@@ -1,0 +1,16 @@
+
+[[dependencies]]
+  branch = "master"
+  name = "github.com/pkg/errors"
+
+[[dependencies]]
+  branch = "master"
+  name = "github.com/prometheus/client_golang"
+
+[[dependencies]]
+  branch = "master"
+  name = "github.com/prometheus/common"
+
+[[dependencies]]
+  branch = "master"
+  name = "gopkg.in/alecthomas/kingpin.v2"

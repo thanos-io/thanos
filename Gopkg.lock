@@ -1,0 +1,67 @@
+memo = ""
+
+[[projects]]
+  branch = "master"
+  name = "github.com/alecthomas/template"
+  packages = ["."]
+  revision = "a0175ee3bccc567396460bf5acd36800cb10c49c"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/alecthomas/units"
+  packages = ["."]
+  revision = "2efee857e7cfd4f3d0138cc3cbb1b4966962b93a"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/beorn7/perks"
+  packages = ["quantile"]
+  revision = "4c0e84591b9aa9e6dcfdf3e020114cd81f89d5f9"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/golang/protobuf"
+  packages = ["proto"]
+  revision = "1909bc2f63dc92bb931deace8b8312c4db72d12f"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/matttproud/golang_protobuf_extensions"
+  packages = ["pbutil"]
+  revision = "c12348ce28de40eed0136aa2b644d0ee0650e56c"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/pkg/errors"
+  packages = ["."]
+  revision = "ff09b135c25aae272398c51a07235b90a75aa4f0"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/prometheus/client_golang"
+  packages = ["prometheus"]
+  revision = "08fd2e12372a66e68e30523c7642e0cbc3e4fbde"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/prometheus/client_model"
+  packages = ["go"]
+  revision = "6f3806018612930941127f2a7c6c453ba2c527d2"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/prometheus/common"
+  packages = ["version","expfmt","model"]
+  revision = "1bab55dd05dbff384524a6a1c99006d9eb5f139b"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/prometheus/procfs"
+  packages = ["."]
+  revision = "1e2146578273cef808354faa16a1922e0b5d6b2f"
+
+[[projects]]
+  branch = "master"
+  name = "gopkg.in/alecthomas/kingpin.v2"
+  packages = ["."]
+  revision = "1087e65c9441605df944fb12c33f0fe7072d18ca"
