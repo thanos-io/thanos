@@ -15,10 +15,6 @@ import (
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
-func init() {
-	prometheus.MustRegister(version.NewCollector("prometheus"))
-}
-
 type runFunc func(log.Logger, prometheus.Registerer) error
 
 func main() {
@@ -32,6 +28,7 @@ func main() {
 
 	cmds := map[string]runFunc{
 		"sidecar": registerSidecar(app, "sidecar"),
+		"store":   registerStore(app, "store"),
 	}
 	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {
@@ -62,7 +59,11 @@ func main() {
 	}
 
 	metrics := prometheus.NewRegistry()
-	metrics.MustRegister(version.NewCollector("prometheus"))
+
+	metrics.MustRegister(
+		version.NewCollector("prometheus"),
+		prometheus.NewGoCollector(),
+	)
 
 	if err := cmds[cmd](logger, metrics); err != nil {
 		fmt.Fprintln(os.Stderr, errors.Wrap(err, "command failed"))
@@ -74,8 +75,8 @@ func interrupt(cancel <-chan struct{}) error {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 	select {
-	case sig := <-c:
-		return fmt.Errorf("received signal %s", sig)
+	case <-c:
+		return nil
 	case <-cancel:
 		return errors.New("canceled")
 	}
