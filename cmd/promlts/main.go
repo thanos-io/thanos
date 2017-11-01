@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -65,5 +67,16 @@ func main() {
 	if err := cmds[cmd](logger, metrics); err != nil {
 		fmt.Fprintln(os.Stderr, errors.Wrap(err, "command failed"))
 		os.Exit(1)
+	}
+}
+
+func interrupt(cancel <-chan struct{}) error {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+	select {
+	case sig := <-c:
+		return fmt.Errorf("received signal %s", sig)
+	case <-cancel:
+		return errors.New("canceled")
 	}
 }
