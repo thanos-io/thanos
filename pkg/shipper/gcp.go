@@ -15,15 +15,50 @@ import (
 
 // GCSRemote implements a remote for Google Cloud Storage.
 type GCSRemote struct {
-	logger log.Logger
-	bucket *storage.BucketHandle
+	logger  log.Logger
+	metrics *gcsRemoteMetrics
+	bucket  *storage.BucketHandle
+}
+
+type gcsRemoteMetrics struct {
+	dirSyncs        prometheus.Counter
+	dirSyncFailures prometheus.Counter
+	uploads         prometheus.Counter
+	uploadFailures  prometheus.Counter
+}
+
+func newGCSRemoteMetrics(r prometheus.Registerer) *gcsRemoteMetrics {
+	var m gcsRemoteMetrics
+
+	m.dirSyncs = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "promlts_gcs_remote_dir_syncs_total",
+		Help: "Total dir sync attempts",
+	})
+	m.dirSyncFailures = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "promlts_gcs_remote_dir_sync_failures_total",
+		Help: "Total number of failed  dir syncs",
+	})
+	m.uploads = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "promlts_gcs_remote_uploads_total",
+		Help: "Total object upload attempts",
+	})
+	m.uploadFailures = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "promlts_gcs_remote_upload_failures_total",
+		Help: "Total number of failed object uploads",
+	})
+
+	if r != nil {
+		prometheus.MustRegister()
+	}
+	return &m
 }
 
 // NewGCSRemote returns a new GCSRemote.
-func NewGCSRemote(logger log.Logger, metrics prometheus.Registerer, bucket *storage.BucketHandle) *GCSRemote {
+func NewGCSRemote(logger log.Logger, metricReg prometheus.Registerer, bucket *storage.BucketHandle) *GCSRemote {
 	return &GCSRemote{
-		logger: logger,
-		bucket: bucket,
+		logger:  logger,
+		bucket:  bucket,
+		metrics: newGCSRemoteMetrics(metricReg),
 	}
 }
 
@@ -52,6 +87,8 @@ func (r *GCSRemote) Exists(ctx context.Context, dir string) (bool, error) {
 
 // Upload the given directory to the remote site.
 func (r *GCSRemote) Upload(ctx context.Context, dir string) error {
+	r.metrics.dirSyncs.Inc()
+
 	err := filepath.Walk(dir, func(name string, fi os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -61,6 +98,7 @@ func (r *GCSRemote) Upload(ctx context.Context, dir string) error {
 	if err == nil {
 		return nil
 	}
+	r.metrics.dirSyncFailures.Inc()
 	level.Error(r.logger).Log("msg", "dupload failed; remove partial data", "dir", dir, "err", err)
 
 	// We don't want to leave partially uploaded directories behind. Cleanup everything related to it
@@ -73,12 +111,20 @@ func (r *GCSRemote) Upload(ctx context.Context, dir string) error {
 }
 
 func (r *GCSRemote) uploadSingle(ctx context.Context, name string) error {
+	r.metrics.uploads.Inc()
+
 	f, err := os.Open(name)
 	if err != nil {
+		r.metrics.uploadFailures.Inc()
 		return nil
 	}
 	w := r.bucket.Object(name).NewWriter(ctx)
 	_, err = io.Copy(w, f)
+
+	if err == nil {
+		return nil
+	}
+	r.metrics.uploadFailures.Inc()
 	return err
 }
 
