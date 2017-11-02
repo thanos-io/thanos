@@ -1,0 +1,10 @@
+sudo: false
+language: go
+go:
+  - 1.9.x
+  - master
+
+go_import_path: github.com/improbable-eng/promlts
+
+script:
+- make format vet test
