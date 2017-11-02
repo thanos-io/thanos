@@ -1,16 +1,82 @@
 
-[[dependencies]]
+# Gopkg.toml example
+#
+# Refer to https://github.com/golang/dep/blob/master/docs/Gopkg.toml.md
+# for detailed Gopkg.toml documentation.
+#
+# required = ["github.com/user/thing/cmd/thing"]
+# ignored = ["github.com/user/project/pkgX", "bitbucket.org/user/project/pkgA/pkgY"]
+#
+# [[constraint]]
+#   name = "github.com/user/project"
+#   version = "1.0.0"
+#
+# [[constraint]]
+#   name = "github.com/user/project2"
+#   branch = "dev"
+#   source = "github.com/myfork/project2"
+#
+# [[override]]
+#  name = "github.com/x/y"
+#  version = "2.4.0"
+
+
+[[constraint]]
+  name = "cloud.google.com/go"
+  version = "0.16.0"
+
+[[constraint]]
   branch = "master"
+  name = "github.com/alecthomas/units"
+
+[[constraint]]
+  name = "github.com/go-kit/kit"
+  version = "0.6.0"
+
+[[constraint]]
+  name = "github.com/gogo/protobuf"
+  version = "0.5.0"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/golang/protobuf"
+
+[[constraint]]
+  name = "github.com/grpc-ecosystem/grpc-gateway"
+  version = "1.2.2"
+
+[[constraint]]
+  name = "github.com/oklog/oklog"
+  version = "0.2.2"
+
+[[constraint]]
+  name = "github.com/oklog/ulid"
+  version = "0.3.0"
+
+[[constraint]]
   name = "github.com/pkg/errors"
+  version = "0.8.0"
 
-[[dependencies]]
-  branch = "master"
+[[constraint]]
   name = "github.com/prometheus/client_golang"
+  version = "0.8.0"
 
-[[dependencies]]
+[[constraint]]
   branch = "master"
   name = "github.com/prometheus/common"
 
-[[dependencies]]
+[[constraint]]
   branch = "master"
+  name = "golang.org/x/net"
+
+[[constraint]]
+  branch = "master"
+  name = "google.golang.org/api"
+
+[[constraint]]
+  name = "google.golang.org/grpc"
+  version = "1.7.1"
+
+[[constraint]]
   name = "gopkg.in/alecthomas/kingpin.v2"
+  version = "2.2.5"
