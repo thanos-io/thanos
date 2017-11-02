@@ -6,5 +6,8 @@ go:
 
 go_import_path: github.com/improbable-eng/promlts
 
+install:
+- dep ensure
+
 script:
 - make install-tools format vet test

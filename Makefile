@@ -19,6 +19,8 @@ install-tools:
 	@go get -u golang.org/x/tools/cmd/goimports
 	@echo ">> fetching promu"
 	@go get -u github.com/prometheus/promu
+	@echo ">> fetching dep"
+	@go get -u github.com/golang/dep/cmd/dep
 
 proto:
 	@go get -u github.com/gogo/protobuf/protoc-gen-gogofast
