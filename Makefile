@@ -4,7 +4,7 @@ all: format build
 
 format:
 	@echo ">> formatting code"
-	@go fmt ./...
+	@goimports -w ./
 
 vet:
 	@echo ">> vetting code"
