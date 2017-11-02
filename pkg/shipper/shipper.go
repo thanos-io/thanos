@@ -5,6 +5,7 @@ package shipper
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"sort"
 	"time"
 
@@ -47,7 +48,7 @@ func New(
 	}
 }
 
-const syncInterval = 30 * time.Second
+const syncInterval = 5 * time.Second
 
 // IsULIDDir returns true if the described file is a directory with a name that is
 // a valid ULID.
@@ -74,6 +75,8 @@ func (s *Shipper) Run(ctx context.Context) error {
 				continue
 			}
 			for _, dn := range names {
+				dn = filepath.Join(s.dir, dn)
+
 				fi, err := os.Stat(dn)
 				if err != nil {
 					level.Warn(s.logger).Log("msg", "open file failed", "err", err)
@@ -98,6 +101,7 @@ func (s *Shipper) sync(ctx context.Context, dir string) error {
 	if ok {
 		return nil
 	}
+	level.Info(s.logger).Log("msg", "upload new block", "dir", dir)
 	return s.remote.Upload(ctx, dir)
 }
 

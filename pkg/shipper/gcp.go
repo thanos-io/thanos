@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
@@ -89,17 +90,22 @@ func (r *GCSRemote) Exists(ctx context.Context, dir string) (bool, error) {
 func (r *GCSRemote) Upload(ctx context.Context, dir string) error {
 	r.metrics.dirSyncs.Inc()
 
+	parent := filepath.Dir(dir)
+
 	err := filepath.Walk(dir, func(name string, fi os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		return r.uploadSingle(ctx, name)
+		if fi.IsDir() {
+			return nil
+		}
+		return r.uploadSingle(ctx, name, strings.TrimPrefix(name, parent))
 	})
 	if err == nil {
 		return nil
 	}
 	r.metrics.dirSyncFailures.Inc()
-	level.Error(r.logger).Log("msg", "dupload failed; remove partial data", "dir", dir, "err", err)
+	level.Error(r.logger).Log("msg", "upload failed; remove partial data", "dir", dir, "err", err)
 
 	// We don't want to leave partially uploaded directories behind. Cleanup everything related to it
 	// and use a uncanceled context.
@@ -110,22 +116,24 @@ func (r *GCSRemote) Upload(ctx context.Context, dir string) error {
 	return err
 }
 
-func (r *GCSRemote) uploadSingle(ctx context.Context, name string) error {
+func (r *GCSRemote) uploadSingle(ctx context.Context, src, target string) error {
+	level.Debug(r.logger).Log("msg", "upload file", "file", src)
 	r.metrics.uploads.Inc()
 
-	f, err := os.Open(name)
+	f, err := os.Open(src)
 	if err != nil {
 		r.metrics.uploadFailures.Inc()
-		return nil
+		return err
 	}
-	w := r.bucket.Object(name).NewWriter(ctx)
+
+	w := r.bucket.Object(target).NewWriter(ctx)
 	_, err = io.Copy(w, f)
 
-	if err == nil {
-		return nil
+	if err != nil {
+		r.metrics.uploadFailures.Inc()
+		return err
 	}
-	r.metrics.uploadFailures.Inc()
-	return err
+	return w.Close()
 }
 
 // delete removes all data prefixed with the dir.
