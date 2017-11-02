@@ -72,6 +72,7 @@ func (s *Shipper) Run(ctx context.Context) error {
 		case <-tick.C:
 			names, err := readDir(s.dir)
 			if err != nil {
+				level.Warn(s.logger).Log("msg", "read dir failed", "err", err)
 				continue
 			}
 			for _, dn := range names {
@@ -105,7 +106,7 @@ func (s *Shipper) sync(ctx context.Context, dir string) error {
 	return s.remote.Upload(ctx, dir)
 }
 
-// ReadDir returns the filenames in the given directory in sorted order.
+// readDir returns the filenames in the given directory in sorted order.
 func readDir(dirpath string) ([]string, error) {
 	dir, err := os.Open(dirpath)
 	if err != nil {

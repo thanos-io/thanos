@@ -16,7 +16,7 @@ import (
 
 // registerStore registers a store command.
 func registerStore(app *kingpin.Application, name string) runFunc {
-	cmd := app.Command(name, "sidecar for Prometheus server")
+	cmd := app.Command(name, "store node giving access to blocks in a GCS bucket")
 
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks").
 		PlaceHolder("<bucket>").Required().String()
@@ -56,6 +56,9 @@ func runStore(
 
 	var g group.Group
 
+	{
+
+	}
 	// Listen for termination signals.
 	{
 		cancel := make(chan struct{})

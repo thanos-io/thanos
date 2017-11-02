@@ -80,7 +80,7 @@ func (r *GCSRemote) Exists(ctx context.Context, dir string) (bool, error) {
 			return false, err
 		}
 		// The first object found with the given filter indicates that the directory exists.
-		// XXX(fabxc): do a full check whether the files add up as well?
+		// XXX(fabxc): do a more elaborate check whether local and remote files match?
 		return true, nil
 	}
 	return false, nil
@@ -125,10 +125,9 @@ func (r *GCSRemote) uploadSingle(ctx context.Context, src, target string) error 
 		r.metrics.uploadFailures.Inc()
 		return err
 	}
-
 	w := r.bucket.Object(target).NewWriter(ctx)
-	_, err = io.Copy(w, f)
 
+	_, err = io.Copy(w, f)
 	if err != nil {
 		r.metrics.uploadFailures.Inc()
 		return err
