@@ -1,7 +1,7 @@
 PREFIX ?= $(shell pwd)
 GO_FILES := $(go list ./... | grep -v /vendor/)
 
-all: format build
+all: install-tools format build
 
 format:
 	@echo ">> formatting code"
@@ -11,11 +11,13 @@ vet:
 	@echo ">> vetting code"
 	@go vet ./...
 
-build: promu
+build:
 	@echo ">> building binaries"
 	@promu build --prefix $(PREFIX)
 
-promu:
+install-tools:
+	@echo ">> fetching goimports"
+	@go get -u golang.org/x/tools/cmd/goimports
 	@echo ">> fetching promu"
 	@go get -u github.com/prometheus/promu
 
@@ -27,4 +29,4 @@ test:
 	@echo ">> running all tests"
 	@go test $(GO_FILES)
 
-.PHONY: all format vet build promu
+.PHONY: all install-tools format vet build promu
