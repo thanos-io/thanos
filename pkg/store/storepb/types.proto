@@ -1,0 +1,40 @@
+syntax = "proto3";
+package promlts;
+
+option go_package = "storepb";
+
+import "gogoproto/gogo.proto";
+
+message Label {
+  string name  = 1;
+  string value = 2;
+}
+
+message Labels {
+  repeated Label labels = 1 [(gogoproto.nullable) = false];
+}
+
+message Chunk {
+  enum Encoding {
+    XOR = 0;
+  }
+  bytes data = 1;
+}
+
+message Series {
+  Labels labels         = 1;
+  repeated Chunk chunks = 2;
+}
+
+// Matcher specifies a rule, which can match or set of labels or not.
+message LabelMatcher {
+  enum Type {
+    EQ  = 0; // =
+    NEQ = 1; // !=
+    RE  = 2; // =~
+    NRE = 3; // !~
+  }
+  Type type    = 1;
+  string name  = 2;
+  string value = 3;
+}
