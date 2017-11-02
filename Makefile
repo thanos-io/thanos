@@ -1,11 +1,10 @@
 PREFIX ?= $(shell pwd)
-GO_FILES := $(go list ./... | grep -v /vendor/)
 
 all: install-tools format build
 
 format:
 	@echo ">> formatting code"
-	@goimports -w ./ $(GO_FILES)
+	@goimports -w ./ $(go list ./... | grep -v /vendor/)
 
 vet:
 	@echo ">> vetting code"
@@ -27,6 +26,6 @@ proto:
 
 test:
 	@echo ">> running all tests"
-	@go test $(GO_FILES)
+	@go test $(shell go list ./... | grep -v /vendor/)
 
 .PHONY: all install-tools format vet build promu
