@@ -18,5 +18,8 @@ promu:
 	@echo ">> fetching promu"
 	@go get -u github.com/prometheus/promu
 
+proto:
+	@go get -u github.com/gogo/protobuf/protoc-gen-gogofast
+	@./scripts/genproto.sh
 
 .PHONY: all format vet build promu

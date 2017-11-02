@@ -1,0 +1,45 @@
+syntax = "proto3";
+package promlts;
+
+import "types.proto";
+import "gogoproto/gogo.proto";
+
+option go_package = "storepb";
+
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
+
+service Store {
+  rpc Series(SeriesRequest) returns (SeriesResponse);
+
+  rpc LabelNames(LabelNamesRequest) returns (LabelNamesResponse);
+
+  rpc LabelValues(LabelValuesRequest) returns (LabelValuesResponse);
+}
+
+message SeriesRequest {
+  int64 min_time                 = 1;
+  int64 max_time                 = 2;
+  repeated LabelMatcher matchers = 3 [(gogoproto.nullable) = false];
+}
+
+message SeriesResponse {
+  repeated Series series = 1;
+}
+
+message LabelNamesRequest {
+}
+
+message LabelNamesResponse {
+  repeated string names = 1;
+}
+
+message LabelValuesRequest {
+  string label = 1;
+}
+
+message LabelValuesResponse {
+  repeated string values = 1;
+}
