@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	"github.com/fabxc/promlts/pkg/shipper"
+	"github.com/improbable-eng/promlts/pkg/shipper"
 
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"

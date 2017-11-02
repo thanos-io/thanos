@@ -1,5 +1,5 @@
 repository:
-    path: github.com/fabxc/promlts
+    path: github.com/improbable-eng/promlts
 build:
     binaries:
         - name: promlts
