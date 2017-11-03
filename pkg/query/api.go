@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/improbable-eng/promlts/pkg/query/compression"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
@@ -17,7 +18,6 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/prometheus/prometheus/util/httputil"
 )
 
 type status string
@@ -109,7 +109,7 @@ func (api *API) Register(r *route.Router) {
 				w.WriteHeader(http.StatusNoContent)
 			}
 		})
-		return prometheus.InstrumentHandler(name, httputil.CompressionHandler{
+		return prometheus.InstrumentHandler(name, compression.Handler{
 			Handler: hf,
 		})
 	}
