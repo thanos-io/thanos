@@ -67,12 +67,12 @@ func runQuery(
 
 	// Start query API HTTP server.
 	{
-		router := route.New()
+		router := route.New().WithPrefix("/api/v1")
 		api.Register(router)
 
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", prometheus.Handler())
-		mux.Handle("/api/prom/api/v1", router)
+		mux.Handle("/", router)
 
 		l, err := net.Listen("tcp", apiAddr)
 		if err != nil {
