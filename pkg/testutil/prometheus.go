@@ -1,12 +1,13 @@
 package testutil
 
 import (
-	"context"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/prometheus/tsdb"
@@ -19,6 +20,7 @@ type Prometheus struct {
 	addr    string
 	running bool
 	db      *tsdb.DB
+	cmd     *exec.Cmd
 }
 
 // NewPrometheus creates a new test Prometheus instance that will listen on address.
@@ -33,7 +35,11 @@ func NewPrometheus(address string) (*Prometheus, error) {
 		return nil, err
 	}
 
-	db, err := tsdb.Open(dir, nil, nil, nil)
+	db, err := tsdb.Open(dir, nil, nil, &tsdb.Options{
+		WALFlushInterval:  10 * time.Millisecond,
+		BlockRanges:       []int64{2 * 3600 * 1000},
+		RetentionDuration: math.MaxInt64,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -46,47 +52,34 @@ func NewPrometheus(address string) (*Prometheus, error) {
 }
 
 // Start runs the Prometheus instance until the context is canceled.
-func (p *Prometheus) Start(ctx context.Context) error {
-	// /// debug
-	// q, _ := p.db.Querier(0, 100000000000000)
-	// ss := q.Select(labels.NewEqualMatcher("a", "b"))
-	// for ss.Next() {
-	// 	fmt.Println(ss.At().Labels())
-	// 	it := ss.At().Iterator()
-
-	// 	for it.Next() {
-	// 		fmt.Println(it.At())
-	// 	}
-	// }
-	////
-
+func (p *Prometheus) Start() error {
 	p.running = true
 	if err := p.db.Close(); err != nil {
 		return err
 	}
-	// TODO(fabxc): Something needs to get debugged and fixed upstream.
-	time.Sleep(5 * time.Second)
 
-	fmt.Println(p.dir)
-	// return nil
-
+	p.cmd = exec.Command(
+		"prometheus",
+		"--storage.tsdb.path="+p.dir,
+		"--web.listen-address="+p.addr,
+		"--config.file="+filepath.Join(p.dir, "prometheus.yml"),
+	)
 	go func() {
-		// defer p.cleanup()
-
-		b, err := exec.CommandContext(ctx,
-			"prometheus",
-			"--storage.tsdb.path="+p.dir,
-			"--web.listen-address="+p.addr,
-			"--config.file="+filepath.Join(p.dir, "prometheus.yml"),
-		).CombinedOutput()
-
-		// if err != nil {
-		fmt.Fprintln(os.Stderr, "running Prometheus failed", err)
-		fmt.Fprintln(os.Stderr, string(b))
-		// }
+		if b, err := p.cmd.CombinedOutput(); err != nil {
+			fmt.Fprintln(os.Stderr, "running Prometheus failed", err)
+			fmt.Fprintln(os.Stderr, string(b))
+		}
 	}()
-	time.Sleep(2 * time.Second)
+	time.Sleep(time.Second / 2)
+
 	return nil
+}
+
+// Stop terminates Prometheus and clean up its data directory.
+func (p *Prometheus) Stop() error {
+	p.cmd.Process.Signal(syscall.SIGTERM)
+	time.Sleep(time.Second / 2)
+	return p.cleanup()
 }
 
 func (p *Prometheus) cleanup() error {
