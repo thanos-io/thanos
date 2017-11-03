@@ -23,13 +23,13 @@ func registerQuery(app *kingpin.Application, name string) runFunc {
 		Default(":19099").String()
 
 	storeAddresses := cmd.Flag("store.addresses", "comma delimited listen addresses of store APIs").
-		Default("localhost:19090").Required().Strings()
+		Default("localhost:19090").Strings()
 
 	queryTimeout := cmd.Flag("query.timeout", "maximum time to process query by query node").
-		Default("2m").Required().Duration()
+		Default("2m").Duration()
 
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "maximum number of queries processed concurrently by query node").
-		Default("20").Required().Int()
+		Default("20").Int()
 
 	return func(logger log.Logger, metrics prometheus.Registerer) error {
 		return runQuery(logger, metrics, *apiAddr, query.Config{
