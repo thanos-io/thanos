@@ -26,11 +26,12 @@ func main() {
 	logLevel := app.Flag("log.level", "log filtering level").
 		Default("info").Enum("error", "warn", "info", "debug")
 
-	cmds := map[string]runFunc{
-		"sidecar": registerSidecar(app, "sidecar"),
-		"store":   registerStore(app, "store"),
-		"query":   registerQuery(app, "query"),
-	}
+	cmds := map[string]runFunc{}
+
+	registerSidecar(cmds, app, "sidecar")
+	registerStore(cmds, app, "store")
+	registerQuery(cmds, app, "query")
+
 	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "Error parsing commandline arguments"))
@@ -55,9 +56,9 @@ func main() {
 		}
 		logger = log.NewLogfmtLogger(os.Stderr)
 		logger = log.NewSyncLogger(logger)
-		logger = level.NewFilter(logger, lvl)
 		logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 		logger = log.With(logger, "caller", log.DefaultCaller)
+		logger = level.NewFilter(logger, lvl)
 	}
 
 	metrics := prometheus.NewRegistry()

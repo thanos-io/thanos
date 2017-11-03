@@ -17,7 +17,7 @@ import (
 )
 
 // registerQuery registers a query command.
-func registerQuery(app *kingpin.Application, name string) runFunc {
+func registerQuery(m map[string]runFunc, app *kingpin.Application, name string) runFunc {
 	cmd := app.Command(name, "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
 
 	apiAddr := cmd.Flag("api-address", "listen address for the query API").
@@ -32,7 +32,7 @@ func registerQuery(app *kingpin.Application, name string) runFunc {
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "maximum number of queries processed concurrently by query node").
 		Default("20").Int()
 
-	return func(logger log.Logger, metrics prometheus.Registerer) error {
+	m[name] = func(logger log.Logger, metrics prometheus.Registerer) error {
 		return runQuery(logger, metrics, *apiAddr, query.Config{
 			StoreAddresses:       *storeAddresses,
 			QueryTimeout:         *queryTimeout,

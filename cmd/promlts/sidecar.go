@@ -19,7 +19,7 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
-func registerSidecar(app *kingpin.Application, name string) runFunc {
+func registerSidecar(m map[string]runFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "sidecar for Prometheus server")
 
 	apiAddr := cmd.Flag("api-address", "listen address for the store API").
@@ -37,7 +37,7 @@ func registerSidecar(app *kingpin.Application, name string) runFunc {
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks").
 		PlaceHolder("<bucket>").Required().String()
 
-	return func(logger log.Logger, reg prometheus.Registerer) error {
+	m[name] = func(logger log.Logger, reg prometheus.Registerer) error {
 		return runSidecar(logger, reg, *apiAddr, *metricsAddr, *promAddr, *dataDir, *gcsBucket)
 	}
 }
