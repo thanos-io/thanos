@@ -16,7 +16,6 @@
 		LabelValuesRequest
 		LabelValuesResponse
 		Label
-		Labels
 		Chunk
 		Series
 		LabelMatcher

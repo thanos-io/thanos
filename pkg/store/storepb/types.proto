@@ -10,10 +10,6 @@ message Label {
   string value = 2;
 }
 
-message Labels {
-  repeated Label labels = 1 [(gogoproto.nullable) = false];
-}
-
 message Chunk {
   enum Encoding {
     XOR = 0;
@@ -23,7 +19,7 @@ message Chunk {
 }
 
 message Series {
-  Labels labels         = 1 [(gogoproto.nullable) = false];
+  repeated Label labels = 1 [(gogoproto.nullable) = false];
   repeated Chunk chunks = 2 [(gogoproto.nullable) = false];
 }
 
