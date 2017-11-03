@@ -91,7 +91,7 @@ func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) 
 		lset := translateLabels(e.Metric)
 		// We generally expect all samples of the requested range to be traversed
 		// so we just encode all samples into one big chunk regardless of size.
-		enc, b, err := encodeChunk(e.Values)
+		enc, b, err := encodeChunk(e.Values, r.MinTime)
 		if err != nil {
 			return nil, status.Error(codes.Unknown, err.Error())
 		}
@@ -103,13 +103,18 @@ func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) 
 	return res, nil
 }
 
-func encodeChunk(ss []model.SamplePair) (storepb.Chunk_Encoding, []byte, error) {
+// encodeChunk translates the sample pairs into a chunk. It takes a minimum timestamp
+// and drops all samples before that one.
+func encodeChunk(ss []model.SamplePair, mint int64) (storepb.Chunk_Encoding, []byte, error) {
 	c := chunks.NewXORChunk()
 	a, err := c.Appender()
 	if err != nil {
 		return 0, nil, err
 	}
 	for _, s := range ss {
+		if int64(s.Timestamp) < mint {
+			continue
+		}
 		a.Append(int64(s.Timestamp), float64(s.Value))
 	}
 	return storepb.Chunk_XOR, c.Bytes(), nil

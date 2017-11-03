@@ -16,7 +16,7 @@ func TestPrometheusProxy_Series(t *testing.T) {
 	p, err := testutil.NewPrometheus(":12345")
 	testutil.Ok(t, err)
 
-	baseT := timestamp.FromTime(time.Now())
+	baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
 
 	a := p.Appender()
 	a.Add(labels.FromStrings("a", "b"), baseT+100, 1)
@@ -27,13 +27,16 @@ func TestPrometheusProxy_Series(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	testutil.Ok(t, p.Start(ctx))
+	testutil.Ok(t, p.Start())
+	defer p.Stop()
 
 	proxy, err := NewPrometheusProxy(nil, "http://localhost:12345/")
 	testutil.Ok(t, err)
 
+	// Query all three samples except for the first one. Since we round up queried data
+	// to seconds, we can test whether the extra sample gets stripped properly.
 	resp, err := proxy.Series(ctx, &storepb.SeriesRequest{
-		MinTime: baseT,
+		MinTime: baseT + 101,
 		MaxTime: baseT + 300,
 		Matchers: []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
@@ -52,11 +55,7 @@ func TestPrometheusProxy_Series(t *testing.T) {
 	testutil.Ok(t, err)
 
 	samples := expandChunk(chk.Iterator())
-
-	testutil.Equals(t, []sample{
-		{baseT + 100, 1}, {baseT + 200, 2}, {baseT + 300, 3},
-	}, samples)
-
+	testutil.Equals(t, []sample{{baseT + 200, 2}, {baseT + 300, 3}}, samples)
 }
 
 type sample struct {
