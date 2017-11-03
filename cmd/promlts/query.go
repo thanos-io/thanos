@@ -17,7 +17,7 @@ import (
 )
 
 // registerQuery registers a query command.
-func registerQuery(m map[string]runFunc, app *kingpin.Application, name string) runFunc {
+func registerQuery(m map[string]runFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
 
 	apiAddr := cmd.Flag("api-address", "listen address for the query API").
