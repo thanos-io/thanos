@@ -1,4 +1,20 @@
-package query
+// Copyright 2016 The Prometheus Authors
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// This package is a modified copy from
+// github.com/prometheus/prometheus/web/api/v1@2121b4628baa7d9d9406aa468712a6a332e77aff
+
+package v1
 
 import (
 	"context"
@@ -9,7 +25,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/improbable-eng/promlts/pkg/query/compression"
+	"github.com/improbable-eng/promlts/pkg/query"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
@@ -72,12 +88,10 @@ type apiFunc func(r *http.Request) (interface{}, *apiError)
 
 // API can register a set of endpoints in a router and handle
 // them using the provided storage and query engine.
-// This struct is mostly copied from
-// github.com/prometheus/prometheus/web/api/v1/api.go@2121b4628baa7d9d9406aa468712a6a332e77aff
 type API struct {
 	queryable   promql.Queryable
 	queryEngine *promql.Engine
-	cfg         Config
+	cfg         query.Config
 
 	now func() time.Time
 }
@@ -86,7 +100,7 @@ type API struct {
 func NewAPI(
 	qe *promql.Engine,
 	q promql.Queryable,
-	cfg Config,
+	cfg query.Config,
 ) *API {
 	return &API{
 		queryEngine: qe,
@@ -359,7 +373,7 @@ type AlertmanagerTarget struct {
 
 func (api *API) alertmanagers(r *http.Request) (interface{}, *apiError) {
 	// TODO(bplotka): Add relevant handling here, when rule engine will be implemented.
-	return []AlertmanagerTarget(nil), nil
+	return &AlertmanagerDiscovery{}, nil
 }
 
 type prometheusConfig struct {
