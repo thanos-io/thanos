@@ -109,9 +109,7 @@ func (api *API) Register(r *route.Router) {
 				w.WriteHeader(http.StatusNoContent)
 			}
 		})
-		return prometheus.InstrumentHandler(name, compression.Handler{
-			Handler: hf,
-		})
+		return prometheus.InstrumentHandler(name, hf)
 	}
 
 	r.Options("/*path", instr("options", api.options))
