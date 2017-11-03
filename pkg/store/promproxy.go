@@ -39,23 +39,29 @@ func NewPrometheusProxy(client *http.Client, baseURL string) (*PrometheusProxy, 
 	}
 	u, err := url.Parse(baseURL)
 	if err != nil {
-		return nil, errors.Wrap(err, "parse base URL")
+		return nil, errors.Wrap(err, "parse Prometheus URL")
 	}
 	return &PrometheusProxy{base: u, client: client}, nil
 }
 
 // Series returns all series for a requested time range and label matcher. The returned data may
 // exceed the requested time bounds.
+//
+// Prometheus's range query API is not suitable to give us all datapoints. We use the
+// instant API and do a range selection in PromQL to cover the queried time range.
 func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) (
 	*storepb.SeriesResponse, error,
 ) {
-	// Prometheus's range query API is not suitable to give us all datapoints. We use the
-	// instant API and do a range selection in PromQL to cover the queried time range.
-	args := url.Values{}
-
-	// We can only provide second precision so we have to round up.
+	sel, err := selectorString(r.Matchers...)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	// We can only provide second precision so we have to round up. This could
+	// cause additional samples to be fetched, which we have to remove further down.
 	rng := (r.MaxTime-r.MinTime)/1000 + 1
-	q := fmt.Sprintf("%s[%ds]", selectorString(r.Matchers...), rng)
+	q := fmt.Sprintf("%s[%ds]", sel, rng)
+
+	args := url.Values{}
 
 	args.Add("query", q)
 	args.Add("time", timestamp.Time(r.MaxTime).Format(time.RFC3339Nano))
@@ -91,6 +97,9 @@ func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) 
 		lset := translateLabels(e.Metric)
 		// We generally expect all samples of the requested range to be traversed
 		// so we just encode all samples into one big chunk regardless of size.
+		//
+		// Drop all data before r.MinTime since we might have fetched more than
+		// the requested range (see above).
 		enc, b, err := encodeChunk(e.Values, r.MinTime)
 		if err != nil {
 			return nil, status.Error(codes.Unknown, err.Error())
@@ -171,7 +180,7 @@ func (p *PrometheusProxy) LabelValues(ctx context.Context, r *storepb.LabelValue
 	return &storepb.LabelValuesResponse{Values: m.Data}, nil
 }
 
-func selectorString(ms ...storepb.LabelMatcher) string {
+func selectorString(ms ...storepb.LabelMatcher) (string, error) {
 	var b bytes.Buffer
 	b.WriteByte('{')
 
@@ -191,12 +200,12 @@ func selectorString(ms ...storepb.LabelMatcher) string {
 		case storepb.LabelMatcher_NRE:
 			b.WriteString("!~")
 		default:
-			panic("unknown matcher type")
+			return "", errors.New("unknown matcher type")
 		}
 
 		b.WriteString(strconv.Quote(m.Value))
 	}
 
 	b.WriteByte('}')
-	return b.String()
+	return b.String(), nil
 }

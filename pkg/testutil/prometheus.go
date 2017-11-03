@@ -51,7 +51,7 @@ func NewPrometheus(address string) (*Prometheus, error) {
 	}, nil
 }
 
-// Start runs the Prometheus instance until the context is canceled.
+// Start running the Prometheus instance and return.
 func (p *Prometheus) Start() error {
 	p.running = true
 	if err := p.db.Close(); err != nil {

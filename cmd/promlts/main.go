@@ -56,9 +56,9 @@ func main() {
 		}
 		logger = log.NewLogfmtLogger(os.Stderr)
 		logger = log.NewSyncLogger(logger)
+		logger = level.NewFilter(logger, lvl)
 		logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 		logger = log.With(logger, "caller", log.DefaultCaller)
-		logger = level.NewFilter(logger, lvl)
 	}
 
 	metrics := prometheus.NewRegistry()
