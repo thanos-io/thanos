@@ -29,6 +29,7 @@ func main() {
 	cmds := map[string]runFunc{
 		"sidecar": registerSidecar(app, "sidecar"),
 		"store":   registerStore(app, "store"),
+		"query":   registerQuery(app, "query"),
 	}
 	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {
