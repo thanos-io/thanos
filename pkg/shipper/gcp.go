@@ -91,7 +91,6 @@ func (r *GCSRemote) Upload(ctx context.Context, dir string) error {
 	r.metrics.dirSyncs.Inc()
 
 	parent := filepath.Dir(dir)
-
 	err := filepath.Walk(dir, func(name string, fi os.FileInfo, err error) error {
 		if err != nil {
 			return err
