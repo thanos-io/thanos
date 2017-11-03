@@ -34,6 +34,9 @@ var _ storepb.StoreServer = (*PrometheusProxy)(nil)
 // NewPrometheusProxy returns a new PrometheusProxy that uses the given HTTP client
 // to talk to Prometheus.
 func NewPrometheusProxy(client *http.Client, baseURL string) (*PrometheusProxy, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
 	u, err := url.Parse(baseURL)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse base URL")
@@ -50,8 +53,9 @@ func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) 
 	// instant API and do a range selection in PromQL to cover the queried time range.
 	args := url.Values{}
 
-	// Timestamps are interpreted as milliseconds in Prometheus.
-	q := fmt.Sprintf("%s[%dms]", selectorString(r.Matchers...), r.MaxTime-r.MinTime)
+	// We can only provide second precision so we have to round up.
+	rng := (r.MaxTime-r.MinTime)/1000 + 1
+	q := fmt.Sprintf("%s[%ds]", selectorString(r.Matchers...), rng)
 
 	args.Add("query", q)
 	args.Add("time", timestamp.Time(r.MaxTime).Format(time.RFC3339Nano))
@@ -64,16 +68,26 @@ func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) 
 	if err != nil {
 		return nil, status.Error(codes.Unknown, err.Error())
 	}
-	defer req.Body.Close()
 
-	var m model.Matrix
-	if err := json.NewDecoder(req.Body).Decode(&m); err != nil {
+	resp, err := p.client.Do(req.WithContext(ctx))
+	if err != nil {
 		return nil, status.Error(codes.Unknown, err.Error())
 	}
-	res := &storepb.SeriesResponse{
-		Series: make([]storepb.Series, 0, len(m)),
+	defer resp.Body.Close()
+
+	var m struct {
+		Data struct {
+			Result model.Matrix `json:"result"`
+		} `json:"data"`
 	}
-	for _, e := range m {
+	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+		return nil, status.Error(codes.Unknown, err.Error())
+	}
+
+	res := &storepb.SeriesResponse{
+		Series: make([]storepb.Series, 0, len(m.Data.Result)),
+	}
+	for _, e := range m.Data.Result {
 		lset := translateLabels(e.Metric)
 		// We generally expect all samples of the requested range to be traversed
 		// so we just encode all samples into one big chunk regardless of size.
@@ -86,8 +100,7 @@ func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) 
 			Chunks: []storepb.Chunk{{Type: enc, Data: b}},
 		})
 	}
-
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+	return res, nil
 }
 
 func encodeChunk(ss []model.SamplePair) (storepb.Chunk_Encoding, []byte, error) {
@@ -102,18 +115,17 @@ func encodeChunk(ss []model.SamplePair) (storepb.Chunk_Encoding, []byte, error) 
 	return storepb.Chunk_XOR, c.Bytes(), nil
 }
 
-func translateLabels(m model.Metric) storepb.Labels {
-	lset := storepb.Labels{
-		Labels: make([]storepb.Label, 0, len(m)),
-	}
+func translateLabels(m model.Metric) []storepb.Label {
+	lset := make([]storepb.Label, 0, len(m))
+
 	for k, v := range m {
-		lset.Labels = append(lset.Labels, storepb.Label{
+		lset = append(lset, storepb.Label{
 			Name:  string(k),
 			Value: string(v),
 		})
 	}
-	sort.Slice(lset.Labels, func(i, j int) bool {
-		return lset.Labels[i].Name < lset.Labels[j].Name
+	sort.Slice(lset, func(i, j int) bool {
+		return lset[i].Name < lset[j].Name
 	})
 	return lset
 }
