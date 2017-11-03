@@ -1,10 +1,11 @@
 PREFIX ?= $(shell pwd)
+FILES ?= $(shell find . -type f -name '*.go' -not -path "./vendor/*")
 
 all: install-tools format build
 
 format:
 	@echo ">> formatting code"
-	@goimports -w ./ $(go list ./... | grep -v /vendor/)
+	@goimports -w $(FILES)
 
 vet:
 	@echo ">> vetting code"
