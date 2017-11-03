@@ -7,6 +7,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/promlts/pkg/query"
+	"github.com/improbable-eng/promlts/pkg/query/api"
 	"github.com/oklog/oklog/pkg/group"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -48,20 +49,12 @@ func runQuery(
 	apiAddr string,
 	cfg query.Config,
 ) error {
-	level.Info(logger).Log(
-		"msg", "I'm a query node",
-		"api-address", apiAddr,
-		"store.addresses", cfg.StoreAddresses,
-		"query.timeout", cfg.QueryTimeout,
-		"query.max-concurrent", cfg.MaxConcurrentQueries,
-	)
-
 	var client http.Client
 
 	// Set up query API engine.
 	queryable := query.NewQueryable(&client, cfg.StoreAddresses)
 	engine := promql.NewEngine(queryable, cfg.EngineOpts(logger))
-	api := query.NewAPI(engine, queryable, cfg)
+	api := v1.NewAPI(engine, queryable, cfg)
 
 	var g group.Group
 
@@ -95,5 +88,13 @@ func runQuery(
 			close(cancel)
 		})
 	}
+
+	level.Info(logger).Log(
+		"msg", "starting query node",
+		"api-address", apiAddr,
+		"store.addresses", cfg.StoreAddresses,
+		"query.timeout", cfg.QueryTimeout,
+		"query.max-concurrent", cfg.MaxConcurrentQueries,
+	)
 	return g.Run()
 }
