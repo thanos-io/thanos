@@ -16,36 +16,39 @@ import (
 // Prometheus represents a test instance for integration testing.
 // It can be populated with data before being started.
 type Prometheus struct {
-	dir     string
 	addr    string
 	running bool
 	db      *tsdb.DB
 	cmd     *exec.Cmd
 }
 
-// NewPrometheus creates a new test Prometheus instance that will listen on address.
-func NewPrometheus(address string) (*Prometheus, error) {
+func NewTSDB() (*tsdb.DB, error) {
 	dir, err := ioutil.TempDir("", "prometheus-test")
 	if err != nil {
 		return nil, err
 	}
-	// Just touch an empty config file. We don't need to actually scrape anything.
-	_, err = os.Create(filepath.Join(dir, "prometheus.yml"))
-	if err != nil {
-		return nil, err
-	}
 
-	db, err := tsdb.Open(dir, nil, nil, &tsdb.Options{
+	return tsdb.Open(dir, nil, nil, &tsdb.Options{
 		WALFlushInterval:  10 * time.Millisecond,
 		BlockRanges:       []int64{2 * 3600 * 1000},
 		RetentionDuration: math.MaxInt64,
 	})
+}
+
+// NewPrometheus creates a new test Prometheus instance that will listen on address.
+func NewPrometheus(address string) (*Prometheus, error) {
+	db, err := NewTSDB()
+	if err != nil {
+		return nil, err
+	}
+
+	// Just touch an empty config file. We don't need to actually scrape anything.
+	_, err = os.Create(filepath.Join(db.Dir(), "prometheus.yml"))
 	if err != nil {
 		return nil, err
 	}
 
 	return &Prometheus{
-		dir:  dir,
 		addr: address,
 		db:   db,
 	}, nil
@@ -60,9 +63,9 @@ func (p *Prometheus) Start() error {
 
 	p.cmd = exec.Command(
 		"prometheus",
-		"--storage.tsdb.path="+p.dir,
+		"--storage.tsdb.path="+p.db.Dir(),
 		"--web.listen-address="+p.addr,
-		"--config.file="+filepath.Join(p.dir, "prometheus.yml"),
+		"--config.file="+filepath.Join(p.db.Dir(), "prometheus.yml"),
 	)
 	go func() {
 		if b, err := p.cmd.CombinedOutput(); err != nil {
@@ -83,7 +86,7 @@ func (p *Prometheus) Stop() error {
 }
 
 func (p *Prometheus) cleanup() error {
-	return os.RemoveAll(p.dir)
+	return os.RemoveAll(p.db.Dir())
 }
 
 // Appender returns a new appender to populate the Prometheus instance with data.
