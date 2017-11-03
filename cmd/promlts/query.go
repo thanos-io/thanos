@@ -3,8 +3,6 @@ package main
 import (
 	"net"
 	"net/http"
-	"net/url"
-	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -13,10 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
-	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/promql"
-	"github.com/prometheus/prometheus/retrieval"
-	"github.com/prometheus/prometheus/web/api/v1"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -37,28 +32,13 @@ func registerQuery(app *kingpin.Application, name string) runFunc {
 		Default("20").Required().Int()
 
 	return func(logger log.Logger, metrics prometheus.Registerer) error {
-		return runQuery(logger, metrics, *apiAddr, *storeAddresses, *queryTimeout, *maxConcurrentQueries)
+		return runQuery(logger, metrics, *apiAddr, query.Config{
+			StoreAddresses:       *storeAddresses,
+			QueryTimeout:         *queryTimeout,
+			MaxConcurrentQueries: *maxConcurrentQueries,
+		})
 	}
 }
-
-type noopTargetRetriever struct{}
-
-func (r noopTargetRetriever) Targets() []*retrieval.Target { return nil }
-
-type noopAlertmanagerRetriever struct{}
-
-func (r noopAlertmanagerRetriever) Alertmanagers() []*url.URL { return nil }
-
-var (
-	emptyConfigFunc = func() config.Config {
-		return config.Config{}
-	}
-	passTestReady = func(f http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			f(w, r)
-		}
-	}
-)
 
 // runQuery starts a server that exposes PromQL Query API. It is responsible for querying configured
 // store nodes, merging and duplicating the data to satisfy user query.
@@ -66,35 +46,22 @@ func runQuery(
 	logger log.Logger,
 	reg prometheus.Registerer,
 	apiAddr string,
-	storeAddresses []string,
-	queryTimeout time.Duration,
-	maxConcurrentQueries int,
+	cfg query.Config,
 ) error {
 	level.Info(logger).Log(
 		"msg", "I'm a query node",
 		"api-address", apiAddr,
-		"store.addresses", storeAddresses,
-		"query.timeout", queryTimeout,
-		"query.max-concurrent", maxConcurrentQueries,
+		"store.addresses", cfg.StoreAddresses,
+		"query.timeout", cfg.QueryTimeout,
+		"query.max-concurrent", cfg.MaxConcurrentQueries,
 	)
 
 	var client http.Client
 
 	// Set up query API engine.
-	queryable := query.NewQueryable(&client, storeAddresses)
-	engine := promql.NewEngine(queryable, &promql.EngineOptions{
-		Logger:               logger,
-		Timeout:              queryTimeout,
-		MaxConcurrentQueries: maxConcurrentQueries,
-	})
-	api := v1.NewAPI(
-		engine,
-		queryable,
-		&noopTargetRetriever{},
-		&noopAlertmanagerRetriever{},
-		emptyConfigFunc,
-		passTestReady,
-	)
+	queryable := query.NewQueryable(&client, cfg.StoreAddresses)
+	engine := promql.NewEngine(queryable, cfg.EngineOpts(logger))
+	api := query.NewAPI(engine, queryable, cfg)
 
 	var g group.Group
 
