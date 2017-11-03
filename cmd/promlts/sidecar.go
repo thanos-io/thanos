@@ -19,7 +19,7 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
-func registerSidecar(app *kingpin.Application, name string) runFunc {
+func registerSidecar(m map[string]runFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "sidecar for Prometheus server")
 
 	apiAddr := cmd.Flag("api-address", "listen address for the store API").
@@ -28,7 +28,7 @@ func registerSidecar(app *kingpin.Application, name string) runFunc {
 	metricsAddr := cmd.Flag("metrics-address", "metrics address for the sidecar").
 		Default(":19091").String()
 
-	promAddr := cmd.Flag("prometheus.address", "listen address of Prometheus instance").
+	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API").
 		Default("localhost:9090").String()
 
 	dataDir := cmd.Flag("tsdb.path", "data directory of TSDB").
@@ -37,8 +37,8 @@ func registerSidecar(app *kingpin.Application, name string) runFunc {
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks").
 		PlaceHolder("<bucket>").Required().String()
 
-	return func(logger log.Logger, reg prometheus.Registerer) error {
-		return runSidecar(logger, reg, *apiAddr, *metricsAddr, *promAddr, *dataDir, *gcsBucket)
+	m[name] = func(logger log.Logger, reg prometheus.Registerer) error {
+		return runSidecar(logger, reg, *apiAddr, *metricsAddr, *promURL, *dataDir, *gcsBucket)
 	}
 }
 
@@ -47,7 +47,7 @@ func runSidecar(
 	reg prometheus.Registerer,
 	apiAddr string,
 	metricsAddr string,
-	promAddr string,
+	promURL string,
 	dataDir string,
 	gcsBucket string,
 ) error {
@@ -76,7 +76,10 @@ func runSidecar(
 		}
 
 		var client http.Client
-		proxy := store.NewPrometheusProxy(&client, promAddr)
+		proxy, err := store.NewPrometheusProxy(&client, promURL)
+		if err != nil {
+			return errors.Wrap(err, "create Prometheus proxy")
+		}
 
 		s := grpc.NewServer()
 		storepb.RegisterStoreServer(s, proxy)

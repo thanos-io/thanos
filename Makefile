@@ -23,11 +23,14 @@ install-tools:
 	@echo ">> fetching dep"
 	@go get -u github.com/golang/dep/cmd/dep
 
+test-deps:
+	@go get -u github.com/prometheus/prometheus/cmd/prometheus
+
 proto:
 	@go get -u github.com/gogo/protobuf/protoc-gen-gogofast
 	@./scripts/genproto.sh
 
-test:
+test: test-deps
 	@echo ">> running all tests"
 	@go test $(shell go list ./... | grep -v /vendor/)
 

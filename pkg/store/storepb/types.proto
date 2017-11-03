@@ -10,20 +10,17 @@ message Label {
   string value = 2;
 }
 
-message Labels {
-  repeated Label labels = 1 [(gogoproto.nullable) = false];
-}
-
 message Chunk {
   enum Encoding {
     XOR = 0;
   }
-  bytes data = 1;
+  Encoding type = 1;
+  bytes data    = 2;
 }
 
 message Series {
-  Labels labels         = 1;
-  repeated Chunk chunks = 2;
+  repeated Label labels = 1 [(gogoproto.nullable) = false];
+  repeated Chunk chunks = 2 [(gogoproto.nullable) = false];
 }
 
 // Matcher specifies a rule, which can match or set of labels or not.

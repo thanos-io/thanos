@@ -15,7 +15,7 @@ import (
 )
 
 // registerStore registers a store command.
-func registerStore(app *kingpin.Application, name string) runFunc {
+func registerStore(m map[string]runFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "store node giving access to blocks in a GCS bucket")
 
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks").
@@ -30,7 +30,7 @@ func registerStore(app *kingpin.Application, name string) runFunc {
 	maxMemCacheSize := cmd.Flag("mem-cache-size", "maximum size of in-memory cache").
 		Default("4GB").Bytes()
 
-	return func(logger log.Logger, metrics prometheus.Registerer) error {
+	m[name] = func(logger log.Logger, metrics prometheus.Registerer) error {
 		return runStore(logger, metrics, *gcsBucket, *peers, *maxDiskCacheSize, *maxMemCacheSize)
 	}
 }
