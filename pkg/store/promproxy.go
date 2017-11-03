@@ -146,7 +146,29 @@ func (p *PrometheusProxy) LabelNames(ctx context.Context, r *storepb.LabelNamesR
 func (p *PrometheusProxy) LabelValues(ctx context.Context, r *storepb.LabelValuesRequest) (
 	*storepb.LabelValuesResponse, error,
 ) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+	u := *p.base
+	u.Path = path.Join(u.Path, "/api/v1/label/", r.Label, "/values")
+
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, status.Error(codes.Unknown, err.Error())
+	}
+
+	resp, err := p.client.Do(req.WithContext(ctx))
+	if err != nil {
+		return nil, status.Error(codes.Unknown, err.Error())
+	}
+	defer resp.Body.Close()
+
+	var m struct {
+		Data []string `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+		return nil, status.Error(codes.Unknown, err.Error())
+	}
+	sort.Strings(m.Data)
+
+	return &storepb.LabelValuesResponse{Values: m.Data}, nil
 }
 
 func selectorString(ms ...storepb.LabelMatcher) string {

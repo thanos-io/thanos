@@ -70,3 +70,30 @@ func expandChunk(cit chunks.Iterator) (res []sample) {
 	}
 	return res
 }
+
+func TestPrometheusProxy_LabelValues(t *testing.T) {
+	p, err := testutil.NewPrometheus(":12346")
+	testutil.Ok(t, err)
+
+	a := p.Appender()
+	a.Add(labels.FromStrings("a", "b"), 0, 1)
+	a.Add(labels.FromStrings("a", "c"), 0, 1)
+	a.Add(labels.FromStrings("a", "a"), 0, 1)
+	testutil.Ok(t, a.Commit())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	testutil.Ok(t, p.Start())
+	defer p.Stop()
+
+	proxy, err := NewPrometheusProxy(nil, "http://localhost:12346/")
+	testutil.Ok(t, err)
+
+	resp, err := proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
+		Label: "a",
+	})
+	testutil.Ok(t, err)
+
+	testutil.Equals(t, []string{"a", "b", "c"}, resp.Values)
+}

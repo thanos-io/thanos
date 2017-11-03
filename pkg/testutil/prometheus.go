@@ -70,7 +70,7 @@ func (p *Prometheus) Start() error {
 			fmt.Fprintln(os.Stderr, string(b))
 		}
 	}()
-	time.Sleep(time.Second / 2)
+	time.Sleep(time.Second)
 
 	return nil
 }
