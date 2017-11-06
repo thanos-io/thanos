@@ -57,6 +57,8 @@ func NewPrometheus(address string) (*Prometheus, error) {
 // Start running the Prometheus instance and return.
 func (p *Prometheus) Start() error {
 	p.running = true
+	time.Sleep(time.Second / 2)
+
 	if err := p.db.Close(); err != nil {
 		return err
 	}
@@ -73,7 +75,7 @@ func (p *Prometheus) Start() error {
 			fmt.Fprintln(os.Stderr, string(b))
 		}
 	}()
-	time.Sleep(time.Second)
+	time.Sleep(2 * time.Second)
 
 	return nil
 }
