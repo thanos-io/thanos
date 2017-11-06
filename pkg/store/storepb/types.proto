@@ -14,8 +14,10 @@ message Chunk {
   enum Encoding {
     XOR = 0;
   }
-  Encoding type = 1;
-  bytes data    = 2;
+  int64 min_time = 1;
+  int64 max_time = 2;
+  Encoding type  = 3;
+  bytes data     = 4;
 }
 
 message Series {
