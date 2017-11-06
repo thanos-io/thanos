@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"time"
 
 	"cloud.google.com/go/storage"
 	"github.com/improbable-eng/promlts/pkg/shipper"
@@ -106,7 +107,7 @@ func runSidecar(
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			return errors.Wrap(s.Run(ctx), "run block shipper")
+			return errors.Wrap(s.Run(ctx, 30*time.Second), "run block shipper")
 		}, func(error) {
 			cancel()
 		})
