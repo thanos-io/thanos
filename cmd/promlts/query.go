@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net"
 	"net/http"
 
@@ -49,10 +50,8 @@ func runQuery(
 	apiAddr string,
 	cfg query.Config,
 ) error {
-	var client http.Client
-
 	// Set up query API engine.
-	queryable := query.NewQueryable(&client, cfg.StoreAddresses)
+	queryable := query.NewQueryable(context.Background(), cfg.StoreAddresses)
 	engine := promql.NewEngine(queryable, cfg.EngineOpts(logger))
 	api := v1.NewAPI(engine, queryable, cfg)
 

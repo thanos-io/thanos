@@ -1,23 +1,25 @@
 package query
 
 import (
-	"github.com/prometheus/tsdb/chunks"
 	"net/http"
 	"sync"
+	"unsafe"
+
+	"github.com/prometheus/tsdb"
+	"github.com/prometheus/tsdb/chunks"
+	"github.com/prometheus/tsdb/labels"
 
 	"context"
 
 	"github.com/improbable-eng/promlts/pkg/store/storepb"
 	"github.com/pkg/errors"
-	"github.com/prometheus/prometheus/pkg/labels"
+	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
 	"google.golang.org/grpc"
 )
 
 var _ promql.Queryable = (*Queryable)(nil)
-var _ storage.Querier = (*querier)(nil)
-var _ storage.SeriesSet = (*seriesSet)(nil)
 
 type Queryable struct {
 	client         *http.Client
@@ -57,30 +59,47 @@ func newQuerier(ctx context.Context, storeAddresses []string, mint, maxt int64) 
 	}
 }
 
-func (q *querier) Select(ms ...*labels.Matcher) storage.SeriesSet {
+func (q *querier) Select(ms ...*promlabels.Matcher) storage.SeriesSet {
 	var (
 		wg  sync.WaitGroup
 		mtx sync.Mutex
-		all []storage.SeriesSet
+		all []tsdb.SeriesSet
 	)
 	wg.Add(len(q.storeAddresses))
 
 	sms, err := translateMatchers(ms...)
 	if err != nil {
-		return errSeriesSet{err: err}
+		return promSeriesSet{set: errSeriesSet{err: err}}
 	}
 	for _, s := range q.storeAddresses {
 		go func(s string) {
-			set := q.selectSingle(sms...)
+			set := q.selectSingle(s, sms...)
 			mtx.Lock()
 			all = append(all, set)
 			mtx.Unlock()
 		}(s)
 	}
-	return newMergedSeriesSet(all...)
+	wg.Wait()
+
+	return promSeriesSet{set: mergeAllSeriesSets(all...)}
 }
 
-func (q *querier) selectSingle(addr string, ms ...storepb.LabelMatcher) storage.SeriesSet {
+func mergeAllSeriesSets(all ...tsdb.SeriesSet) tsdb.SeriesSet {
+	switch len(all) {
+	case 0:
+		return errSeriesSet{err: nil}
+	case 1:
+		return all[0]
+	}
+	h := len(all) / 2
+
+	return tsdb.NewMergedSeriesSet(
+		mergeAllSeriesSets(all[:h]...),
+		mergeAllSeriesSets(all[h:]...),
+	)
+}
+
+func (q *querier) selectSingle(addr string, ms ...storepb.LabelMatcher) tsdb.SeriesSet {
 	conn, err := grpc.DialContext(q.ctx, addr, grpc.WithInsecure())
 	if err != nil {
 		return errSeriesSet{err: err}
@@ -95,55 +114,63 @@ func (q *querier) selectSingle(addr string, ms ...storepb.LabelMatcher) storage.
 	if err != nil {
 		return errSeriesSet{err: err}
 	}
-	return &staticSeriesSet{series: resp.Series, i: -1}
+	return &storeSeriesSet{series: resp.Series, i: -1, mint: q.mint, maxt: q.maxt}
 }
 
-func translateMatchers(in ...*labels.Matcher) ([]storepb.LabelMatcher, error) {
-	out := make([]storepb.LabelMatcher, 0, len(in))
+func (*querier) LabelValues(name string) ([]string, error) {
+	return nil, errors.New("not implemented")
+}
 
-	for _, m := range in {
-		var t storepb.LabelMatcher_Type
-		switch m.Type {
-		case labels.MatchEqual:
-			t = storepb.LabelMatcher_EQ
-		case labels.MatchNotEqual:
-			t = storepb.LabelMatcher_NEQ
-		case labels.MatchRegexp:
-			t = storepb.LabelMatcher_RE
-		case labels.MatchNotRegexp:
-			t = storepb.LabelMatcher_NRE
-		}
-		out = append(out, storepb.LabelMatcher{
-			Name:  m.Name,
-			Value: m.Value,
-			Type:  t,
-		})
+func (*querier) LabelValuesFor(string, labels.Label) ([]string, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (q *querier) Close() error {
+	q.cancel()
+	return nil
+}
+
+func translateChunk(c storepb.Chunk) (tsdb.ChunkMeta, error) {
+	if c.Type != storepb.Chunk_XOR {
+		return tsdb.ChunkMeta{}, errors.Errorf("unrecognized chunk encoding %d", c.Type)
 	}
-	return out, nil
+	cc, err := chunks.FromData(chunks.EncXOR, c.Data)
+	if err != nil {
+		return tsdb.ChunkMeta{}, errors.Wrap(err, "convert chunk")
+	}
+	return tsdb.ChunkMeta{MinTime: c.MinTime, MaxTime: c.MaxTime, Chunk: cc}, nil
 }
 
 type errSeriesSet struct {
 	err error
 }
 
-var _ storage.SeriesSet = (*errSeriesSet)(nil)
+var _ tsdb.SeriesSet = (*errSeriesSet)(nil)
 
-func (errSeriesSet) Next() bool         { return false }
-func (s errSeriesSet) Err() error       { return s.err }
-func (errSeriesSet) At() storage.Series { return nil }
+func (errSeriesSet) Next() bool      { return false }
+func (s errSeriesSet) Err() error    { return s.err }
+func (errSeriesSet) At() tsdb.Series { return nil }
 
 type storeSeriesSet struct {
-	series []storepb.Series
-	i      int
+	series     []storepb.Series
+	mint, maxt int64
+
+	i   int
+	cur *storeSeries
 }
 
-var _ storage.SeriesSet = (*storeSeriesSet)(nil)
+var _ tsdb.SeriesSet = (*storeSeriesSet)(nil)
 
 func (s *storeSeriesSet) Next() bool {
 	if s.i >= len(s.series)-1 {
 		return false
 	}
+	// Skip empty series.
+	if len(s.series[s.i].Chunks) == 0 {
+		return s.Next()
+	}
 	s.i++
+	s.cur = &storeSeries{s: s.series[s.i], mint: s.mint, maxt: s.maxt}
 	return true
 }
 
@@ -151,60 +178,65 @@ func (storeSeriesSet) Err() error {
 	return nil
 }
 
-func (s storeSeriesSet) At() storage.Series {
-	return s.series[s.i]
+func (s storeSeriesSet) At() tsdb.Series {
+	return s.cur
 }
 
+// storeSeries implements storage.Series for a series retrieved fromt he store API.
 type storeSeries struct {
-	lset labels.Labels
-	s    storepb.Series
+	s          storepb.Series
+	mint, maxt int64
 }
 
-var _ storage.Series = (*storeSeries)(nil)
-
-func newStoreSeries(s storepb.Series) *storeSeries {
-	lset := translateLabels(s)
-	return &storeSeries{lset: lset, s: s}
-}
-
-func translateLabels(lset []storepb.Label) labels.Labels {
-
-}
+var _ tsdb.Series = (*storeSeries)(nil)
 
 func (s *storeSeries) Labels() labels.Labels {
-	return s.lset
+	return *(*labels.Labels)(unsafe.Pointer(&s.s.Labels)) // YOLO!
 }
 
-func (s *storeSeries) Iterator() storage.SeriesIterator {
-	return s.s.
+func (s *storeSeries) Iterator() tsdb.SeriesIterator {
+	return newChunkSeriesIterator(s.s.Chunks, s.mint, s.maxt)
 }
+
+type errSeriesIterator struct {
+	err error
+}
+
+func (errSeriesIterator) Seek(int64) bool      { return false }
+func (errSeriesIterator) Next() bool           { return false }
+func (errSeriesIterator) At() (int64, float64) { return 0, 0 }
+func (errSeriesIterator) Err() error           { return nil }
 
 // chunkSeriesIterator implements a series iterator on top
 // of a list of time-sorted, non-overlapping chunks.
 type chunkSeriesIterator struct {
-	chunks []chunks.Chunk
+	chunks     []tsdb.ChunkMeta
+	maxt, mint int64
 
 	i   int
 	cur chunks.Iterator
-
-	maxt, mint int64
 }
 
-func newChunkSeriesIterator(cs []ChunkMeta, dranges Intervals, mint, maxt int64) *chunkSeriesIterator {
-	it := cs[0].Chunk.Iterator()
+func newChunkSeriesIterator(cs []storepb.Chunk, mint, maxt int64) storage.SeriesIterator {
+	cms := make([]tsdb.ChunkMeta, 0, len(cs))
 
-	if len(dranges) > 0 {
-		it = &deletedIterator{it: it, intervals: dranges}
+	for _, c := range cs {
+		tc, err := translateChunk(c)
+		if err != nil {
+			return errSeriesIterator{err: err}
+		}
+		cms = append(cms, tc)
 	}
+
+	it := cms[0].Chunk.Iterator()
+
 	return &chunkSeriesIterator{
-		chunks: cs,
+		chunks: cms,
 		i:      0,
 		cur:    it,
 
 		mint: mint,
 		maxt: maxt,
-
-		intervals: dranges,
 	}
 }
 
@@ -225,9 +257,6 @@ func (it *chunkSeriesIterator) Seek(t int64) (ok bool) {
 	}
 
 	it.cur = it.chunks[it.i].Chunk.Iterator()
-	if len(it.intervals) > 0 {
-		it.cur = &deletedIterator{it: it.cur, intervals: it.intervals}
-	}
 
 	for it.cur.Next() {
 		t0, _ := it.cur.At()
@@ -268,43 +297,10 @@ func (it *chunkSeriesIterator) Next() bool {
 
 	it.i++
 	it.cur = it.chunks[it.i].Chunk.Iterator()
-	if len(it.intervals) > 0 {
-		it.cur = &deletedIterator{it: it.cur, intervals: it.intervals}
-	}
 
 	return it.Next()
 }
 
 func (it *chunkSeriesIterator) Err() error {
 	return it.cur.Err()
-}
-
-
-
-func (*querier) LabelValues(name string) ([]string, error) {
-
-	return nil, errors.New("not implemented")
-}
-
-func (q *querier) Close() error {
-	q.cancel()
-	return nil
-}
-
-type seriesSet struct{}
-
-func newSeriesSet() *seriesSet {
-	return &seriesSet{}
-}
-
-func (*seriesSet) Next() bool {
-	return false
-}
-
-func (*seriesSet) At() storage.Series {
-	return nil
-}
-
-func (*seriesSet) Err() error {
-	return errors.New("not implemented")
 }
