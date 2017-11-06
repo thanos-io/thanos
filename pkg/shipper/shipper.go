@@ -40,6 +40,9 @@ func New(
 	remote Remote,
 	match func(os.FileInfo) bool,
 ) *Shipper {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
 	return &Shipper{
 		logger: logger,
 		dir:    dir,
@@ -47,8 +50,6 @@ func New(
 		match:  match,
 	}
 }
-
-const syncInterval = 5 * time.Second
 
 // IsULIDDir returns true if the described file is a directory with a name that is
 // a valid ULID.
@@ -61,7 +62,7 @@ func IsULIDDir(fi os.FileInfo) bool {
 }
 
 // Run the shipper.
-func (s *Shipper) Run(ctx context.Context) error {
+func (s *Shipper) Run(ctx context.Context, syncInterval time.Duration) error {
 	tick := time.NewTicker(syncInterval)
 	defer tick.Stop()
 
