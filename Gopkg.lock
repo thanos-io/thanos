@@ -98,12 +98,6 @@
   revision = "6a197d5ea61168f2ac821de2b7f011b250904900"
 
 [[projects]]
-  name = "github.com/oklog/oklog"
-  packages = ["pkg/group"]
-  revision = "fca58330910eb7fe6267788eddf879b1d6811176"
-  version = "v0.2.2"
-
-[[projects]]
   name = "github.com/oklog/ulid"
   packages = ["."]
   revision = "d311cb43c92434ec4072dfbbda3400741d0a6337"
@@ -201,7 +195,7 @@
 
 [[projects]]
   name = "google.golang.org/grpc"
-  packages = [".","balancer","benchmark/stats","codes","connectivity","credentials","grpclb/grpc_lb_v1/messages","grpclog","internal","keepalive","metadata","naming","peer","resolver","stats","status","tap","transport"]
+  packages = [".","balancer","codes","connectivity","credentials","grpclb/grpc_lb_v1/messages","grpclog","internal","keepalive","metadata","naming","peer","resolver","stats","status","tap","transport"]
   revision = "5ffe3083946d5603a0578721101dc8165b1d5b5f"
   version = "v1.7.2"
 
@@ -220,6 +214,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "5baafcc2f74d522bb44a0c6d7dc48b9e27800b14321f820ef297253b09c1f004"
+  inputs-digest = "e83a51dda8b8f0a5b9f307839b31fca6ae454cff4efe6b653291ab8778fc6243"
   solver-name = "gps-cdcl"
   solver-version = 1
