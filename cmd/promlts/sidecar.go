@@ -35,8 +35,8 @@ func registerSidecar(m map[string]runFunc, app *kingpin.Application, name string
 	dataDir := cmd.Flag("tsdb.path", "data directory of TSDB").
 		Default("./data").String()
 
-	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks").
-		PlaceHolder("<bucket>").Required().String()
+	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
+		PlaceHolder("<bucket>").String()
 
 	m[name] = func(logger log.Logger, reg prometheus.Registerer) error {
 		return runSidecar(logger, reg, *apiAddr, *metricsAddr, *promURL, *dataDir, *gcsBucket)
@@ -93,9 +93,11 @@ func runSidecar(
 		})
 
 	}
-	// The background shipper continously scans the data directory and uploads
-	// new found blocks to Google Cloud Storage.
-	{
+
+	if gcsBucket != "" {
+		// The background shipper continuously scans the data directory and uploads
+		// new found blocks to Google Cloud Storage.
+
 		gcsClient, err := storage.NewClient(context.Background())
 		if err != nil {
 			return errors.Wrap(err, "create GCS client")
@@ -111,6 +113,8 @@ func runSidecar(
 		}, func(error) {
 			cancel()
 		})
+	} else {
+		level.Info(logger).Log("msg", "No GCS bucket were configured, GCS uploads will be disabled")
 	}
 	// Listen for termination signals.
 	{
