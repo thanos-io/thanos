@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"net/url"
 	"testing"
 	"time"
 
@@ -30,7 +31,13 @@ func TestPrometheusProxy_Series(t *testing.T) {
 	testutil.Ok(t, p.Start())
 	defer p.Stop()
 
-	proxy, err := NewPrometheusProxy(nil, nil, "http://localhost:12345/")
+	u, err := url.Parse("http://localhost:12345")
+	testutil.Ok(t, err)
+
+	proxy, err := NewPrometheusProxy(nil, nil, nil, u,
+		func() labels.Labels {
+			return labels.FromStrings("region", "eu-west")
+		})
 	testutil.Ok(t, err)
 
 	// Query all three samples except for the first one. Since we round up queried data
@@ -45,7 +52,12 @@ func TestPrometheusProxy_Series(t *testing.T) {
 	testutil.Ok(t, err)
 
 	testutil.Equals(t, 1, len(resp.Series))
-	testutil.Equals(t, []storepb.Label{{Name: "a", Value: "b"}}, resp.Series[0].Labels)
+
+	testutil.Equals(t, []storepb.Label{
+		{Name: "a", Value: "b"},
+		{Name: "region", Value: "eu-west"},
+	}, resp.Series[0].Labels)
+
 	testutil.Equals(t, 1, len(resp.Series[0].Chunks))
 
 	c := resp.Series[0].Chunks[0]
@@ -87,7 +99,10 @@ func TestPrometheusProxy_LabelValues(t *testing.T) {
 	testutil.Ok(t, p.Start())
 	defer p.Stop()
 
-	proxy, err := NewPrometheusProxy(nil, nil, "http://localhost:12346/")
+	u, err := url.Parse("http://localhost:12346/")
+	testutil.Ok(t, err)
+
+	proxy, err := NewPrometheusProxy(nil, nil, nil, u, nil)
 	testutil.Ok(t, err)
 
 	resp, err := proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
