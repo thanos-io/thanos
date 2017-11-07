@@ -16,6 +16,7 @@ import (
 // Prometheus represents a test instance for integration testing.
 // It can be populated with data before being started.
 type Prometheus struct {
+	dir     string
 	addr    string
 	running bool
 	db      *tsdb.DB
@@ -49,6 +50,7 @@ func NewPrometheus(address string) (*Prometheus, error) {
 	}
 
 	return &Prometheus{
+		dir:  db.Dir(),
 		addr: address,
 		db:   db,
 	}, nil
@@ -78,6 +80,18 @@ func (p *Prometheus) Start() error {
 	time.Sleep(2 * time.Second)
 
 	return nil
+}
+
+// SetConfig updates the contents of the config file.
+func (p *Prometheus) SetConfig(s string) error {
+	f, err := os.Create(filepath.Join(p.dir, "prometheus.yml"))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = f.Write([]byte(s))
+	return err
 }
 
 // Stop terminates Prometheus and clean up its data directory.
