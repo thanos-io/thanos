@@ -15,7 +15,7 @@ func registerExample(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	// Query flags.
 	apiAddr := cmd.Flag("query.address", "listen address for the query API").
-		Default("localhost:19099").URL()
+		Default("localhost:19099").String()
 
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "maximum number of queries processed concurrently by query node").
 		Default("20").Int()
@@ -25,10 +25,10 @@ func registerExample(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	// Sidecar flags.
 	storeAddress := cmd.Flag("sidecar.address", "listen address of sidecar store API").
-		Default("localhost:19090").URL()
+		Default("localhost:19090").String()
 
 	metricsAddr := cmd.Flag("sidecar.metrics-address", "metrics address for the sidecar").
-		Default("localhost:19091").URL()
+		Default("localhost:19091").String()
 
 	promURL := cmd.Flag("sidecar.prometheus-url", "URL at which to reach Prometheus's API").
 		Default("http://localhost:9090").URL()
@@ -49,7 +49,7 @@ func registerExample(m map[string]setupFunc, app *kingpin.Application, name stri
 	m[name] = func(logger log.Logger, metrics prometheus.Registerer) (okgroup.Group, error) {
 		var g okgroup.Group
 		queryGroup, err := runQuery(logger, metrics, *apiAddr, query.Config{
-			StoreAddresses:       []string{(*storeAddress).String()},
+			StoreAddresses:       []string{*storeAddress},
 			QueryTimeout:         *queryTimeout,
 			MaxConcurrentQueries: *maxConcurrentQueries,
 		})

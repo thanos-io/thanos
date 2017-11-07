@@ -16,17 +16,16 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/promql"
 	"gopkg.in/alecthomas/kingpin.v2"
-	"net/url"
 )
 
 // registerQuery registers a query command.
 func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
 
-	apiAddr := cmd.Flag("query.address", "listen address for the query API").
-		Default("0.0.0.0:19099").URL()
+	apiAddr := cmd.Flag("api-address", "listen host:port address for the query API").
+		Default("0.0.0.0:19099").String()
 
-	storeAddresses := cmd.Flag("query.store-addresses", "comma delimited listen addresses of store APIs").
+	storeAddresses := cmd.Flag("store-addresses", "comma delimited listen addresses of store APIs").
 		Default("localhost:19090").Strings()
 
 	queryTimeout := cmd.Flag("query.timeout", "maximum time to process query by query node").
@@ -49,7 +48,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 func runQuery(
 	logger log.Logger,
 	reg prometheus.Registerer,
-	apiAddr *url.URL,
+	apiAddr string,
 	cfg query.Config,
 ) (okgroup.Group, error) {
 
@@ -70,7 +69,7 @@ func runQuery(
 		registerProfile(mux)
 		mux.Handle("/", router)
 
-		l, err := net.Listen("tcp", apiAddr.String())
+		l, err := net.Listen("tcp", apiAddr)
 		if err != nil {
 			return g, errors.Wrapf(err, "listen on address %s", apiAddr)
 		}

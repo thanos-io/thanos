@@ -18,7 +18,7 @@ import (
 func registerStore(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "store node giving access to blocks in a GCS bucket")
 
-	gcsBucket := cmd.Flag("store.gcs-bucket", "Google Cloud Storage bucket name for stored blocks").
+	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks").
 		PlaceHolder("<bucket>").Required().String()
 
 	maxDiskCacheSize := cmd.Flag("store.disk-cache-size", "maximum size of on-disk cache").

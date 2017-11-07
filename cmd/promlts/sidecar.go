@@ -29,19 +29,19 @@ import (
 func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "sidecar for Prometheus server")
 
-	apiAddr := cmd.Flag("sidecar.address", "listen address for the store API").
-		Default("0.0.0.0:19090").URL()
+	apiAddr := cmd.Flag("api-address", "listen host:port address for the store API").
+		Default("0.0.0.0:19090").String()
 
-	metricsAddr := cmd.Flag("sidecar.metrics-address", "metrics address for the sidecar").
-		Default("0.0.0.0:19091").URL()
+	metricsAddr := cmd.Flag("metrics-address", "metrics host:port address for the sidecar").
+		Default("0.0.0.0:19091").String()
 
-	promURL := cmd.Flag("sidecar.prometheus-url", "URL at which to reach Prometheus's API").
+	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API").
 		Default("http://localhost:9090").URL()
 
-	dataDir := cmd.Flag("sidecar.tsdb-path", "data directory of TSDB").
+	dataDir := cmd.Flag("tsdb.path", "data directory of TSDB").
 		Default("./data").String()
 
-	gcsBucket := cmd.Flag("sidecar.gcs-bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
+	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
 		PlaceHolder("<bucket>").String()
 
 	m[name] = func(logger log.Logger, reg prometheus.Registerer) (okgroup.Group, error) {
@@ -52,8 +52,8 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 func runSidecar(
 	logger log.Logger,
 	reg prometheus.Registerer,
-	apiAddr *url.URL,
-	metricsAddr *url.URL,
+	apiAddr string,
+	metricsAddr string,
 	promURL *url.URL,
 	dataDir string,
 	gcsBucket string,
@@ -73,7 +73,7 @@ func runSidecar(
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", prometheus.Handler())
 
-		l, err := net.Listen("tcp", net.JoinHostPort(metricsAddr.Hostname(), metricsAddr.Port()))
+		l, err := net.Listen("tcp", metricsAddr)
 		if err != nil {
 			return g, errors.Wrap(err, "listen metrics address")
 		}
@@ -85,7 +85,7 @@ func runSidecar(
 		})
 	}
 	{
-		l, err := net.Listen("tcp", net.JoinHostPort(apiAddr.Hostname(), apiAddr.Port()))
+		l, err := net.Listen("tcp", apiAddr)
 		if err != nil {
 			return g, errors.Wrap(err, "listen API address")
 		}
@@ -100,7 +100,6 @@ func runSidecar(
 		}
 
 		s := grpc.NewServer()
-
 		storepb.RegisterStoreServer(s, proxy)
 
 		g.Add(func() error {
