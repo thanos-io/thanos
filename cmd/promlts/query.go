@@ -42,7 +42,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 
 	stores := cmd.Arg("store", "store APIs to get data from").Required().URL()
 
-	m[name] = func(logger log.Logger, metrics prometheus.Registerer) (okgroup.Group, error) {
+	m[name] = func(logger log.Logger, metrics *prometheus.Registry) (okgroup.Group, error) {
 		return runQuery(logger, metrics, *apiAddr, query.Config{
 			QueryTimeout:         *queryTimeout,
 			MaxConcurrentQueries: *maxConcurrentQueries,
@@ -54,7 +54,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 // store nodes, merging and duplicating the data to satisfy user query.
 func runQuery(
 	logger log.Logger,
-	reg prometheus.Registerer,
+	reg *prometheus.Registry,
 	apiAddr string,
 	cfg query.Config,
 	storesURL *url.URL,
@@ -101,7 +101,7 @@ func runQuery(
 		api.Register(router)
 
 		mux := http.NewServeMux()
-		mux.Handle("/metrics", prometheus.Handler())
+		registerMetrics(mux, reg)
 		registerProfile(mux)
 		mux.Handle("/", router)
 
