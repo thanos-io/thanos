@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -54,11 +56,9 @@ func main() {
 		default:
 			panic("unexpected log level")
 		}
-		logger = log.NewLogfmtLogger(os.Stderr)
-		logger = log.NewSyncLogger(logger)
+		logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
 		logger = level.NewFilter(logger, lvl)
-		logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-		logger = log.With(logger, "caller", log.DefaultCaller)
+		logger = log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.DefaultCaller)
 	}
 
 	metrics := prometheus.NewRegistry()
@@ -83,4 +83,16 @@ func interrupt(cancel <-chan struct{}) error {
 	case <-cancel:
 		return errors.New("canceled")
 	}
+}
+
+func registerProfile(mux *http.ServeMux) {
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	mux.Handle("/debug/pprof/block", pprof.Handler("block"))
+	mux.Handle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
+	mux.Handle("/debug/pprof/heap", pprof.Handler("heap"))
+	mux.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
 }

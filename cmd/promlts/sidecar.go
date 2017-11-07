@@ -30,7 +30,7 @@ func registerSidecar(m map[string]runFunc, app *kingpin.Application, name string
 		Default(":19091").String()
 
 	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API").
-		Default("localhost:9090").String()
+		Default("http://localhost:9090").String()
 
 	dataDir := cmd.Flag("tsdb.path", "data directory of TSDB").
 		Default("./data").String()
@@ -75,14 +75,16 @@ func runSidecar(
 		if err != nil {
 			return errors.Wrap(err, "listen API address")
 		}
+		logger := log.With(logger, "component", "proxy")
 
 		var client http.Client
-		proxy, err := store.NewPrometheusProxy(&client, promURL)
+		proxy, err := store.NewPrometheusProxy(logger, &client, promURL)
 		if err != nil {
 			return errors.Wrap(err, "create Prometheus proxy")
 		}
 
 		s := grpc.NewServer()
+
 		storepb.RegisterStoreServer(s, proxy)
 
 		g.Add(func() error {

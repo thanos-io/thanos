@@ -15,6 +15,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/promlts/pkg/store/storepb"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
@@ -25,6 +27,7 @@ import (
 // PrometheusProxy implements the store node API on top of the Prometheus
 // HTTP v1 API.
 type PrometheusProxy struct {
+	logger log.Logger
 	base   *url.URL
 	client *http.Client
 }
@@ -33,15 +36,18 @@ var _ storepb.StoreServer = (*PrometheusProxy)(nil)
 
 // NewPrometheusProxy returns a new PrometheusProxy that uses the given HTTP client
 // to talk to Prometheus.
-func NewPrometheusProxy(client *http.Client, baseURL string) (*PrometheusProxy, error) {
+func NewPrometheusProxy(logger log.Logger, client *http.Client, baseURL string) (*PrometheusProxy, error) {
 	if client == nil {
 		client = http.DefaultClient
+	}
+	if logger == nil {
+		logger = log.NewNopLogger()
 	}
 	u, err := url.Parse(baseURL)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse Prometheus URL")
 	}
-	return &PrometheusProxy{base: u, client: client}, nil
+	return &PrometheusProxy{logger: logger, base: u, client: client}, nil
 }
 
 // Series returns all series for a requested time range and label matcher. The returned data may
@@ -56,6 +62,10 @@ func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) 
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
+
+	level.Debug(p.logger).Log("msg", "received request",
+		"mint", timestamp.Time(r.MinTime), "maxt", timestamp.Time(r.MaxTime), "matchers", sel)
+
 	// We can only provide second precision so we have to round up. This could
 	// cause additional samples to be fetched, which we have to remove further down.
 	rng := (r.MaxTime-r.MinTime)/1000 + 1
@@ -106,7 +116,12 @@ func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) 
 		}
 		res.Series = append(res.Series, storepb.Series{
 			Labels: lset,
-			Chunks: []storepb.Chunk{{Type: enc, Data: b}},
+			Chunks: []storepb.Chunk{{
+				MinTime: int64(e.Values[0].Timestamp),
+				MaxTime: int64(e.Values[len(e.Values)-1].Timestamp),
+				Type:    enc,
+				Data:    b,
+			}},
 		})
 	}
 	return res, nil
