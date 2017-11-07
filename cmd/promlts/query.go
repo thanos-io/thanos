@@ -32,7 +32,7 @@ func registerQuery(m map[string]runFunc, app *kingpin.Application, name string) 
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "maximum number of queries processed concurrently by query node").
 		Default("20").Int()
 
-	m[name] = func(logger log.Logger, metrics prometheus.Registerer) error {
+	m[name] = func(logger log.Logger, metrics *prometheus.Registry) error {
 		return runQuery(logger, metrics, *apiAddr, query.Config{
 			StoreAddresses:       *storeAddresses,
 			QueryTimeout:         *queryTimeout,
@@ -45,7 +45,7 @@ func registerQuery(m map[string]runFunc, app *kingpin.Application, name string) 
 // store nodes, merging and duplicating the data to satisfy user query.
 func runQuery(
 	logger log.Logger,
-	reg prometheus.Registerer,
+	reg *prometheus.Registry,
 	apiAddr string,
 	cfg query.Config,
 ) error {
@@ -62,7 +62,7 @@ func runQuery(
 		api.Register(router)
 
 		mux := http.NewServeMux()
-		mux.Handle("/metrics", prometheus.Handler())
+		registerMetrics(mux, reg)
 		registerProfile(mux)
 		mux.Handle("/", router)
 

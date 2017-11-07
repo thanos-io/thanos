@@ -44,14 +44,14 @@ func registerSidecar(m map[string]runFunc, app *kingpin.Application, name string
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
 		PlaceHolder("<bucket>").String()
 
-	m[name] = func(logger log.Logger, reg prometheus.Registerer) error {
+	m[name] = func(logger log.Logger, reg *prometheus.Registry) error {
 		return runSidecar(logger, reg, *apiAddr, *metricsAddr, *promURL, *dataDir, *gcsBucket)
 	}
 }
 
 func runSidecar(
 	logger log.Logger,
-	reg prometheus.Registerer,
+	reg *prometheus.Registry,
 	apiAddr string,
 	metricsAddr string,
 	promURL string,
@@ -77,7 +77,7 @@ func runSidecar(
 	var g group.Group
 	{
 		mux := http.NewServeMux()
-		mux.Handle("/metrics", prometheus.Handler())
+		registerMetrics(mux, reg)
 
 		l, err := net.Listen("tcp", metricsAddr)
 		if err != nil {
