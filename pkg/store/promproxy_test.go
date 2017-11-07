@@ -30,7 +30,7 @@ func TestPrometheusProxy_Series(t *testing.T) {
 	testutil.Ok(t, p.Start())
 	defer p.Stop()
 
-	proxy, err := NewPrometheusProxy(nil, "http://localhost:12345/")
+	proxy, err := NewPrometheusProxy(nil, nil, "http://localhost:12345/")
 	testutil.Ok(t, err)
 
 	// Query all three samples except for the first one. Since we round up queried data
@@ -87,7 +87,7 @@ func TestPrometheusProxy_LabelValues(t *testing.T) {
 	testutil.Ok(t, p.Start())
 	defer p.Stop()
 
-	proxy, err := NewPrometheusProxy(nil, "http://localhost:12346/")
+	proxy, err := NewPrometheusProxy(nil, nil, "http://localhost:12346/")
 	testutil.Ok(t, err)
 
 	resp, err := proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
