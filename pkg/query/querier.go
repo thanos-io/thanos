@@ -1,56 +1,59 @@
 package query
 
 import (
-	"net/http"
+	"context"
 	"sync"
 	"unsafe"
 
+	"github.com/go-kit/kit/log"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/chunks"
 	"github.com/prometheus/tsdb/labels"
-
-	"context"
 
 	"github.com/improbable-eng/promlts/pkg/store/storepb"
 	"github.com/pkg/errors"
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
 
 var _ promql.Queryable = (*Queryable)(nil)
 
 type Queryable struct {
-	client         *http.Client
+	logger         log.Logger
 	storeAddresses []string
 }
 
-// NewQueryable creates implementation of promql.Queryable that uses given HTTP client
-// to talk to each store node.
-func NewQueryable(ctx context.Context, storeAddresses []string) *Queryable {
+// NewQueryable creates implementation of promql.Queryable that fetches data from the given
+// store API endpoints.
+func NewQueryable(logger log.Logger, storeAddresses []string) *Queryable {
 	return &Queryable{
+		logger:         logger,
 		storeAddresses: storeAddresses,
 	}
 }
 
 func (q *Queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.storeAddresses, mint, maxt), nil
+	return newQuerier(q.logger, ctx, q.storeAddresses, mint, maxt), nil
 }
 
 type querier struct {
+	logger         log.Logger
 	ctx            context.Context
 	cancel         func()
 	mint, maxt     int64
 	storeAddresses []string
 }
 
-// newQuerier creates implementation of storage.Querier that uses given HTTP client
-// to talk to each store node.
-func newQuerier(ctx context.Context, storeAddresses []string, mint, maxt int64) *querier {
+// newQuerier creates implementation of storage.Querier that fetches data from the given
+// store API endpoints.
+func newQuerier(logger log.Logger, ctx context.Context, storeAddresses []string, mint, maxt int64) *querier {
 	ctx, cancel := context.WithCancel(ctx)
 
 	return &querier{
+		logger:         logger,
 		ctx:            ctx,
 		cancel:         cancel,
 		storeAddresses: storeAddresses,
@@ -61,26 +64,34 @@ func newQuerier(ctx context.Context, storeAddresses []string, mint, maxt int64) 
 
 func (q *querier) Select(ms ...*promlabels.Matcher) storage.SeriesSet {
 	var (
-		wg  sync.WaitGroup
 		mtx sync.Mutex
 		all []tsdb.SeriesSet
+		// TODO(fabxc): errgroup will fail the whole query on the first encountered error.
+		// Add support for partial results/errors.
+		g errgroup.Group
 	)
-	wg.Add(len(q.storeAddresses))
 
 	sms, err := translateMatchers(ms...)
 	if err != nil {
 		return promSeriesSet{set: errSeriesSet{err: err}}
 	}
 	for _, s := range q.storeAddresses {
-		go func(s string) {
-			set := q.selectSingle(s, sms...)
+		g.Go(func() error {
+			set, err := q.selectSingle(s, sms...)
+			if err != nil {
+				return err
+			}
+
 			mtx.Lock()
 			all = append(all, set)
 			mtx.Unlock()
-		}(s)
-	}
-	wg.Wait()
 
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return promSeriesSet{errSeriesSet{err: err}}
+	}
 	return promSeriesSet{set: mergeAllSeriesSets(all...)}
 }
 
@@ -99,11 +110,13 @@ func mergeAllSeriesSets(all ...tsdb.SeriesSet) tsdb.SeriesSet {
 	)
 }
 
-func (q *querier) selectSingle(addr string, ms ...storepb.LabelMatcher) tsdb.SeriesSet {
-	conn, err := grpc.DialContext(q.ctx, addr, grpc.WithInsecure())
+func (q *querier) selectSingle(addr string, ms ...storepb.LabelMatcher) (tsdb.SeriesSet, error) {
+	conn, err := grpc.DialContext(q.ctx, addr, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
-		return errSeriesSet{err: err}
+		return nil, errors.Wrap(err, "grpc dial connection")
 	}
+	defer conn.Close()
+
 	c := storepb.NewStoreClient(conn)
 
 	resp, err := c.Series(q.ctx, &storepb.SeriesRequest{
@@ -112,9 +125,9 @@ func (q *querier) selectSingle(addr string, ms ...storepb.LabelMatcher) tsdb.Ser
 		Matchers: ms,
 	})
 	if err != nil {
-		return errSeriesSet{err: err}
+		return nil, errors.Wrap(err, "fetch series")
 	}
-	return &storeSeriesSet{series: resp.Series, i: -1, mint: q.mint, maxt: q.maxt}
+	return &storeSeriesSet{series: resp.Series, i: -1, mint: q.mint, maxt: q.maxt}, nil
 }
 
 func (*querier) LabelValues(name string) ([]string, error) {
@@ -165,11 +178,11 @@ func (s *storeSeriesSet) Next() bool {
 	if s.i >= len(s.series)-1 {
 		return false
 	}
+	s.i++
 	// Skip empty series.
 	if len(s.series[s.i].Chunks) == 0 {
 		return s.Next()
 	}
-	s.i++
 	s.cur = &storeSeries{s: s.series[s.i], mint: s.mint, maxt: s.maxt}
 	return true
 }
@@ -182,7 +195,7 @@ func (s storeSeriesSet) At() tsdb.Series {
 	return s.cur
 }
 
-// storeSeries implements storage.Series for a series retrieved fromt he store API.
+// storeSeries implements storage.Series for a series retrieved from the store API.
 type storeSeries struct {
 	s          storepb.Series
 	mint, maxt int64
@@ -205,7 +218,7 @@ type errSeriesIterator struct {
 func (errSeriesIterator) Seek(int64) bool      { return false }
 func (errSeriesIterator) Next() bool           { return false }
 func (errSeriesIterator) At() (int64, float64) { return 0, 0 }
-func (errSeriesIterator) Err() error           { return nil }
+func (s errSeriesIterator) Err() error         { return s.err }
 
 // chunkSeriesIterator implements a series iterator on top
 // of a list of time-sorted, non-overlapping chunks.

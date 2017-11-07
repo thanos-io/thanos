@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"net"
 	"net/http"
 
@@ -51,7 +50,7 @@ func runQuery(
 	cfg query.Config,
 ) error {
 	// Set up query API engine.
-	queryable := query.NewQueryable(context.Background(), cfg.StoreAddresses)
+	queryable := query.NewQueryable(logger, cfg.StoreAddresses)
 	engine := promql.NewEngine(queryable, cfg.EngineOpts(logger))
 	api := v1.NewAPI(engine, queryable, cfg)
 
@@ -64,6 +63,7 @@ func runQuery(
 
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", prometheus.Handler())
+		registerProfile(mux)
 		mux.Handle("/", router)
 
 		l, err := net.Listen("tcp", apiAddr)
