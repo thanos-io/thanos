@@ -49,7 +49,7 @@ data:
       relabel_configs:
       - action: keep
         source_labels: [__meta_kubernetes_service_label_app]
-        regex: prometheus|node-exporter|loadgen-querier
+        regex: prometheus
       - action: replace
         source_labels: [__meta_kubernetes_service_label_app]
         target_label: job
