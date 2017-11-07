@@ -137,7 +137,7 @@
   branch = "master"
   name = "github.com/prometheus/common"
   packages = ["expfmt","internal/bitbucket.org/ww/goautoneg","model","route","version"]
-  revision = "1bab55dd05dbff384524a6a1c99006d9eb5f139b"
+  revision = "e3fb1a1acd7605367a2b378bc2e2f893c05174b7"
 
 [[projects]]
   branch = "master"
@@ -148,14 +148,14 @@
 [[projects]]
   name = "github.com/prometheus/prometheus"
   packages = ["pkg/labels","pkg/textparse","pkg/timestamp","pkg/value","promql","storage","storage/tsdb","util/stats","util/strutil","util/testutil"]
-  revision = "ce63a5a8557bb33e2030a7756c58fd773736b592"
-  version = "v2.0.0-rc.2"
+  revision = "8a9b32d0eb5be05a8066492e8a75c18b90e2d6ff"
+  version = "v2.0.0-rc.3"
 
 [[projects]]
   branch = "master"
   name = "github.com/prometheus/tsdb"
   packages = [".","chunks","fileutil","labels"]
-  revision = "b1df85781931b0ff48d09a364174016d16a4dc3e"
+  revision = "706602daed1487f7849990678b4ece4599745905"
 
 [[projects]]
   branch = "master"
@@ -167,7 +167,7 @@
   branch = "master"
   name = "golang.org/x/oauth2"
   packages = [".","google","internal","jws","jwt"]
-  revision = "bb50c06baba3d0c76f9d125c0719093e315b5b44"
+  revision = "9ff8ebcc8e241d46f52ecc5bff0e5a2f2dbef402"
 
 [[projects]]
   branch = "master"
@@ -185,7 +185,7 @@
   branch = "master"
   name = "google.golang.org/api"
   packages = ["gensupport","googleapi","googleapi/internal/uritemplates","googleapi/transport","internal","iterator","option","storage/v1","transport/http"]
-  revision = "532986bc317f5cf61f4e7ef35d9dae8b75b3f56f"
+  revision = "167592a6a784880141ec6f1d98e3f3ed132b98b2"
 
 [[projects]]
   name = "google.golang.org/appengine"
@@ -201,9 +201,9 @@
 
 [[projects]]
   name = "google.golang.org/grpc"
-  packages = [".","balancer","codes","connectivity","credentials","grpclb/grpc_lb_v1/messages","grpclog","internal","keepalive","metadata","naming","peer","resolver","stats","status","tap","transport"]
-  revision = "61d37c5d657a47e4404fd6823bd598341a2595de"
-  version = "v1.7.1"
+  packages = [".","balancer","benchmark/stats","codes","connectivity","credentials","grpclb/grpc_lb_v1/messages","grpclog","internal","keepalive","metadata","naming","peer","resolver","stats","status","tap","transport"]
+  revision = "5ffe3083946d5603a0578721101dc8165b1d5b5f"
+  version = "v1.7.2"
 
 [[projects]]
   name = "gopkg.in/alecthomas/kingpin.v2"
@@ -220,6 +220,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "e135de7e22a092f3ed3a10085e16ff80ac6b7bc1294f38bcf270513e99bf27a5"
+  inputs-digest = "5baafcc2f74d522bb44a0c6d7dc48b9e27800b14321f820ef297253b09c1f004"
   solver-name = "gps-cdcl"
   solver-version = 1
