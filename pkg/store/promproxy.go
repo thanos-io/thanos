@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/promlts/pkg/store/storepb"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/tsdb/chunks"
@@ -27,27 +29,40 @@ import (
 // PrometheusProxy implements the store node API on top of the Prometheus
 // HTTP v1 API.
 type PrometheusProxy struct {
-	logger log.Logger
-	base   *url.URL
-	client *http.Client
+	logger         log.Logger
+	base           *url.URL
+	client         *http.Client
+	externalLabels func() labels.Labels
 }
 
 var _ storepb.StoreServer = (*PrometheusProxy)(nil)
 
 // NewPrometheusProxy returns a new PrometheusProxy that uses the given HTTP client
 // to talk to Prometheus.
-func NewPrometheusProxy(logger log.Logger, client *http.Client, baseURL string) (*PrometheusProxy, error) {
+// It attaches the provided external labels to all results.
+func NewPrometheusProxy(
+	logger log.Logger,
+	reg prometheus.Registerer,
+	client *http.Client,
+	baseURL *url.URL,
+	externalLabels func() labels.Labels,
+) (*PrometheusProxy, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
-	u, err := url.Parse(baseURL)
-	if err != nil {
-		return nil, errors.Wrap(err, "parse Prometheus URL")
+	if externalLabels == nil {
+		externalLabels = func() labels.Labels { return nil }
 	}
-	return &PrometheusProxy{logger: logger, base: u, client: client}, nil
+	p := &PrometheusProxy{
+		logger:         logger,
+		base:           baseURL,
+		client:         client,
+		externalLabels: externalLabels,
+	}
+	return p, nil
 }
 
 // Series returns all series for a requested time range and label matcher. The returned data may
@@ -103,8 +118,10 @@ func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) 
 	res := &storepb.SeriesResponse{
 		Series: make([]storepb.Series, 0, len(m.Data.Result)),
 	}
+	ext := p.externalLabels()
+
 	for _, e := range m.Data.Result {
-		lset := translateLabels(e.Metric)
+		lset := translateAndExtendLabels(e.Metric, ext)
 		// We generally expect all samples of the requested range to be traversed
 		// so we just encode all samples into one big chunk regardless of size.
 		//
@@ -144,13 +161,24 @@ func encodeChunk(ss []model.SamplePair, mint int64) (storepb.Chunk_Encoding, []b
 	return storepb.Chunk_XOR, c.Bytes(), nil
 }
 
-func translateLabels(m model.Metric) []storepb.Label {
-	lset := make([]storepb.Label, 0, len(m))
+// translateAndExtendLabels transforms a metrics into a protobuf label set. It additionally
+// attaches the given labels to it, overwriting existing ones on colllision.
+func translateAndExtendLabels(m model.Metric, extend labels.Labels) []storepb.Label {
+	lset := make([]storepb.Label, 0, len(m)+len(extend))
 
 	for k, v := range m {
+		if extend.Get(string(k)) != "" {
+			continue
+		}
 		lset = append(lset, storepb.Label{
 			Name:  string(k),
 			Value: string(v),
+		})
+	}
+	for _, l := range extend {
+		lset = append(lset, storepb.Label{
+			Name:  l.Name,
+			Value: l.Value,
 		})
 	}
 	sort.Slice(lset, func(i, j int) bool {
