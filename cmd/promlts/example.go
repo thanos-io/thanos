@@ -23,6 +23,8 @@ func registerExample(m map[string]setupFunc, app *kingpin.Application, name stri
 	queryTimeout := cmd.Flag("query.timeout", "maximum time to process query by query node").
 		Default("2m").Duration()
 
+	queryStores := cmd.Flag("query.store", "store APIs to get data from").Required().URL()
+
 	// Sidecar flags.
 	storeAddress := cmd.Flag("sidecar.address", "listen address of sidecar store API").
 		Default("localhost:19090").String()
@@ -52,7 +54,7 @@ func registerExample(m map[string]setupFunc, app *kingpin.Application, name stri
 			StoreAddresses:       []string{*storeAddress},
 			QueryTimeout:         *queryTimeout,
 			MaxConcurrentQueries: *maxConcurrentQueries,
-		})
+		}, *queryStores)
 		if err != nil {
 			return g, errors.Wrap(err, "query setup")
 		}
