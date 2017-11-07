@@ -1,2 +1,6 @@
 /promlts
 vendor/
+
+kube/bin
+kube/.kube
+kube/.minikube
