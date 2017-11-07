@@ -12,11 +12,20 @@ option (gogoproto.unmarshaler_all) = true;
 option (gogoproto.goproto_getters_all) = false;
 
 service Store {
+  rpc Info(InfoRequest) returns (InfoResponse);
+
   rpc Series(SeriesRequest) returns (SeriesResponse);
 
   rpc LabelNames(LabelNamesRequest) returns (LabelNamesResponse);
 
   rpc LabelValues(LabelValuesRequest) returns (LabelValuesResponse);
+}
+
+message InfoRequest {
+}
+
+message InfoResponse {
+  repeated Label labels = 1 [(gogoproto.nullable) = false];
 }
 
 message SeriesRequest {
