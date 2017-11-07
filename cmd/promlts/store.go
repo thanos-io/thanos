@@ -8,30 +8,27 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/oklog/oklog/pkg/group"
+	"github.com/improbable-eng/promlts/pkg/okgroup"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 // registerStore registers a store command.
-func registerStore(m map[string]runFunc, app *kingpin.Application, name string) {
+func registerStore(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "store node giving access to blocks in a GCS bucket")
 
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks").
 		PlaceHolder("<bucket>").Required().String()
 
-	peers := cmd.Flag("peers", "Peering store nodes to connect to").
-		PlaceHolder("<peers>").Strings()
-
-	maxDiskCacheSize := cmd.Flag("disk-cache-size", "maximum size of on-disk cache").
+	maxDiskCacheSize := cmd.Flag("store.disk-cache-size", "maximum size of on-disk cache").
 		Default("100GB").Bytes()
 
-	maxMemCacheSize := cmd.Flag("mem-cache-size", "maximum size of in-memory cache").
+	maxMemCacheSize := cmd.Flag("store.mem-cache-size", "maximum size of in-memory cache").
 		Default("4GB").Bytes()
 
-	m[name] = func(logger log.Logger, metrics prometheus.Registerer) error {
-		return runStore(logger, metrics, *gcsBucket, *peers, *maxDiskCacheSize, *maxMemCacheSize)
+	m[name] = func(logger log.Logger, metrics prometheus.Registerer) (okgroup.Group, error) {
+		return runStore(logger, metrics, *gcsBucket, *maxDiskCacheSize, *maxMemCacheSize)
 	}
 }
 
@@ -42,31 +39,19 @@ func runStore(
 	logger log.Logger,
 	reg prometheus.Registerer,
 	gcsBucket string,
-	peers []string,
 	diskCacheSize units.Base2Bytes,
 	memCacheSize units.Base2Bytes,
-) error {
-	level.Info(logger).Log("msg", "I'm a store node", "diskCacheSize", diskCacheSize, "memCacheSize", memCacheSize)
+) (okgroup.Group, error) {
+	var g okgroup.Group
 
 	gcsClient, err := storage.NewClient(context.Background())
 	if err != nil {
-		return errors.Wrap(err, "create GCS client")
+		return g, errors.Wrap(err, "create GCS client")
 	}
 	defer gcsClient.Close()
 
-	var g group.Group
+	// TODO(bplotka): Add store node logic for fetching blocks and exposing store API.
 
-	{
-
-	}
-	// Listen for termination signals.
-	{
-		cancel := make(chan struct{})
-		g.Add(func() error {
-			return interrupt(cancel)
-		}, func(error) {
-			close(cancel)
-		})
-	}
-	return g.Run()
+	level.Info(logger).Log("msg", "I'm a store node", "diskCacheSize", diskCacheSize, "memCacheSize", memCacheSize)
+	return g, nil
 }
