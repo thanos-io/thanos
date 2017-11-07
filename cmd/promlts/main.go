@@ -11,13 +11,14 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/promlts/pkg/okgroup"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/version"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
-type runFunc func(log.Logger, prometheus.Registerer) error
+type setupFunc func(log.Logger, prometheus.Registerer) (okgroup.Group, error)
 
 func main() {
 	app := kingpin.New(filepath.Base(os.Args[0]), "A block storage based long-term storage for Prometheus")
@@ -28,11 +29,11 @@ func main() {
 	logLevel := app.Flag("log.level", "log filtering level").
 		Default("info").Enum("error", "warn", "info", "debug")
 
-	cmds := map[string]runFunc{}
-
+	cmds := map[string]setupFunc{}
 	registerSidecar(cmds, app, "sidecar")
 	registerStore(cmds, app, "store")
 	registerQuery(cmds, app, "query")
+	registerExample(cmds, app, "example")
 
 	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {
@@ -62,16 +63,32 @@ func main() {
 	}
 
 	metrics := prometheus.NewRegistry()
-
 	metrics.MustRegister(
 		version.NewCollector("prometheus"),
 		prometheus.NewGoCollector(),
 	)
 
-	if err := cmds[cmd](logger, metrics); err != nil {
+	g, err := cmds[cmd](logger, metrics)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, errors.Wrap(err, "command failed"))
 		os.Exit(1)
 	}
+
+	// Listen for termination signals.
+	{
+		cancel := make(chan struct{})
+		g.Add(func() error {
+			return interrupt(cancel)
+		}, func(error) {
+			close(cancel)
+		})
+	}
+
+	if err := g.Run(); err != nil {
+		fmt.Fprintln(os.Stderr, errors.Wrap(err, "command run failed"))
+		os.Exit(1)
+	}
+
 }
 
 func interrupt(cancel <-chan struct{}) error {

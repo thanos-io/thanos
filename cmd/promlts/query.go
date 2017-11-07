@@ -4,26 +4,29 @@ import (
 	"net"
 	"net/http"
 
+	"strings"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/promlts/pkg/okgroup"
 	"github.com/improbable-eng/promlts/pkg/query"
 	"github.com/improbable-eng/promlts/pkg/query/api"
-	"github.com/oklog/oklog/pkg/group"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/promql"
 	"gopkg.in/alecthomas/kingpin.v2"
+	"net/url"
 )
 
 // registerQuery registers a query command.
-func registerQuery(m map[string]runFunc, app *kingpin.Application, name string) {
+func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
 
-	apiAddr := cmd.Flag("api-address", "listen address for the query API").
-		Default(":19099").String()
+	apiAddr := cmd.Flag("query.address", "listen address for the query API").
+		Default("0.0.0.0:19099").URL()
 
-	storeAddresses := cmd.Flag("store.addresses", "comma delimited listen addresses of store APIs").
+	storeAddresses := cmd.Flag("query.store-addresses", "comma delimited listen addresses of store APIs").
 		Default("localhost:19090").Strings()
 
 	queryTimeout := cmd.Flag("query.timeout", "maximum time to process query by query node").
@@ -32,7 +35,7 @@ func registerQuery(m map[string]runFunc, app *kingpin.Application, name string) 
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "maximum number of queries processed concurrently by query node").
 		Default("20").Int()
 
-	m[name] = func(logger log.Logger, metrics prometheus.Registerer) error {
+	m[name] = func(logger log.Logger, metrics prometheus.Registerer) (okgroup.Group, error) {
 		return runQuery(logger, metrics, *apiAddr, query.Config{
 			StoreAddresses:       *storeAddresses,
 			QueryTimeout:         *queryTimeout,
@@ -46,15 +49,16 @@ func registerQuery(m map[string]runFunc, app *kingpin.Application, name string) 
 func runQuery(
 	logger log.Logger,
 	reg prometheus.Registerer,
-	apiAddr string,
+	apiAddr *url.URL,
 	cfg query.Config,
-) error {
+) (okgroup.Group, error) {
+
 	// Set up query API engine.
 	queryable := query.NewQueryable(logger, cfg.StoreAddresses)
 	engine := promql.NewEngine(queryable, cfg.EngineOpts(logger))
 	api := v1.NewAPI(engine, queryable, cfg)
 
-	var g group.Group
+	var g okgroup.Group
 
 	// Start query API HTTP server.
 	{
@@ -66,9 +70,9 @@ func runQuery(
 		registerProfile(mux)
 		mux.Handle("/", router)
 
-		l, err := net.Listen("tcp", apiAddr)
+		l, err := net.Listen("tcp", apiAddr.String())
 		if err != nil {
-			return errors.Wrapf(err, "listen on address %s", apiAddr)
+			return g, errors.Wrapf(err, "listen on address %s", apiAddr)
 		}
 
 		g.Add(func() error {
@@ -78,22 +82,12 @@ func runQuery(
 		})
 	}
 
-	// Listen for termination signals.
-	{
-		cancel := make(chan struct{})
-		g.Add(func() error {
-			return interrupt(cancel)
-		}, func(error) {
-			close(cancel)
-		})
-	}
-
 	level.Info(logger).Log(
 		"msg", "starting query node",
 		"api-address", apiAddr,
-		"store.addresses", cfg.StoreAddresses,
+		"store.addresses", strings.Join(cfg.StoreAddresses, ","),
 		"query.timeout", cfg.QueryTimeout,
 		"query.max-concurrent", cfg.MaxConcurrentQueries,
 	)
-	return g.Run()
+	return g, nil
 }
