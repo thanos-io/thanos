@@ -38,14 +38,6 @@
   version = "0.5.0"
 
 [[constraint]]
-  branch = "master"
-  name = "github.com/golang/protobuf"
-
-[[constraint]]
-  name = "github.com/grpc-ecosystem/grpc-gateway"
-  version = "1.2.2"
-
-[[constraint]]
   name = "github.com/oklog/oklog"
   version = "0.2.2"
 
@@ -66,8 +58,20 @@
   name = "github.com/prometheus/common"
 
 [[constraint]]
+  name = "github.com/prometheus/prometheus"
+  version = "2.0.0-rc.3"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/prometheus/tsdb"
+
+[[constraint]]
   branch = "master"
   name = "golang.org/x/net"
+
+[[constraint]]
+  branch = "master"
+  name = "golang.org/x/sync"
 
 [[constraint]]
   branch = "master"
@@ -75,8 +79,12 @@
 
 [[constraint]]
   name = "google.golang.org/grpc"
-  version = "1.7.1"
+  version = "1.7.2"
 
 [[constraint]]
   name = "gopkg.in/alecthomas/kingpin.v2"
   version = "2.2.5"
+
+[[constraint]]
+  branch = "v2"
+  name = "gopkg.in/yaml.v2"
