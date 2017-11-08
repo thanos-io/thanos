@@ -48,7 +48,7 @@ func registerExample(m map[string]setupFunc, app *kingpin.Application, name stri
 	maxMemCacheSize := cmd.Flag("store.mem-cache-size", "maximum size of in-memory cache").
 		Default("4GB").Bytes()
 
-	m[name] = func(logger log.Logger, metrics prometheus.Registerer) (okgroup.Group, error) {
+	m[name] = func(logger log.Logger, metrics *prometheus.Registry) (okgroup.Group, error) {
 		var g okgroup.Group
 		queryGroup, err := runQuery(logger, metrics, *apiAddr, query.Config{
 			StoreAddresses:       []string{*storeAddress},

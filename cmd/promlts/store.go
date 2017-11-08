@@ -27,7 +27,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	maxMemCacheSize := cmd.Flag("store.mem-cache-size", "maximum size of in-memory cache").
 		Default("4GB").Bytes()
 
-	m[name] = func(logger log.Logger, metrics prometheus.Registerer) (okgroup.Group, error) {
+	m[name] = func(logger log.Logger, metrics *prometheus.Registry) (okgroup.Group, error) {
 		return runStore(logger, metrics, *gcsBucket, *maxDiskCacheSize, *maxMemCacheSize)
 	}
 }
@@ -37,7 +37,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 // The served subset is determined through HRW hashing against the block's ULIDs and the known peers.
 func runStore(
 	logger log.Logger,
-	reg prometheus.Registerer,
+	reg *prometheus.Registry,
 	gcsBucket string,
 	diskCacheSize units.Base2Bytes,
 	memCacheSize units.Base2Bytes,
