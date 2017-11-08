@@ -38,8 +38,12 @@
   version = "0.5.0"
 
 [[constraint]]
-  name = "github.com/oklog/oklog"
-  version = "0.2.2"
+  branch = "master"
+  name = "github.com/hashicorp/go-sockaddr"
+
+[[constraint]]
+  name = "github.com/hashicorp/memberlist"
+  version = "0.1.0"
 
 [[constraint]]
   name = "github.com/oklog/ulid"
@@ -59,7 +63,7 @@
 
 [[constraint]]
   name = "github.com/prometheus/prometheus"
-  version = "2.0.0-rc.3"
+  version = "2.0.0"
 
 [[constraint]]
   branch = "master"
