@@ -54,13 +54,13 @@ func registerExample(m map[string]setupFunc, app *kingpin.Application, name stri
 			StoreAddresses:       []string{*storeAddress},
 			QueryTimeout:         *queryTimeout,
 			MaxConcurrentQueries: *maxConcurrentQueries,
-		}, *queryStores)
+		}, nil, *queryStores)
 		if err != nil {
 			return g, errors.Wrap(err, "query setup")
 		}
 		g.AddGroup(queryGroup)
 
-		sidecarGroup, err := runSidecar(logger, metrics, *storeAddress, *metricsAddr, *promURL, *dataDir, *gcsBucket)
+		sidecarGroup, err := runSidecar(logger, metrics, *storeAddress, *metricsAddr, *promURL, *dataDir, nil, *gcsBucket)
 		if err != nil {
 			return g, errors.Wrap(err, "sidecar setup")
 		}
