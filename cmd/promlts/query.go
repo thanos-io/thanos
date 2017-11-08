@@ -143,6 +143,8 @@ func (s *storeInfo) Conn() *grpc.ClientConn {
 }
 
 func (s *storeInfo) Labels() labels.Labels {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
 	return s.labels
 }
 
@@ -207,16 +209,15 @@ func (p *storePool) update(ctx context.Context) error {
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
 
-	// Add new stores and establish connections
+	// Add new stores and establish connections.
 	for addr := range addrs {
 		if _, ok := p.stores[addr]; ok {
 			continue
 		}
-		// TODO(fabxc): blocking here while dialing may lock up clients of the pool, i.e. queries,
-		// for a while. Find a better solution.
-		conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithBlock())
+		conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure())
 		if err != nil {
-			level.Warn(p.logger).Log("msg", "dialing connection failed", "store", addr, "err", err)
+			level.Warn(p.logger).Log("msg", "dialing connection failed; skipping", "store", addr, "err", err)
+			continue
 		}
 		s := &storeInfo{
 			logger: log.With(p.logger, "store", addr),
