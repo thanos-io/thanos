@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/improbable-eng/promlts/pkg/testutil"
+	"github.com/improbable-eng/thanos/pkg/testutil"
 )
 
 func TestSidecar_queryExternalLabels(t *testing.T) {

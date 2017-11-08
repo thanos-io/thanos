@@ -4,14 +4,14 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/promlts/pkg/okgroup"
-	"github.com/improbable-eng/promlts/pkg/query"
+	"github.com/improbable-eng/thanos/pkg/okgroup"
+	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
 func registerExample(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "run all the promlts services in the same binary: prometheus sidecar, query and store node.")
+	cmd := app.Command(name, "run all the Thanos services in the same binary: prometheus sidecar, query and store node.")
 
 	// Query flags.
 	apiAddr := cmd.Flag("query.address", "listen address for the query API").

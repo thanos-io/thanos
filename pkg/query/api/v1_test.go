@@ -28,7 +28,7 @@ import (
 
 	"github.com/prometheus/common/route"
 
-	"github.com/improbable-eng/promlts/pkg/query"
+	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"

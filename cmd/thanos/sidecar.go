@@ -11,15 +11,15 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	"github.com/improbable-eng/promlts/pkg/shipper"
-	"github.com/improbable-eng/promlts/pkg/store"
-	"github.com/improbable-eng/promlts/pkg/store/storepb"
+	"github.com/improbable-eng/thanos/pkg/shipper"
+	"github.com/improbable-eng/thanos/pkg/store"
+	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/promlts/pkg/okgroup"
+	"github.com/improbable-eng/thanos/pkg/okgroup"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -114,11 +114,11 @@ func runSidecar(
 	// the external labels we apply.
 	{
 		promUp := prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "promlts_sidecar_prometheus_up",
+			Name: "thanos_sidecar_prometheus_up",
 			Help: "Boolean indicator whether the sidecar can reach its Prometheus peer.",
 		})
 		lastHeartbeat := prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "promlts_sidecar_last_heartbeat_success_time_seconds",
+			Name: "thanos_sidecar_last_heartbeat_success_time_seconds",
 			Help: "Second timestamp of the last successful heartbeat.",
 		})
 		reg.MustRegister(promUp, lastHeartbeat)
