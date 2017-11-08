@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/improbable-eng/promlts/pkg/store/storepb"
-	"github.com/improbable-eng/promlts/pkg/testutil"
+	"github.com/improbable-eng/thanos/pkg/store/storepb"
+	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/tsdb/chunks"
 	"github.com/prometheus/tsdb/labels"

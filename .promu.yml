@@ -1,9 +1,9 @@
 repository:
-    path: github.com/improbable-eng/promlts
+    path: github.com/improbable-eng/thanos
 build:
     binaries:
-        - name: promlts
-          path: ./cmd/promlts
+        - name: thanos
+          path: ./cmd/thanos
     flags: -a -tags netgo
     ldflags: |
         -X {{repoPath}}/vendor/github.com/prometheus/common/version.Version={{.Version}}

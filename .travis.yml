@@ -4,7 +4,7 @@ go:
   - 1.9.x
   - master
 
-go_import_path: github.com/improbable-eng/promlts
+go_import_path: github.com/improbable-eng/thanos
 
 install:
 - make install-tools

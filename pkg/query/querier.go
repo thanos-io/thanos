@@ -8,7 +8,7 @@ import (
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/labels"
 
-	"github.com/improbable-eng/promlts/pkg/store/storepb"
+	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/pkg/errors"
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"

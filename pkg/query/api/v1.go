@@ -25,7 +25,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/improbable-eng/promlts/pkg/query"
+	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"

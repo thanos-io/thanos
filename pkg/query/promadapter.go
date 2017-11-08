@@ -9,7 +9,7 @@ import (
 	"github.com/prometheus/tsdb"
 	tsdbLabels "github.com/prometheus/tsdb/labels"
 
-	"github.com/improbable-eng/promlts/pkg/store/storepb"
+	"github.com/improbable-eng/thanos/pkg/store/storepb"
 )
 
 type promSeriesSet struct {

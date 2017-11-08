@@ -3,7 +3,7 @@ package query
 import (
 	"unsafe"
 
-	"github.com/improbable-eng/promlts/pkg/store/storepb"
+	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/tsdb"

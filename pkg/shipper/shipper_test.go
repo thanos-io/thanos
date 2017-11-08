@@ -13,7 +13,7 @@ import (
 
 	"os"
 
-	"github.com/improbable-eng/promlts/pkg/testutil"
+	"github.com/improbable-eng/thanos/pkg/testutil"
 )
 
 type inMemStorage struct {

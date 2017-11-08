@@ -15,8 +15,8 @@ if ! [[ $(protoc --version) =~ "3.4.0" ]]; then
 	exit 255
 fi
 
-PROMLTS_ROOT="${GOPATH}/src/github.com/improbable-eng/promlts"
-PROM_PATH="${PROMLTS_ROOT}/pkg/store/storepb"
+THANOS_ROOT="${GOPATH}/src/github.com/improbable-eng/thanos"
+PROM_PATH="${THANOS_ROOT}/pkg/store/storepb"
 GOGOPROTO_ROOT="${GOPATH}/src/github.com/gogo/protobuf"
 GOGOPROTO_PATH="${GOGOPROTO_ROOT}:${GOGOPROTO_ROOT}/protobuf"
 GRPC_GATEWAY_ROOT="${GOPATH}/src/github.com/grpc-ecosystem/grpc-gateway"

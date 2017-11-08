@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/promlts/pkg/okgroup"
+	"github.com/improbable-eng/thanos/pkg/okgroup"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -24,7 +24,7 @@ type setupFunc func(log.Logger, *prometheus.Registry) (okgroup.Group, error)
 func main() {
 	app := kingpin.New(filepath.Base(os.Args[0]), "A block storage based long-term storage for Prometheus")
 
-	app.Version(version.Print("promlts"))
+	app.Version(version.Print("thanos"))
 	app.HelpFlag.Short('h')
 
 	logLevel := app.Flag("log.level", "log filtering level").

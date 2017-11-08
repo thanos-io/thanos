@@ -32,19 +32,19 @@ func newGCSRemoteMetrics(r prometheus.Registerer) *gcsRemoteMetrics {
 	var m gcsRemoteMetrics
 
 	m.dirSyncs = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "promlts_gcs_remote_dir_syncs_total",
+		Name: "thanos_gcs_remote_dir_syncs_total",
 		Help: "Total dir sync attempts",
 	})
 	m.dirSyncFailures = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "promlts_gcs_remote_dir_sync_failures_total",
+		Name: "thanos_gcs_remote_dir_sync_failures_total",
 		Help: "Total number of failed  dir syncs",
 	})
 	m.uploads = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "promlts_gcs_remote_uploads_total",
+		Name: "thanos_gcs_remote_uploads_total",
 		Help: "Total object upload attempts",
 	})
 	m.uploadFailures = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "promlts_gcs_remote_upload_failures_total",
+		Name: "thanos_gcs_remote_upload_failures_total",
 		Help: "Total number of failed object uploads",
 	})
 
