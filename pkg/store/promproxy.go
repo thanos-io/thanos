@@ -65,6 +65,22 @@ func NewPrometheusProxy(
 	return p, nil
 }
 
+// Info returns store information about the Prometheus instance.
+func (p *PrometheusProxy) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
+	lset := p.externalLabels()
+
+	res := &storepb.InfoResponse{
+		Labels: make([]storepb.Label, 0, len(lset)),
+	}
+	for _, l := range lset {
+		res.Labels = append(res.Labels, storepb.Label{
+			Name:  l.Name,
+			Value: l.Value,
+		})
+	}
+	return res, nil
+}
+
 // Series returns all series for a requested time range and label matcher. The returned data may
 // exceed the requested time bounds.
 //

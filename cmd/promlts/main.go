@@ -14,11 +14,12 @@ import (
 	"github.com/improbable-eng/promlts/pkg/okgroup"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/version"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
-type setupFunc func(log.Logger, prometheus.Registerer) (okgroup.Group, error)
+type setupFunc func(log.Logger, *prometheus.Registry) (okgroup.Group, error)
 
 func main() {
 	app := kingpin.New(filepath.Base(os.Args[0]), "A block storage based long-term storage for Prometheus")
@@ -112,4 +113,8 @@ func registerProfile(mux *http.ServeMux) {
 	mux.Handle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
 	mux.Handle("/debug/pprof/heap", pprof.Handler("heap"))
 	mux.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
+}
+
+func registerMetrics(mux *http.ServeMux, g prometheus.Gatherer) {
+	mux.Handle("/metrics", promhttp.HandlerFor(g, promhttp.HandlerOpts{}))
 }

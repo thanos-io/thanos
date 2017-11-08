@@ -9,6 +9,8 @@
 		types.proto
 
 	It has these top-level messages:
+		InfoRequest
+		InfoResponse
 		SeriesRequest
 		SeriesResponse
 		LabelNamesRequest
@@ -25,6 +27,7 @@ package storepb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
+import _ "github.com/gogo/protobuf/gogoproto"
 
 import (
 	context "golang.org/x/net/context"
@@ -44,6 +47,23 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
+type InfoRequest struct {
+}
+
+func (m *InfoRequest) Reset()                    { *m = InfoRequest{} }
+func (m *InfoRequest) String() string            { return proto.CompactTextString(m) }
+func (*InfoRequest) ProtoMessage()               {}
+func (*InfoRequest) Descriptor() ([]byte, []int) { return fileDescriptorRpc, []int{0} }
+
+type InfoResponse struct {
+	Labels []Label `protobuf:"bytes,1,rep,name=labels" json:"labels"`
+}
+
+func (m *InfoResponse) Reset()                    { *m = InfoResponse{} }
+func (m *InfoResponse) String() string            { return proto.CompactTextString(m) }
+func (*InfoResponse) ProtoMessage()               {}
+func (*InfoResponse) Descriptor() ([]byte, []int) { return fileDescriptorRpc, []int{1} }
+
 type SeriesRequest struct {
 	MinTime  int64          `protobuf:"varint,1,opt,name=min_time,json=minTime,proto3" json:"min_time,omitempty"`
 	MaxTime  int64          `protobuf:"varint,2,opt,name=max_time,json=maxTime,proto3" json:"max_time,omitempty"`
@@ -53,7 +73,7 @@ type SeriesRequest struct {
 func (m *SeriesRequest) Reset()                    { *m = SeriesRequest{} }
 func (m *SeriesRequest) String() string            { return proto.CompactTextString(m) }
 func (*SeriesRequest) ProtoMessage()               {}
-func (*SeriesRequest) Descriptor() ([]byte, []int) { return fileDescriptorRpc, []int{0} }
+func (*SeriesRequest) Descriptor() ([]byte, []int) { return fileDescriptorRpc, []int{2} }
 
 type SeriesResponse struct {
 	Series []Series `protobuf:"bytes,1,rep,name=series" json:"series"`
@@ -62,7 +82,7 @@ type SeriesResponse struct {
 func (m *SeriesResponse) Reset()                    { *m = SeriesResponse{} }
 func (m *SeriesResponse) String() string            { return proto.CompactTextString(m) }
 func (*SeriesResponse) ProtoMessage()               {}
-func (*SeriesResponse) Descriptor() ([]byte, []int) { return fileDescriptorRpc, []int{1} }
+func (*SeriesResponse) Descriptor() ([]byte, []int) { return fileDescriptorRpc, []int{3} }
 
 type LabelNamesRequest struct {
 }
@@ -70,7 +90,7 @@ type LabelNamesRequest struct {
 func (m *LabelNamesRequest) Reset()                    { *m = LabelNamesRequest{} }
 func (m *LabelNamesRequest) String() string            { return proto.CompactTextString(m) }
 func (*LabelNamesRequest) ProtoMessage()               {}
-func (*LabelNamesRequest) Descriptor() ([]byte, []int) { return fileDescriptorRpc, []int{2} }
+func (*LabelNamesRequest) Descriptor() ([]byte, []int) { return fileDescriptorRpc, []int{4} }
 
 type LabelNamesResponse struct {
 	Names []string `protobuf:"bytes,1,rep,name=names" json:"names,omitempty"`
@@ -79,7 +99,7 @@ type LabelNamesResponse struct {
 func (m *LabelNamesResponse) Reset()                    { *m = LabelNamesResponse{} }
 func (m *LabelNamesResponse) String() string            { return proto.CompactTextString(m) }
 func (*LabelNamesResponse) ProtoMessage()               {}
-func (*LabelNamesResponse) Descriptor() ([]byte, []int) { return fileDescriptorRpc, []int{3} }
+func (*LabelNamesResponse) Descriptor() ([]byte, []int) { return fileDescriptorRpc, []int{5} }
 
 type LabelValuesRequest struct {
 	Label string `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
@@ -88,7 +108,7 @@ type LabelValuesRequest struct {
 func (m *LabelValuesRequest) Reset()                    { *m = LabelValuesRequest{} }
 func (m *LabelValuesRequest) String() string            { return proto.CompactTextString(m) }
 func (*LabelValuesRequest) ProtoMessage()               {}
-func (*LabelValuesRequest) Descriptor() ([]byte, []int) { return fileDescriptorRpc, []int{4} }
+func (*LabelValuesRequest) Descriptor() ([]byte, []int) { return fileDescriptorRpc, []int{6} }
 
 type LabelValuesResponse struct {
 	Values []string `protobuf:"bytes,1,rep,name=values" json:"values,omitempty"`
@@ -97,9 +117,11 @@ type LabelValuesResponse struct {
 func (m *LabelValuesResponse) Reset()                    { *m = LabelValuesResponse{} }
 func (m *LabelValuesResponse) String() string            { return proto.CompactTextString(m) }
 func (*LabelValuesResponse) ProtoMessage()               {}
-func (*LabelValuesResponse) Descriptor() ([]byte, []int) { return fileDescriptorRpc, []int{5} }
+func (*LabelValuesResponse) Descriptor() ([]byte, []int) { return fileDescriptorRpc, []int{7} }
 
 func init() {
+	proto.RegisterType((*InfoRequest)(nil), "promlts.InfoRequest")
+	proto.RegisterType((*InfoResponse)(nil), "promlts.InfoResponse")
 	proto.RegisterType((*SeriesRequest)(nil), "promlts.SeriesRequest")
 	proto.RegisterType((*SeriesResponse)(nil), "promlts.SeriesResponse")
 	proto.RegisterType((*LabelNamesRequest)(nil), "promlts.LabelNamesRequest")
@@ -119,6 +141,7 @@ const _ = grpc.SupportPackageIsVersion4
 // Client API for Store service
 
 type StoreClient interface {
+	Info(ctx context.Context, in *InfoRequest, opts ...grpc.CallOption) (*InfoResponse, error)
 	Series(ctx context.Context, in *SeriesRequest, opts ...grpc.CallOption) (*SeriesResponse, error)
 	LabelNames(ctx context.Context, in *LabelNamesRequest, opts ...grpc.CallOption) (*LabelNamesResponse, error)
 	LabelValues(ctx context.Context, in *LabelValuesRequest, opts ...grpc.CallOption) (*LabelValuesResponse, error)
@@ -130,6 +153,15 @@ type storeClient struct {
 
 func NewStoreClient(cc *grpc.ClientConn) StoreClient {
 	return &storeClient{cc}
+}
+
+func (c *storeClient) Info(ctx context.Context, in *InfoRequest, opts ...grpc.CallOption) (*InfoResponse, error) {
+	out := new(InfoResponse)
+	err := grpc.Invoke(ctx, "/promlts.Store/Info", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *storeClient) Series(ctx context.Context, in *SeriesRequest, opts ...grpc.CallOption) (*SeriesResponse, error) {
@@ -162,6 +194,7 @@ func (c *storeClient) LabelValues(ctx context.Context, in *LabelValuesRequest, o
 // Server API for Store service
 
 type StoreServer interface {
+	Info(context.Context, *InfoRequest) (*InfoResponse, error)
 	Series(context.Context, *SeriesRequest) (*SeriesResponse, error)
 	LabelNames(context.Context, *LabelNamesRequest) (*LabelNamesResponse, error)
 	LabelValues(context.Context, *LabelValuesRequest) (*LabelValuesResponse, error)
@@ -169,6 +202,24 @@ type StoreServer interface {
 
 func RegisterStoreServer(s *grpc.Server, srv StoreServer) {
 	s.RegisterService(&_Store_serviceDesc, srv)
+}
+
+func _Store_Info_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StoreServer).Info(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/promlts.Store/Info",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StoreServer).Info(ctx, req.(*InfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _Store_Series_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -230,6 +281,10 @@ var _Store_serviceDesc = grpc.ServiceDesc{
 	HandlerType: (*StoreServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
+			MethodName: "Info",
+			Handler:    _Store_Info_Handler,
+		},
+		{
 			MethodName: "Series",
 			Handler:    _Store_Series_Handler,
 		},
@@ -244,6 +299,54 @@ var _Store_serviceDesc = grpc.ServiceDesc{
 	},
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "rpc.proto",
+}
+
+func (m *InfoRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *InfoRequest) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	return i, nil
+}
+
+func (m *InfoResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *InfoResponse) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Labels) > 0 {
+		for _, msg := range m.Labels {
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintRpc(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	return i, nil
 }
 
 func (m *SeriesRequest) Marshal() (dAtA []byte, err error) {
@@ -433,6 +536,24 @@ func encodeVarintRpc(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return offset + 1
 }
+func (m *InfoRequest) Size() (n int) {
+	var l int
+	_ = l
+	return n
+}
+
+func (m *InfoResponse) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Labels) > 0 {
+		for _, e := range m.Labels {
+			l = e.Size()
+			n += 1 + l + sovRpc(uint64(l))
+		}
+	}
+	return n
+}
+
 func (m *SeriesRequest) Size() (n int) {
 	var l int
 	_ = l
@@ -515,6 +636,137 @@ func sovRpc(x uint64) (n int) {
 }
 func sozRpc(x uint64) (n int) {
 	return sovRpc(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (m *InfoRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRpc
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: InfoRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: InfoRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRpc(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRpc
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *InfoResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRpc
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: InfoResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: InfoResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Labels", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRpc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRpc
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Labels = append(m.Labels, Label{})
+			if err := m.Labels[len(m.Labels)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRpc(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRpc
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
 }
 func (m *SeriesRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
@@ -1111,27 +1363,30 @@ var (
 func init() { proto.RegisterFile("rpc.proto", fileDescriptorRpc) }
 
 var fileDescriptorRpc = []byte{
-	// 352 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x92, 0x4f, 0x4b, 0x02, 0x41,
-	0x18, 0xc6, 0x9d, 0xcc, 0x35, 0x5f, 0xa9, 0x68, 0x34, 0xd3, 0x2d, 0x36, 0xd9, 0x93, 0x04, 0x1a,
-	0xd8, 0x21, 0x3a, 0x05, 0x42, 0xd0, 0xa1, 0x3a, 0xac, 0xd1, 0xa1, 0x4b, 0xac, 0x32, 0xd8, 0xc2,
-	0xce, 0xce, 0x34, 0x33, 0x86, 0x5d, 0xfa, 0x7c, 0x1e, 0x83, 0xee, 0x51, 0x7e, 0x92, 0xd8, 0x99,
-	0x69, 0xfd, 0x93, 0xb7, 0x9d, 0xe7, 0x79, 0xf8, 0xbd, 0xef, 0xf3, 0xb2, 0x50, 0x12, 0x7c, 0xd8,
-	0xe1, 0x82, 0x29, 0x86, 0x8b, 0x5c, 0x30, 0x1a, 0x2b, 0xe9, 0x96, 0xd5, 0x1b, 0x27, 0xd2, 0xa8,
-	0x6e, 0x75, 0xc4, 0x46, 0x4c, 0x7f, 0x9e, 0xa6, 0x5f, 0x46, 0xf5, 0xdf, 0x61, 0xbb, 0x4f, 0x44,
-	0x44, 0x64, 0x40, 0x5e, 0xc6, 0x44, 0x2a, 0xdc, 0x80, 0x2d, 0x1a, 0x25, 0x4f, 0x2a, 0xa2, 0xa4,
-	0x8e, 0x9a, 0xa8, 0x95, 0x0f, 0x8a, 0x34, 0x4a, 0xee, 0x23, 0x4a, 0xb4, 0x15, 0x4e, 0x8c, 0xb5,
-	0x61, 0xad, 0x70, 0xa2, 0xad, 0xf3, 0xd4, 0x52, 0xc3, 0x67, 0x22, 0x64, 0x3d, 0xdf, 0xcc, 0xb7,
-	0xca, 0xdd, 0xfd, 0x8e, 0xdd, 0xa2, 0x73, 0x13, 0x0e, 0x48, 0x7c, 0x6b, 0xdc, 0xde, 0xe6, 0xf4,
-	0xeb, 0x38, 0x17, 0x64, 0x61, 0xff, 0x12, 0x76, 0xfe, 0xe6, 0x4b, 0xce, 0x12, 0x49, 0x70, 0x1b,
-	0x1c, 0xa9, 0x95, 0x3a, 0xd2, 0xa0, 0xdd, 0x0c, 0x64, 0x82, 0x16, 0x61, 0x43, 0x7e, 0x05, 0xf6,
-	0xf4, 0x80, 0xbb, 0x90, 0x66, 0x25, 0xfc, 0x13, 0xc0, 0x8b, 0xa2, 0x25, 0x57, 0xa1, 0x90, 0xa4,
-	0x82, 0x06, 0x97, 0x02, 0xf3, 0xc8, 0xb2, 0x0f, 0x61, 0x3c, 0x9e, 0x9f, 0xa1, 0x0a, 0x85, 0x38,
-	0x55, 0xf5, 0x0d, 0x4a, 0x81, 0x79, 0xf8, 0x6d, 0xa8, 0x2c, 0x65, 0x2d, 0xb8, 0x06, 0xce, 0xab,
-	0x56, 0x2c, 0xd9, 0xbe, 0xba, 0x9f, 0x08, 0x0a, 0x7d, 0xc5, 0x04, 0xc1, 0x17, 0xe0, 0x98, 0xed,
-	0x71, 0x6d, 0xa5, 0x8e, 0x1d, 0xe8, 0x1e, 0xfc, 0xd3, 0x2d, 0xfc, 0x0a, 0x60, 0xde, 0x05, 0xbb,
-	0xcb, 0x67, 0x5d, 0x6c, 0xed, 0x1e, 0xae, 0xf5, 0x2c, 0xe6, 0x1a, 0xca, 0x0b, 0xab, 0xe3, 0x95,
-	0xec, 0x52, 0x79, 0xf7, 0x68, 0xbd, 0x69, 0x48, 0xbd, 0xc6, 0xf4, 0xc7, 0xcb, 0x4d, 0x67, 0x1e,
-	0xfa, 0x98, 0x79, 0xe8, 0x7b, 0xe6, 0xa1, 0xc7, 0xa2, 0x4c, 0x4b, 0xf2, 0xc1, 0xc0, 0xd1, 0x3f,
-	0xd5, 0xd9, 0x6f, 0x00, 0x00, 0x00, 0xff, 0xff, 0x51, 0xb6, 0x05, 0xce, 0x8d, 0x02, 0x00, 0x00,
+	// 398 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x52, 0x4d, 0x4f, 0xc2, 0x40,
+	0x10, 0xa5, 0x7c, 0x14, 0x99, 0x0a, 0xc6, 0xa5, 0x20, 0x54, 0x53, 0x49, 0x4f, 0xc4, 0x08, 0x26,
+	0x70, 0x30, 0x26, 0x26, 0x26, 0x24, 0x26, 0x9a, 0xa8, 0x87, 0x62, 0x3c, 0x78, 0x31, 0x85, 0xac,
+	0xd8, 0xa4, 0xed, 0xd6, 0x6e, 0x31, 0x78, 0xf1, 0xec, 0x4f, 0xe3, 0xe8, 0x2f, 0x30, 0xca, 0x2f,
+	0x31, 0xdd, 0x5d, 0x4a, 0x8b, 0xdc, 0x76, 0xde, 0x7b, 0xfb, 0x66, 0xe7, 0xcd, 0x42, 0x29, 0xf0,
+	0xc7, 0x5d, 0x3f, 0x20, 0x21, 0x41, 0x45, 0x3f, 0x20, 0xae, 0x13, 0x52, 0x4d, 0x09, 0xdf, 0x7d,
+	0x4c, 0x39, 0xaa, 0xa9, 0x13, 0x32, 0x21, 0xec, 0x78, 0x12, 0x9d, 0x38, 0x6a, 0x94, 0x41, 0xb9,
+	0xf6, 0x9e, 0x89, 0x89, 0x5f, 0xa7, 0x98, 0x86, 0xc6, 0x39, 0x6c, 0xf3, 0x92, 0xfa, 0xc4, 0xa3,
+	0x18, 0x1d, 0x83, 0xec, 0x58, 0x23, 0xec, 0xd0, 0x86, 0xd4, 0xca, 0xb5, 0x95, 0x5e, 0xa5, 0x2b,
+	0xbc, 0xbb, 0x37, 0x11, 0x3c, 0xc8, 0xcf, 0xbf, 0x0f, 0x33, 0xa6, 0xd0, 0x18, 0x1f, 0x50, 0x1e,
+	0xe2, 0xc0, 0xc6, 0x54, 0xd8, 0xa1, 0x26, 0x6c, 0xb9, 0xb6, 0xf7, 0x14, 0xda, 0x2e, 0x6e, 0x48,
+	0x2d, 0xa9, 0x9d, 0x33, 0x8b, 0xae, 0xed, 0xdd, 0xdb, 0x2e, 0x66, 0x94, 0x35, 0xe3, 0x54, 0x56,
+	0x50, 0xd6, 0x8c, 0x51, 0xa7, 0x11, 0x15, 0x8e, 0x5f, 0x70, 0x40, 0x1b, 0x39, 0xd6, 0xb6, 0x96,
+	0x6e, 0x7b, 0xcb, 0x59, 0xd1, 0x3d, 0x16, 0x1b, 0x17, 0x50, 0x59, 0xf6, 0x17, 0xef, 0xef, 0x80,
+	0x4c, 0x19, 0x22, 0xde, 0xbf, 0x13, 0x1b, 0x71, 0xe1, 0x72, 0x00, 0x2e, 0x32, 0xaa, 0xb0, 0xcb,
+	0x1a, 0xdc, 0x59, 0x6e, 0x3c, 0x84, 0x71, 0x04, 0x28, 0x09, 0x0a, 0x67, 0x15, 0x0a, 0x5e, 0x04,
+	0x30, 0xe3, 0x92, 0xc9, 0x8b, 0x58, 0xfb, 0x60, 0x39, 0xd3, 0x55, 0x0c, 0x2a, 0x14, 0x58, 0x42,
+	0x2c, 0x83, 0x92, 0xc9, 0x0b, 0xa3, 0x03, 0xd5, 0x94, 0x56, 0x18, 0xd7, 0x41, 0x7e, 0x63, 0x88,
+	0x70, 0x16, 0x55, 0xef, 0x33, 0x0b, 0x85, 0x61, 0x48, 0x02, 0x8c, 0xfa, 0x90, 0x8f, 0x96, 0x84,
+	0xd4, 0x78, 0x98, 0xc4, 0x0a, 0xb5, 0xda, 0x1a, 0x2a, 0x6c, 0xcf, 0x40, 0xe6, 0x23, 0xa3, 0xfa,
+	0x5a, 0x06, 0xcb, 0x8b, 0x7b, 0xff, 0x70, 0x71, 0xf5, 0x12, 0x60, 0x15, 0x00, 0xd2, 0xd2, 0xbb,
+	0x48, 0x46, 0xa5, 0xed, 0x6f, 0xe4, 0x84, 0xcd, 0x15, 0x28, 0x89, 0x79, 0xd1, 0x9a, 0x36, 0x95,
+	0x98, 0x76, 0xb0, 0x99, 0xe4, 0x4e, 0x83, 0xe6, 0xfc, 0x57, 0xcf, 0xcc, 0x17, 0xba, 0xf4, 0xb5,
+	0xd0, 0xa5, 0x9f, 0x85, 0x2e, 0x3d, 0x16, 0x69, 0x94, 0x8c, 0x3f, 0x1a, 0xc9, 0xec, 0x5b, 0xf7,
+	0xff, 0x02, 0x00, 0x00, 0xff, 0xff, 0xea, 0xd8, 0xc6, 0x71, 0x0f, 0x03, 0x00, 0x00,
 }
