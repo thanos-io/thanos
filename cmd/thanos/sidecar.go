@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
@@ -44,8 +45,26 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
 		PlaceHolder("<bucket>").String()
 
+	peers := cmd.Flag("cluster.peers", "Initial peers to join the cluster").Strings()
+
+	clusterBindAddr := cmd.Flag("cluster.address", "listen address for clutser").
+		Default(defaultClusterAddr).String()
+
+	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
+		String()
+
 	m[name] = func(logger log.Logger, reg *prometheus.Registry) (okgroup.Group, error) {
-		return runSidecar(logger, reg, *apiAddr, *metricsAddr, *promURL, *dataDir, *gcsBucket)
+		peer, err := joinCluster(
+			logger,
+			cluster.PeerTypeStore,
+			*clusterBindAddr,
+			*clusterAdvertiseAddr,
+			*peers,
+		)
+		if err != nil {
+			return okgroup.Group{}, errors.Wrap(err, "join cluster")
+		}
+		return runSidecar(logger, reg, *apiAddr, *metricsAddr, *promURL, *dataDir, peer, *gcsBucket)
 	}
 }
 
@@ -56,6 +75,7 @@ func runSidecar(
 	metricsAddr string,
 	promURL *url.URL,
 	dataDir string,
+	peer *cluster.Peer,
 	gcsBucket string,
 ) (okgroup.Group, error) {
 

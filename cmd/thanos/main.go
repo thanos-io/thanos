@@ -2,22 +2,30 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/okgroup"
+	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/version"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
+
+const defaultClusterAddr = "0.0.0.0:10900"
 
 type setupFunc func(log.Logger, *prometheus.Registry) (okgroup.Group, error)
 
@@ -117,4 +125,62 @@ func registerProfile(mux *http.ServeMux) {
 
 func registerMetrics(mux *http.ServeMux, g prometheus.Gatherer) {
 	mux.Handle("/metrics", promhttp.HandlerFor(g, promhttp.HandlerOpts{}))
+}
+
+func joinCluster(logger log.Logger, typ cluster.PeerType, bindAddr, advertiseAddr string, peers []string) (*cluster.Peer, error) {
+	bindHost, _, err := net.SplitHostPort(bindAddr)
+	if err != nil {
+		return nil, err
+	}
+	var advertiseHost string
+
+	if advertiseAddr != "" {
+		advertiseHost, _, err = net.SplitHostPort(advertiseAddr)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if addr, err := cluster.CalculateAdvertiseAddress(bindHost, advertiseHost); err != nil {
+		level.Warn(logger).Log("err", "couldn't deduce an advertise address: "+err.Error())
+	} else if hasNonlocal(peers) && isUnroutable(addr.String()) {
+		level.Warn(logger).Log("err", "this node advertises itself on an unroutable address", "addr", addr.String())
+		level.Warn(logger).Log("err", "this node will be unreachable in the cluster")
+		level.Warn(logger).Log("err", "provide --cluster.advertise-address as a routable IP address or hostname")
+	}
+
+	logger = log.With(logger, "component", "cluster")
+
+	// TODO(fabxc): generate human-readable but random names?
+	name, err := ulid.New(uint64(time.Now().Unix()), rand.New(rand.NewSource(0)))
+	if err != nil {
+		return nil, err
+	}
+	return cluster.NewPeer(logger, name.String(), typ, bindAddr, advertiseAddr, peers)
+}
+
+func hasNonlocal(clusterPeers []string) bool {
+	for _, peer := range clusterPeers {
+		if host, _, err := net.SplitHostPort(peer); err == nil {
+			peer = host
+		}
+		if ip := net.ParseIP(peer); ip != nil && !ip.IsLoopback() {
+			return true
+		} else if ip == nil && strings.ToLower(peer) != "localhost" {
+			return true
+		}
+	}
+	return false
+}
+
+func isUnroutable(addr string) bool {
+	if host, _, err := net.SplitHostPort(addr); err == nil {
+		addr = host
+	}
+	if ip := net.ParseIP(addr); ip != nil && (ip.IsUnspecified() || ip.IsLoopback()) {
+		return true // typically 0.0.0.0 or localhost
+	} else if ip == nil && strings.ToLower(addr) == "localhost" {
+		return true
+	}
+	return false
 }

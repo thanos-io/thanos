@@ -21,6 +21,12 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/armon/go-metrics"
+  packages = ["."]
+  revision = "9a4b6e10bed6220a1665955aa2b75afc91eb10b3"
+
+[[projects]]
+  branch = "master"
   name = "github.com/beorn7/perks"
   packages = ["quantile"]
   revision = "4c0e84591b9aa9e6dcfdf3e020114cd81f89d5f9"
@@ -57,7 +63,7 @@
 
 [[projects]]
   name = "github.com/gogo/protobuf"
-  packages = ["proto"]
+  packages = ["gogoproto","proto","protoc-gen-gogo/descriptor"]
   revision = "342cbe0a04158f6dcb03ca0079991a51a4248c02"
   version = "v0.5"
 
@@ -72,6 +78,48 @@
   packages = ["."]
   revision = "317e0006254c44a0ac427cc52a0e083ff0b9622f"
   version = "v2.0.0"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/hashicorp/errwrap"
+  packages = ["."]
+  revision = "7554cd9344cec97297fa6649b055a8c98c2a1e55"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/hashicorp/go-immutable-radix"
+  packages = ["."]
+  revision = "8aac2701530899b64bdea735a1de8da899815220"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/hashicorp/go-msgpack"
+  packages = ["codec"]
+  revision = "fa3f63826f7c23912c15263591e65d54d080b458"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/hashicorp/go-multierror"
+  packages = ["."]
+  revision = "83588e72410abfbe4df460eeb6f30841ae47d4c4"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/hashicorp/go-sockaddr"
+  packages = ["."]
+  revision = "9b4c5fa5b10a683339a270d664474b9f4aee62fc"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/hashicorp/golang-lru"
+  packages = ["simplelru"]
+  revision = "0a025b7e63adc15a622f29b0b2c4c3848243bbf6"
+
+[[projects]]
+  name = "github.com/hashicorp/memberlist"
+  packages = ["."]
+  revision = "ce8abaa0c60c2d6bee7219f5ddf500e0a1457b28"
+  version = "v0.1.0"
 
 [[projects]]
   name = "github.com/julienschmidt/httprouter"
@@ -90,6 +138,12 @@
   packages = ["pbutil"]
   revision = "3247c84500bff8d9fb6d579d800f20b3e091582c"
   version = "v1.0.0"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/miekg/dns"
+  packages = [".","internal/socket"]
+  revision = "388f6eea2949b6d9071d25f08cf5b6686da15265"
 
 [[projects]]
   branch = "master"
@@ -117,7 +171,7 @@
 
 [[projects]]
   name = "github.com/prometheus/client_golang"
-  packages = ["prometheus"]
+  packages = ["prometheus","prometheus/promhttp"]
   revision = "c5b7fccd204277076155f10851dad72b76a49317"
   version = "v0.8.0"
 
@@ -142,8 +196,8 @@
 [[projects]]
   name = "github.com/prometheus/prometheus"
   packages = ["pkg/labels","pkg/textparse","pkg/timestamp","pkg/value","promql","storage","storage/tsdb","util/stats","util/strutil","util/testutil"]
-  revision = "8a9b32d0eb5be05a8066492e8a75c18b90e2d6ff"
-  version = "v2.0.0-rc.3"
+  revision = "0a74f98628a0463dddc90528220c94de5032d1a0"
+  version = "v2.0.0"
 
 [[projects]]
   branch = "master"
@@ -153,9 +207,15 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/sean-/seed"
+  packages = ["."]
+  revision = "e2103e2c35297fb7e17febb81e49b312087a2372"
+
+[[projects]]
+  branch = "master"
   name = "golang.org/x/net"
   packages = ["context","context/ctxhttp","http2","http2/hpack","idna","internal/timeseries","lex/httplex","trace"]
-  revision = "01c190206fbdffa42f334f4b2bf2220f50e64920"
+  revision = "a337091b0525af65de94df2eb7e98bd9962dcbe2"
 
 [[projects]]
   branch = "master"
@@ -179,7 +239,7 @@
   branch = "master"
   name = "google.golang.org/api"
   packages = ["gensupport","googleapi","googleapi/internal/uritemplates","googleapi/transport","internal","iterator","option","storage/v1","transport/http"]
-  revision = "167592a6a784880141ec6f1d98e3f3ed132b98b2"
+  revision = "76b09a3314405551b1f19de9944347fcda3f80ae"
 
 [[projects]]
   name = "google.golang.org/appengine"
@@ -195,7 +255,7 @@
 
 [[projects]]
   name = "google.golang.org/grpc"
-  packages = [".","balancer","codes","connectivity","credentials","grpclb/grpc_lb_v1/messages","grpclog","internal","keepalive","metadata","naming","peer","resolver","stats","status","tap","transport"]
+  packages = [".","balancer","benchmark/stats","codes","connectivity","credentials","grpclb/grpc_lb_v1/messages","grpclog","internal","keepalive","metadata","naming","peer","resolver","stats","status","tap","transport"]
   revision = "5ffe3083946d5603a0578721101dc8165b1d5b5f"
   version = "v1.7.2"
 
@@ -214,6 +274,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "e83a51dda8b8f0a5b9f307839b31fca6ae454cff4efe6b653291ab8778fc6243"
+  inputs-digest = "8250e862fe4a480f94b223acc4f884969856aaa6bb3e19c04b4fcdb8f07bba40"
   solver-name = "gps-cdcl"
   solver-version = 1
