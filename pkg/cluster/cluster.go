@@ -1,7 +1,6 @@
 package cluster
 
 import (
-	"fmt"
 	"net"
 	"sort"
 	"strconv"
@@ -233,8 +232,7 @@ func (d *delegate) GetBroadcasts(overhead, limit int) [][]byte {
 	return d.bcast.GetBroadcasts(overhead, limit)
 }
 
-// LocalState
-func (d *delegate) LocalState(join bool) []byte {
+func (d *delegate) LocalState(_ bool) []byte {
 	d.mtx.RLock()
 	defer d.mtx.RUnlock()
 
@@ -245,7 +243,7 @@ func (d *delegate) LocalState(join bool) []byte {
 	return b
 }
 
-func (d *delegate) MergeRemoteState(buf []byte, join bool) {
+func (d *delegate) MergeRemoteState(buf []byte, _ bool) {
 	var data map[string]peerState
 	if err := json.Unmarshal(buf, &data); err != nil {
 		level.Error(d.logger).Log("method", "MergeRemoteState", "err", err)
@@ -260,12 +258,12 @@ func (d *delegate) MergeRemoteState(buf []byte, join bool) {
 
 // NotifyJoin is called if a peer joins the cluster.
 func (d *delegate) NotifyJoin(n *memberlist.Node) {
-	level.Debug(d.logger).Log("received", "NotifyJoin", "node", n.Name, "addr", fmt.Sprintf("%s:%d", n.Addr, n.Port))
+	level.Debug(d.logger).Log("received", "NotifyJoin", "node", n.Name, "addr", n.Address())
 }
 
 // NotifyLeave is called if a peer leaves the cluster.
 func (d *delegate) NotifyLeave(n *memberlist.Node) {
-	level.Debug(d.logger).Log("received", "NotifyLeave", "node", n.Name, "addr", fmt.Sprintf("%s:%d", n.Addr, n.Port))
+	level.Debug(d.logger).Log("received", "NotifyLeave", "node", n.Name, "addr", n.Address())
 	d.mtx.Lock()
 	defer d.mtx.Unlock()
 	delete(d.data, n.Name)
@@ -273,5 +271,5 @@ func (d *delegate) NotifyLeave(n *memberlist.Node) {
 
 // NotifyUpdate is called if a cluster peer gets updated.
 func (d *delegate) NotifyUpdate(n *memberlist.Node) {
-	level.Debug(d.logger).Log("received", "NotifyUpdate", "node", n.Name, "addr", fmt.Sprintf("%s:%d", n.Addr, n.Port))
+	level.Debug(d.logger).Log("received", "NotifyUpdate", "node", n.Name, "addr", n.Address())
 }
