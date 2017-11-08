@@ -22,7 +22,7 @@ var _ promql.Queryable = (*Queryable)(nil)
 // StoreInfo holds meta information about a store.
 type StoreInfo interface {
 	Conn() *grpc.ClientConn
-	Labels() labels.Labels
+	Labels() []storepb.Label
 }
 
 // Queryable allows to open a querier against a dynamic set of stores.
