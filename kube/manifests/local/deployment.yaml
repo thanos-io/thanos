@@ -12,15 +12,15 @@ spec:
         app: prometheus
     spec:
       containers:
-      - image: prom/prometheus:v2.0.0-rc.3
+      - image: prom/prometheus:v2.0.0
         args: [
           "--config.file=/etc/prometheus/config/prometheus.yaml",
         ]
         name: prometheus
         resources:
           requests:
-            cpu: 200m
-            memory: 2Gi
+            cpu: 100m
+            memory: 200Mi
         volumeMounts:
         - name: config-volume
           mountPath: /etc/prometheus/config
