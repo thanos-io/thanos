@@ -35,6 +35,8 @@ func main() {
 	app.Version(version.Print("thanos"))
 	app.HelpFlag.Short('h')
 
+	debugName := app.Flag("debug.name", "name to prefix to log lines").Hidden().String()
+
 	logLevel := app.Flag("log.level", "log filtering level").
 		Default("info").Enum("error", "warn", "info", "debug")
 
@@ -68,6 +70,11 @@ func main() {
 		}
 		logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
 		logger = level.NewFilter(logger, lvl)
+
+		if *debugName != "" {
+			logger = log.With(logger, "name", *debugName)
+		}
+
 		logger = log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.DefaultCaller)
 	}
 
@@ -127,7 +134,7 @@ func registerMetrics(mux *http.ServeMux, g prometheus.Gatherer) {
 	mux.Handle("/metrics", promhttp.HandlerFor(g, promhttp.HandlerOpts{}))
 }
 
-func joinCluster(logger log.Logger, typ cluster.PeerType, bindAddr, advertiseAddr string, peers []string) (*cluster.Peer, error) {
+func joinCluster(logger log.Logger, typ cluster.PeerType, bindAddr, advertiseAddr, apiAddr string, peers []string) (*cluster.Peer, error) {
 	bindHost, _, err := net.SplitHostPort(bindAddr)
 	if err != nil {
 		return nil, err
@@ -152,11 +159,11 @@ func joinCluster(logger log.Logger, typ cluster.PeerType, bindAddr, advertiseAdd
 	logger = log.With(logger, "component", "cluster")
 
 	// TODO(fabxc): generate human-readable but random names?
-	name, err := ulid.New(uint64(time.Now().Unix()), rand.New(rand.NewSource(0)))
+	name, err := ulid.New(ulid.Now(), rand.New(rand.NewSource(time.Now().UnixNano())))
 	if err != nil {
 		return nil, err
 	}
-	return cluster.NewPeer(logger, name.String(), typ, bindAddr, advertiseAddr, peers)
+	return cluster.NewPeer(logger, name.String(), typ, bindAddr, advertiseAddr, apiAddr, peers)
 }
 
 func hasNonlocal(clusterPeers []string) bool {

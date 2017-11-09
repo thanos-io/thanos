@@ -2,8 +2,6 @@
 #
 # Starts three Prometheus servers scraping themselves and sidecars for each.
 # Two query nodes are started and all are clustered together.
-# The installed binaries for Prometheus and Thanos are called, i.e. `go install`
-# must be called when testing this with development versions.
 
 trap 'kill 0' SIGTERM
 
@@ -28,6 +26,7 @@ EOF
   prometheus \
     --config.file         data/prom${i}/prometheus.yml \
     --storage.tsdb.path   data/prom${i} \
+    --log.level           warn \
     --web.listen-address  0.0.0.0:909${i} &
 
   sleep 0.25
@@ -38,7 +37,8 @@ sleep 0.5
 # Start one sidecar for each Prometheus server.
 for i in `seq 1 3`
 do
-  thanos sidecar \
+  ./thanos sidecar \
+    --debug.name                sidecar-${i} \
     --api-address               0.0.0.0:1909${i} \
     --metrics-address           0.0.0.0:1919${i} \
     --prometheus.url            http://localhost:909${i} \
@@ -55,7 +55,8 @@ sleep 0.5
 # Start to query nodes.
 for i in `seq 1 2`
 do
-  thanos query \
+  ./thanos query \
+    --debug.name                query-${i} \
     --api-address               0.0.0.0:1949${i} \
     --cluster.address           0.0.0.0:1959${i} \
     --cluster.advertise-address 127.0.0.1:1959${i} \
