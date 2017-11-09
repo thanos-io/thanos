@@ -49,6 +49,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			cluster.PeerTypeQuery,
 			*clusterBindAddr,
 			*clusterAdvertiseAddr,
+			*apiAddr,
 			*peers,
 		)
 		if err != nil {
@@ -86,7 +87,7 @@ func runQuery(
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-			return repeatUntil(30*time.Second, ctx.Done(), func() error {
+			return repeatUntil(5*time.Second, ctx.Done(), func() error {
 				stores.Update(ctx)
 				return nil
 			})

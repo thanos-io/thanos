@@ -81,12 +81,13 @@ func (q *querier) Select(ms ...*promlabels.Matcher) storage.SeriesSet {
 		return promSeriesSet{set: errSeriesSet{err: err}}
 	}
 	for _, s := range q.stores {
+		store := s
+
 		g.Go(func() error {
-			set, err := q.selectSingle(s.Conn(), sms...)
+			set, err := q.selectSingle(store.Conn(), sms...)
 			if err != nil {
 				return err
 			}
-
 			mtx.Lock()
 			all = append(all, set)
 			mtx.Unlock()
@@ -97,6 +98,7 @@ func (q *querier) Select(ms ...*promlabels.Matcher) storage.SeriesSet {
 	if err := g.Wait(); err != nil {
 		return promSeriesSet{errSeriesSet{err: err}}
 	}
+
 	return promSeriesSet{set: mergeAllSeriesSets(all...)}
 }
 

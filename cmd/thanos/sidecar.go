@@ -59,6 +59,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			cluster.PeerTypeStore,
 			*clusterBindAddr,
 			*clusterAdvertiseAddr,
+			*apiAddr,
 			*peers,
 		)
 		if err != nil {

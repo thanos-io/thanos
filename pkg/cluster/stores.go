@@ -36,8 +36,8 @@ func (s *StoreSet) Update(ctx context.Context) {
 	// we depend on it. However, in the future this may change when we fetch additional information
 	// about peers or make the set self-updating through events rather than explicit calls to Update.
 	addresses := map[string]struct{}{}
-	for _, a := range s.peer.Peers(PeerTypeStore) {
-		addresses[a] = struct{}{}
+	for _, ps := range s.peer.PeerStates(PeerTypeStore) {
+		addresses[ps.APIAddr] = struct{}{}
 	}
 
 	s.mtx.Lock()
@@ -49,7 +49,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 		if _, ok := s.stores[addr]; ok {
 			continue
 		}
-		conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure())
+		conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithBlock())
 		if err != nil {
 			level.Warn(s.logger).Log("msg", "dialing connection failed; skipping", "store", addr, "err", err)
 			continue
@@ -78,6 +78,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 		if _, ok := addresses[addr]; !ok {
 			store.cancel()
 			store.conn.Close()
+			level.Info(s.logger).Log("msg", "closing connection for store")
 			delete(s.stores, addr)
 		}
 	}
