@@ -114,12 +114,45 @@ func (q *querier) selectSingle(conn *grpc.ClientConn, ms ...storepb.LabelMatcher
 	return &storeSeriesSet{series: resp.Series, i: -1, mint: q.mint, maxt: q.maxt}, nil
 }
 
-func (*querier) LabelValues(name string) ([]string, error) {
-	return nil, errors.New("not implemented")
+func (q *querier) LabelValues(name string) ([]string, error) {
+	var (
+		mtx sync.Mutex
+		all []string
+		// TODO(bplotka): errgroup will fail the whole query on the first encountered error.
+		// Add support for partial results/errors.
+		g errgroup.Group
+	)
+
+	for _, s := range q.stores {
+		g.Go(func() error {
+			values, err := q.labelValuesSingle(s.Conn(), name)
+			if err != nil {
+				return err
+			}
+
+			mtx.Lock()
+			all = append(all, values...)
+			mtx.Unlock()
+
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return []string(nil), err
+	}
+	return all, nil
 }
 
-func (*querier) LabelValuesFor(string, labels.Label) ([]string, error) {
-	return nil, errors.New("not implemented")
+func (q *querier) labelValuesSingle(conn *grpc.ClientConn, name string) ([]string, error) {
+	c := storepb.NewStoreClient(conn)
+
+	resp, err := c.LabelValues(q.ctx, &storepb.LabelValuesRequest{
+		Label: name,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "fetch series")
+	}
+	return resp.Values, nil
 }
 
 func (q *querier) Close() error {
