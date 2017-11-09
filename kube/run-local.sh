@@ -41,7 +41,7 @@ echo "Starting local k8s cluster with config inside ${KUBECONFIG}. To use it, yo
 mkdir -p .kube || true
 touch .kube/config
 
-if minikube status | grep "Stopped"; then
+if minikube status | grep -E "(Stopped)|minikube: $"; then
     sudo -E ${DIR}/bin/minikube start --vm-driver=${DRIVER} --kubernetes-version=v1.8.0
 fi
 
@@ -53,6 +53,11 @@ for i in {1..150}; do # timeout for 5 minutes
   fi
   sleep 2
 done
+
+# Making sure in best-effort way that k8s generates fresh certs.
+kubectl delete secret $(kubectl get secret | grep default-token | cut -d " " -f 1) || true
+kubectl delete secret -n kube-public $(kubectl get secret -n kube-public | grep default-token | cut -d " " -f 1) || true
+kubectl delete secret -n kube-system $(kubectl get secret -n kube-system | grep default-token | cut -d " " -f 1) || true
 
 echo "Local k8s cluster is running. Starting Prometheus pod."
 kubectl apply -f ${DIR}/manifests/local

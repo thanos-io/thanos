@@ -11,7 +11,6 @@ import (
 )
 
 type Config struct {
-	StoreAddresses       []string      `yaml:"store_nodes"`
 	QueryTimeout         time.Duration `yaml:"query_timeout"`
 	MaxConcurrentQueries int           `yaml:"max_conccurent_queries"`
 }

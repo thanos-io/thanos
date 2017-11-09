@@ -3,6 +3,9 @@ package main
 import (
 	"gopkg.in/alecthomas/kingpin.v2"
 
+	"fmt"
+	"net/url"
+
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/okgroup"
 	"github.com/improbable-eng/thanos/pkg/query"
@@ -22,8 +25,6 @@ func registerExample(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	queryTimeout := cmd.Flag("query.timeout", "maximum time to process query by query node").
 		Default("2m").Duration()
-
-	queryStores := cmd.Flag("query.store", "store API to get data from").Required().URL()
 
 	// Sidecar flags.
 	storeAddress := cmd.Flag("sidecar.address", "listen address of sidecar store API").
@@ -50,11 +51,16 @@ func registerExample(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	m[name] = func(logger log.Logger, metrics *prometheus.Registry) (okgroup.Group, error) {
 		var g okgroup.Group
-		queryGroup, err := runQuery(logger, metrics, *apiAddr, query.Config{
-			StoreAddresses:       []string{*storeAddress},
+
+		storeURL, err := url.Parse(fmt.Sprintf("tcp://%s", *storeAddress))
+		if err != nil {
+			return g, err
+		}
+
+		queryGroup, err := runQuery(logger, metrics, *apiAddr, nil, query.Config{
 			QueryTimeout:         *queryTimeout,
 			MaxConcurrentQueries: *maxConcurrentQueries,
-		}, nil, *queryStores)
+		}, nil, storeURL)
 		if err != nil {
 			return g, errors.Wrap(err, "query setup")
 		}

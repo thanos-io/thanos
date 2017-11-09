@@ -35,7 +35,6 @@ import (
 )
 
 var sampleQueryConfig = query.Config{
-	StoreAddresses:       []string{"1.2.3.4:1", "5.6.7.8:2"},
 	MaxConcurrentQueries: 21,
 	QueryTimeout:         1 * time.Minute,
 }
