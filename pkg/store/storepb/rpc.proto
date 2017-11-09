@@ -12,6 +12,7 @@ option (gogoproto.unmarshaler_all) = true;
 option (gogoproto.goproto_getters_all) = false;
 
 service Store {
+  /// Info returns meta information about a store e.g labels that makes that store unique.
   rpc Info(InfoRequest) returns (InfoResponse);
 
   rpc Series(SeriesRequest) returns (SeriesResponse);

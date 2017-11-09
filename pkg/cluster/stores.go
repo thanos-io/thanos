@@ -30,15 +30,15 @@ func NewStoreSet(logger log.Logger, peer *Peer) *StoreSet {
 	}
 }
 
-// Update the store set to the new set of addresses. New background processes intitiated respect
+// Update the store set to the new set of addresses. New background processes initiated respect
 // the lifecycle of the given context.
 func (s *StoreSet) Update(ctx context.Context) {
 	// XXX(fabxc): The store as is barely ties into the cluster. This is the only place where
 	// we depend on it. However, in the future this may change when we fetch additional information
 	// about peers or make the set self-updating through events rather than explicit calls to Update.
-	addresses := map[string]struct{}{}
+	storeAddresses := map[string]struct{}{}
 	for _, ps := range s.peer.PeerStates(PeerTypeStore) {
-		addresses[ps.APIAddr] = struct{}{}
+		storeAddresses[ps.APIAddr] = struct{}{}
 	}
 
 	s.mtx.Lock()
@@ -46,7 +46,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 
 	// For each new address we create a new gRPC connection and start a background routine
 	// which updates relevant metadata for the store (e.g. labels).
-	for addr := range addresses {
+	for addr := range storeAddresses {
 		if _, ok := s.stores[addr]; ok {
 			continue
 		}
@@ -68,6 +68,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 			if err != nil {
 				level.Warn(s.logger).Log("msg", "failed fetching store info", "err", err)
 			} else {
+				// Make sure to set labels even with empty label set do make store ready.
 				store.setLabels(resp.Labels)
 			}
 			return nil
@@ -76,7 +77,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 	}
 	// Delete stores that no longer exist.
 	for addr, store := range s.stores {
-		if _, ok := addresses[addr]; !ok {
+		if _, ok := storeAddresses[addr]; !ok {
 			store.cancel()
 			store.conn.Close()
 			level.Info(s.logger).Log("msg", "closing connection for store")
@@ -90,9 +91,12 @@ func (s *StoreSet) Get() []query.StoreInfo {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 
-	res := make([]query.StoreInfo, 0, len(s.stores))
-
+	var res []query.StoreInfo
 	for _, store := range s.stores {
+		if !store.Ready() {
+			continue
+		}
+
 		res = append(res, store)
 	}
 	return res
@@ -103,12 +107,19 @@ type storeInfo struct {
 	cancel func()
 	mtx    sync.RWMutex
 	labels []storepb.Label
+	ready  bool
 }
 
 var _ query.StoreInfo = (*storeInfo)(nil)
 
 func (s *storeInfo) Conn() *grpc.ClientConn {
 	return s.conn
+}
+
+func (s *storeInfo) Ready() bool {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+	return s.ready
 }
 
 func (s *storeInfo) Labels() []storepb.Label {
@@ -120,5 +131,6 @@ func (s *storeInfo) Labels() []storepb.Label {
 func (s *storeInfo) setLabels(lset []storepb.Label) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
+	s.ready = true
 	s.labels = lset
 }

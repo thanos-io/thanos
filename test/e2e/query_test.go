@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"reflect"
 	"sync"
 	"syscall"
 	"testing"
@@ -20,11 +19,14 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 
+	"reflect"
+
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 )
 
-func spinup(t testing.TB, dir string) (close func()) {
-	const promConfig = `
+func selfScrapePromConfig(port int) string {
+	return fmt.Sprintf(`
 global:
   external_labels:
     prometheus: prom-%d
@@ -33,13 +35,25 @@ scrape_configs:
   scrape_interval: 5s
   static_configs:
   - targets:
-    - "localhost:909%d"
-`
+    - "localhost:%d"
+`, port, port)
+}
+
+type spinupConfig struct {
+	promConfigFn func(port int) string
+	workDir      string
+
+	numPrometheus int
+	numQueries    int
+}
+
+// NOTE: It is important to install Thanos before using this function to compile latest changes.
+func spinup(t testing.TB, cfg spinupConfig) (close func()) {
 	var commands []*exec.Cmd
 	var closers []*exec.Cmd
 
-	for i := 1; i <= 3; i++ {
-		promDir := fmt.Sprintf("%s/data/prom%d", dir, i)
+	for i := 1; i <= cfg.numPrometheus; i++ {
+		promDir := fmt.Sprintf("%s/data/prom%d", cfg.workDir, i)
 
 		if err := os.MkdirAll(promDir, 0777); err != nil {
 			return func() {}
@@ -48,7 +62,7 @@ scrape_configs:
 		if err != nil {
 			return func() {}
 		}
-		_, err = f.Write([]byte(fmt.Sprintf(promConfig, i, i)))
+		_, err = f.Write([]byte(cfg.promConfigFn(9090 + i)))
 		f.Close()
 		if err != nil {
 			return func() {}
@@ -72,7 +86,7 @@ scrape_configs:
 		))
 	}
 
-	for i := 1; i <= 2; i++ {
+	for i := 1; i <= cfg.numQueries; i++ {
 		commands = append(commands, exec.Command("thanos", "query",
 			"--debug.name", fmt.Sprintf("query-%d", i),
 			"--api-address", fmt.Sprintf("0.0.0.0:%d", 19490+i),
@@ -111,13 +125,18 @@ func TestQuerySimple(t *testing.T) {
 	testutil.Ok(t, err)
 	defer os.RemoveAll(dir)
 
-	close := spinup(t, dir)
-	defer close()
+	closeFn := spinup(t, spinupConfig{
+		promConfigFn:  selfScrapePromConfig,
+		workDir:       dir,
+		numPrometheus: 3,
+		numQueries:    2,
+	})
+	defer closeFn()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	err = retryUntil(time.Second, ctx.Done(), func() error {
+	err = runutil.Retry(time.Second, ctx.Done(), func() error {
 		res, err := queryPrometheus(ctx, "http://localhost:19491", time.Now(), "up")
 		if err != nil {
 			return err
@@ -125,30 +144,32 @@ func TestQuerySimple(t *testing.T) {
 		if len(res) != 3 {
 			return errors.Errorf("unexpected result size %d", len(res))
 		}
-		match := true
 
 		// In our model result are always sorted.
-		match = match && reflect.DeepEqual(res[0].Metric, model.Metric{
+		match := reflect.DeepEqual(model.Metric{
 			"__name__":   "up",
 			"instance":   "localhost:9091",
 			"job":        "prometheus",
-			"prometheus": "prom-1",
-		})
-		match = match && reflect.DeepEqual(res[1].Metric, model.Metric{
+			"prometheus": "prom-9091",
+		}, res[0].Metric)
+		match = match && reflect.DeepEqual(model.Metric{
 			"__name__":   "up",
 			"instance":   "localhost:9092",
 			"job":        "prometheus",
-			"prometheus": "prom-2",
-		})
-		match = match && reflect.DeepEqual(res[2].Metric, model.Metric{
+			"prometheus": "prom-9092",
+		}, res[1].Metric)
+		match = match && reflect.DeepEqual(model.Metric{
 			"__name__":   "up",
 			"instance":   "localhost:9093",
 			"job":        "prometheus",
-			"prometheus": "prom-3",
-		})
+			"prometheus": "prom-9093",
+		}, res[2].Metric)
+
+		if !match {
+			return errors.New("metrics mismatch, retrying...")
+		}
 		return nil
 	})
-
 	testutil.Ok(t, err)
 }
 
@@ -184,24 +205,6 @@ func queryPrometheus(ctx context.Context, ustr string, ts time.Time, q string) (
 		return nil, err
 	}
 	return m.Data.Result, nil
-}
-
-func retryUntil(interval time.Duration, stopc <-chan struct{}, f func() error) error {
-	tick := time.NewTicker(interval)
-	defer tick.Stop()
-
-	var err error
-
-	for {
-		if err = f(); err == nil {
-			return nil
-		}
-		select {
-		case <-stopc:
-			return err
-		case <-tick.C:
-		}
-	}
 }
 
 // safeWriter wraps an io.Writer and makes it thread safe.
