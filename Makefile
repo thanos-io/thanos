@@ -15,6 +15,7 @@ build:
 	@echo ">> building binaries"
 	@promu build --prefix $(PREFIX)
 
+
 install-tools:
 	@echo ">> fetching goimports"
 	@go get -u golang.org/x/tools/cmd/goimports
@@ -24,6 +25,7 @@ install-tools:
 	@go get -u github.com/golang/dep/cmd/dep
 
 test-deps:
+	@go install github.com/improbable-eng/thanos/cmd/thanos
 	@go get -u github.com/prometheus/prometheus/cmd/prometheus
 
 proto:

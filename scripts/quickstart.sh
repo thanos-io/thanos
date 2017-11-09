@@ -37,7 +37,7 @@ sleep 0.5
 # Start one sidecar for each Prometheus server.
 for i in `seq 1 3`
 do
-  ./thanos sidecar \
+  thanos sidecar \
     --debug.name                sidecar-${i} \
     --api-address               0.0.0.0:1909${i} \
     --metrics-address           0.0.0.0:1919${i} \
@@ -55,7 +55,7 @@ sleep 0.5
 # Start to query nodes.
 for i in `seq 1 2`
 do
-  ./thanos query \
+  thanos query \
     --debug.name                query-${i} \
     --api-address               0.0.0.0:1949${i} \
     --cluster.address           0.0.0.0:1959${i} \
