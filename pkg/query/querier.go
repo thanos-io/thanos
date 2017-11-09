@@ -138,9 +138,10 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 		})
 	}
 	if err := g.Wait(); err != nil {
-		return []string(nil), err
+		return nil, err
 	}
-	return all, nil
+
+	return dedupStrings(all), nil
 }
 
 func (q *querier) labelValuesSingle(conn *grpc.ClientConn, name string) ([]string, error) {

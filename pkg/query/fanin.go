@@ -3,6 +3,8 @@ package query
 import (
 	"unsafe"
 
+	"strings"
+
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
@@ -199,4 +201,43 @@ func (it *chunkSeriesIterator) Next() bool {
 
 func (it *chunkSeriesIterator) Err() error {
 	return it.cur.Err()
+}
+
+func dedupStrings(a []string) []string {
+	if len(a) == 0 {
+		return nil
+	}
+	if len(a) == 1 {
+		return a
+	}
+	l := len(a) / 2
+	return mergeStrings(dedupStrings(a[:l]), dedupStrings(a[l:]))
+}
+
+func mergeStrings(a, b []string) []string {
+	maxl := len(a)
+	if len(b) > len(a) {
+		maxl = len(b)
+	}
+	res := make([]string, 0, maxl*10/9)
+
+	for len(a) > 0 && len(b) > 0 {
+		d := strings.Compare(a[0], b[0])
+
+		if d == 0 {
+			res = append(res, a[0])
+			a, b = a[1:], b[1:]
+		} else if d < 0 {
+			res = append(res, a[0])
+			a = a[1:]
+		} else if d > 0 {
+			res = append(res, b[0])
+			b = b[1:]
+		}
+	}
+
+	// Append all remaining elements.
+	res = append(res, a...)
+	res = append(res, b...)
+	return res
 }
