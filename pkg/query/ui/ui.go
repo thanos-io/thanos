@@ -47,6 +47,10 @@ func New(logger log.Logger, flagsMap map[string]string) *UI {
 }
 
 func (u *UI) Register(r *route.Router) {
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/graph", http.StatusFound)
+	})
+
 	instrf := prometheus.InstrumentHandlerFunc
 
 	r.Get("/graph", instrf("graph", u.graph))
@@ -136,14 +140,12 @@ func (u *UI) executeTemplate(w http.ResponseWriter, name string, data interface{
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	t, err := template.New("").Parse(text)
+	t, err := template.New("").Funcs(u.tmplFuncs()).Parse(text)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	t.Funcs(u.tmplFuncs())
-
-	if err := t.ExecuteTemplate(w, name, data); err != nil {
+	if err := t.Execute(w, data); err != nil {
 		level.Warn(u.logger).Log("msg", "template expansion failed", "err", err)
 	}
 }
