@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"io/ioutil"
 	"net"
 	"sort"
 	"strconv"
@@ -22,7 +23,7 @@ type Peer struct {
 	mlist *memberlist.Memberlist
 
 	mtx   sync.RWMutex
-	data  map[string]peerState
+	data  map[string]PeerState
 	stopc chan struct{}
 }
 
@@ -42,10 +43,11 @@ func NewPeer(
 	typ PeerType,
 	addr string,
 	advertiseAddr string,
+	apiAddr string,
 	knownPeers []string,
 ) (*Peer, error) {
 	p := &Peer{
-		data:  map[string]peerState{},
+		data:  map[string]PeerState{},
 		stopc: make(chan struct{}),
 	}
 	d := newDelegate(l, p)
@@ -66,8 +68,8 @@ func NewPeer(
 	cfg.Delegate = d
 	cfg.Events = d
 	cfg.GossipInterval = 5 * time.Second
-	cfg.PushPullInterval = 60 * time.Second
-	cfg.LogOutput = log.NewStdlibAdapter(level.Debug(l))
+	cfg.PushPullInterval = 5 * time.Second
+	cfg.LogOutput = ioutil.Discard
 
 	if advertiseAddr != "" {
 		advertiseHost, advertisePortStr, err := net.SplitHostPort(advertiseAddr)
@@ -91,14 +93,13 @@ func NewPeer(
 	n, _ := ml.Join(knownPeers)
 	level.Debug(l).Log("msg", "joined cluster", "peers", n)
 
-	if n == 0 {
-		go p.warnIfAlone(l, 5*time.Second)
+	if n > 0 {
+		go p.warnIfAlone(l, 10*time.Second)
 	}
-
 	// Initialize state with ourselves.
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
-	p.data[p.Name()] = peerState{Type: typ}
+	p.data[p.Name()] = PeerState{Type: typ, APIAddr: apiAddr}
 
 	return p, nil
 }
@@ -146,6 +147,21 @@ func (p *Peer) Peers(t PeerType) (ps []string) {
 	return ps
 }
 
+// PeerStates returns the custom state information for each peer.
+func (p *Peer) PeerStates(t PeerType) (ps []PeerState) {
+	p.mtx.RLock()
+	defer p.mtx.RUnlock()
+
+	for _, o := range p.mlist.Members() {
+		os, ok := p.data[o.Name]
+		if !ok || os.Type != t {
+			continue
+		}
+		ps = append(ps, os)
+	}
+	return ps
+}
+
 // ClusterSize returns the current number of alive members in the cluster.
 func (p *Peer) ClusterSize() int {
 	return p.mlist.NumMembers()
@@ -157,7 +173,7 @@ func (p *Peer) Info() map[string]interface{} {
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
 
-	d := map[string]peerState{}
+	d := map[string]PeerState{}
 	for k, v := range p.data {
 		d[k] = v
 	}
@@ -170,8 +186,9 @@ func (p *Peer) Info() map[string]interface{} {
 	}
 }
 
-type peerState struct {
-	Type PeerType
+type PeerState struct {
+	Type    PeerType
+	APIAddr string
 }
 
 // delegate implements memberlist.Delegate and memberlist.EventDelegate
@@ -212,7 +229,7 @@ func (d *delegate) NodeMeta(limit int) []byte {
 
 // NotifyMsg is the callback invoked when a user-level gossip message is received.
 func (d *delegate) NotifyMsg(b []byte) {
-	var data map[string]peerState
+	var data map[string]PeerState
 	if err := json.Unmarshal(b, &data); err != nil {
 		level.Error(d.logger).Log("method", "NotifyMsg", "b", strings.TrimSpace(string(b)), "err", err)
 		return
@@ -244,7 +261,7 @@ func (d *delegate) LocalState(_ bool) []byte {
 }
 
 func (d *delegate) MergeRemoteState(buf []byte, _ bool) {
-	var data map[string]peerState
+	var data map[string]PeerState
 	if err := json.Unmarshal(buf, &data); err != nil {
 		level.Error(d.logger).Log("method", "MergeRemoteState", "err", err)
 		return
