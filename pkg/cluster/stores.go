@@ -8,6 +8,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/query"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"google.golang.org/grpc"
 )
@@ -59,7 +60,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 		store := &storeInfo{conn: conn, cancel: cancel}
 		s.stores[addr] = store
 
-		go repeatUntil(60*time.Second, iterCtx.Done(), func() error {
+		go runutil.Repeat(60*time.Second, iterCtx.Done(), func() error {
 			ctx, cancel := context.WithTimeout(iterCtx, 30*time.Second)
 			defer cancel()
 
@@ -120,22 +121,4 @@ func (s *storeInfo) setLabels(lset []storepb.Label) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 	s.labels = lset
-}
-
-// repeatUntil executes f every interval seconds until stopc is closed.
-// It executes f once right after being called.
-func repeatUntil(interval time.Duration, stopc <-chan struct{}, f func() error) error {
-	tick := time.NewTicker(interval)
-	defer tick.Stop()
-
-	for {
-		if err := f(); err != nil {
-			return err
-		}
-		select {
-		case <-stopc:
-			return nil
-		case <-tick.C:
-		}
-	}
 }

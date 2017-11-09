@@ -15,6 +15,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/query/api"
 	"github.com/improbable-eng/thanos/pkg/query/ui"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
@@ -87,7 +88,7 @@ func runQuery(
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-			return repeatUntil(5*time.Second, ctx.Done(), func() error {
+			return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
 				stores.Update(ctx)
 				return nil
 			})
