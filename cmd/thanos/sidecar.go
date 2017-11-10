@@ -12,6 +12,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
@@ -185,11 +186,15 @@ func runSidecar(
 		defer gcsClient.Close()
 
 		remote := shipper.NewGCSRemote(logger, nil, gcsClient.Bucket(gcsBucket))
-		s := shipper.New(logger, nil, dataDir, remote, shipper.IsULIDDir)
+		s := shipper.New(logger, nil, dataDir, remote, getExternalLabels)
 
 		ctx, cancel := context.WithCancel(context.Background())
+
 		g.Add(func() error {
-			return errors.Wrap(s.Run(ctx, 30*time.Second), "run block shipper")
+			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+				s.Sync(ctx)
+				return nil
+			})
 		}, func(error) {
 			cancel()
 		})
