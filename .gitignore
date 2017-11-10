@@ -1,6 +1,10 @@
 /thanos
 vendor/
 
+# Ignore minikube setup working dirs.
 kube/bin
 kube/.kube
 kube/.minikube
+
+# Ignore e2e working dirs.
+data/

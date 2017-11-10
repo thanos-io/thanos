@@ -141,6 +141,7 @@ const _ = grpc.SupportPackageIsVersion4
 // Client API for Store service
 
 type StoreClient interface {
+	// / Info returns meta information about a store e.g labels that makes that store unique.
 	Info(ctx context.Context, in *InfoRequest, opts ...grpc.CallOption) (*InfoResponse, error)
 	Series(ctx context.Context, in *SeriesRequest, opts ...grpc.CallOption) (*SeriesResponse, error)
 	LabelNames(ctx context.Context, in *LabelNamesRequest, opts ...grpc.CallOption) (*LabelNamesResponse, error)
@@ -194,6 +195,7 @@ func (c *storeClient) LabelValues(ctx context.Context, in *LabelValuesRequest, o
 // Server API for Store service
 
 type StoreServer interface {
+	// / Info returns meta information about a store e.g labels that makes that store unique.
 	Info(context.Context, *InfoRequest) (*InfoResponse, error)
 	Series(context.Context, *SeriesRequest) (*SeriesResponse, error)
 	LabelNames(context.Context, *LabelNamesRequest) (*LabelNamesResponse, error)
