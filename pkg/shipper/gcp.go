@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/oklog/ulid"
+
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -71,8 +73,8 @@ func (r *GCSRemote) listDir(ctx context.Context, dir string) *storage.ObjectIter
 }
 
 // Exists checks if the given directory exists at the remote site.
-func (r *GCSRemote) Exists(ctx context.Context, dir string) (bool, error) {
-	objs := r.listDir(ctx, dir)
+func (r *GCSRemote) Exists(ctx context.Context, id ulid.ULID) (bool, error) {
+	objs := r.listDir(ctx, id.String())
 	for {
 		if _, err := objs.Next(); err == iterator.Done {
 			break
@@ -87,10 +89,9 @@ func (r *GCSRemote) Exists(ctx context.Context, dir string) (bool, error) {
 }
 
 // Upload the given directory to the remote site.
-func (r *GCSRemote) Upload(ctx context.Context, dir string) error {
+func (r *GCSRemote) Upload(ctx context.Context, id ulid.ULID, dir string) error {
 	r.metrics.dirSyncs.Inc()
 
-	parent := filepath.Dir(dir)
 	err := filepath.Walk(dir, func(name string, fi os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -98,7 +99,7 @@ func (r *GCSRemote) Upload(ctx context.Context, dir string) error {
 		if fi.IsDir() {
 			return nil
 		}
-		return r.uploadSingle(ctx, name, strings.TrimPrefix(name, parent))
+		return r.uploadSingle(ctx, name, filepath.Join(id.String(), strings.TrimPrefix(name, dir)))
 	})
 	if err == nil {
 		return nil
