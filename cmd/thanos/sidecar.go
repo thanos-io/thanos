@@ -11,19 +11,18 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/okgroup"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/prometheus/tsdb/labels"
-	"google.golang.org/grpc"
-
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/okgroup"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/tsdb/labels"
+	"google.golang.org/grpc"
 	"gopkg.in/alecthomas/kingpin.v2"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -81,16 +80,22 @@ func runSidecar(
 	gcsBucket string,
 ) (okgroup.Group, error) {
 
-	var extLabelsMu sync.RWMutex
-	var externalLabels labels.Labels
+	var g okgroup.Group
+	externalLabels := &extLabelSet{promURL: promURL}
 
-	getExternalLabels := func() labels.Labels {
-		extLabelsMu.Lock()
-		defer extLabelsMu.Unlock()
-		return externalLabels
+	// Get external labels before anything else.
+	{
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
+			return externalLabels.Update(ctx)
+		})
+		if err != nil {
+			return g, errors.Wrap(err, "initial external labels query")
+		}
 	}
 
-	var g okgroup.Group
 	{
 		mux := http.NewServeMux()
 		registerMetrics(mux, reg)
@@ -117,7 +122,7 @@ func runSidecar(
 		var client http.Client
 
 		proxy, err := store.NewPrometheusProxy(
-			logger, prometheus.DefaultRegisterer, &client, promURL, getExternalLabels)
+			logger, prometheus.DefaultRegisterer, &client, promURL, externalLabels.Get)
 		if err != nil {
 			return g, errors.Wrap(err, "create Prometheus proxy")
 		}
@@ -146,39 +151,30 @@ func runSidecar(
 		reg.MustRegister(promUp, lastHeartbeat)
 
 		ctx, cancel := context.WithCancel(context.Background())
-		tick := time.NewTicker(30 * time.Second)
-
 		g.Add(func() error {
-			for {
-				elset, err := queryExternalLabels(ctx, promURL)
+			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+				iterCtx, iterCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer iterCancel()
+
+				err := externalLabels.Update(iterCtx)
 				if err != nil {
 					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
 					promUp.Set(0)
 				} else {
 					promUp.Set(1)
-
-					extLabelsMu.Lock()
-					externalLabels = elset
-					extLabelsMu.Unlock()
-
 					lastHeartbeat.Set(float64(time.Now().Unix()))
 				}
-				select {
-				case <-ctx.Done():
-					return nil
-				case <-tick.C:
-				}
-			}
+
+				return nil
+			})
 		}, func(error) {
 			cancel()
-			tick.Stop()
 		})
 	}
 
 	if gcsBucket != "" {
 		// The background shipper continuously scans the data directory and uploads
 		// new found blocks to Google Cloud Storage.
-
 		gcsClient, err := storage.NewClient(context.Background())
 		if err != nil {
 			return g, errors.Wrap(err, "create GCS client")
@@ -186,7 +182,7 @@ func runSidecar(
 		defer gcsClient.Close()
 
 		remote := shipper.NewGCSRemote(logger, nil, gcsClient.Bucket(gcsBucket))
-		s := shipper.New(logger, nil, dataDir, remote, getExternalLabels)
+		s := shipper.New(logger, nil, dataDir, remote, externalLabels.Get)
 
 		ctx, cancel := context.WithCancel(context.Background())
 
@@ -204,6 +200,33 @@ func runSidecar(
 
 	level.Info(logger).Log("msg", "starting sidecar")
 	return g, nil
+}
+
+type extLabelSet struct {
+	promURL *url.URL
+
+	mtx    sync.Mutex
+	labels labels.Labels
+}
+
+func (s *extLabelSet) Update(ctx context.Context) error {
+	elset, err := queryExternalLabels(ctx, s.promURL)
+	if err != nil {
+		return err
+	}
+
+	s.mtx.Lock()
+	s.labels = elset
+	s.mtx.Unlock()
+
+	return nil
+}
+
+func (s *extLabelSet) Get() labels.Labels {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	return s.labels
 }
 
 func queryExternalLabels(ctx context.Context, base *url.URL) (labels.Labels, error) {

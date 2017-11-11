@@ -53,9 +53,6 @@ func NewPrometheusProxy(
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
-	if externalLabels == nil {
-		externalLabels = func() labels.Labels { return nil }
-	}
 	p := &PrometheusProxy{
 		logger:         logger,
 		base:           baseURL,
@@ -134,10 +131,9 @@ func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) 
 	res := &storepb.SeriesResponse{
 		Series: make([]storepb.Series, 0, len(m.Data.Result)),
 	}
-	ext := p.externalLabels()
 
 	for _, e := range m.Data.Result {
-		lset := translateAndExtendLabels(e.Metric, ext)
+		lset := translateAndExtendLabels(e.Metric, p.externalLabels())
 		// We generally expect all samples of the requested range to be traversed
 		// so we just encode all samples into one big chunk regardless of size.
 		//

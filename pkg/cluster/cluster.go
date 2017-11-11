@@ -15,6 +15,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/hashicorp/memberlist"
+	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/pkg/errors"
 )
 
@@ -189,6 +190,10 @@ func (p *Peer) Info() map[string]interface{} {
 type PeerState struct {
 	Type    PeerType
 	APIAddr string
+
+	// Every peer can propagate its labels that makes a peer a unique member of the system.
+	// We assume that only Store Type peers will be propagating (external) labels.
+	Labels []storepb.Label
 }
 
 // delegate implements memberlist.Delegate and memberlist.EventDelegate
