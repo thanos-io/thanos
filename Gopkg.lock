@@ -38,12 +38,6 @@
   version = "v1.0.0"
 
 [[projects]]
-  branch = "master"
-  name = "github.com/dgryski/go-bits"
-  packages = ["."]
-  revision = "2ad8d707cc05b1815ce6ff2543bb5e8d8f9298ef"
-
-[[projects]]
   name = "github.com/go-kit/kit"
   packages = ["log","log/level"]
   revision = "4dc7be5d2d12881735283bcab7352178e190fc71"
@@ -58,8 +52,8 @@
 [[projects]]
   name = "github.com/go-stack/stack"
   packages = ["."]
-  revision = "817915b46b97fd7bb80e8ab6b69f01a53ac3eebf"
-  version = "v1.6.0"
+  revision = "259ab82a6cad3992b4e21ff5cac294ccb06474bc"
+  version = "v1.7.0"
 
 [[projects]]
   name = "github.com/gogo/protobuf"
@@ -143,7 +137,7 @@
   branch = "master"
   name = "github.com/miekg/dns"
   packages = [".","internal/socket"]
-  revision = "388f6eea2949b6d9071d25f08cf5b6686da15265"
+  revision = "9fc4eb252eedf0ef8adc05169ce35da5e31beaba"
 
 [[projects]]
   branch = "master"
@@ -203,7 +197,7 @@
   branch = "master"
   name = "github.com/prometheus/tsdb"
   packages = [".","chunks","fileutil","labels"]
-  revision = "706602daed1487f7849990678b4ece4599745905"
+  revision = "032413caf03890a77008614d70258ff8385ba596"
 
 [[projects]]
   branch = "master"
@@ -239,7 +233,7 @@
   branch = "master"
   name = "google.golang.org/api"
   packages = ["gensupport","googleapi","googleapi/internal/uritemplates","googleapi/transport","internal","iterator","option","storage/v1","transport/http"]
-  revision = "76b09a3314405551b1f19de9944347fcda3f80ae"
+  revision = "a0c31fb0028e0111b942a29b9fc2e9235202c48b"
 
 [[projects]]
   name = "google.golang.org/appengine"
@@ -274,6 +268,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "8250e862fe4a480f94b223acc4f884969856aaa6bb3e19c04b4fcdb8f07bba40"
+  inputs-digest = "3a5e4e53506a5a4f8d6a849072db1949c8e14d3ac3bd75945fb6b3301013af09"
   solver-name = "gps-cdcl"
   solver-version = 1
