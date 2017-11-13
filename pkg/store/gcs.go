@@ -14,6 +14,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/fileutil"
+	"github.com/prometheus/tsdb/labels"
+	"golang.org/x/sync/errgroup"
 
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
@@ -48,10 +50,14 @@ func NewGCSStore(logger log.Logger, bucket *storage.BucketHandle, dir string) (*
 		blocks: map[ulid.ULID]*gcsBlock{},
 	}
 
+	if err := os.MkdirAll(dir, 0777); err != nil {
+		return nil, errors.Wrap(err, "create dir")
+	}
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
 		return nil, errors.Wrap(err, "read dir")
 	}
+
 	for _, fi := range files {
 		if !fi.IsDir() {
 			continue
@@ -91,7 +97,9 @@ func (s *GCSStore) SyncBlocks(ctx context.Context) {
 		}
 		return nil
 	})
-	level.Error(s.logger).Log("msg", "unexpected error", "err", err)
+	if err != nil {
+		level.Error(s.logger).Log("msg", "unexpected error", "err", err)
+	}
 }
 
 func (s *GCSStore) syncBlocks(ctx context.Context) error {
@@ -104,13 +112,15 @@ func (s *GCSStore) syncBlocks(ctx context.Context) error {
 		} else if err != nil {
 			return err
 		}
-		id, err := ulid.Parse(oi.Name)
+		id, err := ulid.Parse(oi.Prefix[:len(oi.Prefix)-1])
 		if err != nil {
 			continue
 		}
 		if _, ok := s.blocks[id]; ok {
 			continue
 		}
+		level.Info(s.logger).Log("msg", "sync block from GCS", "id", id)
+
 		if err := s.syncBlock(ctx, id); err != nil {
 			level.Error(s.logger).Log("msg", "syncing block failed", "err", err, "block", id.String())
 		}
@@ -181,6 +191,7 @@ func (s *GCSStore) syncBlock(ctx context.Context, id ulid.ULID) error {
 type gcsBlock struct {
 	dir    string
 	indexr tsdb.IndexReader
+	chunks tsdb.ChunkReader
 }
 
 // Info implements the storepb.StoreServer interface.
@@ -191,7 +202,62 @@ func (s *GCSStore) Info(context.Context, *storepb.InfoRequest) (*storepb.InfoRes
 
 // Series implements the storepb.StoreServer interface.
 func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*storepb.SeriesResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+	resp := &storepb.SeriesResponse{}
+
+	matchers, err := translateMatchers(req.Matchers)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	var g errgroup.Group
+	// TODO(fabxc): filter inspected blocks by labels.
+
+	for _, b := range s.blocks {
+		b := b
+
+		// TODO(fabxc): only aggregate chunk metas first and add a subsequent fetch stage
+		// where we consolidate requests.
+		g.Go(func() error {
+			set, err := tsdb.LookupChunkSeries(b.indexr, nil, matchers...)
+			if err != nil {
+				return errors.Wrap(err, "get series set")
+			}
+			for set.Next() {
+				lset, chunks, _ := set.At()
+
+				series := &storepb.Series{
+					Labels: make([]storepb.Label, 0, len(lset)),
+					Chunks: make([]storepb.Chunk, 0, len(chunks)),
+				}
+				for _, l := range lset {
+					series.Labels = append(series.Labels, storepb.Label{
+						Name:  l.Name,
+						Value: l.Value,
+					})
+				}
+				for _, meta := range chunks {
+					c, err := b.chunks.Chunk(meta.Ref)
+					if err != nil {
+						return errors.Wrap(err, "fetch chunk")
+					}
+					// TODO(fabxc): validate encoding.
+					series.Chunks = append(series.Chunks, storepb.Chunk{
+						Type:    storepb.Chunk_XOR,
+						MinTime: meta.MinTime,
+						MaxTime: meta.MaxTime,
+						Data:    c.Bytes(),
+					})
+				}
+			}
+			if err := set.Err(); err != nil {
+				return errors.Wrap(err, "read series set")
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, status.Error(codes.Aborted, err.Error())
+	}
+	return resp, nil
 }
 
 // LabelNames implements the storepb.StoreServer interface.
@@ -223,4 +289,36 @@ func renameFile(from, to string) error {
 		return err
 	}
 	return pdir.Close()
+}
+
+func translateMatcher(m storepb.LabelMatcher) (labels.Matcher, error) {
+	switch m.Type {
+	case storepb.LabelMatcher_EQ:
+		return labels.NewEqualMatcher(m.Name, m.Value), nil
+
+	case storepb.LabelMatcher_NEQ:
+		return labels.Not(labels.NewEqualMatcher(m.Name, m.Value)), nil
+
+	case storepb.LabelMatcher_RE:
+		return labels.NewRegexpMatcher(m.Name, m.Value)
+
+	case storepb.LabelMatcher_NRE:
+		m, err := labels.NewRegexpMatcher(m.Name, m.Value)
+		if err != nil {
+			return nil, err
+		}
+		return labels.Not(m), nil
+	}
+	return nil, errors.Errorf("unknown label matcher type %d", m.Type)
+}
+
+func translateMatchers(ms []storepb.LabelMatcher) (res []labels.Matcher, err error) {
+	for _, m := range ms {
+		r, err := translateMatcher(m)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, r)
+	}
+	return res, nil
 }
