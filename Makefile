@@ -1,5 +1,7 @@
-PREFIX ?= $(shell pwd)
-FILES ?= $(shell find . -type f -name '*.go' -not -path "./vendor/*")
+PREFIX            ?= $(shell pwd)
+FILES             ?= $(shell find . -type f -name '*.go' -not -path "./vendor/*")
+DOCKER_IMAGE_NAME ?= thanos
+DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))
 
 all: install-tools format build
 
@@ -42,4 +44,8 @@ assets:
 	@go-bindata $(bindata_flags) -pkg ui -o pkg/query/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  pkg/query/ui/templates/... pkg/query/ui/static/...
 	@go fmt ./pkg/query/ui
 
-.PHONY: all install-tools format vet build assets
+docker: build
+	@echo ">> building docker image"
+	@docker build -t "$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)" .
+
+.PHONY: all install-tools format vet build assets docker
