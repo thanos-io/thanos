@@ -10,10 +10,10 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/coreos/etcd/pkg/fileutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
+	"github.com/prometheus/tsdb/fileutil"
 	"github.com/prometheus/tsdb/labels"
 
 	"github.com/go-kit/kit/log"
