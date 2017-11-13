@@ -63,10 +63,11 @@
 
 [[constraint]]
   name = "github.com/prometheus/prometheus"
-  version = "2.0.0"
+  #version = "2.0.0"
+  branch = "fabxc"
 
 [[constraint]]
-  branch = "master"
+  branch = "fabxc"
   name = "github.com/prometheus/tsdb"
 
 [[constraint]]
