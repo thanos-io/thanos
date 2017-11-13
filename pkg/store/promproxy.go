@@ -131,9 +131,9 @@ func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) 
 	res := &storepb.SeriesResponse{
 		Series: make([]storepb.Series, 0, len(m.Data.Result)),
 	}
-
+	ext := p.externalLabels()
 	for _, e := range m.Data.Result {
-		lset := translateAndExtendLabels(e.Metric, p.externalLabels())
+		lset := translateAndExtendLabels(e.Metric, ext)
 		// We generally expect all samples of the requested range to be traversed
 		// so we just encode all samples into one big chunk regardless of size.
 		//

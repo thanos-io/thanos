@@ -191,8 +191,6 @@ type PeerState struct {
 	Type    PeerType
 	APIAddr string
 
-	// Every peer can propagate its labels that makes a peer a unique member of the system.
-	// We assume that only Store Type peers will be propagating (external) labels.
 	Labels []storepb.Label
 }
 
