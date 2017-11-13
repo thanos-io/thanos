@@ -2,14 +2,19 @@ package main
 
 import (
 	"context"
+	"net"
+	"net/http"
 
 	"cloud.google.com/go/storage"
-	"github.com/alecthomas/units"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/okgroup"
+	"github.com/improbable-eng/thanos/pkg/store"
+	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"google.golang.org/grpc"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -17,17 +22,39 @@ import (
 func registerStore(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "store node giving access to blocks in a GCS bucket")
 
-	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks").
+	apiAddr := cmd.Flag("api-address", "listen host:port address for the store API").
+		Default("0.0.0.0:19090").String()
+
+	metricsAddr := cmd.Flag("metrics-address", "metrics host:port address for the sidecar").
+		Default("0.0.0.0:19091").String()
+
+	dataDir := cmd.Flag("tsdb.path", "data directory of TSDB").
+		Default("./data").String()
+
+	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
 		PlaceHolder("<bucket>").Required().String()
 
-	maxDiskCacheSize := cmd.Flag("store.disk-cache-size", "maximum size of on-disk cache").
-		Default("100GB").Bytes()
+	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster").Strings()
 
-	maxMemCacheSize := cmd.Flag("store.mem-cache-size", "maximum size of in-memory cache").
-		Default("4GB").Bytes()
+	clusterBindAddr := cmd.Flag("cluster.address", "listen address for clutser").
+		Default(defaultClusterAddr).String()
+
+	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
+		String()
 
 	m[name] = func(logger log.Logger, metrics *prometheus.Registry) (okgroup.Group, error) {
-		return runStore(logger, metrics, *gcsBucket, *maxDiskCacheSize, *maxMemCacheSize)
+		peer, err := joinCluster(
+			logger,
+			cluster.PeerTypeStore,
+			*clusterBindAddr,
+			*clusterAdvertiseAddr,
+			*apiAddr,
+			*peers,
+		)
+		if err != nil {
+			return okgroup.Group{}, errors.Wrap(err, "join cluster")
+		}
+		return runStore(logger, metrics, peer, *gcsBucket, *dataDir, *apiAddr, *metricsAddr)
 	}
 }
 
@@ -37,20 +64,68 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 func runStore(
 	logger log.Logger,
 	reg *prometheus.Registry,
+	peer *cluster.Peer,
 	gcsBucket string,
-	diskCacheSize units.Base2Bytes,
-	memCacheSize units.Base2Bytes,
+	dataDir string,
+	apiAddr string,
+	metricsAddr string,
 ) (okgroup.Group, error) {
 	var g okgroup.Group
 
-	gcsClient, err := storage.NewClient(context.Background())
-	if err != nil {
-		return g, errors.Wrap(err, "create GCS client")
+	{
+		gcsClient, err := storage.NewClient(context.Background())
+		if err != nil {
+			return g, errors.Wrap(err, "create GCS client")
+		}
+
+		gs, err := store.NewGCSStore(logger, gcsClient.Bucket(gcsBucket), dataDir)
+		if err != nil {
+			return g, errors.Wrap(err, "create GCS store")
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+
+		g.Add(func() error {
+			gs.SyncBlocks(ctx)
+
+			gs.Close()
+			gcsClient.Close()
+
+			return nil
+		}, func(error) {
+			cancel()
+		})
+
+		l, err := net.Listen("tcp", apiAddr)
+		if err != nil {
+			return g, errors.Wrap(err, "listen API address")
+		}
+		s := grpc.NewServer()
+		storepb.RegisterStoreServer(s, gs)
+
+		g.Add(func() error {
+			return errors.Wrap(s.Serve(l), "serve gRPC")
+		}, func(error) {
+			l.Close()
+		})
 	}
-	defer gcsClient.Close()
+	{
+		mux := http.NewServeMux()
+		registerMetrics(mux, reg)
+		registerProfile(mux)
 
-	// TODO(bplotka): Add store node logic for fetching blocks and exposing store API.
+		l, err := net.Listen("tcp", metricsAddr)
+		if err != nil {
+			return g, errors.Wrap(err, "listen metrics address")
+		}
 
-	level.Info(logger).Log("msg", "I'm a store node", "diskCacheSize", diskCacheSize, "memCacheSize", memCacheSize)
+		g.Add(func() error {
+			return errors.Wrap(http.Serve(l, mux), "serve metrics")
+		}, func(error) {
+			l.Close()
+		})
+	}
+
+	level.Info(logger).Log("msg", "I'm a store node")
+
 	return g, nil
 }

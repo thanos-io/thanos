@@ -183,7 +183,6 @@ func runSidecar(
 		if err != nil {
 			return g, errors.Wrap(err, "create GCS client")
 		}
-		defer gcsClient.Close()
 
 		remote := shipper.NewGCSRemote(logger, nil, gcsClient.Bucket(gcsBucket))
 		s := shipper.New(logger, nil, dataDir, remote, getExternalLabels)
@@ -191,6 +190,8 @@ func runSidecar(
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
+			defer gcsClient.Close()
+
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				s.Sync(ctx)
 				return nil

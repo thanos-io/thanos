@@ -35,13 +35,6 @@ func registerExample(m map[string]setupFunc, app *kingpin.Application, name stri
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
 		PlaceHolder("<bucket>").String()
 
-	// Store node flags.
-	maxDiskCacheSize := cmd.Flag("store.disk-cache-size", "maximum size of on-disk cache").
-		Default("100GB").Bytes()
-
-	maxMemCacheSize := cmd.Flag("store.mem-cache-size", "maximum size of in-memory cache").
-		Default("4GB").Bytes()
-
 	m[name] = func(logger log.Logger, metrics *prometheus.Registry) (okgroup.Group, error) {
 		var g okgroup.Group
 
@@ -59,12 +52,6 @@ func registerExample(m map[string]setupFunc, app *kingpin.Application, name stri
 			return g, errors.Wrap(err, "sidecar setup")
 		}
 		g.AddGroup(sidecarGroup)
-
-		storeGroup, err := runStore(logger, metrics, *gcsBucket, *maxDiskCacheSize, *maxMemCacheSize)
-		if err != nil {
-			return g, errors.Wrap(err, "store setup")
-		}
-		g.AddGroup(storeGroup)
 
 		return g, nil
 	}
