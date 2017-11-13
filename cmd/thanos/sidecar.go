@@ -83,19 +83,26 @@ func runSidecar(
 	var g okgroup.Group
 	externalLabels := &extLabelSet{promURL: promURL}
 
-	// Get external labels before anything else.
+	// Blocking query of external labels before anything else.
+	// We retry infinitely until we reach and fetch labels from our Prometheus.
 	{
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-
+		ctx := context.Background()
 		err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
-			return externalLabels.Update(ctx)
+			err := externalLabels.Update(ctx)
+			if err != nil {
+				level.Warn(logger).Log(
+					"msg", "failed to fetch initial external labels. Retrying",
+					"err", err,
+				)
+			}
+			return err
 		})
 		if err != nil {
 			return g, errors.Wrap(err, "initial external labels query")
 		}
 	}
 
+	// Setup all the concurrent groups.
 	{
 		mux := http.NewServeMux()
 		registerMetrics(mux, reg)
@@ -239,7 +246,7 @@ func queryExternalLabels(ctx context.Context, base *url.URL) (labels.Labels, err
 	}
 	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, errors.Wrap(err, "request config")
+		return nil, errors.Wrapf(err, "request config against %s", u.String())
 	}
 	defer resp.Body.Close()
 
