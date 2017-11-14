@@ -138,7 +138,7 @@ func (s *GCSStore) downloadBlock(ctx context.Context, id ulid.ULID) error {
 	if err != nil {
 		return errors.Wrap(err, "create index object reader")
 	}
-	_, err = io.Copy(f, r)
+	_, copyErr := io.Copy(f, r)
 
 	if err := f.Close(); err != nil {
 		level.Warn(s.logger).Log("msg", "close file", "err", err)
@@ -146,11 +146,11 @@ func (s *GCSStore) downloadBlock(ctx context.Context, id ulid.ULID) error {
 	if err := r.Close(); err != nil {
 		level.Warn(s.logger).Log("msg", "close object reader", "err", err)
 	}
-	if err != nil {
+	if copyErr != nil {
 		if err := os.RemoveAll(tmpdir); err != nil {
 			level.Warn(s.logger).Log("msg", "cleanup temp dir after failure", "err", err)
 		}
-		return errors.Wrap(err, "copy index file to disk")
+		return errors.Wrap(copyErr, "copy index file to disk")
 	}
 
 	if err := renameFile(tmpdir, bdir); err != nil {

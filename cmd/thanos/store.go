@@ -125,7 +125,7 @@ func runStore(
 		})
 	}
 
-	level.Info(logger).Log("msg", "I'm a store node")
+	level.Info(logger).Log("msg", "starting store node")
 
 	return g, nil
 }

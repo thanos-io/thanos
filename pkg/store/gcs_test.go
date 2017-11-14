@@ -30,15 +30,15 @@ func TestGCSStore_downloadBlocks(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	gcsClient, err := storage.NewClient(ctx)
-	testutil.Ok(t, err)
-	defer gcsClient.Close()
-
 	project, ok := os.LookupEnv("GCP_PROJECT")
 	// TODO(fabxc): make it run against a mock store if no actual bucket is configured.
 	if !ok {
 		return
 	}
+
+	gcsClient, err := storage.NewClient(ctx)
+	testutil.Ok(t, err)
+	defer gcsClient.Close()
 
 	bkt := gcsClient.Bucket(randBucketName(t))
 	testutil.Ok(t, bkt.Create(ctx, project, nil))
