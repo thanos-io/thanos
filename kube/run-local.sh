@@ -55,9 +55,8 @@ for i in {1..150}; do # timeout for 5 minutes
 done
 
 # Making sure in best-effort way that k8s generates fresh certs.
-kubectl delete secret $(kubectl get secret | grep default-token | cut -d " " -f 1) || true
-kubectl delete secret -n kube-public $(kubectl get secret -n kube-public | grep default-token | cut -d " " -f 1) || true
-kubectl delete secret -n kube-system $(kubectl get secret -n kube-system | grep default-token | cut -d " " -f 1) || true
+kubectl delete secret $(kubectl get secret | grep default-token | cut -d " " -f 1) 2>/dev/null || true
+kubectl delete secret -n kube-public $(kubectl get secret -n kube-public | grep default-token | cut -d " " -f 1) 2>/dev/null || true
+kubectl delete secret -n kube-system $(kubectl get secret -n kube-system | grep default-token | cut -d " " -f 1) 2>/dev/null || true
 
-echo "Local k8s cluster is running. Starting Prometheus pod."
-kubectl apply -f ${DIR}/manifests/local
+echo "Cluster is running. See README.md for example deployments you can apply."
