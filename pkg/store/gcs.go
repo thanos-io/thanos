@@ -2,8 +2,8 @@ package store
 
 import (
 	"context"
+	"encoding/binary"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -13,6 +13,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
+	"github.com/prometheus/tsdb/chunks"
 	"github.com/prometheus/tsdb/fileutil"
 	"github.com/prometheus/tsdb/labels"
 	"golang.org/x/sync/errgroup"
@@ -43,6 +44,9 @@ var _ storepb.StoreServer = (*GCSStore)(nil)
 // NewGCSStore creates a new GCS backed store that caches index files to disk. It loads
 // pre-exisiting cache entries in dir on creation.
 func NewGCSStore(logger log.Logger, bucket *storage.BucketHandle, dir string) (*GCSStore, error) {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
 	s := &GCSStore{
 		logger: logger,
 		bucket: bucket,
@@ -53,25 +57,8 @@ func NewGCSStore(logger log.Logger, bucket *storage.BucketHandle, dir string) (*
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return nil, errors.Wrap(err, "create dir")
 	}
-	files, err := ioutil.ReadDir(dir)
-	if err != nil {
-		return nil, errors.Wrap(err, "read dir")
-	}
-
-	for _, fi := range files {
-		if !fi.IsDir() {
-			continue
-		}
-		id, err := ulid.Parse(fi.Name())
-		if err != nil {
-			continue
-		}
-		if _, err := s.loadFromDisk(id); err != nil {
-			level.Warn(logger).Log("msg", "loading block from disk failed; deleting", "id", id)
-			// Since the disk just acts as a persistent cache, simply deleting
-			// the corrupted directory is fine.
-			os.RemoveAll(filepath.Join(dir, fi.Name()))
-		}
+	if err := s.loadBlocks(); err != nil {
+		return nil, errors.Wrap(err, "loading blocks from disk failed")
 	}
 	return s, nil
 }
@@ -79,7 +66,7 @@ func NewGCSStore(logger log.Logger, bucket *storage.BucketHandle, dir string) (*
 // Close the store.
 func (s *GCSStore) Close() (err error) {
 	for _, b := range s.blocks {
-		if e := b.indexr.Close(); e != nil {
+		if e := b.Close(); e != nil {
 			level.Warn(s.logger).Log("msg", "closing GCS block failed", "err", err)
 			err = e
 		}
@@ -92,8 +79,11 @@ func (s *GCSStore) SyncBlocks(ctx context.Context) {
 	// NOTE(fabxc): watches are not yet supported by the Go client library so we just
 	// do a periodic refresh.
 	err := runutil.Repeat(60*time.Second, ctx.Done(), func() error {
-		if err := s.syncBlocks(ctx); err != nil {
-			level.Warn(s.logger).Log("msg", "syncing blocks failed", "err", err)
+		if err := s.downloadBlocks(ctx); err != nil {
+			level.Warn(s.logger).Log("msg", "downloading missing blocks failed", "err", err)
+		}
+		if err := s.loadBlocks(); err != nil {
+			level.Warn(s.logger).Log("msg", "loading disk blocks failed", "err", err)
 		}
 		return nil
 	})
@@ -102,7 +92,7 @@ func (s *GCSStore) SyncBlocks(ctx context.Context) {
 	}
 }
 
-func (s *GCSStore) syncBlocks(ctx context.Context) error {
+func (s *GCSStore) downloadBlocks(ctx context.Context) error {
 	objs := s.bucket.Objects(ctx, &storage.Query{Delimiter: "/"})
 
 	for {
@@ -121,33 +111,16 @@ func (s *GCSStore) syncBlocks(ctx context.Context) error {
 		}
 		level.Info(s.logger).Log("msg", "sync block from GCS", "id", id)
 
-		if err := s.syncBlock(ctx, id); err != nil {
+		if err := s.downloadBlock(ctx, id); err != nil {
 			level.Error(s.logger).Log("msg", "syncing block failed", "err", err, "block", id.String())
 		}
 	}
 	return nil
 }
 
-// loadFromDisk loads a block with the given ID from the disk cache.
-func (s *GCSStore) loadFromDisk(id ulid.ULID) (*gcsBlock, error) {
-	dir := filepath.Join(s.dir, id.String())
-
-	indexr, err := tsdb.NewFileIndexReader(filepath.Join(dir, "index"))
-	if err != nil {
-		return nil, errors.Wrap(err, "open index reader")
-	}
-	b := &gcsBlock{indexr: indexr, dir: dir}
-
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
-
-	s.blocks[id] = b
-	return b, nil
-}
-
-// syncBlock downloads the index and meta.json file for the given block ID and opens a reader
+// downloadBlock downloads the index and meta.json file for the given block ID and opens a reader
 // against the block.
-func (s *GCSStore) syncBlock(ctx context.Context, id ulid.ULID) error {
+func (s *GCSStore) downloadBlock(ctx context.Context, id ulid.ULID) error {
 	bdir := filepath.Join(s.dir, id.String())
 	tmpdir := bdir + ".tmp"
 
@@ -183,15 +156,47 @@ func (s *GCSStore) syncBlock(ctx context.Context, id ulid.ULID) error {
 	if err := renameFile(tmpdir, bdir); err != nil {
 		return errors.Wrap(err, "rename block directory")
 	}
-
-	_, err = s.loadFromDisk(id)
-	return errors.Wrap(err, "load synced block")
+	return nil
 }
 
-type gcsBlock struct {
-	dir    string
-	indexr tsdb.IndexReader
-	chunks tsdb.ChunkReader
+// loadBlocks ensures that all blocks in the data directory are loaded into memory.
+func (s *GCSStore) loadBlocks() error {
+	fns, err := fileutil.ReadDir(s.dir)
+	if err != nil {
+		return errors.Wrap(err, "read dir")
+	}
+	for _, fn := range fns {
+		id, err := ulid.Parse(fn)
+		if err != nil {
+			continue
+		}
+		if _, ok := s.blocks[id]; ok {
+			continue
+		}
+		b, err := s.loadFromDisk(id)
+		if err != nil {
+			level.Warn(s.logger).Log("msg", "loading block failed", "err", err)
+		}
+		s.mtx.Lock()
+		s.blocks[id] = b
+		s.mtx.Unlock()
+	}
+	return nil
+}
+
+// loadFromDisk loads a block with the given ID from the disk cache.
+func (s *GCSStore) loadFromDisk(id ulid.ULID) (*gcsBlock, error) {
+	dir := filepath.Join(s.dir, id.String())
+
+	indexr, err := tsdb.NewFileIndexReader(filepath.Join(dir, "index"))
+	if err != nil {
+		return nil, errors.Wrap(err, "open index reader")
+	}
+	b, err := newGCSBlock(context.TODO(), id, indexr, s.bucket)
+	if err != nil {
+		return nil, errors.Wrap(err, "open GCS block")
+	}
+	return b, nil
 }
 
 // Info implements the storepb.StoreServer interface.
@@ -212,19 +217,19 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 	// TODO(fabxc): filter inspected blocks by labels.
 
 	for _, b := range s.blocks {
-		b := b
+		block := b
 
 		// TODO(fabxc): only aggregate chunk metas first and add a subsequent fetch stage
 		// where we consolidate requests.
 		g.Go(func() error {
-			set, err := tsdb.LookupChunkSeries(b.indexr, nil, matchers...)
+			set, err := tsdb.LookupChunkSeries(block.index, nil, matchers...)
 			if err != nil {
 				return errors.Wrap(err, "get series set")
 			}
 			for set.Next() {
 				lset, chunks, _ := set.At()
 
-				series := &storepb.Series{
+				series := storepb.Series{
 					Labels: make([]storepb.Label, 0, len(lset)),
 					Chunks: make([]storepb.Chunk, 0, len(chunks)),
 				}
@@ -235,6 +240,12 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 					})
 				}
 				for _, meta := range chunks {
+					if meta.MaxTime < req.MinTime {
+						continue
+					}
+					if meta.MinTime > req.MaxTime {
+						break
+					}
 					c, err := b.chunks.Chunk(meta.Ref)
 					if err != nil {
 						return errors.Wrap(err, "fetch chunk")
@@ -246,6 +257,9 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 						MaxTime: meta.MaxTime,
 						Data:    c.Bytes(),
 					})
+				}
+				if len(series.Chunks) > 0 {
+					resp.Series = append(resp.Series, series)
 				}
 			}
 			if err := set.Err(); err != nil {
@@ -268,6 +282,101 @@ func (s *GCSStore) LabelNames(context.Context, *storepb.LabelNamesRequest) (*sto
 // LabelValues implements the storepb.StoreServer interface.
 func (s *GCSStore) LabelValues(context.Context, *storepb.LabelValuesRequest) (*storepb.LabelValuesResponse, error) {
 	return &storepb.LabelValuesResponse{}, nil
+}
+
+type gcsBlock struct {
+	id     ulid.ULID
+	dir    string
+	index  tsdb.IndexReader
+	chunks tsdb.ChunkReader
+}
+
+func newGCSBlock(
+	ctx context.Context,
+	id ulid.ULID,
+	index tsdb.IndexReader,
+	bkt *storage.BucketHandle,
+) (*gcsBlock, error) {
+	cr, err := newGCSChunkReader(ctx, id, bkt)
+	if err != nil {
+		return nil, err
+	}
+	return &gcsBlock{
+		id:     id,
+		index:  index,
+		chunks: cr,
+	}, nil
+}
+
+func (b *gcsBlock) Close() error {
+	b.index.Close()
+	b.chunks.Close()
+	return nil
+}
+
+type gcsChunkReader struct {
+	id    ulid.ULID
+	bkt   *storage.BucketHandle
+	files []*storage.ObjectHandle
+}
+
+func newGCSChunkReader(ctx context.Context, id ulid.ULID, bkt *storage.BucketHandle) (*gcsChunkReader, error) {
+	r := &gcsChunkReader{
+		id:  id,
+		bkt: bkt,
+	}
+	objs := bkt.Objects(ctx, &storage.Query{
+		Prefix: path.Join(id.String(), "chunks/"),
+	})
+	for {
+		oi, err := objs.Next()
+		if err == iterator.Done {
+			break
+		} else if err != nil {
+			return nil, errors.Wrap(err, "list chunk files")
+		}
+		r.files = append(r.files, bkt.Object(oi.Name))
+	}
+	return r, nil
+}
+
+func (r *gcsChunkReader) Chunk(id uint64) (chunks.Chunk, error) {
+	var (
+		seq = int(id >> 32)
+		off = int((id << 32) >> 32)
+	)
+	if seq >= len(r.files) {
+		return nil, errors.Errorf("reference sequence %d out of range", seq)
+	}
+	obj := r.files[seq]
+
+	// We don't know the length of the chunk, load 1024 bytes, which should be enough
+	// even for long ones.
+	rd, err := obj.NewRangeReader(context.TODO(), int64(off), int64(off+1024))
+	if err != nil {
+		return nil, errors.Wrap(err, "create reader")
+	}
+	defer r.Close()
+
+	b := make([]byte, 1024)
+	if _, err := rd.Read(b); err != nil {
+		return nil, errors.Wrap(err, "fetch chunk range")
+	}
+
+	l, n := binary.Uvarint(b)
+	if n < 0 {
+		return nil, errors.Errorf("reading chunk length failed")
+	}
+	if len(b) < n+int(l) {
+		return nil, errors.Errorf("preloaded chunk too small, expecting %d", n+int(l))
+	}
+	b = b[n : n+int(l)]
+
+	return chunks.FromData(chunks.Encoding(b[0]), b[1:1+l])
+}
+
+func (r *gcsChunkReader) Close() error {
+	return nil
 }
 
 func renameFile(from, to string) error {
