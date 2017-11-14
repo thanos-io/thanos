@@ -8,6 +8,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/improbable-eng/thanos/pkg/cluster"
 )
 
 func registerExample(m map[string]setupFunc, app *kingpin.Application, name string) {
@@ -41,13 +42,13 @@ func registerExample(m map[string]setupFunc, app *kingpin.Application, name stri
 		queryGroup, err := runQuery(logger, metrics, *apiAddr, query.Config{
 			QueryTimeout:         *queryTimeout,
 			MaxConcurrentQueries: *maxConcurrentQueries,
-		}, nil)
+		}, cluster.JoinConfig{})
 		if err != nil {
 			return g, errors.Wrap(err, "query setup")
 		}
 		g.AddGroup(queryGroup)
 
-		sidecarGroup, err := runSidecar(logger, metrics, *apiAddr, *metricsAddr, *promURL, *dataDir, nil, *gcsBucket)
+		sidecarGroup, err := runSidecar(logger, metrics, *apiAddr, *metricsAddr, *promURL, *dataDir, cluster.JoinConfig{}, *gcsBucket)
 		if err != nil {
 			return g, errors.Wrap(err, "sidecar setup")
 		}

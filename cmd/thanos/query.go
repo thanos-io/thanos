@@ -4,9 +4,9 @@ import (
 	"context"
 	"net"
 	"net/http"
-	"net/url"
-	"strconv"
 	"time"
+
+	"os"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -36,7 +36,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "maximum number of queries processed concurrently by query node").
 		Default("20").Int()
 
-	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster").Strings()
+	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>.").Strings()
 
 	clusterBindAddr := cmd.Flag("cluster.address", "listen address for cluster").
 		Default(defaultClusterAddr).String()
@@ -44,22 +44,21 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
 		String()
 
-	m[name] = func(logger log.Logger, metrics *prometheus.Registry) (okgroup.Group, error) {
-		peer, err := joinCluster(
+	m[name] = func(logger log.Logger, req *prometheus.Registry) (okgroup.Group, error) {
+		joinConfig, err := createJoinConfig(
 			logger,
-			cluster.PeerTypeQuery,
 			*clusterBindAddr,
-			*clusterAdvertiseAddr,
-			*apiAddr,
+			os.ExpandEnv(*clusterAdvertiseAddr),
 			*peers,
+			true,
 		)
 		if err != nil {
-			return okgroup.Group{}, errors.Wrap(err, "join cluster")
+			return okgroup.Group{}, errors.Wrap(err, "create join cluster config")
 		}
-		return runQuery(logger, metrics, *apiAddr, query.Config{
+		return runQuery(logger, req, *apiAddr, query.Config{
 			QueryTimeout:         *queryTimeout,
 			MaxConcurrentQueries: *maxConcurrentQueries,
-		}, peer)
+		}, joinConfig)
 	}
 }
 
@@ -70,18 +69,25 @@ func runQuery(
 	reg *prometheus.Registry,
 	apiAddr string,
 	cfg query.Config,
-	peer *cluster.Peer,
+	joinConfig cluster.JoinConfig,
 ) (
 	okgroup.Group, error,
 ) {
+	var g okgroup.Group
+	peer, err := cluster.Join(logger, joinConfig, cluster.PeerState{
+		Type:    cluster.PeerTypeQuery,
+		APIAddr: apiAddr,
+	}, reg)
+	if err != nil {
+		return g, errors.Wrap(err, "join cluster")
+	}
+
 	var (
 		stores    = cluster.NewStoreSet(logger, peer)
 		queryable = query.NewQueryable(logger, stores.Get)
 		engine    = promql.NewEngine(queryable, cfg.EngineOpts(logger))
 		api       = v1.NewAPI(engine, queryable, cfg)
 	)
-
-	var g okgroup.Group
 
 	// Periodically update the store set with the addresses we see in our cluster.
 	{
@@ -121,46 +127,4 @@ func runQuery(
 
 	level.Info(logger).Log("msg", "starting query node")
 	return g, nil
-}
-
-func discoverAddresses(ctx context.Context, target *url.URL) (map[string]struct{}, error) {
-	host, port, err := net.SplitHostPort(target.Host)
-	if err != nil {
-		return nil, errors.Wrap(err, "split host/port")
-	}
-	var res net.Resolver
-
-	addresses := map[string]struct{}{}
-
-	switch target.Scheme {
-	case "dns", "dnsip":
-		ips, err := res.LookupIPAddr(ctx, host)
-		if err != nil {
-			return nil, errors.Wrap(err, "LookupIP")
-		}
-		for _, ip := range ips {
-			addresses[net.JoinHostPort(ip.String(), port)] = struct{}{}
-		}
-	case "dnssrv":
-		_, records, err := res.LookupSRV(ctx, "", "tcp", host)
-		if err != nil {
-			return nil, errors.Wrap(err, "LookupSRV")
-		}
-		for _, rec := range records {
-			addresses[net.JoinHostPort(rec.Target, strconv.Itoa(int(rec.Port)))] = struct{}{}
-		}
-	case "dnsaddr":
-		names, err := res.LookupAddr(ctx, host)
-		if err != nil {
-			return nil, errors.Wrap(err, "LookupAddr")
-		}
-		for _, n := range names {
-			addresses[net.JoinHostPort(n, port)] = struct{}{}
-		}
-	case "tcp":
-		addresses[net.JoinHostPort(host, port)] = struct{}{}
-	default:
-		return nil, errors.Errorf("unsupported discovery scheme %s (one of dnsip, dnssrv, dnsaddr)", target.Scheme)
-	}
-	return addresses, nil
 }

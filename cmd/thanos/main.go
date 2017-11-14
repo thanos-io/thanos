@@ -13,10 +13,13 @@ import (
 	"syscall"
 	"time"
 
+	"context"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/okgroup"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -134,23 +137,28 @@ func registerMetrics(mux *http.ServeMux, g prometheus.Gatherer) {
 	mux.Handle("/metrics", promhttp.HandlerFor(g, promhttp.HandlerOpts{}))
 }
 
-func joinCluster(logger log.Logger, typ cluster.PeerType, bindAddr, advertiseAddr, apiAddr string, peers []string) (*cluster.Peer, error) {
+func createJoinConfig(logger log.Logger, bindAddr, advertiseAddr string, peers []string, waitIfEmpty bool) (cluster.JoinConfig, error) {
 	bindHost, _, err := net.SplitHostPort(bindAddr)
 	if err != nil {
-		return nil, err
+		return cluster.JoinConfig{}, err
 	}
 	var advertiseHost string
 
 	if advertiseAddr != "" {
 		advertiseHost, _, err = net.SplitHostPort(advertiseAddr)
 		if err != nil {
-			return nil, err
+			return cluster.JoinConfig{}, err
 		}
+	}
+
+	resolvedPeers, err := resolvePeers(context.Background(), peers, advertiseAddr, net.Resolver{}, waitIfEmpty)
+	if err != nil {
+		return cluster.JoinConfig{}, errors.Wrap(err, "resolve peers")
 	}
 
 	if addr, err := cluster.CalculateAdvertiseAddress(bindHost, advertiseHost); err != nil {
 		level.Warn(logger).Log("err", "couldn't deduce an advertise address: "+err.Error())
-	} else if hasNonlocal(peers) && isUnroutable(addr.String()) {
+	} else if hasNonlocal(resolvedPeers) && isUnroutable(addr.String()) {
 		level.Warn(logger).Log("err", "this node advertises itself on an unroutable address", "addr", addr.String())
 		level.Warn(logger).Log("err", "this node will be unreachable in the cluster")
 		level.Warn(logger).Log("err", "provide --cluster.advertise-address as a routable IP address or hostname")
@@ -161,9 +169,79 @@ func joinCluster(logger log.Logger, typ cluster.PeerType, bindAddr, advertiseAdd
 	// TODO(fabxc): generate human-readable but random names?
 	name, err := ulid.New(ulid.Now(), rand.New(rand.NewSource(time.Now().UnixNano())))
 	if err != nil {
-		return nil, err
+		return cluster.JoinConfig{}, err
 	}
-	return cluster.NewPeer(logger, name.String(), typ, bindAddr, advertiseAddr, apiAddr, peers)
+	return cluster.JoinConfig{
+		Name:          name.String(),
+		Addr:          bindAddr,
+		AdvertiseAddr: advertiseAddr,
+		KnownPeers:    resolvedPeers,
+	}, nil
+}
+
+func resolvePeers(ctx context.Context, peers []string, myAddress string, res net.Resolver, waitIfEmpty bool) ([]string, error) {
+	var resolvedPeers []string
+
+	for _, peer := range peers {
+		host, port, err := net.SplitHostPort(peer)
+		if err != nil {
+			return nil, errors.Wrapf(err, "split host/port for peer %s", peer)
+		}
+
+		retryCtx, cancel := context.WithCancel(ctx)
+		if ips, err := res.LookupIPAddr(ctx, host); err == nil {
+			if len(ips) == 0 {
+				var lookupErrSpotted bool
+
+				err := runutil.Retry(2*time.Second, retryCtx.Done(), func() error {
+					if lookupErrSpotted {
+						cancel()
+					}
+
+					ips, err = res.LookupIPAddr(retryCtx, host)
+					if err != nil {
+						lookupErrSpotted = true
+						return errors.Wrapf(err, "IP Addr lookup for peer %s", peer)
+					}
+
+					ips = removeMyAddr(ips, port, myAddress)
+					if len(ips) == 0 {
+						if !waitIfEmpty {
+							return nil
+						}
+						return errors.New("empty IPAddr result. Retrying")
+					}
+
+					return nil
+				})
+				if err != nil {
+					return nil, err
+				}
+			}
+
+			for _, ip := range ips {
+				resolvedPeers = append(resolvedPeers, net.JoinHostPort(ip.String(), port))
+			}
+		}
+
+		// Assume direct address.
+		resolvedPeers = append(resolvedPeers, peer)
+	}
+
+	return resolvedPeers, nil
+}
+
+func removeMyAddr(ips []net.IPAddr, targetPort string, myAddr string) []net.IPAddr {
+	var result []net.IPAddr
+
+	for _, ip := range ips {
+		if net.JoinHostPort(ip.String(), targetPort) == myAddr {
+			continue
+		}
+		result = append(result, ip)
+	}
+
+	return result
 }
 
 func hasNonlocal(clusterPeers []string) bool {
