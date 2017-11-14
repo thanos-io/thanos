@@ -4,12 +4,14 @@ metadata:
   name: prometheus
   labels:
     app: prometheus
+    thanos-peer: "true"
 spec:
   replicas: 1
   template:
     metadata:
       labels:
         app: prometheus
+        thanos-peer: "true"
     spec:
       containers:
       - image: prom/prometheus:v2.0.0
@@ -31,6 +33,11 @@ spec:
         # TODO(bplotka): With vm-driver=none, even that is uses same docker, images are not recognized. Investigate.
       - image: bplotka/thanos:latest
         imagePullPolicy: Always
+        env:
+        - name: POD_IP
+          valueFrom:
+           fieldRef:
+             fieldPath: status.podIP
         args: [
           "sidecar",
           "--debug.name=sidecar",
@@ -39,7 +46,8 @@ spec:
           "--prometheus.url=http://localhost:9090",
           "--tsdb.path=/data",
           "--cluster.address=0.0.0.0:19390",
-          "--cluster.advertise-address=10.0.0.88:19390",
+          "--cluster.advertise-address=$POD_IP:19390",
+          "--cluster.peers=thanos.default.svc.cluster.local:19390",
            # "--gcs.bucket=<bucket>" Add bucket and service account to enable shipping blocks to GCS.
         ]
         name: thanos

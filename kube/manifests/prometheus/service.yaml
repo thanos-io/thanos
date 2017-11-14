@@ -5,25 +5,16 @@ metadata:
     app: prometheus
   name: prometheus
 spec:
-  clusterIP: 10.0.0.88
   externalTrafficPolicy: Cluster
   ports:
   - port: 9090
     protocol: TCP
     targetPort: 9090
     name: http-prometheus
-  - port: 19090
-    protocol: TCP
-    targetPort: 19090
-    name: grpc-sidecar
   - port: 19190
     protocol: TCP
     targetPort: 19190
     name: http-sidecar-metrics
-  - port: 19390
-    protocol: TCP
-    targetPort: 19390
-    name: http-sidecar-cluster
   selector:
     app: prometheus
   sessionAffinity: None

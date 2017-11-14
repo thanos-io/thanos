@@ -18,6 +18,16 @@ To use cluster from your terminal do:
 
 From now on you can use `kubectl` as well as `minikube` command, including `minikube stop` to stop the whole cluster.
   
+## Start Thanos service for Thanos gossip peers
+
+This allows query to discover thanos services.
+
+```bash
+echo "Starting Thanos service for gathering all thanos gossip peers."
+kubectl apply -f manifests/thanos
+
+```
+  
 ## Start Prometheus with Thanos sidecar
 
 ```bash
@@ -31,3 +41,5 @@ From now on you can use `kubectl` as well as `minikube` command, including `mini
  echo "Starting Thanos query pod targeting sidecar."
  kubectl apply -f kube/manifests/thanos-query
 ```
+
+You can invoke `bash kube/apply-example.sh` that will do all these steps.

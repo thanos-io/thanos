@@ -36,7 +36,8 @@ shift $((OPTIND-1))
 
 echo "Starting local k8s cluster with config inside ${KUBECONFIG}. To use it, you need to do
 'source kube/envs.sh' to set up needed environment variables. You can stop the local k8s cluster using:
- minikube stop"
+ minikube stop. Also make sure you have 'namespace 10.0.0.10' inside the /etc/resolv.conf to have kube-dns entries
+ accessible on your host."
 
 mkdir -p .kube || true
 touch .kube/config
