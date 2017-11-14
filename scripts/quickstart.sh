@@ -43,12 +43,29 @@ do
     --metrics-address           0.0.0.0:1919${i} \
     --prometheus.url            http://localhost:909${i} \
     --tsdb.path                 data/prom${i} \
+    --gcs.bucket                "${GCS_BUCKET}" \
     --cluster.address           0.0.0.0:1939${i} \
     --cluster.advertise-address 127.0.0.1:1939${i} \
     --cluster.peers             127.0.0.1:19391 &
 
   sleep 0.25
 done
+
+sleep 0.5
+
+if [ -n "${GCS_BUCKET}" ]
+then
+  thanos store \
+    --debug.name                store \
+    --log.level debug \
+    --api-address               0.0.0.0:19691 \
+    --metrics-address           0.0.0.0:19791 \
+    --tsdb.path                 data/store \
+    --gcs.bucket                "${GCS_BUCKET}" \
+    --cluster.address           0.0.0.0:19891 \
+    --cluster.advertise-address 127.0.0.1:19891 \
+    --cluster.peers             127.0.0.1:19391 &
+fi
 
 sleep 0.5
 
