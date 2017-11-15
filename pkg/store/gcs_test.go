@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/block"
+
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/shipper"
 
@@ -34,7 +36,7 @@ func TestGCSStore_downloadBlocks(t *testing.T) {
 	defer cancel()
 
 	expBlocks := []ulid.ULID{}
-	expIndexes := map[string][]byte{}
+	expFiles := map[string][]byte{}
 
 	randr := rand.New(rand.NewSource(0))
 
@@ -58,8 +60,8 @@ func TestGCSStore_downloadBlocks(t *testing.T) {
 			testutil.Ok(t, err)
 			testutil.Ok(t, w.Close())
 
-			if strings.HasSuffix(s, "index") {
-				expIndexes[s] = b
+			if strings.HasSuffix(s, "index") || strings.HasSuffix(s, "meta.json") {
+				expFiles[s] = b
 			}
 		}
 	}
@@ -82,7 +84,7 @@ func TestGCSStore_downloadBlocks(t *testing.T) {
 		testutil.Assert(t, err == nil, "block %s not synced", id)
 	}
 	// For each block we expect a downloaded index file.
-	for fn, data := range expIndexes {
+	for fn, data := range expFiles {
 		b, err := ioutil.ReadFile(filepath.Join(dir, fn))
 		testutil.Ok(t, err)
 		testutil.Equals(t, data, b)
@@ -126,12 +128,20 @@ func TestGCSStore_e2e(t *testing.T) {
 		id2, err := testutil.CreateBlock(dir, series[4:], 10, mint, maxt)
 		testutil.Ok(t, err)
 
-		// TODO(fabxc): remove the component dependency by factoring out the block interface.
-		testutil.Ok(t, remote.Upload(ctx, id1, filepath.Join(dir, id1.String())))
-		testutil.Ok(t, remote.Upload(ctx, id2, filepath.Join(dir, id2.String())))
+		dir1, dir2 := filepath.Join(dir, id1.String()), filepath.Join(dir, id2.String())
 
-		testutil.Ok(t, os.RemoveAll(filepath.Join(dir, id1.String())))
-		testutil.Ok(t, os.RemoveAll(filepath.Join(dir, id2.String())))
+		// Add labels to the meta of the second block.
+		meta, err := block.ReadMetaFile(dir2)
+		testutil.Ok(t, err)
+		meta.Thanos.Labels = map[string]string{"ext": "value"}
+		testutil.Ok(t, block.WriteMetaFile(dir2, meta))
+
+		// TODO(fabxc): remove the component dependency by factoring out the block interface.
+		testutil.Ok(t, remote.Upload(ctx, id1, dir1))
+		testutil.Ok(t, remote.Upload(ctx, id2, dir2))
+
+		testutil.Ok(t, os.RemoveAll(dir1))
+		testutil.Ok(t, os.RemoveAll(dir2))
 	}
 
 	store, err := NewGCSStore(nil, bkt, dir)
@@ -152,12 +162,12 @@ func TestGCSStore_e2e(t *testing.T) {
 	pbseries := [][]storepb.Label{
 		{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}},
 		{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}},
-		{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}},
-		{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}},
+		{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext", Value: "value"}},
+		{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext", Value: "value"}},
 		{{Name: "a", Value: "2"}, {Name: "b", Value: "1"}},
 		{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
-		{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}},
-		{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}},
+		{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}, {Name: "ext", Value: "value"}},
+		{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext", Value: "value"}},
 	}
 	resp, err := store.Series(ctx, &storepb.SeriesRequest{
 		Matchers: []storepb.LabelMatcher{

@@ -16,6 +16,7 @@ import (
 
 	"os"
 
+	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 )
 
@@ -87,7 +88,7 @@ func TestShipper_UploadBlocks(t *testing.T) {
 
 		testutil.Ok(t, os.Mkdir(tmp, 0777))
 
-		meta := blockMeta{}
+		meta := block.Meta{}
 		meta.Version = 1
 		meta.ULID = id
 
