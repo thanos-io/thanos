@@ -1,7 +1,6 @@
 package cluster
 
 import (
-	"io/ioutil"
 	"net"
 	"sort"
 	"strconv"
@@ -10,12 +9,19 @@ import (
 
 	"encoding/json"
 
+	"math/rand"
 	"sync"
+
+	"context"
+
+	"io/ioutil"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/hashicorp/memberlist"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
+	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 )
 
@@ -37,16 +43,61 @@ const (
 	PeerTypeQuery = "query"
 )
 
-// NewPeer creates a new peer.
-func NewPeer(
+// Join creates a new peer that joins the cluster.
+func Join(
 	l log.Logger,
-	name string,
-	typ PeerType,
-	addr string,
+	bindAddr string,
 	advertiseAddr string,
-	apiAddr string,
 	knownPeers []string,
+	state PeerState,
+	waitIfEmpty bool,
 ) (*Peer, error) {
+	bindHost, bindPortStr, err := net.SplitHostPort(bindAddr)
+	if err != nil {
+		return nil, err
+	}
+	bindPort, err := strconv.Atoi(bindPortStr)
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid listen address")
+	}
+	var advertiseHost string
+	var advertisePort int
+
+	if advertiseAddr != "" {
+		var advertisePortStr string
+		advertiseHost, advertisePortStr, err = net.SplitHostPort(advertiseAddr)
+		if err != nil {
+			return nil, errors.Wrap(err, "invalid advertise address")
+		}
+		advertisePort, err = strconv.Atoi(advertisePortStr)
+		if err != nil {
+			return nil, errors.Wrap(err, "invalid advertise address, wrong port")
+		}
+	}
+
+	resolvedPeers, err := resolvePeers(context.Background(), knownPeers, advertiseAddr, net.Resolver{}, waitIfEmpty)
+	if err != nil {
+		return nil, errors.Wrap(err, "resolve peers")
+	}
+	level.Debug(l).Log("msg", "resolved peers to following addresses", "peers", strings.Join(resolvedPeers, ","))
+
+	// Initial validation of user-specified advertise address.
+	if addr, err := calculateAdvertiseAddress(bindHost, advertiseHost); err != nil {
+		level.Warn(l).Log("err", "couldn't deduce an advertise address: "+err.Error())
+	} else if hasNonlocal(resolvedPeers) && isUnroutable(addr.String()) {
+		level.Warn(l).Log("err", "this node advertises itself on an unroutable address", "addr", addr.String())
+		level.Warn(l).Log("err", "this node will be unreachable in the cluster")
+		level.Warn(l).Log("err", "provide --cluster.advertise-address as a routable IP address or hostname")
+	}
+
+	l = log.With(l, "component", "cluster")
+
+	// TODO(fabxc): generate human-readable but random names?
+	name, err := ulid.New(ulid.Now(), rand.New(rand.NewSource(time.Now().UnixNano())))
+	if err != nil {
+		return nil, err
+	}
+
 	p := &Peer{
 		data:  map[string]PeerState{},
 		stopc: make(chan struct{}),
@@ -54,33 +105,15 @@ func NewPeer(
 	d := newDelegate(l, p)
 
 	cfg := memberlist.DefaultLANConfig()
-
-	host, portStr, err := net.SplitHostPort(addr)
-	if err != nil {
-		return nil, errors.Wrap(err, "invalid listen address")
-	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		return nil, errors.Wrap(err, "invalid listen address")
-	}
-	cfg.Name = name
-	cfg.BindAddr = host
-	cfg.BindPort = port
+	cfg.Name = name.String()
+	cfg.BindAddr = bindHost
+	cfg.BindPort = bindPort
 	cfg.Delegate = d
 	cfg.Events = d
 	cfg.GossipInterval = 5 * time.Second
 	cfg.PushPullInterval = 5 * time.Second
 	cfg.LogOutput = ioutil.Discard
-
 	if advertiseAddr != "" {
-		advertiseHost, advertisePortStr, err := net.SplitHostPort(advertiseAddr)
-		if err != nil {
-			return nil, errors.Wrap(err, "invalid advertise address")
-		}
-		advertisePort, err := strconv.Atoi(advertisePortStr)
-		if err != nil {
-			return nil, errors.Wrap(err, "invalid advertise address")
-		}
 		cfg.AdvertiseAddr = advertiseHost
 		cfg.AdvertisePort = advertisePort
 	}
@@ -97,10 +130,11 @@ func NewPeer(
 	if n > 0 {
 		go p.warnIfAlone(l, 10*time.Second)
 	}
+
 	// Initialize state with ourselves.
 	p.mtx.RLock()
-	defer p.mtx.RUnlock()
-	p.data[p.Name()] = PeerState{Type: typ, APIAddr: apiAddr}
+	p.data[p.Name()] = state
+	p.mtx.RUnlock()
 
 	return p, nil
 }
@@ -292,4 +326,98 @@ func (d *delegate) NotifyLeave(n *memberlist.Node) {
 // NotifyUpdate is called if a cluster peer gets updated.
 func (d *delegate) NotifyUpdate(n *memberlist.Node) {
 	level.Debug(d.logger).Log("received", "NotifyUpdate", "node", n.Name, "addr", n.Address())
+}
+
+func resolvePeers(ctx context.Context, peers []string, myAddress string, res net.Resolver, waitIfEmpty bool) ([]string, error) {
+	var resolvedPeers []string
+
+	for _, peer := range peers {
+		host, port, err := net.SplitHostPort(peer)
+		if err != nil {
+			return nil, errors.Wrapf(err, "split host/port for peer %s", peer)
+		}
+
+		retryCtx, cancel := context.WithCancel(ctx)
+		ips, err := res.LookupIPAddr(ctx, host)
+		if err != nil {
+			// Assume direct address.
+			resolvedPeers = append(resolvedPeers, peer)
+			continue
+		}
+
+		if len(ips) == 0 {
+			var lookupErrSpotted bool
+
+			err := runutil.Retry(2*time.Second, retryCtx.Done(), func() error {
+				if lookupErrSpotted {
+					// We need to invoke cancel in next run of retry when lookupErrSpotted to preserve LookupIPAddr error.
+					cancel()
+				}
+
+				ips, err = res.LookupIPAddr(retryCtx, host)
+				if err != nil {
+					lookupErrSpotted = true
+					return errors.Wrapf(err, "IP Addr lookup for peer %s", peer)
+				}
+
+				ips = removeMyAddr(ips, port, myAddress)
+				if len(ips) == 0 {
+					if !waitIfEmpty {
+						return nil
+					}
+					return errors.New("empty IPAddr result. Retrying")
+				}
+
+				return nil
+			})
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		for _, ip := range ips {
+			resolvedPeers = append(resolvedPeers, net.JoinHostPort(ip.String(), port))
+		}
+	}
+
+	return resolvedPeers, nil
+}
+
+func removeMyAddr(ips []net.IPAddr, targetPort string, myAddr string) []net.IPAddr {
+	var result []net.IPAddr
+
+	for _, ip := range ips {
+		if net.JoinHostPort(ip.String(), targetPort) == myAddr {
+			continue
+		}
+		result = append(result, ip)
+	}
+
+	return result
+}
+
+func hasNonlocal(clusterPeers []string) bool {
+	for _, peer := range clusterPeers {
+		if host, _, err := net.SplitHostPort(peer); err == nil {
+			peer = host
+		}
+		if ip := net.ParseIP(peer); ip != nil && !ip.IsLoopback() {
+			return true
+		} else if ip == nil && strings.ToLower(peer) != "localhost" {
+			return true
+		}
+	}
+	return false
+}
+
+func isUnroutable(addr string) bool {
+	if host, _, err := net.SplitHostPort(addr); err == nil {
+		addr = host
+	}
+	if ip := net.ParseIP(addr); ip != nil && (ip.IsUnspecified() || ip.IsLoopback()) {
+		return true // typically 0.0.0.0 or localhost
+	} else if ip == nil && strings.ToLower(addr) == "localhost" {
+		return true
+	}
+	return false
 }

@@ -4,8 +4,6 @@ import (
 	"context"
 	"net"
 	"net/http"
-	"net/url"
-	"strconv"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -45,13 +43,15 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 		String()
 
 	m[name] = func(g *run.Group, logger log.Logger, metrics *prometheus.Registry) error {
-		peer, err := joinCluster(
+		peer, err := cluster.Join(
 			logger,
-			cluster.PeerTypeQuery,
 			*clusterBindAddr,
 			*clusterAdvertiseAddr,
-			*apiAddr,
 			*peers,
+			cluster.PeerState{
+				Type:    cluster.PeerTypeQuery,
+				APIAddr: *apiAddr,
+			},
 			true,
 		)
 		if err != nil {
@@ -119,46 +119,4 @@ func runQuery(
 
 	level.Info(logger).Log("msg", "starting query node")
 	return nil
-}
-
-func discoverAddresses(ctx context.Context, target *url.URL) (map[string]struct{}, error) {
-	host, port, err := net.SplitHostPort(target.Host)
-	if err != nil {
-		return nil, errors.Wrap(err, "split host/port")
-	}
-	var res net.Resolver
-
-	addresses := map[string]struct{}{}
-
-	switch target.Scheme {
-	case "dns", "dnsip":
-		ips, err := res.LookupIPAddr(ctx, host)
-		if err != nil {
-			return nil, errors.Wrap(err, "LookupIP")
-		}
-		for _, ip := range ips {
-			addresses[net.JoinHostPort(ip.String(), port)] = struct{}{}
-		}
-	case "dnssrv":
-		_, records, err := res.LookupSRV(ctx, "", "tcp", host)
-		if err != nil {
-			return nil, errors.Wrap(err, "LookupSRV")
-		}
-		for _, rec := range records {
-			addresses[net.JoinHostPort(rec.Target, strconv.Itoa(int(rec.Port)))] = struct{}{}
-		}
-	case "dnsaddr":
-		names, err := res.LookupAddr(ctx, host)
-		if err != nil {
-			return nil, errors.Wrap(err, "LookupAddr")
-		}
-		for _, n := range names {
-			addresses[net.JoinHostPort(n, port)] = struct{}{}
-		}
-	case "tcp":
-		addresses[net.JoinHostPort(host, port)] = struct{}{}
-	default:
-		return nil, errors.Errorf("unsupported discovery scheme %s (one of dnsip, dnssrv, dnsaddr)", target.Scheme)
-	}
-	return addresses, nil
 }

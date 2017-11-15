@@ -54,19 +54,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 		String()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry) error {
-		peer, err := joinCluster(
-			logger,
-			cluster.PeerTypeStore,
-			*clusterBindAddr,
-			*clusterAdvertiseAddr,
-			*apiAddr,
-			*peers,
-			false,
-		)
-		if err != nil {
-			return errors.Wrap(err, "join cluster")
-		}
-		return runSidecar(g, logger, reg, *apiAddr, *metricsAddr, *promURL, *dataDir, peer, *gcsBucket)
+		return runSidecar(g, logger, reg, *apiAddr, *metricsAddr, *promURL, *dataDir, *clusterBindAddr, *clusterAdvertiseAddr, *peers, *gcsBucket)
 	}
 }
 
@@ -78,7 +66,9 @@ func runSidecar(
 	metricsAddr string,
 	promURL *url.URL,
 	dataDir string,
-	peer *cluster.Peer,
+	clusterBindAddr string,
+	clusterAdvertiseAddr string,
+	knownPeers []string,
 	gcsBucket string,
 ) error {
 
@@ -101,6 +91,17 @@ func runSidecar(
 		if err != nil {
 			return errors.Wrap(err, "initial external labels query")
 		}
+	}
+
+	_, err := cluster.Join(logger, clusterBindAddr, clusterAdvertiseAddr, knownPeers,
+		cluster.PeerState{
+			Type:    cluster.PeerTypeStore,
+			APIAddr: apiAddr,
+			Labels:  externalLabels.GetPB(),
+		}, false,
+	)
+	if err != nil {
+		return errors.Wrap(err, "join cluster")
 	}
 
 	// Setup all the concurrent groups.
@@ -236,6 +237,20 @@ func (s *extLabelSet) Get() labels.Labels {
 	defer s.mtx.Unlock()
 
 	return s.labels
+}
+
+func (s *extLabelSet) GetPB() []storepb.Label {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	lset := make([]storepb.Label, 0, len(s.labels))
+	for _, l := range s.labels {
+		lset = append(lset, storepb.Label{
+			Name:  l.Name,
+			Value: l.Value,
+		})
+	}
+	return lset
 }
 
 func queryExternalLabels(ctx context.Context, base *url.URL) (labels.Labels, error) {

@@ -43,19 +43,21 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 		String()
 
 	m[name] = func(g *run.Group, logger log.Logger, metrics *prometheus.Registry) error {
-		peer, err := joinCluster(
+		_, err := cluster.Join(
 			logger,
-			cluster.PeerTypeStore,
 			*clusterBindAddr,
 			*clusterAdvertiseAddr,
-			*apiAddr,
 			*peers,
+			cluster.PeerState{
+				Type:    cluster.PeerTypeStore,
+				APIAddr: *apiAddr,
+			},
 			false,
 		)
 		if err != nil {
 			return errors.Wrap(err, "join cluster")
 		}
-		return runStore(g, logger, metrics, peer, *gcsBucket, *dataDir, *apiAddr, *metricsAddr)
+		return runStore(g, logger, metrics, *gcsBucket, *dataDir, *apiAddr, *metricsAddr)
 	}
 }
 
@@ -66,7 +68,6 @@ func runStore(
 	g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
-	peer *cluster.Peer,
 	gcsBucket string,
 	dataDir string,
 	apiAddr string,
