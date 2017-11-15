@@ -7,8 +7,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -77,10 +75,10 @@ func (s *GCSStore) Close() (err error) {
 }
 
 // SyncBlocks synchronizes the stores state with the GCS bucket.
-func (s *GCSStore) SyncBlocks(ctx context.Context, interval time.Duration) {
+func (s *GCSStore) SyncBlocks(ctx context.Context) {
 	// NOTE(fabxc): watches are not yet supported by the Go client library so we just
 	// do a periodic refresh.
-	err := runutil.Repeat(interval, ctx.Done(), func() error {
+	err := runutil.Repeat(60*time.Second, ctx.Done(), func() error {
 		if err := s.downloadBlocks(ctx); err != nil {
 			level.Warn(s.logger).Log("msg", "downloading missing blocks failed", "err", err)
 		}
@@ -186,12 +184,6 @@ func (s *GCSStore) loadBlocks() error {
 	return nil
 }
 
-func (s *GCSStore) numBlocks() int {
-	s.mtx.RLock()
-	defer s.mtx.RUnlock()
-	return len(s.blocks)
-}
-
 // loadFromDisk loads a block with the given ID from the disk cache.
 func (s *GCSStore) loadFromDisk(id ulid.ULID) (*gcsBlock, error) {
 	dir := filepath.Join(s.dir, id.String())
@@ -213,104 +205,16 @@ func (s *GCSStore) Info(context.Context, *storepb.InfoRequest) (*storepb.InfoRes
 	return &storepb.InfoResponse{}, nil
 }
 
-type seriesResult struct {
-	mtx sync.RWMutex
-	res map[uint64]*seriesEntry
-}
-
-type seriesEntry struct {
-	lset   labels.Labels
-	chunks []tsdb.ChunkMeta
-}
-
-func (r *seriesResult) add(lset labels.Labels, chks []tsdb.ChunkMeta) {
-	if len(chks) == 0 {
-		return
-	}
-	h := lset.Hash()
-
-	r.mtx.Lock()
-	defer r.mtx.Unlock()
-
-	e, ok := r.res[h]
-	if !ok {
-		e = &seriesEntry{lset: lset}
-		r.res[h] = e
-	}
-	e.chunks = append(e.chunks, chks...)
-}
-
-func (r *seriesResult) response() ([]storepb.Series, error) {
-	res := make([]storepb.Series, 0, len(r.res))
-
-	for _, e := range r.res {
-		s := storepb.Series{
-			Labels: make([]storepb.Label, 0, len(e.lset)),
-			Chunks: make([]storepb.Chunk, 0, len(e.chunks)),
-		}
-		for _, l := range e.lset {
-			s.Labels = append(s.Labels, storepb.Label{
-				Name:  l.Name,
-				Value: l.Value,
-			})
-		}
-		for _, cm := range e.chunks {
-			s.Chunks = append(s.Chunks, storepb.Chunk{
-				Type:    storepb.Chunk_XOR,
-				MinTime: cm.MinTime,
-				MaxTime: cm.MaxTime,
-				Data:    cm.Chunk.Bytes(),
-			})
-		}
-		sort.Slice(s.Chunks, func(i, j int) bool {
-			return s.Chunks[i].MinTime < s.Chunks[j].MaxTime
-		})
-		// We do not yet handle overlapping chunks in the querying layer and should only
-		// have blocks disjoint in time and series space.
-		// Error early here until the query layer can handle it.
-		maxTime := s.Chunks[0].MaxTime
-		for _, c := range s.Chunks[1:] {
-			if c.MinTime <= maxTime {
-				return nil, errors.Errorf("chunks overlap: max %d, min %d", maxTime, c.MinTime)
-			}
-			maxTime = c.MaxTime
-		}
-
-		res = append(res, s)
-	}
-	sort.Slice(res, func(i, j int) bool {
-		return compareLabels(res[i].Labels, res[j].Labels) < 0
-	})
-	return res, nil
-}
-
-func compareLabels(a, b []storepb.Label) int {
-	l := len(a)
-	if len(b) < l {
-		l = len(b)
-	}
-	for i := 0; i < l; i++ {
-		if d := strings.Compare(a[i].Name, b[i].Name); d != 0 {
-			return d
-		}
-		if d := strings.Compare(a[i].Value, b[i].Value); d != 0 {
-			return d
-		}
-	}
-	// If all labels so far were in common, the set with fewer labels comes first.
-	return len(a) - len(b)
-}
-
 // Series implements the storepb.StoreServer interface.
 func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*storepb.SeriesResponse, error) {
+	resp := &storepb.SeriesResponse{}
+
 	matchers, err := translateMatchers(req.Matchers)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	var g errgroup.Group
 	// TODO(fabxc): filter inspected blocks by labels.
-
-	res := &seriesResult{res: map[uint64]*seriesEntry{}}
 
 	for _, b := range s.blocks {
 		block := b
@@ -322,12 +226,19 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 			if err != nil {
 				return errors.Wrap(err, "get series set")
 			}
-			var chks []tsdb.ChunkMeta
-
 			for set.Next() {
-				chks = chks[:0]
 				lset, chunks, _ := set.At()
 
+				series := storepb.Series{
+					Labels: make([]storepb.Label, 0, len(lset)),
+					Chunks: make([]storepb.Chunk, 0, len(chunks)),
+				}
+				for _, l := range lset {
+					series.Labels = append(series.Labels, storepb.Label{
+						Name:  l.Name,
+						Value: l.Value,
+					})
+				}
 				for _, meta := range chunks {
 					if meta.MaxTime < req.MinTime {
 						continue
@@ -335,13 +246,21 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 					if meta.MinTime > req.MaxTime {
 						break
 					}
-					meta.Chunk, err = block.chunks.Chunk(meta.Ref)
+					c, err := b.chunks.Chunk(meta.Ref)
 					if err != nil {
 						return errors.Wrap(err, "fetch chunk")
 					}
-					chks = append(chks, meta)
+					// TODO(fabxc): validate encoding.
+					series.Chunks = append(series.Chunks, storepb.Chunk{
+						Type:    storepb.Chunk_XOR,
+						MinTime: meta.MinTime,
+						MaxTime: meta.MaxTime,
+						Data:    c.Bytes(),
+					})
 				}
-				res.add(lset, chks)
+				if len(series.Chunks) > 0 {
+					resp.Series = append(resp.Series, series)
+				}
 			}
 			if err := set.Err(); err != nil {
 				return errors.Wrap(err, "read series set")
@@ -352,11 +271,7 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 	if err := g.Wait(); err != nil {
 		return nil, status.Error(codes.Aborted, err.Error())
 	}
-	series, err := res.response()
-	if err != nil {
-		return nil, status.Error(codes.Aborted, err.Error())
-	}
-	return &storepb.SeriesResponse{Series: series}, nil
+	return resp, nil
 }
 
 // LabelNames implements the storepb.StoreServer interface.
@@ -452,10 +367,10 @@ func (r *gcsChunkReader) Chunk(id uint64) (chunks.Chunk, error) {
 	if n < 0 {
 		return nil, errors.Errorf("reading chunk length failed")
 	}
-	if len(b) < n+int(l)+1 {
+	if len(b) < n+int(l) {
 		return nil, errors.Errorf("preloaded chunk too small, expecting %d", n+int(l))
 	}
-	b = b[n : n+int(l)+1]
+	b = b[n : n+int(l)]
 
 	return chunks.FromData(chunks.Encoding(b[0]), b[1:1+l])
 }
