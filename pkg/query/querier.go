@@ -13,15 +13,14 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
 )
 
 var _ promql.Queryable = (*Queryable)(nil)
 
 // StoreInfo holds meta information about a store used by query.
 type StoreInfo interface {
-	// Conn returns connection to the store API.
-	Conn() *grpc.ClientConn
+	// Client to access the store.
+	Client() storepb.StoreClient
 
 	// Labels returns store labels that should be appended to every metric returned by this store.
 	Labels() []storepb.Label
@@ -29,9 +28,8 @@ type StoreInfo interface {
 
 // Queryable allows to open a querier against a dynamic set of stores.
 type Queryable struct {
-	logger         log.Logger
-	storeAddresses []string
-	stores         func() []StoreInfo
+	logger log.Logger
+	stores func() []StoreInfo
 }
 
 // NewQueryable creates implementation of promql.Queryable that fetches data from the given
@@ -58,6 +56,9 @@ type querier struct {
 // newQuerier creates implementation of storage.Querier that fetches data from the given
 // store API endpoints.
 func newQuerier(logger log.Logger, ctx context.Context, stores []StoreInfo, mint, maxt int64) *querier {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	return &querier{
 		logger: logger,
@@ -86,7 +87,7 @@ func (q *querier) Select(ms ...*promlabels.Matcher) storage.SeriesSet {
 		store := s
 
 		g.Go(func() error {
-			set, err := q.selectSingle(store.Conn(), sms...)
+			set, err := q.selectSingle(store.Client(), sms...)
 			if err != nil {
 				return err
 			}
@@ -104,10 +105,8 @@ func (q *querier) Select(ms ...*promlabels.Matcher) storage.SeriesSet {
 	return promSeriesSet{set: mergeAllSeriesSets(all...)}
 }
 
-func (q *querier) selectSingle(conn *grpc.ClientConn, ms ...storepb.LabelMatcher) (tsdb.SeriesSet, error) {
-	c := storepb.NewStoreClient(conn)
-
-	resp, err := c.Series(q.ctx, &storepb.SeriesRequest{
+func (q *querier) selectSingle(client storepb.StoreClient, ms ...storepb.LabelMatcher) (tsdb.SeriesSet, error) {
+	resp, err := client.Series(q.ctx, &storepb.SeriesRequest{
 		MinTime:  q.mint,
 		MaxTime:  q.maxt,
 		Matchers: ms,
@@ -128,8 +127,10 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 	)
 
 	for _, s := range q.stores {
+		store := s
+
 		g.Go(func() error {
-			values, err := q.labelValuesSingle(s.Conn(), name)
+			values, err := q.labelValuesSingle(store.Client(), name)
 			if err != nil {
 				return err
 			}
@@ -144,14 +145,11 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-
 	return dedupStrings(all), nil
 }
 
-func (q *querier) labelValuesSingle(conn *grpc.ClientConn, name string) ([]string, error) {
-	c := storepb.NewStoreClient(conn)
-
-	resp, err := c.LabelValues(q.ctx, &storepb.LabelValuesRequest{
+func (q *querier) labelValuesSingle(client storepb.StoreClient, name string) ([]string, error) {
+	resp, err := client.LabelValues(q.ctx, &storepb.LabelValuesRequest{
 		Label: name,
 	})
 	if err != nil {
