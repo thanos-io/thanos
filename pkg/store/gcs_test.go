@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -22,39 +21,17 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/tsdb/fileutil"
 	"github.com/prometheus/tsdb/labels"
-	"google.golang.org/api/iterator"
 
-	"cloud.google.com/go/storage"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 )
 
-func randBucketName(t *testing.T) string {
-	b := make([]byte, 16)
-	_, err := rand.Read(b)
-	testutil.Ok(t, err)
-	return fmt.Sprintf("test-%x", b)
-}
-
 func TestGCSStore_downloadBlocks(t *testing.T) {
+	bkt, cleanup := testutil.NewObjectStoreBucket(t)
+	defer cleanup()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	project, ok := os.LookupEnv("GCP_PROJECT")
-	// TODO(fabxc): make it run against a mock store if no actual bucket is configured.
-	if !ok {
-		t.Skip()
-		return
-	}
-
-	gcsClient, err := storage.NewClient(ctx)
-	testutil.Ok(t, err)
-	defer gcsClient.Close()
-
-	bkt := gcsClient.Bucket(randBucketName(t))
-	testutil.Ok(t, bkt.Create(ctx, project, nil))
-
-	defer deleteAllBucket(t, ctx, bkt)
 
 	expBlocks := []ulid.ULID{}
 	expIndexes := map[string][]byte{}
@@ -112,38 +89,12 @@ func TestGCSStore_downloadBlocks(t *testing.T) {
 	}
 }
 
-func deleteAllBucket(t testing.TB, ctx context.Context, bkt *storage.BucketHandle) {
-	objs := bkt.Objects(ctx, nil)
-	for {
-		oi, err := objs.Next()
-		if err == iterator.Done {
-			break
-		}
-		testutil.Ok(t, err)
-		testutil.Ok(t, bkt.Object(oi.Name).Delete(ctx))
-	}
-	testutil.Ok(t, bkt.Delete(ctx))
-}
-
 func TestGCSStore_e2e(t *testing.T) {
+	bkt, cleanup := testutil.NewObjectStoreBucket(t)
+	defer cleanup()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	project, ok := os.LookupEnv("GCP_PROJECT")
-	// TODO(fabxc): make it run against a mock store if no actual bucket is configured.
-	if !ok {
-		t.Skip()
-		return
-	}
-
-	gcsClient, err := storage.NewClient(ctx)
-	testutil.Ok(t, err)
-	defer gcsClient.Close()
-
-	bkt := gcsClient.Bucket(randBucketName(t))
-	testutil.Ok(t, bkt.Create(ctx, project, nil))
-
-	defer deleteAllBucket(t, ctx, bkt)
 
 	dir, err := ioutil.TempDir("", "test_gcsstore_e2e")
 	testutil.Ok(t, err)
