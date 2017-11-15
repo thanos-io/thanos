@@ -1,0 +1,34 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: thanos-query
+  labels:
+    app: thanos-query
+    thanos-peer: "true"
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: thanos-query
+        thanos-peer: "true"
+    spec:
+      containers:
+        # To use your own thanos image you need to do `eval $(minikube docker-env) && make docker` and place thanos/thanos:latest here.
+        # TODO(bplotka): With vm-driver=none, even that is uses same docker, images are not recognized. Investigate.
+      - image: bplotka/thanos:latest
+        imagePullPolicy: Always
+        args: [
+          "query",
+          "--log.level=debug",
+          "--debug.name=query",
+          "--api-address=0.0.0.0:19099", # This address will be properly deduced and propagated via cluster.PeerState.
+          "--cluster.address=0.0.0.0:19390",
+          "--cluster.peers=thanos.default.svc.cluster.local:19390",
+        ]
+        name: thanos
+        resources:
+          requests:
+            cpu: 200m
+            memory: 200Mi
+      terminationGracePeriodSeconds: 300
