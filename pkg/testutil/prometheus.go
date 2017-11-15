@@ -4,13 +4,23 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
+	"unsafe"
 
+	"github.com/go-kit/kit/log"
+	"github.com/oklog/ulid"
+	"github.com/pkg/errors"
+	promlabels "github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/tsdb"
+	"github.com/prometheus/tsdb/labels"
+	"golang.org/x/sync/errgroup"
 )
 
 // Prometheus represents a test instance for integration testing.
@@ -113,4 +123,89 @@ func (p *Prometheus) Appender() tsdb.Appender {
 		panic("Appender must not be called after start")
 	}
 	return p.db.Appender()
+}
+
+// CreateBlock writes a block with the given series and numSamples samples each.
+// Samples will be in the time range [mint, maxt).
+func CreateBlock(
+	dir string,
+	series []labels.Labels,
+	numSamples int,
+	mint, maxt int64,
+) (id ulid.ULID, err error) {
+	h, err := tsdb.NewHead(nil, nil, tsdb.NopWAL(), 10000000000)
+	if err != nil {
+		return id, errors.Wrap(err, "create head block")
+	}
+	defer h.Close()
+
+	var g errgroup.Group
+	var timeStepSize = (maxt - mint) / int64(numSamples+1)
+	var batchSize = len(series) / runtime.GOMAXPROCS(0)
+
+	for len(series) > 0 {
+		l := batchSize
+		if len(series) < 1000 {
+			l = len(series)
+		}
+		batch := series[:l]
+		series = series[l:]
+
+		g.Go(func() error {
+			t := mint
+
+			for i := 0; i < numSamples; i++ {
+				app := h.Appender()
+
+				for _, lset := range batch {
+					_, err := app.Add(lset, t, rand.Float64())
+					if err != nil {
+						app.Rollback()
+						return errors.Wrap(err, "add sample")
+					}
+				}
+				if err := app.Commit(); err != nil {
+					return errors.Wrap(err, "commit")
+				}
+				t += timeStepSize
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return id, err
+	}
+	c, err := tsdb.NewLeveledCompactor(nil, log.NewNopLogger(), []int64{maxt - mint}, nil)
+	if err != nil {
+		return id, errors.Wrap(err, "create compactor")
+	}
+	return c.Write(dir, h, mint, maxt)
+}
+
+// ReadSeriesFile reads up to n entries from the given series file.
+func ReadSeriesFile(fn string, n int) ([]labels.Labels, error) {
+	b, err := ioutil.ReadFile(fn)
+	if err != nil {
+		return nil, err
+	}
+
+	p := textparse.New(b)
+	i := 0
+	var mets []labels.Labels
+	// The data might be dirty and contain duplicate series.
+	hashes := map[uint64]struct{}{}
+
+	for p.Next() && i < n {
+		m := make(labels.Labels, 0, 10)
+		p.Metric((*promlabels.Labels)(unsafe.Pointer(&m)))
+
+		h := m.Hash()
+		if _, ok := hashes[h]; ok {
+			continue
+		}
+		mets = append(mets, m)
+		hashes[h] = struct{}{}
+		i++
+	}
+	return mets, p.Err()
 }
