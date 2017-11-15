@@ -117,7 +117,7 @@ func (r *GCSRemote) Upload(ctx context.Context, id ulid.ULID, dir string) error 
 }
 
 func (r *GCSRemote) uploadSingle(ctx context.Context, src, target string) error {
-	level.Debug(r.logger).Log("msg", "upload file", "file", src)
+	level.Debug(r.logger).Log("msg", "upload file", "src", src, "dst", target)
 	r.metrics.uploads.Inc()
 
 	f, err := os.Open(src)
