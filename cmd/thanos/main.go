@@ -77,7 +77,7 @@ func main() {
 		version.NewCollector("prometheus"),
 		prometheus.NewGoCollector(),
 	)
-  
+
 	var g run.Group
 
 	if err := cmds[cmd](&g, logger, metrics); err != nil {

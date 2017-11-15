@@ -203,7 +203,7 @@
   branch = "fabxc"
   name = "github.com/prometheus/tsdb"
   packages = [".","chunks","fileutil","labels"]
-  revision = "f1512a368acb6e596a219f7f5322cd59bfbd4ecf"
+  revision = "a031cf7424079c17746314bc29e3ff907d3b97ba"
 
 [[projects]]
   branch = "master"
