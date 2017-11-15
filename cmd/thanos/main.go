@@ -197,6 +197,7 @@ func resolvePeers(ctx context.Context, peers []string, myAddress string, res net
 
 			err := runutil.Retry(2*time.Second, retryCtx.Done(), func() error {
 				if lookupErrSpotted {
+					// We need to invoke cancel in next run of retry when lookupErrSpotted to preserve LookupIPAddr error.
 					cancel()
 				}
 
