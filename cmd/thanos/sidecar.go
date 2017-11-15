@@ -45,9 +45,9 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
 		PlaceHolder("<bucket>").String()
 
-	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster").Strings()
+	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
 
-	clusterBindAddr := cmd.Flag("cluster.address", "listen address for clutser").
+	clusterBindAddr := cmd.Flag("cluster.address", "listen address for cluster").
 		Default(defaultClusterAddr).String()
 
 	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
@@ -61,6 +61,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			*clusterAdvertiseAddr,
 			*apiAddr,
 			*peers,
+			false,
 		)
 		if err != nil {
 			return errors.Wrap(err, "join cluster")

@@ -36,9 +36,9 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "maximum number of queries processed concurrently by query node").
 		Default("20").Int()
 
-	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster").Strings()
+	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
 
-	clusterBindAddr := cmd.Flag("cluster.address", "listen address for clutser").
+	clusterBindAddr := cmd.Flag("cluster.address", "listen address for cluster").
 		Default(defaultClusterAddr).String()
 
 	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
@@ -52,6 +52,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*clusterAdvertiseAddr,
 			*apiAddr,
 			*peers,
+			true,
 		)
 		if err != nil {
 			return errors.Wrap(err, "join cluster")
