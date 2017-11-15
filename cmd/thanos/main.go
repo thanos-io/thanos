@@ -155,6 +155,7 @@ func createJoinConfig(logger log.Logger, bindAddr, advertiseAddr string, peers [
 	if err != nil {
 		return cluster.JoinConfig{}, errors.Wrap(err, "resolve peers")
 	}
+	level.Debug(logger).Log("msg", "resolved peers to following addresses", "peers", strings.Join(resolvedPeers, ","))
 
 	if addr, err := cluster.CalculateAdvertiseAddress(bindHost, advertiseHost); err != nil {
 		level.Warn(logger).Log("err", "couldn't deduce an advertise address: "+err.Error())
@@ -189,43 +190,45 @@ func resolvePeers(ctx context.Context, peers []string, myAddress string, res net
 		}
 
 		retryCtx, cancel := context.WithCancel(ctx)
-		if ips, err := res.LookupIPAddr(ctx, host); err == nil {
-			if len(ips) == 0 {
-				var lookupErrSpotted bool
+		ips, err := res.LookupIPAddr(ctx, host)
+		if err != nil {
+			// Assume direct address.
+			resolvedPeers = append(resolvedPeers, peer)
+			continue
+		}
 
-				err := runutil.Retry(2*time.Second, retryCtx.Done(), func() error {
-					if lookupErrSpotted {
-						cancel()
-					}
+		if len(ips) == 0 {
+			var lookupErrSpotted bool
 
-					ips, err = res.LookupIPAddr(retryCtx, host)
-					if err != nil {
-						lookupErrSpotted = true
-						return errors.Wrapf(err, "IP Addr lookup for peer %s", peer)
-					}
-
-					ips = removeMyAddr(ips, port, myAddress)
-					if len(ips) == 0 {
-						if !waitIfEmpty {
-							return nil
-						}
-						return errors.New("empty IPAddr result. Retrying")
-					}
-
-					return nil
-				})
-				if err != nil {
-					return nil, err
+			err := runutil.Retry(2*time.Second, retryCtx.Done(), func() error {
+				if lookupErrSpotted {
+					cancel()
 				}
-			}
 
-			for _, ip := range ips {
-				resolvedPeers = append(resolvedPeers, net.JoinHostPort(ip.String(), port))
+				ips, err = res.LookupIPAddr(retryCtx, host)
+				if err != nil {
+					lookupErrSpotted = true
+					return errors.Wrapf(err, "IP Addr lookup for peer %s", peer)
+				}
+
+				ips = removeMyAddr(ips, port, myAddress)
+				if len(ips) == 0 {
+					if !waitIfEmpty {
+						return nil
+					}
+					return errors.New("empty IPAddr result. Retrying")
+				}
+
+				return nil
+			})
+			if err != nil {
+				return nil, err
 			}
 		}
 
-		// Assume direct address.
-		resolvedPeers = append(resolvedPeers, peer)
+		for _, ip := range ips {
+			resolvedPeers = append(resolvedPeers, net.JoinHostPort(ip.String(), port))
+		}
 	}
 
 	return resolvedPeers, nil
