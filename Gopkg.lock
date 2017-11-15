@@ -203,7 +203,7 @@
   branch = "fabxc"
   name = "github.com/prometheus/tsdb"
   packages = [".","chunks","fileutil","labels"]
-  revision = "f1512a368acb6e596a219f7f5322cd59bfbd4ecf"
+  revision = "a031cf7424079c17746314bc29e3ff907d3b97ba"
 
 [[projects]]
   branch = "master"
@@ -274,6 +274,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "36d1abfc959a1a727e267a8fbeb3b148d6f9c081e14eb6f2f0130935af8a5ffc"
+  inputs-digest = "d859da8b03b8c50b66e493c214b859da1e891a37cdaeb340f70ea0d79b528f8c"
   solver-name = "gps-cdcl"
   solver-version = 1
