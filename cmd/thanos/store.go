@@ -50,7 +50,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			*clusterBindAddr,
 			os.ExpandEnv(*clusterAdvertiseAddr),
 			*peers,
-			true,
+			false,
 		)
 		if err != nil {
 			return okgroup.Group{}, errors.Wrap(err, "create join cluster config")
