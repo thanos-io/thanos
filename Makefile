@@ -47,5 +47,8 @@ assets:
 docker: build
 	@echo ">> building docker image"
 	@docker build -t "$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)" .
+	# Pin whatever we built to the thanos/thanos:latest to have that accessible by minikube.
+	@docker tag $(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG) thanos/thanos:latest
+
 
 .PHONY: all install-tools format vet build assets docker

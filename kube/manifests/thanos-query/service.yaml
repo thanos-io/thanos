@@ -2,18 +2,17 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app: prometheus
-  name: prometheus
+    app: thanos-query
+  name: thanos-query
 spec:
-  clusterIP: 10.0.0.88
   externalTrafficPolicy: Cluster
   ports:
-  - nodePort: 30600
-    port: 9090
+  - port: 19099
     protocol: TCP
-    targetPort: 9090
+    targetPort: 19099
+    name: http-query
   selector:
-    app: prometheus
+    app: thanos-query
   sessionAffinity: None
   type: NodePort
 status:

@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"os"
+
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -54,18 +56,17 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 		String()
 
 	m[name] = func(logger log.Logger, reg *prometheus.Registry) (okgroup.Group, error) {
-		peer, err := joinCluster(
+		joinConfig, err := createJoinConfig(
 			logger,
-			cluster.PeerTypeStore,
 			*clusterBindAddr,
-			*clusterAdvertiseAddr,
-			*apiAddr,
+			os.ExpandEnv(*clusterAdvertiseAddr),
 			*peers,
+			false,
 		)
 		if err != nil {
-			return okgroup.Group{}, errors.Wrap(err, "join cluster")
+			return okgroup.Group{}, errors.Wrap(err, "create join cluster config")
 		}
-		return runSidecar(logger, reg, *apiAddr, *metricsAddr, *promURL, *dataDir, peer, *gcsBucket)
+		return runSidecar(logger, reg, *apiAddr, *metricsAddr, *promURL, *dataDir, joinConfig, *gcsBucket)
 	}
 }
 
@@ -76,7 +77,7 @@ func runSidecar(
 	metricsAddr string,
 	promURL *url.URL,
 	dataDir string,
-	peer *cluster.Peer,
+	joinConfig cluster.JoinConfig,
 	gcsBucket string,
 ) (okgroup.Group, error) {
 
@@ -100,6 +101,15 @@ func runSidecar(
 		if err != nil {
 			return g, errors.Wrap(err, "initial external labels query")
 		}
+	}
+
+	_, err := cluster.Join(logger, joinConfig, cluster.PeerState{
+		Type:    cluster.PeerTypeStore,
+		APIAddr: apiAddr,
+		Labels:  externalLabels.GetPB(),
+	}, reg)
+	if err != nil {
+		return g, errors.Wrap(err, "join cluster")
 	}
 
 	// Setup all the concurrent groups.
@@ -235,6 +245,20 @@ func (s *extLabelSet) Get() labels.Labels {
 	defer s.mtx.Unlock()
 
 	return s.labels
+}
+
+func (s *extLabelSet) GetPB() []storepb.Label {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	lset := make([]storepb.Label, 0, len(s.labels))
+	for _, l := range s.labels {
+		lset = append(lset, storepb.Label{
+			Name:  l.Name,
+			Value: l.Value,
+		})
+	}
+	return lset
 }
 
 func queryExternalLabels(ctx context.Context, base *url.URL) (labels.Labels, error) {
