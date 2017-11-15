@@ -1,0 +1,69 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+    thanos-peer: "true"
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: prometheus
+        thanos-peer: "true"
+    spec:
+      containers:
+      - image: prom/prometheus:v2.0.0
+        args: [
+          "--config.file=/etc/prometheus/config/prometheus.yaml",
+          "--storage.tsdb.path=/data",
+        ]
+        name: prometheus
+        resources:
+          requests:
+            cpu: 100m
+            memory: 200Mi
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/prometheus/config
+        - name: tsdb-data
+          mountPath: /data
+        # To use your own thanos image you need to do `eval $(minikube docker-env) && make docker` and place thanos/thanos:latest here.
+        # TODO(bplotka): With vm-driver=none, even that is uses same docker, images are not recognized. Investigate.
+      - image: bplotka/thanos:latest
+        imagePullPolicy: Always
+        env:
+        - name: POD_IP
+          valueFrom:
+           fieldRef:
+             fieldPath: status.podIP
+        # Override entry point to support var expanding.
+        args: [
+          "sidecar",
+          "--log.level=debug",
+          "--debug.name=sidecar",
+          "--api-address=0.0.0.0:19090", # This address will be properly deduced and propagated via cluster.PeerState.
+          "--metrics-address=0.0.0.0:19190",
+          "--prometheus.url=http://localhost:9090",
+          "--tsdb.path=/data",
+          "--cluster.address=0.0.0.0:19390",
+          #"--cluster.advertise-address=$POD_IP:19390",
+          "--cluster.peers=thanos.default.svc.cluster.local:19390",
+           # "--gcs.bucket=<bucket>" Add bucket and service account to enable shipping blocks to GCS.
+        ]
+        name: thanos
+        resources:
+          requests:
+            cpu: 100m
+            memory: 50Mi
+        volumeMounts:
+        - name: tsdb-data
+          mountPath: /data
+      volumes:
+      - name: config-volume
+        configMap:
+          name: prometheus
+      - name: tsdb-data
+        emptyDir: {}
+      terminationGracePeriodSeconds: 300
