@@ -11,11 +11,11 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/cluster"
-	"github.com/improbable-eng/thanos/pkg/okgroup"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/query/api"
 	"github.com/improbable-eng/thanos/pkg/query/ui"
 	"github.com/improbable-eng/thanos/pkg/runutil"
+	"github.com/oklog/run"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
@@ -44,7 +44,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
 		String()
 
-	m[name] = func(logger log.Logger, metrics *prometheus.Registry) (okgroup.Group, error) {
+	m[name] = func(g *run.Group, logger log.Logger, metrics *prometheus.Registry) error {
 		peer, err := joinCluster(
 			logger,
 			cluster.PeerTypeQuery,
@@ -54,9 +54,9 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*peers,
 		)
 		if err != nil {
-			return okgroup.Group{}, errors.Wrap(err, "join cluster")
+			return errors.Wrap(err, "join cluster")
 		}
-		return runQuery(logger, metrics, *apiAddr, query.Config{
+		return runQuery(g, logger, metrics, *apiAddr, query.Config{
 			QueryTimeout:         *queryTimeout,
 			MaxConcurrentQueries: *maxConcurrentQueries,
 		}, peer)
@@ -66,22 +66,19 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 // runQuery starts a server that exposes PromQL Query API. It is responsible for querying configured
 // store nodes, merging and duplicating the data to satisfy user query.
 func runQuery(
+	g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
 	apiAddr string,
 	cfg query.Config,
 	peer *cluster.Peer,
-) (
-	okgroup.Group, error,
-) {
+) error {
 	var (
 		stores    = cluster.NewStoreSet(logger, peer)
 		queryable = query.NewQueryable(logger, stores.Get)
 		engine    = promql.NewEngine(queryable, cfg.EngineOpts(logger))
 		api       = v1.NewAPI(engine, queryable, cfg)
 	)
-
-	var g okgroup.Group
 
 	// Periodically update the store set with the addresses we see in our cluster.
 	{
@@ -109,7 +106,7 @@ func runQuery(
 
 		l, err := net.Listen("tcp", apiAddr)
 		if err != nil {
-			return g, errors.Wrapf(err, "listen on address %s", apiAddr)
+			return errors.Wrapf(err, "listen on address %s", apiAddr)
 		}
 
 		g.Add(func() error {
@@ -120,7 +117,7 @@ func runQuery(
 	}
 
 	level.Info(logger).Log("msg", "starting query node")
-	return g, nil
+	return nil
 }
 
 func discoverAddresses(ctx context.Context, target *url.URL) (map[string]struct{}, error) {

@@ -14,11 +14,11 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/cluster"
-	"github.com/improbable-eng/thanos/pkg/okgroup"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
+	"github.com/oklog/run"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/tsdb/labels"
@@ -53,7 +53,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
 		String()
 
-	m[name] = func(logger log.Logger, reg *prometheus.Registry) (okgroup.Group, error) {
+	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry) error {
 		peer, err := joinCluster(
 			logger,
 			cluster.PeerTypeStore,
@@ -63,13 +63,14 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			*peers,
 		)
 		if err != nil {
-			return okgroup.Group{}, errors.Wrap(err, "join cluster")
+			return errors.Wrap(err, "join cluster")
 		}
-		return runSidecar(logger, reg, *apiAddr, *metricsAddr, *promURL, *dataDir, peer, *gcsBucket)
+		return runSidecar(g, logger, reg, *apiAddr, *metricsAddr, *promURL, *dataDir, peer, *gcsBucket)
 	}
 }
 
 func runSidecar(
+	g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
 	apiAddr string,
@@ -78,9 +79,8 @@ func runSidecar(
 	dataDir string,
 	peer *cluster.Peer,
 	gcsBucket string,
-) (okgroup.Group, error) {
+) error {
 
-	var g okgroup.Group
 	externalLabels := &extLabelSet{promURL: promURL}
 
 	// Blocking query of external labels before anything else.
@@ -98,7 +98,7 @@ func runSidecar(
 			return err
 		})
 		if err != nil {
-			return g, errors.Wrap(err, "initial external labels query")
+			return errors.Wrap(err, "initial external labels query")
 		}
 	}
 
@@ -110,7 +110,7 @@ func runSidecar(
 
 		l, err := net.Listen("tcp", metricsAddr)
 		if err != nil {
-			return g, errors.Wrap(err, "listen metrics address")
+			return errors.Wrap(err, "listen metrics address")
 		}
 
 		g.Add(func() error {
@@ -122,7 +122,7 @@ func runSidecar(
 	{
 		l, err := net.Listen("tcp", apiAddr)
 		if err != nil {
-			return g, errors.Wrap(err, "listen API address")
+			return errors.Wrap(err, "listen API address")
 		}
 		logger := log.With(logger, "component", "proxy")
 
@@ -131,7 +131,7 @@ func runSidecar(
 		proxy, err := store.NewPrometheusProxy(
 			logger, prometheus.DefaultRegisterer, &client, promURL, externalLabels.Get)
 		if err != nil {
-			return g, errors.Wrap(err, "create Prometheus proxy")
+			return errors.Wrap(err, "create Prometheus proxy")
 		}
 
 		s := grpc.NewServer()
@@ -184,7 +184,7 @@ func runSidecar(
 		// new found blocks to Google Cloud Storage.
 		gcsClient, err := storage.NewClient(context.Background())
 		if err != nil {
-			return g, errors.Wrap(err, "create GCS client")
+			return errors.Wrap(err, "create GCS client")
 		}
 
 		remote := shipper.NewGCSRemote(logger, nil, gcsClient.Bucket(gcsBucket))
@@ -207,7 +207,7 @@ func runSidecar(
 	}
 
 	level.Info(logger).Log("msg", "starting sidecar")
-	return g, nil
+	return nil
 }
 
 type extLabelSet struct {
