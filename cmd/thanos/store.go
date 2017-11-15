@@ -10,9 +10,9 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/cluster"
-	"github.com/improbable-eng/thanos/pkg/okgroup"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
+	"github.com/oklog/run"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
@@ -35,7 +35,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
 		PlaceHolder("<bucket>").Required().String()
 
-	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster").Strings()
+	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
 
 	clusterBindAddr := cmd.Flag("cluster.address", "listen address for clutser").
 		Default(defaultClusterAddr).String()
@@ -43,19 +43,22 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
 		String()
 
-	m[name] = func(logger log.Logger, metrics *prometheus.Registry) (okgroup.Group, error) {
-		peer, err := joinCluster(
+	m[name] = func(g *run.Group, logger log.Logger, metrics *prometheus.Registry) error {
+		_, err := cluster.Join(
 			logger,
-			cluster.PeerTypeStore,
 			*clusterBindAddr,
 			*clusterAdvertiseAddr,
-			*apiAddr,
 			*peers,
+			cluster.PeerState{
+				Type:    cluster.PeerTypeStore,
+				APIAddr: *apiAddr,
+			},
+			false,
 		)
 		if err != nil {
-			return okgroup.Group{}, errors.Wrap(err, "join cluster")
+			return errors.Wrap(err, "join cluster")
 		}
-		return runStore(logger, metrics, peer, *gcsBucket, *dataDir, *apiAddr, *metricsAddr)
+		return runStore(g, logger, metrics, *gcsBucket, *dataDir, *apiAddr, *metricsAddr)
 	}
 }
 
@@ -63,25 +66,23 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 // It also connects to a Google Cloud Storage bucket and serves data queries to a subset of its contents.
 // The served subset is determined through HRW hashing against the block's ULIDs and the known peers.
 func runStore(
+	g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
-	peer *cluster.Peer,
 	gcsBucket string,
 	dataDir string,
 	apiAddr string,
 	metricsAddr string,
-) (okgroup.Group, error) {
-	var g okgroup.Group
-
+) error {
 	{
 		gcsClient, err := storage.NewClient(context.Background())
 		if err != nil {
-			return g, errors.Wrap(err, "create GCS client")
+			return errors.Wrap(err, "create GCS client")
 		}
 
 		gs, err := store.NewGCSStore(logger, gcsClient.Bucket(gcsBucket), dataDir)
 		if err != nil {
-			return g, errors.Wrap(err, "create GCS store")
+			return errors.Wrap(err, "create GCS store")
 		}
 		ctx, cancel := context.WithCancel(context.Background())
 
@@ -98,7 +99,7 @@ func runStore(
 
 		l, err := net.Listen("tcp", apiAddr)
 		if err != nil {
-			return g, errors.Wrap(err, "listen API address")
+			return errors.Wrap(err, "listen API address")
 		}
 		s := grpc.NewServer()
 		storepb.RegisterStoreServer(s, gs)
@@ -116,7 +117,7 @@ func runStore(
 
 		l, err := net.Listen("tcp", metricsAddr)
 		if err != nil {
-			return g, errors.Wrap(err, "listen metrics address")
+			return errors.Wrap(err, "listen metrics address")
 		}
 
 		g.Add(func() error {
@@ -128,5 +129,5 @@ func runStore(
 
 	level.Info(logger).Log("msg", "starting store node")
 
-	return g, nil
+	return nil
 }

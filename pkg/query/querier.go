@@ -18,13 +18,10 @@ import (
 
 var _ promql.Queryable = (*Queryable)(nil)
 
-// StoreInfo holds meta information about a store.
+// StoreInfo holds meta information about a store used by query.
 type StoreInfo interface {
 	// Conn returns connection to the store API.
 	Conn() *grpc.ClientConn
-
-	// Ready returns true if store is ready. In our case it is ready, only after labels when set for the first time.
-	Ready() bool
 
 	// Labels returns store labels that should be appended to every metric returned by this store.
 	Labels() []storepb.Label

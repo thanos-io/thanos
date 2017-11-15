@@ -53,6 +53,8 @@ func spinup(t testing.TB, cfg config) (close func()) {
 			"--cluster.address", fmt.Sprintf("0.0.0.0:%d", 19390+i),
 			"--cluster.advertise-address", fmt.Sprintf("127.0.0.1:%d", 19390+i),
 			"--cluster.peers", "127.0.0.1:19391",
+			"--cluster.peers", "127.0.0.1:19591",
+			"--log.level", "debug",
 		))
 	}
 
@@ -63,6 +65,8 @@ func spinup(t testing.TB, cfg config) (close func()) {
 			"--cluster.address", fmt.Sprintf("0.0.0.0:%d", 19590+i),
 			"--cluster.advertise-address", fmt.Sprintf("127.0.0.1:%d", 19590+i),
 			"--cluster.peers", "127.0.0.1:19391",
+			"--cluster.peers", "127.0.0.1:19591",
+			"--log.level", "debug",
 		))
 	}
 

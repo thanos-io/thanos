@@ -53,9 +53,6 @@ func NewPrometheusProxy(
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
-	if externalLabels == nil {
-		externalLabels = func() labels.Labels { return nil }
-	}
 	p := &PrometheusProxy{
 		logger:         logger,
 		base:           baseURL,
@@ -135,7 +132,6 @@ func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) 
 		Series: make([]storepb.Series, 0, len(m.Data.Result)),
 	}
 	ext := p.externalLabels()
-
 	for _, e := range m.Data.Result {
 		lset := translateAndExtendLabels(e.Metric, ext)
 		// We generally expect all samples of the requested range to be traversed
