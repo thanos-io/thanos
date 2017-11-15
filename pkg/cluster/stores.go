@@ -46,6 +46,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 	// In every case we also updates the labels from peer state.
 	for addr, state := range storePeers {
 		if _, ok := s.stores[addr]; !ok {
+			level.Debug(s.logger).Log("msg", "grpc dialing", "store", addr)
 			conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithBlock())
 			if err != nil {
 				level.Warn(s.logger).Log("msg", "dialing connection failed; skipping", "store", addr, "err", err)
