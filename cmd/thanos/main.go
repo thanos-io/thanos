@@ -18,8 +18,8 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/cluster"
-	"github.com/improbable-eng/thanos/pkg/okgroup"
 	"github.com/improbable-eng/thanos/pkg/runutil"
+	"github.com/oklog/run"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -30,7 +30,7 @@ import (
 
 const defaultClusterAddr = "0.0.0.0:10900"
 
-type setupFunc func(log.Logger, *prometheus.Registry) (okgroup.Group, error)
+type setupFunc func(*run.Group, log.Logger, *prometheus.Registry) error
 
 func main() {
 	app := kingpin.New(filepath.Base(os.Args[0]), "A block storage based long-term storage for Prometheus")
@@ -86,9 +86,10 @@ func main() {
 		version.NewCollector("prometheus"),
 		prometheus.NewGoCollector(),
 	)
+  
+	var g run.Group
 
-	g, err := cmds[cmd](logger, metrics)
-	if err != nil {
+	if err := cmds[cmd](&g, logger, metrics); err != nil {
 		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command failed", cmd))
 		os.Exit(1)
 	}
@@ -104,10 +105,9 @@ func main() {
 	}
 
 	if err := g.Run(); err != nil {
-		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command run failed", cmd))
+		level.Error(logger).Log("msg", "running command failed", "err", err)
 		os.Exit(1)
 	}
-
 }
 
 func interrupt(cancel <-chan struct{}) error {

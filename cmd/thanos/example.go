@@ -4,8 +4,8 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/okgroup"
 	"github.com/improbable-eng/thanos/pkg/query"
+	"github.com/oklog/run"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -35,24 +35,21 @@ func registerExample(m map[string]setupFunc, app *kingpin.Application, name stri
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
 		PlaceHolder("<bucket>").String()
 
-	m[name] = func(logger log.Logger, metrics *prometheus.Registry) (okgroup.Group, error) {
-		var g okgroup.Group
+	m[name] = func(g *run.Group, logger log.Logger, metrics *prometheus.Registry) error {
 
-		queryGroup, err := runQuery(logger, metrics, *apiAddr, query.Config{
+		err := runQuery(g, logger, metrics, *apiAddr, query.Config{
 			QueryTimeout:         *queryTimeout,
 			MaxConcurrentQueries: *maxConcurrentQueries,
 		}, nil)
 		if err != nil {
-			return g, errors.Wrap(err, "query setup")
+			return errors.Wrap(err, "query setup")
 		}
-		g.AddGroup(queryGroup)
 
-		sidecarGroup, err := runSidecar(logger, metrics, *apiAddr, *metricsAddr, *promURL, *dataDir, nil, *gcsBucket)
+		err = runSidecar(g, logger, metrics, *apiAddr, *metricsAddr, *promURL, *dataDir, nil, *gcsBucket)
 		if err != nil {
-			return g, errors.Wrap(err, "sidecar setup")
+			return errors.Wrap(err, "sidecar setup")
 		}
-		g.AddGroup(sidecarGroup)
 
-		return g, nil
+		return nil
 	}
 }
