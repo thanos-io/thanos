@@ -11,19 +11,18 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/prometheus/tsdb/labels"
-	"google.golang.org/grpc"
-
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/okgroup"
+	"github.com/oklog/run"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/tsdb/labels"
+	"google.golang.org/grpc"
 	"gopkg.in/alecthomas/kingpin.v2"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -46,51 +45,66 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
 		PlaceHolder("<bucket>").String()
 
-	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster").Strings()
+	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
 
-	clusterBindAddr := cmd.Flag("cluster.address", "listen address for clutser").
+	clusterBindAddr := cmd.Flag("cluster.address", "listen address for cluster").
 		Default(defaultClusterAddr).String()
 
 	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
 		String()
 
-	m[name] = func(logger log.Logger, reg *prometheus.Registry) (okgroup.Group, error) {
-		peer, err := joinCluster(
-			logger,
-			cluster.PeerTypeStore,
-			*clusterBindAddr,
-			*clusterAdvertiseAddr,
-			*apiAddr,
-			*peers,
-		)
-		if err != nil {
-			return okgroup.Group{}, errors.Wrap(err, "join cluster")
-		}
-		return runSidecar(logger, reg, *apiAddr, *metricsAddr, *promURL, *dataDir, peer, *gcsBucket)
+	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry) error {
+		return runSidecar(g, logger, reg, *apiAddr, *metricsAddr, *promURL, *dataDir, *clusterBindAddr, *clusterAdvertiseAddr, *peers, *gcsBucket)
 	}
 }
 
 func runSidecar(
+	g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
 	apiAddr string,
 	metricsAddr string,
 	promURL *url.URL,
 	dataDir string,
-	peer *cluster.Peer,
+	clusterBindAddr string,
+	clusterAdvertiseAddr string,
+	knownPeers []string,
 	gcsBucket string,
-) (okgroup.Group, error) {
+) error {
 
-	var extLabelsMu sync.RWMutex
-	var externalLabels labels.Labels
+	externalLabels := &extLabelSet{promURL: promURL}
 
-	getExternalLabels := func() labels.Labels {
-		extLabelsMu.Lock()
-		defer extLabelsMu.Unlock()
-		return externalLabels
+	// Blocking query of external labels before anything else.
+	// We retry infinitely until we reach and fetch labels from our Prometheus.
+	{
+		ctx := context.Background()
+		err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
+			err := externalLabels.Update(ctx)
+			if err != nil {
+				level.Warn(logger).Log(
+					"msg", "failed to fetch initial external labels. Retrying",
+					"err", err,
+				)
+			}
+			return err
+		})
+		if err != nil {
+			return errors.Wrap(err, "initial external labels query")
+		}
 	}
 
-	var g okgroup.Group
+	_, err := cluster.Join(logger, clusterBindAddr, clusterAdvertiseAddr, knownPeers,
+		cluster.PeerState{
+			Type:    cluster.PeerTypeStore,
+			APIAddr: apiAddr,
+			Labels:  externalLabels.GetPB(),
+		}, false,
+	)
+	if err != nil {
+		return errors.Wrap(err, "join cluster")
+	}
+
+	// Setup all the concurrent groups.
 	{
 		mux := http.NewServeMux()
 		registerMetrics(mux, reg)
@@ -98,7 +112,7 @@ func runSidecar(
 
 		l, err := net.Listen("tcp", metricsAddr)
 		if err != nil {
-			return g, errors.Wrap(err, "listen metrics address")
+			return errors.Wrap(err, "listen metrics address")
 		}
 
 		g.Add(func() error {
@@ -110,16 +124,16 @@ func runSidecar(
 	{
 		l, err := net.Listen("tcp", apiAddr)
 		if err != nil {
-			return g, errors.Wrap(err, "listen API address")
+			return errors.Wrap(err, "listen API address")
 		}
 		logger := log.With(logger, "component", "proxy")
 
 		var client http.Client
 
 		proxy, err := store.NewPrometheusProxy(
-			logger, prometheus.DefaultRegisterer, &client, promURL, getExternalLabels)
+			logger, prometheus.DefaultRegisterer, &client, promURL, externalLabels.Get)
 		if err != nil {
-			return g, errors.Wrap(err, "create Prometheus proxy")
+			return errors.Wrap(err, "create Prometheus proxy")
 		}
 
 		s := grpc.NewServer()
@@ -146,46 +160,37 @@ func runSidecar(
 		reg.MustRegister(promUp, lastHeartbeat)
 
 		ctx, cancel := context.WithCancel(context.Background())
-		tick := time.NewTicker(30 * time.Second)
-
 		g.Add(func() error {
-			for {
-				elset, err := queryExternalLabels(ctx, promURL)
+			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+				iterCtx, iterCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer iterCancel()
+
+				err := externalLabels.Update(iterCtx)
 				if err != nil {
 					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
 					promUp.Set(0)
 				} else {
 					promUp.Set(1)
-
-					extLabelsMu.Lock()
-					externalLabels = elset
-					extLabelsMu.Unlock()
-
 					lastHeartbeat.Set(float64(time.Now().Unix()))
 				}
-				select {
-				case <-ctx.Done():
-					return nil
-				case <-tick.C:
-				}
-			}
+
+				return nil
+			})
 		}, func(error) {
 			cancel()
-			tick.Stop()
 		})
 	}
 
 	if gcsBucket != "" {
 		// The background shipper continuously scans the data directory and uploads
 		// new found blocks to Google Cloud Storage.
-
 		gcsClient, err := storage.NewClient(context.Background())
 		if err != nil {
-			return g, errors.Wrap(err, "create GCS client")
+			return errors.Wrap(err, "create GCS client")
 		}
 
 		remote := shipper.NewGCSRemote(logger, nil, gcsClient.Bucket(gcsBucket))
-		s := shipper.New(logger, nil, dataDir, remote, getExternalLabels)
+		s := shipper.New(logger, nil, dataDir, remote, externalLabels.Get)
 
 		ctx, cancel := context.WithCancel(context.Background())
 
@@ -204,7 +209,48 @@ func runSidecar(
 	}
 
 	level.Info(logger).Log("msg", "starting sidecar")
-	return g, nil
+	return nil
+}
+
+type extLabelSet struct {
+	promURL *url.URL
+
+	mtx    sync.Mutex
+	labels labels.Labels
+}
+
+func (s *extLabelSet) Update(ctx context.Context) error {
+	elset, err := queryExternalLabels(ctx, s.promURL)
+	if err != nil {
+		return err
+	}
+
+	s.mtx.Lock()
+	s.labels = elset
+	s.mtx.Unlock()
+
+	return nil
+}
+
+func (s *extLabelSet) Get() labels.Labels {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	return s.labels
+}
+
+func (s *extLabelSet) GetPB() []storepb.Label {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	lset := make([]storepb.Label, 0, len(s.labels))
+	for _, l := range s.labels {
+		lset = append(lset, storepb.Label{
+			Name:  l.Name,
+			Value: l.Value,
+		})
+	}
+	return lset
 }
 
 func queryExternalLabels(ctx context.Context, base *url.URL) (labels.Labels, error) {
@@ -217,7 +263,7 @@ func queryExternalLabels(ctx context.Context, base *url.URL) (labels.Labels, err
 	}
 	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, errors.Wrap(err, "request config")
+		return nil, errors.Wrapf(err, "request config against %s", u.String())
 	}
 	defer resp.Body.Close()
 

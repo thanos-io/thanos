@@ -7,13 +7,13 @@ import (
 	"github.com/pkg/errors"
 )
 
-// CalculateAdvertiseAddress attempts to clone logic from deep within memberlist
+// calculateAdvertiseAddress attempts to clone logic from deep within memberlist
 // (NetTransport.FinalAdvertiseAddr) in order to surface its conclusions to the
 // application, so we can provide more actionable error messages if the user has
 // inadvertantly misconfigured their cluster.
 //
 // https://github.com/hashicorp/memberlist/blob/022f081/net_transport.go#L126
-func CalculateAdvertiseAddress(bindAddr, advertiseAddr string) (net.IP, error) {
+func calculateAdvertiseAddress(bindAddr, advertiseAddr string) (net.IP, error) {
 	if advertiseAddr != "" {
 		ip := net.ParseIP(advertiseAddr)
 		if ip == nil {

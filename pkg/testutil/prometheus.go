@@ -38,9 +38,7 @@ func NewTSDB() (*tsdb.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return tsdb.Open(dir, nil, nil, &tsdb.Options{
-		WALFlushInterval:  10 * time.Millisecond,
 		BlockRanges:       []int64{2 * 3600 * 1000},
 		RetentionDuration: math.MaxInt64,
 	})
@@ -69,7 +67,6 @@ func NewPrometheus(address string) (*Prometheus, error) {
 // Start running the Prometheus instance and return.
 func (p *Prometheus) Start() error {
 	p.running = true
-	time.Sleep(time.Second / 2)
 
 	if err := p.db.Close(); err != nil {
 		return err

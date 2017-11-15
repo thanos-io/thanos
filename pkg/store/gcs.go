@@ -312,6 +312,8 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 
 	res := &seriesResult{res: map[uint64]*seriesEntry{}}
 
+	s.mtx.RLock()
+
 	for _, b := range s.blocks {
 		block := b
 
@@ -349,6 +351,9 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 			return nil
 		})
 	}
+
+	s.mtx.RUnlock()
+
 	if err := g.Wait(); err != nil {
 		return nil, status.Error(codes.Aborted, err.Error())
 	}
