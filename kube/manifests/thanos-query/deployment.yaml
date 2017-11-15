@@ -18,18 +18,12 @@ spec:
         # TODO(bplotka): With vm-driver=none, even that is uses same docker, images are not recognized. Investigate.
       - image: bplotka/thanos:latest
         imagePullPolicy: Always
-        env:
-        - name: POD_IP
-          valueFrom:
-           fieldRef:
-             fieldPath: status.podIP
         args: [
           "query",
           "--log.level=debug",
           "--debug.name=query",
           "--api-address=0.0.0.0:19099", # This address will be properly deduced and propagated via cluster.PeerState.
           "--cluster.address=0.0.0.0:19390",
-         # "--cluster.advertise-address=$POD_IP:19390",
           "--cluster.peers=thanos.default.svc.cluster.local:19390",
         ]
         name: thanos
