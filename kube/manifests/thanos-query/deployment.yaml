@@ -25,6 +25,7 @@ spec:
              fieldPath: status.podIP
         args: [
           "query",
+          "--log.level=debug",
           "--debug.name=query",
           "--api-address=0.0.0.0:19099",
           "--cluster.address=0.0.0.0:19390",
