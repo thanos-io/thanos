@@ -82,12 +82,22 @@ func Join(
 	level.Debug(l).Log("msg", "resolved peers to following addresses", "peers", strings.Join(resolvedPeers, ","))
 
 	// Initial validation of user-specified advertise address.
-	if addr, err := calculateAdvertiseAddress(bindHost, advertiseHost); err != nil {
+	addr, err := calculateAdvertiseAddress(bindHost, advertiseHost)
+	if err != nil {
 		level.Warn(l).Log("err", "couldn't deduce an advertise address: "+err.Error())
 	} else if hasNonlocal(resolvedPeers) && isUnroutable(addr.String()) {
 		level.Warn(l).Log("err", "this node advertises itself on an unroutable address", "addr", addr.String())
 		level.Warn(l).Log("err", "this node will be unreachable in the cluster")
 		level.Warn(l).Log("err", "provide --cluster.advertise-address as a routable IP address or hostname")
+	}
+
+	// If the API listens on 0.0.0.0, deduce it to the advertise IP.
+	apiHost, apiPort, err := net.SplitHostPort(state.APIAddr)
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid API address")
+	}
+	if apiHost == "0.0.0.0" {
+		state.APIAddr = net.JoinHostPort(addr.String(), apiPort)
 	}
 
 	l = log.With(l, "component", "cluster")
