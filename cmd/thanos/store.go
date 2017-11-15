@@ -34,7 +34,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
 		PlaceHolder("<bucket>").Required().String()
 
-	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster").Strings()
+	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
 
 	clusterBindAddr := cmd.Flag("cluster.address", "listen address for clutser").
 		Default(defaultClusterAddr).String()
@@ -50,6 +50,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			*clusterAdvertiseAddr,
 			*apiAddr,
 			*peers,
+			false,
 		)
 		if err != nil {
 			return okgroup.Group{}, errors.Wrap(err, "join cluster")
