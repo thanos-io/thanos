@@ -91,11 +91,7 @@ func Join(l log.Logger, joinCfg JoinConfig, state PeerState, reg *prometheus.Reg
 	}
 	p.mlist = ml
 
-	n, err := ml.Join(joinCfg.KnownPeers)
-	if err != nil {
-		return nil, errors.Wrap(err, "join cluster")
-	}
-
+	n, _ := ml.Join(joinCfg.KnownPeers)
 	level.Debug(l).Log("msg", "joined cluster", "peers", n)
 	if n > 0 {
 		go p.warnIfAlone(l, 10*time.Second)

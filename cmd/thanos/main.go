@@ -89,7 +89,7 @@ func main() {
 
 	g, err := cmds[cmd](logger, metrics)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, errors.Wrap(err, "command failed"))
+		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command failed", cmd))
 		os.Exit(1)
 	}
 
@@ -104,7 +104,7 @@ func main() {
 	}
 
 	if err := g.Run(); err != nil {
-		fmt.Fprintln(os.Stderr, errors.Wrap(err, "command run failed"))
+		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command run failed", cmd))
 		os.Exit(1)
 	}
 
