@@ -67,6 +67,9 @@ func NewGCSStore(logger log.Logger, bucket *storage.BucketHandle, dir string) (*
 
 // Close the store.
 func (s *GCSStore) Close() (err error) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
 	for _, b := range s.blocks {
 		if e := b.Close(); e != nil {
 			level.Warn(s.logger).Log("msg", "closing GCS block failed", "err", err)
@@ -108,7 +111,7 @@ func (s *GCSStore) downloadBlocks(ctx context.Context) error {
 		if err != nil {
 			continue
 		}
-		if _, ok := s.blocks[id]; ok {
+		if b := s.getBlock(id); b != nil {
 			continue
 		}
 		level.Info(s.logger).Log("msg", "sync block from GCS", "id", id)
@@ -172,16 +175,14 @@ func (s *GCSStore) loadBlocks() error {
 		if err != nil {
 			continue
 		}
-		if _, ok := s.blocks[id]; ok {
+		if b := s.getBlock(id); b != nil {
 			continue
 		}
 		b, err := s.loadFromDisk(id)
 		if err != nil {
 			level.Warn(s.logger).Log("msg", "loading block failed", "err", err)
 		}
-		s.mtx.Lock()
-		s.blocks[id] = b
-		s.mtx.Unlock()
+		s.setBlock(id, b)
 	}
 	return nil
 }
@@ -190,6 +191,18 @@ func (s *GCSStore) numBlocks() int {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 	return len(s.blocks)
+}
+
+func (s *GCSStore) getBlock(id ulid.ULID) *gcsBlock {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+	return s.blocks[id]
+}
+
+func (s *GCSStore) setBlock(id ulid.ULID, b *gcsBlock) {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+	s.blocks[id] = b
 }
 
 // loadFromDisk loads a block with the given ID from the disk cache.
@@ -214,7 +227,7 @@ func (s *GCSStore) Info(context.Context, *storepb.InfoRequest) (*storepb.InfoRes
 }
 
 type seriesResult struct {
-	mtx sync.RWMutex
+	mtx sync.Mutex
 	res map[uint64]*seriesEntry
 }
 
