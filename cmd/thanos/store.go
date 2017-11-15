@@ -4,7 +4,6 @@ import (
 	"context"
 	"net"
 	"net/http"
-	"time"
 
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
@@ -87,7 +86,7 @@ func runStore(
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-			gs.SyncBlocks(ctx, 30*time.Second)
+			gs.SyncBlocks(ctx)
 
 			gs.Close()
 			gcsClient.Close()
