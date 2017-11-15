@@ -1,7 +1,6 @@
 package cluster
 
 import (
-	"io/ioutil"
 	"net"
 	"sort"
 	"strconv"
@@ -14,6 +13,8 @@ import (
 	"sync"
 
 	"context"
+
+	"io/ioutil"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -80,6 +81,7 @@ func Join(
 	}
 	level.Debug(l).Log("msg", "resolved peers to following addresses", "peers", strings.Join(resolvedPeers, ","))
 
+	// Initial validation of user-specified advertise address.
 	if addr, err := calculateAdvertiseAddress(bindHost, advertiseHost); err != nil {
 		level.Warn(l).Log("err", "couldn't deduce an advertise address: "+err.Error())
 	} else if hasNonlocal(resolvedPeers) && isUnroutable(addr.String()) {
@@ -97,9 +99,7 @@ func Join(
 	}
 
 	p := &Peer{
-		data:  map[string]PeerState{
-			name.String(): state,
-		},
+		data:  map[string]PeerState{},
 		stopc: make(chan struct{}),
 	}
 	d := newDelegate(l, p)
@@ -124,17 +124,17 @@ func Join(
 	}
 	p.mlist = ml
 
-	//// Initialize state with ourselves.
-	//p.mtx.RLock()
-	//p.data[p.Name()] = state
-	//p.mtx.RUnlock()
-
 	n, _ := ml.Join(knownPeers)
 	level.Debug(l).Log("msg", "joined cluster", "peers", n)
 
 	if n > 0 {
 		go p.warnIfAlone(l, 10*time.Second)
 	}
+
+	// Initialize state with ourselves.
+	p.mtx.RLock()
+	p.data[p.Name()] = state
+	p.mtx.RUnlock()
 
 	return p, nil
 }

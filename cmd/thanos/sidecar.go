@@ -97,6 +97,7 @@ func runSidecar(
 		cluster.PeerState{
 			Type:    cluster.PeerTypeStore,
 			APIAddr: apiAddr,
+			Labels:  externalLabels.GetPB(),
 		}, false,
 	)
 	if err != nil {
@@ -236,6 +237,20 @@ func (s *extLabelSet) Get() labels.Labels {
 	defer s.mtx.Unlock()
 
 	return s.labels
+}
+
+func (s *extLabelSet) GetPB() []storepb.Label {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	lset := make([]storepb.Label, 0, len(s.labels))
+	for _, l := range s.labels {
+		lset = append(lset, storepb.Label{
+			Name:  l.Name,
+			Value: l.Value,
+		})
+	}
+	return lset
 }
 
 func queryExternalLabels(ctx context.Context, base *url.URL) (labels.Labels, error) {
