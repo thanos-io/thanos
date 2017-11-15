@@ -110,18 +110,6 @@ func Join(l log.Logger, joinCfg JoinConfig, state PeerState, reg *prometheus.Reg
 	return p, nil
 }
 
-// SetLabels sets the labels and notifies other members.
-func (p *Peer) SetLabels(labels []storepb.Label, timeout time.Duration) error {
-	p.mtx.RLock()
-
-	state := p.data[p.Name()]
-	state.Labels = labels
-	p.data[p.Name()] = state
-
-	p.mtx.RUnlock()
-	return p.mlist.UpdateNode(timeout)
-}
-
 func (p *Peer) warnIfAlone(logger log.Logger, d time.Duration) {
 	tick := time.NewTicker(d)
 	defer tick.Stop()
