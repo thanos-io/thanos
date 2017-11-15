@@ -25,8 +25,6 @@ import (
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
-const defaultClusterAddr = "0.0.0.0:10900"
-
 type setupFunc func(log.Logger, *prometheus.Registry) (okgroup.Group, error)
 
 func main() {
