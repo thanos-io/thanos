@@ -5,6 +5,8 @@ import (
 	"net"
 	"net/http"
 
+	"os"
+
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -43,18 +45,17 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 		String()
 
 	m[name] = func(logger log.Logger, metrics *prometheus.Registry) (okgroup.Group, error) {
-		peer, err := joinCluster(
+		joinConfig, err := createJoinConfig(
 			logger,
-			cluster.PeerTypeStore,
 			*clusterBindAddr,
-			*clusterAdvertiseAddr,
-			*apiAddr,
+			os.ExpandEnv(*clusterAdvertiseAddr),
 			*peers,
+			true,
 		)
 		if err != nil {
-			return okgroup.Group{}, errors.Wrap(err, "join cluster")
+			return okgroup.Group{}, errors.Wrap(err, "create join cluster config")
 		}
-		return runStore(logger, metrics, peer, *gcsBucket, *dataDir, *apiAddr, *metricsAddr)
+		return runStore(logger, metrics, joinConfig, *gcsBucket, *dataDir, *apiAddr, *metricsAddr)
 	}
 }
 
@@ -64,13 +65,21 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 func runStore(
 	logger log.Logger,
 	reg *prometheus.Registry,
-	peer *cluster.Peer,
+	joinConfig cluster.JoinConfig,
 	gcsBucket string,
 	dataDir string,
 	apiAddr string,
 	metricsAddr string,
 ) (okgroup.Group, error) {
 	var g okgroup.Group
+
+	_, err := cluster.Join(logger, joinConfig, cluster.PeerState{
+		Type:    cluster.PeerTypeStore,
+		APIAddr: apiAddr,
+	}, reg)
+	if err != nil {
+		return g, errors.Wrap(err, "join cluster")
+	}
 
 	{
 		gcsClient, err := storage.NewClient(context.Background())
