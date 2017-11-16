@@ -22,7 +22,7 @@ From now on you can use `kubectl` as well as `minikube` command, including `mini
 
 This directory covers are required k8s manifest to start example setup that will include:
 - Thanos headless service for discovery purposes.
-- Prometheus + thanos sidecar.
+- Prometheus + Thanos sidecar.
 - Thanos query node
 
 This setup will have GCS upload disabled, but will show how we can proxy requests from Prometheus.
@@ -32,7 +32,7 @@ This example can be easily extended to show the HA Prometheus use case. (TODO)
 To run example setup:
 1. `bash kube/apply-example.sh`
 
-You will be know able to reach Prometheus on http://prometheus.default.svc.cluster.local:9090/graph
+You will be now able to reach Prometheus on http://prometheus.default.svc.cluster.local:9090/graph
 And Thanos Query UI on http://thanos-query.default.svc.cluster.local:19099/graph
 
 Thanos Query UI should show exactly the same data as Prometheus.
@@ -44,7 +44,7 @@ To tear down example setup:
 
 This example is running setup that is supposed to upload blocks to GCS for long term storage. This setup includes:
 - Thanos headless service for discovery purposes.
-- Prometheus + thanos sidecar with GCS shipper configured
+- Prometheus + Thanos sidecar with GCS shipper configured
 - Thanos query node
 - Thanos store node.
 
@@ -56,7 +56,7 @@ To run example setup:
 3. Download JSON credentials for service account and run: `kubectl create secret generic gcs-credentials --from-file=<your-json-file>`
 4. Run `bash kube/apply-lts.sh`
 
-You will be know able to reach Prometheus on http://prometheus-gcs.default.svc.cluster.local:9090/graph
+You will be now able to reach Prometheus on http://prometheus-gcs.default.svc.cluster.local:9090/graph
 And Thanos Query UI on http://thanos-query.default.svc.cluster.local:19099/graph
 
 Thanos Query UI should show exactly the same data as Prometheus, but also older data if it's running longer that 12h.
