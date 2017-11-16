@@ -108,6 +108,60 @@ func TestQuerier_Series(t *testing.T) {
 	testutil.Ok(t, res.Err())
 }
 
+func TestStoreMatches(t *testing.T) {
+	mustMatcher := func(mt labels.MatchType, n, v string) *labels.Matcher {
+		m, err := labels.NewMatcher(mt, n, v)
+		testutil.Ok(t, err)
+		return m
+	}
+	cases := []struct {
+		s  StoreInfo
+		ms []*labels.Matcher
+		ok bool
+	}{
+		{
+			s: testStoreInfo{labels: []storepb.Label{{"a", "b"}}},
+			ms: []*labels.Matcher{
+				mustMatcher(labels.MatchEqual, "b", "1"),
+			},
+			ok: true,
+		},
+		{
+			s: testStoreInfo{labels: []storepb.Label{{"a", "b"}}},
+			ms: []*labels.Matcher{
+				mustMatcher(labels.MatchEqual, "a", "b"),
+			},
+			ok: true,
+		},
+		{
+			s: testStoreInfo{labels: []storepb.Label{{"a", "b"}}},
+			ms: []*labels.Matcher{
+				mustMatcher(labels.MatchEqual, "a", "c"),
+			},
+			ok: false,
+		},
+		{
+			s: testStoreInfo{labels: []storepb.Label{{"a", "b"}}},
+			ms: []*labels.Matcher{
+				mustMatcher(labels.MatchRegexp, "a", "b|c"),
+			},
+			ok: true,
+		},
+		{
+			s: testStoreInfo{labels: []storepb.Label{{"a", "b"}}},
+			ms: []*labels.Matcher{
+				mustMatcher(labels.MatchNotEqual, "a", ""),
+			},
+			ok: true,
+		},
+	}
+
+	for i, c := range cases {
+		ok := storeMatches(c.s, c.ms...)
+		testutil.Assert(t, c.ok == ok, "test case %d failed", i)
+	}
+}
+
 type testStoreInfo struct {
 	labels []storepb.Label
 	client storepb.StoreClient
