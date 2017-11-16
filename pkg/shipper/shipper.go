@@ -4,15 +4,12 @@ package shipper
 
 import (
 	"context"
-	"encoding/json"
-	"io/ioutil"
 	"os"
 	"path/filepath"
-	"sort"
 
+	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
-	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/fileutil"
 	"github.com/prometheus/tsdb/labels"
 
@@ -62,7 +59,7 @@ func New(
 
 // Sync performs a single synchronization if the local block data with the remote end.
 func (s *Shipper) Sync(ctx context.Context) {
-	names, err := readDir(s.dir)
+	names, err := fileutil.ReadDir(s.dir)
 	if err != nil {
 		level.Warn(s.logger).Log("msg", "read dir failed", "err", err)
 	}
@@ -87,21 +84,8 @@ func (s *Shipper) Sync(ctx context.Context) {
 	}
 }
 
-// blockMeta is regular TSDB block meta extended by Thanos specific information.
-type blockMeta struct {
-	Version int `json:"version"`
-
-	tsdb.BlockMeta
-
-	Thanos thanosBlockMeta `json:"thanos"`
-}
-
-type thanosBlockMeta struct {
-	Labels map[string]string `json:"labels"`
-}
-
 func (s *Shipper) sync(ctx context.Context, id ulid.ULID, dir string) error {
-	meta, err := readMetaFile(dir)
+	meta, err := block.ReadMetaFile(dir)
 	if err != nil {
 		return errors.Wrap(err, "read meta file")
 	}
@@ -143,85 +127,8 @@ func (s *Shipper) sync(ctx context.Context, id ulid.ULID, dir string) error {
 	if lset := s.labels(); lset != nil {
 		meta.Thanos.Labels = lset.Map()
 	}
-	if err := writeMetaFile(updir, meta); err != nil {
+	if err := block.WriteMetaFile(updir, meta); err != nil {
 		return errors.Wrap(err, "write meta file")
 	}
 	return s.remote.Upload(ctx, id, updir)
-}
-
-// readDir returns the filenames in the given directory in sorted order.
-func readDir(dirpath string) ([]string, error) {
-	dir, err := os.Open(dirpath)
-	if err != nil {
-		return nil, err
-	}
-	defer dir.Close()
-	names, err := dir.Readdirnames(-1)
-	if err != nil {
-		return nil, err
-	}
-	sort.Strings(names)
-	return names, nil
-}
-
-const metaFilename = "meta.json"
-
-func writeMetaFile(dir string, meta *blockMeta) error {
-	// Make any changes to the file appear atomic.
-	path := filepath.Join(dir, metaFilename)
-	tmp := path + ".tmp"
-
-	f, err := os.Create(tmp)
-	if err != nil {
-		return err
-	}
-
-	enc := json.NewEncoder(f)
-	enc.SetIndent("", "\t")
-
-	if err := enc.Encode(meta); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	return renameFile(tmp, path)
-}
-
-func readMetaFile(dir string) (*blockMeta, error) {
-	b, err := ioutil.ReadFile(filepath.Join(dir, metaFilename))
-	if err != nil {
-		return nil, err
-	}
-	var m blockMeta
-
-	if err := json.Unmarshal(b, &m); err != nil {
-		return nil, err
-	}
-	if m.Version != 1 {
-		return nil, errors.Errorf("unexpected meta file version %d", m.Version)
-	}
-	return &m, nil
-}
-
-func renameFile(from, to string) error {
-	if err := os.RemoveAll(to); err != nil {
-		return err
-	}
-	if err := os.Rename(from, to); err != nil {
-		return err
-	}
-
-	// Directory was renamed; sync parent dir to persist rename.
-	pdir, err := fileutil.OpenDir(filepath.Dir(to))
-	if err != nil {
-		return err
-	}
-
-	if err = fileutil.Fsync(pdir); err != nil {
-		pdir.Close()
-		return err
-	}
-	return pdir.Close()
 }

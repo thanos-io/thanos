@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/block"
+
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
@@ -133,29 +135,34 @@ func (s *GCSStore) downloadBlock(ctx context.Context, id ulid.ULID) error {
 		return errors.Wrap(err, "create temp dir")
 	}
 
-	indexObj := s.bucket.Object(path.Join(id.String(), "index"))
+	for _, fn := range []string{
+		"index",
+		"meta.json",
+	} {
+		obj := s.bucket.Object(path.Join(id.String(), fn))
 
-	f, err := os.Create(filepath.Join(tmpdir, "index"))
-	if err != nil {
-		return errors.Wrap(err, "create local index copy")
-	}
-	r, err := indexObj.NewReader(ctx)
-	if err != nil {
-		return errors.Wrap(err, "create index object reader")
-	}
-	_, copyErr := io.Copy(f, r)
-
-	if err := f.Close(); err != nil {
-		level.Warn(s.logger).Log("msg", "close file", "err", err)
-	}
-	if err := r.Close(); err != nil {
-		level.Warn(s.logger).Log("msg", "close object reader", "err", err)
-	}
-	if copyErr != nil {
-		if err := os.RemoveAll(tmpdir); err != nil {
-			level.Warn(s.logger).Log("msg", "cleanup temp dir after failure", "err", err)
+		f, err := os.Create(filepath.Join(tmpdir, fn))
+		if err != nil {
+			return errors.Wrap(err, "create local index copy")
 		}
-		return errors.Wrap(copyErr, "copy index file to disk")
+		r, err := obj.NewReader(ctx)
+		if err != nil {
+			return errors.Wrap(err, "create index object reader")
+		}
+		_, copyErr := io.Copy(f, r)
+
+		if err := f.Close(); err != nil {
+			level.Warn(s.logger).Log("msg", "close file", "err", err)
+		}
+		if err := r.Close(); err != nil {
+			level.Warn(s.logger).Log("msg", "close object reader", "err", err)
+		}
+		if copyErr != nil {
+			if err := os.RemoveAll(tmpdir); err != nil {
+				level.Warn(s.logger).Log("msg", "cleanup temp dir after failure", "err", err)
+			}
+			return errors.Wrap(copyErr, "copy index file to disk")
+		}
 	}
 
 	if err := renameFile(tmpdir, bdir); err != nil {
@@ -213,7 +220,11 @@ func (s *GCSStore) loadFromDisk(id ulid.ULID) (*gcsBlock, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "open index reader")
 	}
-	b, err := newGCSBlock(context.TODO(), id, indexr, s.bucket)
+	meta, err := block.ReadMetaFile(dir)
+	if err != nil {
+		return nil, errors.Wrap(err, "read meta file")
+	}
+	b, err := newGCSBlock(context.TODO(), meta, indexr, s.bucket)
 	if err != nil {
 		return nil, errors.Wrap(err, "open GCS block")
 	}
@@ -232,11 +243,12 @@ type seriesResult struct {
 }
 
 type seriesEntry struct {
-	lset   labels.Labels
-	chunks []tsdb.ChunkMeta
+	lset         labels.Labels
+	chunks       []tsdb.ChunkMeta
+	externalLset map[string]string // extra labels to attach, overrules lset
 }
 
-func (r *seriesResult) add(lset labels.Labels, chks []tsdb.ChunkMeta) {
+func (r *seriesResult) add(lset labels.Labels, externalLset map[string]string, chks []tsdb.ChunkMeta) {
 	if len(chks) == 0 {
 		return
 	}
@@ -247,7 +259,7 @@ func (r *seriesResult) add(lset labels.Labels, chks []tsdb.ChunkMeta) {
 
 	e, ok := r.res[h]
 	if !ok {
-		e = &seriesEntry{lset: lset}
+		e = &seriesEntry{lset: lset, externalLset: externalLset}
 		r.res[h] = e
 	}
 	e.chunks = append(e.chunks, chks...)
@@ -262,11 +274,26 @@ func (r *seriesResult) response() ([]storepb.Series, error) {
 			Chunks: make([]storepb.Chunk, 0, len(e.chunks)),
 		}
 		for _, l := range e.lset {
+			// Skip if the external labels of the block overrule the series' label.
+			// NOTE(fabxc): maybe move it to a prefixed version to still ensure uniqueness of series?
+			if e.externalLset[l.Name] != "" {
+				continue
+			}
 			s.Labels = append(s.Labels, storepb.Label{
 				Name:  l.Name,
 				Value: l.Value,
 			})
 		}
+		for ln, lv := range e.externalLset {
+			s.Labels = append(s.Labels, storepb.Label{
+				Name:  ln,
+				Value: lv,
+			})
+		}
+		sort.Slice(s.Labels, func(i, j int) bool {
+			return s.Labels[i].Name < s.Labels[j].Name
+		})
+
 		for _, cm := range e.chunks {
 			s.Chunks = append(s.Chunks, storepb.Chunk{
 				Type:    storepb.Chunk_XOR,
@@ -356,7 +383,7 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 					}
 					chks = append(chks, meta)
 				}
-				res.add(lset, chks)
+				res.add(lset, block.meta.Thanos.Labels, chks)
 			}
 			if err := set.Err(); err != nil {
 				return errors.Wrap(err, "read series set")
@@ -388,7 +415,7 @@ func (s *GCSStore) LabelValues(context.Context, *storepb.LabelValuesRequest) (*s
 }
 
 type gcsBlock struct {
-	id     ulid.ULID
+	meta   *block.Meta
 	dir    string
 	index  tsdb.IndexReader
 	chunks tsdb.ChunkReader
@@ -396,16 +423,16 @@ type gcsBlock struct {
 
 func newGCSBlock(
 	ctx context.Context,
-	id ulid.ULID,
+	meta *block.Meta,
 	index tsdb.IndexReader,
 	bkt *storage.BucketHandle,
 ) (*gcsBlock, error) {
-	cr, err := newGCSChunkReader(ctx, id, bkt)
+	cr, err := newGCSChunkReader(ctx, meta.ULID, bkt)
 	if err != nil {
 		return nil, err
 	}
 	return &gcsBlock{
-		id:     id,
+		meta:   meta,
 		index:  index,
 		chunks: cr,
 	}, nil

@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -11,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/improbable-eng/thanos/pkg/block"
 
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/shipper"
@@ -22,42 +23,20 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/tsdb/fileutil"
 	"github.com/prometheus/tsdb/labels"
-	"google.golang.org/api/iterator"
 
-	"cloud.google.com/go/storage"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 )
 
-func randBucketName(t *testing.T) string {
-	b := make([]byte, 16)
-	_, err := rand.Read(b)
-	testutil.Ok(t, err)
-	return fmt.Sprintf("test-%x", b)
-}
-
 func TestGCSStore_downloadBlocks(t *testing.T) {
+	bkt, cleanup := testutil.NewObjectStoreBucket(t)
+	defer cleanup()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	project, ok := os.LookupEnv("GCP_PROJECT")
-	// TODO(fabxc): make it run against a mock store if no actual bucket is configured.
-	if !ok {
-		t.Skip()
-		return
-	}
-
-	gcsClient, err := storage.NewClient(ctx)
-	testutil.Ok(t, err)
-	defer gcsClient.Close()
-
-	bkt := gcsClient.Bucket(randBucketName(t))
-	testutil.Ok(t, bkt.Create(ctx, project, nil))
-
-	defer deleteAllBucket(t, ctx, bkt)
-
 	expBlocks := []ulid.ULID{}
-	expIndexes := map[string][]byte{}
+	expFiles := map[string][]byte{}
 
 	randr := rand.New(rand.NewSource(0))
 
@@ -81,8 +60,8 @@ func TestGCSStore_downloadBlocks(t *testing.T) {
 			testutil.Ok(t, err)
 			testutil.Ok(t, w.Close())
 
-			if strings.HasSuffix(s, "index") {
-				expIndexes[s] = b
+			if strings.HasSuffix(s, "index") || strings.HasSuffix(s, "meta.json") {
+				expFiles[s] = b
 			}
 		}
 	}
@@ -105,45 +84,19 @@ func TestGCSStore_downloadBlocks(t *testing.T) {
 		testutil.Assert(t, err == nil, "block %s not synced", id)
 	}
 	// For each block we expect a downloaded index file.
-	for fn, data := range expIndexes {
+	for fn, data := range expFiles {
 		b, err := ioutil.ReadFile(filepath.Join(dir, fn))
 		testutil.Ok(t, err)
 		testutil.Equals(t, data, b)
 	}
 }
 
-func deleteAllBucket(t testing.TB, ctx context.Context, bkt *storage.BucketHandle) {
-	objs := bkt.Objects(ctx, nil)
-	for {
-		oi, err := objs.Next()
-		if err == iterator.Done {
-			break
-		}
-		testutil.Ok(t, err)
-		testutil.Ok(t, bkt.Object(oi.Name).Delete(ctx))
-	}
-	testutil.Ok(t, bkt.Delete(ctx))
-}
-
 func TestGCSStore_e2e(t *testing.T) {
+	bkt, cleanup := testutil.NewObjectStoreBucket(t)
+	defer cleanup()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	project, ok := os.LookupEnv("GCP_PROJECT")
-	// TODO(fabxc): make it run against a mock store if no actual bucket is configured.
-	if !ok {
-		t.Skip()
-		return
-	}
-
-	gcsClient, err := storage.NewClient(ctx)
-	testutil.Ok(t, err)
-	defer gcsClient.Close()
-
-	bkt := gcsClient.Bucket(randBucketName(t))
-	testutil.Ok(t, bkt.Create(ctx, project, nil))
-
-	defer deleteAllBucket(t, ctx, bkt)
 
 	dir, err := ioutil.TempDir("", "test_gcsstore_e2e")
 	testutil.Ok(t, err)
@@ -175,12 +128,20 @@ func TestGCSStore_e2e(t *testing.T) {
 		id2, err := testutil.CreateBlock(dir, series[4:], 10, mint, maxt)
 		testutil.Ok(t, err)
 
-		// TODO(fabxc): remove the component dependency by factoring out the block interface.
-		testutil.Ok(t, remote.Upload(ctx, id1, filepath.Join(dir, id1.String())))
-		testutil.Ok(t, remote.Upload(ctx, id2, filepath.Join(dir, id2.String())))
+		dir1, dir2 := filepath.Join(dir, id1.String()), filepath.Join(dir, id2.String())
 
-		testutil.Ok(t, os.RemoveAll(filepath.Join(dir, id1.String())))
-		testutil.Ok(t, os.RemoveAll(filepath.Join(dir, id2.String())))
+		// Add labels to the meta of the second block.
+		meta, err := block.ReadMetaFile(dir2)
+		testutil.Ok(t, err)
+		meta.Thanos.Labels = map[string]string{"ext": "value"}
+		testutil.Ok(t, block.WriteMetaFile(dir2, meta))
+
+		// TODO(fabxc): remove the component dependency by factoring out the block interface.
+		testutil.Ok(t, remote.Upload(ctx, id1, dir1))
+		testutil.Ok(t, remote.Upload(ctx, id2, dir2))
+
+		testutil.Ok(t, os.RemoveAll(dir1))
+		testutil.Ok(t, os.RemoveAll(dir2))
 	}
 
 	store, err := NewGCSStore(nil, bkt, dir)
@@ -201,12 +162,12 @@ func TestGCSStore_e2e(t *testing.T) {
 	pbseries := [][]storepb.Label{
 		{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}},
 		{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}},
-		{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}},
-		{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}},
+		{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext", Value: "value"}},
+		{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext", Value: "value"}},
 		{{Name: "a", Value: "2"}, {Name: "b", Value: "1"}},
 		{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
-		{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}},
-		{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}},
+		{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}, {Name: "ext", Value: "value"}},
+		{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext", Value: "value"}},
 	}
 	resp, err := store.Series(ctx, &storepb.SeriesRequest{
 		Matchers: []storepb.LabelMatcher{
