@@ -17,29 +17,51 @@ To use cluster from your terminal do:
 `source ./kube/envs.sh`
 
 From now on you can use `kubectl` as well as `minikube` command, including `minikube stop` to stop the whole cluster.
-  
-## Start Thanos service for Thanos gossip peers
 
-This allows query to discover thanos services.
+## Example setup.
 
-```bash
-echo "Starting Thanos service for gathering all thanos gossip peers."
-kubectl apply -f manifests/thanos
+This directory covers are required k8s manifest to start example setup that will include:
+- Thanos headless service for discovery purposes.
+- Prometheus + thanos sidecar.
+- Thanos query node
 
-```
-  
-## Start Prometheus with Thanos sidecar
+This setup will have GCS upload disabled, but will show how we can proxy requests from Prometheus.
 
-```bash
- echo "Starting Prometheus pod with sidecar."
- kubectl apply -f kube/manifests/prometheus
-```
+This example can be easily extended to show the HA Prometheus use case. (TODO)
 
-## Start query node targeting Prometheus sidecar
+To run example setup:
+1. `bash kube/apply-example.sh`
 
-```bash
- echo "Starting Thanos query pod targeting sidecar."
- kubectl apply -f kube/manifests/thanos-query
-```
+You will be know able to reach Prometheus on http://prometheus.default.svc.cluster.local:9090/graph
+And Thanos Query UI on http://thanos-query.default.svc.cluster.local:19099/graph
 
-You can invoke `bash kube/apply-example.sh` that will do all these steps.
+Thanos Query UI should show exactly the same data as Prometheus.
+
+To tear down example setup:
+1. `bash kube/delete-example.sh`
+
+## Long term storage setup
+
+This example is running setup that is supposed to upload blocks to GCS for long term storage. This setup includes:
+- Thanos headless service for discovery purposes.
+- Prometheus + thanos sidecar with GCS shipper configured
+- Thanos query node
+- Thanos store node.
+
+To run example setup:
+1. Create GCS bucket in your GCP project. Either name it "thanos-test" or put its name into
+  * manifest/prometheus-gcs/deployment.yaml inside `"--gcs.bucket` flag.
+  * manifest/thanos-query/deployment.yaml inside `"--gcs.bucket` flag.
+2. Create service account that have permission to this bucket
+3. Download JSON credentials for service account and run: `kubectl create secret generic gcs-credentials --from-file=<your-json-file>`
+4. Run `bash kube/apply-lts.sh`
+
+You will be know able to reach Prometheus on http://prometheus-gcs.default.svc.cluster.local:9090/graph
+And Thanos Query UI on http://thanos-query.default.svc.cluster.local:19099/graph
+
+Thanos Query UI should show exactly the same data as Prometheus, but also older data if it's running longer that 12h.
+
+After 3h sidecar should upload first block to GCS. You can make that quicker by changing prometheus `storage.tsdb.{min,max}-block-duration` to smaller value (e.g 20m)
+
+To tear down example setup:
+1. `bash kube/delete-lts.sh`

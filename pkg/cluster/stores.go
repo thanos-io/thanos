@@ -52,6 +52,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 				level.Warn(s.logger).Log("msg", "dialing connection failed; skipping", "store", addr, "err", err)
 				continue
 			}
+			level.Debug(s.logger).Log("msg", "successfully made grpc connection", "store", addr)
 			store := &storeInfo{conn: conn}
 			s.stores[addr] = store
 		}

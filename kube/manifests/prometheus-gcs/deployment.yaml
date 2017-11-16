@@ -1,16 +1,16 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: prometheus
+  name: prometheus-gcs
   labels:
-    app: prometheus
+    app: prometheus-gcs
     thanos-peer: "true"
 spec:
   replicas: 1
   template:
     metadata:
       labels:
-        app: prometheus
+        app: prometheus-gcs
         thanos-peer: "true"
     spec:
       containers:
@@ -20,6 +20,7 @@ spec:
           "--storage.tsdb.path=/data",
           "--storage.tsdb.min-block-duration=2h",
           "--storage.tsdb.max-block-duration=2h",
+          "--storage.tsdb.retention=12h"
         ]
         name: prometheus
         resources:
@@ -35,6 +36,9 @@ spec:
         # TODO(bplotka): With vm-driver=none, even that is uses same docker, images are not recognized. Investigate.
       - image: bplotka/thanos:latest
         imagePullPolicy: Always
+        env:
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: /creds/gcs-credentials.json
         args: [
           "sidecar",
           "--log.level=debug",
@@ -45,7 +49,8 @@ spec:
           "--tsdb.path=/data",
           "--cluster.address=0.0.0.0:19390",
           "--cluster.peers=thanos.default.svc.cluster.local:19390",
-          # This an example of running sidecar without shipping data to GCS.
+          # This is required to be added in GCS prior startup of this.
+          "--gcs.bucket=thanos-test"
         ]
         name: thanos
         resources:
@@ -55,10 +60,17 @@ spec:
         volumeMounts:
         - name: tsdb-data
           mountPath: /data
+        - name: gcs-credentials
+          mountPath: /creds/
       volumes:
       - name: config-volume
         configMap:
-          name: prometheus
+          name: prometheus-gcs
       - name: tsdb-data
         emptyDir: {}
+      - name: gcs-credentials
+        secret:
+          defaultMode: 420
+          # gcs-credentials secret with single file gcs-credentials.json is required.
+          secretName: gcs-credentials
       terminationGracePeriodSeconds: 300
