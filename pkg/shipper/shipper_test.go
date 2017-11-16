@@ -101,7 +101,10 @@ func TestShipper_UploadBlocks(t *testing.T) {
 		// Running shipper while a block is being written to temp dir should not trigger uploads.
 		shipper.Sync(ctx)
 
-		testutil.Ok(t, ioutil.WriteFile(tmp+"/chunks", []byte("chunkcontents"), 0666))
+		testutil.Ok(t, os.MkdirAll(tmp+"/chunks", 0777))
+		testutil.Ok(t, ioutil.WriteFile(tmp+"/chunks/0001", []byte("chunkcontents1"), 0666))
+		testutil.Ok(t, ioutil.WriteFile(tmp+"/chunks/0002", []byte("chunkcontents2"), 0666))
+
 		testutil.Ok(t, os.Rename(tmp, bdir))
 
 		// After rename sync should upload the block.
@@ -120,7 +123,8 @@ func TestShipper_UploadBlocks(t *testing.T) {
 
 		expFiles[id.String()+"/meta.json"] = buf.String()
 		expFiles[id.String()+"/index"] = "indexcontents"
-		expFiles[id.String()+"/chunks"] = "chunkcontents"
+		expFiles[id.String()+"/chunks/0001"] = "chunkcontents1"
+		expFiles[id.String()+"/chunks/0002"] = "chunkcontents2"
 	}
 
 	for id := range expBlocks {

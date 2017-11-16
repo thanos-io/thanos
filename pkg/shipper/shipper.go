@@ -115,14 +115,9 @@ func (s *Shipper) sync(ctx context.Context, id ulid.ULID, dir string) error {
 	}
 	defer os.RemoveAll(updir)
 
-	if err := os.Link(filepath.Join(dir, "index"), filepath.Join(updir, "index")); err != nil {
-		return errors.Wrap(err, "link index file")
+	if err := hardlinkBlock(dir, updir); err != nil {
+		return errors.Wrap(err, "hard link block")
 	}
-	if err := os.Link(filepath.Join(dir, "chunks"), filepath.Join(updir, "chunks")); err != nil {
-		return errors.Wrap(err, "link chunk directory")
-	}
-	// Tombstone files are skipped as they should not be used in the Thanos deployment model.
-
 	// Attach current labels and write a new meta file with Thanos extensions.
 	if lset := s.labels(); lset != nil {
 		meta.Thanos.Labels = lset.Map()
@@ -131,4 +126,28 @@ func (s *Shipper) sync(ctx context.Context, id ulid.ULID, dir string) error {
 		return errors.Wrap(err, "write meta file")
 	}
 	return s.remote.Upload(ctx, id, updir)
+}
+
+func hardlinkBlock(src, dst string) error {
+	chunkDir := filepath.Join(dst, "chunks")
+
+	if err := os.MkdirAll(chunkDir, 0777); err != nil {
+		return errors.Wrap(err, "create chunks dir")
+	}
+
+	files, err := fileutil.ReadDir(filepath.Join(src, "chunks"))
+	if err != nil {
+		return errors.Wrap(err, "read chunk dir")
+	}
+	for i, fn := range files {
+		files[i] = filepath.Join("chunks", fn)
+	}
+	files = append(files, "meta.json", "index")
+
+	for _, fn := range files {
+		if err := os.Link(filepath.Join(src, fn), filepath.Join(dst, fn)); err != nil {
+			return errors.Wrapf(err, "hard link file %s", fn)
+		}
+	}
+	return nil
 }
