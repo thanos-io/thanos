@@ -337,12 +337,18 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 	s.mtx.RLock()
 
 	for _, b := range s.blocks {
-		block := b
-
+		var (
+			extLset = b.meta.Thanos.Labels
+			indexr  = b.indexReader()
+			chunkr  = b.chunkReader()
+		)
 		// TODO(fabxc): only aggregate chunk metas first and add a subsequent fetch stage
 		// where we consolidate requests.
 		g.Go(func() error {
-			set, err := tsdb.LookupChunkSeries(block.index, nil, matchers...)
+			defer indexr.Close()
+			defer chunkr.Close()
+
+			set, err := tsdb.LookupChunkSeries(indexr, nil, matchers...)
 			if err != nil {
 				return errors.Wrap(err, "get series set")
 			}
@@ -359,13 +365,13 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 					if meta.MinTime > req.MaxTime {
 						break
 					}
-					meta.Chunk, err = block.chunks.Chunk(meta.Ref)
+					meta.Chunk, err = chunkr.Chunk(meta.Ref)
 					if err != nil {
 						return errors.Wrap(err, "fetch chunk")
 					}
 					chks = append(chks, meta)
 				}
-				res.add(lset, block.meta.Thanos.Labels, chks)
+				res.add(lset, extLset, chks)
 			}
 			if err := set.Err(); err != nil {
 				return errors.Wrap(err, "read series set")
@@ -397,10 +403,11 @@ func (s *GCSStore) LabelValues(context.Context, *storepb.LabelValuesRequest) (*s
 }
 
 type gcsBlock struct {
-	meta   *block.Meta
-	dir    string
-	index  tsdb.IndexReader
-	chunks tsdb.ChunkReader
+	meta           *block.Meta
+	dir            string
+	pendingReaders sync.WaitGroup
+	index          tsdb.IndexReader
+	chunks         tsdb.ChunkReader
 }
 
 func newGCSBlock(
@@ -420,7 +427,39 @@ func newGCSBlock(
 	}, nil
 }
 
+func (b *gcsBlock) indexReader() tsdb.IndexReader {
+	b.pendingReaders.Add(1)
+	return &closeIndex{b.index, b.pendingReaders.Done}
+}
+
+func (b *gcsBlock) chunkReader() tsdb.ChunkReader {
+	b.pendingReaders.Add(1)
+	return &closeChunks{b.chunks, b.pendingReaders.Done}
+}
+
+type closeIndex struct {
+	tsdb.IndexReader
+	close func()
+}
+
+func (c *closeIndex) Close() error {
+	c.close()
+	return nil
+}
+
+type closeChunks struct {
+	tsdb.ChunkReader
+	close func()
+}
+
+func (c *closeChunks) Close() error {
+	c.close()
+	return nil
+}
+
+// Close waits for all pending readers to finish and then closes all underlying resources.
 func (b *gcsBlock) Close() error {
+	b.pendingReaders.Wait()
 	b.index.Close()
 	b.chunks.Close()
 	return nil
