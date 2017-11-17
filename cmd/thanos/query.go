@@ -42,9 +42,10 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
 		String()
 
-	m[name] = func(g *run.Group, logger log.Logger, metrics *prometheus.Registry) error {
+	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry) error {
 		peer, err := cluster.Join(
 			logger,
+			reg,
 			*clusterBindAddr,
 			*clusterAdvertiseAddr,
 			*peers,
@@ -56,7 +57,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 		if err != nil {
 			return errors.Wrap(err, "join cluster")
 		}
-		return runQuery(g, logger, metrics, *httpAddr, query.Config{
+		return runQuery(g, logger, reg, *httpAddr, query.Config{
 			QueryTimeout:         *queryTimeout,
 			MaxConcurrentQueries: *maxConcurrentQueries,
 		}, peer)

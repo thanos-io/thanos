@@ -44,9 +44,10 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
 		String()
 
-	m[name] = func(g *run.Group, logger log.Logger, metrics *prometheus.Registry) error {
+	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry) error {
 		_, err := cluster.Join(
 			logger,
+			reg,
 			*clusterBindAddr,
 			*clusterAdvertiseAddr,
 			*peers,
@@ -59,7 +60,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 		if err != nil {
 			return errors.Wrap(err, "join cluster")
 		}
-		return runStore(g, logger, metrics, *gcsBucket, *dataDir, *grpcAddr, *httpAddr)
+		return runStore(g, logger, reg, *gcsBucket, *dataDir, *grpcAddr, *httpAddr)
 	}
 }
 

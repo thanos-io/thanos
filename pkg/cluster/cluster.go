@@ -23,6 +23,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Peer is a single peer in a gossip cluster.
@@ -46,6 +47,7 @@ const (
 // Join creates a new peer that joins the cluster.
 func Join(
 	l log.Logger,
+	reg *prometheus.Registry,
 	bindAddr string,
 	advertiseAddr string,
 	knownPeers []string,
@@ -114,7 +116,7 @@ func Join(
 		data:  map[string]PeerState{},
 		stopc: make(chan struct{}),
 	}
-	d := newDelegate(l, p)
+	d := newDelegate(l, reg, p)
 
 	cfg := memberlist.DefaultLANConfig()
 	cfg.Name = name.String()
@@ -247,17 +249,34 @@ type delegate struct {
 
 	logger log.Logger
 	bcast  *memberlist.TransmitLimitedQueue
+
+	gossipMsgsReceived   prometheus.Counter
+	gossipClusterMembers prometheus.Gauge
 }
 
-func newDelegate(l log.Logger, p *Peer) *delegate {
+func newDelegate(l log.Logger, reg *prometheus.Registry, p *Peer) *delegate {
 	bcast := &memberlist.TransmitLimitedQueue{
 		NumNodes:       p.ClusterSize,
 		RetransmitMult: 3,
 	}
+	gossipMsgsReceived := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_gossip_messages_received_total",
+		Help: "Total gossip NotifyMsg calls.",
+	})
+	gossipClusterMembers := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_cluster_members",
+		Help: "Number indicating current number of members in cluster.",
+	})
+
+	reg.MustRegister(gossipMsgsReceived)
+	reg.MustRegister(gossipClusterMembers)
+
 	return &delegate{
-		logger: l,
-		Peer:   p,
-		bcast:  bcast,
+		logger:               l,
+		Peer:                 p,
+		bcast:                bcast,
+		gossipMsgsReceived:   gossipMsgsReceived,
+		gossipClusterMembers: gossipClusterMembers,
 	}
 }
 
@@ -283,6 +302,8 @@ func (d *delegate) NotifyMsg(b []byte) {
 		level.Error(d.logger).Log("method", "NotifyMsg", "b", strings.TrimSpace(string(b)), "err", err)
 		return
 	}
+	d.gossipMsgsReceived.Inc()
+
 	d.mtx.Lock()
 	defer d.mtx.Unlock()
 	for k, v := range data {
@@ -298,6 +319,7 @@ func (d *delegate) GetBroadcasts(overhead, limit int) [][]byte {
 	return d.bcast.GetBroadcasts(overhead, limit)
 }
 
+// LocalState is called when gossip fetches local state.
 func (d *delegate) LocalState(_ bool) []byte {
 	d.mtx.RLock()
 	defer d.mtx.RUnlock()
@@ -324,11 +346,13 @@ func (d *delegate) MergeRemoteState(buf []byte, _ bool) {
 
 // NotifyJoin is called if a peer joins the cluster.
 func (d *delegate) NotifyJoin(n *memberlist.Node) {
+	d.gossipClusterMembers.Inc()
 	level.Debug(d.logger).Log("received", "NotifyJoin", "node", n.Name, "addr", n.Address())
 }
 
 // NotifyLeave is called if a peer leaves the cluster.
 func (d *delegate) NotifyLeave(n *memberlist.Node) {
+	d.gossipClusterMembers.Dec()
 	level.Debug(d.logger).Log("received", "NotifyLeave", "node", n.Name, "addr", n.Address())
 	d.mtx.Lock()
 	defer d.mtx.Unlock()
