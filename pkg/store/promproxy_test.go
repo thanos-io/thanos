@@ -112,3 +112,46 @@ func TestPrometheusProxy_LabelValues(t *testing.T) {
 
 	testutil.Equals(t, []string{"a", "b", "c"}, resp.Values)
 }
+
+func TestPrometheusProxy_Series_MatchExternalLabel(t *testing.T) {
+	p, err := testutil.NewPrometheus(":12347")
+	testutil.Ok(t, err)
+
+	baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
+
+	a := p.Appender()
+	a.Add(labels.FromStrings("a", "b"), baseT+100, 1)
+	a.Add(labels.FromStrings("a", "b"), baseT+200, 2)
+	a.Add(labels.FromStrings("a", "b"), baseT+300, 3)
+	testutil.Ok(t, a.Commit())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	testutil.Ok(t, p.Start())
+	defer p.Stop()
+
+	u, err := url.Parse("http://localhost:12347")
+	testutil.Ok(t, err)
+
+	proxy, err := NewPrometheusProxy(nil, nil, nil, u,
+		func() labels.Labels {
+			return labels.FromStrings("region", "eu-west")
+		})
+	testutil.Ok(t, err)
+
+	resp, err := proxy.Series(ctx, &storepb.SeriesRequest{
+		MinTime: baseT + 101,
+		MaxTime: baseT + 300,
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"},
+		},
+	})
+	testutil.Ok(t, err)
+
+	testutil.Equals(t, 1, len(resp.Series))
+
+	testutil.Equals(t, []storepb.Label{
+		{Name: "region", Value: "eu-west"},
+	}, resp.Series[0].Labels)
+}

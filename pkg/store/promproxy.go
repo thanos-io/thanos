@@ -1,7 +1,6 @@
 package store
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,7 +8,6 @@ import (
 	"net/url"
 	"path"
 	"sort"
-	"strconv"
 	"time"
 
 	"github.com/prometheus/tsdb/labels"
@@ -19,7 +17,6 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/timestamp"
@@ -86,7 +83,19 @@ func (p *PrometheusProxy) Info(ctx context.Context, r *storepb.InfoRequest) (*st
 func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) (
 	*storepb.SeriesResponse, error,
 ) {
-	sel, err := selectorString(r.Matchers...)
+	ext := p.externalLabels()
+
+	match, newMatcher, err := extLabelsMatches(ext, r.Matchers)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	if !match {
+		// No data.
+		return &storepb.SeriesResponse{}, nil
+	}
+
+	sel, err := matcherToSelectorQuery(newMatcher)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -131,7 +140,7 @@ func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) 
 	res := &storepb.SeriesResponse{
 		Series: make([]storepb.Series, 0, len(m.Data.Result)),
 	}
-	ext := p.externalLabels()
+
 	for _, e := range m.Data.Result {
 		lset := translateAndExtendLabels(e.Metric, ext)
 		// We generally expect all samples of the requested range to be traversed
@@ -154,6 +163,36 @@ func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) 
 		})
 	}
 	return res, nil
+}
+
+func extLabelsMatches(extLabels labels.Labels, ms []storepb.LabelMatcher) (bool, []storepb.LabelMatcher, error) {
+	elmap := map[string]string{}
+	for _, l := range extLabels {
+		elmap[l.Name] = l.Value
+	}
+
+	var newMatcher []storepb.LabelMatcher
+	for _, m := range ms {
+		extValue, ok := elmap[m.Name]
+		if !ok {
+			// Agnostic to external labels.
+			newMatcher = append(newMatcher, m)
+			continue
+		}
+
+		m, err := translateMatcher(m)
+		if err != nil {
+			return false, nil, err
+		}
+
+		if !m.Matches(extValue) {
+			// External label does not match. This should not happen - it should be filtered out on query node,
+			// but let's do that anyway here.
+			return false, nil, nil
+		}
+	}
+
+	return true, newMatcher, nil
 }
 
 // encodeChunk translates the sample pairs into a chunk. It takes a minimum timestamp
@@ -233,34 +272,4 @@ func (p *PrometheusProxy) LabelValues(ctx context.Context, r *storepb.LabelValue
 	sort.Strings(m.Data)
 
 	return &storepb.LabelValuesResponse{Values: m.Data}, nil
-}
-
-func selectorString(ms ...storepb.LabelMatcher) (string, error) {
-	var b bytes.Buffer
-	b.WriteByte('{')
-
-	for i, m := range ms {
-		if i != 0 {
-			b.WriteByte(',')
-		}
-		b.WriteString(m.Name)
-
-		switch m.Type {
-		case storepb.LabelMatcher_EQ:
-			b.WriteByte('=')
-		case storepb.LabelMatcher_NEQ:
-			b.WriteString("!=")
-		case storepb.LabelMatcher_RE:
-			b.WriteString("=~")
-		case storepb.LabelMatcher_NRE:
-			b.WriteString("!~")
-		default:
-			return "", errors.New("unknown matcher type")
-		}
-
-		b.WriteString(strconv.Quote(m.Value))
-	}
-
-	b.WriteByte('}')
-	return b.String(), nil
 }
