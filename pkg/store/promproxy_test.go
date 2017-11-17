@@ -144,6 +144,7 @@ func TestPrometheusProxy_Series_MatchExternalLabel(t *testing.T) {
 		MinTime: baseT + 101,
 		MaxTime: baseT + 300,
 		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
 			{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"},
 		},
 	})
@@ -152,6 +153,21 @@ func TestPrometheusProxy_Series_MatchExternalLabel(t *testing.T) {
 	testutil.Equals(t, 1, len(resp.Series))
 
 	testutil.Equals(t, []storepb.Label{
+		{Name: "a", Value: "b"},
 		{Name: "region", Value: "eu-west"},
 	}, resp.Series[0].Labels)
+
+	// However it should not match wrong external label.
+	resp, err = proxy.Series(ctx, &storepb.SeriesRequest{
+		MinTime: baseT + 101,
+		MaxTime: baseT + 300,
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
+			{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west2"}, // Non existing label value.
+		},
+	})
+	testutil.Ok(t, err)
+
+	// No series.
+	testutil.Equals(t, 0, len(resp.Series))
 }
