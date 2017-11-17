@@ -102,7 +102,7 @@ func (s *GCSStore) SyncBlocks(ctx context.Context, interval time.Duration) {
 func (s *GCSStore) downloadBlocks(ctx context.Context) error {
 	objs := s.bucket.Objects(ctx, &storage.Query{Delimiter: "/"})
 
-	// Fetch a maximum of 20 blocks in parallel
+	// Fetch a maximum of 20 blocks in parallel.
 	var wg sync.WaitGroup
 	workc := make(chan struct{}, 20)
 
