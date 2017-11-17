@@ -5,13 +5,20 @@ import (
 	"sync"
 
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
-	"github.com/prometheus/client_golang/prometheus"
+
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
+	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
+)
+
+const (
+	dialSuccess = "success"
+	dialFailure = "failure"
 )
 
 // StoreSet maintains a set of active stores. It is backed by a peer's view of the cluster.
@@ -21,6 +28,9 @@ type StoreSet struct {
 	mtx         sync.RWMutex
 	stores      map[string]*storeInfo
 	grpcMetrics *grpc_prometheus.ClientMetrics
+
+	storeNodeConnections prometheus.Gauge
+	storeNodeDialHist    *prometheus.HistogramVec
 }
 
 // NewStoreSet returns a new store backed by the peers view of the cluster.
@@ -34,11 +44,23 @@ func NewStoreSet(logger log.Logger, reg *prometheus.Registry, peer *Peer) *Store
 	)
 	reg.MustRegister(met)
 
+	storeNodeConnections := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_store_nodes_grpc_connections",
+		Help: "Number indicating current number of gRPC connection to store nodes. This indicates also to how many stores query node have access to.",
+	})
+	storeNodeDialHist := prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name: "thanost_store_node_grpc_dial_seconds",
+		Help: "Histogram of block gRPC dialing latency (seconds) until connection is maintained or aborted.",
+		// Possible values: dialSuccess or dialFailure.
+	}, []string{"status"})
+
 	return &StoreSet{
-		logger:      logger,
-		peer:        peer,
-		stores:      map[string]*storeInfo{},
-		grpcMetrics: met,
+		logger:               logger,
+		peer:                 peer,
+		stores:               map[string]*storeInfo{},
+		grpcMetrics:          met,
+		storeNodeConnections: storeNodeConnections,
+		storeNodeDialHist:    storeNodeDialHist,
 	}
 }
 
@@ -62,16 +84,19 @@ func (s *StoreSet) Update(ctx context.Context) {
 		if _, ok := s.stores[addr]; !ok {
 			level.Debug(s.logger).Log("msg", "grpc dialing", "store", addr)
 
+			startTime := time.Now()
 			conn, err := grpc.DialContext(ctx, addr,
 				grpc.WithInsecure(),
 				grpc.WithBlock(),
 				grpc.WithUnaryInterceptor(s.grpcMetrics.UnaryClientInterceptor()),
 			)
 			if err != nil {
+				s.storeNodeDialHist.WithLabelValues(dialFailure).Observe(time.Since(startTime).Seconds())
 				level.Warn(s.logger).Log("msg", "dialing connection failed; skipping", "store", addr, "err", err)
 				continue
 			}
 
+			s.storeNodeDialHist.WithLabelValues(dialSuccess).Observe(time.Since(startTime).Seconds())
 			level.Debug(s.logger).Log("msg", "successfully made grpc connection", "store", addr)
 
 			store := &storeInfo{conn: conn}
@@ -90,6 +115,8 @@ func (s *StoreSet) Update(ctx context.Context) {
 			delete(s.stores, addr)
 		}
 	}
+
+	s.storeNodeConnections.Set(float64(len(s.stores)))
 }
 
 // Get returns a list of all active stores.
