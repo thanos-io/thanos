@@ -63,10 +63,14 @@ func (s *Shipper) Sync(ctx context.Context) {
 	if err != nil {
 		level.Warn(s.logger).Log("msg", "read dir failed", "err", err)
 	}
-	for _, dn := range names {
-		dn = filepath.Join(s.dir, dn)
+	for _, fn := range names {
+		id, err := ulid.Parse(fn)
+		if err != nil {
+			continue
+		}
+		dir := filepath.Join(s.dir, fn)
 
-		fi, err := os.Stat(dn)
+		fi, err := os.Stat(dir)
 		if err != nil {
 			level.Warn(s.logger).Log("msg", "open file failed", "err", err)
 			continue
@@ -74,12 +78,8 @@ func (s *Shipper) Sync(ctx context.Context) {
 		if !fi.IsDir() {
 			continue
 		}
-		id, err := ulid.Parse(fi.Name())
-		if err != nil {
-			continue
-		}
-		if err := s.sync(ctx, id, dn); err != nil {
-			level.Error(s.logger).Log("msg", "shipping failed", "dir", dn, "err", err)
+		if err := s.sync(ctx, id, dir); err != nil {
+			level.Error(s.logger).Log("msg", "shipping failed", "dir", dir, "err", err)
 		}
 	}
 }
