@@ -9,6 +9,7 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
@@ -23,11 +24,11 @@ import (
 func registerStore(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "store node giving access to blocks in a GCS bucket")
 
-	apiAddr := cmd.Flag("api-address", "listen host:port address for the store API").
-		Default("0.0.0.0:19090").String()
+	grpcAddr := cmd.Flag("grpc-address", "listen address for gRPC endpoints").
+		Default(defaultGRPCAddr).String()
 
-	metricsAddr := cmd.Flag("metrics-address", "metrics host:port address for the sidecar").
-		Default("0.0.0.0:19091").String()
+	httpAddr := cmd.Flag("http-address", "listen address for HTTP endpoints").
+		Default(defaultHTTPAddr).String()
 
 	dataDir := cmd.Flag("tsdb.path", "data directory of TSDB").
 		Default("./data").String()
@@ -51,14 +52,14 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			*peers,
 			cluster.PeerState{
 				Type:    cluster.PeerTypeStore,
-				APIAddr: *apiAddr,
+				APIAddr: *grpcAddr,
 			},
 			false,
 		)
 		if err != nil {
 			return errors.Wrap(err, "join cluster")
 		}
-		return runStore(g, logger, metrics, *gcsBucket, *dataDir, *apiAddr, *metricsAddr)
+		return runStore(g, logger, metrics, *gcsBucket, *dataDir, *grpcAddr, *httpAddr)
 	}
 }
 
@@ -71,8 +72,8 @@ func runStore(
 	reg *prometheus.Registry,
 	gcsBucket string,
 	dataDir string,
-	apiAddr string,
-	metricsAddr string,
+	grpcAddr string,
+	httpAddr string,
 ) error {
 	{
 		gcsClient, err := storage.NewClient(context.Background())
@@ -97,12 +98,22 @@ func runStore(
 			cancel()
 		})
 
-		l, err := net.Listen("tcp", apiAddr)
+		l, err := net.Listen("tcp", grpcAddr)
 		if err != nil {
 			return errors.Wrap(err, "listen API address")
 		}
-		s := grpc.NewServer()
+
+		met := grpc_prometheus.NewServerMetrics()
+		met.EnableHandlingTimeHistogram(
+			grpc_prometheus.WithHistogramBuckets([]float64{
+				0.001, 0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4,
+			}),
+		)
+		s := grpc.NewServer(
+			grpc.UnaryInterceptor(met.UnaryServerInterceptor()),
+		)
 		storepb.RegisterStoreServer(s, gs)
+		reg.MustRegister(met)
 
 		g.Add(func() error {
 			return errors.Wrap(s.Serve(l), "serve gRPC")
@@ -115,7 +126,7 @@ func runStore(
 		registerMetrics(mux, reg)
 		registerProfile(mux)
 
-		l, err := net.Listen("tcp", metricsAddr)
+		l, err := net.Listen("tcp", httpAddr)
 		if err != nil {
 			return errors.Wrap(err, "listen metrics address")
 		}

@@ -19,7 +19,11 @@ import (
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
-const defaultClusterAddr = "0.0.0.0:10900"
+const (
+	defaultClusterAddr = "0.0.0.0:10900"
+	defaultGRPCAddr    = "0.0.0.0:10901"
+	defaultHTTPAddr    = "0.0.0.0:10902"
+)
 
 type setupFunc func(*run.Group, log.Logger, *prometheus.Registry) error
 

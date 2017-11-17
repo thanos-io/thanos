@@ -75,6 +75,12 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/grpc-ecosystem/go-grpc-prometheus"
+  packages = ["."]
+  revision = "0dafe0d496ea71181bf2dd039e7e3f44b6bd11a7"
+
+[[projects]]
+  branch = "master"
   name = "github.com/hashicorp/errwrap"
   packages = ["."]
   revision = "7554cd9344cec97297fa6649b055a8c98c2a1e55"
@@ -274,6 +280,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "ccadd63894c2918adb6d95fcd37ead63d8845cd4eadfadd1c4920e771997434c"
+  inputs-digest = "a3edd7257147fbcb0c0a8b751928fb03ae2a5993ff5edcdefa84a01e36d4f95f"
   solver-name = "gps-cdcl"
   solver-version = 1
