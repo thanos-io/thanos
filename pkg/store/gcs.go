@@ -337,6 +337,9 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 	s.mtx.RLock()
 
 	for _, b := range s.blocks {
+		if !b.matches(req.MinTime, req.MaxTime, matchers...) {
+			continue
+		}
 		var (
 			extLset = b.meta.Thanos.Labels
 			indexr  = b.indexReader()
@@ -425,6 +428,27 @@ func newGCSBlock(
 		index:  index,
 		chunks: cr,
 	}, nil
+}
+
+// matches checks whether the block potentially holds data for the given
+// time range and label matchers.
+func (b *gcsBlock) matches(mint, maxt int64, matchers ...labels.Matcher) bool {
+	if b.meta.MaxTime < mint {
+		return false
+	}
+	if b.meta.MinTime > maxt {
+		return false
+	}
+	for _, m := range matchers {
+		v, ok := b.meta.Thanos.Labels[m.Name()]
+		if !ok {
+			continue
+		}
+		if !m.Matches(v) {
+			return false
+		}
+	}
+	return true
 }
 
 func (b *gcsBlock) indexReader() tsdb.IndexReader {
