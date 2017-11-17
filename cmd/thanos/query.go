@@ -74,7 +74,7 @@ func runQuery(
 	peer *cluster.Peer,
 ) error {
 	var (
-		stores    = cluster.NewStoreSet(logger, peer)
+		stores    = cluster.NewStoreSet(logger, reg, peer)
 		queryable = query.NewQueryable(logger, stores.Get)
 		engine    = promql.NewEngine(queryable, cfg.EngineOpts(logger))
 		api       = v1.NewAPI(engine, queryable, cfg)
