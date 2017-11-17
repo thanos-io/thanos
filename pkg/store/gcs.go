@@ -102,6 +102,10 @@ func (s *GCSStore) SyncBlocks(ctx context.Context, interval time.Duration) {
 func (s *GCSStore) downloadBlocks(ctx context.Context) error {
 	objs := s.bucket.Objects(ctx, &storage.Query{Delimiter: "/"})
 
+	// Fetch a maximum of 20 blocks in parallel
+	var wg sync.WaitGroup
+	workc := make(chan struct{}, 20)
+
 	for {
 		oi, err := objs.Next()
 		if err == iterator.Done {
@@ -118,10 +122,19 @@ func (s *GCSStore) downloadBlocks(ctx context.Context) error {
 		}
 		level.Info(s.logger).Log("msg", "sync block from GCS", "id", id)
 
-		if err := s.downloadBlock(ctx, id); err != nil {
-			level.Error(s.logger).Log("msg", "syncing block failed", "err", err, "block", id.String())
-		}
+		wg.Add(1)
+		go func() {
+			workc <- struct{}{}
+
+			if err := s.downloadBlock(ctx, id); err != nil {
+				level.Error(s.logger).Log("msg", "syncing block failed", "err", err, "block", id.String())
+			}
+			wg.Done()
+			<-workc
+		}()
 	}
+	wg.Wait()
+
 	return nil
 }
 
