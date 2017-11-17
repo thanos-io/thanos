@@ -92,12 +92,14 @@ func Join(
 	}
 
 	// If the API listens on 0.0.0.0, deduce it to the advertise IP.
-	apiHost, apiPort, err := net.SplitHostPort(state.APIAddr)
-	if err != nil {
-		return nil, errors.Wrap(err, "invalid API address")
-	}
-	if apiHost == "0.0.0.0" {
-		state.APIAddr = net.JoinHostPort(addr.String(), apiPort)
+	if state.APIAddr != "" {
+		apiHost, apiPort, err := net.SplitHostPort(state.APIAddr)
+		if err != nil {
+			return nil, errors.Wrap(err, "invalid API address")
+		}
+		if apiHost == "0.0.0.0" {
+			state.APIAddr = net.JoinHostPort(addr.String(), apiPort)
+		}
 	}
 
 	l = log.With(l, "component", "cluster")
