@@ -78,7 +78,7 @@ func main() {
 
 	metrics := prometheus.NewRegistry()
 	metrics.MustRegister(
-		version.NewCollector("prometheus"),
+		version.NewCollector(fmt.Sprintf("thanos-%s", cmd)),
 		prometheus.NewGoCollector(),
 	)
 
