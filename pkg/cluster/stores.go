@@ -57,6 +57,9 @@ func NewStoreSet(logger log.Logger, reg *prometheus.Registry, peer *Peer) *Store
 		Name: "thanost_store_node_grpc_dial_failures_total",
 		Help: "Number of failed gRPC dials targeting store node.",
 	})
+	reg.MustRegister(storeNodeConnections)
+	reg.MustRegister(storeNodeDialDuration)
+	reg.MustRegister(storeNodeFailedDials)
 
 	return &StoreSet{
 		logger:                logger,
