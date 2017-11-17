@@ -8,7 +8,7 @@ import (
 
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/pkg/errors"
-	promlabels "github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
 	"golang.org/x/sync/errgroup"
@@ -69,7 +69,22 @@ func newQuerier(logger log.Logger, ctx context.Context, stores []StoreInfo, mint
 	}
 }
 
-func (q *querier) Select(ms ...*promlabels.Matcher) storage.SeriesSet {
+// matchStore returns true iff the given store may hold data for the given label matchers.
+func storeMatches(s StoreInfo, matchers ...*labels.Matcher) bool {
+	for _, m := range matchers {
+		for _, l := range s.Labels() {
+			if l.Name != m.Name {
+				continue
+			}
+			if !m.Matches(l.Value) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (q *querier) Select(ms ...*labels.Matcher) storage.SeriesSet {
 	var (
 		mtx sync.Mutex
 		all []chunkSeriesSet
@@ -83,6 +98,11 @@ func (q *querier) Select(ms ...*promlabels.Matcher) storage.SeriesSet {
 		return promSeriesSet{set: errSeriesSet{err: err}}
 	}
 	for _, s := range q.stores {
+		// We might be able to skip the store if its meta information indicates
+		// it cannot have series matching our query.
+		if !storeMatches(s, ms...) {
+			continue
+		}
 		store := s
 
 		g.Go(func() error {
