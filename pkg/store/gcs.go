@@ -316,19 +316,8 @@ func (r *seriesResult) response() ([]storepb.Series, error) {
 			})
 		}
 		sort.Slice(s.Chunks, func(i, j int) bool {
-			return s.Chunks[i].MinTime < s.Chunks[j].MaxTime
+			return s.Chunks[i].MinTime < s.Chunks[j].MinTime
 		})
-		// We do not yet handle overlapping chunks in the querying layer and should only
-		// have blocks disjoint in time and series space.
-		// Error early here until the query layer can handle it.
-		maxTime := s.Chunks[0].MaxTime
-		for _, c := range s.Chunks[1:] {
-			if c.MinTime <= maxTime {
-				return nil, errors.Errorf("chunks overlap: max %d, min %d", maxTime, c.MinTime)
-			}
-			maxTime = c.MaxTime
-		}
-
 		res = append(res, s)
 	}
 	sort.Slice(res, func(i, j int) bool {
