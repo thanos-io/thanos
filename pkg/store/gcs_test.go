@@ -160,6 +160,10 @@ func TestGCSStore_e2e(t *testing.T) {
 	})
 	testutil.Ok(t, err)
 
+	vals, err := store.LabelValues(ctx, &storepb.LabelValuesRequest{Label: "a"})
+	testutil.Ok(t, err)
+	testutil.Equals(t, []string{"1", "2"}, vals.Values)
+
 	pbseries := [][]storepb.Label{
 		{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}},
 		{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}},

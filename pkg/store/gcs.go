@@ -8,6 +8,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -330,7 +331,6 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	var g errgroup.Group
-	// TODO(fabxc): filter inspected blocks by labels.
 
 	res := &seriesResult{res: map[uint64]*seriesEntry{}}
 
@@ -401,8 +401,51 @@ func (s *GCSStore) LabelNames(context.Context, *storepb.LabelNamesRequest) (*sto
 }
 
 // LabelValues implements the storepb.StoreServer interface.
-func (s *GCSStore) LabelValues(context.Context, *storepb.LabelValuesRequest) (*storepb.LabelValuesResponse, error) {
-	return &storepb.LabelValuesResponse{}, nil
+func (s *GCSStore) LabelValues(ctx context.Context, req *storepb.LabelValuesRequest) (*storepb.LabelValuesResponse, error) {
+	var g errgroup.Group
+
+	s.mtx.RLock()
+
+	var mtx sync.Mutex
+	var sets [][]string
+
+	for _, b := range s.blocks {
+		indexr := b.indexReader()
+		// TODO(fabxc): only aggregate chunk metas first and add a subsequent fetch stage
+		// where we consolidate requests.
+		g.Go(func() error {
+			defer indexr.Close()
+
+			tpls, err := indexr.LabelValues(req.Label)
+			if err != nil {
+				return errors.Wrap(err, "lookup label values")
+			}
+			res := make([]string, 0, tpls.Len())
+
+			for i := 0; i < tpls.Len(); i++ {
+				e, err := tpls.At(i)
+				if err != nil {
+					return errors.Wrap(err, "get string tuple entry")
+				}
+				res = append(res, e[0])
+			}
+
+			mtx.Lock()
+			sets = append(sets, res)
+			mtx.Unlock()
+
+			return nil
+		})
+	}
+
+	s.mtx.RUnlock()
+
+	if err := g.Wait(); err != nil {
+		return nil, status.Error(codes.Aborted, err.Error())
+	}
+	return &storepb.LabelValuesResponse{
+		Values: mergeStringSlices(sets...),
+	}, nil
 }
 
 type gcsBlock struct {
@@ -605,4 +648,47 @@ func translateMatchers(ms []storepb.LabelMatcher) (res []labels.Matcher, err err
 		res = append(res, r)
 	}
 	return res, nil
+}
+
+func mergeStringSlices(a ...[]string) []string {
+	if len(a) == 0 {
+		return nil
+	}
+	if len(a) == 1 {
+		return a[0]
+	}
+	l := len(a) / 2
+
+	return mergeTwoStringSlices(
+		mergeStringSlices(a[:l]...),
+		mergeStringSlices(a[l:]...),
+	)
+}
+
+func mergeTwoStringSlices(a, b []string) []string {
+	maxl := len(a)
+	if len(b) > len(a) {
+		maxl = len(b)
+	}
+	res := make([]string, 0, maxl*10/9)
+
+	for len(a) > 0 && len(b) > 0 {
+		d := strings.Compare(a[0], b[0])
+
+		if d == 0 {
+			res = append(res, a[0])
+			a, b = a[1:], b[1:]
+		} else if d < 0 {
+			res = append(res, a[0])
+			a = a[1:]
+		} else if d > 0 {
+			res = append(res, b[0])
+			b = b[1:]
+		}
+	}
+
+	// Append all remaining elements.
+	res = append(res, a...)
+	res = append(res, b...)
+	return res
 }
