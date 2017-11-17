@@ -5,11 +5,10 @@ import (
 	"sync"
 
 	"github.com/go-kit/kit/log"
-	"github.com/prometheus/tsdb"
 
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/pkg/errors"
-	promlabels "github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
 	"golang.org/x/sync/errgroup"
@@ -70,10 +69,25 @@ func newQuerier(logger log.Logger, ctx context.Context, stores []StoreInfo, mint
 	}
 }
 
-func (q *querier) Select(ms ...*promlabels.Matcher) storage.SeriesSet {
+// matchStore returns true iff the given store may hold data for the given label matchers.
+func storeMatches(s StoreInfo, matchers ...*labels.Matcher) bool {
+	for _, m := range matchers {
+		for _, l := range s.Labels() {
+			if l.Name != m.Name {
+				continue
+			}
+			if !m.Matches(l.Value) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (q *querier) Select(ms ...*labels.Matcher) storage.SeriesSet {
 	var (
 		mtx sync.Mutex
-		all []tsdb.SeriesSet
+		all []chunkSeriesSet
 		// TODO(fabxc): errgroup will fail the whole query on the first encountered error.
 		// Add support for partial results/errors.
 		g errgroup.Group
@@ -84,6 +98,11 @@ func (q *querier) Select(ms ...*promlabels.Matcher) storage.SeriesSet {
 		return promSeriesSet{set: errSeriesSet{err: err}}
 	}
 	for _, s := range q.stores {
+		// We might be able to skip the store if its meta information indicates
+		// it cannot have series matching our query.
+		if !storeMatches(s, ms...) {
+			continue
+		}
 		store := s
 
 		g.Go(func() error {
@@ -99,13 +118,12 @@ func (q *querier) Select(ms ...*promlabels.Matcher) storage.SeriesSet {
 		})
 	}
 	if err := g.Wait(); err != nil {
-		return promSeriesSet{errSeriesSet{err: err}}
+		return promSeriesSet{set: errSeriesSet{err: err}}
 	}
-
-	return promSeriesSet{set: mergeAllSeriesSets(all...)}
+	return promSeriesSet{set: mergeAllSeriesSets(all...), mint: q.mint, maxt: q.maxt}
 }
 
-func (q *querier) selectSingle(client storepb.StoreClient, ms ...storepb.LabelMatcher) (tsdb.SeriesSet, error) {
+func (q *querier) selectSingle(client storepb.StoreClient, ms ...storepb.LabelMatcher) (chunkSeriesSet, error) {
 	resp, err := client.Series(q.ctx, &storepb.SeriesRequest{
 		MinTime:  q.mint,
 		MaxTime:  q.maxt,
@@ -114,7 +132,7 @@ func (q *querier) selectSingle(client storepb.StoreClient, ms ...storepb.LabelMa
 	if err != nil {
 		return nil, errors.Wrap(err, "fetch series")
 	}
-	return &storeSeriesSet{series: resp.Series, i: -1, mint: q.mint, maxt: q.maxt}, nil
+	return &storeSeriesSet{series: resp.Series, i: -1}, nil
 }
 
 func (q *querier) LabelValues(name string) ([]string, error) {
