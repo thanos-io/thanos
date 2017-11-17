@@ -4,6 +4,9 @@ import (
 	"context"
 	"sync"
 
+	"github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/query"
@@ -13,18 +16,29 @@ import (
 
 // StoreSet maintains a set of active stores. It is backed by a peer's view of the cluster.
 type StoreSet struct {
-	logger log.Logger
-	peer   *Peer
-	mtx    sync.RWMutex
-	stores map[string]*storeInfo
+	logger      log.Logger
+	peer        *Peer
+	mtx         sync.RWMutex
+	stores      map[string]*storeInfo
+	grpcMetrics *grpc_prometheus.ClientMetrics
 }
 
 // NewStoreSet returns a new store backed by the peers view of the cluster.
-func NewStoreSet(logger log.Logger, peer *Peer) *StoreSet {
+func NewStoreSet(logger log.Logger, reg *prometheus.Registry, peer *Peer) *StoreSet {
+	met := grpc_prometheus.NewClientMetrics()
+
+	met.EnableClientHandlingTimeHistogram(
+		grpc_prometheus.WithHistogramBuckets([]float64{
+			0.001, 0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4,
+		}),
+	)
+	reg.MustRegister(met)
+
 	return &StoreSet{
-		logger: logger,
-		peer:   peer,
-		stores: map[string]*storeInfo{},
+		logger:      logger,
+		peer:        peer,
+		stores:      map[string]*storeInfo{},
+		grpcMetrics: met,
 	}
 }
 
@@ -47,12 +61,19 @@ func (s *StoreSet) Update(ctx context.Context) {
 	for addr, state := range storePeers {
 		if _, ok := s.stores[addr]; !ok {
 			level.Debug(s.logger).Log("msg", "grpc dialing", "store", addr)
-			conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure(), grpc.WithBlock())
+
+			conn, err := grpc.DialContext(ctx, addr,
+				grpc.WithInsecure(),
+				grpc.WithBlock(),
+				grpc.WithUnaryInterceptor(s.grpcMetrics.UnaryClientInterceptor()),
+			)
 			if err != nil {
 				level.Warn(s.logger).Log("msg", "dialing connection failed; skipping", "store", addr, "err", err)
 				continue
 			}
+
 			level.Debug(s.logger).Log("msg", "successfully made grpc connection", "store", addr)
+
 			store := &storeInfo{conn: conn}
 			s.stores[addr] = store
 		}

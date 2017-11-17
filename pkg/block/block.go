@@ -8,9 +8,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/coreos/etcd/pkg/fileutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
+	"github.com/prometheus/tsdb/fileutil"
 )
 
 // Meta describes the a block's meta. It wraps the known TSDB meta structure and

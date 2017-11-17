@@ -46,8 +46,8 @@ func spinup(t testing.TB, cfg config) (close func()) {
 		))
 		commands = append(commands, exec.Command("thanos", "sidecar",
 			"--debug.name", fmt.Sprintf("sidecar-%d", i),
-			"--api-address", fmt.Sprintf("0.0.0.0:%d", 19090+i),
-			"--metrics-address", fmt.Sprintf("0.0.0.0:%d", 19190+i),
+			"--grpc-address", fmt.Sprintf("0.0.0.0:%d", 19090+i),
+			"--http-address", fmt.Sprintf("0.0.0.0:%d", 19190+i),
 			"--prometheus.url", fmt.Sprintf("http://localhost:%d", 9090+i),
 			"--tsdb.path", promDir,
 			"--cluster.address", fmt.Sprintf("0.0.0.0:%d", 19390+i),
@@ -61,7 +61,7 @@ func spinup(t testing.TB, cfg config) (close func()) {
 	for i := 1; i <= cfg.numQueries; i++ {
 		commands = append(commands, exec.Command("thanos", "query",
 			"--debug.name", fmt.Sprintf("query-%d", i),
-			"--api-address", fmt.Sprintf("0.0.0.0:%d", 19490+i),
+			"--http-address", fmt.Sprintf("0.0.0.0:%d", 19490+i),
 			"--cluster.address", fmt.Sprintf("0.0.0.0:%d", 19590+i),
 			"--cluster.advertise-address", fmt.Sprintf("127.0.0.1:%d", 19590+i),
 			"--cluster.peers", "127.0.0.1:19391",

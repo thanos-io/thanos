@@ -67,6 +67,10 @@
   branch = "fabxc"
 
 [[constraint]]
+  branch = "master"
+  name = "github.com/grpc-ecosystem/go-grpc-prometheus"
+
+[[constraint]]
   branch = "fabxc"
   name = "github.com/prometheus/tsdb"
 

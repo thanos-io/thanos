@@ -13,6 +13,7 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
@@ -30,11 +31,11 @@ import (
 func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "sidecar for Prometheus server")
 
-	apiAddr := cmd.Flag("api-address", "listen host:port address for the store API").
-		Default("0.0.0.0:19090").String()
+	grpcAddr := cmd.Flag("grpc-address", "listen address for gRPC endpoints").
+		Default(defaultGRPCAddr).String()
 
-	metricsAddr := cmd.Flag("metrics-address", "metrics host:port address for the sidecar").
-		Default("0.0.0.0:19091").String()
+	httpAddr := cmd.Flag("http-address", "listen address for HTTP endpoints").
+		Default(defaultHTTPAddr).String()
 
 	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API").
 		Default("http://localhost:9090").URL()
@@ -54,7 +55,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 		String()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry) error {
-		return runSidecar(g, logger, reg, *apiAddr, *metricsAddr, *promURL, *dataDir, *clusterBindAddr, *clusterAdvertiseAddr, *peers, *gcsBucket)
+		return runSidecar(g, logger, reg, *grpcAddr, *httpAddr, *promURL, *dataDir, *clusterBindAddr, *clusterAdvertiseAddr, *peers, *gcsBucket)
 	}
 }
 
@@ -62,8 +63,8 @@ func runSidecar(
 	g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
-	apiAddr string,
-	metricsAddr string,
+	grpcAddr string,
+	httpAddr string,
 	promURL *url.URL,
 	dataDir string,
 	clusterBindAddr string,
@@ -96,7 +97,7 @@ func runSidecar(
 	_, err := cluster.Join(logger, clusterBindAddr, clusterAdvertiseAddr, knownPeers,
 		cluster.PeerState{
 			Type:    cluster.PeerTypeStore,
-			APIAddr: apiAddr,
+			APIAddr: grpcAddr,
 			Labels:  externalLabels.GetPB(),
 		}, false,
 	)
@@ -110,7 +111,7 @@ func runSidecar(
 		registerMetrics(mux, reg)
 		registerProfile(mux)
 
-		l, err := net.Listen("tcp", metricsAddr)
+		l, err := net.Listen("tcp", httpAddr)
 		if err != nil {
 			return errors.Wrap(err, "listen metrics address")
 		}
@@ -122,7 +123,7 @@ func runSidecar(
 		})
 	}
 	{
-		l, err := net.Listen("tcp", apiAddr)
+		l, err := net.Listen("tcp", grpcAddr)
 		if err != nil {
 			return errors.Wrap(err, "listen API address")
 		}
@@ -136,8 +137,17 @@ func runSidecar(
 			return errors.Wrap(err, "create Prometheus proxy")
 		}
 
-		s := grpc.NewServer()
+		met := grpc_prometheus.NewServerMetrics()
+		met.EnableHandlingTimeHistogram(
+			grpc_prometheus.WithHistogramBuckets([]float64{
+				0.001, 0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4,
+			}),
+		)
+		s := grpc.NewServer(
+			grpc.UnaryInterceptor(met.UnaryServerInterceptor()),
+		)
 		storepb.RegisterStoreServer(s, proxy)
+		reg.MustRegister(met)
 
 		g.Add(func() error {
 			return errors.Wrap(s.Serve(l), "serve gRPC")

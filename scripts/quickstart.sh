@@ -39,8 +39,8 @@ for i in `seq 1 3`
 do
   thanos sidecar \
     --debug.name                sidecar-${i} \
-    --api-address               0.0.0.0:1909${i} \
-    --metrics-address           0.0.0.0:1919${i} \
+    --grpc-address              0.0.0.0:1909${i} \
+    --http-address              0.0.0.0:1919${i} \
     --prometheus.url            http://localhost:909${i} \
     --tsdb.path                 data/prom${i} \
     --gcs.bucket                "${GCS_BUCKET}" \
@@ -58,8 +58,8 @@ then
   thanos store \
     --debug.name                store \
     --log.level debug \
-    --api-address               0.0.0.0:19691 \
-    --metrics-address           0.0.0.0:19791 \
+    --grpc-address              0.0.0.0:19691 \
+    --http-address              0.0.0.0:19791 \
     --tsdb.path                 data/store \
     --gcs.bucket                "${GCS_BUCKET}" \
     --cluster.address           0.0.0.0:19891 \
@@ -74,7 +74,7 @@ for i in `seq 1 2`
 do
   thanos query \
     --debug.name                query-${i} \
-    --api-address               0.0.0.0:1949${i} \
+    --http-address              0.0.0.0:1949${i} \
     --cluster.address           0.0.0.0:1959${i} \
     --cluster.advertise-address 127.0.0.1:1959${i} \
     --cluster.peers             127.0.0.1:19391 &

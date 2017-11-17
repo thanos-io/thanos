@@ -25,8 +25,8 @@ import (
 func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
 
-	apiAddr := cmd.Flag("api-address", "listen host:port address for the query API").
-		Default("0.0.0.0:19099").String()
+	httpAddr := cmd.Flag("http-address", "listen host:port for HTTP endpoints").
+		Default(defaultHTTPAddr).String()
 
 	queryTimeout := cmd.Flag("query.timeout", "maximum time to process query by query node").
 		Default("2m").Duration()
@@ -49,15 +49,14 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*clusterAdvertiseAddr,
 			*peers,
 			cluster.PeerState{
-				Type:    cluster.PeerTypeQuery,
-				APIAddr: *apiAddr,
+				Type: cluster.PeerTypeQuery,
 			},
 			true,
 		)
 		if err != nil {
 			return errors.Wrap(err, "join cluster")
 		}
-		return runQuery(g, logger, metrics, *apiAddr, query.Config{
+		return runQuery(g, logger, metrics, *httpAddr, query.Config{
 			QueryTimeout:         *queryTimeout,
 			MaxConcurrentQueries: *maxConcurrentQueries,
 		}, peer)
@@ -70,12 +69,12 @@ func runQuery(
 	g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
-	apiAddr string,
+	httpAddr string,
 	cfg query.Config,
 	peer *cluster.Peer,
 ) error {
 	var (
-		stores    = cluster.NewStoreSet(logger, peer)
+		stores    = cluster.NewStoreSet(logger, reg, peer)
 		queryable = query.NewQueryable(logger, stores.Get)
 		engine    = promql.NewEngine(queryable, cfg.EngineOpts(logger))
 		api       = v1.NewAPI(engine, queryable, cfg)
@@ -105,9 +104,9 @@ func runQuery(
 		registerProfile(mux)
 		mux.Handle("/", router)
 
-		l, err := net.Listen("tcp", apiAddr)
+		l, err := net.Listen("tcp", httpAddr)
 		if err != nil {
-			return errors.Wrapf(err, "listen on address %s", apiAddr)
+			return errors.Wrapf(err, "listen on address %s", httpAddr)
 		}
 
 		g.Add(func() error {
