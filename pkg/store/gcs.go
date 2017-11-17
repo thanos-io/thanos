@@ -8,6 +8,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -101,6 +102,10 @@ func (s *GCSStore) SyncBlocks(ctx context.Context, interval time.Duration) {
 func (s *GCSStore) downloadBlocks(ctx context.Context) error {
 	objs := s.bucket.Objects(ctx, &storage.Query{Delimiter: "/"})
 
+	// Fetch a maximum of 20 blocks in parallel.
+	var wg sync.WaitGroup
+	workc := make(chan struct{}, 20)
+
 	for {
 		oi, err := objs.Next()
 		if err == iterator.Done {
@@ -117,10 +122,19 @@ func (s *GCSStore) downloadBlocks(ctx context.Context) error {
 		}
 		level.Info(s.logger).Log("msg", "sync block from GCS", "id", id)
 
-		if err := s.downloadBlock(ctx, id); err != nil {
-			level.Error(s.logger).Log("msg", "syncing block failed", "err", err, "block", id.String())
-		}
+		wg.Add(1)
+		go func() {
+			workc <- struct{}{}
+
+			if err := s.downloadBlock(ctx, id); err != nil {
+				level.Error(s.logger).Log("msg", "syncing block failed", "err", err, "block", id.String())
+			}
+			wg.Done()
+			<-workc
+		}()
 	}
+	wg.Wait()
+
 	return nil
 }
 
@@ -302,19 +316,8 @@ func (r *seriesResult) response() ([]storepb.Series, error) {
 			})
 		}
 		sort.Slice(s.Chunks, func(i, j int) bool {
-			return s.Chunks[i].MinTime < s.Chunks[j].MaxTime
+			return s.Chunks[i].MinTime < s.Chunks[j].MinTime
 		})
-		// We do not yet handle overlapping chunks in the querying layer and should only
-		// have blocks disjoint in time and series space.
-		// Error early here until the query layer can handle it.
-		maxTime := s.Chunks[0].MaxTime
-		for _, c := range s.Chunks[1:] {
-			if c.MinTime <= maxTime {
-				return nil, errors.Errorf("chunks overlap: max %d, min %d", maxTime, c.MinTime)
-			}
-			maxTime = c.MaxTime
-		}
-
 		res = append(res, s)
 	}
 	sort.Slice(res, func(i, j int) bool {
@@ -330,19 +333,27 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	var g errgroup.Group
-	// TODO(fabxc): filter inspected blocks by labels.
 
 	res := &seriesResult{res: map[uint64]*seriesEntry{}}
 
 	s.mtx.RLock()
 
 	for _, b := range s.blocks {
-		block := b
-
+		if !b.matches(req.MinTime, req.MaxTime, matchers...) {
+			continue
+		}
+		var (
+			extLset = b.meta.Thanos.Labels
+			indexr  = b.indexReader()
+			chunkr  = b.chunkReader()
+		)
 		// TODO(fabxc): only aggregate chunk metas first and add a subsequent fetch stage
 		// where we consolidate requests.
 		g.Go(func() error {
-			set, err := tsdb.LookupChunkSeries(block.index, nil, matchers...)
+			defer indexr.Close()
+			defer chunkr.Close()
+
+			set, err := tsdb.LookupChunkSeries(indexr, nil, matchers...)
 			if err != nil {
 				return errors.Wrap(err, "get series set")
 			}
@@ -359,13 +370,13 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 					if meta.MinTime > req.MaxTime {
 						break
 					}
-					meta.Chunk, err = block.chunks.Chunk(meta.Ref)
+					meta.Chunk, err = chunkr.Chunk(meta.Ref)
 					if err != nil {
 						return errors.Wrap(err, "fetch chunk")
 					}
 					chks = append(chks, meta)
 				}
-				res.add(lset, block.meta.Thanos.Labels, chks)
+				res.add(lset, extLset, chks)
 			}
 			if err := set.Err(); err != nil {
 				return errors.Wrap(err, "read series set")
@@ -392,15 +403,59 @@ func (s *GCSStore) LabelNames(context.Context, *storepb.LabelNamesRequest) (*sto
 }
 
 // LabelValues implements the storepb.StoreServer interface.
-func (s *GCSStore) LabelValues(context.Context, *storepb.LabelValuesRequest) (*storepb.LabelValuesResponse, error) {
-	return &storepb.LabelValuesResponse{}, nil
+func (s *GCSStore) LabelValues(ctx context.Context, req *storepb.LabelValuesRequest) (*storepb.LabelValuesResponse, error) {
+	var g errgroup.Group
+
+	s.mtx.RLock()
+
+	var mtx sync.Mutex
+	var sets [][]string
+
+	for _, b := range s.blocks {
+		indexr := b.indexReader()
+		// TODO(fabxc): only aggregate chunk metas first and add a subsequent fetch stage
+		// where we consolidate requests.
+		g.Go(func() error {
+			defer indexr.Close()
+
+			tpls, err := indexr.LabelValues(req.Label)
+			if err != nil {
+				return errors.Wrap(err, "lookup label values")
+			}
+			res := make([]string, 0, tpls.Len())
+
+			for i := 0; i < tpls.Len(); i++ {
+				e, err := tpls.At(i)
+				if err != nil {
+					return errors.Wrap(err, "get string tuple entry")
+				}
+				res = append(res, e[0])
+			}
+
+			mtx.Lock()
+			sets = append(sets, res)
+			mtx.Unlock()
+
+			return nil
+		})
+	}
+
+	s.mtx.RUnlock()
+
+	if err := g.Wait(); err != nil {
+		return nil, status.Error(codes.Aborted, err.Error())
+	}
+	return &storepb.LabelValuesResponse{
+		Values: mergeStringSlices(sets...),
+	}, nil
 }
 
 type gcsBlock struct {
-	meta   *block.Meta
-	dir    string
-	index  tsdb.IndexReader
-	chunks tsdb.ChunkReader
+	meta           *block.Meta
+	dir            string
+	pendingReaders sync.WaitGroup
+	index          tsdb.IndexReader
+	chunks         tsdb.ChunkReader
 }
 
 func newGCSBlock(
@@ -420,7 +475,60 @@ func newGCSBlock(
 	}, nil
 }
 
+// matches checks whether the block potentially holds data for the given
+// time range and label matchers.
+func (b *gcsBlock) matches(mint, maxt int64, matchers ...labels.Matcher) bool {
+	if b.meta.MaxTime < mint {
+		return false
+	}
+	if b.meta.MinTime > maxt {
+		return false
+	}
+	for _, m := range matchers {
+		v, ok := b.meta.Thanos.Labels[m.Name()]
+		if !ok {
+			continue
+		}
+		if !m.Matches(v) {
+			return false
+		}
+	}
+	return true
+}
+
+func (b *gcsBlock) indexReader() tsdb.IndexReader {
+	b.pendingReaders.Add(1)
+	return &closeIndex{b.index, b.pendingReaders.Done}
+}
+
+func (b *gcsBlock) chunkReader() tsdb.ChunkReader {
+	b.pendingReaders.Add(1)
+	return &closeChunks{b.chunks, b.pendingReaders.Done}
+}
+
+type closeIndex struct {
+	tsdb.IndexReader
+	close func()
+}
+
+func (c *closeIndex) Close() error {
+	c.close()
+	return nil
+}
+
+type closeChunks struct {
+	tsdb.ChunkReader
+	close func()
+}
+
+func (c *closeChunks) Close() error {
+	c.close()
+	return nil
+}
+
+// Close waits for all pending readers to finish and then closes all underlying resources.
 func (b *gcsBlock) Close() error {
+	b.pendingReaders.Wait()
 	b.index.Close()
 	b.chunks.Close()
 	return nil
@@ -542,4 +650,47 @@ func translateMatchers(ms []storepb.LabelMatcher) (res []labels.Matcher, err err
 		res = append(res, r)
 	}
 	return res, nil
+}
+
+func mergeStringSlices(a ...[]string) []string {
+	if len(a) == 0 {
+		return nil
+	}
+	if len(a) == 1 {
+		return a[0]
+	}
+	l := len(a) / 2
+
+	return mergeTwoStringSlices(
+		mergeStringSlices(a[:l]...),
+		mergeStringSlices(a[l:]...),
+	)
+}
+
+func mergeTwoStringSlices(a, b []string) []string {
+	maxl := len(a)
+	if len(b) > len(a) {
+		maxl = len(b)
+	}
+	res := make([]string, 0, maxl*10/9)
+
+	for len(a) > 0 && len(b) > 0 {
+		d := strings.Compare(a[0], b[0])
+
+		if d == 0 {
+			res = append(res, a[0])
+			a, b = a[1:], b[1:]
+		} else if d < 0 {
+			res = append(res, a[0])
+			a = a[1:]
+		} else if d > 0 {
+			res = append(res, b[0])
+			b = b[1:]
+		}
+	}
+
+	// Append all remaining elements.
+	res = append(res, a...)
+	res = append(res, b...)
+	return res
 }

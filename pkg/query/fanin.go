@@ -15,7 +15,7 @@ import (
 func mergeAllSeriesSets(all ...chunkSeriesSet) chunkSeriesSet {
 	switch len(all) {
 	case 0:
-		panic("unexpected")
+		return &storeSeriesSet{}
 	case 1:
 		return all[0]
 	}
