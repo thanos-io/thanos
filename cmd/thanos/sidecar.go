@@ -94,7 +94,7 @@ func runSidecar(
 		}
 	}
 
-	_, err := cluster.Join(logger, clusterBindAddr, clusterAdvertiseAddr, knownPeers,
+	_, err := cluster.Join(logger, reg, clusterBindAddr, clusterAdvertiseAddr, knownPeers,
 		cluster.PeerState{
 			Type:    cluster.PeerTypeStore,
 			APIAddr: grpcAddr,
