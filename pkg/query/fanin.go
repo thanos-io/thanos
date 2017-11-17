@@ -1,63 +1,131 @@
 package query
 
 import (
+	"sort"
 	"unsafe"
 
 	"strings"
 
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/chunks"
-	"github.com/prometheus/tsdb/labels"
 )
 
-func mergeAllSeriesSets(all ...tsdb.SeriesSet) tsdb.SeriesSet {
+func mergeAllSeriesSets(all ...chunkSeriesSet) chunkSeriesSet {
 	switch len(all) {
 	case 0:
-		return errSeriesSet{err: nil}
+		panic("unexpected")
 	case 1:
 		return all[0]
 	}
 	h := len(all) / 2
 
-	return tsdb.NewMergedSeriesSet(
+	return newMergedSeriesSet(
 		mergeAllSeriesSets(all[:h]...),
 		mergeAllSeriesSets(all[h:]...),
 	)
 }
 
-func translateChunk(c storepb.Chunk) (tsdb.ChunkMeta, error) {
-	if c.Type != storepb.Chunk_XOR {
-		return tsdb.ChunkMeta{}, errors.Errorf("unrecognized chunk encoding %d", c.Type)
+type chunkSeriesSet interface {
+	Next() bool
+	At() ([]storepb.Label, []storepb.Chunk)
+	Err() error
+}
+
+// mergedSeriesSet takes two series sets as a single series set. The input series sets
+// must be sorted and sequential in time, i.e. if they have the same label set,
+// the datapoints of a must be before the datapoints of b.
+type mergedSeriesSet struct {
+	a, b chunkSeriesSet
+
+	lset         []storepb.Label
+	chunks       []storepb.Chunk
+	adone, bdone bool
+}
+
+// NewMergedSeriesSet takes two series sets as a single series set.
+// Series that occur in both sets should have disjoint time ranges and a should com before b.
+// If the ranges overlap, the result series will still have monotonically increasing timestamps,
+// but all samples in the overlapping range in b will be dropped.
+func newMergedSeriesSet(a, b chunkSeriesSet) *mergedSeriesSet {
+	s := &mergedSeriesSet{a: a, b: b}
+	// Initialize first elements of both sets as Next() needs
+	// one element look-ahead.
+	s.adone = !s.a.Next()
+	s.bdone = !s.b.Next()
+
+	return s
+}
+
+func (s *mergedSeriesSet) At() ([]storepb.Label, []storepb.Chunk) {
+	return s.lset, s.chunks
+}
+
+func (s *mergedSeriesSet) Err() error {
+	if s.a.Err() != nil {
+		return s.a.Err()
 	}
-	cc, err := chunks.FromData(chunks.EncXOR, c.Data)
-	if err != nil {
-		return tsdb.ChunkMeta{}, errors.Wrap(err, "convert chunk")
+	return s.b.Err()
+}
+
+func (s *mergedSeriesSet) compare() int {
+	if s.adone {
+		return 1
 	}
-	return tsdb.ChunkMeta{MinTime: c.MinTime, MaxTime: c.MaxTime, Chunk: cc}, nil
+	if s.bdone {
+		return -1
+	}
+	lsetA, _ := s.a.At()
+	lsetB, _ := s.b.At()
+	return storepb.CompareLabels(lsetA, lsetB)
+}
+
+func (s *mergedSeriesSet) Next() bool {
+	if s.adone && s.bdone || s.Err() != nil {
+		return false
+	}
+
+	d := s.compare()
+
+	// Both sets contain the current series. Chain them into a single one.
+	if d > 0 {
+		s.lset, s.chunks = s.b.At()
+		s.bdone = !s.b.Next()
+	} else if d < 0 {
+		s.lset, s.chunks = s.a.At()
+		s.adone = !s.a.Next()
+	} else {
+		// Concatenate chunks from both series sets. They may be out of order
+		// w.r.t to their time range. This must be accounted for later.
+		lset, chksA := s.a.At()
+		_, chksB := s.b.At()
+
+		s.lset = lset
+		// Slice reuse is not generally safe with nested merge iterators.
+		// We err on the safe side an create a new slice.
+		s.chunks = make([]storepb.Chunk, 0, len(chksA)+len(chksB))
+		s.chunks = append(s.chunks, chksA...)
+		s.chunks = append(s.chunks, chksB...)
+
+		s.adone = !s.a.Next()
+		s.bdone = !s.b.Next()
+	}
+	return true
 }
 
 type errSeriesSet struct {
 	err error
 }
 
-var _ tsdb.SeriesSet = (*errSeriesSet)(nil)
-
-func (errSeriesSet) Next() bool      { return false }
-func (s errSeriesSet) Err() error    { return s.err }
-func (errSeriesSet) At() tsdb.Series { return nil }
+func (errSeriesSet) Next() bool                             { return false }
+func (s errSeriesSet) Err() error                           { return s.err }
+func (errSeriesSet) At() ([]storepb.Label, []storepb.Chunk) { return nil, nil }
 
 type storeSeriesSet struct {
-	series     []storepb.Series
-	mint, maxt int64
-
-	i   int
-	cur *storeSeries
+	series []storepb.Series
+	i      int
 }
-
-var _ tsdb.SeriesSet = (*storeSeriesSet)(nil)
 
 func (s *storeSeriesSet) Next() bool {
 	if s.i >= len(s.series)-1 {
@@ -68,7 +136,6 @@ func (s *storeSeriesSet) Next() bool {
 	if len(s.series[s.i].Chunks) == 0 {
 		return s.Next()
 	}
-	s.cur = &storeSeries{s: s.series[s.i], mint: s.mint, maxt: s.maxt}
 	return true
 }
 
@@ -76,24 +143,33 @@ func (storeSeriesSet) Err() error {
 	return nil
 }
 
-func (s storeSeriesSet) At() tsdb.Series {
-	return s.cur
+func (s storeSeriesSet) At() ([]storepb.Label, []storepb.Chunk) {
+	ser := s.series[s.i]
+	return ser.Labels, ser.Chunks
 }
 
-// storeSeries implements storage.Series for a series retrieved from the store API.
-type storeSeries struct {
-	s          storepb.Series
+// chunkSeries implements storage.Series for a series on storepb types.
+type chunkSeries struct {
+	lset       labels.Labels
+	chunks     []storepb.Chunk
 	mint, maxt int64
 }
 
-var _ tsdb.Series = (*storeSeries)(nil)
+func newChunkSeries(lset []storepb.Label, chunks []storepb.Chunk, mint, maxt int64) *chunkSeries {
+	sort.Slice(chunks, func(i, j int) bool {
+		return chunks[i].MinTime < chunks[j].MinTime
+	})
+	l := *(*labels.Labels)(unsafe.Pointer(&lset)) // YOLO!
 
-func (s *storeSeries) Labels() labels.Labels {
-	return *(*labels.Labels)(unsafe.Pointer(&s.s.Labels)) // YOLO!
+	return &chunkSeries{lset: l, chunks: chunks, mint: mint, maxt: maxt}
 }
 
-func (s *storeSeries) Iterator() tsdb.SeriesIterator {
-	return newChunkSeriesIterator(s.s.Chunks, s.mint, s.maxt)
+func (s *chunkSeries) Labels() labels.Labels {
+	return s.lset
+}
+
+func (s *chunkSeries) Iterator() storage.SeriesIterator {
+	return newChunkSeriesIterator(s.chunks, s.mint, s.maxt)
 }
 
 type errSeriesIterator struct {
@@ -108,61 +184,54 @@ func (s errSeriesIterator) Err() error         { return s.err }
 // chunkSeriesIterator implements a series iterator on top
 // of a list of time-sorted, non-overlapping chunks.
 type chunkSeriesIterator struct {
-	chunks     []tsdb.ChunkMeta
+	chunks     []storepb.Chunk
 	maxt, mint int64
 
 	i   int
 	cur chunks.Iterator
+	err error
 }
 
 func newChunkSeriesIterator(cs []storepb.Chunk, mint, maxt int64) storage.SeriesIterator {
-	cms := make([]tsdb.ChunkMeta, 0, len(cs))
-
-	for _, c := range cs {
-		tc, err := translateChunk(c)
-		if err != nil {
-			return errSeriesIterator{err: err}
-		}
-		cms = append(cms, tc)
-	}
-
-	it := cms[0].Chunk.Iterator()
-
-	return &chunkSeriesIterator{
-		chunks: cms,
+	it := &chunkSeriesIterator{
+		chunks: cs,
 		i:      0,
-		cur:    it,
-
-		mint: mint,
-		maxt: maxt,
+		mint:   mint,
+		maxt:   maxt,
 	}
+	it.openChunk()
+	return it
+}
+
+func (it *chunkSeriesIterator) openChunk() bool {
+	c, err := chunks.FromData(chunks.EncXOR, it.chunks[it.i].Data)
+	if err != nil {
+		it.err = err
+		return false
+	}
+	it.cur = c.Iterator()
+	return true
 }
 
 func (it *chunkSeriesIterator) Seek(t int64) (ok bool) {
+	if it.err != nil {
+		return false
+	}
 	if t > it.maxt {
 		return false
 	}
-
-	// Seek to the first valid value after t.
-	if t < it.mint {
-		t = it.mint
-	}
-
-	for ; it.chunks[it.i].MaxTime < t; it.i++ {
-		if it.i == len(it.chunks)-1 {
+	// We generally expect the chunks already to be cut down
+	// to the range we are interested in. There's not much to be gained from
+	// hopping across chunks so we just call next until we reach t.
+	for {
+		ct, _ := it.At()
+		if ct >= t {
+			return true
+		}
+		if !it.Next() {
 			return false
 		}
 	}
-
-	it.cur = it.chunks[it.i].Chunk.Iterator()
-
-	for it.cur.Next() {
-		t0, _ := it.cur.At()
-		if t0 >= t {
-			return true
-		}
-	}
-	return false
 }
 
 func (it *chunkSeriesIterator) At() (t int64, v float64) {
@@ -193,13 +262,20 @@ func (it *chunkSeriesIterator) Next() bool {
 		return false
 	}
 
-	it.i++
-	it.cur = it.chunks[it.i].Chunk.Iterator()
+	lastT, _ := it.At()
 
-	return it.Next()
+	it.i++
+	if !it.openChunk() {
+		return false
+	}
+	// Ensure we don't go back in time.
+	return it.Seek(lastT + 1)
 }
 
 func (it *chunkSeriesIterator) Err() error {
+	if it.err != nil {
+		return it.err
+	}
 	return it.cur.Err()
 }
 

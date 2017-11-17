@@ -91,8 +91,8 @@ type storeInfo struct {
 
 var _ query.StoreInfo = (*storeInfo)(nil)
 
-func (s *storeInfo) Conn() *grpc.ClientConn {
-	return s.conn
+func (s *storeInfo) Client() storepb.StoreClient {
+	return storepb.NewStoreClient(s.conn)
 }
 
 func (s *storeInfo) Labels() []storepb.Label {
