@@ -13,6 +13,8 @@ import (
 	"time"
 	"unsafe"
 
+	"net"
+
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
@@ -26,11 +28,12 @@ import (
 // Prometheus represents a test instance for integration testing.
 // It can be populated with data before being started.
 type Prometheus struct {
-	dir     string
-	addr    string
+	dir string
+	db  *tsdb.DB
+
 	running bool
-	db      *tsdb.DB
 	cmd     *exec.Cmd
+	addr    string
 }
 
 func NewTSDB() (*tsdb.DB, error) {
@@ -45,7 +48,7 @@ func NewTSDB() (*tsdb.DB, error) {
 }
 
 // NewPrometheus creates a new test Prometheus instance that will listen on address.
-func NewPrometheus(address string) (*Prometheus, error) {
+func NewPrometheus() (*Prometheus, error) {
 	db, err := NewTSDB()
 	if err != nil {
 		return nil, err
@@ -59,9 +62,23 @@ func NewPrometheus(address string) (*Prometheus, error) {
 
 	return &Prometheus{
 		dir:  db.Dir(),
-		addr: address,
 		db:   db,
+		addr: "<prometheus-not-started>",
 	}, nil
+}
+
+func getFreePort() (int, error) {
+	addr, err := net.ResolveTCPAddr("tcp", ":0")
+	if err != nil {
+		return 0, err
+	}
+
+	l, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		return 0, err
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
 // Start running the Prometheus instance and return.
@@ -72,6 +89,12 @@ func (p *Prometheus) Start() error {
 		return err
 	}
 
+	port, err := getFreePort()
+	if err != nil {
+		return err
+	}
+
+	p.addr = fmt.Sprintf("localhost:%d", port)
 	p.cmd = exec.Command(
 		"prometheus",
 		"--storage.tsdb.path="+p.db.Dir(),
@@ -87,6 +110,11 @@ func (p *Prometheus) Start() error {
 	time.Sleep(2 * time.Second)
 
 	return nil
+}
+
+// Addr gets correct address after Start method.
+func (p *Prometheus) Addr() string {
+	return p.addr
 }
 
 // SetConfig updates the contents of the config file.

@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"fmt"
+
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/prometheus/prometheus/pkg/timestamp"
@@ -14,7 +16,7 @@ import (
 )
 
 func TestPrometheusProxy_Series(t *testing.T) {
-	p, err := testutil.NewPrometheus(":12345")
+	p, err := testutil.NewPrometheus()
 	testutil.Ok(t, err)
 
 	baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
@@ -31,7 +33,7 @@ func TestPrometheusProxy_Series(t *testing.T) {
 	testutil.Ok(t, p.Start())
 	defer p.Stop()
 
-	u, err := url.Parse("http://localhost:12345")
+	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
 	proxy, err := NewPrometheusProxy(nil, nil, nil, u,
@@ -84,7 +86,7 @@ func expandChunk(cit chunks.Iterator) (res []sample) {
 }
 
 func TestPrometheusProxy_LabelValues(t *testing.T) {
-	p, err := testutil.NewPrometheus(":12346")
+	p, err := testutil.NewPrometheus()
 	testutil.Ok(t, err)
 
 	a := p.Appender()
@@ -99,7 +101,7 @@ func TestPrometheusProxy_LabelValues(t *testing.T) {
 	testutil.Ok(t, p.Start())
 	defer p.Stop()
 
-	u, err := url.Parse("http://localhost:12346/")
+	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
 	proxy, err := NewPrometheusProxy(nil, nil, nil, u, nil)
@@ -111,4 +113,63 @@ func TestPrometheusProxy_LabelValues(t *testing.T) {
 	testutil.Ok(t, err)
 
 	testutil.Equals(t, []string{"a", "b", "c"}, resp.Values)
+}
+
+func TestPrometheusProxy_Series_MatchExternalLabel(t *testing.T) {
+	p, err := testutil.NewPrometheus()
+	testutil.Ok(t, err)
+
+	baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
+
+	a := p.Appender()
+	a.Add(labels.FromStrings("a", "b"), baseT+100, 1)
+	a.Add(labels.FromStrings("a", "b"), baseT+200, 2)
+	a.Add(labels.FromStrings("a", "b"), baseT+300, 3)
+	testutil.Ok(t, a.Commit())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	testutil.Ok(t, p.Start())
+	defer p.Stop()
+
+	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
+	testutil.Ok(t, err)
+
+	proxy, err := NewPrometheusProxy(nil, nil, nil, u,
+		func() labels.Labels {
+			return labels.FromStrings("region", "eu-west")
+		})
+	testutil.Ok(t, err)
+
+	resp, err := proxy.Series(ctx, &storepb.SeriesRequest{
+		MinTime: baseT + 101,
+		MaxTime: baseT + 300,
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
+			{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"},
+		},
+	})
+	testutil.Ok(t, err)
+
+	testutil.Equals(t, 1, len(resp.Series))
+
+	testutil.Equals(t, []storepb.Label{
+		{Name: "a", Value: "b"},
+		{Name: "region", Value: "eu-west"},
+	}, resp.Series[0].Labels)
+
+	// However it should not match wrong external label.
+	resp, err = proxy.Series(ctx, &storepb.SeriesRequest{
+		MinTime: baseT + 101,
+		MaxTime: baseT + 300,
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
+			{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west2"}, // Non existing label value.
+		},
+	})
+	testutil.Ok(t, err)
+
+	// No series.
+	testutil.Equals(t, 0, len(resp.Series))
 }
