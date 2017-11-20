@@ -16,6 +16,7 @@ import (
 
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/chunks"
 	"github.com/prometheus/tsdb/fileutil"
@@ -35,9 +36,10 @@ import (
 // GCSStore implements the store API backed by a GCS bucket. It loads all index
 // files to local disk.
 type GCSStore struct {
-	logger log.Logger
-	bucket *storage.BucketHandle
-	dir    string
+	logger  log.Logger
+	metrics *gcsStoreMetrics
+	bucket  *storage.BucketHandle
+	dir     string
 
 	mtx    sync.RWMutex
 	blocks map[ulid.ULID]*gcsBlock
@@ -45,9 +47,42 @@ type GCSStore struct {
 
 var _ storepb.StoreServer = (*GCSStore)(nil)
 
+type gcsStoreMetrics struct {
+	blockDownloads       prometheus.Counter
+	blockDownloadsFailed prometheus.Counter
+}
+
+func newGCSStoreMetrics(reg *prometheus.Registry, s *GCSStore) *gcsStoreMetrics {
+	var m gcsStoreMetrics
+
+	m.blockDownloads = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_gcs_store_block_downloads_total",
+		Help: "Total number of block download attempts.",
+	})
+	m.blockDownloadsFailed = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_gcs_store_block_downloads_failed_total",
+		Help: "Total number of failed block download attempts.",
+	})
+	blocksLoaded := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "thanos_gcs_store_blocks_loaded",
+		Help: "Number of currently loaded blocks.",
+	}, func() float64 {
+		return float64(s.numBlocks())
+	})
+
+	if reg != nil {
+		reg.MustRegister(
+			m.blockDownloads,
+			m.blockDownloadsFailed,
+			blocksLoaded,
+		)
+	}
+	return &m
+}
+
 // NewGCSStore creates a new GCS backed store that caches index files to disk. It loads
 // pre-exisiting cache entries in dir on creation.
-func NewGCSStore(logger log.Logger, bucket *storage.BucketHandle, dir string) (*GCSStore, error) {
+func NewGCSStore(logger log.Logger, reg *prometheus.Registry, bucket *storage.BucketHandle, dir string) (*GCSStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -57,6 +92,7 @@ func NewGCSStore(logger log.Logger, bucket *storage.BucketHandle, dir string) (*
 		dir:    dir,
 		blocks: map[ulid.ULID]*gcsBlock{},
 	}
+	s.metrics = newGCSStoreMetrics(reg, s)
 
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return nil, errors.Wrap(err, "create dir")
@@ -125,9 +161,11 @@ func (s *GCSStore) downloadBlocks(ctx context.Context) error {
 		wg.Add(1)
 		go func() {
 			workc <- struct{}{}
+			s.metrics.blockDownloads.Inc()
 
 			if err := s.downloadBlock(ctx, id); err != nil {
 				level.Error(s.logger).Log("msg", "syncing block failed", "err", err, "block", id.String())
+				s.metrics.blockDownloadsFailed.Inc()
 			}
 			wg.Done()
 			<-workc

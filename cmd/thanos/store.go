@@ -82,7 +82,7 @@ func runStore(
 			return errors.Wrap(err, "create GCS client")
 		}
 
-		gs, err := store.NewGCSStore(logger, gcsClient.Bucket(gcsBucket), dataDir)
+		gs, err := store.NewGCSStore(logger, reg, gcsClient.Bucket(gcsBucket), dataDir)
 		if err != nil {
 			return errors.Wrap(err, "create GCS store")
 		}
