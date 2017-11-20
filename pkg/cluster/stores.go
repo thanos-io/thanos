@@ -16,11 +16,6 @@ import (
 	"google.golang.org/grpc"
 )
 
-const (
-	dialSuccess = "success"
-	dialFailure = "failure"
-)
-
 // StoreSet maintains a set of active stores. It is backed by a peer's view of the cluster.
 type StoreSet struct {
 	logger      log.Logger
@@ -79,7 +74,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 	// we depend on it. However, in the future this may change when we fetch additional information
 	// about storePeers or make the set self-updating through events rather than explicit calls to Update.
 	storePeers := map[string]PeerState{}
-	for _, ps := range s.peer.PeerStates(PeerTypeStore) {
+	for _, ps := range s.peer.PeerStates(AnyStorePeerCond()) {
 		storePeers[ps.APIAddr] = ps
 	}
 
@@ -113,7 +108,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 		}
 
 		// Always fetch up-to-date labels propagated in peer state.
-		s.stores[addr].setLabels(state.Labels)
+		s.stores[addr].setLabels(state.Metadata.Labels)
 	}
 
 	// Delete stores that no longer exist.
