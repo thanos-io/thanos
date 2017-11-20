@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"io"
+	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/improbable-eng/thanos/pkg/block"
 
+	"github.com/oklog/run"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -275,7 +277,7 @@ func (s *GCSStore) loadFromDisk(id ulid.ULID) (*gcsBlock, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "read meta file")
 	}
-	b, err := newGCSBlock(context.TODO(), meta, indexr, s.bucket)
+	b, err := newGCSBlock(context.TODO(), s.logger, meta, indexr, s.bucket)
 	if err != nil {
 		return nil, errors.Wrap(err, "open GCS block")
 	}
@@ -288,80 +290,47 @@ func (s *GCSStore) Info(context.Context, *storepb.InfoRequest) (*storepb.InfoRes
 	return &storepb.InfoResponse{}, nil
 }
 
-type seriesResult struct {
-	mtx sync.Mutex
-	res map[uint64]*seriesEntry
-}
-
 type seriesEntry struct {
-	lset         labels.Labels
-	chunks       []tsdb.ChunkMeta
-	externalLset map[string]string // extra labels to attach, overrules lset
+	lset []storepb.Label
+	chks []tsdb.ChunkMeta
+}
+type gcsSeriesSet struct {
+	set    []seriesEntry
+	chunkr *gcsChunkReader
+	i      int
+	err    error
+	chks   []storepb.Chunk
 }
 
-func (r *seriesResult) add(lset labels.Labels, externalLset map[string]string, chks []tsdb.ChunkMeta) {
-	if len(chks) == 0 {
-		return
+func (s *gcsSeriesSet) Next() bool {
+	if s.i >= len(s.set)-1 {
+		return false
 	}
-	h := lset.Hash()
+	s.i++
+	s.chks = make([]storepb.Chunk, 0, len(s.set[s.i].chks))
 
-	r.mtx.Lock()
-	defer r.mtx.Unlock()
-
-	e, ok := r.res[h]
-	if !ok {
-		e = &seriesEntry{lset: lset, externalLset: externalLset}
-		r.res[h] = e
+	for _, c := range s.set[s.i].chks {
+		chk, err := s.chunkr.Chunk(c.Ref)
+		if err != nil {
+			s.err = err
+			return false
+		}
+		s.chks = append(s.chks, storepb.Chunk{
+			MinTime: c.MinTime,
+			MaxTime: c.MaxTime,
+			Type:    storepb.Chunk_XOR,
+			Data:    chk.Bytes(),
+		})
 	}
-	e.chunks = append(e.chunks, chks...)
+	return true
 }
 
-func (r *seriesResult) response() ([]storepb.Series, error) {
-	res := make([]storepb.Series, 0, len(r.res))
+func (s *gcsSeriesSet) At() ([]storepb.Label, []storepb.Chunk) {
+	return s.set[s.i].lset, s.chks
+}
 
-	for _, e := range r.res {
-		s := storepb.Series{
-			Labels: make([]storepb.Label, 0, len(e.lset)),
-			Chunks: make([]storepb.Chunk, 0, len(e.chunks)),
-		}
-		for _, l := range e.lset {
-			// Skip if the external labels of the block overrule the series' label.
-			// NOTE(fabxc): maybe move it to a prefixed version to still ensure uniqueness of series?
-			if e.externalLset[l.Name] != "" {
-				continue
-			}
-			s.Labels = append(s.Labels, storepb.Label{
-				Name:  l.Name,
-				Value: l.Value,
-			})
-		}
-		for ln, lv := range e.externalLset {
-			s.Labels = append(s.Labels, storepb.Label{
-				Name:  ln,
-				Value: lv,
-			})
-		}
-		sort.Slice(s.Labels, func(i, j int) bool {
-			return s.Labels[i].Name < s.Labels[j].Name
-		})
-
-		for _, cm := range e.chunks {
-			s.Chunks = append(s.Chunks, storepb.Chunk{
-				Type:    storepb.Chunk_XOR,
-				MinTime: cm.MinTime,
-				MaxTime: cm.MaxTime,
-				Data:    cm.Chunk.Bytes(),
-			})
-		}
-		sort.Slice(s.Chunks, func(i, j int) bool {
-			return s.Chunks[i].MinTime < s.Chunks[j].MinTime
-		})
-		res = append(res, s)
-	}
-	sort.Slice(res, func(i, j int) bool {
-		return storepb.CompareLabels(res[i].Labels, res[j].Labels) < 0
-	})
-	return res, nil
+func (s *gcsSeriesSet) Err() error {
+	return s.err
 }
 
 // Series implements the storepb.StoreServer interface.
@@ -372,7 +341,7 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 	}
 	var g errgroup.Group
 
-	res := &seriesResult{res: map[uint64]*seriesEntry{}}
+	var res []chunkSeriesSet
 
 	s.mtx.RLock()
 
@@ -385,40 +354,71 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 			indexr  = b.indexReader()
 			chunkr  = b.chunkReader(ctx)
 		)
+		defer indexr.Close()
+		defer chunkr.Close()
 		// TODO(fabxc): only aggregate chunk metas first and add a subsequent fetch stage
 		// where we consolidate requests.
 		g.Go(func() error {
-			defer indexr.Close()
-			defer chunkr.Close()
+			var preloadc int
 
 			set, err := tsdb.LookupChunkSeries(indexr, nil, matchers...)
 			if err != nil {
 				return errors.Wrap(err, "get series set")
 			}
-			var chks []tsdb.ChunkMeta
+			resSet := &gcsSeriesSet{chunkr: chunkr}
 
 			for set.Next() {
-				chks = chks[:0]
-				lset, chunks, _ := set.At()
+				lset, chks, _ := set.At()
 
-				for _, meta := range chunks {
+				s := seriesEntry{
+					lset: make([]storepb.Label, 0, len(lset)),
+					chks: make([]tsdb.ChunkMeta, 0, len(chks)),
+				}
+				for _, l := range lset {
+					// Skip if the external labels of the block overrule the series' label.
+					// NOTE(fabxc): maybe move it to a prefixed version to still ensure uniqueness of series?
+					if extLset[l.Name] != "" {
+						continue
+					}
+					s.lset = append(s.lset, storepb.Label{
+						Name:  l.Name,
+						Value: l.Value,
+					})
+				}
+				for ln, lv := range extLset {
+					s.lset = append(s.lset, storepb.Label{
+						Name:  ln,
+						Value: lv,
+					})
+				}
+				sort.Slice(s.lset, func(i, j int) bool {
+					return s.lset[i].Name < s.lset[j].Name
+				})
+
+				for _, meta := range chks {
 					if meta.MaxTime < req.MinTime {
 						continue
 					}
 					if meta.MinTime > req.MaxTime {
 						break
 					}
-					meta.Chunk, err = chunkr.Chunk(meta.Ref)
-					if err != nil {
-						return errors.Wrap(err, "fetch chunk")
+					preloadc++
+					if err := chunkr.addPreload(meta.Ref); err != nil {
+						return errors.Wrap(err, "add chunk preload")
 					}
-					chks = append(chks, meta)
+					s.chks = append(s.chks, meta)
 				}
-				res.add(lset, extLset, chks)
+
+				resSet.set = append(resSet.set, s)
 			}
 			if err := set.Err(); err != nil {
 				return errors.Wrap(err, "read series set")
 			}
+			if err := chunkr.preload(); err != nil {
+				return errors.Wrap(err, "preload chunks")
+			}
+			res = append(res, resSet)
+
 			return nil
 		})
 	}
@@ -428,11 +428,21 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 	if err := g.Wait(); err != nil {
 		return nil, status.Error(codes.Aborted, err.Error())
 	}
-	series, err := res.response()
-	if err != nil {
-		return nil, status.Error(codes.Aborted, err.Error())
+	resp := &storepb.SeriesResponse{}
+	set := mergeAllSeriesSets(res...)
+
+	for set.Next() {
+		lset, chks := set.At()
+
+		resp.Series = append(resp.Series, storepb.Series{
+			Labels: lset,
+			Chunks: chks,
+		})
 	}
-	return &storepb.SeriesResponse{Series: series}, nil
+	if err := set.Err(); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return resp, nil
 }
 
 // LabelNames implements the storepb.StoreServer interface.
@@ -489,6 +499,7 @@ func (s *GCSStore) LabelValues(ctx context.Context, req *storepb.LabelValuesRequ
 }
 
 type gcsBlock struct {
+	logger         log.Logger
 	meta           *block.Meta
 	dir            string
 	pendingReaders sync.WaitGroup
@@ -498,14 +509,13 @@ type gcsBlock struct {
 
 func newGCSBlock(
 	ctx context.Context,
+	logger log.Logger,
 	meta *block.Meta,
 	index tsdb.IndexReader,
 	bkt *storage.BucketHandle,
 ) (*gcsBlock, error) {
-	b := &gcsBlock{
-		meta:  meta,
-		index: index,
-	}
+	b := &gcsBlock{logger: logger, meta: meta, index: index}
+
 	// Get object handles for all chunk files.
 	objs := bkt.Objects(ctx, &storage.Query{
 		Prefix: path.Join(meta.ULID.String(), "chunks/"),
@@ -548,9 +558,9 @@ func (b *gcsBlock) indexReader() tsdb.IndexReader {
 	return &closeIndex{b.index, b.pendingReaders.Done}
 }
 
-func (b *gcsBlock) chunkReader(ctx context.Context) tsdb.ChunkReader {
+func (b *gcsBlock) chunkReader(ctx context.Context) *gcsChunkReader {
 	b.pendingReaders.Add(1)
-	return &closeChunks{newGCSChunkReader(ctx, b.meta.ULID, b.chunkObjs), b.pendingReaders.Done}
+	return newGCSChunkReader(ctx, b.logger, b.meta.ULID, b.chunkObjs, b.pendingReaders.Done)
 }
 
 type closeIndex struct {
@@ -563,16 +573,6 @@ func (c *closeIndex) Close() error {
 	return nil
 }
 
-type closeChunks struct {
-	tsdb.ChunkReader
-	close func()
-}
-
-func (c *closeChunks) Close() error {
-	c.close()
-	return nil
-}
-
 // Close waits for all pending readers to finish and then closes all underlying resources.
 func (b *gcsBlock) Close() error {
 	b.pendingReaders.Wait()
@@ -581,60 +581,154 @@ func (b *gcsBlock) Close() error {
 }
 
 type gcsChunkReader struct {
+	logger log.Logger
 	ctx    context.Context
-	cancel func()
+	close  func()
 	id     ulid.ULID
 
-	files []*storage.ObjectHandle
+	files    []*storage.ObjectHandle
+	preloads [][]uint32
+	mtx      sync.Mutex
+	chunks   map[uint64]chunks.Chunk
 }
 
-func newGCSChunkReader(ctx context.Context, id ulid.ULID, files []*storage.ObjectHandle) *gcsChunkReader {
+func newGCSChunkReader(ctx context.Context, logger log.Logger, id ulid.ULID, files []*storage.ObjectHandle, close func()) *gcsChunkReader {
 	ctx, cancel := context.WithCancel(ctx)
+
 	return &gcsChunkReader{
-		ctx:    ctx,
-		cancel: cancel,
-		id:     id,
-		files:  files,
+		logger:   logger,
+		ctx:      ctx,
+		id:       id,
+		files:    files,
+		preloads: make([][]uint32, len(files)),
+		chunks:   map[uint64]chunks.Chunk{},
+		close: func() {
+			cancel()
+			close()
+		},
 	}
+}
+
+// addPreload adds the chunk with id to the data set that will be fetched on calling preload.
+func (r *gcsChunkReader) addPreload(id uint64) error {
+	var (
+		seq = int(id >> 32)
+		off = uint32(id)
+	)
+	if seq >= len(r.preloads) {
+		return errors.Errorf("reference sequence %d out of range", seq)
+	}
+	r.preloads[seq] = append(r.preloads[seq], off)
+	return nil
+}
+
+// preloadFile adds actors to load all chunks referenced by the offsets from the given file.
+// It attempts to conslidate requests for multiple chunks into a single one and populates
+// the reader's chunk map.
+func (r *gcsChunkReader) preloadFile(g *run.Group, seq int, file *storage.ObjectHandle, offsets []uint32) {
+	sort.Slice(offsets, func(i, j int) bool {
+		return offsets[i] < offsets[j]
+	})
+	j := 0
+	k := 0
+
+	for k < len(offsets) {
+		j = k
+		k++
+
+		start := offsets[j]
+		end := start + 1024
+
+		// Extend the range if the next chunk is no further than 0.5MB away.
+		// Otherwise, break out and fetch the current range.
+		for k < len(offsets) {
+			next := offsets[k] + 1024
+			if next-end > 512*1024 {
+				break
+			}
+			k++
+			end = next
+		}
+
+		inclOffs := offsets[j:k]
+		ctx, cancel := context.WithCancel(r.ctx)
+
+		g.Add(func() error {
+			now := time.Now()
+			defer func() {
+				level.Debug(r.logger).Log(
+					"msg", "preloaded range",
+					"block", r.id,
+					"file", seq,
+					"numOffsets", len(inclOffs),
+					"length", end-start,
+					"duration", time.Since(now))
+			}()
+
+			objr, err := file.NewRangeReader(ctx, int64(start), int64(end-start))
+			if err != nil {
+				return errors.Wrap(err, "create reader")
+			}
+			defer objr.Close()
+
+			b, err := ioutil.ReadAll(objr)
+			if err != nil {
+				return errors.Wrap(err, "load byte range for chunks")
+			}
+			for _, o := range inclOffs {
+				cb := b[o-start:]
+
+				l, n := binary.Uvarint(cb)
+				if n < 0 {
+					return errors.Errorf("reading chunk length failed")
+				}
+				if len(cb) < n+int(l)+1 {
+					return errors.Errorf("preloaded chunk too small, expecting %d", n+int(l))
+				}
+				cb = cb[n : n+int(l)+1]
+
+				c, err := chunks.FromData(chunks.Encoding(cb[0]), cb[1:])
+				if err != nil {
+					return errors.Wrap(err, "instantiate chunk")
+				}
+
+				r.mtx.Lock()
+				cid := uint64(seq<<32) | uint64(o)
+				r.chunks[cid] = c
+				r.mtx.Unlock()
+			}
+			return nil
+		}, func(err error) {
+			if err != nil {
+				cancel()
+			}
+		})
+	}
+}
+
+// preload all added chunk IDs. Must be called before the first call to Chunk is made.
+func (r *gcsChunkReader) preload() error {
+	var g run.Group
+
+	for i, offsets := range r.preloads {
+		if len(offsets) == 0 {
+			continue
+		}
+		r.preloadFile(&g, i, r.files[i], offsets)
+	}
+	return g.Run()
 }
 
 func (r *gcsChunkReader) Chunk(id uint64) (chunks.Chunk, error) {
-	var (
-		seq = int(id >> 32)
-		off = int((id << 32) >> 32)
-	)
-	if seq >= len(r.files) {
-		return nil, errors.Errorf("reference sequence %d out of range", seq)
+	c, ok := r.chunks[id]
+	if !ok {
+		return nil, errors.Errorf("chunk with ID %d not found", id)
 	}
-	obj := r.files[seq]
-
-	// We don't know the length of the chunk, load 1024 bytes, which should be enough
-	// even for long ones.
-	rd, err := obj.NewRangeReader(r.ctx, int64(off), int64(off+1024))
-	if err != nil {
-		return nil, errors.Wrap(err, "create reader")
-	}
-	defer rd.Close()
-
-	b := make([]byte, 1024)
-	if _, err := rd.Read(b); err != nil {
-		return nil, errors.Wrap(err, "fetch chunk range")
-	}
-
-	l, n := binary.Uvarint(b)
-	if n < 0 {
-		return nil, errors.Errorf("reading chunk length failed")
-	}
-	if len(b) < n+int(l)+1 {
-		return nil, errors.Errorf("preloaded chunk too small, expecting %d", n+int(l))
-	}
-	b = b[n : n+int(l)+1]
-
-	return chunks.FromData(chunks.Encoding(b[0]), b[1:1+l])
+	return c, nil
 }
 
 func (r *gcsChunkReader) Close() error {
-	r.cancel()
+	r.close()
 	return nil
 }
 
@@ -732,4 +826,106 @@ func mergeTwoStringSlices(a, b []string) []string {
 	res = append(res, a...)
 	res = append(res, b...)
 	return res
+}
+
+func mergeAllSeriesSets(all ...chunkSeriesSet) chunkSeriesSet {
+	switch len(all) {
+	case 0:
+		return &gcsSeriesSet{}
+	case 1:
+		return all[0]
+	}
+	h := len(all) / 2
+
+	return newMergedSeriesSet(
+		mergeAllSeriesSets(all[:h]...),
+		mergeAllSeriesSets(all[h:]...),
+	)
+}
+
+type chunkSeriesSet interface {
+	Next() bool
+	At() ([]storepb.Label, []storepb.Chunk)
+	Err() error
+}
+
+// mergedSeriesSet takes two series sets as a single series set. The input series sets
+// must be sorted and sequential in time, i.e. if they have the same label set,
+// the datapoints of a must be before the datapoints of b.
+type mergedSeriesSet struct {
+	a, b chunkSeriesSet
+
+	lset         []storepb.Label
+	chunks       []storepb.Chunk
+	adone, bdone bool
+}
+
+// NewMergedSeriesSet takes two series sets as a single series set.
+// Series that occur in both sets should have disjoint time ranges and a should com before b.
+// If the ranges overlap, the result series will still have monotonically increasing timestamps,
+// but all samples in the overlapping range in b will be dropped.
+func newMergedSeriesSet(a, b chunkSeriesSet) *mergedSeriesSet {
+	s := &mergedSeriesSet{a: a, b: b}
+	// Initialize first elements of both sets as Next() needs
+	// one element look-ahead.
+	s.adone = !s.a.Next()
+	s.bdone = !s.b.Next()
+
+	return s
+}
+
+func (s *mergedSeriesSet) At() ([]storepb.Label, []storepb.Chunk) {
+	return s.lset, s.chunks
+}
+
+func (s *mergedSeriesSet) Err() error {
+	if s.a.Err() != nil {
+		return s.a.Err()
+	}
+	return s.b.Err()
+}
+
+func (s *mergedSeriesSet) compare() int {
+	if s.adone {
+		return 1
+	}
+	if s.bdone {
+		return -1
+	}
+	lsetA, _ := s.a.At()
+	lsetB, _ := s.b.At()
+	return storepb.CompareLabels(lsetA, lsetB)
+}
+
+func (s *mergedSeriesSet) Next() bool {
+	if s.adone && s.bdone || s.Err() != nil {
+		return false
+	}
+
+	d := s.compare()
+
+	// Both sets contain the current series. Chain them into a single one.
+	if d > 0 {
+		s.lset, s.chunks = s.b.At()
+		s.bdone = !s.b.Next()
+	} else if d < 0 {
+		s.lset, s.chunks = s.a.At()
+		s.adone = !s.a.Next()
+	} else {
+		// Concatenate chunks from both series sets. They may be out of order
+		// w.r.t to their time range. This must be accounted for later.
+		lset, chksA := s.a.At()
+		_, chksB := s.b.At()
+
+		s.lset = lset
+		// Slice reuse is not generally safe with nested merge iterators.
+		// We err on the safe side an create a new slice.
+		s.chunks = make([]storepb.Chunk, 0, len(chksA)+len(chksB))
+		s.chunks = append(s.chunks, chksA...)
+		s.chunks = append(s.chunks, chksB...)
+
+		s.adone = !s.a.Next()
+		s.bdone = !s.b.Next()
+	}
+	return true
 }
