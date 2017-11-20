@@ -2,6 +2,7 @@ package query
 
 import (
 	"context"
+	"io"
 	"testing"
 
 	"github.com/prometheus/tsdb/chunks"
@@ -218,8 +219,8 @@ func (s *testStoreClient) Info(ctx context.Context, req *storepb.InfoRequest, _ 
 	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
-func (s *testStoreClient) Series(ctx context.Context, req *storepb.SeriesRequest, _ ...grpc.CallOption) (*storepb.SeriesResponse, error) {
-	return &storepb.SeriesResponse{Series: s.series}, nil
+func (s *testStoreClient) Series(ctx context.Context, req *storepb.SeriesRequest, _ ...grpc.CallOption) (storepb.Store_SeriesClient, error) {
+	return &testStoreSeriesClient{ctx: ctx, series: s.series}, nil
 }
 
 func (s *testStoreClient) LabelNames(ctx context.Context, req *storepb.LabelNamesRequest, _ ...grpc.CallOption) (*storepb.LabelNamesResponse, error) {
@@ -228,4 +229,25 @@ func (s *testStoreClient) LabelNames(ctx context.Context, req *storepb.LabelName
 
 func (s *testStoreClient) LabelValues(ctx context.Context, req *storepb.LabelValuesRequest, _ ...grpc.CallOption) (*storepb.LabelValuesResponse, error) {
 	return &storepb.LabelValuesResponse{Values: s.values[req.Label]}, nil
+}
+
+type testStoreSeriesClient struct {
+	// This field just exist to pseudo-implement the unused methods of the interface.
+	storepb.Store_SeriesClient
+	ctx    context.Context
+	series []storepb.Series
+	i      int
+}
+
+func (c *testStoreSeriesClient) Recv() (*storepb.SeriesResponse, error) {
+	if c.i >= len(c.series) {
+		return nil, io.EOF
+	}
+	s := c.series[c.i]
+	c.i++
+	return &storepb.SeriesResponse{Series: s}, nil
+}
+
+func (c *testStoreSeriesClient) Context() context.Context {
+	return c.ctx
 }

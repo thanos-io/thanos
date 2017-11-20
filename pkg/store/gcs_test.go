@@ -174,17 +174,19 @@ func TestGCSStore_e2e(t *testing.T) {
 		{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}, {Name: "ext", Value: "value"}},
 		{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext", Value: "value"}},
 	}
-	resp, err := store.Series(ctx, &storepb.SeriesRequest{
+	srv := &testStoreSeriesServer{ctx: ctx}
+
+	err = store.Series(&storepb.SeriesRequest{
 		Matchers: []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|2"},
 		},
 		MinTime: timestamp.FromTime(start),
 		MaxTime: timestamp.FromTime(now),
-	})
+	}, srv)
 	testutil.Ok(t, err)
-	testutil.Equals(t, len(pbseries), len(resp.Series))
+	testutil.Equals(t, len(pbseries), len(srv.series))
 
-	for i, s := range resp.Series {
+	for i, s := range srv.series {
 		testutil.Equals(t, pbseries[i], s.Labels)
 		testutil.Equals(t, 3, len(s.Chunks))
 	}
@@ -193,17 +195,19 @@ func TestGCSStore_e2e(t *testing.T) {
 		{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}},
 		{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
 	}
-	resp, err = store.Series(ctx, &storepb.SeriesRequest{
+	srv = &testStoreSeriesServer{ctx: ctx}
+
+	err = store.Series(&storepb.SeriesRequest{
 		Matchers: []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "2"},
 		},
 		MinTime: timestamp.FromTime(start),
 		MaxTime: timestamp.FromTime(now),
-	})
+	}, srv)
 	testutil.Ok(t, err)
-	testutil.Equals(t, len(pbseries), len(resp.Series))
+	testutil.Equals(t, len(pbseries), len(srv.series))
 
-	for i, s := range resp.Series {
+	for i, s := range srv.series {
 		testutil.Equals(t, pbseries[i], s.Labels)
 		testutil.Equals(t, 3, len(s.Chunks))
 	}
@@ -283,4 +287,20 @@ func TestGCSBlock_matches(t *testing.T) {
 		ok := b.matches(c.mint, c.maxt, c.matchers...)
 		testutil.Assert(t, c.ok == ok, "test case %d failed", i)
 	}
+}
+
+type testStoreSeriesServer struct {
+	// This field just exist to pseudo-implement the unused methods of the interface.
+	storepb.Store_SeriesServer
+	ctx    context.Context
+	series []storepb.Series
+}
+
+func (s *testStoreSeriesServer) Send(r *storepb.SeriesResponse) error {
+	s.series = append(s.series, r.Series)
+	return nil
+}
+
+func (s *testStoreSeriesServer) Context() context.Context {
+	return s.ctx
 }
