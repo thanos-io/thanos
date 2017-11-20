@@ -94,11 +94,13 @@ func runSidecar(
 		}
 	}
 
-	_, err := cluster.Join(logger, reg, clusterBindAddr, clusterAdvertiseAddr, knownPeers,
+	p, err := cluster.Join(logger, reg, clusterBindAddr, clusterAdvertiseAddr, knownPeers,
 		cluster.PeerState{
-			Type:    cluster.PeerTypeStore,
+			Type:    cluster.PeerTypeStoreSidecar,
 			APIAddr: grpcAddr,
-			Labels:  externalLabels.GetPB(),
+			Metadata: cluster.PeerMetadata{
+				Labels: externalLabels.GetPB(),
+			},
 		}, false,
 	)
 	if err != nil {
@@ -181,6 +183,9 @@ func runSidecar(
 					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
 					promUp.Set(0)
 				} else {
+					// Update gossip.
+					p.SetLabels(externalLabels.GetPB())
+
 					promUp.Set(1)
 					lastHeartbeat.Set(float64(time.Now().Unix()))
 				}
@@ -201,7 +206,7 @@ func runSidecar(
 		}
 
 		remote := shipper.NewGCSRemote(logger, nil, gcsClient.Bucket(gcsBucket))
-		s := shipper.New(logger, nil, dataDir, remote, externalLabels.Get)
+		s := shipper.New(logger, nil, dataDir, remote, externalLabels.Get, p)
 
 		ctx, cancel := context.WithCancel(context.Background())
 

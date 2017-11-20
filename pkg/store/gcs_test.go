@@ -25,7 +25,7 @@ import (
 	"github.com/prometheus/tsdb/fileutil"
 	"github.com/prometheus/tsdb/labels"
 
-	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/cluster/mocks"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 )
@@ -153,7 +153,7 @@ func TestGCSStore_e2e(t *testing.T) {
 		testutil.Ok(t, os.RemoveAll(dir2))
 	}
 
-	metaUpdater := &mockMetaUpdater{}
+	metaUpdater := &mocks.MetaUpdater{}
 	store, err := NewGCSStore(nil, nil, bkt, metaUpdater, dir)
 	testutil.Ok(t, err)
 
@@ -169,8 +169,8 @@ func TestGCSStore_e2e(t *testing.T) {
 	})
 	testutil.Ok(t, err)
 
-	testutil.Equals(t, lowTimestamp, metaUpdater.meta.LowTimestamp)
-	testutil.Equals(t, highTimestamp, metaUpdater.meta.HighTimestamp)
+	testutil.Equals(t, lowTimestamp, metaUpdater.Meta.LowTimestamp)
+	testutil.Equals(t, highTimestamp, metaUpdater.Meta.HighTimestamp)
 
 	vals, err := store.LabelValues(ctx, &storepb.LabelValuesRequest{Label: "a"})
 	testutil.Ok(t, err)
@@ -223,15 +223,6 @@ func TestGCSStore_e2e(t *testing.T) {
 		testutil.Equals(t, pbseries[i], s.Labels)
 		testutil.Equals(t, 3, len(s.Chunks))
 	}
-}
-
-type mockMetaUpdater struct {
-	meta cluster.PeerMetadata
-}
-
-func (u *mockMetaUpdater) CurrentMetadata() cluster.PeerMetadata { return u.meta }
-func (u *mockMetaUpdater) UpdateMetadata(meta cluster.PeerMetadata) {
-	u.meta = meta
 }
 
 func TestGCSBlock_matches(t *testing.T) {

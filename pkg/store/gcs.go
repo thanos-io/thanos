@@ -47,6 +47,9 @@ type GCSStore struct {
 	mtx         sync.RWMutex
 	blocks      map[ulid.ULID]*gcsBlock
 	metaUpdater cluster.MetadataUpdater
+
+	oldestBlockMinTime   int64
+	youngestBlockMaxTime int64
 }
 
 var _ storepb.StoreServer = (*GCSStore)(nil)
@@ -126,7 +129,6 @@ func NewGCSStore(logger log.Logger, reg *prometheus.Registry, bucket *storage.Bu
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
-
 	if metaUpdater == nil {
 		metaUpdater = cluster.NopMetadataUpdarter()
 	}
@@ -270,9 +272,8 @@ func (s *GCSStore) downloadBlock(ctx context.Context, id ulid.ULID) error {
 // loadBlocks ensures that all blocks in the data directory are loaded into memory.
 // Additionally, it saves metadata about the oldest and newest block.
 func (s *GCSStore) loadBlocks() error {
-	meta := s.metaUpdater.CurrentMetadata()
-	oldestBlockMinTime := meta.LowTimestamp
-	youngestBlockMaxTime := meta.HighTimestamp
+	oldestBlockMinTime := s.oldestBlockMinTime
+	youngestBlockMaxTime := s.youngestBlockMaxTime
 
 	fns, err := fileutil.ReadDir(s.dir)
 	if err != nil {
@@ -301,9 +302,10 @@ func (s *GCSStore) loadBlocks() error {
 		}
 	}
 
-	meta.LowTimestamp = oldestBlockMinTime
-	meta.HighTimestamp = youngestBlockMaxTime
-	s.metaUpdater.UpdateMetadata(meta)
+	s.oldestBlockMinTime = oldestBlockMinTime
+	s.youngestBlockMaxTime = youngestBlockMaxTime
+	// Update gossip metadata.
+	s.metaUpdater.SetTimestamps(s.oldestBlockMinTime, s.youngestBlockMaxTime)
 	return nil
 }
 

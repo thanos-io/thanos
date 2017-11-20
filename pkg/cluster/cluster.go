@@ -70,14 +70,14 @@ type PeerMetadata struct {
 
 // MetadataUpdater is a function that allows to update metadata of the peer.
 type MetadataUpdater interface {
-	CurrentMetadata() PeerMetadata
-	UpdateMetadata(PeerMetadata)
+	SetLabels([]storepb.Label)
+	SetTimestamps(lowTimestamp int64, highTimestamp int64)
 }
 
 type nopMetadataUpdater struct{}
 
-func (nopMetadataUpdater) CurrentMetadata() PeerMetadata { return PeerMetadata{} }
-func (nopMetadataUpdater) UpdateMetadata(PeerMetadata)   {}
+func (nopMetadataUpdater) SetLabels([]storepb.Label)                             {}
+func (nopMetadataUpdater) SetTimestamps(lowTimestamp int64, highTimestamp int64) {}
 
 func NopMetadataUpdarter() MetadataUpdater {
 	return nopMetadataUpdater{}
@@ -208,23 +208,28 @@ func (p *Peer) warnIfAlone(logger log.Logger, d time.Duration) {
 	}
 }
 
-// UpdateMetadata updates internal metadata stored in PeerState for this peer.
+// SetLabels updates internal metadata's labels stored in PeerState for this peer.
 // Note that this data will be propagated based on gossipInterval we set.
-func (p *Peer) UpdateMetadata(metadata PeerMetadata) {
+func (p *Peer) SetLabels(labels []storepb.Label) {
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
 
 	s := p.data[p.Name()]
-	s.Metadata = metadata
+	s.Metadata.Labels = labels
 	p.data[p.Name()] = s
 }
 
-// CurrentMetadata returns state metadata for this peer.
-func (p *Peer) CurrentMetadata() PeerMetadata {
+// SetTimestamps updates internal metadata's timestamps stored in PeerState for this peer.
+// Note that this data will be propagated based on gossipInterval we set.
+func (p *Peer) SetTimestamps(lowTimestamp int64, highTimestamp int64) {
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
 
-	return p.data[p.Name()].Metadata
+	s := p.data[p.Name()]
+	s.Metadata.LowTimestamp = lowTimestamp
+	s.Metadata.HighTimestamp = highTimestamp
+	p.data[p.Name()] = s
+
 }
 
 // Leave the cluster, waiting up to timeout.

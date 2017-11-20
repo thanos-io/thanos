@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -27,11 +28,12 @@ type Remote interface {
 // Shipper watches a directory for matching files and directories and uploads
 // them to a remote data store.
 type Shipper struct {
-	logger log.Logger
-	dir    string
-	remote Remote
-	match  func(os.FileInfo) bool
-	labels func() labels.Labels
+	logger      log.Logger
+	dir         string
+	remote      Remote
+	match       func(os.FileInfo) bool
+	labels      func() labels.Labels
+	metaUpdater cluster.MetadataUpdater
 }
 
 // New creates a new shipper that detects new TSDB blocks in dir and uploads them
@@ -42,6 +44,7 @@ func New(
 	dir string,
 	remote Remote,
 	lbls func() labels.Labels,
+	metaUpdater cluster.MetadataUpdater,
 ) *Shipper {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -49,11 +52,15 @@ func New(
 	if lbls == nil {
 		lbls = func() labels.Labels { return nil }
 	}
+	if metaUpdater == nil {
+		metaUpdater = cluster.NopMetadataUpdarter()
+	}
 	return &Shipper{
 		logger: logger,
 		dir:    dir,
 		remote: remote,
 		labels: lbls,
+		metaUpdater: metaUpdater,
 	}
 }
 
@@ -63,6 +70,8 @@ func (s *Shipper) Sync(ctx context.Context) {
 	if err != nil {
 		level.Warn(s.logger).Log("msg", "read dir failed", "err", err)
 	}
+
+	oldestBlockMinTime := int64(0)
 	for _, fn := range names {
 		id, err := ulid.Parse(fn)
 		if err != nil {
@@ -78,27 +87,35 @@ func (s *Shipper) Sync(ctx context.Context) {
 		if !fi.IsDir() {
 			continue
 		}
-		if err := s.sync(ctx, id, dir); err != nil {
+		minTime, err := s.sync(ctx, id, dir)
+		if err != nil {
 			level.Error(s.logger).Log("msg", "shipping failed", "dir", dir, "err", err)
 		}
+
+		if minTime < oldestBlockMinTime || oldestBlockMinTime == 0 {
+			oldestBlockMinTime = minTime
+		}
 	}
+
+	// High timestamp does not make sense for sidecar, so we put 0. We always have freshest data.
+	s.metaUpdater.SetTimestamps(oldestBlockMinTime, int64(0))
 }
 
-func (s *Shipper) sync(ctx context.Context, id ulid.ULID, dir string) error {
+func (s *Shipper) sync(ctx context.Context, id ulid.ULID, dir string) (minTime int64, err error) {
 	meta, err := block.ReadMetaFile(dir)
 	if err != nil {
-		return errors.Wrap(err, "read meta file")
+		return 0, errors.Wrap(err, "read meta file")
 	}
 	// We only ship of the first compacted block level.
 	if meta.Compaction.Level > 1 {
-		return nil
+		return meta.MinTime, nil
 	}
 	ok, err := s.remote.Exists(ctx, id)
 	if err != nil {
-		return errors.Wrap(err, "check exists")
+		return 0, errors.Wrap(err, "check exists")
 	}
 	if ok {
-		return nil
+		return meta.MinTime, nil
 	}
 
 	level.Info(s.logger).Log("msg", "upload new block", "id", id)
@@ -108,24 +125,24 @@ func (s *Shipper) sync(ctx context.Context, id ulid.ULID, dir string) error {
 	updir := filepath.Join(s.dir, "thanos", "upload")
 
 	if err := os.RemoveAll(updir); err != nil {
-		return errors.Wrap(err, "clean upload directory")
+		return 0, errors.Wrap(err, "clean upload directory")
 	}
 	if err := os.MkdirAll(updir, 0777); err != nil {
-		return errors.Wrap(err, "create upload dir")
+		return 0, errors.Wrap(err, "create upload dir")
 	}
 	defer os.RemoveAll(updir)
 
 	if err := hardlinkBlock(dir, updir); err != nil {
-		return errors.Wrap(err, "hard link block")
+		return 0, errors.Wrap(err, "hard link block")
 	}
 	// Attach current labels and write a new meta file with Thanos extensions.
 	if lset := s.labels(); lset != nil {
 		meta.Thanos.Labels = lset.Map()
 	}
 	if err := block.WriteMetaFile(updir, meta); err != nil {
-		return errors.Wrap(err, "write meta file")
+		return 0, errors.Wrap(err, "write meta file")
 	}
-	return s.remote.Upload(ctx, id, updir)
+	return meta.MinTime, s.remote.Upload(ctx, id, updir)
 }
 
 func hardlinkBlock(src, dst string) error {
