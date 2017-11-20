@@ -5,11 +5,13 @@ import (
 	"net/url"
 	"testing"
 
+	"fmt"
+
 	"github.com/improbable-eng/thanos/pkg/testutil"
 )
 
 func TestSidecar_queryExternalLabels(t *testing.T) {
-	p, err := testutil.NewPrometheus(":12347")
+	p, err := testutil.NewPrometheus()
 	testutil.Ok(t, err)
 
 	err = p.SetConfig(`
@@ -20,11 +22,11 @@ global:
 `)
 	testutil.Ok(t, err)
 
-	u, err := url.Parse("http://localhost:12347/")
-	testutil.Ok(t, err)
-
 	testutil.Ok(t, p.Start())
 	defer p.Stop()
+
+	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
+	testutil.Ok(t, err)
 
 	ext, err := queryExternalLabels(context.Background(), u)
 	testutil.Ok(t, err)

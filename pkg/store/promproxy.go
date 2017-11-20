@@ -166,15 +166,10 @@ func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) 
 }
 
 func extLabelsMatches(extLabels labels.Labels, ms []storepb.LabelMatcher) (bool, []storepb.LabelMatcher, error) {
-	elmap := map[string]string{}
-	for _, l := range extLabels {
-		elmap[l.Name] = l.Value
-	}
-
 	var newMatcher []storepb.LabelMatcher
 	for _, m := range ms {
-		extValue, ok := elmap[m.Name]
-		if !ok {
+		extValue := extLabels.Get(m.Name)
+		if extValue == "" {
 			// Agnostic to external labels.
 			newMatcher = append(newMatcher, m)
 			continue
