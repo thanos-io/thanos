@@ -25,6 +25,7 @@ import (
 	"github.com/prometheus/tsdb/fileutil"
 	"github.com/prometheus/tsdb/labels"
 
+	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 )
@@ -70,7 +71,7 @@ func TestGCSStore_downloadBlocks(t *testing.T) {
 	dir, err := ioutil.TempDir("", "test-syncBlocks")
 	testutil.Ok(t, err)
 
-	s, err := NewGCSStore(nil, nil, bkt, dir)
+	s, err := NewGCSStore(nil, nil, bkt, nil, dir)
 	testutil.Ok(t, err)
 	defer s.Close()
 
@@ -117,10 +118,17 @@ func TestGCSStore_e2e(t *testing.T) {
 	now := start
 	remote := shipper.NewGCSRemote(log.NewNopLogger(), nil, bkt)
 
+	lowTimestamp := int64(0)
+	highTimestamp := int64(0)
 	for i := 0; i < 3; i++ {
 		mint := timestamp.FromTime(now)
 		now = now.Add(2 * time.Hour)
 		maxt := timestamp.FromTime(now)
+
+		if lowTimestamp == 0 {
+			lowTimestamp = mint
+		}
+		highTimestamp = maxt
 
 		// Create two blocks per time slot. Only add 10 samples each so only one chunk
 		// gets created each. This way we can easily verify we got 10 chunks per series below.
@@ -145,7 +153,8 @@ func TestGCSStore_e2e(t *testing.T) {
 		testutil.Ok(t, os.RemoveAll(dir2))
 	}
 
-	store, err := NewGCSStore(nil, nil, bkt, dir)
+	metaUpdater := &mockMetaUpdater{}
+	store, err := NewGCSStore(nil, nil, bkt, metaUpdater, dir)
 	testutil.Ok(t, err)
 
 	go store.SyncBlocks(ctx, 100*time.Millisecond)
@@ -159,6 +168,9 @@ func TestGCSStore_e2e(t *testing.T) {
 		return nil
 	})
 	testutil.Ok(t, err)
+
+	testutil.Equals(t, lowTimestamp, metaUpdater.meta.LowTimestamp)
+	testutil.Equals(t, highTimestamp, metaUpdater.meta.HighTimestamp)
 
 	vals, err := store.LabelValues(ctx, &storepb.LabelValuesRequest{Label: "a"})
 	testutil.Ok(t, err)
@@ -211,6 +223,15 @@ func TestGCSStore_e2e(t *testing.T) {
 		testutil.Equals(t, pbseries[i], s.Labels)
 		testutil.Equals(t, 3, len(s.Chunks))
 	}
+}
+
+type mockMetaUpdater struct {
+	meta cluster.PeerMetadata
+}
+
+func (u *mockMetaUpdater) CurrentMetadata() cluster.PeerMetadata { return u.meta }
+func (u *mockMetaUpdater) UpdateMetadata(meta cluster.PeerMetadata) {
+	u.meta = meta
 }
 
 func TestGCSBlock_matches(t *testing.T) {

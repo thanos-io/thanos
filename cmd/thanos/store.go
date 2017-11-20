@@ -45,14 +45,14 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 		String()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry) error {
-		_, err := cluster.Join(
+		p, err := cluster.Join(
 			logger,
 			reg,
 			*clusterBindAddr,
 			*clusterAdvertiseAddr,
 			*peers,
 			cluster.PeerState{
-				Type:    cluster.PeerTypeStore,
+				Type:    cluster.PeerTypeStoreGCS,
 				APIAddr: *grpcAddr,
 			},
 			false,
@@ -60,7 +60,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 		if err != nil {
 			return errors.Wrap(err, "join cluster")
 		}
-		return runStore(g, logger, reg, *gcsBucket, *dataDir, *grpcAddr, *httpAddr)
+		return runStore(g, logger, reg, *gcsBucket, *dataDir, *grpcAddr, *httpAddr, p)
 	}
 }
 
@@ -75,6 +75,7 @@ func runStore(
 	dataDir string,
 	grpcAddr string,
 	httpAddr string,
+	metaUpdater cluster.MetadataUpdater,
 ) error {
 	{
 		gcsClient, err := storage.NewClient(context.Background())
@@ -82,7 +83,7 @@ func runStore(
 			return errors.Wrap(err, "create GCS client")
 		}
 
-		gs, err := store.NewGCSStore(logger, reg, gcsClient.Bucket(gcsBucket), dataDir)
+		gs, err := store.NewGCSStore(logger, reg, gcsClient.Bucket(gcsBucket), metaUpdater, dataDir)
 		if err != nil {
 			return errors.Wrap(err, "create GCS store")
 		}

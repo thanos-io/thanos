@@ -28,6 +28,7 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"google.golang.org/api/iterator"
@@ -43,8 +44,9 @@ type GCSStore struct {
 	bucket  *storage.BucketHandle
 	dir     string
 
-	mtx    sync.RWMutex
-	blocks map[ulid.ULID]*gcsBlock
+	mtx         sync.RWMutex
+	blocks      map[ulid.ULID]*gcsBlock
+	metaUpdater cluster.MetadataUpdater
 }
 
 var _ storepb.StoreServer = (*GCSStore)(nil)
@@ -120,15 +122,20 @@ func newGCSStoreMetrics(reg *prometheus.Registry, s *GCSStore) *gcsStoreMetrics 
 
 // NewGCSStore creates a new GCS backed store that caches index files to disk. It loads
 // pre-exisiting cache entries in dir on creation.
-func NewGCSStore(logger log.Logger, reg *prometheus.Registry, bucket *storage.BucketHandle, dir string) (*GCSStore, error) {
+func NewGCSStore(logger log.Logger, reg *prometheus.Registry, bucket *storage.BucketHandle, metaUpdater cluster.MetadataUpdater, dir string) (*GCSStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
+
+	if metaUpdater == nil {
+		metaUpdater = cluster.NopMetadataUpdarter()
+	}
 	s := &GCSStore{
-		logger: logger,
-		bucket: bucket,
-		dir:    dir,
-		blocks: map[ulid.ULID]*gcsBlock{},
+		logger:      logger,
+		bucket:      bucket,
+		dir:         dir,
+		blocks:      map[ulid.ULID]*gcsBlock{},
+		metaUpdater: metaUpdater,
 	}
 	s.metrics = newGCSStoreMetrics(reg, s)
 
@@ -261,7 +268,12 @@ func (s *GCSStore) downloadBlock(ctx context.Context, id ulid.ULID) error {
 }
 
 // loadBlocks ensures that all blocks in the data directory are loaded into memory.
+// Additionally, it saves metadata about the oldest and newest block.
 func (s *GCSStore) loadBlocks() error {
+	meta := s.metaUpdater.CurrentMetadata()
+	oldestBlockMinTime := meta.LowTimestamp
+	youngestBlockMaxTime := meta.HighTimestamp
+
 	fns, err := fileutil.ReadDir(s.dir)
 	if err != nil {
 		return errors.Wrap(err, "read dir")
@@ -279,7 +291,19 @@ func (s *GCSStore) loadBlocks() error {
 			level.Warn(s.logger).Log("msg", "loading block failed", "err", err)
 		}
 		s.setBlock(id, b)
+
+		if oldestBlockMinTime > b.meta.MinTime || oldestBlockMinTime == 0 {
+			oldestBlockMinTime = b.meta.MinTime
+		}
+
+		if youngestBlockMaxTime < b.meta.MaxTime || youngestBlockMaxTime == 0 {
+			youngestBlockMaxTime = b.meta.MaxTime
+		}
 	}
+
+	meta.LowTimestamp = oldestBlockMinTime
+	meta.HighTimestamp = youngestBlockMaxTime
+	s.metaUpdater.UpdateMetadata(meta)
 	return nil
 }
 
@@ -317,6 +341,7 @@ func (s *GCSStore) loadFromDisk(id ulid.ULID) (*gcsBlock, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "open GCS block")
 	}
+
 	return b, nil
 }
 
