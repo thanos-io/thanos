@@ -495,6 +495,8 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 			Chunks: chks,
 		})
 	}
+	s.metrics.seriesMergeDuration.Observe(time.Since(begin).Seconds())
+
 	if err := set.Err(); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
