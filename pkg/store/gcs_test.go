@@ -70,7 +70,7 @@ func TestGCSStore_downloadBlocks(t *testing.T) {
 	dir, err := ioutil.TempDir("", "test-syncBlocks")
 	testutil.Ok(t, err)
 
-	s, err := NewGCSStore(nil, bkt, dir)
+	s, err := NewGCSStore(nil, nil, bkt, dir)
 	testutil.Ok(t, err)
 	defer s.Close()
 
@@ -145,7 +145,7 @@ func TestGCSStore_e2e(t *testing.T) {
 		testutil.Ok(t, os.RemoveAll(dir2))
 	}
 
-	store, err := NewGCSStore(nil, bkt, dir)
+	store, err := NewGCSStore(nil, nil, bkt, dir)
 	testutil.Ok(t, err)
 
 	go store.SyncBlocks(ctx, 100*time.Millisecond)

@@ -383,7 +383,7 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 		var (
 			extLset = b.meta.Thanos.Labels
 			indexr  = b.indexReader()
-			chunkr  = b.chunkReader()
+			chunkr  = b.chunkReader(ctx)
 		)
 		// TODO(fabxc): only aggregate chunk metas first and add a subsequent fetch stage
 		// where we consolidate requests.
@@ -493,7 +493,7 @@ type gcsBlock struct {
 	dir            string
 	pendingReaders sync.WaitGroup
 	index          tsdb.IndexReader
-	chunks         tsdb.ChunkReader
+	chunkObjs      []*storage.ObjectHandle
 }
 
 func newGCSBlock(
@@ -502,15 +502,24 @@ func newGCSBlock(
 	index tsdb.IndexReader,
 	bkt *storage.BucketHandle,
 ) (*gcsBlock, error) {
-	cr, err := newGCSChunkReader(ctx, meta.ULID, bkt)
-	if err != nil {
-		return nil, err
+	b := &gcsBlock{
+		meta:  meta,
+		index: index,
 	}
-	return &gcsBlock{
-		meta:   meta,
-		index:  index,
-		chunks: cr,
-	}, nil
+	// Get object handles for all chunk files.
+	objs := bkt.Objects(ctx, &storage.Query{
+		Prefix: path.Join(meta.ULID.String(), "chunks/"),
+	})
+	for {
+		oi, err := objs.Next()
+		if err == iterator.Done {
+			break
+		} else if err != nil {
+			return nil, errors.Wrap(err, "list chunk files")
+		}
+		b.chunkObjs = append(b.chunkObjs, bkt.Object(oi.Name))
+	}
+	return b, nil
 }
 
 // matches checks whether the block potentially holds data for the given
@@ -539,9 +548,9 @@ func (b *gcsBlock) indexReader() tsdb.IndexReader {
 	return &closeIndex{b.index, b.pendingReaders.Done}
 }
 
-func (b *gcsBlock) chunkReader() tsdb.ChunkReader {
+func (b *gcsBlock) chunkReader(ctx context.Context) tsdb.ChunkReader {
 	b.pendingReaders.Add(1)
-	return &closeChunks{b.chunks, b.pendingReaders.Done}
+	return &closeChunks{newGCSChunkReader(ctx, b.meta.ULID, b.chunkObjs), b.pendingReaders.Done}
 }
 
 type closeIndex struct {
@@ -568,34 +577,25 @@ func (c *closeChunks) Close() error {
 func (b *gcsBlock) Close() error {
 	b.pendingReaders.Wait()
 	b.index.Close()
-	b.chunks.Close()
 	return nil
 }
 
 type gcsChunkReader struct {
-	id    ulid.ULID
-	bkt   *storage.BucketHandle
+	ctx    context.Context
+	cancel func()
+	id     ulid.ULID
+
 	files []*storage.ObjectHandle
 }
 
-func newGCSChunkReader(ctx context.Context, id ulid.ULID, bkt *storage.BucketHandle) (*gcsChunkReader, error) {
-	r := &gcsChunkReader{
-		id:  id,
-		bkt: bkt,
+func newGCSChunkReader(ctx context.Context, id ulid.ULID, files []*storage.ObjectHandle) *gcsChunkReader {
+	ctx, cancel := context.WithCancel(ctx)
+	return &gcsChunkReader{
+		ctx:    ctx,
+		cancel: cancel,
+		id:     id,
+		files:  files,
 	}
-	objs := bkt.Objects(ctx, &storage.Query{
-		Prefix: path.Join(id.String(), "chunks/"),
-	})
-	for {
-		oi, err := objs.Next()
-		if err == iterator.Done {
-			break
-		} else if err != nil {
-			return nil, errors.Wrap(err, "list chunk files")
-		}
-		r.files = append(r.files, bkt.Object(oi.Name))
-	}
-	return r, nil
 }
 
 func (r *gcsChunkReader) Chunk(id uint64) (chunks.Chunk, error) {
@@ -610,11 +610,11 @@ func (r *gcsChunkReader) Chunk(id uint64) (chunks.Chunk, error) {
 
 	// We don't know the length of the chunk, load 1024 bytes, which should be enough
 	// even for long ones.
-	rd, err := obj.NewRangeReader(context.TODO(), int64(off), int64(off+1024))
+	rd, err := obj.NewRangeReader(r.ctx, int64(off), int64(off+1024))
 	if err != nil {
 		return nil, errors.Wrap(err, "create reader")
 	}
-	defer r.Close()
+	defer rd.Close()
 
 	b := make([]byte, 1024)
 	if _, err := rd.Read(b); err != nil {
@@ -634,6 +634,7 @@ func (r *gcsChunkReader) Chunk(id uint64) (chunks.Chunk, error) {
 }
 
 func (r *gcsChunkReader) Close() error {
+	r.cancel()
 	return nil
 }
 
