@@ -52,7 +52,7 @@ const (
 
 // PeerState contains state for the peer.
 type PeerState struct {
-	Type    PeerType ``
+	Type    PeerType
 	APIAddr string
 
 	Metadata PeerMetadata
