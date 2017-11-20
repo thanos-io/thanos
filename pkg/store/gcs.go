@@ -444,10 +444,10 @@ func (s *GCSStore) blockSeries(ctx context.Context, b *gcsBlock, matchers []labe
 }
 
 // Series implements the storepb.StoreServer interface.
-func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*storepb.SeriesResponse, error) {
+func (s *GCSStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	matchers, err := translateMatchers(req.Matchers)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
+		return status.Error(codes.InvalidArgument, err.Error())
 	}
 	var g run.Group
 	var res []chunkSeriesSet
@@ -459,7 +459,7 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 			continue
 		}
 		block := b
-		ctx, cancel := context.WithCancel(ctx)
+		ctx, cancel := context.WithCancel(srv.Context())
 
 		g.Add(func() error {
 			part, err := s.blockSeries(ctx, block, matchers, req.MinTime, req.MaxTime)
@@ -479,7 +479,7 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 
 	begin := time.Now()
 	if err := g.Run(); err != nil {
-		return nil, status.Error(codes.Aborted, err.Error())
+		return status.Error(codes.Aborted, err.Error())
 	}
 	s.metrics.seriesPreloadAllDuration.Observe(time.Since(begin).Seconds())
 
@@ -488,21 +488,15 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 	set := mergeAllSeriesSets(res...)
 
 	for set.Next() {
-		lset, chks := set.At()
+		resp.Series.Labels, resp.Series.Chunks = set.At()
 
-		resp.Series = append(resp.Series, storepb.Series{
-			Labels: lset,
-			Chunks: chks,
-		})
+		if err := srv.Send(resp); err != nil {
+			return errors.Wrap(err, "send series response")
+		}
 	}
 	s.metrics.seriesMergeDuration.Observe(time.Since(begin).Seconds())
 
-	if err := set.Err(); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	s.metrics.seriesMergeDuration.Observe(time.Since(begin).Seconds())
-
-	return resp, nil
+	return nil
 }
 
 // LabelNames implements the storepb.StoreServer interface.

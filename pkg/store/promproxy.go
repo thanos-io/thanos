@@ -83,12 +83,10 @@ func (p *PrometheusProxy) Info(ctx context.Context, r *storepb.InfoRequest) (*st
 //
 // Prometheus's range query API is not suitable to give us all datapoints. We use the
 // instant API and do a range selection in PromQL to cover the queried time range.
-func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) (
-	*storepb.SeriesResponse, error,
-) {
+func (p *PrometheusProxy) Series(r *storepb.SeriesRequest, s storepb.Store_SeriesServer) error {
 	sel, err := selectorString(r.Matchers...)
 	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
+		return status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	level.Debug(p.logger).Log("msg", "received request",
@@ -110,12 +108,12 @@ func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) 
 
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, status.Error(codes.Unknown, err.Error())
+		return status.Error(codes.Unknown, err.Error())
 	}
 
-	resp, err := p.client.Do(req.WithContext(ctx))
+	resp, err := p.client.Do(req.WithContext(s.Context()))
 	if err != nil {
-		return nil, status.Error(codes.Unknown, err.Error())
+		return status.Error(codes.Unknown, err.Error())
 	}
 	defer resp.Body.Close()
 
@@ -125,12 +123,11 @@ func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) 
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
-		return nil, status.Error(codes.Unknown, err.Error())
+		return status.Error(codes.Unknown, err.Error())
 	}
 
-	res := &storepb.SeriesResponse{
-		Series: make([]storepb.Series, 0, len(m.Data.Result)),
-	}
+	var res storepb.SeriesResponse
+
 	ext := p.externalLabels()
 	for _, e := range m.Data.Result {
 		lset := translateAndExtendLabels(e.Metric, ext)
@@ -141,9 +138,9 @@ func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) 
 		// the requested range (see above).
 		enc, b, err := encodeChunk(e.Values, r.MinTime)
 		if err != nil {
-			return nil, status.Error(codes.Unknown, err.Error())
+			return status.Error(codes.Unknown, err.Error())
 		}
-		res.Series = append(res.Series, storepb.Series{
+		res.Series = storepb.Series{
 			Labels: lset,
 			Chunks: []storepb.Chunk{{
 				MinTime: int64(e.Values[0].Timestamp),
@@ -151,9 +148,12 @@ func (p *PrometheusProxy) Series(ctx context.Context, r *storepb.SeriesRequest) 
 				Type:    enc,
 				Data:    b,
 			}},
-		})
+		}
+		if err := s.Send(&res); err != nil {
+			return err
+		}
 	}
-	return res, nil
+	return nil
 }
 
 // encodeChunk translates the sample pairs into a chunk. It takes a minimum timestamp
