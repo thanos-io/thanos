@@ -50,8 +50,12 @@ type GCSStore struct {
 var _ storepb.StoreServer = (*GCSStore)(nil)
 
 type gcsStoreMetrics struct {
-	blockDownloads       prometheus.Counter
-	blockDownloadsFailed prometheus.Counter
+	blockDownloads           prometheus.Counter
+	blockDownloadsFailed     prometheus.Counter
+	seriesPrepareDuration    prometheus.Histogram
+	seriesPreloadDuration    prometheus.Histogram
+	seriesPreloadAllDuration prometheus.Histogram
+	seriesMergeDuration      prometheus.Histogram
 }
 
 func newGCSStoreMetrics(reg *prometheus.Registry, s *GCSStore) *gcsStoreMetrics {
@@ -71,12 +75,44 @@ func newGCSStoreMetrics(reg *prometheus.Registry, s *GCSStore) *gcsStoreMetrics 
 	}, func() float64 {
 		return float64(s.numBlocks())
 	})
+	m.seriesPrepareDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name: "thanos_gcs_store_series_prepare_duration_seconds",
+		Help: "Time it takes to prepare a query against a single block.",
+		Buckets: []float64{
+			0.0005, 0.001, 0.01, 0.05, 0.1, 0.3, 0.7, 1.5, 3,
+		},
+	})
+	m.seriesPreloadDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name: "thanos_gcs_store_series_preload_duration_seconds",
+		Help: "Time it takes to load all chunks for a block query from GCS into memory.",
+		Buckets: []float64{
+			0.01, 0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15,
+		},
+	})
+	m.seriesPreloadAllDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name: "thanos_gcs_series_preload_all_duration_seconds",
+		Help: "Time it takes until all per-block prepares and preloads for a query are finished.",
+		Buckets: []float64{
+			0.01, 0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15,
+		},
+	})
+	m.seriesMergeDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name: "thanos_gcs_store_series_merge_duration_seconds",
+		Help: "Time it takes to merge sub-results from all queried blocks into a single result.",
+		Buckets: []float64{
+			0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 1, 3, 5, 10,
+		},
+	})
 
 	if reg != nil {
 		reg.MustRegister(
 			m.blockDownloads,
 			m.blockDownloadsFailed,
 			blocksLoaded,
+			m.seriesPrepareDuration,
+			m.seriesPreloadDuration,
+			m.seriesPreloadAllDuration,
+			m.seriesMergeDuration,
 		)
 	}
 	return &m
@@ -333,14 +369,87 @@ func (s *gcsSeriesSet) Err() error {
 	return s.err
 }
 
+func (s *GCSStore) blockSeries(ctx context.Context, b *gcsBlock, matchers []labels.Matcher, mint, maxt int64) (chunkSeriesSet, error) {
+	var (
+		extLset = b.meta.Thanos.Labels
+		indexr  = b.indexReader()
+		chunkr  = b.chunkReader(ctx)
+	)
+	defer indexr.Close()
+	defer chunkr.Close()
+
+	begin := time.Now()
+	set, err := tsdb.LookupChunkSeries(indexr, nil, matchers...)
+	if err != nil {
+		return nil, errors.Wrap(err, "get series set")
+	}
+	var res []seriesEntry
+
+	for set.Next() {
+		lset, chks, _ := set.At()
+
+		s := seriesEntry{
+			lset: make([]storepb.Label, 0, len(lset)),
+			chks: make([]tsdb.ChunkMeta, 0, len(chks)),
+		}
+		for _, l := range lset {
+			// Skip if the external labels of the block overrule the series' label.
+			// NOTE(fabxc): maybe move it to a prefixed version to still ensure uniqueness of series?
+			if extLset[l.Name] != "" {
+				continue
+			}
+			s.lset = append(s.lset, storepb.Label{
+				Name:  l.Name,
+				Value: l.Value,
+			})
+		}
+		for ln, lv := range extLset {
+			s.lset = append(s.lset, storepb.Label{
+				Name:  ln,
+				Value: lv,
+			})
+		}
+		sort.Slice(s.lset, func(i, j int) bool {
+			return s.lset[i].Name < s.lset[j].Name
+		})
+
+		for _, meta := range chks {
+			if meta.MaxTime < mint {
+				continue
+			}
+			if meta.MinTime > maxt {
+				break
+			}
+			if err := chunkr.addPreload(meta.Ref); err != nil {
+				return nil, errors.Wrap(err, "add chunk preload")
+			}
+			s.chks = append(s.chks, meta)
+		}
+
+		res = append(res, s)
+	}
+	s.metrics.seriesPrepareDuration.Observe(time.Since(begin).Seconds())
+
+	if err := set.Err(); err != nil {
+		return nil, errors.Wrap(err, "read series set")
+	}
+
+	begin = time.Now()
+	if err := chunkr.preload(); err != nil {
+		return nil, errors.Wrap(err, "preload chunks")
+	}
+	s.metrics.seriesPreloadDuration.Observe(time.Since(begin).Seconds())
+
+	return &gcsSeriesSet{chunkr: chunkr, set: res}, nil
+}
+
 // Series implements the storepb.StoreServer interface.
 func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*storepb.SeriesResponse, error) {
 	matchers, err := translateMatchers(req.Matchers)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	var g errgroup.Group
-
+	var g run.Group
 	var res []chunkSeriesSet
 
 	s.mtx.RLock()
@@ -349,85 +458,32 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 		if !b.matches(req.MinTime, req.MaxTime, matchers...) {
 			continue
 		}
-		var (
-			extLset = b.meta.Thanos.Labels
-			indexr  = b.indexReader()
-			chunkr  = b.chunkReader(ctx)
-		)
-		defer indexr.Close()
-		defer chunkr.Close()
-		// TODO(fabxc): only aggregate chunk metas first and add a subsequent fetch stage
-		// where we consolidate requests.
-		g.Go(func() error {
-			var preloadc int
+		block := b
+		ctx, cancel := context.WithCancel(ctx)
 
-			set, err := tsdb.LookupChunkSeries(indexr, nil, matchers...)
+		g.Add(func() error {
+			part, err := s.blockSeries(ctx, block, matchers, req.MinTime, req.MaxTime)
 			if err != nil {
-				return errors.Wrap(err, "get series set")
+				return errors.Wrapf(err, "fetch series for block %s", block.meta.ULID)
 			}
-			resSet := &gcsSeriesSet{chunkr: chunkr}
-
-			for set.Next() {
-				lset, chks, _ := set.At()
-
-				s := seriesEntry{
-					lset: make([]storepb.Label, 0, len(lset)),
-					chks: make([]tsdb.ChunkMeta, 0, len(chks)),
-				}
-				for _, l := range lset {
-					// Skip if the external labels of the block overrule the series' label.
-					// NOTE(fabxc): maybe move it to a prefixed version to still ensure uniqueness of series?
-					if extLset[l.Name] != "" {
-						continue
-					}
-					s.lset = append(s.lset, storepb.Label{
-						Name:  l.Name,
-						Value: l.Value,
-					})
-				}
-				for ln, lv := range extLset {
-					s.lset = append(s.lset, storepb.Label{
-						Name:  ln,
-						Value: lv,
-					})
-				}
-				sort.Slice(s.lset, func(i, j int) bool {
-					return s.lset[i].Name < s.lset[j].Name
-				})
-
-				for _, meta := range chks {
-					if meta.MaxTime < req.MinTime {
-						continue
-					}
-					if meta.MinTime > req.MaxTime {
-						break
-					}
-					preloadc++
-					if err := chunkr.addPreload(meta.Ref); err != nil {
-						return errors.Wrap(err, "add chunk preload")
-					}
-					s.chks = append(s.chks, meta)
-				}
-
-				resSet.set = append(resSet.set, s)
-			}
-			if err := set.Err(); err != nil {
-				return errors.Wrap(err, "read series set")
-			}
-			if err := chunkr.preload(); err != nil {
-				return errors.Wrap(err, "preload chunks")
-			}
-			res = append(res, resSet)
-
+			res = append(res, part)
 			return nil
+		}, func(err error) {
+			if err != nil {
+				cancel()
+			}
 		})
 	}
 
 	s.mtx.RUnlock()
 
-	if err := g.Wait(); err != nil {
+	begin := time.Now()
+	if err := g.Run(); err != nil {
 		return nil, status.Error(codes.Aborted, err.Error())
 	}
+	s.metrics.seriesPreloadAllDuration.Observe(time.Since(begin).Seconds())
+
+	begin = time.Now()
 	resp := &storepb.SeriesResponse{}
 	set := mergeAllSeriesSets(res...)
 
@@ -442,6 +498,8 @@ func (s *GCSStore) Series(ctx context.Context, req *storepb.SeriesRequest) (*sto
 	if err := set.Err(); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	s.metrics.seriesMergeDuration.Observe(time.Since(begin).Seconds())
+
 	return resp, nil
 }
 
@@ -629,6 +687,12 @@ func (r *gcsChunkReader) preloadFile(g *run.Group, seq int, file *storage.Object
 	sort.Slice(offsets, func(i, j int) bool {
 		return offsets[i] < offsets[j]
 	})
+	const (
+		// Maximum amount of irrelevant bytes between chunks we are willing to fetch.
+		maxChunkGap = 512 * 1024
+		// Maximum length we expect a chunk to have and prefetch.
+		maxChunkLen = 2048
+	)
 	j := 0
 	k := 0
 
@@ -637,17 +701,17 @@ func (r *gcsChunkReader) preloadFile(g *run.Group, seq int, file *storage.Object
 		k++
 
 		start := offsets[j]
-		end := start + 1024
+		end := start + maxChunkLen
 
 		// Extend the range if the next chunk is no further than 0.5MB away.
 		// Otherwise, break out and fetch the current range.
 		for k < len(offsets) {
-			next := offsets[k] + 1024
-			if next-end > 512*1024 {
+			nextEnd := offsets[k] + maxChunkLen
+			if nextEnd-end > maxChunkGap {
 				break
 			}
 			k++
-			end = next
+			end = nextEnd
 		}
 
 		inclOffs := offsets[j:k]
