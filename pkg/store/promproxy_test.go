@@ -44,25 +44,27 @@ func TestPrometheusProxy_Series(t *testing.T) {
 
 	// Query all three samples except for the first one. Since we round up queried data
 	// to seconds, we can test whether the extra sample gets stripped properly.
-	resp, err := proxy.Series(ctx, &storepb.SeriesRequest{
+	srv := &testStoreSeriesServer{ctx: ctx}
+
+	err = proxy.Series(&storepb.SeriesRequest{
 		MinTime: baseT + 101,
 		MaxTime: baseT + 300,
 		Matchers: []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
 		},
-	})
+	}, srv)
 	testutil.Ok(t, err)
 
-	testutil.Equals(t, 1, len(resp.Series))
+	testutil.Equals(t, 1, len(srv.series))
 
 	testutil.Equals(t, []storepb.Label{
 		{Name: "a", Value: "b"},
 		{Name: "region", Value: "eu-west"},
-	}, resp.Series[0].Labels)
+	}, srv.series[0].Labels)
 
-	testutil.Equals(t, 1, len(resp.Series[0].Chunks))
+	testutil.Equals(t, 1, len(srv.series[0].Chunks))
 
-	c := resp.Series[0].Chunks[0]
+	c := srv.series[0].Chunks[0]
 	testutil.Equals(t, storepb.Chunk_XOR, c.Type)
 
 	chk, err := chunks.FromData(chunks.EncXOR, c.Data)
@@ -141,35 +143,37 @@ func TestPrometheusProxy_Series_MatchExternalLabel(t *testing.T) {
 			return labels.FromStrings("region", "eu-west")
 		})
 	testutil.Ok(t, err)
+	srv := &testStoreSeriesServer{ctx: ctx}
 
-	resp, err := proxy.Series(ctx, &storepb.SeriesRequest{
+	err = proxy.Series(&storepb.SeriesRequest{
 		MinTime: baseT + 101,
 		MaxTime: baseT + 300,
 		Matchers: []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
 			{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"},
 		},
-	})
+	}, srv)
 	testutil.Ok(t, err)
 
-	testutil.Equals(t, 1, len(resp.Series))
+	testutil.Equals(t, 1, len(srv.series))
 
 	testutil.Equals(t, []storepb.Label{
 		{Name: "a", Value: "b"},
 		{Name: "region", Value: "eu-west"},
-	}, resp.Series[0].Labels)
+	}, srv.series[0].Labels)
 
+	srv = &testStoreSeriesServer{ctx: ctx}
 	// However it should not match wrong external label.
-	resp, err = proxy.Series(ctx, &storepb.SeriesRequest{
+	err = proxy.Series(&storepb.SeriesRequest{
 		MinTime: baseT + 101,
 		MaxTime: baseT + 300,
 		Matchers: []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
 			{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west2"}, // Non existing label value.
 		},
-	})
+	}, srv)
 	testutil.Ok(t, err)
 
 	// No series.
-	testutil.Equals(t, 0, len(resp.Series))
+	testutil.Equals(t, 0, len(srv.series))
 }

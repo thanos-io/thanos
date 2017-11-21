@@ -112,6 +112,7 @@ func runStore(
 		)
 		s := grpc.NewServer(
 			grpc.UnaryInterceptor(met.UnaryServerInterceptor()),
+			grpc.StreamInterceptor(met.StreamServerInterceptor()),
 		)
 		storepb.RegisterStoreServer(s, gs)
 		reg.MustRegister(met)

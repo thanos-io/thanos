@@ -2,6 +2,7 @@ package query
 
 import (
 	"context"
+	"io"
 	"sync"
 
 	"github.com/go-kit/kit/log"
@@ -124,7 +125,7 @@ func (q *querier) Select(ms ...*labels.Matcher) storage.SeriesSet {
 }
 
 func (q *querier) selectSingle(client storepb.StoreClient, ms ...storepb.LabelMatcher) (chunkSeriesSet, error) {
-	resp, err := client.Series(q.ctx, &storepb.SeriesRequest{
+	sc, err := client.Series(q.ctx, &storepb.SeriesRequest{
 		MinTime:  q.mint,
 		MaxTime:  q.maxt,
 		Matchers: ms,
@@ -132,7 +133,19 @@ func (q *querier) selectSingle(client storepb.StoreClient, ms ...storepb.LabelMa
 	if err != nil {
 		return nil, errors.Wrap(err, "fetch series")
 	}
-	return &storeSeriesSet{series: resp.Series, i: -1}, nil
+	res := &storeSeriesSet{i: -1}
+
+	for {
+		r, err := sc.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		res.series = append(res.series, r.Series)
+	}
+	return res, nil
 }
 
 func (q *querier) LabelValues(name string) ([]string, error) {
