@@ -56,10 +56,10 @@ func New(
 		metaUpdater = cluster.NopMetadataUpdarter()
 	}
 	return &Shipper{
-		logger: logger,
-		dir:    dir,
-		remote: remote,
-		labels: lbls,
+		logger:      logger,
+		dir:         dir,
+		remote:      remote,
+		labels:      lbls,
 		metaUpdater: metaUpdater,
 	}
 }

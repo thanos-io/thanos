@@ -36,7 +36,7 @@ func joinPeer(num int, knownPeers []string) (peerAddr string, peer *Peer, err er
 					Value: fmt.Sprintf("%d", num),
 				},
 			},
-			LowTimestamp: timestamp.FromTime(now.Add(-10 * time.Minute)),
+			LowTimestamp:  timestamp.FromTime(now.Add(-10 * time.Minute)),
 			HighTimestamp: timestamp.FromTime(now.Add(-1 * time.Second)),
 		},
 	}
@@ -103,10 +103,11 @@ func TestPeers_PropagatingState(t *testing.T) {
 				Value: "1",
 			},
 		},
-		LowTimestamp: timestamp.FromTime(now.Add(-20 * time.Minute)),
+		LowTimestamp:  timestamp.FromTime(now.Add(-20 * time.Minute)),
 		HighTimestamp: timestamp.FromTime(now.Add(-1 * time.Millisecond)),
 	}
-	peer1.UpdateMetadata(newPeerMeta1)
+	peer1.SetLabels(newPeerMeta1.Labels)
+	peer1.SetTimestamps(newPeerMeta1.LowTimestamp, newPeerMeta1.HighTimestamp)
 
 	// Check if peer2 got the updated meta about peer1.
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)

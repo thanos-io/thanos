@@ -1,8 +1,8 @@
 package mocks
 
 import (
-	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/store/storepb"
 )
 
 type MetaUpdater struct {
