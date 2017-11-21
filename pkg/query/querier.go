@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"io"
+	"sort"
 	"sync"
 
 	"github.com/go-kit/kit/log"
@@ -29,45 +30,57 @@ type StoreInfo interface {
 
 // Queryable allows to open a querier against a dynamic set of stores.
 type Queryable struct {
-	logger log.Logger
-	stores func() []StoreInfo
+	logger       log.Logger
+	stores       func() []StoreInfo
+	replicaLabel string
 }
 
 // NewQueryable creates implementation of promql.Queryable that fetches data from the given
 // store API endpoints.
-func NewQueryable(logger log.Logger, stores func() []StoreInfo) *Queryable {
+// All data retrieved from store nodes will be deduplicated along the replicaLabel by default.
+func NewQueryable(logger log.Logger, stores func() []StoreInfo, replicaLabel string) *Queryable {
 	return &Queryable{
-		logger: logger,
-		stores: stores,
+		logger:       logger,
+		stores:       stores,
+		replicaLabel: replicaLabel,
 	}
 }
 
+// Querier returns a new storage querier against the underlying stores.
 func (q *Queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(q.logger, ctx, q.stores(), mint, maxt), nil
+	return newQuerier(ctx, q.logger, q.stores(), mint, maxt, q.replicaLabel), nil
 }
 
 type querier struct {
-	logger     log.Logger
-	ctx        context.Context
-	cancel     func()
-	mint, maxt int64
-	stores     []StoreInfo
+	logger       log.Logger
+	ctx          context.Context
+	cancel       func()
+	mint, maxt   int64
+	stores       []StoreInfo
+	replicaLabel string
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the given
 // store API endpoints.
-func newQuerier(logger log.Logger, ctx context.Context, stores []StoreInfo, mint, maxt int64) *querier {
+func newQuerier(
+	ctx context.Context,
+	logger log.Logger,
+	stores []StoreInfo,
+	mint, maxt int64,
+	replicaLabel string,
+) *querier {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	return &querier{
-		logger: logger,
-		ctx:    ctx,
-		cancel: cancel,
-		mint:   mint,
-		maxt:   maxt,
-		stores: stores,
+		logger:       logger,
+		ctx:          ctx,
+		cancel:       cancel,
+		mint:         mint,
+		maxt:         maxt,
+		stores:       stores,
+		replicaLabel: replicaLabel,
 	}
 }
 
@@ -138,7 +151,7 @@ func (q *querier) selectSingle(client storepb.StoreClient, ms ...storepb.LabelMa
 	if err != nil {
 		return nil, errors.Wrap(err, "fetch series")
 	}
-	res := &storeSeriesSet{i: -1}
+	var set []storepb.Series
 
 	for {
 		r, err := sc.Recv()
@@ -148,8 +161,34 @@ func (q *querier) selectSingle(client storepb.StoreClient, ms ...storepb.LabelMa
 		if err != nil {
 			return nil, err
 		}
-		res.series = append(res.series, r.Series)
+		set = append(set, r.Series)
 	}
+	res := newStoreSeriesSet(set)
+
+	if q.replicaLabel == "" {
+		return res, nil
+	}
+	// Resort the result so that the same series with different replica
+	// labels are coming right after each other.
+	// TODO(fabxc): this could potentially pushed further down into the store API
+	// to make true streaming possible.
+	for _, s := range set {
+		// Move the replica label to the very end.
+		sort.Slice(s.Labels, func(i, j int) bool {
+			if s.Labels[i].Name == q.replicaLabel {
+				return false
+			}
+			if s.Labels[j].Name == q.replicaLabel {
+				return true
+			}
+			return s.Labels[i].Name < s.Labels[j].Name
+		})
+	}
+	// With the re-ordered label sets, re-sorting all series aligns the same series
+	// from different replicas sequentially.
+	sort.Slice(set, func(i, j int) bool {
+		return storepb.CompareLabels(set[i].Labels, set[j].Labels) < 0
+	})
 	return res, nil
 }
 

@@ -34,6 +34,9 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "maximum number of queries processed concurrently by query node").
 		Default("20").Int()
 
+	replicaLabel := cmd.Flag("query.replica-label", "label to treat as a replica indicator along which data is deduplicated").
+		String()
+
 	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
 
 	clusterBindAddr := cmd.Flag("cluster.address", "listen address for cluster").
@@ -60,7 +63,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 		return runQuery(g, logger, reg, *httpAddr, query.Config{
 			QueryTimeout:         *queryTimeout,
 			MaxConcurrentQueries: *maxConcurrentQueries,
-		}, peer)
+		}, *replicaLabel, peer)
 	}
 }
 
@@ -72,11 +75,12 @@ func runQuery(
 	reg *prometheus.Registry,
 	httpAddr string,
 	cfg query.Config,
+	replicaLabel string,
 	peer *cluster.Peer,
 ) error {
 	var (
 		stores    = cluster.NewStoreSet(logger, reg, peer)
-		queryable = query.NewQueryable(logger, stores.Get)
+		queryable = query.NewQueryable(logger, stores.Get, replicaLabel)
 		engine    = promql.NewEngine(queryable, cfg.EngineOpts(logger))
 		api       = v1.NewAPI(engine, queryable, cfg)
 	)
