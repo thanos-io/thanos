@@ -428,11 +428,10 @@ func (s *GCSStore) blockSeries(ctx context.Context, b *gcsBlock, matchers []labe
 
 		res = append(res, s)
 	}
-	s.metrics.seriesPrepareDuration.Observe(time.Since(begin).Seconds())
-
 	if err := set.Err(); err != nil {
 		return nil, errors.Wrap(err, "read series set")
 	}
+	s.metrics.seriesPrepareDuration.Observe(time.Since(begin).Seconds())
 
 	begin = time.Now()
 	if err := chunkr.preload(); err != nil {
@@ -494,8 +493,10 @@ func (s *GCSStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			return errors.Wrap(err, "send series response")
 		}
 	}
+	if set.Err() != nil {
+		return errors.Wrap(set.Err(), "expand series set")
+	}
 	s.metrics.seriesMergeDuration.Observe(time.Since(begin).Seconds())
-
 	return nil
 }
 
