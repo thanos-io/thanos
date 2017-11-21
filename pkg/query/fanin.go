@@ -23,15 +23,15 @@ type storeSeriesSet struct {
 	i      int
 }
 
+func newStoreSeriesSet(s []storepb.Series) *storeSeriesSet {
+	return &storeSeriesSet{series: s, i: -1}
+}
+
 func (s *storeSeriesSet) Next() bool {
 	if s.i >= len(s.series)-1 {
 		return false
 	}
 	s.i++
-	// Skip empty series.
-	if len(s.series[s.i].Chunks) == 0 {
-		return s.Next()
-	}
 	return true
 }
 

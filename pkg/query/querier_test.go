@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"io"
+	"sort"
 	"testing"
 
 	"github.com/prometheus/tsdb/chunks"
@@ -37,11 +38,11 @@ func TestQuerier_LabelValues(t *testing.T) {
 	}
 	expected := []string{"a", "b", "c", "d", "e", "out-of-order", "x", "y"}
 
-	q := newQuerier(nil, context.Background(), []StoreInfo{
+	q := newQuerier(context.Background(), nil, []StoreInfo{
 		testStoreInfo{client: a},
 		testStoreInfo{client: b},
 		testStoreInfo{client: c},
-	}, 0, 10000)
+	}, 0, 10000, "")
 	defer q.Close()
 
 	vals, err := q.LabelValues("test")
@@ -70,11 +71,11 @@ func TestQuerier_Series(t *testing.T) {
 	}
 	// Querier clamps the range to [1,300], which should drop some samples of the result above.
 	// The store API allows endpoints to send more data then initially requested.
-	q := newQuerier(nil, context.Background(), []StoreInfo{
+	q := newQuerier(context.Background(), nil, []StoreInfo{
 		testStoreInfo{client: a},
 		testStoreInfo{client: b},
 		testStoreInfo{client: c},
-	}, 1, 300)
+	}, 1, 300, "")
 	defer q.Close()
 
 	res := q.Select()
@@ -107,6 +108,75 @@ func TestQuerier_Series(t *testing.T) {
 		i++
 	}
 	testutil.Ok(t, res.Err())
+}
+
+func TestStoreSelectSingle(t *testing.T) {
+	c := &testStoreClient{
+		series: []storepb.Series{
+			{Labels: []storepb.Label{
+				{"a", "1"},
+				{"b", "replica-1"},
+				{"c", "3"},
+			}},
+			{Labels: []storepb.Label{
+				{"a", "1"},
+				{"b", "replica-1"},
+				{"c", "3"},
+				{"d", "4"},
+			}},
+			{Labels: []storepb.Label{
+				{"a", "1"},
+				{"b", "replica-1"},
+				{"c", "4"},
+			}},
+			{Labels: []storepb.Label{
+				{"a", "1"},
+				{"b", "replica-2"},
+				{"c", "3"},
+			}},
+		},
+	}
+	// Just verify we assembled the input data according to the store API contract.
+	ok := sort.SliceIsSorted(c.series, func(i, j int) bool {
+		return storepb.CompareLabels(c.series[i].Labels, c.series[j].Labels) < 0
+	})
+	testutil.Assert(t, ok, "input data unoreded")
+
+	q := newQuerier(context.Background(), nil, nil, 0, 0, "b")
+
+	res, err := q.selectSingle(c)
+	testutil.Ok(t, err)
+
+	exp := [][]storepb.Label{
+		{
+			{"a", "1"},
+			{"c", "3"},
+			{"b", "replica-1"},
+		},
+		{
+			{"a", "1"},
+			{"c", "3"},
+			{"b", "replica-2"},
+		},
+		{
+			{"a", "1"},
+			{"c", "3"},
+			{"d", "4"},
+			{"b", "replica-1"},
+		},
+		{
+			{"a", "1"},
+			{"c", "4"},
+			{"b", "replica-1"},
+		},
+	}
+	var got [][]storepb.Label
+
+	for res.Next() {
+		lset, _ := res.At()
+		got = append(got, lset)
+	}
+	testutil.Equals(t, exp, got)
 }
 
 func TestStoreMatches(t *testing.T) {
