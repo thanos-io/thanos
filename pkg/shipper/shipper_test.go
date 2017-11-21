@@ -16,8 +16,12 @@ import (
 
 	"os"
 
+	"time"
+
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/testutil"
+	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/tsdb"
 )
 
 type inMemStorage struct {
@@ -66,9 +70,12 @@ func TestShipper_UploadBlocks(t *testing.T) {
 	testutil.Ok(t, err)
 	defer os.RemoveAll(dir)
 
+	var gotMinTime int64
 	storage := newInMemStorage(t)
 	shipper := New(nil, nil, dir, storage, func() labels.Labels {
 		return labels.FromStrings("prometheus", "prom-1")
+	}, func(mint int64) {
+		gotMinTime = mint
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -81,6 +88,7 @@ func TestShipper_UploadBlocks(t *testing.T) {
 	expBlocks := map[ulid.ULID]struct{}{}
 	expFiles := map[string]string{}
 
+	now := time.Now()
 	for i := 0; i < numDirs; i++ {
 		id := ulid.MustNew(uint64(i), rands)
 		bdir := filepath.Join(dir, id.String())
@@ -88,7 +96,12 @@ func TestShipper_UploadBlocks(t *testing.T) {
 
 		testutil.Ok(t, os.Mkdir(tmp, 0777))
 
-		meta := block.Meta{}
+		meta := block.Meta{
+			BlockMeta: tsdb.BlockMeta{
+				MinTime: timestamp.FromTime(now.Add(time.Duration(i) * time.Hour)),
+				MaxTime: timestamp.FromTime(now.Add((time.Duration(i) * time.Hour) + 1)),
+			},
+		}
 		meta.Version = 1
 		meta.ULID = id
 
@@ -126,6 +139,8 @@ func TestShipper_UploadBlocks(t *testing.T) {
 		expFiles[id.String()+"/chunks/0001"] = "chunkcontents1"
 		expFiles[id.String()+"/chunks/0002"] = "chunkcontents2"
 	}
+
+	testutil.Equals(t, timestamp.FromTime(now), gotMinTime)
 
 	for id := range expBlocks {
 		_, ok := storage.blocks[id]

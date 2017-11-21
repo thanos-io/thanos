@@ -13,8 +13,6 @@ import (
 	"time"
 	"unsafe"
 
-	"net"
-
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
@@ -67,20 +65,6 @@ func NewPrometheus() (*Prometheus, error) {
 	}, nil
 }
 
-func getFreePort() (int, error) {
-	addr, err := net.ResolveTCPAddr("tcp", ":0")
-	if err != nil {
-		return 0, err
-	}
-
-	l, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		return 0, err
-	}
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port, nil
-}
-
 // Start running the Prometheus instance and return.
 func (p *Prometheus) Start() error {
 	p.running = true
@@ -89,7 +73,7 @@ func (p *Prometheus) Start() error {
 		return err
 	}
 
-	port, err := getFreePort()
+	port, err := FreePort()
 	if err != nil {
 		return err
 	}

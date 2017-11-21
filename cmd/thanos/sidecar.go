@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"math"
+
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -22,6 +24,7 @@ import (
 	"github.com/oklog/run"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -94,11 +97,16 @@ func runSidecar(
 		}
 	}
 
-	_, err := cluster.Join(logger, reg, clusterBindAddr, clusterAdvertiseAddr, knownPeers,
+	p, err := cluster.Join(logger, reg, clusterBindAddr, clusterAdvertiseAddr, knownPeers,
 		cluster.PeerState{
-			Type:    cluster.PeerTypeStore,
+			Type:    cluster.PeerTypeSource,
 			APIAddr: grpcAddr,
-			Labels:  externalLabels.GetPB(),
+			Metadata: cluster.PeerMetadata{
+				Labels:  externalLabels.GetPB(),
+				MinTime: timestamp.FromTime(time.Now()),
+				// MaxTime timestamp does not make sense for sidecar so we put sentinel. We always have freshest data.
+				MaxTime: math.MaxInt64,
+			},
 		}, false,
 	)
 	if err != nil {
@@ -181,6 +189,9 @@ func runSidecar(
 					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
 					promUp.Set(0)
 				} else {
+					// Update gossip.
+					p.SetLabels(externalLabels.GetPB())
+
 					promUp.Set(1)
 					lastHeartbeat.Set(float64(time.Now().Unix()))
 				}
@@ -201,7 +212,9 @@ func runSidecar(
 		}
 
 		remote := shipper.NewGCSRemote(logger, nil, gcsClient.Bucket(gcsBucket))
-		s := shipper.New(logger, nil, dataDir, remote, externalLabels.Get)
+		s := shipper.New(logger, nil, dataDir, remote, externalLabels.Get, func(mint int64) {
+			p.SetTimestamps(mint, math.MaxInt64)
+		})
 
 		ctx, cancel := context.WithCancel(context.Background())
 

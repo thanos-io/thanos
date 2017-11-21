@@ -35,14 +35,43 @@ type Peer struct {
 	stopc chan struct{}
 }
 
+const (
+	defaultPushPullInterval = 5 * time.Second
+	defaultGossipInterval   = 5 * time.Second
+)
+
 // PeerType describes a peer's role in the cluster.
 type PeerType string
 
 // Constants holding valid PeerType values.
 const (
+	// PeerTypeStore is for peers that implements StoreAPI and are used for browsing historical data.
 	PeerTypeStore = "store"
+	// PeerTypeSource is for peers that implements StoreAPI and are used for scraping data. They tend to
+	// have data accessible only for short period.
+	PeerTypeSource = "source"
+
+	// PeerTypeQuery is for peers that implements QueryAPI and are used for querying the metrics.
 	PeerTypeQuery = "query"
 )
+
+// PeerState contains state for the peer.
+type PeerState struct {
+	Type    PeerType
+	APIAddr string
+
+	Metadata PeerMetadata
+}
+
+// PeerMetadata are the information that can change in runtime of the peer.
+type PeerMetadata struct {
+	Labels []storepb.Label
+
+	// MinTime indicates the minTime of the oldest block available from this peer.
+	MinTime int64
+	// MaxTime indicates the maxTime of the youngest block available from this peer.
+	MaxTime int64
+}
 
 // Join creates a new peer that joins the cluster.
 func Join(
@@ -51,8 +80,22 @@ func Join(
 	bindAddr string,
 	advertiseAddr string,
 	knownPeers []string,
-	state PeerState,
+	initialState PeerState,
 	waitIfEmpty bool,
+) (*Peer, error) {
+	return join(l, reg, bindAddr, advertiseAddr, knownPeers, initialState, waitIfEmpty, defaultPushPullInterval, defaultGossipInterval)
+}
+
+func join(
+	l log.Logger,
+	reg *prometheus.Registry,
+	bindAddr string,
+	advertiseAddr string,
+	knownPeers []string,
+	initialState PeerState,
+	waitIfEmpty bool,
+	pushPullInterval time.Duration,
+	gossipInterval time.Duration,
 ) (*Peer, error) {
 	bindHost, bindPortStr, err := net.SplitHostPort(bindAddr)
 	if err != nil {
@@ -94,13 +137,13 @@ func Join(
 	}
 
 	// If the API listens on 0.0.0.0, deduce it to the advertise IP.
-	if state.APIAddr != "" {
-		apiHost, apiPort, err := net.SplitHostPort(state.APIAddr)
+	if initialState.APIAddr != "" {
+		apiHost, apiPort, err := net.SplitHostPort(initialState.APIAddr)
 		if err != nil {
 			return nil, errors.Wrap(err, "invalid API address")
 		}
 		if apiHost == "0.0.0.0" {
-			state.APIAddr = net.JoinHostPort(addr.String(), apiPort)
+			initialState.APIAddr = net.JoinHostPort(addr.String(), apiPort)
 		}
 	}
 
@@ -124,8 +167,8 @@ func Join(
 	cfg.BindPort = bindPort
 	cfg.Delegate = d
 	cfg.Events = d
-	cfg.GossipInterval = 5 * time.Second
-	cfg.PushPullInterval = 5 * time.Second
+	cfg.GossipInterval = gossipInterval
+	cfg.PushPullInterval = pushPullInterval
 	cfg.LogOutput = ioutil.Discard
 	if advertiseAddr != "" {
 		cfg.AdvertiseAddr = advertiseHost
@@ -147,7 +190,7 @@ func Join(
 
 	// Initialize state with ourselves.
 	p.mtx.RLock()
-	p.data[p.Name()] = state
+	p.data[p.Name()] = initialState
 	p.mtx.RUnlock()
 
 	return p, nil
@@ -167,6 +210,30 @@ func (p *Peer) warnIfAlone(logger log.Logger, d time.Duration) {
 			}
 		}
 	}
+}
+
+// SetLabels updates internal metadata's labels stored in PeerState for this peer.
+// Note that this data will be propagated based on gossipInterval we set.
+func (p *Peer) SetLabels(labels []storepb.Label) {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+
+	s := p.data[p.Name()]
+	s.Metadata.Labels = labels
+	p.data[p.Name()] = s
+}
+
+// SetTimestamps updates internal metadata's timestamps stored in PeerState for this peer.
+// Note that this data will be propagated based on gossipInterval we set.
+func (p *Peer) SetTimestamps(mint int64, maxt int64) {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+
+	s := p.data[p.Name()]
+	s.Metadata.MinTime = mint
+	s.Metadata.MaxTime = maxt
+	p.data[p.Name()] = s
+
 }
 
 // Leave the cluster, waiting up to timeout.
@@ -196,17 +263,27 @@ func (p *Peer) Peers(t PeerType) (ps []string) {
 	return ps
 }
 
+// PeerTypesStoreAPIs gives a PeerType that allows all types that exposes StoreAPI.
+func PeerTypesStoreAPIs() []PeerType {
+	return []PeerType{PeerTypeStore, PeerTypeSource}
+}
+
 // PeerStates returns the custom state information for each peer.
-func (p *Peer) PeerStates(t PeerType) (ps []PeerState) {
+func (p *Peer) PeerStates(types ...PeerType) (ps []PeerState) {
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
 
 	for _, o := range p.mlist.Members() {
 		os, ok := p.data[o.Name]
-		if !ok || os.Type != t {
+		if !ok {
 			continue
 		}
-		ps = append(ps, os)
+		for _, t := range types {
+			if os.Type == t {
+				ps = append(ps, os)
+				break
+			}
+		}
 	}
 	return ps
 }
@@ -233,13 +310,6 @@ func (p *Peer) Info() map[string]interface{} {
 		"n":       p.mlist.NumMembers(),
 		"state":   d,
 	}
-}
-
-type PeerState struct {
-	Type    PeerType
-	APIAddr string
-
-	Labels []storepb.Label
 }
 
 // delegate implements memberlist.Delegate and memberlist.EventDelegate
