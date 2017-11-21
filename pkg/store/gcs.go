@@ -9,11 +9,11 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/strutil"
 
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
@@ -369,7 +369,7 @@ func (s *gcsSeriesSet) Err() error {
 	return s.err
 }
 
-func (s *GCSStore) blockSeries(ctx context.Context, b *gcsBlock, matchers []labels.Matcher, mint, maxt int64) (chunkSeriesSet, error) {
+func (s *GCSStore) blockSeries(ctx context.Context, b *gcsBlock, matchers []labels.Matcher, mint, maxt int64) (storepb.SeriesSet, error) {
 	var (
 		extLset = b.meta.Thanos.Labels
 		indexr  = b.indexReader()
@@ -449,7 +449,7 @@ func (s *GCSStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
 	var g run.Group
-	var res []chunkSeriesSet
+	var res []storepb.SeriesSet
 
 	s.mtx.RLock()
 
@@ -484,7 +484,7 @@ func (s *GCSStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 
 	begin = time.Now()
 	resp := &storepb.SeriesResponse{}
-	set := mergeAllSeriesSets(res...)
+	set := storepb.MergeSeriesSets(res...)
 
 	for set.Next() {
 		resp.Series.Labels, resp.Series.Chunks = set.At()
@@ -549,7 +549,7 @@ func (s *GCSStore) LabelValues(ctx context.Context, req *storepb.LabelValuesRequ
 		return nil, status.Error(codes.Aborted, err.Error())
 	}
 	return &storepb.LabelValuesResponse{
-		Values: mergeStringSlices(sets...),
+		Values: strutil.MergeSlices(sets...),
 	}, nil
 }
 
@@ -812,149 +812,4 @@ func renameFile(from, to string) error {
 		return err
 	}
 	return pdir.Close()
-}
-
-func mergeStringSlices(a ...[]string) []string {
-	if len(a) == 0 {
-		return nil
-	}
-	if len(a) == 1 {
-		return a[0]
-	}
-	l := len(a) / 2
-
-	return mergeTwoStringSlices(
-		mergeStringSlices(a[:l]...),
-		mergeStringSlices(a[l:]...),
-	)
-}
-
-func mergeTwoStringSlices(a, b []string) []string {
-	maxl := len(a)
-	if len(b) > len(a) {
-		maxl = len(b)
-	}
-	res := make([]string, 0, maxl*10/9)
-
-	for len(a) > 0 && len(b) > 0 {
-		d := strings.Compare(a[0], b[0])
-
-		if d == 0 {
-			res = append(res, a[0])
-			a, b = a[1:], b[1:]
-		} else if d < 0 {
-			res = append(res, a[0])
-			a = a[1:]
-		} else if d > 0 {
-			res = append(res, b[0])
-			b = b[1:]
-		}
-	}
-
-	// Append all remaining elements.
-	res = append(res, a...)
-	res = append(res, b...)
-	return res
-}
-
-func mergeAllSeriesSets(all ...chunkSeriesSet) chunkSeriesSet {
-	switch len(all) {
-	case 0:
-		return &gcsSeriesSet{}
-	case 1:
-		return all[0]
-	}
-	h := len(all) / 2
-
-	return newMergedSeriesSet(
-		mergeAllSeriesSets(all[:h]...),
-		mergeAllSeriesSets(all[h:]...),
-	)
-}
-
-type chunkSeriesSet interface {
-	Next() bool
-	At() ([]storepb.Label, []storepb.Chunk)
-	Err() error
-}
-
-// mergedSeriesSet takes two series sets as a single series set. The input series sets
-// must be sorted and sequential in time, i.e. if they have the same label set,
-// the datapoints of a must be before the datapoints of b.
-type mergedSeriesSet struct {
-	a, b chunkSeriesSet
-
-	lset         []storepb.Label
-	chunks       []storepb.Chunk
-	adone, bdone bool
-}
-
-// NewMergedSeriesSet takes two series sets as a single series set.
-// Series that occur in both sets should have disjoint time ranges and a should com before b.
-// If the ranges overlap, the result series will still have monotonically increasing timestamps,
-// but all samples in the overlapping range in b will be dropped.
-func newMergedSeriesSet(a, b chunkSeriesSet) *mergedSeriesSet {
-	s := &mergedSeriesSet{a: a, b: b}
-	// Initialize first elements of both sets as Next() needs
-	// one element look-ahead.
-	s.adone = !s.a.Next()
-	s.bdone = !s.b.Next()
-
-	return s
-}
-
-func (s *mergedSeriesSet) At() ([]storepb.Label, []storepb.Chunk) {
-	return s.lset, s.chunks
-}
-
-func (s *mergedSeriesSet) Err() error {
-	if s.a.Err() != nil {
-		return s.a.Err()
-	}
-	return s.b.Err()
-}
-
-func (s *mergedSeriesSet) compare() int {
-	if s.adone {
-		return 1
-	}
-	if s.bdone {
-		return -1
-	}
-	lsetA, _ := s.a.At()
-	lsetB, _ := s.b.At()
-	return storepb.CompareLabels(lsetA, lsetB)
-}
-
-func (s *mergedSeriesSet) Next() bool {
-	if s.adone && s.bdone || s.Err() != nil {
-		return false
-	}
-
-	d := s.compare()
-
-	// Both sets contain the current series. Chain them into a single one.
-	if d > 0 {
-		s.lset, s.chunks = s.b.At()
-		s.bdone = !s.b.Next()
-	} else if d < 0 {
-		s.lset, s.chunks = s.a.At()
-		s.adone = !s.a.Next()
-	} else {
-		// Concatenate chunks from both series sets. They may be out of order
-		// w.r.t to their time range. This must be accounted for later.
-		lset, chksA := s.a.At()
-		_, chksB := s.b.At()
-
-		s.lset = lset
-		// Slice reuse is not generally safe with nested merge iterators.
-		// We err on the safe side an create a new slice.
-		s.chunks = make([]storepb.Chunk, 0, len(chksA)+len(chksB))
-		s.chunks = append(s.chunks, chksA...)
-		s.chunks = append(s.chunks, chksB...)
-
-		s.adone = !s.a.Next()
-		s.bdone = !s.b.Next()
-	}
-	return true
 }

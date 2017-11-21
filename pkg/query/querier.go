@@ -8,6 +8,7 @@ import (
 	"github.com/go-kit/kit/log"
 
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
+	"github.com/improbable-eng/thanos/pkg/strutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
@@ -88,7 +89,7 @@ func storeMatches(s StoreInfo, matchers ...*labels.Matcher) bool {
 func (q *querier) Select(ms ...*labels.Matcher) storage.SeriesSet {
 	var (
 		mtx sync.Mutex
-		all []chunkSeriesSet
+		all []storepb.SeriesSet
 		// TODO(fabxc): errgroup will fail the whole query on the first encountered error.
 		// Add support for partial results/errors.
 		g errgroup.Group
@@ -121,10 +122,14 @@ func (q *querier) Select(ms ...*labels.Matcher) storage.SeriesSet {
 	if err := g.Wait(); err != nil {
 		return promSeriesSet{set: errSeriesSet{err: err}}
 	}
-	return promSeriesSet{set: mergeAllSeriesSets(all...), mint: q.mint, maxt: q.maxt}
+	return promSeriesSet{
+		mint: q.mint,
+		maxt: q.maxt,
+		set:  storepb.MergeSeriesSets(all...),
+	}
 }
 
-func (q *querier) selectSingle(client storepb.StoreClient, ms ...storepb.LabelMatcher) (chunkSeriesSet, error) {
+func (q *querier) selectSingle(client storepb.StoreClient, ms ...storepb.LabelMatcher) (storepb.SeriesSet, error) {
 	sc, err := client.Series(q.ctx, &storepb.SeriesRequest{
 		MinTime:  q.mint,
 		MaxTime:  q.maxt,
@@ -151,7 +156,7 @@ func (q *querier) selectSingle(client storepb.StoreClient, ms ...storepb.LabelMa
 func (q *querier) LabelValues(name string) ([]string, error) {
 	var (
 		mtx sync.Mutex
-		all []string
+		all [][]string
 		// TODO(bplotka): errgroup will fail the whole query on the first encountered error.
 		// Add support for partial results/errors.
 		g errgroup.Group
@@ -167,7 +172,7 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 			}
 
 			mtx.Lock()
-			all = append(all, values...)
+			all = append(all, values)
 			mtx.Unlock()
 
 			return nil
@@ -176,7 +181,7 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	return dedupStrings(all), nil
+	return strutil.MergeUnsortedSlices(all...), nil
 }
 
 func (q *querier) labelValuesSingle(client storepb.StoreClient, name string) ([]string, error) {
