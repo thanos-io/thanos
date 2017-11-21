@@ -6,11 +6,9 @@ go:
 
 go_import_path: github.com/improbable-eng/thanos
 
-before_install:
-- openssl aes-256-cbc -K $encrypted_df79f74ec4fb_key -iv $encrypted_df79f74ec4fb_iv
-  -in test/travis-gcs-creds.json.enc -out travis-gcs-creds.json -d
-
 install:
+- openssl aes-256-cbc -K $encrypted_df79f74ec4fb_key -iv $encrypted_df79f74ec4fb_iv
+  -in test/travis-gcs-creds.json.enc -out ${GOPATH}/src/github.com/improbable-eng/thanos/travis-gcs-creds.json -d
 - make install-tools
 - dep ensure
 
