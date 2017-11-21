@@ -28,7 +28,6 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"google.golang.org/api/iterator"
@@ -44,9 +43,9 @@ type GCSStore struct {
 	bucket  *storage.BucketHandle
 	dir     string
 
-	mtx         sync.RWMutex
-	blocks      map[ulid.ULID]*gcsBlock
-	metaUpdater cluster.MetadataUpdater
+	mtx                sync.RWMutex
+	blocks             map[ulid.ULID]*gcsBlock
+	gossipTimestampsFn func(mint int64, maxt int64)
 
 	oldestBlockMinTime   int64
 	youngestBlockMaxTime int64
@@ -125,19 +124,19 @@ func newGCSStoreMetrics(reg *prometheus.Registry, s *GCSStore) *gcsStoreMetrics 
 
 // NewGCSStore creates a new GCS backed store that caches index files to disk. It loads
 // pre-exisiting cache entries in dir on creation.
-func NewGCSStore(logger log.Logger, reg *prometheus.Registry, bucket *storage.BucketHandle, metaUpdater cluster.MetadataUpdater, dir string) (*GCSStore, error) {
+func NewGCSStore(logger log.Logger, reg *prometheus.Registry, bucket *storage.BucketHandle, gossipTimestampsFn func(mint int64, maxt int64), dir string) (*GCSStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
-	if metaUpdater == nil {
-		metaUpdater = cluster.NopMetadataUpdater()
+	if gossipTimestampsFn == nil {
+		gossipTimestampsFn = func(mint int64, maxt int64) {}
 	}
 	s := &GCSStore{
-		logger:      logger,
-		bucket:      bucket,
-		dir:         dir,
-		blocks:      map[ulid.ULID]*gcsBlock{},
-		metaUpdater: metaUpdater,
+		logger:             logger,
+		bucket:             bucket,
+		dir:                dir,
+		blocks:             map[ulid.ULID]*gcsBlock{},
+		gossipTimestampsFn: gossipTimestampsFn,
 	}
 	s.metrics = newGCSStoreMetrics(reg, s)
 
@@ -306,7 +305,7 @@ func (s *GCSStore) loadBlocks() error {
 	s.oldestBlockMinTime = oldestBlockMinTime
 	s.youngestBlockMaxTime = youngestBlockMaxTime
 	// Update gossip metadata.
-	s.metaUpdater.SetTimestamps(s.oldestBlockMinTime, s.youngestBlockMaxTime)
+	s.gossipTimestampsFn(s.oldestBlockMinTime, s.youngestBlockMaxTime)
 	return nil
 }
 

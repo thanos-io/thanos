@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"math"
+
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -52,15 +54,19 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			*clusterAdvertiseAddr,
 			*peers,
 			cluster.PeerState{
-				Type:    cluster.PeerTypeStoreGCS,
+				Type:    cluster.PeerTypeStore,
 				APIAddr: *grpcAddr,
+				Metadata: cluster.PeerMetadata{
+					MinTime: math.MinInt64,
+					MaxTime: math.MaxInt64,
+				},
 			},
 			false,
 		)
 		if err != nil {
 			return errors.Wrap(err, "join cluster")
 		}
-		return runStore(g, logger, reg, *gcsBucket, *dataDir, *grpcAddr, *httpAddr, p)
+		return runStore(g, logger, reg, *gcsBucket, *dataDir, *grpcAddr, *httpAddr, p.SetTimestamps)
 	}
 }
 
@@ -75,7 +81,7 @@ func runStore(
 	dataDir string,
 	grpcAddr string,
 	httpAddr string,
-	metaUpdater cluster.MetadataUpdater,
+	gossipTimestampsFn func(mint int64, maxt int64),
 ) error {
 	{
 		gcsClient, err := storage.NewClient(context.Background())
@@ -83,7 +89,7 @@ func runStore(
 			return errors.Wrap(err, "create GCS client")
 		}
 
-		gs, err := store.NewGCSStore(logger, reg, gcsClient.Bucket(gcsBucket), metaUpdater, dataDir)
+		gs, err := store.NewGCSStore(logger, reg, gcsClient.Bucket(gcsBucket), gossipTimestampsFn, dataDir)
 		if err != nil {
 			return errors.Wrap(err, "create GCS store")
 		}

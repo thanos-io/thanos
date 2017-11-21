@@ -27,7 +27,7 @@ func joinPeer(num int, knownPeers []string) (peerAddr string, peer *Peer, err er
 	peerAddr = fmt.Sprintf("127.0.0.1:%d", port)
 	now := time.Now()
 	peerState1 := PeerState{
-		Type:    PeerTypeStoreSidecar,
+		Type:    PeerTypeSource,
 		APIAddr: fmt.Sprintf("sidecar-address:%d", num),
 		Metadata: PeerMetadata{
 			Labels: []storepb.Label{
@@ -36,12 +36,12 @@ func joinPeer(num int, knownPeers []string) (peerAddr string, peer *Peer, err er
 					Value: fmt.Sprintf("%d", num),
 				},
 			},
-			LowTimestamp:  timestamp.FromTime(now.Add(-10 * time.Minute)),
-			HighTimestamp: timestamp.FromTime(now.Add(-1 * time.Second)),
+			MinTime: timestamp.FromTime(now.Add(-10 * time.Minute)),
+			MaxTime: timestamp.FromTime(now.Add(-1 * time.Second)),
 		},
 	}
 
-	peer, err = Join(
+	peer, err = join(
 		log.NewNopLogger(),
 		prometheus.NewRegistry(),
 		peerAddr,
@@ -49,29 +49,19 @@ func joinPeer(num int, knownPeers []string) (peerAddr string, peer *Peer, err er
 		knownPeers,
 		peerState1,
 		false,
+		100*time.Millisecond,
+		50*time.Millisecond,
 	)
 
 	return peerAddr, peer, nil
 }
 
 func sortStr(str []string) []string {
-	res := sort.StringSlice(str)
-	res.Sort()
-	return res
+	sort.Strings(str)
+	return str
 }
 
 func TestPeers_PropagatingState(t *testing.T) {
-	ppOld := pushPullInterval
-	gOld := gossipInterval
-	// We need to decrease these options for quicker test. These are used in Join.
-	pushPullInterval = 100 * time.Millisecond
-	gossipInterval = 50 * time.Millisecond
-	defer func() {
-
-		pushPullInterval = ppOld
-		gossipInterval = gOld
-	}()
-
 	addr1, peer1, err := joinPeer(1, nil)
 	testutil.Ok(t, err)
 
@@ -80,7 +70,7 @@ func TestPeers_PropagatingState(t *testing.T) {
 
 	// peer2 should see two members with their data.
 	expected := sortStr([]string{addr1, addr2})
-	testutil.Equals(t, expected, sortStr(peer2.Peers(PeerTypeStoreSidecar)))
+	testutil.Equals(t, expected, sortStr(peer2.Peers(PeerTypeSource)))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -92,7 +82,7 @@ func TestPeers_PropagatingState(t *testing.T) {
 	}))
 
 	// peer1 should see two members with their data.
-	testutil.Equals(t, expected, sortStr(peer1.Peers(PeerTypeStoreSidecar)))
+	testutil.Equals(t, expected, sortStr(peer1.Peers(PeerTypeSource)))
 
 	// Update peer1 state.
 	now := time.Now()
@@ -103,17 +93,17 @@ func TestPeers_PropagatingState(t *testing.T) {
 				Value: "1",
 			},
 		},
-		LowTimestamp:  timestamp.FromTime(now.Add(-20 * time.Minute)),
-		HighTimestamp: timestamp.FromTime(now.Add(-1 * time.Millisecond)),
+		MinTime: timestamp.FromTime(now.Add(-20 * time.Minute)),
+		MaxTime: timestamp.FromTime(now.Add(-1 * time.Millisecond)),
 	}
 	peer1.SetLabels(newPeerMeta1.Labels)
-	peer1.SetTimestamps(newPeerMeta1.LowTimestamp, newPeerMeta1.HighTimestamp)
+	peer1.SetTimestamps(newPeerMeta1.MinTime, newPeerMeta1.MaxTime)
 
 	// Check if peer2 got the updated meta about peer1.
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel2()
 	testutil.Ok(t, runutil.Retry(1*time.Second, ctx2.Done(), func() error {
-		for _, st := range peer2.PeerStates(PeerCond(PeerTypeStoreSidecar)) {
+		for _, st := range peer2.PeerStates(PeerTypeSource) {
 			if st.APIAddr != "sidecar-address:1" {
 				continue
 			}

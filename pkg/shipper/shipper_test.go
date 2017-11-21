@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/cluster/mocks"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/tsdb"
@@ -71,11 +70,13 @@ func TestShipper_UploadBlocks(t *testing.T) {
 	testutil.Ok(t, err)
 	defer os.RemoveAll(dir)
 
-	metaUpdater := &mocks.MetaUpdater{}
+	var gotMinTime int64
 	storage := newInMemStorage(t)
 	shipper := New(nil, nil, dir, storage, func() labels.Labels {
 		return labels.FromStrings("prometheus", "prom-1")
-	}, metaUpdater)
+	}, func(mint int64) {
+		gotMinTime = mint
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -139,8 +140,7 @@ func TestShipper_UploadBlocks(t *testing.T) {
 		expFiles[id.String()+"/chunks/0002"] = "chunkcontents2"
 	}
 
-	testutil.Equals(t, timestamp.FromTime(now), metaUpdater.Meta.LowTimestamp)
-	testutil.Equals(t, int64(0), metaUpdater.Meta.HighTimestamp)
+	testutil.Equals(t, timestamp.FromTime(now), gotMinTime)
 
 	for id := range expBlocks {
 		_, ok := storage.blocks[id]

@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"math"
+
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -97,11 +99,13 @@ func runSidecar(
 
 	p, err := cluster.Join(logger, reg, clusterBindAddr, clusterAdvertiseAddr, knownPeers,
 		cluster.PeerState{
-			Type:    cluster.PeerTypeStoreSidecar,
+			Type:    cluster.PeerTypeSource,
 			APIAddr: grpcAddr,
 			Metadata: cluster.PeerMetadata{
-				Labels:       externalLabels.GetPB(),
-				LowTimestamp: timestamp.FromTime(time.Now()),
+				Labels:  externalLabels.GetPB(),
+				MinTime: timestamp.FromTime(time.Now()),
+				// MaxTime timestamp does not make sense for sidecar so we put sentinel. We always have freshest data.
+				MaxTime: math.MaxInt64,
 			},
 		}, false,
 	)
@@ -208,7 +212,9 @@ func runSidecar(
 		}
 
 		remote := shipper.NewGCSRemote(logger, nil, gcsClient.Bucket(gcsBucket))
-		s := shipper.New(logger, nil, dataDir, remote, externalLabels.Get, p)
+		s := shipper.New(logger, nil, dataDir, remote, externalLabels.Get, func(mint int64) {
+			p.SetTimestamps(mint, math.MaxInt64)
+		})
 
 		ctx, cancel := context.WithCancel(context.Background())
 

@@ -15,7 +15,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -28,12 +27,13 @@ type Remote interface {
 // Shipper watches a directory for matching files and directories and uploads
 // them to a remote data store.
 type Shipper struct {
-	logger      log.Logger
-	dir         string
-	remote      Remote
-	match       func(os.FileInfo) bool
-	labels      func() labels.Labels
-	metaUpdater cluster.MetadataUpdater
+	logger log.Logger
+	dir    string
+	remote Remote
+	match  func(os.FileInfo) bool
+	labels func() labels.Labels
+	// MaxTime timestamp does not make sense for sidecar, so we need to gossip minTime only. We always have freshest data.
+	gossipMinTimeFn func(mint int64)
 }
 
 // New creates a new shipper that detects new TSDB blocks in dir and uploads them
@@ -44,7 +44,7 @@ func New(
 	dir string,
 	remote Remote,
 	lbls func() labels.Labels,
-	metaUpdater cluster.MetadataUpdater,
+	gossipMinTimeFn func(mint int64),
 ) *Shipper {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -52,15 +52,15 @@ func New(
 	if lbls == nil {
 		lbls = func() labels.Labels { return nil }
 	}
-	if metaUpdater == nil {
-		metaUpdater = cluster.NopMetadataUpdater()
+	if gossipMinTimeFn == nil {
+		gossipMinTimeFn = func(mint int64) {}
 	}
 	return &Shipper{
-		logger:      logger,
-		dir:         dir,
-		remote:      remote,
-		labels:      lbls,
-		metaUpdater: metaUpdater,
+		logger:          logger,
+		dir:             dir,
+		remote:          remote,
+		labels:          lbls,
+		gossipMinTimeFn: gossipMinTimeFn,
 	}
 }
 
@@ -99,8 +99,7 @@ func (s *Shipper) Sync(ctx context.Context) {
 	}
 
 	if oldestBlockMinTime > 0 {
-		// High timestamp does not make sense for sidecar, so we put 0. We always have freshest data.
-		s.metaUpdater.SetTimestamps(oldestBlockMinTime, int64(0))
+		s.gossipMinTimeFn(oldestBlockMinTime)
 	}
 }
 

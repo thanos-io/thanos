@@ -74,7 +74,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 	// we depend on it. However, in the future this may change when we fetch additional information
 	// about storePeers or make the set self-updating through events rather than explicit calls to Update.
 	storePeers := map[string]PeerState{}
-	for _, ps := range s.peer.PeerStates(AnyStorePeerCond()) {
+	for _, ps := range s.peer.PeerStates(PeerTypesStoreAPIs()...) {
 		storePeers[ps.APIAddr] = ps
 	}
 

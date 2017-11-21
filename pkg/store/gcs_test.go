@@ -118,17 +118,17 @@ func TestGCSStore_e2e(t *testing.T) {
 	now := start
 	remote := shipper.NewGCSRemote(log.NewNopLogger(), nil, bkt)
 
-	lowTimestamp := int64(0)
-	highTimestamp := int64(0)
+	minTime := int64(0)
+	maxTime := int64(0)
 	for i := 0; i < 3; i++ {
 		mint := timestamp.FromTime(now)
 		now = now.Add(2 * time.Hour)
 		maxt := timestamp.FromTime(now)
 
-		if lowTimestamp == 0 {
-			lowTimestamp = mint
+		if minTime == 0 {
+			minTime = mint
 		}
-		highTimestamp = maxt
+		maxTime = maxt
 
 		// Create two blocks per time slot. Only add 10 samples each so only one chunk
 		// gets created each. This way we can easily verify we got 10 chunks per series below.
@@ -153,8 +153,11 @@ func TestGCSStore_e2e(t *testing.T) {
 		testutil.Ok(t, os.RemoveAll(dir2))
 	}
 
-	metaUpdater := &mocks.MetaUpdater{}
-	store, err := NewGCSStore(nil, nil, bkt, metaUpdater, dir)
+	var gossipMinTime, gossipMaxTime int64
+	store, err := NewGCSStore(nil, nil, bkt, func(mint int64, maxt int64) {
+		gossipMinTime = mint
+		gossipMaxTime = maxt
+	}, dir)
 	testutil.Ok(t, err)
 
 	go store.SyncBlocks(ctx, 100*time.Millisecond)
@@ -169,8 +172,8 @@ func TestGCSStore_e2e(t *testing.T) {
 	})
 	testutil.Ok(t, err)
 
-	testutil.Equals(t, lowTimestamp, metaUpdater.Meta.LowTimestamp)
-	testutil.Equals(t, highTimestamp, metaUpdater.Meta.HighTimestamp)
+	testutil.Equals(t, minTime, gossipMinTime)
+	testutil.Equals(t, maxTime, gossipMaxTime)
 
 	vals, err := store.LabelValues(ctx, &storepb.LabelValuesRequest{Label: "a"})
 	testutil.Ok(t, err)

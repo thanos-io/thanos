@@ -35,9 +35,9 @@ type Peer struct {
 	stopc chan struct{}
 }
 
-var (
-	pushPullInterval = 5 * time.Second
-	gossipInterval   = 5 * time.Second
+const (
+	defaultPushPullInterval = 5 * time.Second
+	defaultGossipInterval   = 5 * time.Second
 )
 
 // PeerType describes a peer's role in the cluster.
@@ -45,9 +45,14 @@ type PeerType string
 
 // Constants holding valid PeerType values.
 const (
-	PeerTypeStoreGCS     = "store-gcs"
-	PeerTypeStoreSidecar = "store-sidecar"
-	PeerTypeQuery        = "query"
+	// PeerTypeStore is for peers that implements StoreAPI and are used for browsing historical data.
+	PeerTypeStore = "store"
+	// PeerTypeSource is for peers that implements StoreAPI and are used for scraping data. They tend to
+	// have data accessible only for short period.
+	PeerTypeSource = "source"
+
+	// PeerTypeQuery is for peers that implements QueryAPI and are used for querying the metrics.
+	PeerTypeQuery = "query"
 )
 
 // PeerState contains state for the peer.
@@ -62,25 +67,10 @@ type PeerState struct {
 type PeerMetadata struct {
 	Labels []storepb.Label
 
-	// LowTimestamp indicates the minTime of the oldest block available from this peer.
-	LowTimestamp int64
-	// HighTimestamp indicates the maxTime of the youngest block available from this peer.
-	HighTimestamp int64
-}
-
-// MetadataUpdater is a function that allows to update metadata of the peer.
-type MetadataUpdater interface {
-	SetLabels([]storepb.Label)
-	SetTimestamps(lowTimestamp int64, highTimestamp int64)
-}
-
-type nopMetadataUpdater struct{}
-
-func (nopMetadataUpdater) SetLabels([]storepb.Label)                             {}
-func (nopMetadataUpdater) SetTimestamps(lowTimestamp int64, highTimestamp int64) {}
-
-func NopMetadataUpdater() MetadataUpdater {
-	return nopMetadataUpdater{}
+	// MinTime indicates the minTime of the oldest block available from this peer.
+	MinTime int64
+	// MaxTime indicates the maxTime of the youngest block available from this peer.
+	MaxTime int64
 }
 
 // Join creates a new peer that joins the cluster.
@@ -92,6 +82,20 @@ func Join(
 	knownPeers []string,
 	initialState PeerState,
 	waitIfEmpty bool,
+) (*Peer, error) {
+	return join(l, reg, bindAddr, advertiseAddr, knownPeers, initialState, waitIfEmpty, defaultPushPullInterval, defaultGossipInterval)
+}
+
+func join(
+	l log.Logger,
+	reg *prometheus.Registry,
+	bindAddr string,
+	advertiseAddr string,
+	knownPeers []string,
+	initialState PeerState,
+	waitIfEmpty bool,
+	pushPullInterval time.Duration,
+	gossipInterval time.Duration,
 ) (*Peer, error) {
 	bindHost, bindPortStr, err := net.SplitHostPort(bindAddr)
 	if err != nil {
@@ -221,13 +225,13 @@ func (p *Peer) SetLabels(labels []storepb.Label) {
 
 // SetTimestamps updates internal metadata's timestamps stored in PeerState for this peer.
 // Note that this data will be propagated based on gossipInterval we set.
-func (p *Peer) SetTimestamps(lowTimestamp int64, highTimestamp int64) {
+func (p *Peer) SetTimestamps(mint int64, maxt int64) {
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
 
 	s := p.data[p.Name()]
-	s.Metadata.LowTimestamp = lowTimestamp
-	s.Metadata.HighTimestamp = highTimestamp
+	s.Metadata.MinTime = mint
+	s.Metadata.MaxTime = maxt
 	p.data[p.Name()] = s
 
 }
@@ -259,29 +263,27 @@ func (p *Peer) Peers(t PeerType) (ps []string) {
 	return ps
 }
 
-func AnyStorePeerCond() func(PeerType) bool {
-	return func(t PeerType) bool {
-		return t == PeerTypeStoreGCS || t == PeerTypeStoreSidecar
-	}
-}
-
-func PeerCond(wanted PeerType) func(PeerType) bool {
-	return func(t PeerType) bool {
-		return t == wanted
-	}
+// PeerTypesStoreAPIs gives a PeerType that allows all types that exposes StoreAPI.
+func PeerTypesStoreAPIs() []PeerType {
+	return []PeerType{PeerTypeStore, PeerTypeSource}
 }
 
 // PeerStates returns the custom state information for each peer.
-func (p *Peer) PeerStates(typeCond func(PeerType) bool) (ps []PeerState) {
+func (p *Peer) PeerStates(types ...PeerType) (ps []PeerState) {
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
 
 	for _, o := range p.mlist.Members() {
 		os, ok := p.data[o.Name]
-		if !ok || !typeCond(os.Type) {
+		if !ok {
 			continue
 		}
-		ps = append(ps, os)
+		for _, t := range types {
+			if os.Type == t {
+				ps = append(ps, os)
+				break
+			}
+		}
 	}
 	return ps
 }
