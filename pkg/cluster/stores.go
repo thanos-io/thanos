@@ -97,6 +97,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 				grpc.WithInsecure(),
 				grpc.WithBlock(),
 				grpc.WithUnaryInterceptor(s.grpcMetrics.UnaryClientInterceptor()),
+				grpc.WithStreamInterceptor(s.grpcMetrics.StreamClientInterceptor()),
 			)
 			if err != nil {
 				s.storeNodeFailedDials.Inc()
