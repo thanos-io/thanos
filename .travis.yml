@@ -1,14 +1,18 @@
 sudo: false
 language: go
 go:
-  - 1.9.x
-  - master
+- 1.9.x
+- master
 
 go_import_path: github.com/improbable-eng/thanos
+
+before_install:
+- openssl aes-256-cbc -K $encrypted_df79f74ec4fb_key -iv $encrypted_df79f74ec4fb_iv
+  -in test/travis-gcs-creds.json.enc -out travis-gcs-creds.json -d
 
 install:
 - make install-tools
 - dep ensure
 
 script:
-- make format test 
+- make format test
