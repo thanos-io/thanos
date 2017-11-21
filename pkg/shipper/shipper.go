@@ -13,6 +13,8 @@ import (
 	"github.com/prometheus/tsdb/fileutil"
 	"github.com/prometheus/tsdb/labels"
 
+	"math"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
@@ -71,7 +73,7 @@ func (s *Shipper) Sync(ctx context.Context) {
 		level.Warn(s.logger).Log("msg", "read dir failed", "err", err)
 	}
 
-	oldestBlockMinTime := int64(0)
+	var oldestBlockMinTime int64 = math.MaxInt64
 	for _, fn := range names {
 		id, err := ulid.Parse(fn)
 		if err != nil {
@@ -93,12 +95,12 @@ func (s *Shipper) Sync(ctx context.Context) {
 			continue
 		}
 
-		if minTime < oldestBlockMinTime || oldestBlockMinTime == 0 {
+		if minTime < oldestBlockMinTime || oldestBlockMinTime == math.MaxInt64 {
 			oldestBlockMinTime = minTime
 		}
 	}
 
-	if oldestBlockMinTime > 0 {
+	if oldestBlockMinTime != math.MaxInt64 {
 		s.gossipMinTimeFn(oldestBlockMinTime)
 	}
 }

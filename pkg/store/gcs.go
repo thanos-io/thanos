@@ -25,6 +25,8 @@ import (
 	"github.com/prometheus/tsdb/labels"
 	"golang.org/x/sync/errgroup"
 
+	"math"
+
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -132,11 +134,13 @@ func NewGCSStore(logger log.Logger, reg *prometheus.Registry, bucket *storage.Bu
 		gossipTimestampsFn = func(mint int64, maxt int64) {}
 	}
 	s := &GCSStore{
-		logger:             logger,
-		bucket:             bucket,
-		dir:                dir,
-		blocks:             map[ulid.ULID]*gcsBlock{},
-		gossipTimestampsFn: gossipTimestampsFn,
+		logger:               logger,
+		bucket:               bucket,
+		dir:                  dir,
+		blocks:               map[ulid.ULID]*gcsBlock{},
+		gossipTimestampsFn:   gossipTimestampsFn,
+		oldestBlockMinTime:   math.MaxInt64,
+		youngestBlockMaxTime: math.MaxInt64,
 	}
 	s.metrics = newGCSStoreMetrics(reg, s)
 
@@ -293,11 +297,11 @@ func (s *GCSStore) loadBlocks() error {
 		}
 		s.setBlock(id, b)
 
-		if oldestBlockMinTime > b.meta.MinTime || oldestBlockMinTime == 0 {
+		if oldestBlockMinTime > b.meta.MinTime || oldestBlockMinTime == math.MaxInt64 {
 			oldestBlockMinTime = b.meta.MinTime
 		}
 
-		if youngestBlockMaxTime < b.meta.MaxTime || youngestBlockMaxTime == 0 {
+		if youngestBlockMaxTime < b.meta.MaxTime || youngestBlockMaxTime == math.MaxInt64 {
 			youngestBlockMaxTime = b.meta.MaxTime
 		}
 	}
