@@ -53,7 +53,7 @@ func New(
 		lbls = func() labels.Labels { return nil }
 	}
 	if metaUpdater == nil {
-		metaUpdater = cluster.NopMetadataUpdarter()
+		metaUpdater = cluster.NopMetadataUpdater()
 	}
 	return &Shipper{
 		logger:      logger,
@@ -90,6 +90,7 @@ func (s *Shipper) Sync(ctx context.Context) {
 		minTime, err := s.sync(ctx, id, dir)
 		if err != nil {
 			level.Error(s.logger).Log("msg", "shipping failed", "dir", dir, "err", err)
+			continue
 		}
 
 		if minTime < oldestBlockMinTime || oldestBlockMinTime == 0 {
@@ -97,8 +98,10 @@ func (s *Shipper) Sync(ctx context.Context) {
 		}
 	}
 
-	// High timestamp does not make sense for sidecar, so we put 0. We always have freshest data.
-	s.metaUpdater.SetTimestamps(oldestBlockMinTime, int64(0))
+	if oldestBlockMinTime > 0 {
+		// High timestamp does not make sense for sidecar, so we put 0. We always have freshest data.
+		s.metaUpdater.SetTimestamps(oldestBlockMinTime, int64(0))
+	}
 }
 
 func (s *Shipper) sync(ctx context.Context, id ulid.ULID, dir string) (minTime int64, err error) {

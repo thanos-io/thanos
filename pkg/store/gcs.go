@@ -130,7 +130,7 @@ func NewGCSStore(logger log.Logger, reg *prometheus.Registry, bucket *storage.Bu
 		logger = log.NewNopLogger()
 	}
 	if metaUpdater == nil {
-		metaUpdater = cluster.NopMetadataUpdarter()
+		metaUpdater = cluster.NopMetadataUpdater()
 	}
 	s := &GCSStore{
 		logger:      logger,
@@ -290,6 +290,7 @@ func (s *GCSStore) loadBlocks() error {
 		b, err := s.loadFromDisk(id)
 		if err != nil {
 			level.Warn(s.logger).Log("msg", "loading block failed", "err", err)
+			continue
 		}
 		s.setBlock(id, b)
 

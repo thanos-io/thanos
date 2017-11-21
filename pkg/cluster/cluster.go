@@ -79,7 +79,7 @@ type nopMetadataUpdater struct{}
 func (nopMetadataUpdater) SetLabels([]storepb.Label)                             {}
 func (nopMetadataUpdater) SetTimestamps(lowTimestamp int64, highTimestamp int64) {}
 
-func NopMetadataUpdarter() MetadataUpdater {
+func NopMetadataUpdater() MetadataUpdater {
 	return nopMetadataUpdater{}
 }
 

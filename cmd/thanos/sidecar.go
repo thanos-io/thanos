@@ -22,6 +22,7 @@ import (
 	"github.com/oklog/run"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -99,7 +100,8 @@ func runSidecar(
 			Type:    cluster.PeerTypeStoreSidecar,
 			APIAddr: grpcAddr,
 			Metadata: cluster.PeerMetadata{
-				Labels: externalLabels.GetPB(),
+				Labels:       externalLabels.GetPB(),
+				LowTimestamp: timestamp.FromTime(time.Now()),
 			},
 		}, false,
 	)
