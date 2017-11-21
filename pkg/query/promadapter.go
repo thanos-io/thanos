@@ -9,7 +9,7 @@ import (
 )
 
 type promSeriesSet struct {
-	set        chunkSeriesSet
+	set        storepb.SeriesSet
 	mint, maxt int64
 }
 
