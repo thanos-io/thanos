@@ -338,6 +338,14 @@ type gcsSeriesSet struct {
 	chks   []storepb.Chunk
 }
 
+func newGCSSeriesSet(chunkr *gcsChunkReader, set []seriesEntry) *gcsSeriesSet {
+	return &gcsSeriesSet{
+		chunkr: chunkr,
+		set:    set,
+		i:      -1,
+	}
+}
+
 func (s *gcsSeriesSet) Next() bool {
 	if s.i >= len(s.set)-1 {
 		return false
@@ -439,7 +447,7 @@ func (s *GCSStore) blockSeries(ctx context.Context, b *gcsBlock, matchers []labe
 	}
 	s.metrics.seriesPreloadDuration.Observe(time.Since(begin).Seconds())
 
-	return &gcsSeriesSet{chunkr: chunkr, set: res}, nil
+	return newGCSSeriesSet(chunkr, res), nil
 }
 
 // Series implements the storepb.StoreServer interface.
@@ -448,9 +456,11 @@ func (s *GCSStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
-	var g run.Group
-	var res []storepb.SeriesSet
-
+	var (
+		g   run.Group
+		res []storepb.SeriesSet
+		mtx sync.Mutex
+	)
 	s.mtx.RLock()
 
 	for _, b := range s.blocks {
@@ -465,7 +475,11 @@ func (s *GCSStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			if err != nil {
 				return errors.Wrapf(err, "fetch series for block %s", block.meta.ULID)
 			}
+
+			mtx.Lock()
 			res = append(res, part)
+			mtx.Unlock()
+
 			return nil
 		}, func(err error) {
 			if err != nil {
