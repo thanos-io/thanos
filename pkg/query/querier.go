@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"io"
+	"math"
 	"sort"
 	"sync"
 	"unsafe"
@@ -474,12 +475,10 @@ type dedupSeriesSet struct {
 	set          storage.SeriesSet
 	replicaLabel string
 
-	// Gathered replica series so far.
 	replicas []storage.Series
 	lset     labels.Labels
 	peek     storage.Series
-	// lastReplica string
-	ok bool
+	ok       bool
 }
 
 func newDedupSeriesSet(set storage.SeriesSet, replicaLabel string) storage.SeriesSet {
@@ -499,7 +498,6 @@ func (s *dedupSeriesSet) Next() bool {
 	// without the replica label if it exists.
 	s.lset = s.peekLset()
 	s.replicas = append(s.replicas[:0], s.peek)
-	s.peek = nil
 	return s.next()
 }
 
@@ -565,4 +563,116 @@ func (s *dedupSeries) Labels() labels.Labels {
 
 func (s *dedupSeries) Iterator() storage.SeriesIterator {
 	return newDedupSeriesIterator(s.replicas[0].Iterator(), s.replicas[1].Iterator())
+}
+
+type sample struct {
+	t int64
+	v float64
+}
+
+type dedupSeriesIterator struct {
+	a, b storage.SeriesIterator
+	i    int
+
+	aok, bok   bool
+	lastT      int64
+	penA, penB int64
+	useA       bool
+}
+
+func newDedupSeriesIterator(a, b storage.SeriesIterator) *dedupSeriesIterator {
+	return &dedupSeriesIterator{
+		a:     a,
+		b:     b,
+		lastT: math.MinInt64,
+		aok:   true,
+		bok:   true,
+	}
+}
+
+func (it *dedupSeriesIterator) Next() bool {
+	// Advance both iterators to at least the next highest timestamp plus the potential penalty.
+	if it.aok {
+		it.aok = it.a.Seek(it.lastT + 1 + it.penA)
+	}
+	if it.bok {
+		it.bok = it.b.Seek(it.lastT + 1 + it.penB)
+	}
+	// Handle basic cases where one iterator is exhausted before the other.
+	if !it.aok {
+		it.useA = false
+		if it.bok {
+			it.lastT, _ = it.b.At()
+			it.penB = 0
+		}
+		return it.bok
+	}
+	if !it.bok {
+		it.useA = true
+		it.lastT, _ = it.a.At()
+		it.penA = 0
+		return true
+	}
+	// General case where both iterators still have data. We pick the one
+	// with the smaller timestamp.
+	// The applied penalty potentially already skipped potential samples already
+	// that would have resulted in exaggerated sampling frequency.
+	ta, _ := it.a.At()
+	tb, _ := it.b.At()
+
+	it.useA = ta <= tb
+
+	// For the series we didn't pick, add a penalty as high as the delta of the last two
+	// samples to the next seek against it.
+	// This ensures that we don't pick a sample too close, which would increase the overall
+	// sample frequency. It also guards against clock drift and inaccuracies during
+	// timestamp assignment.
+	// If we don't know a delta yet, we pick 3000 as a constant, which is based on the knowledge
+	// that timestamps are in milliseconds and sampling frequencies typically multiple seconds long.
+	const initialPenality = 3000
+
+	if it.useA {
+		if it.lastT != math.MinInt64 {
+			it.penB = ta - it.lastT
+		} else {
+			it.penB = initialPenality
+		}
+		it.penA = 0
+		it.lastT = ta
+		return true
+	}
+	if it.lastT != math.MinInt64 {
+		it.penA = tb - it.lastT
+	} else {
+		it.penA = initialPenality
+	}
+	it.penB = 0
+	it.lastT = tb
+	return true
+}
+
+func (it *dedupSeriesIterator) Seek(t int64) bool {
+	for {
+		ts, _ := it.At()
+		if ts >= t {
+			return true
+		}
+		if !it.Next() {
+			return false
+		}
+	}
+}
+
+func (it *dedupSeriesIterator) At() (int64, float64) {
+	if it.useA {
+		return it.a.At()
+	}
+	return it.b.At()
+}
+
+func (it *dedupSeriesIterator) Err() error {
+	if it.a.Err() != nil {
+		return it.a.Err()
+	}
+	return it.b.Err()
 }

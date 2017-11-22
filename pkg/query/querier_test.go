@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math"
+	"math/rand"
 	"sort"
 	"testing"
 
@@ -351,6 +353,22 @@ func TestDedupSeriesSet(t *testing.T) {
 			{"replica", "replica-3"},
 		},
 	}
+	exp := []labels.Labels{
+		{
+			{"a", "1"},
+			{"c", "3"},
+		}, {
+			{"a", "1"},
+			{"c", "3"},
+			{"d", "4"},
+		}, {
+			{"a", "1"},
+			{"c", "4"},
+		}, {
+			{"a", "2"},
+			{"c", "3"},
+		},
+	}
 	var series []storepb.Series
 	for _, lset := range input {
 		series = append(series, storepb.Series{Labels: lset})
@@ -362,8 +380,153 @@ func TestDedupSeriesSet(t *testing.T) {
 	}
 	dedupSet := newDedupSeriesSet(set, "replica")
 
+	var got []labels.Labels
 	for dedupSet.Next() {
-		fmt.Println(dedupSet.At())
+		got = append(got, dedupSet.At().Labels())
 	}
 	testutil.Ok(t, dedupSet.Err())
+	testutil.Equals(t, exp, got)
+}
+
+func TestDedupSeriesIterator(t *testing.T) {
+	cases := []struct {
+		a, b, exp []sample
+	}{
+		{ // Generally prefer the first series.
+			a:   []sample{{100, 1}, {200, 1}, {300, 1}, {400, 1}},
+			b:   []sample{{100, 2}, {200, 2}, {300, 2}, {400, 2}},
+			exp: []sample{{100, 1}, {200, 1}, {300, 1}, {400, 1}},
+		},
+		{ // Prefer b if it starts earlier.
+			a:   []sample{{101, 1}, {201, 1}, {301, 1}, {401, 1}},
+			b:   []sample{{100, 2}, {200, 2}, {300, 2}, {400, 2}},
+			exp: []sample{{100, 2}, {200, 2}, {300, 2}, {400, 2}},
+		},
+		{ // Don't switch series on a single delta sized gap.
+			a:   []sample{{100, 1}, {200, 1}, {400, 1}},
+			b:   []sample{{101, 2}, {201, 2}, {301, 2}, {401, 2}},
+			exp: []sample{{100, 1}, {200, 1}, {400, 1}},
+		},
+		{ // Once the gap gets bigger, switch and stay with the new series.
+			a:   []sample{{1000, 1}, {2000, 1}, {3000, 1}, {6000, 1}, {7000, 1}},
+			b:   []sample{{1010, 2}, {2010, 2}, {3010, 2}, {4010, 2}, {5010, 2}, {6010, 2}},
+			exp: []sample{{1000, 1}, {2000, 1}, {3000, 1}, {4010, 2}, {5010, 2}, {6010, 2}},
+		},
+		{ // Alternating gaps and more samples in the first series.
+			a: []sample{
+				{1000, 1}, {2000, 1}, {3000, 1}, {4000, 1},
+				{7000, 1}, {8000, 1}, {9000, 1}, {10000, 1},
+				{14000, 1}, {15000, 1}, {16000, 1}, {17000, 1},
+				{30000, 1}, {35000, 1}, {40000, 1}, {45000, 1},
+			},
+			b: []sample{
+				{4000, 2}, {5000, 2}, {6000, 2}, {7000, 2},
+				{10000, 2}, {11000, 2}, {12000, 2}, {13000, 2},
+				{17000, 2}, {18000, 2}, {19000, 2}, {20000, 2},
+				{41000, 2},
+			},
+			exp: []sample{
+				{1000, 1}, {2000, 1}, {3000, 1}, {4000, 1},
+				{6000, 2}, {7000, 2}, {9000, 1}, {10000, 1},
+				{12000, 2}, {13000, 2}, {15000, 1}, {16000, 1},
+				{17000, 1}, {19000, 2}, {20000, 2},
+				{30000, 1}, {35000, 1}, {40000, 1}, {45000, 1},
+			},
+		},
+	}
+	for i, c := range cases {
+		t.Logf("case %d:", i)
+		it := newDedupSeriesIterator(
+			&sampleIterator{l: c.a, i: -1},
+			&sampleIterator{l: c.b, i: -1},
+		)
+		res := expandSeries(t, it)
+		testutil.Equals(t, c.exp, res)
+	}
+}
+
+func BenchmarkDedupSeriesIterator(b *testing.B) {
+	run := func(b *testing.B, s1, s2 []sample) {
+		it := newDedupSeriesIterator(
+			&sampleIterator{l: s1, i: -1},
+			&sampleIterator{l: s2, i: -1},
+		)
+		b.ResetTimer()
+		var total int64
+
+		for it.Next() {
+			t, _ := it.At()
+			total += t
+		}
+		fmt.Fprint(ioutil.Discard, total)
+	}
+	b.Run("equal", func(b *testing.B) {
+		var s1, s2 []sample
+
+		for i := 0; i < b.N; i++ {
+			s1 = append(s1, sample{t: int64(i * 10000), v: 1})
+		}
+		for i := 0; i < b.N; i++ {
+			s2 = append(s2, sample{t: int64(i * 10000), v: 2})
+		}
+		run(b, s1, s2)
+	})
+	b.Run("fixed-delta", func(b *testing.B) {
+		var s1, s2 []sample
+
+		for i := 0; i < b.N; i++ {
+			s1 = append(s1, sample{t: int64(i * 10000), v: 1})
+		}
+		for i := 0; i < b.N; i++ {
+			s2 = append(s2, sample{t: int64(i*10000) + 10, v: 2})
+		}
+		run(b, s1, s2)
+	})
+	b.Run("minor-rand-delta", func(b *testing.B) {
+		var s1, s2 []sample
+
+		for i := 0; i < b.N; i++ {
+			s1 = append(s1, sample{t: int64(i*10000) + rand.Int63n(5000), v: 1})
+		}
+		for i := 0; i < b.N; i++ {
+			s2 = append(s2, sample{t: int64(i*10000) + +rand.Int63n(5000), v: 2})
+		}
+		run(b, s1, s2)
+	})
+}
+
+type sampleIterator struct {
+	l []sample
+	i int
+}
+
+func (s *sampleIterator) Err() error {
+	return nil
+}
+
+func (s *sampleIterator) At() (int64, float64) {
+	return s.l[s.i].t, s.l[s.i].v
+}
+
+func (s *sampleIterator) Next() bool {
+	if s.i >= len(s.l) {
+		return false
+	}
+	s.i++
+	return true
+}
+
+func (s *sampleIterator) Seek(t int64) bool {
+	if s.i < 0 {
+		s.i = 0
+	}
+	for {
+		if s.i >= len(s.l) {
+			return false
+		}
+		if s.l[s.i].t >= t {
+			return true
+		}
+		s.i++
+	}
 }
