@@ -137,9 +137,18 @@ func (q *querier) Select(ms ...*labels.Matcher) storage.SeriesSet {
 	if err := g.Wait(); err != nil {
 		return promSeriesSet{set: errSeriesSet{err: err}}
 	}
-	set := storepb.MergeSeriesSets(all...)
-
-	return promSeriesSet{mint: q.mint, maxt: q.maxt, set: set}
+	set := promSeriesSet{
+		mint: q.mint,
+		maxt: q.maxt,
+		set:  storepb.MergeSeriesSets(all...),
+	}
+	// The merged series set assembles all potentially-overlapping time ranges
+	// of the same series into a single one. The series are ordered so that equal series
+	// from different replicas are sequential. We can now deduplicate those.
+	if q.replicaLabel == "" {
+		return set
+	}
+	return newDedupSeriesSet(set, q.replicaLabel)
 }
 
 func (q *querier) selectSingle(client storepb.StoreClient, ms ...storepb.LabelMatcher) (storepb.SeriesSet, error) {
@@ -459,4 +468,101 @@ func (it *chunkSeriesIterator) Err() error {
 		return it.err
 	}
 	return it.cur.Err()
+}
+
+type dedupSeriesSet struct {
+	set          storage.SeriesSet
+	replicaLabel string
+
+	// Gathered replica series so far.
+	replicas []storage.Series
+	lset     labels.Labels
+	peek     storage.Series
+	// lastReplica string
+	ok bool
+}
+
+func newDedupSeriesSet(set storage.SeriesSet, replicaLabel string) storage.SeriesSet {
+	s := &dedupSeriesSet{set: set, replicaLabel: replicaLabel}
+	s.ok = s.set.Next()
+	if s.ok {
+		s.peek = s.set.At()
+	}
+	return s
+}
+
+func (s *dedupSeriesSet) Next() bool {
+	if !s.ok {
+		return false
+	}
+	// Set the label set we are currently gathering to the peek element
+	// without the replica label if it exists.
+	s.lset = s.peekLset()
+	s.replicas = append(s.replicas[:0], s.peek)
+	s.peek = nil
+	return s.next()
+}
+
+// peekLset returns the label set of the current peek element stripped from the
+// replica label if it exists
+func (s *dedupSeriesSet) peekLset() labels.Labels {
+	lset := s.peek.Labels()
+	if lset[len(lset)-1].Name != s.replicaLabel {
+		return lset
+	}
+	return lset[:len(lset)-1]
+}
+
+func (s *dedupSeriesSet) next() bool {
+	// Peek the next series to see whether it's a replica for the current series.
+	s.ok = s.set.Next()
+	if !s.ok {
+		// There's no next series, the current replicas are the last element.
+		return len(s.replicas) > 0
+	}
+	s.peek = s.set.At()
+	nextLset := s.peekLset()
+
+	// If the label set modulo the replica label is equal to the current label set
+	// look for more replicas, otherwise a series is complete.
+	if !labels.Equal(s.lset, nextLset) {
+		return true
+	}
+	s.replicas = append(s.replicas, s.peek)
+	return s.next()
+}
+
+func (s *dedupSeriesSet) At() storage.Series {
+	if len(s.replicas) == 1 {
+		return seriesWithLabels{Series: s.replicas[0], lset: s.lset}
+	}
+	return newDedupSeries(s.lset, s.replicas...)
+}
+
+func (s *dedupSeriesSet) Err() error {
+	return s.set.Err()
+}
+
+type seriesWithLabels struct {
+	storage.Series
+	lset labels.Labels
+}
+
+func (s seriesWithLabels) Labels() labels.Labels { return s.lset }
+
+type dedupSeries struct {
+	lset     labels.Labels
+	replicas []storage.Series
+}
+
+func newDedupSeries(lset labels.Labels, replicas ...storage.Series) *dedupSeries {
+	return &dedupSeries{lset: lset, replicas: replicas}
+}
+
+func (s *dedupSeries) Labels() labels.Labels {
+	return s.lset
+}
+
+func (s *dedupSeries) Iterator() storage.SeriesIterator {
+	return newDedupSeriesIterator(s.replicas[0].Iterator(), s.replicas[1].Iterator())
 }

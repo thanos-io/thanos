@@ -2,7 +2,9 @@ package query
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"math"
 	"sort"
 	"testing"
 
@@ -246,11 +248,6 @@ func (s testStoreInfo) Client() storepb.StoreClient {
 	return s.client
 }
 
-type sample struct {
-	t int64
-	v float64
-}
-
 func expandSeries(t testing.TB, it storage.SeriesIterator) (res []sample) {
 	for it.Next() {
 		t, v := it.At()
@@ -320,4 +317,53 @@ func (c *testStoreSeriesClient) Recv() (*storepb.SeriesResponse, error) {
 
 func (c *testStoreSeriesClient) Context() context.Context {
 	return c.ctx
+}
+
+func TestDedupSeriesSet(t *testing.T) {
+	input := [][]storepb.Label{
+		{
+			{"a", "1"},
+			{"c", "3"},
+			{"replica", "replica-1"},
+		}, {
+			{"a", "1"},
+			{"c", "3"},
+			{"replica", "replica-2"},
+		}, {
+			{"a", "1"},
+			{"c", "3"},
+			{"replica", "replica-3"},
+		}, {
+			{"a", "1"},
+			{"c", "3"},
+			{"d", "4"},
+		}, {
+			{"a", "1"},
+			{"c", "4"},
+			{"replica", "replica-1"},
+		}, {
+			{"a", "2"},
+			{"c", "3"},
+			{"replica", "replica-3"},
+		}, {
+			{"a", "2"},
+			{"c", "3"},
+			{"replica", "replica-3"},
+		},
+	}
+	var series []storepb.Series
+	for _, lset := range input {
+		series = append(series, storepb.Series{Labels: lset})
+	}
+	set := promSeriesSet{
+		mint: math.MinInt64,
+		maxt: math.MaxInt64,
+		set:  newStoreSeriesSet(series),
+	}
+	dedupSet := newDedupSeriesSet(set, "replica")
+
+	for dedupSet.Next() {
+		fmt.Println(dedupSet.At())
+	}
+	testutil.Ok(t, dedupSet.Err())
 }
