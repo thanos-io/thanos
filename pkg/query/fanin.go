@@ -4,6 +4,8 @@ import (
 	"sort"
 	"unsafe"
 
+	"errors"
+
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
@@ -77,6 +79,14 @@ func (errSeriesIterator) Next() bool           { return false }
 func (errSeriesIterator) At() (int64, float64) { return 0, 0 }
 func (s errSeriesIterator) Err() error         { return s.err }
 
+type nopSeriesIterator struct {}
+
+func (nopSeriesIterator) Seek(int64) bool      { return false }
+func (nopSeriesIterator) Next() bool           { return false }
+func (nopSeriesIterator) At() (int64, float64) { return 0, 0 }
+func (nopSeriesIterator) Err() error         { return nil }
+
+
 // chunkSeriesIterator implements a series iterator on top
 // of a list of time-sorted, non-overlapping chunks.
 type chunkSeriesIterator struct {
@@ -89,6 +99,11 @@ type chunkSeriesIterator struct {
 }
 
 func newChunkSeriesIterator(cs []storepb.Chunk, mint, maxt int64) storage.SeriesIterator {
+	if len(cs) == 0 {
+		// This should not happen. StoreAPI implementations should not send empty results.
+		// NOTE(bplotka): Metric, err log here?
+		return nopSeriesIterator{}
+	}
 	it := &chunkSeriesIterator{
 		chunks: cs,
 		i:      0,
