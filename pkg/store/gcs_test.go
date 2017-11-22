@@ -225,6 +225,41 @@ func TestGCSStore_e2e(t *testing.T) {
 		testutil.Equals(t, pbseries[i], s.Labels)
 		testutil.Equals(t, 3, len(s.Chunks))
 	}
+
+	// Matching by external label should work as well.
+	pbseries = [][]storepb.Label{
+		{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext", Value: "value"}},
+		{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext", Value: "value"}},
+	}
+	srv = &testStoreSeriesServer{ctx: ctx}
+
+	err = store.Series(&storepb.SeriesRequest{
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+			{Type: storepb.LabelMatcher_EQ, Name: "ext", Value: "value"},
+		},
+		MinTime: timestamp.FromTime(start),
+		MaxTime: timestamp.FromTime(now),
+	}, srv)
+	testutil.Ok(t, err)
+	testutil.Equals(t, len(pbseries), len(srv.series))
+
+	for i, s := range srv.series {
+		testutil.Equals(t, pbseries[i], s.Labels)
+		testutil.Equals(t, 3, len(s.Chunks))
+	}
+
+	srv = &testStoreSeriesServer{ctx: ctx}
+	err = store.Series(&storepb.SeriesRequest{
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+			{Type: storepb.LabelMatcher_EQ, Name: "ext", Value: "wrong-value"},
+		},
+		MinTime: timestamp.FromTime(start),
+		MaxTime: timestamp.FromTime(now),
+	}, srv)
+	testutil.Ok(t, err)
+	testutil.Equals(t, 0, len(srv.series))
 }
 
 func TestGCSBlock_matches(t *testing.T) {
@@ -238,10 +273,11 @@ func TestGCSBlock_matches(t *testing.T) {
 		}
 	}
 	cases := []struct {
-		meta       *block.Meta
-		mint, maxt int64
-		matchers   []labels.Matcher
-		ok         bool
+		meta             *block.Meta
+		mint, maxt       int64
+		matchers         []labels.Matcher
+		expBlockMatchers []labels.Matcher
+		ok               bool
 	}{
 		{
 			meta: makeMeta(100, 200, nil),
@@ -274,6 +310,9 @@ func TestGCSBlock_matches(t *testing.T) {
 			matchers: []labels.Matcher{
 				labels.NewEqualMatcher("a", "b"),
 			},
+			expBlockMatchers: []labels.Matcher{
+				labels.NewEqualMatcher("a", "b"),
+			},
 			ok: true,
 		},
 		{
@@ -294,12 +333,26 @@ func TestGCSBlock_matches(t *testing.T) {
 			},
 			ok: false,
 		},
+		{
+			meta: makeMeta(100, 200, map[string]string{"a": "b"}),
+			mint: 150,
+			maxt: 160,
+			matchers: []labels.Matcher{
+				labels.NewEqualMatcher("a", "b"),
+				labels.NewEqualMatcher("d", "e"),
+			},
+			expBlockMatchers: []labels.Matcher{
+				labels.NewEqualMatcher("d", "e"),
+			},
+			ok: true,
+		},
 	}
 
 	for i, c := range cases {
 		b := &gcsBlock{meta: c.meta}
-		ok := b.matches(c.mint, c.maxt, c.matchers...)
+		blockMatchers, ok := b.blockMatchers(c.mint, c.maxt, c.matchers...)
 		testutil.Assert(t, c.ok == ok, "test case %d failed", i)
+		testutil.Equals(t, c.expBlockMatchers, blockMatchers)
 	}
 }
 

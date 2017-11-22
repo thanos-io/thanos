@@ -496,14 +496,15 @@ func (s *GCSStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 	s.mtx.RLock()
 
 	for _, b := range s.blocks {
-		if !b.matches(req.MinTime, req.MaxTime, matchers...) {
+		blockMatchers, ok := b.blockMatchers(req.MinTime, req.MaxTime, matchers...)
+		if !ok {
 			continue
 		}
 		block := b
 		ctx, cancel := context.WithCancel(srv.Context())
 
 		g.Add(func() error {
-			part, err := s.blockSeries(ctx, block, matchers, req.MinTime, req.MaxTime)
+			part, err := s.blockSeries(ctx, block, blockMatchers, req.MinTime, req.MaxTime)
 			if err != nil {
 				return errors.Wrapf(err, "fetch series for block %s", block.meta.ULID)
 			}
@@ -633,25 +634,29 @@ func newGCSBlock(
 	return b, nil
 }
 
-// matches checks whether the block potentially holds data for the given
-// time range and label matchers.
-func (b *gcsBlock) matches(mint, maxt int64, matchers ...labels.Matcher) bool {
+// blockMatchers checks whether the block potentially holds data for the given
+// time range and label matchers and returns proper matches for this block that
+// are stripped from external label matchers.
+func (b *gcsBlock) blockMatchers(mint, maxt int64, matchers ...labels.Matcher) ([]labels.Matcher, bool) {
 	if b.meta.MaxTime < mint {
-		return false
+		return nil, false
 	}
 	if b.meta.MinTime > maxt {
-		return false
+		return nil, false
 	}
+
+	var blockMatchers []labels.Matcher
 	for _, m := range matchers {
 		v, ok := b.meta.Thanos.Labels[m.Name()]
 		if !ok {
+			blockMatchers = append(blockMatchers, m)
 			continue
 		}
 		if !m.Matches(v) {
-			return false
+			return nil, false
 		}
 	}
-	return true
+	return blockMatchers, true
 }
 
 func (b *gcsBlock) indexReader() tsdb.IndexReader {
