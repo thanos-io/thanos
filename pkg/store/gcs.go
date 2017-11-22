@@ -464,8 +464,9 @@ func (s *GCSStore) blockSeries(ctx context.Context, b *gcsBlock, matchers []labe
 			}
 			s.chks = append(s.chks, meta)
 		}
-
-		res = append(res, s)
+		if len(s.chks) > 0 {
+			res = append(res, s)
+		}
 	}
 	if err := set.Err(); err != nil {
 		return nil, errors.Wrap(err, "read series set")

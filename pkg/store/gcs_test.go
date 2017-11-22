@@ -25,7 +25,6 @@ import (
 	"github.com/prometheus/tsdb/fileutil"
 	"github.com/prometheus/tsdb/labels"
 
-	"github.com/improbable-eng/thanos/pkg/cluster/mocks"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 )
