@@ -333,6 +333,19 @@ func TestGCSBlock_matches(t *testing.T) {
 			},
 			ok: false,
 		},
+		{
+			meta: makeMeta(100, 200, map[string]string{"a": "b"}),
+			mint: 150,
+			maxt: 160,
+			matchers: []labels.Matcher{
+				labels.NewEqualMatcher("a", "b"),
+				labels.NewEqualMatcher("d", "e"),
+			},
+			expBlockMatchers: []labels.Matcher{
+				labels.NewEqualMatcher("d", "e"),
+			},
+			ok: true,
+		},
 	}
 
 	for i, c := range cases {
