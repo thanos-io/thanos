@@ -2,11 +2,14 @@ package query
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/go-kit/kit/log"
+	yaml "gopkg.in/yaml.v1"
 
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/strutil"
@@ -16,6 +19,27 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"golang.org/x/sync/errgroup"
 )
+
+type Config struct {
+	QueryTimeout         time.Duration `yaml:"query_timeout"`
+	MaxConcurrentQueries int           `yaml:"max_conccurent_queries"`
+}
+
+func (c Config) EngineOpts(logger log.Logger) *promql.EngineOptions {
+	return &promql.EngineOptions{
+		Logger:               logger,
+		Timeout:              c.QueryTimeout,
+		MaxConcurrentQueries: c.MaxConcurrentQueries,
+	}
+}
+
+func (c Config) String() string {
+	b, err := yaml.Marshal(c)
+	if err != nil {
+		return fmt.Sprintf("<error creating config string: %s>", err)
+	}
+	return string(b)
+}
 
 var _ promql.Queryable = (*Queryable)(nil)
 
@@ -135,11 +159,18 @@ func (q *querier) Select(ms ...*labels.Matcher) storage.SeriesSet {
 	if err := g.Wait(); err != nil {
 		return promSeriesSet{set: errSeriesSet{err: err}}
 	}
-	return promSeriesSet{
+	set := promSeriesSet{
 		mint: q.mint,
 		maxt: q.maxt,
 		set:  storepb.MergeSeriesSets(all...),
 	}
+	// The merged series set assembles all potentially-overlapping time ranges
+	// of the same series into a single one. The series are ordered so that equal series
+	// from different replicas are sequential. We can now deduplicate those.
+	if q.replicaLabel == "" {
+		return set
+	}
+	return newDedupSeriesSet(set, q.replicaLabel)
 }
 
 func (q *querier) selectSingle(client storepb.StoreClient, ms ...storepb.LabelMatcher) (storepb.SeriesSet, error) {
