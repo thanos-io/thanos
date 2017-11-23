@@ -393,9 +393,9 @@ func TestDedupSeriesIterator(t *testing.T) {
 		a, b, exp []sample
 	}{
 		{ // Generally prefer the first series.
-			a:   []sample{{100, 1}, {200, 1}, {300, 1}, {400, 1}},
-			b:   []sample{{100, 2}, {200, 2}, {300, 2}, {400, 2}},
-			exp: []sample{{100, 1}, {200, 1}, {300, 1}, {400, 1}},
+			a:   []sample{{100, 10}, {200, 11}, {300, 12}, {400, 13}},
+			b:   []sample{{100, 20}, {200, 21}, {300, 22}, {400, 23}},
+			exp: []sample{{100, 10}, {200, 11}, {300, 12}, {400, 13}},
 		},
 		{ // Prefer b if it starts earlier.
 			a:   []sample{{101, 1}, {201, 1}, {301, 1}, {401, 1}},

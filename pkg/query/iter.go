@@ -298,7 +298,11 @@ func (s *dedupSeriesSet) At() storage.Series {
 	if len(s.replicas) == 1 {
 		return seriesWithLabels{Series: s.replicas[0], lset: s.lset}
 	}
-	return newDedupSeries(s.lset, s.replicas...)
+	// Clients may store the series, so we must make a copy of the slice
+	// before advancing.
+	repl := make([]storage.Series, len(s.replicas))
+	copy(repl, s.replicas)
+	return newDedupSeries(s.lset, repl...)
 }
 
 func (s *dedupSeriesSet) Err() error {
