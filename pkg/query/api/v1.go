@@ -25,6 +25,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/NYTimes/gziphandler"
+
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -55,7 +57,7 @@ const (
 )
 
 var corsHeaders = map[string]string{
-	"Access-Control-Allow-Headers":  "Accept, Authorization, Content-Type, Origin",
+	"Access-Control-Allow-Headers":  "Accept, Accept-Encoding, Authorization, Content-Type, Origin",
 	"Access-Control-Allow-Methods":  "GET, OPTIONS",
 	"Access-Control-Allow-Origin":   "*",
 	"Access-Control-Expose-Headers": "Date",
@@ -123,7 +125,7 @@ func (api *API) Register(r *route.Router) {
 				w.WriteHeader(http.StatusNoContent)
 			}
 		})
-		return prometheus.InstrumentHandler(name, hf)
+		return prometheus.InstrumentHandler(name, gziphandler.GzipHandler(hf))
 	}
 
 	r.Options("/*path", instr("options", api.options))
@@ -395,14 +397,10 @@ func respond(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	b, err := json.Marshal(&response{
+	json.NewEncoder(w).Encode(&response{
 		Status: statusSuccess,
 		Data:   data,
 	})
-	if err != nil {
-		return
-	}
-	w.Write(b)
 }
 
 func respondError(w http.ResponseWriter, apiErr *apiError, data interface{}) {
@@ -423,16 +421,12 @@ func respondError(w http.ResponseWriter, apiErr *apiError, data interface{}) {
 	}
 	w.WriteHeader(code)
 
-	b, err := json.Marshal(&response{
+	json.NewEncoder(w).Encode(&response{
 		Status:    statusError,
 		ErrorType: apiErr.typ,
 		Error:     apiErr.err.Error(),
 		Data:      data,
 	})
-	if err != nil {
-		return
-	}
-	w.Write(b)
 }
 
 func parseTime(s string) (time.Time, error) {
