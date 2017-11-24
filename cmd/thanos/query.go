@@ -83,7 +83,7 @@ func runQuery(
 		stores    = cluster.NewStoreSet(logger, reg, peer)
 		queryable = query.NewQueryable(logger, stores.Get, replicaLabel)
 		engine    = promql.NewEngine(queryable, cfg.EngineOpts(logger))
-		api       = v1.NewAPI(engine, queryable, cfg)
+		api       = v1.NewAPI(reg, engine, queryable, cfg)
 	)
 
 	// Periodically update the store set with the addresses we see in our cluster.

@@ -31,6 +31,7 @@ import (
 
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/testutil"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
@@ -63,7 +64,11 @@ func TestEndpoints(t *testing.T) {
 		queryable:   suite.Storage(),
 		queryEngine: suite.QueryEngine(),
 		cfg:         sampleQueryConfig,
-		now:         func() time.Time { return now },
+
+		instantQueryDuration: prometheus.NewHistogram(prometheus.HistogramOpts{}),
+		rangeQueryDuration:   prometheus.NewHistogram(prometheus.HistogramOpts{}),
+
+		now: func() time.Time { return now },
 	}
 
 	start := time.Unix(0, 0)
