@@ -57,7 +57,7 @@
 
 [[projects]]
   name = "github.com/gogo/protobuf"
-  packages = ["gogoproto","proto","protoc-gen-gogo/descriptor"]
+  packages = ["gogoproto","proto","protoc-gen-gogo/descriptor","sortkeys","types"]
   revision = "342cbe0a04158f6dcb03ca0079991a51a4248c02"
   version = "v0.5"
 
@@ -202,14 +202,14 @@
 [[projects]]
   branch = "fabxc"
   name = "github.com/prometheus/prometheus"
-  packages = ["pkg/labels","pkg/textparse","pkg/timestamp","pkg/value","promql","storage","storage/tsdb","util/stats","util/strutil","util/testutil"]
-  revision = "4a532303cad2dcff4c3e9cf23bfa182ddb1eb5b2"
+  packages = ["pkg/labels","pkg/rulefmt","pkg/textparse","pkg/timestamp","pkg/value","promql","rules","storage","storage/tsdb","template","util/stats","util/strutil","util/testutil"]
+  revision = "6171d00fa712c2f8368e601fa20c131fe37c8e16"
 
 [[projects]]
-  branch = "fabxc"
+  branch = "master"
   name = "github.com/prometheus/tsdb"
   packages = [".","chunks","fileutil","labels"]
-  revision = "542b2be8bb930b1cd00121fca34a56197c829895"
+  revision = "ad3c4849a99729a9c10a55b3ba4c0ad146d2446a"
 
 [[projects]]
   branch = "master"
@@ -234,6 +234,12 @@
   name = "golang.org/x/sync"
   packages = ["errgroup"]
   revision = "fd80eb99c8f653c847d294a001bdf2a3a6f768f5"
+
+[[projects]]
+  branch = "master"
+  name = "golang.org/x/sys"
+  packages = ["unix"]
+  revision = "a13efeb2fd213cf4be7227992aa54519af3b2ac0"
 
 [[projects]]
   branch = "master"
@@ -272,6 +278,12 @@
   version = "v2.2.5"
 
 [[projects]]
+  branch = "v1"
+  name = "gopkg.in/yaml.v1"
+  packages = ["."]
+  revision = "9f9df34309c04878acc86042b16630b0f696e1de"
+
+[[projects]]
   branch = "v2"
   name = "gopkg.in/yaml.v2"
   packages = ["."]
@@ -280,6 +292,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "a3edd7257147fbcb0c0a8b751928fb03ae2a5993ff5edcdefa84a01e36d4f95f"
+  inputs-digest = "0d3b419e8c3069cfc540e47f9ab1d8495fff8fbdf515782da6198397185aee36"
   solver-name = "gps-cdcl"
   solver-version = 1
