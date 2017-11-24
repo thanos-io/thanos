@@ -108,14 +108,14 @@ func NewAPI(
 	cfg query.Config,
 ) *API {
 	instantQueryDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name: "thanos_api_instant_query_duration_seconds",
+		Name: "thanos_query_api_instant_query_duration_seconds",
 		Help: "Time it takes to perform instant query on promEngine backed up with thanos querier.",
 		Buckets: []float64{
 			0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 20,
 		},
 	})
 	rangeQueryDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name: "thanos_api_range_query_duration_seconds",
+		Name: "thanos_query_api_range_query_duration_seconds",
 		Help: "Time it takes to perform range query on promEngine backed up with thanos querier.",
 		Buckets: []float64{
 			0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 20,
