@@ -95,20 +95,46 @@ type API struct {
 	queryEngine *promql.Engine
 	cfg         query.Config
 
-	now func() time.Time
+	instantQueryDuration prometheus.Histogram
+	rangeQueryDuration   prometheus.Histogram
+	now                  func() time.Time
 }
 
 // NewAPI returns an initialized API type.
 func NewAPI(
+	reg *prometheus.Registry,
 	qe *promql.Engine,
 	q promql.Queryable,
 	cfg query.Config,
 ) *API {
+	instantQueryDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name: "thanos_api_instant_query_duration_seconds",
+		Help: "Time it takes to perform instant query on promEngine backed up with thanos querier.",
+		Buckets: []float64{
+			0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 20,
+		},
+	})
+	rangeQueryDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name: "thanos_api_range_query_duration_seconds",
+		Help: "Time it takes to perform range query on promEngine backed up with thanos querier.",
+		Buckets: []float64{
+			0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 20,
+		},
+	})
+
+	reg.MustRegister(
+		instantQueryDuration,
+		rangeQueryDuration,
+	)
 	return &API{
 		queryEngine: qe,
 		queryable:   q,
 		cfg:         cfg,
-		now:         time.Now,
+
+		instantQueryDuration: instantQueryDuration,
+		rangeQueryDuration:   rangeQueryDuration,
+
+		now: time.Now,
 	}
 }
 
@@ -177,6 +203,7 @@ func (api *API) query(r *http.Request) (interface{}, *apiError) {
 		defer cancel()
 	}
 
+	begin := api.now()
 	qry, err := api.queryEngine.NewInstantQuery(r.FormValue("query"), ts)
 	if err != nil {
 		return nil, &apiError{errorBadData, err}
@@ -194,6 +221,8 @@ func (api *API) query(r *http.Request) (interface{}, *apiError) {
 		}
 		return nil, &apiError{errorExec, res.Err}
 	}
+	api.instantQueryDuration.Observe(time.Since(begin).Seconds())
+
 	return &queryData{
 		ResultType: res.Value.Type(),
 		Result:     res.Value,
@@ -243,6 +272,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, *apiError) {
 		defer cancel()
 	}
 
+	begin := api.now()
 	qry, err := api.queryEngine.NewRangeQuery(r.FormValue("query"), start, end, step)
 	if err != nil {
 		return nil, &apiError{errorBadData, err}
@@ -258,6 +288,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, *apiError) {
 		}
 		return nil, &apiError{errorExec, res.Err}
 	}
+	api.rangeQueryDuration.Observe(time.Since(begin).Seconds())
 
 	return &queryData{
 		ResultType: res.Value.Type(),
