@@ -74,6 +74,12 @@
   revision = "1e59b77b52bf8e4b449a57e6f79f21226d571845"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/golang/snappy"
+  packages = ["."]
+  revision = "553a641470496b2327abcac10b36396bd98e45c9"
+
+[[projects]]
   name = "github.com/googleapis/gax-go"
   packages = ["."]
   revision = "317e0006254c44a0ac427cc52a0e083ff0b9622f"
@@ -298,6 +304,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "6a7feb95f10e1a069347adb44875a3d88da1811c3ba574da569fc88b241295d9"
+  inputs-digest = "1ae5c79f2ca501ac787403c451a6174a2c6b2664718fb3ee46515c75ef78ed4c"
   solver-name = "gps-cdcl"
   solver-version = 1
