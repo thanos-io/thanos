@@ -82,7 +82,8 @@ func TestQuerier_Series(t *testing.T) {
 	}, 1, 300, "")
 	defer q.Close()
 
-	res := q.Select()
+	res, err := q.Select()
+	testutil.Ok(t, err)
 
 	expected := []struct {
 		lset    labels.Labels

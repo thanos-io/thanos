@@ -123,7 +123,7 @@ func storeMatches(s StoreInfo, matchers ...*labels.Matcher) bool {
 	return true
 }
 
-func (q *querier) Select(ms ...*labels.Matcher) storage.SeriesSet {
+func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 	var (
 		mtx sync.Mutex
 		all []storepb.SeriesSet
@@ -134,7 +134,7 @@ func (q *querier) Select(ms ...*labels.Matcher) storage.SeriesSet {
 
 	sms, err := translateMatchers(ms...)
 	if err != nil {
-		return promSeriesSet{set: errSeriesSet{err: err}}
+		return nil, errors.Wrap(err, "convert matchers")
 	}
 	for _, s := range q.stores {
 		// We might be able to skip the store if its meta information indicates
@@ -157,7 +157,7 @@ func (q *querier) Select(ms ...*labels.Matcher) storage.SeriesSet {
 		})
 	}
 	if err := g.Wait(); err != nil {
-		return promSeriesSet{set: errSeriesSet{err: err}}
+		return nil, errors.Wrap(err, "query stores")
 	}
 	set := promSeriesSet{
 		mint: q.mint,
@@ -168,9 +168,9 @@ func (q *querier) Select(ms ...*labels.Matcher) storage.SeriesSet {
 	// of the same series into a single one. The series are ordered so that equal series
 	// from different replicas are sequential. We can now deduplicate those.
 	if q.replicaLabel == "" {
-		return set
+		return set, nil
 	}
-	return newDedupSeriesSet(set, q.replicaLabel)
+	return newDedupSeriesSet(set, q.replicaLabel), nil
 }
 
 func (q *querier) selectSingle(client storepb.StoreClient, ms ...storepb.LabelMatcher) (storepb.SeriesSet, error) {
