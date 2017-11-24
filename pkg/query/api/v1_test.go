@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -29,6 +30,7 @@ import (
 	"github.com/prometheus/common/route"
 
 	"github.com/improbable-eng/thanos/pkg/query"
+	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
@@ -622,4 +624,39 @@ func TestOptionsMethod(t *testing.T) {
 			t.Fatalf("Expected %q for header %q, got %q", v, h, resp.Header.Get(h))
 		}
 	}
+}
+
+func BenchmarkQueryResultEncoding(b *testing.B) {
+	var mat promql.Matrix
+	for i := 0; i < 1000; i++ {
+		lset := labels.FromStrings(
+			"__name__", "my_test_metric_name",
+			"instance", fmt.Sprintf("abcdefghijklmnopqrstuvxyz-%d", i),
+			"job", "test-test",
+			"method", "ABCD",
+			"status", "199",
+			"namespace", "something",
+			"long-label", "34grnt83j0qxj309je9rgt9jf2jd-92jd-92jf9wrfjre",
+		)
+		var points []promql.Point
+		for j := 0; j < b.N/1000; j++ {
+			points = append(points, promql.Point{
+				T: int64(j * 10000),
+				V: rand.Float64(),
+			})
+		}
+		mat = append(mat, promql.Series{
+			Metric: lset,
+			Points: points,
+		})
+	}
+	input := &queryData{
+		ResultType: promql.ValueTypeMatrix,
+		Result:     mat,
+	}
+	b.ResetTimer()
+
+	c, err := json.Marshal(&input)
+	testutil.Ok(b, err)
+	fmt.Println(len(c))
 }
