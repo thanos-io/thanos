@@ -42,6 +42,7 @@ func main() {
 	registerSidecar(cmds, app, "sidecar")
 	registerStore(cmds, app, "store")
 	registerQuery(cmds, app, "query")
+	registerRule(cmds, app, "rule")
 	registerExample(cmds, app, "example")
 
 	cmd, err := app.Parse(os.Args[1:])

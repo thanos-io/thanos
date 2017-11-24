@@ -53,7 +53,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*clusterAdvertiseAddr,
 			*peers,
 			cluster.PeerState{
-				Type: cluster.PeerTypeQuery,
+				Type:    cluster.PeerTypeQuery,
+				APIAddr: *httpAddr,
 			},
 			true,
 		)

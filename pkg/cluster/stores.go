@@ -90,7 +90,6 @@ func (s *StoreSet) Update(ctx context.Context) {
 			startTime := time.Now()
 			conn, err := grpc.DialContext(ctx, addr,
 				grpc.WithInsecure(),
-				grpc.WithBlock(),
 				grpc.WithUnaryInterceptor(s.grpcMetrics.UnaryClientInterceptor()),
 				grpc.WithStreamInterceptor(s.grpcMetrics.StreamClientInterceptor()),
 			)
