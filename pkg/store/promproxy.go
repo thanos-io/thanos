@@ -1,25 +1,27 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"path"
 	"sort"
-	"time"
+	"sync"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/golang/snappy"
+	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/store/prompb"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/tsdb/chunks"
 )
 
@@ -29,6 +31,7 @@ type PrometheusProxy struct {
 	logger         log.Logger
 	base           *url.URL
 	client         *http.Client
+	buffers        sync.Pool
 	externalLabels func() labels.Labels
 }
 
@@ -75,6 +78,18 @@ func (p *PrometheusProxy) Info(ctx context.Context, r *storepb.InfoRequest) (*st
 	return res, nil
 }
 
+func (p *PrometheusProxy) getBuffer() []byte {
+	b := p.buffers.Get()
+	if b == nil {
+		return make([]byte, 0, 32*1024) // 32KB seems like a good minimum starting size.
+	}
+	return b.([]byte)
+}
+
+func (p *PrometheusProxy) putBuffer(b []byte) {
+	p.buffers.Put(b[:0])
+}
+
 // Series returns all series for a requested time range and label matcher. The returned data may
 // exceed the requested time bounds.
 //
@@ -83,74 +98,102 @@ func (p *PrometheusProxy) Info(ctx context.Context, r *storepb.InfoRequest) (*st
 func (p *PrometheusProxy) Series(r *storepb.SeriesRequest, s storepb.Store_SeriesServer) error {
 	ext := p.externalLabels()
 
-	match, newMatcher, err := extLabelsMatches(ext, r.Matchers)
+	match, newMatchers, err := extLabelsMatches(ext, r.Matchers)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
 	if !match {
 		return nil
 	}
+	q := prompb.Query{StartTimestampMs: r.MinTime, EndTimestampMs: r.MaxTime}
 
-	sel, err := matcherToSelectorQuery(newMatcher)
-	if err != nil {
-		return status.Error(codes.InvalidArgument, err.Error())
+	// TODO(fabxc): import common definitions from prompb once we have a stable gRPC
+	// query API there.
+	for _, m := range newMatchers {
+		pm := prompb.LabelMatcher{Name: m.Name, Value: m.Value}
+
+		switch m.Type {
+		case storepb.LabelMatcher_EQ:
+			pm.Type = prompb.LabelMatcher_EQ
+		case storepb.LabelMatcher_NEQ:
+			pm.Type = prompb.LabelMatcher_NEQ
+		case storepb.LabelMatcher_RE:
+			pm.Type = prompb.LabelMatcher_RE
+		case storepb.LabelMatcher_NRE:
+			pm.Type = prompb.LabelMatcher_NRE
+		default:
+			return errors.New("unrecognized matcher type")
+		}
+		q.Matchers = append(q.Matchers, pm)
 	}
 
-	level.Debug(p.logger).Log("msg", "received request",
-		"mint", timestamp.Time(r.MinTime), "maxt", timestamp.Time(r.MaxTime), "matchers", sel)
-
-	// We can only provide second precision so we have to round up. This could
-	// cause additional samples to be fetched, which we have to remove further down.
-	rng := (r.MaxTime-r.MinTime)/1000 + 1
-	q := fmt.Sprintf("%s[%ds]", sel, rng)
-
-	args := url.Values{}
-
-	args.Add("query", q)
-	args.Add("time", timestamp.Time(r.MaxTime).Format(time.RFC3339Nano))
+	reqb, err := proto.Marshal(&prompb.ReadRequest{Queries: []prompb.Query{q}})
+	if err != nil {
+		return errors.Wrap(err, "marshal read request")
+	}
 
 	u := *p.base
-	u.Path = path.Join(u.Path, "/api/v1/query")
-	u.RawQuery = args.Encode()
+	u.Path = "/api/v1/read"
 
-	req, err := http.NewRequest("GET", u.String(), nil)
+	preq, err := http.NewRequest("POST", u.String(), bytes.NewReader(snappy.Encode(nil, reqb)))
 	if err != nil {
-		return status.Error(codes.Unknown, err.Error())
+		return errors.Wrap(err, "unable to create request")
 	}
+	preq.Header.Add("Content-Encoding", "snappy")
+	preq.Header.Set("Content-Type", "application/x-protobuf")
+	preq.Header.Set("X-Prometheus-Remote-Read-Version", "0.1.0")
 
-	resp, err := p.client.Do(req.WithContext(s.Context()))
+	preq = preq.WithContext(s.Context())
+
+	presp, err := p.client.Do(preq)
 	if err != nil {
-		return status.Error(codes.Unknown, err.Error())
+		return errors.Wrap(err, "send request")
 	}
-	defer resp.Body.Close()
+	defer presp.Body.Close()
 
-	var m struct {
-		Data struct {
-			Result model.Matrix `json:"result"`
-		} `json:"data"`
+	if presp.StatusCode/100 != 2 {
+		return errors.Errorf("request failed with code %s", presp.Status)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
-		return status.Error(codes.Unknown, err.Error())
+
+	buf := bytes.NewBuffer(p.getBuffer())
+	defer func() {
+		p.putBuffer(buf.Bytes())
+	}()
+	if _, err := io.Copy(buf, presp.Body); err != nil {
+		return errors.Wrap(err, "copy response")
+	}
+	decomp, err := snappy.Decode(p.getBuffer(), buf.Bytes())
+	defer p.putBuffer(decomp)
+	if err != nil {
+		return errors.Wrap(err, "decompress response")
+	}
+
+	var data prompb.ReadResponse
+	if err := proto.Unmarshal(decomp, &data); err != nil {
+		return errors.Wrap(err, "unmarshal response")
+	}
+	if len(data.Results) != 1 {
+		return errors.Errorf("unexepected result size %d", len(data.Results))
 	}
 
 	var res storepb.SeriesResponse
 
-	for _, e := range m.Data.Result {
-		lset := translateAndExtendLabels(e.Metric, ext)
+	for _, e := range data.Results[0].Timeseries {
+		lset := translateAndExtendLabels(e.Labels, ext)
 		// We generally expect all samples of the requested range to be traversed
 		// so we just encode all samples into one big chunk regardless of size.
 		//
 		// Drop all data before r.MinTime since we might have fetched more than
 		// the requested range (see above).
-		enc, b, err := encodeChunk(e.Values, r.MinTime)
+		enc, b, err := encodeChunk(e.Samples, r.MinTime)
 		if err != nil {
 			return status.Error(codes.Unknown, err.Error())
 		}
 		res.Series = storepb.Series{
 			Labels: lset,
 			Chunks: []storepb.Chunk{{
-				MinTime: int64(e.Values[0].Timestamp),
-				MaxTime: int64(e.Values[len(e.Values)-1].Timestamp),
+				MinTime: int64(e.Samples[0].Timestamp),
+				MaxTime: int64(e.Samples[len(e.Samples)-1].Timestamp),
 				Type:    enc,
 				Data:    b,
 			}},
@@ -189,7 +232,7 @@ func extLabelsMatches(extLabels labels.Labels, ms []storepb.LabelMatcher) (bool,
 
 // encodeChunk translates the sample pairs into a chunk. It takes a minimum timestamp
 // and drops all samples before that one.
-func encodeChunk(ss []model.SamplePair, mint int64) (storepb.Chunk_Encoding, []byte, error) {
+func encodeChunk(ss []prompb.Sample, mint int64) (storepb.Chunk_Encoding, []byte, error) {
 	c := chunks.NewXORChunk()
 	a, err := c.Appender()
 	if err != nil {
@@ -206,16 +249,16 @@ func encodeChunk(ss []model.SamplePair, mint int64) (storepb.Chunk_Encoding, []b
 
 // translateAndExtendLabels transforms a metrics into a protobuf label set. It additionally
 // attaches the given labels to it, overwriting existing ones on colllision.
-func translateAndExtendLabels(m model.Metric, extend labels.Labels) []storepb.Label {
+func translateAndExtendLabels(m []prompb.Label, extend labels.Labels) []storepb.Label {
 	lset := make([]storepb.Label, 0, len(m)+len(extend))
 
-	for k, v := range m {
-		if extend.Get(string(k)) != "" {
+	for _, l := range m {
+		if extend.Get(l.Name) != "" {
 			continue
 		}
 		lset = append(lset, storepb.Label{
-			Name:  string(k),
-			Value: string(v),
+			Name:  l.Name,
+			Value: l.Value,
 		})
 	}
 	for _, l := range extend {

@@ -21,7 +21,7 @@ GOGOPROTO_ROOT="${GOPATH}/src/github.com/gogo/protobuf"
 GOGOPROTO_PATH="${GOGOPROTO_ROOT}:${GOGOPROTO_ROOT}/protobuf"
 GRPC_GATEWAY_ROOT="${GOPATH}/src/github.com/grpc-ecosystem/grpc-gateway"
 
-DIRS="pkg/store/storepb"
+DIRS="pkg/store/storepb pkg/store/prompb"
 
 for dir in ${DIRS}; do
 	pushd ${dir}
