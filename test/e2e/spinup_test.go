@@ -85,6 +85,7 @@ func spinup(t testing.TB, cfg config) (close func()) {
 
 		commands = append(commands, exec.Command("thanos", "rule",
 			"--debug.name", fmt.Sprintf("rule-%d", i),
+			"--label", fmt.Sprintf(`replica="%d"`, i),
 			"--data-dir", dbDir,
 			"--rule-dir", dbDir,
 			"--eval-interval", "1s",

@@ -38,7 +38,7 @@ groups:
 	closeFn := spinup(t, config{
 		workDir:    dir,
 		numQueries: 1,
-		numRules:   1,
+		numRules:   2,
 		rules:      alwaysFireRule,
 	})
 	defer closeFn()
@@ -46,11 +46,21 @@ groups:
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	expMetric := model.Metric{
-		"__name__":   "ALERTS",
-		"severity":   "page",
-		"alertname":  "AlwaysFiring",
-		"alertstate": "firing",
+	expMetrics := []model.Metric{
+		{
+			"__name__":   "ALERTS",
+			"severity":   "page",
+			"alertname":  "AlwaysFiring",
+			"alertstate": "firing",
+			"replica":    "1",
+		},
+		{
+			"__name__":   "ALERTS",
+			"severity":   "page",
+			"alertname":  "AlwaysFiring",
+			"alertstate": "firing",
+			"replica":    "2",
+		},
 	}
 	err = runutil.Retry(time.Second, ctx.Done(), func() error {
 		qtime := time.Now()
@@ -59,17 +69,19 @@ groups:
 		if err != nil {
 			return err
 		}
-		if len(res) != 1 {
+		if len(res) != 2 {
 			return errors.Errorf("unexpected result length %d", len(res))
 		}
-		if !res[0].Metric.Equal(expMetric) {
-			return errors.Errorf("unexpected metric %s", res[0].Metric)
-		}
-		if int64(res[0].Timestamp) != timestamp.FromTime(qtime) {
-			return errors.Errorf("unexpected timestamp %d", res[0].Timestamp)
-		}
-		if res[0].Value != 1 {
-			return errors.Errorf("unexpected value %d", res[0].Value)
+		for i, r := range res {
+			if !r.Metric.Equal(expMetrics[i]) {
+				return errors.Errorf("unexpected metric %s", r.Metric)
+			}
+			if int64(r.Timestamp) != timestamp.FromTime(qtime) {
+				return errors.Errorf("unexpected timestamp %d", r.Timestamp)
+			}
+			if r.Value != 1 {
+				return errors.Errorf("unexpected value %f", r.Value)
+			}
 		}
 		return nil
 	})
