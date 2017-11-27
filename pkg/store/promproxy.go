@@ -179,13 +179,13 @@ func (p *PrometheusProxy) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	var res storepb.SeriesResponse
 
 	for _, e := range data.Results[0].Timeseries {
-		lset := translateAndExtendLabels(e.Labels, ext)
+		lset := p.translateAndExtendLabels(e.Labels, ext)
 		// We generally expect all samples of the requested range to be traversed
 		// so we just encode all samples into one big chunk regardless of size.
 		//
 		// Drop all data before r.MinTime since we might have fetched more than
 		// the requested range (see above).
-		enc, b, err := encodeChunk(e.Samples, r.MinTime)
+		enc, b, err := p.encodeChunk(e.Samples, r.MinTime)
 		if err != nil {
 			return status.Error(codes.Unknown, err.Error())
 		}
@@ -232,7 +232,7 @@ func extLabelsMatches(extLabels labels.Labels, ms []storepb.LabelMatcher) (bool,
 
 // encodeChunk translates the sample pairs into a chunk. It takes a minimum timestamp
 // and drops all samples before that one.
-func encodeChunk(ss []prompb.Sample, mint int64) (storepb.Chunk_Encoding, []byte, error) {
+func (p *PrometheusProxy) encodeChunk(ss []prompb.Sample, mint int64) (storepb.Chunk_Encoding, []byte, error) {
 	c := chunks.NewXORChunk()
 	a, err := c.Appender()
 	if err != nil {
@@ -249,7 +249,7 @@ func encodeChunk(ss []prompb.Sample, mint int64) (storepb.Chunk_Encoding, []byte
 
 // translateAndExtendLabels transforms a metrics into a protobuf label set. It additionally
 // attaches the given labels to it, overwriting existing ones on colllision.
-func translateAndExtendLabels(m []prompb.Label, extend labels.Labels) []storepb.Label {
+func (p *PrometheusProxy) translateAndExtendLabels(m []prompb.Label, extend labels.Labels) []storepb.Label {
 	lset := make([]storepb.Label, 0, len(m)+len(extend))
 
 	for _, l := range m {
