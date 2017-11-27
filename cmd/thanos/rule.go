@@ -15,12 +15,16 @@ import (
 	"syscall"
 	"time"
 
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
+	"google.golang.org/grpc"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/store"
+	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/oklog/run"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -64,7 +68,10 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			*clusterBindAddr,
 			*clusterAdvertiseAddr,
 			*peers,
-			cluster.PeerState{Type: cluster.PeerTypeSource},
+			cluster.PeerState{
+				Type:    cluster.PeerTypeSource,
+				APIAddr: *grpcAddr,
+			},
 			true,
 		)
 		if err != nil {
@@ -198,6 +205,35 @@ func runRule(
 			}
 		}, func(error) {
 			close(cancel)
+		})
+	}
+	{
+		l, err := net.Listen("tcp", grpcAddr)
+		if err != nil {
+			return errors.Wrap(err, "listen API address")
+		}
+		logger := log.With(logger, "component", "store")
+
+		store := store.NewTSDBStore(logger, reg, db, nil)
+
+		met := grpc_prometheus.NewServerMetrics()
+		met.EnableHandlingTimeHistogram(
+			grpc_prometheus.WithHistogramBuckets([]float64{
+				0.001, 0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4,
+			}),
+		)
+		s := grpc.NewServer(
+			grpc.UnaryInterceptor(met.UnaryServerInterceptor()),
+			grpc.StreamInterceptor(met.StreamServerInterceptor()),
+		)
+		storepb.RegisterStoreServer(s, store)
+		reg.MustRegister(met)
+
+		g.Add(func() error {
+			return errors.Wrap(s.Serve(l), "serve gRPC")
+		}, func(error) {
+			s.Stop()
+			l.Close()
 		})
 	}
 	// Start the HTTP server for debugging and metrics.
