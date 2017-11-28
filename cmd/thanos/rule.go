@@ -14,12 +14,16 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
+
+	"github.com/improbable-eng/thanos/pkg/runutil"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/improbable-eng/thanos/pkg/alert"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
@@ -58,6 +62,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	evalInterval := cmd.Flag("eval-interval", "the default evaluation interval to use").
 		Default("30s").Duration()
 
+	alertmgrs := cmd.Flag("alertmanagers.url", "URLs of Alertmanagers to send alerts to").
+		Strings()
+
 	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
 
 	clusterBindAddr := cmd.Flag("cluster.address", "listen address for cluster").
@@ -86,7 +93,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 		if err != nil {
 			return errors.Wrap(err, "parse labels")
 		}
-		return runRule(g, logger, reg, lset, *httpAddr, *grpcAddr, *evalInterval, *dataDir, *ruleDir, peer)
+		return runRule(g, logger, reg, lset, *alertmgrs, *httpAddr, *grpcAddr, *evalInterval, *dataDir, *ruleDir, peer)
 	}
 }
 
@@ -97,6 +104,7 @@ func runRule(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	lset labels.Labels,
+	alertmgrURLs []string,
 	httpAddr string,
 	grpcAddr string,
 	evalInterval time.Duration,
@@ -139,15 +147,42 @@ func runRule(
 		return nil, errors.Errorf("no query peer reachable")
 	}
 
-	var mgr *rules.Manager
-
+	// Run rule evaluation and alert notifications.
+	var (
+		alertmgrs = newAlertmanagerSet(alertmgrURLs, nil)
+		alertQ    = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(lset))
+		mgr       *rules.Manager
+	)
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 
+		notify := func(ctx context.Context, expr string, alerts ...*rules.Alert) error {
+			res := make([]*alert.Alert, 0, len(alerts))
+			for _, alrt := range alerts {
+				// Only send actually firing alerts.
+				if alrt.State == rules.StatePending {
+					continue
+				}
+				a := &alert.Alert{
+					StartsAt:    alrt.FiringAt,
+					Labels:      alrt.Labels,
+					Annotations: alrt.Annotations,
+				}
+				if !alrt.ResolvedAt.IsZero() {
+					a.EndsAt = alrt.ResolvedAt
+				}
+				res = append(res, a)
+			}
+
+			if len(alerts) > 0 {
+				alertQ.Push(res...)
+			}
+			return nil
+		}
 		mgr = rules.NewManager(&rules.ManagerOptions{
 			Context:     ctx,
 			Query:       queryFn,
-			Notify:      printAlertNotifications,
+			Notify:      notify,
 			Logger:      log.With(logger, "component", "rules"),
 			Appendable:  tsdb.Adapter(db, 0),
 			ExternalURL: nil,
@@ -161,7 +196,40 @@ func runRule(
 			cancel()
 		})
 	}
+	{
+		sdr := alert.NewSender(logger, reg, alertmgrs.get, nil)
+		ctx, cancel := context.WithCancel(context.Background())
 
+		g.Add(func() error {
+			for {
+				sdr.Send(ctx, alertQ.Pop(ctx.Done()))
+
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				default:
+				}
+			}
+		}, func(error) {
+			cancel()
+		})
+	}
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+
+		g.Add(func() error {
+			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+				if err := alertmgrs.update(ctx); err != nil {
+					level.Warn(logger).Log("msg", "refreshing Alertmanagers failed", "err", err)
+				}
+				return nil
+			})
+		}, func(error) {
+			cancel()
+		})
+	}
+
+	// Handle reload and termination interrupts.
 	reload := make(chan struct{}, 1)
 	{
 		cancel := make(chan struct{})
@@ -217,6 +285,8 @@ func runRule(
 			close(cancel)
 		})
 	}
+
+	// Start HTTP and gRPC servers.
 	{
 		l, err := net.Listen("tcp", grpcAddr)
 		if err != nil {
@@ -246,7 +316,6 @@ func runRule(
 			l.Close()
 		})
 	}
-	// Start the HTTP server for debugging and metrics.
 	{
 		router := route.New()
 
@@ -324,11 +393,98 @@ func queryPrometheusInstant(ctx context.Context, addr, query string, t time.Time
 	return vec, nil
 }
 
-func printAlertNotifications(ctx context.Context, expr string, alerts ...*rules.Alert) error {
-	fmt.Fprintf(os.Stdout, "%d alerts for %s\n", len(alerts), expr)
-	for _, a := range alerts {
-		fmt.Fprintf(os.Stdout, "  labels: %s val: %f\n", a.Labels, a.Value)
+type alertmanagerSet struct {
+	resolver *net.Resolver
+	addrs    []string
+	mtx      sync.Mutex
+	current  []*url.URL
+}
+
+func newAlertmanagerSet(addrs []string, resolver *net.Resolver) *alertmanagerSet {
+	if resolver == nil {
+		resolver = net.DefaultResolver
 	}
+	return &alertmanagerSet{
+		resolver: resolver,
+		addrs:    addrs,
+	}
+}
+
+func (s *alertmanagerSet) get() []*url.URL {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+	return s.current
+}
+
+const defaultAlertmanagerPort = 9093
+
+func (s *alertmanagerSet) update(ctx context.Context) error {
+	var res []*url.URL
+
+	for _, addr := range s.addrs {
+		u, err := url.Parse(addr)
+		if err != nil {
+			return errors.Wrapf(err, "parse URL %q", addr)
+		}
+		host, port, err := net.SplitHostPort(u.Host)
+		if err != nil {
+			host, port = u.Host, ""
+		}
+		var (
+			hosts  []string
+			proto  = u.Scheme
+			lookup = "none"
+		)
+		if ps := strings.SplitN(u.Scheme, ":", 2); len(ps) == 2 {
+			lookup, proto = ps[0], ps[1]
+		}
+		switch lookup {
+		case "dns":
+			if port == "" {
+				port = strconv.Itoa(defaultAlertmanagerPort)
+			}
+			ips, err := s.resolver.LookupIPAddr(ctx, host)
+			if err != nil {
+				return errors.Wrapf(err, "lookup IP addresses %q", host)
+			}
+			for _, ip := range ips {
+				hosts = append(hosts, net.JoinHostPort(ip.String(), port))
+			}
+		case "dnssrv":
+			_, recs, err := s.resolver.LookupSRV(ctx, "", proto, host)
+			if err != nil {
+				return errors.Wrapf(err, "lookup SRV records %q", host)
+			}
+			for _, rec := range recs {
+				// Only use port from SRV record if no explicit port was specified.
+				if port == "" {
+					port = strconv.Itoa(int(rec.Port))
+				}
+				hosts = append(hosts, net.JoinHostPort(rec.Target, port))
+			}
+		case "none":
+			if port == "" {
+				port = strconv.Itoa(defaultAlertmanagerPort)
+			}
+			hosts = append(hosts, net.JoinHostPort(host, port))
+		default:
+			return errors.Errorf("invalid lookup scheme %q", lookup)
+		}
+
+		for _, h := range hosts {
+			res = append(res, &url.URL{
+				Scheme: proto,
+				Host:   h,
+				Path:   u.Path,
+				User:   u.User,
+			})
+		}
+	}
+
+	s.mtx.Lock()
+	s.current = res
+	s.mtx.Unlock()
+
 	return nil
 }
 
@@ -346,4 +502,14 @@ func parseFlagLabels(s []string) (labels.Labels, error) {
 		lset = append(lset, labels.Label{Name: parts[0], Value: val})
 	}
 	return lset, nil
+}
+
+func labelsTSDBToProm(lset labels.Labels) (res promlabels.Labels) {
+	for _, l := range lset {
+		res = append(res, promlabels.Label{
+			Name:  l.Name,
+			Value: l.Value,
+		})
+	}
+	return res
 }
