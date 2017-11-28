@@ -135,14 +135,14 @@ func runSidecar(
 		if err != nil {
 			return errors.Wrap(err, "listen API address")
 		}
-		logger := log.With(logger, "component", "proxy")
+		logger := log.With(logger, "component", "store")
 
 		var client http.Client
 
-		proxy, err := store.NewPrometheusProxy(
+		promStore, err := store.NewPrometheusStore(
 			logger, prometheus.DefaultRegisterer, &client, promURL, externalLabels.Get)
 		if err != nil {
-			return errors.Wrap(err, "create Prometheus proxy")
+			return errors.Wrap(err, "create Prometheus store")
 		}
 
 		met := grpc_prometheus.NewServerMetrics()
@@ -155,7 +155,7 @@ func runSidecar(
 			grpc.UnaryInterceptor(met.UnaryServerInterceptor()),
 			grpc.StreamInterceptor(met.StreamServerInterceptor()),
 		)
-		storepb.RegisterStoreServer(s, proxy)
+		storepb.RegisterStoreServer(s, promStore)
 		reg.MustRegister(met)
 
 		g.Add(func() error {

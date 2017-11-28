@@ -53,9 +53,6 @@ func (s *TSDBStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.
 
 // Series returns all series for a requested time range and label matcher. The returned data may
 // exceed the requested time bounds.
-//
-// Prometheus's range query API is not suitable to give us all datapoints. We use the
-// instant API and do a range selection in PromQL to cover the queried time range.
 func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	match, newMatchers, err := extLabelsMatches(s.labels, r.Matchers)
 	if err != nil {
@@ -69,7 +66,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	// TODO(fabxc): an improvement over this trivial approach would be to directly
+	// TODO(fabxc): An improvement over this trivial approach would be to directly
 	// use the chunks provided by TSDB in the response.
 	// But since the sidecar has a similar approach, optimizing here has only
 	// limited benefit for now.
