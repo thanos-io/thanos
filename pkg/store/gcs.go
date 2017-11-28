@@ -37,6 +37,14 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const (
+	// Class A operation.
+	gcsOperationObjectsList = "objects.list"
+
+	// Class B operation.
+	gcsOperationObjectGet = "object.get"
+)
+
 // GCSStore implements the store API backed by a GCS bucket. It loads all index
 // files to local disk.
 type GCSStore struct {
@@ -62,6 +70,7 @@ type gcsStoreMetrics struct {
 	seriesPreloadDuration    prometheus.Histogram
 	seriesPreloadAllDuration prometheus.Histogram
 	seriesMergeDuration      prometheus.Histogram
+	gcsOperations            *prometheus.CounterVec
 }
 
 func newGCSStoreMetrics(reg *prometheus.Registry, s *GCSStore) *gcsStoreMetrics {
@@ -109,6 +118,10 @@ func newGCSStoreMetrics(reg *prometheus.Registry, s *GCSStore) *gcsStoreMetrics 
 			0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 1, 3, 5, 10,
 		},
 	})
+	m.gcsOperations = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_gcs_operations_total",
+		Help: "Number of Google Storage operations.",
+	}, []string{"type"})
 
 	if reg != nil {
 		reg.MustRegister(
@@ -119,6 +132,7 @@ func newGCSStoreMetrics(reg *prometheus.Registry, s *GCSStore) *gcsStoreMetrics 
 			m.seriesPreloadDuration,
 			m.seriesPreloadAllDuration,
 			m.seriesMergeDuration,
+			m.gcsOperations,
 		)
 	}
 	return &m
@@ -186,6 +200,7 @@ func (s *GCSStore) SyncBlocks(ctx context.Context, interval time.Duration) {
 }
 
 func (s *GCSStore) downloadBlocks(ctx context.Context) error {
+	s.metrics.gcsOperations.WithLabelValues(gcsOperationObjectsList).Inc()
 	objs := s.bucket.Objects(ctx, &storage.Query{Delimiter: "/"})
 
 	// Fetch a maximum of 20 blocks in parallel.
@@ -246,6 +261,8 @@ func (s *GCSStore) downloadBlock(ctx context.Context, id ulid.ULID) error {
 		if err != nil {
 			return errors.Wrap(err, "create local index copy")
 		}
+
+		s.metrics.gcsOperations.WithLabelValues(gcsOperationObjectGet).Inc()
 		r, err := obj.NewReader(ctx)
 		if err != nil {
 			return errors.Wrap(err, "create index object reader")
@@ -343,7 +360,7 @@ func (s *GCSStore) loadFromDisk(id ulid.ULID) (*gcsBlock, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "read meta file")
 	}
-	b, err := newGCSBlock(context.TODO(), s.logger, meta, indexr, s.bucket)
+	b, err := newGCSBlock(context.TODO(), s.logger, meta, indexr, s.bucket, s.metrics.gcsOperations)
 	if err != nil {
 		return nil, errors.Wrap(err, "open GCS block")
 	}
@@ -607,6 +624,7 @@ type gcsBlock struct {
 	pendingReaders sync.WaitGroup
 	index          tsdb.IndexReader
 	chunkObjs      []*storage.ObjectHandle
+	gcsOperations  *prometheus.CounterVec
 }
 
 func newGCSBlock(
@@ -615,10 +633,17 @@ func newGCSBlock(
 	meta *block.Meta,
 	index tsdb.IndexReader,
 	bkt *storage.BucketHandle,
+	gcsOperations *prometheus.CounterVec,
 ) (*gcsBlock, error) {
-	b := &gcsBlock{logger: logger, meta: meta, index: index}
+	b := &gcsBlock{
+		logger:        logger,
+		meta:          meta,
+		index:         index,
+		gcsOperations: gcsOperations,
+	}
 
 	// Get object handles for all chunk files.
+	gcsOperations.WithLabelValues(gcsOperationObjectsList).Inc()
 	objs := bkt.Objects(ctx, &storage.Query{
 		Prefix: path.Join(meta.ULID.String(), "chunks/"),
 	})
@@ -666,7 +691,7 @@ func (b *gcsBlock) indexReader() tsdb.IndexReader {
 
 func (b *gcsBlock) chunkReader(ctx context.Context) *gcsChunkReader {
 	b.pendingReaders.Add(1)
-	return newGCSChunkReader(ctx, b.logger, b.meta.ULID, b.chunkObjs, b.pendingReaders.Done)
+	return newGCSChunkReader(ctx, b.logger, b.meta.ULID, b.chunkObjs, b.pendingReaders.Done, b.gcsOperations)
 }
 
 type closeIndex struct {
@@ -696,9 +721,11 @@ type gcsChunkReader struct {
 	preloads [][]uint32
 	mtx      sync.Mutex
 	chunks   map[uint64]chunks.Chunk
+
+	gcsOperations *prometheus.CounterVec
 }
 
-func newGCSChunkReader(ctx context.Context, logger log.Logger, id ulid.ULID, files []*storage.ObjectHandle, close func()) *gcsChunkReader {
+func newGCSChunkReader(ctx context.Context, logger log.Logger, id ulid.ULID, files []*storage.ObjectHandle, close func(), gcsOperations *prometheus.CounterVec) *gcsChunkReader {
 	ctx, cancel := context.WithCancel(ctx)
 
 	return &gcsChunkReader{
@@ -712,6 +739,7 @@ func newGCSChunkReader(ctx context.Context, logger log.Logger, id ulid.ULID, fil
 			cancel()
 			close()
 		},
+		gcsOperations: gcsOperations,
 	}
 }
 
@@ -777,6 +805,7 @@ func (r *gcsChunkReader) preloadFile(g *run.Group, seq int, file *storage.Object
 					"duration", time.Since(now))
 			}()
 
+			r.gcsOperations.WithLabelValues(gcsOperationObjectGet).Inc()
 			objr, err := file.NewRangeReader(ctx, int64(start), int64(end-start))
 			if err != nil {
 				return errors.Wrap(err, "create reader")

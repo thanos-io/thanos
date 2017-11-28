@@ -16,6 +16,12 @@ import (
 	"google.golang.org/api/iterator"
 )
 
+const (
+	// Class A operations.
+	gcsOperationObjectsList  = "objects.list"
+	gcsOperationObjectInsert = "object.insert"
+)
+
 // GCSRemote implements a remote for Google Cloud Storage.
 type GCSRemote struct {
 	logger  log.Logger
@@ -28,6 +34,7 @@ type gcsRemoteMetrics struct {
 	dirSyncFailures prometheus.Counter
 	uploads         prometheus.Counter
 	uploadFailures  prometheus.Counter
+	gcsOperations   *prometheus.CounterVec
 }
 
 func newGCSRemoteMetrics(r prometheus.Registerer) *gcsRemoteMetrics {
@@ -39,7 +46,7 @@ func newGCSRemoteMetrics(r prometheus.Registerer) *gcsRemoteMetrics {
 	})
 	m.dirSyncFailures = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "thanos_gcs_remote_dir_sync_failures_total",
-		Help: "Total number of failed  dir syncs",
+		Help: "Total number of failed dir syncs",
 	})
 	m.uploads = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "thanos_gcs_remote_uploads_total",
@@ -49,9 +56,19 @@ func newGCSRemoteMetrics(r prometheus.Registerer) *gcsRemoteMetrics {
 		Name: "thanos_gcs_remote_upload_failures_total",
 		Help: "Total number of failed object uploads",
 	})
+	m.gcsOperations = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_gcs_operations_total",
+		Help: "Number of Google Storage operations.",
+	}, []string{"type"})
 
 	if r != nil {
-		prometheus.MustRegister()
+		prometheus.MustRegister(
+			m.dirSyncs,
+			m.dirSyncFailures,
+			m.uploads,
+			m.uploadFailures,
+			m.gcsOperations,
+		)
 	}
 	return &m
 }
@@ -66,6 +83,7 @@ func NewGCSRemote(logger log.Logger, metricReg prometheus.Registerer, bucket *st
 }
 
 func (r *GCSRemote) listDir(ctx context.Context, dir string) *storage.ObjectIterator {
+	r.metrics.gcsOperations.WithLabelValues(gcsOperationObjectsList).Inc()
 	return r.bucket.Objects(ctx, &storage.Query{
 		Delimiter: "/",
 		Prefix:    dir,
@@ -125,6 +143,8 @@ func (r *GCSRemote) uploadSingle(ctx context.Context, src, target string) error 
 		r.metrics.uploadFailures.Inc()
 		return err
 	}
+
+	r.metrics.gcsOperations.WithLabelValues(gcsOperationObjectInsert).Inc()
 	w := r.bucket.Object(target).NewWriter(ctx)
 
 	_, err = io.Copy(w, f)
@@ -136,6 +156,7 @@ func (r *GCSRemote) uploadSingle(ctx context.Context, src, target string) error 
 }
 
 // delete removes all data prefixed with the dir.
+// NOTE: object.Delete operation is free so no worth to increment gcs operations metric.
 func (r *GCSRemote) delete(ctx context.Context, dir string) error {
 	objs := r.listDir(ctx, dir)
 	for {
@@ -146,6 +167,7 @@ func (r *GCSRemote) delete(ctx context.Context, dir string) error {
 		if err != nil {
 			return err
 		}
+
 		if err := r.bucket.Object(oa.Name).Delete(ctx); err != nil {
 			return err
 		}
