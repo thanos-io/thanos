@@ -2,8 +2,11 @@ package e2e_test
 
 import (
 	"context"
+	"encoding/json"
 	"io/ioutil"
+	"net/http"
 	"os"
+	"sort"
 	"testing"
 	"time"
 
@@ -36,10 +39,11 @@ groups:
 `
 
 	closeFn := spinup(t, config{
-		workDir:    dir,
-		numQueries: 1,
-		numRules:   2,
-		rules:      alwaysFireRule,
+		workDir:          dir,
+		numQueries:       1,
+		numRules:         2,
+		numAlertmanagers: 1,
+		rules:            alwaysFireRule,
 	})
 	defer closeFn()
 
@@ -62,9 +66,22 @@ groups:
 			"replica":    "2",
 		},
 	}
+	expAlertLabels := []model.LabelSet{
+		{
+			"severity":  "page",
+			"alertname": "AlwaysFiring",
+			"replica":   "1",
+		},
+		{
+			"severity":  "page",
+			"alertname": "AlwaysFiring",
+			"replica":   "2",
+		},
+	}
 	err = runutil.Retry(time.Second, ctx.Done(), func() error {
 		qtime := time.Now()
 
+		// The time series written for the firing alerting rule must be queryable.
 		res, err := queryPrometheus(ctx, "http://localhost:19491", time.Now(), "ALERTS")
 		if err != nil {
 			return err
@@ -83,7 +100,45 @@ groups:
 				return errors.Errorf("unexpected value %f", r.Value)
 			}
 		}
+		// A notification must be sent to Alertmanager.
+		alrts, err := queryAlertmanagerAlerts(ctx, "http://localhost:29093")
+		if err != nil {
+			return err
+		}
+		if len(alrts) != 2 {
+			return errors.Errorf("unexpected alerts length %d", len(alrts))
+		}
+		for i, a := range alrts {
+			if !a.Labels.Equal(expAlertLabels[i]) {
+				return errors.Errorf("unexpected labels %s", a.Labels)
+			}
+		}
 		return nil
 	})
 	testutil.Ok(t, err)
+}
+
+func queryAlertmanagerAlerts(ctx context.Context, url string) ([]*model.Alert, error) {
+	req, err := http.NewRequest("GET", url+"/api/v1/alerts", nil)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var v struct {
+		Data []*model.Alert `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
+		return nil, err
+	}
+	sort.Slice(v.Data, func(i, j int) bool {
+		return v.Data[i].Labels.Before(v.Data[j].Labels)
+	})
+	return v.Data, nil
 }

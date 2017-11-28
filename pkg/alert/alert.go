@@ -36,7 +36,7 @@ type Alert struct {
 	// Extra key/value information which does not define alert identity.
 	Annotations labels.Labels `json:"annotations"`
 
-	// The known time range for this alert. Both ends are optional.
+	// The known time range for this alert. Start and end time are both optional.
 	StartsAt     time.Time `json:"startsAt,omitempty"`
 	EndsAt       time.Time `json:"endsAt,omitempty"`
 	GeneratorURL string    `json:"generatorURL,omitempty"`
@@ -125,7 +125,7 @@ func NewQueue(logger log.Logger, reg prometheus.Registerer, capacity, maxBatchSi
 		Name: "thanos_alert_queue_length",
 		Help: "Length of the alert queue.",
 	}, func() float64 {
-		return float64(q.Cap())
+		return float64(q.Len())
 	})
 	if reg != nil {
 		reg.MustRegister(q.pushed, q.popped, q.dropped, lenMetric, capMetric)
@@ -170,7 +170,10 @@ func (q *Queue) Pop(termc <-chan struct{}) []*Alert {
 }
 
 // Push adds a list of alerts to the queue.
-func (q *Queue) Push(alerts ...*Alert) {
+func (q *Queue) Push(alerts []*Alert) {
+	if len(alerts) == 0 {
+		return
+	}
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
 
@@ -316,12 +319,12 @@ func (s *Sender) sendOne(ctx context.Context, url string, b []byte) error {
 
 	resp, err := s.doReq(req)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "send request to %q", url)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode/100 != 2 {
-		return errors.Errorf("bad response status %v", resp.Status)
+		return errors.Errorf("bad response status %v from %q", resp.Status, url)
 	}
 	return nil
 }

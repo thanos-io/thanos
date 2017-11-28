@@ -29,6 +29,7 @@ install-tools:
 test-deps:
 	@go install github.com/improbable-eng/thanos/cmd/thanos
 	@go get -u github.com/prometheus/prometheus/cmd/prometheus
+	@go get -u github.com/prometheus/alertmanager/cmd/alertmanager
 
 proto:
 	@go get -u github.com/gogo/protobuf/protoc-gen-gogofast

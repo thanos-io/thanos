@@ -62,7 +62,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	evalInterval := cmd.Flag("eval-interval", "the default evaluation interval to use").
 		Default("30s").Duration()
 
-	alertmgrs := cmd.Flag("alertmanagers.url", "URLs of Alertmanagers to send alerts to").
+	alertmgrs := cmd.Flag("alertmanagers.url", "Alertmanager URLs to push firing alerts to. The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Alertmanager IPs through respective DNS lookups. The port defaults to 9093 or the SRV record's value. The URL path is used as a prefix for the regular Alertmanager API path.").
 		Strings()
 
 	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
@@ -173,10 +173,8 @@ func runRule(
 				}
 				res = append(res, a)
 			}
+			alertQ.Push(res)
 
-			if len(alerts) > 0 {
-				alertQ.Push(res...)
-			}
 			return nil
 		}
 		mgr = rules.NewManager(&rules.ManagerOptions{
@@ -435,7 +433,7 @@ func (s *alertmanagerSet) update(ctx context.Context) error {
 			proto  = u.Scheme
 			lookup = "none"
 		)
-		if ps := strings.SplitN(u.Scheme, ":", 2); len(ps) == 2 {
+		if ps := strings.SplitN(u.Scheme, "+", 2); len(ps) == 2 {
 			lookup, proto = ps[0], ps[1]
 		}
 		switch lookup {
