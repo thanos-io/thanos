@@ -12,28 +12,39 @@ import (
 	"os/signal"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
-	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/promql"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/store"
+	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/oklog/run"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
+	promlabels "github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage/tsdb"
+	"github.com/prometheus/tsdb/labels"
+	"google.golang.org/grpc"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 // registerRule registers a rule command.
 func registerRule(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
+
+	labelStrs := cmd.Flag("label", "labels applying to all generated metrics (repeated)").
+		PlaceHolder("<name>=\"<value>\"").Strings()
+
+	dataDir := cmd.Flag("data-dir", "data directory").Default("data/").String()
 
 	ruleDir := cmd.Flag("rule-dir", "directory containing rule files").
 		Default("rules/").String()
@@ -46,8 +57,6 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	evalInterval := cmd.Flag("eval-interval", "the default evaluation interval to use").
 		Default("30s").Duration()
-
-	dataDir := cmd.Flag("data-dir", "data directory").Default("data/").String()
 
 	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
 
@@ -64,13 +73,20 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			*clusterBindAddr,
 			*clusterAdvertiseAddr,
 			*peers,
-			cluster.PeerState{Type: cluster.PeerTypeSource},
+			cluster.PeerState{
+				Type:    cluster.PeerTypeSource,
+				APIAddr: *grpcAddr,
+			},
 			true,
 		)
 		if err != nil {
 			return errors.Wrap(err, "join cluster")
 		}
-		return runRule(g, logger, reg, *httpAddr, *grpcAddr, *evalInterval, *dataDir, *ruleDir, peer)
+		lset, err := parseFlagLabels(*labelStrs)
+		if err != nil {
+			return errors.Wrap(err, "parse labels")
+		}
+		return runRule(g, logger, reg, lset, *httpAddr, *grpcAddr, *evalInterval, *dataDir, *ruleDir, peer)
 	}
 }
 
@@ -80,6 +96,7 @@ func runRule(
 	g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
+	lset labels.Labels,
 	httpAddr string,
 	grpcAddr string,
 	evalInterval time.Duration,
@@ -200,6 +217,35 @@ func runRule(
 			close(cancel)
 		})
 	}
+	{
+		l, err := net.Listen("tcp", grpcAddr)
+		if err != nil {
+			return errors.Wrap(err, "listen API address")
+		}
+		logger := log.With(logger, "component", "store")
+
+		store := store.NewTSDBStore(logger, reg, db, lset)
+
+		met := grpc_prometheus.NewServerMetrics()
+		met.EnableHandlingTimeHistogram(
+			grpc_prometheus.WithHistogramBuckets([]float64{
+				0.001, 0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4,
+			}),
+		)
+		s := grpc.NewServer(
+			grpc.UnaryInterceptor(met.UnaryServerInterceptor()),
+			grpc.StreamInterceptor(met.StreamServerInterceptor()),
+		)
+		storepb.RegisterStoreServer(s, store)
+		reg.MustRegister(met)
+
+		g.Add(func() error {
+			return errors.Wrap(s.Serve(l), "serve gRPC")
+		}, func(error) {
+			s.Stop()
+			l.Close()
+		})
+	}
 	// Start the HTTP server for debugging and metrics.
 	{
 		router := route.New()
@@ -260,10 +306,10 @@ func queryPrometheusInstant(ctx context.Context, addr, query string, t time.Time
 	vec := make(promql.Vector, 0, len(m.Data.Result))
 
 	for _, e := range m.Data.Result {
-		lset := make(labels.Labels, 0, len(e.Metric))
+		lset := make(promlabels.Labels, 0, len(e.Metric))
 
 		for k, v := range e.Metric {
-			lset = append(lset, labels.Label{
+			lset = append(lset, promlabels.Label{
 				Name:  string(k),
 				Value: string(v),
 			})
@@ -284,4 +330,20 @@ func printAlertNotifications(ctx context.Context, expr string, alerts ...*rules.
 		fmt.Fprintf(os.Stdout, "  labels: %s val: %f\n", a.Labels, a.Value)
 	}
 	return nil
+}
+
+func parseFlagLabels(s []string) (labels.Labels, error) {
+	var lset labels.Labels
+	for _, l := range s {
+		parts := strings.SplitN(l, "=", 2)
+		if len(parts) != 2 {
+			return nil, errors.Errorf("unrecognized label %q", l)
+		}
+		val, err := strconv.Unquote(parts[1])
+		if err != nil {
+			return nil, errors.Wrap(err, "unquote label value")
+		}
+		lset = append(lset, labels.Label{Name: parts[0], Value: val})
+	}
+	return lset, nil
 }

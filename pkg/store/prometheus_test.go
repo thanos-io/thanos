@@ -15,7 +15,7 @@ import (
 	"github.com/prometheus/tsdb/labels"
 )
 
-func TestPrometheusProxy_Series(t *testing.T) {
+func TestPrometheusStore_Series(t *testing.T) {
 	p, err := testutil.NewPrometheus()
 	testutil.Ok(t, err)
 
@@ -36,7 +36,7 @@ func TestPrometheusProxy_Series(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusProxy(nil, nil, nil, u,
+	proxy, err := NewPrometheusStore(nil, nil, nil, u,
 		func() labels.Labels {
 			return labels.FromStrings("region", "eu-west")
 		})
@@ -87,7 +87,7 @@ func expandChunk(cit chunks.Iterator) (res []sample) {
 	return res
 }
 
-func TestPrometheusProxy_LabelValues(t *testing.T) {
+func TestPrometheusStore_LabelValues(t *testing.T) {
 	p, err := testutil.NewPrometheus()
 	testutil.Ok(t, err)
 
@@ -106,7 +106,7 @@ func TestPrometheusProxy_LabelValues(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusProxy(nil, nil, nil, u, nil)
+	proxy, err := NewPrometheusStore(nil, nil, nil, u, nil)
 	testutil.Ok(t, err)
 
 	resp, err := proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
@@ -117,7 +117,7 @@ func TestPrometheusProxy_LabelValues(t *testing.T) {
 	testutil.Equals(t, []string{"a", "b", "c"}, resp.Values)
 }
 
-func TestPrometheusProxy_Series_MatchExternalLabel(t *testing.T) {
+func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 	p, err := testutil.NewPrometheus()
 	testutil.Ok(t, err)
 
@@ -138,7 +138,7 @@ func TestPrometheusProxy_Series_MatchExternalLabel(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusProxy(nil, nil, nil, u,
+	proxy, err := NewPrometheusStore(nil, nil, nil, u,
 		func() labels.Labels {
 			return labels.FromStrings("region", "eu-west")
 		})
