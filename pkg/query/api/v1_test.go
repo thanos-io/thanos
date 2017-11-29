@@ -35,6 +35,8 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/go-kit/kit/log"
+	"github.com/opentracing/opentracing-go"
 )
 
 var sampleQueryConfig = query.Config{
@@ -605,7 +607,7 @@ func TestParseDuration(t *testing.T) {
 func TestOptionsMethod(t *testing.T) {
 	r := route.New()
 	api := &API{}
-	api.Register(r)
+	api.Register(r, &opentracing.NoopTracer{}, log.NewNopLogger())
 
 	s := httptest.NewServer(r)
 	defer s.Close()
