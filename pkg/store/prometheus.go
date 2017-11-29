@@ -45,13 +45,13 @@ func NewPrometheusStore(
 	baseURL *url.URL,
 	externalLabels func() labels.Labels,
 ) (*PrometheusStore, error) {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
 	if client == nil {
 		client = &http.Client{
 			Transport: tracing.HTTPTripperware(logger, http.DefaultTransport),
 		}
-	}
-	if logger == nil {
-		logger = log.NewNopLogger()
 	}
 	p := &PrometheusStore{
 		logger:         logger,
