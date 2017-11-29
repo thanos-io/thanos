@@ -21,7 +21,9 @@ import (
 	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
+	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/oklog/run"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/timestamp"
@@ -57,8 +59,8 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
 		String()
 
-	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry) error {
-		return runSidecar(g, logger, reg, *grpcAddr, *httpAddr, *promURL, *dataDir, *clusterBindAddr, *clusterAdvertiseAddr, *peers, *gcsBucket)
+	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
+		return runSidecar(g, logger, reg, tracer, *grpcAddr, *httpAddr, *promURL, *dataDir, *clusterBindAddr, *clusterAdvertiseAddr, *peers, *gcsBucket)
 	}
 }
 
@@ -66,6 +68,7 @@ func runSidecar(
 	g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
+	tracer opentracing.Tracer,
 	grpcAddr string,
 	httpAddr string,
 	promURL *url.URL,
@@ -153,7 +156,9 @@ func runSidecar(
 		)
 		s := grpc.NewServer(
 			grpc.UnaryInterceptor(met.UnaryServerInterceptor()),
+			grpc.UnaryInterceptor(tracing.UnaryServerInterceptor(tracer)),
 			grpc.StreamInterceptor(met.StreamServerInterceptor()),
+			grpc.StreamInterceptor(tracing.StreamServerInterceptor(tracer)),
 		)
 		storepb.RegisterStoreServer(s, promStore)
 		reg.MustRegister(met)

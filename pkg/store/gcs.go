@@ -33,6 +33,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
+	"github.com/improbable-eng/thanos/pkg/tracing"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -352,23 +353,30 @@ func (s *GCSStore) blockSeries(ctx context.Context, b *gcsBlock, matchers []labe
 	defer indexr.Close()
 	defer chunkr.Close()
 
+	span, _ := tracing.StartSpanFromContext(ctx, "gcs_store_posting_setup")
 	begin := time.Now()
-
 	// The postings to preload are registered within the call to PostingsForMatchers,
 	// when it invokes indexr.Postings for each underlying postings list.
 	p, absent, err := tsdb.PostingsForMatchers(indexr, matchers...)
 	if err != nil {
+		span.Finish()
 		return nil, err
 	}
 
 	level.Debug(s.logger).Log("msg", "setup postings", "duration", time.Since(begin))
-	begin = time.Now()
+	span.Finish()
 
+	span, _ = tracing.StartSpanFromContext(ctx, "gcs_store_posting_preload")
+	begin = time.Now()
 	if err := indexr.preloadPostings(); err != nil {
+		span.Finish()
 		return nil, err
 	}
 
 	level.Debug(s.logger).Log("msg", "preload postings", "duration", time.Since(begin))
+	span.Finish()
+
+	span, _ = tracing.StartSpanFromContext(ctx, "gcs_store_series_preload")
 	begin = time.Now()
 
 	var ps []uint64
@@ -376,12 +384,15 @@ func (s *GCSStore) blockSeries(ctx context.Context, b *gcsBlock, matchers []labe
 		ps = append(ps, p.At())
 	}
 	if err := p.Err(); err != nil {
+		span.Finish()
 		return nil, err
 	}
 	if err := indexr.preloadSeries(ps); err != nil {
+		span.Finish()
 		return nil, err
 	}
 	level.Debug(s.logger).Log("msg", "preload series", "count", len(ps), "duration", time.Since(begin))
+	span.Finish()
 
 	var (
 		res  []seriesEntry
@@ -443,12 +454,16 @@ Outer:
 		}
 	}
 	s.metrics.seriesPrepareDuration.Observe(time.Since(begin).Seconds())
+	span.Finish()
 
+	span, _ = tracing.StartSpanFromContext(ctx, "gcs_store_blocks_preload")
 	begin = time.Now()
 	if err := chunkr.preload(); err != nil {
+		span.Finish()
 		return nil, errors.Wrap(err, "preload chunks")
 	}
 	s.metrics.seriesPreloadDuration.Observe(time.Since(begin).Seconds())
+	span.Finish()
 
 	return newGCSSeriesSet(chunkr, res), nil
 }
@@ -505,6 +520,9 @@ func (s *GCSStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		"numBlocks", numBlocks,
 		"duration", time.Since(begin))
 	s.metrics.seriesPreloadAllDuration.Observe(time.Since(begin).Seconds())
+
+	span, _ := tracing.StartSpanFromContext(srv.Context(), "gcs_store_merge_all")
+	defer span.Finish()
 
 	begin = time.Now()
 	resp := &storepb.SeriesResponse{}

@@ -27,7 +27,10 @@ import (
 
 	"github.com/NYTimes/gziphandler"
 
+	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/query"
+	"github.com/improbable-eng/thanos/pkg/tracing"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
@@ -97,7 +100,8 @@ type API struct {
 
 	instantQueryDuration prometheus.Histogram
 	rangeQueryDuration   prometheus.Histogram
-	now                  func() time.Time
+
+	now func() time.Time
 }
 
 // NewAPI returns an initialized API type.
@@ -139,7 +143,7 @@ func NewAPI(
 }
 
 // Register the API's endpoints in the given router.
-func (api *API) Register(r *route.Router) {
+func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger) {
 	instr := func(name string, f apiFunc) http.HandlerFunc {
 		hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			setCORS(w)
@@ -151,7 +155,9 @@ func (api *API) Register(r *route.Router) {
 				w.WriteHeader(http.StatusNoContent)
 			}
 		})
-		return prometheus.InstrumentHandler(name, gziphandler.GzipHandler(hf))
+		return prometheus.InstrumentHandler(name, gziphandler.GzipHandler(
+			tracing.HTTPMiddleware(tracer, name, logger, hf)),
+		)
 	}
 
 	r.Options("/*path", instr("options", api.options))
@@ -202,6 +208,10 @@ func (api *API) query(r *http.Request) (interface{}, *apiError) {
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
+
+	// We are starting promQL tracing span here, because we have no control over promQL code.
+	span, ctx := tracing.StartSpanFromContext(r.Context(), "promql_instant_query")
+	defer span.Finish()
 
 	begin := api.now()
 	qry, err := api.queryEngine.NewInstantQuery(r.FormValue("query"), ts)
@@ -271,6 +281,10 @@ func (api *API) queryRange(r *http.Request) (interface{}, *apiError) {
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
+
+	// We are starting promQL tracing span here, because we have no control over promQL code.
+	span, ctx := tracing.StartSpanFromContext(r.Context(), "promql_range_query")
+	defer span.Finish()
 
 	begin := api.now()
 	qry, err := api.queryEngine.NewRangeQuery(r.FormValue("query"), start, end, step)

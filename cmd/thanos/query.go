@@ -14,6 +14,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/query/ui"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/run"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
@@ -45,7 +46,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
 		String()
 
-	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry) error {
+	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
 		peer, err := cluster.Join(
 			logger,
 			reg,
@@ -61,7 +62,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 		if err != nil {
 			return errors.Wrap(err, "join cluster")
 		}
-		return runQuery(g, logger, reg, *httpAddr, query.Config{
+		return runQuery(g, logger, reg, tracer, *httpAddr, query.Config{
 			QueryTimeout:         *queryTimeout,
 			MaxConcurrentQueries: *maxConcurrentQueries,
 		}, *replicaLabel, peer)
@@ -74,13 +75,14 @@ func runQuery(
 	g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
+	tracer opentracing.Tracer,
 	httpAddr string,
 	cfg query.Config,
 	replicaLabel string,
 	peer *cluster.Peer,
 ) error {
 	var (
-		stores    = cluster.NewStoreSet(logger, reg, peer)
+		stores    = cluster.NewStoreSet(logger, reg, tracer, peer)
 		queryable = query.NewQueryable(logger, stores.Get, replicaLabel)
 		engine    = promql.NewEngine(queryable, cfg.EngineOpts(logger))
 		api       = v1.NewAPI(reg, engine, queryable, cfg)
@@ -102,7 +104,7 @@ func runQuery(
 	// Start query API + UI HTTP server.
 	{
 		router := route.New()
-		api.Register(router.WithPrefix("/api/v1"))
+		api.Register(router.WithPrefix("/api/v1"), tracer, logger)
 		ui.New(logger, nil).Register(router)
 
 		mux := http.NewServeMux()

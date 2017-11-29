@@ -12,6 +12,8 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
+	"github.com/improbable-eng/thanos/pkg/tracing"
+	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
 )
@@ -27,10 +29,12 @@ type StoreSet struct {
 	storeNodeConnections  prometheus.Gauge
 	storeNodeDialDuration prometheus.Histogram
 	storeNodeFailedDials  prometheus.Counter
+
+	tracer opentracing.Tracer
 }
 
 // NewStoreSet returns a new store backed by the peers view of the cluster.
-func NewStoreSet(logger log.Logger, reg *prometheus.Registry, peer *Peer) *StoreSet {
+func NewStoreSet(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, peer *Peer) *StoreSet {
 	met := grpc_prometheus.NewClientMetrics()
 
 	met.EnableClientHandlingTimeHistogram(
@@ -64,6 +68,7 @@ func NewStoreSet(logger log.Logger, reg *prometheus.Registry, peer *Peer) *Store
 		storeNodeConnections:  storeNodeConnections,
 		storeNodeDialDuration: storeNodeDialDuration,
 		storeNodeFailedDials:  storeNodeFailedDials,
+		tracer:                tracer,
 	}
 }
 
@@ -91,7 +96,9 @@ func (s *StoreSet) Update(ctx context.Context) {
 			conn, err := grpc.DialContext(ctx, addr,
 				grpc.WithInsecure(),
 				grpc.WithUnaryInterceptor(s.grpcMetrics.UnaryClientInterceptor()),
+				grpc.WithUnaryInterceptor(tracing.UnaryClientInterceptor(s.tracer)),
 				grpc.WithStreamInterceptor(s.grpcMetrics.StreamClientInterceptor()),
+				grpc.WithStreamInterceptor(tracing.StreamClientInterceptor(s.tracer)),
 			)
 			if err != nil {
 				s.storeNodeFailedDials.Inc()
