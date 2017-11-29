@@ -29,14 +29,14 @@ import (
 
 	"github.com/prometheus/common/route"
 
+	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/testutil"
+	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
-	"github.com/go-kit/kit/log"
-	"github.com/opentracing/opentracing-go"
 )
 
 var sampleQueryConfig = query.Config{

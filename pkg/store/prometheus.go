@@ -22,6 +22,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/store/prompb"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
+	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -45,7 +46,9 @@ func NewPrometheusStore(
 	externalLabels func() labels.Labels,
 ) (*PrometheusStore, error) {
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{
+			Transport: tracing.HTTPTripperware(logger, http.DefaultTransport),
+		}
 	}
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -136,7 +139,10 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	preq.Header.Set("Content-Type", "application/x-protobuf")
 	preq.Header.Set("X-Prometheus-Remote-Read-Version", "0.1.0")
 
-	preq = preq.WithContext(s.Context())
+	span, ctx := tracing.StartSpanFromContext(s.Context(), "/prom_v1_read_series HTTP[client]")
+	defer span.Finish()
+
+	preq = preq.WithContext(ctx)
 
 	presp, err := p.client.Do(preq)
 	if err != nil {
@@ -285,6 +291,9 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	if err != nil {
 		return nil, status.Error(codes.Unknown, err.Error())
 	}
+
+	span, ctx := tracing.StartSpanFromContext(ctx, "/prom_label_values HTTP[client]")
+	defer span.Finish()
 
 	resp, err := p.client.Do(req.WithContext(ctx))
 	if err != nil {

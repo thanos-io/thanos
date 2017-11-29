@@ -1,6 +1,7 @@
 package tracing
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"strconv"
@@ -11,11 +12,15 @@ import (
 	"github.com/opentracing/opentracing-go/ext"
 )
 
-func HTTPMiddleware(tracer opentracing.Tracer, operationName string, logger log.Logger, next http.HandlerFunc) http.HandlerFunc {
+// HTTPMiddleware returns HTTP handler that injects given tracer and starts new server span. If any client span is fetched
+// wire we include that as our parent.
+func HTTPMiddleware(tracer opentracing.Tracer, name string, logger log.Logger, next http.HandlerFunc) http.HandlerFunc {
+	operationName := fmt.Sprintf("/%s HTTP[server]", name)
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		var span opentracing.Span
 		wireContext, err := tracer.Extract(
-			opentracing.TextMap,
+			opentracing.HTTPHeaders,
 			opentracing.HTTPHeadersCarrier(r.Header),
 		)
 		if err != nil && err != opentracing.ErrSpanContextNotFound {
@@ -33,9 +38,8 @@ func HTTPMiddleware(tracer opentracing.Tracer, operationName string, logger log.
 }
 
 type tripperware struct {
-	operationName string
-	logger        log.Logger
-	next          http.RoundTripper
+	logger log.Logger
+	next   http.RoundTripper
 }
 
 func (t *tripperware) RoundTrip(r *http.Request) (*http.Response, error) {
@@ -48,10 +52,10 @@ func (t *tripperware) RoundTrip(r *http.Request) (*http.Response, error) {
 
 	span := opentracing.SpanFromContext(r.Context())
 	if span == nil {
+		// No span.
 		return t.next.RoundTrip(r)
 	}
 
-	span = tracer.StartSpan(t.operationName, opentracing.ChildOf(span.Context()))
 	ext.HTTPMethod.Set(span, r.Method)
 	ext.HTTPUrl.Set(span, r.URL.String())
 	host, portString, err := net.SplitHostPort(r.URL.Host)
@@ -67,21 +71,21 @@ func (t *tripperware) RoundTrip(r *http.Request) (*http.Response, error) {
 	// There's nothing we can do with any errors here.
 	if err = tracer.Inject(
 		span.Context(),
-		opentracing.TextMap,
+		opentracing.HTTPHeaders,
 		opentracing.HTTPHeadersCarrier(r.Header),
 	); err != nil {
 		level.Warn(t.logger).Log("msg", "failed to inject trace", "err", err)
 	}
 
 	resp, err := t.next.RoundTrip(r)
-	span.Finish()
 	return resp, err
 }
 
-func HTTPTripperware(logger log.Logger, operationName string, next http.RoundTripper) http.RoundTripper {
+// HTTPTripperware returns HTTP tripper that assumes given span in context as client child span and injects it into the wire.
+// NOTE: It assumes tracer is given in request context. Also, it is caller responsibility to finish span.
+func HTTPTripperware(logger log.Logger, next http.RoundTripper) http.RoundTripper {
 	return &tripperware{
-		operationName: operationName,
-		logger:        logger,
-		next:          next,
+		logger: logger,
+		next:   next,
 	}
 }

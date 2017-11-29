@@ -454,16 +454,12 @@ Outer:
 		}
 	}
 	s.metrics.seriesPrepareDuration.Observe(time.Since(begin).Seconds())
-	span.Finish()
 
-	span, _ = tracing.StartSpanFromContext(ctx, "gcs_store_blocks_preload")
 	begin = time.Now()
 	if err := chunkr.preload(); err != nil {
-		span.Finish()
 		return nil, errors.Wrap(err, "preload chunks")
 	}
 	s.metrics.seriesPreloadDuration.Observe(time.Since(begin).Seconds())
-	span.Finish()
 
 	return newGCSSeriesSet(chunkr, res), nil
 }
@@ -512,16 +508,19 @@ func (s *GCSStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 
 	s.mtx.RUnlock()
 
+	span, _ := tracing.StartSpanFromContext(srv.Context(), "gcs_store_preload_all")
 	begin := time.Now()
 	if err := g.Run(); err != nil {
+		span.Finish()
 		return status.Error(codes.Aborted, err.Error())
 	}
 	level.Debug(s.logger).Log("msg", "preload all block data",
 		"numBlocks", numBlocks,
 		"duration", time.Since(begin))
 	s.metrics.seriesPreloadAllDuration.Observe(time.Since(begin).Seconds())
+	span.Finish()
 
-	span, _ := tracing.StartSpanFromContext(srv.Context(), "gcs_store_merge_all")
+	span, _ = tracing.StartSpanFromContext(srv.Context(), "gcs_store_merge_all")
 	defer span.Finish()
 
 	begin = time.Now()

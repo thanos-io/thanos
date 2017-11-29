@@ -366,10 +366,14 @@ func queryPrometheusInstant(ctx context.Context, logger log.Logger, addr, query 
 	if err != nil {
 		return nil, err
 	}
+
+	span, ctx := tracing.StartSpanFromContext(ctx, "/rule_instant_query HTTP[client]")
+	defer span.Finish()
+
 	req = req.WithContext(ctx)
 
 	client := &http.Client{
-		Transport: tracing.HTTPTripperware(logger, "rule_instant_query", http.DefaultTransport),
+		Transport: tracing.HTTPTripperware(logger, http.DefaultTransport),
 	}
 	resp, err := client.Do(req)
 	if err != nil {

@@ -10,13 +10,11 @@ import (
 	"cloud.google.com/go/trace/apiv1"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/lovoo/gcloud-opentracing"
+	"github.com/improbable-io/gcloud-opentracing"
 	"github.com/opentracing/basictracer-go"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
-
-const DefaultSampleFactor = "10"
 
 type gcloudRecorderLogger struct {
 	logger log.Logger
@@ -73,5 +71,7 @@ func newGCloudTracer(ctx context.Context, logger log.Logger, gcloudTraceProjectI
 		MaxLogsPerSpan: 100,
 	}
 
-	return basictracer.NewWithOptions(opts), recorder.Close, nil
+	return &tracer{
+		wrapped: basictracer.NewWithOptions(opts),
+	}, recorder.Close, nil
 }

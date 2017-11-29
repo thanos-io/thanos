@@ -140,6 +140,12 @@
   version = "v0.1.0"
 
 [[projects]]
+  name = "github.com/improbable-io/gcloud-opentracing"
+  packages = ["."]
+  revision = "9a3ba70d6a016bafc680df855bd7ed25b81fad5f"
+  version = "v0.3.0"
+
+[[projects]]
   name = "github.com/julienschmidt/httprouter"
   packages = ["."]
   revision = "8c199fb6259ffc1af525cc3ad52ee60ba8359669"
@@ -150,12 +156,6 @@
   name = "github.com/kr/logfmt"
   packages = ["."]
   revision = "b84e30acd515aadc4b783ad4ff83aff3299bdfe0"
-
-[[projects]]
-  name = "github.com/lovoo/gcloud-opentracing"
-  packages = ["."]
-  revision = "9a3ba70d6a016bafc680df855bd7ed25b81fad5f"
-  version = "v0.3.0"
 
 [[projects]]
   name = "github.com/matttproud/golang_protobuf_extensions"
@@ -322,6 +322,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "855c28f7316dea0dbb85bb35006291adb6ef5ff2e08029ab02dc82165ecd177f"
+  inputs-digest = "9bce4d7cd047f1a137dfd8f087e6c255be55e02def745610e6e970879a8b93bc"
   solver-name = "gps-cdcl"
   solver-version = 1
