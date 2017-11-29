@@ -15,9 +15,10 @@ type config struct {
 	rules        string
 	workDir      string
 
-	numPrometheus int
-	numQueries    int
-	numRules      int
+	numPrometheus    int
+	numQueries       int
+	numRules         int
+	numAlertmanagers int
 }
 
 // NOTE: It is important to install Thanos before using this function to compile latest changes.
@@ -89,6 +90,7 @@ func spinup(t testing.TB, cfg config) (close func()) {
 			"--data-dir", dbDir,
 			"--rule-dir", dbDir,
 			"--eval-interval", "1s",
+			"--alertmanagers.url", "http://127.0.0.1:29093",
 			"--grpc-address", fmt.Sprintf("0.0.0.0:%d", 19690+i),
 			"--http-address", fmt.Sprintf("0.0.0.0:%d", 19790+i),
 			"--cluster.address", fmt.Sprintf("0.0.0.0:%d", 19780+i),
@@ -99,8 +101,38 @@ func spinup(t testing.TB, cfg config) (close func()) {
 		))
 	}
 
-	var stderr bytes.Buffer
+	for i := 1; i <= cfg.numAlertmanagers; i++ {
+		dir := fmt.Sprintf("%s/data/alertmanager%d", cfg.workDir, i)
+
+		if err := os.MkdirAll(dir, 0777); err != nil {
+			t.Errorf("creating dir failed: %s", err)
+			return func() {}
+		}
+		config := `
+route:
+  group_by: ['alertname']
+  group_wait: 1s
+  group_interval: 1s
+  receiver: 'null'
+receivers:
+- name: 'null'
+`
+		err := ioutil.WriteFile(dir+"/config.yaml", []byte(config), 0666)
+		if err != nil {
+			t.Errorf("creating config file failed: %s", err)
+			return func() {}
+		}
+		commands = append(commands, exec.Command("alertmanager",
+			"-config.file", dir+"/config.yaml",
+			"-web.listen-address", "0.0.0.0:29093",
+			"-log.level", "debug",
+		))
+	}
+
+	var stderr, stdout bytes.Buffer
+
 	stderrw := &safeWriter{Writer: &stderr}
+	stdoutw := &safeWriter{Writer: &stdout}
 
 	close = func() {
 		for _, c := range closers {
@@ -110,9 +142,11 @@ func spinup(t testing.TB, cfg config) (close func()) {
 			}
 		}
 		t.Logf("STDERR\n %s", stderr.String())
+		t.Logf("STDOUT\n %s", stdout.String())
 	}
 	for _, cmd := range commands {
 		cmd.Stderr = stderrw
+		cmd.Stdout = stdoutw
 
 		if err := cmd.Start(); err != nil {
 			t.Errorf("start failed: %s", err)
