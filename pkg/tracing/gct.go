@@ -16,7 +16,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-const DefaultSampleFactor uint64 = 1
+const DefaultSampleFactor = "10"
 
 type gcloudRecorderLogger struct {
 	logger log.Logger

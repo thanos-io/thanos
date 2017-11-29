@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/tracing"
@@ -95,10 +96,18 @@ func (s *StoreSet) Update(ctx context.Context) {
 			startTime := time.Now()
 			conn, err := grpc.DialContext(ctx, addr,
 				grpc.WithInsecure(),
-				grpc.WithUnaryInterceptor(s.grpcMetrics.UnaryClientInterceptor()),
-				grpc.WithUnaryInterceptor(tracing.UnaryClientInterceptor(s.tracer)),
-				grpc.WithStreamInterceptor(s.grpcMetrics.StreamClientInterceptor()),
-				grpc.WithStreamInterceptor(tracing.StreamClientInterceptor(s.tracer)),
+				grpc.WithUnaryInterceptor(
+					grpc_middleware.ChainUnaryClient(
+						s.grpcMetrics.UnaryClientInterceptor(),
+						tracing.UnaryClientInterceptor(s.tracer),
+					),
+				),
+				grpc.WithStreamInterceptor(
+					grpc_middleware.ChainStreamClient(
+						s.grpcMetrics.StreamClientInterceptor(),
+						tracing.StreamClientInterceptor(s.tracer),
+					),
+				),
 			)
 			if err != nil {
 				s.storeNodeFailedDials.Inc()

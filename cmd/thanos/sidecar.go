@@ -15,6 +15,7 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -155,10 +156,18 @@ func runSidecar(
 			}),
 		)
 		s := grpc.NewServer(
-			grpc.UnaryInterceptor(met.UnaryServerInterceptor()),
-			grpc.UnaryInterceptor(tracing.UnaryServerInterceptor(tracer)),
-			grpc.StreamInterceptor(met.StreamServerInterceptor()),
-			grpc.StreamInterceptor(tracing.StreamServerInterceptor(tracer)),
+			grpc.UnaryInterceptor(
+				grpc_middleware.ChainUnaryServer(
+					met.UnaryServerInterceptor(),
+					tracing.UnaryServerInterceptor(tracer),
+				),
+			),
+			grpc.StreamInterceptor(
+				grpc_middleware.ChainStreamServer(
+					met.StreamServerInterceptor(),
+					tracing.StreamServerInterceptor(tracer),
+				),
+			),
 		)
 		storepb.RegisterStoreServer(s, promStore)
 		reg.MustRegister(met)
