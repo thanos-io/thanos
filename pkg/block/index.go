@@ -59,6 +59,9 @@ func WriteIndexCache(fn string, r *index.Reader) error {
 			if err != nil {
 				return errors.Wrap(err, "get label value")
 			}
+			if len(v) != 1 {
+				return errors.Errorf("unexpected tuple length %d", len(v))
+			}
 			vals = append(vals, v[0])
 		}
 		v.LabelValues[ln] = vals
@@ -106,7 +109,7 @@ func ReadIndexCache(fn string) (
 	postings = make(map[labels.Label]index.Range, len(v.Postings))
 
 	// Most strings we encounter are duplicates. Dedup string objects that we keep
-	// around after the function returns.
+	// around after the function returns to reduce total memory usage.
 	// NOTE(fabxc): it could even make sense to deduplicate globally.
 	getStr := func(s string) string {
 		if cs, ok := strs[s]; ok {

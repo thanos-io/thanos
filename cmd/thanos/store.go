@@ -13,6 +13,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/oklog/run"
@@ -96,12 +97,17 @@ func runStore(
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-			gs.SyncBlocks(ctx, 30*time.Second)
+			err := runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+				if err := gs.SyncBlocks(ctx); err != nil {
+					level.Warn(logger).Log("msg", "syncing blocks failed", "err", err)
+				}
+				return nil
+			})
 
 			gs.Close()
 			gcsClient.Close()
 
-			return nil
+			return err
 		}, func(error) {
 			cancel()
 		})

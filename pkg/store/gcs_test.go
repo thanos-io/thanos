@@ -3,94 +3,22 @@ package store
 import (
 	"context"
 	"io/ioutil"
-	"math/rand"
 	"os"
-	"path"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/block"
-
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/shipper"
-
+	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/pkg/errors"
-
-	"github.com/oklog/ulid"
-	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/fileutil"
-	"github.com/prometheus/tsdb/labels"
-
+	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
+	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/tsdb"
+	"github.com/prometheus/tsdb/labels"
 )
-
-func TestGCSStore_downloadBlocks(t *testing.T) {
-	bkt, cleanup := testutil.NewObjectStoreBucket(t)
-	defer cleanup()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	expBlocks := []ulid.ULID{}
-	expFiles := map[string][]byte{}
-
-	randr := rand.New(rand.NewSource(0))
-
-	// Generate 5 blocks with random data and add it to the bucket.
-	for i := int64(0); i < 3; i++ {
-		id := ulid.MustNew(uint64(i), randr)
-		expBlocks = append(expBlocks, id)
-
-		for _, s := range []string{
-			path.Join(id.String(), "index"),
-			path.Join(id.String(), "chunks/0001"),
-			path.Join(id.String(), "chunks/0002"),
-			path.Join(id.String(), "meta.json"),
-		} {
-			w := bkt.Object(s).NewWriter(ctx)
-			b := make([]byte, 64*1024)
-
-			_, err := randr.Read(b)
-			testutil.Ok(t, err)
-			_, err = w.Write(b)
-			testutil.Ok(t, err)
-			testutil.Ok(t, w.Close())
-
-			if strings.HasSuffix(s, "index") || strings.HasSuffix(s, "meta.json") {
-				expFiles[s] = b
-			}
-		}
-	}
-
-	dir, err := ioutil.TempDir("", "test-syncBlocks")
-	testutil.Ok(t, err)
-
-	s, err := NewGCSStore(nil, nil, bkt, nil, dir)
-	testutil.Ok(t, err)
-	defer s.Close()
-
-	testutil.Ok(t, s.downloadBlocks(ctx))
-
-	fns, err := fileutil.ReadDir(dir)
-	testutil.Ok(t, err)
-
-	testutil.Assert(t, len(expBlocks) == len(fns), "invalid block count")
-	for _, id := range expBlocks {
-		_, err := os.Stat(filepath.Join(dir, id.String()))
-		testutil.Assert(t, err == nil, "block %s not synced", id)
-	}
-	// For each block we expect a downloaded index file.
-	for fn, data := range expFiles {
-		b, err := ioutil.ReadFile(filepath.Join(dir, fn))
-		testutil.Ok(t, err)
-		testutil.Equals(t, data, b)
-	}
-}
 
 func TestGCSStore_e2e(t *testing.T) {
 	bkt, cleanup := testutil.NewObjectStoreBucket(t)
@@ -159,7 +87,11 @@ func TestGCSStore_e2e(t *testing.T) {
 	}, dir)
 	testutil.Ok(t, err)
 
-	go store.SyncBlocks(ctx, 100*time.Millisecond)
+	go func() {
+		runutil.Repeat(100*time.Millisecond, ctx.Done(), func() error {
+			return store.SyncBlocks(ctx)
+		})
+	}()
 
 	ctx, _ = context.WithTimeout(ctx, 30*time.Second)
 
