@@ -14,6 +14,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/pkg/errors"
+	"github.com/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -22,7 +23,6 @@ import (
 	"github.com/improbable-eng/thanos/pkg/store/prompb"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/tsdb/chunks"
 )
 
 // PrometheusStore implements the store node API on top of the Prometheus remote read API.
@@ -226,7 +226,8 @@ func extLabelsMatches(extLabels labels.Labels, ms []storepb.LabelMatcher) (bool,
 // encodeChunk translates the sample pairs into a chunk. It takes a minimum timestamp
 // and drops all samples before that one.
 func (p *PrometheusStore) encodeChunk(ss []prompb.Sample, mint int64) (storepb.Chunk_Encoding, []byte, error) {
-	c := chunks.NewXORChunk()
+	c := chunkenc.NewXORChunk()
+
 	a, err := c.Appender()
 	if err != nil {
 		return 0, nil, err

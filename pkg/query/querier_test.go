@@ -10,8 +10,6 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/prometheus/tsdb/chunks"
-
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -19,6 +17,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/tsdb/chunkenc"
 	"google.golang.org/grpc"
 )
 
@@ -264,7 +263,7 @@ func testStoreSeries(t testing.TB, lset labels.Labels, smpls []sample) (s storep
 	for _, l := range lset {
 		s.Labels = append(s.Labels, storepb.Label{Name: l.Name, Value: l.Value})
 	}
-	c := chunks.NewXORChunk()
+	c := chunkenc.NewXORChunk()
 	a, err := c.Appender()
 	testutil.Ok(t, err)
 

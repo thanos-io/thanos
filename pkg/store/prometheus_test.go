@@ -11,7 +11,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/prometheus/tsdb/chunks"
+	"github.com/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/tsdb/labels"
 )
 
@@ -67,7 +67,7 @@ func TestPrometheusStore_Series(t *testing.T) {
 	c := srv.series[0].Chunks[0]
 	testutil.Equals(t, storepb.Chunk_XOR, c.Type)
 
-	chk, err := chunks.FromData(chunks.EncXOR, c.Data)
+	chk, err := chunkenc.FromData(chunkenc.EncXOR, c.Data)
 	testutil.Ok(t, err)
 
 	samples := expandChunk(chk.Iterator())
@@ -79,7 +79,7 @@ type sample struct {
 	v float64
 }
 
-func expandChunk(cit chunks.Iterator) (res []sample) {
+func expandChunk(cit chunkenc.Iterator) (res []sample) {
 	for cit.Next() {
 		t, v := cit.At()
 		res = append(res, sample{t, v})
