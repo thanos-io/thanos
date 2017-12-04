@@ -20,14 +20,14 @@ import (
 	"github.com/prometheus/tsdb/labels"
 )
 
-func TestGCSStore_e2e(t *testing.T) {
+func TestBucketStore_e2e(t *testing.T) {
 	bkt, cleanup := testutil.NewObjectStoreBucket(t)
 	defer cleanup()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	dir, err := ioutil.TempDir("", "test_gcsstore_e2e")
+	dir, err := ioutil.TempDir("", "test_bucketstore_e2e")
 	testutil.Ok(t, err)
 	defer os.RemoveAll(dir)
 
@@ -43,7 +43,7 @@ func TestGCSStore_e2e(t *testing.T) {
 	}
 	start := time.Now()
 	now := start
-	remote := shipper.NewGCSRemote(log.NewNopLogger(), nil, bkt)
+	remote := shipper.NewGCSRemote(log.NewNopLogger(), nil, bkt.Handle())
 
 	minTime := int64(0)
 	maxTime := int64(0)
@@ -81,7 +81,7 @@ func TestGCSStore_e2e(t *testing.T) {
 	}
 
 	var gossipMinTime, gossipMaxTime int64
-	store, err := NewGCSStore(nil, nil, bkt, func(mint int64, maxt int64) {
+	store, err := NewBucketStore(nil, nil, bkt, func(mint int64, maxt int64) {
 		gossipMinTime = mint
 		gossipMaxTime = maxt
 	}, dir)
@@ -194,7 +194,7 @@ func TestGCSStore_e2e(t *testing.T) {
 	testutil.Equals(t, 0, len(srv.series))
 }
 
-func TestGCSBlock_matches(t *testing.T) {
+func TestBucketBlock_matches(t *testing.T) {
 	makeMeta := func(mint, maxt int64, lset map[string]string) *block.Meta {
 		return &block.Meta{
 			BlockMeta: tsdb.BlockMeta{
@@ -281,7 +281,7 @@ func TestGCSBlock_matches(t *testing.T) {
 	}
 
 	for i, c := range cases {
-		b := &gcsBlock{meta: c.meta}
+		b := &bucketBlock{meta: c.meta}
 		blockMatchers, ok := b.blockMatchers(c.mint, c.maxt, c.matchers...)
 		testutil.Assert(t, c.ok == ok, "test case %d failed", i)
 		testutil.Equals(t, c.expBlockMatchers, blockMatchers)
