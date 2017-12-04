@@ -44,7 +44,8 @@ func main() {
 
 	gcloudTraceProject := app.Flag("gcloudtrace.project", "GCP project to send Google Cloud Trace tracings to. If empty, tracing will be disabled.").
 		String()
-	gcloudTraceSampleFactor := app.Flag("gcloudtrace.sample-factor", "How often we send traces (1/<sample-factor>).").Default("1").Uint64()
+	gcloudTraceSampleFactor := app.Flag("gcloudtrace.sample-factor", "How often we send traces (1/<sample-factor>).").
+		Default("1").Uint64()
 
 	cmds := map[string]setupFunc{}
 	registerSidecar(cmds, app, "sidecar")
@@ -100,17 +101,15 @@ func main() {
 
 		var closeFn func() error
 		tracer, closeFn = tracing.NewOptionalGCloudTracer(ctx, logger, *gcloudTraceProject, *gcloudTraceSampleFactor)
-		if closeFn != nil {
-			// Only when to need to close something, listen on cmd finish.
-			ctx, cancel := context.WithCancel(ctx)
-			g.Add(func() error {
-				<-ctx.Done()
-				return ctx.Err()
-			}, func(error) {
-				closeFn()
-				cancel()
-			})
-		}
+
+		ctx, cancel := context.WithCancel(ctx)
+		g.Add(func() error {
+			<-ctx.Done()
+			return ctx.Err()
+		}, func(error) {
+			closeFn()
+			cancel()
+		})
 	}
 
 	if err := cmds[cmd](&g, logger, metrics, tracer); err != nil {

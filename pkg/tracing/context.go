@@ -10,7 +10,7 @@ type contextKey struct{}
 
 var tracerKey = contextKey{}
 
-// ContextWithSpan returns a new `context.Context` that holds a reference to given opentracing.Tracer.
+// ContextWithTracer returns a new `context.Context` that holds a reference to given opentracing.Tracer.
 func ContextWithTracer(ctx context.Context, tracer opentracing.Tracer) context.Context {
 	return context.WithValue(ctx, tracerKey, tracer)
 }

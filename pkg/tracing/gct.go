@@ -1,5 +1,4 @@
 // Package gct contains initialization for Google Cloud Trace opentracing.Tracer.
-
 package tracing
 
 import (
@@ -10,10 +9,10 @@ import (
 	"cloud.google.com/go/trace/apiv1"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/lovoo/gcloud-opentracing"
 	"github.com/opentracing/basictracer-go"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"github.com/lovoo/gcloud-opentracing"
 )
 
 type gcloudRecorderLogger struct {
@@ -31,13 +30,13 @@ func (l *gcloudRecorderLogger) Errorf(format string, args ...interface{}) {
 // NewOptionalGCloudTracer returns GoogleCloudTracer Tracer. In case of error it log warning and returns noop tracer.
 func NewOptionalGCloudTracer(ctx context.Context, logger log.Logger, gcloudTraceProjectID string, sampleFactor uint64) (opentracing.Tracer, func() error) {
 	if gcloudTraceProjectID == "" {
-		return &opentracing.NoopTracer{}, nil
+		return &opentracing.NoopTracer{}, func() error { return nil }
 	}
 
 	tracer, closeFn, err := newGCloudTracer(ctx, logger, gcloudTraceProjectID, sampleFactor)
 	if err != nil {
 		level.Warn(logger).Log("msg", "failed to init Google Cloud Tracer. Tracing will be disabled", "err", err)
-		return &opentracing.NoopTracer{}, nil
+		return &opentracing.NoopTracer{}, func() error { return nil }
 	}
 
 	return tracer, closeFn

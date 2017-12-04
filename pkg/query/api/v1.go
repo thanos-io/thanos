@@ -155,9 +155,7 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 				w.WriteHeader(http.StatusNoContent)
 			}
 		})
-		return prometheus.InstrumentHandler(name, gziphandler.GzipHandler(
-			tracing.HTTPMiddleware(tracer, name, logger, hf)),
-		)
+		return prometheus.InstrumentHandler(name, tracing.HTTPMiddleware(tracer, name, logger, gziphandler.GzipHandler(hf)))
 	}
 
 	r.Options("/*path", instr("options", api.options))

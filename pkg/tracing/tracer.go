@@ -15,8 +15,8 @@ func (t *tracer) StartSpan(operationName string, opts ...opentracing.StartSpanOp
 	span := t.wrapped.StartSpan(operationName, opts...)
 
 	// Set common tags.
-	if hostname := os.Getenv("$HOSTNAME"); hostname != "" {
-		span.SetTag("hostname", os.Getenv("$HOSTNAME"))
+	if hostname := os.Getenv("HOSTNAME"); hostname != "" {
+		span.SetTag("hostname", hostname)
 	}
 
 	span.SetTag("binary_revision", version.Revision)

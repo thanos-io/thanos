@@ -14,7 +14,7 @@ import (
 
 // HTTPMiddleware returns HTTP handler that injects given tracer and starts new server span. If any client span is fetched
 // wire we include that as our parent.
-func HTTPMiddleware(tracer opentracing.Tracer, name string, logger log.Logger, next http.HandlerFunc) http.HandlerFunc {
+func HTTPMiddleware(tracer opentracing.Tracer, name string, logger log.Logger, next http.Handler) http.HandlerFunc {
 	operationName := fmt.Sprintf("/%s HTTP[server]", name)
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -31,7 +31,7 @@ func HTTPMiddleware(tracer opentracing.Tracer, name string, logger log.Logger, n
 		ext.HTTPMethod.Set(span, r.Method)
 		ext.HTTPUrl.Set(span, r.URL.String())
 
-		next(w, r.WithContext(opentracing.ContextWithSpan(ContextWithTracer(r.Context(), tracer), span)))
+		next.ServeHTTP(w, r.WithContext(opentracing.ContextWithSpan(ContextWithTracer(r.Context(), tracer), span)))
 		span.Finish()
 		return
 	}
