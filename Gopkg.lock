@@ -218,10 +218,10 @@
   revision = "6171d00fa712c2f8368e601fa20c131fe37c8e16"
 
 [[projects]]
-  branch = "master"
+  branch = "refpkg2"
   name = "github.com/prometheus/tsdb"
-  packages = [".","chunks","fileutil","labels"]
-  revision = "ad3c4849a99729a9c10a55b3ba4c0ad146d2446a"
+  packages = [".","chunkenc","chunks","fileutil","index","labels"]
+  revision = "abd68925295f6e2ddce0c54bf2680d0c42549cd6"
 
 [[projects]]
   branch = "master"
@@ -304,6 +304,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "1ae5c79f2ca501ac787403c451a6174a2c6b2664718fb3ee46515c75ef78ed4c"
+  inputs-digest = "db669804d4f8abeed32b8aeb6a2ce31c6860b715bd1dec80ffbb76d10061002e"
   solver-name = "gps-cdcl"
   solver-version = 1

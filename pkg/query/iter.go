@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/prometheus/tsdb/chunks"
+	"github.com/prometheus/tsdb/chunkenc"
 )
 
 // promSeriesSet implements the SeriesSet interface of the Prometheus storage
@@ -139,7 +139,7 @@ type chunkSeriesIterator struct {
 	maxt, mint int64
 
 	i   int
-	cur chunks.Iterator
+	cur chunkenc.Iterator
 	err error
 }
 
@@ -160,7 +160,7 @@ func newChunkSeriesIterator(cs []storepb.Chunk, mint, maxt int64) storage.Series
 }
 
 func (it *chunkSeriesIterator) openChunk() bool {
-	c, err := chunks.FromData(chunks.EncXOR, it.chunks[it.i].Data)
+	c, err := chunkenc.FromData(chunkenc.EncXOR, it.chunks[it.i].Data)
 	if err != nil {
 		it.err = err
 		return false

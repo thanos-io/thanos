@@ -6,9 +6,9 @@ import (
 	"sort"
 
 	"github.com/pkg/errors"
-	"github.com/prometheus/tsdb/chunks"
 
 	"github.com/prometheus/tsdb"
+	"github.com/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -101,7 +101,8 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 }
 
 func (s *TSDBStore) encodeChunk(it tsdb.SeriesIterator) (*storepb.Chunk, error) {
-	chk := chunks.NewXORChunk()
+	chk := chunkenc.NewXORChunk()
+
 	app, err := chk.Appender()
 	if err != nil {
 		return nil, err
