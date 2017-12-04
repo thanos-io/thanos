@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	"github.com/improbable-eng/thanos/pkg/store/gcs"
+	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 
 	"google.golang.org/api/iterator"
 )
@@ -39,7 +39,7 @@ func NewObjectStoreBucket(t testing.TB) (*gcs.Bucket, func()) {
 	bkt := gcsClient.Bucket(name)
 	Ok(t, bkt.Create(ctx, project, nil))
 
-	return gcs.NewBucket(bkt), func() {
+	return gcs.NewBucket(bkt, nil, name), func() {
 		deleteAllBucket(t, ctx, bkt)
 		cancel()
 		gcsClient.Close()

@@ -58,7 +58,7 @@ func BucketWithMetrics(name string, b Bucket, r prometheus.Registerer) Bucket {
 		Bucket: b,
 		ops: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name:        "thanos_store_bucket_operations_total",
-			Help:        "Total number of operations that were executed against a bucket.",
+			Help:        "Total number of store operations that were executed against a bucket.",
 			ConstLabels: prometheus.Labels{"bucket": name},
 		}, []string{"operation"}),
 	}
@@ -74,7 +74,7 @@ type metricBucket struct {
 }
 
 func (b *metricBucket) Iter(ctx context.Context, dir string, f func(name string) error) error {
-	b.ops.WithLabelValues("list").Inc()
+	b.ops.WithLabelValues("iter").Inc()
 	return b.Bucket.Iter(ctx, dir, f)
 }
 
