@@ -73,6 +73,11 @@ type metricBucket struct {
 	ops *prometheus.CounterVec
 }
 
+func (b *metricBucket) Iter(ctx context.Context, dir string, f func(name string) error) error {
+	b.ops.WithLabelValues("list").Inc()
+	return b.Bucket.Iter(ctx, dir, f)
+}
+
 func (b *metricBucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
 	b.ops.WithLabelValues("get").Inc()
 	return b.Bucket.Get(ctx, name)
