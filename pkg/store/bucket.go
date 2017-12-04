@@ -114,12 +114,12 @@ func newBucketStoreMetrics(reg *prometheus.Registry, s *BucketStore) *bucketStor
 	var m bucketStoreMetrics
 
 	m.blockDownloads = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "thanos_bucket_store_block_downloads_total",
-		Help: "Total number of block download attempts.",
+		Name: "thanos_bucket_store_block_loads_total",
+		Help: "Total number of remote block loading attempts.",
 	})
 	m.blockDownloadsFailed = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "thanos_bucket_store_block_downloads_failed_total",
-		Help: "Total number of failed block download attempts.",
+		Name: "thanos_bucket_store_block_load_failures_total",
+		Help: "Total number of failed remote block loading attempts.",
 	})
 	blocksLoaded := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "thanos_bucket_store_blocks_loaded",
@@ -210,7 +210,7 @@ func NewBucketStore(
 		}
 		d := filepath.Join(dir, dn)
 
-		b, err := newBucketBlock(context.TODO(), logger, id, d, bucket)
+		b, err := newBucketBlock(context.TODO(), logger, bucket, id, d)
 		if err != nil {
 			level.Warn(s.logger).Log("msg", "loading block failed", "id", id, "err", err)
 			// Wipe the directory so we can cleanly try again later.
@@ -247,7 +247,7 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 			for id := range blockc {
 				dir := filepath.Join(s.dir, id.String())
 
-				b, err := newBucketBlock(ctx, s.logger, id, dir, s.bucket)
+				b, err := newBucketBlock(ctx, s.logger, s.bucket, id, dir)
 				if err != nil {
 					level.Warn(s.logger).Log("msg", "loading block failed", "id", id, "err", err)
 					// Wipe the directory so we can cleanly try again later.
@@ -605,64 +605,108 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	}, nil
 }
 
+// bucketBlock represents a block that is located in a bucket. It holds intermediate
+// state for the block on local disk.
 type bucketBlock struct {
-	logger         log.Logger
-	meta           *block.Meta
-	dir            string
-	pendingReaders sync.WaitGroup
+	logger log.Logger
+	bucket Bucket
+	meta   *block.Meta
+	dir    string
 
-	index     *bucketIndex
-	bucket    Bucket
+	symbols  map[uint32]string
+	lvals    map[string][]string
+	postings map[labels.Label]index.Range
+
+	indexObj  string
 	chunkObjs []string
+
+	pendingReaders sync.WaitGroup
 }
 
 func newBucketBlock(
 	ctx context.Context,
 	logger log.Logger,
+	bkt Bucket,
 	id ulid.ULID,
 	dir string,
-	bkt Bucket,
 ) (*bucketBlock, error) {
-	// If we haven't seen the block before download the meta.json file.
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		if err := os.MkdirAll(dir, 0777); err != nil {
-			return nil, errors.Wrap(err, "create dir")
-		}
-		dst := filepath.Join(dir, "meta.json")
-		src := path.Join(id.String(), "meta.json")
-
-		if err := downloadBucketObject(ctx, bkt, dst, src); err != nil {
-			return nil, errors.Wrap(err, "download meta.json")
-		}
-	} else if err != nil {
-		return nil, err
+	b := &bucketBlock{
+		logger:   logger,
+		bucket:   bkt,
+		indexObj: path.Join(id.String(), "index"),
 	}
-	meta, err := block.ReadMetaFile(dir)
-	if err != nil {
-		return nil, errors.Wrap(err, "read meta.json")
+	if err := b.loadMeta(ctx, id, dir); err != nil {
+		return nil, errors.Wrap(err, "load meta")
 	}
-
-	ix, err := newBucketIndex(ctx, bkt, dir, path.Join(id.String(), "index"))
-	if err != nil {
-		return nil, errors.Wrap(err, "initialize index")
+	if err := b.loadIndexCache(ctx, dir); err != nil {
+		return nil, errors.Wrap(err, "load index cache")
 	}
-
 	// Get object handles for all chunk files.
-	var chunkObjs []string
-	err = bkt.Iter(ctx, id.String()+"/chunks/", func(n string) error {
-		chunkObjs = append(chunkObjs, n)
+	err := bkt.Iter(ctx, id.String()+"/chunks/", func(n string) error {
+		b.chunkObjs = append(b.chunkObjs, n)
 		return nil
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "list chunk files")
 	}
-	return &bucketBlock{
-		logger:    logger,
-		meta:      meta,
-		index:     ix,
-		bucket:    bkt,
-		chunkObjs: chunkObjs,
-	}, nil
+	return b, nil
+}
+
+func (b *bucketBlock) loadMeta(ctx context.Context, id ulid.ULID, dir string) error {
+	// If we haven't seen the block before download the meta.json file.
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if err := os.MkdirAll(dir, 0777); err != nil {
+			return errors.Wrap(err, "create dir")
+		}
+		dst := filepath.Join(dir, "meta.json")
+		src := path.Join(id.String(), "meta.json")
+
+		if err := downloadBucketObject(ctx, b.bucket, dst, src); err != nil {
+			return errors.Wrap(err, "download meta.json")
+		}
+	} else if err != nil {
+		return err
+	}
+	meta, err := block.ReadMetaFile(dir)
+	if err != nil {
+		return errors.Wrap(err, "read meta.json")
+	}
+	b.meta = meta
+	return nil
+}
+
+func (b *bucketBlock) loadIndexCache(ctx context.Context, dir string) (err error) {
+	cachefn := filepath.Join(dir, block.IndexCacheFilename)
+
+	b.symbols, b.lvals, b.postings, err = block.ReadIndexCache(cachefn)
+	if err == nil {
+		return nil
+	}
+	if !os.IsNotExist(errors.Cause(err)) {
+		return errors.Wrap(err, "read index cache")
+	}
+	// No cache exists is on disk yet, build it from a the downloaded index and retry.
+	fn := filepath.Join(dir, "index")
+
+	if err := downloadBucketObject(ctx, b.bucket, fn, b.indexObj); err != nil {
+		return errors.Wrap(err, "download index file")
+	}
+	indexr, err := index.NewFileReader(fn)
+	if err != nil {
+		return errors.Wrap(err, "open index reader")
+	}
+	defer os.Remove(fn)
+	defer indexr.Close()
+
+	if err := block.WriteIndexCache(cachefn, indexr); err != nil {
+		return errors.Wrap(err, "write index cache")
+	}
+
+	b.symbols, b.lvals, b.postings, err = block.ReadIndexCache(cachefn)
+	if err != nil {
+		return errors.Wrap(err, "read index cache")
+	}
+	return nil
 }
 
 // blockMatchers checks whether the block potentially holds data for the given
@@ -690,14 +734,42 @@ func (b *bucketBlock) blockMatchers(mint, maxt int64, matchers ...labels.Matcher
 	return blockMatchers, true
 }
 
+func (b *bucketBlock) readIndexRange(ctx context.Context, off, length int64) ([]byte, error) {
+	r, err := b.bucket.GetRange(ctx, b.indexObj, off, length)
+	if err != nil {
+		return nil, errors.Wrap(err, "get range reader")
+	}
+	defer r.Close()
+
+	c, err := ioutil.ReadAll(r)
+	if err != nil {
+		return nil, errors.Wrap(err, "read range")
+	}
+	return c, nil
+}
+
+func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length int64) ([]byte, error) {
+	r, err := b.bucket.GetRange(ctx, b.chunkObjs[seq], off, length)
+	if err != nil {
+		return nil, errors.Wrap(err, "get range reader")
+	}
+	defer r.Close()
+
+	c, err := ioutil.ReadAll(r)
+	if err != nil {
+		return nil, errors.Wrap(err, "read range")
+	}
+	return c, nil
+}
+
 func (b *bucketBlock) indexReader(ctx context.Context) *bucketIndexReader {
 	b.pendingReaders.Add(1)
-	return newBucketIndexReader(ctx, b.logger, b.meta.ULID, b.index, b.pendingReaders.Done)
+	return newBucketIndexReader(ctx, b)
 }
 
 func (b *bucketBlock) chunkReader(ctx context.Context) *bucketChunkReader {
 	b.pendingReaders.Add(1)
-	return newBucketChunkReader(ctx, b.logger, b.meta.ULID, b.bucket, b.chunkObjs, b.pendingReaders.Done)
+	return newBucketChunkReader(ctx, b)
 }
 
 // Close waits for all pending readers to finish and then closes all underlying resources.
@@ -706,113 +778,25 @@ func (b *bucketBlock) Close() error {
 	return nil
 }
 
-type bucketIndex struct {
-	bkt     Bucket
-	objName string
-	dec     *index.DecoderV1
-
-	symbols  map[uint32]string
-	lvals    map[string][]string
-	postings map[labels.Label]index.Range
-}
-
-func newBucketIndex(ctx context.Context, bkt Bucket, dir, objName string) (*bucketIndex, error) {
-	// Attempt to load cached index state first.
-	cachefn := filepath.Join(dir, block.IndexCacheFilename)
-
-	sym, lvals, pranges, err := block.ReadIndexCache(cachefn)
-	if err == nil {
-		ix := &bucketIndex{
-			bkt:      bkt,
-			objName:  objName,
-			symbols:  sym,
-			lvals:    lvals,
-			postings: pranges,
-			dec:      &index.DecoderV1{},
-		}
-		ix.dec.SetSymbolTable(ix.symbols)
-
-		return ix, nil
-	}
-	if !os.IsNotExist(errors.Cause(err)) {
-		return nil, errors.Wrap(err, "read index cache")
-	}
-	// No cache exists is on disk yet, build it from a the downloaded index and retry.
-	fn := filepath.Join(dir, "index")
-
-	if err := downloadBucketObject(ctx, bkt, fn, objName); err != nil {
-		return nil, errors.Wrap(err, "download index file")
-	}
-	indexr, err := index.NewFileReader(fn)
-	if err != nil {
-		return nil, errors.Wrap(err, "open index reader")
-	}
-	defer os.Remove(fn)
-	defer indexr.Close()
-
-	if err := block.WriteIndexCache(cachefn, indexr); err != nil {
-		return nil, errors.Wrap(err, "write index cache")
-	}
-
-	sym, lvals, pranges, err = block.ReadIndexCache(cachefn)
-	if err != nil {
-		return nil, errors.Wrap(err, "read index cache")
-	}
-	ix := &bucketIndex{
-		bkt:      bkt,
-		objName:  objName,
-		symbols:  sym,
-		lvals:    lvals,
-		postings: pranges,
-		dec:      &index.DecoderV1{},
-	}
-	ix.dec.SetSymbolTable(ix.symbols)
-
-	return ix, nil
-}
-
-func (ix *bucketIndex) readRange(ctx context.Context, off, length int64) ([]byte, error) {
-	r, err := ix.bkt.GetRange(ctx, ix.objName, off, length)
-	if err != nil {
-		return nil, errors.Wrap(err, "get range reader")
-	}
-	defer r.Close()
-
-	b, err := ioutil.ReadAll(r)
-	if err != nil {
-		return nil, errors.Wrap(err, "read range")
-	}
-	return b, nil
-}
-
 type bucketIndexReader struct {
-	logger log.Logger
-	ctx    context.Context
-	close  func()
-	id     ulid.ULID
-	index  *bucketIndex
+	ctx   context.Context
+	block *bucketBlock
+	dec   *index.DecoderV1
 
 	loadedPostings map[labels.Label]*lazyPostings
 	loadedSeries   map[uint64][]byte
 }
 
-func newBucketIndexReader(
-	ctx context.Context,
-	logger log.Logger,
-	id ulid.ULID,
-	index *bucketIndex,
-	close func(),
-) *bucketIndexReader {
-	return &bucketIndexReader{
-		ctx:    ctx,
-		logger: logger,
-		id:     id,
-		index:  index,
-		close:  close,
-
+func newBucketIndexReader(ctx context.Context, block *bucketBlock) *bucketIndexReader {
+	r := &bucketIndexReader{
+		ctx:            ctx,
+		block:          block,
+		dec:            &index.DecoderV1{},
 		loadedPostings: map[labels.Label]*lazyPostings{},
 		loadedSeries:   map[uint64][]byte{},
 	}
+	r.dec.SetSymbolTable(r.block.symbols)
+	return r
 }
 
 func (r *bucketIndexReader) preloadPostings() error {
@@ -831,12 +815,12 @@ func (r *bucketIndexReader) preloadPostings() error {
 	start := all[0].ptr.Start
 	end := all[len(all)-1].ptr.End
 
-	b, err := r.index.readRange(r.ctx, int64(start), int64(end-start))
+	b, err := r.block.readIndexRange(r.ctx, int64(start), int64(end-start))
 	if err != nil {
 		return errors.Wrap(err, "read postings range")
 	}
 	for _, p := range all {
-		_, l, err := r.index.dec.Postings(b[p.ptr.Start-start : p.ptr.End-start])
+		_, l, err := r.dec.Postings(b[p.ptr.Start-start : p.ptr.End-start])
 		if err != nil {
 			return errors.Wrap(err, "read postings list")
 		}
@@ -858,7 +842,7 @@ func (r *bucketIndexReader) preloadSeries(ids []uint64) error {
 	start := ids[0]
 	end := ids[len(ids)-1] + maxSeriesSize
 
-	b, err := r.index.readRange(r.ctx, int64(start), int64(end-start))
+	b, err := r.block.readIndexRange(r.ctx, int64(start), int64(end-start))
 	if err != nil {
 		return errors.Wrap(err, "read series range")
 	}
@@ -883,7 +867,7 @@ func (r *bucketIndexReader) LabelValues(names ...string) (index.StringTuples, er
 	if len(names) != 1 {
 		return nil, errors.New("label value lookups only supported for single name")
 	}
-	return index.NewStringTuples(r.index.lvals[names[0]], 1)
+	return index.NewStringTuples(r.block.lvals[names[0]], 1)
 }
 
 type lazyPostings struct {
@@ -901,7 +885,7 @@ func (p *lazyPostings) set(v index.Postings) {
 // background garbage collections.
 func (r *bucketIndexReader) Postings(name, value string) (index.Postings, error) {
 	l := labels.Label{Name: name, Value: value}
-	ptr, ok := r.index.postings[l]
+	ptr, ok := r.block.postings[l]
 	if !ok {
 		return index.EmptyPostings(), nil
 	}
@@ -924,7 +908,7 @@ func (r *bucketIndexReader) Series(ref uint64, lset *labels.Labels, chks *[]chun
 	if !ok {
 		return errors.New("series not found")
 	}
-	return r.index.dec.Series(b, lset, chks)
+	return r.dec.Series(b, lset, chks)
 }
 
 // LabelIndices returns the label pairs for which indices exist.
@@ -934,45 +918,25 @@ func (r *bucketIndexReader) LabelIndices() ([][]string, error) {
 
 // Close released the underlying resources of the reader.
 func (r *bucketIndexReader) Close() error {
-	r.close()
+	r.block.pendingReaders.Done()
 	return nil
 }
 
 type bucketChunkReader struct {
-	logger log.Logger
-	ctx    context.Context
-	close  func()
-	id     ulid.ULID
-	bkt    Bucket
+	ctx   context.Context
+	block *bucketBlock
 
-	files    []string
 	preloads [][]uint32
 	mtx      sync.Mutex
 	chunks   map[uint64]chunkenc.Chunk
 }
 
-func newBucketChunkReader(
-	ctx context.Context,
-	logger log.Logger,
-	id ulid.ULID,
-	bkt Bucket,
-	files []string,
-	close func(),
-) *bucketChunkReader {
-	ctx, cancel := context.WithCancel(ctx)
-
+func newBucketChunkReader(ctx context.Context, block *bucketBlock) *bucketChunkReader {
 	return &bucketChunkReader{
-		logger:   logger,
 		ctx:      ctx,
-		bkt:      bkt,
-		id:       id,
-		files:    files,
-		preloads: make([][]uint32, len(files)),
+		block:    block,
+		preloads: make([][]uint32, len(block.chunkObjs)),
 		chunks:   map[uint64]chunkenc.Chunk{},
-		close: func() {
-			cancel()
-			close()
-		},
 	}
 }
 
@@ -992,7 +956,7 @@ func (r *bucketChunkReader) addPreload(id uint64) error {
 // preloadFile adds actors to load all chunks referenced by the offsets from the given file.
 // It attempts to conslidate requests for multiple chunks into a single one and populates
 // the reader's chunk map.
-func (r *bucketChunkReader) preloadFile(g *run.Group, seq int, file string, offsets []uint32) {
+func (r *bucketChunkReader) preloadFile(g *run.Group, seq int, offsets []uint32) {
 	if len(offsets) == 0 {
 		return
 	}
@@ -1032,24 +996,18 @@ func (r *bucketChunkReader) preloadFile(g *run.Group, seq int, file string, offs
 		g.Add(func() error {
 			now := time.Now()
 			defer func() {
-				level.Debug(r.logger).Log(
+				level.Debug(r.block.logger).Log(
 					"msg", "preloaded range",
-					"block", r.id,
-					"file", file,
+					"block", r.block.meta.ULID,
+					"file", seq,
 					"numOffsets", len(inclOffs),
 					"length", end-start,
 					"duration", time.Since(now))
 			}()
 
-			objr, err := r.bkt.GetRange(ctx, file, int64(start), int64(end-start))
+			b, err := r.block.readChunkRange(ctx, seq, int64(start), int64(end-start))
 			if err != nil {
-				return errors.Wrapf(err, "create reader for %q", file)
-			}
-			defer objr.Close()
-
-			b, err := ioutil.ReadAll(objr)
-			if err != nil {
-				return errors.Wrap(err, "load byte range for chunks")
+				return errors.Wrapf(err, "read range for %d", seq)
 			}
 			for _, o := range inclOffs {
 				cb := b[o-start:]
@@ -1087,7 +1045,7 @@ func (r *bucketChunkReader) preload() error {
 	var g run.Group
 
 	for i, offsets := range r.preloads {
-		r.preloadFile(&g, i, r.files[i], offsets)
+		r.preloadFile(&g, i, offsets)
 	}
 	return g.Run()
 }
@@ -1101,7 +1059,7 @@ func (r *bucketChunkReader) Chunk(id uint64) (chunkenc.Chunk, error) {
 }
 
 func (r *bucketChunkReader) Close() error {
-	r.close()
+	r.block.pendingReaders.Done()
 	return nil
 }
 
