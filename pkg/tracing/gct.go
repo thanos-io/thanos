@@ -28,12 +28,12 @@ func (l *gcloudRecorderLogger) Errorf(format string, args ...interface{}) {
 }
 
 // NewOptionalGCloudTracer returns GoogleCloudTracer Tracer. In case of error it log warning and returns noop tracer.
-func NewOptionalGCloudTracer(ctx context.Context, logger log.Logger, gcloudTraceProjectID string, sampleFactor uint64) (opentracing.Tracer, func() error) {
+func NewOptionalGCloudTracer(ctx context.Context, logger log.Logger, gcloudTraceProjectID string, sampleFactor uint64, debugName string) (opentracing.Tracer, func() error) {
 	if gcloudTraceProjectID == "" {
 		return &opentracing.NoopTracer{}, func() error { return nil }
 	}
 
-	tracer, closeFn, err := newGCloudTracer(ctx, logger, gcloudTraceProjectID, sampleFactor)
+	tracer, closeFn, err := newGCloudTracer(ctx, logger, gcloudTraceProjectID, sampleFactor, debugName)
 	if err != nil {
 		level.Warn(logger).Log("msg", "failed to init Google Cloud Tracer. Tracing will be disabled", "err", err)
 		return &opentracing.NoopTracer{}, func() error { return nil }
@@ -42,7 +42,7 @@ func NewOptionalGCloudTracer(ctx context.Context, logger log.Logger, gcloudTrace
 	return tracer, closeFn
 }
 
-func newGCloudTracer(ctx context.Context, logger log.Logger, gcloudTraceProjectID string, sampleFactor uint64) (opentracing.Tracer, func() error, error) {
+func newGCloudTracer(ctx context.Context, logger log.Logger, gcloudTraceProjectID string, sampleFactor uint64, debugName string) (opentracing.Tracer, func() error, error) {
 	if sampleFactor < 1 {
 		return nil, nil, errors.Errorf("invalid opentracing sample factor: %v, should be > 0", sampleFactor)
 	}
@@ -71,6 +71,7 @@ func newGCloudTracer(ctx context.Context, logger log.Logger, gcloudTraceProjectI
 	}
 
 	return &tracer{
-		wrapped: basictracer.NewWithOptions(opts),
+		debugName: debugName,
+		wrapped:   basictracer.NewWithOptions(opts),
 	}, recorder.Close, nil
 }
