@@ -16,6 +16,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
+	"github.com/improbable-eng/thanos/pkg/store/gcs"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/oklog/run"
@@ -94,7 +95,13 @@ func runStore(
 			return errors.Wrap(err, "create GCS client")
 		}
 
-		gs, err := store.NewGCSStore(logger, reg, gcsClient.Bucket(gcsBucket), gossipTimestampsFn, dataDir)
+		gs, err := store.NewGCSStore(
+			logger,
+			reg,
+			gcs.NewBucket(gcsClient.Bucket(gcsBucket)),
+			gossipTimestampsFn,
+			dataDir,
+		)
 		if err != nil {
 			return errors.Wrap(err, "create GCS store")
 		}

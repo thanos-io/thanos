@@ -43,7 +43,7 @@ func TestGCSStore_e2e(t *testing.T) {
 	}
 	start := time.Now()
 	now := start
-	remote := shipper.NewGCSRemote(log.NewNopLogger(), nil, bkt)
+	remote := shipper.NewGCSRemote(log.NewNopLogger(), nil, bkt.Handle())
 
 	minTime := int64(0)
 	maxTime := int64(0)

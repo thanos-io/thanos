@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/improbable-eng/thanos/pkg/store/gcs"
 
 	"google.golang.org/api/iterator"
 )
@@ -20,7 +21,7 @@ import (
 //
 // TODO(fabxc): define object storage interface and have this method return
 // mocks or actual remote buckets depending on env vars.
-func NewObjectStoreBucket(t testing.TB) (*storage.BucketHandle, func()) {
+func NewObjectStoreBucket(t testing.TB) (*gcs.Bucket, func()) {
 	project, ok := os.LookupEnv("GCP_PROJECT")
 	// TODO(fabxc): make it run against a mock store if no actual bucket is configured.
 	if !ok {
@@ -38,7 +39,7 @@ func NewObjectStoreBucket(t testing.TB) (*storage.BucketHandle, func()) {
 	bkt := gcsClient.Bucket(name)
 	Ok(t, bkt.Create(ctx, project, nil))
 
-	return bkt, func() {
+	return gcs.NewBucket(bkt), func() {
 		deleteAllBucket(t, ctx, bkt)
 		cancel()
 		gcsClient.Close()
