@@ -273,8 +273,8 @@ func (s *GCSStore) getBlock(id ulid.ULID) *gcsBlock {
 }
 
 func (s *GCSStore) setBlock(id ulid.ULID, b *gcsBlock) {
-	s.mtx.RLock()
-	defer s.mtx.RUnlock()
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
 
 	s.blocks[id] = b
 
