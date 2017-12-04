@@ -9,9 +9,13 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"context"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/oklog/run"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -25,7 +29,7 @@ const (
 	defaultHTTPAddr    = "0.0.0.0:10902"
 )
 
-type setupFunc func(*run.Group, log.Logger, *prometheus.Registry) error
+type setupFunc func(*run.Group, log.Logger, *prometheus.Registry, opentracing.Tracer) error
 
 func main() {
 	app := kingpin.New(filepath.Base(os.Args[0]), "A block storage based long-term storage for Prometheus")
@@ -37,6 +41,11 @@ func main() {
 
 	logLevel := app.Flag("log.level", "log filtering level").
 		Default("info").Enum("error", "warn", "info", "debug")
+
+	gcloudTraceProject := app.Flag("gcloudtrace.project", "GCP project to send Google Cloud Trace tracings to. If empty, tracing will be disabled.").
+		String()
+	gcloudTraceSampleFactor := app.Flag("gcloudtrace.sample-factor", "How often we send traces (1/<sample-factor>).").
+		Default("1").Uint64()
 
 	cmds := map[string]setupFunc{}
 	registerSidecar(cmds, app, "sidecar")
@@ -84,8 +93,26 @@ func main() {
 	)
 
 	var g run.Group
+	var tracer opentracing.Tracer
 
-	if err := cmds[cmd](&g, logger, metrics); err != nil {
+	// Setup optional tracing.
+	{
+		ctx := context.Background()
+
+		var closeFn func() error
+		tracer, closeFn = tracing.NewOptionalGCloudTracer(ctx, logger, *gcloudTraceProject, *gcloudTraceSampleFactor)
+
+		ctx, cancel := context.WithCancel(ctx)
+		g.Add(func() error {
+			<-ctx.Done()
+			return ctx.Err()
+		}, func(error) {
+			closeFn()
+			cancel()
+		})
+	}
+
+	if err := cmds[cmd](&g, logger, metrics, tracer); err != nil {
 		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command failed", cmd))
 		os.Exit(1)
 	}

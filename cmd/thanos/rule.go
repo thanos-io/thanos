@@ -22,12 +22,15 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/alert"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
+	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/oklog/run"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
@@ -73,7 +76,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
 		String()
 
-	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry) error {
+	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
 		peer, err := cluster.Join(
 			logger,
 			reg,
@@ -93,7 +96,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 		if err != nil {
 			return errors.Wrap(err, "parse labels")
 		}
-		return runRule(g, logger, reg, lset, *alertmgrs, *httpAddr, *grpcAddr, *evalInterval, *dataDir, *ruleDir, peer)
+		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *httpAddr, *grpcAddr, *evalInterval, *dataDir, *ruleDir, peer)
 	}
 }
 
@@ -103,6 +106,7 @@ func runRule(
 	g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
+	tracer opentracing.Tracer,
 	lset labels.Labels,
 	alertmgrURLs []string,
 	httpAddr string,
@@ -138,7 +142,7 @@ func runRule(
 		peers := peer.PeerStates(cluster.PeerTypeQuery)
 
 		for _, i := range rand.Perm(len(peers)) {
-			vec, err := queryPrometheusInstant(ctx, peers[i].APIAddr, q, t)
+			vec, err := queryPrometheusInstant(ctx, logger, peers[i].APIAddr, q, t)
 			if err != nil {
 				return nil, err
 			}
@@ -301,8 +305,18 @@ func runRule(
 			}),
 		)
 		s := grpc.NewServer(
-			grpc.UnaryInterceptor(met.UnaryServerInterceptor()),
-			grpc.StreamInterceptor(met.StreamServerInterceptor()),
+			grpc.UnaryInterceptor(
+				grpc_middleware.ChainUnaryServer(
+					met.UnaryServerInterceptor(),
+					tracing.UnaryServerInterceptor(tracer),
+				),
+			),
+			grpc.StreamInterceptor(
+				grpc_middleware.ChainStreamServer(
+					met.StreamServerInterceptor(),
+					tracing.StreamServerInterceptor(tracer),
+				),
+			),
 		)
 		storepb.RegisterStoreServer(s, store)
 		reg.MustRegister(met)
@@ -338,7 +352,7 @@ func runRule(
 	return nil
 }
 
-func queryPrometheusInstant(ctx context.Context, addr, query string, t time.Time) (promql.Vector, error) {
+func queryPrometheusInstant(ctx context.Context, logger log.Logger, addr, query string, t time.Time) (promql.Vector, error) {
 	u, err := url.Parse(fmt.Sprintf("http://%s/api/v1/query", addr))
 	if err != nil {
 		return nil, err
@@ -352,9 +366,16 @@ func queryPrometheusInstant(ctx context.Context, addr, query string, t time.Time
 	if err != nil {
 		return nil, err
 	}
+
+	span, ctx := tracing.StartSpan(ctx, "/rule_instant_query HTTP[client]")
+	defer span.Finish()
+
 	req = req.WithContext(ctx)
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{
+		Transport: tracing.HTTPTripperware(logger, http.DefaultTransport),
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}

@@ -148,7 +148,7 @@ func TestStoreSelectSingle(t *testing.T) {
 
 	q := newQuerier(context.Background(), nil, nil, 0, 0, "b")
 
-	res, err := q.selectSingle(c)
+	res, err := q.selectSingle(context.Background(), c)
 	testutil.Ok(t, err)
 
 	exp := [][]storepb.Label{

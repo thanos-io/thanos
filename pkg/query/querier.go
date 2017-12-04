@@ -13,6 +13,7 @@ import (
 
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/strutil"
+	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
@@ -131,6 +132,8 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 		// Add support for partial results/errors.
 		g errgroup.Group
 	)
+	span, ctx := tracing.StartSpan(q.ctx, "querier_select")
+	defer span.Finish()
 
 	sms, err := translateMatchers(ms...)
 	if err != nil {
@@ -145,7 +148,7 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 		store := s
 
 		g.Go(func() error {
-			set, err := q.selectSingle(store.Client(), sms...)
+			set, err := q.selectSingle(ctx, store.Client(), sms...)
 			if err != nil {
 				return err
 			}
@@ -173,8 +176,8 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 	return newDedupSeriesSet(set, q.replicaLabel), nil
 }
 
-func (q *querier) selectSingle(client storepb.StoreClient, ms ...storepb.LabelMatcher) (storepb.SeriesSet, error) {
-	sc, err := client.Series(q.ctx, &storepb.SeriesRequest{
+func (q *querier) selectSingle(ctx context.Context, client storepb.StoreClient, ms ...storepb.LabelMatcher) (storepb.SeriesSet, error) {
+	sc, err := client.Series(ctx, &storepb.SeriesRequest{
 		MinTime:  q.mint,
 		MaxTime:  q.maxt,
 		Matchers: ms,
@@ -231,12 +234,14 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 		// Add support for partial results/errors.
 		g errgroup.Group
 	)
+	span, ctx := tracing.StartSpan(q.ctx, "querier_label_values")
+	defer span.Finish()
 
 	for _, s := range q.stores {
 		store := s
 
 		g.Go(func() error {
-			values, err := q.labelValuesSingle(store.Client(), name)
+			values, err := q.labelValuesSingle(ctx, store.Client(), name)
 			if err != nil {
 				return err
 			}
@@ -254,8 +259,8 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 	return strutil.MergeUnsortedSlices(all...), nil
 }
 
-func (q *querier) labelValuesSingle(client storepb.StoreClient, name string) ([]string, error) {
-	resp, err := client.LabelValues(q.ctx, &storepb.LabelValuesRequest{
+func (q *querier) labelValuesSingle(ctx context.Context, client storepb.StoreClient, name string) ([]string, error) {
+	resp, err := client.LabelValues(ctx, &storepb.LabelValuesRequest{
 		Label: name,
 	})
 	if err != nil {

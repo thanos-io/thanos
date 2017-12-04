@@ -29,8 +29,10 @@ import (
 
 	"github.com/prometheus/common/route"
 
+	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/testutil"
+	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
@@ -605,7 +607,7 @@ func TestParseDuration(t *testing.T) {
 func TestOptionsMethod(t *testing.T) {
 	r := route.New()
 	api := &API{}
-	api.Register(r)
+	api.Register(r, &opentracing.NoopTracer{}, log.NewNopLogger())
 
 	s := httptest.NewServer(r)
 	defer s.Close()

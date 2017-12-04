@@ -11,12 +11,15 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
+	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/oklog/run"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
@@ -47,7 +50,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
 		String()
 
-	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry) error {
+	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
 		p, err := cluster.Join(
 			logger,
 			reg,
@@ -67,7 +70,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 		if err != nil {
 			return errors.Wrap(err, "join cluster")
 		}
-		return runStore(g, logger, reg, *gcsBucket, *dataDir, *grpcAddr, *httpAddr, p.SetTimestamps)
+		return runStore(g, logger, reg, tracer, *gcsBucket, *dataDir, *grpcAddr, *httpAddr, p.SetTimestamps)
 	}
 }
 
@@ -78,6 +81,7 @@ func runStore(
 	g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
+	tracer opentracing.Tracer,
 	gcsBucket string,
 	dataDir string,
 	grpcAddr string,
@@ -123,9 +127,20 @@ func runStore(
 				0.001, 0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4,
 			}),
 		)
+
 		s := grpc.NewServer(
-			grpc.UnaryInterceptor(met.UnaryServerInterceptor()),
-			grpc.StreamInterceptor(met.StreamServerInterceptor()),
+			grpc.UnaryInterceptor(
+				grpc_middleware.ChainUnaryServer(
+					met.UnaryServerInterceptor(),
+					tracing.UnaryServerInterceptor(tracer),
+				),
+			),
+			grpc.StreamInterceptor(
+				grpc_middleware.ChainStreamServer(
+					met.StreamServerInterceptor(),
+					tracing.StreamServerInterceptor(tracer),
+				),
+			),
 		)
 		storepb.RegisterStoreServer(s, gs)
 		reg.MustRegister(met)
