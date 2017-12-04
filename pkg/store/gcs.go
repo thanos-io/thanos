@@ -344,7 +344,6 @@ func (s *gcsSeriesSet) Err() error {
 	return s.err
 }
 
-// TODO(bplotka): This function has too much of tracing,log,metric boilerplate. Reduce that later on.
 func (s *GCSStore) blockSeries(ctx context.Context, b *gcsBlock, matchers []labels.Matcher, mint, maxt int64) (storepb.SeriesSet, error) {
 	var (
 		extLset = b.meta.Thanos.Labels
@@ -354,46 +353,35 @@ func (s *GCSStore) blockSeries(ctx context.Context, b *gcsBlock, matchers []labe
 	defer indexr.Close()
 	defer chunkr.Close()
 
-	span, _ := tracing.StartSpanFromContext(ctx, "gcs_store_posting_setup")
 	blockPrepareBegin := time.Now()
 	// The postings to preload are registered within the call to PostingsForMatchers,
 	// when it invokes indexr.Postings for each underlying postings list.
 	p, absent, err := tsdb.PostingsForMatchers(indexr, matchers...)
 	if err != nil {
-		span.Finish()
 		return nil, err
 	}
 	level.Debug(s.logger).Log("msg", "setup postings", "duration", time.Since(blockPrepareBegin))
-	span.Finish()
 
-	span, _ = tracing.StartSpanFromContext(ctx, "gcs_store_posting_preload")
 	begin := time.Now()
 	if err := indexr.preloadPostings(); err != nil {
-		span.Finish()
 		return nil, err
 	}
 
 	level.Debug(s.logger).Log("msg", "preload postings", "duration", time.Since(begin))
-	span.Finish()
 
-	span, _ = tracing.StartSpanFromContext(ctx, "gcs_store_index_series_preload")
 	begin = time.Now()
 	var ps []uint64
 	for p.Next() {
 		ps = append(ps, p.At())
 	}
 	if err := p.Err(); err != nil {
-		span.Finish()
 		return nil, err
 	}
 	if err := indexr.preloadSeries(ps); err != nil {
-		span.Finish()
 		return nil, err
 	}
 	level.Debug(s.logger).Log("msg", "preload index series", "count", len(ps), "duration", time.Since(begin))
-	span.Finish()
 
-	span, _ = tracing.StartSpanFromContext(ctx, "gcs_store_series_prepare")
 	begin = time.Now()
 	var (
 		res  []seriesEntry
@@ -446,7 +434,6 @@ Outer:
 				break
 			}
 			if err := chunkr.addPreload(meta.Ref); err != nil {
-				span.Finish()
 				return nil, errors.Wrap(err, "add chunk preload")
 			}
 			s.chks = append(s.chks, meta)
@@ -456,7 +443,6 @@ Outer:
 		}
 	}
 	s.metrics.seriesPrepareDuration.Observe(time.Since(blockPrepareBegin).Seconds())
-	span.Finish()
 
 	begin = time.Now()
 	if err := chunkr.preload(); err != nil {
