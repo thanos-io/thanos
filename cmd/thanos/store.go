@@ -95,10 +95,14 @@ func runStore(
 			return errors.Wrap(err, "create GCS client")
 		}
 
+		var bkt store.Bucket
+		bkt = gcs.NewBucket(gcsClient.Bucket(gcsBucket))
+		bkt = store.BucketWithMetrics(gcsBucket, bkt, reg)
+
 		gs, err := store.NewBucketStore(
 			logger,
 			reg,
-			gcs.NewBucket(gcsClient.Bucket(gcsBucket)),
+			bkt,
 			gossipTimestampsFn,
 			dataDir,
 		)

@@ -51,6 +51,38 @@ type Bucket interface {
 	GetRange(ctx context.Context, name string, off, len int64) (io.ReadCloser, error)
 }
 
+// BucketWithMetrics takes a bucket and registers metrics with the given registry for
+// operations run against the bucket.
+func BucketWithMetrics(name string, b Bucket, r prometheus.Registerer) Bucket {
+	bkt := &metricBucket{
+		Bucket: b,
+		ops: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name:        "thanos_store_bucket_operations_total",
+			Help:        "Total number of operations that were executed against a bucket.",
+			ConstLabels: prometheus.Labels{"bucket": name},
+		}, []string{"operation"}),
+	}
+	if r != nil {
+		r.MustRegister(bkt.ops)
+	}
+	return bkt
+}
+
+type metricBucket struct {
+	Bucket
+	ops *prometheus.CounterVec
+}
+
+func (b *metricBucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
+	b.ops.WithLabelValues("get").Inc()
+	return b.Bucket.Get(ctx, name)
+}
+
+func (b *metricBucket) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
+	b.ops.WithLabelValues("get_range").Inc()
+	return b.Bucket.GetRange(ctx, name, off, length)
+}
+
 // BucketStore implements the store API backed by a Bucket bucket. It loads all index
 // files to local disk.
 type BucketStore struct {
