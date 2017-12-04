@@ -100,7 +100,7 @@ func main() {
 		ctx := context.Background()
 
 		var closeFn func() error
-		tracer, closeFn = tracing.NewOptionalGCloudTracer(ctx, logger, *gcloudTraceProject, *gcloudTraceSampleFactor)
+		tracer, closeFn = tracing.NewOptionalGCloudTracer(ctx, logger, *gcloudTraceProject, *gcloudTraceSampleFactor, *debugName)
 
 		ctx, cancel := context.WithCancel(ctx)
 		g.Add(func() error {

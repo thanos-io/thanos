@@ -8,11 +8,16 @@ import (
 )
 
 type tracer struct {
-	wrapped opentracing.Tracer
+	debugName string
+	wrapped   opentracing.Tracer
 }
 
 func (t *tracer) StartSpan(operationName string, opts ...opentracing.StartSpanOption) opentracing.Span {
 	span := t.wrapped.StartSpan(operationName, opts...)
+
+	if t.debugName != "" {
+		span.SetTag("service_name", t.debugName)
+	}
 
 	// Set common tags.
 	if hostname := os.Getenv("HOSTNAME"); hostname != "" {
