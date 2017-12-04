@@ -139,7 +139,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	preq.Header.Set("Content-Type", "application/x-protobuf")
 	preq.Header.Set("X-Prometheus-Remote-Read-Version", "0.1.0")
 
-	span, ctx := tracing.StartSpanFromContext(s.Context(), "/prom_v1_read_series HTTP[client]")
+	span, ctx := tracing.StartSpan(s.Context(), "/prom_v1_read_series HTTP[client]")
 	defer span.Finish()
 
 	preq = preq.WithContext(ctx)
@@ -292,7 +292,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 		return nil, status.Error(codes.Unknown, err.Error())
 	}
 
-	span, ctx := tracing.StartSpanFromContext(ctx, "/prom_label_values HTTP[client]")
+	span, ctx := tracing.StartSpan(ctx, "/prom_label_values HTTP[client]")
 	defer span.Finish()
 
 	resp, err := p.client.Do(req.WithContext(ctx))

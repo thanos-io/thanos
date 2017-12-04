@@ -23,9 +23,9 @@ func tracerFromContext(ctx context.Context) opentracing.Tracer {
 	return nil
 }
 
-// StartSpanFromContext starts and returns span with `operationName` using any Span found within given context.
+// StartSpan starts and returns span with `operationName` using any Span found within given context.
 // It uses traces propagated in context.
-func StartSpanFromContext(ctx context.Context, operationName string, opts ...opentracing.StartSpanOption) (opentracing.Span, context.Context) {
+func StartSpan(ctx context.Context, operationName string, opts ...opentracing.StartSpanOption) (opentracing.Span, context.Context) {
 	tracer := tracerFromContext(ctx)
 	if tracer == nil {
 		// No tracing found, use noop one.

@@ -132,7 +132,7 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 		// Add support for partial results/errors.
 		g errgroup.Group
 	)
-	span, ctx := tracing.StartSpanFromContext(q.ctx, "querier_select")
+	span, ctx := tracing.StartSpan(q.ctx, "querier_select")
 	defer span.Finish()
 
 	sms, err := translateMatchers(ms...)
@@ -234,7 +234,7 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 		// Add support for partial results/errors.
 		g errgroup.Group
 	)
-	span, ctx := tracing.StartSpanFromContext(q.ctx, "querier_label_values")
+	span, ctx := tracing.StartSpan(q.ctx, "querier_label_values")
 	defer span.Finish()
 
 	for _, s := range q.stores {

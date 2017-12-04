@@ -497,7 +497,7 @@ func (s *GCSStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 
 	s.mtx.RUnlock()
 
-	span, _ := tracing.StartSpanFromContext(srv.Context(), "gcs_store_preload_all")
+	span, _ := tracing.StartSpan(srv.Context(), "gcs_store_preload_all")
 	begin := time.Now()
 	if err := g.Run(); err != nil {
 		span.Finish()
@@ -509,7 +509,7 @@ func (s *GCSStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 	s.metrics.seriesPreloadAllDuration.Observe(time.Since(begin).Seconds())
 	span.Finish()
 
-	span, _ = tracing.StartSpanFromContext(srv.Context(), "gcs_store_merge_all")
+	span, _ = tracing.StartSpan(srv.Context(), "gcs_store_merge_all")
 	defer span.Finish()
 
 	begin = time.Now()

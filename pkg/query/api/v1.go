@@ -208,7 +208,7 @@ func (api *API) query(r *http.Request) (interface{}, *apiError) {
 	}
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
-	span, ctx := tracing.StartSpanFromContext(r.Context(), "promql_instant_query")
+	span, ctx := tracing.StartSpan(r.Context(), "promql_instant_query")
 	defer span.Finish()
 
 	begin := api.now()
@@ -281,7 +281,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, *apiError) {
 	}
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
-	span, ctx := tracing.StartSpanFromContext(r.Context(), "promql_range_query")
+	span, ctx := tracing.StartSpan(r.Context(), "promql_range_query")
 	defer span.Finish()
 
 	begin := api.now()

@@ -367,7 +367,7 @@ func queryPrometheusInstant(ctx context.Context, logger log.Logger, addr, query 
 		return nil, err
 	}
 
-	span, ctx := tracing.StartSpanFromContext(ctx, "/rule_instant_query HTTP[client]")
+	span, ctx := tracing.StartSpan(ctx, "/rule_instant_query HTTP[client]")
 	defer span.Finish()
 
 	req = req.WithContext(ctx)
