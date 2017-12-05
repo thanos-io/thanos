@@ -15,15 +15,61 @@ import (
 
 	"math"
 
+	"strings"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// Remote represents a remote data store to which directories are uploaded.
-type Remote interface {
-	Exists(ctx context.Context, id ulid.ULID) (bool, error)
-	Upload(ctx context.Context, id ulid.ULID, dir string) error
+// Bucket represents a writable bucket of data objects.
+type Bucket interface {
+	// Exists checks if the given directory exists at the remote site (and contains at least one element).
+	Exists(ctx context.Context, dir string) (bool, error)
+
+	// Upload writes the file specified in src to remote location specified as target.
+	Upload(ctx context.Context, src, target string) error
+
+	// Delete removes all data prefixed with the dir.
+	Delete(ctx context.Context, dir string) error
+}
+
+type metrics struct {
+	dirSyncs        prometheus.Counter
+	dirSyncFailures prometheus.Counter
+	uploads         prometheus.Counter
+	uploadFailures  prometheus.Counter
+}
+
+func newMetrics(r prometheus.Registerer) *metrics {
+	var m metrics
+
+	m.dirSyncs = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_shipper_dir_syncs_total",
+		Help: "Total dir sync attempts",
+	})
+	m.dirSyncFailures = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_shipper_dir_sync_failures_total",
+		Help: "Total number of failed dir syncs",
+	})
+	m.uploads = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_shipper_uploads_total",
+		Help: "Total object upload attempts",
+	})
+	m.uploadFailures = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_shipper_upload_failures_total",
+		Help: "Total number of failed object uploads",
+	})
+
+	if r != nil {
+		prometheus.MustRegister(
+			m.dirSyncs,
+			m.dirSyncFailures,
+			m.uploads,
+			m.uploadFailures,
+		)
+	}
+	return &m
 }
 
 // Shipper watches a directory for matching files and directories and uploads
@@ -31,20 +77,22 @@ type Remote interface {
 type Shipper struct {
 	logger log.Logger
 	dir    string
-	remote Remote
+	bucket Bucket
 	match  func(os.FileInfo) bool
 	labels func() labels.Labels
 	// MaxTime timestamp does not make sense for sidecar, so we need to gossip minTime only. We always have freshest data.
 	gossipMinTimeFn func(mint int64)
+
+	metrics *metrics
 }
 
 // New creates a new shipper that detects new TSDB blocks in dir and uploads them
 // to remote if necessary. It attaches the return value of the labels getter to uploaded data.
 func New(
 	logger log.Logger,
-	metric prometheus.Registerer,
+	r prometheus.Registerer,
 	dir string,
-	remote Remote,
+	bucket Bucket,
 	lbls func() labels.Labels,
 	gossipMinTimeFn func(mint int64),
 ) *Shipper {
@@ -60,9 +108,10 @@ func New(
 	return &Shipper{
 		logger:          logger,
 		dir:             dir,
-		remote:          remote,
+		bucket:          bucket,
 		labels:          lbls,
 		gossipMinTimeFn: gossipMinTimeFn,
+		metrics:         newMetrics(r),
 	}
 }
 
@@ -114,7 +163,7 @@ func (s *Shipper) sync(ctx context.Context, id ulid.ULID, dir string) (minTime i
 	if meta.Compaction.Level > 1 {
 		return meta.MinTime, nil
 	}
-	ok, err := s.remote.Exists(ctx, id)
+	ok, err := s.bucket.Exists(ctx, id.String())
 	if err != nil {
 		return 0, errors.Wrap(err, "check exists")
 	}
@@ -146,7 +195,44 @@ func (s *Shipper) sync(ctx context.Context, id ulid.ULID, dir string) (minTime i
 	if err := block.WriteMetaFile(updir, meta); err != nil {
 		return 0, errors.Wrap(err, "write meta file")
 	}
-	return meta.MinTime, s.remote.Upload(ctx, id, updir)
+	return meta.MinTime, s.uploadDir(ctx, id, updir)
+}
+
+// uploadDir uploads the given directory to the remote site.
+func (s *Shipper) uploadDir(ctx context.Context, id ulid.ULID, dir string) error {
+	s.metrics.dirSyncs.Inc()
+
+	err := filepath.Walk(dir, func(src string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if fi.IsDir() {
+			return nil
+		}
+
+		target := filepath.Join(id.String(), strings.TrimPrefix(src, dir))
+		level.Debug(s.logger).Log("msg", "upload file", "src", src, "dst", target)
+		s.metrics.uploads.Inc()
+		err = s.bucket.Upload(ctx, src, target)
+		if err != nil {
+			s.metrics.uploadFailures.Inc()
+		}
+
+		return err
+	})
+	if err == nil {
+		return nil
+	}
+	s.metrics.dirSyncFailures.Inc()
+	level.Error(s.logger).Log("msg", "upload failed; remove partial data", "dir", dir, "err", err)
+
+	// We don't want to leave partially uploaded directories behind. Cleanup everything related to it
+	// and use a uncanceled context.
+	if err2 := s.bucket.Delete(ctx, dir); err2 != nil {
+		level.Error(s.logger).Log(
+			"msg", "cleanup failed; partial data may be left behind", "dir", dir, "err", err2)
+	}
+	return err
 }
 
 func hardlinkBlock(src, dst string) error {

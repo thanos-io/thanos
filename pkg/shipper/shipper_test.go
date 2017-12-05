@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"math/rand"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/oklog/ulid"
@@ -19,51 +18,11 @@ import (
 	"time"
 
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/objstore/inmem"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/tsdb"
 )
-
-type inMemStorage struct {
-	t      *testing.T
-	blocks map[ulid.ULID]struct{}
-	files  map[string]string
-}
-
-func newInMemStorage(t *testing.T) *inMemStorage {
-	return &inMemStorage{
-		t:      t,
-		blocks: map[ulid.ULID]struct{}{},
-		files:  map[string]string{},
-	}
-}
-
-func (r *inMemStorage) Exists(_ context.Context, id ulid.ULID) (bool, error) {
-	_, exists := r.blocks[id]
-	return exists, nil
-}
-
-func (r *inMemStorage) Upload(_ context.Context, id ulid.ULID, dir string) error {
-	r.t.Logf("upload called: %s %s", id, dir)
-	// Double check if shipper checks Exists method properly.
-	_, exists := r.blocks[id]
-	testutil.Assert(r.t, !exists, "target should not exists")
-
-	r.blocks[id] = struct{}{}
-
-	return filepath.Walk(dir, func(name string, fi os.FileInfo, err error) error {
-		if !fi.IsDir() {
-			b, err := ioutil.ReadFile(name)
-			if err != nil {
-				return err
-			}
-			name = filepath.Join(id.String(), strings.TrimPrefix(name, dir))
-			r.t.Logf("upload file %s, %s", name, string(b))
-			r.files[name] = string(b)
-		}
-		return nil
-	})
-}
 
 func TestShipper_UploadBlocks(t *testing.T) {
 	dir, err := ioutil.TempDir("", "shipper-test")
@@ -71,8 +30,8 @@ func TestShipper_UploadBlocks(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	var gotMinTime int64
-	storage := newInMemStorage(t)
-	shipper := New(nil, nil, dir, storage, func() labels.Labels {
+	bucket := inmem.NewBucket()
+	shipper := New(nil, nil, dir, bucket, func() labels.Labels {
 		return labels.FromStrings("prometheus", "prom-1")
 	}, func(mint int64) {
 		gotMinTime = mint
@@ -86,7 +45,7 @@ func TestShipper_UploadBlocks(t *testing.T) {
 	rands := rand.New(rand.NewSource(0))
 
 	expBlocks := map[ulid.ULID]struct{}{}
-	expFiles := map[string]string{}
+	expFiles := map[string][]byte{}
 
 	now := time.Now()
 	for i := 0; i < numDirs; i++ {
@@ -134,20 +93,20 @@ func TestShipper_UploadBlocks(t *testing.T) {
 
 		testutil.Ok(t, enc.Encode(&meta))
 
-		expFiles[id.String()+"/meta.json"] = buf.String()
-		expFiles[id.String()+"/index"] = "indexcontents"
-		expFiles[id.String()+"/chunks/0001"] = "chunkcontents1"
-		expFiles[id.String()+"/chunks/0002"] = "chunkcontents2"
+		expFiles[id.String()+"/meta.json"] = buf.Bytes()
+		expFiles[id.String()+"/index"] = []byte("indexcontents")
+		expFiles[id.String()+"/chunks/0001"] = []byte("chunkcontents1")
+		expFiles[id.String()+"/chunks/0002"] = []byte("chunkcontents2")
 	}
 
 	testutil.Equals(t, timestamp.FromTime(now), gotMinTime)
 
 	for id := range expBlocks {
-		_, ok := storage.blocks[id]
+		ok, _ := bucket.Exists(nil, id.String())
 		testutil.Assert(t, ok, "block %s was not uploaded", id)
 	}
 	for fn, exp := range expFiles {
-		act, ok := storage.files[fn]
+		act, ok := bucket.Objects()[fn]
 		testutil.Assert(t, ok, "file %s was not uploaded", fn)
 		testutil.Equals(t, exp, act)
 	}

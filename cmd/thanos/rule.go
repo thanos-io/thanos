@@ -20,12 +20,17 @@ import (
 
 	"github.com/improbable-eng/thanos/pkg/runutil"
 
+	"math"
+
+	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/alert"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
+	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/tracing"
@@ -68,6 +73,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	alertmgrs := cmd.Flag("alertmanagers.url", "Alertmanager URLs to push firing alerts to. The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Alertmanager IPs through respective DNS lookups. The port defaults to 9093 or the SRV record's value. The URL path is used as a prefix for the regular Alertmanager API path.").
 		Strings()
 
+	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty ruler won't store any block inside Google Cloud Storage").
+		PlaceHolder("<bucket>").String()
+
 	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
 
 	clusterBindAddr := cmd.Flag("cluster.address", "listen address for cluster").
@@ -96,7 +104,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 		if err != nil {
 			return errors.Wrap(err, "parse labels")
 		}
-		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *httpAddr, *grpcAddr, *evalInterval, *dataDir, *ruleDir, peer)
+		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *httpAddr, *grpcAddr, *evalInterval, *dataDir, *ruleDir, peer, *gcsBucket)
 	}
 }
 
@@ -115,6 +123,7 @@ func runRule(
 	dataDir string,
 	ruleDir string,
 	peer *cluster.Peer,
+	gcsBucket string,
 ) error {
 	db, err := tsdb.Open(dataDir, log.With(logger, "component", "tsdb"), reg, &tsdb.Options{
 		MinBlockDuration: model.Duration(2 * time.Hour),
@@ -346,6 +355,38 @@ func runRule(
 		}, func(error) {
 			l.Close()
 		})
+	}
+
+	if gcsBucket != "" {
+		// The background shipper continuously scans the data directory and uploads
+		// new found blocks to Google Cloud Storage.
+		gcsClient, err := storage.NewClient(context.Background())
+		if err != nil {
+			return errors.Wrap(err, "create GCS client")
+		}
+
+		bkt := gcs.NewBucket(gcsClient.Bucket(gcsBucket), reg, gcsBucket)
+		s := shipper.New(logger, nil, dataDir, bkt, func() labels.Labels {
+			// We don't need external labels here, replica label if any will be appended to TSDB directly.
+			return labels.Labels{}
+		}, func(mint int64) {
+			peer.SetTimestamps(mint, math.MaxInt64)
+		})
+
+		ctx, cancel := context.WithCancel(context.Background())
+
+		g.Add(func() error {
+			defer gcsClient.Close()
+
+			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+				s.Sync(ctx)
+				return nil
+			})
+		}, func(error) {
+			cancel()
+		})
+	} else {
+		level.Info(logger).Log("msg", "No GCS bucket were configured, GCS uploads will be disabled")
 	}
 
 	level.Info(logger).Log("msg", "starting query node")

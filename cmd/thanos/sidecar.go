@@ -18,6 +18,7 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
@@ -225,8 +226,8 @@ func runSidecar(
 			return errors.Wrap(err, "create GCS client")
 		}
 
-		remote := shipper.NewGCSRemote(logger, nil, gcsClient.Bucket(gcsBucket))
-		s := shipper.New(logger, nil, dataDir, remote, externalLabels.Get, func(mint int64) {
+		bkt := gcs.NewBucket(gcsClient.Bucket(gcsBucket), reg, gcsBucket)
+		s := shipper.New(logger, nil, dataDir, bkt, externalLabels.Get, func(mint int64) {
 			p.SetTimestamps(mint, math.MaxInt64)
 		})
 

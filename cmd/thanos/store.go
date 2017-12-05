@@ -14,9 +14,9 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
-	"github.com/improbable-eng/thanos/pkg/store/gcs"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/oklog/run"
@@ -96,7 +96,7 @@ func runStore(
 		}
 
 		var bkt store.Bucket
-		bkt = gcs.NewBucket(gcsClient.Bucket(gcsBucket))
+		bkt = gcs.NewBucket(gcsClient.Bucket(gcsBucket), reg, gcsBucket)
 		bkt = store.BucketWithMetrics(gcsBucket, bkt, reg)
 
 		gs, err := store.NewBucketStore(
