@@ -69,9 +69,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	evalInterval := cmd.Flag("eval-interval", "the default evaluation interval to use").
 		Default("30s").Duration()
-	tsdbMaxBlockDuration := cmd.Flag("tsdb.max-block-duration", "maximum duration for TSDB Block. Suggested to use the same value as minimum to disable dynamic resizing").
-		Default("2h").Duration()
-	tsdbMinBlockDuration := cmd.Flag("tsdb.min-block-duration", "minimum duration for TSDB Block. Suggested to use the same value as maximum to disable dynamic resizing").
+	tsdbBlockDuration := cmd.Flag("tsdb.block-duration", "block duration for TSDB block").
 		Default("2h").Duration()
 	tsdbRetention := cmd.Flag("tsdb.retention", "block retention time on local disk").
 		Default("48h").Duration()
@@ -112,8 +110,8 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 		}
 
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration: model.Duration(*tsdbMinBlockDuration),
-			MaxBlockDuration: model.Duration(*tsdbMaxBlockDuration),
+			MinBlockDuration: model.Duration(*tsdbBlockDuration),
+			MaxBlockDuration: model.Duration(*tsdbBlockDuration),
 			Retention:        model.Duration(*tsdbRetention),
 			NoLockfile:       true,
 			WALFlushInterval: 30 * time.Second,
