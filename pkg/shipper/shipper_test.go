@@ -106,7 +106,7 @@ func TestShipper_UploadBlocks(t *testing.T) {
 		testutil.Assert(t, ok, "block %s was not uploaded", id)
 	}
 	for fn, exp := range expFiles {
-		act, ok := bucket.Files()[fn]
+		act, ok := bucket.Objects()[fn]
 		testutil.Assert(t, ok, "file %s was not uploaded", fn)
 		testutil.Equals(t, exp, act)
 	}

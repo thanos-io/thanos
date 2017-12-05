@@ -76,7 +76,7 @@ func TestBucketStore_e2e(t *testing.T) {
 
 		// TODO(fabxc): remove the component dependency by factoring out the block interface.
 		testutil.Ok(t, uploadDir(t, ctx, bkt, id1, dir1))
-		testutil.Ok(t, uploadDir(t, ctx, bkt, id2, dir1))
+		testutil.Ok(t, uploadDir(t, ctx, bkt, id2, dir2))
 
 		testutil.Ok(t, os.RemoveAll(dir1))
 		testutil.Ok(t, os.RemoveAll(dir2))

@@ -13,27 +13,27 @@ import (
 
 // Bucket implements the store.Bucket and shipper.Bucket interfaces against local memory.
 type Bucket struct {
-	files map[string][]byte
+	objects map[string][]byte
 }
 
 // NewBucket returns a new in memory Bucket.
 // NOTE: Returned bucket is just a naive in memory bucket implementation. For test use cases only.
 func NewBucket() *Bucket {
 	return &Bucket{
-		files: map[string][]byte{},
+		objects: map[string][]byte{},
 	}
 }
 
-// Files returns internally stored files.
+// Objects returns internally stored objects.
 // NOTE: For assert purposes.
-func (b *Bucket) Files() map[string][]byte {
-	return b.files
+func (b *Bucket) Objects() map[string][]byte {
+	return b.objects
 }
 
 // Iter calls f for each entry in the given directory. The argument to f is the full
 // object name including the prefix of the inspected directory.
 func (b *Bucket) Iter(_ context.Context, dir string, f func(string) error) error {
-	for filename := range b.files {
+	for filename := range b.objects {
 		if !strings.HasPrefix(filename, dir) {
 			continue
 		}
@@ -47,7 +47,7 @@ func (b *Bucket) Iter(_ context.Context, dir string, f func(string) error) error
 
 // Get returns a reader for the given object name.
 func (b *Bucket) Get(_ context.Context, name string) (io.ReadCloser, error) {
-	file, ok := b.files[name]
+	file, ok := b.objects[name]
 	if !ok {
 		return nil, errors.Errorf("no such file %s", name)
 	}
@@ -57,7 +57,7 @@ func (b *Bucket) Get(_ context.Context, name string) (io.ReadCloser, error) {
 
 // GetRange returns a new range reader for the given object name and range.
 func (b *Bucket) GetRange(_ context.Context, name string, off, length int64) (io.ReadCloser, error) {
-	file, ok := b.files[name]
+	file, ok := b.objects[name]
 	if !ok {
 		return nil, errors.Errorf("no such file %s", name)
 	}
@@ -75,7 +75,7 @@ func (b *Bucket) GetRange(_ context.Context, name string, off, length int64) (io
 
 // Exists checks if the given directory exists in memory.
 func (b *Bucket) Exists(_ context.Context, dir string) (bool, error) {
-	for filename := range b.files {
+	for filename := range b.objects {
 		if !strings.HasPrefix(filename, dir) {
 			continue
 		}
@@ -93,18 +93,18 @@ func (b *Bucket) Upload(_ context.Context, src, target string) error {
 		return err
 	}
 
-	b.files[target] = body
+	b.objects[target] = body
 	return nil
 }
 
 // Delete removes all data prefixed with the dir.
 func (b *Bucket) Delete(_ context.Context, dir string) error {
-	for filename := range b.files {
+	for filename := range b.objects {
 		if !strings.HasPrefix(filename, dir) {
 			continue
 		}
 
-		delete(b.files, filename)
+		delete(b.objects, filename)
 	}
 
 	return nil
