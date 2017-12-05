@@ -69,6 +69,12 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	evalInterval := cmd.Flag("eval-interval", "the default evaluation interval to use").
 		Default("30s").Duration()
+	tsdbMaxBlockDuration := cmd.Flag("tsdb.max-block-duration", "maximum duration for TSDB Block. Suggested to use the same value as minimum to disable dynamic resizing").
+		Default("2h").Duration()
+	tsdbMinBlockDuration := cmd.Flag("tsdb.min-block-duration", "minimum duration for TSDB Block. Suggested to use the same value as maximum to disable dynamic resizing").
+		Default("2h").Duration()
+	tsdbRetention := cmd.Flag("tsdb.retention", "block retention time on local disk").
+		Default("48h").Duration()
 
 	alertmgrs := cmd.Flag("alertmanagers.url", "Alertmanager URLs to push firing alerts to. The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Alertmanager IPs through respective DNS lookups. The port defaults to 9093 or the SRV record's value. The URL path is used as a prefix for the regular Alertmanager API path.").
 		Strings()
@@ -104,7 +110,15 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 		if err != nil {
 			return errors.Wrap(err, "parse labels")
 		}
-		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *httpAddr, *grpcAddr, *evalInterval, *dataDir, *ruleDir, peer, *gcsBucket)
+
+		tsdbOpts := &tsdb.Options{
+			MinBlockDuration: model.Duration(*tsdbMinBlockDuration),
+			MaxBlockDuration: model.Duration(*tsdbMaxBlockDuration),
+			Retention:        model.Duration(*tsdbRetention),
+			NoLockfile:       true,
+			WALFlushInterval: 30 * time.Second,
+		}
+		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *httpAddr, *grpcAddr, *evalInterval, *dataDir, *ruleDir, peer, *gcsBucket, tsdbOpts)
 	}
 }
 
@@ -124,14 +138,9 @@ func runRule(
 	ruleDir string,
 	peer *cluster.Peer,
 	gcsBucket string,
+	tsdbOpts *tsdb.Options,
 ) error {
-	db, err := tsdb.Open(dataDir, log.With(logger, "component", "tsdb"), reg, &tsdb.Options{
-		MinBlockDuration: model.Duration(2 * time.Hour),
-		MaxBlockDuration: model.Duration(2 * time.Hour),
-		Retention:        model.Duration(48 * time.Hour),
-		NoLockfile:       true,
-		WALFlushInterval: 30 * time.Second,
-	})
+	db, err := tsdb.Open(dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts)
 	if err != nil {
 		return errors.Wrap(err, "open TSDB")
 	}
