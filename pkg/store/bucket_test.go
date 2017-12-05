@@ -325,7 +325,7 @@ func uploadDir(t testing.TB, ctx context.Context, bkt shipper.Bucket, id ulid.UL
 	// We don't want to leave partially uploaded directories behind. Cleanup everything related to it
 	// and use a uncanceled context.
 	if err2 := bkt.Delete(ctx, dir); err2 != nil {
-		t.Log("cleanup failed; partial data may be left behind. dir: %s. Err: %v", dir, err2)
+		t.Logf("cleanup failed; partial data may be left behind. dir: %s. Err: %v", dir, err2)
 	}
 	return err
 }
