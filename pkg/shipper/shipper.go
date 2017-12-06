@@ -62,7 +62,7 @@ func newMetrics(r prometheus.Registerer) *metrics {
 	})
 
 	if r != nil {
-		prometheus.MustRegister(
+		r.MustRegister(
 			m.dirSyncs,
 			m.dirSyncFailures,
 			m.uploads,

@@ -38,7 +38,7 @@ func NewBucket(b *storage.BucketHandle, r prometheus.Registerer, bucketName stri
 	}, []string{"operation"})
 
 	if r != nil {
-		prometheus.MustRegister(bkt.opsTotal)
+		r.MustRegister(bkt.opsTotal)
 	}
 	return bkt
 }
