@@ -175,6 +175,7 @@ func runRule(
 	)
 	{
 		ctx, cancel := context.WithCancel(context.Background())
+		ctx = tracing.ContextWithTracer(ctx, tracer)
 
 		notify := func(ctx context.Context, expr string, alerts ...*rules.Alert) error {
 			res := make([]*alert.Alert, 0, len(alerts))
