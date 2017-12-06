@@ -267,13 +267,20 @@ func runRule(
 					if err != nil {
 						return err
 					}
-					if !fi.IsDir() {
-						files = append(files, p)
+
+					if fi.Mode()&os.ModeSymlink != 0 {
+						// Configmap sometimes leaves symlinks lying around near the proper files. Ignore these.
+						return nil
 					}
+
+					if fi.IsDir() {
+						return nil
+					}
+
+					files = append(files, p)
 					return nil
 				})
 				level.Info(logger).Log("msg", "reload rule files", "numFiles", len(files))
-
 				if err := mgr.Update(evalInterval, files); err != nil {
 					level.Error(logger).Log("msg", "reloading rules failed", "err", err)
 				}
