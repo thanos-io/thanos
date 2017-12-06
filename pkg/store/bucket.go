@@ -402,11 +402,8 @@ func (s *BucketStore) blockSeries(ctx context.Context, b *bucketBlock, matchers 
 	level.Debug(s.logger).Log("msg", "preload postings", "duration", time.Since(begin))
 
 	begin = time.Now()
-	var ps []uint64
-	for lazyPostings.Next() {
-		ps = append(ps, lazyPostings.At())
-	}
-	if err := lazyPostings.Err(); err != nil {
+	ps, err := index.ExpandPostings(lazyPostings)
+	if err != nil {
 		return nil, err
 	}
 	if err := indexr.preloadSeries(ps); err != nil {
