@@ -19,6 +19,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/tsdb"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -31,16 +32,13 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	dataDir := cmd.Flag("tsdb.path", "data directory of TSDB").
 		Default("./data").String()
 
-	srcGCSBucket := cmd.Flag("gcs.src-bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
-		PlaceHolder("<bucket>").Required().String()
-
-	dstGCSBucket := cmd.Flag("gcs.dst-bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
+	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks.").
 		PlaceHolder("<bucket>").Required().String()
 
 	// deleteOld := cmd.Flag("delete-old", "delete compacted blocks from the bucket").Bool()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
-		return runCompact(g, logger, reg, *httpAddr, *dataDir, *srcGCSBucket, *dstGCSBucket)
+		return runCompact(g, logger, reg, *httpAddr, *dataDir, *gcsBucket)
 	}
 }
 
@@ -50,45 +48,67 @@ func runCompact(
 	reg *prometheus.Registry,
 	httpAddr string,
 	dataDir string,
-	srcGCSBucket string,
-	dstGCSBucket string,
+	gcsBucket string,
 ) error {
 
 	gcsClient, err := storage.NewClient(context.Background())
 	if err != nil {
 		return errors.Wrap(err, "create GCS client")
 	}
-	bkt := gcs.NewBucket(gcsClient.Bucket(srcGCSBucket), reg, srcGCSBucket)
-	dstBkt := gcs.NewBucket(gcsClient.Bucket(dstGCSBucket), reg, dstGCSBucket)
+	bkt := gcs.NewBucket(gcsClient.Bucket(gcsBucket), reg, gcsBucket)
 
-	c, err := compact.NewCompactor(logger, dataDir, bkt, dstBkt)
+	sy, err := compact.NewSyncer(logger, dataDir, bkt)
 	if err != nil {
 		return err
 	}
 
 	{
+		comp, err := tsdb.NewLeveledCompactor(reg, logger, []int64{
+			2 * 3600 * 1000,
+			8 * 3600 * 1000,
+			2 * 24 * 3600 * 1000,
+			14 * 24 * 3600 * 1000,
+		}, nil)
+		if err != nil {
+			return errors.Wrap(err, "create compactor")
+		}
+
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
-				err := c.Do(ctx)
-				if err != nil {
-					level.Error(logger).Log("msg", "compactor do failed", "err", err)
+				for _, g := range sy.Groups() {
+					if err := g.Compact(ctx, comp); err != nil {
+						level.Error(logger).Log("msg", "compaction failed", "err", err)
+					}
 				}
-				return err
+				return nil
 			})
 		}, func(error) {
 			cancel()
 		})
 	}
-	// Periodically update the store set with the addresses we see in our cluster.
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
-				if err := c.SyncMetas(ctx); err != nil {
+				if err := sy.SyncMetas(ctx); err != nil {
 					level.Error(logger).Log("msg", "sync failed", "err", err)
+				}
+				return nil
+			})
+		}, func(error) {
+			cancel()
+		})
+	}
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+
+		g.Add(func() error {
+			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+				if err := sy.GarbageCollect(ctx, bkt); err != nil {
+					level.Error(logger).Log("msg", "garbage collection failed", "err", err)
 				}
 				return nil
 			})

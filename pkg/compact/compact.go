@@ -137,6 +137,68 @@ func (c *Syncer) Groups() (res []*Group) {
 	return res
 }
 
+// GarbageCollect deletes blocks from the bucket if their data is available as part of a
+// block with a higher compaction level.
+func (c *Syncer) GarbageCollect(ctx context.Context, bkt Bucket) error {
+	names, err := fileutil.ReadDir(c.dir)
+	if err != nil {
+		return errors.Wrap(err, "read dir")
+	}
+	// map each block to the most recent parent block.
+	var all []ulid.ULID
+	parents := map[ulid.ULID]ulid.ULID{}
+	// We can delete all leaf and intermediate blocks for which a block with ULID exists,
+	// that contains them as well.
+	for _, n := range names {
+		if _, err := ulid.Parse(n); err != nil {
+			continue
+		}
+		n = filepath.Join(c.dir, n)
+
+		meta, err := block.ReadMetaFile(n)
+		if err != nil {
+			return errors.Wrap(err, "read meta")
+		}
+		all = append(all, meta.ULID)
+
+		// Update highest parent for source blocks.
+		for _, cid := range meta.Compaction.Sources {
+			pid, ok := parents[cid]
+			if !ok || pid.Compare(meta.ULID) <= 0 {
+				parents[cid] = meta.ULID
+				continue
+			}
+		}
+	}
+
+	// A block can safely be deleted if all its source blocks have a younger parent block
+	// than itself. Source blocks are their own parent, so the rule applies as well.
+	hasChildren := map[ulid.ULID]struct{}{}
+	for _, pid := range parents {
+		hasChildren[pid] = struct{}{}
+	}
+
+	for _, id := range all {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if _, ok := hasChildren[id]; ok {
+			continue
+		}
+		// Spawn a new context so we always delete a block in full on shutdown.
+		delCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+
+		level.Info(c.logger).Log("msg", "deleting outdated block", "block", id)
+
+		err := c.bkt.Delete(delCtx, id.String())
+		cancel()
+		if err != nil {
+			return errors.Wrapf(err, "delete block %s from bucket", id)
+		}
+	}
+	return nil
+}
+
 // add adds the block in the given directory to its respective compaction group.
 func (c *Syncer) add(bdir string) error {
 	meta, err := block.ReadMetaFile(bdir)
