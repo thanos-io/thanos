@@ -52,6 +52,11 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		Delimiter: "/",
 	})
 	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
 		attrs, err := it.Next()
 		if err == iterator.Done {
 			return nil
