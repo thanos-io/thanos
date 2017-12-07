@@ -143,7 +143,14 @@ func (b *Bucket) Delete(ctx context.Context, dir string) error {
 		if err != nil {
 			return err
 		}
-
+		// If the prefix is set, we hit another directory and delete recursively.
+		if oa.Prefix != "" {
+			if err := b.Delete(ctx, oa.Prefix); err != nil {
+				return err
+			}
+			continue
+		}
+		// Otherwise it's an object we can delete directly.
 		if err := b.bkt.Object(oa.Name).Delete(ctx); err != nil {
 			return err
 		}
