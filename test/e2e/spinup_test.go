@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"syscall"
 	"testing"
+	"path"
 )
 
 type config struct {
@@ -88,7 +89,7 @@ func spinup(t testing.TB, cfg config) (close func()) {
 			"--debug.name", fmt.Sprintf("rule-%d", i),
 			"--label", fmt.Sprintf(`replica="%d"`, i),
 			"--data-dir", dbDir,
-			"--rule-dir", dbDir,
+			"--rule-file", path.Join(dbDir, "*.yaml"),
 			"--eval-interval", "1s",
 			"--alertmanagers.url", "http://127.0.0.1:29093",
 			"--grpc-address", fmt.Sprintf("0.0.0.0:%d", 19690+i),
