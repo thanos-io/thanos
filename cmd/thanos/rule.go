@@ -262,6 +262,7 @@ func runRule(
 				case <-reload:
 				}
 
+				level.Debug(logger).Log("msg", "configured rule files", "files", strings.Join(ruleFiles, ","))
 				var files []string
 				for _, pat := range ruleFiles {
 					fs, err := filepath.Glob(pat)
