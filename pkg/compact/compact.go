@@ -49,6 +49,9 @@ type Syncer struct {
 
 // NewSyncer returns a new Syncer for the given Bucket and directory.
 func NewSyncer(logger log.Logger, dir string, bkt Bucket) (*Syncer, error) {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return nil, err
 	}
@@ -142,14 +145,18 @@ func (c *Syncer) SyncMetas(ctx context.Context) error {
 			level.Warn(c.logger).Log("msg", "downloading meta.json failed", "block", id, "err", err)
 			return nil
 		}
+		if err := renameFile(tmpdir, dir); err != nil {
+			level.Warn(c.logger).Log("msg", "rename temp dir", "block", id, "err", err)
+			return nil
+		}
 		// The first time we see a new block, we sort it into a group. The compactor
 		// may delete a block from a group after having compacted it.
 		// This prevents re-compacting the same data. The block remain in the top-level
 		// directory until it has actually been deleted from the bucket.
-		if err := c.add(filepath.Dir(dst)); err != nil {
+		if err := c.add(dir); err != nil {
 			level.Warn(c.logger).Log("msg", "add new block to group", "err", err)
 		}
-		return renameFile(tmpdir, dir)
+		return nil
 	})
 	if err != nil {
 		return errors.Wrap(err, "retrieve bucket block metas")
@@ -330,16 +337,18 @@ func (cg *Group) Add(meta *block.Meta) error {
 	return block.WriteMetaFile(bdir, meta)
 }
 
-func (cg *Group) Remove(id ulid.ULID) error {
-	cg.mtx.Lock()
-	defer cg.mtx.Unlock()
-
-	return os.RemoveAll(filepath.Join(cg.dir, id.String()))
-}
-
 // Dir returns the groups directory.
 func (cg *Group) Dir() string {
 	return cg.dir
+}
+
+// IDs returns all IDs of blocks in the group.
+func (cg *Group) IDs() (ids []ulid.ULID, err error) {
+	err = iterMetas(cg.dir, func(_ string, id ulid.ULID) error {
+		ids = append(ids, id)
+		return nil
+	})
+	return ids, err
 }
 
 // Labels returns the labels that all blocks in the group share.
