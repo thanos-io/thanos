@@ -71,25 +71,35 @@ func (c *Syncer) reloadGroups() error {
 		return errors.Wrap(err, "create group dir")
 	}
 
-	names, err := fileutil.ReadDir(c.dir)
-	if err != nil {
-		return err
-	}
-	for _, n := range names {
-		if _, err := ulid.Parse(n); err != nil {
-			return nil
-		}
-		if err := c.add(filepath.Join(c.dir, n)); err != nil {
+	return iterMetas(c.dir, func(dir string, _ ulid.ULID) error {
+		if err := c.add(dir); err != nil {
 			return errors.Wrap(err, "add block to groups")
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 // SyncMetas synchronizes all meta files from blocks in the bucket into
 // the given directory.
 func (c *Syncer) SyncMetas(ctx context.Context) error {
-	return c.bkt.Iter(ctx, "", func(name string) error {
+	// Read back all block metas so we can detect deleted blocks.
+	var (
+		local  = map[ulid.ULID]*block.Meta{}
+		remote = map[ulid.ULID]struct{}{}
+	)
+	err := iterMetas(c.dir, func(dir string, id ulid.ULID) error {
+		meta, err := block.ReadMetaFile(dir)
+		if err != nil {
+			return err
+		}
+		local[id] = meta
+		return nil
+	})
+	if err != nil {
+		return errors.Wrap(err, "read local blocks")
+	}
+
+	err = c.bkt.Iter(ctx, "", func(name string) error {
 		if !strings.HasSuffix(name, "/") {
 			return nil
 		}
@@ -97,20 +107,37 @@ func (c *Syncer) SyncMetas(ctx context.Context) error {
 		if err != nil {
 			return nil
 		}
+		remote[id] = struct{}{}
+
 		if _, err = os.Stat(filepath.Join(c.dir, name)); err == nil {
 			return nil
 		} else if !os.IsNotExist(err) {
 			return err
 		}
-		fmt.Println("download meta for", id)
 
-		src := path.Join(name, "meta.json")
-		dst := filepath.Join(c.dir, name, "meta.json")
+		// ULIDs contain a millisecond timestamp. We do not consider blocks
+		// that have been created within the last 5 minutes to avoid races when a block
+		// is only partially uploaded.
+		// TODO(fabxc): increase the duration for production later. We are probably fine
+		// here with 1 hour or more.
+		if ulid.Now()-id.Time() < 5*60*1000 {
+			fmt.Println("skipping block", id, "due to time", ulid.Now(), id.Time())
+			return nil
+		}
+		level.Debug(c.logger).Log("msg", "download meta", "block", id)
+
+		dir := filepath.Join(c.dir, name)
+		tmpdir := dir + ".tmp"
 
 		// TODO(fabxc): make atomic via rename.
-		if err := os.MkdirAll(filepath.Dir(dst), 0777); err != nil {
+		if err := os.MkdirAll(tmpdir, 0777); err != nil {
 			return err
 		}
+		defer os.RemoveAll(tmpdir)
+
+		src := path.Join(name, "meta.json")
+		dst := filepath.Join(tmpdir, "meta.json")
+
 		if err := downloadBucketObject(ctx, c.bkt, dst, src); err != nil {
 			level.Warn(c.logger).Log("msg", "downloading meta.json failed", "block", id, "err", err)
 			return nil
@@ -122,81 +149,29 @@ func (c *Syncer) SyncMetas(ctx context.Context) error {
 		if err := c.add(filepath.Dir(dst)); err != nil {
 			level.Warn(c.logger).Log("msg", "add new block to group", "err", err)
 		}
-		return nil
+		return renameFile(tmpdir, dir)
 	})
-}
-
-// Groups returns the compaction groups created by the Syncer.
-func (c *Syncer) Groups() (res []*Group) {
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
-
-	for _, g := range c.groups {
-		res = append(res, g)
-	}
-	return res
-}
-
-// GarbageCollect deletes blocks from the bucket if their data is available as part of a
-// block with a higher compaction level.
-func (c *Syncer) GarbageCollect(ctx context.Context, bkt Bucket) error {
-	names, err := fileutil.ReadDir(c.dir)
 	if err != nil {
-		return errors.Wrap(err, "read dir")
+		return errors.Wrap(err, "retrieve bucket block metas")
 	}
-	// map each block to the most recent parent block.
-	var all []ulid.ULID
-	parents := map[ulid.ULID]ulid.ULID{}
-	// We can delete all leaf and intermediate blocks for which a block with ULID exists,
-	// that contains them as well.
-	for _, n := range names {
-		if _, err := ulid.Parse(n); err != nil {
+
+	// Delete all local block dirs that no longer exist in the bucket.
+	for id, meta := range local {
+		if _, ok := remote[id]; ok {
 			continue
 		}
-		n = filepath.Join(c.dir, n)
-
-		meta, err := block.ReadMetaFile(n)
-		if err != nil {
-			return errors.Wrap(err, "read meta")
+		if err := os.RemoveAll(filepath.Join(c.dir, id.String())); err != nil {
+			level.Warn(c.logger).Log("msg", "delete outdated block", "block", id, "err", err)
 		}
-		all = append(all, meta.ULID)
-
-		// Update highest parent for source blocks.
-		for _, cid := range meta.Compaction.Sources {
-			pid, ok := parents[cid]
-			if !ok || pid.Compare(meta.ULID) <= 0 {
-				parents[cid] = meta.ULID
-				continue
-			}
-		}
-	}
-
-	// A block can safely be deleted if all its source blocks have a younger parent block
-	// than itself. Source blocks are their own parent, so the rule applies as well.
-	hasChildren := map[ulid.ULID]struct{}{}
-	for _, pid := range parents {
-		hasChildren[pid] = struct{}{}
-	}
-
-	for _, id := range all {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if _, ok := hasChildren[id]; ok {
-			continue
-		}
-		// Spawn a new context so we always delete a block in full on shutdown.
-		delCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-
-		level.Info(c.logger).Log("msg", "deleting outdated block", "block", id)
-
-		err := c.bkt.Delete(delCtx, id.String())
-		cancel()
-		if err != nil {
-			return errors.Wrapf(err, "delete block %s from bucket", id)
+		if err := os.RemoveAll(filepath.Join(c.dir, "groups", c.groupKey(meta), id.String())); err != nil {
+			level.Warn(c.logger).Log("msg", "delete outdated block from group", "block", id, "err", err)
 		}
 	}
 	return nil
+}
+
+func (c *Syncer) groupKey(meta *block.Meta) string {
+	return fmt.Sprintf("%x", labels.FromMap(meta.Thanos.Labels).Hash())
 }
 
 // add adds the block in the given directory to its respective compaction group.
@@ -205,7 +180,7 @@ func (c *Syncer) add(bdir string) error {
 	if err != nil {
 		return errors.Wrap(err, "read meta file")
 	}
-	h := fmt.Sprintf("%x", labels.FromMap(meta.Thanos.Labels).Hash())
+	h := c.groupKey(meta)
 
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
@@ -226,6 +201,95 @@ func (c *Syncer) add(bdir string) error {
 	return g.Add(meta)
 }
 
+// Groups returns the compaction groups created by the Syncer.
+func (c *Syncer) Groups() (res []*Group) {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	for _, g := range c.groups {
+		res = append(res, g)
+	}
+	return res
+}
+
+// GarbageCollect deletes blocks from the bucket if their data is available as part of a
+// block with a higher compaction level.
+func (c *Syncer) GarbageCollect(ctx context.Context, bkt Bucket) error {
+	// Map each block to its highest priority parent. Initial blocks have themselves
+	// in their source section, i.e. are their own parent.
+	var (
+		all     = map[ulid.ULID]*block.Meta{}
+		parents = map[ulid.ULID]ulid.ULID{}
+	)
+	err := iterMetas(c.dir, func(dir string, _ ulid.ULID) error {
+		meta, err := block.ReadMetaFile(dir)
+		if err != nil {
+			return errors.Wrap(err, "read meta")
+		}
+		all[meta.ULID] = meta
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	for id, meta := range all {
+		// For each source block we contain, check whether we are the highest priotiy parent block.
+		for _, sid := range meta.Compaction.Sources {
+			pid, ok := parents[sid]
+			// No parents for the source block so far.
+			if !ok {
+				parents[sid] = id
+				continue
+			}
+			pmeta, ok := all[pid]
+			if !ok {
+				return errors.Errorf("previous parent block %s not found", pid)
+			}
+			// A parent is of higher priority if its compaction level is higher.
+			// If compaction levels are equal, the more recent ULID wins.
+			//
+			// The ULID recency alone is not sufficient since races, e.g. induced
+			// by downtime of garbage collection, may re-compact blocks that are
+			// were already compacted into higher-level blocks multiple times.
+			level, plevel := meta.Compaction.Level, pmeta.Compaction.Level
+
+			if level > plevel || (level == plevel && id.Compare(pid) > 0) {
+				fmt.Println("overwrite parent for", sid, "from", pid, "to", id)
+				parents[sid] = id
+			}
+		}
+	}
+
+	// A block can safely be deleted if they are not the highest priority parent for
+	// any source block.
+	hasChildren := map[ulid.ULID]struct{}{}
+	for _, pid := range parents {
+		hasChildren[pid] = struct{}{}
+	}
+
+	for id := range all {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if _, ok := hasChildren[id]; ok {
+			continue
+		}
+		// Spawn a new context so we always delete a block in full on shutdown.
+		delCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+
+		level.Info(c.logger).Log("msg", "deleting outdated block", "block", id)
+
+		// TODO(fabxc): yet another hack due to the fuzzy directory semantics of our Buckets.
+		err := c.bkt.Delete(delCtx, id.String()+"/")
+		cancel()
+		if err != nil {
+			return errors.Wrapf(err, "delete block %s from bucket", id)
+		}
+	}
+	return nil
+}
+
 // Group captures a set of blocks that have the same origin labels.
 // Those blocks generally contain the same series and can thus efficiently be compacted.
 type Group struct {
@@ -236,6 +300,7 @@ type Group struct {
 	labels map[string]string
 }
 
+// NewGroup returns a new compaction group.
 func NewGroup(logger log.Logger, bkt Bucket, dir string, labels map[string]string) (*Group, error) {
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return nil, err
@@ -248,6 +313,7 @@ func NewGroup(logger log.Logger, bkt Bucket, dir string, labels map[string]strin
 	}, nil
 }
 
+// Add the block with the given meta to the group.
 func (cg *Group) Add(meta *block.Meta) error {
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
@@ -271,10 +337,12 @@ func (cg *Group) Remove(id ulid.ULID) error {
 	return os.RemoveAll(filepath.Join(cg.dir, id.String()))
 }
 
+// Dir returns the groups directory.
 func (cg *Group) Dir() string {
 	return cg.dir
 }
 
+// Labels returns the labels that all blocks in the group share.
 func (cg *Group) Labels() map[string]string {
 	return cg.labels
 }
@@ -282,11 +350,11 @@ func (cg *Group) Labels() map[string]string {
 // Compact plans and runs a single compaction against the group. The compacted result
 // is uploaded into the bucket the blocks were retrived from.
 func (cg *Group) Compact(ctx context.Context, comp tsdb.Compactor) error {
-	cg.mtx.Lock()
-	defer cg.mtx.Unlock()
-
 	// Planning a compaction works purely based on the meta.json files in our group's dir.
+	cg.mtx.Lock()
 	plan, err := comp.Plan(cg.dir)
+	cg.mtx.Unlock()
+
 	if err != nil {
 		return errors.Wrap(err, "plan compaction")
 	}
@@ -426,4 +494,43 @@ func downloadBucketObject(ctx context.Context, bkt Bucket, dst, src string) erro
 	}()
 	_, err = io.Copy(f, r)
 	return err
+}
+
+// iterMetas calls f for each meta.json of block directories in dir.
+func iterMetas(dir string, f func(dir string, id ulid.ULID) error) error {
+	names, err := fileutil.ReadDir(dir)
+	if err != nil {
+		return errors.Wrap(err, "read dir")
+	}
+	for _, n := range names {
+		id, err := ulid.Parse(n)
+		if err != nil {
+			continue
+		}
+		if err := f(filepath.Join(dir, n), id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func renameFile(from, to string) error {
+	if err := os.RemoveAll(to); err != nil {
+		return err
+	}
+	if err := os.Rename(from, to); err != nil {
+		return err
+	}
+
+	// Directory was renamed; sync parent dir to persist rename.
+	pdir, err := fileutil.OpenDir(filepath.Dir(to))
+	if err != nil {
+		return err
+	}
+
+	if err = fileutil.Fsync(pdir); err != nil {
+		pdir.Close()
+		return err
+	}
+	return pdir.Close()
 }
