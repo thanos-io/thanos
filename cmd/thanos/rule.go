@@ -269,13 +269,32 @@ func runRule(
 						return err
 					}
 
-					if fi.Mode()&os.ModeSymlink != 0 {
-						// Configmap sometimes leaves symlinks lying around near the proper files. Ignore these.
+					if strings.HasPrefix(fi.Name(), ".") {
+						// Ignore . and .. files/dirs (e.g Configmap mounting are leaving the original objects in the `..data` dir).
 						return nil
 					}
 
 					if fi.IsDir() {
 						return nil
+					}
+
+					if fi.Mode()&os.ModeSymlink != 0 {
+						followedPath, err := os.Readlink(p)
+						if err != nil {
+							level.Warn(logger).Log("msg", "failed to follow symlink. Ignoring rule.", "path", p, "err", err)
+							return nil
+						}
+
+						info, err := os.Lstat(followedPath)
+						if err != nil {
+							level.Warn(logger).Log("msg", "failed to lstat target symlink. Ignoring rule.", "path", followedPath, "err", err)
+							return nil
+						}
+
+						if info.IsDir() {
+							// It is a directory, so ignore it. Otherwise symlink will be automatically followed.
+							return nil
+						}
 					}
 
 					files = append(files, p)
