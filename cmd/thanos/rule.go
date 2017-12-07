@@ -22,6 +22,8 @@ import (
 
 	"math"
 
+	"path"
+
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -58,7 +60,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	dataDir := cmd.Flag("data-dir", "data directory").Default("data/").String()
 
-	ruleDir := cmd.Flag("rule-dir", "directory containing rule files").
+	ruleDir := cmd.Flag("rule-dir", "directory containing rule files. Only .yml and .yaml file extensions are accepted. All directories and `..` or `.` files are ignored.").
 		Default("rules/").String()
 
 	httpAddr := cmd.Flag("http-address", "listen host:port for HTTP endpoints").
@@ -262,44 +264,12 @@ func runRule(
 				case <-reload:
 				}
 
-				var files []string
-				// We recursively pick all files in the rule directory.
-				filepath.Walk(ruleDir, func(p string, fi os.FileInfo, err error) error {
-					if err != nil {
-						return err
-					}
+				files, err := getRulesFiles(logger, ruleDir)
+				if err != nil {
+					level.Error(logger).Log("msg", "get rules files failed", "err", err)
+					continue
+				}
 
-					if strings.HasPrefix(fi.Name(), ".") {
-						// Ignore . and .. files/dirs (e.g Configmap mounting are leaving the original objects in the `..data` dir).
-						return nil
-					}
-
-					if fi.IsDir() {
-						return nil
-					}
-
-					if fi.Mode()&os.ModeSymlink != 0 {
-						followedPath, err := os.Readlink(p)
-						if err != nil {
-							level.Warn(logger).Log("msg", "failed to follow symlink. Ignoring rule.", "path", p, "err", err)
-							return nil
-						}
-
-						info, err := os.Lstat(followedPath)
-						if err != nil {
-							level.Warn(logger).Log("msg", "failed to lstat target symlink. Ignoring rule.", "path", followedPath, "err", err)
-							return nil
-						}
-
-						if info.IsDir() {
-							// It is a directory, so ignore it. Otherwise symlink will be automatically followed.
-							return nil
-						}
-					}
-
-					files = append(files, p)
-					return nil
-				})
 				level.Info(logger).Log("msg", "reload rule files", "numFiles", len(files))
 				if err := mgr.Update(evalInterval, files); err != nil {
 					level.Error(logger).Log("msg", "reloading rules failed", "err", err)
@@ -485,6 +455,58 @@ func queryPrometheusInstant(ctx context.Context, logger log.Logger, addr, query 
 		})
 	}
 	return vec, nil
+}
+
+// getRulesFiles picks recursively all .yml or .yaml files (with symlink support) from the rule directory.
+// It also ignores dirs and files with `.` and `..` prefixes.
+func getRulesFiles(logger log.Logger, ruleDir string) ([]string, error) {
+	var files []string
+	err := filepath.Walk(ruleDir, func(p string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if strings.HasPrefix(fi.Name(), ".") {
+			// Ignore . and .. files/dirs (e.g Configmap mounting are leaving the original objects in the `..data` dir).
+			return nil
+		}
+
+		if fi.IsDir() {
+			return nil
+		}
+
+		// Follow symlink and double check if it is not a directory.
+		if fi.Mode()&os.ModeSymlink != 0 {
+			followedPath, err := os.Readlink(p)
+			if err != nil {
+				level.Warn(logger).Log("msg", "failed to follow symlink. Ignoring rule.", "path", p, "err", err)
+				return nil
+			}
+
+			if !path.IsAbs(followedPath) {
+				// relative path. append dir.
+				followedPath = path.Join(path.Dir(p), followedPath)
+			}
+
+			info, err := os.Lstat(followedPath)
+			if err != nil {
+				fmt.Println(followedPath)
+				level.Warn(logger).Log("msg", "failed to lstat target symlink. Ignoring rule.", "path", followedPath, "err", err)
+				return nil
+			}
+
+			if info.IsDir() {
+				// It is a directory, so ignore it. Otherwise symlink will be automatically followed.
+				return nil
+			}
+		}
+
+		if path.Ext(fi.Name()) == ".yml" || path.Ext(fi.Name()) == ".yaml" {
+			files = append(files, p)
+		}
+
+		return nil
+	})
+	return files, err
 }
 
 type alertmanagerSet struct {
