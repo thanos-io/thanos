@@ -180,6 +180,5 @@ func runStore(
 	}
 
 	level.Info(logger).Log("msg", "starting store node")
-
 	return nil
 }

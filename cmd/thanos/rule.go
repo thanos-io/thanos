@@ -58,8 +58,8 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	dataDir := cmd.Flag("data-dir", "data directory").Default("data/").String()
 
-	ruleDir := cmd.Flag("rule-dir", "directory containing rule files").
-		Default("rules/").String()
+	ruleFiles := cmd.Flag("rule-file", "rule files that should be used by rule manager. Can be in glob format (repeated)").
+		Default("rules/").Strings()
 
 	httpAddr := cmd.Flag("http-address", "listen host:port for HTTP endpoints").
 		Default(defaultHTTPAddr).String()
@@ -116,7 +116,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			NoLockfile:       true,
 			WALFlushInterval: 30 * time.Second,
 		}
-		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *httpAddr, *grpcAddr, *evalInterval, *dataDir, *ruleDir, peer, *gcsBucket, tsdbOpts)
+		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *httpAddr, *grpcAddr, *evalInterval, *dataDir, *ruleFiles, peer, *gcsBucket, tsdbOpts)
 	}
 }
 
@@ -133,7 +133,7 @@ func runRule(
 	grpcAddr string,
 	evalInterval time.Duration,
 	dataDir string,
-	ruleDir string,
+	ruleFiles []string,
 	peer *cluster.Peer,
 	gcsBucket string,
 	tsdbOpts *tsdb.Options,
@@ -175,6 +175,7 @@ func runRule(
 	)
 	{
 		ctx, cancel := context.WithCancel(context.Background())
+		ctx = tracing.ContextWithTracer(ctx, tracer)
 
 		notify := func(ctx context.Context, expr string, alerts ...*rules.Alert) error {
 			res := make([]*alert.Alert, 0, len(alerts))
@@ -261,19 +262,19 @@ func runRule(
 				case <-reload:
 				}
 
+				level.Debug(logger).Log("msg", "configured rule files", "files", strings.Join(ruleFiles, ","))
 				var files []string
-				// We recursively pick all files in the rule directory.
-				filepath.Walk(ruleDir, func(p string, fi os.FileInfo, err error) error {
+				for _, pat := range ruleFiles {
+					fs, err := filepath.Glob(pat)
 					if err != nil {
-						return err
+						// The only error can be a bad pattern.
+						level.Error(logger).Log("msg", "retrieving rule files failed. Ignoring file.", "pattern", pat, "err", err)
+						continue
 					}
-					if !fi.IsDir() {
-						files = append(files, p)
-					}
-					return nil
-				})
-				level.Info(logger).Log("msg", "reload rule files", "numFiles", len(files))
+					files = append(files, fs...)
+				}
 
+				level.Info(logger).Log("msg", "reload rule files", "numFiles", len(files))
 				if err := mgr.Update(evalInterval, files); err != nil {
 					level.Error(logger).Log("msg", "reloading rules failed", "err", err)
 				}
