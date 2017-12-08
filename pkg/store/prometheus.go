@@ -188,6 +188,12 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		if err != nil {
 			return status.Error(codes.Unknown, err.Error())
 		}
+
+		if len(e.Samples) == 0 {
+			// Do not try to send empty time series, although it should not really happen.
+			continue
+		}
+
 		res.Series = storepb.Series{
 			Labels: lset,
 			Chunks: []storepb.Chunk{{
