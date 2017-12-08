@@ -393,7 +393,7 @@ func (s *BucketStore) blockSeries(ctx context.Context, b *bucketBlock, matchers 
 
 	begin := time.Now()
 
-	if err := preloadPostings(ctx, indexr.loadedPostings, indexr.preloadPostings); err != nil {
+	if err := preloadPostings(ctx, indexr.loadedPostings, indexr.loadPostings); err != nil {
 		return nil, err
 	}
 
@@ -810,7 +810,8 @@ func newBucketIndexReader(ctx context.Context, block *bucketBlock) *bucketIndexR
 	return r
 }
 
-func (r *bucketIndexReader) preloadPostings(ctx context.Context, postings []*lazyPostings, start int64, length int64) error {
+// loadPostings loads given postings using given start + length. It is expected to have given postings data within given range.
+func (r *bucketIndexReader) loadPostings(ctx context.Context, postings []*lazyPostings, start int64, length int64) error {
 	b, err := r.block.readIndexRange(ctx, int64(start), length)
 	if err != nil {
 		return errors.Wrap(err, "read postings range")
@@ -841,9 +842,10 @@ func preloadPostings(
 	})
 
 	// Maximum amount of irrelevant bytes between postings we are willing to fetch.
-	const maxPostingsGap = 1024
+	const maxPostingsGap = 1024 * 512
 
 	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	g := run.Group{}
 
 	j := 0
@@ -870,8 +872,9 @@ func preloadPostings(
 			end = nextEnd
 		}
 
+		subPostings := postings[j:k]
 		g.Add(func() error {
-			return loadPosting(ctx, postings[j:k], int64(start), int64(end-start))
+			return loadPosting(ctx, subPostings, int64(start), int64(end-start))
 		}, func(err error) {
 			if err != nil {
 				cancel()
