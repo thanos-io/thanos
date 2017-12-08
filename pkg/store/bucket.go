@@ -384,7 +384,7 @@ func (s *BucketStore) blockSeries(ctx context.Context, b *bucketBlock, matchers 
 
 	// The postings to preload are registered within the call to PostingsForMatchers,
 	// when it invokes indexr.Postings for each underlying postings list.
-	// They are ready to use ONLY after preloadPostings method.
+	// They are ready to use ONLY after preloadPostings was called successfully.
 	lazyPostings, absent, err := tsdb.PostingsForMatchers(indexr, matchers...)
 	if err != nil {
 		return nil, err
@@ -396,6 +396,8 @@ func (s *BucketStore) blockSeries(ctx context.Context, b *bucketBlock, matchers 
 	if err := preloadPostings(ctx, indexr.loadedPostings, indexr.loadPostings); err != nil {
 		return nil, err
 	}
+	level.Debug(s.logger).Log("msg", "preload postings",
+		"count", len(indexr.loadedPostings), "duration", time.Since(begin))
 
 	level.Debug(s.logger).Log("msg", "preload postings", "duration", time.Since(begin))
 
@@ -410,7 +412,8 @@ func (s *BucketStore) blockSeries(ctx context.Context, b *bucketBlock, matchers 
 	if err := indexr.preloadSeries(ps); err != nil {
 		return nil, err
 	}
-	level.Debug(s.logger).Log("msg", "preload index series", "count", len(ps), "duration", time.Since(begin))
+	level.Debug(s.logger).Log("msg", "preload index series",
+		"count", len(ps), "duration", time.Since(begin))
 
 	begin = time.Now()
 	var (
@@ -888,15 +891,39 @@ func (r *bucketIndexReader) preloadSeries(ids []uint64) error {
 	if len(ids) == 0 {
 		return nil
 	}
+	var g run.Group
+
 	// We don't know how long a series entry will. We use this constant as a buffer size
 	// bytes which we read beyond an entries start position.
 	const maxSeriesSize = 4096
+	const maxSeriesGap = 512 * 1024
 
-	// The series IDs in the postings list are equivalent to the offset of the respective series entry.
-	// TODO(fabxc): detect gaps and split up requests as we do for chunks.
-	start := ids[0]
-	end := ids[len(ids)-1] + maxSeriesSize
+	j := 0
+	k := 0
+	for k < len(ids) {
+		j = k
+		k++
 
+		start, end := ids[j], ids[j]+maxSeriesSize
+
+		// Keep growing the range until the end or we encounter a large gap.
+		for ; k < len(ids); k++ {
+			if ids[k]-end > maxSeriesGap {
+				break
+			}
+			end = ids[k] + maxSeriesSize
+		}
+		part := ids[j:k]
+
+		g.Add(func() error {
+			return r.loadSeries(part, start, end)
+		}, func(error) {
+		})
+	}
+	return g.Run()
+}
+
+func (r *bucketIndexReader) loadSeries(ids []uint64, start, end uint64) error {
 	b, err := r.block.readIndexRange(r.ctx, int64(start), int64(end-start))
 	if err != nil {
 		return errors.Wrap(err, "read series range")
