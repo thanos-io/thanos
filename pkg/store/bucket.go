@@ -778,7 +778,7 @@ func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length i
 
 func (b *bucketBlock) indexReader(ctx context.Context) *bucketIndexReader {
 	b.pendingReaders.Add(1)
-	return newBucketIndexReader(ctx, b)
+	return newBucketIndexReader(ctx, b.logger, b)
 }
 
 func (b *bucketBlock) chunkReader(ctx context.Context) *bucketChunkReader {
@@ -793,19 +793,21 @@ func (b *bucketBlock) Close() error {
 }
 
 type bucketIndexReader struct {
-	ctx   context.Context
-	block *bucketBlock
-	dec   *index.DecoderV1
+	logger log.Logger
+	ctx    context.Context
+	block  *bucketBlock
+	dec    *index.DecoderV1
 
 	loadedPostings []*lazyPostings
 	loadedSeries   map[uint64][]byte
 }
 
-func newBucketIndexReader(ctx context.Context, block *bucketBlock) *bucketIndexReader {
+func newBucketIndexReader(ctx context.Context, logger log.Logger, block *bucketBlock) *bucketIndexReader {
 	r := &bucketIndexReader{
-		ctx:   ctx,
-		block: block,
-		dec:   &index.DecoderV1{},
+		logger: logger,
+		ctx:    ctx,
+		block:  block,
+		dec:    &index.DecoderV1{},
 
 		loadedSeries: map[uint64][]byte{},
 	}
@@ -829,7 +831,7 @@ func (r *bucketIndexReader) preloadPostings() error {
 
 	j := 0
 	k := 0
-	for k < len(r.loadedPostings) {
+	for k < len(ps) {
 		j = k
 		k++
 
@@ -837,7 +839,7 @@ func (r *bucketIndexReader) preloadPostings() error {
 
 		// Keep growing the range until the end or we encounter a large gap.
 		for ; k < len(ps); k++ {
-			if ps[k].ptr.Start-end > maxPostingsGap {
+			if end+maxPostingsGap < ps[k].ptr.Start {
 				break
 			}
 			end = ps[k].ptr.End
@@ -859,6 +861,8 @@ func (r *bucketIndexReader) preloadPostings() error {
 
 // loadPostings loads given postings using given start + length. It is expected to have given postings data within given range.
 func (r *bucketIndexReader) loadPostings(ctx context.Context, postings []*lazyPostings, start, end int64) error {
+	level.Debug(r.logger).Log("msg", "preload postings", "count", len(postings), "start", start, "end", end)
+
 	b, err := r.block.readIndexRange(r.ctx, int64(start), int64(end-start))
 	if err != nil {
 		return errors.Wrap(err, "read postings range")
@@ -894,7 +898,7 @@ func (r *bucketIndexReader) preloadSeries(ids []uint64) error {
 
 		// Keep growing the range until the end or we encounter a large gap.
 		for ; k < len(ids); k++ {
-			if ids[k]-end > maxSeriesGap {
+			if end+maxSeriesGap < ids[k] {
 				break
 			}
 			end = ids[k] + maxSeriesSize
@@ -915,6 +919,8 @@ func (r *bucketIndexReader) preloadSeries(ids []uint64) error {
 }
 
 func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []uint64, start, end uint64) error {
+	level.Debug(r.logger).Log("msg", "preload series", "count", len(ids), "start", start, "end", end)
+
 	b, err := r.block.readIndexRange(ctx, int64(start), int64(end-start))
 	if err != nil {
 		return errors.Wrap(err, "read series range")
@@ -1055,7 +1061,7 @@ func (r *bucketChunkReader) preloadFile(g *run.Group, seq int, offsets []uint32)
 		// Extend the range if the next chunk is no further than 0.5MB away.
 		// Otherwise, break out and fetch the current range.
 		for ; k < len(offsets); k++ {
-			if offsets[k] > maxChunkGap {
+			if end+maxChunkGap < offsets[k] {
 				break
 			}
 			end = offsets[k] + maxChunkLen
