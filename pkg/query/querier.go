@@ -11,6 +11,7 @@ import (
 	"github.com/go-kit/kit/log"
 	yaml "gopkg.in/yaml.v1"
 
+	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/strutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
@@ -150,7 +151,9 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 		g.Go(func() error {
 			set, err := q.selectSingle(ctx, store.Client(), sms...)
 			if err != nil {
-				return err
+				// TODO(bplotka): Find a way to notify Client/UI !
+				level.Error(q.logger).Log("msg", "single select failed. Ignoring this result.", "err", err)
+				return nil
 			}
 			mtx.Lock()
 			all = append(all, set)
@@ -243,7 +246,9 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 		g.Go(func() error {
 			values, err := q.labelValuesSingle(ctx, store.Client(), name)
 			if err != nil {
-				return err
+				// TODO(bplotka): Find a way to notify Client/UI !
+				level.Error(q.logger).Log("msg", "single labelValues failed. Ignoring this result.", "err", err)
+				return nil
 			}
 
 			mtx.Lock()
