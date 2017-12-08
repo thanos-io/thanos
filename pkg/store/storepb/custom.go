@@ -52,9 +52,7 @@ type SeriesSet interface {
 	Err() error
 }
 
-// mergedSeriesSet takes two series sets as a single series set. The input series sets
-// must be sorted and sequential in time, i.e. if they have the same label set,
-// the datapoints of a must be before the datapoints of b.
+// mergedSeriesSet takes two series sets as a single series set.
 type mergedSeriesSet struct {
 	a, b SeriesSet
 
@@ -64,9 +62,8 @@ type mergedSeriesSet struct {
 }
 
 // newMergedSeriesSet takes two series sets as a single series set.
-// Series that occur in both sets should have disjoint time ranges and a should come before b.
-// If the ranges overlap, the result series will still have monotonically increasing timestamps,
-// but all samples in the overlapping range in b will be dropped.
+// Series that occur in both sets should have disjoint time ranges.
+// If the ranges overlap b samples are appended to a samples.
 func newMergedSeriesSet(a, b SeriesSet) *mergedSeriesSet {
 	s := &mergedSeriesSet{a: a, b: b}
 	// Initialize first elements of both sets as Next() needs

@@ -251,7 +251,6 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 		go func() {
 			for id := range blockc {
 				dir := filepath.Join(s.dir, id.String())
-
 				b, err := newBucketBlock(ctx, s.logger, s.bucket, id, dir)
 				if err != nil {
 					level.Warn(s.logger).Log("msg", "loading block failed", "id", id, "err", err)
@@ -271,6 +270,7 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 		if err != nil {
 			return nil
 		}
+
 		if b := s.getBlock(id); b != nil {
 			return nil
 		}
@@ -381,16 +381,19 @@ func (s *BucketStore) blockSeries(ctx context.Context, b *bucketBlock, matchers 
 	defer chunkr.Close()
 
 	blockPrepareBegin := time.Now()
+
 	// The postings to preload are registered within the call to PostingsForMatchers,
 	// when it invokes indexr.Postings for each underlying postings list.
-	p, absent, err := tsdb.PostingsForMatchers(indexr, matchers...)
+	// They are ready to use ONLY after preloadPostings method.
+	lazyPostings, absent, err := tsdb.PostingsForMatchers(indexr, matchers...)
 	if err != nil {
 		return nil, err
 	}
-	level.Debug(s.logger).Log("msg", "setup postings", "duration", time.Since(blockPrepareBegin))
+	level.Debug(s.logger).Log("msg", "register postings", "duration", time.Since(blockPrepareBegin))
 
 	begin := time.Now()
-	if err := indexr.preloadPostings(); err != nil {
+
+	if err := preloadPostings(ctx, indexr.loadedPostings, indexr.loadPostings); err != nil {
 		return nil, err
 	}
 
@@ -398,10 +401,10 @@ func (s *BucketStore) blockSeries(ctx context.Context, b *bucketBlock, matchers 
 
 	begin = time.Now()
 	var ps []uint64
-	for p.Next() {
-		ps = append(ps, p.At())
+	for lazyPostings.Next() {
+		ps = append(ps, lazyPostings.At())
 	}
-	if err := p.Err(); err != nil {
+	if err := lazyPostings.Err(); err != nil {
 		return nil, err
 	}
 	if err := indexr.preloadSeries(ps); err != nil {
@@ -541,8 +544,10 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 	begin = time.Now()
 	resp := &storepb.SeriesResponse{}
-	set := storepb.MergeSeriesSets(res...)
 
+	// Merge series set into an union of all block sets. This exposes all blocks are single seriesSet.
+	// Returned set is can be out of order in terms of series time ranges. It is fixed later on, inside querier.
+	set := storepb.MergeSeriesSets(res...)
 	for set.Next() {
 		resp.Series.Labels, resp.Series.Chunks = set.At()
 
@@ -746,6 +751,7 @@ func (b *bucketBlock) readIndexRange(ctx context.Context, off, length int64) ([]
 	}
 	defer r.Close()
 
+	// NOTE(bplotka): Huge amount of memory is allocated here. We need to cache it.
 	c, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, errors.Wrap(err, "read range")
@@ -788,43 +794,29 @@ type bucketIndexReader struct {
 	block *bucketBlock
 	dec   *index.DecoderV1
 
-	loadedPostings map[labels.Label]*lazyPostings
+	loadedPostings []*lazyPostings
 	loadedSeries   map[uint64][]byte
 }
 
 func newBucketIndexReader(ctx context.Context, block *bucketBlock) *bucketIndexReader {
 	r := &bucketIndexReader{
-		ctx:            ctx,
-		block:          block,
-		dec:            &index.DecoderV1{},
-		loadedPostings: map[labels.Label]*lazyPostings{},
-		loadedSeries:   map[uint64][]byte{},
+		ctx:   ctx,
+		block: block,
+		dec:   &index.DecoderV1{},
+
+		loadedSeries: map[uint64][]byte{},
 	}
 	r.dec.SetSymbolTable(r.block.symbols)
 	return r
 }
 
-func (r *bucketIndexReader) preloadPostings() error {
-	if len(r.loadedPostings) == 0 {
-		return nil
-	}
-
-	all := make([]*lazyPostings, 0, len(r.loadedPostings))
-	for _, p := range r.loadedPostings {
-		all = append(all, p)
-	}
-	sort.Slice(all, func(i, j int) bool {
-		return all[i].ptr.Start < all[j].ptr.Start
-	})
-	// TODO(fabxc): detect gaps and split up into multiple requests as we do for chunks.
-	start := all[0].ptr.Start
-	end := all[len(all)-1].ptr.End
-
-	b, err := r.block.readIndexRange(r.ctx, int64(start), int64(end-start))
+// loadPostings loads given postings using given start + length. It is expected to have given postings data within given range.
+func (r *bucketIndexReader) loadPostings(ctx context.Context, postings []*lazyPostings, start int64, length int64) error {
+	b, err := r.block.readIndexRange(ctx, int64(start), length)
 	if err != nil {
 		return errors.Wrap(err, "read postings range")
 	}
-	for _, p := range all {
+	for _, p := range postings {
 		_, l, err := r.dec.Postings(b[p.ptr.Start-start : p.ptr.End-start])
 		if err != nil {
 			return errors.Wrap(err, "read postings list")
@@ -832,6 +824,64 @@ func (r *bucketIndexReader) preloadPostings() error {
 		p.set(l)
 	}
 	return nil
+}
+
+// preloadPostings loads all given postings. It tries to avoid bigger gaps of irrelevant bytes.
+// TODO(bplotka): Merge this unit-tested function with the preloadFile (for chunks) and apply same for prealodSeries.
+func preloadPostings(
+	ctx context.Context,
+	postings []*lazyPostings,
+	loadPosting func(ctx context.Context, postings []*lazyPostings, start int64, length int64) error,
+) error {
+	if len(postings) == 0 {
+		return nil
+	}
+
+	sort.Slice(postings, func(i, j int) bool {
+		return postings[i].ptr.Start < postings[j].ptr.Start
+	})
+
+	// Maximum amount of irrelevant bytes between postings we are willing to fetch.
+	const maxPostingsGap = 1024 * 512
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	g := run.Group{}
+
+	j := 0
+	k := 0
+	for k < len(postings) {
+		j = k
+		k++
+
+		start, end := postings[j].ptr.Start, postings[j].ptr.End
+
+		// Extend the range if the next posting is no further than 1KB away.
+		// Otherwise, break out and fetch the current range.
+		for k < len(postings) {
+			nextEnd := postings[k].ptr.End
+
+			// Handle overlapping ranges.
+			if nextEnd < end {
+				nextEnd = end
+			}
+			if nextEnd-end > maxPostingsGap {
+				break
+			}
+			k++
+			end = nextEnd
+		}
+
+		subPostings := postings[j:k]
+		g.Add(func() error {
+			return loadPosting(ctx, subPostings, int64(start), int64(end-start))
+		}, func(err error) {
+			if err != nil {
+				cancel()
+			}
+		})
+	}
+	return g.Run()
 }
 
 func (r *bucketIndexReader) preloadSeries(ids []uint64) error {
@@ -895,7 +945,7 @@ func (r *bucketIndexReader) Postings(name, value string) (index.Postings, error)
 		return index.EmptyPostings(), nil
 	}
 	p := &lazyPostings{ptr: ptr}
-	r.loadedPostings[l] = p
+	r.loadedPostings = append(r.loadedPostings, p)
 	return p, nil
 }
 
@@ -974,9 +1024,9 @@ func (r *bucketChunkReader) preloadFile(g *run.Group, seq int, offsets []uint32)
 		// Maximum length we expect a chunk to have and prefetch.
 		maxChunkLen = 2048
 	)
+
 	j := 0
 	k := 0
-
 	for k < len(offsets) {
 		j = k
 		k++

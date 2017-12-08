@@ -1,9 +1,6 @@
 package store
 
 import (
-	"bytes"
-	"strconv"
-
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb/labels"
@@ -39,34 +36,4 @@ func translateMatchers(ms []storepb.LabelMatcher) (res []labels.Matcher, err err
 		res = append(res, r)
 	}
 	return res, nil
-}
-
-func matcherToSelectorQuery(ms []storepb.LabelMatcher) (string, error) {
-	var b bytes.Buffer
-	b.WriteByte('{')
-
-	for i, m := range ms {
-		if i != 0 {
-			b.WriteByte(',')
-		}
-		b.WriteString(m.Name)
-
-		switch m.Type {
-		case storepb.LabelMatcher_EQ:
-			b.WriteByte('=')
-		case storepb.LabelMatcher_NEQ:
-			b.WriteString("!=")
-		case storepb.LabelMatcher_RE:
-			b.WriteString("=~")
-		case storepb.LabelMatcher_NRE:
-			b.WriteString("!~")
-		default:
-			return "", errors.New("unknown matcher type")
-		}
-
-		b.WriteString(strconv.Quote(m.Value))
-	}
-
-	b.WriteByte('}')
-	return b.String(), nil
 }
