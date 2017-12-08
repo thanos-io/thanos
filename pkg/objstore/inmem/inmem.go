@@ -8,12 +8,15 @@ import (
 	"io/ioutil"
 	"strings"
 
+	"path"
+
 	"github.com/pkg/errors"
 )
 
 // Bucket implements the store.Bucket and shipper.Bucket interfaces against local memory.
 type Bucket struct {
 	objects map[string][]byte
+	dirs    map[string]struct{}
 }
 
 // NewBucket returns a new in memory Bucket.
@@ -21,6 +24,7 @@ type Bucket struct {
 func NewBucket() *Bucket {
 	return &Bucket{
 		objects: map[string][]byte{},
+		dirs:    map[string]struct{}{},
 	}
 }
 
@@ -39,6 +43,17 @@ func (b *Bucket) Iter(_ context.Context, dir string, f func(string) error) error
 		}
 
 		if err := f(filename); err != nil {
+			return err
+		}
+	}
+	// Mimick GCS behaviour where dirs are also listed separately.
+	for dirName := range b.dirs {
+		if !strings.HasPrefix(dirName, dir) {
+			continue
+		}
+
+		// Again, mimick GCS and add trailing slash.
+		if err := f(dirName + "/"); err != nil {
 			return err
 		}
 	}
@@ -62,15 +77,16 @@ func (b *Bucket) GetRange(_ context.Context, name string, off, length int64) (io
 		return nil, errors.Errorf("no such file %s", name)
 	}
 
-	if int64(len(file)) >= off {
+	if int64(len(file)) < off {
 		return nil, errors.Errorf("offset larger than content length. Len %d. Offset: %v", len(file), off)
 	}
 
-	if int64(len(file)) >= off+length {
-		return nil, errors.Errorf("offset+length larger than content length. Len %d. Offset+lenth: %v", len(file), off+length)
+	if int64(len(file)) <= off+length {
+		// Just return maximum of what we have.
+		length = int64(len(file)) - off
 	}
 
-	return ioutil.NopCloser(bytes.NewReader(file[off:length])), nil
+	return ioutil.NopCloser(bytes.NewReader(file[off : off+length])), nil
 }
 
 // Exists checks if the given directory exists in memory.
@@ -93,6 +109,7 @@ func (b *Bucket) Upload(_ context.Context, src, target string) error {
 		return err
 	}
 
+	b.dirs[path.Dir(target)] = struct{}{}
 	b.objects[target] = body
 	return nil
 }
@@ -106,6 +123,6 @@ func (b *Bucket) Delete(_ context.Context, dir string) error {
 
 		delete(b.objects, filename)
 	}
-
+	delete(b.objects, dir)
 	return nil
 }
