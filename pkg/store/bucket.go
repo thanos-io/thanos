@@ -393,7 +393,7 @@ func (s *BucketStore) blockSeries(ctx context.Context, b *bucketBlock, matchers 
 
 	begin := time.Now()
 
-	if err := preloadPostings(ctx, indexr.loadedPostings, indexr.loadPostings); err != nil {
+	if err := indexr.preloadPostings(); err != nil {
 		return nil, err
 	}
 	level.Debug(s.logger).Log("msg", "preload postings",
@@ -813,9 +813,53 @@ func newBucketIndexReader(ctx context.Context, block *bucketBlock) *bucketIndexR
 	return r
 }
 
+func (r *bucketIndexReader) preloadPostings() error {
+	ps := r.loadedPostings
+
+	if len(ps) == 0 {
+		return nil
+	}
+	sort.Slice(ps, func(i, j int) bool {
+		return ps[i].ptr.Start < ps[j].ptr.Start
+	})
+
+	var g run.Group
+
+	const maxPostingsGap = 512 * 1024
+
+	j := 0
+	k := 0
+	for k < len(r.loadedPostings) {
+		j = k
+		k++
+
+		start, end := ps[j].ptr.Start, ps[j].ptr.End
+
+		// Keep growing the range until the end or we encounter a large gap.
+		for ; k < len(ps); k++ {
+			if ps[k].ptr.Start-end > maxPostingsGap {
+				break
+			}
+			end = ps[k].ptr.End
+		}
+		part := ps[j:k]
+
+		ctx, cancel := context.WithCancel(r.ctx)
+
+		g.Add(func() error {
+			return r.loadPostings(ctx, part, start, end)
+		}, func(err error) {
+			if err != nil {
+				cancel()
+			}
+		})
+	}
+	return g.Run()
+}
+
 // loadPostings loads given postings using given start + length. It is expected to have given postings data within given range.
-func (r *bucketIndexReader) loadPostings(ctx context.Context, postings []*lazyPostings, start int64, length int64) error {
-	b, err := r.block.readIndexRange(ctx, int64(start), length)
+func (r *bucketIndexReader) loadPostings(ctx context.Context, postings []*lazyPostings, start, end int64) error {
+	b, err := r.block.readIndexRange(r.ctx, int64(start), int64(end-start))
 	if err != nil {
 		return errors.Wrap(err, "read postings range")
 	}
@@ -827,64 +871,6 @@ func (r *bucketIndexReader) loadPostings(ctx context.Context, postings []*lazyPo
 		p.set(l)
 	}
 	return nil
-}
-
-// preloadPostings loads all given postings. It tries to avoid bigger gaps of irrelevant bytes.
-// TODO(bplotka): Merge this unit-tested function with the preloadFile (for chunks) and apply same for prealodSeries.
-func preloadPostings(
-	ctx context.Context,
-	postings []*lazyPostings,
-	loadPosting func(ctx context.Context, postings []*lazyPostings, start int64, length int64) error,
-) error {
-	if len(postings) == 0 {
-		return nil
-	}
-
-	sort.Slice(postings, func(i, j int) bool {
-		return postings[i].ptr.Start < postings[j].ptr.Start
-	})
-
-	// Maximum amount of irrelevant bytes between postings we are willing to fetch.
-	const maxPostingsGap = 1024 * 512
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	g := run.Group{}
-
-	j := 0
-	k := 0
-	for k < len(postings) {
-		j = k
-		k++
-
-		start, end := postings[j].ptr.Start, postings[j].ptr.End
-
-		// Extend the range if the next posting is no further than 1KB away.
-		// Otherwise, break out and fetch the current range.
-		for k < len(postings) {
-			nextEnd := postings[k].ptr.End
-
-			// Handle overlapping ranges.
-			if nextEnd < end {
-				nextEnd = end
-			}
-			if nextEnd-end > maxPostingsGap {
-				break
-			}
-			k++
-			end = nextEnd
-		}
-
-		subPostings := postings[j:k]
-		g.Add(func() error {
-			return loadPosting(ctx, subPostings, int64(start), int64(end-start))
-		}, func(err error) {
-			if err != nil {
-				cancel()
-			}
-		})
-	}
-	return g.Run()
 }
 
 func (r *bucketIndexReader) preloadSeries(ids []uint64) error {
@@ -915,16 +901,21 @@ func (r *bucketIndexReader) preloadSeries(ids []uint64) error {
 		}
 		part := ids[j:k]
 
+		ctx, cancel := context.WithCancel(r.ctx)
+
 		g.Add(func() error {
-			return r.loadSeries(part, start, end)
-		}, func(error) {
+			return r.loadSeries(ctx, part, start, end)
+		}, func(err error) {
+			if err != nil {
+				cancel()
+			}
 		})
 	}
 	return g.Run()
 }
 
-func (r *bucketIndexReader) loadSeries(ids []uint64, start, end uint64) error {
-	b, err := r.block.readIndexRange(r.ctx, int64(start), int64(end-start))
+func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []uint64, start, end uint64) error {
+	b, err := r.block.readIndexRange(ctx, int64(start), int64(end-start))
 	if err != nil {
 		return errors.Wrap(err, "read series range")
 	}
@@ -1063,13 +1054,11 @@ func (r *bucketChunkReader) preloadFile(g *run.Group, seq int, offsets []uint32)
 
 		// Extend the range if the next chunk is no further than 0.5MB away.
 		// Otherwise, break out and fetch the current range.
-		for k < len(offsets) {
-			nextEnd := offsets[k] + maxChunkLen
-			if nextEnd-end > maxChunkGap {
+		for ; k < len(offsets); k++ {
+			if offsets[k] > maxChunkGap {
 				break
 			}
-			k++
-			end = nextEnd
+			end = offsets[k] + maxChunkLen
 		}
 
 		inclOffs := offsets[j:k]
