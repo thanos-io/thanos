@@ -86,7 +86,7 @@ func (b *Bucket) GetRange(_ context.Context, name string, off, length int64) (io
 		length = int64(len(file)) - off
 	}
 
-	return ioutil.NopCloser(bytes.NewReader(file[off:off+length])), nil
+	return ioutil.NopCloser(bytes.NewReader(file[off : off+length])), nil
 }
 
 // Exists checks if the given directory exists in memory.
