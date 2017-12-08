@@ -74,6 +74,22 @@ func TestPrometheusStore_Series(t *testing.T) {
 	testutil.Equals(t, []sample{{baseT + 200, 2}, {baseT + 300, 3}}, samples)
 }
 
+type testStoreSeriesServer struct {
+	// This field just exist to pseudo-implement the unused methods of the interface.
+	storepb.Store_SeriesServer
+	ctx    context.Context
+	series []storepb.Series
+}
+
+func (s *testStoreSeriesServer) Send(r *storepb.SeriesResponse) error {
+	s.series = append(s.series, r.Series)
+	return nil
+}
+
+func (s *testStoreSeriesServer) Context() context.Context {
+	return s.ctx
+}
+
 type sample struct {
 	t int64
 	v float64

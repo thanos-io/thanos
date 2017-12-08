@@ -15,6 +15,7 @@ import (
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
+	"github.com/improbable-eng/thanos/pkg/objstore/inmemcache"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
@@ -51,6 +52,9 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
 		String()
 
+	objectCacheMemoryCapacity := cmd.Flag("cache.memory-object-maximum", "maximum amount of bytes that can be stored by cache for whole index files").
+		Uint64()
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
 		p, err := cluster.Join(
 			logger,
@@ -71,7 +75,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 		if err != nil {
 			return errors.Wrap(err, "join cluster")
 		}
-		return runStore(g, logger, reg, tracer, *gcsBucket, *dataDir, *grpcAddr, *httpAddr, p.SetTimestamps)
+		return runStore(g, logger, reg, tracer, *gcsBucket, *dataDir, *grpcAddr, *httpAddr, p.SetTimestamps, *objectCacheMemoryCapacity)
 	}
 }
 
@@ -88,6 +92,7 @@ func runStore(
 	grpcAddr string,
 	httpAddr string,
 	gossipTimestampsFn func(mint int64, maxt int64),
+	objectCacheMemoryCapacity uint64,
 ) error {
 	{
 		gcsClient, err := storage.NewClient(context.Background())
@@ -103,6 +108,7 @@ func runStore(
 			logger,
 			reg,
 			bkt,
+			inmemcache.NewWholeObjectsBucket(reg, bkt, objectCacheMemoryCapacity),
 			gossipTimestampsFn,
 			dataDir,
 		)

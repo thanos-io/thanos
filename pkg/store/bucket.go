@@ -91,10 +91,11 @@ func (b *metricBucket) GetRange(ctx context.Context, name string, off, length in
 // BucketStore implements the store API backed by a Bucket bucket. It loads all index
 // files to local disk.
 type BucketStore struct {
-	logger  log.Logger
-	metrics *bucketStoreMetrics
-	bucket  Bucket
-	dir     string
+	logger       log.Logger
+	metrics      *bucketStoreMetrics
+	bucket       Bucket
+	cachedBucket Bucket
+	dir          string
 
 	mtx                sync.RWMutex
 	blocks             map[ulid.ULID]*bucketBlock
@@ -130,7 +131,7 @@ func newBucketStoreMetrics(reg *prometheus.Registry, s *BucketStore) *bucketStor
 		Name: "thanos_bucket_store_blocks_loaded",
 		Help: "Number of currently loaded blocks.",
 	}, func() float64 {
-		return float64(s.numBlocks())
+		return float64(s.NumBlocks())
 	})
 	m.seriesPrepareDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name: "thanos_bucket_store_series_prepare_duration_seconds",
@@ -181,6 +182,7 @@ func NewBucketStore(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	bucket Bucket,
+	cachedBucket Bucket,
 	gossipTimestampsFn func(mint int64, maxt int64),
 	dir string,
 ) (*BucketStore, error) {
@@ -193,6 +195,7 @@ func NewBucketStore(
 	s := &BucketStore{
 		logger:               logger,
 		bucket:               bucket,
+		cachedBucket:         cachedBucket,
 		dir:                  dir,
 		blocks:               map[ulid.ULID]*bucketBlock{},
 		gossipTimestampsFn:   gossipTimestampsFn,
@@ -215,7 +218,7 @@ func NewBucketStore(
 		}
 		d := filepath.Join(dir, dn)
 
-		b, err := newBucketBlock(context.TODO(), logger, bucket, id, d)
+		b, err := newBucketBlock(context.TODO(), logger, bucket, cachedBucket, id, d)
 		if err != nil {
 			level.Warn(s.logger).Log("msg", "loading block failed", "id", id, "err", err)
 			// Wipe the directory so we can cleanly try again later.
@@ -251,7 +254,7 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 		go func() {
 			for id := range blockc {
 				dir := filepath.Join(s.dir, id.String())
-				b, err := newBucketBlock(ctx, s.logger, s.bucket, id, dir)
+				b, err := newBucketBlock(ctx, s.logger, s.bucket, s.cachedBucket, id, dir)
 				if err != nil {
 					level.Warn(s.logger).Log("msg", "loading block failed", "id", id, "err", err)
 					// Wipe the directory so we can cleanly try again later.
@@ -287,7 +290,7 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 	return err
 }
 
-func (s *BucketStore) numBlocks() int {
+func (s *BucketStore) NumBlocks() int {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 	return len(s.blocks)
@@ -534,7 +537,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		return status.Error(codes.Aborted, err.Error())
 	}
 	level.Debug(s.logger).Log("msg", "preload all block data",
-		"numBlocks", numBlocks,
+		"NumBlocks", numBlocks,
 		"duration", time.Since(begin))
 	s.metrics.seriesPreloadAllDuration.Observe(time.Since(begin).Seconds())
 	span.Finish()
@@ -620,8 +623,10 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 type bucketBlock struct {
 	logger log.Logger
 	bucket Bucket
-	meta   *block.Meta
-	dir    string
+	// TODO(bplotka): Make that one an only one bucket when range caching will be supported.
+	cachedBucket Bucket
+	meta         *block.Meta
+	dir          string
 
 	symbols  map[uint32]string
 	lvals    map[string][]string
@@ -637,13 +642,15 @@ func newBucketBlock(
 	ctx context.Context,
 	logger log.Logger,
 	bkt Bucket,
+	cachedBucket Bucket,
 	id ulid.ULID,
 	dir string,
 ) (*bucketBlock, error) {
 	b := &bucketBlock{
-		logger:   logger,
-		bucket:   bkt,
-		indexObj: path.Join(id.String(), "index"),
+		logger:       logger,
+		bucket:       bkt,
+		cachedBucket: cachedBucket,
+		indexObj:     path.Join(id.String(), "index"),
 	}
 	if err := b.loadMeta(ctx, id, dir); err != nil {
 		return nil, errors.Wrap(err, "load meta")
@@ -745,7 +752,9 @@ func (b *bucketBlock) blockMatchers(mint, maxt int64, matchers ...labels.Matcher
 }
 
 func (b *bucketBlock) readIndexRange(ctx context.Context, off, length int64) ([]byte, error) {
-	r, err := b.bucket.GetRange(ctx, b.indexObj, off, length)
+	// NOTE(bplotka): Index can potentially use whole object cached bucket, because index files are usually small, but still
+	// we will be caching not needed data mostly. Implement range caching support.
+	r, err := b.cachedBucket.GetRange(ctx, b.indexObj, off, length)
 	if err != nil {
 		return nil, errors.Wrap(err, "get range reader")
 	}
