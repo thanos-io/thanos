@@ -220,7 +220,7 @@ func (c *Syncer) Groups() (res []*Group) {
 
 // GarbageCollect deletes blocks from the bucket if their data is available as part of a
 // block with a higher compaction level.
-func (c *Syncer) GarbageCollect(ctx context.Context, bkt Bucket) error {
+func (c *Syncer) GarbageCollect(ctx context.Context) error {
 	// Map each block to its highest priority parent. Initial blocks have themselves
 	// in their source section, i.e. are their own parent.
 	var (
@@ -343,7 +343,7 @@ func (cg *Group) Dir() string {
 	return cg.dir
 }
 
-// IDs returns all IDs of blocks in the group.
+// IDs returns all sorted IDs of blocks in the group.
 func (cg *Group) IDs() (ids []ulid.ULID, err error) {
 	err = iterMetas(cg.dir, func(_ string, id ulid.ULID) error {
 		ids = append(ids, id)
