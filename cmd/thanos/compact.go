@@ -78,7 +78,7 @@ func runCompact(
 		g.Add(func() error {
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				for _, g := range sy.Groups() {
-					if err := g.Compact(ctx, comp); err != nil {
+					if _, err := g.Compact(ctx, comp); err != nil {
 						level.Error(logger).Log("msg", "compaction failed", "err", err)
 					}
 				}

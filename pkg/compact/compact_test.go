@@ -2,7 +2,6 @@ package compact
 
 import (
 	"context"
-	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -10,7 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/prometheus/tsdb"
+	"github.com/prometheus/tsdb/labels"
 
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/ulid"
@@ -19,8 +21,7 @@ import (
 func TestSyncer_SyncMetas(t *testing.T) {
 	dir, err := ioutil.TempDir("", "test-syncer")
 	testutil.Ok(t, err)
-	// defer os.RemoveAll(dir)
-	fmt.Println(dir)
+	defer os.RemoveAll(dir)
 
 	bkt, close := testutil.NewObjectStoreBucket(t)
 	defer close()
@@ -72,4 +73,65 @@ func TestSyncer_SyncMetas(t *testing.T) {
 	got, err = sy.Groups()[0].IDs()
 	testutil.Ok(t, err)
 	testutil.Equals(t, ids[5:], got)
+}
+
+func TestGroup_Compact(t *testing.T) {
+	dir, err := ioutil.TempDir("", "test-syncer")
+	testutil.Ok(t, err)
+	defer os.RemoveAll(dir)
+
+	bkt, close := testutil.NewObjectStoreBucket(t)
+	defer close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	b1, err := testutil.CreateBlock(dir, []labels.Labels{
+		{{Name: "a", Value: "1"}},
+		{{Name: "a", Value: "2"}},
+		{{Name: "a", Value: "3"}},
+		{{Name: "a", Value: "4"}},
+	}, 100, 0, 1000)
+	testutil.Ok(t, err)
+
+	b2, err := testutil.CreateBlock(dir, []labels.Labels{
+		{{Name: "a", Value: "2"}},
+		{{Name: "a", Value: "3"}},
+		{{Name: "a", Value: "4"}},
+		{{Name: "a", Value: "5"}},
+	}, 100, 1001, 2000)
+	testutil.Ok(t, err)
+
+	b3, err := testutil.CreateBlock(dir, []labels.Labels{
+		{{Name: "a", Value: "3"}},
+		{{Name: "a", Value: "4"}},
+		{{Name: "a", Value: "5"}},
+		{{Name: "a", Value: "6"}},
+	}, 100, 2001, 3000)
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, uploadBlock(ctx, bkt, b1, filepath.Join(dir, b1.String())))
+	testutil.Ok(t, uploadBlock(ctx, bkt, b2, filepath.Join(dir, b2.String())))
+	testutil.Ok(t, uploadBlock(ctx, bkt, b3, filepath.Join(dir, b3.String())))
+
+	g, err := NewGroup(log.NewLogfmtLogger(os.Stderr), bkt, dir, nil)
+	testutil.Ok(t, err)
+
+	comp, err := tsdb.NewLeveledCompactor(nil, log.NewLogfmtLogger(os.Stderr), []int64{1000, 3000}, nil)
+	testutil.Ok(t, err)
+
+	id, err := g.Compact(ctx, comp)
+	testutil.Ok(t, err)
+	testutil.Assert(t, id != ulid.ULID{}, "no compaction took place")
+
+	resDir := filepath.Join(dir, id.String())
+	testutil.Ok(t, downloadBlock(ctx, bkt, id.String(), resDir))
+
+	meta, err := block.ReadMetaFile(resDir)
+	testutil.Ok(t, err)
+
+	testutil.Equals(t, uint64(6), meta.Stats.NumSeries)
+	testutil.Equals(t, uint64(3*4*100), meta.Stats.NumSamples)
+	testutil.Equals(t, 2, meta.Compaction.Level)
+	testutil.Equals(t, []ulid.ULID{b1, b2, b3}, meta.Compaction.Sources)
 }

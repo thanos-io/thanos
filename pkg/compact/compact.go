@@ -124,7 +124,6 @@ func (c *Syncer) SyncMetas(ctx context.Context) error {
 		// TODO(fabxc): increase the duration for production later. We are probably fine
 		// here with 1 hour or more.
 		if ulid.Now()-id.Time() < 5*60*1000 {
-			fmt.Println("skipping block", id, "due to time", ulid.Now(), id.Time())
 			return nil
 		}
 		level.Debug(c.logger).Log("msg", "download meta", "block", id)
@@ -262,7 +261,6 @@ func (c *Syncer) GarbageCollect(ctx context.Context, bkt Bucket) error {
 			level, plevel := meta.Compaction.Level, pmeta.Compaction.Level
 
 			if level > plevel || (level == plevel && id.Compare(pid) > 0) {
-				fmt.Println("overwrite parent for", sid, "from", pid, "to", id)
 				parents[sid] = id
 			}
 		}
@@ -309,6 +307,9 @@ type Group struct {
 
 // NewGroup returns a new compaction group.
 func NewGroup(logger log.Logger, bkt Bucket, dir string, labels map[string]string) (*Group, error) {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return nil, err
 	}
@@ -358,30 +359,24 @@ func (cg *Group) Labels() map[string]string {
 
 // Compact plans and runs a single compaction against the group. The compacted result
 // is uploaded into the bucket the blocks were retrived from.
-func (cg *Group) Compact(ctx context.Context, comp tsdb.Compactor) error {
+func (cg *Group) Compact(ctx context.Context, comp tsdb.Compactor) (id ulid.ULID, err error) {
 	// Planning a compaction works purely based on the meta.json files in our group's dir.
 	cg.mtx.Lock()
 	plan, err := comp.Plan(cg.dir)
 	cg.mtx.Unlock()
 
 	if err != nil {
-		return errors.Wrap(err, "plan compaction")
+		return id, errors.Wrap(err, "plan compaction")
 	}
 	if len(plan) == 0 {
-		return nil
+		return id, nil
 	}
-	fmt.Println("will compact", cg.dir)
-	for _, p := range plan {
-		meta, _ := block.ReadMetaFile(p)
-		fmt.Println("   ", meta.ULID, "[", meta.MinTime, ",", meta.MaxTime, "]")
-	}
-
 	// Once we have a plan we need to download the actual data. We don't touch
 	// the main directory but use an intermediate one instead.
 	wdir := filepath.Join(cg.dir, "tmp")
 
 	if err := os.MkdirAll(wdir, 0777); err != nil {
-		return errors.Wrap(err, "create working dir")
+		return id, errors.Wrap(err, "create working dir")
 	}
 	defer os.RemoveAll(wdir)
 
@@ -389,11 +384,11 @@ func (cg *Group) Compact(ctx context.Context, comp tsdb.Compactor) error {
 	begin := time.Now()
 
 	for _, b := range plan {
-		id := filepath.Base(b)
-		dst := filepath.Join(wdir, id)
+		ids := filepath.Base(b)
+		dst := filepath.Join(wdir, ids)
 
-		if err := downloadBlock(ctx, cg.bkt, id, dst); err != nil {
-			return errors.Wrap(err, "download block")
+		if err := downloadBlock(ctx, cg.bkt, ids, dst); err != nil {
+			return id, errors.Wrapf(err, "download block %s", ids)
 		}
 		compDirs = append(compDirs, dst)
 	}
@@ -402,9 +397,9 @@ func (cg *Group) Compact(ctx context.Context, comp tsdb.Compactor) error {
 
 	begin = time.Now()
 
-	id, err := comp.Compact(wdir, compDirs...)
+	id, err = comp.Compact(wdir, compDirs...)
 	if err != nil {
-		return errors.Wrapf(err, "compact blocks %v", plan)
+		return id, errors.Wrapf(err, "compact blocks %v", plan)
 	}
 	level.Debug(cg.logger).Log("msg", "compacted blocks",
 		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin))
@@ -415,18 +410,18 @@ func (cg *Group) Compact(ctx context.Context, comp tsdb.Compactor) error {
 
 	newMeta, err := block.ReadMetaFile(bdir)
 	if err != nil {
-		return errors.Wrap(err, "read new meta")
+		return id, errors.Wrap(err, "read new meta")
 	}
 	newMeta.Thanos.Labels = cg.labels
 
 	if err := block.WriteMetaFile(bdir, newMeta); err != nil {
-		return errors.Wrap(err, "write new meta")
+		return id, errors.Wrap(err, "write new meta")
 	}
 
 	begin = time.Now()
 
 	if err = uploadBlock(ctx, cg.bkt, id, bdir); err != nil {
-		return errors.Wrap(err, "upload block")
+		return id, errors.Wrap(err, "upload block")
 	}
 	level.Debug(cg.logger).Log("msg", "uploaded block", "block", id, "duration", time.Since(begin))
 
@@ -438,7 +433,7 @@ func (cg *Group) Compact(ctx context.Context, comp tsdb.Compactor) error {
 			level.Error(cg.logger).Log("msg", "remove compacted block dir", "err", err)
 		}
 	}
-	return nil
+	return id, nil
 }
 
 func uploadBlock(ctx context.Context, bkt Bucket, id ulid.ULID, dir string) error {
