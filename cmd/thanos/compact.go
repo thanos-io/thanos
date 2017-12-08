@@ -61,7 +61,25 @@ func runCompact(
 	if err != nil {
 		return err
 	}
+	// Start cycle of syncing blocks from the bucket and garbage collecting the bucket.
+	{
+		ctx, cancel := context.WithCancel(context.Background())
 
+		g.Add(func() error {
+			return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
+				if err := sy.SyncMetas(ctx); err != nil {
+					level.Error(logger).Log("msg", "sync failed", "err", err)
+				}
+				if err := sy.GarbageCollect(ctx); err != nil {
+					level.Error(logger).Log("msg", "garbage collection failed", "err", err)
+				}
+				return nil
+			})
+		}, func(error) {
+			cancel()
+		})
+	}
+	// Check grouped blocks and run compaction over them.
 	{
 		comp, err := tsdb.NewLeveledCompactor(reg, logger, []int64{
 			2 * 3600 * 1000,
@@ -76,7 +94,7 @@ func runCompact(
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+			return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
 				for _, g := range sy.Groups() {
 					if _, err := g.Compact(ctx, comp); err != nil {
 						level.Error(logger).Log("msg", "compaction failed", "err", err)
@@ -88,35 +106,7 @@ func runCompact(
 			cancel()
 		})
 	}
-	{
-		ctx, cancel := context.WithCancel(context.Background())
-
-		g.Add(func() error {
-			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
-				if err := sy.SyncMetas(ctx); err != nil {
-					level.Error(logger).Log("msg", "sync failed", "err", err)
-				}
-				return nil
-			})
-		}, func(error) {
-			cancel()
-		})
-	}
-	{
-		ctx, cancel := context.WithCancel(context.Background())
-
-		g.Add(func() error {
-			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
-				if err := sy.GarbageCollect(ctx, bkt); err != nil {
-					level.Error(logger).Log("msg", "garbage collection failed", "err", err)
-				}
-				return nil
-			})
-		}, func(error) {
-			cancel()
-		})
-	}
-	// Start query API + UI HTTP server.
+	// Start metric and profiling endpoints.
 	{
 		router := route.New()
 		ui.New(logger, nil).Register(router)
