@@ -151,19 +151,15 @@ func runStore(
 			return status.Errorf(codes.Internal, "%s", p)
 		}
 		s := grpc.NewServer(
-			grpc.UnaryInterceptor(
-				grpc_middleware.ChainUnaryServer(
-					grpc_recovery.UnaryServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
-					met.UnaryServerInterceptor(),
-					tracing.UnaryServerInterceptor(tracer),
-				),
+			grpc_middleware.WithUnaryServerChain(
+				grpc_recovery.UnaryServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
+				met.UnaryServerInterceptor(),
+				tracing.UnaryServerInterceptor(tracer),
 			),
-			grpc.StreamInterceptor(
-				grpc_middleware.ChainStreamServer(
-					grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
-					met.StreamServerInterceptor(),
-					tracing.StreamServerInterceptor(tracer),
-				),
+			grpc_middleware.WithStreamServerChain(
+				grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
+				met.StreamServerInterceptor(),
+				tracing.StreamServerInterceptor(tracer),
 			),
 		)
 		storepb.RegisterStoreServer(s, gs)
