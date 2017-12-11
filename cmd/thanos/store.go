@@ -11,22 +11,16 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/grpc-ecosystem/go-grpc-middleware/recovery"
-	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -135,35 +129,8 @@ func runStore(
 			return errors.Wrap(err, "listen API address")
 		}
 
-		met := grpc_prometheus.NewServerMetrics()
-		met.EnableHandlingTimeHistogram(
-			grpc_prometheus.WithHistogramBuckets([]float64{
-				0.001, 0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4,
-			}),
-		)
-
-		panicsTotal := prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "thanos_grpc_req_panics_recovered_total",
-			Help: "Total number of gRPC requests recovered from internal panic.",
-		})
-		grpcPanicRecoveryHandler := func(p interface{}) (err error) {
-			panicsTotal.Inc()
-			return status.Errorf(codes.Internal, "%s", p)
-		}
-		s := grpc.NewServer(
-			grpc_middleware.WithUnaryServerChain(
-				grpc_recovery.UnaryServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
-				met.UnaryServerInterceptor(),
-				tracing.UnaryServerInterceptor(tracer),
-			),
-			grpc_middleware.WithStreamServerChain(
-				grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
-				met.StreamServerInterceptor(),
-				tracing.StreamServerInterceptor(tracer),
-			),
-		)
+		s := grpc.NewServer(defaultGRPCServerOpts(logger, reg, tracer)...)
 		storepb.RegisterStoreServer(s, gs)
-		reg.MustRegister(met, panicsTotal)
 
 		g.Add(func() error {
 			return errors.Wrap(s.Serve(l), "serve gRPC")
