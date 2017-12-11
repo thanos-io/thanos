@@ -15,15 +15,12 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/grpc-ecosystem/go-grpc-middleware"
-	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -150,28 +147,8 @@ func runSidecar(
 			return errors.Wrap(err, "create Prometheus store")
 		}
 
-		met := grpc_prometheus.NewServerMetrics()
-		met.EnableHandlingTimeHistogram(
-			grpc_prometheus.WithHistogramBuckets([]float64{
-				0.001, 0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4,
-			}),
-		)
-		s := grpc.NewServer(
-			grpc.UnaryInterceptor(
-				grpc_middleware.ChainUnaryServer(
-					met.UnaryServerInterceptor(),
-					tracing.UnaryServerInterceptor(tracer),
-				),
-			),
-			grpc.StreamInterceptor(
-				grpc_middleware.ChainStreamServer(
-					met.StreamServerInterceptor(),
-					tracing.StreamServerInterceptor(tracer),
-				),
-			),
-		)
+		s := grpc.NewServer(defaultGRPCServerOpts(logger, reg, tracer)...)
 		storepb.RegisterStoreServer(s, promStore)
-		reg.MustRegister(met)
 
 		g.Add(func() error {
 			return errors.Wrap(s.Serve(l), "serve gRPC")
