@@ -12,6 +12,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/grpc-ecosystem/go-grpc-middleware"
+	"github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
@@ -24,6 +25,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -139,22 +142,28 @@ func runStore(
 			}),
 		)
 
+		panicsTotal := prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "thanos_grpc_req_panics_recovered_total",
+			Help: "Total number of gRPC requests recovered from internal panic.",
+		})
+		grpcPanicRecoveryHandler := func(p interface{}) (err error) {
+			panicsTotal.Inc()
+			return status.Errorf(codes.Internal, "%s", p)
+		}
 		s := grpc.NewServer(
-			grpc.UnaryInterceptor(
-				grpc_middleware.ChainUnaryServer(
-					met.UnaryServerInterceptor(),
-					tracing.UnaryServerInterceptor(tracer),
-				),
+			grpc_middleware.WithUnaryServerChain(
+				grpc_recovery.UnaryServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
+				met.UnaryServerInterceptor(),
+				tracing.UnaryServerInterceptor(tracer),
 			),
-			grpc.StreamInterceptor(
-				grpc_middleware.ChainStreamServer(
-					met.StreamServerInterceptor(),
-					tracing.StreamServerInterceptor(tracer),
-				),
+			grpc_middleware.WithStreamServerChain(
+				grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
+				met.StreamServerInterceptor(),
+				tracing.StreamServerInterceptor(tracer),
 			),
 		)
 		storepb.RegisterStoreServer(s, gs)
-		reg.MustRegister(met)
+		reg.MustRegister(met, panicsTotal)
 
 		g.Add(func() error {
 			return errors.Wrap(s.Serve(l), "serve gRPC")
