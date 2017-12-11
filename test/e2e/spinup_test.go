@@ -9,7 +9,6 @@ import (
 	"path"
 	"syscall"
 	"testing"
-	"path"
 )
 
 type config struct {

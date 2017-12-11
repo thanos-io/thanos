@@ -329,3 +329,46 @@ func uploadDir(t testing.TB, ctx context.Context, bkt shipper.Bucket, id ulid.UL
 	}
 	return err
 }
+
+func TestPartitionRanges(t *testing.T) {
+	const maxGapSize = 1024 * 512
+
+	for _, c := range []struct {
+		input    [][2]int
+		expected [][2]int
+	}{
+		{
+			input:    [][2]int{{1, 10}},
+			expected: [][2]int{{0, 1}},
+		},
+		{
+			input:    [][2]int{{1, 2}, {3, 5}, {7, 10}},
+			expected: [][2]int{{0, 3}},
+		},
+		{
+			input: [][2]int{
+				{1, 2},
+				{3, 5},
+				{20, 30},
+				{maxGapSize + 31, maxGapSize + 32},
+			},
+			expected: [][2]int{{0, 3}, {3, 4}},
+		},
+		// Overlapping ranges.
+		{
+			input: [][2]int{
+				{1, 30},
+				{3, 28},
+				{1, 4},
+				{maxGapSize + 31, maxGapSize + 32},
+				{maxGapSize + 31, maxGapSize + 40},
+			},
+			expected: [][2]int{{0, 3}, {3, 5}},
+		},
+	} {
+		res := partitionRanges(len(c.input), func(i int) (uint64, uint64) {
+			return uint64(c.input[i][0]), uint64(c.input[i][1])
+		}, maxGapSize)
+		testutil.Equals(t, c.expected, res)
+	}
+}

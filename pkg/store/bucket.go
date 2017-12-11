@@ -384,7 +384,7 @@ func (s *BucketStore) blockSeries(ctx context.Context, b *bucketBlock, matchers 
 
 	// The postings to preload are registered within the call to PostingsForMatchers,
 	// when it invokes indexr.Postings for each underlying postings list.
-	// They are ready to use ONLY after preloadPostings method.
+	// They are ready to use ONLY after preloadPostings was called successfully.
 	lazyPostings, absent, err := tsdb.PostingsForMatchers(indexr, matchers...)
 	if err != nil {
 		return nil, err
@@ -393,9 +393,11 @@ func (s *BucketStore) blockSeries(ctx context.Context, b *bucketBlock, matchers 
 
 	begin := time.Now()
 
-	if err := preloadPostings(ctx, indexr.loadedPostings, indexr.loadPostings); err != nil {
+	if err := indexr.preloadPostings(); err != nil {
 		return nil, err
 	}
+	level.Debug(s.logger).Log("msg", "preload postings",
+		"count", len(indexr.loadedPostings), "duration", time.Since(begin))
 
 	level.Debug(s.logger).Log("msg", "preload postings", "duration", time.Since(begin))
 
@@ -410,7 +412,8 @@ func (s *BucketStore) blockSeries(ctx context.Context, b *bucketBlock, matchers 
 	if err := indexr.preloadSeries(ps); err != nil {
 		return nil, err
 	}
-	level.Debug(s.logger).Log("msg", "preload index series", "count", len(ps), "duration", time.Since(begin))
+	level.Debug(s.logger).Log("msg", "preload index series",
+		"count", len(ps), "duration", time.Since(begin))
 
 	begin = time.Now()
 	var (
@@ -775,7 +778,7 @@ func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length i
 
 func (b *bucketBlock) indexReader(ctx context.Context) *bucketIndexReader {
 	b.pendingReaders.Add(1)
-	return newBucketIndexReader(ctx, b)
+	return newBucketIndexReader(ctx, b.logger, b)
 }
 
 func (b *bucketBlock) chunkReader(ctx context.Context) *bucketChunkReader {
@@ -790,19 +793,21 @@ func (b *bucketBlock) Close() error {
 }
 
 type bucketIndexReader struct {
-	ctx   context.Context
-	block *bucketBlock
-	dec   *index.DecoderV1
+	logger log.Logger
+	ctx    context.Context
+	block  *bucketBlock
+	dec    *index.DecoderV1
 
 	loadedPostings []*lazyPostings
 	loadedSeries   map[uint64][]byte
 }
 
-func newBucketIndexReader(ctx context.Context, block *bucketBlock) *bucketIndexReader {
+func newBucketIndexReader(ctx context.Context, logger log.Logger, block *bucketBlock) *bucketIndexReader {
 	r := &bucketIndexReader{
-		ctx:   ctx,
-		block: block,
-		dec:   &index.DecoderV1{},
+		logger: logger,
+		ctx:    ctx,
+		block:  block,
+		dec:    &index.DecoderV1{},
 
 		loadedSeries: map[uint64][]byte{},
 	}
@@ -810,9 +815,39 @@ func newBucketIndexReader(ctx context.Context, block *bucketBlock) *bucketIndexR
 	return r
 }
 
+func (r *bucketIndexReader) preloadPostings() error {
+	const maxGapSize = 512 * 1024
+
+	ps := r.loadedPostings
+
+	sort.Slice(ps, func(i, j int) bool {
+		return ps[i].ptr.Start < ps[j].ptr.Start
+	})
+	parts := partitionRanges(len(ps), func(i int) (start, end uint64) {
+		return uint64(ps[i].ptr.Start), uint64(ps[i].ptr.End)
+	}, maxGapSize)
+	var g run.Group
+
+	for _, p := range parts {
+		ctx, cancel := context.WithCancel(r.ctx)
+		i, j := p[0], p[1]
+
+		g.Add(func() error {
+			return r.loadPostings(ctx, ps[i:j], ps[i].ptr.Start, ps[j-1].ptr.End)
+		}, func(err error) {
+			if err != nil {
+				cancel()
+			}
+		})
+	}
+	return g.Run()
+}
+
 // loadPostings loads given postings using given start + length. It is expected to have given postings data within given range.
-func (r *bucketIndexReader) loadPostings(ctx context.Context, postings []*lazyPostings, start int64, length int64) error {
-	b, err := r.block.readIndexRange(ctx, int64(start), length)
+func (r *bucketIndexReader) loadPostings(ctx context.Context, postings []*lazyPostings, start, end int64) error {
+	level.Debug(r.logger).Log("msg", "preload postings", "count", len(postings), "start", start, "end", end)
+
+	b, err := r.block.readIndexRange(r.ctx, int64(start), int64(end-start))
 	if err != nil {
 		return errors.Wrap(err, "read postings range")
 	}
@@ -826,55 +861,47 @@ func (r *bucketIndexReader) loadPostings(ctx context.Context, postings []*lazyPo
 	return nil
 }
 
-// preloadPostings loads all given postings. It tries to avoid bigger gaps of irrelevant bytes.
-// TODO(bplotka): Merge this unit-tested function with the preloadFile (for chunks) and apply same for prealodSeries.
-func preloadPostings(
-	ctx context.Context,
-	postings []*lazyPostings,
-	loadPosting func(ctx context.Context, postings []*lazyPostings, start int64, length int64) error,
-) error {
-	if len(postings) == 0 {
-		return nil
-	}
-
-	sort.Slice(postings, func(i, j int) bool {
-		return postings[i].ptr.Start < postings[j].ptr.Start
-	})
-
-	// Maximum amount of irrelevant bytes between postings we are willing to fetch.
-	const maxPostingsGap = 1024 * 512
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	g := run.Group{}
-
+// partitionRanges partitions length entries into n <= length ranges that cover all
+// input ranges.
+// It combines entries that are separated by reasonably small gaps.
+func partitionRanges(length int, rng func(int) (uint64, uint64), maxGapSize uint64) (parts [][2]int) {
 	j := 0
 	k := 0
-	for k < len(postings) {
+	for k < length {
 		j = k
 		k++
 
-		start, end := postings[j].ptr.Start, postings[j].ptr.End
+		_, end := rng(j)
 
-		// Extend the range if the next posting is no further than 1KB away.
-		// Otherwise, break out and fetch the current range.
-		for k < len(postings) {
-			nextEnd := postings[k].ptr.End
+		// Keep growing the range until the end or we encounter a large gap.
+		for ; k < length; k++ {
+			s, e := rng(k)
 
-			// Handle overlapping ranges.
-			if nextEnd < end {
-				nextEnd = end
-			}
-			if nextEnd-end > maxPostingsGap {
+			if end+maxGapSize < s {
 				break
 			}
-			k++
-			end = nextEnd
+			end = e
 		}
+		parts = append(parts, [2]int{j, k})
+	}
+	return parts
+}
 
-		subPostings := postings[j:k]
+func (r *bucketIndexReader) preloadSeries(ids []uint64) error {
+	const maxSeriesSize = 4096
+	const maxGapSize = 512 * 1024
+
+	parts := partitionRanges(len(ids), func(i int) (start, end uint64) {
+		return ids[i], ids[i] + maxSeriesSize
+	}, maxGapSize)
+	var g run.Group
+
+	for _, p := range parts {
+		ctx, cancel := context.WithCancel(r.ctx)
+		i, j := p[0], p[1]
+
 		g.Add(func() error {
-			return loadPosting(ctx, subPostings, int64(start), int64(end-start))
+			return r.loadSeries(ctx, ids[i:j], ids[i], ids[j-1]+maxSeriesSize)
 		}, func(err error) {
 			if err != nil {
 				cancel()
@@ -884,20 +911,10 @@ func preloadPostings(
 	return g.Run()
 }
 
-func (r *bucketIndexReader) preloadSeries(ids []uint64) error {
-	if len(ids) == 0 {
-		return nil
-	}
-	// We don't know how long a series entry will. We use this constant as a buffer size
-	// bytes which we read beyond an entries start position.
-	const maxSeriesSize = 4096
+func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []uint64, start, end uint64) error {
+	level.Debug(r.logger).Log("msg", "preload series", "count", len(ids), "start", start, "end", end)
 
-	// The series IDs in the postings list are equivalent to the offset of the respective series entry.
-	// TODO(fabxc): detect gaps and split up requests as we do for chunks.
-	start := ids[0]
-	end := ids[len(ids)-1] + maxSeriesSize
-
-	b, err := r.block.readIndexRange(r.ctx, int64(start), int64(end-start))
+	b, err := r.block.readIndexRange(ctx, int64(start), int64(end-start))
 	if err != nil {
 		return errors.Wrap(err, "read series range")
 	}
@@ -961,7 +978,7 @@ func (r *bucketIndexReader) SortedPostings(p index.Postings) index.Postings {
 func (r *bucketIndexReader) Series(ref uint64, lset *labels.Labels, chks *[]chunks.Meta) error {
 	b, ok := r.loadedSeries[ref]
 	if !ok {
-		return errors.New("series not found")
+		return errors.Errorf("series %d not found", ref)
 	}
 	return r.dec.Series(b, lset, chks)
 }
@@ -1012,41 +1029,21 @@ func (r *bucketChunkReader) addPreload(id uint64) error {
 // It attempts to conslidate requests for multiple chunks into a single one and populates
 // the reader's chunk map.
 func (r *bucketChunkReader) preloadFile(g *run.Group, seq int, offsets []uint32) {
-	if len(offsets) == 0 {
-		return
-	}
+	const maxChunkSize = 2048
+	const maxGapSize = 512 * 1024
+
 	sort.Slice(offsets, func(i, j int) bool {
 		return offsets[i] < offsets[j]
 	})
-	const (
-		// Maximum amount of irrelevant bytes between chunks we are willing to fetch.
-		maxChunkGap = 512 * 1024
-		// Maximum length we expect a chunk to have and prefetch.
-		maxChunkLen = 2048
-	)
+	parts := partitionRanges(len(offsets), func(i int) (start, end uint64) {
+		return uint64(offsets[i]), uint64(offsets[i]) + maxChunkSize
+	}, maxGapSize)
 
-	j := 0
-	k := 0
-	for k < len(offsets) {
-		j = k
-		k++
-
-		start := offsets[j]
-		end := start + maxChunkLen
-
-		// Extend the range if the next chunk is no further than 0.5MB away.
-		// Otherwise, break out and fetch the current range.
-		for k < len(offsets) {
-			nextEnd := offsets[k] + maxChunkLen
-			if nextEnd-end > maxChunkGap {
-				break
-			}
-			k++
-			end = nextEnd
-		}
-
-		inclOffs := offsets[j:k]
+	for _, p := range parts {
 		ctx, cancel := context.WithCancel(r.ctx)
+
+		inclOffs := offsets[p[0]:p[1]]
+		start, end := offsets[p[0]], offsets[p[1]-1]+maxChunkSize
 
 		g.Add(func() error {
 			now := time.Now()
