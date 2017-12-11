@@ -29,16 +29,17 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	httpAddr := cmd.Flag("http-address", "listen host:port for HTTP endpoints").
 		Default(defaultHTTPAddr).String()
 
-	dataDir := cmd.Flag("tsdb.path", "data directory of TSDB").
+	dataDir := cmd.Flag("data-dir", "data directory to cache blocks and process compactions").
 		Default("./data").String()
 
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks.").
 		PlaceHolder("<bucket>").Required().String()
 
-	// deleteOld := cmd.Flag("delete-old", "delete compacted blocks from the bucket").Bool()
+	syncDelay := cmd.Flag("sync-delay", "minimum age of blocks before they are being processed.").
+		Default("2h").Duration()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
-		return runCompact(g, logger, reg, *httpAddr, *dataDir, *gcsBucket)
+		return runCompact(g, logger, reg, *httpAddr, *dataDir, *gcsBucket, *syncDelay)
 	}
 }
 
@@ -49,15 +50,15 @@ func runCompact(
 	httpAddr string,
 	dataDir string,
 	gcsBucket string,
+	syncDelay time.Duration,
 ) error {
-
 	gcsClient, err := storage.NewClient(context.Background())
 	if err != nil {
 		return errors.Wrap(err, "create GCS client")
 	}
 	bkt := gcs.NewBucket(gcsClient.Bucket(gcsBucket), reg, gcsBucket)
 
-	sy, err := compact.NewSyncer(logger, dataDir, bkt)
+	sy, err := compact.NewSyncer(logger, dataDir, bkt, syncDelay)
 	if err != nil {
 		return err
 	}
@@ -81,11 +82,13 @@ func runCompact(
 	}
 	// Check grouped blocks and run compaction over them.
 	{
+		// Instantiate the compactor with different time slices. Timestamps in TSDB
+		// are in milliseconds.
 		comp, err := tsdb.NewLeveledCompactor(reg, logger, []int64{
-			2 * 3600 * 1000,
-			8 * 3600 * 1000,
-			2 * 24 * 3600 * 1000,
-			14 * 24 * 3600 * 1000,
+			int64(2 * time.Hour / time.Millisecond),
+			int64(8 * time.Hour / time.Millisecond),
+			int64(2 * 24 * time.Hour / time.Millisecond),
+			int64(14 * 24 * time.Hour / time.Millisecond),
 		}, nil)
 		if err != nil {
 			return errors.Wrap(err, "create compactor")

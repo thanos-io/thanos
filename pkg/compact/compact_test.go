@@ -63,7 +63,7 @@ func TestSyncer_SyncMetas(t *testing.T) {
 		testutil.Ok(t, os.RemoveAll(d))
 	}
 
-	sy, err := NewSyncer(nil, dir, bkt)
+	sy, err := NewSyncer(nil, dir, bkt, 0)
 	testutil.Ok(t, err)
 
 	got, err := sy.Groups()[0].IDs()
@@ -147,7 +147,7 @@ func TestSyncer_GarbageCollect(t *testing.T) {
 	}
 
 	// Do one initial synchronization with the bucket.
-	sy, err := NewSyncer(nil, dir, bkt)
+	sy, err := NewSyncer(nil, dir, bkt, 0)
 	testutil.Ok(t, err)
 	testutil.Ok(t, sy.SyncMetas(ctx))
 
