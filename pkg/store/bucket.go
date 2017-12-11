@@ -825,6 +825,7 @@ type bucketIndexReader struct {
 	block  *bucketBlock
 	dec    *index.DecoderV1
 
+	mtx            sync.Mutex
 	loadedPostings []*lazyPostings
 	loadedSeries   map[uint64][]byte
 }
@@ -878,6 +879,10 @@ func (r *bucketIndexReader) loadPostings(ctx context.Context, postings []*lazyPo
 	if err != nil {
 		return errors.Wrap(err, "read postings range")
 	}
+
+	r.mtx.Lock()
+	defer r.mtx.Unlock()
+
 	for _, p := range postings {
 		_, l, err := r.dec.Postings(b[p.ptr.Start-start : p.ptr.End-start])
 		if err != nil {
@@ -886,32 +891,6 @@ func (r *bucketIndexReader) loadPostings(ctx context.Context, postings []*lazyPo
 		p.set(l)
 	}
 	return nil
-}
-
-// partitionRanges partitions length entries into n <= length ranges that cover all
-// input ranges.
-// It combines entries that are separated by reasonably small gaps.
-func partitionRanges(length int, rng func(int) (uint64, uint64), maxGapSize uint64) (parts [][2]int) {
-	j := 0
-	k := 0
-	for k < length {
-		j = k
-		k++
-
-		_, end := rng(j)
-
-		// Keep growing the range until the end or we encounter a large gap.
-		for ; k < length; k++ {
-			s, e := rng(k)
-
-			if end+maxGapSize < s {
-				break
-			}
-			end = e
-		}
-		parts = append(parts, [2]int{j, k})
-	}
-	return parts
 }
 
 func (r *bucketIndexReader) preloadSeries(ids []uint64) error {
@@ -945,6 +924,10 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []uint64, start,
 	if err != nil {
 		return errors.Wrap(err, "read series range")
 	}
+
+	r.mtx.Lock()
+	defer r.mtx.Unlock()
+
 	for _, id := range ids {
 		c := b[id-start:]
 
@@ -955,6 +938,32 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []uint64, start,
 		r.loadedSeries[id] = c[n : n+int(l)]
 	}
 	return nil
+}
+
+// partitionRanges partitions length entries into n <= length ranges that cover all
+// input ranges.
+// It combines entries that are separated by reasonably small gaps.
+func partitionRanges(length int, rng func(int) (uint64, uint64), maxGapSize uint64) (parts [][2]int) {
+	j := 0
+	k := 0
+	for k < length {
+		j = k
+		k++
+
+		_, end := rng(j)
+
+		// Keep growing the range until the end or we encounter a large gap.
+		for ; k < length; k++ {
+			s, e := rng(k)
+
+			if end+maxGapSize < s {
+				break
+			}
+			end = e
+		}
+		parts = append(parts, [2]int{j, k})
+	}
+	return parts
 }
 
 func (r *bucketIndexReader) Symbols() (map[string]struct{}, error) {
