@@ -821,17 +821,17 @@ func (r *bucketIndexReader) preloadPostings() error {
 	sort.Slice(ps, func(i, j int) bool {
 		return ps[i].ptr.Start < ps[j].ptr.Start
 	})
-	rng := func(i int) (start, end uint64) {
+	parts := partitionRanges(len(ps), func(i int) (start, end uint64) {
 		return uint64(ps[i].ptr.Start), uint64(ps[i].ptr.End)
-	}
+	})
 	var g run.Group
 
-	for _, p := range partitionRanges(len(ps), rng) {
+	for _, p := range parts {
 		ctx, cancel := context.WithCancel(r.ctx)
 		i, j := p[0], p[1]
 
 		g.Add(func() error {
-			return r.loadPostings(ctx, ps[i:j], ps[i].ptr.Start, ps[j].ptr.End)
+			return r.loadPostings(ctx, ps[i:j], ps[i].ptr.Start, ps[j-1].ptr.End)
 		}, func(err error) {
 			if err != nil {
 				cancel()
@@ -891,18 +891,17 @@ func partitionRanges(length int, rng func(int) (uint64, uint64)) (parts [][2]int
 func (r *bucketIndexReader) preloadSeries(ids []uint64) error {
 	const maxSeriesSize = 4096
 
-	rng := func(i int) (start, end uint64) {
+	parts := partitionRanges(len(ids), func(i int) (start, end uint64) {
 		return ids[i], ids[i] + maxSeriesSize
-	}
+	})
 	var g run.Group
 
-	for _, p := range partitionRanges(len(ids), rng) {
+	for _, p := range parts {
 		ctx, cancel := context.WithCancel(r.ctx)
+		i, j := p[0], p[1]
 
 		g.Add(func() error {
-			i, j := p[0], p[1]
-
-			return r.loadSeries(ctx, ids[i:j], ids[i], ids[j]+maxSeriesSize)
+			return r.loadSeries(ctx, ids[i:j], ids[i], ids[j-1]+maxSeriesSize)
 		}, func(err error) {
 			if err != nil {
 				cancel()
@@ -979,7 +978,7 @@ func (r *bucketIndexReader) SortedPostings(p index.Postings) index.Postings {
 func (r *bucketIndexReader) Series(ref uint64, lset *labels.Labels, chks *[]chunks.Meta) error {
 	b, ok := r.loadedSeries[ref]
 	if !ok {
-		return errors.New("series not found")
+		return errors.Errorf("series %d not found", ref)
 	}
 	return r.dec.Series(b, lset, chks)
 }
@@ -1035,15 +1034,15 @@ func (r *bucketChunkReader) preloadFile(g *run.Group, seq int, offsets []uint32)
 	sort.Slice(offsets, func(i, j int) bool {
 		return offsets[i] < offsets[j]
 	})
-	rng := func(i int) (start, end uint64) {
+	parts := partitionRanges(len(offsets), func(i int) (start, end uint64) {
 		return uint64(offsets[i]), uint64(offsets[i]) + maxChunkSize
-	}
+	})
 
-	for _, p := range partitionRanges(len(offsets), rng) {
+	for _, p := range parts {
 		ctx, cancel := context.WithCancel(r.ctx)
 
 		inclOffs := offsets[p[0]:p[1]]
-		start, end := offsets[p[0]], offsets[p[1]]+maxChunkSize
+		start, end := offsets[p[0]], offsets[p[1]-1]+maxChunkSize
 
 		g.Add(func() error {
 			now := time.Now()
