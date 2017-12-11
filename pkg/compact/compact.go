@@ -271,16 +271,16 @@ func (c *Syncer) GarbageCollect(ctx context.Context) error {
 
 	// A block can safely be deleted if they are not the highest priority parent for
 	// any source block.
-	hasChildren := map[ulid.ULID]struct{}{}
+	topParents := map[ulid.ULID]struct{}{}
 	for _, pid := range parents {
-		hasChildren[pid] = struct{}{}
+		topParents[pid] = struct{}{}
 	}
 
 	for id := range all {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if _, ok := hasChildren[id]; ok {
+		if _, ok := topParents[id]; ok {
 			continue
 		}
 		// Spawn a new context so we always delete a block in full on shutdown.
