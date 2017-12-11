@@ -25,8 +25,6 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/grpc-ecosystem/go-grpc-middleware"
-	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/alert"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
@@ -315,28 +313,8 @@ func runRule(
 
 		store := store.NewTSDBStore(logger, reg, db, lset)
 
-		met := grpc_prometheus.NewServerMetrics()
-		met.EnableHandlingTimeHistogram(
-			grpc_prometheus.WithHistogramBuckets([]float64{
-				0.001, 0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4,
-			}),
-		)
-		s := grpc.NewServer(
-			grpc.UnaryInterceptor(
-				grpc_middleware.ChainUnaryServer(
-					met.UnaryServerInterceptor(),
-					tracing.UnaryServerInterceptor(tracer),
-				),
-			),
-			grpc.StreamInterceptor(
-				grpc_middleware.ChainStreamServer(
-					met.StreamServerInterceptor(),
-					tracing.StreamServerInterceptor(tracer),
-				),
-			),
-		)
+		s := grpc.NewServer(defaultGRPCServerOpts(logger, reg, tracer)...)
 		storepb.RegisterStoreServer(s, store)
-		reg.MustRegister(met)
 
 		g.Add(func() error {
 			return errors.Wrap(s.Serve(l), "serve gRPC")
