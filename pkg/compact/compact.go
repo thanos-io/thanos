@@ -400,7 +400,7 @@ func (cg *Group) Compact(ctx context.Context, comp tsdb.Compactor) (id ulid.ULID
 
 	begin = time.Now()
 
-	id, err = comp.Compact(wdir, compDirs...)
+	err = comp.Compact(wdir, compDirs...)
 	if err != nil {
 		return id, errors.Wrapf(err, "compact blocks %v", plan)
 	}
