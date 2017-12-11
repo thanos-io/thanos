@@ -219,7 +219,7 @@ func NewBucketStore(
 		if err != nil {
 			level.Warn(s.logger).Log("msg", "loading block failed", "id", id, "err", err)
 			// Wipe the directory so we can cleanly try again later.
-			os.RemoveAll(dir)
+			os.RemoveAll(d)
 			continue
 		}
 		s.setBlock(id, b)
@@ -264,12 +264,15 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 		}()
 	}
 
+	allIDs := map[ulid.ULID]struct{}{}
+
 	err := s.bucket.Iter(ctx, "", func(name string) error {
-		// Strip trailing slash indicating the a directory.
+		// Strip trailing slash indicating a directory.
 		id, err := ulid.Parse(name[:len(name)-1])
 		if err != nil {
 			return nil
 		}
+		allIDs[id] = struct{}{}
 
 		if b := s.getBlock(id); b != nil {
 			return nil
@@ -284,7 +287,19 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 	close(blockc)
 	wg.Wait()
 
-	return err
+	if err != nil {
+		return err
+	}
+	// Drop all blocks that are no longer present in the bucket.
+	for id := range s.blocks {
+		if _, ok := allIDs[id]; ok {
+			continue
+		}
+		if err := s.removeBlock(id); err != nil {
+			level.Warn(s.logger).Log("msg", "drop outdated block", "block", id, "err", err)
+		}
+	}
+	return nil
 }
 
 func (s *BucketStore) numBlocks() int {
@@ -312,6 +327,21 @@ func (s *BucketStore) setBlock(id ulid.ULID, b *bucketBlock) {
 		s.youngestBlockMaxTime = b.meta.MaxTime
 	}
 	s.gossipTimestampsFn(s.oldestBlockMinTime, s.youngestBlockMaxTime)
+}
+
+func (s *BucketStore) removeBlock(id ulid.ULID) error {
+	s.mtx.Lock()
+	b, ok := s.blocks[id]
+	delete(s.blocks, id)
+	s.mtx.Unlock()
+
+	if !ok {
+		return nil
+	}
+	if err := b.Close(); err != nil {
+		return errors.Wrap(err, "close block")
+	}
+	return os.RemoveAll(b.dir)
 }
 
 // Info implements the storepb.StoreServer interface.
