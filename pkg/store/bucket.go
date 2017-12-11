@@ -816,6 +816,8 @@ func newBucketIndexReader(ctx context.Context, logger log.Logger, block *bucketB
 }
 
 func (r *bucketIndexReader) preloadPostings() error {
+	const maxGapSize = 512 * 1024
+
 	ps := r.loadedPostings
 
 	sort.Slice(ps, func(i, j int) bool {
@@ -823,7 +825,7 @@ func (r *bucketIndexReader) preloadPostings() error {
 	})
 	parts := partitionRanges(len(ps), func(i int) (start, end uint64) {
 		return uint64(ps[i].ptr.Start), uint64(ps[i].ptr.End)
-	})
+	}, maxGapSize)
 	var g run.Group
 
 	for _, p := range parts {
@@ -859,13 +861,10 @@ func (r *bucketIndexReader) loadPostings(ctx context.Context, postings []*lazyPo
 	return nil
 }
 
-// paritionRanges partitions length entries into n <= length ranges that cover all
+// partitionRanges partitions length entries into n <= length ranges that cover all
 // input ranges.
 // It combines entries that are separated by reasonably small gaps.
-func partitionRanges(length int, rng func(int) (uint64, uint64)) (parts [][2]int) {
-	// Maximum number of empty space we accept between entries.
-	const maxGapSize = 512 * 1024
-
+func partitionRanges(length int, rng func(int) (uint64, uint64), maxGapSize uint64) (parts [][2]int) {
 	j := 0
 	k := 0
 	for k < length {
@@ -890,10 +889,11 @@ func partitionRanges(length int, rng func(int) (uint64, uint64)) (parts [][2]int
 
 func (r *bucketIndexReader) preloadSeries(ids []uint64) error {
 	const maxSeriesSize = 4096
+	const maxGapSize = 512 * 1024
 
 	parts := partitionRanges(len(ids), func(i int) (start, end uint64) {
 		return ids[i], ids[i] + maxSeriesSize
-	})
+	}, maxGapSize)
 	var g run.Group
 
 	for _, p := range parts {
@@ -1030,13 +1030,14 @@ func (r *bucketChunkReader) addPreload(id uint64) error {
 // the reader's chunk map.
 func (r *bucketChunkReader) preloadFile(g *run.Group, seq int, offsets []uint32) {
 	const maxChunkSize = 2048
+	const maxGapSize = 512 * 1024
 
 	sort.Slice(offsets, func(i, j int) bool {
 		return offsets[i] < offsets[j]
 	})
 	parts := partitionRanges(len(offsets), func(i int) (start, end uint64) {
 		return uint64(offsets[i]), uint64(offsets[i]) + maxChunkSize
-	})
+	}, maxGapSize)
 
 	for _, p := range parts {
 		ctx, cancel := context.WithCancel(r.ctx)

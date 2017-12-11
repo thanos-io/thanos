@@ -368,7 +368,7 @@ func TestPartitionRanges(t *testing.T) {
 	} {
 		res := partitionRanges(len(c.input), func(i int) (uint64, uint64) {
 			return uint64(c.input[i][0]), uint64(c.input[i][1])
-		})
+		}, maxGapSize)
 		testutil.Equals(t, c.expected, res)
 	}
 }
