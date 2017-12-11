@@ -818,38 +818,20 @@ func newBucketIndexReader(ctx context.Context, logger log.Logger, block *bucketB
 func (r *bucketIndexReader) preloadPostings() error {
 	ps := r.loadedPostings
 
-	if len(ps) == 0 {
-		return nil
-	}
 	sort.Slice(ps, func(i, j int) bool {
 		return ps[i].ptr.Start < ps[j].ptr.Start
 	})
-
+	rng := func(i int) (start, end uint64) {
+		return uint64(ps[i].ptr.Start), uint64(ps[i].ptr.End)
+	}
 	var g run.Group
 
-	const maxPostingsGap = 512 * 1024
-
-	j := 0
-	k := 0
-	for k < len(ps) {
-		j = k
-		k++
-
-		start, end := ps[j].ptr.Start, ps[j].ptr.End
-
-		// Keep growing the range until the end or we encounter a large gap.
-		for ; k < len(ps); k++ {
-			if end+maxPostingsGap < ps[k].ptr.Start {
-				break
-			}
-			end = ps[k].ptr.End
-		}
-		part := ps[j:k]
-
+	for _, p := range partitionRanges(len(ps), rng) {
 		ctx, cancel := context.WithCancel(r.ctx)
+		i, j := p[0], p[1]
 
 		g.Add(func() error {
-			return r.loadPostings(ctx, part, start, end)
+			return r.loadPostings(ctx, ps[i:j], ps[i].ptr.Start, ps[j].ptr.End)
 		}, func(err error) {
 			if err != nil {
 				cancel()
@@ -877,38 +859,50 @@ func (r *bucketIndexReader) loadPostings(ctx context.Context, postings []*lazyPo
 	return nil
 }
 
-func (r *bucketIndexReader) preloadSeries(ids []uint64) error {
-	if len(ids) == 0 {
-		return nil
-	}
-	var g run.Group
-
-	// We don't know how long a series entry will. We use this constant as a buffer size
-	// bytes which we read beyond an entries start position.
-	const maxSeriesSize = 4096
-	const maxSeriesGap = 512 * 1024
+// paritionRanges partitions length entries into n <= length ranges that cover all
+// input ranges.
+// It combines entries that are separated by reasonably small gaps.
+func partitionRanges(length int, rng func(int) (uint64, uint64)) (parts [][2]int) {
+	// Maximum number of empty space we accept between entries.
+	const maxGapSize = 512 * 1024
 
 	j := 0
 	k := 0
-	for k < len(ids) {
+	for k < length {
 		j = k
 		k++
 
-		start, end := ids[j], ids[j]+maxSeriesSize
+		_, end := rng(j)
 
 		// Keep growing the range until the end or we encounter a large gap.
-		for ; k < len(ids); k++ {
-			if end+maxSeriesGap < ids[k] {
+		for ; k < length; k++ {
+			s, e := rng(k)
+
+			if end+maxGapSize < s {
 				break
 			}
-			end = ids[k] + maxSeriesSize
+			end = e
 		}
-		part := ids[j:k]
+		parts = append(parts, [2]int{j, k})
+	}
+	return parts
+}
 
+func (r *bucketIndexReader) preloadSeries(ids []uint64) error {
+	const maxSeriesSize = 4096
+
+	rng := func(i int) (start, end uint64) {
+		return ids[i], ids[i] + maxSeriesSize
+	}
+	var g run.Group
+
+	for _, p := range partitionRanges(len(ids), rng) {
 		ctx, cancel := context.WithCancel(r.ctx)
 
 		g.Add(func() error {
-			return r.loadSeries(ctx, part, start, end)
+			i, j := p[0], p[1]
+
+			return r.loadSeries(ctx, ids[i:j], ids[i], ids[j]+maxSeriesSize)
 		}, func(err error) {
 			if err != nil {
 				cancel()
@@ -1036,39 +1030,20 @@ func (r *bucketChunkReader) addPreload(id uint64) error {
 // It attempts to conslidate requests for multiple chunks into a single one and populates
 // the reader's chunk map.
 func (r *bucketChunkReader) preloadFile(g *run.Group, seq int, offsets []uint32) {
-	if len(offsets) == 0 {
-		return
-	}
+	const maxChunkSize = 2048
+
 	sort.Slice(offsets, func(i, j int) bool {
 		return offsets[i] < offsets[j]
 	})
-	const (
-		// Maximum amount of irrelevant bytes between chunks we are willing to fetch.
-		maxChunkGap = 512 * 1024
-		// Maximum length we expect a chunk to have and prefetch.
-		maxChunkLen = 2048
-	)
+	rng := func(i int) (start, end uint64) {
+		return uint64(offsets[i]), uint64(offsets[i]) + maxChunkSize
+	}
 
-	j := 0
-	k := 0
-	for k < len(offsets) {
-		j = k
-		k++
-
-		start := offsets[j]
-		end := start + maxChunkLen
-
-		// Extend the range if the next chunk is no further than 0.5MB away.
-		// Otherwise, break out and fetch the current range.
-		for ; k < len(offsets); k++ {
-			if end+maxChunkGap < offsets[k] {
-				break
-			}
-			end = offsets[k] + maxChunkLen
-		}
-
-		inclOffs := offsets[j:k]
+	for _, p := range partitionRanges(len(offsets), rng) {
 		ctx, cancel := context.WithCancel(r.ctx)
+
+		inclOffs := offsets[p[0]:p[1]]
+		start, end := offsets[p[0]], offsets[p[1]]+maxChunkSize
 
 		g.Add(func() error {
 			now := time.Now()
