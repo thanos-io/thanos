@@ -267,7 +267,7 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 	allIDs := map[ulid.ULID]struct{}{}
 
 	err := s.bucket.Iter(ctx, "", func(name string) error {
-		// Strip trailing slash indicating the a directory.
+		// Strip trailing slash indicating a directory.
 		id, err := ulid.Parse(name[:len(name)-1])
 		if err != nil {
 			return nil
