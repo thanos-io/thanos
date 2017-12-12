@@ -6,3 +6,5 @@ Thanos is a set of clustered components that implement a scalable metric storage
 
 * [Design](/docs/design.md)
 * [Component docs](/docs/components)
+
+Currently, Thanos only supports Google Cloud Storage.
