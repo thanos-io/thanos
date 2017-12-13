@@ -86,7 +86,7 @@ func TestBucketStore_e2e(t *testing.T) {
 	store, err := NewBucketStore(nil, nil, bkt, func(mint int64, maxt int64) {
 		gossipMinTime = mint
 		gossipMaxTime = maxt
-	}, dir, 100)
+	}, dir, 100, 0)
 	testutil.Ok(t, err)
 
 	go func() {

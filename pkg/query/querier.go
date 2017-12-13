@@ -169,7 +169,7 @@ func (q *querier) selectSingle(ctx context.Context, client storepb.StoreClient, 
 			break
 		}
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "receive series")
 		}
 		set = append(set, r.Series)
 	}
