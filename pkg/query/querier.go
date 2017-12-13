@@ -2,14 +2,11 @@ package query
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"sort"
 	"sync"
-	"time"
 
 	"github.com/go-kit/kit/log"
-	yaml "gopkg.in/yaml.v1"
 
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
@@ -17,33 +14,9 @@ import (
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
 	"golang.org/x/sync/errgroup"
 )
-
-type Config struct {
-	QueryTimeout         time.Duration `yaml:"query_timeout"`
-	MaxConcurrentQueries int           `yaml:"max_conccurent_queries"`
-}
-
-func (c Config) EngineOpts(logger log.Logger) *promql.EngineOptions {
-	return &promql.EngineOptions{
-		Logger:               logger,
-		Timeout:              c.QueryTimeout,
-		MaxConcurrentQueries: c.MaxConcurrentQueries,
-	}
-}
-
-func (c Config) String() string {
-	b, err := yaml.Marshal(c)
-	if err != nil {
-		return fmt.Sprintf("<error creating config string: %s>", err)
-	}
-	return string(b)
-}
-
-var _ promql.Queryable = (*Queryable)(nil)
 
 // StoreInfo holds meta information about a store used by query.
 type StoreInfo interface {

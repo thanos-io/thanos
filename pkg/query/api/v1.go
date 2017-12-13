@@ -28,7 +28,6 @@ import (
 	"github.com/NYTimes/gziphandler"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -96,7 +95,6 @@ type apiFunc func(r *http.Request) (interface{}, *apiError)
 type API struct {
 	queryable   promql.Queryable
 	queryEngine *promql.Engine
-	cfg         query.Config
 
 	instantQueryDuration prometheus.Histogram
 	rangeQueryDuration   prometheus.Histogram
@@ -109,7 +107,6 @@ func NewAPI(
 	reg *prometheus.Registry,
 	qe *promql.Engine,
 	q promql.Queryable,
-	cfg query.Config,
 ) *API {
 	instantQueryDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name: "thanos_query_api_instant_query_duration_seconds",
@@ -131,14 +128,11 @@ func NewAPI(
 		rangeQueryDuration,
 	)
 	return &API{
-		queryEngine: qe,
-		queryable:   q,
-		cfg:         cfg,
-
+		queryEngine:          qe,
+		queryable:            q,
 		instantQueryDuration: instantQueryDuration,
 		rangeQueryDuration:   rangeQueryDuration,
-
-		now: time.Now,
+		now:                  time.Now,
 	}
 }
 
@@ -166,12 +160,6 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 	r.Get("/label/:name/values", instr("label_values", api.labelValues))
 
 	r.Get("/series", instr("series", api.series))
-	r.Del("/series", instr("drop_series", api.dropSeries))
-
-	r.Get("/targets", instr("targets", api.targets))
-	r.Get("/alertmanagers", instr("alertmanagers", api.alertmanagers))
-
-	r.Get("/status/config", instr("config", api.serveConfig))
 }
 
 type queryData struct {
@@ -398,42 +386,6 @@ func (api *API) series(r *http.Request) (interface{}, *apiError) {
 	}
 
 	return metrics, nil
-}
-
-func (api *API) dropSeries(r *http.Request) (interface{}, *apiError) {
-	return nil, &apiError{errorInternal, fmt.Errorf("not implemented")}
-}
-
-func (api *API) targets(r *http.Request) (interface{}, *apiError) {
-	// We don't have any Prometheus "called" targets.
-	// TODO(bplotka): We could possibly list all store nodes as targets?
-	return []string(nil), nil
-}
-
-// AlertmanagerDiscovery has all the active Alertmanagers.
-type AlertmanagerDiscovery struct {
-	ActiveAlertmanagers []*AlertmanagerTarget `json:"activeAlertmanagers"`
-}
-
-// AlertmanagerTarget has info on one AM.
-type AlertmanagerTarget struct {
-	URL string `json:"url"`
-}
-
-func (api *API) alertmanagers(r *http.Request) (interface{}, *apiError) {
-	// TODO(bplotka): Add relevant handling here, when rule engine will be implemented.
-	return &AlertmanagerDiscovery{}, nil
-}
-
-type prometheusConfig struct {
-	YAML string `json:"yaml"`
-}
-
-func (api *API) serveConfig(r *http.Request) (interface{}, *apiError) {
-	cfg := &prometheusConfig{
-		YAML: api.cfg.String(),
-	}
-	return cfg, nil
 }
 
 func respond(w http.ResponseWriter, data interface{}) {

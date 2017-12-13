@@ -47,25 +47,27 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 		String()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
-		peer, err := cluster.Join(
-			logger,
-			reg,
+		pstate := cluster.PeerState{
+			Type:    cluster.PeerTypeQuery,
+			APIAddr: *httpAddr,
+		}
+		peer, err := cluster.Join(logger, reg,
 			*clusterBindAddr,
 			*clusterAdvertiseAddr,
 			*peers,
-			cluster.PeerState{
-				Type:    cluster.PeerTypeQuery,
-				APIAddr: *httpAddr,
-			},
+			pstate,
 			true,
 		)
 		if err != nil {
 			return errors.Wrap(err, "join cluster")
 		}
-		return runQuery(g, logger, reg, tracer, *httpAddr, query.Config{
-			QueryTimeout:         *queryTimeout,
-			MaxConcurrentQueries: *maxConcurrentQueries,
-		}, *replicaLabel, peer)
+		return runQuery(g, logger, reg, tracer,
+			*httpAddr,
+			*maxConcurrentQueries,
+			*queryTimeout,
+			*replicaLabel,
+			peer,
+		)
 	}
 }
 
@@ -77,17 +79,22 @@ func runQuery(
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	httpAddr string,
-	cfg query.Config,
+	maxConcurrentQueries int,
+	queryTimeout time.Duration,
 	replicaLabel string,
 	peer *cluster.Peer,
 ) error {
+	pqlOpts := &promql.EngineOptions{
+		Logger:               logger,
+		Metrics:              reg,
+		Timeout:              queryTimeout,
+		MaxConcurrentQueries: maxConcurrentQueries,
+	}
 	var (
 		stores    = cluster.NewStoreSet(logger, reg, tracer, peer)
 		queryable = query.NewQueryable(logger, stores.Get, replicaLabel)
-		engine    = promql.NewEngine(queryable, cfg.EngineOpts(logger))
-		api       = v1.NewAPI(reg, engine, queryable, cfg)
+		engine    = promql.NewEngine(queryable, pqlOpts)
 	)
-
 	// Periodically update the store set with the addresses we see in our cluster.
 	{
 		ctx, cancel := context.WithCancel(context.Background())
@@ -104,8 +111,10 @@ func runQuery(
 	// Start query API + UI HTTP server.
 	{
 		router := route.New()
-		api.Register(router.WithPrefix("/api/v1"), tracer, logger)
 		ui.New(logger, nil).Register(router)
+
+		api := v1.NewAPI(reg, engine, queryable)
+		api.Register(router.WithPrefix("/api/v1"), tracer, logger)
 
 		mux := http.NewServeMux()
 		registerMetrics(mux, reg)
