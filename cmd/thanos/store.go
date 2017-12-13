@@ -2,11 +2,10 @@ package main
 
 import (
 	"context"
+	"math"
 	"net"
 	"net/http"
 	"time"
-
-	"math"
 
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
@@ -40,6 +39,9 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
 		PlaceHolder("<bucket>").Required().String()
 
+	indexCacheSize := cmd.Flag("index-cache-size", "Number of data records that are kept in the index cache.").
+		Default("100000").Int()
+
 	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
 
 	clusterBindAddr := cmd.Flag("cluster.address", "listen address for clutser").
@@ -49,26 +51,37 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 		String()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
+		pstate := cluster.PeerState{
+			Type:    cluster.PeerTypeStore,
+			APIAddr: *grpcAddr,
+			Metadata: cluster.PeerMetadata{
+				MinTime: math.MinInt64,
+				MaxTime: math.MaxInt64,
+			},
+		}
 		p, err := cluster.Join(
 			logger,
 			reg,
 			*clusterBindAddr,
 			*clusterAdvertiseAddr,
 			*peers,
-			cluster.PeerState{
-				Type:    cluster.PeerTypeStore,
-				APIAddr: *grpcAddr,
-				Metadata: cluster.PeerMetadata{
-					MinTime: math.MinInt64,
-					MaxTime: math.MaxInt64,
-				},
-			},
+			pstate,
 			false,
 		)
 		if err != nil {
 			return errors.Wrap(err, "join cluster")
 		}
-		return runStore(g, logger, reg, tracer, *gcsBucket, *dataDir, *grpcAddr, *httpAddr, p.SetTimestamps)
+		return runStore(g,
+			logger,
+			reg,
+			tracer,
+			*gcsBucket,
+			*dataDir,
+			*grpcAddr,
+			*httpAddr,
+			p.SetTimestamps,
+			*indexCacheSize,
+		)
 	}
 }
 
@@ -85,6 +98,7 @@ func runStore(
 	grpcAddr string,
 	httpAddr string,
 	gossipTimestampsFn func(mint int64, maxt int64),
+	indexCacheSize int,
 ) error {
 	{
 		gcsClient, err := storage.NewClient(context.Background())
@@ -102,6 +116,7 @@ func runStore(
 			bkt,
 			gossipTimestampsFn,
 			dataDir,
+			indexCacheSize,
 		)
 		if err != nil {
 			return errors.Wrap(err, "create GCS store")
