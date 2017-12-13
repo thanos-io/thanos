@@ -15,10 +15,10 @@ func translateMatcher(m storepb.LabelMatcher) (labels.Matcher, error) {
 		return labels.Not(labels.NewEqualMatcher(m.Name, m.Value)), nil
 
 	case storepb.LabelMatcher_RE:
-		return labels.NewRegexpMatcher(m.Name, m.Value)
+		return labels.NewRegexpMatcher(m.Name, "^(?:"+m.Value+")$")
 
 	case storepb.LabelMatcher_NRE:
-		m, err := labels.NewRegexpMatcher(m.Name, m.Value)
+		m, err := labels.NewRegexpMatcher(m.Name, "^(?:"+m.Value+")$")
 		if err != nil {
 			return nil, err
 		}
