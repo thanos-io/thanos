@@ -92,10 +92,11 @@ func (b *metricBucket) GetRange(ctx context.Context, name string, off, length in
 // BucketStore implements the store API backed by a Bucket bucket. It loads all index
 // files to local disk.
 type BucketStore struct {
-	logger  log.Logger
-	metrics *bucketStoreMetrics
-	bucket  Bucket
-	dir     string
+	logger     log.Logger
+	metrics    *bucketStoreMetrics
+	bucket     Bucket
+	dir        string
+	indexCache *indexCache
 
 	mtx                sync.RWMutex
 	blocks             map[ulid.ULID]*bucketBlock
@@ -217,6 +218,7 @@ func NewBucketStore(
 	bucket Bucket,
 	gossipTimestampsFn func(mint int64, maxt int64),
 	dir string,
+	indexCacheSize int,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -224,10 +226,15 @@ func NewBucketStore(
 	if gossipTimestampsFn == nil {
 		gossipTimestampsFn = func(mint int64, maxt int64) {}
 	}
+	indexCache, err := newIndexCache(indexCacheSize)
+	if err != nil {
+		return nil, errors.Wrap(err, "create index cache")
+	}
 	s := &BucketStore{
 		logger:               logger,
 		bucket:               bucket,
 		dir:                  dir,
+		indexCache:           indexCache,
 		blocks:               map[ulid.ULID]*bucketBlock{},
 		gossipTimestampsFn:   gossipTimestampsFn,
 		oldestBlockMinTime:   math.MaxInt64,
@@ -249,7 +256,7 @@ func NewBucketStore(
 		}
 		d := filepath.Join(dir, dn)
 
-		b, err := newBucketBlock(context.TODO(), logger, bucket, id, d)
+		b, err := newBucketBlock(context.TODO(), log.With(logger, "block", id), bucket, id, d, s.indexCache)
 		if err != nil {
 			level.Warn(s.logger).Log("msg", "loading block failed", "id", id, "err", err)
 			// Wipe the directory so we can cleanly try again later.
@@ -286,7 +293,7 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 			for id := range blockc {
 				dir := filepath.Join(s.dir, id.String())
 
-				b, err := newBucketBlock(ctx, s.logger, s.bucket, id, dir)
+				b, err := newBucketBlock(ctx, s.logger, s.bucket, id, dir, s.indexCache)
 				if err != nil {
 					level.Warn(s.logger).Log("msg", "loading block failed", "id", id, "err", err)
 					// Wipe the directory so we can cleanly try again later.
@@ -718,10 +725,11 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 // bucketBlock represents a block that is located in a bucket. It holds intermediate
 // state for the block on local disk.
 type bucketBlock struct {
-	logger log.Logger
-	bucket Bucket
-	meta   *block.Meta
-	dir    string
+	logger     log.Logger
+	bucket     Bucket
+	meta       *block.Meta
+	dir        string
+	indexCache *indexCache
 
 	symbols  map[uint32]string
 	lvals    map[string][]string
@@ -739,11 +747,13 @@ func newBucketBlock(
 	bkt Bucket,
 	id ulid.ULID,
 	dir string,
+	indexCache *indexCache,
 ) (*bucketBlock, error) {
 	b := &bucketBlock{
-		logger:   logger,
-		bucket:   bkt,
-		indexObj: path.Join(id.String(), "index"),
+		logger:     logger,
+		bucket:     bkt,
+		indexObj:   path.Join(id.String(), "index"),
+		indexCache: indexCache,
 	}
 	if err := b.loadMeta(ctx, id, dir); err != nil {
 		return nil, errors.Wrap(err, "load meta")
@@ -875,7 +885,7 @@ func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length i
 
 func (b *bucketBlock) indexReader(ctx context.Context) *bucketIndexReader {
 	b.pendingReaders.Add(1)
-	return newBucketIndexReader(ctx, b.logger, b)
+	return newBucketIndexReader(ctx, b.logger, b, b.indexCache)
 }
 
 func (b *bucketBlock) chunkReader(ctx context.Context) *bucketChunkReader {
@@ -895,19 +905,21 @@ type bucketIndexReader struct {
 	block  *bucketBlock
 	dec    *index.DecoderV1
 	stats  *queryStats
+	cache  *indexCache
 
 	mtx            sync.Mutex
 	loadedPostings []*lazyPostings
 	loadedSeries   map[uint64][]byte
 }
 
-func newBucketIndexReader(ctx context.Context, logger log.Logger, block *bucketBlock) *bucketIndexReader {
+func newBucketIndexReader(ctx context.Context, logger log.Logger, block *bucketBlock, cache *indexCache) *bucketIndexReader {
 	r := &bucketIndexReader{
 		logger:       logger,
 		ctx:          ctx,
 		block:        block,
 		dec:          &index.DecoderV1{},
 		stats:        &queryStats{},
+		cache:        cache,
 		loadedSeries: map[uint64][]byte{},
 	}
 	r.dec.SetSymbolTable(r.block.symbols)
@@ -967,7 +979,7 @@ func (r *bucketIndexReader) loadPostings(ctx context.Context, postings []*lazyPo
 			return errors.Wrap(err, "read postings list")
 		}
 		p.set(l)
-
+		r.cache.setPostings(r.block.meta.ULID, p.key, c)
 		// If we just fetched it we still have to update the stats for touched postings.
 		r.stats.postingsTouched++
 		r.stats.postingsTouchedSizeSum += len(c)
@@ -978,6 +990,17 @@ func (r *bucketIndexReader) loadPostings(ctx context.Context, postings []*lazyPo
 func (r *bucketIndexReader) preloadSeries(ids []uint64) error {
 	const maxSeriesSize = 4096
 	const maxGapSize = 512 * 1024
+
+	var newIDs []uint64
+
+	for _, id := range ids {
+		if b, ok := r.cache.series(r.block.meta.ULID, id); ok {
+			r.loadedSeries[id] = b
+			continue
+		}
+		newIDs = append(newIDs, id)
+	}
+	ids = newIDs
 
 	parts := partitionRanges(len(ids), func(i int) (start, end uint64) {
 		return ids[i], ids[i] + maxSeriesSize
@@ -1022,7 +1045,12 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []uint64, start,
 		if n < 1 {
 			return errors.New("reading series length failed")
 		}
-		r.loadedSeries[id] = c[n : n+int(l)]
+		if len(c) < n+int(l) {
+			return errors.Errorf("invalid remaining size %d, expected %d", len(c), n+int(l))
+		}
+		c = c[n : n+int(l)]
+		r.loadedSeries[id] = c
+		r.cache.setSeries(r.block.meta.ULID, id, c)
 	}
 	return nil
 }
@@ -1067,6 +1095,7 @@ func (r *bucketIndexReader) LabelValues(names ...string) (index.StringTuples, er
 
 type lazyPostings struct {
 	index.Postings
+	key labels.Label
 	ptr index.Range
 }
 
@@ -1084,8 +1113,18 @@ func (r *bucketIndexReader) Postings(name, value string) (index.Postings, error)
 	if !ok {
 		return index.EmptyPostings(), nil
 	}
+	if b, ok := r.cache.postings(r.block.meta.ULID, l); ok {
+		r.stats.postingsTouched++
+		r.stats.postingsTouchedSizeSum += len(b)
+
+		_, p, err := r.dec.Postings(b)
+		if err != nil {
+			return nil, errors.Wrap(err, "decode postings")
+		}
+		return p, nil
+	}
 	// The stats for touched postings are updated as they are loaded.
-	p := &lazyPostings{ptr: ptr}
+	p := &lazyPostings{key: l, ptr: ptr}
 	r.loadedPostings = append(r.loadedPostings, p)
 	return p, nil
 }
