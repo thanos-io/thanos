@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 
 	"context"
@@ -40,6 +41,11 @@ const (
 type setupFunc func(*run.Group, log.Logger, *prometheus.Registry, opentracing.Tracer) error
 
 func main() {
+	if os.Getenv("DEBUG") != "" {
+		runtime.SetMutexProfileFraction(10)
+		runtime.SetBlockProfileRate(10)
+	}
+
 	app := kingpin.New(filepath.Base(os.Args[0]), "A block storage based long-term storage for Prometheus")
 
 	app.Version(version.Print("thanos"))

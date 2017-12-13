@@ -109,7 +109,7 @@ func runStore(
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-			err := runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+			err := runutil.Repeat(3*time.Minute, ctx.Done(), func() error {
 				if err := gs.SyncBlocks(ctx); err != nil {
 					level.Warn(logger).Log("msg", "syncing blocks failed", "err", err)
 				}
