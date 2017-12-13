@@ -30,7 +30,6 @@ import (
 	"github.com/prometheus/common/route"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
@@ -38,11 +37,6 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
 )
-
-var sampleQueryConfig = query.Config{
-	MaxConcurrentQueries: 21,
-	QueryTimeout:         1 * time.Minute,
-}
 
 func TestEndpoints(t *testing.T) {
 	suite, err := promql.NewTest(t, `
@@ -65,7 +59,6 @@ func TestEndpoints(t *testing.T) {
 	api := &API{
 		queryable:   suite.Storage(),
 		queryEngine: suite.QueryEngine(),
-		cfg:         sampleQueryConfig,
 
 		instantQueryDuration: prometheus.NewHistogram(prometheus.HistogramOpts{}),
 		rangeQueryDuration:   prometheus.NewHistogram(prometheus.HistogramOpts{}),
@@ -375,20 +368,6 @@ func TestEndpoints(t *testing.T) {
 		{
 			endpoint: api.series,
 			errType:  errorBadData,
-		},
-		{
-			endpoint: api.dropSeries,
-			errType:  errorInternal,
-		},
-		{
-			endpoint: api.alertmanagers,
-			response: &AlertmanagerDiscovery{},
-		},
-		{
-			endpoint: api.serveConfig,
-			response: &prometheusConfig{
-				YAML: sampleQueryConfig.String(),
-			},
 		},
 	}
 
