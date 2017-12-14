@@ -24,15 +24,11 @@ func TestShipper_UploadBlocks(t *testing.T) {
 	testutil.Ok(t, err)
 	defer os.RemoveAll(dir)
 
-	var gotMinTime int64
-
 	bucket, close := testutil.NewObjectStoreBucket(t)
 	defer close()
 
 	shipper := New(nil, nil, dir, bucket, func() labels.Labels {
 		return labels.FromStrings("prometheus", "prom-1")
-	}, func(mint int64) {
-		gotMinTime = mint
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -91,20 +87,28 @@ func TestShipper_UploadBlocks(t *testing.T) {
 
 		testutil.Ok(t, enc.Encode(&meta))
 
-		expBlocks[id] = struct{}{}
+		// We will delete the fifth block and do not expect it to be re-uploaded later
+		if i != 4 {
+			expBlocks[id] = struct{}{}
 
-		expFiles[id.String()+"/meta.json"] = buf.Bytes()
-		expFiles[id.String()+"/index"] = []byte("indexcontents")
-		expFiles[id.String()+"/chunks/0001"] = []byte("chunkcontents1")
-		expFiles[id.String()+"/chunks/0002"] = []byte("chunkcontents2")
-
+			expFiles[id.String()+"/meta.json"] = buf.Bytes()
+			expFiles[id.String()+"/index"] = []byte("indexcontents")
+			expFiles[id.String()+"/chunks/0001"] = []byte("chunkcontents1")
+			expFiles[id.String()+"/chunks/0002"] = []byte("chunkcontents2")
+		} else {
+			testutil.Ok(t, bucket.Delete(ctx, ids[4].String()))
+		}
 		// The shipper meta file should show all blocks as uploaded.
 		shipMeta, err := ReadMetaFile(dir)
 		testutil.Ok(t, err)
 		testutil.Equals(t, &Meta{Version: 1, Uploaded: ids[:i+1]}, shipMeta)
-	}
 
-	testutil.Equals(t, timestamp.FromTime(now), gotMinTime)
+		// Verify timestamps were updated correctly.
+		minTotal, maxSync, err := shipper.Timestamps()
+		testutil.Ok(t, err)
+		testutil.Equals(t, timestamp.FromTime(now), minTotal)
+		testutil.Equals(t, meta.MaxTime, maxSync)
+	}
 
 	for id := range expBlocks {
 		ok, _ := bucket.Exists(nil, id.String())
@@ -118,4 +122,8 @@ func TestShipper_UploadBlocks(t *testing.T) {
 		testutil.Ok(t, rc.Close())
 		testutil.Equals(t, exp, act)
 	}
+	// Verify the fifth block is still deleted by the end.
+	ok, err := bucket.Exists(ctx, ids[4].String()+"/meta.json")
+	testutil.Ok(t, err)
+	testutil.Assert(t, ok == false, "fifth block was reuploaded")
 }
