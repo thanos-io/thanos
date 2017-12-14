@@ -62,7 +62,7 @@ func ContextWithOpts(ctx context.Context, opts ...Option) context.Context {
 		opt(o)
 	}
 
-	return context.WithValue(ctx, optCtxKey, opts)
+	return context.WithValue(ctx, optCtxKey, o)
 }
 
 func optsFromContext(ctx context.Context) *opts {
