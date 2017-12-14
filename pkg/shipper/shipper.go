@@ -4,6 +4,8 @@ package shipper
 
 import (
 	"context"
+	"encoding/json"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -75,15 +77,15 @@ func newMetrics(r prometheus.Registerer) *metrics {
 // Shipper watches a directory for matching files and directories and uploads
 // them to a remote data store.
 type Shipper struct {
-	logger log.Logger
-	dir    string
-	bucket Bucket
-	match  func(os.FileInfo) bool
-	labels func() labels.Labels
+	logger  log.Logger
+	dir     string
+	metrics *metrics
+	bucket  Bucket
+	match   func(os.FileInfo) bool
+	labels  func() labels.Labels
+
 	// MaxTime timestamp does not make sense for sidecar, so we need to gossip minTime only. We always have freshest data.
 	gossipMinTimeFn func(mint int64)
-
-	metrics *metrics
 }
 
 // New creates a new shipper that detects new TSDB blocks in dir and uploads them
@@ -116,11 +118,32 @@ func New(
 }
 
 // Sync performs a single synchronization if the local block data with the remote end.
+// It is not concurrency-safe.
 func (s *Shipper) Sync(ctx context.Context) {
 	names, err := fileutil.ReadDir(s.dir)
 	if err != nil {
 		level.Warn(s.logger).Log("msg", "read dir failed", "err", err)
 	}
+
+	meta, err := ReadMetaFile(s.dir)
+	if err != nil {
+		// If we encounter any error, wipe the meta file (if existant) and proceed.
+		// The meta file is only used to deduplicate uploads, which are properly handled
+		// by the system if their occur anyway.
+		if !os.IsNotExist(err) {
+			level.Warn(s.logger).Log("msg", "reading meta file failed, removing it", "err", err)
+			os.RemoveAll(filepath.Join(s.dir, MetaFilename))
+		}
+		meta = &Meta{Version: 1}
+	}
+	// Build a map of blocks we already uploaded.
+	hasUploaded := make(map[ulid.ULID]struct{}, len(meta.Uploaded))
+
+	for _, id := range meta.Uploaded {
+		hasUploaded[id] = struct{}{}
+	}
+	// Reset the uploaded slice so we can rebuild it only with blocks that still exist locally.
+	meta.Uploaded = nil
 
 	var oldestBlockMinTime int64 = math.MaxInt64
 	for _, fn := range names {
@@ -138,64 +161,72 @@ func (s *Shipper) Sync(ctx context.Context) {
 		if !fi.IsDir() {
 			continue
 		}
-		minTime, err := s.sync(ctx, id, dir)
+		m, err := block.ReadMetaFile(dir)
 		if err != nil {
-			level.Error(s.logger).Log("msg", "shipping failed", "dir", dir, "err", err)
+			level.Warn(s.logger).Log("msg", "reading meta file failed", "err", err)
 			continue
 		}
-
-		if minTime < oldestBlockMinTime || oldestBlockMinTime == math.MaxInt64 {
-			oldestBlockMinTime = minTime
+		// Do not sync a block if we already uploaded it. If it is no longer found in the bucket,
+		// it was generally removed by the compaction process.
+		if _, ok := hasUploaded[id]; !ok {
+			if err := s.sync(ctx, m, dir); err != nil {
+				level.Error(s.logger).Log("msg", "shipping failed", "dir", dir, "err", err)
+				continue
+			}
 		}
+
+		if m.MinTime < oldestBlockMinTime || oldestBlockMinTime == math.MaxInt64 {
+			oldestBlockMinTime = m.MinTime
+		}
+		meta.Uploaded = append(meta.Uploaded, id)
 	}
 
 	if oldestBlockMinTime != math.MaxInt64 {
 		s.gossipMinTimeFn(oldestBlockMinTime)
 	}
+	if err := WriteMetaFile(s.dir, meta); err != nil {
+		level.Warn(s.logger).Log("msg", "updating meta file failed", "err", err)
+	}
 }
 
-func (s *Shipper) sync(ctx context.Context, id ulid.ULID, dir string) (minTime int64, err error) {
-	meta, err := block.ReadMetaFile(dir)
-	if err != nil {
-		return 0, errors.Wrap(err, "read meta file")
-	}
+func (s *Shipper) sync(ctx context.Context, meta *block.Meta, dir string) (err error) {
 	// We only ship of the first compacted block level.
 	if meta.Compaction.Level > 1 {
-		return meta.MinTime, nil
+		return nil
 	}
-	ok, err := s.bucket.Exists(ctx, id.String())
+	ok, err := s.bucket.Exists(ctx, meta.ULID.String())
 	if err != nil {
-		return 0, errors.Wrap(err, "check exists")
+		return errors.Wrap(err, "check exists")
 	}
 	if ok {
-		return meta.MinTime, nil
+		return nil
 	}
 
-	level.Info(s.logger).Log("msg", "upload new block", "id", id)
+	level.Info(s.logger).Log("msg", "upload new block", "id", meta.ULID)
 
 	// We hard-link the files into a temporary upload directory so we are not affected
 	// by other operations happening against the TSDB directory.
 	updir := filepath.Join(s.dir, "thanos", "upload")
 
 	if err := os.RemoveAll(updir); err != nil {
-		return 0, errors.Wrap(err, "clean upload directory")
+		return errors.Wrap(err, "clean upload directory")
 	}
 	if err := os.MkdirAll(updir, 0777); err != nil {
-		return 0, errors.Wrap(err, "create upload dir")
+		return errors.Wrap(err, "create upload dir")
 	}
 	defer os.RemoveAll(updir)
 
 	if err := hardlinkBlock(dir, updir); err != nil {
-		return 0, errors.Wrap(err, "hard link block")
+		return errors.Wrap(err, "hard link block")
 	}
 	// Attach current labels and write a new meta file with Thanos extensions.
 	if lset := s.labels(); lset != nil {
 		meta.Thanos.Labels = lset.Map()
 	}
 	if err := block.WriteMetaFile(updir, meta); err != nil {
-		return 0, errors.Wrap(err, "write meta file")
+		return errors.Wrap(err, "write meta file")
 	}
-	return meta.MinTime, s.uploadDir(ctx, id, updir)
+	return s.uploadDir(ctx, meta.ULID, updir)
 }
 
 // uploadDir uploads the given directory to the remote site.
@@ -257,4 +288,75 @@ func hardlinkBlock(src, dst string) error {
 		}
 	}
 	return nil
+}
+
+// Meta defines the fomart thanos.shipper.json file that the shipper places in the data directory.
+type Meta struct {
+	Version  int         `json:"version"`
+	Uploaded []ulid.ULID `json:"uploaded"`
+}
+
+// MetaFilename is the known JSON filename for meta information.
+const MetaFilename = "thanos.shipper.json"
+
+// WriteMetaFile writes the given meta into <dir>/thanos.shipper.json.
+func WriteMetaFile(dir string, meta *Meta) error {
+	// Make any changes to the file appear atomic.
+	path := filepath.Join(dir, MetaFilename)
+	tmp := path + ".tmp"
+
+	f, err := os.Create(tmp)
+	if err != nil {
+		return err
+	}
+
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "\t")
+
+	if err := enc.Encode(meta); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return renameFile(tmp, path)
+}
+
+// ReadMetaFile reads the given meta from <dir>/thanos.shipper.json.
+func ReadMetaFile(dir string) (*Meta, error) {
+	b, err := ioutil.ReadFile(filepath.Join(dir, MetaFilename))
+	if err != nil {
+		return nil, err
+	}
+	var m Meta
+
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	if m.Version != 1 {
+		return nil, errors.Errorf("unexpected meta file version %d", m.Version)
+	}
+	return &m, nil
+}
+
+func renameFile(from, to string) error {
+	if err := os.RemoveAll(to); err != nil {
+		return err
+	}
+	if err := os.Rename(from, to); err != nil {
+		return err
+	}
+
+	// Directory was renamed; sync parent dir to persist rename.
+	pdir, err := fileutil.OpenDir(filepath.Dir(to))
+	if err != nil {
+		return err
+	}
+
+	if err = fileutil.Fsync(pdir); err != nil {
+		pdir.Close()
+		return err
+	}
+	return pdir.Close()
 }

@@ -2,26 +2,21 @@ package shipper
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"io/ioutil"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/oklog/ulid"
-	"github.com/prometheus/tsdb/labels"
-
-	"context"
-	"io/ioutil"
-
-	"os"
-
 	"time"
 
 	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/objstore/inmem"
 	"github.com/improbable-eng/thanos/pkg/testutil"
+	"github.com/oklog/ulid"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/tsdb"
+	"github.com/prometheus/tsdb/labels"
 )
 
 func TestShipper_UploadBlocks(t *testing.T) {
@@ -30,7 +25,10 @@ func TestShipper_UploadBlocks(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	var gotMinTime int64
-	bucket := inmem.NewBucket()
+
+	bucket, close := testutil.NewObjectStoreBucket(t)
+	defer close()
+
 	shipper := New(nil, nil, dir, bucket, func() labels.Labels {
 		return labels.FromStrings("prometheus", "prom-1")
 	}, func(mint int64) {
@@ -40,16 +38,18 @@ func TestShipper_UploadBlocks(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Create 10 directories with ULIDs as names
-	const numDirs = 10
-	rands := rand.New(rand.NewSource(0))
+	// Create 10 new blocks that should actually be uploaded.
+	var (
+		expBlocks = map[ulid.ULID]struct{}{}
+		expFiles  = map[string][]byte{}
+		randr     = rand.New(rand.NewSource(0))
+		now       = time.Now()
+		ids       []ulid.ULID
+	)
+	for i := 0; i < 10; i++ {
+		id := ulid.MustNew(uint64(i), randr)
+		ids = append(ids, id)
 
-	expBlocks := map[ulid.ULID]struct{}{}
-	expFiles := map[string][]byte{}
-
-	now := time.Now()
-	for i := 0; i < numDirs; i++ {
-		id := ulid.MustNew(uint64(i), rands)
 		bdir := filepath.Join(dir, id.String())
 		tmp := bdir + ".tmp"
 
@@ -82,8 +82,6 @@ func TestShipper_UploadBlocks(t *testing.T) {
 		// After rename sync should upload the block.
 		shipper.Sync(ctx)
 
-		expBlocks[id] = struct{}{}
-
 		// The external labels must be attached to the meta file on upload.
 		meta.Thanos.Labels = map[string]string{"prometheus": "prom-1"}
 
@@ -93,10 +91,17 @@ func TestShipper_UploadBlocks(t *testing.T) {
 
 		testutil.Ok(t, enc.Encode(&meta))
 
+		expBlocks[id] = struct{}{}
+
 		expFiles[id.String()+"/meta.json"] = buf.Bytes()
 		expFiles[id.String()+"/index"] = []byte("indexcontents")
 		expFiles[id.String()+"/chunks/0001"] = []byte("chunkcontents1")
 		expFiles[id.String()+"/chunks/0002"] = []byte("chunkcontents2")
+
+		// The shipper meta file should show all blocks as uploaded.
+		shipMeta, err := ReadMetaFile(dir)
+		testutil.Ok(t, err)
+		testutil.Equals(t, &Meta{Version: 1, Uploaded: ids[:i+1]}, shipMeta)
 	}
 
 	testutil.Equals(t, timestamp.FromTime(now), gotMinTime)
@@ -106,8 +111,11 @@ func TestShipper_UploadBlocks(t *testing.T) {
 		testutil.Assert(t, ok, "block %s was not uploaded", id)
 	}
 	for fn, exp := range expFiles {
-		act, ok := bucket.Objects()[fn]
-		testutil.Assert(t, ok, "file %s was not uploaded", fn)
+		rc, err := bucket.Get(ctx, fn)
+		testutil.Ok(t, err)
+		act, err := ioutil.ReadAll(rc)
+		testutil.Ok(t, err)
+		testutil.Ok(t, rc.Close())
 		testutil.Equals(t, exp, act)
 	}
 }
