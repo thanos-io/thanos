@@ -42,6 +42,9 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	indexCacheSize := cmd.Flag("index-cache-size", "Number of data records that are kept in the index cache.").
 		Default("100000").Int()
 
+	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatble bytes for chunks.").
+		Default("2GB").Bytes()
+
 	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
 
 	clusterBindAddr := cmd.Flag("cluster.address", "listen address for clutser").
@@ -81,6 +84,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			*httpAddr,
 			p.SetTimestamps,
 			*indexCacheSize,
+			uint64(*chunkPoolSize),
 		)
 	}
 }
@@ -99,6 +103,7 @@ func runStore(
 	httpAddr string,
 	gossipTimestampsFn func(mint int64, maxt int64),
 	indexCacheSize int,
+	chunkPoolSizeBytes uint64,
 ) error {
 	{
 		gcsClient, err := storage.NewClient(context.Background())
@@ -117,6 +122,7 @@ func runStore(
 			gossipTimestampsFn,
 			dataDir,
 			indexCacheSize,
+			chunkPoolSizeBytes,
 		)
 		if err != nil {
 			return errors.Wrap(err, "create GCS store")

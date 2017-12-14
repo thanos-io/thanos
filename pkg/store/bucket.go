@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/pool"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/strutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
@@ -94,6 +96,7 @@ type BucketStore struct {
 	bucket     Bucket
 	dir        string
 	indexCache *indexCache
+	chunkPool  *pool.BytesPool
 
 	mtx                sync.RWMutex
 	blocks             map[ulid.ULID]*bucketBlock
@@ -216,6 +219,7 @@ func NewBucketStore(
 	gossipTimestampsFn func(mint int64, maxt int64),
 	dir string,
 	indexCacheSize int,
+	maxChunkPoolBytes uint64,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -227,11 +231,16 @@ func NewBucketStore(
 	if err != nil {
 		return nil, errors.Wrap(err, "create index cache")
 	}
+	chunkPool, err := pool.NewBytesPool(1e6, 50e6, 2, maxChunkPoolBytes)
+	if err != nil {
+		return nil, errors.Wrap(err, "create chunk pool")
+	}
 	s := &BucketStore{
 		logger:               logger,
 		bucket:               bucket,
 		dir:                  dir,
 		indexCache:           indexCache,
+		chunkPool:            chunkPool,
 		blocks:               map[ulid.ULID]*bucketBlock{},
 		gossipTimestampsFn:   gossipTimestampsFn,
 		oldestBlockMinTime:   math.MaxInt64,
@@ -251,13 +260,21 @@ func NewBucketStore(
 		if err != nil {
 			continue
 		}
-		d := filepath.Join(dir, dn)
+		blockDir := filepath.Join(dir, dn)
 
-		b, err := newBucketBlock(context.TODO(), log.With(logger, "block", id), bucket, id, d, s.indexCache)
+		b, err := newBucketBlock(
+			context.TODO(),
+			log.With(logger, "block", id),
+			bucket,
+			id,
+			blockDir,
+			s.indexCache,
+			s.chunkPool,
+		)
 		if err != nil {
 			level.Warn(s.logger).Log("msg", "loading block failed", "id", id, "err", err)
 			// Wipe the directory so we can cleanly try again later.
-			os.RemoveAll(d)
+			os.RemoveAll(blockDir)
 			continue
 		}
 		s.setBlock(id, b)
@@ -290,7 +307,7 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 			for id := range blockc {
 				dir := filepath.Join(s.dir, id.String())
 
-				b, err := newBucketBlock(ctx, s.logger, s.bucket, id, dir, s.indexCache)
+				b, err := newBucketBlock(ctx, s.logger, s.bucket, id, dir, s.indexCache, s.chunkPool)
 				if err != nil {
 					level.Warn(s.logger).Log("msg", "loading block failed", "id", id, "err", err)
 					// Wipe the directory so we can cleanly try again later.
@@ -442,14 +459,15 @@ func measureTime(f func() error) (time.Duration, error) {
 	return time.Since(s), err
 }
 
-func (s *BucketStore) blockSeries(ctx context.Context, b *bucketBlock, matchers []labels.Matcher, mint, maxt int64) (storepb.SeriesSet, *queryStats, error) {
-	var (
-		stats  = &queryStats{}
-		indexr = b.indexReader(ctx)
-		chunkr = b.chunkReader(ctx)
-	)
-	defer indexr.Close()
-	defer chunkr.Close()
+func (s *BucketStore) blockSeries(
+	ctx context.Context,
+	extLset map[string]string,
+	indexr *bucketIndexReader,
+	chunkr *bucketChunkReader,
+	matchers []labels.Matcher,
+	mint, maxt int64,
+) (storepb.SeriesSet, *queryStats, error) {
+	stats := &queryStats{}
 
 	// The postings to preload are registered within the call to PostingsForMatchers,
 	// when it invokes indexr.Postings for each underlying postings list.
@@ -476,10 +494,9 @@ func (s *BucketStore) blockSeries(ctx context.Context, b *bucketBlock, matchers 
 	// Transform all series into the response types and mark their relevant chunks
 	// for preloading.
 	var (
-		res     []seriesEntry
-		lset    labels.Labels
-		chks    []chunks.Meta
-		extLset = b.meta.Thanos.Labels
+		res  []seriesEntry
+		lset labels.Labels
+		chks []chunks.Meta
 	)
 Outer:
 	for _, id := range ps {
@@ -580,13 +597,25 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		}
 		stats.blocksQueried++
 
-		block := b
+		b := b
 		ctx, cancel := context.WithCancel(srv.Context())
 
+		// We must keep the readers open until all their data has been sent.
+		indexr := b.indexReader(ctx)
+		chunkr := b.chunkReader(ctx)
+		defer indexr.Close()
+		defer chunkr.Close()
+
 		g.Add(func() error {
-			part, pstats, err := s.blockSeries(ctx, block, blockMatchers, req.MinTime, req.MaxTime)
+			part, pstats, err := s.blockSeries(ctx,
+				b.meta.Thanos.Labels,
+				indexr,
+				chunkr,
+				blockMatchers,
+				req.MinTime, req.MaxTime,
+			)
 			if err != nil {
-				return errors.Wrapf(err, "fetch series for block %s", block.meta.ULID)
+				return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
 			}
 
 			mtx.Lock()
@@ -636,11 +665,11 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			stats.mergedChunksCount += len(resp.Series.Chunks)
 
 			if err := srv.Send(&resp); err != nil {
-				return errors.Wrap(err, "send series response")
+				return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
 			}
 		}
 		if set.Err() != nil {
-			return errors.Wrap(set.Err(), "expand series set")
+			return status.Error(codes.Unknown, errors.Wrap(set.Err(), "expand series set").Error())
 		}
 		stats.mergeDuration = time.Since(begin)
 		s.metrics.seriesMergeDuration.Observe(stats.mergeDuration.Seconds())
@@ -727,6 +756,7 @@ type bucketBlock struct {
 	meta       *block.Meta
 	dir        string
 	indexCache *indexCache
+	chunkPool  *pool.BytesPool
 
 	symbols  map[uint32]string
 	lvals    map[string][]string
@@ -745,12 +775,14 @@ func newBucketBlock(
 	id ulid.ULID,
 	dir string,
 	indexCache *indexCache,
+	chunkPool *pool.BytesPool,
 ) (*bucketBlock, error) {
 	b := &bucketBlock{
 		logger:     logger,
 		bucket:     bkt,
 		indexObj:   path.Join(id.String(), "index"),
 		indexCache: indexCache,
+		chunkPool:  chunkPool,
 	}
 	if err := b.loadMeta(ctx, id, dir); err != nil {
 		return nil, errors.Wrap(err, "load meta")
@@ -867,17 +899,22 @@ func (b *bucketBlock) readIndexRange(ctx context.Context, off, length int64) ([]
 }
 
 func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length int64) ([]byte, error) {
+	c, err := b.chunkPool.Get(int(length))
+	if err != nil {
+		return nil, errors.Wrap(err, "allocate chunk bytes")
+	}
+	buf := bytes.NewBuffer(c)
+
 	r, err := b.bucket.GetRange(ctx, b.chunkObjs[seq], off, length)
 	if err != nil {
 		return nil, errors.Wrap(err, "get range reader")
 	}
 	defer r.Close()
 
-	c, err := ioutil.ReadAll(r)
-	if err != nil {
+	if _, err = io.Copy(buf, r); err != nil {
 		return nil, errors.Wrap(err, "read range")
 	}
-	return c, nil
+	return buf.Bytes(), nil
 }
 
 func (b *bucketBlock) indexReader(ctx context.Context) *bucketIndexReader {
@@ -1166,6 +1203,9 @@ type bucketChunkReader struct {
 	preloads [][]uint32
 	mtx      sync.Mutex
 	chunks   map[uint64]chunkenc.Chunk
+
+	// Byte slice to return to the chunk pool on close.
+	chunkBytes [][]byte
 }
 
 func newBucketChunkReader(ctx context.Context, block *bucketBlock) *bucketChunkReader {
@@ -1232,6 +1272,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, offs []uint32, seq i
 	if err != nil {
 		return errors.Wrapf(err, "read range for %d", seq)
 	}
+	r.chunkBytes = append(r.chunkBytes, b)
 
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
@@ -1278,6 +1319,10 @@ func (r *bucketChunkReader) Chunk(id uint64) (chunkenc.Chunk, error) {
 
 func (r *bucketChunkReader) Close() error {
 	r.block.pendingReaders.Done()
+
+	for _, b := range r.chunkBytes {
+		r.block.chunkPool.Put(b)
+	}
 	return nil
 }
 
