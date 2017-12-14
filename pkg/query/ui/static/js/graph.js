@@ -76,6 +76,8 @@ Prometheus.Graph.prototype.initialize = function() {
   });
   self.expr.change(self.handleChange);
 
+  self.dedupBtn = self.queryForm.find(".dedup_btn");
+  self.enableDedup = self.queryForm.find("input[name=dedup]");
   self.rangeInput = self.queryForm.find("input[name=range_input]");
   self.stackedBtn = self.queryForm.find(".stacked_btn");
   self.stacked = self.queryForm.find("input[name=stacked]");
@@ -155,6 +157,26 @@ Prometheus.Graph.prototype.initialize = function() {
     self.stacked.val(self.isStacked() ? '0' : '1');
     styleStackBtn();
     self.updateGraph();
+  });
+
+  self.isDedupEnabled = function() {
+      return self.enableDedup.val() === '1';
+  };
+  var styleDedupBtn = function() {
+      var icon = self.dedupBtn.find('.glyphicon');
+      if (self.isDedupEnabled()) {
+          icon.addClass("glyphicon-check");
+          icon.removeClass("glyphicon-unchecked");
+      } else {
+          icon.addClass("glyphicon-unchecked");
+          icon.removeClass("glyphicon-check");
+      }
+  };
+  styleDedupBtn();
+
+  self.dedupBtn.click(function() {
+      self.enableDedup.val(self.isDedupEnabled() ? '0' : '1');
+      styleDedupBtn();
   });
 
   self.queryForm.submit(function() {
@@ -404,8 +426,11 @@ Prometheus.Graph.prototype.submitQuery = function() {
   var url;
   var success;
   var params = {
-    "query": self.expr.val()
+    "query": self.expr.val(),
   };
+
+  params.dedup = (self.isDedupEnabled() ? 'true' : 'false');
+
   if (self.options.tab === 0) {
     params.start = endDate - rangeSeconds;
     params.end = endDate;

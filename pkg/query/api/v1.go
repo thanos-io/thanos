@@ -28,6 +28,7 @@ import (
 	"github.com/NYTimes/gziphandler"
 
 	"github.com/go-kit/kit/log"
+	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -195,6 +196,18 @@ func (api *API) query(r *http.Request) (interface{}, *apiError) {
 		defer cancel()
 	}
 
+	var opts []query.Option
+	// Allow disabling deduplication on demand.
+	if dedup := r.FormValue("dedup"); dedup != "" {
+		enableDeduplication, err := strconv.ParseBool(dedup)
+		if err != nil {
+			return nil, &apiError{errorBadData, errors.Wrap(err, "'dedup' parameter")}
+		}
+		if !enableDeduplication {
+			opts = append(opts, query.WithDisabledDeduplication())
+		}
+	}
+
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(r.Context(), "promql_instant_query")
 	defer span.Finish()
@@ -205,7 +218,8 @@ func (api *API) query(r *http.Request) (interface{}, *apiError) {
 		return nil, &apiError{errorBadData, err}
 	}
 
-	res := qry.Exec(ctx)
+	// TODO(Bplotka): Add proper query.PartialErrorReporter to opts when UI is ready.
+	res := qry.Exec(query.ContextWithOpts(ctx, opts...))
 	if res.Err != nil {
 		switch res.Err.(type) {
 		case promql.ErrQueryCanceled:
@@ -268,6 +282,18 @@ func (api *API) queryRange(r *http.Request) (interface{}, *apiError) {
 		defer cancel()
 	}
 
+	var opts []query.Option
+	// Allow disabling deduplication on demand.
+	if dedup := r.FormValue("dedup"); dedup != "" {
+		enableDeduplication, err := strconv.ParseBool(dedup)
+		if err != nil {
+			return nil, &apiError{errorBadData, errors.Wrap(err, "'dedup' parameter")}
+		}
+		if !enableDeduplication {
+			opts = append(opts, query.WithDisabledDeduplication())
+		}
+	}
+
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(r.Context(), "promql_range_query")
 	defer span.Finish()
@@ -278,7 +304,8 @@ func (api *API) queryRange(r *http.Request) (interface{}, *apiError) {
 		return nil, &apiError{errorBadData, err}
 	}
 
-	res := qry.Exec(ctx)
+	// TODO(Bplotka): Add proper query.PartialErrorReporter to opts when UI is ready.
+	res := qry.Exec(query.ContextWithOpts(ctx, opts...))
 	if res.Err != nil {
 		switch res.Err.(type) {
 		case promql.ErrQueryCanceled:
@@ -303,6 +330,7 @@ func (api *API) labelValues(r *http.Request) (interface{}, *apiError) {
 	if !model.LabelNameRE.MatchString(name) {
 		return nil, &apiError{errorBadData, fmt.Errorf("invalid label name: %q", name)}
 	}
+
 	q, err := api.queryable.Querier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, &apiError{errorExec, err}
@@ -310,6 +338,7 @@ func (api *API) labelValues(r *http.Request) (interface{}, *apiError) {
 	defer q.Close()
 
 	// TODO(fabxc): add back request context.
+
 	vals, err := q.LabelValues(name)
 	if err != nil {
 		return nil, &apiError{errorExec, err}
@@ -360,7 +389,20 @@ func (api *API) series(r *http.Request) (interface{}, *apiError) {
 		matcherSets = append(matcherSets, matchers)
 	}
 
-	q, err := api.queryable.Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
+	var opts []query.Option
+	// Allow disabling deduplication on demand.
+	if dedup := r.FormValue("dedup"); dedup != "" {
+		enableDeduplication, err := strconv.ParseBool(r.FormValue("dedup"))
+		if err != nil {
+			return nil, &apiError{errorBadData, errors.Wrap(err, "'dedup' parameter")}
+		}
+		if !enableDeduplication {
+			opts = append(opts, query.WithDisabledDeduplication())
+		}
+	}
+
+	// TODO(Bplotka): Add proper query.PartialErrorReporter to opts when UI is ready.
+	q, err := api.queryable.Querier(query.ContextWithOpts(r.Context(), opts...), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, &apiError{errorExec, err}
 	}
