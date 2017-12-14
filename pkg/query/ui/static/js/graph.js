@@ -165,11 +165,9 @@ Prometheus.Graph.prototype.initialize = function() {
   var styleDedupBtn = function() {
       var icon = self.dedupBtn.find('.glyphicon');
       if (self.isDedupEnabled()) {
-          self.dedupBtn.addClass("btn-primary");
           icon.addClass("glyphicon-check");
           icon.removeClass("glyphicon-unchecked");
       } else {
-          self.dedupBtn.removeClass("btn-primary");
           icon.addClass("glyphicon-unchecked");
           icon.removeClass("glyphicon-check");
       }

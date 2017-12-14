@@ -22,18 +22,11 @@ var optCtxKey = struct{}{}
 
 // PartialErrReporter allows to report partial errors. Partial error occurs when only part of the results are ready and
 // another is not available because of the failure. We still want to return partial result, but with some notification.
-type PartialErrReporter interface {
-	// Report reports partial error (that the result will be only partial because given errors).
-	// NOTE: It is required to be thread-safe.
-	Report(err error)
-}
-
-type nopErrReporter struct{}
-
-func (r nopErrReporter) Report(err error) {}
+// NOTE: It is required to be thread-safe.
+type PartialErrReporter func(error)
 
 // Option specifies change in the opts struct.
-type Option func(o *opts)
+type Option func(*opts)
 
 type opts struct {
 	disabledDeduplication bool
@@ -42,7 +35,7 @@ type opts struct {
 
 func defaultOpts() *opts {
 	return &opts{
-		partialErrReporter: nopErrReporter{},
+		partialErrReporter: func(error) {},
 	}
 }
 
@@ -190,7 +183,7 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 			set, err := q.selectSingle(ctx, store.Client(), sms...)
 			if err != nil {
 				level.Error(q.logger).Log("msg", "single select failed. Ignoring this result.", "err", err)
-				opts.partialErrReporter.Report(err)
+				opts.partialErrReporter(err)
 				return nil
 			}
 			mtx.Lock()
@@ -290,7 +283,7 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 			values, err := q.labelValuesSingle(ctx, store.Client(), name)
 			if err != nil {
 				level.Error(q.logger).Log("msg", "single labelValues failed. Ignoring this result.", "err", err)
-				opts.partialErrReporter.Report(err)
+				opts.partialErrReporter(err)
 				return nil
 			}
 
