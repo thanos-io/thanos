@@ -51,7 +51,7 @@ scrape_configs:
 	})
 	defer closeFn()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
 	err = runutil.Retry(time.Second, ctx.Done(), func() error {
