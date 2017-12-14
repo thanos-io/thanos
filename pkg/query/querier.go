@@ -18,6 +18,69 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+var optCtxKey = struct{}{}
+
+// PartialErrReporter allows to report partial errors. Partial error occurs when only part of the results are ready and
+// another is not available because of the failure. We still want to return partial result, but with some notification.
+type PartialErrReporter interface {
+	// Report reports partial error (that the result will be only partial because given errors).
+	// NOTE: It is required to be thread-safe.
+	Report(err error)
+}
+
+type nopErrReporter struct{}
+
+func (r nopErrReporter) Report(err error) {}
+
+// Option specifies change in the opts struct.
+type Option func(o *opts)
+
+type opts struct {
+	disabledDeduplication bool
+	partialErrReporter    PartialErrReporter
+}
+
+func defaultOpts() *opts {
+	return &opts{
+		partialErrReporter: nopErrReporter{},
+	}
+}
+
+// WithDisabledDeduplication returns option that sets disabledDeduplication flag to true.
+func WithDisabledDeduplication() Option {
+	return func(o *opts) {
+		o.disabledDeduplication = true
+	}
+}
+
+// WithPartialErrReporter return option that sets the given PartialErrReporter to opts.
+func WithPartialErrReporter(errReporter PartialErrReporter) Option {
+	return func(o *opts) {
+		o.partialErrReporter = errReporter
+	}
+}
+
+// ContextWithOpts returns context with given options.
+// NOTE: This is the only way we can pass additional arguments to our custom querier which is hidden behind standard Prometheus
+// promql engine.
+func ContextWithOpts(ctx context.Context, opts ...Option) context.Context {
+	o := defaultOpts()
+	for _, opt := range opts {
+		opt(o)
+	}
+
+	return context.WithValue(ctx, optCtxKey, opts)
+}
+
+func optsFromContext(ctx context.Context) *opts {
+	o, ok := ctx.Value(optCtxKey).(*opts)
+	if !ok {
+		return defaultOpts()
+	}
+
+	return o
+}
+
 // StoreInfo holds meta information about a store used by query.
 type StoreInfo interface {
 	// Client to access the store.
@@ -106,6 +169,8 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 		// Add support for partial results/errors.
 		g errgroup.Group
 	)
+	opts := optsFromContext(q.ctx)
+
 	span, ctx := tracing.StartSpan(q.ctx, "querier_select")
 	defer span.Finish()
 
@@ -124,8 +189,8 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 		g.Go(func() error {
 			set, err := q.selectSingle(ctx, store.Client(), sms...)
 			if err != nil {
-				// TODO(bplotka): Find a way to notify Client/UI !
 				level.Error(q.logger).Log("msg", "single select failed. Ignoring this result.", "err", err)
+				opts.partialErrReporter.Report(err)
 				return nil
 			}
 			mtx.Lock()
@@ -143,12 +208,15 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 		maxt: q.maxt,
 		set:  storepb.MergeSeriesSets(all...),
 	}
+
+	if opts.disabledDeduplication || q.replicaLabel == "" {
+		// Return data without any deduplication.
+		return set, nil
+	}
+
 	// The merged series set assembles all potentially-overlapping time ranges
 	// of the same series into a single one. The series are ordered so that equal series
 	// from different replicas are sequential. We can now deduplicate those.
-	if q.replicaLabel == "" {
-		return set, nil
-	}
 	return newDedupSeriesSet(set, q.replicaLabel), nil
 }
 
@@ -210,6 +278,8 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 		// Add support for partial results/errors.
 		g errgroup.Group
 	)
+	opts := optsFromContext(q.ctx)
+
 	span, ctx := tracing.StartSpan(q.ctx, "querier_label_values")
 	defer span.Finish()
 
@@ -219,8 +289,8 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 		g.Go(func() error {
 			values, err := q.labelValuesSingle(ctx, store.Client(), name)
 			if err != nil {
-				// TODO(bplotka): Find a way to notify Client/UI !
 				level.Error(q.logger).Log("msg", "single labelValues failed. Ignoring this result.", "err", err)
+				opts.partialErrReporter.Report(err)
 				return nil
 			}
 

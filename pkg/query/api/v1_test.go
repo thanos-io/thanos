@@ -130,6 +130,15 @@ func TestEndpoints(t *testing.T) {
 				},
 			},
 		},
+		// Bad dedup parameter.
+		{
+			endpoint: api.query,
+			query: url.Values{
+				"query": []string{"0.333"},
+				"dedup": []string{"sdfsf"},
+			},
+			errType: errorBadData,
+		},
 		{
 			endpoint: api.queryRange,
 			query: url.Values{
@@ -229,6 +238,18 @@ func TestEndpoints(t *testing.T) {
 				"start": []string{"148966367200.372"},
 				"end":   []string{"1489667272.372"},
 				"step":  []string{"1"},
+			},
+			errType: errorBadData,
+		},
+		// Bad dedup parameter
+		{
+			endpoint: api.queryRange,
+			query: url.Values{
+				"query": []string{"time()"},
+				"start": []string{"0"},
+				"end":   []string{"2"},
+				"step":  []string{"1"},
+				"dedup": []string{"sdfsf-range"},
 			},
 			errType: errorBadData,
 		},
@@ -367,6 +388,14 @@ func TestEndpoints(t *testing.T) {
 		// Missing match[] query params in series requests.
 		{
 			endpoint: api.series,
+			errType:  errorBadData,
+		},
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"dedup": []string{"sdfsf-series"},
+			},
 			errType:  errorBadData,
 		},
 	}

@@ -123,6 +123,10 @@ input[name="end_input"], input[name="range_input"] {
   border-radius: 0;
 }
 
+.dedup_btn {
+  margin-left: 8px;
+}
+
 .prometheus_input_group {
   display: inline-block;
   margin: 10px 5px;
