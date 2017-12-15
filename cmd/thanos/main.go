@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/pprof"
@@ -8,11 +9,8 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"syscall"
-
-	"context"
-
 	"runtime/debug"
+	"syscall"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"

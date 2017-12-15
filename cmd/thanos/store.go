@@ -11,6 +11,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
@@ -111,9 +112,7 @@ func runStore(
 			return errors.Wrap(err, "create GCS client")
 		}
 
-		var bkt store.Bucket
-		bkt = gcs.NewBucket(gcsClient.Bucket(gcsBucket), reg, gcsBucket)
-		bkt = store.BucketWithMetrics(gcsBucket, bkt, reg)
+		bkt := objstore.BucketWithMetrics(gcsBucket, gcs.NewBucket(gcsClient.Bucket(gcsBucket)), reg)
 
 		gs, err := store.NewBucketStore(
 			logger,

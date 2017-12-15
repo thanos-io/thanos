@@ -3,12 +3,11 @@ package inmem
 import (
 	"context"
 	"io"
+	"sort"
 
 	"bytes"
 	"io/ioutil"
 	"strings"
-
-	"path"
 
 	"github.com/pkg/errors"
 )
@@ -16,16 +15,12 @@ import (
 // Bucket implements the store.Bucket and shipper.Bucket interfaces against local memory.
 type Bucket struct {
 	objects map[string][]byte
-	dirs    map[string]struct{}
 }
 
 // NewBucket returns a new in memory Bucket.
 // NOTE: Returned bucket is just a naive in memory bucket implementation. For test use cases only.
 func NewBucket() *Bucket {
-	return &Bucket{
-		objects: map[string][]byte{},
-		dirs:    map[string]struct{}{},
-	}
+	return &Bucket{objects: map[string][]byte{}}
 }
 
 // Objects returns internally stored objects.
@@ -37,23 +32,23 @@ func (b *Bucket) Objects() map[string][]byte {
 // Iter calls f for each entry in the given directory. The argument to f is the full
 // object name including the prefix of the inspected directory.
 func (b *Bucket) Iter(_ context.Context, dir string, f func(string) error) error {
+	unique := map[string]struct{}{}
+
 	for filename := range b.objects {
 		if !strings.HasPrefix(filename, dir) {
 			continue
 		}
-
-		if err := f(filename); err != nil {
-			return err
-		}
+		parts := strings.SplitAfter(filename, "/")
+		unique[parts[0]] = struct{}{}
 	}
-	// Mimick GCS behaviour where dirs are also listed separately.
-	for dirName := range b.dirs {
-		if !strings.HasPrefix(dirName, dir) {
-			continue
-		}
+	var keys []string
+	for n := range unique {
+		keys = append(keys, n)
+	}
+	sort.Strings(keys)
 
-		// Again, mimick GCS and add trailing slash.
-		if err := f(dirName + "/"); err != nil {
+	for _, k := range keys {
+		if err := f(k); err != nil {
 			return err
 		}
 	}
@@ -90,39 +85,23 @@ func (b *Bucket) GetRange(_ context.Context, name string, off, length int64) (io
 }
 
 // Exists checks if the given directory exists in memory.
-func (b *Bucket) Exists(_ context.Context, dir string) (bool, error) {
-	for filename := range b.objects {
-		if !strings.HasPrefix(filename, dir) {
-			continue
-		}
-
-		return true, nil
-	}
-
-	return false, nil
+func (b *Bucket) Exists(_ context.Context, name string) (bool, error) {
+	_, ok := b.objects[name]
+	return ok, nil
 }
 
 // Upload writes the file specified in src to into the memory.
-func (b *Bucket) Upload(_ context.Context, src, target string) error {
-	body, err := ioutil.ReadFile(src)
+func (b *Bucket) Upload(_ context.Context, name string, r io.Reader) error {
+	body, err := ioutil.ReadAll(r)
 	if err != nil {
 		return err
 	}
-
-	b.dirs[path.Dir(target)] = struct{}{}
-	b.objects[target] = body
+	b.objects[name] = body
 	return nil
 }
 
 // Delete removes all data prefixed with the dir.
-func (b *Bucket) Delete(_ context.Context, dir string) error {
-	for filename := range b.objects {
-		if !strings.HasPrefix(filename, dir) {
-			continue
-		}
-
-		delete(b.objects, filename)
-	}
-	delete(b.objects, dir)
+func (b *Bucket) Delete(_ context.Context, name string) error {
+	delete(b.objects, name)
 	return nil
 }

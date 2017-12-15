@@ -39,7 +39,7 @@ func NewObjectStoreBucket(t testing.TB) (*gcs.Bucket, func()) {
 	bkt := gcsClient.Bucket(name)
 	Ok(t, bkt.Create(ctx, project, nil))
 
-	return gcs.NewBucket(bkt, nil, name), func() {
+	return gcs.NewBucket(bkt), func() {
 		deleteAllBucket(t, ctx, bkt)
 		cancel()
 		gcsClient.Close()

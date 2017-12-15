@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -10,12 +11,11 @@ import (
 	"sync"
 	"time"
 
-	"math"
-
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
@@ -203,7 +203,7 @@ func runSidecar(
 			return errors.Wrap(err, "create GCS client")
 		}
 
-		bkt := gcs.NewBucket(gcsClient.Bucket(gcsBucket), reg, gcsBucket)
+		bkt := objstore.BucketWithMetrics(gcsBucket, gcs.NewBucket(gcsClient.Bucket(gcsBucket)), reg)
 		s := shipper.New(logger, nil, dataDir, bkt, externalLabels.Get)
 
 		ctx, cancel := context.WithCancel(context.Background())

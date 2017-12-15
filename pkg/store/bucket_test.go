@@ -8,14 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"strings"
+	"github.com/improbable-eng/thanos/pkg/objstore"
 
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
-	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/tsdb"
@@ -75,8 +73,8 @@ func TestBucketStore_e2e(t *testing.T) {
 		testutil.Ok(t, block.WriteMetaFile(dir2, meta))
 
 		// TODO(fabxc): remove the component dependency by factoring out the block interface.
-		testutil.Ok(t, uploadDir(t, ctx, bkt, id1, dir1))
-		testutil.Ok(t, uploadDir(t, ctx, bkt, id2, dir2))
+		testutil.Ok(t, objstore.UploadDir(ctx, bkt, dir1, id1.String()))
+		testutil.Ok(t, objstore.UploadDir(ctx, bkt, dir2, id2.String()))
 
 		testutil.Ok(t, os.RemoveAll(dir1))
 		testutil.Ok(t, os.RemoveAll(dir2))
@@ -304,30 +302,6 @@ func (s *testStoreSeriesServer) Send(r *storepb.SeriesResponse) error {
 
 func (s *testStoreSeriesServer) Context() context.Context {
 	return s.ctx
-}
-
-func uploadDir(t testing.TB, ctx context.Context, bkt shipper.Bucket, id ulid.ULID, dir string) error {
-	err := filepath.Walk(dir, func(src string, fi os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if fi.IsDir() {
-			return nil
-		}
-
-		target := filepath.Join(id.String(), strings.TrimPrefix(src, dir))
-		return bkt.Upload(ctx, src, target)
-	})
-	if err == nil {
-		return nil
-	}
-
-	// We don't want to leave partially uploaded directories behind. Cleanup everything related to it
-	// and use a uncanceled context.
-	if err2 := bkt.Delete(ctx, dir); err2 != nil {
-		t.Logf("cleanup failed; partial data may be left behind. dir: %s. Err: %v", dir, err2)
-	}
-	return err
 }
 
 func TestPartitionRanges(t *testing.T) {

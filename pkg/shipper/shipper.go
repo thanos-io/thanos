@@ -8,32 +8,19 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+	"path"
 	"path/filepath"
-
-	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
-	"github.com/prometheus/tsdb/fileutil"
-	"github.com/prometheus/tsdb/labels"
-
-	"strings"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/objstore"
+	"github.com/oklog/ulid"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/tsdb/fileutil"
+	"github.com/prometheus/tsdb/labels"
 )
-
-// Bucket represents a writable bucket of data objects.
-type Bucket interface {
-	// Exists checks if the given directory exists at the remote site (and contains at least one element).
-	Exists(ctx context.Context, dir string) (bool, error)
-
-	// Upload writes the file specified in src to remote location specified as target.
-	Upload(ctx context.Context, src, target string) error
-
-	// Delete removes all data prefixed with the dir.
-	Delete(ctx context.Context, dir string) error
-}
 
 type metrics struct {
 	dirSyncs        prometheus.Counter
@@ -79,7 +66,7 @@ type Shipper struct {
 	logger  log.Logger
 	dir     string
 	metrics *metrics
-	bucket  Bucket
+	bucket  objstore.Bucket
 	labels  func() labels.Labels
 }
 
@@ -89,7 +76,7 @@ func New(
 	logger log.Logger,
 	r prometheus.Registerer,
 	dir string,
-	bucket Bucket,
+	bucket objstore.Bucket,
 	lbls func() labels.Labels,
 ) *Shipper {
 	if logger == nil {
@@ -181,7 +168,7 @@ func (s *Shipper) sync(ctx context.Context, meta *block.Meta) (err error) {
 	if meta.Compaction.Level > 1 {
 		return nil
 	}
-	ok, err := s.bucket.Exists(ctx, meta.ULID.String())
+	ok, err := s.bucket.Exists(ctx, path.Join(meta.ULID.String(), "meta.json"))
 	if err != nil {
 		return errors.Wrap(err, "check exists")
 	}
@@ -213,42 +200,13 @@ func (s *Shipper) sync(ctx context.Context, meta *block.Meta) (err error) {
 	if err := block.WriteMetaFile(updir, meta); err != nil {
 		return errors.Wrap(err, "write meta file")
 	}
-	return s.uploadDir(ctx, meta.ULID, updir)
-}
-
-// uploadDir uploads the given directory to the remote site.
-func (s *Shipper) uploadDir(ctx context.Context, id ulid.ULID, dir string) error {
-	s.metrics.dirSyncs.Inc()
-
-	err := filepath.Walk(dir, func(src string, fi os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if fi.IsDir() {
-			return nil
-		}
-
-		target := filepath.Join(id.String(), strings.TrimPrefix(src, dir))
-		level.Debug(s.logger).Log("msg", "upload file", "src", src, "dst", target)
-		s.metrics.uploads.Inc()
-		err = s.bucket.Upload(ctx, src, target)
-		if err != nil {
-			s.metrics.uploadFailures.Inc()
-		}
-
-		return err
-	})
+	err = objstore.UploadDir(ctx, s.bucket, updir, meta.ULID.String())
 	if err == nil {
 		return nil
 	}
-	s.metrics.dirSyncFailures.Inc()
-	level.Error(s.logger).Log("msg", "upload failed; remove partial data", "dir", dir, "err", err)
-
-	// We don't want to leave partially uploaded directories behind. Cleanup everything related to it
-	// and use a uncanceled context.
-	if err2 := s.bucket.Delete(ctx, dir); err2 != nil {
-		level.Error(s.logger).Log(
-			"msg", "cleanup failed; partial data may be left behind", "dir", dir, "err", err2)
+	// Cleanup the dir with an uncancelable context.
+	if err2 := objstore.DeleteDir(context.Background(), s.bucket, meta.ULID.String()); err2 != nil {
+		level.Warn(s.logger).Log("msg", "cleaning up block failed", "block", meta.ULID, "err", err)
 	}
 	return err
 }
