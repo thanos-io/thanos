@@ -3,7 +3,6 @@ package compact
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 	"time"
 
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/prometheus/tsdb/fileutil"
 
 	"github.com/go-kit/kit/log"
@@ -23,26 +23,12 @@ import (
 	"github.com/prometheus/tsdb/labels"
 )
 
-// Bucket represents a readable bucket of data objects.
-type Bucket interface {
-	// Iter calls the given function with each found top-level object name in the bucket.
-	// It exits if the context is canceled or the function returns an error.
-	Iter(ctx context.Context, dir string, f func(name string) error) error
-
-	// Get returns a new reader against the object with the given name.
-	Get(ctx context.Context, name string) (io.ReadCloser, error)
-
-	Upload(ctx context.Context, dst, src string) error
-
-	Delete(ctx context.Context, dir string) error
-}
-
 // Syncer syncronizes block metas from a bucket into a local directory.
 // It sorts them into compaction groups based on equal label sets.
 type Syncer struct {
 	logger    log.Logger
 	dir       string
-	bkt       Bucket
+	bkt       objstore.Bucket
 	syncDelay time.Duration
 	mtx       sync.Mutex
 	groups    map[string]*Group
@@ -50,7 +36,7 @@ type Syncer struct {
 
 // NewSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewSyncer(logger log.Logger, dir string, bkt Bucket, syncDelay time.Duration) (*Syncer, error) {
+func NewSyncer(logger log.Logger, dir string, bkt objstore.Bucket, syncDelay time.Duration) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -140,9 +126,8 @@ func (c *Syncer) SyncMetas(ctx context.Context) error {
 		defer os.RemoveAll(tmpdir)
 
 		src := path.Join(name, "meta.json")
-		dst := filepath.Join(tmpdir, "meta.json")
 
-		if err := downloadBucketObject(ctx, c.bkt, dst, src); err != nil {
+		if err := objstore.DownloadFile(ctx, c.bkt, src, tmpdir); err != nil {
 			level.Warn(c.logger).Log("msg", "downloading meta.json failed", "block", id, "err", err)
 			return nil
 		}
@@ -304,12 +289,12 @@ type Group struct {
 	logger log.Logger
 	mtx    sync.Mutex
 	dir    string
-	bkt    Bucket
+	bkt    objstore.Bucket
 	labels map[string]string
 }
 
 // NewGroup returns a new compaction group.
-func NewGroup(logger log.Logger, bkt Bucket, dir string, labels map[string]string) (*Group, error) {
+func NewGroup(logger log.Logger, bkt objstore.Bucket, dir string, labels map[string]string) (*Group, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -390,7 +375,7 @@ func (cg *Group) Compact(ctx context.Context, comp tsdb.Compactor) (id ulid.ULID
 		ids := filepath.Base(b)
 		dst := filepath.Join(wdir, ids)
 
-		if err := downloadBlock(ctx, cg.bkt, ids, dst); err != nil {
+		if err := objstore.DownloadDir(ctx, cg.bkt, ids, dst); err != nil {
 			return id, errors.Wrapf(err, "download block %s", ids)
 		}
 		compDirs = append(compDirs, dst)
@@ -423,7 +408,7 @@ func (cg *Group) Compact(ctx context.Context, comp tsdb.Compactor) (id ulid.ULID
 
 	begin = time.Now()
 
-	if err = uploadBlock(ctx, cg.bkt, id, bdir); err != nil {
+	if err := objstore.UploadDir(ctx, cg.bkt, id.String(), bdir); err != nil {
 		return id, errors.Wrap(err, "upload block")
 	}
 	level.Debug(cg.logger).Log("msg", "uploaded block", "block", id, "duration", time.Since(begin))
@@ -437,71 +422,6 @@ func (cg *Group) Compact(ctx context.Context, comp tsdb.Compactor) (id ulid.ULID
 		}
 	}
 	return id, nil
-}
-
-func uploadBlock(ctx context.Context, bkt Bucket, id ulid.ULID, dir string) error {
-	err := filepath.Walk(dir, func(src string, fi os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if fi.IsDir() {
-			return nil
-		}
-		target := filepath.Join(id.String(), strings.TrimPrefix(src, dir))
-		return bkt.Upload(ctx, src, target)
-	})
-	if err == nil {
-		return nil
-	}
-	// We don't want to leave partially uploaded directories behind. Cleanup everything related to it
-	// and use a uncanceled context.
-	// Use a fresh context so we always process this.
-	bkt.Delete(context.Background(), dir)
-	return err
-}
-
-func downloadBlock(ctx context.Context, bkt Bucket, id, dst string) error {
-	if err := os.MkdirAll(filepath.Join(dst, "chunks"), 0777); err != nil {
-		return err
-	}
-	objs := []string{"meta.json", "index"}
-
-	err := bkt.Iter(ctx, id+"/chunks/", func(n string) error {
-		objs = append(objs, path.Join("chunks", path.Base(n)))
-		return nil
-	})
-	if err != nil {
-		return errors.Wrap(err, "get chunk object list")
-	}
-
-	for _, o := range objs {
-		err := downloadBucketObject(ctx, bkt, filepath.Join(dst, o), path.Join(id, o))
-		if err != nil {
-			return errors.Wrap(err, "download meta.json")
-		}
-	}
-	return nil
-}
-
-func downloadBucketObject(ctx context.Context, bkt Bucket, dst, src string) error {
-	r, err := bkt.Get(ctx, src)
-	if err != nil {
-		return errors.Wrap(err, "create reader")
-	}
-	defer r.Close()
-
-	f, err := os.Create(dst)
-	if err != nil {
-		return errors.Wrap(err, "create file")
-	}
-	defer func() {
-		f.Close()
-		if err != nil {
-			os.Remove(dst)
-		}
-	}()
-	_, err = io.Copy(f, r)
-	return err
 }
 
 // iterBlocks calls f for each meta.json of block directories in dir.
