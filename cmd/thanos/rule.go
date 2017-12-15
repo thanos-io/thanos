@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/rand"
 	"net"
 	"net/http"
@@ -19,8 +20,6 @@ import (
 	"time"
 
 	"github.com/improbable-eng/thanos/pkg/runutil"
-
-	"math"
 
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
@@ -355,8 +354,6 @@ func runRule(
 		s := shipper.New(logger, nil, dataDir, bkt, func() labels.Labels {
 			// We don't need external labels here, replica label if any will be appended to TSDB directly.
 			return labels.Labels{}
-		}, func(mint int64) {
-			peer.SetTimestamps(mint, math.MaxInt64)
 		})
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -366,6 +363,13 @@ func runRule(
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				s.Sync(ctx)
+
+				minTime, _, err := s.Timestamps()
+				if err != nil {
+					level.Warn(logger).Log("msg", "reading timestamps failed", "err", err)
+				} else {
+					peer.SetTimestamps(minTime, math.MaxInt64)
+				}
 				return nil
 			})
 		}, func(error) {

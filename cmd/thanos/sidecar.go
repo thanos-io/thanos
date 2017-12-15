@@ -204,9 +204,7 @@ func runSidecar(
 		}
 
 		bkt := gcs.NewBucket(gcsClient.Bucket(gcsBucket), reg, gcsBucket)
-		s := shipper.New(logger, nil, dataDir, bkt, externalLabels.Get, func(mint int64) {
-			p.SetTimestamps(mint, math.MaxInt64)
-		})
+		s := shipper.New(logger, nil, dataDir, bkt, externalLabels.Get)
 
 		ctx, cancel := context.WithCancel(context.Background())
 
@@ -215,6 +213,13 @@ func runSidecar(
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				s.Sync(ctx)
+
+				minTime, _, err := s.Timestamps()
+				if err != nil {
+					level.Warn(logger).Log("msg", "reading timestamps failed", "err", err)
+				} else {
+					p.SetTimestamps(minTime, math.MaxInt64)
+				}
 				return nil
 			})
 		}, func(error) {
