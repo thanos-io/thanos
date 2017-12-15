@@ -341,6 +341,9 @@ func TestDedupSeriesSet(t *testing.T) {
 			{"d", "4"},
 		}, {
 			{"a", "1"},
+			{"c", "3"},
+		}, {
+			{"a", "1"},
 			{"c", "4"},
 			{"replica", "replica-1"},
 		}, {
@@ -361,6 +364,9 @@ func TestDedupSeriesSet(t *testing.T) {
 			{"a", "1"},
 			{"c", "3"},
 			{"d", "4"},
+		}, {
+			{"a", "1"},
+			{"c", "3"},
 		}, {
 			{"a", "1"},
 			{"c", "4"},
