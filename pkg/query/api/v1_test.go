@@ -394,9 +394,9 @@ func TestEndpoints(t *testing.T) {
 			endpoint: api.series,
 			query: url.Values{
 				"match[]": []string{`test_metric2`},
-				"dedup": []string{"sdfsf-series"},
+				"dedup":   []string{"sdfsf-series"},
 			},
-			errType:  errorBadData,
+			errType: errorBadData,
 		},
 	}
 
@@ -412,7 +412,7 @@ func TestEndpoints(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		resp, apiErr := test.endpoint(req.WithContext(ctx))
+		resp, _, apiErr := test.endpoint(req.WithContext(ctx))
 		if apiErr != nil {
 			if test.errType == errorNone {
 				t.Fatalf("Unexpected error: %s", apiErr)
@@ -433,7 +433,7 @@ func TestEndpoints(t *testing.T) {
 
 func TestRespondSuccess(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		respond(w, "test")
+		respond(w, "test", nil)
 	}))
 	defer s.Close()
 

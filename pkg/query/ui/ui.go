@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"path/filepath"
 
 	"html/template"
@@ -69,10 +68,9 @@ func (u *UI) graph(w http.ResponseWriter, r *http.Request) {
 
 func (u *UI) status(w http.ResponseWriter, r *http.Request) {
 	u.executeTemplate(w, "status.html", struct {
-		Birth         time.Time
-		CWD           string
-		Version       string
-		Alertmanagers []*url.URL
+		Birth   time.Time
+		CWD     string
+		Version string
 	}{
 		Birth:   u.birth,
 		CWD:     u.cwd,

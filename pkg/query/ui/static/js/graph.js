@@ -106,6 +106,7 @@ Prometheus.Graph.prototype.initialize = function() {
   })
 
   self.error = graphWrapper.find(".error").hide();
+  self.warnings = graphWrapper.find(".warnings").hide();
   self.graphArea = graphWrapper.find(".graph_area");
   self.graph = self.graphArea.find(".graph");
   self.yAxis = self.graphArea.find(".y_axis");
@@ -408,6 +409,7 @@ Prometheus.Graph.prototype.decreaseEnd = function() {
 Prometheus.Graph.prototype.submitQuery = function() {
   var self = this;
   self.clearError();
+  self.clearWarnings();
   if (!self.expr.val()) {
     return;
   }
@@ -454,6 +456,9 @@ Prometheus.Graph.prototype.submitQuery = function() {
           self.showError(json.error);
           return;
         }
+        if (json.warnings) {
+          self.showWarnings(json.warnings);
+        }
         success(json.data, textStatus);
       },
       error: function(xhr, resp) {
@@ -497,6 +502,22 @@ Prometheus.Graph.prototype.clearError = function(msg) {
   self.error.text('');
   self.error.hide();
 };
+
+Prometheus.Graph.prototype.showWarnings = function(msgs) {
+  var self = this;
+  var content = "";
+  for (i = 0; i < msgs.length; i++) {
+    content += "<li>" + escapeHTML(msgs[i]) + "</li>";
+  }
+  self.warnings.html("<ul>" + content + "</ul>");
+  self.warnings.show();
+}
+
+Prometheus.Graph.prototype.clearWarnings = function() {
+  var self = this;
+  self.warnings.html("");
+  self.warnings.hide();
+}
 
 Prometheus.Graph.prototype.updateRefresh = function() {
   var self = this;

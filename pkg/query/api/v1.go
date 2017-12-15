@@ -23,6 +23,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/NYTimes/gziphandler"
@@ -80,6 +81,7 @@ type response struct {
 	Data      interface{} `json:"data,omitempty"`
 	ErrorType errorType   `json:"errorType,omitempty"`
 	Error     string      `json:"error,omitempty"`
+	Warnings  []string    `json:"warnings,omitempty"`
 }
 
 // Enables cross-site script calls.
@@ -89,7 +91,7 @@ func setCORS(w http.ResponseWriter) {
 	}
 }
 
-type apiFunc func(r *http.Request) (interface{}, *apiError)
+type apiFunc func(r *http.Request) (interface{}, []error, *apiError)
 
 // API can register a set of endpoints in a router and handle
 // them using the provided storage and query engine.
@@ -142,10 +144,10 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 	instr := func(name string, f apiFunc) http.HandlerFunc {
 		hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			setCORS(w)
-			if data, err := f(r); err != nil {
+			if data, warnings, err := f(r); err != nil {
 				respondError(w, err, data)
 			} else if data != nil {
-				respond(w, data)
+				respond(w, data, warnings)
 			} else {
 				w.WriteHeader(http.StatusNoContent)
 			}
@@ -166,19 +168,20 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 type queryData struct {
 	ResultType promql.ValueType `json:"resultType"`
 	Result     promql.Value     `json:"result"`
+	Warnings   []error          `json:"warnings"`
 }
 
-func (api *API) options(r *http.Request) (interface{}, *apiError) {
-	return nil, nil
+func (api *API) options(r *http.Request) (interface{}, []error, *apiError) {
+	return nil, nil, nil
 }
 
-func (api *API) query(r *http.Request) (interface{}, *apiError) {
+func (api *API) query(r *http.Request) (interface{}, []error, *apiError) {
 	var ts time.Time
 	if t := r.FormValue("time"); t != "" {
 		var err error
 		ts, err = parseTime(t)
 		if err != nil {
-			return nil, &apiError{errorBadData, err}
+			return nil, nil, &apiError{errorBadData, err}
 		}
 	} else {
 		ts = api.now()
@@ -189,7 +192,7 @@ func (api *API) query(r *http.Request) (interface{}, *apiError) {
 		var cancel context.CancelFunc
 		timeout, err := parseDuration(to)
 		if err != nil {
-			return nil, &apiError{errorBadData, err}
+			return nil, nil, &apiError{errorBadData, err}
 		}
 
 		ctx, cancel = context.WithTimeout(ctx, timeout)
@@ -201,12 +204,21 @@ func (api *API) query(r *http.Request) (interface{}, *apiError) {
 	if dedup := r.FormValue("dedup"); dedup != "" {
 		enableDeduplication, err := strconv.ParseBool(dedup)
 		if err != nil {
-			return nil, &apiError{errorBadData, errors.Wrap(err, "'dedup' parameter")}
+			return nil, nil, &apiError{errorBadData, errors.Wrap(err, "'dedup' parameter")}
 		}
-		if !enableDeduplication {
-			opts = append(opts, query.WithDisabledDeduplication())
+		if enableDeduplication {
+			opts = append(opts, query.WithDeduplication())
 		}
 	}
+	var (
+		warnmtx  sync.Mutex
+		warnings []error
+	)
+	opts = append(opts, query.WithPartialErrReporter(func(err error) {
+		warnmtx.Lock()
+		warnings = append(warnings, err)
+		warnmtx.Unlock()
+	}))
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(r.Context(), "promql_instant_query")
@@ -215,7 +227,7 @@ func (api *API) query(r *http.Request) (interface{}, *apiError) {
 	begin := api.now()
 	qry, err := api.queryEngine.NewInstantQuery(r.FormValue("query"), ts)
 	if err != nil {
-		return nil, &apiError{errorBadData, err}
+		return nil, nil, &apiError{errorBadData, err}
 	}
 
 	// TODO(Bplotka): Add proper query.PartialErrorReporter to opts when UI is ready.
@@ -223,51 +235,51 @@ func (api *API) query(r *http.Request) (interface{}, *apiError) {
 	if res.Err != nil {
 		switch res.Err.(type) {
 		case promql.ErrQueryCanceled:
-			return nil, &apiError{errorCanceled, res.Err}
+			return nil, nil, &apiError{errorCanceled, res.Err}
 		case promql.ErrQueryTimeout:
-			return nil, &apiError{errorTimeout, res.Err}
+			return nil, nil, &apiError{errorTimeout, res.Err}
 		case promql.ErrStorage:
-			return nil, &apiError{errorInternal, res.Err}
+			return nil, nil, &apiError{errorInternal, res.Err}
 		}
-		return nil, &apiError{errorExec, res.Err}
+		return nil, nil, &apiError{errorExec, res.Err}
 	}
 	api.instantQueryDuration.Observe(time.Since(begin).Seconds())
 
 	return &queryData{
 		ResultType: res.Value.Type(),
 		Result:     res.Value,
-	}, nil
+	}, warnings, nil
 }
 
-func (api *API) queryRange(r *http.Request) (interface{}, *apiError) {
+func (api *API) queryRange(r *http.Request) (interface{}, []error, *apiError) {
 	start, err := parseTime(r.FormValue("start"))
 	if err != nil {
-		return nil, &apiError{errorBadData, err}
+		return nil, nil, &apiError{errorBadData, err}
 	}
 	end, err := parseTime(r.FormValue("end"))
 	if err != nil {
-		return nil, &apiError{errorBadData, err}
+		return nil, nil, &apiError{errorBadData, err}
 	}
 	if end.Before(start) {
 		err := errors.New("end timestamp must not be before start time")
-		return nil, &apiError{errorBadData, err}
+		return nil, nil, &apiError{errorBadData, err}
 	}
 
 	step, err := parseDuration(r.FormValue("step"))
 	if err != nil {
-		return nil, &apiError{errorBadData, err}
+		return nil, nil, &apiError{errorBadData, err}
 	}
 
 	if step <= 0 {
 		err := errors.New("zero or negative query resolution step widths are not accepted. Try a positive integer")
-		return nil, &apiError{errorBadData, err}
+		return nil, nil, &apiError{errorBadData, err}
 	}
 
 	// For safety, limit the number of returned points per timeseries.
 	// This is sufficient for 60s resolution for a week or 1h resolution for a year.
 	if end.Sub(start)/step > 11000 {
 		err := errors.New("exceeded maximum resolution of 11,000 points per timeseries. Try decreasing the query resolution (?step=XX)")
-		return nil, &apiError{errorBadData, err}
+		return nil, nil, &apiError{errorBadData, err}
 	}
 
 	ctx := r.Context()
@@ -275,7 +287,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, *apiError) {
 		var cancel context.CancelFunc
 		timeout, err := parseDuration(to)
 		if err != nil {
-			return nil, &apiError{errorBadData, err}
+			return nil, nil, &apiError{errorBadData, err}
 		}
 
 		ctx, cancel = context.WithTimeout(ctx, timeout)
@@ -287,12 +299,21 @@ func (api *API) queryRange(r *http.Request) (interface{}, *apiError) {
 	if dedup := r.FormValue("dedup"); dedup != "" {
 		enableDeduplication, err := strconv.ParseBool(dedup)
 		if err != nil {
-			return nil, &apiError{errorBadData, errors.Wrap(err, "'dedup' parameter")}
+			return nil, nil, &apiError{errorBadData, errors.Wrap(err, "'dedup' parameter")}
 		}
-		if !enableDeduplication {
-			opts = append(opts, query.WithDisabledDeduplication())
+		if enableDeduplication {
+			opts = append(opts, query.WithDeduplication())
 		}
 	}
+	var (
+		warnmtx  sync.Mutex
+		warnings []error
+	)
+	opts = append(opts, query.WithPartialErrReporter(func(err error) {
+		warnmtx.Lock()
+		warnings = append(warnings, err)
+		warnmtx.Unlock()
+	}))
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(r.Context(), "promql_range_query")
@@ -301,7 +322,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, *apiError) {
 	begin := api.now()
 	qry, err := api.queryEngine.NewRangeQuery(r.FormValue("query"), start, end, step)
 	if err != nil {
-		return nil, &apiError{errorBadData, err}
+		return nil, nil, &apiError{errorBadData, err}
 	}
 
 	// TODO(Bplotka): Add proper query.PartialErrorReporter to opts when UI is ready.
@@ -309,31 +330,40 @@ func (api *API) queryRange(r *http.Request) (interface{}, *apiError) {
 	if res.Err != nil {
 		switch res.Err.(type) {
 		case promql.ErrQueryCanceled:
-			return nil, &apiError{errorCanceled, res.Err}
+			return nil, nil, &apiError{errorCanceled, res.Err}
 		case promql.ErrQueryTimeout:
-			return nil, &apiError{errorTimeout, res.Err}
+			return nil, nil, &apiError{errorTimeout, res.Err}
 		}
-		return nil, &apiError{errorExec, res.Err}
+		return nil, nil, &apiError{errorExec, res.Err}
 	}
 	api.rangeQueryDuration.Observe(time.Since(begin).Seconds())
 
 	return &queryData{
 		ResultType: res.Value.Type(),
 		Result:     res.Value,
-	}, nil
+	}, warnings, nil
 }
 
-func (api *API) labelValues(r *http.Request) (interface{}, *apiError) {
+func (api *API) labelValues(r *http.Request) (interface{}, []error, *apiError) {
 	ctx := r.Context()
 	name := route.Param(ctx, "name")
 
 	if !model.LabelNameRE.MatchString(name) {
-		return nil, &apiError{errorBadData, fmt.Errorf("invalid label name: %q", name)}
+		return nil, nil, &apiError{errorBadData, fmt.Errorf("invalid label name: %q", name)}
 	}
+	var (
+		warnmtx  sync.Mutex
+		warnings []error
+	)
+	ctx = query.ContextWithOpts(ctx, query.WithPartialErrReporter(func(err error) {
+		warnmtx.Lock()
+		warnings = append(warnings, err)
+		warnmtx.Unlock()
+	}))
 
 	q, err := api.queryable.Querier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
-		return nil, &apiError{errorExec, err}
+		return nil, nil, &apiError{errorExec, err}
 	}
 	defer q.Close()
 
@@ -341,10 +371,10 @@ func (api *API) labelValues(r *http.Request) (interface{}, *apiError) {
 
 	vals, err := q.LabelValues(name)
 	if err != nil {
-		return nil, &apiError{errorExec, err}
+		return nil, nil, &apiError{errorExec, err}
 	}
 
-	return vals, nil
+	return vals, warnings, nil
 }
 
 var (
@@ -352,10 +382,10 @@ var (
 	maxTime = time.Unix(math.MaxInt64/1000-62135596801, 999999999)
 )
 
-func (api *API) series(r *http.Request) (interface{}, *apiError) {
+func (api *API) series(r *http.Request) (interface{}, []error, *apiError) {
 	r.ParseForm()
 	if len(r.Form["match[]"]) == 0 {
-		return nil, &apiError{errorBadData, fmt.Errorf("no match[] parameter provided")}
+		return nil, nil, &apiError{errorBadData, fmt.Errorf("no match[] parameter provided")}
 	}
 
 	var start time.Time
@@ -363,7 +393,7 @@ func (api *API) series(r *http.Request) (interface{}, *apiError) {
 		var err error
 		start, err = parseTime(t)
 		if err != nil {
-			return nil, &apiError{errorBadData, err}
+			return nil, nil, &apiError{errorBadData, err}
 		}
 	} else {
 		start = minTime
@@ -374,7 +404,7 @@ func (api *API) series(r *http.Request) (interface{}, *apiError) {
 		var err error
 		end, err = parseTime(t)
 		if err != nil {
-			return nil, &apiError{errorBadData, err}
+			return nil, nil, &apiError{errorBadData, err}
 		}
 	} else {
 		end = maxTime
@@ -384,7 +414,7 @@ func (api *API) series(r *http.Request) (interface{}, *apiError) {
 	for _, s := range r.Form["match[]"] {
 		matchers, err := promql.ParseMetricSelector(s)
 		if err != nil {
-			return nil, &apiError{errorBadData, err}
+			return nil, nil, &apiError{errorBadData, err}
 		}
 		matcherSets = append(matcherSets, matchers)
 	}
@@ -394,17 +424,27 @@ func (api *API) series(r *http.Request) (interface{}, *apiError) {
 	if dedup := r.FormValue("dedup"); dedup != "" {
 		enableDeduplication, err := strconv.ParseBool(r.FormValue("dedup"))
 		if err != nil {
-			return nil, &apiError{errorBadData, errors.Wrap(err, "'dedup' parameter")}
+			return nil, nil, &apiError{errorBadData, errors.Wrap(err, "'dedup' parameter")}
 		}
-		if !enableDeduplication {
-			opts = append(opts, query.WithDisabledDeduplication())
+		if enableDeduplication {
+			opts = append(opts, query.WithDeduplication())
 		}
 	}
+	var (
+		warnmtx  sync.Mutex
+		warnings []error
+	)
+	opts = append(opts, query.WithPartialErrReporter(func(err error) {
+		warnmtx.Lock()
+		warnings = append(warnings, err)
+		warnmtx.Unlock()
+	}))
+	ctx := query.ContextWithOpts(r.Context(), opts...)
 
 	// TODO(Bplotka): Add proper query.PartialErrorReporter to opts when UI is ready.
-	q, err := api.queryable.Querier(query.ContextWithOpts(r.Context(), opts...), timestamp.FromTime(start), timestamp.FromTime(end))
+	q, err := api.queryable.Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
-		return nil, &apiError{errorExec, err}
+		return nil, nil, &apiError{errorExec, err}
 	}
 	defer q.Close()
 
@@ -413,7 +453,7 @@ func (api *API) series(r *http.Request) (interface{}, *apiError) {
 	for _, mset := range matcherSets {
 		s, err := q.Select(mset...)
 		if err != nil {
-			return nil, &apiError{errorExec, err}
+			return nil, nil, &apiError{errorExec, err}
 		}
 		set = storage.DeduplicateSeriesSet(set, s)
 	}
@@ -424,20 +464,24 @@ func (api *API) series(r *http.Request) (interface{}, *apiError) {
 		metrics = append(metrics, set.At().Labels())
 	}
 	if set.Err() != nil {
-		return nil, &apiError{errorExec, set.Err()}
+		return nil, nil, &apiError{errorExec, set.Err()}
 	}
 
-	return metrics, nil
+	return metrics, warnings, nil
 }
 
-func respond(w http.ResponseWriter, data interface{}) {
+func respond(w http.ResponseWriter, data interface{}, warnings []error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	json.NewEncoder(w).Encode(&response{
+	resp := &response{
 		Status: statusSuccess,
 		Data:   data,
-	})
+	}
+	for _, warn := range warnings {
+		resp.Warnings = append(resp.Warnings, warn.Error())
+	}
+	json.NewEncoder(w).Encode(resp)
 }
 
 func respondError(w http.ResponseWriter, apiErr *apiError, data interface{}) {

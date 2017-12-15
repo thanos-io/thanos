@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 
-	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/strutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
@@ -29,20 +28,21 @@ type PartialErrReporter func(error)
 type Option func(*opts)
 
 type opts struct {
-	disabledDeduplication bool
-	partialErrReporter    PartialErrReporter
+	deduplicate        bool
+	partialErrReporter PartialErrReporter
 }
 
 func defaultOpts() *opts {
 	return &opts{
+		deduplicate:        false,
 		partialErrReporter: func(error) {},
 	}
 }
 
-// WithDisabledDeduplication returns option that sets disabledDeduplication flag to true.
-func WithDisabledDeduplication() Option {
+// WithDeduplication returns option that sets deduplication flag to true.
+func WithDeduplication() Option {
 	return func(o *opts) {
-		o.disabledDeduplication = true
+		o.deduplicate = true
 	}
 }
 
@@ -180,10 +180,9 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 		store := s
 
 		g.Go(func() error {
-			set, err := q.selectSingle(ctx, store.Client(), sms...)
+			set, err := q.selectSingle(ctx, store.Client(), opts.deduplicate, sms...)
 			if err != nil {
-				level.Error(q.logger).Log("msg", "single select failed. Ignoring this result.", "err", err)
-				opts.partialErrReporter(err)
+				opts.partialErrReporter(errors.Wrapf(err, "querying store failed"))
 				return nil
 			}
 			mtx.Lock()
@@ -202,18 +201,22 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 		set:  storepb.MergeSeriesSets(all...),
 	}
 
-	if opts.disabledDeduplication || q.replicaLabel == "" {
+	if !opts.deduplicate || q.replicaLabel == "" {
 		// Return data without any deduplication.
 		return set, nil
 	}
-
 	// The merged series set assembles all potentially-overlapping time ranges
 	// of the same series into a single one. The series are ordered so that equal series
 	// from different replicas are sequential. We can now deduplicate those.
 	return newDedupSeriesSet(set, q.replicaLabel), nil
 }
 
-func (q *querier) selectSingle(ctx context.Context, client storepb.StoreClient, ms ...storepb.LabelMatcher) (storepb.SeriesSet, error) {
+func (q *querier) selectSingle(
+	ctx context.Context,
+	client storepb.StoreClient,
+	deduplicate bool,
+	ms ...storepb.LabelMatcher,
+) (storepb.SeriesSet, error) {
 	sc, err := client.Series(ctx, &storepb.SeriesRequest{
 		MinTime:  q.mint,
 		MaxTime:  q.maxt,
@@ -236,7 +239,7 @@ func (q *querier) selectSingle(ctx context.Context, client storepb.StoreClient, 
 	}
 	res := newStoreSeriesSet(set)
 
-	if q.replicaLabel == "" {
+	if !deduplicate || q.replicaLabel == "" {
 		return res, nil
 	}
 	// Resort the result so that the same series with different replica
@@ -282,8 +285,7 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 		g.Go(func() error {
 			values, err := q.labelValuesSingle(ctx, store.Client(), name)
 			if err != nil {
-				level.Error(q.logger).Log("msg", "single labelValues failed. Ignoring this result.", "err", err)
-				opts.partialErrReporter(err)
+				opts.partialErrReporter(errors.Wrap(err, "querying store failed"))
 				return nil
 			}
 

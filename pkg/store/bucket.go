@@ -231,7 +231,7 @@ func NewBucketStore(
 	if err != nil {
 		return nil, errors.Wrap(err, "create index cache")
 	}
-	chunkPool, err := pool.NewBytesPool(1e6, 50e6, 2, maxChunkPoolBytes)
+	chunkPool, err := pool.NewBytesPool(2e5, 50e6, 2, maxChunkPoolBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "create chunk pool")
 	}

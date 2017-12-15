@@ -119,6 +119,11 @@ input[name="end_input"], input[name="range_input"] {
   margin: 2px;
 }
 
+.warnings {
+  padding: 5px;
+  margin: 2px;
+}
+
 .btn, .form-control, .nav-tabs > li > a {
   border-radius: 0;
 }
