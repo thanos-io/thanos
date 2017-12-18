@@ -1022,7 +1022,7 @@ func (r *bucketIndexReader) loadPostings(ctx context.Context, postings []*lazyPo
 }
 
 func (r *bucketIndexReader) preloadSeries(ids []uint64) error {
-	const maxSeriesSize = 4096
+	const maxSeriesSize = 64 * 1024
 	const maxGapSize = 512 * 1024
 
 	var newIDs []uint64
