@@ -322,62 +322,75 @@ func (c *testStoreSeriesClient) Context() context.Context {
 }
 
 func TestDedupSeriesSet(t *testing.T) {
-	input := [][]storepb.Label{
+	input := []struct {
+		lset []storepb.Label
+		vals []sample
+	}{
 		{
-			{"a", "1"},
-			{"c", "3"},
-			{"replica", "replica-1"},
+			lset: []storepb.Label{{"a", "1"}, {"c", "3"}, {"replica", "replica-1"}},
+			vals: []sample{{10000, 1}, {20000, 2}},
 		}, {
-			{"a", "1"},
-			{"c", "3"},
-			{"replica", "replica-2"},
+			lset: []storepb.Label{{"a", "1"}, {"c", "3"}, {"replica", "replica-2"}},
+			vals: []sample{{60000, 3}, {70000, 4}},
 		}, {
-			{"a", "1"},
-			{"c", "3"},
-			{"replica", "replica-3"},
+			lset: []storepb.Label{{"a", "1"}, {"c", "3"}, {"replica", "replica-3"}},
+			vals: []sample{{200000, 5}, {210000, 6}},
 		}, {
-			{"a", "1"},
-			{"c", "3"},
-			{"d", "4"},
+			lset: []storepb.Label{{"a", "1"}, {"c", "3"}, {"d", "4"}},
+			vals: []sample{{10000, 1}, {20000, 2}},
 		}, {
-			{"a", "1"},
-			{"c", "3"},
+			lset: []storepb.Label{{"a", "1"}, {"c", "3"}},
+			vals: []sample{{10000, 1}, {20000, 2}},
 		}, {
-			{"a", "1"},
-			{"c", "4"},
-			{"replica", "replica-1"},
+			lset: []storepb.Label{{"a", "1"}, {"c", "4"}, {"replica", "replica-1"}},
+			vals: []sample{{10000, 1}, {20000, 2}},
 		}, {
-			{"a", "2"},
-			{"c", "3"},
-			{"replica", "replica-3"},
+			lset: []storepb.Label{{"a", "2"}, {"c", "3"}, {"replica", "replica-3"}},
+			vals: []sample{{10000, 1}, {20000, 2}},
 		}, {
-			{"a", "2"},
-			{"c", "3"},
-			{"replica", "replica-3"},
+			lset: []storepb.Label{{"a", "2"}, {"c", "3"}, {"replica", "replica-3"}},
+			vals: []sample{{60000, 3}, {70000, 4}},
 		},
 	}
-	exp := []labels.Labels{
+	exp := []struct {
+		lset labels.Labels
+		vals []sample
+	}{
 		{
-			{"a", "1"},
-			{"c", "3"},
-		}, {
-			{"a", "1"},
-			{"c", "3"},
-			{"d", "4"},
-		}, {
-			{"a", "1"},
-			{"c", "3"},
-		}, {
-			{"a", "1"},
-			{"c", "4"},
-		}, {
-			{"a", "2"},
-			{"c", "3"},
+			lset: labels.Labels{{"a", "1"}, {"c", "3"}},
+			vals: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}, {200000, 5}, {210000, 6}},
+		},
+		{
+			lset: labels.Labels{{"a", "1"}, {"c", "3"}, {"d", "4"}},
+			vals: []sample{{10000, 1}, {20000, 2}},
+		},
+		{
+			lset: labels.Labels{{"a", "1"}, {"c", "3"}},
+			vals: []sample{{10000, 1}, {20000, 2}},
+		},
+		{
+			lset: labels.Labels{{"a", "1"}, {"c", "4"}},
+			vals: []sample{{10000, 1}, {20000, 2}},
+		},
+		{
+			lset: labels.Labels{{"a", "2"}, {"c", "3"}},
+			vals: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}},
 		},
 	}
 	var series []storepb.Series
-	for _, lset := range input {
-		series = append(series, storepb.Series{Labels: lset})
+	for _, c := range input {
+		chk := chunkenc.NewXORChunk()
+		app, _ := chk.Appender()
+		for _, s := range c.vals {
+			app.Append(s.t, s.v)
+		}
+		series = append(series, storepb.Series{
+			Labels: c.lset,
+			Chunks: []storepb.Chunk{{
+				Type: storepb.Chunk_XOR,
+				Data: chk.Bytes(),
+			}},
+		})
 	}
 	set := promSeriesSet{
 		mint: math.MinInt64,
@@ -386,58 +399,48 @@ func TestDedupSeriesSet(t *testing.T) {
 	}
 	dedupSet := newDedupSeriesSet(set, "replica")
 
-	var got []labels.Labels
+	i := 0
 	for dedupSet.Next() {
-		got = append(got, dedupSet.At().Labels())
+		testutil.Equals(t, exp[i].lset, dedupSet.At().Labels())
+
+		res := expandSeries(t, dedupSet.At().Iterator())
+		testutil.Equals(t, exp[i].vals, res)
+		i++
 	}
 	testutil.Ok(t, dedupSet.Err())
-	testutil.Equals(t, exp, got)
 }
 
 func TestDedupSeriesIterator(t *testing.T) {
+	// The deltas between timestamps should be at least 10000 to not be affected
+	// by the initial penalty of 5000, that will cause the second iterator to seek
+	// ahead this far at least once.
 	cases := []struct {
 		a, b, exp []sample
 	}{
 		{ // Generally prefer the first series.
-			a:   []sample{{100, 10}, {200, 11}, {300, 12}, {400, 13}},
-			b:   []sample{{100, 20}, {200, 21}, {300, 22}, {400, 23}},
-			exp: []sample{{100, 10}, {200, 11}, {300, 12}, {400, 13}},
+			a:   []sample{{10000, 10}, {20000, 11}, {30000, 12}, {40000, 13}},
+			b:   []sample{{10000, 20}, {20000, 21}, {30000, 22}, {40000, 23}},
+			exp: []sample{{10000, 10}, {20000, 11}, {30000, 12}, {40000, 13}},
 		},
 		{ // Prefer b if it starts earlier.
-			a:   []sample{{101, 1}, {201, 1}, {301, 1}, {401, 1}},
-			b:   []sample{{100, 2}, {200, 2}, {300, 2}, {400, 2}},
-			exp: []sample{{100, 2}, {200, 2}, {300, 2}, {400, 2}},
+			a:   []sample{{10100, 1}, {20100, 1}, {30100, 1}, {40100, 1}},
+			b:   []sample{{10000, 2}, {20000, 2}, {30000, 2}, {40000, 2}},
+			exp: []sample{{10000, 2}, {20000, 2}, {30000, 2}, {40000, 2}},
 		},
 		{ // Don't switch series on a single delta sized gap.
-			a:   []sample{{100, 1}, {200, 1}, {400, 1}},
-			b:   []sample{{101, 2}, {201, 2}, {301, 2}, {401, 2}},
-			exp: []sample{{100, 1}, {200, 1}, {400, 1}},
+			a:   []sample{{10000, 1}, {20000, 1}, {40000, 1}},
+			b:   []sample{{10000, 2}, {20000, 2}, {30000, 2}, {40000, 2}},
+			exp: []sample{{10000, 1}, {20000, 1}, {40000, 1}},
 		},
-		{ // Once the gap gets bigger, switch and stay with the new series.
-			a:   []sample{{1000, 1}, {2000, 1}, {3000, 1}, {6000, 1}, {7000, 1}},
-			b:   []sample{{1010, 2}, {2010, 2}, {3010, 2}, {4010, 2}, {5010, 2}, {6010, 2}},
-			exp: []sample{{1000, 1}, {2000, 1}, {3000, 1}, {4010, 2}, {5010, 2}, {6010, 2}},
+		{
+			a:   []sample{{10000, 1}, {20000, 1}, {40000, 1}},
+			b:   []sample{{15000, 2}, {25000, 2}, {35000, 2}, {45000, 2}},
+			exp: []sample{{10000, 1}, {20000, 1}, {40000, 1}},
 		},
-		{ // Alternating gaps and more samples in the first series.
-			a: []sample{
-				{1000, 1}, {2000, 1}, {3000, 1}, {4000, 1},
-				{7000, 1}, {8000, 1}, {9000, 1}, {10000, 1},
-				{14000, 1}, {15000, 1}, {16000, 1}, {17000, 1},
-				{30000, 1}, {35000, 1}, {40000, 1}, {45000, 1},
-			},
-			b: []sample{
-				{4000, 2}, {5000, 2}, {6000, 2}, {7000, 2},
-				{10000, 2}, {11000, 2}, {12000, 2}, {13000, 2},
-				{17000, 2}, {18000, 2}, {19000, 2}, {20000, 2},
-				{41000, 2},
-			},
-			exp: []sample{
-				{1000, 1}, {2000, 1}, {3000, 1}, {4000, 1},
-				{6000, 2}, {7000, 2}, {9000, 1}, {10000, 1},
-				{12000, 2}, {13000, 2}, {15000, 1}, {16000, 1},
-				{17000, 1}, {19000, 2}, {20000, 2},
-				{30000, 1}, {35000, 1}, {40000, 1}, {45000, 1},
-			},
+		{ // Once the gap gets bigger than 2 deltas, switch and stay with the new series.
+			a:   []sample{{10000, 1}, {20000, 1}, {30000, 1}, {60000, 1}, {70000, 1}},
+			b:   []sample{{10100, 2}, {20100, 2}, {30100, 2}, {40100, 2}, {50100, 2}, {60100, 2}},
+			exp: []sample{{10000, 1}, {20000, 1}, {30000, 1}, {50100, 2}, {60100, 2}},
 		},
 	}
 	for i, c := range cases {
