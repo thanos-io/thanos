@@ -351,10 +351,7 @@ func runRule(
 		}
 
 		bkt := gcs.NewBucket(gcsClient.Bucket(gcsBucket), reg, gcsBucket)
-		s := shipper.New(logger, nil, dataDir, bkt, func() labels.Labels {
-			// We don't need external labels here, replica label if any will be appended to TSDB directly.
-			return labels.Labels{}
-		})
+		s := shipper.New(logger, nil, dataDir, bkt, func() labels.Labels { return lset })
 
 		ctx, cancel := context.WithCancel(context.Background())
 
