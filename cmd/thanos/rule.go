@@ -391,6 +391,7 @@ func queryPrometheusInstant(ctx context.Context, logger log.Logger, addr, query 
 	params := url.Values{}
 	params.Add("query", query)
 	params.Add("time", t.Format(time.RFC3339Nano))
+	params.Add("dedup", "true")
 	u.RawQuery = params.Encode()
 
 	req, err := http.NewRequest("GET", u.String(), nil)
