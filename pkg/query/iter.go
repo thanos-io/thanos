@@ -181,7 +181,7 @@ func (it *chunkSeriesIterator) Seek(t int64) (ok bool) {
 	// hopping across chunks so we just call next until we reach t.
 	for {
 		ct, _ := it.At()
-		if ct >= t {
+		if ct > 0 && ct >= t {
 			return true
 		}
 		if !it.Next() {
@@ -329,8 +329,12 @@ func (s *dedupSeries) Labels() labels.Labels {
 	return s.lset
 }
 
-func (s *dedupSeries) Iterator() storage.SeriesIterator {
-	return newDedupSeriesIterator(s.replicas[0].Iterator(), s.replicas[1].Iterator())
+func (s *dedupSeries) Iterator() (it storage.SeriesIterator) {
+	it = s.replicas[0].Iterator()
+	for _, o := range s.replicas[1:] {
+		it = newDedupSeriesIterator(it, o.Iterator())
+	}
+	return it
 }
 
 type sample struct {
@@ -390,18 +394,18 @@ func (it *dedupSeriesIterator) Next() bool {
 
 	it.useA = ta <= tb
 
-	// For the series we didn't pick, add a penalty as high as the delta of the last two
+	// For the series we didn't pick, add a penalty twice as high as the delta of the last two
 	// samples to the next seek against it.
 	// This ensures that we don't pick a sample too close, which would increase the overall
 	// sample frequency. It also guards against clock drift and inaccuracies during
 	// timestamp assignment.
-	// If we don't know a delta yet, we pick 3000 as a constant, which is based on the knowledge
+	// If we don't know a delta yet, we pick 5000 as a constant, which is based on the knowledge
 	// that timestamps are in milliseconds and sampling frequencies typically multiple seconds long.
-	const initialPenality = 3000
+	const initialPenality = 5000
 
 	if it.useA {
 		if it.lastT != math.MinInt64 {
-			it.penB = ta - it.lastT
+			it.penB = 2 * (ta - it.lastT)
 		} else {
 			it.penB = initialPenality
 		}
@@ -410,7 +414,7 @@ func (it *dedupSeriesIterator) Next() bool {
 		return true
 	}
 	if it.lastT != math.MinInt64 {
-		it.penA = tb - it.lastT
+		it.penA = 2 * (tb - it.lastT)
 	} else {
 		it.penA = initialPenality
 	}
@@ -422,7 +426,7 @@ func (it *dedupSeriesIterator) Next() bool {
 func (it *dedupSeriesIterator) Seek(t int64) bool {
 	for {
 		ts, _ := it.At()
-		if ts >= t {
+		if ts > 0 && ts >= t {
 			return true
 		}
 		if !it.Next() {
