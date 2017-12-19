@@ -65,7 +65,7 @@ func TestSyncer_SyncMetas(t *testing.T) {
 		testutil.Ok(t, os.RemoveAll(d))
 	}
 
-	sy, err := NewSyncer(nil, dir, bkt, 0)
+	sy, err := NewSyncer(nil, nil, dir, bkt, 0)
 	testutil.Ok(t, err)
 
 	got, err := sy.Groups()[0].IDs()
@@ -151,7 +151,7 @@ func TestSyncer_GarbageCollect(t *testing.T) {
 	}
 
 	// Do one initial synchronization with the bucket.
-	sy, err := NewSyncer(nil, dir, bkt, 0)
+	sy, err := NewSyncer(nil, nil, dir, bkt, 0)
 	testutil.Ok(t, err)
 	testutil.Ok(t, sy.SyncMetas(ctx))
 
@@ -219,7 +219,7 @@ func TestGroup_Compact(t *testing.T) {
 	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(dir, b2.String()), b2.String()))
 	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(dir, b3.String()), b3.String()))
 
-	g, err := NewGroup(log.NewLogfmtLogger(os.Stderr), bkt, dir, nil)
+	g, err := newGroup(log.NewLogfmtLogger(os.Stderr), nil, bkt, dir, nil)
 	testutil.Ok(t, err)
 
 	comp, err := tsdb.NewLeveledCompactor(nil, log.NewLogfmtLogger(os.Stderr), []int64{1000, 3000}, nil)
