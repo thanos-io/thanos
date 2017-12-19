@@ -71,7 +71,7 @@ type bucketStoreMetrics struct {
 	resultSeriesCount     prometheus.Summary
 }
 
-func newBucketStoreMetrics(reg *prometheus.Registry, s *BucketStore) *bucketStoreMetrics {
+func newBucketStoreMetrics(reg prometheus.Registerer, s *BucketStore) *bucketStoreMetrics {
 	var m bucketStoreMetrics
 
 	m.blockLoads = prometheus.NewCounter(prometheus.CounterOpts{
@@ -162,11 +162,11 @@ func newBucketStoreMetrics(reg *prometheus.Registry, s *BucketStore) *bucketStor
 // an object store bucket. It is optimized to work against high latency backends.
 func NewBucketStore(
 	logger log.Logger,
-	reg *prometheus.Registry,
+	reg prometheus.Registerer,
 	bucket objstore.BucketReader,
 	gossipTimestampsFn func(mint int64, maxt int64),
 	dir string,
-	indexCacheSize int,
+	indexCacheSizeBytes uint64,
 	maxChunkPoolBytes uint64,
 ) (*BucketStore, error) {
 	if logger == nil {
@@ -175,7 +175,7 @@ func NewBucketStore(
 	if gossipTimestampsFn == nil {
 		gossipTimestampsFn = func(mint int64, maxt int64) {}
 	}
-	indexCache, err := newIndexCache(indexCacheSize)
+	indexCache, err := newIndexCache(reg, indexCacheSizeBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "create index cache")
 	}
