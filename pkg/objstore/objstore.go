@@ -16,10 +16,10 @@ import (
 type Bucket interface {
 	BucketReader
 
-	// Upload writes the file specified in src to remote GCS location specified as target.
+	// Upload the contents of the reader as an object into the bucket.
 	Upload(ctx context.Context, name string, r io.Reader) error
 
-	// Delete removes the object with the given names.
+	// Delete removes the object with the given name.
 	Delete(ctx context.Context, name string) error
 }
 
