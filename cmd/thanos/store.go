@@ -40,8 +40,8 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
 		PlaceHolder("<bucket>").Required().String()
 
-	indexCacheSize := cmd.Flag("index-cache-size", "Number of data records that are kept in the index cache.").
-		Default("100000").Int()
+	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the index cache.").
+		Default("250MB").Bytes()
 
 	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatble bytes for chunks.").
 		Default("2GB").Bytes()
@@ -84,7 +84,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			*grpcAddr,
 			*httpAddr,
 			p.SetTimestamps,
-			*indexCacheSize,
+			uint64(*indexCacheSize),
 			uint64(*chunkPoolSize),
 		)
 	}
@@ -103,7 +103,7 @@ func runStore(
 	grpcAddr string,
 	httpAddr string,
 	gossipTimestampsFn func(mint int64, maxt int64),
-	indexCacheSize int,
+	indexCacheSizeBytes uint64,
 	chunkPoolSizeBytes uint64,
 ) error {
 	{
@@ -122,7 +122,7 @@ func runStore(
 			bkt,
 			gossipTimestampsFn,
 			dataDir,
-			indexCacheSize,
+			indexCacheSizeBytes,
 			chunkPoolSizeBytes,
 		)
 		if err != nil {
