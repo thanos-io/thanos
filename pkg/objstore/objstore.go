@@ -183,76 +183,123 @@ type metricBucket struct {
 }
 
 func (b *metricBucket) Iter(ctx context.Context, dir string, f func(name string) error) error {
+	const op = "iter"
+
 	err := b.bkt.Iter(ctx, dir, f)
 	if err != nil {
-		b.opsFailures.WithLabelValues("iter").Inc()
+		b.opsFailures.WithLabelValues(op).Inc()
 	}
-	b.ops.WithLabelValues("iter").Inc()
+	b.ops.WithLabelValues(op).Inc()
 
 	return err
 }
 
 func (b *metricBucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
-	start := time.Now()
+	const op = "get"
+	b.ops.WithLabelValues(op).Inc()
 
 	rc, err := b.bkt.Get(ctx, name)
 	if err != nil {
-		b.opsFailures.WithLabelValues("upload").Inc()
+		b.opsFailures.WithLabelValues(op).Inc()
+		return nil, err
 	}
-	b.ops.WithLabelValues("upload").Inc()
-	b.opsDuration.WithLabelValues("upload").Observe(time.Since(start).Seconds())
+	rc = newTimingReadCloser(rc,
+		b.opsDuration.WithLabelValues(op), b.opsFailures.WithLabelValues(op))
 
-	return rc, err
+	return rc, nil
 }
 
 func (b *metricBucket) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
-	start := time.Now()
+	const op = "get_range"
+	b.ops.WithLabelValues(op).Inc()
 
 	rc, err := b.bkt.GetRange(ctx, name, off, length)
 	if err != nil {
-		b.opsFailures.WithLabelValues("upload").Inc()
+		b.opsFailures.WithLabelValues(op).Inc()
+		return nil, err
 	}
-	b.ops.WithLabelValues("upload").Inc()
-	b.opsDuration.WithLabelValues("upload").Observe(time.Since(start).Seconds())
+	rc = newTimingReadCloser(rc,
+		b.opsDuration.WithLabelValues(op), b.opsFailures.WithLabelValues(op))
 
-	return rc, err
+	return rc, nil
 }
 
 func (b *metricBucket) Exists(ctx context.Context, name string) (bool, error) {
+	const op = "exists"
 	start := time.Now()
 
 	ok, err := b.bkt.Exists(ctx, name)
 	if err != nil {
-		b.opsFailures.WithLabelValues("exists").Inc()
+		b.opsFailures.WithLabelValues(op).Inc()
 	}
-	b.ops.WithLabelValues("exists").Inc()
-	b.opsDuration.WithLabelValues("exists").Observe(time.Since(start).Seconds())
+	b.ops.WithLabelValues(op).Inc()
+	b.opsDuration.WithLabelValues(op).Observe(time.Since(start).Seconds())
 
 	return ok, err
 }
 
 func (b *metricBucket) Upload(ctx context.Context, name string, r io.Reader) error {
+	const op = "upload"
 	start := time.Now()
 
 	err := b.bkt.Upload(ctx, name, r)
 	if err != nil {
-		b.opsFailures.WithLabelValues("upload").Inc()
+		b.opsFailures.WithLabelValues(op).Inc()
 	}
-	b.ops.WithLabelValues("upload").Inc()
-	b.opsDuration.WithLabelValues("upload").Observe(time.Since(start).Seconds())
+	b.ops.WithLabelValues(op).Inc()
+	b.opsDuration.WithLabelValues(op).Observe(time.Since(start).Seconds())
 
 	return err
 }
 
 func (b *metricBucket) Delete(ctx context.Context, name string) error {
+	const op = "delete"
 	start := time.Now()
 
 	err := b.bkt.Delete(ctx, name)
 	if err != nil {
-		b.opsFailures.WithLabelValues("delete").Inc()
+		b.opsFailures.WithLabelValues(op).Inc()
 	}
-	b.ops.WithLabelValues("delete").Inc()
-	b.opsDuration.WithLabelValues("delete").Observe(time.Since(start).Seconds())
+	b.ops.WithLabelValues(op).Inc()
+	b.opsDuration.WithLabelValues(op).Observe(time.Since(start).Seconds())
 
 	return err
+}
+
+type timingReadCloser struct {
+	io.ReadCloser
+
+	ok       bool
+	start    time.Time
+	duration prometheus.Histogram
+	failed   prometheus.Counter
+}
+
+func newTimingReadCloser(rc io.ReadCloser, dur prometheus.Histogram, failed prometheus.Counter) *timingReadCloser {
+	return &timingReadCloser{
+		ReadCloser: rc,
+		ok:         true,
+		start:      time.Now(),
+		duration:   dur,
+		failed:     failed,
+	}
+}
+
+func (rc *timingReadCloser) Close() error {
+	err := rc.ReadCloser.Close()
+	rc.duration.Observe(time.Since(rc.start).Seconds())
+	if rc.ok && err != nil {
+		rc.failed.Inc()
+		rc.ok = false
+	}
+	return err
+}
+
+func (rc *timingReadCloser) Read(b []byte) (n int, err error) {
+	n, err = rc.ReadCloser.Read(b)
+	if rc.ok && err != nil {
+		rc.failed.Inc()
+		rc.ok = false
+	}
+	return n, err
 }
