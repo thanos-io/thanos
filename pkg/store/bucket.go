@@ -18,6 +18,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/pool"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/strutil"
@@ -37,63 +38,12 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// Bucket represents a readable bucket of data objects.
-type Bucket interface {
-	// Iter calls the given function with each found top-level object name in the bucket.
-	// It exits if the context is canceled or the function returns an error.
-	Iter(ctx context.Context, dir string, f func(name string) error) error
-
-	// Get returns a new reader against the object with the given name.
-	Get(ctx context.Context, name string) (io.ReadCloser, error)
-
-	// GerRange returns a new reader against the object that reads len bytes
-	// starting at off.
-	GetRange(ctx context.Context, name string, off, len int64) (io.ReadCloser, error)
-}
-
-// BucketWithMetrics takes a bucket and registers metrics with the given registry for
-// operations run against the bucket.
-func BucketWithMetrics(name string, b Bucket, r prometheus.Registerer) Bucket {
-	bkt := &metricBucket{
-		Bucket: b,
-		ops: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name:        "thanos_store_bucket_operations_total",
-			Help:        "Total number of store operations that were executed against a bucket.",
-			ConstLabels: prometheus.Labels{"bucket": name},
-		}, []string{"operation"}),
-	}
-	if r != nil {
-		r.MustRegister(bkt.ops)
-	}
-	return bkt
-}
-
-type metricBucket struct {
-	Bucket
-	ops *prometheus.CounterVec
-}
-
-func (b *metricBucket) Iter(ctx context.Context, dir string, f func(name string) error) error {
-	b.ops.WithLabelValues("iter").Inc()
-	return b.Bucket.Iter(ctx, dir, f)
-}
-
-func (b *metricBucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
-	b.ops.WithLabelValues("get").Inc()
-	return b.Bucket.Get(ctx, name)
-}
-
-func (b *metricBucket) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
-	b.ops.WithLabelValues("get_range").Inc()
-	return b.Bucket.GetRange(ctx, name, off, length)
-}
-
 // BucketStore implements the store API backed by a Bucket bucket. It loads all index
 // files to local disk.
 type BucketStore struct {
 	logger     log.Logger
 	metrics    *bucketStoreMetrics
-	bucket     Bucket
+	bucket     objstore.BucketReader
 	dir        string
 	indexCache *indexCache
 	chunkPool  *pool.BytesPool
@@ -105,8 +55,6 @@ type BucketStore struct {
 	oldestBlockMinTime   int64
 	youngestBlockMaxTime int64
 }
-
-var _ storepb.StoreServer = (*BucketStore)(nil)
 
 type bucketStoreMetrics struct {
 	blockLoads            prometheus.Counter
@@ -175,18 +123,18 @@ func newBucketStoreMetrics(reg *prometheus.Registry, s *BucketStore) *bucketStor
 		Name: "thanos_bucket_store_series_get_all_duration_seconds",
 		Help: "Time it takes until all per-block prepares and preloads for a query are finished.",
 		Buckets: []float64{
-			0.01, 0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15,
+			0.01, 0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 30, 60,
 		},
 	})
 	m.seriesMergeDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name: "thanos_bucket_store_series_merge_duration_seconds",
 		Help: "Time it takes to merge sub-results from all queried blocks into a single result.",
 		Buckets: []float64{
-			0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7, 1, 3, 5, 10,
+			0.01, 0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 30, 60,
 		},
 	})
 	m.resultSeriesCount = prometheus.NewSummary(prometheus.SummaryOpts{
-		Name: "thanos_bucket_store_series_result_count",
+		Name: "thanos_bucket_store_series_result_series",
 		Help: "Number of series observed in the final result of a query.",
 	})
 
@@ -215,7 +163,7 @@ func newBucketStoreMetrics(reg *prometheus.Registry, s *BucketStore) *bucketStor
 func NewBucketStore(
 	logger log.Logger,
 	reg *prometheus.Registry,
-	bucket Bucket,
+	bucket objstore.BucketReader,
 	gossipTimestampsFn func(mint int64, maxt int64),
 	dir string,
 	indexCacheSize int,
@@ -752,7 +700,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 // state for the block on local disk.
 type bucketBlock struct {
 	logger     log.Logger
-	bucket     Bucket
+	bucket     objstore.BucketReader
 	meta       *block.Meta
 	dir        string
 	indexCache *indexCache
@@ -771,7 +719,7 @@ type bucketBlock struct {
 func newBucketBlock(
 	ctx context.Context,
 	logger log.Logger,
-	bkt Bucket,
+	bkt objstore.BucketReader,
 	id ulid.ULID,
 	dir string,
 	indexCache *indexCache,
@@ -791,7 +739,7 @@ func newBucketBlock(
 		return nil, errors.Wrap(err, "load index cache")
 	}
 	// Get object handles for all chunk files.
-	err := bkt.Iter(ctx, id.String()+"/chunks/", func(n string) error {
+	err := bkt.Iter(ctx, path.Join(id.String(), "chunks"), func(n string) error {
 		b.chunkObjs = append(b.chunkObjs, n)
 		return nil
 	})
@@ -807,10 +755,9 @@ func (b *bucketBlock) loadMeta(ctx context.Context, id ulid.ULID, dir string) er
 		if err := os.MkdirAll(dir, 0777); err != nil {
 			return errors.Wrap(err, "create dir")
 		}
-		dst := filepath.Join(dir, "meta.json")
 		src := path.Join(id.String(), "meta.json")
 
-		if err := downloadBucketObject(ctx, b.bucket, dst, src); err != nil {
+		if err := objstore.DownloadFile(ctx, b.bucket, src, dir); err != nil {
 			return errors.Wrap(err, "download meta.json")
 		}
 	} else if err != nil {
@@ -837,14 +784,15 @@ func (b *bucketBlock) loadIndexCache(ctx context.Context, dir string) (err error
 	// No cache exists is on disk yet, build it from a the downloaded index and retry.
 	fn := filepath.Join(dir, "index")
 
-	if err := downloadBucketObject(ctx, b.bucket, fn, b.indexObj); err != nil {
+	if err := objstore.DownloadFile(ctx, b.bucket, b.indexObj, fn); err != nil {
 		return errors.Wrap(err, "download index file")
 	}
+	defer os.Remove(fn)
+
 	indexr, err := index.NewFileReader(fn)
 	if err != nil {
 		return errors.Wrap(err, "open index reader")
 	}
-	defer os.Remove(fn)
 	defer indexr.Close()
 
 	if err := block.WriteIndexCache(cachefn, indexr); err != nil {
@@ -1345,27 +1293,6 @@ func renameFile(from, to string) error {
 		return err
 	}
 	return pdir.Close()
-}
-
-func downloadBucketObject(ctx context.Context, bkt Bucket, dst, src string) error {
-	r, err := bkt.Get(ctx, src)
-	if err != nil {
-		return errors.Wrap(err, "create reader")
-	}
-	defer r.Close()
-
-	f, err := os.Create(dst)
-	if err != nil {
-		return errors.Wrap(err, "create file")
-	}
-	defer func() {
-		f.Close()
-		if err != nil {
-			os.Remove(dst)
-		}
-	}()
-	_, err = io.Copy(f, r)
-	return err
 }
 
 type queryStats struct {

@@ -4,8 +4,7 @@ package gcs
 import (
 	"context"
 	"io"
-
-	"os"
+	"strings"
 
 	"cloud.google.com/go/storage"
 	"github.com/prometheus/client_golang/prometheus"
@@ -19,26 +18,32 @@ const (
 
 	// Class B operation.
 	opObjectGet = "object.get"
+
+	// Free operations.
+	opObjectDelete = "object.delete"
 )
+
+// DirDelim is the delimiter used to model a directory structure in an object store bucket.
+const DirDelim = "/"
 
 // Bucket implements the store.Bucket and shipper.Bucket interfaces against GCS.
 type Bucket struct {
-	bkt *storage.BucketHandle
-
+	bkt      *storage.BucketHandle
 	opsTotal *prometheus.CounterVec
 }
 
 // NewBucket returns a new Bucket against the given bucket handle.
-func NewBucket(b *storage.BucketHandle, r prometheus.Registerer, bucketName string) *Bucket {
-	bkt := &Bucket{bkt: b}
-	bkt.opsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name:        "thanos_objstore_gcs_bucket_operations_total",
-		Help:        "Total number of operations that were executed against a Google Compute Storage bucket.",
-		ConstLabels: prometheus.Labels{"bucket": bucketName},
-	}, []string{"operation"})
-
-	if r != nil {
-		r.MustRegister(bkt.opsTotal)
+func NewBucket(name string, b *storage.BucketHandle, reg prometheus.Registerer) *Bucket {
+	bkt := &Bucket{
+		bkt: b,
+		opsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name:        "thanos_objstore_gcs_bucket_operations_total",
+			Help:        "Total number of operations that were executed against a Google Compute Storage bucket.",
+			ConstLabels: prometheus.Labels{"bucket": name},
+		}, []string{"operation"}),
+	}
+	if reg != nil {
+		reg.MustRegister()
 	}
 	return bkt
 }
@@ -47,9 +52,14 @@ func NewBucket(b *storage.BucketHandle, r prometheus.Registerer, bucketName stri
 // object name including the prefix of the inspected directory.
 func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) error {
 	b.opsTotal.WithLabelValues(opObjectsList).Inc()
+	// Ensure the object name actually ends with a dir suffix. Otherwise we'll just iterate the
+	// object itself as one prefix item.
+	if dir != "" {
+		dir = strings.TrimSuffix(dir, DirDelim) + DirDelim
+	}
 	it := b.bkt.Objects(ctx, &storage.Query{
 		Prefix:    dir,
-		Delimiter: "/",
+		Delimiter: DirDelim,
 	})
 	for {
 		select {
@@ -88,72 +98,33 @@ func (b *Bucket) Handle() *storage.BucketHandle {
 	return b.bkt
 }
 
-// Exists checks if the given directory exists at the remote site (and contains at least one element).
-func (b *Bucket) Exists(ctx context.Context, dir string) (bool, error) {
-	b.opsTotal.WithLabelValues(opObjectsList).Inc()
-	objs := b.bkt.Objects(ctx, &storage.Query{
-		Delimiter: "/",
-		Prefix:    dir,
-	})
-	for {
-		_, err := objs.Next()
-		if err == iterator.Done {
-			return false, nil
-		}
+// Exists checks if the given object exists.
+func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
+	b.opsTotal.WithLabelValues(opObjectGet).Inc()
 
-		if err != nil {
-			return false, err
-		}
-
-		// The first object found with the given filter indicates that the directory exists.
+	if _, err := b.bkt.Object(name).Attrs(ctx); err == nil {
 		return true, nil
+	} else if err != storage.ErrObjectNotExist {
+		return false, err
 	}
+	return false, nil
 }
 
 // Upload writes the file specified in src to remote GCS location specified as target.
-func (b *Bucket) Upload(ctx context.Context, src, target string) error {
-	f, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-
+func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	b.opsTotal.WithLabelValues(opObjectInsert).Inc()
-	w := b.bkt.Object(target).NewWriter(ctx)
 
-	_, err = io.Copy(w, f)
-	if err != nil {
+	w := b.bkt.Object(name).NewWriter(ctx)
+
+	if _, err := io.Copy(w, r); err != nil {
 		return err
 	}
 	return w.Close()
 }
 
-// Delete removes all data prefixed with the dir.
-// NOTE: object.Delete operation is free so no worth to increment gcs operations metric.
-func (b *Bucket) Delete(ctx context.Context, dir string) error {
-	b.opsTotal.WithLabelValues(opObjectsList).Inc()
-	objs := b.bkt.Objects(ctx, &storage.Query{
-		Delimiter: "/",
-		Prefix:    dir,
-	})
-	for {
-		oa, err := objs.Next()
-		if err == iterator.Done {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		// If the prefix is set, we hit another directory and delete recursively.
-		if oa.Prefix != "" {
-			if err := b.Delete(ctx, oa.Prefix); err != nil {
-				return err
-			}
-			continue
-		}
-		// Otherwise it's an object we can delete directly.
-		if err := b.bkt.Object(oa.Name).Delete(ctx); err != nil {
-			return err
-		}
-	}
-	return nil
+// Delete removes the object with the given name.
+func (b *Bucket) Delete(ctx context.Context, name string) error {
+	b.opsTotal.WithLabelValues(opObjectDelete).Inc()
+
+	return b.bkt.Object(name).Delete(ctx)
 }

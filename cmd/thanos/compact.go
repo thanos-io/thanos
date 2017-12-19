@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	"github.com/improbable-eng/thanos/pkg/compact"
-	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/compact"
+	"github.com/improbable-eng/thanos/pkg/objstore"
+	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/query/ui"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/run"
@@ -56,7 +56,9 @@ func runCompact(
 	if err != nil {
 		return errors.Wrap(err, "create GCS client")
 	}
-	bkt := gcs.NewBucket(gcsClient.Bucket(gcsBucket), reg, gcsBucket)
+	var bkt objstore.Bucket
+	bkt = gcs.NewBucket(gcsBucket, gcsClient.Bucket(gcsBucket), reg)
+	bkt = objstore.BucketWithMetrics(gcsBucket, bkt, reg)
 
 	sy, err := compact.NewSyncer(logger, dataDir, bkt, syncDelay)
 	if err != nil {

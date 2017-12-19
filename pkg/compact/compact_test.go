@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/objstore"
+
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/prometheus/tsdb"
@@ -57,7 +59,7 @@ func TestSyncer_SyncMetas(t *testing.T) {
 		testutil.Ok(t, block.WriteMetaFile(bdir, &meta))
 	}
 	for i, id := range ids[5:] {
-		testutil.Ok(t, uploadBlock(ctx, bkt, id, bdirs[i+5]))
+		testutil.Ok(t, objstore.UploadDir(ctx, bkt, bdirs[i+5], id.String()))
 	}
 	for _, d := range bdirs[10:] {
 		testutil.Ok(t, os.RemoveAll(d))
@@ -143,7 +145,9 @@ func TestSyncer_GarbageCollect(t *testing.T) {
 		bdir := filepath.Join(dir, m.ULID.String())
 		testutil.Ok(t, os.MkdirAll(bdir, 0777))
 		testutil.Ok(t, block.WriteMetaFile(bdir, m))
-		testutil.Ok(t, bkt.Upload(ctx, path.Join(bdir, "meta.json"), path.Join(m.ULID.String(), "meta.json")))
+		testutil.Ok(t, objstore.UploadFile(ctx, bkt,
+			path.Join(bdir, "meta.json"),
+			path.Join(m.ULID.String(), "meta.json")))
 	}
 
 	// Do one initial synchronization with the bucket.
@@ -211,9 +215,9 @@ func TestGroup_Compact(t *testing.T) {
 	}, 100, 2001, 3000)
 	testutil.Ok(t, err)
 
-	testutil.Ok(t, uploadBlock(ctx, bkt, b1, filepath.Join(dir, b1.String())))
-	testutil.Ok(t, uploadBlock(ctx, bkt, b2, filepath.Join(dir, b2.String())))
-	testutil.Ok(t, uploadBlock(ctx, bkt, b3, filepath.Join(dir, b3.String())))
+	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(dir, b1.String()), b1.String()))
+	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(dir, b2.String()), b2.String()))
+	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(dir, b3.String()), b3.String()))
 
 	g, err := NewGroup(log.NewLogfmtLogger(os.Stderr), bkt, dir, nil)
 	testutil.Ok(t, err)
@@ -226,7 +230,7 @@ func TestGroup_Compact(t *testing.T) {
 	testutil.Assert(t, id != ulid.ULID{}, "no compaction took place")
 
 	resDir := filepath.Join(dir, id.String())
-	testutil.Ok(t, downloadBlock(ctx, bkt, id.String(), resDir))
+	testutil.Ok(t, objstore.DownloadDir(ctx, bkt, id.String(), resDir))
 
 	meta, err := block.ReadMetaFile(resDir)
 	testutil.Ok(t, err)

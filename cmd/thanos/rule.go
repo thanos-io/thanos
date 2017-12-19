@@ -19,14 +19,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/runutil"
-
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/alert"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
@@ -350,7 +350,10 @@ func runRule(
 			return errors.Wrap(err, "create GCS client")
 		}
 
-		bkt := gcs.NewBucket(gcsClient.Bucket(gcsBucket), reg, gcsBucket)
+		var bkt objstore.Bucket
+		bkt = gcs.NewBucket(gcsBucket, gcsClient.Bucket(gcsBucket), reg)
+		bkt = objstore.BucketWithMetrics(gcsBucket, bkt, reg)
+
 		s := shipper.New(logger, nil, dataDir, bkt, func() labels.Labels { return lset })
 
 		ctx, cancel := context.WithCancel(context.Background())
