@@ -112,7 +112,9 @@ func runStore(
 			return errors.Wrap(err, "create GCS client")
 		}
 
-		bkt := objstore.BucketWithMetrics(gcsBucket, gcs.NewBucket(gcsClient.Bucket(gcsBucket)), reg)
+		var bkt objstore.Bucket
+		bkt = gcs.NewBucket(gcsBucket, gcsClient.Bucket(gcsBucket), reg)
+		bkt = objstore.BucketWithMetrics(gcsBucket, bkt, reg)
 
 		gs, err := store.NewBucketStore(
 			logger,
