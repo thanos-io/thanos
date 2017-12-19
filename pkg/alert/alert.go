@@ -79,6 +79,7 @@ func (a *Alert) ResolvedAt(ts time.Time) bool {
 type Queue struct {
 	logger       log.Logger
 	maxBatchSize int
+	capacity     int
 	labels       labels.Labels
 
 	mtx   sync.Mutex
@@ -97,7 +98,7 @@ func NewQueue(logger log.Logger, reg prometheus.Registerer, capacity, maxBatchSi
 	}
 	q := &Queue{
 		logger:       logger,
-		queue:        make([]*Alert, 0, capacity),
+		capacity:     capacity,
 		morec:        make(chan struct{}, 1),
 		maxBatchSize: maxBatchSize,
 		labels:       lset,
@@ -142,9 +143,7 @@ func (q *Queue) Len() int {
 
 // Cap returns the fixed capacity of the queue.
 func (q *Queue) Cap() int {
-	q.mtx.Lock()
-	defer q.mtx.Unlock()
-	return cap(q.queue)
+	return q.capacity
 }
 
 // Pop takes a batch of alerts from the front of the queue. The batch size is limited
@@ -190,7 +189,7 @@ func (q *Queue) Push(alerts []*Alert) {
 
 	// Queue capacity should be significantly larger than a single alert
 	// batch could be.
-	if d := len(alerts) - cap(q.queue); d > 0 {
+	if d := len(alerts) - q.capacity; d > 0 {
 		alerts = alerts[d:]
 
 		level.Warn(q.logger).Log(
@@ -201,7 +200,7 @@ func (q *Queue) Push(alerts []*Alert) {
 
 	// If the queue is full, remove the oldest alerts in favor
 	// of newer ones.
-	if d := (len(q.queue) + len(alerts)) - cap(q.queue); d > 0 {
+	if d := (len(q.queue) + len(alerts)) - q.capacity; d > 0 {
 		q.queue = q.queue[d:]
 
 		level.Warn(q.logger).Log(
