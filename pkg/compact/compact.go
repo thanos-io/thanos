@@ -19,6 +19,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/labels"
 )
@@ -27,28 +28,84 @@ import (
 // It sorts them into compaction groups based on equal label sets.
 type Syncer struct {
 	logger    log.Logger
+	reg       *prometheus.Registry
 	dir       string
 	bkt       objstore.Bucket
 	syncDelay time.Duration
 	mtx       sync.Mutex
 	groups    map[string]*Group
+	metrics   *syncerMetrics
+}
+
+type syncerMetrics struct {
+	syncMetaFailures          prometheus.Counter
+	syncMetaDuration          prometheus.Histogram
+	garbageCollectedBlocks    prometheus.Counter
+	garbageCollectionFailures prometheus.Counter
+	garbageCollectionDuration prometheus.Histogram
+}
+
+func newSyncerMetrics(reg *prometheus.Registry) *syncerMetrics {
+	var m syncerMetrics
+
+	m.syncMetaFailures = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compact_sync_meta_failures_total",
+		Help: "Total number of failed sync meta operations.",
+	})
+	m.syncMetaDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name: "thanos_compact_sync_meta_duration_seconds",
+		Help: "Time it took to sync meta files.",
+		Buckets: []float64{
+			0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 30, 60, 100, 200, 500,
+		},
+	})
+
+	m.garbageCollectedBlocks = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compact_garbage_collected_blocks_total",
+		Help: "Total number of deleted blocks by compactor.",
+	})
+
+	m.garbageCollectionFailures = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compact_garbage_collection_failures_total",
+		Help: "Total number of failed garbage collection operations.",
+	})
+	m.garbageCollectionDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name: "thanos_compact_garbage_collection_duration_seconds",
+		Help: "Time it took to perform garbage collection iteration.",
+		Buckets: []float64{
+			0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 30, 60, 100, 200, 500,
+		},
+	})
+	if reg != nil {
+		reg.MustRegister(
+			m.syncMetaFailures,
+			m.syncMetaDuration,
+			m.garbageCollectedBlocks,
+			m.garbageCollectionFailures,
+			m.garbageCollectionDuration,
+		)
+	}
+	return &m
 }
 
 // NewSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewSyncer(logger log.Logger, dir string, bkt objstore.Bucket, syncDelay time.Duration) (*Syncer, error) {
+func NewSyncer(logger log.Logger, reg *prometheus.Registry, dir string, bkt objstore.Bucket, syncDelay time.Duration) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return nil, err
 	}
+
 	c := &Syncer{
 		logger:    logger,
+		reg:       reg,
 		dir:       dir,
 		syncDelay: syncDelay,
 		groups:    map[string]*Group{},
 		bkt:       bkt,
+		metrics:   newSyncerMetrics(reg),
 	}
 	return c, errors.Wrap(c.reloadGroups(), "reload groups")
 }
@@ -74,6 +131,18 @@ func (c *Syncer) reloadGroups() error {
 // SyncMetas synchronizes all meta files from blocks in the bucket into
 // the given directory.
 func (c *Syncer) SyncMetas(ctx context.Context) error {
+	begin := time.Now()
+
+	err := c.syncMetas(ctx)
+	if err != nil {
+		c.metrics.syncMetaFailures.Inc()
+	}
+	c.metrics.syncMetaDuration.Observe(time.Since(begin).Seconds())
+
+	return err
+}
+
+func (c *Syncer) syncMetas(ctx context.Context) error {
 	// Read back all block metas so we can detect deleted blocks.
 	var (
 		local  = map[ulid.ULID]*block.Meta{}
@@ -153,6 +222,7 @@ func (c *Syncer) SyncMetas(ctx context.Context) error {
 		if _, ok := remote[id]; ok {
 			continue
 		}
+
 		if err := os.RemoveAll(filepath.Join(c.dir, id.String())); err != nil {
 			level.Warn(c.logger).Log("msg", "delete outdated block", "block", id, "err", err)
 		}
@@ -160,6 +230,7 @@ func (c *Syncer) SyncMetas(ctx context.Context) error {
 			level.Warn(c.logger).Log("msg", "delete outdated block from group", "block", id, "err", err)
 		}
 	}
+
 	return nil
 }
 
@@ -180,8 +251,9 @@ func (c *Syncer) add(bdir string) error {
 
 	g, ok := c.groups[h]
 	if !ok {
-		g, err = NewGroup(
+		g, err = newGroup(
 			log.With(c.logger, "compactionGroup", h),
+			c.reg,
 			c.bkt,
 			filepath.Join(c.dir, "groups", h),
 			meta.Thanos.Labels,
@@ -208,6 +280,18 @@ func (c *Syncer) Groups() (res []*Group) {
 // GarbageCollect deletes blocks from the bucket if their data is available as part of a
 // block with a higher compaction level.
 func (c *Syncer) GarbageCollect(ctx context.Context) error {
+	begin := time.Now()
+
+	err := c.garbageCollect(ctx)
+	if err != nil {
+		c.metrics.garbageCollectionFailures.Inc()
+	}
+	c.metrics.garbageCollectionDuration.Observe(time.Since(begin).Seconds())
+
+	return err
+}
+
+func (c *Syncer) garbageCollect(ctx context.Context) error {
 	// Map each block to its highest priority parent. Initial blocks have themselves
 	// in their source section, i.e. are their own parent.
 	var (
@@ -227,7 +311,7 @@ func (c *Syncer) GarbageCollect(ctx context.Context) error {
 	}
 
 	for id, meta := range all {
-		// For each source block we contain, check whether we are the highest priotiy parent block.
+		// For each source block we contain, check whether we are the highest priority parent block.
 		for _, sid := range meta.Compaction.Sources {
 			pid, ok := parents[sid]
 			// No parents for the source block so far.
@@ -278,34 +362,85 @@ func (c *Syncer) GarbageCollect(ctx context.Context) error {
 		if err != nil {
 			return errors.Wrapf(err, "delete block %s from bucket", id)
 		}
+		c.metrics.garbageCollectedBlocks.Inc()
 	}
 	return nil
+}
+
+type groupMetrics struct {
+	cachedBlocksCount float64
+
+	compactionFailures prometheus.Counter
+	compactionDuration prometheus.Histogram
+}
+
+func newGroupMetrics(reg *prometheus.Registry, labels map[string]string, getBlocksFunc func() (ids []ulid.ULID, err error)) *groupMetrics {
+	var m groupMetrics
+
+	groupBlocksCount := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Name:        "thanos_compact_group_blocks_count",
+		Help:        "Number of currently loaded blocks for group.",
+		ConstLabels: labels,
+	}, func() float64 {
+		b, err := getBlocksFunc()
+		if err != nil {
+			return float64(m.cachedBlocksCount)
+		}
+		m.cachedBlocksCount = float64(len(b))
+		return float64(len(b))
+	})
+
+	m.compactionFailures = prometheus.NewCounter(prometheus.CounterOpts{
+		Name:        "thanos_compact_group_compactions_failures_total",
+		Help:        "Total number of failed group compactions.",
+		ConstLabels: labels,
+	})
+	m.compactionDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:        "thanos_compact_group_compactions_duration_seconds",
+		Help:        "Time it took to compact whole group.",
+		ConstLabels: labels,
+		Buckets: []float64{
+			0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 30, 60, 100, 200, 500,
+		},
+	})
+
+	if reg != nil {
+		reg.MustRegister(
+			groupBlocksCount,
+			m.compactionFailures,
+			m.compactionDuration,
+		)
+	}
+	return &m
 }
 
 // Group captures a set of blocks that have the same origin labels.
 // Those blocks generally contain the same series and can thus efficiently be compacted.
 type Group struct {
-	logger log.Logger
-	mtx    sync.Mutex
-	dir    string
-	bkt    objstore.Bucket
-	labels map[string]string
+	logger  log.Logger
+	mtx     sync.Mutex
+	dir     string
+	bkt     objstore.Bucket
+	labels  map[string]string
+	metrics *groupMetrics
 }
 
-// NewGroup returns a new compaction group.
-func NewGroup(logger log.Logger, bkt objstore.Bucket, dir string, labels map[string]string) (*Group, error) {
+// newGroup returns a new compaction group.
+func newGroup(logger log.Logger, reg *prometheus.Registry, bkt objstore.Bucket, dir string, labels map[string]string) (*Group, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return nil, err
 	}
-	return &Group{
+	g := &Group{
 		logger: logger,
 		dir:    dir,
 		bkt:    bkt,
 		labels: labels,
-	}, nil
+	}
+	g.metrics = newGroupMetrics(reg, labels, g.IDs)
+	return g, nil
 }
 
 // Add the block with the given meta to the group.
@@ -345,8 +480,20 @@ func (cg *Group) Labels() map[string]string {
 }
 
 // Compact plans and runs a single compaction against the group. The compacted result
-// is uploaded into the bucket the blocks were retrived from.
-func (cg *Group) Compact(ctx context.Context, comp tsdb.Compactor) (id ulid.ULID, err error) {
+// is uploaded into the bucket the blocks were retrieved from.
+func (cg *Group) Compact(ctx context.Context, comp tsdb.Compactor) (ulid.ULID, error) {
+	begin := time.Now()
+
+	id, err := cg.compact(ctx, comp)
+	if err != nil {
+		cg.metrics.compactionFailures.Inc()
+	}
+	cg.metrics.compactionDuration.Observe(time.Since(begin).Seconds())
+
+	return id, err
+
+}
+func (cg *Group) compact(ctx context.Context, comp tsdb.Compactor) (id ulid.ULID, err error) {
 	// Planning a compaction works purely based on the meta.json files in our group's dir.
 	cg.mtx.Lock()
 	plan, err := comp.Plan(cg.dir)

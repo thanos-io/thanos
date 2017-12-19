@@ -60,7 +60,7 @@ func runCompact(
 	bkt = gcs.NewBucket(gcsBucket, gcsClient.Bucket(gcsBucket), reg)
 	bkt = objstore.BucketWithMetrics(gcsBucket, bkt, reg)
 
-	sy, err := compact.NewSyncer(logger, dataDir, bkt, syncDelay)
+	sy, err := compact.NewSyncer(logger, reg, dataDir, bkt, syncDelay)
 	if err != nil {
 		return err
 	}
