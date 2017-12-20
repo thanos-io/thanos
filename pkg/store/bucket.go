@@ -365,24 +365,40 @@ type seriesEntry struct {
 type bucketSeriesSet struct {
 	set  []seriesEntry
 	i    int
+	chkI int
 	chks []storepb.Chunk
 }
 
 func newBucketSeriesSet(set []seriesEntry) *bucketSeriesSet {
 	return &bucketSeriesSet{
-		set: set,
-		i:   -1,
+		set:  set,
+		i:    -1,
+		chkI: 0,
 	}
 }
 
 func (s *bucketSeriesSet) Next() bool {
-	if s.i >= len(s.set)-1 {
+	const grpcMaxMsgSize = 4 * 1024 * 1024
+
+	if s.i >= len(s.set)-1 && s.chkI == 0 {
 		return false
 	}
-	s.i++
-	s.chks = make([]storepb.Chunk, 0, len(s.set[s.i].chks))
 
-	for _, c := range s.set[s.i].chks {
+	if s.chkI > 0 {
+		s.i++
+	}
+
+	s.chks = make([]storepb.Chunk, 0, len(s.set[s.i].chks[s.chkI:len(s.set[s.i].chks)-1]))
+
+	var bytesCount int
+	for i, c := range s.set[s.i].chks[s.chkI : len(s.set[s.i].chks)-1] {
+		bytesCount += len(c.Chunk.Bytes())
+
+		if bytesCount >= grpcMaxMsgSize {
+			s.chkI += i
+			return true
+		}
+
 		s.chks = append(s.chks, storepb.Chunk{
 			MinTime: c.MinTime,
 			MaxTime: c.MaxTime,
@@ -390,6 +406,8 @@ func (s *bucketSeriesSet) Next() bool {
 			Data:    c.Chunk.Bytes(),
 		})
 	}
+
+	s.chkI = 0
 	return true
 }
 
@@ -399,12 +417,6 @@ func (s *bucketSeriesSet) At() ([]storepb.Label, []storepb.Chunk) {
 
 func (s *bucketSeriesSet) Err() error {
 	return nil
-}
-
-func measureTime(f func() error) (time.Duration, error) {
-	s := time.Now()
-	err := f()
-	return time.Since(s), err
 }
 
 func (s *BucketStore) blockSeries(
@@ -603,7 +615,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		begin := time.Now()
 		var resp storepb.SeriesResponse
 
-		// Merge series set into an union of all block sets. This exposes all blocks are single seriesSet.
+		// Merge series set into an union of all block sets. This exposes all blocks as single seriesSet.
 		// Returned set is can be out of order in terms of series time ranges. It is fixed later on, inside querier.
 		set := storepb.MergeSeriesSets(res...)
 		for set.Next() {
