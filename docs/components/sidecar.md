@@ -18,3 +18,5 @@ $ thanos query \
     --gcs.bucket       "example-bucket" \
     --cluster.peers    "thanos-cluster.example.org" \
 ```
+
+## Deployment

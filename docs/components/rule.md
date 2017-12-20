@@ -15,3 +15,5 @@ $ thanos rule \
 
 As rule nodes outsource query processing to query nodes, they should generally experience little load. If necessary, functional sharding can be applied by splitting up the sets of rules between HA pairs.
 Rules are processed with deduplicated data according to the replica label configured on query nodes.
+
+## Deployment

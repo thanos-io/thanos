@@ -24,3 +24,4 @@ $ thanos query \
     --cluster.peers    "thanos-cluster.example.org" \
 ```
 
+## Deployment

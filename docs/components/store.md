@@ -11,3 +11,5 @@ $ thanos query \
 ```
 
 In general about 1MB of local disk space is required per TSDB block stored in the object storage bucket.
+
+## Deployment
