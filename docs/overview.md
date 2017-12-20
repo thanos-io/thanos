@@ -4,6 +4,9 @@ Thanos is a set of components that can be composed into a highly available metri
 
 Currently Thanos only supports Google Cloud Storage as an object storage backend but more implementations can easily be added.
 
+* [Getting Started](#getting-started)
+* [Concepts](design)
+
 ## Getting started
 
 ### Requirements
@@ -13,7 +16,7 @@ Currently Thanos only supports Google Cloud Storage as an object storage backend
 
 ### Get Thanos!
 
-Thanos has no official relases yet. With a working installation of the Go toolchain, Thanos can be downloaded and built by running
+Thanos has no official releases yet. With a working installation of the Go toolchain, Thanos can be downloaded and built by running
 
 ```
 go get github.com/improbable-eng/thanos/...
@@ -41,7 +44,7 @@ It hosts the Prometheus querying UI and implements its HTTP API, which allows to
 
 After a query node is deployed and connected to the cluster, it provides a global view of all available data. This means metrics from different Prometheus servers can be combined within a single query.
 
-It can deduplicate data that was collected from high-availablity pairs of Prometheus servers and thereby seamlessly closes gaps caused by downtime of single instances.
+It can deduplicate data that was collected from high-availability pairs of Prometheus servers and thereby seamlessly closes gaps caused by downtime of single instances.
 
 A combination of sidecars and query nodes already provides a very useful system.
 Next, we can extend this by making data that was backed up to our object storage queryable.
@@ -66,10 +69,10 @@ Rule nodes can evaluate known Prometheus rules against the Thanos' querying laye
 
 Metric data stored in the object storage is in the same format as on Prometheus' local disk. Similarly to compaction processes done by Prometheus, Thanos' can greatly benefit from data in the object storage being compacted.
 
-The compactor is a singleton components that continously ensures that data blocks in the object storage are consolidated, which reduces data size and increases query efficiency.
+The compactor is a singleton component that continously ensures that data blocks in the object storage are consolidated, which reduces data size and increases query efficiency.
 
 * [How to deploy the compactor](components/compact#deployment)
 
-It is not necessary to deploy the compactor to try Thanos out.
+It is not necessary to deploy the compactor to try out Thanos.
 
 In the future, the compactor will also take on tasks such as dynamic retention and downsampling.
