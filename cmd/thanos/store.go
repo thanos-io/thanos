@@ -83,7 +83,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			*dataDir,
 			*grpcAddr,
 			*httpAddr,
-			p.SetTimestamps,
+			p,
 			uint64(*indexCacheSize),
 			uint64(*chunkPoolSize),
 		)
@@ -102,7 +102,7 @@ func runStore(
 	dataDir string,
 	grpcAddr string,
 	httpAddr string,
-	gossipTimestampsFn func(mint int64, maxt int64),
+	peer *cluster.Peer,
 	indexCacheSizeBytes uint64,
 	chunkPoolSizeBytes uint64,
 ) error {
@@ -120,7 +120,6 @@ func runStore(
 			logger,
 			reg,
 			bkt,
-			gossipTimestampsFn,
 			dataDir,
 			indexCacheSizeBytes,
 			chunkPoolSizeBytes,
@@ -135,6 +134,7 @@ func runStore(
 				if err := gs.SyncBlocks(ctx); err != nil {
 					level.Warn(logger).Log("msg", "syncing blocks failed", "err", err)
 				}
+				peer.SetTimestamps(gs.TimeRange())
 				return nil
 			})
 

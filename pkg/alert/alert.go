@@ -281,19 +281,21 @@ func (s *Sender) Send(ctx context.Context, alerts []*Alert) error {
 	var g errgroup.Group
 
 	for _, u := range s.alertmanagers() {
+		amURL := *u
 		sendCtx, cancel := context.WithCancel(ctx)
 
 		g.Go(func() error {
 			defer cancel()
 
 			start := time.Now()
-			u.Path = path.Join(u.Path, alertPushEndpoint)
+			amURL.Path = path.Join(amURL.Path, alertPushEndpoint)
 
-			if err := s.sendOne(sendCtx, u.String(), b); err != nil {
+			if err := s.sendOne(sendCtx, amURL.String(), b); err != nil {
 				level.Warn(s.logger).Log(
 					"msg", "sending alerts failed",
 					"alertmanager", u.Host,
-					"numDropped", len(alerts))
+					"numDropped", len(alerts),
+					"err", err)
 				s.dropped.WithLabelValues(u.Host).Add(float64(len(alerts)))
 				return err
 			}

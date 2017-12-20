@@ -25,7 +25,6 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -99,14 +98,15 @@ func runSidecar(
 		}
 	}
 
-	p, err := cluster.Join(logger, reg, clusterBindAddr, clusterAdvertiseAddr, knownPeers,
+	peer, err := cluster.Join(logger, reg, clusterBindAddr, clusterAdvertiseAddr, knownPeers,
 		cluster.PeerState{
 			Type:    cluster.PeerTypeSource,
 			APIAddr: grpcAddr,
 			Metadata: cluster.PeerMetadata{
-				Labels:  externalLabels.GetPB(),
-				MinTime: timestamp.FromTime(time.Now()),
-				// MaxTime timestamp does not make sense for sidecar so we put sentinel. We always have freshest data.
+				Labels: externalLabels.GetPB(),
+				// Start out with the full time range. The shipper will constrain it later.
+				// TODO(fabxc): minimum timestamp is never adjusted if shipping is disabled.
+				MinTime: 0,
 				MaxTime: math.MaxInt64,
 			},
 		}, false,
@@ -182,7 +182,7 @@ func runSidecar(
 					promUp.Set(0)
 				} else {
 					// Update gossip.
-					p.SetLabels(externalLabels.GetPB())
+					peer.SetLabels(externalLabels.GetPB())
 
 					promUp.Set(1)
 					lastHeartbeat.Set(float64(time.Now().Unix()))
@@ -221,7 +221,7 @@ func runSidecar(
 				if err != nil {
 					level.Warn(logger).Log("msg", "reading timestamps failed", "err", err)
 				} else {
-					p.SetTimestamps(minTime, math.MaxInt64)
+					peer.SetTimestamps(minTime, math.MaxInt64)
 				}
 				return nil
 			})
@@ -232,7 +232,7 @@ func runSidecar(
 		level.Info(logger).Log("msg", "No GCS bucket were configured, GCS uploads will be disabled")
 	}
 
-	level.Info(logger).Log("msg", "starting sidecar")
+	level.Info(logger).Log("msg", "starting sidecar", "peer", peer.Name())
 	return nil
 }
 

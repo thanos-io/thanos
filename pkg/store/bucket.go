@@ -48,12 +48,8 @@ type BucketStore struct {
 	indexCache *indexCache
 	chunkPool  *pool.BytesPool
 
-	mtx                sync.RWMutex
-	blocks             map[ulid.ULID]*bucketBlock
-	gossipTimestampsFn func(mint int64, maxt int64)
-
-	oldestBlockMinTime   int64
-	youngestBlockMaxTime int64
+	mtx    sync.RWMutex
+	blocks map[ulid.ULID]*bucketBlock
 }
 
 type bucketStoreMetrics struct {
@@ -164,16 +160,12 @@ func NewBucketStore(
 	logger log.Logger,
 	reg prometheus.Registerer,
 	bucket objstore.BucketReader,
-	gossipTimestampsFn func(mint int64, maxt int64),
 	dir string,
 	indexCacheSizeBytes uint64,
 	maxChunkPoolBytes uint64,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
-	}
-	if gossipTimestampsFn == nil {
-		gossipTimestampsFn = func(mint int64, maxt int64) {}
 	}
 	indexCache, err := newIndexCache(reg, indexCacheSizeBytes)
 	if err != nil {
@@ -184,15 +176,12 @@ func NewBucketStore(
 		return nil, errors.Wrap(err, "create chunk pool")
 	}
 	s := &BucketStore{
-		logger:               logger,
-		bucket:               bucket,
-		dir:                  dir,
-		indexCache:           indexCache,
-		chunkPool:            chunkPool,
-		blocks:               map[ulid.ULID]*bucketBlock{},
-		gossipTimestampsFn:   gossipTimestampsFn,
-		oldestBlockMinTime:   math.MaxInt64,
-		youngestBlockMaxTime: math.MaxInt64,
+		logger:     logger,
+		bucket:     bucket,
+		dir:        dir,
+		indexCache: indexCache,
+		chunkPool:  chunkPool,
+		blocks:     map[ulid.ULID]*bucketBlock{},
 	}
 	s.metrics = newBucketStoreMetrics(reg, s)
 
@@ -325,16 +314,26 @@ func (s *BucketStore) getBlock(id ulid.ULID) *bucketBlock {
 func (s *BucketStore) setBlock(id ulid.ULID, b *bucketBlock) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
-
 	s.blocks[id] = b
+}
 
-	if s.oldestBlockMinTime > b.meta.MinTime || s.oldestBlockMinTime == math.MaxInt64 {
-		s.oldestBlockMinTime = b.meta.MinTime
+// TimeRange returns the minimum and maximum timestamp of data available in the store.
+func (s *BucketStore) TimeRange() (mint, maxt int64) {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	mint = math.MaxInt64
+	maxt = math.MinInt64
+
+	for _, b := range s.blocks {
+		if b.meta.MinTime < mint {
+			mint = b.meta.MinTime
+		}
+		if b.meta.MaxTime > maxt {
+			maxt = b.meta.MaxTime
+		}
 	}
-	if s.youngestBlockMaxTime < b.meta.MaxTime || s.youngestBlockMaxTime == math.MaxInt64 {
-		s.youngestBlockMaxTime = b.meta.MaxTime
-	}
-	s.gossipTimestampsFn(s.oldestBlockMinTime, s.youngestBlockMaxTime)
+	return mint, maxt
 }
 
 func (s *BucketStore) removeBlock(id ulid.ULID) error {

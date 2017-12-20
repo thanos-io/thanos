@@ -86,6 +86,14 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 		String()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
+		lset, err := parseFlagLabels(*labelStrs)
+		if err != nil {
+			return errors.Wrap(err, "parse labels")
+		}
+		var storeLset []storepb.Label
+		for _, l := range lset {
+			storeLset = append(storeLset, storepb.Label{Name: l.Name, Value: l.Value})
+		}
 		peer, err := cluster.Join(
 			logger,
 			reg,
@@ -95,15 +103,18 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			cluster.PeerState{
 				Type:    cluster.PeerTypeSource,
 				APIAddr: *grpcAddr,
+				Metadata: cluster.PeerMetadata{
+					Labels: storeLset,
+					// Start out with the full time range. The shipper will constrain it later.
+					// TODO(fabxc): minimum timestamp is never adjusted if shipping is disabled.
+					MinTime: 0,
+					MaxTime: math.MaxInt64,
+				},
 			},
 			true,
 		)
 		if err != nil {
 			return errors.Wrap(err, "join cluster")
-		}
-		lset, err := parseFlagLabels(*labelStrs)
-		if err != nil {
-			return errors.Wrap(err, "parse labels")
 		}
 
 		tsdbOpts := &tsdb.Options{
@@ -379,7 +390,7 @@ func runRule(
 		level.Info(logger).Log("msg", "No GCS bucket were configured, GCS uploads will be disabled")
 	}
 
-	level.Info(logger).Log("msg", "starting query node")
+	level.Info(logger).Log("msg", "starting rule node", "peer", peer.Name())
 	return nil
 }
 

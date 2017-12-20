@@ -233,7 +233,6 @@ func (p *Peer) SetTimestamps(mint int64, maxt int64) {
 	s.Metadata.MinTime = mint
 	s.Metadata.MaxTime = maxt
 	p.data[p.Name()] = s
-
 }
 
 // Leave the cluster, waiting up to timeout.

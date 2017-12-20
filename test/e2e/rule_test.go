@@ -47,7 +47,7 @@ groups:
 	})
 	defer closeFn()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	expMetrics := []model.Metric{
@@ -78,7 +78,7 @@ groups:
 			"replica":   "2",
 		},
 	}
-	err = runutil.Retry(time.Second, ctx.Done(), func() error {
+	err = runutil.Retry(5*time.Second, ctx.Done(), func() error {
 		qtime := time.Now()
 
 		// The time series written for the firing alerting rule must be queryable.
