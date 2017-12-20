@@ -81,6 +81,10 @@ func newIndexCache(reg prometheus.Registerer, maxBytes uint64) (*indexCache, err
 		Help: "Current byte size of items in the index cache.",
 	}, []string{"item_type"})
 
+	// Initialize eviction metric with 0.
+	evicted.WithLabelValues(cacheTypePostings).Set(0)
+	evicted.WithLabelValues(cacheTypeSeries).Set(0)
+
 	// Initialize LRU cache with a high size limit since we will manage evictions ourselves
 	// based on stored size.
 	onEvict := func(key, val interface{}) {
@@ -131,6 +135,7 @@ func (c *indexCache) setPostings(b ulid.ULID, l labels.Label, v []byte) {
 	copy(cv, v)
 	c.lru.Add(cacheItem{b, cacheKeyPostings(l)}, cv)
 
+	c.currentSize.WithLabelValues(cacheTypePostings).Add(float64(len(v)))
 }
 
 func (c *indexCache) postings(b ulid.ULID, l labels.Label) ([]byte, bool) {
@@ -160,6 +165,8 @@ func (c *indexCache) setSeries(b ulid.ULID, id uint64, v []byte) {
 	cv := make([]byte, len(v))
 	copy(cv, v)
 	c.lru.Add(cacheItem{b, cacheKeySeries(id)}, cv)
+
+	c.currentSize.WithLabelValues(cacheTypeSeries).Add(float64(len(v)))
 }
 
 func (c *indexCache) series(b ulid.ULID, id uint64) ([]byte, bool) {
