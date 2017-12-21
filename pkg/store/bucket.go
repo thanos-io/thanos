@@ -65,6 +65,7 @@ type bucketStoreMetrics struct {
 	seriesGetAllDuration  prometheus.Histogram
 	seriesMergeDuration   prometheus.Histogram
 	resultSeriesCount     prometheus.Summary
+	chunkSizeBytes  prometheus.Histogram
 }
 
 func newBucketStoreMetrics(reg prometheus.Registerer, s *BucketStore) *bucketStoreMetrics {
@@ -134,6 +135,14 @@ func newBucketStoreMetrics(reg prometheus.Registerer, s *BucketStore) *bucketSto
 		Help: "Number of series observed in the final result of a query.",
 	})
 
+	m.chunkSizeBytes = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name: "thanos_bucket_store_sent_chunk_size_bytes",
+		Help: "Size in bytes of the chunks for the single series, which is adequate to the gRPC message size sent to querier.",
+		Buckets: []float64{
+			32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024,
+		},
+	})
+
 	if reg != nil {
 		reg.MustRegister(
 			m.blockLoads,
@@ -149,6 +158,7 @@ func newBucketStoreMetrics(reg prometheus.Registerer, s *BucketStore) *bucketSto
 			m.seriesGetAllDuration,
 			m.seriesMergeDuration,
 			m.resultSeriesCount,
+			m.chunkSizeBytes,
 		)
 	}
 	return &m
@@ -365,6 +375,7 @@ type bucketSeriesSet struct {
 	set  []seriesEntry
 	i    int
 	chks []storepb.Chunk
+	size int
 }
 
 func newBucketSeriesSet(set []seriesEntry) *bucketSeriesSet {
@@ -379,11 +390,13 @@ func (s *bucketSeriesSet) Next() bool {
 		return false
 	}
 	s.i++
+	s.size = 0
 	s.chks = make([]storepb.Chunk, 0, len(s.set[s.i].chks))
 
 	// TODO(bplotka): If spotted troubles with gRPC overhead, split chunks to max 4MB chunks if needed. Currently
 	// we have huge limit for message size ~2GB.
 	for _, c := range s.set[s.i].chks {
+		s.size += len(c.Chunk.Bytes())
 		s.chks = append(s.chks, storepb.Chunk{
 			MinTime: c.MinTime,
 			MaxTime: c.MaxTime,
@@ -394,18 +407,12 @@ func (s *bucketSeriesSet) Next() bool {
 	return true
 }
 
-func (s *bucketSeriesSet) At() ([]storepb.Label, []storepb.Chunk) {
-	return s.set[s.i].lset, s.chks
+func (s *bucketSeriesSet) At() ([]storepb.Label, []storepb.Chunk, int) {
+	return s.set[s.i].lset, s.chks, s.size
 }
 
 func (s *bucketSeriesSet) Err() error {
 	return nil
-}
-
-func measureTime(f func() error) (time.Duration, error) {
-	s := time.Now()
-	err := f()
-	return time.Since(s), err
 }
 
 func (s *BucketStore) blockSeries(
@@ -608,10 +615,12 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		// Returned set is can be out of order in terms of series time ranges. It is fixed later on, inside querier.
 		set := storepb.MergeSeriesSets(res...)
 		for set.Next() {
-			resp.Series.Labels, resp.Series.Chunks = set.At()
+			var chSize int
+			resp.Series.Labels, resp.Series.Chunks, chSize = set.At()
 
 			stats.mergedSeriesCount++
 			stats.mergedChunksCount += len(resp.Series.Chunks)
+			s.metrics.chunkSizeBytes.Observe(float64(chSize))
 
 			if err := srv.Send(&resp); err != nil {
 				return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
