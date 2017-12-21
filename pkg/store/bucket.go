@@ -381,6 +381,8 @@ func (s *bucketSeriesSet) Next() bool {
 	s.i++
 	s.chks = make([]storepb.Chunk, 0, len(s.set[s.i].chks))
 
+	// TODO(bplotka): If spotted troubles with gRPC overhead, split chunks to max 4MB chunks if needed. Currently
+	// we have huge limit for message size ~2GB.
 	for _, c := range s.set[s.i].chks {
 		s.chks = append(s.chks, storepb.Chunk{
 			MinTime: c.MinTime,

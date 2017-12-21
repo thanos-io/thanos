@@ -6,6 +6,8 @@ import (
 
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
 
+	"math"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/grpc-ecosystem/go-grpc-middleware"
@@ -43,6 +45,11 @@ func NewStoreSet(logger log.Logger, reg *prometheus.Registry, tracer opentracing
 		}),
 	)
 	dialOpts := []grpc.DialOption{
+		// We want to make sure that we can receive huge gRPC messages from storeAPI.
+		// On TCP level we can be fine, but the gRPC overhead for huge messages could be significant.
+		// Current limit is ~2GB.
+		// TODO(bplotka): Split sent chunks on store node per max 4MB chunks if needed.
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32)),
 		grpc.WithInsecure(),
 		grpc.WithUnaryInterceptor(
 			grpc_middleware.ChainUnaryClient(
