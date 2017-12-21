@@ -49,4 +49,9 @@ docker: build
 	@echo ">> building docker image"
 	@docker build -t "$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)" .
 
-.PHONY: all install-tools format vet build assets docker
+docs:
+	@go get -u github.com/campoy/embedmd
+	@go build ./cmd/thanos/...
+	@scripts/genflagdocs.sh
+
+.PHONY: all install-tools format vet build assets docker docs
