@@ -24,3 +24,43 @@ $ thanos query \
     --cluster.peers    "thanos-cluster.example.org" \
 ```
 
+## Deployment
+
+## Flags
+
+[embedmd]:# (flags/query.txt $)
+```$
+usage: thanos query [<flags>]
+
+query node exposing PromQL enabled Query API with data retrieved from multiple
+store nodes
+
+Flags:
+  -h, --help                     Show context-sensitive help (also try
+                                 --help-long and --help-man).
+      --version                  Show application version.
+      --log.level=info           log filtering level
+      --gcloudtrace.project=GCLOUDTRACE.PROJECT  
+                                 GCP project to send Google Cloud Trace tracings
+                                 to. If empty, tracing will be disabled.
+      --gcloudtrace.sample-factor=1  
+                                 How often we send traces (1/<sample-factor>).
+      --http-address="0.0.0.0:10902"  
+                                 listen host:port for HTTP endpoints
+      --query.timeout=2m         maximum time to process query by query node
+      --query.max-concurrent=20  maximum number of queries processed
+                                 concurrently by query node
+      --query.replica-label=QUERY.REPLICA-LABEL  
+                                 label to treat as a replica indicator along
+                                 which data is deduplicated. Still you will be
+                                 able to query without deduplication using
+                                 'dedup=false' parameter
+      --cluster.peers=CLUSTER.PEERS ...  
+                                 initial peers to join the cluster. It can be
+                                 either <ip:port>, or <domain:port>
+      --cluster.address="0.0.0.0:10900"  
+                                 listen address for cluster
+      --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS  
+                                 explicit address to advertise in cluster
+
+```

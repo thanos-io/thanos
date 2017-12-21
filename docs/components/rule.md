@@ -15,3 +15,57 @@ $ thanos rule \
 
 As rule nodes outsource query processing to query nodes, they should generally experience little load. If necessary, functional sharding can be applied by splitting up the sets of rules between HA pairs.
 Rules are processed with deduplicated data according to the replica label configured on query nodes.
+
+## Deployment
+
+## Flags
+
+[embedmd]:# (flags/rule.txt $)
+```$
+usage: thanos rule [<flags>]
+
+query node exposing PromQL enabled Query API with data retrieved from multiple
+store nodes
+
+Flags:
+  -h, --help                    Show context-sensitive help (also try
+                                --help-long and --help-man).
+      --version                 Show application version.
+      --log.level=info          log filtering level
+      --gcloudtrace.project=GCLOUDTRACE.PROJECT  
+                                GCP project to send Google Cloud Trace tracings
+                                to. If empty, tracing will be disabled.
+      --gcloudtrace.sample-factor=1  
+                                How often we send traces (1/<sample-factor>).
+      --label=<name>="<value>" ...  
+                                labels applying to all generated metrics
+                                (repeated)
+      --data-dir="data/"        data directory
+      --rule-file=rules/ ...    rule files that should be used by rule manager.
+                                Can be in glob format (repeated)
+      --http-address="0.0.0.0:10902"  
+                                listen host:port for HTTP endpoints
+      --grpc-address="0.0.0.0:10901"  
+                                listen host:port for gRPC endpoints
+      --eval-interval=30s       the default evaluation interval to use
+      --tsdb.block-duration=2h  block duration for TSDB block
+      --tsdb.retention=48h      block retention time on local disk
+      --alertmanagers.url=ALERTMANAGERS.URL ...  
+                                Alertmanager URLs to push firing alerts to. The
+                                scheme may be prefixed with 'dns+' or 'dnssrv+'
+                                to detect Alertmanager IPs through respective
+                                DNS lookups. The port defaults to 9093 or the
+                                SRV record's value. The URL path is used as a
+                                prefix for the regular Alertmanager API path.
+      --gcs.bucket=<bucket>     Google Cloud Storage bucket name for stored
+                                blocks. If empty ruler won't store any block
+                                inside Google Cloud Storage
+      --cluster.peers=CLUSTER.PEERS ...  
+                                initial peers to join the cluster. It can be
+                                either <ip:port>, or <domain:port>
+      --cluster.address="0.0.0.0:10900"  
+                                listen address for cluster
+      --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS  
+                                explicit address to advertise in cluster
+
+```
