@@ -104,6 +104,12 @@ func (s *StoreSet) Update(ctx context.Context) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
+	for k, conn := range s.conns {
+		if _, ok := conns[k]; !ok {
+			conn.Close()
+		}
+	}
+
 	s.stores = stores
 	s.conns = conns
 

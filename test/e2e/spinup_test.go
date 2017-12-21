@@ -9,6 +9,7 @@ import (
 	"path"
 	"syscall"
 	"testing"
+	"time"
 )
 
 type config struct {
@@ -58,6 +59,7 @@ func spinup(t testing.TB, cfg config) (close func()) {
 			"--cluster.peers", "127.0.0.1:19591",
 			"--log.level", "debug",
 		))
+		time.Sleep(200 * time.Millisecond)
 	}
 
 	for i := 1; i <= cfg.numQueries; i++ {
@@ -70,6 +72,7 @@ func spinup(t testing.TB, cfg config) (close func()) {
 			"--cluster.peers", "127.0.0.1:19591",
 			"--log.level", "debug",
 		))
+		time.Sleep(200 * time.Millisecond)
 	}
 
 	for i := 1; i <= cfg.numRules; i++ {
@@ -100,6 +103,7 @@ func spinup(t testing.TB, cfg config) (close func()) {
 			"--cluster.peers", "127.0.0.1:19591",
 			"--log.level", "debug",
 		))
+		time.Sleep(200 * time.Millisecond)
 	}
 
 	for i := 1; i <= cfg.numAlertmanagers; i++ {

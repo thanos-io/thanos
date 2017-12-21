@@ -2,7 +2,6 @@ package query
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"sort"
 	"sync"
@@ -149,7 +148,7 @@ func newQuerier(
 	}
 }
 
-// matchStore returns true iff the given store may hold data for the given label matchers.
+// matchStore returns true if the given store may hold data for the given label matchers.
 func storeMatches(s *StoreInfo, mint, maxt int64, matchers ...*labels.Matcher) bool {
 	if mint > s.MaxTime || maxt < s.MinTime {
 		return false
@@ -185,14 +184,12 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 		return nil, errors.Wrap(err, "convert matchers")
 	}
 	for _, s := range q.stores {
-		fmt.Println("probe store", s.Addr, "storeRange", s.MinTime, s.MaxTime, "qrange", q.mint, q.maxt)
 		// We might be able to skip the store if its meta information indicates
 		// it cannot have series matching our query.
 		if !storeMatches(s, q.mint, q.maxt, ms...) {
 			continue
 		}
 		store := s
-		fmt.Println("querying store", s.Addr)
 
 		g.Go(func() error {
 			set, err := q.selectSingle(ctx, store.Client, opts.deduplicate, sms...)
