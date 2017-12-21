@@ -51,6 +51,7 @@ docker: build
 
 docs:
 	@go get -u github.com/campoy/embedmd
+	@go build ./cmd/thanos/...
 	@scripts/genflagdocs.sh
 
-.PHONY: all install-tools format vet build assets docker
+.PHONY: all install-tools format vet build assets docker docs
