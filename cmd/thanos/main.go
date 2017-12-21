@@ -144,6 +144,7 @@ func main() {
 		level.Error(logger).Log("msg", "running command failed", "err", err)
 		os.Exit(1)
 	}
+	level.Info(logger).Log("exiting")
 }
 
 func interrupt(cancel <-chan struct{}) error {

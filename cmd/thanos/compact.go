@@ -133,6 +133,6 @@ func runCompact(
 		})
 	}
 
-	level.Info(logger).Log("msg", "starting query node")
+	level.Info(logger).Log("msg", "starting compact node")
 	return nil
 }

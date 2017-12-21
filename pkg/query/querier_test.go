@@ -41,10 +41,10 @@ func TestQuerier_LabelValues(t *testing.T) {
 	}
 	expected := []string{"a", "b", "c", "d", "e", "out-of-order", "x", "y"}
 
-	q := newQuerier(context.Background(), nil, []StoreInfo{
-		testStoreInfo{client: a},
-		testStoreInfo{client: b},
-		testStoreInfo{client: c},
+	q := newQuerier(context.Background(), nil, []*StoreInfo{
+		&StoreInfo{Client: a},
+		&StoreInfo{Client: b},
+		&StoreInfo{Client: c},
 	}, 0, 10000, "")
 	defer q.Close()
 
@@ -74,10 +74,10 @@ func TestQuerier_Series(t *testing.T) {
 	}
 	// Querier clamps the range to [1,300], which should drop some samples of the result above.
 	// The store API allows endpoints to send more data then initially requested.
-	q := newQuerier(context.Background(), nil, []StoreInfo{
-		testStoreInfo{client: a},
-		testStoreInfo{client: b},
-		testStoreInfo{client: c},
+	q := newQuerier(context.Background(), nil, []*StoreInfo{
+		&StoreInfo{Client: a},
+		&StoreInfo{Client: b},
+		&StoreInfo{Client: c},
 	}, 1, 300, "")
 	defer q.Close()
 
@@ -190,40 +190,65 @@ func TestStoreMatches(t *testing.T) {
 		return m
 	}
 	cases := []struct {
-		s  StoreInfo
-		ms []*labels.Matcher
-		ok bool
+		s          *StoreInfo
+		mint, maxt int64
+		ms         []*labels.Matcher
+		ok         bool
 	}{
 		{
-			s: testStoreInfo{labels: []storepb.Label{{"a", "b"}}},
+			s: &StoreInfo{Labels: []storepb.Label{{"a", "b"}}},
 			ms: []*labels.Matcher{
 				mustMatcher(labels.MatchEqual, "b", "1"),
 			},
 			ok: true,
 		},
 		{
-			s: testStoreInfo{labels: []storepb.Label{{"a", "b"}}},
+			s:    &StoreInfo{MinTime: 100, MaxTime: 200},
+			mint: 201,
+			maxt: 300,
+			ok:   false,
+		},
+		{
+			s:    &StoreInfo{MinTime: 100, MaxTime: 200},
+			mint: 200,
+			maxt: 300,
+			ok:   true,
+		},
+		{
+			s:    &StoreInfo{MinTime: 100, MaxTime: 200},
+			mint: 50,
+			maxt: 99,
+			ok:   false,
+		},
+		{
+			s:    &StoreInfo{MinTime: 100, MaxTime: 200},
+			mint: 50,
+			maxt: 100,
+			ok:   true,
+		},
+		{
+			s: &StoreInfo{Labels: []storepb.Label{{"a", "b"}}},
 			ms: []*labels.Matcher{
 				mustMatcher(labels.MatchEqual, "a", "b"),
 			},
 			ok: true,
 		},
 		{
-			s: testStoreInfo{labels: []storepb.Label{{"a", "b"}}},
+			s: &StoreInfo{Labels: []storepb.Label{{"a", "b"}}},
 			ms: []*labels.Matcher{
 				mustMatcher(labels.MatchEqual, "a", "c"),
 			},
 			ok: false,
 		},
 		{
-			s: testStoreInfo{labels: []storepb.Label{{"a", "b"}}},
+			s: &StoreInfo{Labels: []storepb.Label{{"a", "b"}}},
 			ms: []*labels.Matcher{
 				mustMatcher(labels.MatchRegexp, "a", "b|c"),
 			},
 			ok: true,
 		},
 		{
-			s: testStoreInfo{labels: []storepb.Label{{"a", "b"}}},
+			s: &StoreInfo{Labels: []storepb.Label{{"a", "b"}}},
 			ms: []*labels.Matcher{
 				mustMatcher(labels.MatchNotEqual, "a", ""),
 			},
@@ -232,22 +257,9 @@ func TestStoreMatches(t *testing.T) {
 	}
 
 	for i, c := range cases {
-		ok := storeMatches(c.s, c.ms...)
+		ok := storeMatches(c.s, c.mint, c.maxt, c.ms...)
 		testutil.Assert(t, c.ok == ok, "test case %d failed", i)
 	}
-}
-
-type testStoreInfo struct {
-	labels []storepb.Label
-	client storepb.StoreClient
-}
-
-func (s testStoreInfo) Labels() []storepb.Label {
-	return s.labels
-}
-
-func (s testStoreInfo) Client() storepb.StoreClient {
-	return s.client
 }
 
 func expandSeries(t testing.TB, it storage.SeriesIterator) (res []sample) {

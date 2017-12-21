@@ -80,11 +80,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		testutil.Ok(t, os.RemoveAll(dir2))
 	}
 
-	var gossipMinTime, gossipMaxTime int64
-	store, err := NewBucketStore(nil, nil, bkt, func(mint int64, maxt int64) {
-		gossipMinTime = mint
-		gossipMaxTime = maxt
-	}, dir, 100, 0)
+	store, err := NewBucketStore(nil, nil, bkt, dir, 100, 0)
 	testutil.Ok(t, err)
 
 	go func() {
@@ -103,8 +99,9 @@ func TestBucketStore_e2e(t *testing.T) {
 	})
 	testutil.Ok(t, err)
 
-	testutil.Equals(t, minTime, gossipMinTime)
-	testutil.Equals(t, maxTime, gossipMaxTime)
+	mint, maxt := store.TimeRange()
+	testutil.Equals(t, minTime, mint)
+	testutil.Equals(t, maxTime, maxt)
 
 	vals, err := store.LabelValues(ctx, &storepb.LabelValuesRequest{Label: "a"})
 	testutil.Ok(t, err)

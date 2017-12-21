@@ -75,25 +75,34 @@ func optsFromContext(ctx context.Context) *opts {
 }
 
 // StoreInfo holds meta information about a store used by query.
-type StoreInfo interface {
-	// Client to access the store.
-	Client() storepb.StoreClient
+type StoreInfo struct {
+	Addr string
 
-	// Labels returns store labels that should be appended to every metric returned by this store.
-	Labels() []storepb.Label
+	// Client to access the store.
+	Client storepb.StoreClient
+
+	// Labels that apply to all date exposed by the backing store.
+	Labels []storepb.Label
+
+	// Minimum and maximum time range of data in the store.
+	MinTime, MaxTime int64
+}
+
+func (s *StoreInfo) String() string {
+	return s.Addr
 }
 
 // Queryable allows to open a querier against a dynamic set of stores.
 type Queryable struct {
 	logger       log.Logger
-	stores       func() []StoreInfo
+	stores       func() []*StoreInfo
 	replicaLabel string
 }
 
 // NewQueryable creates implementation of promql.Queryable that fetches data from the given
 // store API endpoints.
 // All data retrieved from store nodes will be deduplicated along the replicaLabel by default.
-func NewQueryable(logger log.Logger, stores func() []StoreInfo, replicaLabel string) *Queryable {
+func NewQueryable(logger log.Logger, stores func() []*StoreInfo, replicaLabel string) *Queryable {
 	return &Queryable{
 		logger:       logger,
 		stores:       stores,
@@ -111,7 +120,7 @@ type querier struct {
 	ctx          context.Context
 	cancel       func()
 	mint, maxt   int64
-	stores       []StoreInfo
+	stores       []*StoreInfo
 	replicaLabel string
 }
 
@@ -120,7 +129,7 @@ type querier struct {
 func newQuerier(
 	ctx context.Context,
 	logger log.Logger,
-	stores []StoreInfo,
+	stores []*StoreInfo,
 	mint, maxt int64,
 	replicaLabel string,
 ) *querier {
@@ -139,10 +148,13 @@ func newQuerier(
 	}
 }
 
-// matchStore returns true iff the given store may hold data for the given label matchers.
-func storeMatches(s StoreInfo, matchers ...*labels.Matcher) bool {
+// matchStore returns true if the given store may hold data for the given label matchers.
+func storeMatches(s *StoreInfo, mint, maxt int64, matchers ...*labels.Matcher) bool {
+	if mint > s.MaxTime || maxt < s.MinTime {
+		return false
+	}
 	for _, m := range matchers {
-		for _, l := range s.Labels() {
+		for _, l := range s.Labels {
 			if l.Name != m.Name {
 				continue
 			}
@@ -174,13 +186,13 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 	for _, s := range q.stores {
 		// We might be able to skip the store if its meta information indicates
 		// it cannot have series matching our query.
-		if !storeMatches(s, ms...) {
+		if !storeMatches(s, q.mint, q.maxt, ms...) {
 			continue
 		}
 		store := s
 
 		g.Go(func() error {
-			set, err := q.selectSingle(ctx, store.Client(), opts.deduplicate, sms...)
+			set, err := q.selectSingle(ctx, store.Client, opts.deduplicate, sms...)
 			if err != nil {
 				opts.partialErrReporter(errors.Wrapf(err, "querying store failed"))
 				return nil
@@ -283,7 +295,7 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 		store := s
 
 		g.Go(func() error {
-			values, err := q.labelValuesSingle(ctx, store.Client(), name)
+			values, err := q.labelValuesSingle(ctx, store.Client, name)
 			if err != nil {
 				opts.partialErrReporter(errors.Wrap(err, "querying store failed"))
 				return nil

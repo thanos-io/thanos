@@ -133,6 +133,6 @@ func runQuery(
 		})
 	}
 
-	level.Info(logger).Log("msg", "starting query node")
+	level.Info(logger).Log("msg", "starting query node", "peer", peer.Name())
 	return nil
 }
