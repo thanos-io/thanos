@@ -123,68 +123,21 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		q.Matchers = append(q.Matchers, pm)
 	}
 
-	reqb, err := proto.Marshal(&prompb.ReadRequest{Queries: []prompb.Query{q}})
+	resp, err := p.promSeries(s.Context(), q)
 	if err != nil {
-		return errors.Wrap(err, "marshal read request")
+		return errors.Wrap(err, "query Prometheus")
 	}
 
-	u := *p.base
-	u.Path = "/api/v1/read"
-
-	preq, err := http.NewRequest("POST", u.String(), bytes.NewReader(snappy.Encode(nil, reqb)))
-	if err != nil {
-		return errors.Wrap(err, "unable to create request")
-	}
-	preq.Header.Add("Content-Encoding", "snappy")
-	preq.Header.Set("Content-Type", "application/x-protobuf")
-	preq.Header.Set("X-Prometheus-Remote-Read-Version", "0.1.0")
-
-	span, ctx := tracing.StartSpan(s.Context(), "/prom_v1_read_series HTTP[client]")
+	span, _ := tracing.StartSpan(s.Context(), "transform_and_respond")
 	defer span.Finish()
-
-	preq = preq.WithContext(ctx)
-
-	presp, err := p.client.Do(preq)
-	if err != nil {
-		return errors.Wrap(err, "send request")
-	}
-	defer presp.Body.Close()
-
-	if presp.StatusCode/100 != 2 {
-		return errors.Errorf("request failed with code %s", presp.Status)
-	}
-
-	buf := bytes.NewBuffer(p.getBuffer())
-	defer func() {
-		p.putBuffer(buf.Bytes())
-	}()
-	if _, err := io.Copy(buf, presp.Body); err != nil {
-		return errors.Wrap(err, "copy response")
-	}
-	decomp, err := snappy.Decode(p.getBuffer(), buf.Bytes())
-	defer p.putBuffer(decomp)
-	if err != nil {
-		return errors.Wrap(err, "decompress response")
-	}
-
-	var data prompb.ReadResponse
-	if err := proto.Unmarshal(decomp, &data); err != nil {
-		return errors.Wrap(err, "unmarshal response")
-	}
-	if len(data.Results) != 1 {
-		return errors.Errorf("unexepected result size %d", len(data.Results))
-	}
 
 	var res storepb.SeriesResponse
 
-	for _, e := range data.Results[0].Timeseries {
+	for _, e := range resp.Results[0].Timeseries {
 		lset := p.translateAndExtendLabels(e.Labels, ext)
 		// We generally expect all samples of the requested range to be traversed
 		// so we just encode all samples into one big chunk regardless of size.
-		//
-		// Drop all data before r.MinTime since we might have fetched more than
-		// the requested range (see above).
-		enc, b, err := p.encodeChunk(e.Samples, r.MinTime)
+		enc, cb, err := p.encodeChunk(e.Samples)
 		if err != nil {
 			return status.Error(codes.Unknown, err.Error())
 		}
@@ -194,7 +147,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 				MinTime: int64(e.Samples[0].Timestamp),
 				MaxTime: int64(e.Samples[len(e.Samples)-1].Timestamp),
 				Type:    enc,
-				Data:    b,
+				Data:    cb,
 			}},
 		}
 		if err := s.Send(&res); err != nil {
@@ -202,6 +155,61 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		}
 	}
 	return nil
+}
+
+func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prompb.ReadResponse, error) {
+	span, ctx := tracing.StartSpan(ctx, "query_prometheus")
+	defer span.Finish()
+
+	reqb, err := proto.Marshal(&prompb.ReadRequest{Queries: []prompb.Query{q}})
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal read request")
+	}
+
+	u := *p.base
+	u.Path = "/api/v1/read"
+
+	preq, err := http.NewRequest("POST", u.String(), bytes.NewReader(snappy.Encode(nil, reqb)))
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to create request")
+	}
+	preq.Header.Add("Content-Encoding", "snappy")
+	preq.Header.Set("Content-Type", "application/x-protobuf")
+	preq.Header.Set("X-Prometheus-Remote-Read-Version", "0.1.0")
+
+	preq = preq.WithContext(ctx)
+
+	presp, err := p.client.Do(preq)
+	if err != nil {
+		return nil, errors.Wrap(err, "send request")
+	}
+	defer presp.Body.Close()
+
+	if presp.StatusCode/100 != 2 {
+		return nil, errors.Errorf("request failed with code %s", presp.Status)
+	}
+
+	buf := bytes.NewBuffer(p.getBuffer())
+	defer func() {
+		p.putBuffer(buf.Bytes())
+	}()
+	if _, err := io.Copy(buf, presp.Body); err != nil {
+		return nil, errors.Wrap(err, "copy response")
+	}
+	decomp, err := snappy.Decode(p.getBuffer(), buf.Bytes())
+	defer p.putBuffer(decomp)
+	if err != nil {
+		return nil, errors.Wrap(err, "decompress response")
+	}
+
+	var data prompb.ReadResponse
+	if err := proto.Unmarshal(decomp, &data); err != nil {
+		return nil, errors.Wrap(err, "unmarshal response")
+	}
+	if len(data.Results) != 1 {
+		return nil, errors.Errorf("unexepected result size %d", len(data.Results))
+	}
+	return &data, nil
 }
 
 func extLabelsMatches(extLabels labels.Labels, ms []storepb.LabelMatcher) (bool, []storepb.LabelMatcher, error) {
@@ -225,13 +233,11 @@ func extLabelsMatches(extLabels labels.Labels, ms []storepb.LabelMatcher) (bool,
 			return false, nil, nil
 		}
 	}
-
 	return true, newMatcher, nil
 }
 
-// encodeChunk translates the sample pairs into a chunk. It takes a minimum timestamp
-// and drops all samples before that one.
-func (p *PrometheusStore) encodeChunk(ss []prompb.Sample, mint int64) (storepb.Chunk_Encoding, []byte, error) {
+// encodeChunk translates the sample pairs into a chunk.
+func (p *PrometheusStore) encodeChunk(ss []prompb.Sample) (storepb.Chunk_Encoding, []byte, error) {
 	c := chunkenc.NewXORChunk()
 
 	a, err := c.Appender()
@@ -239,9 +245,6 @@ func (p *PrometheusStore) encodeChunk(ss []prompb.Sample, mint int64) (storepb.C
 		return 0, nil, err
 	}
 	for _, s := range ss {
-		if int64(s.Timestamp) < mint {
-			continue
-		}
 		a.Append(int64(s.Timestamp), float64(s.Value))
 	}
 	return storepb.Chunk_XOR, c.Bytes(), nil
