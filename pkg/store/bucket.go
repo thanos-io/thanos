@@ -65,6 +65,7 @@ type bucketStoreMetrics struct {
 	seriesGetAllDuration  prometheus.Histogram
 	seriesMergeDuration   prometheus.Histogram
 	resultSeriesCount     prometheus.Summary
+	chunkSizeBytes        prometheus.Histogram
 }
 
 func newBucketStoreMetrics(reg prometheus.Registerer, s *BucketStore) *bucketStoreMetrics {
@@ -134,6 +135,14 @@ func newBucketStoreMetrics(reg prometheus.Registerer, s *BucketStore) *bucketSto
 		Help: "Number of series observed in the final result of a query.",
 	})
 
+	m.chunkSizeBytes = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name: "thanos_bucket_store_sent_chunk_size_bytes",
+		Help: "Size in bytes of the chunks for the single series, which is adequate to the gRPC message size sent to querier.",
+		Buckets: []float64{
+			32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024,
+		},
+	})
+
 	if reg != nil {
 		reg.MustRegister(
 			m.blockLoads,
@@ -149,6 +158,7 @@ func newBucketStoreMetrics(reg prometheus.Registerer, s *BucketStore) *bucketSto
 			m.seriesGetAllDuration,
 			m.seriesMergeDuration,
 			m.resultSeriesCount,
+			m.chunkSizeBytes,
 		)
 	}
 	return &m
@@ -381,6 +391,8 @@ func (s *bucketSeriesSet) Next() bool {
 	s.i++
 	s.chks = make([]storepb.Chunk, 0, len(s.set[s.i].chks))
 
+	// TODO(bplotka): If spotted troubles with gRPC overhead, split chunks to max 4MB chunks if needed. Currently
+	// we have huge limit for message size ~2GB.
 	for _, c := range s.set[s.i].chks {
 		s.chks = append(s.chks, storepb.Chunk{
 			MinTime: c.MinTime,
@@ -398,12 +410,6 @@ func (s *bucketSeriesSet) At() ([]storepb.Label, []storepb.Chunk) {
 
 func (s *bucketSeriesSet) Err() error {
 	return nil
-}
-
-func measureTime(f func() error) (time.Duration, error) {
-	s := time.Now()
-	err := f()
-	return time.Since(s), err
 }
 
 func (s *BucketStore) blockSeries(
@@ -610,6 +616,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 			stats.mergedSeriesCount++
 			stats.mergedChunksCount += len(resp.Series.Chunks)
+			s.metrics.chunkSizeBytes.Observe(float64(chunksSize(resp.Series.Chunks)))
 
 			if err := srv.Send(&resp); err != nil {
 				return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
@@ -640,6 +647,14 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		"stats", fmt.Sprintf("%+v", stats))
 
 	return nil
+}
+
+func chunksSize(chks []storepb.Chunk) int {
+	var size int
+	for _, chk := range chks {
+		size += len(chk.Data)
+	}
+	return size
 }
 
 // LabelNames implements the storepb.StoreServer interface.

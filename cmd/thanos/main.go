@@ -12,6 +12,8 @@ import (
 	"runtime/debug"
 	"syscall"
 
+	"math"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/grpc-ecosystem/go-grpc-middleware"
@@ -197,6 +199,7 @@ func defaultGRPCServerOpts(logger log.Logger, reg *prometheus.Registry, tracer o
 	}
 	reg.MustRegister(met, panicsTotal)
 	return []grpc.ServerOption{
+		grpc.MaxSendMsgSize(math.MaxInt32),
 		grpc_middleware.WithUnaryServerChain(
 			met.UnaryServerInterceptor(),
 			tracing.UnaryServerInterceptor(tracer),
