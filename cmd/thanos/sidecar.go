@@ -17,6 +17,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
+	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
@@ -49,6 +50,30 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
 		PlaceHolder("<bucket>").String()
 
+	s3Bucket := cmd.Flag("s3.bucket", "S3-Compatible API bucket name for stored blocks.").
+		PlaceHolder("<bucket>").String()
+
+	s3Endpoint := cmd.Flag("s3.endpoint", "S3-Compatible API endpoint for stored blocks.").
+		PlaceHolder("<api-url>").String()
+
+	s3AccessKey := cmd.Flag("s3.access-key", "Access key for an S3-Compatible API.").
+		PlaceHolder("<key>").String()
+
+	s3SecretKey := cmd.Flag("s3.secret-key", "Secret key for an S3-Compatible API.").
+		PlaceHolder("<key>").String()
+
+	s3Insecure := cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
+		Default("false").Bool()
+
+	// something abut kingpin (I assume) makes it impossible to dereference and have them resolve correctly later
+	s3Config := &s3.Config{
+		Bucket:    s3Bucket,
+		Endpoint:  s3Endpoint,
+		AccessKey: s3AccessKey,
+		SecretKey: s3SecretKey,
+		Insecure:  s3Insecure,
+	}
+
 	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
 
 	clusterBindAddr := cmd.Flag("cluster.address", "listen address for cluster").
@@ -64,7 +89,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 		Default(cluster.DefaultPushPullInterval.String()).Duration()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
-		return runSidecar(g, logger, reg, tracer, *grpcAddr, *httpAddr, *promURL, *dataDir, *clusterBindAddr, *clusterAdvertiseAddr, *peers, *gossipInterval, *pushPullInterval, *gcsBucket)
+		return runSidecar(g, logger, reg, tracer, *grpcAddr, *httpAddr, *promURL, *dataDir, *clusterBindAddr, *clusterAdvertiseAddr, *peers, *gossipInterval, *pushPullInterval, *gcsBucket, s3Config)
 	}
 }
 
@@ -83,8 +108,8 @@ func runSidecar(
 	gossipInterval time.Duration,
 	pushPullInterval time.Duration,
 	gcsBucket string,
+	s3Config *s3.Config,
 ) error {
-
 	externalLabels := &extLabelSet{promURL: promURL}
 
 	// Blocking query of external labels before anything else.
@@ -238,8 +263,35 @@ func runSidecar(
 		}, func(error) {
 			cancel()
 		})
+	} else if s3Config.Validate() != false {
+		var bkt objstore.Bucket
+		bkt, err = s3.NewBucket(s3Config, reg)
+		if err != nil {
+			return errors.Wrap(err, "create s3 client")
+		}
+		bkt = objstore.BucketWithMetrics(*s3Config.Bucket, bkt, reg)
+
+		s := shipper.New(logger, nil, dataDir, bkt, externalLabels.Get)
+
+		ctx, cancel := context.WithCancel(context.Background())
+
+		g.Add(func() error {
+			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+				s.Sync(ctx)
+
+				minTime, _, err := s.Timestamps()
+				if err != nil {
+					level.Warn(logger).Log("msg", "reading timestamps failed", "err", err)
+				} else {
+					peer.SetTimestamps(minTime, math.MaxInt64)
+				}
+				return nil
+			})
+		}, func(error) {
+			cancel()
+		})
 	} else {
-		level.Info(logger).Log("msg", "No GCS bucket were configured, GCS uploads will be disabled")
+		level.Info(logger).Log("msg", "No GCS or S3 bucket were configured, uploads will be disabled")
 	}
 
 	level.Info(logger).Log("msg", "starting sidecar", "peer", peer.Name())

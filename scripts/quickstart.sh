@@ -5,6 +5,27 @@
 
 trap 'kill 0' SIGTERM
 
+# Start local object storage, if desired.
+if [ -n "${MINIO_ENABLED}" ]
+then
+  export MINIO_ACCESS_KEY="THANOS"
+  export MINIO_SECRET_KEY="ITSTHANOSTIME"
+  export S3_ACCESS_KEY=${MINIO_ACCESS_KEY}
+  export S3_SECRET_KEY=${MINIO_SECRET_KEY}
+  export S3_BUCKET="thanos"
+  export S3_ENDPOINT="127.0.0.1:9000"
+  rm -rf data/minio
+  mkdir -p data/minio
+
+  minio server ./data/minio \
+      --address ${S3_ENDPOINT} &
+  sleep 3
+  # create the bucket
+  mc config host add tmp http://${S3_ENDPOINT} THANOS ITSTHANOSTIME
+  mc mb tmp/${S3_BUCKET}
+  mc config host rm tmp
+fi
+
 # Start three Prometheus servers monitoring themselves.
 for i in `seq 1 3`
 do
@@ -21,6 +42,22 @@ scrape_configs:
   static_configs:
   - targets:
     - "localhost:909${i}"
+- job_name: thanos-sidecar
+  scrape_interval: 5s
+  static_configs:
+  - targets:
+    - "localhost:1919${i}"
+- job_name: thanos-store
+  scrape_interval: 5s
+  static_configs:
+  - targets:
+    - "localhost:19791"
+- job_name: thanos-query
+  scrape_interval: 5s
+  static_configs:
+  - targets:
+    - "localhost:19491"
+    - "localhost:19492"
 EOF
 
   prometheus \
@@ -44,6 +81,11 @@ do
     --prometheus.url            http://localhost:909${i} \
     --tsdb.path                 data/prom${i} \
     --gcs.bucket                "${GCS_BUCKET}" \
+    --s3.endpoint               "${S3_ENDPOINT}" \
+    --s3.bucket                 "${S3_BUCKET}" \
+    --s3.access-key             "${S3_ACCESS_KEY}" \
+    --s3.secret-key             "${S3_SECRET_KEY}" \
+    --s3.insecure               \
     --cluster.address           0.0.0.0:1939${i} \
     --cluster.advertise-address 127.0.0.1:1939${i} \
     --cluster.peers             127.0.0.1:19391 &
@@ -53,7 +95,7 @@ done
 
 sleep 0.5
 
-if [ -n "${GCS_BUCKET}" ]
+if [ -n "${GCS_BUCKET}" -o -n "${S3_ENDPOINT}" ]
 then
   thanos store \
     --debug.name                store \
@@ -62,6 +104,11 @@ then
     --http-address              0.0.0.0:19791 \
     --tsdb.path                 data/store \
     --gcs.bucket                "${GCS_BUCKET}" \
+    --s3.endpoint               "${S3_ENDPOINT}" \
+    --s3.bucket                 "${S3_BUCKET}" \
+    --s3.access-key             "${S3_ACCESS_KEY}" \
+    --s3.insecure               \
+    --s3.secret-key             "${S3_SECRET_KEY}" \
     --cluster.address           0.0.0.0:19891 \
     --cluster.advertise-address 127.0.0.1:19891 \
     --cluster.peers             127.0.0.1:19391 &
