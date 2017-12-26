@@ -8,9 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/objstore"
-
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"

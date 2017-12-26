@@ -429,10 +429,14 @@ func (s *BucketStore) blockSeries(
 	if err != nil {
 		return nil, stats, err
 	}
+	// If the tree was reduced to the empty postings list, don't preload the registered
+	// leaf postings and return early with an empty result.
+	if lazyPostings == index.EmptyPostings() {
+		return storepb.EmptySeriesSet(), stats, nil
+	}
 	if err := indexr.preloadPostings(); err != nil {
 		return nil, stats, err
 	}
-
 	// Get result postings list by resolving the postings tree.
 	ps, err := index.ExpandPostings(lazyPostings)
 	if err != nil {

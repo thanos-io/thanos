@@ -28,6 +28,11 @@ func (emptySeriesSet) Next() bool             { return false }
 func (emptySeriesSet) At() ([]Label, []Chunk) { return nil, nil }
 func (emptySeriesSet) Err() error             { return nil }
 
+// EmptySeriesSet returns a new series set that contains no series.
+func EmptySeriesSet() SeriesSet {
+	return emptySeriesSet{}
+}
+
 // MergeSeriesSets returns a new series set that is the union of the input sets.
 func MergeSeriesSets(all ...SeriesSet) SeriesSet {
 	switch len(all) {
