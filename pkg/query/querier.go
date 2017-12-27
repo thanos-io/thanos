@@ -207,6 +207,8 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 			}
 
 			if q.isDedupEnabled(opts) {
+				// TODO(fabxc): this could potentially pushed further down into the store API
+				// to make true streaming possible.
 				sortDedupLabels(set, q.replicaLabel)
 			}
 
@@ -236,11 +238,9 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 	return newDedupSeriesSet(set, q.replicaLabel), nil
 }
 
+// sortDedupLabels resorts the set so that the same series with different replica
+// labels are coming right after each other.
 func sortDedupLabels(set []storepb.Series, replicaLabel string) {
-	// Resort the result so that the same series with different replica
-	// labels are coming right after each other.
-	// TODO(fabxc): this could potentially pushed further down into the store API
-	// to make true streaming possible.
 	for _, s := range set {
 		// Move the replica label to the very end.
 		sort.Slice(s.Labels, func(i, j int) bool {
