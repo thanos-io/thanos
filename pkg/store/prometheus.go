@@ -131,8 +131,6 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	span, _ := tracing.StartSpan(s.Context(), "transform_and_respond")
 	defer span.Finish()
 
-	var res storepb.SeriesResponse
-
 	for _, e := range resp.Results[0].Timeseries {
 		lset := p.translateAndExtendLabels(e.Labels, ext)
 		// We generally expect all samples of the requested range to be traversed
@@ -141,7 +139,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		if err != nil {
 			return status.Error(codes.Unknown, err.Error())
 		}
-		res.Series = storepb.Series{
+		resp := storepb.NewSeriesResponse(&storepb.Series{
 			Labels: lset,
 			Chunks: []storepb.Chunk{{
 				MinTime: int64(e.Samples[0].Timestamp),
@@ -149,8 +147,8 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 				Type:    enc,
 				Data:    cb,
 			}},
-		}
-		if err := s.Send(&res); err != nil {
+		})
+		if err := s.Send(resp); err != nil {
 			return err
 		}
 	}
