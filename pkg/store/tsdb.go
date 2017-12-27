@@ -81,7 +81,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		return status.Error(codes.Internal, err.Error())
 	}
 
-	var res storepb.SeriesResponse
+	var respSeries storepb.Series
 
 	for set.Next() {
 		series := set.At()
@@ -90,10 +90,11 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		if err != nil {
 			return status.Errorf(codes.Internal, "encode chunk: %s", err)
 		}
-		res.Series.Labels = s.translateAndExtendLabels(series.Labels(), s.labels)
-		res.Series.Chunks = append(res.Series.Chunks[:0], *c)
 
-		if err := srv.Send(&res); err != nil {
+		respSeries.Labels = s.translateAndExtendLabels(series.Labels(), s.labels)
+		respSeries.Chunks = append(respSeries.Chunks[:0], *c)
+
+		if err := srv.Send(storepb.NewSeriesResponse(&respSeries)); err != nil {
 			return status.Error(codes.Aborted, err.Error())
 		}
 	}

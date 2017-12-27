@@ -601,19 +601,19 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		defer span.Finish()
 
 		begin := time.Now()
-		var resp storepb.SeriesResponse
+		var series storepb.Series
 
 		// Merge series set into an union of all block sets. This exposes all blocks are single seriesSet.
 		// Returned set is can be out of order in terms of series time ranges. It is fixed later on, inside querier.
 		set := storepb.MergeSeriesSets(res...)
 		for set.Next() {
-			resp.Series.Labels, resp.Series.Chunks = set.At()
+			series.Labels, series.Chunks = set.At()
 
 			stats.mergedSeriesCount++
-			stats.mergedChunksCount += len(resp.Series.Chunks)
-			s.metrics.chunkSizeBytes.Observe(float64(chunksSize(resp.Series.Chunks)))
+			stats.mergedChunksCount += len(series.Chunks)
+			s.metrics.chunkSizeBytes.Observe(float64(chunksSize(series.Chunks)))
 
-			if err := srv.Send(&resp); err != nil {
+			if err := srv.Send(storepb.NewSeriesResponse(&series)); err != nil {
 				return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
 			}
 		}

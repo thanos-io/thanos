@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"math"
 	"math/rand"
-	"sort"
 	"testing"
 
 	"google.golang.org/grpc/codes"
@@ -114,73 +113,57 @@ func TestQuerier_Series(t *testing.T) {
 	testutil.Ok(t, res.Err())
 }
 
-func TestStoreSelectSingle(t *testing.T) {
-	c := &testStoreClient{
-		series: []storepb.Series{
-			{Labels: []storepb.Label{
-				{"a", "1"},
-				{"b", "replica-1"},
-				{"c", "3"},
-			}},
-			{Labels: []storepb.Label{
-				{"a", "1"},
-				{"b", "replica-1"},
-				{"c", "3"},
-				{"d", "4"},
-			}},
-			{Labels: []storepb.Label{
-				{"a", "1"},
-				{"b", "replica-1"},
-				{"c", "4"},
-			}},
-			{Labels: []storepb.Label{
-				{"a", "1"},
-				{"b", "replica-2"},
-				{"c", "3"},
-			}},
-		},
+func TestSortReplicaLabel(t *testing.T) {
+	set := []storepb.Series{
+		{Labels: []storepb.Label{
+			{"a", "1"},
+			{"b", "replica-1"},
+			{"c", "3"},
+		}},
+		{Labels: []storepb.Label{
+			{"a", "1"},
+			{"b", "replica-1"},
+			{"c", "3"},
+			{"d", "4"},
+		}},
+		{Labels: []storepb.Label{
+			{"a", "1"},
+			{"b", "replica-1"},
+			{"c", "4"},
+		}},
+		{Labels: []storepb.Label{
+			{"a", "1"},
+			{"b", "replica-2"},
+			{"c", "3"},
+		}},
 	}
-	// Just verify we assembled the input data according to the store API contract.
-	ok := sort.SliceIsSorted(c.series, func(i, j int) bool {
-		return storepb.CompareLabels(c.series[i].Labels, c.series[j].Labels) < 0
-	})
-	testutil.Assert(t, ok, "input data unoreded")
 
-	q := newQuerier(context.Background(), nil, nil, 0, 0, "b")
+	sortDedupLabels(set, "b")
 
-	res, err := q.selectSingle(context.Background(), c, true)
-	testutil.Ok(t, err)
-
-	exp := [][]storepb.Label{
-		{
+	exp := []storepb.Series{
+		{Labels: []storepb.Label{
 			{"a", "1"},
 			{"c", "3"},
 			{"b", "replica-1"},
-		},
-		{
+		}},
+		{Labels: []storepb.Label{
 			{"a", "1"},
 			{"c", "3"},
 			{"b", "replica-2"},
-		},
-		{
+		}},
+		{Labels: []storepb.Label{
 			{"a", "1"},
 			{"c", "3"},
 			{"d", "4"},
 			{"b", "replica-1"},
-		},
-		{
+		}},
+		{Labels: []storepb.Label{
 			{"a", "1"},
 			{"c", "4"},
 			{"b", "replica-1"},
-		},
+		}},
 	}
-	var got [][]storepb.Label
-
-	for res.Next() {
-		lset, _ := res.At()
-		got = append(got, lset)
-	}
-	testutil.Equals(t, exp, got)
+	testutil.Equals(t, exp, set)
 }
 
 func TestStoreMatches(t *testing.T) {
@@ -326,7 +309,7 @@ func (c *testStoreSeriesClient) Recv() (*storepb.SeriesResponse, error) {
 	}
 	s := c.series[c.i]
 	c.i++
-	return &storepb.SeriesResponse{Series: s}, nil
+	return storepb.NewSeriesResponse(&s), nil
 }
 
 func (c *testStoreSeriesClient) Context() context.Context {

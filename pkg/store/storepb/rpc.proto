@@ -36,7 +36,10 @@ message SeriesRequest {
 }
 
 message SeriesResponse {
-  Series series = 1 [(gogoproto.nullable) = false];
+  oneof result {
+      Series series = 1;
+      string warning = 2;
+  }
 }
 
 message LabelNamesRequest {
@@ -44,6 +47,7 @@ message LabelNamesRequest {
 
 message LabelNamesResponse {
   repeated string names = 1;
+  repeated string warning = 2;
 }
 
 message LabelValuesRequest {
@@ -52,4 +56,5 @@ message LabelValuesRequest {
 
 message LabelValuesResponse {
   repeated string values = 1;
+  repeated string warning = 2;
 }

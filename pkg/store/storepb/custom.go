@@ -4,6 +4,23 @@ import (
 	"strings"
 )
 
+func NewWarnSeriesResponse(err error) *SeriesResponse {
+	return &SeriesResponse{
+		Result: &SeriesResponse_Warning{
+			Warning: err.Error(),
+		},
+	}
+}
+
+func NewSeriesResponse(series *Series) *SeriesResponse {
+	return &SeriesResponse{
+		Result: &SeriesResponse_Series{
+			Series: series,
+		},
+	}
+}
+
+
 // CompareLabels compares two sets of labels.
 func CompareLabels(a, b []Label) int {
 	l := len(a)

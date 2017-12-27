@@ -292,7 +292,10 @@ type testStoreSeriesServer struct {
 }
 
 func (s *testStoreSeriesServer) Send(r *storepb.SeriesResponse) error {
-	s.series = append(s.series, r.Series)
+	if r.GetSeries() == nil {
+		return errors.New("no series")
+	}
+	s.series = append(s.series, *r.GetSeries())
 	return nil
 }
 
