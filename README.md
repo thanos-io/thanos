@@ -53,6 +53,12 @@ It can deduplicate data that was collected from high-availability pairs of Prome
 A combination of sidecars and query nodes already provides a very useful system.
 Next, we can extend this by making data that was backed up to our object storage queryable.
 
+* Example graph of deduplicated series from HA Prometheus instances over long period (6 weeks):
+![Query over 6 weeks with deduplication](./docs/img/query_ui_6week_dedup.png)
+
+* Example graph of raw series from HA Prometheus instances over long period (6 weeks):
+![Query over 6 weeks without deduplication](./docs/img/query_ui_6week.png)
+
 ### Store Node
 
 Store nodes act as a Thanos-internal querying frontend for metric data in an object storage. The query layer detects them as a source of metric data and fans out its queries to store nodes and sidecars alike.
