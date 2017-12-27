@@ -425,14 +425,18 @@ func (s *BucketStore) blockSeries(
 	// The postings to preload are registered within the call to PostingsForMatchers,
 	// when it invokes indexr.Postings for each underlying postings list.
 	// They are ready to use ONLY after preloadPostings was called successfully.
-	lazyPostings, absent, err := tsdb.PostingsForMatchers(indexr, matchers...)
+	lazyPostings, err := tsdb.PostingsForMatchers(indexr, matchers...)
 	if err != nil {
 		return nil, stats, err
+	}
+	// If the tree was reduced to the empty postings list, don't preload the registered
+	// leaf postings and return early with an empty result.
+	if lazyPostings == index.EmptyPostings() {
+		return storepb.EmptySeriesSet(), stats, nil
 	}
 	if err := indexr.preloadPostings(); err != nil {
 		return nil, stats, err
 	}
-
 	// Get result postings list by resolving the postings tree.
 	ps, err := index.ExpandPostings(lazyPostings)
 	if err != nil {
@@ -451,18 +455,9 @@ func (s *BucketStore) blockSeries(
 		lset labels.Labels
 		chks []chunks.Meta
 	)
-Outer:
 	for _, id := range ps {
 		if err := indexr.Series(id, &lset, &chks); err != nil {
 			return nil, stats, err
-		}
-		// We must check all returned series whether they have one of the labels that should be
-		// empty/absent set. If yes, we need to skip them.
-		// NOTE(fabxc): ideally we'd solve this upstream with an inverted postings iterator.
-		for _, l := range absent {
-			if lset.Get(l) != "" {
-				continue Outer
-			}
 		}
 		s := seriesEntry{
 			lset: make([]storepb.Label, 0, len(lset)),

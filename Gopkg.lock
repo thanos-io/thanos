@@ -236,10 +236,10 @@
   revision = "6171d00fa712c2f8368e601fa20c131fe37c8e16"
 
 [[projects]]
-  branch = "refpkg2"
+  branch = "master"
   name = "github.com/prometheus/tsdb"
   packages = [".","chunkenc","chunks","fileutil","index","labels"]
-  revision = "989ef0ac6acc5cf12202c27bfd1fa797dda145f3"
+  revision = "07ef80820ef1250db82f9544f3fcf7f0f63ccee0"
 
 [[projects]]
   branch = "master"
@@ -308,12 +308,6 @@
   version = "v2.2.5"
 
 [[projects]]
-  branch = "v1"
-  name = "gopkg.in/yaml.v1"
-  packages = ["."]
-  revision = "9f9df34309c04878acc86042b16630b0f696e1de"
-
-[[projects]]
   branch = "v2"
   name = "gopkg.in/yaml.v2"
   packages = ["."]
@@ -322,6 +316,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "16e7ceaea23343acf707218128c3d30e1de4a20c44089357afde87db9ea309c3"
+  inputs-digest = "9b13a107c51e85d17de52bdfb23c12304e0f6838d43991f32aa850ceb8f19ddc"
   solver-name = "gps-cdcl"
   solver-version = 1
