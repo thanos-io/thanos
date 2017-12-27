@@ -14,8 +14,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// WarningSeries is a series that triggers partial error warning.
 var WarningSeries = storepb.Series{Labels: []storepb.Label{{Name: "WarningSeries"}}}
 
+// StoreClient is test gRPC store API client.
 type StoreClient struct {
 	Values    map[string][]string
 	SeriesSet []storepb.Series
@@ -37,6 +39,7 @@ func (s *StoreClient) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	return &storepb.LabelValuesResponse{Values: s.Values[req.Label]}, nil
 }
 
+// StoreSeriesClient is test gRPC storeAPI series client.
 type StoreSeriesClient struct {
 	// This field just exist to pseudo-implement the unused methods of the interface.
 	storepb.Store_SeriesClient
@@ -64,6 +67,7 @@ func (c *StoreSeriesClient) Context() context.Context {
 	return c.ctx
 }
 
+// StoreSeriesServer is test gRPC storeAPI series server.
 type StoreSeriesServer struct {
 	// This field just exist to pseudo-implement the unused methods of the interface.
 	storepb.Store_SeriesServer
@@ -99,6 +103,7 @@ type Sample struct {
 	V float64
 }
 
+// StoreSeries creates test series with single chunk that stores all the given samples.
 func StoreSeries(t testing.TB, lset labels.Labels, smpls []Sample) (s storepb.Series) {
 	for _, l := range lset {
 		s.Labels = append(s.Labels, storepb.Label{Name: l.Name, Value: l.Value})
