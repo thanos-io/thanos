@@ -166,6 +166,10 @@ func storeMatches(s *StoreInfo, mint, maxt int64, matchers ...*labels.Matcher) b
 	return true
 }
 
+func (q *querier) isDedupEnabled(o *opts) bool {
+	return o.deduplicate && q.replicaLabel != ""
+}
+
 func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 	var (
 		mtx sync.Mutex
@@ -192,13 +196,22 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 		store := s
 
 		g.Go(func() error {
-			set, err := q.selectSingle(ctx, store.Client, opts.deduplicate, sms...)
+			set, warnings, err := q.selectSingle(ctx, store.Client, sms...)
 			if err != nil {
 				opts.partialErrReporter(errors.Wrapf(err, "querying store failed"))
 				return nil
 			}
+
+			for _, w := range warnings {
+				opts.partialErrReporter(errors.New(w))
+			}
+
+			if q.isDedupEnabled(opts) {
+				sortDedupLabels(set, q.replicaLabel)
+			}
+
 			mtx.Lock()
-			all = append(all, set)
+			all = append(all, newStoreSeriesSet(set))
 			mtx.Unlock()
 
 			return nil
@@ -213,7 +226,7 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 		set:  storepb.MergeSeriesSets(all...),
 	}
 
-	if !opts.deduplicate || q.replicaLabel == "" {
+	if !q.isDedupEnabled(opts) {
 		// Return data without any deduplication.
 		return set, nil
 	}
@@ -223,37 +236,7 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 	return newDedupSeriesSet(set, q.replicaLabel), nil
 }
 
-func (q *querier) selectSingle(
-	ctx context.Context,
-	client storepb.StoreClient,
-	deduplicate bool,
-	ms ...storepb.LabelMatcher,
-) (storepb.SeriesSet, error) {
-	sc, err := client.Series(ctx, &storepb.SeriesRequest{
-		MinTime:  q.mint,
-		MaxTime:  q.maxt,
-		Matchers: ms,
-	})
-	if err != nil {
-		return nil, errors.Wrap(err, "fetch series")
-	}
-	var set []storepb.Series
-
-	for {
-		r, err := sc.Recv()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, errors.Wrap(err, "receive series")
-		}
-		set = append(set, r.Series)
-	}
-	res := newStoreSeriesSet(set)
-
-	if !deduplicate || q.replicaLabel == "" {
-		return res, nil
-	}
+func sortDedupLabels(set []storepb.Series, replicaLabel string) {
 	// Resort the result so that the same series with different replica
 	// labels are coming right after each other.
 	// TODO(fabxc): this could potentially pushed further down into the store API
@@ -261,10 +244,10 @@ func (q *querier) selectSingle(
 	for _, s := range set {
 		// Move the replica label to the very end.
 		sort.Slice(s.Labels, func(i, j int) bool {
-			if s.Labels[i].Name == q.replicaLabel {
+			if s.Labels[i].Name == replicaLabel {
 				return false
 			}
-			if s.Labels[j].Name == q.replicaLabel {
+			if s.Labels[j].Name == replicaLabel {
 				return true
 			}
 			return s.Labels[i].Name < s.Labels[j].Name
@@ -275,7 +258,43 @@ func (q *querier) selectSingle(
 	sort.Slice(set, func(i, j int) bool {
 		return storepb.CompareLabels(set[i].Labels, set[j].Labels) < 0
 	})
-	return res, nil
+}
+func (q *querier) selectSingle(
+	ctx context.Context,
+	client storepb.StoreClient,
+	ms ...storepb.LabelMatcher,
+) ([]storepb.Series, []string, error) {
+	sc, err := client.Series(ctx, &storepb.SeriesRequest{
+		MinTime:  q.mint,
+		MaxTime:  q.maxt,
+		Matchers: ms,
+	})
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "fetch series")
+	}
+	var (
+		set      []storepb.Series
+		warnings []string
+	)
+
+	for {
+		r, err := sc.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "receive series")
+		}
+
+		if w := r.GetWarning(); w != "" {
+			warnings = append(warnings, w)
+			continue
+		}
+
+		set = append(set, *r.GetSeries())
+	}
+
+	return set, warnings, nil
 }
 
 func (q *querier) LabelValues(name string) ([]string, error) {
@@ -295,10 +314,14 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 		store := s
 
 		g.Go(func() error {
-			values, err := q.labelValuesSingle(ctx, store.Client, name)
+			values, warnings, err := q.labelValuesSingle(ctx, store.Client, name)
 			if err != nil {
 				opts.partialErrReporter(errors.Wrap(err, "querying store failed"))
 				return nil
+			}
+
+			for _, w := range warnings {
+				opts.partialErrReporter(errors.New(w))
 			}
 
 			mtx.Lock()
@@ -314,14 +337,14 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 	return strutil.MergeUnsortedSlices(all...), nil
 }
 
-func (q *querier) labelValuesSingle(ctx context.Context, client storepb.StoreClient, name string) ([]string, error) {
+func (q *querier) labelValuesSingle(ctx context.Context, client storepb.StoreClient, name string) ([]string, []string, error) {
 	resp, err := client.LabelValues(ctx, &storepb.LabelValuesRequest{
 		Label: name,
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "fetch series")
+		return nil, nil, errors.Wrap(err, "fetch series")
 	}
-	return resp.Values, nil
+	return resp.Values, resp.Warning, nil
 }
 
 func (q *querier) Close() error {
