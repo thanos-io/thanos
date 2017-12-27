@@ -48,7 +48,7 @@ import (
 
 // registerRule registers a rule command.
 func registerRule(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
+	cmd := app.Command(name, "ruler evaluating Prometheus rules against given Query nodes, exposing Store API and storing old blocks in bucket")
 
 	labelStrs := cmd.Flag("label", "labels applying to all generated metrics (repeated)").
 		PlaceHolder("<name>=\"<value>\"").Strings()

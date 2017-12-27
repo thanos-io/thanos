@@ -47,7 +47,7 @@ message LabelNamesRequest {
 
 message LabelNamesResponse {
   repeated string names = 1;
-  repeated string warning = 2;
+  repeated string warnings = 2;
 }
 
 message LabelValuesRequest {
@@ -56,5 +56,5 @@ message LabelValuesRequest {
 
 message LabelValuesResponse {
   repeated string values = 1;
-  repeated string warning = 2;
+  repeated string warnings = 2;
 }

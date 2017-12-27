@@ -116,7 +116,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}, {Name: "ext", Value: "value"}},
 		{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext", Value: "value"}},
 	}
-	srv := &testStoreSeriesServer{ctx: ctx}
+	srv := testutil.NewStoreSeriesServer(ctx)
 
 	err = store.Series(&storepb.SeriesRequest{
 		Matchers: []storepb.LabelMatcher{
@@ -126,9 +126,9 @@ func TestBucketStore_e2e(t *testing.T) {
 		MaxTime: timestamp.FromTime(now),
 	}, srv)
 	testutil.Ok(t, err)
-	testutil.Equals(t, len(pbseries), len(srv.series))
+	testutil.Equals(t, len(pbseries), len(srv.SeriesSet))
 
-	for i, s := range srv.series {
+	for i, s := range srv.SeriesSet {
 		testutil.Equals(t, pbseries[i], s.Labels)
 		testutil.Equals(t, 3, len(s.Chunks))
 	}
@@ -137,7 +137,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}},
 		{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
 	}
-	srv = &testStoreSeriesServer{ctx: ctx}
+	srv = testutil.NewStoreSeriesServer(ctx)
 
 	err = store.Series(&storepb.SeriesRequest{
 		Matchers: []storepb.LabelMatcher{
@@ -147,9 +147,9 @@ func TestBucketStore_e2e(t *testing.T) {
 		MaxTime: timestamp.FromTime(now),
 	}, srv)
 	testutil.Ok(t, err)
-	testutil.Equals(t, len(pbseries), len(srv.series))
+	testutil.Equals(t, len(pbseries), len(srv.SeriesSet))
 
-	for i, s := range srv.series {
+	for i, s := range srv.SeriesSet {
 		testutil.Equals(t, pbseries[i], s.Labels)
 		testutil.Equals(t, 3, len(s.Chunks))
 	}
@@ -159,7 +159,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext", Value: "value"}},
 		{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext", Value: "value"}},
 	}
-	srv = &testStoreSeriesServer{ctx: ctx}
+	srv = testutil.NewStoreSeriesServer(ctx)
 
 	err = store.Series(&storepb.SeriesRequest{
 		Matchers: []storepb.LabelMatcher{
@@ -170,14 +170,14 @@ func TestBucketStore_e2e(t *testing.T) {
 		MaxTime: timestamp.FromTime(now),
 	}, srv)
 	testutil.Ok(t, err)
-	testutil.Equals(t, len(pbseries), len(srv.series))
+	testutil.Equals(t, len(pbseries), len(srv.SeriesSet))
 
-	for i, s := range srv.series {
+	for i, s := range srv.SeriesSet {
 		testutil.Equals(t, pbseries[i], s.Labels)
 		testutil.Equals(t, 3, len(s.Chunks))
 	}
 
-	srv = &testStoreSeriesServer{ctx: ctx}
+	srv = testutil.NewStoreSeriesServer(ctx)
 	err = store.Series(&storepb.SeriesRequest{
 		Matchers: []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
@@ -187,7 +187,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		MaxTime: timestamp.FromTime(now),
 	}, srv)
 	testutil.Ok(t, err)
-	testutil.Equals(t, 0, len(srv.series))
+	testutil.Equals(t, 0, len(srv.SeriesSet))
 }
 
 func TestBucketBlock_matches(t *testing.T) {
@@ -282,25 +282,6 @@ func TestBucketBlock_matches(t *testing.T) {
 		testutil.Assert(t, c.ok == ok, "test case %d failed", i)
 		testutil.Equals(t, c.expBlockMatchers, blockMatchers)
 	}
-}
-
-type testStoreSeriesServer struct {
-	// This field just exist to pseudo-implement the unused methods of the interface.
-	storepb.Store_SeriesServer
-	ctx    context.Context
-	series []storepb.Series
-}
-
-func (s *testStoreSeriesServer) Send(r *storepb.SeriesResponse) error {
-	if r.GetSeries() == nil {
-		return errors.New("no series")
-	}
-	s.series = append(s.series, *r.GetSeries())
-	return nil
-}
-
-func (s *testStoreSeriesServer) Context() context.Context {
-	return s.ctx
 }
 
 func TestPartitionRanges(t *testing.T) {

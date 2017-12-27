@@ -3,47 +3,42 @@ package query
 import (
 	"context"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"math"
 	"math/rand"
 	"testing"
-
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/tsdb/chunkenc"
-	"google.golang.org/grpc"
 )
 
 func TestQuerier_LabelValues(t *testing.T) {
-	a := &testStoreClient{
-		values: map[string][]string{
-			"test": []string{"a", "b", "c", "d"},
+	a := &testutil.StoreClient{
+		Values: map[string][]string{
+			"test": {"a", "b", "c", "d"},
 		},
 	}
-	b := &testStoreClient{
-		values: map[string][]string{
+	b := &testutil.StoreClient{
+		Values: map[string][]string{
 			// The contract is that label values are sorted but we should be resilient
 			// to misbehaving clients.
-			"test": []string{"a", "out-of-order", "d", "x", "y"},
+			"test": {"a", "out-of-order", "d", "x", "y"},
 		},
 	}
-	c := &testStoreClient{
-		values: map[string][]string{
-			"test": []string{"e"},
+	c := &testutil.StoreClient{
+		Values: map[string][]string{
+			"test": {"e"},
 		},
 	}
 	expected := []string{"a", "b", "c", "d", "e", "out-of-order", "x", "y"}
 
 	q := newQuerier(context.Background(), nil, []*StoreInfo{
-		&StoreInfo{Client: a},
-		&StoreInfo{Client: b},
-		&StoreInfo{Client: c},
+		{Client: a},
+		{Client: b},
+		{Client: c},
 	}, 0, 10000, "")
 	defer q.Close()
 
@@ -55,28 +50,28 @@ func TestQuerier_LabelValues(t *testing.T) {
 // TestQuerier_Series catches common edge cases encountered when querying multiple store nodes.
 // It is not a subtitute for testing fanin/merge procedures in depth.
 func TestQuerier_Series(t *testing.T) {
-	a := &testStoreClient{
-		series: []storepb.Series{
-			testStoreSeries(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-			testStoreSeries(t, labels.FromStrings("a", "b"), []sample{{2, 2}, {3, 3}, {4, 4}}),
+	a := &testutil.StoreClient{
+		SeriesSet: []storepb.Series{
+			testutil.StoreSeries(t, labels.FromStrings("a", "a"), []testutil.Sample{{0, 0}, {2, 1}, {3, 2}}),
+			testutil.StoreSeries(t, labels.FromStrings("a", "b"), []testutil.Sample{{2, 2}, {3, 3}, {4, 4}}),
 		},
 	}
-	b := &testStoreClient{
-		series: []storepb.Series{
-			testStoreSeries(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
+	b := &testutil.StoreClient{
+		SeriesSet: []storepb.Series{
+			testutil.StoreSeries(t, labels.FromStrings("a", "b"), []testutil.Sample{{1, 1}, {2, 2}, {3, 3}}),
 		},
 	}
-	c := &testStoreClient{
-		series: []storepb.Series{
-			testStoreSeries(t, labels.FromStrings("a", "c"), []sample{{100, 1}, {300, 3}, {400, 4}}),
+	c := &testutil.StoreClient{
+		SeriesSet: []storepb.Series{
+			testutil.StoreSeries(t, labels.FromStrings("a", "c"), []testutil.Sample{{100, 1}, {300, 3}, {400, 4}}),
 		},
 	}
-	// Querier clamps the range to [1,300], which should drop some samples of the result above.
+	// Querier clamps the range to [1,300], which should drop some testutil.Samples of the result above.
 	// The store API allows endpoints to send more data then initially requested.
 	q := newQuerier(context.Background(), nil, []*StoreInfo{
-		&StoreInfo{Client: a},
-		&StoreInfo{Client: b},
-		&StoreInfo{Client: c},
+		{Client: a},
+		{Client: b},
+		{Client: c},
 	}, 1, 300, "")
 	defer q.Close()
 
@@ -85,19 +80,19 @@ func TestQuerier_Series(t *testing.T) {
 
 	expected := []struct {
 		lset    labels.Labels
-		samples []sample
+		samples []testutil.Sample
 	}{
 		{
 			lset:    labels.FromStrings("a", "a"),
-			samples: []sample{{2, 1}, {3, 2}},
+			samples: []testutil.Sample{{2, 1}, {3, 2}},
 		},
 		{
 			lset:    labels.FromStrings("a", "b"),
-			samples: []sample{{1, 1}, {2, 2}, {3, 3}, {4, 4}},
+			samples: []testutil.Sample{{1, 1}, {2, 2}, {3, 3}, {4, 4}},
 		},
 		{
 			lset:    labels.FromStrings("a", "c"),
-			samples: []sample{{100, 1}, {300, 3}},
+			samples: []testutil.Sample{{100, 1}, {300, 3}},
 		},
 	}
 
@@ -245,131 +240,69 @@ func TestStoreMatches(t *testing.T) {
 	}
 }
 
-func expandSeries(t testing.TB, it storage.SeriesIterator) (res []sample) {
+func expandSeries(t testing.TB, it storage.SeriesIterator) (res []testutil.Sample) {
 	for it.Next() {
 		t, v := it.At()
-		res = append(res, sample{t, v})
+		res = append(res, testutil.Sample{t, v})
 	}
 	testutil.Ok(t, it.Err())
 	return res
 }
 
-func testStoreSeries(t testing.TB, lset labels.Labels, smpls []sample) (s storepb.Series) {
-	for _, l := range lset {
-		s.Labels = append(s.Labels, storepb.Label{Name: l.Name, Value: l.Value})
-	}
-	c := chunkenc.NewXORChunk()
-	a, err := c.Appender()
-	testutil.Ok(t, err)
-
-	for _, smpl := range smpls {
-		a.Append(smpl.t, smpl.v)
-	}
-	s.Chunks = append(s.Chunks, storepb.Chunk{
-		Type:    storepb.Chunk_XOR,
-		MinTime: smpls[0].t,
-		MaxTime: smpls[len(smpls)-1].t,
-		Data:    c.Bytes(),
-	})
-	return s
-}
-
-type testStoreClient struct {
-	values map[string][]string
-	series []storepb.Series
-}
-
-func (s *testStoreClient) Info(ctx context.Context, req *storepb.InfoRequest, _ ...grpc.CallOption) (*storepb.InfoResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
-}
-
-func (s *testStoreClient) Series(ctx context.Context, req *storepb.SeriesRequest, _ ...grpc.CallOption) (storepb.Store_SeriesClient, error) {
-	return &testStoreSeriesClient{ctx: ctx, series: s.series}, nil
-}
-
-func (s *testStoreClient) LabelNames(ctx context.Context, req *storepb.LabelNamesRequest, _ ...grpc.CallOption) (*storepb.LabelNamesResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
-}
-
-func (s *testStoreClient) LabelValues(ctx context.Context, req *storepb.LabelValuesRequest, _ ...grpc.CallOption) (*storepb.LabelValuesResponse, error) {
-	return &storepb.LabelValuesResponse{Values: s.values[req.Label]}, nil
-}
-
-type testStoreSeriesClient struct {
-	// This field just exist to pseudo-implement the unused methods of the interface.
-	storepb.Store_SeriesClient
-	ctx    context.Context
-	series []storepb.Series
-	i      int
-}
-
-func (c *testStoreSeriesClient) Recv() (*storepb.SeriesResponse, error) {
-	if c.i >= len(c.series) {
-		return nil, io.EOF
-	}
-	s := c.series[c.i]
-	c.i++
-	return storepb.NewSeriesResponse(&s), nil
-}
-
-func (c *testStoreSeriesClient) Context() context.Context {
-	return c.ctx
-}
-
 func TestDedupSeriesSet(t *testing.T) {
 	input := []struct {
 		lset []storepb.Label
-		vals []sample
+		vals []testutil.Sample
 	}{
 		{
 			lset: []storepb.Label{{"a", "1"}, {"c", "3"}, {"replica", "replica-1"}},
-			vals: []sample{{10000, 1}, {20000, 2}},
+			vals: []testutil.Sample{{10000, 1}, {20000, 2}},
 		}, {
 			lset: []storepb.Label{{"a", "1"}, {"c", "3"}, {"replica", "replica-2"}},
-			vals: []sample{{60000, 3}, {70000, 4}},
+			vals: []testutil.Sample{{60000, 3}, {70000, 4}},
 		}, {
 			lset: []storepb.Label{{"a", "1"}, {"c", "3"}, {"replica", "replica-3"}},
-			vals: []sample{{200000, 5}, {210000, 6}},
+			vals: []testutil.Sample{{200000, 5}, {210000, 6}},
 		}, {
 			lset: []storepb.Label{{"a", "1"}, {"c", "3"}, {"d", "4"}},
-			vals: []sample{{10000, 1}, {20000, 2}},
+			vals: []testutil.Sample{{10000, 1}, {20000, 2}},
 		}, {
 			lset: []storepb.Label{{"a", "1"}, {"c", "3"}},
-			vals: []sample{{10000, 1}, {20000, 2}},
+			vals: []testutil.Sample{{10000, 1}, {20000, 2}},
 		}, {
 			lset: []storepb.Label{{"a", "1"}, {"c", "4"}, {"replica", "replica-1"}},
-			vals: []sample{{10000, 1}, {20000, 2}},
+			vals: []testutil.Sample{{10000, 1}, {20000, 2}},
 		}, {
 			lset: []storepb.Label{{"a", "2"}, {"c", "3"}, {"replica", "replica-3"}},
-			vals: []sample{{10000, 1}, {20000, 2}},
+			vals: []testutil.Sample{{10000, 1}, {20000, 2}},
 		}, {
 			lset: []storepb.Label{{"a", "2"}, {"c", "3"}, {"replica", "replica-3"}},
-			vals: []sample{{60000, 3}, {70000, 4}},
+			vals: []testutil.Sample{{60000, 3}, {70000, 4}},
 		},
 	}
 	exp := []struct {
 		lset labels.Labels
-		vals []sample
+		vals []testutil.Sample
 	}{
 		{
 			lset: labels.Labels{{"a", "1"}, {"c", "3"}},
-			vals: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}, {200000, 5}, {210000, 6}},
+			vals: []testutil.Sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}, {200000, 5}, {210000, 6}},
 		},
 		{
 			lset: labels.Labels{{"a", "1"}, {"c", "3"}, {"d", "4"}},
-			vals: []sample{{10000, 1}, {20000, 2}},
+			vals: []testutil.Sample{{10000, 1}, {20000, 2}},
 		},
 		{
 			lset: labels.Labels{{"a", "1"}, {"c", "3"}},
-			vals: []sample{{10000, 1}, {20000, 2}},
+			vals: []testutil.Sample{{10000, 1}, {20000, 2}},
 		},
 		{
 			lset: labels.Labels{{"a", "1"}, {"c", "4"}},
-			vals: []sample{{10000, 1}, {20000, 2}},
+			vals: []testutil.Sample{{10000, 1}, {20000, 2}},
 		},
 		{
 			lset: labels.Labels{{"a", "2"}, {"c", "3"}},
-			vals: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}},
+			vals: []testutil.Sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}},
 		},
 	}
 	var series []storepb.Series
@@ -377,7 +310,7 @@ func TestDedupSeriesSet(t *testing.T) {
 		chk := chunkenc.NewXORChunk()
 		app, _ := chk.Appender()
 		for _, s := range c.vals {
-			app.Append(s.t, s.v)
+			app.Append(s.T, s.V)
 		}
 		series = append(series, storepb.Series{
 			Labels: c.lset,
@@ -410,39 +343,39 @@ func TestDedupSeriesIterator(t *testing.T) {
 	// by the initial penalty of 5000, that will cause the second iterator to seek
 	// ahead this far at least once.
 	cases := []struct {
-		a, b, exp []sample
+		a, b, exp []testutil.Sample
 	}{
 		{ // Generally prefer the first series.
-			a:   []sample{{10000, 10}, {20000, 11}, {30000, 12}, {40000, 13}},
-			b:   []sample{{10000, 20}, {20000, 21}, {30000, 22}, {40000, 23}},
-			exp: []sample{{10000, 10}, {20000, 11}, {30000, 12}, {40000, 13}},
+			a:   []testutil.Sample{{10000, 10}, {20000, 11}, {30000, 12}, {40000, 13}},
+			b:   []testutil.Sample{{10000, 20}, {20000, 21}, {30000, 22}, {40000, 23}},
+			exp: []testutil.Sample{{10000, 10}, {20000, 11}, {30000, 12}, {40000, 13}},
 		},
 		{ // Prefer b if it starts earlier.
-			a:   []sample{{10100, 1}, {20100, 1}, {30100, 1}, {40100, 1}},
-			b:   []sample{{10000, 2}, {20000, 2}, {30000, 2}, {40000, 2}},
-			exp: []sample{{10000, 2}, {20000, 2}, {30000, 2}, {40000, 2}},
+			a:   []testutil.Sample{{10100, 1}, {20100, 1}, {30100, 1}, {40100, 1}},
+			b:   []testutil.Sample{{10000, 2}, {20000, 2}, {30000, 2}, {40000, 2}},
+			exp: []testutil.Sample{{10000, 2}, {20000, 2}, {30000, 2}, {40000, 2}},
 		},
 		{ // Don't switch series on a single delta sized gap.
-			a:   []sample{{10000, 1}, {20000, 1}, {40000, 1}},
-			b:   []sample{{10000, 2}, {20000, 2}, {30000, 2}, {40000, 2}},
-			exp: []sample{{10000, 1}, {20000, 1}, {40000, 1}},
+			a:   []testutil.Sample{{10000, 1}, {20000, 1}, {40000, 1}},
+			b:   []testutil.Sample{{10000, 2}, {20000, 2}, {30000, 2}, {40000, 2}},
+			exp: []testutil.Sample{{10000, 1}, {20000, 1}, {40000, 1}},
 		},
 		{
-			a:   []sample{{10000, 1}, {20000, 1}, {40000, 1}},
-			b:   []sample{{15000, 2}, {25000, 2}, {35000, 2}, {45000, 2}},
-			exp: []sample{{10000, 1}, {20000, 1}, {40000, 1}},
+			a:   []testutil.Sample{{10000, 1}, {20000, 1}, {40000, 1}},
+			b:   []testutil.Sample{{15000, 2}, {25000, 2}, {35000, 2}, {45000, 2}},
+			exp: []testutil.Sample{{10000, 1}, {20000, 1}, {40000, 1}},
 		},
 		{ // Once the gap gets bigger than 2 deltas, switch and stay with the new series.
-			a:   []sample{{10000, 1}, {20000, 1}, {30000, 1}, {60000, 1}, {70000, 1}},
-			b:   []sample{{10100, 2}, {20100, 2}, {30100, 2}, {40100, 2}, {50100, 2}, {60100, 2}},
-			exp: []sample{{10000, 1}, {20000, 1}, {30000, 1}, {50100, 2}, {60100, 2}},
+			a:   []testutil.Sample{{10000, 1}, {20000, 1}, {30000, 1}, {60000, 1}, {70000, 1}},
+			b:   []testutil.Sample{{10100, 2}, {20100, 2}, {30100, 2}, {40100, 2}, {50100, 2}, {60100, 2}},
+			exp: []testutil.Sample{{10000, 1}, {20000, 1}, {30000, 1}, {50100, 2}, {60100, 2}},
 		},
 	}
 	for i, c := range cases {
 		t.Logf("case %d:", i)
 		it := newDedupSeriesIterator(
-			&sampleIterator{l: c.a, i: -1},
-			&sampleIterator{l: c.b, i: -1},
+			&SampleIterator{l: c.a, i: -1},
+			&SampleIterator{l: c.b, i: -1},
 		)
 		res := expandSeries(t, it)
 		testutil.Equals(t, c.exp, res)
@@ -450,10 +383,10 @@ func TestDedupSeriesIterator(t *testing.T) {
 }
 
 func BenchmarkDedupSeriesIterator(b *testing.B) {
-	run := func(b *testing.B, s1, s2 []sample) {
+	run := func(b *testing.B, s1, s2 []testutil.Sample) {
 		it := newDedupSeriesIterator(
-			&sampleIterator{l: s1, i: -1},
-			&sampleIterator{l: s2, i: -1},
+			&SampleIterator{l: s1, i: -1},
+			&SampleIterator{l: s2, i: -1},
 		)
 		b.ResetTimer()
 		var total int64
@@ -465,54 +398,54 @@ func BenchmarkDedupSeriesIterator(b *testing.B) {
 		fmt.Fprint(ioutil.Discard, total)
 	}
 	b.Run("equal", func(b *testing.B) {
-		var s1, s2 []sample
+		var s1, s2 []testutil.Sample
 
 		for i := 0; i < b.N; i++ {
-			s1 = append(s1, sample{t: int64(i * 10000), v: 1})
+			s1 = append(s1, testutil.Sample{T: int64(i * 10000), V: 1})
 		}
 		for i := 0; i < b.N; i++ {
-			s2 = append(s2, sample{t: int64(i * 10000), v: 2})
+			s2 = append(s2, testutil.Sample{T: int64(i * 10000), V: 2})
 		}
 		run(b, s1, s2)
 	})
 	b.Run("fixed-delta", func(b *testing.B) {
-		var s1, s2 []sample
+		var s1, s2 []testutil.Sample
 
 		for i := 0; i < b.N; i++ {
-			s1 = append(s1, sample{t: int64(i * 10000), v: 1})
+			s1 = append(s1, testutil.Sample{T: int64(i * 10000), V: 1})
 		}
 		for i := 0; i < b.N; i++ {
-			s2 = append(s2, sample{t: int64(i*10000) + 10, v: 2})
+			s2 = append(s2, testutil.Sample{T: int64(i*10000) + 10, V: 2})
 		}
 		run(b, s1, s2)
 	})
 	b.Run("minor-rand-delta", func(b *testing.B) {
-		var s1, s2 []sample
+		var s1, s2 []testutil.Sample
 
 		for i := 0; i < b.N; i++ {
-			s1 = append(s1, sample{t: int64(i*10000) + rand.Int63n(5000), v: 1})
+			s1 = append(s1, testutil.Sample{T: int64(i*10000) + rand.Int63n(5000), V: 1})
 		}
 		for i := 0; i < b.N; i++ {
-			s2 = append(s2, sample{t: int64(i*10000) + +rand.Int63n(5000), v: 2})
+			s2 = append(s2, testutil.Sample{T: int64(i*10000) + +rand.Int63n(5000), V: 2})
 		}
 		run(b, s1, s2)
 	})
 }
 
-type sampleIterator struct {
-	l []sample
+type SampleIterator struct {
+	l []testutil.Sample
 	i int
 }
 
-func (s *sampleIterator) Err() error {
+func (s *SampleIterator) Err() error {
 	return nil
 }
 
-func (s *sampleIterator) At() (int64, float64) {
-	return s.l[s.i].t, s.l[s.i].v
+func (s *SampleIterator) At() (int64, float64) {
+	return s.l[s.i].T, s.l[s.i].V
 }
 
-func (s *sampleIterator) Next() bool {
+func (s *SampleIterator) Next() bool {
 	if s.i >= len(s.l) {
 		return false
 	}
@@ -520,7 +453,7 @@ func (s *sampleIterator) Next() bool {
 	return true
 }
 
-func (s *sampleIterator) Seek(t int64) bool {
+func (s *SampleIterator) Seek(t int64) bool {
 	if s.i < 0 {
 		s.i = 0
 	}
@@ -528,7 +461,7 @@ func (s *sampleIterator) Seek(t int64) bool {
 		if s.i >= len(s.l) {
 			return false
 		}
-		if s.l[s.i].t >= t {
+		if s.l[s.i].T >= t {
 			return true
 		}
 		s.i++

@@ -44,7 +44,7 @@ func TestPrometheusStore_Series(t *testing.T) {
 
 	// Query all three samples except for the first one. Since we round up queried data
 	// to seconds, we can test whether the extra sample gets stripped properly.
-	srv := &testStoreSeriesServer{ctx: ctx}
+	srv := testutil.NewStoreSeriesServer(ctx)
 
 	err = proxy.Series(&storepb.SeriesRequest{
 		MinTime: baseT + 101,
@@ -55,16 +55,16 @@ func TestPrometheusStore_Series(t *testing.T) {
 	}, srv)
 	testutil.Ok(t, err)
 
-	testutil.Equals(t, 1, len(srv.series))
+	testutil.Equals(t, 1, len(srv.SeriesSet))
 
 	testutil.Equals(t, []storepb.Label{
 		{Name: "a", Value: "b"},
 		{Name: "region", Value: "eu-west"},
-	}, srv.series[0].Labels)
+	}, srv.SeriesSet[0].Labels)
 
-	testutil.Equals(t, 1, len(srv.series[0].Chunks))
+	testutil.Equals(t, 1, len(srv.SeriesSet[0].Chunks))
 
-	c := srv.series[0].Chunks[0]
+	c := srv.SeriesSet[0].Chunks[0]
 	testutil.Equals(t, storepb.Chunk_XOR, c.Type)
 
 	chk, err := chunkenc.FromData(chunkenc.EncXOR, c.Data)
@@ -143,7 +143,7 @@ func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 			return labels.FromStrings("region", "eu-west")
 		})
 	testutil.Ok(t, err)
-	srv := &testStoreSeriesServer{ctx: ctx}
+	srv := testutil.NewStoreSeriesServer(ctx)
 
 	err = proxy.Series(&storepb.SeriesRequest{
 		MinTime: baseT + 101,
@@ -155,14 +155,14 @@ func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 	}, srv)
 	testutil.Ok(t, err)
 
-	testutil.Equals(t, 1, len(srv.series))
+	testutil.Equals(t, 1, len(srv.SeriesSet))
 
 	testutil.Equals(t, []storepb.Label{
 		{Name: "a", Value: "b"},
 		{Name: "region", Value: "eu-west"},
-	}, srv.series[0].Labels)
+	}, srv.SeriesSet[0].Labels)
 
-	srv = &testStoreSeriesServer{ctx: ctx}
+	srv = testutil.NewStoreSeriesServer(ctx)
 	// However it should not match wrong external label.
 	err = proxy.Series(&storepb.SeriesRequest{
 		MinTime: baseT + 101,
@@ -175,5 +175,5 @@ func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 	testutil.Ok(t, err)
 
 	// No series.
-	testutil.Equals(t, 0, len(srv.series))
+	testutil.Equals(t, 0, len(srv.SeriesSet))
 }

@@ -213,6 +213,12 @@ func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prom
 func extLabelsMatches(extLabels labels.Labels, ms []storepb.LabelMatcher) (bool, []storepb.LabelMatcher, error) {
 	var newMatcher []storepb.LabelMatcher
 	for _, m := range ms {
+		// Validate all matchers.
+		tm, err := translateMatcher(m)
+		if err != nil {
+			return false, nil, err
+		}
+
 		extValue := extLabels.Get(m.Name)
 		if extValue == "" {
 			// Agnostic to external labels.
@@ -220,12 +226,7 @@ func extLabelsMatches(extLabels labels.Labels, ms []storepb.LabelMatcher) (bool,
 			continue
 		}
 
-		m, err := translateMatcher(m)
-		if err != nil {
-			return false, nil, err
-		}
-
-		if !m.Matches(extValue) {
+		if !tm.Matches(extValue) {
 			// External label does not match. This should not happen - it should be filtered out on query node,
 			// but let's do that anyway here.
 			return false, nil, nil
@@ -262,6 +263,11 @@ func (p *PrometheusStore) translateAndExtendLabels(m []prompb.Label, extend labe
 			Value: l.Value,
 		})
 	}
+
+	return extendLset(lset, extend)
+}
+
+func extendLset(lset []storepb.Label, extend labels.Labels) []storepb.Label {
 	for _, l := range extend {
 		lset = append(lset, storepb.Label{
 			Name:  l.Name,

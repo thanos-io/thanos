@@ -57,14 +57,6 @@ func translateMatchers(ms ...*labels.Matcher) ([]storepb.LabelMatcher, error) {
 	return res, nil
 }
 
-type errSeriesSet struct {
-	err error
-}
-
-func (errSeriesSet) Next() bool                             { return false }
-func (s errSeriesSet) Err() error                           { return s.err }
-func (errSeriesSet) At() ([]storepb.Label, []storepb.Chunk) { return nil, nil }
-
 // storeSeriesSet implements a storepb SeriesSet against a list of storepb.Series.
 type storeSeriesSet struct {
 	series []storepb.Series
@@ -335,11 +327,6 @@ func (s *dedupSeries) Iterator() (it storage.SeriesIterator) {
 		it = newDedupSeriesIterator(it, o.Iterator())
 	}
 	return it
-}
-
-type sample struct {
-	t int64
-	v float64
 }
 
 type dedupSeriesIterator struct {

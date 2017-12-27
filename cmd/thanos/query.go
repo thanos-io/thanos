@@ -13,12 +13,16 @@ import (
 	"github.com/improbable-eng/thanos/pkg/query/api"
 	"github.com/improbable-eng/thanos/pkg/query/ui"
 	"github.com/improbable-eng/thanos/pkg/runutil"
+	"github.com/improbable-eng/thanos/pkg/store"
+	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/tsdb/labels"
+	"google.golang.org/grpc"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -46,6 +50,11 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
 		String()
 
+	federationLabels := cmd.Flag("federation.label", "labels to treat as a query external labels exposed on federated endpoint (repeated)").
+		PlaceHolder("<name>=\"<value>\"").Strings()
+	federationAddr := cmd.Flag("federation.address", "listen host:port for gRPC federation endpoint").
+		PlaceHolder("<host:port>").String()
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
 		pstate := cluster.PeerState{
 			Type:    cluster.PeerTypeQuery,
@@ -61,12 +70,19 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 		if err != nil {
 			return errors.Wrap(err, "join cluster")
 		}
+
+		federationLset, err := parseFlagLabels(*federationLabels)
+		if err != nil {
+			return errors.Wrap(err, "parse federation labels")
+		}
 		return runQuery(g, logger, reg, tracer,
 			*httpAddr,
 			*maxConcurrentQueries,
 			*queryTimeout,
 			*replicaLabel,
 			peer,
+			*federationAddr,
+			federationLset,
 		)
 	}
 }
@@ -83,6 +99,8 @@ func runQuery(
 	queryTimeout time.Duration,
 	replicaLabel string,
 	peer *cluster.Peer,
+	federationAddr string,
+	federationLset labels.Labels,
 ) error {
 	pqlOpts := &promql.EngineOptions{
 		Logger:               logger,
@@ -129,6 +147,28 @@ func runQuery(
 		g.Add(func() error {
 			return errors.Wrap(http.Serve(l, mux), "serve query")
 		}, func(error) {
+			l.Close()
+		})
+	}
+
+	// Start optional gRPC federation endpoint.
+	if federationAddr != "" {
+
+		l, err := net.Listen("tcp", federationAddr)
+		if err != nil {
+			return errors.Wrap(err, "listen federation API address")
+		}
+		logger := log.With(logger, "component", "query")
+
+		qstore := store.NewQueryStore(logger, stores.Get, federationLset)
+
+		s := grpc.NewServer(defaultGRPCServerOpts(logger, reg, tracer)...)
+		storepb.RegisterStoreServer(s, qstore)
+
+		g.Add(func() error {
+			return errors.Wrap(s.Serve(l), "serve federation gRPC")
+		}, func(error) {
+			s.Stop()
 			l.Close()
 		})
 	}

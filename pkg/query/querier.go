@@ -174,9 +174,7 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 	var (
 		mtx sync.Mutex
 		all []storepb.SeriesSet
-		// TODO(fabxc): errgroup will fail the whole query on the first encountered error.
-		// Add support for partial results/errors.
-		g errgroup.Group
+		g   errgroup.Group
 	)
 	opts := optsFromContext(q.ctx)
 
@@ -219,9 +217,7 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 			return nil
 		})
 	}
-	if err := g.Wait(); err != nil {
-		return nil, errors.Wrap(err, "query stores")
-	}
+	_ = g.Wait()
 	set := promSeriesSet{
 		mint: q.mint,
 		maxt: q.maxt,
@@ -301,9 +297,7 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 	var (
 		mtx sync.Mutex
 		all [][]string
-		// TODO(bplotka): errgroup will fail the whole query on the first encountered error.
-		// Add support for partial results/errors.
-		g errgroup.Group
+		g   errgroup.Group
 	)
 	opts := optsFromContext(q.ctx)
 
@@ -331,9 +325,7 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 			return nil
 		})
 	}
-	if err := g.Wait(); err != nil {
-		return nil, err
-	}
+	_ = g.Wait()
 	return strutil.MergeUnsortedSlices(all...), nil
 }
 
@@ -344,7 +336,7 @@ func (q *querier) labelValuesSingle(ctx context.Context, client storepb.StoreCli
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "fetch series")
 	}
-	return resp.Values, resp.Warning, nil
+	return resp.Values, resp.Warnings, nil
 }
 
 func (q *querier) Close() error {
