@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"path"
@@ -67,7 +68,9 @@ func (p *PrometheusStore) Info(ctx context.Context, r *storepb.InfoRequest) (*st
 	lset := p.externalLabels()
 
 	res := &storepb.InfoResponse{
-		Labels: make([]storepb.Label, 0, len(lset)),
+		MinTime: 0,
+		MaxTime: math.MaxInt64,
+		Labels:  make([]storepb.Label, 0, len(lset)),
 	}
 	for _, l := range lset {
 		res.Labels = append(res.Labels, storepb.Label{

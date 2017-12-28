@@ -6,6 +6,8 @@ import (
 
 	"io"
 
+	"math"
+
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
@@ -45,7 +47,9 @@ func NewProxyStore(
 // Info returns store information about the external labels this store have.
 func (s *ProxyStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	res := &storepb.InfoResponse{
-		Labels: make([]storepb.Label, 0, len(s.selectorLabels)),
+		MinTime: 0,
+		MaxTime: math.MaxInt64,
+		Labels:  make([]storepb.Label, 0, len(s.selectorLabels)),
 	}
 	for _, l := range s.selectorLabels {
 		res.Labels = append(res.Labels, storepb.Label{
