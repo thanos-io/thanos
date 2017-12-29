@@ -56,7 +56,7 @@ func (s *ProxyStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb
 }
 
 // Series returns all series for a requested time range and label matcher. Requested series are taken from other
-// stores and proxied to RPC client.
+// stores and proxied to RPC client. NOTE: Resulted data are not trimmed exactly to min and max time range.
 func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	match, newMatchers, err := labelsMatches(s.selectorLabels, r.Matchers)
 	if err != nil {

@@ -96,8 +96,7 @@ type Sample struct {
 	V float64
 }
 
-// StoreSeriesResponse creates test storepb.SeriesResponse that includes series with single chunk that stores all the given samples.
-func StoreSeriesResponse(t testing.TB, lset labels.Labels, smpls []Sample) *storepb.SeriesResponse {
+func storeSeries(t testing.TB, lset labels.Labels, smpls []Sample) storepb.Series {
 	var s storepb.Series
 
 	for _, l := range lset {
@@ -116,5 +115,11 @@ func StoreSeriesResponse(t testing.TB, lset labels.Labels, smpls []Sample) *stor
 		MaxTime: smpls[len(smpls)-1].T,
 		Data:    c.Bytes(),
 	})
+	return s
+}
+
+// StoreSeriesResponse creates test storepb.SeriesResponse that includes series with single chunk that stores all the given samples.
+func StoreSeriesResponse(t testing.TB, lset labels.Labels, smpls []Sample) *storepb.SeriesResponse {
+	s := storeSeries(t, lset, smpls)
 	return storepb.NewSeriesResponse(&s)
 }

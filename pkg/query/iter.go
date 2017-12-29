@@ -108,15 +108,6 @@ func (s *chunkSeries) Iterator() storage.SeriesIterator {
 	return newChunkSeriesIterator(s.chunks, s.mint, s.maxt)
 }
 
-type errSeriesIterator struct {
-	err error
-}
-
-func (errSeriesIterator) Seek(int64) bool      { return false }
-func (errSeriesIterator) Next() bool           { return false }
-func (errSeriesIterator) At() (int64, float64) { return 0, 0 }
-func (s errSeriesIterator) Err() error         { return s.err }
-
 type nopSeriesIterator struct{}
 
 func (nopSeriesIterator) Seek(int64) bool      { return false }
