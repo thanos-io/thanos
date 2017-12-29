@@ -44,7 +44,7 @@ func TestPrometheusStore_Series(t *testing.T) {
 
 	// Query all three samples except for the first one. Since we round up queried data
 	// to seconds, we can test whether the extra sample gets stripped properly.
-	srv := testutil.NewStoreSeriesServer(ctx)
+	srv := newStoreSeriesServer(ctx)
 
 	err = proxy.Series(&storepb.SeriesRequest{
 		MinTime: baseT + 101,
@@ -143,7 +143,7 @@ func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 			return labels.FromStrings("region", "eu-west")
 		})
 	testutil.Ok(t, err)
-	srv := testutil.NewStoreSeriesServer(ctx)
+	srv := newStoreSeriesServer(ctx)
 
 	err = proxy.Series(&storepb.SeriesRequest{
 		MinTime: baseT + 101,
@@ -162,7 +162,7 @@ func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 		{Name: "region", Value: "eu-west"},
 	}, srv.SeriesSet[0].Labels)
 
-	srv = testutil.NewStoreSeriesServer(ctx)
+	srv = newStoreSeriesServer(ctx)
 	// However it should not match wrong external label.
 	err = proxy.Series(&storepb.SeriesRequest{
 		MinTime: baseT + 101,

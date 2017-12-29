@@ -2,7 +2,6 @@ package testutil
 
 import (
 	"context"
-	"errors"
 	"io"
 	"testing"
 
