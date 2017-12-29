@@ -174,7 +174,7 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 	var (
 		mtx sync.Mutex
 		all []storepb.SeriesSet
-		wg sync.WaitGroup
+		wg  sync.WaitGroup
 	)
 	opts := optsFromContext(q.ctx)
 
@@ -309,12 +309,10 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 	defer span.Finish()
 
 	for _, s := range q.stores {
-		store := s
-
 		wg.Add(1)
-		go func() {
+		go func(s *StoreInfo) {
 			defer wg.Done()
-			values, warnings, err := q.labelValuesSingle(ctx, store.Client, name)
+			values, warnings, err := q.labelValuesSingle(ctx, s.Client, name)
 			if err != nil {
 				opts.partialErrReporter(errors.Wrap(err, "querying store failed"))
 				return
@@ -329,7 +327,7 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 			mtx.Unlock()
 
 			return
-		}()
+		}(s)
 	}
 	wg.Wait()
 	return strutil.MergeUnsortedSlices(all...), nil

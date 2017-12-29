@@ -14,6 +14,37 @@ import (
 	tlabels "github.com/prometheus/tsdb/labels"
 )
 
+// storeSeriesServer is test gRPC storeAPI series server.
+type storeSeriesServer struct {
+	// This field just exist to pseudo-implement the unused methods of the interface.
+	storepb.Store_SeriesServer
+	ctx context.Context
+
+	SeriesSet []storepb.Series
+	Warnings  []string
+}
+
+func newStoreSeriesServer(ctx context.Context) *storeSeriesServer {
+	return &storeSeriesServer{ctx: ctx}
+}
+
+func (s *storeSeriesServer) Send(r *storepb.SeriesResponse) error {
+	if r.GetWarning() != "" {
+		s.Warnings = append(s.Warnings, r.GetWarning())
+		return nil
+	}
+
+	if r.GetSeries() == nil {
+		return errors.New("no seriesSet")
+	}
+	s.SeriesSet = append(s.SeriesSet, *r.GetSeries())
+	return nil
+}
+
+func (s *storeSeriesServer) Context() context.Context {
+	return s.ctx
+}
+
 func TestQueryStore_Series(t *testing.T) {
 	cls := []*query.StoreInfo{
 		{
@@ -68,7 +99,7 @@ func TestQueryStore_Series(t *testing.T) {
 	q := NewProxyStore(nil, func() []*query.StoreInfo { return cls }, tlabels.FromStrings("fed", "a"))
 
 	ctx := context.Background()
-	s1 := testutil.NewStoreSeriesServer(ctx)
+	s1 := newStoreSeriesServer(ctx)
 
 	// This should return empty response, since there is external label mismatch.
 	err := q.Series(
@@ -82,7 +113,7 @@ func TestQueryStore_Series(t *testing.T) {
 	testutil.Equals(t, 0, len(s1.SeriesSet))
 	testutil.Equals(t, 0, len(s1.Warnings))
 
-	s2 := testutil.NewStoreSeriesServer(ctx)
+	s2 := newStoreSeriesServer(ctx)
 	err = q.Series(
 		&storepb.SeriesRequest{
 			MinTime:  1,

@@ -116,7 +116,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}, {Name: "ext", Value: "value"}},
 		{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext", Value: "value"}},
 	}
-	srv := testutil.NewStoreSeriesServer(ctx)
+	srv := newStoreSeriesServer(ctx)
 
 	err = store.Series(&storepb.SeriesRequest{
 		Matchers: []storepb.LabelMatcher{
@@ -137,7 +137,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}},
 		{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
 	}
-	srv = testutil.NewStoreSeriesServer(ctx)
+	srv = newStoreSeriesServer(ctx)
 
 	err = store.Series(&storepb.SeriesRequest{
 		Matchers: []storepb.LabelMatcher{
@@ -159,7 +159,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext", Value: "value"}},
 		{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext", Value: "value"}},
 	}
-	srv = testutil.NewStoreSeriesServer(ctx)
+	srv = newStoreSeriesServer(ctx)
 
 	err = store.Series(&storepb.SeriesRequest{
 		Matchers: []storepb.LabelMatcher{
@@ -177,7 +177,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		testutil.Equals(t, 3, len(s.Chunks))
 	}
 
-	srv = testutil.NewStoreSeriesServer(ctx)
+	srv = newStoreSeriesServer(ctx)
 	err = store.Series(&storepb.SeriesRequest{
 		Matchers: []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},

@@ -60,37 +60,6 @@ func (c *StoreSeriesClient) Context() context.Context {
 	return c.ctx
 }
 
-// StoreSeriesServer is test gRPC storeAPI series server.
-type StoreSeriesServer struct {
-	// This field just exist to pseudo-implement the unused methods of the interface.
-	storepb.Store_SeriesServer
-	ctx context.Context
-
-	SeriesSet []storepb.Series
-	Warnings  []string
-}
-
-func NewStoreSeriesServer(ctx context.Context) *StoreSeriesServer {
-	return &StoreSeriesServer{ctx: ctx}
-}
-
-func (s *StoreSeriesServer) Send(r *storepb.SeriesResponse) error {
-	if r.GetWarning() != "" {
-		s.Warnings = append(s.Warnings, r.GetWarning())
-		return nil
-	}
-
-	if r.GetSeries() == nil {
-		return errors.New("no seriesSet")
-	}
-	s.SeriesSet = append(s.SeriesSet, *r.GetSeries())
-	return nil
-}
-
-func (s *StoreSeriesServer) Context() context.Context {
-	return s.ctx
-}
-
 type Sample struct {
 	T int64
 	V float64

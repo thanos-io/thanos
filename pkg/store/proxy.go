@@ -12,6 +12,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/strutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb/labels"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -69,6 +70,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 	var (
 		respCh    = make(chan *storepb.SeriesResponse, 10)
 		seriesSet []storepb.SeriesSet
+		g         errgroup.Group
 	)
 
 	for _, store := range s.stores() {
@@ -91,15 +93,17 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		seriesSet = append(seriesSet, startStreamSeriesSet(sc, respCh, 10))
 	}
 
-	go func() {
+	g.Go(func() error {
+		defer close(respCh)
+
 		mergedSet := storepb.MergeSeriesSets(seriesSet...)
 		for mergedSet.Next() {
 			var series storepb.Series
 			series.Labels, series.Chunks = mergedSet.At()
 			respCh <- storepb.NewSeriesResponse(&series)
 		}
-		close(respCh)
-	}()
+		return mergedSet.Err()
+	})
 
 	for resp := range respCh {
 		if err := srv.Send(resp); err != nil {
@@ -107,7 +111,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		}
 	}
 
-	return nil
+	return g.Wait()
 }
 
 // streamSeriesSet iterates over incoming stream of series.
@@ -211,11 +215,10 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		wg       sync.WaitGroup
 	)
 	for _, s := range s.stores() {
-		store := s
 		wg.Add(1)
-		go func() {
+		go func(s *query.StoreInfo) {
 			defer wg.Done()
-			resp, err := store.Client.LabelValues(ctx, &storepb.LabelValuesRequest{
+			resp, err := s.Client.LabelValues(ctx, &storepb.LabelValuesRequest{
 				Label: r.Label,
 			})
 			if err != nil {
@@ -231,7 +234,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 			mtx.Unlock()
 
 			return
-		}()
+		}(s)
 	}
 
 	wg.Wait()
