@@ -57,6 +57,8 @@ func spinup(t testing.TB, cfg config) (close func()) {
 			"--cluster.advertise-address", fmt.Sprintf("127.0.0.1:%d", 19390+i),
 			"--cluster.peers", "127.0.0.1:19391",
 			"--cluster.peers", "127.0.0.1:19591",
+			"--cluster.gossip-interval", "1s",
+			"--cluster.pushpull-interval", "1s",
 			"--log.level", "debug",
 		))
 		time.Sleep(200 * time.Millisecond)
@@ -71,6 +73,8 @@ func spinup(t testing.TB, cfg config) (close func()) {
 			"--cluster.advertise-address", fmt.Sprintf("127.0.0.1:%d", 19590+i),
 			"--cluster.peers", "127.0.0.1:19391",
 			"--cluster.peers", "127.0.0.1:19591",
+			"--cluster.gossip-interval", "1s",
+			"--cluster.pushpull-interval", "1s",
 			"--log.level", "debug",
 		))
 		time.Sleep(200 * time.Millisecond)
@@ -102,6 +106,8 @@ func spinup(t testing.TB, cfg config) (close func()) {
 			"--cluster.advertise-address", fmt.Sprintf("127.0.0.1:%d", 19890+i),
 			"--cluster.peers", "127.0.0.1:19391",
 			"--cluster.peers", "127.0.0.1:19591",
+			"--cluster.gossip-interval", "1s",
+			"--cluster.pushpull-interval", "1s",
 			"--log.level", "debug",
 		))
 		time.Sleep(200 * time.Millisecond)

@@ -82,6 +82,12 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	clusterBindAddr := cmd.Flag("cluster.address", "listen address for cluster").
 		Default(defaultClusterAddr).String()
 
+	gossipInterval := cmd.Flag("cluster.gossip-interval", "interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth.").
+		Default(cluster.DefaultGossipInterval).Duration()
+
+	pushPullInterval := cmd.Flag("cluster.pushpull-interval", "interval for gossip state syncs . Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage.").
+		Default(cluster.DefaultPushPullInterval).Duration()
+
 	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
 		String()
 
@@ -112,6 +118,8 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 				},
 			},
 			true,
+			*gossipInterval,
+			*pushPullInterval,
 		)
 		if err != nil {
 			return errors.Wrap(err, "join cluster")
