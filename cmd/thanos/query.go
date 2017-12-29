@@ -33,6 +33,9 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	httpAddr := cmd.Flag("http-address", "listen host:port for HTTP endpoints").
 		Default(defaultHTTPAddr).String()
 
+	grpcAddr := cmd.Flag("grpc-address", "listen host:port for gRPC endpoints").
+		Default(defaultGRPCAddr).String()
+
 	queryTimeout := cmd.Flag("query.timeout", "maximum time to process query by query node").
 		Default("2m").Duration()
 
@@ -50,10 +53,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
 		String()
 
-	federationLabels := cmd.Flag("federation.label", "labels to treat as a query external labels exposed on federated endpoint (repeated)").
+	selectorLabels := cmd.Flag("selector-label", "query selector labels that will be exposed in info endpoint (repeated)").
 		PlaceHolder("<name>=\"<value>\"").Strings()
-	federationAddr := cmd.Flag("federation.address", "listen host:port for gRPC federation endpoint").
-		PlaceHolder("<host:port>").String()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
 		pstate := cluster.PeerState{
@@ -71,18 +72,18 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			return errors.Wrap(err, "join cluster")
 		}
 
-		federationLset, err := parseFlagLabels(*federationLabels)
+		selectorLset, err := parseFlagLabels(*selectorLabels)
 		if err != nil {
 			return errors.Wrap(err, "parse federation labels")
 		}
 		return runQuery(g, logger, reg, tracer,
 			*httpAddr,
+			*grpcAddr,
 			*maxConcurrentQueries,
 			*queryTimeout,
 			*replicaLabel,
 			peer,
-			*federationAddr,
-			federationLset,
+			selectorLset,
 		)
 	}
 }
@@ -95,12 +96,12 @@ func runQuery(
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	httpAddr string,
+	grpcAddr string,
 	maxConcurrentQueries int,
 	queryTimeout time.Duration,
 	replicaLabel string,
 	peer *cluster.Peer,
-	federationAddr string,
-	federationLset labels.Labels,
+	selectorLset labels.Labels,
 ) error {
 	pqlOpts := &promql.EngineOptions{
 		Logger:               logger,
@@ -141,7 +142,7 @@ func runQuery(
 
 		l, err := net.Listen("tcp", httpAddr)
 		if err != nil {
-			return errors.Wrapf(err, "listen on address %s", httpAddr)
+			return errors.Wrapf(err, "listen HTTP on address %s", httpAddr)
 		}
 
 		g.Add(func() error {
@@ -150,29 +151,26 @@ func runQuery(
 			l.Close()
 		})
 	}
-
-	// Start optional gRPC federation endpoint.
-	if federationAddr != "" {
-
-		l, err := net.Listen("tcp", federationAddr)
+	// Start query (proxy) gRPC StoreAPI.
+	{
+		l, err := net.Listen("tcp", grpcAddr)
 		if err != nil {
-			return errors.Wrap(err, "listen federation API address")
+			return errors.Wrapf(err, "listen gRPC on address")
 		}
 		logger := log.With(logger, "component", "query")
 
-		qstore := store.NewQueryStore(logger, stores.Get, federationLset)
+		store := store.NewProxyStore(logger, stores.Get, selectorLset)
 
 		s := grpc.NewServer(defaultGRPCServerOpts(logger, reg, tracer)...)
-		storepb.RegisterStoreServer(s, qstore)
+		storepb.RegisterStoreServer(s, store)
 
 		g.Add(func() error {
-			return errors.Wrap(s.Serve(l), "serve federation gRPC")
+			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			s.Stop()
 			l.Close()
 		})
 	}
-
 	level.Info(logger).Log("msg", "starting query node", "peer", peer.Name())
 	return nil
 }

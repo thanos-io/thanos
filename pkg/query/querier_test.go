@@ -51,27 +51,27 @@ func TestQuerier_LabelValues(t *testing.T) {
 // It is not a subtitute for testing fanin/merge procedures in depth.
 func TestQuerier_Series(t *testing.T) {
 	a := &testutil.StoreClient{
-		SeriesSet: []storepb.Series{
-			testutil.StoreSeries(t, labels.FromStrings("a", "a"), []testutil.Sample{{0, 0}, {2, 1}, {3, 2}}),
-			testutil.StoreSeries(t, labels.FromStrings("a", "b"), []testutil.Sample{{2, 2}, {3, 3}, {4, 4}}),
+		RespSet: []*storepb.SeriesResponse{
+			testutil.StoreSeriesResponse(t, labels.FromStrings("a", "a"), []testutil.Sample{{0, 0}, {2, 1}, {3, 2}}),
+			testutil.StoreSeriesResponse(t, labels.FromStrings("a", "b"), []testutil.Sample{{2, 2}, {3, 3}, {4, 4}}),
 		},
 	}
 	b := &testutil.StoreClient{
-		SeriesSet: []storepb.Series{
-			testutil.StoreSeries(t, labels.FromStrings("a", "b"), []testutil.Sample{{1, 1}, {2, 2}, {3, 3}}),
+		RespSet: []*storepb.SeriesResponse{
+			testutil.StoreSeriesResponse(t, labels.FromStrings("a", "b"), []testutil.Sample{{1, 1}, {2, 2}, {3, 3}}),
 		},
 	}
 	c := &testutil.StoreClient{
-		SeriesSet: []storepb.Series{
-			testutil.StoreSeries(t, labels.FromStrings("a", "c"), []testutil.Sample{{100, 1}, {300, 3}, {400, 4}}),
+		RespSet: []*storepb.SeriesResponse{
+			testutil.StoreSeriesResponse(t, labels.FromStrings("a", "c"), []testutil.Sample{{100, 1}, {300, 3}, {400, 4}}),
 		},
 	}
 	// Querier clamps the range to [1,300], which should drop some testutil.Samples of the result above.
 	// The store API allows endpoints to send more data then initially requested.
 	q := newQuerier(context.Background(), nil, []*StoreInfo{
-		{Client: a},
-		{Client: b},
-		{Client: c},
+		{Client: a, MinTime: 1, MaxTime: 300},
+		{Client: b, MinTime: 1, MaxTime: 300},
+		{Client: c, MinTime: 1, MaxTime: 300},
 	}, 1, 300, "")
 	defer q.Close()
 
@@ -98,6 +98,8 @@ func TestQuerier_Series(t *testing.T) {
 
 	i := 0
 	for res.Next() {
+		testutil.Assert(t, i < len(expected), "more series than expected")
+
 		testutil.Equals(t, expected[i].lset, res.At().Labels())
 
 		samples := expandSeries(t, res.At().Iterator())
@@ -106,6 +108,8 @@ func TestQuerier_Series(t *testing.T) {
 		i++
 	}
 	testutil.Ok(t, res.Err())
+
+	testutil.Equals(t, len(expected), i)
 }
 
 func TestSortReplicaLabel(t *testing.T) {

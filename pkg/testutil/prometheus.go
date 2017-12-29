@@ -11,13 +11,10 @@ import (
 	"runtime"
 	"syscall"
 	"time"
-	"unsafe"
 
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
-	promlabels "github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/labels"
 	"golang.org/x/sync/errgroup"
@@ -189,32 +186,4 @@ func CreateBlock(
 		return id, errors.Wrap(err, "create compactor")
 	}
 	return c.Write(dir, h, mint, maxt)
-}
-
-// ReadSeriesFile reads up to n entries from the given series file.
-func ReadSeriesFile(fn string, n int) ([]labels.Labels, error) {
-	b, err := ioutil.ReadFile(fn)
-	if err != nil {
-		return nil, err
-	}
-
-	p := textparse.New(b)
-	i := 0
-	var mets []labels.Labels
-	// The data might be dirty and contain duplicate series.
-	hashes := map[uint64]struct{}{}
-
-	for p.Next() && i < n {
-		m := make(labels.Labels, 0, 10)
-		p.Metric((*promlabels.Labels)(unsafe.Pointer(&m)))
-
-		h := m.Hash()
-		if _, ok := hashes[h]; ok {
-			continue
-		}
-		mets = append(mets, m)
-		hashes[h] = struct{}{}
-		i++
-	}
-	return mets, p.Err()
 }

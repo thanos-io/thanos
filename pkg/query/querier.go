@@ -8,13 +8,13 @@ import (
 
 	"github.com/go-kit/kit/log"
 
+	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/strutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
-	"golang.org/x/sync/errgroup"
 )
 
 var optCtxKey = struct{}{}
@@ -174,7 +174,7 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 	var (
 		mtx sync.Mutex
 		all []storepb.SeriesSet
-		g   errgroup.Group
+		wg  = &sync.WaitGroup{}
 	)
 	opts := optsFromContext(q.ctx)
 
@@ -185,6 +185,7 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "convert matchers")
 	}
+
 	for _, s := range q.stores {
 		// We might be able to skip the store if its meta information indicates
 		// it cannot have series matching our query.
@@ -193,11 +194,15 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 		}
 		store := s
 
-		g.Go(func() error {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
 			set, warnings, err := q.selectSingle(ctx, store.Client, sms...)
 			if err != nil {
 				opts.partialErrReporter(errors.Wrapf(err, "querying store failed"))
-				return nil
+				level.Error(q.logger).Log("msg", "querying store failed", "err", err)
+				return
 			}
 
 			for _, w := range warnings {
@@ -213,11 +218,10 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 			mtx.Lock()
 			all = append(all, newStoreSeriesSet(set))
 			mtx.Unlock()
-
-			return nil
-		})
+		}()
 	}
-	_ = g.Wait()
+
+	wg.Wait()
 	set := promSeriesSet{
 		mint: q.mint,
 		maxt: q.maxt,
@@ -297,7 +301,7 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 	var (
 		mtx sync.Mutex
 		all [][]string
-		g   errgroup.Group
+		wg  = &sync.WaitGroup{}
 	)
 	opts := optsFromContext(q.ctx)
 
@@ -307,11 +311,13 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 	for _, s := range q.stores {
 		store := s
 
-		g.Go(func() error {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 			values, warnings, err := q.labelValuesSingle(ctx, store.Client, name)
 			if err != nil {
 				opts.partialErrReporter(errors.Wrap(err, "querying store failed"))
-				return nil
+				return
 			}
 
 			for _, w := range warnings {
@@ -322,10 +328,10 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 			all = append(all, values)
 			mtx.Unlock()
 
-			return nil
-		})
+			return
+		}()
 	}
-	_ = g.Wait()
+	wg.Wait()
 	return strutil.MergeUnsortedSlices(all...), nil
 }
 

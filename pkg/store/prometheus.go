@@ -94,7 +94,7 @@ func (p *PrometheusStore) putBuffer(b []byte) {
 func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_SeriesServer) error {
 	ext := p.externalLabels()
 
-	match, newMatchers, err := extLabelsMatches(ext, r.Matchers)
+	match, newMatchers, err := labelsMatches(ext, r.Matchers)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -210,7 +210,7 @@ func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prom
 	return &data, nil
 }
 
-func extLabelsMatches(extLabels labels.Labels, ms []storepb.LabelMatcher) (bool, []storepb.LabelMatcher, error) {
+func labelsMatches(lset labels.Labels, ms []storepb.LabelMatcher) (bool, []storepb.LabelMatcher, error) {
 	var newMatcher []storepb.LabelMatcher
 	for _, m := range ms {
 		// Validate all matchers.
@@ -219,7 +219,7 @@ func extLabelsMatches(extLabels labels.Labels, ms []storepb.LabelMatcher) (bool,
 			return false, nil, err
 		}
 
-		extValue := extLabels.Get(m.Name)
+		extValue := lset.Get(m.Name)
 		if extValue == "" {
 			// Agnostic to external labels.
 			newMatcher = append(newMatcher, m)

@@ -14,13 +14,11 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// WarningSeries is a series that triggers partial error warning.
-var WarningSeries = storepb.Series{Labels: []storepb.Label{{Name: "WarningSeries"}}}
-
 // StoreClient is test gRPC store API client.
 type StoreClient struct {
-	Values    map[string][]string
-	SeriesSet []storepb.Series
+	Values map[string][]string
+
+	RespSet []*storepb.SeriesResponse
 }
 
 func (s *StoreClient) Info(ctx context.Context, req *storepb.InfoRequest, _ ...grpc.CallOption) (*storepb.InfoResponse, error) {
@@ -28,7 +26,7 @@ func (s *StoreClient) Info(ctx context.Context, req *storepb.InfoRequest, _ ...g
 }
 
 func (s *StoreClient) Series(ctx context.Context, req *storepb.SeriesRequest, _ ...grpc.CallOption) (storepb.Store_SeriesClient, error) {
-	return &StoreSeriesClient{ctx: ctx, seriesSet: s.SeriesSet}, nil
+	return &StoreSeriesClient{ctx: ctx, respSet: s.RespSet}, nil
 }
 
 func (s *StoreClient) LabelNames(ctx context.Context, req *storepb.LabelNamesRequest, _ ...grpc.CallOption) (*storepb.LabelNamesResponse, error) {
@@ -43,24 +41,19 @@ func (s *StoreClient) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 type StoreSeriesClient struct {
 	// This field just exist to pseudo-implement the unused methods of the interface.
 	storepb.Store_SeriesClient
-	ctx       context.Context
-	i         int
-	seriesSet []storepb.Series
+	ctx     context.Context
+	i       int
+	respSet []*storepb.SeriesResponse
 }
 
 func (c *StoreSeriesClient) Recv() (*storepb.SeriesResponse, error) {
-	if c.i >= len(c.seriesSet) {
+	if c.i >= len(c.respSet) {
 		return nil, io.EOF
 	}
-	s := c.seriesSet[c.i]
+	s := c.respSet[c.i]
 	c.i++
 
-	if s.String() == WarningSeries.String() {
-		// This indicates that we should send warning instead.
-		return storepb.NewWarnSeriesResponse(errors.New("warn")), nil
-
-	}
-	return storepb.NewSeriesResponse(&s), nil
+	return s, nil
 }
 
 func (c *StoreSeriesClient) Context() context.Context {
@@ -103,8 +96,10 @@ type Sample struct {
 	V float64
 }
 
-// StoreSeries creates test series with single chunk that stores all the given samples.
-func StoreSeries(t testing.TB, lset labels.Labels, smpls []Sample) (s storepb.Series) {
+// StoreSeriesResponse creates test storepb.SeriesResponse that includes series with single chunk that stores all the given samples.
+func StoreSeriesResponse(t testing.TB, lset labels.Labels, smpls []Sample) *storepb.SeriesResponse {
+	var s storepb.Series
+
 	for _, l := range lset {
 		s.Labels = append(s.Labels, storepb.Label{Name: l.Name, Value: l.Value})
 	}
@@ -121,5 +116,5 @@ func StoreSeries(t testing.TB, lset labels.Labels, smpls []Sample) (s storepb.Se
 		MaxTime: smpls[len(smpls)-1].T,
 		Data:    c.Bytes(),
 	})
-	return s
+	return storepb.NewSeriesResponse(&s)
 }
