@@ -174,7 +174,7 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 	var (
 		mtx sync.Mutex
 		all []storepb.SeriesSet
-		wg  = &sync.WaitGroup{}
+		wg sync.WaitGroup
 	)
 	opts := optsFromContext(q.ctx)
 
@@ -301,7 +301,7 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 	var (
 		mtx sync.Mutex
 		all [][]string
-		wg  = &sync.WaitGroup{}
+		wg  sync.WaitGroup
 	)
 	opts := optsFromContext(q.ctx)
 

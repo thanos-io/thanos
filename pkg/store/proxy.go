@@ -208,7 +208,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		warnings []string
 		all      [][]string
 		mtx      sync.Mutex
-		wg       = &sync.WaitGroup{}
+		wg       sync.WaitGroup
 	)
 	for _, s := range s.stores() {
 		store := s

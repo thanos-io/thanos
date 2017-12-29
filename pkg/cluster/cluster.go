@@ -36,8 +36,8 @@ type Peer struct {
 }
 
 const (
-	DefaultPushPullInterval = "5s"
-	DefaultGossipInterval   = "5s"
+	DefaultPushPullInterval = 5 * time.Second
+	DefaultGossipInterval   = 5 * time.Second
 )
 
 // PeerType describes a peer's role in the cluster.

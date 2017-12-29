@@ -54,10 +54,10 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 		String()
 
 	gossipInterval := cmd.Flag("cluster.gossip-interval", "interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth.").
-		Default(cluster.DefaultGossipInterval).Duration()
+		Default(cluster.DefaultGossipInterval.String()).Duration()
 
 	pushPullInterval := cmd.Flag("cluster.pushpull-interval", "interval for gossip state syncs . Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage.").
-		Default(cluster.DefaultPushPullInterval).Duration()
+		Default(cluster.DefaultPushPullInterval.String()).Duration()
 
 	selectorLabels := cmd.Flag("selector-label", "query selector labels that will be exposed in info endpoint (repeated)").
 		PlaceHolder("<name>=\"<value>\"").Strings()
