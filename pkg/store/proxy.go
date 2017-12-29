@@ -67,7 +67,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 	}
 
 	var (
-		respCh    = make(chan *storepb.SeriesResponse, 1024)
+		respCh    = make(chan *storepb.SeriesResponse, 10)
 		seriesSet []storepb.SeriesSet
 	)
 
@@ -88,7 +88,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			continue
 		}
 
-		seriesSet = append(seriesSet, startStreamSeriesSet(sc, respCh, 1024))
+		seriesSet = append(seriesSet, startStreamSeriesSet(sc, respCh, 10))
 	}
 
 	go func() {
