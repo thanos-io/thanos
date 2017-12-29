@@ -65,6 +65,7 @@ func spinup(t testing.TB, cfg config) (close func()) {
 	for i := 1; i <= cfg.numQueries; i++ {
 		commands = append(commands, exec.Command("thanos", "query",
 			"--debug.name", fmt.Sprintf("query-%d", i),
+			"--grpc-address", fmt.Sprintf("127.0.0.1:%d", 19990+i),
 			"--http-address", fmt.Sprintf("127.0.0.1:%d", 19490+i),
 			"--cluster.address", fmt.Sprintf("127.0.0.1:%d", 19590+i),
 			"--cluster.advertise-address", fmt.Sprintf("127.0.0.1:%d", 19590+i),
