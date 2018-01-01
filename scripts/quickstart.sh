@@ -6,23 +6,27 @@
 trap 'kill 0' SIGTERM
 
 # Start local object storage, if desired.
+# NOTE: If you would like to use an actual S3-compatible API with this setup
+#       remove the `--s3.insecure` flags below
 if [ -n "${MINIO_ENABLED}" ]
 then
   export MINIO_ACCESS_KEY="THANOS"
   export MINIO_SECRET_KEY="ITSTHANOSTIME"
+  export MINIO_ENDPOINT="127.0.0.1:9000"
+  export MINIO_BUCKET="thanos"
   export S3_ACCESS_KEY=${MINIO_ACCESS_KEY}
   export S3_SECRET_KEY=${MINIO_SECRET_KEY}
-  export S3_BUCKET="thanos"
-  export S3_ENDPOINT="127.0.0.1:9000"
+  export S3_BUCKET=${MINIO_BUCKET}
+  export S3_ENDPOINT=${MINIO_ENDPOINT}
   rm -rf data/minio
   mkdir -p data/minio
 
   minio server ./data/minio \
-      --address ${S3_ENDPOINT} &
+      --address ${MINIO_ENDPOINT} &
   sleep 3
   # create the bucket
-  mc config host add tmp http://${S3_ENDPOINT} THANOS ITSTHANOSTIME
-  mc mb tmp/${S3_BUCKET}
+  mc config host add tmp http://${MINIO_ENDPOINT} THANOS ITSTHANOSTIME
+  mc mb tmp/${MINIO_BUCKET}
   mc config host rm tmp
 fi
 

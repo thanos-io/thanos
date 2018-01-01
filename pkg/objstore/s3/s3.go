@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/minio/minio-go"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -30,38 +31,38 @@ type Bucket struct {
 
 // Config encapsulates the necessary config values to instantiate an s3 client.
 type Config struct {
-	Bucket    *string
-	Endpoint  *string
-	AccessKey *string
-	SecretKey *string
-	Insecure  *bool
+	Bucket    string
+	Endpoint  string
+	AccessKey string
+	SecretKey string
+	Insecure  bool
 }
 
 // Validate checks to see if any of the s3 config options are set.
-func (conf *Config) Validate() bool {
-	if *conf.Bucket == "" &&
-		*conf.Endpoint == "" &&
-		*conf.AccessKey == "" &&
-		*conf.SecretKey == "" {
-		return false
+func (conf *Config) Validate() error {
+	if conf.Bucket == "" ||
+		conf.Endpoint == "" ||
+		conf.AccessKey == "" ||
+		conf.SecretKey == "" {
+		return errors.New("insufficient s3 configuration information")
 	}
-	return true
+	return nil
 }
 
 // NewBucket returns a new Bucket using the provided s3 config values.
 func NewBucket(conf *Config, reg prometheus.Registerer) (*Bucket, error) {
-	client, err := minio.NewCore(*conf.Endpoint, *conf.AccessKey, *conf.SecretKey, !*conf.Insecure)
+	client, err := minio.NewCore(conf.Endpoint, conf.AccessKey, conf.SecretKey, !conf.Insecure)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "initialize s3 client")
 	}
 
 	bkt := &Bucket{
-		bucket: *conf.Bucket,
+		bucket: conf.Bucket,
 		client: client,
 		opsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name:        "thanos_objstore_s3_bucket_operations_total",
 			Help:        "Total number of operations that were executed against an s3 bucket.",
-			ConstLabels: prometheus.Labels{"bucket": *conf.Bucket},
+			ConstLabels: prometheus.Labels{"bucket": conf.Bucket},
 		}, []string{"operation"}),
 	}
 	if reg != nil {
@@ -80,11 +81,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		dir = strings.TrimSuffix(dir, DirDelim) + DirDelim
 	}
 
-	// create a channel to control ListObjects goroutine
-	doneCh := make(chan struct{})
-	defer close(doneCh)
-
-	for object := range b.client.Client.ListObjects(b.bucket, dir, false, doneCh) {
+	for object := range b.client.Client.ListObjects(b.bucket, dir, false, ctx.Done()) {
 		// this sometimes happens with empty buckets
 		if object.Key == "" {
 			continue
@@ -100,8 +97,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 // Get returns a reader for the given object name.
 func (b *Bucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
 	b.opsTotal.WithLabelValues(opObjectGet).Inc()
-	rc, _, err := b.client.GetObject(b.bucket, name, minio.GetObjectOptions{})
-	return rc, err
+	return b.client.GetObjectWithContext(ctx, b.bucket, name, minio.GetObjectOptions{})
 }
 
 // GetRange returns a new range reader for the given object name and range.
@@ -112,11 +108,7 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 	if err != nil {
 		return nil, err
 	}
-	rc, _, err := b.client.GetObject(b.bucket, name, *opts)
-	if err != nil {
-	}
-	return rc, err
-
+	return b.client.GetObjectWithContext(ctx, b.bucket, name, *opts)
 }
 
 // Exists checks if the given object exists.
@@ -128,7 +120,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 		if errResponse.Code == "NoSuchKey" {
 			return false, nil
 		}
-		return false, err
+		return false, errors.Wrap(err, "stat s3 object")
 	}
 
 	return true, nil
@@ -138,7 +130,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	b.opsTotal.WithLabelValues(opObjectInsert).Inc()
 	_, err := b.client.PutObjectWithContext(ctx, b.bucket, name, r, -1, minio.PutObjectOptions{})
-	return err
+	return errors.Wrap(err, "upload s3 object")
 }
 
 // Delete removes the object with the given name.
