@@ -58,7 +58,7 @@ func main() {
 
 	gcloudTraceProject := app.Flag("gcloudtrace.project", "GCP project to send Google Cloud Trace tracings to. If empty, tracing will be disabled.").
 		String()
-	gcloudTraceSampleFactor := app.Flag("gcloudtrace.sample-factor", "How often we send traces (1/<sample-factor>).").
+	gcloudTraceSampleFactor := app.Flag("gcloudtrace.sample-factor", "How often we send traces (1/<sample-factor>). If 0 no trace will be sent periodically, unless forced by baggage item. See `pkg/tracing/tracing.go` for details.").
 		Default("1").Uint64()
 
 	cmds := map[string]setupFunc{}
