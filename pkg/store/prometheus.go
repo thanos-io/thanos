@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"path"
@@ -63,11 +64,15 @@ func NewPrometheusStore(
 }
 
 // Info returns store information about the Prometheus instance.
+// NOTE(bplotka): MaxTime & MinTime are not accurate nor adjusted dynamically like these included in gossip meta.
+// This is fine for now, but might be needed in future.
 func (p *PrometheusStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	lset := p.externalLabels()
 
 	res := &storepb.InfoResponse{
-		Labels: make([]storepb.Label, 0, len(lset)),
+		MinTime: 0,
+		MaxTime: math.MaxInt64,
+		Labels:  make([]storepb.Label, 0, len(lset)),
 	}
 	for _, l := range lset {
 		res.Labels = append(res.Labels, storepb.Label{

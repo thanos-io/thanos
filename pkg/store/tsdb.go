@@ -40,7 +40,12 @@ func NewTSDBStore(logger log.Logger, reg prometheus.Registerer, db *tsdb.DB, ext
 // Info returns store information about the Prometheus instance.
 func (s *TSDBStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	res := &storepb.InfoResponse{
-		Labels: make([]storepb.Label, 0, len(s.labels)),
+		MinTime: 0,
+		MaxTime: math.MaxInt64,
+		Labels:  make([]storepb.Label, 0, len(s.labels)),
+	}
+	if blocks := s.db.Blocks(); len(blocks) > 0 {
+		res.MinTime = blocks[0].Meta().MinTime
 	}
 	for _, l := range s.labels {
 		res.Labels = append(res.Labels, storepb.Label{

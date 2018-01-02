@@ -6,8 +6,9 @@ import (
 
 	"io"
 
+	"math"
+
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/strutil"
 	"github.com/pkg/errors"
@@ -17,10 +18,28 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// Info holds meta information about a store.
+type Info struct {
+	Addr string
+
+	// Client to access the store.
+	Client storepb.StoreClient
+
+	// Labels that apply to all date exposed by the backing store.
+	Labels []storepb.Label
+
+	// Minimum and maximum time range of data in the store.
+	MinTime, MaxTime int64
+}
+
+func (i *Info) String() string {
+	return i.Addr
+}
+
 // ProxyStore implements the store API that proxies request to all given underlying stores.
 type ProxyStore struct {
 	logger         log.Logger
-	stores         func() []*query.StoreInfo
+	stores         func() []*Info
 	selectorLabels labels.Labels
 }
 
@@ -28,7 +47,7 @@ type ProxyStore struct {
 // Note that there is no deduplication support. Deduplication should be done on the highest level (just before PromQL)
 func NewProxyStore(
 	logger log.Logger,
-	stores func() []*query.StoreInfo,
+	stores func() []*Info,
 	selectorLabels labels.Labels,
 ) *ProxyStore {
 	if logger == nil {
@@ -45,7 +64,9 @@ func NewProxyStore(
 // Info returns store information about the external labels this store have.
 func (s *ProxyStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	res := &storepb.InfoResponse{
-		Labels: make([]storepb.Label, 0, len(s.selectorLabels)),
+		MinTime: 0,
+		MaxTime: math.MaxInt64,
+		Labels:  make([]storepb.Label, 0, len(s.selectorLabels)),
 	}
 	for _, l := range s.selectorLabels {
 		res.Labels = append(res.Labels, storepb.Label{
@@ -175,7 +196,7 @@ func (s *streamSeriesSet) Err() error {
 }
 
 // matchStore returns true if the given store may hold data for the given label matchers.
-func storeMatches(s *query.StoreInfo, mint, maxt int64, matchers ...storepb.LabelMatcher) (bool, error) {
+func storeMatches(s *Info, mint, maxt int64, matchers ...storepb.LabelMatcher) (bool, error) {
 	if mint > s.MaxTime || maxt < s.MinTime {
 		return false, nil
 	}
@@ -216,7 +237,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 	)
 	for _, s := range s.stores() {
 		wg.Add(1)
-		go func(s *query.StoreInfo) {
+		go func(s *Info) {
 			defer wg.Done()
 			resp, err := s.Client.LabelValues(ctx, &storepb.LabelValuesRequest{
 				Label: r.Label,
