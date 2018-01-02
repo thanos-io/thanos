@@ -37,8 +37,8 @@ message SeriesRequest {
 
 message SeriesResponse {
   oneof result {
-      Series series = 1;
-      string warning = 2;
+    Series series     = 1;
+    string warning    = 2;
   }
 }
 

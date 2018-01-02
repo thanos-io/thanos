@@ -19,6 +19,7 @@
 		LabelValuesResponse
 		Label
 		Chunk
+		DeltaChunk
 		Series
 		LabelMatcher
 */
