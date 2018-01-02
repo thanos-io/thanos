@@ -12,7 +12,6 @@ import (
 	"github.com/lovoo/gcloud-opentracing"
 	"github.com/opentracing/basictracer-go"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 type gcloudRecorderLogger struct {
@@ -43,16 +42,12 @@ func NewOptionalGCloudTracer(ctx context.Context, logger log.Logger, gcloudTrace
 }
 
 func newGCloudTracer(ctx context.Context, logger log.Logger, gcloudTraceProjectID string, sampleFactor uint64, debugName string) (opentracing.Tracer, func() error, error) {
-	if sampleFactor < 1 {
-		return nil, nil, errors.Errorf("invalid opentracing sample factor: %v, should be > 0", sampleFactor)
-	}
-
 	traceClient, err := trace.NewClient(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	recorder, err := gcloudtracer.NewRecorder(
+	r, err := gcloudtracer.NewRecorder(
 		ctx,
 		gcloudTraceProjectID,
 		traceClient,
@@ -61,15 +56,22 @@ func newGCloudTracer(ctx context.Context, logger log.Logger, gcloudTraceProjectI
 		return nil, traceClient.Close, err
 	}
 
+	shouldSample := func(traceID uint64) bool {
+		// Set the sampling rate.
+		return traceID%sampleFactor == 0
+	}
+	if sampleFactor < 1 {
+		level.Debug(logger).Log("msg", "Tracing is enabled, but sampling is 0 which means only spans with 'force tracing' baggage will enable tracing.")
+		shouldSample = func(_ uint64) bool {
+			return false
+		}
+	}
 	return &tracer{
 		debugName: debugName,
 		wrapped: basictracer.NewWithOptions(basictracer.Options{
-			ShouldSample: func(traceID uint64) bool {
-				// Set the sampling rate.
-				return traceID%sampleFactor == 0
-			},
-			Recorder:       recorder,
+			ShouldSample:   shouldSample,
+			Recorder:       &forceRecorder{wrapped: r},
 			MaxLogsPerSpan: 100,
 		}),
-	}, recorder.Close, nil
+	}, r.Close, nil
 }
