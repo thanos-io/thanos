@@ -130,7 +130,8 @@ func runQuery(
 	}
 	var (
 		stores    = newStoreSet(logger, reg, tracer, peer, storeAddrs)
-		queryable = query.NewQueryable(logger, stores.Get, replicaLabel)
+		proxy     = store.NewProxyStore(logger, stores.Get, selectorLset)
+		queryable = query.NewQueryable(logger, proxy, replicaLabel)
 		engine    = promql.NewEngine(queryable, pqlOpts)
 	)
 	// Periodically update the store set with the addresses we see in our cluster.
@@ -190,10 +191,8 @@ func runQuery(
 		}
 		logger := log.With(logger, "component", "query")
 
-		store := store.NewProxyStore(logger, stores.Get, selectorLset)
-
 		s := grpc.NewServer(defaultGRPCServerOpts(logger, reg, tracer)...)
-		storepb.RegisterStoreServer(s, store)
+		storepb.RegisterStoreServer(s, proxy)
 
 		g.Add(func() error {
 			return errors.Wrap(s.Serve(l), "serve gRPC")
@@ -215,8 +214,8 @@ type storeSet struct {
 	dialOpts    []grpc.DialOption
 
 	mtx          sync.RWMutex
-	staticStores map[string]*query.StoreInfo
-	peerStores   map[string]*query.StoreInfo
+	staticStores map[string]*store.Info
+	peerStores   map[string]*store.Info
 
 	storeNodeConnections prometheus.Gauge
 }
@@ -287,7 +286,7 @@ func (s *storeSet) dialConn(ctx context.Context, addr string) (*grpc.ClientConn,
 }
 
 func (s *storeSet) UpdateStatic(ctx context.Context) {
-	stores := make(map[string]*query.StoreInfo, len(s.staticStores))
+	stores := make(map[string]*store.Info, len(s.staticStores))
 
 	for _, addr := range s.staticAddrs {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -311,7 +310,7 @@ func (s *storeSet) UpdateStatic(ctx context.Context) {
 			level.Warn(s.logger).Log("msg", "fetching store info failed", "addr", addr, "err", err)
 			continue
 		}
-		stores[addr] = &query.StoreInfo{
+		stores[addr] = &store.Info{
 			Addr:    addr,
 			Client:  client,
 			Labels:  resp.Labels,
@@ -330,7 +329,7 @@ func (s *storeSet) UpdateStatic(ctx context.Context) {
 // Update the store set to the new set of addresses and labels for that addresses.
 // New background processes initiated respect the lifecycle of the given context.
 func (s *storeSet) UpdatePeers(ctx context.Context) {
-	stores := make(map[string]*query.StoreInfo, len(s.peerStores))
+	stores := make(map[string]*store.Info, len(s.peerStores))
 
 	for _, ps := range s.peer.PeerStates(cluster.PeerTypesStoreAPIs()...) {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -348,7 +347,7 @@ func (s *storeSet) UpdatePeers(ctx context.Context) {
 			}
 			client = storepb.NewStoreClient(conn)
 		}
-		stores[ps.APIAddr] = &query.StoreInfo{
+		stores[ps.APIAddr] = &store.Info{
 			Addr:    ps.APIAddr,
 			Client:  client,
 			Labels:  ps.Metadata.Labels,
@@ -365,11 +364,11 @@ func (s *storeSet) UpdatePeers(ctx context.Context) {
 }
 
 // Get returns a list of all active stores.
-func (s *storeSet) Get() []*query.StoreInfo {
+func (s *storeSet) Get() []*store.Info {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 
-	stores := make([]*query.StoreInfo, 0, len(s.peerStores)+len(s.staticStores))
+	stores := make([]*store.Info, 0, len(s.peerStores)+len(s.staticStores))
 
 	for _, store := range s.staticStores {
 		stores = append(stores, store)
