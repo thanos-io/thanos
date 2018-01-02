@@ -7,7 +7,7 @@ trap 'kill 0' SIGTERM
 
 # Start local object storage, if desired.
 # NOTE: If you would like to use an actual S3-compatible API with this setup
-#       remove the `--s3.insecure` flags below
+#       set the S3_* environment variables set in the Minio example.
 if [ -n "${MINIO_ENABLED}" ]
 then
   export MINIO_ACCESS_KEY="THANOS"
@@ -18,6 +18,7 @@ then
   export S3_SECRET_KEY=${MINIO_SECRET_KEY}
   export S3_BUCKET=${MINIO_BUCKET}
   export S3_ENDPOINT=${MINIO_ENDPOINT}
+  export S3_INSECURE="true"
   rm -rf data/minio
   mkdir -p data/minio
 
@@ -85,11 +86,6 @@ do
     --prometheus.url            http://localhost:909${i} \
     --tsdb.path                 data/prom${i} \
     --gcs.bucket                "${GCS_BUCKET}" \
-    --s3.endpoint               "${S3_ENDPOINT}" \
-    --s3.bucket                 "${S3_BUCKET}" \
-    --s3.access-key             "${S3_ACCESS_KEY}" \
-    --s3.secret-key             "${S3_SECRET_KEY}" \
-    --s3.insecure               \
     --cluster.address           0.0.0.0:1939${i} \
     --cluster.advertise-address 127.0.0.1:1939${i} \
     --cluster.peers             127.0.0.1:19391 &
@@ -108,11 +104,6 @@ then
     --http-address              0.0.0.0:19791 \
     --tsdb.path                 data/store \
     --gcs.bucket                "${GCS_BUCKET}" \
-    --s3.endpoint               "${S3_ENDPOINT}" \
-    --s3.bucket                 "${S3_BUCKET}" \
-    --s3.access-key             "${S3_ACCESS_KEY}" \
-    --s3.insecure               \
-    --s3.secret-key             "${S3_SECRET_KEY}" \
     --cluster.address           0.0.0.0:19891 \
     --cluster.advertise-address 127.0.0.1:19891 \
     --cluster.peers             127.0.0.1:19391 &

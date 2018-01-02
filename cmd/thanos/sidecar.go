@@ -51,7 +51,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 		PlaceHolder("<bucket>").String()
 
 	s3Bucket := cmd.Flag("s3.bucket", "S3-Compatible API bucket name for stored blocks.").
-		PlaceHolder("<bucket>").String()
+		PlaceHolder("<bucket>").Envar("S3_BUCKET").String()
 
 	s3Endpoint := cmd.Flag("s3.endpoint", "S3-Compatible API endpoint for stored blocks.").
 		PlaceHolder("<api-url>").Envar("S3_ENDPOINT").String()
@@ -63,7 +63,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 		PlaceHolder("<key>").Envar("S3_SECRET_KEY").String()
 
 	s3Insecure := cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
-		Default("false").Bool()
+		Default("false").Envar("S3_INSECURE").Bool()
 
 	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
 

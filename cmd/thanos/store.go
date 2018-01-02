@@ -42,19 +42,19 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 		PlaceHolder("<bucket>").Required().String()
 
 	s3Bucket := cmd.Flag("s3.bucket", "S3-Compatible API bucket name for stored blocks.").
-		PlaceHolder("<bucket>").String()
+		PlaceHolder("<bucket>").Envar("S3_BUCKET").String()
 
 	s3Endpoint := cmd.Flag("s3.endpoint", "S3-Compatible API endpoint for stored blocks.").
-		PlaceHolder("<api-url>").String()
+		PlaceHolder("<api-url>").Envar("S3_ENDPOINT").String()
 
 	s3AccessKey := cmd.Flag("s3.access-key", "Access key for an S3-Compatible API.").
-		PlaceHolder("<key>").String()
+		PlaceHolder("<key>").Envar("S3_ACCESS_KEY").String()
 
 	s3SecretKey := cmd.Flag("s3.secret-key", "Secret key for an S3-Compatible API.").
-		PlaceHolder("<key>").String()
+		PlaceHolder("<key>").Envar("S3_SECRET_KEY").String()
 
 	s3Insecure := cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
-		Default("false").Bool()
+		Default("false").Envar("S3_INSECURE").Bool()
 
 	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the index cache.").
 		Default("250MB").Bytes()
@@ -188,7 +188,7 @@ func runStore(
 			chunkPoolSizeBytes,
 		)
 		if err != nil {
-			return errors.Wrap(err, "create GCS store")
+			return errors.Wrap(err, "create object storage store")
 		}
 		ctx, cancel := context.WithCancel(context.Background())
 
