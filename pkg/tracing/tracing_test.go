@@ -1,4 +1,4 @@
-// This files includes unit tests that may test tiny logic in this package, but also are here as a showcase on how tracing can
+// This file includes unit tests that test only tiny logic in this package, but are here mainly as a showcase on how tracing can
 // be configured.
 
 package tracing
