@@ -83,7 +83,7 @@ type forceRecorder struct {
 	wrapped basictracer.SpanRecorder
 }
 
-// RecordSpan invokes wrapper forceRecorder only if Sampled field is true or ForceTracingBaggageKey item is set in span's context.
+// RecordSpan invokes wrapper SpanRecorder only if Sampled field is true or ForceTracingBaggageKey item is set in span's context.
 // NOTE(bplotka): Currently only HTTP supports ForceTracingBaggageKey injection on ForceTracingBaggageKey header existence.
 func (r *forceRecorder) RecordSpan(sp basictracer.RawSpan) {
 	if force := sp.Context.Baggage[ForceTracingBaggageKey]; force != "" {
