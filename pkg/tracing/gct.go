@@ -61,17 +61,15 @@ func newGCloudTracer(ctx context.Context, logger log.Logger, gcloudTraceProjectI
 		return nil, traceClient.Close, err
 	}
 
-	// Set the sampling rate.
-	opts := basictracer.Options{
-		ShouldSample: func(traceID uint64) bool {
-			return traceID%sampleFactor == 0
-		},
-		Recorder:       recorder,
-		MaxLogsPerSpan: 100,
-	}
-
 	return &tracer{
 		debugName: debugName,
-		wrapped:   basictracer.NewWithOptions(opts),
+		wrapped: basictracer.NewWithOptions(basictracer.Options{
+			ShouldSample: func(traceID uint64) bool {
+				// Set the sampling rate.
+				return traceID%sampleFactor == 0
+			},
+			Recorder:       recorder,
+			MaxLogsPerSpan: 100,
+		}),
 	}, recorder.Close, nil
 }
