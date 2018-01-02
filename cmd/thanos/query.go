@@ -280,7 +280,7 @@ func (s *storeSet) dialConn(ctx context.Context, addr string) (*grpc.ClientConn,
 	if err != nil {
 		return nil, err
 	}
-	runtime.SetFinalizer(conn, (*conn).Close)
+	runtime.SetFinalizer(conn, func(cc *grpc.ClientConn) { cc.Close() })
 
 	return conn, nil
 }
