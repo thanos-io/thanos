@@ -226,9 +226,10 @@ func runSidecar(
 	}
 
 	var (
-		bkt     objstore.Bucket
-		bucket  string
-		closeFn      = func() {}
+		bkt    objstore.Bucket
+		bucket string
+		// closeFn gets called when the sync loop ends to close clients, clean up, etc
+		closeFn      = func() error { return nil }
 		uploads bool = true
 	)
 
@@ -249,7 +250,7 @@ func runSidecar(
 		}
 
 		bkt = gcs.NewBucket(gcsBucket, gcsClient.Bucket(gcsBucket), reg)
-		closeFn = func() { gcsClient.Close() }
+		closeFn = gcsClient.Close
 		bucket = gcsBucket
 	} else if s3Config.Validate() == nil {
 		bkt, err = s3.NewBucket(s3Config, reg)

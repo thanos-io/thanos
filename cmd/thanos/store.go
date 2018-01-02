@@ -142,8 +142,9 @@ func runStore(
 ) error {
 	{
 		var (
-			bkt     objstore.Bucket
-			closeFn = func() {}
+			bkt objstore.Bucket
+			// closeFn gets called when the sync loop ends to close clients, clean up, etc
+			closeFn = func() error { return nil }
 			bucket  string
 		)
 
@@ -162,7 +163,7 @@ func runStore(
 			}
 
 			bkt = gcs.NewBucket(gcsBucket, gcsClient.Bucket(gcsBucket), reg)
-			closeFn = func() { gcsClient.Close() }
+			closeFn = gcsClient.Close
 			bucket = gcsBucket
 		} else if s3Config.Validate() == nil {
 			b, err := s3.NewBucket(s3Config, reg)
