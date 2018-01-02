@@ -40,7 +40,12 @@ func NewTSDBStore(logger log.Logger, reg prometheus.Registerer, db *tsdb.DB, ext
 // Info returns store information about the Prometheus instance.
 func (s *TSDBStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	res := &storepb.InfoResponse{
-		Labels: make([]storepb.Label, 0, len(s.labels)),
+		MinTime: 0,
+		MaxTime: math.MaxInt64,
+		Labels:  make([]storepb.Label, 0, len(s.labels)),
+	}
+	if blocks := s.db.Blocks(); len(blocks) > 0 {
+		res.MinTime = blocks[0].Meta().MinTime
 	}
 	for _, l := range s.labels {
 		res.Labels = append(res.Labels, storepb.Label{
@@ -54,7 +59,7 @@ func (s *TSDBStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.
 // Series returns all series for a requested time range and label matcher. The returned data may
 // exceed the requested time bounds.
 func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
-	match, newMatchers, err := extLabelsMatches(s.labels, r.Matchers)
+	match, newMatchers, err := labelsMatches(s.labels, r.Matchers)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}

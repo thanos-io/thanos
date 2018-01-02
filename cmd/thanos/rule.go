@@ -48,7 +48,7 @@ import (
 
 // registerRule registers a rule command.
 func registerRule(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
+	cmd := app.Command(name, "ruler evaluating Prometheus rules against given Query nodes, exposing Store API and storing old blocks in bucket")
 
 	labelStrs := cmd.Flag("label", "labels applying to all generated metrics (repeated)").
 		PlaceHolder("<name>=\"<value>\"").Strings()
@@ -82,6 +82,12 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	clusterBindAddr := cmd.Flag("cluster.address", "listen address for cluster").
 		Default(defaultClusterAddr).String()
 
+	gossipInterval := cmd.Flag("cluster.gossip-interval", "interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth.").
+		Default(cluster.DefaultGossipInterval.String()).Duration()
+
+	pushPullInterval := cmd.Flag("cluster.pushpull-interval", "interval for gossip state syncs . Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage.").
+		Default(cluster.DefaultPushPullInterval.String()).Duration()
+
 	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
 		String()
 
@@ -112,6 +118,8 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 				},
 			},
 			true,
+			*gossipInterval,
+			*pushPullInterval,
 		)
 		if err != nil {
 			return errors.Wrap(err, "join cluster")

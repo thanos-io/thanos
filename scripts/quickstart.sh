@@ -74,6 +74,7 @@ for i in `seq 1 2`
 do
   thanos query \
     --debug.name                query-${i} \
+    --grpc-address              0.0.0.0:1999${i} \
     --http-address              0.0.0.0:1949${i} \
     --cluster.address           0.0.0.0:1959${i} \
     --cluster.advertise-address 127.0.0.1:1959${i} \

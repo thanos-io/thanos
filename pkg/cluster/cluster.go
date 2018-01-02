@@ -36,8 +36,8 @@ type Peer struct {
 }
 
 const (
-	defaultPushPullInterval = 5 * time.Second
-	defaultGossipInterval   = 5 * time.Second
+	DefaultPushPullInterval = 5 * time.Second
+	DefaultGossipInterval   = 5 * time.Second
 )
 
 // PeerType describes a peer's role in the cluster.
@@ -73,20 +73,7 @@ type PeerMetadata struct {
 	MaxTime int64
 }
 
-// Join creates a new peer that joins the cluster.
 func Join(
-	l log.Logger,
-	reg *prometheus.Registry,
-	bindAddr string,
-	advertiseAddr string,
-	knownPeers []string,
-	initialState PeerState,
-	waitIfEmpty bool,
-) (*Peer, error) {
-	return join(l, reg, bindAddr, advertiseAddr, knownPeers, initialState, waitIfEmpty, defaultPushPullInterval, defaultGossipInterval)
-}
-
-func join(
 	l log.Logger,
 	reg *prometheus.Registry,
 	bindAddr string,

@@ -41,7 +41,7 @@ func joinPeer(num int, knownPeers []string) (peerAddr string, peer *Peer, err er
 		},
 	}
 
-	peer, err = join(
+	peer, err = Join(
 		log.NewNopLogger(),
 		prometheus.NewRegistry(),
 		peerAddr,

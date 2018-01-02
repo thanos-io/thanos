@@ -363,8 +363,12 @@ func (s *BucketStore) removeBlock(id ulid.ULID) error {
 
 // Info implements the storepb.StoreServer interface.
 func (s *BucketStore) Info(context.Context, *storepb.InfoRequest) (*storepb.InfoResponse, error) {
+	mint, maxt := s.TimeRange()
 	// Store nodes hold global data and thus have no labels.
-	return &storepb.InfoResponse{}, nil
+	return &storepb.InfoResponse{
+		MinTime: mint,
+		MaxTime: maxt,
+	}, nil
 }
 
 type seriesEntry struct {

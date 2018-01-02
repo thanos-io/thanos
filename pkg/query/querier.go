@@ -2,19 +2,15 @@ package query
 
 import (
 	"context"
-	"io"
 	"sort"
-	"sync"
 
 	"github.com/go-kit/kit/log"
 
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/improbable-eng/thanos/pkg/strutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
-	"golang.org/x/sync/errgroup"
 )
 
 var optCtxKey = struct{}{}
@@ -74,45 +70,26 @@ func optsFromContext(ctx context.Context) *opts {
 	return o
 }
 
-// StoreInfo holds meta information about a store used by query.
-type StoreInfo struct {
-	Addr string
-
-	// Client to access the store.
-	Client storepb.StoreClient
-
-	// Labels that apply to all date exposed by the backing store.
-	Labels []storepb.Label
-
-	// Minimum and maximum time range of data in the store.
-	MinTime, MaxTime int64
-}
-
-func (s *StoreInfo) String() string {
-	return s.Addr
-}
-
-// Queryable allows to open a querier against a dynamic set of stores.
+// Queryable allows to open a querier against proxy store API.
 type Queryable struct {
 	logger       log.Logger
-	stores       func() []*StoreInfo
 	replicaLabel string
+	proxy        storepb.StoreServer
 }
 
-// NewQueryable creates implementation of promql.Queryable that fetches data from the given
-// store API endpoints.
-// All data retrieved from store nodes will be deduplicated along the replicaLabel by default.
-func NewQueryable(logger log.Logger, stores func() []*StoreInfo, replicaLabel string) *Queryable {
+// NewQueryable creates implementation of promql.Queryable that fetches data from the proxy store API endpoints.
+// All data retrieved from it will be deduplicated along the replicaLabel by default.
+func NewQueryable(logger log.Logger, proxy storepb.StoreServer, replicaLabel string) *Queryable {
 	return &Queryable{
 		logger:       logger,
-		stores:       stores,
 		replicaLabel: replicaLabel,
+		proxy:        proxy,
 	}
 }
 
-// Querier returns a new storage querier against the underlying stores.
+// Querier returns a new storage querier against the underlying proxy store API.
 func (q *Queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, q.stores(), mint, maxt, q.replicaLabel), nil
+	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabel, q.proxy), nil
 }
 
 type querier struct {
@@ -120,18 +97,19 @@ type querier struct {
 	ctx          context.Context
 	cancel       func()
 	mint, maxt   int64
-	stores       []*StoreInfo
 	replicaLabel string
+
+	proxy storepb.StoreServer
 }
 
-// newQuerier creates implementation of storage.Querier that fetches data from the given
+// newQuerier creates implementation of storage.Querier that fetches data from the proxy
 // store API endpoints.
 func newQuerier(
 	ctx context.Context,
 	logger log.Logger,
-	stores []*StoreInfo,
 	mint, maxt int64,
 	replicaLabel string,
+	proxy storepb.StoreServer,
 ) *querier {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -143,41 +121,42 @@ func newQuerier(
 		cancel:       cancel,
 		mint:         mint,
 		maxt:         maxt,
-		stores:       stores,
 		replicaLabel: replicaLabel,
+		proxy:        proxy,
 	}
-}
-
-// matchStore returns true if the given store may hold data for the given label matchers.
-func storeMatches(s *StoreInfo, mint, maxt int64, matchers ...*labels.Matcher) bool {
-	if mint > s.MaxTime || maxt < s.MinTime {
-		return false
-	}
-	for _, m := range matchers {
-		for _, l := range s.Labels {
-			if l.Name != m.Name {
-				continue
-			}
-			if !m.Matches(l.Value) {
-				return false
-			}
-		}
-	}
-	return true
 }
 
 func (q *querier) isDedupEnabled(o *opts) bool {
 	return o.deduplicate && q.replicaLabel != ""
 }
 
+type seriesServer struct {
+	// This field just exist to pseudo-implement the unused methods of the interface.
+	storepb.Store_SeriesServer
+	ctx context.Context
+
+	seriesSet []storepb.Series
+	warnings  []string
+}
+
+func (s *seriesServer) Send(r *storepb.SeriesResponse) error {
+	if r.GetWarning() != "" {
+		s.warnings = append(s.warnings, r.GetWarning())
+		return nil
+	}
+
+	if r.GetSeries() == nil {
+		return errors.New("no seriesSet")
+	}
+	s.seriesSet = append(s.seriesSet, *r.GetSeries())
+	return nil
+}
+
+func (s *seriesServer) Context() context.Context {
+	return s.ctx
+}
+
 func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
-	var (
-		mtx sync.Mutex
-		all []storepb.SeriesSet
-		// TODO(fabxc): errgroup will fail the whole query on the first encountered error.
-		// Add support for partial results/errors.
-		g errgroup.Group
-	)
 	opts := optsFromContext(q.ctx)
 
 	span, ctx := tracing.StartSpan(q.ctx, "querier_select")
@@ -187,45 +166,32 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "convert matchers")
 	}
-	for _, s := range q.stores {
-		// We might be able to skip the store if its meta information indicates
-		// it cannot have series matching our query.
-		if !storeMatches(s, q.mint, q.maxt, ms...) {
-			continue
-		}
-		store := s
 
-		g.Go(func() error {
-			set, warnings, err := q.selectSingle(ctx, store.Client, sms...)
-			if err != nil {
-				opts.partialErrReporter(errors.Wrapf(err, "querying store failed"))
-				return nil
-			}
-
-			for _, w := range warnings {
-				opts.partialErrReporter(errors.New(w))
-			}
-
-			if q.isDedupEnabled(opts) {
-				// TODO(fabxc): this could potentially pushed further down into the store API
-				// to make true streaming possible.
-				sortDedupLabels(set, q.replicaLabel)
-			}
-
-			mtx.Lock()
-			all = append(all, newStoreSeriesSet(set))
-			mtx.Unlock()
-
-			return nil
-		})
+	resp := &seriesServer{ctx: ctx}
+	if err := q.proxy.Series(
+		&storepb.SeriesRequest{
+			MinTime:  q.mint,
+			MaxTime:  q.maxt,
+			Matchers: sms,
+		}, resp,
+	); err != nil {
+		return nil, errors.Wrap(err, "proxy Series()")
 	}
-	if err := g.Wait(); err != nil {
-		return nil, errors.Wrap(err, "query stores")
+
+	for _, w := range resp.warnings {
+		opts.partialErrReporter(errors.New(w))
 	}
+
+	if q.isDedupEnabled(opts) {
+		// TODO(fabxc): this could potentially pushed further down into the store API
+		// to make true streaming possible.
+		sortDedupLabels(resp.seriesSet, q.replicaLabel)
+	}
+
 	set := promSeriesSet{
 		mint: q.mint,
 		maxt: q.maxt,
-		set:  storepb.MergeSeriesSets(all...),
+		set:  newStoreSeriesSet(resp.seriesSet),
 	}
 
 	if !q.isDedupEnabled(opts) {
@@ -259,92 +225,23 @@ func sortDedupLabels(set []storepb.Series, replicaLabel string) {
 		return storepb.CompareLabels(set[i].Labels, set[j].Labels) < 0
 	})
 }
-func (q *querier) selectSingle(
-	ctx context.Context,
-	client storepb.StoreClient,
-	ms ...storepb.LabelMatcher,
-) ([]storepb.Series, []string, error) {
-	sc, err := client.Series(ctx, &storepb.SeriesRequest{
-		MinTime:  q.mint,
-		MaxTime:  q.maxt,
-		Matchers: ms,
-	})
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "fetch series")
-	}
-	var (
-		set      []storepb.Series
-		warnings []string
-	)
-
-	for {
-		r, err := sc.Recv()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "receive series")
-		}
-
-		if w := r.GetWarning(); w != "" {
-			warnings = append(warnings, w)
-			continue
-		}
-
-		set = append(set, *r.GetSeries())
-	}
-
-	return set, warnings, nil
-}
 
 func (q *querier) LabelValues(name string) ([]string, error) {
-	var (
-		mtx sync.Mutex
-		all [][]string
-		// TODO(bplotka): errgroup will fail the whole query on the first encountered error.
-		// Add support for partial results/errors.
-		g errgroup.Group
-	)
 	opts := optsFromContext(q.ctx)
 
 	span, ctx := tracing.StartSpan(q.ctx, "querier_label_values")
 	defer span.Finish()
 
-	for _, s := range q.stores {
-		store := s
-
-		g.Go(func() error {
-			values, warnings, err := q.labelValuesSingle(ctx, store.Client, name)
-			if err != nil {
-				opts.partialErrReporter(errors.Wrap(err, "querying store failed"))
-				return nil
-			}
-
-			for _, w := range warnings {
-				opts.partialErrReporter(errors.New(w))
-			}
-
-			mtx.Lock()
-			all = append(all, values)
-			mtx.Unlock()
-
-			return nil
-		})
-	}
-	if err := g.Wait(); err != nil {
-		return nil, err
-	}
-	return strutil.MergeUnsortedSlices(all...), nil
-}
-
-func (q *querier) labelValuesSingle(ctx context.Context, client storepb.StoreClient, name string) ([]string, []string, error) {
-	resp, err := client.LabelValues(ctx, &storepb.LabelValuesRequest{
-		Label: name,
-	})
+	resp, err := q.proxy.LabelValues(ctx, &storepb.LabelValuesRequest{Label: name})
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "fetch series")
+		return nil, errors.Wrap(err, "proxy LabelValues()")
 	}
-	return resp.Values, resp.Warning, nil
+
+	for _, w := range resp.Warnings {
+		opts.partialErrReporter(errors.New(w))
+	}
+
+	return resp.Values, nil
 }
 
 func (q *querier) Close() error {

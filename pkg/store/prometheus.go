@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"path"
@@ -63,11 +64,15 @@ func NewPrometheusStore(
 }
 
 // Info returns store information about the Prometheus instance.
+// NOTE(bplotka): MaxTime & MinTime are not accurate nor adjusted dynamically like these included in gossip meta.
+// This is fine for now, but might be needed in future.
 func (p *PrometheusStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	lset := p.externalLabels()
 
 	res := &storepb.InfoResponse{
-		Labels: make([]storepb.Label, 0, len(lset)),
+		MinTime: 0,
+		MaxTime: math.MaxInt64,
+		Labels:  make([]storepb.Label, 0, len(lset)),
 	}
 	for _, l := range lset {
 		res.Labels = append(res.Labels, storepb.Label{
@@ -94,7 +99,7 @@ func (p *PrometheusStore) putBuffer(b []byte) {
 func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_SeriesServer) error {
 	ext := p.externalLabels()
 
-	match, newMatchers, err := extLabelsMatches(ext, r.Matchers)
+	match, newMatchers, err := labelsMatches(ext, r.Matchers)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -210,22 +215,23 @@ func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prom
 	return &data, nil
 }
 
-func extLabelsMatches(extLabels labels.Labels, ms []storepb.LabelMatcher) (bool, []storepb.LabelMatcher, error) {
+func labelsMatches(lset labels.Labels, ms []storepb.LabelMatcher) (bool, []storepb.LabelMatcher, error) {
 	var newMatcher []storepb.LabelMatcher
 	for _, m := range ms {
-		extValue := extLabels.Get(m.Name)
+		// Validate all matchers.
+		tm, err := translateMatcher(m)
+		if err != nil {
+			return false, nil, err
+		}
+
+		extValue := lset.Get(m.Name)
 		if extValue == "" {
 			// Agnostic to external labels.
 			newMatcher = append(newMatcher, m)
 			continue
 		}
 
-		m, err := translateMatcher(m)
-		if err != nil {
-			return false, nil, err
-		}
-
-		if !m.Matches(extValue) {
+		if !tm.Matches(extValue) {
 			// External label does not match. This should not happen - it should be filtered out on query node,
 			// but let's do that anyway here.
 			return false, nil, nil
@@ -262,6 +268,11 @@ func (p *PrometheusStore) translateAndExtendLabels(m []prompb.Label, extend labe
 			Value: l.Value,
 		})
 	}
+
+	return extendLset(lset, extend)
+}
+
+func extendLset(lset []storepb.Label, extend labels.Labels) []storepb.Label {
 	for _, l := range extend {
 		lset = append(lset, storepb.Label{
 			Name:  l.Name,

@@ -20,7 +20,6 @@ func NewSeriesResponse(series *Series) *SeriesResponse {
 	}
 }
 
-
 // CompareLabels compares two sets of labels.
 func CompareLabels(a, b []Label) int {
 	l := len(a)
