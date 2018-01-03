@@ -38,17 +38,20 @@ groups:
       summary: "I always complain"
 `
 
-	closeFn := spinup(t, config{
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	unexpectedExit, err := spinup(t, ctx, config{
 		workDir:          dir,
 		numQueries:       1,
 		numRules:         2,
 		numAlertmanagers: 1,
 		rules:            alwaysFireRule,
 	})
-	defer closeFn()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
+	if err != nil {
+		t.Errorf("spinup failed: %v", err)
+		return
+	}
 
 	expMetrics := []model.Metric{
 		{
@@ -79,6 +82,14 @@ groups:
 		},
 	}
 	err = runutil.Retry(5*time.Second, ctx.Done(), func() error {
+		select {
+		case err :=  <-unexpectedExit:
+			t.Errorf("Some process exited unexpectedly: %v", err)
+			return nil
+		default:
+		}
+
+
 		qtime := time.Now()
 
 		// The time series written for the firing alerting rule must be queryable.

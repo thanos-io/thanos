@@ -30,7 +30,10 @@ func TestQuerySimple(t *testing.T) {
 	testutil.Ok(t, err)
 	defer os.RemoveAll(dir)
 
-	closeFn := spinup(t, config{
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	unexpectedExit, err := spinup(t, ctx, config{
 		promConfigFn: func(port int) string {
 			// Self scraping config with unique external label.
 			return fmt.Sprintf(`
@@ -49,12 +52,19 @@ scrape_configs:
 		numPrometheus: 3,
 		numQueries:    2,
 	})
-	defer closeFn()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
+	if err != nil {
+		t.Errorf("spinup failed: %v", err)
+		return
+	}
 
 	err = runutil.Retry(time.Second, ctx.Done(), func() error {
+		select {
+		case err := <-unexpectedExit:
+			t.Errorf("Some process exited unexpectedly: %v", err)
+			return nil
+		default:
+		}
+
 		res, err := queryPrometheus(ctx, "http://localhost:19491", time.Now(), "up")
 		if err != nil {
 			return err
