@@ -83,17 +83,16 @@ groups:
 	}
 	err = runutil.Retry(5*time.Second, ctx.Done(), func() error {
 		select {
-		case err :=  <-unexpectedExit:
+		case err := <-unexpectedExit:
 			t.Errorf("Some process exited unexpectedly: %v", err)
 			return nil
 		default:
 		}
 
-
 		qtime := time.Now()
 
 		// The time series written for the firing alerting rule must be queryable.
-		res, err := queryPrometheus(ctx, "http://localhost:19491", time.Now(), "ALERTS")
+		res, err := queryPrometheus(ctx, "http://"+queryHTTP(1), time.Now(), "ALERTS")
 		if err != nil {
 			return err
 		}

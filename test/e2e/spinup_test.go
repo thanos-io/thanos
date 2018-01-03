@@ -18,7 +18,8 @@ import (
 )
 
 var (
-	promHTTP = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 9090+i) }
+	// We keep this one with localhost, to have perfect match with what Prometheus will expose in up metric.
+	promHTTP = func(i int) string { return fmt.Sprintf("localhost:%d", 9090+i) }
 
 	sidecarGRPC    = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19090+i) }
 	sidecarHTTP    = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19190+i) }
