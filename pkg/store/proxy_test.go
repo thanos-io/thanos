@@ -122,7 +122,7 @@ func TestQueryStore_Series(t *testing.T) {
 
 		k := 0
 		for _, chk := range series.Chunks {
-			c, err := chunkenc.FromData(chunkenc.EncXOR, chk.Data)
+			c, err := chunkenc.FromData(chunkenc.EncXOR, chk.Raw.Data)
 			testutil.Ok(t, err)
 
 			iter := c.Iterator()
@@ -308,11 +308,10 @@ func storeSeriesResponse(t testing.TB, lset labels.Labels, smpls []sample) *stor
 	for _, smpl := range smpls {
 		a.Append(smpl.t, smpl.v)
 	}
-	s.Chunks = append(s.Chunks, storepb.Chunk{
-		Type:    storepb.Chunk_XOR,
+	s.Chunks = append(s.Chunks, storepb.AggrChunk{
 		MinTime: smpls[0].t,
 		MaxTime: smpls[len(smpls)-1].t,
-		Data:    c.Bytes(),
+		Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR, Data: c.Bytes()},
 	})
 	return storepb.NewSeriesResponse(&s)
 }

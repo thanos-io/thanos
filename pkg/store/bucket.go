@@ -378,7 +378,7 @@ type seriesEntry struct {
 type bucketSeriesSet struct {
 	set  []seriesEntry
 	i    int
-	chks []storepb.Chunk
+	chks []storepb.AggrChunk
 }
 
 func newBucketSeriesSet(set []seriesEntry) *bucketSeriesSet {
@@ -393,22 +393,21 @@ func (s *bucketSeriesSet) Next() bool {
 		return false
 	}
 	s.i++
-	s.chks = make([]storepb.Chunk, 0, len(s.set[s.i].chks))
+	s.chks = make([]storepb.AggrChunk, 0, len(s.set[s.i].chks))
 
 	// TODO(bplotka): If spotted troubles with gRPC overhead, split chunks to max 4MB chunks if needed. Currently
 	// we have huge limit for message size ~2GB.
 	for _, c := range s.set[s.i].chks {
-		s.chks = append(s.chks, storepb.Chunk{
+		s.chks = append(s.chks, storepb.AggrChunk{
 			MinTime: c.MinTime,
 			MaxTime: c.MaxTime,
-			Type:    storepb.Chunk_XOR,
-			Data:    c.Chunk.Bytes(),
+			Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR, Data: c.Chunk.Bytes()},
 		})
 	}
 	return true
 }
 
-func (s *bucketSeriesSet) At() ([]storepb.Label, []storepb.Chunk) {
+func (s *bucketSeriesSet) At() ([]storepb.Label, []storepb.AggrChunk) {
 	return s.set[s.i].lset, s.chks
 }
 
@@ -543,6 +542,11 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 	// Select blocks relevant for the query and prepare getters for their data.
 	for _, b := range s.blocks {
+		// NOTE(fabxc): we skip all downsampled blocks for now until support for the rest of the
+		// chain is implemented.
+		if b.meta.Thanos.DownsamplingWindow > 0 {
+			continue
+		}
 		blockMatchers, ok := b.blockMatchers(req.MinTime, req.MaxTime, matchers...)
 		if !ok {
 			continue
@@ -648,10 +652,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	return nil
 }
 
-func chunksSize(chks []storepb.Chunk) int {
-	var size int
+func chunksSize(chks []storepb.AggrChunk) (size int) {
 	for _, chk := range chks {
-		size += len(chk.Data)
+		size += chk.Size() // This gets the encoded proto size.
 	}
 	return size
 }

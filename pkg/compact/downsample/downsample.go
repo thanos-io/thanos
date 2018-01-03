@@ -520,7 +520,7 @@ func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, window int64) (mint, 
 		acs = append(acs, c.Iterator())
 	}
 	*buf = (*buf)[:0]
-	it := newCounterChunkSeriesIterator(acs...)
+	it := NewCounterSeriesIterator(acs...)
 
 	if err := expandChunkIterator(it, buf); err != nil {
 		return 0, 0, nil, err
@@ -670,12 +670,12 @@ func (c *AggrChunk) Get(t AggrType) (chunkenc.Chunk, error) {
 	return c.nth(p)
 }
 
-// countChunkSeriesIterator iterates over an ordered sequence of chunks and treats decreasing
+// CounterSeriesIterator iterates over an ordered sequence of chunks and treats decreasing
 // values as counter reset.
 // Additionally, it can deal with downsampled counter chunks, which set the last value of a chunk
 // to the original last value. The last value can be detected by checking whether the timestamp
 // did not increase w.r.t to the previous sample
-type countChunkSeriesIterator struct {
+type CounterSeriesIterator struct {
 	chks   []chunkenc.Iterator
 	i      int     // current chunk
 	total  int     // total number of processed samples
@@ -684,11 +684,11 @@ type countChunkSeriesIterator struct {
 	totalV float64 // total counter state since beginning of series
 }
 
-func newCounterChunkSeriesIterator(its ...chunkenc.Iterator) *countChunkSeriesIterator {
-	return &countChunkSeriesIterator{chks: its}
+func NewCounterSeriesIterator(chks ...chunkenc.Iterator) *CounterSeriesIterator {
+	return &CounterSeriesIterator{chks: chks}
 }
 
-func (it *countChunkSeriesIterator) Next() bool {
+func (it *CounterSeriesIterator) Next() bool {
 	if it.i >= len(it.chks) {
 		return false
 	}
@@ -722,11 +722,11 @@ func (it *countChunkSeriesIterator) Next() bool {
 	return it.Next()
 }
 
-func (it *countChunkSeriesIterator) At() (t int64, v float64) {
+func (it *CounterSeriesIterator) At() (t int64, v float64) {
 	return it.lastT, it.totalV
 }
 
-func (it *countChunkSeriesIterator) Seek(x int64) bool {
+func (it *CounterSeriesIterator) Seek(x int64) bool {
 	for {
 		ok := it.Next()
 		if !ok {
@@ -738,7 +738,7 @@ func (it *countChunkSeriesIterator) Seek(x int64) bool {
 	}
 }
 
-func (it *countChunkSeriesIterator) Err() error {
+func (it *CounterSeriesIterator) Err() error {
 	if it.i >= len(it.chks) {
 		return nil
 	}

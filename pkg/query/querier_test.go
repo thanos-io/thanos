@@ -196,10 +196,9 @@ func TestDedupSeriesSet(t *testing.T) {
 		}
 		series = append(series, storepb.Series{
 			Labels: c.lset,
-			Chunks: []storepb.Chunk{{
-				Type: storepb.Chunk_XOR,
-				Data: chk.Bytes(),
-			}},
+			Chunks: []storepb.AggrChunk{
+				{Raw: &storepb.Chunk{Type: storepb.Chunk_XOR, Data: chk.Bytes()}},
+			},
 		})
 	}
 	set := promSeriesSet{
@@ -387,11 +386,10 @@ func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sampl
 		for _, smpl := range smpls {
 			a.Append(smpl.t, smpl.v)
 		}
-		s.Chunks = append(s.Chunks, storepb.Chunk{
-			Type:    storepb.Chunk_XOR,
+		s.Chunks = append(s.Chunks, storepb.AggrChunk{
 			MinTime: smpls[0].t,
 			MaxTime: smpls[len(smpls)-1].t,
-			Data:    c.Bytes(),
+			Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR, Data: c.Bytes()},
 		})
 	}
 	return storepb.NewSeriesResponse(&s)

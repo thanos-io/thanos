@@ -25,7 +25,8 @@ type TSDBStore struct {
 }
 
 // NewTSDBStore implements the store API against a local TSDB instance.
-// It attaches the provided external labels to all results.
+// It attaches the provided external labels to all results. It only responds with raw data
+// and does not support downsampling.
 func NewTSDBStore(logger log.Logger, reg prometheus.Registerer, db *tsdb.DB, externalLabels labels.Labels) *TSDBStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -97,7 +98,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		}
 
 		respSeries.Labels = s.translateAndExtendLabels(series.Labels(), s.labels)
-		respSeries.Chunks = append(respSeries.Chunks[:0], *c)
+		respSeries.Chunks = append(respSeries.Chunks[:0], c)
 
 		if err := srv.Send(storepb.NewSeriesResponse(&respSeries)); err != nil {
 			return status.Error(codes.Aborted, err.Error())
@@ -106,12 +107,12 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 	return nil
 }
 
-func (s *TSDBStore) encodeChunk(it tsdb.SeriesIterator) (*storepb.Chunk, error) {
+func (s *TSDBStore) encodeChunk(it tsdb.SeriesIterator) (storepb.AggrChunk, error) {
 	chk := chunkenc.NewXORChunk()
 
 	app, err := chk.Appender()
 	if err != nil {
-		return nil, err
+		return storepb.AggrChunk{}, err
 	}
 	var mint int64
 
@@ -122,15 +123,14 @@ func (s *TSDBStore) encodeChunk(it tsdb.SeriesIterator) (*storepb.Chunk, error) 
 		app.Append(it.At())
 	}
 	if it.Err() != nil {
-		return nil, errors.Wrap(it.Err(), "read series")
+		return storepb.AggrChunk{}, errors.Wrap(it.Err(), "read series")
 	}
 	maxt, _ := it.At()
 
-	return &storepb.Chunk{
+	return storepb.AggrChunk{
 		MinTime: mint,
 		MaxTime: maxt,
-		Type:    storepb.Chunk_XOR,
-		Data:    chk.Bytes(),
+		Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR, Data: chk.Bytes()},
 	}, nil
 }
 

@@ -35,6 +35,18 @@ message SeriesRequest {
   int64 min_time                 = 1;
   int64 max_time                 = 2;
   repeated LabelMatcher matchers = 3 [(gogoproto.nullable) = false];
+
+  int64 maxAggregateWindow = 4;
+  repeated Aggr aggregates = 5;
+}
+
+enum Aggr {
+  RAW     = 0;
+  COUNT   = 1;
+  SUM     = 2;
+  MIN     = 3;
+  MAX     = 4;
+  COUNTER = 5;
 }
 
 message SeriesResponse {

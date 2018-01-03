@@ -102,9 +102,11 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			continue
 		}
 		sc, err := store.Client.Series(srv.Context(), &storepb.SeriesRequest{
-			MinTime:  r.MinTime,
-			MaxTime:  r.MaxTime,
-			Matchers: newMatchers,
+			MinTime:            r.MinTime,
+			MaxTime:            r.MaxTime,
+			Matchers:           newMatchers,
+			Aggregates:         r.Aggregates,
+			MaxAggregateWindow: r.MaxAggregateWindow,
 		})
 		if err != nil {
 			respCh <- storepb.NewWarnSeriesResponse(errors.Wrap(err, "fetch series"))
@@ -185,7 +187,7 @@ func (s *streamSeriesSet) Next() (ok bool) {
 	return ok
 }
 
-func (s *streamSeriesSet) At() ([]storepb.Label, []storepb.Chunk) {
+func (s *streamSeriesSet) At() ([]storepb.Label, []storepb.AggrChunk) {
 	if s.currSeries == nil {
 		return nil, nil
 	}

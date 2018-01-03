@@ -65,9 +65,9 @@ func TestPrometheusStore_Series(t *testing.T) {
 	testutil.Equals(t, 1, len(srv.SeriesSet[0].Chunks))
 
 	c := srv.SeriesSet[0].Chunks[0]
-	testutil.Equals(t, storepb.Chunk_XOR, c.Type)
+	testutil.Equals(t, storepb.Chunk_XOR, c.Raw.Type)
 
-	chk, err := chunkenc.FromData(chunkenc.EncXOR, c.Data)
+	chk, err := chunkenc.FromData(chunkenc.EncXOR, c.Raw.Data)
 	testutil.Ok(t, err)
 
 	samples := expandChunk(chk.Iterator())
