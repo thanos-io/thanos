@@ -20,10 +20,19 @@ message Chunk {
   bytes data     = 4;
 }
 
-// DeltaChunk represents a chunk of sample data for a series. It may contain the raw
+enum Aggregate {
+  Raw     = 0;
+  Count   = 1;
+  Sum     = 2;
+  Min     = 3;
+  Max     = 4;
+  Counter = 5;
+}
+
+// AggrChunk represents a chunk of sample data for a series. It may contain the raw
 // data or a set of time-aggregations over it, i.e. downsampled date.
 // Not all fields may be set depending on the requested data.
-message DeltaChunk {
+message AggrChunk {
   Chunk raw     = 1 [(gogoproto.nullable) = false];
   Chunk sum     = 2 [(gogoproto.nullable) = false];
   Chunk count   = 3 [(gogoproto.nullable) = false];
@@ -35,7 +44,7 @@ message DeltaChunk {
 // Series represents a time series with chunks encoding its raw sample data.
 message Series {
   repeated Label      labels = 1 [(gogoproto.nullable) = false];
-  repeated DeltaChunk chunks = 2 [(gogoproto.nullable) = false];
+  repeated Chunk chunks = 2 [(gogoproto.nullable) = false];
 }
 
 // Matcher specifies a rule, which can match or set of labels or not.

@@ -100,16 +100,6 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 	return &m
 }
 
-// DownsamplingLevel encodes the resolution of a downsampling level
-type DownsamplingLevel int64
-
-// Implemented downsampling resolutions.
-const (
-	DownsamplingLevel0 = 0              // original raw data
-	DownsamplingLevel1 = 5 * 60 * 1000  // 5 minutes
-	DownsamplingLevel2 = 60 * 60 * 1000 // 1 hour
-)
-
 // NewSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
 func NewSyncer(
@@ -118,6 +108,7 @@ func NewSyncer(
 	dir string,
 	bkt objstore.Bucket,
 	syncDelay time.Duration,
+	window int64,
 ) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
