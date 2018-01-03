@@ -40,9 +40,9 @@ func CompareLabels(a, b []Label) int {
 
 type emptySeriesSet struct{}
 
-func (emptySeriesSet) Next() bool             { return false }
-func (emptySeriesSet) At() ([]Label, []Chunk) { return nil, nil }
-func (emptySeriesSet) Err() error             { return nil }
+func (emptySeriesSet) Next() bool                 { return false }
+func (emptySeriesSet) At() ([]Label, []AggrChunk) { return nil, nil }
+func (emptySeriesSet) Err() error                 { return nil }
 
 // EmptySeriesSet returns a new series set that contains no series.
 func EmptySeriesSet() SeriesSet {
@@ -69,7 +69,7 @@ func MergeSeriesSets(all ...SeriesSet) SeriesSet {
 // The set is sorted by the label sets. Chunks may be overlapping or out of order.
 type SeriesSet interface {
 	Next() bool
-	At() ([]Label, []Chunk)
+	At() ([]Label, []AggrChunk)
 	Err() error
 }
 
@@ -78,7 +78,7 @@ type mergedSeriesSet struct {
 	a, b SeriesSet
 
 	lset         []Label
-	chunks       []Chunk
+	chunks       []AggrChunk
 	adone, bdone bool
 }
 
@@ -95,7 +95,7 @@ func newMergedSeriesSet(a, b SeriesSet) *mergedSeriesSet {
 	return s
 }
 
-func (s *mergedSeriesSet) At() ([]Label, []Chunk) {
+func (s *mergedSeriesSet) At() ([]Label, []AggrChunk) {
 	return s.lset, s.chunks
 }
 
@@ -141,7 +141,7 @@ func (s *mergedSeriesSet) Next() bool {
 		s.lset = lset
 		// Slice reuse is not generally safe with nested merge iterators.
 		// We err on the safe side an create a new slice.
-		s.chunks = make([]Chunk, 0, len(chksA)+len(chksB))
+		s.chunks = make([]AggrChunk, 0, len(chksA)+len(chksB))
 		s.chunks = append(s.chunks, chksA...)
 		s.chunks = append(s.chunks, chksB...)
 
