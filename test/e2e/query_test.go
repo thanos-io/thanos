@@ -30,7 +30,7 @@ func TestQuerySimple(t *testing.T) {
 	testutil.Ok(t, err)
 	defer os.RemoveAll(dir)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	unexpectedExit, err := spinup(t, ctx, config{
