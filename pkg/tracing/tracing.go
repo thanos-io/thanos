@@ -64,7 +64,7 @@ func (t *tracer) StartSpan(operationName string, opts ...opentracing.StartSpanOp
 	}
 
 	span.SetTag("binary_revision", version.Revision)
-	if len(os.Args) > 0 {
+	if len(os.Args) > 1 {
 		span.SetTag("binary_cmd", os.Args[1])
 	}
 
