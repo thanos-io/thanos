@@ -387,6 +387,7 @@ func runRule(
 		bucket string
 		// closeFn gets called when the sync loop ends to close clients, clean up, etc
 		closeFn = func() error { return nil }
+		uploads = true
 	)
 
 	s3Config := &s3.Config{
@@ -416,32 +417,35 @@ func runRule(
 
 		bucket = s3Config.Bucket
 	} else {
-		return errors.New("no valid GCS or S3 configuration supplied")
+		level.Info(logger).Log("msg", "No GCS or S3 bucket configured, uploads will be disabled")
+		uploads = false
 	}
 
-	bkt = objstore.BucketWithMetrics(bucket, bkt, reg)
+	if uploads {
+		bkt = objstore.BucketWithMetrics(bucket, bkt, reg)
 
-	s := shipper.New(logger, nil, dataDir, bkt, func() labels.Labels { return lset })
+		s := shipper.New(logger, nil, dataDir, bkt, func() labels.Labels { return lset })
 
-	ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(context.Background())
 
-	g.Add(func() error {
-		defer closeFn()
+		g.Add(func() error {
+			defer closeFn()
 
-		return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
-			s.Sync(ctx)
+			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+				s.Sync(ctx)
 
-			minTime, _, err := s.Timestamps()
-			if err != nil {
-				level.Warn(logger).Log("msg", "reading timestamps failed", "err", err)
-			} else {
-				peer.SetTimestamps(minTime, math.MaxInt64)
-			}
-			return nil
+				minTime, _, err := s.Timestamps()
+				if err != nil {
+					level.Warn(logger).Log("msg", "reading timestamps failed", "err", err)
+				} else {
+					peer.SetTimestamps(minTime, math.MaxInt64)
+				}
+				return nil
+			})
+		}, func(error) {
+			cancel()
 		})
-	}, func(error) {
-		cancel()
-	})
+	}
 
 	level.Info(logger).Log("msg", "starting rule node", "peer", peer.Name())
 	return nil
