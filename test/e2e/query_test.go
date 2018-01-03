@@ -30,7 +30,10 @@ func TestQuerySimple(t *testing.T) {
 	testutil.Ok(t, err)
 	defer os.RemoveAll(dir)
 
-	closeFn := spinup(t, config{
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	unexpectedExit, err := spinup(t, ctx, config{
 		promConfigFn: func(port int) string {
 			// Self scraping config with unique external label.
 			return fmt.Sprintf(`
@@ -39,7 +42,7 @@ global:
     prometheus: prom-%d
 scrape_configs:
 - job_name: prometheus
-  scrape_interval: 5s
+  scrape_interval: 1s
   static_configs:
   - targets:
     - "localhost:%d"
@@ -49,13 +52,20 @@ scrape_configs:
 		numPrometheus: 3,
 		numQueries:    2,
 	})
-	defer closeFn()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
+	if err != nil {
+		t.Errorf("spinup failed: %v", err)
+		return
+	}
 
 	err = runutil.Retry(time.Second, ctx.Done(), func() error {
-		res, err := queryPrometheus(ctx, "http://localhost:19491", time.Now(), "up")
+		select {
+		case err := <-unexpectedExit:
+			t.Errorf("Some process exited unexpectedly: %v", err)
+			return nil
+		default:
+		}
+
+		res, err := queryPrometheus(ctx, "http://"+queryHTTP(1), time.Now(), "up")
 		if err != nil {
 			return err
 		}
@@ -66,19 +76,19 @@ scrape_configs:
 		// In our model result are always sorted.
 		match := reflect.DeepEqual(model.Metric{
 			"__name__":   "up",
-			"instance":   "localhost:9091",
+			"instance":   model.LabelValue(promHTTP(1)),
 			"job":        "prometheus",
 			"prometheus": "prom-9091",
 		}, res[0].Metric)
 		match = match && reflect.DeepEqual(model.Metric{
 			"__name__":   "up",
-			"instance":   "localhost:9092",
+			"instance":   model.LabelValue(promHTTP(2)),
 			"job":        "prometheus",
 			"prometheus": "prom-9092",
 		}, res[1].Metric)
 		match = match && reflect.DeepEqual(model.Metric{
 			"__name__":   "up",
-			"instance":   "localhost:9093",
+			"instance":   model.LabelValue(promHTTP(3)),
 			"job":        "prometheus",
 			"prometheus": "prom-9093",
 		}, res[2].Metric)
