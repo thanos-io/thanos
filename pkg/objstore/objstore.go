@@ -297,7 +297,7 @@ func (rc *timingReadCloser) Close() error {
 
 func (rc *timingReadCloser) Read(b []byte) (n int, err error) {
 	n, err = rc.ReadCloser.Read(b)
-	if rc.ok && err != nil {
+	if rc.ok && err != nil && err != io.EOF {
 		rc.failed.Inc()
 		rc.ok = false
 	}

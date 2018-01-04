@@ -12,6 +12,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/compact"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
+	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/query/ui"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/run"
@@ -35,11 +36,26 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks.").
 		PlaceHolder("<bucket>").Required().String()
 
+	s3Bucket := cmd.Flag("s3.bucket", "S3-Compatible API bucket name for stored blocks.").
+		PlaceHolder("<bucket>").Envar("S3_BUCKET").String()
+
+	s3Endpoint := cmd.Flag("s3.endpoint", "S3-Compatible API endpoint for stored blocks.").
+		PlaceHolder("<api-url>").Envar("S3_ENDPOINT").String()
+
+	s3AccessKey := cmd.Flag("s3.access-key", "Access key for an S3-Compatible API.").
+		PlaceHolder("<key>").Envar("S3_ACCESS_KEY").String()
+
+	s3SecretKey := cmd.Flag("s3.secret-key", "Secret key for an S3-Compatible API.").
+		PlaceHolder("<key>").Envar("S3_SECRET_KEY").String()
+
+	s3Insecure := cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
+		Default("false").Envar("S3_INSECURE").Bool()
+
 	syncDelay := cmd.Flag("sync-delay", "minimum age of blocks before they are being processed.").
 		Default("2h").Duration()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
-		return runCompact(g, logger, reg, *httpAddr, *dataDir, *gcsBucket, *syncDelay)
+		return runCompact(g, logger, reg, *httpAddr, *dataDir, *gcsBucket, *s3Bucket, *s3Endpoint, *s3AccessKey, *s3SecretKey, *s3Insecure, *syncDelay)
 	}
 }
 
@@ -50,15 +66,46 @@ func runCompact(
 	httpAddr string,
 	dataDir string,
 	gcsBucket string,
+	s3Bucket string,
+	s3Endpoint string,
+	s3AccessKey string,
+	s3SecretKey string,
+	s3Insecure bool,
 	syncDelay time.Duration,
 ) error {
-	gcsClient, err := storage.NewClient(context.Background())
-	if err != nil {
-		return errors.Wrap(err, "create GCS client")
+	var (
+		bkt    objstore.Bucket
+		bucket string
+	)
+
+	s3Config := &s3.Config{
+		Bucket:    s3Bucket,
+		Endpoint:  s3Endpoint,
+		AccessKey: s3AccessKey,
+		SecretKey: s3SecretKey,
+		Insecure:  s3Insecure,
 	}
-	var bkt objstore.Bucket
-	bkt = gcs.NewBucket(gcsBucket, gcsClient.Bucket(gcsBucket), reg)
-	bkt = objstore.BucketWithMetrics(gcsBucket, bkt, reg)
+
+	if gcsBucket != "" {
+		gcsClient, err := storage.NewClient(context.Background())
+		if err != nil {
+			return errors.Wrap(err, "create GCS client")
+		}
+		bkt = gcs.NewBucket(gcsBucket, gcsClient.Bucket(gcsBucket), reg)
+		bucket = gcsBucket
+	} else if s3Config.Validate() == nil {
+		b, err := s3.NewBucket(s3Config, reg)
+		if err != nil {
+			return errors.Wrap(err, "create s3 client")
+		}
+
+		bkt = b
+		bucket = s3Config.Bucket
+	} else {
+		return errors.New("no valid GCS or S3 configuration supplied")
+	}
+
+	bkt = objstore.BucketWithMetrics(bucket, bkt, reg)
 
 	sy, err := compact.NewSyncer(logger, reg, dataDir, bkt, syncDelay)
 	if err != nil {

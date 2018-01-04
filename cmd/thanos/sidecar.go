@@ -17,6 +17,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
+	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
@@ -49,6 +50,21 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
 		PlaceHolder("<bucket>").String()
 
+	s3Bucket := cmd.Flag("s3.bucket", "S3-Compatible API bucket name for stored blocks.").
+		PlaceHolder("<bucket>").Envar("S3_BUCKET").String()
+
+	s3Endpoint := cmd.Flag("s3.endpoint", "S3-Compatible API endpoint for stored blocks.").
+		PlaceHolder("<api-url>").Envar("S3_ENDPOINT").String()
+
+	s3AccessKey := cmd.Flag("s3.access-key", "Access key for an S3-Compatible API.").
+		PlaceHolder("<key>").Envar("S3_ACCESS_KEY").String()
+
+	s3SecretKey := cmd.Flag("s3.secret-key", "Secret key for an S3-Compatible API.").
+		PlaceHolder("<key>").Envar("S3_SECRET_KEY").String()
+
+	s3Insecure := cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
+		Default("false").Envar("S3_INSECURE").Bool()
+
 	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
 
 	clusterBindAddr := cmd.Flag("cluster.address", "listen address for cluster").
@@ -64,7 +80,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 		Default(cluster.DefaultPushPullInterval.String()).Duration()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
-		return runSidecar(g, logger, reg, tracer, *grpcAddr, *httpAddr, *promURL, *dataDir, *clusterBindAddr, *clusterAdvertiseAddr, *peers, *gossipInterval, *pushPullInterval, *gcsBucket)
+		return runSidecar(g, logger, reg, tracer, *grpcAddr, *httpAddr, *promURL, *dataDir, *clusterBindAddr, *clusterAdvertiseAddr, *peers, *gossipInterval, *pushPullInterval, *gcsBucket, *s3Bucket, *s3Endpoint, *s3AccessKey, *s3SecretKey, *s3Insecure)
 	}
 }
 
@@ -83,8 +99,12 @@ func runSidecar(
 	gossipInterval time.Duration,
 	pushPullInterval time.Duration,
 	gcsBucket string,
+	s3Bucket string,
+	s3Endpoint string,
+	s3AccessKey string,
+	s3SecretKey string,
+	s3Insecure bool,
 ) error {
-
 	externalLabels := &extLabelSet{promURL: promURL}
 
 	// Blocking query of external labels before anything else.
@@ -205,24 +225,54 @@ func runSidecar(
 		})
 	}
 
+	var (
+		bkt    objstore.Bucket
+		bucket string
+		// closeFn gets called when the sync loop ends to close clients, clean up, etc
+		closeFn      = func() error { return nil }
+		uploads bool = true
+	)
+
+	s3Config := &s3.Config{
+		Bucket:    s3Bucket,
+		Endpoint:  s3Endpoint,
+		AccessKey: s3AccessKey,
+		SecretKey: s3SecretKey,
+		Insecure:  s3Insecure,
+	}
+
+	// The background shipper continuously scans the data directory and uploads
+	// new blocks to Google Cloud Storage or an S3-compatible storage service.
 	if gcsBucket != "" {
-		// The background shipper continuously scans the data directory and uploads
-		// new found blocks to Google Cloud Storage.
 		gcsClient, err := storage.NewClient(context.Background())
 		if err != nil {
 			return errors.Wrap(err, "create GCS client")
 		}
 
-		var bkt objstore.Bucket
 		bkt = gcs.NewBucket(gcsBucket, gcsClient.Bucket(gcsBucket), reg)
-		bkt = objstore.BucketWithMetrics(gcsBucket, bkt, reg)
+		closeFn = gcsClient.Close
+		bucket = gcsBucket
+	} else if s3Config.Validate() == nil {
+		bkt, err = s3.NewBucket(s3Config, reg)
+		if err != nil {
+			return errors.Wrap(err, "create s3 client")
+		}
+
+		bucket = s3Config.Bucket
+	} else {
+		uploads = false
+		level.Info(logger).Log("msg", "No GCS or S3 bucket were configured, uploads will be disabled")
+	}
+
+	if uploads {
+		bkt = objstore.BucketWithMetrics(bucket, bkt, reg)
 
 		s := shipper.New(logger, nil, dataDir, bkt, externalLabels.Get)
 
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-			defer gcsClient.Close()
+			defer closeFn()
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				s.Sync(ctx)
@@ -238,8 +288,6 @@ func runSidecar(
 		}, func(error) {
 			cancel()
 		})
-	} else {
-		level.Info(logger).Log("msg", "No GCS bucket were configured, GCS uploads will be disabled")
 	}
 
 	level.Info(logger).Log("msg", "starting sidecar", "peer", peer.Name())

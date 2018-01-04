@@ -13,6 +13,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
+	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
@@ -39,6 +40,21 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
 		PlaceHolder("<bucket>").Required().String()
+
+	s3Bucket := cmd.Flag("s3.bucket", "S3-Compatible API bucket name for stored blocks.").
+		PlaceHolder("<bucket>").Envar("S3_BUCKET").String()
+
+	s3Endpoint := cmd.Flag("s3.endpoint", "S3-Compatible API endpoint for stored blocks.").
+		PlaceHolder("<api-url>").Envar("S3_ENDPOINT").String()
+
+	s3AccessKey := cmd.Flag("s3.access-key", "Access key for an S3-Compatible API.").
+		PlaceHolder("<key>").Envar("S3_ACCESS_KEY").String()
+
+	s3SecretKey := cmd.Flag("s3.secret-key", "Secret key for an S3-Compatible API.").
+		PlaceHolder("<key>").Envar("S3_SECRET_KEY").String()
+
+	s3Insecure := cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
+		Default("false").Envar("S3_INSECURE").Bool()
 
 	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the index cache.").
 		Default("250MB").Bytes()
@@ -88,6 +104,11 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			reg,
 			tracer,
 			*gcsBucket,
+			*s3Bucket,
+			*s3Endpoint,
+			*s3AccessKey,
+			*s3SecretKey,
+			*s3Insecure,
 			*dataDir,
 			*grpcAddr,
 			*httpAddr,
@@ -107,6 +128,11 @@ func runStore(
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	gcsBucket string,
+	s3Bucket string,
+	s3Endpoint string,
+	s3AccessKey string,
+	s3SecretKey string,
+	s3Insecure bool,
 	dataDir string,
 	grpcAddr string,
 	httpAddr string,
@@ -115,16 +141,45 @@ func runStore(
 	chunkPoolSizeBytes uint64,
 ) error {
 	{
-		gcsClient, err := storage.NewClient(context.Background())
-		if err != nil {
-			return errors.Wrap(err, "create GCS client")
+		var (
+			bkt objstore.Bucket
+			// closeFn gets called when the sync loop ends to close clients, clean up, etc
+			closeFn = func() error { return nil }
+			bucket  string
+		)
+
+		s3Config := &s3.Config{
+			Bucket:    s3Bucket,
+			Endpoint:  s3Endpoint,
+			AccessKey: s3AccessKey,
+			SecretKey: s3SecretKey,
+			Insecure:  s3Insecure,
 		}
 
-		var bkt objstore.Bucket
-		bkt = gcs.NewBucket(gcsBucket, gcsClient.Bucket(gcsBucket), reg)
-		bkt = objstore.BucketWithMetrics(gcsBucket, bkt, reg)
+		if gcsBucket != "" {
+			gcsClient, err := storage.NewClient(context.Background())
+			if err != nil {
+				return errors.Wrap(err, "create GCS client")
+			}
 
-		gs, err := store.NewBucketStore(
+			bkt = gcs.NewBucket(gcsBucket, gcsClient.Bucket(gcsBucket), reg)
+			closeFn = gcsClient.Close
+			bucket = gcsBucket
+		} else if s3Config.Validate() == nil {
+			b, err := s3.NewBucket(s3Config, reg)
+			if err != nil {
+				return errors.Wrap(err, "create s3 client")
+			}
+
+			bkt = b
+			bucket = s3Config.Bucket
+		} else {
+			return errors.New("no valid GCS or S3 configuration supplied")
+		}
+
+		bkt = objstore.BucketWithMetrics(bucket, bkt, reg)
+
+		bs, err := store.NewBucketStore(
 			logger,
 			reg,
 			bkt,
@@ -133,21 +188,21 @@ func runStore(
 			chunkPoolSizeBytes,
 		)
 		if err != nil {
-			return errors.Wrap(err, "create GCS store")
+			return errors.Wrap(err, "create object storage store")
 		}
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
 			err := runutil.Repeat(3*time.Minute, ctx.Done(), func() error {
-				if err := gs.SyncBlocks(ctx); err != nil {
+				if err := bs.SyncBlocks(ctx); err != nil {
 					level.Warn(logger).Log("msg", "syncing blocks failed", "err", err)
 				}
-				peer.SetTimestamps(gs.TimeRange())
+				peer.SetTimestamps(bs.TimeRange())
 				return nil
 			})
 
-			gs.Close()
-			gcsClient.Close()
+			bs.Close()
+			closeFn()
 
 			return err
 		}, func(error) {
@@ -160,7 +215,7 @@ func runStore(
 		}
 
 		s := grpc.NewServer(defaultGRPCServerOpts(logger, reg, tracer)...)
-		storepb.RegisterStoreServer(s, gs)
+		storepb.RegisterStoreServer(s, bs)
 
 		g.Add(func() error {
 			return errors.Wrap(s.Serve(l), "serve gRPC")
