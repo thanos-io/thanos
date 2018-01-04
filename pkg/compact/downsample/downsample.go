@@ -99,7 +99,7 @@ func Downsample(
 	if pall.Err() != nil {
 		return id, errors.Wrap(pall.Err(), "iterate series set")
 	}
-	comp, err := tsdb.NewLeveledCompactor(nil, log.NewNopLogger(), []int64{rng}, aggrPool{})
+	comp, err := tsdb.NewLeveledCompactor(nil, log.NewNopLogger(), []int64{rng}, AggrChunkPool{})
 	if err != nil {
 		return id, errors.Wrap(err, "create compactor")
 	}
@@ -748,12 +748,12 @@ func (it *CounterSeriesIterator) Err() error {
 	return it.chks[it.i].Err()
 }
 
-type aggrPool struct{}
+type AggrChunkPool struct{}
 
-func (p aggrPool) Get(e chunkenc.Encoding, b []byte) (chunkenc.Chunk, error) {
+func (p AggrChunkPool) Get(e chunkenc.Encoding, b []byte) (chunkenc.Chunk, error) {
 	return &AggrChunk{b: b}, nil
 }
 
-func (p aggrPool) Put(c chunkenc.Chunk) error {
+func (p AggrChunkPool) Put(c chunkenc.Chunk) error {
 	return nil
 }

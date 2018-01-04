@@ -193,7 +193,7 @@ func testDownsample(t *testing.T, data []*downsampleTestSet, meta *block.Meta, r
 	testutil.Ok(t, err)
 	defer indexr.Close()
 
-	chunkr, err := chunks.NewDirReader(filepath.Join(dir, id.String(), "chunks"), aggrPool{})
+	chunkr, err := chunks.NewDirReader(filepath.Join(dir, id.String(), "chunks"), AggrChunkPool{})
 	testutil.Ok(t, err)
 	defer chunkr.Close()
 
