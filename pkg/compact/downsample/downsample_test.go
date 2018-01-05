@@ -115,7 +115,7 @@ func TestDownsampleAggr(t *testing.T) {
 		},
 	}
 	var meta block.Meta
-	meta.Thanos.DownsamplingWindow = 10
+	meta.Thanos.Downsample.Window = 10
 
 	testDownsample(t, input, &meta, 500)
 }
