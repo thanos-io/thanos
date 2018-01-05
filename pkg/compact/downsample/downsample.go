@@ -84,17 +84,17 @@ func Downsample(
 			chunked = append(chunked, all[k:])
 		}
 		// Raw and already downsampled data need different processing.
-		if origMeta.Thanos.DownsamplingWindow == 0 {
+		if origMeta.Thanos.Downsample.Window == 0 {
 			for _, s := range downsampleRaw(lset, all, window) {
 				newb.addSeries(s)
 			}
-		} else {
-			s, err := downsampleAggr(lset, all, chunked, window)
-			if err != nil {
-				return id, errors.Wrap(err, "downsample aggregate block")
-			}
-			newb.addSeries(s)
+			continue
 		}
+		s, err := downsampleAggr(lset, all, chunked, window)
+		if err != nil {
+			return id, errors.Wrap(err, "downsample aggregate block")
+		}
+		newb.addSeries(s)
 	}
 	if pall.Err() != nil {
 		return id, errors.Wrap(pall.Err(), "iterate series set")
@@ -115,7 +115,7 @@ func Downsample(
 		return id, errors.Wrap(err, "read block meta")
 	}
 	meta.Thanos.Labels = origMeta.Thanos.Labels
-	meta.Thanos.DownsamplingWindow = window
+	meta.Thanos.Downsample.Window = window
 	meta.Compaction = origMeta.Compaction
 
 	if err := block.WriteMetaFile(bdir, meta); err != nil {
@@ -259,7 +259,7 @@ func downsampleAggr(lset labels.Labels, all []sample, chunked [][]sample, window
 	} else if strings.HasSuffix(metric, "$max") {
 		downsampleMax(ser, all, window)
 	} else if strings.HasSuffix(metric, "$counter") {
-		downsampleCounterCounter(ser, all, chunked, window)
+		downsampleAggrCounter(ser, all, chunked, window)
 	} else {
 		return nil, errors.Errorf("unknown aggregate metric %q", metric)
 	}
@@ -279,6 +279,7 @@ func aggrLset(lset labels.Labels, aggr string) labels.Labels {
 	return res
 }
 
+// isCounter guesses whether a series is a counter based on its label set.
 func isCounter(lset labels.Labels) bool {
 	metric := lset.Get("__name__")
 	return strings.HasSuffix(metric, "_total") ||
@@ -286,6 +287,9 @@ func isCounter(lset labels.Labels) bool {
 		strings.HasSuffix(metric, "_sum")
 }
 
+// targetChunkSize computes an intended sample count per chunk given a fixed length
+// of samples in the series.
+// It aims to split the series into chunks of length 120 or higher.
 func targetChunkSize(l int) int {
 	c := 1
 	for ; l/c > 250; c++ {
@@ -336,6 +340,7 @@ func (s *series) add(t int64, v float64) {
 	s.cmax = t
 }
 
+// cut finishes the currently appended to chunk.
 func (s *series) cut() {
 	s.chunks = append(s.chunks, chunks.Meta{
 		MinTime: s.cmin,
@@ -345,6 +350,7 @@ func (s *series) cut() {
 	s.cur = nil
 }
 
+// close finalizes the series.
 func (s *series) close() {
 	if s.cur == nil {
 		return
@@ -372,16 +378,17 @@ func downsampleCounter(ser *series, data []sample, window int64, split bool) {
 	)
 	for i, s := range data {
 		if s.t > nextT {
-			if split && i > 0 && i%n == 0 {
-				// Add signaling sample that indicates what the true last value was
-				// before cutting a new chunk.
-				// For already downsampled series lastV is set to the last value that
-				// series itself added as a signaling sample.
-				ser.add(nextT, lastV)
-				ser.cut()
-			}
 			if nextT != -1 {
 				ser.add(nextT, counter)
+
+				if split && i%n == 0 {
+					// Add signaling sample that indicates what the true last value was
+					// before cutting a new chunk.
+					// For already downsampled series lastV is set to the last value that
+					// series itself added as a signaling sample.
+					ser.add(nextT, lastV)
+					ser.cut()
+				}
 			}
 			nextT = s.t - (s.t % window) + window - 1
 		}
@@ -410,7 +417,8 @@ func downsampleCounter(ser *series, data []sample, window int64, split bool) {
 	ser.cut()
 }
 
-func downsampleCounterCounter(ser *series, data []sample, chunked [][]sample, window int64) {
+// downsampleAggrCounter downsamples a counter series that already is an aggregated counter.
+func downsampleAggrCounter(ser *series, data []sample, chunked [][]sample, window int64) {
 	// For downsampling an already downsampled counter series, we have to ensure that produced
 	// chunks align with boundaries of input chunks.
 	// Otherwise the signal sample indiciating the last true sample value is not picked correctly.
@@ -435,6 +443,7 @@ func downsampleCounterCounter(ser *series, data []sample, chunked [][]sample, wi
 	}
 }
 
+// downsampleCount creates a sample count aggregate over a raw series.
 func downsampleCount(ser *series, data []sample, window int64) {
 	nextT := int64(-1)
 	var count int
@@ -452,6 +461,7 @@ func downsampleCount(ser *series, data []sample, window int64) {
 	ser.add(nextT, float64(count))
 }
 
+// downsampleSum creates a downsampled sum aggregate over a series.
 func downsampleSum(ser *series, data []sample, window int64) {
 	nextT := int64(-1)
 	var sum float64
@@ -469,6 +479,7 @@ func downsampleSum(ser *series, data []sample, window int64) {
 	ser.add(nextT, sum)
 }
 
+// downsampleMin creates a downsampled min aggregate over a series.
 func downsampleMin(ser *series, data []sample, window int64) {
 	nextT := int64(-1)
 	min := math.MaxFloat64
@@ -488,6 +499,7 @@ func downsampleMin(ser *series, data []sample, window int64) {
 	ser.add(nextT, min)
 }
 
+// downsampleMin creates a downsampled max aggregate over a series.
 func downsampleMax(ser *series, data []sample, window int64) {
 	nextT := int64(-1)
 	max := -math.MaxFloat64
@@ -521,15 +533,10 @@ type countChunkSeriesIterator struct {
 	totalV float64 // total counter state since beginning of series
 }
 
-func (it *countChunkSeriesIterator) LastSample() (int64, float64) {
-	return it.lastT, it.lastV
-}
-
 func (it *countChunkSeriesIterator) Next() bool {
 	if it.i >= len(it.chks) {
 		return false
 	}
-	// Chunk ends without special sample. It was not a downsampled counter series.
 	if ok := it.chks[it.i].Next(); !ok {
 		it.i++
 		return it.Next()
