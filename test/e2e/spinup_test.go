@@ -171,9 +171,9 @@ receivers:
 			return nil, errors.Wrap(err, "creating alertmanager config file failed")
 		}
 		commands = append(commands, exec.Command("alertmanager",
-			"-config.file", dir+"/config.yaml",
-			"-web.listen-address", "127.0.0.1:29093",
-			"-log.level", "debug",
+			"--config.file", dir+"/config.yaml",
+			"--web.listen-address", "127.0.0.1:29093",
+			"--log.level", "debug",
 		))
 	}
 
