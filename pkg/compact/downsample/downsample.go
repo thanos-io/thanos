@@ -2,7 +2,7 @@ package downsample
 
 import (
 	"context"
-	"fmt"
+	"encoding/binary"
 	"math"
 	"path/filepath"
 	"sort"
@@ -40,6 +40,8 @@ func Downsample(
 	}
 	defer chunkr.Close()
 
+	rng := origMeta.MaxTime - origMeta.MinTime
+
 	// Write downsampled data in a custom memory block where we have fine-grained control
 	// over created chunks.
 	// This is necessary since we need to inject special values at the end of chunks for
@@ -51,56 +53,52 @@ func Downsample(
 		return id, errors.Wrap(err, "get all postings list")
 	}
 	var (
-		all     []sample
-		chunked [][]sample
-		chks    []chunks.Meta
+		aggrChunks []*AggrChunk
+		all        []sample
+		chks       []chunks.Meta
 	)
 	for pall.Next() {
 		var lset labels.Labels
 		chks = chks[:0]
 		all = all[:0]
-		chunked = chunked[:0]
+		aggrChunks = aggrChunks[:0]
 
 		// Get series labels and chunks. Downsampled data is sensitive to chunk boundaries
 		// and we need to preserve them to properly downsample previously downsampled data.
 		if err := indexr.Series(pall.At(), &lset, &chks); err != nil {
 			return id, errors.Wrapf(err, "get series %d", pall.At())
 		}
+		// Raw and already downsampled data need different processing.
+		if origMeta.Thanos.Downsample.Window == 0 {
+			for _, c := range chks {
+				chk, err := chunkr.Chunk(c.Ref)
+				if err != nil {
+					return id, errors.Wrapf(err, "get chunk %d", c.Ref)
+				}
+				if err := expandChunkIterator(chk.Iterator(), &all); err != nil {
+					return id, errors.Wrapf(err, "expand chunk %d", c.Ref)
+				}
+			}
+			newb.addSeries(downsampleRaw(lset, all, window))
+			continue
+		}
 		for _, c := range chks {
 			chk, err := chunkr.Chunk(c.Ref)
 			if err != nil {
 				return id, errors.Wrapf(err, "get chunk %d", c.Ref)
 			}
-			k := len(all)
-			it := chk.Iterator()
-
-			for it.Next() {
-				t, v := it.At()
-				all = append(all, sample{t, v})
-			}
-			if it.Err() != nil {
-				return id, errors.Wrapf(it.Err(), "expand chunk %d", c.Ref)
-			}
-			chunked = append(chunked, all[k:])
+			aggrChunks = append(aggrChunks, chk.(*AggrChunk))
 		}
-		// Raw and already downsampled data need different processing.
-		if origMeta.Thanos.Downsample.Window == 0 {
-			for _, s := range downsampleRaw(lset, all, window) {
-				newb.addSeries(s)
-			}
-			continue
-		}
-		s, err := downsampleAggr(lset, all, chunked, window)
+		res, err := downsampleAggr(aggrChunks, &all, chks[0].MinTime, chks[len(chks)-1].MaxTime, window)
 		if err != nil {
 			return id, errors.Wrap(err, "downsample aggregate block")
 		}
-		newb.addSeries(s)
+		newb.addSeries(&series{lset: lset, chunks: res})
 	}
 	if pall.Err() != nil {
 		return id, errors.Wrap(pall.Err(), "iterate series set")
 	}
-	rng := origMeta.MaxTime - origMeta.MinTime
-	comp, err := tsdb.NewLeveledCompactor(nil, log.NewNopLogger(), []int64{rng}, nil)
+	comp, err := tsdb.NewLeveledCompactor(nil, log.NewNopLogger(), []int64{rng}, aggrPool{})
 	if err != nil {
 		return id, errors.Wrap(err, "create compactor")
 	}
@@ -212,71 +210,333 @@ func (b *memBlock) Close() error {
 	return nil
 }
 
-func downsampleRaw(lset labels.Labels, data []sample, window int64) []*series {
+// aggregator collects commulative stats for a stream of values.
+type aggregator struct {
+	total   int     // total samples processed
+	count   int     // samples in current window
+	sum     float64 // value sum of current window
+	min     float64 // min of current window
+	max     float64 // max of current window
+	counter float64 // total counter state since beginning
+	resets  int     // number of counter resests since beginning
+	last    float64 // last added value
+}
+
+// reset the stats to start a new aggregation window.
+func (a *aggregator) reset() {
+	a.count = 0
+	a.sum = 0
+	a.min = math.MaxFloat64
+	a.max = -math.MaxFloat64
+}
+
+func (a *aggregator) add(v float64) {
+	if a.total > 0 {
+		if v < a.last {
+			// Counter reset, correct the value.
+			a.counter += v
+			a.resets++
+		} else {
+			// Add delta with last value to the counter.
+			a.counter += v - a.last
+		}
+	} else {
+		// First sample sets the counter.
+		a.counter = v
+	}
+	a.last = v
+
+	a.sum += v
+	a.count++
+	a.total++
+
+	if v < a.min {
+		a.min = v
+	}
+	if v > a.max {
+		a.max = v
+	}
+}
+
+// AggrType represents an aggregation type.
+type AggrType uint8
+
+// Valid aggregations.
+const (
+	AggrCount AggrType = iota
+	AggrSum
+	AggrMin
+	AggrMax
+	AggrCounter
+)
+
+func (t AggrType) String() string {
+	switch t {
+	case AggrCount:
+		return "count"
+	case AggrSum:
+		return "sum"
+	case AggrMin:
+		return "min"
+	case AggrMax:
+		return "max"
+	case AggrCounter:
+		return "counter"
+	}
+	return "<unknown>"
+}
+
+// aggrChunkBuilder builds chunks for multiple different aggregates.
+type aggrChunkBuilder struct {
+	mint, maxt int64
+	isCounter  bool
+	added      int
+
+	chunks [5]chunkenc.Chunk
+	apps   [5]chunkenc.Appender
+}
+
+func newAggrChunkBuilder(isCounter bool) *aggrChunkBuilder {
+	b := &aggrChunkBuilder{
+		mint:      math.MaxInt64,
+		maxt:      math.MinInt64,
+		isCounter: isCounter,
+	}
+	if !isCounter {
+		b.chunks[AggrSum] = chunkenc.NewXORChunk()
+		b.chunks[AggrMin] = chunkenc.NewXORChunk()
+		b.chunks[AggrMax] = chunkenc.NewXORChunk()
+	}
+	b.chunks[AggrCount] = chunkenc.NewXORChunk()
+	b.chunks[AggrCounter] = chunkenc.NewXORChunk()
+
+	for i, c := range b.chunks {
+		if c != nil {
+			b.apps[i], _ = c.Appender()
+		}
+	}
+
+	return b
+}
+
+func (b *aggrChunkBuilder) add(t int64, aggr *aggregator) {
+	if t < b.mint {
+		b.mint = t
+	}
+	if t > b.maxt {
+		b.maxt = t
+	}
+	if !b.isCounter {
+		b.apps[AggrSum].Append(t, aggr.sum)
+		b.apps[AggrMin].Append(t, aggr.min)
+		b.apps[AggrMax].Append(t, aggr.max)
+	}
+	b.apps[AggrCount].Append(t, float64(aggr.count))
+	b.apps[AggrCounter].Append(t, aggr.counter)
+
+	b.added++
+}
+
+func (b *aggrChunkBuilder) encode() *AggrChunk {
+	return EncodeAggrChunk(b.chunks)
+}
+
+// currentWindow returns the end timestamp of the window that t falls into.
+func currentWindow(t, w int64) int64 {
+	// The next timestamp is the next number after s.t that's aligned with window.
+	// We substract 1 because block ranges are [from, to) and the last sample would
+	// go out of bounds otherwise.
+	return t - (t % w) + w - 1
+}
+
+// downsampleRaw create a series of aggregation chunks for the given sample data.
+func downsampleRaw(lset labels.Labels, data []sample, window int64) *series {
 	if len(data) == 0 {
 		return nil
 	}
-	n := targetChunkSize(len(data))
-
-	countSeries := newAggrSeries(lset, "count", n)
-	sumSeries := newAggrSeries(lset, "sum", n)
-	minSeries := newAggrSeries(lset, "min", n)
-	maxSeries := newAggrSeries(lset, "max", n)
-	counterSeries := newAggrSeries(lset, "counter", 0)
-
-	res := make([]*series, 0, 5)
-
-	if !isCounter(lset) {
-		downsampleSum(sumSeries, data, window)
-		downsampleMin(minSeries, data, window)
-		downsampleMax(maxSeries, data, window)
-		res = append(res, sumSeries, minSeries, maxSeries)
-	}
-	downsampleCount(countSeries, data, window)
-	downsampleCounter(counterSeries, data, window, true)
-	res = append(res, countSeries, counterSeries)
-
-	for _, s := range res {
-		s.close()
-	}
-	return res
-}
-
-func downsampleAggr(lset labels.Labels, all []sample, chunked [][]sample, window int64) (*series, error) {
-	if len(all) == 0 {
-		return nil, nil
-	}
-	metric := lset.Get("__name__")
-	ser := newSeries(lset, targetChunkSize(len(all))+1)
-
-	if strings.HasSuffix(metric, "$sum") {
-		downsampleSum(ser, all, window)
-	} else if strings.HasSuffix(metric, "$count") {
-		// Downsampling a count aggregate is equivalent to downsampling a sum.
-		downsampleSum(ser, all, window)
-	} else if strings.HasSuffix(metric, "$min") {
-		downsampleMin(ser, all, window)
-	} else if strings.HasSuffix(metric, "$max") {
-		downsampleMax(ser, all, window)
-	} else if strings.HasSuffix(metric, "$counter") {
-		downsampleAggrCounter(ser, all, chunked, window)
-	} else {
-		return nil, errors.Errorf("unknown aggregate metric %q", metric)
-	}
-	ser.close()
-	return ser, nil
-}
-
-func aggrLset(lset labels.Labels, aggr string) labels.Labels {
-	res := make(labels.Labels, len(lset))
-	copy(res, lset)
-
-	for i, l := range res {
-		if l.Name == "__name__" {
-			res[i].Value = fmt.Sprintf("%s$%s", l.Value, aggr)
+	var (
+		mint, maxt = data[0].t, data[len(data)-1].t
+		ns         = int((maxt-mint)/window) + 1
+		nc, _      = targetChunkSize(ns)
+		chks       = make([]chunks.Meta, 0, nc)
+		batchSize  = (len(data) / nc) + 1
+	)
+	for len(data) > 0 {
+		j := batchSize
+		if j > len(data) {
+			j = len(data)
 		}
+		// The batch we took might end in the middle of a downsampling window. We have to additionally
+		// grab all following samples still within our current window.
+		curW := currentWindow(data[j-1].t, window)
+
+		for ; j < len(data) && data[j].t <= curW; j++ {
+		}
+
+		ab := newAggrChunkBuilder(isCounter(lset))
+		batch := data[:j]
+		data = data[j:]
+
+		lastT := downsampleBatch(batch, window, ab.add)
+
+		// Finalize the chunk's counter aggregate with the last true sample.
+		ab.apps[AggrCounter].Append(lastT, batch[len(batch)-1].v)
+
+		chks = append(chks, chunks.Meta{
+			MinTime: ab.mint,
+			MaxTime: ab.maxt,
+			Chunk:   ab.encode(),
+		})
 	}
-	return res
+	return &series{lset: lset, chunks: chks}
+}
+
+// downsampleBatch aggregates the data over the given window and calls add each time
+// the end of a window was reached.
+func downsampleBatch(data []sample, window int64, add func(int64, *aggregator)) int64 {
+	var (
+		aggr  aggregator
+		nextT = int64(-1)
+	)
+	// Fill up one aggregate chunk with up to m samples.
+	for _, s := range data {
+		if s.t > nextT {
+			if nextT != -1 {
+				add(nextT, &aggr)
+			}
+			aggr.reset()
+			nextT = currentWindow(s.t, window)
+		}
+		aggr.add(s.v)
+	}
+	// Add the last sample.
+	add(nextT, &aggr)
+
+	return nextT
+}
+
+// downsampleAggr downsamples a sequence of aggregation chunks to the given resolution window.
+func downsampleAggr(chks []*AggrChunk, buf *[]sample, mint, maxt, window int64) ([]chunks.Meta, error) {
+	// We downsample aggregates only along chunk boundaries. This is required for counters
+	// to be downsampled correctly since a chunks' last counter value is the true last value
+	// of the original series. We need to preserve it even across multiple aggregation iterations.
+	var (
+		ns        = int((maxt-mint)/window) + 1
+		nc, _     = targetChunkSize(ns)
+		res       = make([]chunks.Meta, 0, nc)
+		batchSize = len(chks) / nc
+	)
+
+	for len(chks) > 0 {
+		j := batchSize
+		if j > len(chks) {
+			j = len(chks)
+		}
+		part := chks[:j]
+		chks = chks[j:]
+
+		mint, maxt, c, err := downsampleAggrBatch(part, buf, window)
+		if err != nil {
+			return nil, err
+		}
+
+		res = append(res, chunks.Meta{
+			MinTime: mint,
+			MaxTime: maxt,
+			Chunk:   c,
+		})
+	}
+	return res, nil
+}
+
+func expandChunkIterator(it chunkenc.Iterator, buf *[]sample) error {
+	for it.Next() {
+		t, v := it.At()
+		*buf = append(*buf, sample{t, v})
+	}
+	return it.Err()
+}
+
+func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, window int64) (mint, maxt int64, c *AggrChunk, err error) {
+	ab := &aggrChunkBuilder{}
+
+	// do does a generic aggregation for count, sum, min, and max aggregates.
+	// Counters need special treatment.
+	do := func(at AggrType, f func(a *aggregator) float64) error {
+		(*buf) = (*buf)[:0]
+		// Expand all samples for the aggregate type.
+		for _, chk := range chks {
+			c, err := chk.Get(at)
+			if err == ErrAggrNotExist {
+				continue
+			} else if err != nil {
+				return err
+			}
+			if err := expandChunkIterator(c.Iterator(), buf); err != nil {
+				return err
+			}
+		}
+		if len(*buf) == 0 {
+			return nil
+		}
+		ab.chunks[at] = chunkenc.NewXORChunk()
+		ab.apps[at], _ = ab.chunks[at].Appender()
+
+		downsampleBatch(*buf, window, func(t int64, a *aggregator) {
+			ab.apps[at].Append(t, f(a))
+		})
+		return nil
+	}
+	if err := do(AggrCount, func(a *aggregator) float64 {
+		return a.sum
+	}); err != nil {
+		return 0, 0, nil, err
+	}
+	if err = do(AggrSum, func(a *aggregator) float64 {
+		return a.sum
+	}); err != nil {
+		return 0, 0, nil, err
+	}
+	if err := do(AggrMin, func(a *aggregator) float64 {
+		return a.min
+	}); err != nil {
+		return 0, 0, nil, err
+	}
+	if err := do(AggrMax, func(a *aggregator) float64 {
+		return a.max
+	}); err != nil {
+		return 0, 0, nil, err
+	}
+
+	// Handle counters by reading them properly.
+	acs := make([]chunkenc.Iterator, 0, len(chks))
+	for _, chk := range chks {
+		c, err := chk.Get(AggrCounter)
+		if err == ErrAggrNotExist {
+			continue
+		} else if err != nil {
+			return 0, 0, nil, err
+		}
+		acs = append(acs, c.Iterator())
+	}
+	*buf = (*buf)[:0]
+	it := newCounterChunkSeriesIterator(acs...)
+
+	if err := expandChunkIterator(it, buf); err != nil {
+		return 0, 0, nil, err
+	}
+	if len(*buf) == 0 {
+		return ab.mint, ab.maxt, ab.encode(), nil
+	}
+	ab.chunks[AggrCounter] = chunkenc.NewXORChunk()
+	ab.apps[AggrCounter], _ = ab.chunks[AggrCounter].Appender()
+
+	lastT := downsampleBatch(*buf, window, func(t int64, a *aggregator) {
+		ab.apps[AggrCounter].Append(t, a.counter)
+	})
+	ab.apps[AggrCounter].Append(lastT, it.lastV)
+
+	return ab.mint, ab.maxt, ab.encode(), nil
 }
 
 // isCounter guesses whether a series is a counter based on its label set.
@@ -290,11 +550,10 @@ func isCounter(lset labels.Labels) bool {
 // targetChunkSize computes an intended sample count per chunk given a fixed length
 // of samples in the series.
 // It aims to split the series into chunks of length 120 or higher.
-func targetChunkSize(l int) int {
-	c := 1
-	for ; l/c > 250; c++ {
+func targetChunkSize(l int) (c, s int) {
+	for c = 1; l/c > 240; c++ {
 	}
-	return l / c
+	return c, (l / c) + 1
 }
 
 type sample struct {
@@ -302,221 +561,113 @@ type sample struct {
 	v float64
 }
 
-// series is a mutable series that creates XOR chunk with a configurable target amount
-// of samples per chunk.
 type series struct {
 	lset   labels.Labels
 	chunks []chunks.Meta
-
-	l, n       int
-	cur        chunkenc.Chunk
-	app        chunkenc.Appender
-	cmin, cmax int64
 }
 
-// newSeries returns a new series and automatically cuts a new chunk after n samples if
-// n is greater than 0.
-func newSeries(lset labels.Labels, n int) *series {
-	return &series{lset: lset, n: n}
+// AggrChunk is a chunk that is composed of a set of aggregates for the same underlying data.
+// Not all aggregates must be present.
+type AggrChunk struct {
+	b []byte
 }
 
-// newSeries returns a new series and automatically cuts a new chunk after n samples if
-// n is greater than 0.
-// It extends the metric name of the label set by the aggregation modifier.
-func newAggrSeries(lset labels.Labels, aggr string, n int) *series {
-	return &series{lset: aggrLset(lset, aggr), n: n}
-}
+// EncodeAggrChunk encodes a new aggregate chunk from the array of chunks for each aggregate.
+// Each array entry corresponds to the respective AggrType number.
+func EncodeAggrChunk(chks [5]chunkenc.Chunk) *AggrChunk {
+	var mask byte
+	var all []chunkenc.Chunk
 
-func (s *series) add(t int64, v float64) {
-	if s.n > 0 && s.l >= s.n {
-		s.cut()
-	}
-	if s.cur == nil {
-		s.cur = chunkenc.NewXORChunk()
-		s.cmin = t
-		s.app, _ = s.cur.Appender()
-	}
-	s.app.Append(t, v)
-	s.cmax = t
-}
-
-// cut finishes the currently appended to chunk.
-func (s *series) cut() {
-	s.chunks = append(s.chunks, chunks.Meta{
-		MinTime: s.cmin,
-		MaxTime: s.cmax,
-		Chunk:   s.cur,
-	})
-	s.cur = nil
-}
-
-// close finalizes the series.
-func (s *series) close() {
-	if s.cur == nil {
-		return
-	}
-	s.chunks = append(s.chunks, chunks.Meta{
-		MinTime: s.cmin,
-		MaxTime: s.cmax,
-		Chunk:   s.cur,
-	})
-}
-
-// downsampleCounter downsamples the data points into the series with the given window.
-// If split is set to false, it will write all result data into a single chunk in the series.
-// It writes a signal sample to the end of each chunk which preservers the last true sample of
-// the input data.
-// If it is called on already downsampled data, the input data must end at such a signaling
-// sample to recursively guarantee the semantics.
-func downsampleCounter(ser *series, data []sample, window int64, split bool) {
-	var (
-		n       = targetChunkSize(len(data))
-		nextT   = int64(-1)
-		lastT   int64
-		lastV   float64
-		counter float64
-	)
-	for i, s := range data {
-		if s.t > nextT {
-			if nextT != -1 {
-				ser.add(nextT, counter)
-
-				if split && i%n == 0 {
-					// Add signaling sample that indicates what the true last value was
-					// before cutting a new chunk.
-					// For already downsampled series lastV is set to the last value that
-					// series itself added as a signaling sample.
-					ser.add(nextT, lastV)
-					ser.cut()
-				}
-			}
-			nextT = s.t - (s.t % window) + window - 1
-		}
-		if i == 0 {
-			// First sample sets the counter.
-			counter = s.v
-		} else if s.t > lastT {
-			// We ignored samples with no increasing timestamps. This handles signaling samples
-			// in already downsampled counter series.
-			// At breaking points (e.g. chunks) they add a sample with non-increased timestamp
-			// and the true last value, like the one we add ourselves in this function.
-			if s.v < lastV {
-				// Counter reset, correct the value.
-				counter += s.v
-			} else {
-				// Add delta with last value to the counter.
-				counter += s.v - lastV
-			}
-		}
-		lastV = s.v
-		lastT = s.t
-	}
-	ser.add(nextT, counter)
-	// Add signaling sample that indicates what the true last value was.
-	ser.add(nextT, lastV)
-	ser.cut()
-}
-
-// downsampleAggrCounter downsamples a counter series that already is an aggregated counter.
-func downsampleAggrCounter(ser *series, data []sample, chunked [][]sample, window int64) {
-	// For downsampling an already downsampled counter series, we have to ensure that produced
-	// chunks align with boundaries of input chunks.
-	// Otherwise the signal sample indiciating the last true sample value is not picked correctly.
-	n := targetChunkSize(len(data))
-	k := len(chunked)/(len(data)/n) + 1 // batch size
-
-	for len(chunked) > 0 {
-		j := k
-		if j > len(chunked) {
-			j = len(chunked)
-		}
-		length := 0
-		for _, p := range chunked[:j] {
-			length += len(p)
-		}
-		part := data[:length]
-		data = data[length:]
-		chunked = chunked[j:]
-
-		// Downsample the counter series spanning the chunk batch into a single chunk.
-		downsampleCounter(ser, part, window, false)
-	}
-}
-
-// downsampleCount creates a sample count aggregate over a raw series.
-func downsampleCount(ser *series, data []sample, window int64) {
-	nextT := int64(-1)
-	var count int
-
-	for _, s := range data {
-		if s.t > nextT {
-			if nextT != -1 {
-				ser.add(nextT, float64(count))
-			}
-			count = 0
-			nextT = s.t - (s.t % window) + window - 1
-		}
-		count++
-	}
-	ser.add(nextT, float64(count))
-}
-
-// downsampleSum creates a downsampled sum aggregate over a series.
-func downsampleSum(ser *series, data []sample, window int64) {
-	nextT := int64(-1)
-	var sum float64
-
-	for _, s := range data {
-		if s.t > nextT {
-			if nextT != -1 {
-				ser.add(nextT, sum)
-			}
-			sum = 0
-			nextT = s.t - (s.t % window) + window - 1
-		}
-		sum += s.v
-	}
-	ser.add(nextT, sum)
-}
-
-// downsampleMin creates a downsampled min aggregate over a series.
-func downsampleMin(ser *series, data []sample, window int64) {
-	nextT := int64(-1)
-	min := math.MaxFloat64
-
-	for _, s := range data {
-		if s.t > nextT {
-			if nextT != -1 {
-				ser.add(nextT, min)
-			}
-			min = math.MaxFloat64
-			nextT = s.t - (s.t % window) + window - 1
-		}
-		if s.v < min {
-			min = s.v
+	for i, c := range chks {
+		if c != nil {
+			mask |= 1 << (7 - uint(i))
+			all = append(all, c)
 		}
 	}
-	ser.add(nextT, min)
+
+	var b []byte
+	b = append(b, mask)
+	buf := [8]byte{}
+
+	for _, c := range all {
+		l := len(c.Bytes())
+		n := binary.PutUvarint(buf[:], uint64(l))
+		b = append(b, buf[:n]...)
+		b = append(b, byte(c.Encoding()))
+		b = append(b, c.Bytes()...)
+	}
+	return &AggrChunk{b: b}
 }
 
-// downsampleMin creates a downsampled max aggregate over a series.
-func downsampleMax(ser *series, data []sample, window int64) {
-	nextT := int64(-1)
-	max := -math.MaxFloat64
+func (c *AggrChunk) Bytes() []byte {
+	return c.b
+}
 
-	for _, s := range data {
-		if s.t > nextT {
-			if nextT != -1 {
-				ser.add(nextT, max)
-			}
-			max = -math.MaxFloat64
-			nextT = s.t - (s.t % window) + window - 1
-		}
-		if s.v > max {
-			max = s.v
-		}
+func (c *AggrChunk) Appender() (chunkenc.Appender, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (c *AggrChunk) Iterator() chunkenc.Iterator {
+	return chunkenc.NewNopIterator()
+}
+
+func (c *AggrChunk) NumSamples() int {
+	x, err := c.nth(0)
+	if err != nil {
+		return 0
 	}
-	ser.add(nextT, max)
+	return x.NumSamples()
+}
+
+// ErrAggrNotExist is returned if a requested aggregation is not present in an AggrChunk.
+var ErrAggrNotExist = errors.New("aggregate does not exist")
+
+// ChunkEncAggr is the top level encoding byte for the AggrChunk.
+// It picks the highest number possible to prevent future collisions with upstream encodings.
+const ChunkEncAggr = chunkenc.Encoding(0xff)
+
+func (c *AggrChunk) Encoding() chunkenc.Encoding {
+	return ChunkEncAggr
+}
+
+// nth returns the nth chunk present in the aggregated chunk.
+func (c *AggrChunk) nth(n uint8) (chunkenc.Chunk, error) {
+	b := c.b[1:]
+	var x []byte
+
+	for i := uint8(0); i <= n; i++ {
+		l, n := binary.Uvarint(b)
+		if n < 1 || len(b[n:]) < int(l)+1 {
+			return nil, errors.New("invalid size")
+		}
+		x = b[n : n+int(l)+1]
+		b = b[n+int(l)+1:]
+	}
+	return chunkenc.FromData(chunkenc.Encoding(x[0]), x[1:])
+}
+
+// position returns at which position the chunk for the type is located.
+func (c *AggrChunk) position(t AggrType) (ok bool, p uint8) {
+	mask := uint8(c.b[0])
+
+	if mask&(1<<(7-t)) == 0 {
+		return false, 0
+	}
+	// In the bit mask we count how many chunk types have their bit set before
+	// the type's own position.
+	for i := int(t) - 1; i >= 0; i-- {
+		p += (mask << uint(i)) >> 7
+	}
+	return true, p
+}
+
+// Get returns the sub-chunk for the given aggregate type if it exists.
+func (c *AggrChunk) Get(t AggrType) (chunkenc.Chunk, error) {
+	ok, p := c.position(t)
+	if !ok {
+		return nil, ErrAggrNotExist
+	}
+	return c.nth(p)
 }
 
 // countChunkSeriesIterator iterates over an ordered sequence of chunks and treats decreasing
@@ -531,6 +682,10 @@ type countChunkSeriesIterator struct {
 	lastT  int64   // timestamp of the last sample
 	lastV  float64 // value of the last sample
 	totalV float64 // total counter state since beginning of series
+}
+
+func newCounterChunkSeriesIterator(its ...chunkenc.Iterator) *countChunkSeriesIterator {
+	return &countChunkSeriesIterator{chks: its}
 }
 
 func (it *countChunkSeriesIterator) Next() bool {
@@ -563,7 +718,6 @@ func (it *countChunkSeriesIterator) Next() bool {
 	// We hit the last sample that indicates what the true last value was. For the
 	// next chunk we use it to determine whether there was a counter reset between them.
 	it.lastT, it.lastV = t, v
-	it.i++
 
 	return it.Next()
 }
@@ -589,4 +743,14 @@ func (it *countChunkSeriesIterator) Err() error {
 		return nil
 	}
 	return it.chks[it.i].Err()
+}
+
+type aggrPool struct{}
+
+func (p aggrPool) Get(e chunkenc.Encoding, b []byte) (chunkenc.Chunk, error) {
+	return &AggrChunk{b: b}, nil
+}
+
+func (p aggrPool) Put(c chunkenc.Chunk) error {
+	return nil
 }
