@@ -36,7 +36,7 @@ message SeriesRequest {
   int64 max_time                 = 2;
   repeated LabelMatcher matchers = 3 [(gogoproto.nullable) = false];
 
-  int64 maxAggregateWindow = 4;
+  int64 min_resolution     = 4;
   repeated Aggr aggregates = 5;
 }
 

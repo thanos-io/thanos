@@ -544,7 +544,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	for _, b := range s.blocks {
 		// NOTE(fabxc): we skip all downsampled blocks for now until support for the rest of the
 		// chain is implemented.
-		if b.meta.Thanos.Downsample.Window > 0 {
+		if b.meta.Thanos.Downsample.Resolution > 0 {
 			continue
 		}
 		blockMatchers, ok := b.blockMatchers(req.MinTime, req.MaxTime, matchers...)
