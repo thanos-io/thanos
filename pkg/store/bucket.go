@@ -19,6 +19,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/pool"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
@@ -392,6 +393,7 @@ type bucketSeriesSet struct {
 	set  []seriesEntry
 	i    int
 	chks []storepb.AggrChunk
+	err  error
 }
 
 func newBucketSeriesSet(set []seriesEntry) *bucketSeriesSet {
@@ -411,11 +413,50 @@ func (s *bucketSeriesSet) Next() bool {
 	// TODO(bplotka): If spotted troubles with gRPC overhead, split chunks to max 4MB chunks if needed. Currently
 	// we have huge limit for message size ~2GB.
 	for _, c := range s.set[s.i].chks {
-		s.chks = append(s.chks, storepb.AggrChunk{
-			MinTime: c.MinTime,
-			MaxTime: c.MaxTime,
-			Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR, Data: c.Chunk.Bytes()},
-		})
+		chk := storepb.AggrChunk{MinTime: c.MinTime, MaxTime: c.MaxTime}
+
+		switch c.Chunk.Encoding() {
+		case chunkenc.EncXOR: // A regular chunk raw data is stored with.
+			chk.Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: c.Chunk.Bytes()}
+
+		case downsample.ChunkEncAggr: // Downsampled aggregatechunk.
+			ac := downsample.AggrChunk(c.Chunk.Bytes())
+
+			for _, at := range [...]downsample.AggrType{
+				downsample.AggrCount,
+				downsample.AggrSum,
+				downsample.AggrMin,
+				downsample.AggrMax,
+				downsample.AggrCounter,
+			} {
+				sub, err := ac.Get(at)
+				if err == downsample.ErrAggrNotExist {
+					continue
+				} else if err != nil {
+					s.err = err
+					return false
+				}
+				x := &storepb.Chunk{Type: storepb.Chunk_XOR, Data: sub.Bytes()}
+
+				switch at {
+				case downsample.AggrCount:
+					chk.Count = append(chk.Count, x)
+				case downsample.AggrSum:
+					chk.Sum = append(chk.Sum, x)
+				case downsample.AggrMin:
+					chk.Min = append(chk.Min, x)
+				case downsample.AggrMax:
+					chk.Max = append(chk.Max, x)
+				case downsample.AggrCounter:
+					chk.Counter = append(chk.Counter, x)
+				}
+			}
+		default:
+			s.err = errors.Errorf("unknown chunk encoding %d", c.Chunk.Encoding())
+			return false
+		}
+
+		s.chks = append(s.chks, chk)
 	}
 	return true
 }
@@ -425,7 +466,7 @@ func (s *bucketSeriesSet) At() ([]storepb.Label, []storepb.AggrChunk) {
 }
 
 func (s *bucketSeriesSet) Err() error {
-	return nil
+	return s.err
 }
 
 func (s *BucketStore) blockSeries(
@@ -623,7 +664,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		var series storepb.Series
 
 		// Merge series set into an union of all block sets. This exposes all blocks are single seriesSet.
-		// Returned set is can be out of order in terms of series time ranges. It is fixed later on, inside querier.
+		// Chunks of returned series might be out of order w.r.t to their time range.
+		// This must be accounted for later by clients.
 		set := storepb.MergeSeriesSets(res...)
 		for set.Next() {
 			series.Labels, series.Chunks = set.At()
@@ -751,7 +793,7 @@ type bucketBlockSet struct {
 func newBucketBlockSet(lset labels.Labels) *bucketBlockSet {
 	return &bucketBlockSet{
 		labels:      lset,
-		resolutions: []int64{60 * 60 * 1000, 5 * 60 * 1000, 0},
+		resolutions: []int64{downsample.ResLevel0, downsample.ResLevel1, downsample.ResLevel2},
 		blocks:      make([][]*bucketBlock, 3),
 	}
 }
@@ -776,7 +818,6 @@ func (s *bucketBlockSet) add(b *bucketBlock) error {
 		}
 		return false
 	})
-
 	return nil
 }
 

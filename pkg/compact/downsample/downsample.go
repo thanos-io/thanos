@@ -21,6 +21,13 @@ import (
 	"github.com/prometheus/tsdb/labels"
 )
 
+// Standard downsampling resolution levels in Thanos.
+const (
+	ResLevel0 = 0
+	ResLevel1 = 5 * 60 * 1000
+	ResLevel2 = 60 * 60 * 1000
+)
+
 // Downsample downsamples the given block. It writes a new block into dir and returns its ID.
 func Downsample(
 	ctx context.Context,
@@ -340,7 +347,7 @@ func (b *aggrChunkBuilder) add(t int64, aggr *aggregator) {
 	b.added++
 }
 
-func (b *aggrChunkBuilder) encode() *AggrChunk {
+func (b *aggrChunkBuilder) encode() AggrChunk {
 	return EncodeAggrChunk(b.chunks)
 }
 
@@ -460,7 +467,7 @@ func expandChunkIterator(it chunkenc.Iterator, buf *[]sample) error {
 	return it.Err()
 }
 
-func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (mint, maxt int64, c *AggrChunk, err error) {
+func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (mint, maxt int64, c AggrChunk, err error) {
 	ab := &aggrChunkBuilder{}
 
 	// do does a generic aggregation for count, sum, min, and max aggregates.
@@ -571,13 +578,11 @@ type series struct {
 
 // AggrChunk is a chunk that is composed of a set of aggregates for the same underlying data.
 // Not all aggregates must be present.
-type AggrChunk struct {
-	b []byte
-}
+type AggrChunk []byte
 
 // EncodeAggrChunk encodes a new aggregate chunk from the array of chunks for each aggregate.
 // Each array entry corresponds to the respective AggrType number.
-func EncodeAggrChunk(chks [5]chunkenc.Chunk) *AggrChunk {
+func EncodeAggrChunk(chks [5]chunkenc.Chunk) AggrChunk {
 	var mask byte
 	var all []chunkenc.Chunk
 
@@ -599,22 +604,22 @@ func EncodeAggrChunk(chks [5]chunkenc.Chunk) *AggrChunk {
 		b = append(b, byte(c.Encoding()))
 		b = append(b, c.Bytes()...)
 	}
-	return &AggrChunk{b: b}
+	return AggrChunk(b)
 }
 
-func (c *AggrChunk) Bytes() []byte {
-	return c.b
+func (c AggrChunk) Bytes() []byte {
+	return []byte(c)
 }
 
-func (c *AggrChunk) Appender() (chunkenc.Appender, error) {
+func (c AggrChunk) Appender() (chunkenc.Appender, error) {
 	return nil, errors.New("not implemented")
 }
 
-func (c *AggrChunk) Iterator() chunkenc.Iterator {
+func (c AggrChunk) Iterator() chunkenc.Iterator {
 	return chunkenc.NewNopIterator()
 }
 
-func (c *AggrChunk) NumSamples() int {
+func (c AggrChunk) NumSamples() int {
 	x, err := c.nth(0)
 	if err != nil {
 		return 0
@@ -629,13 +634,13 @@ var ErrAggrNotExist = errors.New("aggregate does not exist")
 // It picks the highest number possible to prevent future collisions with upstream encodings.
 const ChunkEncAggr = chunkenc.Encoding(0xff)
 
-func (c *AggrChunk) Encoding() chunkenc.Encoding {
+func (c AggrChunk) Encoding() chunkenc.Encoding {
 	return ChunkEncAggr
 }
 
 // nth returns the nth chunk present in the aggregated chunk.
-func (c *AggrChunk) nth(n uint8) (chunkenc.Chunk, error) {
-	b := c.b[1:]
+func (c AggrChunk) nth(n uint8) (chunkenc.Chunk, error) {
+	b := c[1:]
 	var x []byte
 
 	for i := uint8(0); i <= n; i++ {
@@ -650,8 +655,8 @@ func (c *AggrChunk) nth(n uint8) (chunkenc.Chunk, error) {
 }
 
 // position returns at which position the chunk for the type is located.
-func (c *AggrChunk) position(t AggrType) (ok bool, p uint8) {
-	mask := uint8(c.b[0])
+func (c AggrChunk) position(t AggrType) (ok bool, p uint8) {
+	mask := uint8(c[0])
 
 	if mask&(1<<(7-t)) == 0 {
 		return false, 0
@@ -665,7 +670,7 @@ func (c *AggrChunk) position(t AggrType) (ok bool, p uint8) {
 }
 
 // Get returns the sub-chunk for the given aggregate type if it exists.
-func (c *AggrChunk) Get(t AggrType) (chunkenc.Chunk, error) {
+func (c AggrChunk) Get(t AggrType) (chunkenc.Chunk, error) {
 	ok, p := c.position(t)
 	if !ok {
 		return nil, ErrAggrNotExist
@@ -751,7 +756,7 @@ func (it *CounterSeriesIterator) Err() error {
 type AggrChunkPool struct{}
 
 func (p AggrChunkPool) Get(e chunkenc.Encoding, b []byte) (chunkenc.Chunk, error) {
-	return &AggrChunk{b: b}, nil
+	return AggrChunk(b), nil
 }
 
 func (p AggrChunkPool) Put(c chunkenc.Chunk) error {
