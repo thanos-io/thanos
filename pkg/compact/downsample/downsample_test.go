@@ -109,7 +109,7 @@ func TestDownsampleAggr(t *testing.T) {
 		},
 	}
 	var meta block.Meta
-	meta.Thanos.Downsample.Window = 10
+	meta.Thanos.Downsample.Resolution = 10
 
 	testDownsample(t, input, &meta, 500)
 }
@@ -137,9 +137,9 @@ type downsampleTestSet struct {
 	output map[AggrType][]sample
 }
 
-// testDownsample inserts the input into a block and invokes the downsampler with the given window.
+// testDownsample inserts the input into a block and invokes the downsampler with the given resolution.
 // The chunk ranges within the input block are aligned at 500 time units.
-func testDownsample(t *testing.T, data []*downsampleTestSet, meta *block.Meta, window int64) {
+func testDownsample(t *testing.T, data []*downsampleTestSet, meta *block.Meta, resolution int64) {
 	t.Helper()
 
 	dir, err := ioutil.TempDir("", "downsample-raw")
@@ -180,7 +180,7 @@ func testDownsample(t *testing.T, data []*downsampleTestSet, meta *block.Meta, w
 		mb.addSeries(ser)
 	}
 
-	id, err := Downsample(context.Background(), meta, mb, dir, window)
+	id, err := Downsample(context.Background(), meta, mb, dir, resolution)
 	testutil.Ok(t, err)
 
 	exp := map[uint64]map[AggrType][]sample{}

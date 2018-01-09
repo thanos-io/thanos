@@ -27,7 +27,7 @@ type Meta struct {
 type ThanosMeta struct {
 	Labels     map[string]string `json:"labels"`
 	Downsample struct {
-		Window int64 `json:"window"`
+		Resolution int64 `json:"resolution"`
 	} `json:"downsample"`
 }
 
