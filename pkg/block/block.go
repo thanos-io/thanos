@@ -25,7 +25,10 @@ type Meta struct {
 
 // ThanosMeta holds block meta information specific to Thanos.
 type ThanosMeta struct {
-	Labels map[string]string `json:"labels"`
+	Labels     map[string]string `json:"labels"`
+	Downsample struct {
+		Resolution int64 `json:"resolution"`
+	} `json:"downsample"`
 }
 
 // MetaFilename is the known JSON filename for meta information.
