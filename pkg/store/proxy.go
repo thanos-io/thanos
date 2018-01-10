@@ -102,11 +102,11 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			continue
 		}
 		sc, err := store.Client.Series(srv.Context(), &storepb.SeriesRequest{
-			MinTime:            r.MinTime,
-			MaxTime:            r.MaxTime,
-			Matchers:           newMatchers,
-			Aggregates:         r.Aggregates,
-			MaxAggregateWindow: r.MaxAggregateWindow,
+			MinTime:             r.MinTime,
+			MaxTime:             r.MaxTime,
+			Matchers:            newMatchers,
+			Aggregates:          r.Aggregates,
+			MaxResolutionWindow: r.MaxResolutionWindow,
 		})
 		if err != nil {
 			respCh <- storepb.NewWarnSeriesResponse(errors.Wrap(err, "fetch series"))

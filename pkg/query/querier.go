@@ -169,11 +169,11 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 
 	resp := &seriesServer{ctx: ctx}
 	if err := q.proxy.Series(&storepb.SeriesRequest{
-		MinTime:            q.mint,
-		MaxTime:            q.maxt,
-		Matchers:           sms,
-		MaxAggregateWindow: 0, // we always query raw data for now.
-		Aggregates:         []storepb.Aggr{storepb.Aggr_RAW},
+		MinTime:             q.mint,
+		MaxTime:             q.maxt,
+		Matchers:            sms,
+		MaxResolutionWindow: 0, // we always query raw data for now.
+		Aggregates:          []storepb.Aggr{storepb.Aggr_RAW},
 	}, resp); err != nil {
 		return nil, errors.Wrap(err, "proxy Series()")
 	}
