@@ -23,9 +23,9 @@ import (
 
 // Standard downsampling resolution levels in Thanos.
 const (
-	ResLevel0 = 0
-	ResLevel1 = 5 * 60 * 1000
-	ResLevel2 = 60 * 60 * 1000
+	ResLevel0 = int64(0)
+	ResLevel1 = int64(5 * 60 * 1000)
+	ResLevel2 = int64(60 * 60 * 1000)
 )
 
 // Downsample downsamples the given block. It writes a new block into dir and returns its ID.
@@ -751,6 +751,73 @@ func (it *CounterSeriesIterator) Err() error {
 		return nil
 	}
 	return it.chks[it.i].Err()
+}
+
+// AverageChunkIterator emits an artifical series of average samples based in aggregate
+// chunks with sum and count aggregates.
+type AverageChunkIterator struct {
+	// chks  []AggrChunk
+	// i     int
+	cntIt chunkenc.Iterator
+	sumIt chunkenc.Iterator
+	t     int64
+	v     float64
+	err   error
+}
+
+func NewAverageChunkIterator(cnt, sum chunkenc.Iterator) *AverageChunkIterator {
+	return &AverageChunkIterator{cntIt: cnt, sumIt: sum}
+}
+
+func (it *AverageChunkIterator) Next() bool {
+	// if it.i >= len(it.chks) {
+	// 	return false
+	// }
+	cok, sok := it.cntIt.Next(), it.sumIt.Next()
+	if cok != sok {
+		it.err = errors.New("sum and count iterator not aligned")
+		return false
+	}
+	if !cok {
+		// if it.err = it.nextChunk(); it.err != nil {
+		// 	return false
+		// }
+		// return it.Next()
+		return false
+	}
+
+	cntT, cntV := it.cntIt.At()
+	sumT, sumV := it.sumIt.At()
+	if cntT != sumT {
+		it.err = errors.New("sum and count timestamps not aligned")
+	}
+	it.t, it.v = cntT, sumV/cntV
+	return true
+}
+
+// func (it *AverageSeriesIterator) nextChunk() error {
+// 	it.i++
+// 	if it.i >= len(it.chks) {
+// 		return nil
+// 	}
+// 	cc, err := it.chks[it.i].Get(AggrCount)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	sc, err := it.chks[it.i].Get(AggrSum)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	it.cntIt = cc.Iterator()
+// 	it.sumIt = sc.Iterator()
+// }
+
+func (it *AverageChunkIterator) At() (int64, float64) {
+	return it.t, it.v
+}
+
+func (it *AverageChunkIterator) Err() error {
+	return it.err
 }
 
 type AggrChunkPool struct{}

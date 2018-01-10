@@ -254,10 +254,10 @@
   revision = "a6e9df898b1336106c743392c48ee0b71f5c4efa"
 
 [[projects]]
-  branch = "fabxc"
+  branch = "queryparams"
   name = "github.com/prometheus/prometheus"
   packages = ["pkg/labels","pkg/rulefmt","pkg/textparse","pkg/timestamp","pkg/value","promql","rules","storage","storage/tsdb","template","util/stats","util/strutil","util/testutil"]
-  revision = "6171d00fa712c2f8368e601fa20c131fe37c8e16"
+  revision = "7c8fece5a44ceb81a317086a0edba1850a23980f"
 
 [[projects]]
   branch = "master"
@@ -352,6 +352,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "79377894d44bee626f58fd0358d903633d6686033749705ce27d009fb6c3e4c9"
+  inputs-digest = "6628624316d3c7b9a5df091c43a4f5ac923da3aed09fa5a3bb1f2bf01f94d60b"
   solver-name = "gps-cdcl"
   solver-version = 1

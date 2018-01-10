@@ -387,13 +387,14 @@ func (s *BucketStore) Info(context.Context, *storepb.InfoRequest) (*storepb.Info
 
 type seriesEntry struct {
 	lset []storepb.Label
-	chks []chunks.Meta
+	refs []uint64
+	chks []storepb.AggrChunk
 }
 type bucketSeriesSet struct {
-	set  []seriesEntry
-	i    int
-	chks []storepb.AggrChunk
-	err  error
+	set []seriesEntry
+	i   int
+	// chks []storepb.AggrChunk
+	err error
 }
 
 func newBucketSeriesSet(set []seriesEntry) *bucketSeriesSet {
@@ -408,61 +409,62 @@ func (s *bucketSeriesSet) Next() bool {
 		return false
 	}
 	s.i++
-	s.chks = make([]storepb.AggrChunk, 0, len(s.set[s.i].chks))
-
-	// TODO(bplotka): If spotted troubles with gRPC overhead, split chunks to max 4MB chunks if needed. Currently
-	// we have huge limit for message size ~2GB.
-	for _, c := range s.set[s.i].chks {
-		chk := storepb.AggrChunk{MinTime: c.MinTime, MaxTime: c.MaxTime}
-
-		switch c.Chunk.Encoding() {
-		case chunkenc.EncXOR: // A regular chunk raw data is stored with.
-			chk.Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: c.Chunk.Bytes()}
-
-		case downsample.ChunkEncAggr: // Downsampled aggregatechunk.
-			ac := downsample.AggrChunk(c.Chunk.Bytes())
-
-			for _, at := range [...]downsample.AggrType{
-				downsample.AggrCount,
-				downsample.AggrSum,
-				downsample.AggrMin,
-				downsample.AggrMax,
-				downsample.AggrCounter,
-			} {
-				sub, err := ac.Get(at)
-				if err == downsample.ErrAggrNotExist {
-					continue
-				} else if err != nil {
-					s.err = err
-					return false
-				}
-				x := &storepb.Chunk{Type: storepb.Chunk_XOR, Data: sub.Bytes()}
-
-				switch at {
-				case downsample.AggrCount:
-					chk.Count = append(chk.Count, x)
-				case downsample.AggrSum:
-					chk.Sum = append(chk.Sum, x)
-				case downsample.AggrMin:
-					chk.Min = append(chk.Min, x)
-				case downsample.AggrMax:
-					chk.Max = append(chk.Max, x)
-				case downsample.AggrCounter:
-					chk.Counter = append(chk.Counter, x)
-				}
-			}
-		default:
-			s.err = errors.Errorf("unknown chunk encoding %d", c.Chunk.Encoding())
-			return false
-		}
-
-		s.chks = append(s.chks, chk)
-	}
 	return true
+	// s.chks = make([]storepb.AggrChunk, 0, len(s.set[s.i].chks))
+
+	// // TODO(bplotka): If spotted troubles with gRPC overhead, split chunks to max 4MB chunks if needed. Currently
+	// // we have huge limit for message size ~2GB.
+	// for _, c := range s.set[s.i].chks {
+	// 	chk := storepb.AggrChunk{MinTime: c.MinTime, MaxTime: c.MaxTime}
+
+	// 	switch c.Chunk.Encoding() {
+	// 	case chunkenc.EncXOR: // A regular chunk raw data is stored with.
+	// 		chk.Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: c.Chunk.Bytes()}
+
+	// 	case downsample.ChunkEncAggr: // Downsampled aggregatechunk.
+	// 		ac := downsample.AggrChunk(c.Chunk.Bytes())
+
+	// 		for _, at := range [...]downsample.AggrType{
+	// 			downsample.AggrCount,
+	// 			downsample.AggrSum,
+	// 			downsample.AggrMin,
+	// 			downsample.AggrMax,
+	// 			downsample.AggrCounter,
+	// 		} {
+	// 			sub, err := ac.Get(at)
+	// 			if err == downsample.ErrAggrNotExist {
+	// 				continue
+	// 			} else if err != nil {
+	// 				s.err = err
+	// 				return false
+	// 			}
+	// 			x := &storepb.Chunk{Type: storepb.Chunk_XOR, Data: sub.Bytes()}
+
+	// 			switch at {
+	// 			case downsample.AggrCount:
+	// 				chk.Count = x
+	// 			case downsample.AggrSum:
+	// 				chk.Sum = x
+	// 			case downsample.AggrMin:
+	// 				chk.Min = x
+	// 			case downsample.AggrMax:
+	// 				chk.Max = x
+	// 			case downsample.AggrCounter:
+	// 				chk.Counter = x
+	// 			}
+	// 		}
+	// 	default:
+	// 		s.err = errors.Errorf("unknown chunk encoding %d", c.Chunk.Encoding())
+	// 		return false
+	// 	}
+
+	// 	s.chks = append(s.chks, chk)
+	// }
+	// return true
 }
 
 func (s *bucketSeriesSet) At() ([]storepb.Label, []storepb.AggrChunk) {
-	return s.set[s.i].lset, s.chks
+	return s.set[s.i].lset, s.set[s.i].chks
 }
 
 func (s *bucketSeriesSet) Err() error {
@@ -475,7 +477,7 @@ func (s *BucketStore) blockSeries(
 	indexr *bucketIndexReader,
 	chunkr *bucketChunkReader,
 	matchers []labels.Matcher,
-	mint, maxt int64,
+	req *storepb.SeriesRequest,
 ) (storepb.SeriesSet, *queryStats, error) {
 	stats := &queryStats{}
 
@@ -518,7 +520,8 @@ func (s *BucketStore) blockSeries(
 		}
 		s := seriesEntry{
 			lset: make([]storepb.Label, 0, len(lset)),
-			chks: make([]chunks.Meta, 0, len(chks)),
+			refs: make([]uint64, 0, len(chks)),
+			chks: make([]storepb.AggrChunk, 0, len(chks)),
 		}
 		for _, l := range lset {
 			// Skip if the external labels of the block overrule the series' label.
@@ -542,16 +545,20 @@ func (s *BucketStore) blockSeries(
 		})
 
 		for _, meta := range chks {
-			if meta.MaxTime < mint {
+			if meta.MaxTime < req.MaxTime {
 				continue
 			}
-			if meta.MinTime > maxt {
+			if meta.MinTime > req.MinTime {
 				break
 			}
 			if err := chunkr.addPreload(meta.Ref); err != nil {
 				return nil, stats, errors.Wrap(err, "add chunk preload")
 			}
-			s.chks = append(s.chks, meta)
+			s.chks = append(s.chks, storepb.AggrChunk{
+				MinTime: meta.MinTime,
+				MaxTime: meta.MaxTime,
+			})
+			s.refs = append(s.refs, meta.Ref)
 		}
 		if len(s.chks) > 0 {
 			res = append(res, s)
@@ -565,12 +572,61 @@ func (s *BucketStore) blockSeries(
 
 	// Transform all chunks into the response format.
 	for _, s := range res {
-		for i := range s.chks {
-			chk, err := chunkr.Chunk(s.chks[i].Ref)
+		for i, ref := range s.refs {
+			chk, err := chunkr.Chunk(ref)
 			if err != nil {
 				return nil, stats, errors.Wrap(err, "get chunk")
 			}
-			s.chks[i].Chunk = chk
+			c := &storepb.Chunk{Type: storepb.Chunk_XOR}
+
+			switch chk.Encoding() {
+			case chunkenc.EncXOR:
+				c.Data = chk.Bytes()
+				s.chks[i].Raw = c
+			case downsample.ChunkEncAggr:
+				for _, at := range req.Aggregates {
+					ac := downsample.AggrChunk(chk.Bytes())
+					switch at {
+					case storepb.Aggr_COUNT:
+						x, err := ac.Get(downsample.AggrCount)
+						if err != nil {
+							return nil, stats, errors.Errorf("aggregate %s does not exist", downsample.AggrCount)
+						}
+						c.Data = x.Bytes()
+						s.chks[i].Count = c
+					case storepb.Aggr_SUM:
+						x, err := ac.Get(downsample.AggrSum)
+						if err != nil {
+							return nil, stats, errors.Errorf("aggregate %s does not exist", downsample.AggrSum)
+						}
+						c.Data = x.Bytes()
+						s.chks[i].Sum = c
+					case storepb.Aggr_MIN:
+						x, err := ac.Get(downsample.AggrMin)
+						if err != nil {
+							return nil, stats, errors.Errorf("aggregate %s does not exist", downsample.AggrMin)
+						}
+						c.Data = x.Bytes()
+						s.chks[i].Min = c
+					case storepb.Aggr_MAX:
+						x, err := ac.Get(downsample.AggrMax)
+						if err != nil {
+							return nil, stats, errors.Errorf("aggregate %s does not exist", downsample.AggrMax)
+						}
+						c.Data = x.Bytes()
+						s.chks[i].Max = c
+					case storepb.Aggr_COUNTER:
+						x, err := ac.Get(downsample.AggrCounter)
+						if err != nil {
+							return nil, stats, errors.Errorf("aggregate %s does not exist", downsample.AggrCounter)
+						}
+						c.Data = x.Bytes()
+						s.chks[i].Counter = c
+					}
+				}
+			default:
+				return nil, stats, errors.Errorf("unknown chunk encoding %d", chk.Encoding())
+			}
 		}
 	}
 
@@ -578,6 +634,31 @@ func (s *BucketStore) blockSeries(
 	stats = stats.merge(chunkr.stats)
 
 	return newBucketSeriesSet(res), stats, nil
+}
+
+func mapAggregate(a storepb.Aggr) downsample.AggrType {
+	switch a {
+	case storepb.Aggr_COUNT:
+		return downsample.AggrCount
+	case storepb.Aggr_SUM:
+		return downsample.AggrSum
+	case storepb.Aggr_MAX:
+		return downsample.AggrMax
+	case storepb.Aggr_MIN:
+		return downsample.AggrMin
+	case storepb.Aggr_COUNTER:
+		return downsample.AggrCounter
+	}
+	panic("invalid input aggregate")
+}
+
+func containsAggregate(set []storepb.Aggr, x storepb.Aggr) bool {
+	for _, y := range set {
+		if y == x {
+			return true
+		}
+	}
+	return false
 }
 
 // Series implements the storepb.StoreServer interface.
@@ -599,7 +680,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		if !ok {
 			continue
 		}
-		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxAggregateWindow)
+		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow)
 
 		for _, b := range blocks {
 			stats.blocksQueried++
@@ -619,7 +700,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					indexr,
 					chunkr,
 					blockMatchers,
-					req.MinTime, req.MaxTime,
+					req,
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
