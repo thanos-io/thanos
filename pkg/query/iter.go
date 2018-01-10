@@ -79,7 +79,7 @@ func (storeSeriesSet) Err() error {
 	return nil
 }
 
-func (s storeSeriesSet) At() ([]storepb.Label, []storepb.Chunk) {
+func (s storeSeriesSet) At() ([]storepb.Label, []storepb.AggrChunk) {
 	ser := s.series[s.i]
 	return ser.Labels, ser.Chunks
 }
@@ -87,11 +87,11 @@ func (s storeSeriesSet) At() ([]storepb.Label, []storepb.Chunk) {
 // chunkSeries implements storage.Series for a series on storepb types.
 type chunkSeries struct {
 	lset       labels.Labels
-	chunks     []storepb.Chunk
+	chunks     []storepb.AggrChunk
 	mint, maxt int64
 }
 
-func newChunkSeries(lset []storepb.Label, chunks []storepb.Chunk, mint, maxt int64) *chunkSeries {
+func newChunkSeries(lset []storepb.Label, chunks []storepb.AggrChunk, mint, maxt int64) *chunkSeries {
 	sort.Slice(chunks, func(i, j int) bool {
 		return chunks[i].MinTime < chunks[j].MinTime
 	})
@@ -105,7 +105,11 @@ func (s *chunkSeries) Labels() labels.Labels {
 }
 
 func (s *chunkSeries) Iterator() storage.SeriesIterator {
-	return newChunkSeriesIterator(s.chunks, s.mint, s.maxt)
+	chks := make([]storepb.Chunk, 0, len(s.chunks))
+	for _, c := range s.chunks {
+		chks = append(chks, *c.Raw)
+	}
+	return newChunkSeriesIterator(chks, s.mint, s.maxt)
 }
 
 type nopSeriesIterator struct{}
@@ -138,6 +142,7 @@ func newChunkSeriesIterator(cs []storepb.Chunk, mint, maxt int64) storage.Series
 		mint:   mint,
 		maxt:   maxt,
 	}
+	// TODO(fabxc): just open all iterators immediately?
 	it.openChunk()
 	return it
 }
