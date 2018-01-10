@@ -5,6 +5,11 @@ option go_package = "storepb";
 
 import "gogoproto/gogo.proto";
 
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
+
 message Label {
   string name  = 1;
   string value = 2;
@@ -14,15 +19,25 @@ message Chunk {
   enum Encoding {
     XOR = 0;
   }
-  int64 min_time = 1;
-  int64 max_time = 2;
-  Encoding type  = 3;
-  bytes data     = 4;
+  Encoding type  = 1;
+  bytes data     = 2;
 }
 
 message Series {
-  repeated Label labels = 1 [(gogoproto.nullable) = false];
-  repeated Chunk chunks = 2 [(gogoproto.nullable) = false];
+  repeated Label labels     = 1 [(gogoproto.nullable) = false];
+  repeated AggrChunk chunks = 2 [(gogoproto.nullable) = false];
+}
+
+message AggrChunk {
+  int64 min_time = 1;
+  int64 max_time = 2;
+
+  Chunk raw     = 3;
+  Chunk count   = 4;
+  Chunk sum     = 5;
+  Chunk min     = 6;
+  Chunk max     = 7;
+  Chunk counter = 8;
 }
 
 // Matcher specifies a rule, which can match or set of labels or not.
