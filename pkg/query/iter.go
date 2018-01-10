@@ -1,6 +1,7 @@
 package query
 
 import (
+	"fmt"
 	"math"
 	"sort"
 	"unsafe"
@@ -10,6 +11,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/tsdb/chunkenc"
 )
@@ -116,9 +118,12 @@ func (s *chunkSeries) Iterator() storage.SeriesIterator {
 	var sit storage.SeriesIterator
 	its := make([]chunkenc.Iterator, 0, len(s.chunks))
 
+	fmt.Println("it for series", s.lset)
+
 	switch s.aggr {
 	case resAggrCount:
 		for _, c := range s.chunks {
+			fmt.Println("chunk", timestamp.Time(c.MinTime), timestamp.Time(c.MaxTime))
 			its = append(its, getFirstIterator(c.Count, c.Raw))
 		}
 		sit = newChunkSeriesIterator(its)
@@ -151,16 +156,23 @@ func (s *chunkSeries) Iterator() storage.SeriesIterator {
 				its = append(its, downsample.NewAverageChunkIterator(sum, cnt))
 			}
 		}
+		sit = newChunkSeriesIterator(its)
+	default:
+		return errSeriesIterator{err: errors.Errorf("unexpected result aggreagte type %v", s.aggr)}
 	}
 	return newBoundedSeriesIterator(sit, s.mint, s.maxt)
 }
 
 func getFirstIterator(cs ...*storepb.Chunk) chunkenc.Iterator {
-	for _, c := range cs {
+	for i, c := range cs {
+		if c == nil {
+			continue
+		}
 		chk, err := chunkenc.FromData(chunkEncoding(c.Type), c.Data)
 		if err != nil {
 			return errSeriesIterator{err}
 		}
+		fmt.Println("get chunk", i, c.Type, chk.NumSamples())
 		return chk.Iterator()
 	}
 	return errSeriesIterator{errors.New("no valid chunk found")}

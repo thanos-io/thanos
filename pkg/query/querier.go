@@ -2,10 +2,12 @@ package query
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/tracing"
@@ -210,11 +212,13 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 		MinTime:             q.mint,
 		MaxTime:             q.maxt,
 		Matchers:            sms,
-		MaxResolutionWindow: params.Step / 10, // Fit at least 10 samples between steps.
+		MaxResolutionWindow: params.Step * 1000 / 10, // Fit at least 10 samples between steps.
 		Aggregates:          queryAggrs,
 	}, resp); err != nil {
 		return nil, errors.Wrap(err, "proxy Series()")
 	}
+
+	level.Info(q.logger).Log("msg", "got response", "seriesCount", len(resp.seriesSet))
 
 	for _, w := range resp.warnings {
 		opts.partialErrReporter(errors.New(w))
@@ -232,11 +236,13 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 		set:  newStoreSeriesSet(resp.seriesSet),
 		aggr: resAggr,
 	}
+	fmt.Println("opts", opts)
 
 	if !q.isDedupEnabled(opts) {
 		// Return data without any deduplication.
 		return set, nil
 	}
+	fmt.Println("dedupe data")
 	// The merged series set assembles all potentially-overlapping time ranges
 	// of the same series into a single one. The series are ordered so that equal series
 	// from different replicas are sequential. We can now deduplicate those.

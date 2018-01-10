@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"io"
@@ -9,6 +10,7 @@ import (
 	"math"
 
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/strutil"
 	"github.com/pkg/errors"
@@ -93,6 +95,9 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		seriesSet []storepb.SeriesSet
 		g         errgroup.Group
 	)
+
+	level.Info(s.logger).Log("msg", "request",
+		"resolution", r.MaxResolutionWindow, "aggrs", fmt.Sprintf("%v", r.Aggregates))
 
 	for _, store := range s.stores() {
 		// We might be able to skip the store if its meta information indicates
