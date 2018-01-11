@@ -146,11 +146,10 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		}
 		resp := storepb.NewSeriesResponse(&storepb.Series{
 			Labels: lset,
-			Chunks: []storepb.Chunk{{
+			Chunks: []storepb.AggrChunk{{
 				MinTime: int64(e.Samples[0].Timestamp),
 				MaxTime: int64(e.Samples[len(e.Samples)-1].Timestamp),
-				Type:    enc,
-				Data:    cb,
+				Raw:     &storepb.Chunk{Type: enc, Data: cb},
 			}},
 		})
 		if err := s.Send(resp); err != nil {

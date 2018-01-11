@@ -238,7 +238,7 @@ func testDownsample(t *testing.T, data []*downsampleTestSet, meta *block.Meta, r
 	}
 }
 
-func TestCountChunkSeriesIterator(t *testing.T) {
+func TestCounterSeriesIterator(t *testing.T) {
 	chunks := [][]sample{
 		{{100, 10}, {200, 20}, {300, 10}, {400, 20}, {400, 5}},
 		{{500, 10}, {600, 20}, {700, 30}, {800, 40}, {800, 10}}, // no actual reset
@@ -257,7 +257,7 @@ func TestCountChunkSeriesIterator(t *testing.T) {
 		its = append(its, newSampleIterator(c))
 	}
 
-	x := countChunkSeriesIterator{chks: its}
+	x := NewCounterSeriesIterator(its...)
 
 	var res []sample
 	for x.Next() {
