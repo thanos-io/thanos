@@ -3,9 +3,12 @@ package downsample
 import (
 	"context"
 	"io/ioutil"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/prometheus/prometheus/pkg/value"
 
 	"github.com/prometheus/tsdb/chunks"
 
@@ -58,11 +61,13 @@ type testAggrSeries struct {
 }
 
 func TestDownsampleRaw(t *testing.T) {
+	staleMarker := math.Float64frombits(value.StaleNaN)
+
 	input := []*downsampleTestSet{
 		{
 			lset: labels.FromStrings("__name__", "a"),
 			inRaw: []sample{
-				{20, 1}, {40, 2}, {60, 3}, {80, 1}, {100, 2}, {120, 5}, {180, 10}, {250, 1},
+				{20, 1}, {40, 2}, {60, 3}, {80, 1}, {100, 2}, {101, staleMarker}, {120, 5}, {180, 10}, {250, 1},
 			},
 			output: map[AggrType][]sample{
 				AggrCount:   {{99, 4}, {199, 3}, {299, 1}},
@@ -119,7 +124,7 @@ type testSeries struct {
 	data []sample
 }
 
-func encodeTestAggrSeries(v map[AggrType][]sample) (*AggrChunk, int64, int64) {
+func encodeTestAggrSeries(v map[AggrType][]sample) (AggrChunk, int64, int64) {
 	b := newAggrChunkBuilder(false)
 
 	for at, d := range v {
@@ -193,7 +198,7 @@ func testDownsample(t *testing.T, data []*downsampleTestSet, meta *block.Meta, r
 	testutil.Ok(t, err)
 	defer indexr.Close()
 
-	chunkr, err := chunks.NewDirReader(filepath.Join(dir, id.String(), "chunks"), aggrPool{})
+	chunkr, err := chunks.NewDirReader(filepath.Join(dir, id.String(), "chunks"), AggrChunkPool{})
 	testutil.Ok(t, err)
 	defer chunkr.Close()
 
@@ -215,7 +220,7 @@ func testDownsample(t *testing.T, data []*downsampleTestSet, meta *block.Meta, r
 			testutil.Ok(t, err)
 
 			for _, at := range []AggrType{AggrCount, AggrSum, AggrMin, AggrMax, AggrCounter} {
-				c, err := chk.(*AggrChunk).Get(at)
+				c, err := chk.(AggrChunk).Get(at)
 				if err == ErrAggrNotExist {
 					continue
 				}
@@ -238,12 +243,30 @@ func testDownsample(t *testing.T, data []*downsampleTestSet, meta *block.Meta, r
 	}
 }
 
+func TestAverageChunkIterator(t *testing.T) {
+	sum := []sample{{100, 30}, {200, 40}, {300, 5}, {400, -10}}
+	cnt := []sample{{100, 1}, {200, 5}, {300, 2}, {400, 10}}
+	exp := []sample{{100, 30}, {200, 8}, {300, 2.5}, {400, -1}}
+
+	x := NewAverageChunkIterator(newSampleIterator(cnt), newSampleIterator(sum))
+
+	var res []sample
+	for x.Next() {
+		t, v := x.At()
+		res = append(res, sample{t, v})
+	}
+	testutil.Ok(t, x.Err())
+	testutil.Equals(t, exp, res)
+}
+
 func TestCounterSeriesIterator(t *testing.T) {
+	staleMarker := math.Float64frombits(value.StaleNaN)
+
 	chunks := [][]sample{
 		{{100, 10}, {200, 20}, {300, 10}, {400, 20}, {400, 5}},
 		{{500, 10}, {600, 20}, {700, 30}, {800, 40}, {800, 10}}, // no actual reset
 		{{900, 5}, {1000, 10}, {1100, 15}},                      // actual reset
-		{{1200, 20}, {1300, 40}},                                // no special last sample, no reset
+		{{1200, 20}, {1250, staleMarker}, {1300, 40}},           // no special last sample, no reset
 		{{1400, 30}, {1500, 30}, {1600, 50}},                    // no special last sample, reset
 	}
 	exp := []sample{
