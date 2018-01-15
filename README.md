@@ -6,8 +6,6 @@
 
 Thanos is a set of components that can be composed into a highly available metric system with unlimited storage capacity. It can be added seamlessly on top of existing Prometheus deployments and leverages the Prometheus 2.0 storage format to efficiently access great amounts of metric data in an object storage.
 
-Currently Thanos only supports Google Cloud Storage as an object storage backend but more implementations can easily be added.
-
 * [Getting Started](#getting-started)
 * [Concepts](docs/design.md)
 
@@ -91,4 +89,3 @@ In the future, the compactor will also take on tasks such as dynamic retention a
 
 Contributions are very welcome!
 
-One of the pending task is to add more backends, which only require implementing a [simple interface](https://github.com/improbable-eng/thanos/blob/86651e9402115c6476b35ac2bb3d6003c9ec9956/pkg/objstore/objstore.go#L15-L40).
