@@ -3,12 +3,10 @@ package e2e_test
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
-	"sync"
 	"testing"
 	"time"
 
@@ -133,16 +131,4 @@ func queryPrometheus(ctx context.Context, ustr string, ts time.Time, q string) (
 		return nil, err
 	}
 	return m.Data.Result, nil
-}
-
-// safeWriter wraps an io.Writer and makes it thread safe.
-type safeWriter struct {
-	io.Writer
-	mtx sync.Mutex
-}
-
-func (w *safeWriter) Write(b []byte) (int, error) {
-	w.mtx.Lock()
-	defer w.mtx.Unlock()
-	return w.Writer.Write(b)
 }
