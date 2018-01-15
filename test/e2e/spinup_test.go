@@ -224,13 +224,11 @@ receivers:
 		})
 	}
 
-	var unexpectedExit = make(chan error, 1)
+	var exit = make(chan error, 1)
 	go func(g run.Group) {
-		err := g.Run()
-		if err != nil {
-			unexpectedExit <- err
-		}
+		exit <- g.Run()
+		close(exit)
 	}(g)
 
-	return unexpectedExit, nil
+	return exit, nil
 }

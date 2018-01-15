@@ -29,9 +29,7 @@ func TestQuerySimple(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-
-	unexpectedExit, err := spinup(t, ctx, config{
+	exit, err := spinup(t, ctx, config{
 		promConfigFn: func(port int) string {
 			// Self scraping config with unique external label.
 			return fmt.Sprintf(`
@@ -52,12 +50,18 @@ scrape_configs:
 	})
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)
+		cancel()
 		return
 	}
 
+	defer func() {
+		cancel()
+		<-exit
+	}()
+
 	err = runutil.Retry(time.Second, ctx.Done(), func() error {
 		select {
-		case err := <-unexpectedExit:
+		case err := <-exit:
 			t.Errorf("Some process exited unexpectedly: %v", err)
 			return nil
 		default:

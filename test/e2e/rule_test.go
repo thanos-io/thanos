@@ -41,7 +41,7 @@ groups:
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
-	unexpectedExit, err := spinup(t, ctx, config{
+	exit, err := spinup(t, ctx, config{
 		workDir:          dir,
 		numQueries:       1,
 		numRules:         2,
@@ -50,8 +50,14 @@ groups:
 	})
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)
+		cancel()
 		return
 	}
+
+	defer func() {
+		cancel()
+		<-exit
+	}()
 
 	expMetrics := []model.Metric{
 		{
@@ -83,7 +89,7 @@ groups:
 	}
 	err = runutil.Retry(5*time.Second, ctx.Done(), func() error {
 		select {
-		case err := <-unexpectedExit:
+		case err := <-exit:
 			t.Errorf("Some process exited unexpectedly: %v", err)
 			return nil
 		default:
