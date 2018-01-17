@@ -64,7 +64,7 @@
 [[constraint]]
   name = "github.com/prometheus/prometheus"
   #version = "2.0.0"
-  branch = "fabxc"
+  branch = "queryparams"
 
 [[constraint]]
   branch = "master"

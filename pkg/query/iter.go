@@ -5,6 +5,8 @@ import (
 	"sort"
 	"unsafe"
 
+	"github.com/improbable-eng/thanos/pkg/compact/downsample"
+
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -17,6 +19,7 @@ import (
 type promSeriesSet struct {
 	set        storepb.SeriesSet
 	mint, maxt int64
+	aggr       resAggr
 }
 
 func (s promSeriesSet) Next() bool { return s.set.Next() }
@@ -24,7 +27,7 @@ func (s promSeriesSet) Err() error { return s.set.Err() }
 
 func (s promSeriesSet) At() storage.Series {
 	lset, chunks := s.set.At()
-	return newChunkSeries(lset, chunks, s.mint, s.maxt)
+	return newChunkSeries(lset, chunks, s.mint, s.maxt, s.aggr)
 }
 
 func translateMatcher(m *labels.Matcher) (storepb.LabelMatcher, error) {
@@ -89,15 +92,20 @@ type chunkSeries struct {
 	lset       labels.Labels
 	chunks     []storepb.AggrChunk
 	mint, maxt int64
+	aggr       resAggr
 }
 
-func newChunkSeries(lset []storepb.Label, chunks []storepb.AggrChunk, mint, maxt int64) *chunkSeries {
+func newChunkSeries(lset []storepb.Label, chunks []storepb.AggrChunk, mint, maxt int64, aggr resAggr) *chunkSeries {
 	sort.Slice(chunks, func(i, j int) bool {
 		return chunks[i].MinTime < chunks[j].MinTime
 	})
-	l := *(*labels.Labels)(unsafe.Pointer(&lset)) // YOLO!
-
-	return &chunkSeries{lset: l, chunks: chunks, mint: mint, maxt: maxt}
+	return &chunkSeries{
+		lset:   *(*labels.Labels)(unsafe.Pointer(&lset)), // YOLO!
+		chunks: chunks,
+		mint:   mint,
+		maxt:   maxt,
+		aggr:   aggr,
+	}
 }
 
 func (s *chunkSeries) Labels() labels.Labels {
@@ -105,71 +113,151 @@ func (s *chunkSeries) Labels() labels.Labels {
 }
 
 func (s *chunkSeries) Iterator() storage.SeriesIterator {
-	chks := make([]storepb.Chunk, 0, len(s.chunks))
-	for _, c := range s.chunks {
-		chks = append(chks, *c.Raw)
+	var sit storage.SeriesIterator
+	its := make([]chunkenc.Iterator, 0, len(s.chunks))
+
+	switch s.aggr {
+	case resAggrCount:
+		for _, c := range s.chunks {
+			its = append(its, getFirstIterator(c.Count, c.Raw))
+		}
+		sit = newChunkSeriesIterator(its)
+	case resAggrSum:
+		for _, c := range s.chunks {
+			its = append(its, getFirstIterator(c.Sum, c.Raw))
+		}
+		sit = newChunkSeriesIterator(its)
+	case resAggrMin:
+		for _, c := range s.chunks {
+			its = append(its, getFirstIterator(c.Min, c.Raw))
+		}
+		sit = newChunkSeriesIterator(its)
+	case resAggrMax:
+		for _, c := range s.chunks {
+			its = append(its, getFirstIterator(c.Max, c.Raw))
+		}
+		sit = newChunkSeriesIterator(its)
+	case resAggrCounter:
+		for _, c := range s.chunks {
+			its = append(its, getFirstIterator(c.Counter, c.Raw))
+		}
+		sit = downsample.NewCounterSeriesIterator(its...)
+	case resAggrAvg:
+		for _, c := range s.chunks {
+			if c.Raw != nil {
+				its = append(its, getFirstIterator(c.Raw))
+			} else {
+				sum, cnt := getFirstIterator(c.Sum), getFirstIterator(c.Count)
+				its = append(its, downsample.NewAverageChunkIterator(cnt, sum))
+			}
+		}
+		sit = newChunkSeriesIterator(its)
+	default:
+		return errSeriesIterator{err: errors.Errorf("unexpected result aggreagte type %v", s.aggr)}
 	}
-	return newChunkSeriesIterator(chks, s.mint, s.maxt)
+	return newBoundedSeriesIterator(sit, s.mint, s.maxt)
 }
 
-type nopSeriesIterator struct{}
+func getFirstIterator(cs ...*storepb.Chunk) chunkenc.Iterator {
+	for _, c := range cs {
+		if c == nil {
+			continue
+		}
+		chk, err := chunkenc.FromData(chunkEncoding(c.Type), c.Data)
+		if err != nil {
+			return errSeriesIterator{err}
+		}
+		return chk.Iterator()
+	}
+	return errSeriesIterator{errors.New("no valid chunk found")}
+}
 
-func (nopSeriesIterator) Seek(int64) bool      { return false }
-func (nopSeriesIterator) Next() bool           { return false }
-func (nopSeriesIterator) At() (int64, float64) { return 0, 0 }
-func (nopSeriesIterator) Err() error           { return nil }
+func chunkEncoding(e storepb.Chunk_Encoding) chunkenc.Encoding {
+	switch e {
+	case storepb.Chunk_XOR:
+		return chunkenc.EncXOR
+	}
+	return 255 // invalid
+}
+
+type errSeriesIterator struct {
+	err error
+}
+
+func (errSeriesIterator) Seek(int64) bool      { return false }
+func (errSeriesIterator) Next() bool           { return false }
+func (errSeriesIterator) At() (int64, float64) { return 0, 0 }
+func (it errSeriesIterator) Err() error        { return it.err }
+
+// boundedSeriesIterator wraps a series iterator and ensures that it only emits
+// samples within a fixed time range.
+type boundedSeriesIterator struct {
+	it         storage.SeriesIterator
+	mint, maxt int64
+}
+
+func newBoundedSeriesIterator(it storage.SeriesIterator, mint, maxt int64) *boundedSeriesIterator {
+	return &boundedSeriesIterator{it: it, mint: mint, maxt: maxt}
+}
+
+func (it *boundedSeriesIterator) Seek(t int64) (ok bool) {
+	if t > it.maxt {
+		return false
+	}
+	if t < it.mint {
+		t = it.mint
+	}
+	return it.it.Seek(t)
+}
+
+func (it *boundedSeriesIterator) At() (t int64, v float64) {
+	return it.it.At()
+}
+
+func (it *boundedSeriesIterator) Next() bool {
+	if !it.it.Next() {
+		return false
+	}
+	t, _ := it.At()
+
+	// Advance the iterator if we are before the valid interval.
+	if t < it.mint {
+		if !it.Seek(it.mint) {
+			return false
+		}
+		t, _ = it.At()
+	}
+	// Once we passed the valid interval, there is no going back.
+	return t <= it.maxt
+}
+
+func (it *boundedSeriesIterator) Err() error {
+	return it.it.Err()
+}
 
 // chunkSeriesIterator implements a series iterator on top
 // of a list of time-sorted, non-overlapping chunks.
 type chunkSeriesIterator struct {
-	chunks     []storepb.Chunk
-	maxt, mint int64
-
-	i   int
-	cur chunkenc.Iterator
-	err error
+	chunks []chunkenc.Iterator
+	i      int
 }
 
-func newChunkSeriesIterator(cs []storepb.Chunk, mint, maxt int64) storage.SeriesIterator {
+func newChunkSeriesIterator(cs []chunkenc.Iterator) storage.SeriesIterator {
 	if len(cs) == 0 {
 		// This should not happen. StoreAPI implementations should not send empty results.
 		// NOTE(bplotka): Metric, err log here?
-		return nopSeriesIterator{}
+		return errSeriesIterator{}
 	}
-	it := &chunkSeriesIterator{
-		chunks: cs,
-		i:      0,
-		mint:   mint,
-		maxt:   maxt,
-	}
-	// TODO(fabxc): just open all iterators immediately?
-	it.openChunk()
-	return it
-}
-
-func (it *chunkSeriesIterator) openChunk() bool {
-	c, err := chunkenc.FromData(chunkenc.EncXOR, it.chunks[it.i].Data)
-	if err != nil {
-		it.err = err
-		return false
-	}
-	it.cur = c.Iterator()
-	return true
+	return &chunkSeriesIterator{chunks: cs}
 }
 
 func (it *chunkSeriesIterator) Seek(t int64) (ok bool) {
-	if it.err != nil {
-		return false
-	}
-	if t > it.maxt {
-		return false
-	}
 	// We generally expect the chunks already to be cut down
 	// to the range we are interested in. There's not much to be gained from
 	// hopping across chunks so we just call next until we reach t.
 	for {
 		ct, _ := it.At()
-		if ct > 0 && ct >= t {
+		if ct >= t {
 			return true
 		}
 		if !it.Next() {
@@ -179,48 +267,29 @@ func (it *chunkSeriesIterator) Seek(t int64) (ok bool) {
 }
 
 func (it *chunkSeriesIterator) At() (t int64, v float64) {
-	return it.cur.At()
+	return it.chunks[it.i].At()
 }
 
 func (it *chunkSeriesIterator) Next() bool {
-	if it.cur.Next() {
-		t, _ := it.cur.At()
-
-		if t < it.mint {
-			if !it.Seek(it.mint) {
-				return false
-			}
-			t, _ = it.At()
-
-			return t <= it.maxt
-		}
-		if t > it.maxt {
-			return false
-		}
-		return true
-	}
-	if err := it.cur.Err(); err != nil {
-		return false
-	}
-	if it.i == len(it.chunks)-1 {
-		return false
-	}
-
 	lastT, _ := it.At()
 
-	it.i++
-	if !it.openChunk() {
+	if it.chunks[it.i].Next() {
+		return true
+	}
+	if it.Err() != nil {
 		return false
 	}
-	// Ensure we don't go back in time.
+	if it.i >= len(it.chunks)-1 {
+		return false
+	}
+	// Chunks are guaranteed to be ordered but not generally guaranteed to not overlap.
+	// We must ensure to skip any overlapping range between adjacent chunks.
+	it.i++
 	return it.Seek(lastT + 1)
 }
 
 func (it *chunkSeriesIterator) Err() error {
-	if it.err != nil {
-		return it.err
-	}
-	return it.cur.Err()
+	return it.chunks[it.i].Err()
 }
 
 type dedupSeriesSet struct {

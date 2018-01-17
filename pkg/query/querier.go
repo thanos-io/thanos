@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"sort"
+	"strings"
 
 	"github.com/go-kit/kit/log"
 
@@ -156,7 +157,40 @@ func (s *seriesServer) Context() context.Context {
 	return s.ctx
 }
 
-func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
+type resAggr int
+
+const (
+	resAggrAvg resAggr = iota
+	resAggrCount
+	resAggrSum
+	resAggrMin
+	resAggrMax
+	resAggrCounter
+)
+
+// aggrsFromFunc infers aggregates of the underlying data based on the wrapping
+// function of a series selection.
+func aggrsFromFunc(f string) ([]storepb.Aggr, resAggr) {
+	if f == "min" || strings.HasPrefix(f, "min_") {
+		return []storepb.Aggr{storepb.Aggr_MIN}, resAggrMin
+	}
+	if f == "max" || strings.HasPrefix(f, "max_") {
+		return []storepb.Aggr{storepb.Aggr_MAX}, resAggrMax
+	}
+	if f == "count" || strings.HasPrefix(f, "count_") {
+		return []storepb.Aggr{storepb.Aggr_COUNT}, resAggrCount
+	}
+	if f == "sum" || strings.HasPrefix(f, "sum_") {
+		return []storepb.Aggr{storepb.Aggr_SUM}, resAggrSum
+	}
+	if f == "increase" || f == "rate" {
+		return []storepb.Aggr{storepb.Aggr_COUNTER}, resAggrCounter
+	}
+	// In the default case, we retrieve count and sum to compute an average.
+	return []storepb.Aggr{storepb.Aggr_COUNT, storepb.Aggr_SUM}, resAggrAvg
+}
+
+func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (storage.SeriesSet, error) {
 	opts := optsFromContext(q.ctx)
 
 	span, ctx := tracing.StartSpan(q.ctx, "querier_select")
@@ -167,13 +201,15 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 		return nil, errors.Wrap(err, "convert matchers")
 	}
 
+	queryAggrs, resAggr := aggrsFromFunc(params.Func)
+
 	resp := &seriesServer{ctx: ctx}
 	if err := q.proxy.Series(&storepb.SeriesRequest{
 		MinTime:             q.mint,
 		MaxTime:             q.maxt,
 		Matchers:            sms,
-		MaxResolutionWindow: 0, // we always query raw data for now.
-		Aggregates:          []storepb.Aggr{storepb.Aggr_RAW},
+		MaxResolutionWindow: params.Step / 5, // Fit at least 5 samples between steps.
+		Aggregates:          queryAggrs,
 	}, resp); err != nil {
 		return nil, errors.Wrap(err, "proxy Series()")
 	}
@@ -192,6 +228,7 @@ func (q *querier) Select(ms ...*labels.Matcher) (storage.SeriesSet, error) {
 		mint: q.mint,
 		maxt: q.maxt,
 		set:  newStoreSeriesSet(resp.seriesSet),
+		aggr: resAggr,
 	}
 
 	if !q.isDedupEnabled(opts) {
