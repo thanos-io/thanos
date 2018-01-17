@@ -199,20 +199,21 @@ func TestGroup_Compact(t *testing.T) {
 	}, 100, 0, 1000)
 	testutil.Ok(t, err)
 
-	b2, err := testutil.CreateBlock(dir, []labels.Labels{
-		{{Name: "a", Value: "2"}},
-		{{Name: "a", Value: "3"}},
-		{{Name: "a", Value: "4"}},
-		{{Name: "a", Value: "5"}},
-	}, 100, 1001, 2000)
-	testutil.Ok(t, err)
-
+	// Mix order to make sure compact is able to deduct min time / max time.
 	b3, err := testutil.CreateBlock(dir, []labels.Labels{
 		{{Name: "a", Value: "3"}},
 		{{Name: "a", Value: "4"}},
 		{{Name: "a", Value: "5"}},
 		{{Name: "a", Value: "6"}},
 	}, 100, 2001, 3000)
+	testutil.Ok(t, err)
+
+	b2, err := testutil.CreateBlock(dir, []labels.Labels{
+		{{Name: "a", Value: "2"}},
+		{{Name: "a", Value: "3"}},
+		{{Name: "a", Value: "4"}},
+		{{Name: "a", Value: "5"}},
+	}, 100, 1001, 2000)
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(dir, b1.String()), b1.String()))
@@ -235,8 +236,10 @@ func TestGroup_Compact(t *testing.T) {
 	meta, err := block.ReadMetaFile(resDir)
 	testutil.Ok(t, err)
 
+	testutil.Equals(t, int64(0), meta.MinTime)
+	testutil.Equals(t, int64(3000), meta.MaxTime)
 	testutil.Equals(t, uint64(6), meta.Stats.NumSeries)
 	testutil.Equals(t, uint64(3*4*100), meta.Stats.NumSamples)
 	testutil.Equals(t, 2, meta.Compaction.Level)
-	testutil.Equals(t, []ulid.ULID{b1, b2, b3}, meta.Compaction.Sources)
+	testutil.Equals(t, []ulid.ULID{b1, b3, b2}, meta.Compaction.Sources)
 }
