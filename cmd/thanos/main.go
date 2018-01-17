@@ -68,6 +68,7 @@ func main() {
 	registerRule(cmds, app, "rule")
 	registerCompact(cmds, app, "compact")
 	registerBucket(cmds, app, "bucket")
+	registerDownsample(cmds, app, "downsample")
 
 	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {
