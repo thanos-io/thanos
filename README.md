@@ -1,6 +1,4 @@
-# Thanos
-
-[![Build Status](https://travis-ci.org/improbable-eng/thanos.svg?branch=master)](https://travis-ci.org/improbable-eng/thanos) [![Go Report Card](https://goreportcard.com/badge/github.com/improbable-eng/thanos)](https://goreportcard.com/report/github.com/improbable-eng/thanos)
+![Thanos](docs/img/Thanos-logo_fullmedium.png)
 
 ## Overview
 
@@ -89,3 +87,6 @@ In the future, the compactor will also take on tasks such as dynamic retention a
 
 Contributions are very welcome!
 
+
+
+[![Build Status](https://travis-ci.org/improbable-eng/thanos.svg?branch=master)](https://travis-ci.org/improbable-eng/thanos) [![Go Report Card](https://goreportcard.com/badge/github.com/improbable-eng/thanos)](https://goreportcard.com/report/github.com/improbable-eng/thanos)
