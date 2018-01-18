@@ -16,8 +16,8 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/grpc-ecosystem/go-grpc-middleware/recovery"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/oklog/run"
@@ -67,7 +67,7 @@ func main() {
 	registerQuery(cmds, app, "query")
 	registerRule(cmds, app, "rule")
 	registerCompact(cmds, app, "compact")
-	registerExample(cmds, app, "example")
+	registerBucket(cmds, app, "bucket")
 
 	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {
