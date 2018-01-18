@@ -25,9 +25,9 @@ import (
 
 // Standard downsampling resolution levels in Thanos.
 const (
-	ResLevel0 = int64(0)
-	ResLevel1 = int64(5 * 60 * 1000)
-	ResLevel2 = int64(60 * 60 * 1000)
+	ResLevel0 = int64(0)              // raw data
+	ResLevel1 = int64(5 * 60 * 1000)  // 5 minutes in milliseconds
+	ResLevel2 = int64(60 * 60 * 1000) // 1 hour in milliseconds
 )
 
 // Downsample downsamples the given block. It writes a new block into dir and returns its ID.
