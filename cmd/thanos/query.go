@@ -125,8 +125,8 @@ func runQuery(
 	var (
 		stores    = newStoreSet(logger, reg, tracer, peer, storeAddrs)
 		proxy     = store.NewProxyStore(logger, stores.Get, selectorLset)
-		queryable = query.NewQueryable(logger, proxy, replicaLabel)
 		engine    = promql.NewEngine(logger, reg, maxConcurrentQueries, queryTimeout)
+		queryableCreator = query.NewQueryableCreator(logger, proxy, replicaLabel)
 	)
 	// Periodically update the store set with the addresses we see in our cluster.
 	{
@@ -158,7 +158,7 @@ func runQuery(
 		router := route.New()
 		ui.New(logger, nil).Register(router)
 
-		api := v1.NewAPI(reg, engine, queryable)
+		api := v1.NewAPI(reg, engine, queryableCreator)
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger)
 
 		mux := http.NewServeMux()

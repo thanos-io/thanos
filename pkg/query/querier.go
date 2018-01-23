@@ -14,93 +14,50 @@ import (
 	"github.com/prometheus/prometheus/storage"
 )
 
-var optCtxKey = struct{}{}
-
 // PartialErrReporter allows to report partial errors. Partial error occurs when only part of the results are ready and
 // another is not available because of the failure. We still want to return partial result, but with some notification.
 // NOTE: It is required to be thread-safe.
 type PartialErrReporter func(error)
 
-// Option specifies change in the opts struct.
-type Option func(*opts)
+// QueryableCreator returns implementation of promql.Queryable that fetches data from the proxy store API endpoints.
+// If deduplication is enabled, all data retrieved from it will be deduplicated along the replicaLabel by default.
+type QueryableCreator func(deduplicate bool, p PartialErrReporter) storage.Queryable
 
-type opts struct {
-	deduplicate        bool
-	partialErrReporter PartialErrReporter
-}
-
-func defaultOpts() *opts {
-	return &opts{
-		deduplicate:        false,
-		partialErrReporter: func(error) {},
+// NewQueryableCreator creates QueryableCreator.
+func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLabel string) QueryableCreator {
+	return func(deduplicate bool, p PartialErrReporter) storage.Queryable {
+		return &queryable{
+			logger:           logger,
+			replicaLabel:     replicaLabel,
+			proxy:            proxy,
+			deduplicate:      deduplicate,
+			partialErrReport: p,
+		}
 	}
 }
 
-// WithDeduplication returns option that sets deduplication flag to true.
-func WithDeduplication() Option {
-	return func(o *opts) {
-		o.deduplicate = true
-	}
-}
-
-// WithPartialErrReporter return option that sets the given PartialErrReporter to opts.
-func WithPartialErrReporter(errReporter PartialErrReporter) Option {
-	return func(o *opts) {
-		o.partialErrReporter = errReporter
-	}
-}
-
-// ContextWithOpts returns context with given options.
-// NOTE: This is the only way we can pass additional arguments to our custom querier which is hidden behind standard Prometheus
-// promql engine.
-func ContextWithOpts(ctx context.Context, opts ...Option) context.Context {
-	o := defaultOpts()
-	for _, opt := range opts {
-		opt(o)
-	}
-
-	return context.WithValue(ctx, optCtxKey, o)
-}
-
-func optsFromContext(ctx context.Context) *opts {
-	o, ok := ctx.Value(optCtxKey).(*opts)
-	if !ok {
-		return defaultOpts()
-	}
-
-	return o
-}
-
-// Queryable allows to open a querier against proxy store API.
-type Queryable struct {
-	logger       log.Logger
-	replicaLabel string
-	proxy        storepb.StoreServer
-}
-
-// NewQueryable creates implementation of promql.Queryable that fetches data from the proxy store API endpoints.
-// All data retrieved from it will be deduplicated along the replicaLabel by default.
-func NewQueryable(logger log.Logger, proxy storepb.StoreServer, replicaLabel string) *Queryable {
-	return &Queryable{
-		logger:       logger,
-		replicaLabel: replicaLabel,
-		proxy:        proxy,
-	}
+type queryable struct {
+	logger           log.Logger
+	replicaLabel     string
+	proxy            storepb.StoreServer
+	deduplicate      bool
+	partialErrReport PartialErrReporter
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
-func (q *Queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabel, q.proxy), nil
+func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
+	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabel, q.proxy, q.deduplicate, q.partialErrReport), nil
 }
 
 type querier struct {
-	logger       log.Logger
-	ctx          context.Context
-	cancel       func()
-	mint, maxt   int64
-	replicaLabel string
-
-	proxy storepb.StoreServer
+	ctx              context.Context
+	logger           log.Logger
+	cancel           func()
+	mint, maxt       int64
+	replicaLabel     string
+	proxy            storepb.StoreServer
+	deduplicate      bool
+	partialErrReport PartialErrReporter
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -111,24 +68,31 @@ func newQuerier(
 	mint, maxt int64,
 	replicaLabel string,
 	proxy storepb.StoreServer,
+	deduplicate bool,
+	partialErrReport PartialErrReporter,
 ) *querier {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
+	if partialErrReport == nil {
+		partialErrReport = func(error) {}
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	return &querier{
-		logger:       logger,
-		ctx:          ctx,
-		cancel:       cancel,
-		mint:         mint,
-		maxt:         maxt,
-		replicaLabel: replicaLabel,
-		proxy:        proxy,
+		ctx:              ctx,
+		logger:           logger,
+		cancel:           cancel,
+		mint:             mint,
+		maxt:             maxt,
+		replicaLabel:     replicaLabel,
+		proxy:            proxy,
+		deduplicate:      deduplicate,
+		partialErrReport: partialErrReport,
 	}
 }
 
-func (q *querier) isDedupEnabled(o *opts) bool {
-	return o.deduplicate && q.replicaLabel != ""
+func (q *querier) isDedupEnabled() bool {
+	return q.deduplicate && q.replicaLabel != ""
 }
 
 type seriesServer struct {
@@ -191,8 +155,6 @@ func aggrsFromFunc(f string) ([]storepb.Aggr, resAggr) {
 }
 
 func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (storage.SeriesSet, error) {
-	opts := optsFromContext(q.ctx)
-
 	span, ctx := tracing.StartSpan(q.ctx, "querier_select")
 	defer span.Finish()
 
@@ -215,13 +177,21 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 	}
 
 	for _, w := range resp.warnings {
-		opts.partialErrReporter(errors.New(w))
+		q.partialErrReport(errors.New(w))
 	}
 
-	if q.isDedupEnabled(opts) {
+	if q.isDedupEnabled() {
 		// TODO(fabxc): this could potentially pushed further down into the store API
 		// to make true streaming possible.
 		sortDedupLabels(resp.seriesSet, q.replicaLabel)
+
+		// Return data without any deduplication.
+		return promSeriesSet{
+			mint: q.mint,
+			maxt: q.maxt,
+			set:  newStoreSeriesSet(resp.seriesSet),
+			aggr: resAggr,
+		}, nil
 	}
 
 	set := promSeriesSet{
@@ -231,10 +201,6 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 		aggr: resAggr,
 	}
 
-	if !q.isDedupEnabled(opts) {
-		// Return data without any deduplication.
-		return set, nil
-	}
 	// The merged series set assembles all potentially-overlapping time ranges
 	// of the same series into a single one. The series are ordered so that equal series
 	// from different replicas are sequential. We can now deduplicate those.
@@ -264,8 +230,6 @@ func sortDedupLabels(set []storepb.Series, replicaLabel string) {
 }
 
 func (q *querier) LabelValues(name string) ([]string, error) {
-	opts := optsFromContext(q.ctx)
-
 	span, ctx := tracing.StartSpan(q.ctx, "querier_label_values")
 	defer span.Finish()
 
@@ -275,7 +239,7 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 	}
 
 	for _, w := range resp.Warnings {
-		opts.partialErrReporter(errors.New(w))
+		q.partialErrReport(errors.New(w))
 	}
 
 	return resp.Values, nil

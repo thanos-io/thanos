@@ -30,13 +30,21 @@ import (
 	"github.com/prometheus/common/route"
 
 	"github.com/go-kit/kit/log"
+	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/prometheus/storage"
 )
+
+func testQueryableCreator(queryable storage.Queryable) query.QueryableCreator {
+	return func(deduplicate bool, p query.PartialErrReporter) storage.Queryable {
+		return queryable
+	}
+}
 
 func TestEndpoints(t *testing.T) {
 	suite, err := promql.NewTest(t, `
@@ -57,8 +65,8 @@ func TestEndpoints(t *testing.T) {
 	now := time.Now()
 
 	api := &API{
-		queryable:   suite.Storage(),
-		queryEngine: suite.QueryEngine(),
+		queryableCreate: testQueryableCreator(suite.Storage()),
+		queryEngine:     suite.QueryEngine(),
 
 		instantQueryDuration: prometheus.NewHistogram(prometheus.HistogramOpts{}),
 		rangeQueryDuration:   prometheus.NewHistogram(prometheus.HistogramOpts{}),
