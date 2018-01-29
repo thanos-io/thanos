@@ -125,7 +125,7 @@ type testSeries struct {
 }
 
 func encodeTestAggrSeries(v map[AggrType][]sample) (AggrChunk, int64, int64) {
-	b := newAggrChunkBuilder(false)
+	b := newAggrChunkBuilder()
 
 	for at, d := range v {
 		for _, s := range d {
