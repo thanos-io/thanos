@@ -222,7 +222,7 @@ func runRule(
 					continue
 				}
 				a := &alert.Alert{
-					StartsAt:    alrt.FiringAt,
+					StartsAt:    alrt.FiredAt,
 					Labels:      alrt.Labels,
 					Annotations: alrt.Annotations,
 				}
@@ -237,8 +237,8 @@ func runRule(
 		}
 		mgr = rules.NewManager(&rules.ManagerOptions{
 			Context:     ctx,
-			Query:       queryFn,
-			Notify:      notify,
+			QueryFunc:   queryFn,
+			NotifyFunc:  notify,
 			Logger:      log.With(logger, "component", "rules"),
 			Appendable:  tsdb.Adapter(db, 0),
 			ExternalURL: nil,

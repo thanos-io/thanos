@@ -6,7 +6,6 @@ import (
 	"unsafe"
 
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
-
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -218,14 +217,14 @@ func (it *boundedSeriesIterator) Next() bool {
 	if !it.it.Next() {
 		return false
 	}
-	t, _ := it.At()
+	t, _ := it.it.At()
 
 	// Advance the iterator if we are before the valid interval.
 	if t < it.mint {
 		if !it.Seek(it.mint) {
 			return false
 		}
-		t, _ = it.At()
+		t, _ = it.it.At()
 	}
 	// Once we passed the valid interval, there is no going back.
 	return t <= it.maxt
