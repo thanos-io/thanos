@@ -150,7 +150,7 @@ func newBucketStoreMetrics(reg prometheus.Registerer, s *BucketStore) *bucketSto
 	return &m
 }
 
-// BucketStore implements the store API backed by a Bucket bucket. It loads all index
+// BucketStore implements the store API backed by a bucket. It loads all index
 // files to local disk.
 type BucketStore struct {
 	logger     log.Logger
@@ -290,6 +290,12 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 	return nil
 }
 
+func (s *BucketStore) numBlocks() int {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+	return len(s.blocks)
+}
+
 func (s *BucketStore) getBlock(id ulid.ULID) *bucketBlock {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
@@ -301,6 +307,7 @@ func (s *BucketStore) addBlock(ctx context.Context, id ulid.ULID) (err error) {
 
 	defer func() {
 		if err != nil {
+			s.metrics.blockLoadFailures.Inc()
 			os.RemoveAll(dir)
 		}
 	}()
@@ -309,7 +316,6 @@ func (s *BucketStore) addBlock(ctx context.Context, id ulid.ULID) (err error) {
 	b, err := newBucketBlock(ctx, log.With(s.logger, "block", id),
 		s.bucket, id, dir, s.indexCache, s.chunkPool)
 	if err != nil {
-		s.metrics.blockLoadFailures.Inc()
 		return err
 	}
 	s.mtx.Lock()
@@ -393,7 +399,6 @@ type seriesEntry struct {
 type bucketSeriesSet struct {
 	set []seriesEntry
 	i   int
-	// chks []storepb.AggrChunk
 	err error
 }
 
@@ -564,7 +569,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 			if err != nil {
 				return errors.Errorf("aggregate %s does not exist", downsample.AggrSum)
 			}
-			out.Count = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: x.Bytes()}
+			out.Sum = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: x.Bytes()}
 		case storepb.Aggr_MIN:
 			x, err := ac.Get(downsample.AggrMin)
 			if err != nil {
@@ -1443,7 +1448,7 @@ func (r *bucketChunkReader) Chunk(id uint64) (chunkenc.Chunk, error) {
 
 // rawChunk is a helper type that wraps a chunk's raw bytes and implements the chunkenc.Chunk
 // interface over it.
-// It is used to Store API responses which don't need to introspect and validate the chunk's contents.s
+// It is used to Store API responses which don't need to introspect and validate the chunk's contents.
 type rawChunk []byte
 
 func (b rawChunk) Encoding() chunkenc.Encoding {
