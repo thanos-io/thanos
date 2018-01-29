@@ -31,7 +31,7 @@ func TestQuerier_Series(t *testing.T) {
 	q := newQuerier(context.Background(), nil, 1, 300, "", testProxy)
 	defer q.Close()
 
-	res, err := q.Select()
+	res, err := q.Select(&storage.SelectParams{})
 	testutil.Ok(t, err)
 
 	expected := []struct {
@@ -202,7 +202,7 @@ func TestDedupSeriesSet(t *testing.T) {
 		})
 	}
 	set := promSeriesSet{
-		mint: math.MinInt64,
+		mint: 1,
 		maxt: math.MaxInt64,
 		set:  newStoreSeriesSet(series),
 	}

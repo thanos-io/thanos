@@ -96,7 +96,7 @@ type apiFunc func(r *http.Request) (interface{}, []error, *apiError)
 // API can register a set of endpoints in a router and handle
 // them using the provided storage and query engine.
 type API struct {
-	queryable   promql.Queryable
+	queryable   storage.Queryable
 	queryEngine *promql.Engine
 
 	instantQueryDuration prometheus.Histogram
@@ -109,7 +109,7 @@ type API struct {
 func NewAPI(
 	reg *prometheus.Registry,
 	qe *promql.Engine,
-	q promql.Queryable,
+	q storage.Queryable,
 ) *API {
 	instantQueryDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name: "thanos_query_api_instant_query_duration_seconds",
@@ -225,7 +225,7 @@ func (api *API) query(r *http.Request) (interface{}, []error, *apiError) {
 	defer span.Finish()
 
 	begin := api.now()
-	qry, err := api.queryEngine.NewInstantQuery(r.FormValue("query"), ts)
+	qry, err := api.queryEngine.NewInstantQuery(api.queryable, r.FormValue("query"), ts)
 	if err != nil {
 		return nil, nil, &apiError{errorBadData, err}
 	}
@@ -281,7 +281,6 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *apiError) {
 		err := errors.New("exceeded maximum resolution of 11,000 points per timeseries. Try decreasing the query resolution (?step=XX)")
 		return nil, nil, &apiError{errorBadData, err}
 	}
-
 	ctx := r.Context()
 	if to := r.FormValue("timeout"); to != "" {
 		var cancel context.CancelFunc
@@ -320,7 +319,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *apiError) {
 	defer span.Finish()
 
 	begin := api.now()
-	qry, err := api.queryEngine.NewRangeQuery(r.FormValue("query"), start, end, step)
+	qry, err := api.queryEngine.NewRangeQuery(api.queryable, r.FormValue("query"), start, end, step)
 	if err != nil {
 		return nil, nil, &apiError{errorBadData, err}
 	}
@@ -448,18 +447,17 @@ func (api *API) series(r *http.Request) (interface{}, []error, *apiError) {
 	}
 	defer q.Close()
 
-	var set storage.SeriesSet
-
+	var sets []storage.SeriesSet
 	for _, mset := range matcherSets {
-		s, err := q.Select(mset...)
+		s, err := q.Select(nil, mset...)
 		if err != nil {
 			return nil, nil, &apiError{errorExec, err}
 		}
-		set = storage.DeduplicateSeriesSet(set, s)
+		sets = append(sets, s)
 	}
 
+	set := storage.NewMergeSeriesSet(sets)
 	metrics := []labels.Labels{}
-
 	for set.Next() {
 		metrics = append(metrics, set.At().Labels())
 	}
