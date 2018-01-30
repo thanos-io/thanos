@@ -229,6 +229,10 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 	}
 	level.Info(logger).Log("msg", "downloaded block", "id", m.ULID, "duration", time.Since(begin))
 
+	if err := block.VerifyIndex(filepath.Join(bdir, "index")); err != nil {
+		return errors.Wrap(err, "input block index not valid")
+	}
+
 	begin = time.Now()
 
 	var pool chunkenc.Pool
@@ -247,13 +251,18 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 	if err != nil {
 		return errors.Wrapf(err, "downsample block %s to window %d", m.ULID, resolution)
 	}
+	resdir := filepath.Join(dir, id.String())
 
 	level.Info(logger).Log("msg", "downsampled block",
 		"from", m.ULID, "to", id, "duration", time.Since(begin))
 
+	if err := block.VerifyIndex(filepath.Join(resdir, "index")); err != nil {
+		return errors.Wrap(err, "output block index not valid")
+	}
+
 	begin = time.Now()
 
-	err = objstore.UploadDir(ctx, bkt, filepath.Join(dir, id.String()), id.String())
+	err = objstore.UploadDir(ctx, bkt, resdir, id.String())
 	if err != nil {
 		return errors.Wrapf(err, "upload downsampled block %s", id)
 	}
@@ -263,7 +272,7 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 	begin = time.Now()
 
 	os.RemoveAll(bdir)
-	os.RemoveAll(filepath.Join(dir, id.String()))
+	os.RemoveAll(resdir)
 
 	return nil
 }

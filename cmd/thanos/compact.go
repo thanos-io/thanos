@@ -78,6 +78,14 @@ func runCompact(
 		bucket string
 	)
 
+	halted := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_compactor_halted",
+		Help: "Set to 1 if the compactor halted due to an unexpected error",
+	})
+	halted.Set(0)
+
+	reg.MustRegister(halted)
+
 	s3Config := &s3.Config{
 		Bucket:    s3Bucket,
 		Endpoint:  s3Endpoint,
@@ -113,24 +121,6 @@ func runCompact(
 	}
 	// Start cycle of syncing blocks from the bucket and garbage collecting the bucket.
 	{
-		ctx, cancel := context.WithCancel(context.Background())
-
-		g.Add(func() error {
-			return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
-				if err := sy.SyncMetas(ctx); err != nil {
-					level.Error(logger).Log("msg", "sync failed", "err", err)
-				}
-				if err := sy.GarbageCollect(ctx); err != nil {
-					level.Error(logger).Log("msg", "garbage collection failed", "err", err)
-				}
-				return nil
-			})
-		}, func(error) {
-			cancel()
-		})
-	}
-	// Check grouped blocks and run compaction over them.
-	{
 		// Instantiate the compactor with different time slices. Timestamps in TSDB
 		// are in milliseconds.
 		comp, err := tsdb.NewLeveledCompactor(reg, logger, []int64{
@@ -147,9 +137,22 @@ func runCompact(
 
 		g.Add(func() error {
 			return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
+				if err := sy.SyncMetas(ctx); err != nil {
+					level.Error(logger).Log("msg", "sync failed", "err", err)
+				}
+				if err := sy.GarbageCollect(ctx); err != nil {
+					level.Error(logger).Log("msg", "garbage collection failed", "err", err)
+				}
 				for _, g := range sy.Groups() {
 					if _, err := g.Compact(ctx, comp); err != nil {
 						level.Error(logger).Log("msg", "compaction failed", "err", err)
+						// The HaltError type signals that we hit a critical bug and should block
+						// for investigation.
+						if compact.IsHaltError(err) {
+							level.Error(logger).Log("msg", "critical error detected; halting")
+							halted.Set(1)
+							select {}
+						}
 					}
 				}
 				return nil

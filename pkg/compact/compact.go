@@ -533,8 +533,28 @@ func (cg *Group) Compact(ctx context.Context, comp tsdb.Compactor) (ulid.ULID, e
 	cg.metrics.compactionDuration.Observe(time.Since(begin).Seconds())
 
 	return id, err
-
 }
+
+// HaltError is a type wrapper for errors that should halt any further progress on compactions.
+type HaltError struct {
+	err error
+}
+
+func halt(err error) HaltError {
+	return HaltError{err: err}
+}
+
+func (e HaltError) Error() string {
+	return e.err.Error()
+}
+
+// IsHaltError returns true if the base error is a HaltError.
+func IsHaltError(err error) bool {
+	_, ok1 := errors.Cause(err).(HaltError)
+	_, ok2 := errors.Cause(err).(*HaltError)
+	return ok1 || ok2
+}
+
 func (cg *Group) compact(ctx context.Context, comp tsdb.Compactor) (id ulid.ULID, err error) {
 	// Planning a compaction works purely based on the meta.json files in our group's dir.
 	cg.mtx.Lock()
@@ -547,6 +567,27 @@ func (cg *Group) compact(ctx context.Context, comp tsdb.Compactor) (id ulid.ULID
 	if len(plan) == 0 {
 		return id, nil
 	}
+	// Due to #183 we verify that none of the blocks in the plan have overlapping sources.
+	// This is one potential source of how we could end up with duplicated chunks.
+	uniqueSources := map[ulid.ULID]struct{}{}
+
+	for _, pdir := range plan {
+		meta, err := block.ReadMetaFile(pdir)
+		if err != nil {
+			return id, errors.Wrapf(err, "read meta from %s", pdir)
+		}
+		for _, s := range meta.Compaction.Sources {
+			if _, ok := uniqueSources[s]; ok {
+				return id, halt(errors.Errorf("overlapping sources detected for plan %v", plan))
+			}
+			uniqueSources[s] = struct{}{}
+		}
+		// Ensure all input blocks are valid.
+		if err := block.VerifyIndex(filepath.Join(pdir, "index")); err != nil {
+			return id, errors.Wrapf(halt(err), "invalid plan block %s", pdir)
+		}
+	}
+
 	// Once we have a plan we need to download the actual data. We don't touch
 	// the main directory but use an intermediate one instead.
 	wdir := filepath.Join(cg.dir, "tmp")
@@ -592,6 +633,11 @@ func (cg *Group) compact(ctx context.Context, comp tsdb.Compactor) (id ulid.ULID
 
 	if err := block.WriteMetaFile(bdir, newMeta); err != nil {
 		return id, errors.Wrap(err, "write new meta")
+	}
+
+	// Ensure the output block is valid.
+	if err := block.VerifyIndex(filepath.Join(bdir, "index")); err != nil {
+		return id, errors.Wrapf(halt(err), "invalid result block %s", bdir)
 	}
 
 	begin = time.Now()
