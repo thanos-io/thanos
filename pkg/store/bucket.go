@@ -18,6 +18,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/pool"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
@@ -38,21 +39,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// BucketStore implements the store API backed by a Bucket bucket. It loads all index
-// files to local disk.
-type BucketStore struct {
-	logger     log.Logger
-	metrics    *bucketStoreMetrics
-	bucket     objstore.BucketReader
-	dir        string
-	indexCache *indexCache
-	chunkPool  *pool.BytesPool
-
-	mtx    sync.RWMutex
-	blocks map[ulid.ULID]*bucketBlock
-}
-
 type bucketStoreMetrics struct {
+	blocksLoaded          prometheus.Gauge
 	blockLoads            prometheus.Counter
 	blockLoadFailures     prometheus.Counter
 	blockDrops            prometheus.Counter
@@ -87,11 +75,9 @@ func newBucketStoreMetrics(reg prometheus.Registerer, s *BucketStore) *bucketSto
 		Name: "thanos_bucket_store_block_drop_failures_total",
 		Help: "Total number of local blocks that failed to be dropped.",
 	})
-	blocksLoaded := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+	m.blocksLoaded = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_bucket_store_blocks_loaded",
 		Help: "Number of currently loaded blocks.",
-	}, func() float64 {
-		return float64(s.numBlocks())
 	})
 
 	m.seriesDataTouched = prometheus.NewSummaryVec(prometheus.SummaryOpts{
@@ -149,7 +135,7 @@ func newBucketStoreMetrics(reg prometheus.Registerer, s *BucketStore) *bucketSto
 			m.blockLoadFailures,
 			m.blockDrops,
 			m.blockDropFailures,
-			blocksLoaded,
+			m.blocksLoaded,
 			m.seriesDataTouched,
 			m.seriesDataFetched,
 			m.seriesDataSizeTouched,
@@ -162,6 +148,22 @@ func newBucketStoreMetrics(reg prometheus.Registerer, s *BucketStore) *bucketSto
 		)
 	}
 	return &m
+}
+
+// BucketStore implements the store API backed by a bucket. It loads all index
+// files to local disk.
+type BucketStore struct {
+	logger     log.Logger
+	metrics    *bucketStoreMetrics
+	bucket     objstore.BucketReader
+	dir        string
+	indexCache *indexCache
+	chunkPool  *pool.BytesPool
+
+	// Sets of blocks that have the same labels. They are indexed by a hash over their label set.
+	mtx       sync.RWMutex
+	blocks    map[ulid.ULID]*bucketBlock
+	blockSets map[uint64]*bucketBlockSet
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -192,6 +194,7 @@ func NewBucketStore(
 		indexCache: indexCache,
 		chunkPool:  chunkPool,
 		blocks:     map[ulid.ULID]*bucketBlock{},
+		blockSets:  map[uint64]*bucketBlockSet{},
 	}
 	s.metrics = newBucketStoreMetrics(reg, s)
 
@@ -207,24 +210,10 @@ func NewBucketStore(
 		if err != nil {
 			continue
 		}
-		blockDir := filepath.Join(dir, dn)
-
-		b, err := newBucketBlock(
-			context.TODO(),
-			log.With(logger, "block", id),
-			bucket,
-			id,
-			blockDir,
-			s.indexCache,
-			s.chunkPool,
-		)
-		if err != nil {
+		if err := s.addBlock(context.TODO(), id); err != nil {
 			level.Warn(s.logger).Log("msg", "loading block failed", "id", id, "err", err)
-			// Wipe the directory so we can cleanly try again later.
-			os.RemoveAll(blockDir)
 			continue
 		}
-		s.setBlock(id, b)
 	}
 	return s, nil
 }
@@ -252,18 +241,10 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 		wg.Add(1)
 		go func() {
 			for id := range blockc {
-				dir := filepath.Join(s.dir, id.String())
-
-				b, err := newBucketBlock(ctx, s.logger, s.bucket, id, dir, s.indexCache, s.chunkPool)
-				if err != nil {
+				if err := s.addBlock(ctx, id); err != nil {
 					level.Warn(s.logger).Log("msg", "loading block failed", "id", id, "err", err)
-					// Wipe the directory so we can cleanly try again later.
-					os.RemoveAll(dir)
-					s.metrics.blockLoadFailures.Inc()
 					continue
 				}
-				s.metrics.blockLoads.Inc()
-				s.setBlock(id, b)
 			}
 			wg.Done()
 		}()
@@ -321,10 +302,63 @@ func (s *BucketStore) getBlock(id ulid.ULID) *bucketBlock {
 	return s.blocks[id]
 }
 
-func (s *BucketStore) setBlock(id ulid.ULID, b *bucketBlock) {
+func (s *BucketStore) addBlock(ctx context.Context, id ulid.ULID) (err error) {
+	dir := filepath.Join(s.dir, id.String())
+
+	defer func() {
+		if err != nil {
+			s.metrics.blockLoadFailures.Inc()
+			os.RemoveAll(dir)
+		}
+	}()
+	s.metrics.blockLoads.Inc()
+
+	b, err := newBucketBlock(ctx, log.With(s.logger, "block", id),
+		s.bucket, id, dir, s.indexCache, s.chunkPool)
+	if err != nil {
+		return err
+	}
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
-	s.blocks[id] = b
+
+	lset := labels.FromMap(b.meta.Thanos.Labels)
+	h := lset.Hash()
+
+	set, ok := s.blockSets[h]
+	if !ok {
+		set = newBucketBlockSet(lset)
+		s.blockSets[h] = set
+	}
+
+	if err = set.add(b); err != nil {
+		return errors.Wrap(err, "add block to set")
+	}
+	s.blocks[b.meta.ULID] = b
+
+	s.metrics.blocksLoaded.Inc()
+
+	return nil
+}
+
+func (s *BucketStore) removeBlock(id ulid.ULID) error {
+	s.mtx.Lock()
+	b, ok := s.blocks[id]
+	delete(s.blocks, id)
+
+	if ok {
+		lset := labels.FromMap(b.meta.Thanos.Labels)
+		s.blockSets[lset.Hash()].remove(id)
+	}
+	s.mtx.Unlock()
+	s.metrics.blocksLoaded.Dec()
+
+	if !ok {
+		return nil
+	}
+	if err := b.Close(); err != nil {
+		return errors.Wrap(err, "close block")
+	}
+	return os.RemoveAll(b.dir)
 }
 
 // TimeRange returns the minimum and maximum timestamp of data available in the store.
@@ -346,21 +380,6 @@ func (s *BucketStore) TimeRange() (mint, maxt int64) {
 	return mint, maxt
 }
 
-func (s *BucketStore) removeBlock(id ulid.ULID) error {
-	s.mtx.Lock()
-	b, ok := s.blocks[id]
-	delete(s.blocks, id)
-	s.mtx.Unlock()
-
-	if !ok {
-		return nil
-	}
-	if err := b.Close(); err != nil {
-		return errors.Wrap(err, "close block")
-	}
-	return os.RemoveAll(b.dir)
-}
-
 // Info implements the storepb.StoreServer interface.
 func (s *BucketStore) Info(context.Context, *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	mint, maxt := s.TimeRange()
@@ -373,12 +392,14 @@ func (s *BucketStore) Info(context.Context, *storepb.InfoRequest) (*storepb.Info
 
 type seriesEntry struct {
 	lset []storepb.Label
-	chks []chunks.Meta
-}
-type bucketSeriesSet struct {
-	set  []seriesEntry
-	i    int
+	refs []uint64
 	chks []storepb.AggrChunk
+}
+
+type bucketSeriesSet struct {
+	set []seriesEntry
+	i   int
+	err error
 }
 
 func newBucketSeriesSet(set []seriesEntry) *bucketSeriesSet {
@@ -393,35 +414,25 @@ func (s *bucketSeriesSet) Next() bool {
 		return false
 	}
 	s.i++
-	s.chks = make([]storepb.AggrChunk, 0, len(s.set[s.i].chks))
-
-	// TODO(bplotka): If spotted troubles with gRPC overhead, split chunks to max 4MB chunks if needed. Currently
-	// we have huge limit for message size ~2GB.
-	for _, c := range s.set[s.i].chks {
-		s.chks = append(s.chks, storepb.AggrChunk{
-			MinTime: c.MinTime,
-			MaxTime: c.MaxTime,
-			Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR, Data: c.Chunk.Bytes()},
-		})
-	}
 	return true
 }
 
 func (s *bucketSeriesSet) At() ([]storepb.Label, []storepb.AggrChunk) {
-	return s.set[s.i].lset, s.chks
+	return s.set[s.i].lset, s.set[s.i].chks
 }
 
 func (s *bucketSeriesSet) Err() error {
-	return nil
+	return s.err
 }
 
 func (s *BucketStore) blockSeries(
 	ctx context.Context,
+	ulid ulid.ULID,
 	extLset map[string]string,
 	indexr *bucketIndexReader,
 	chunkr *bucketChunkReader,
 	matchers []labels.Matcher,
-	mint, maxt int64,
+	req *storepb.SeriesRequest,
 ) (storepb.SeriesSet, *queryStats, error) {
 	stats := &queryStats{}
 
@@ -464,7 +475,8 @@ func (s *BucketStore) blockSeries(
 		}
 		s := seriesEntry{
 			lset: make([]storepb.Label, 0, len(lset)),
-			chks: make([]chunks.Meta, 0, len(chks)),
+			refs: make([]uint64, 0, len(chks)),
+			chks: make([]storepb.AggrChunk, 0, len(chks)),
 		}
 		for _, l := range lset {
 			// Skip if the external labels of the block overrule the series' label.
@@ -488,16 +500,21 @@ func (s *BucketStore) blockSeries(
 		})
 
 		for _, meta := range chks {
-			if meta.MaxTime < mint {
+			if meta.MaxTime < req.MinTime {
 				continue
 			}
-			if meta.MinTime > maxt {
+			if meta.MinTime > req.MaxTime {
 				break
 			}
+
 			if err := chunkr.addPreload(meta.Ref); err != nil {
 				return nil, stats, errors.Wrap(err, "add chunk preload")
 			}
-			s.chks = append(s.chks, meta)
+			s.chks = append(s.chks, storepb.AggrChunk{
+				MinTime: meta.MinTime,
+				MaxTime: meta.MaxTime,
+			})
+			s.refs = append(s.refs, meta.Ref)
 		}
 		if len(s.chks) > 0 {
 			res = append(res, s)
@@ -511,12 +528,14 @@ func (s *BucketStore) blockSeries(
 
 	// Transform all chunks into the response format.
 	for _, s := range res {
-		for i := range s.chks {
-			chk, err := chunkr.Chunk(s.chks[i].Ref)
+		for i, ref := range s.refs {
+			chk, err := chunkr.Chunk(ref)
 			if err != nil {
 				return nil, stats, errors.Wrap(err, "get chunk")
 			}
-			s.chks[i].Chunk = chk
+			if err := populateChunk(&s.chks[i], chk, req.Aggregates); err != nil {
+				return nil, stats, errors.Wrap(err, "populate chunk")
+			}
 		}
 	}
 
@@ -524,6 +543,54 @@ func (s *BucketStore) blockSeries(
 	stats = stats.merge(chunkr.stats)
 
 	return newBucketSeriesSet(res), stats, nil
+}
+
+func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr) error {
+	if in.Encoding() == chunkenc.EncXOR {
+		out.Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: in.Bytes()}
+		return nil
+	}
+	if in.Encoding() != downsample.ChunkEncAggr {
+		return errors.Errorf("unsupported chunk encoding %d", in.Encoding())
+	}
+
+	ac := downsample.AggrChunk(in.Bytes())
+
+	for _, at := range aggrs {
+		switch at {
+		case storepb.Aggr_COUNT:
+			x, err := ac.Get(downsample.AggrCount)
+			if err != nil {
+				return errors.Errorf("aggregate %s does not exist", downsample.AggrCount)
+			}
+			out.Count = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: x.Bytes()}
+		case storepb.Aggr_SUM:
+			x, err := ac.Get(downsample.AggrSum)
+			if err != nil {
+				return errors.Errorf("aggregate %s does not exist", downsample.AggrSum)
+			}
+			out.Sum = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: x.Bytes()}
+		case storepb.Aggr_MIN:
+			x, err := ac.Get(downsample.AggrMin)
+			if err != nil {
+				return errors.Errorf("aggregate %s does not exist", downsample.AggrMin)
+			}
+			out.Min = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: x.Bytes()}
+		case storepb.Aggr_MAX:
+			x, err := ac.Get(downsample.AggrMax)
+			if err != nil {
+				return errors.Errorf("aggregate %s does not exist", downsample.AggrMax)
+			}
+			out.Max = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: x.Bytes()}
+		case storepb.Aggr_COUNTER:
+			x, err := ac.Get(downsample.AggrCounter)
+			if err != nil {
+				return errors.Errorf("aggregate %s does not exist", downsample.AggrCounter)
+			}
+			out.Counter = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: x.Bytes()}
+		}
+	}
+	return nil
 }
 
 // Series implements the storepb.StoreServer interface.
@@ -540,51 +607,50 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	)
 	s.mtx.RLock()
 
-	// Select blocks relevant for the query and prepare getters for their data.
-	for _, b := range s.blocks {
-		// NOTE(fabxc): we skip all downsampled blocks for now until support for the rest of the
-		// chain is implemented.
-		if b.meta.Thanos.Downsample.Resolution > 0 {
-			continue
-		}
-		blockMatchers, ok := b.blockMatchers(req.MinTime, req.MaxTime, matchers...)
+	for _, bs := range s.blockSets {
+		blockMatchers, ok := bs.labelMatchers(matchers...)
 		if !ok {
 			continue
 		}
-		stats.blocksQueried++
+		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow)
 
-		b := b
-		ctx, cancel := context.WithCancel(srv.Context())
+		for _, b := range blocks {
+			stats.blocksQueried++
 
-		// We must keep the readers open until all their data has been sent.
-		indexr := b.indexReader(ctx)
-		chunkr := b.chunkReader(ctx)
-		defer indexr.Close()
-		defer chunkr.Close()
+			b := b
+			ctx, cancel := context.WithCancel(srv.Context())
 
-		g.Add(func() error {
-			part, pstats, err := s.blockSeries(ctx,
-				b.meta.Thanos.Labels,
-				indexr,
-				chunkr,
-				blockMatchers,
-				req.MinTime, req.MaxTime,
-			)
-			if err != nil {
-				return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
-			}
+			// We must keep the readers open until all their data has been sent.
+			indexr := b.indexReader(ctx)
+			chunkr := b.chunkReader(ctx)
+			defer indexr.Close()
+			defer chunkr.Close()
 
-			mtx.Lock()
-			res = append(res, part)
-			stats = stats.merge(pstats)
-			mtx.Unlock()
+			g.Add(func() error {
+				part, pstats, err := s.blockSeries(ctx,
+					b.meta.ULID,
+					b.meta.Thanos.Labels,
+					indexr,
+					chunkr,
+					blockMatchers,
+					req,
+				)
+				if err != nil {
+					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
+				}
 
-			return nil
-		}, func(err error) {
-			if err != nil {
-				cancel()
-			}
-		})
+				mtx.Lock()
+				res = append(res, part)
+				stats = stats.merge(pstats)
+				mtx.Unlock()
+
+				return nil
+			}, func(err error) {
+				if err != nil {
+					cancel()
+				}
+			})
+		}
 	}
 
 	s.mtx.RUnlock()
@@ -609,12 +675,14 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		defer span.Finish()
 
 		begin := time.Now()
-		var series storepb.Series
 
 		// Merge series set into an union of all block sets. This exposes all blocks are single seriesSet.
-		// Returned set is can be out of order in terms of series time ranges. It is fixed later on, inside querier.
+		// Chunks of returned series might be out of order w.r.t to their time range.
+		// This must be accounted for later by clients.
 		set := storepb.MergeSeriesSets(res...)
 		for set.Next() {
+			var series storepb.Series
+
 			series.Labels, series.Chunks = set.At()
 
 			stats.mergedSeriesCount++
@@ -712,6 +780,131 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	}, nil
 }
 
+// bucketBlockSet holds all blocks of an equal label set. It internally splits
+// them up by downsampling resolution and allows querying
+type bucketBlockSet struct {
+	labels      labels.Labels
+	mtx         sync.RWMutex
+	resolutions []int64          // available resolution, high to low
+	blocks      [][]*bucketBlock // ordered buckets for the existing resolutions
+}
+
+// newBucketBlockSet initializes a new set with the known downsampling windows hard-configured.
+// The set currently does not support arbtirary ranges.
+func newBucketBlockSet(lset labels.Labels) *bucketBlockSet {
+	return &bucketBlockSet{
+		labels:      lset,
+		resolutions: []int64{downsample.ResLevel2, downsample.ResLevel1, downsample.ResLevel0},
+		blocks:      make([][]*bucketBlock, 3),
+	}
+}
+
+func (s *bucketBlockSet) add(b *bucketBlock) error {
+	if !s.labels.Equals(labels.FromMap(b.meta.Thanos.Labels)) {
+		return errors.New("block's label set does not match set")
+	}
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	i := int64index(s.resolutions, b.meta.Thanos.Downsample.Resolution)
+	if i < 0 {
+		return errors.Errorf("unsupported downsampling resolution %d", b.meta.Thanos.Downsample.Resolution)
+	}
+	bs := append(s.blocks[i], b)
+	s.blocks[i] = bs
+
+	sort.Slice(bs, func(j, k int) bool {
+		if bs[j].meta.MinTime < bs[k].meta.MinTime {
+			return true
+		}
+		return false
+	})
+	return nil
+}
+
+func (s *bucketBlockSet) remove(id ulid.ULID) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	for i, bs := range s.blocks {
+		for j, b := range bs {
+			if b.meta.ULID != id {
+				continue
+			}
+			s.blocks[i] = append(bs[:j], bs[j+1:]...)
+			return
+		}
+	}
+}
+
+func int64index(s []int64, x int64) int {
+	for i, v := range s {
+		if v == x {
+			return i
+		}
+	}
+	return -1
+}
+
+// getFor returns a time-ordered list of blocks that cover date between mint and maxt.
+// Blocks with the lowest resolution possible but not lower than the given resolution are returned.
+func (s *bucketBlockSet) getFor(mint, maxt, minResolution int64) (bs []*bucketBlock) {
+	if mint == maxt {
+		return nil
+	}
+
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	// Find first matching resolution.
+	i := 0
+	for ; i < len(s.resolutions) && s.resolutions[i] > minResolution; i++ {
+	}
+
+	// Base case, we fill the given interval with the closest resolution.
+	for _, b := range s.blocks[i] {
+		if b.meta.MaxTime <= mint {
+			continue
+		}
+		if b.meta.MinTime >= maxt {
+			break
+		}
+		bs = append(bs, b)
+	}
+	// Our current resolution might not cover all data, recursively fill the gaps at the start
+	// end end of [mint, maxt] with higher resolution blocks.
+	i++
+	// No higher resolution left, we are done.
+	if i >= len(s.resolutions) {
+		return bs
+	}
+	if len(bs) == 0 {
+		return s.getFor(mint, maxt, s.resolutions[i])
+	}
+	left := s.getFor(mint, bs[0].meta.MinTime, s.resolutions[i])
+	right := s.getFor(bs[len(bs)-1].meta.MaxTime, maxt, s.resolutions[i])
+
+	return append(left, append(bs, right...)...)
+}
+
+// labelMatchers verifies whether the block set matches the given matchers and returns a new
+// set of matchers that is equivalent when querying data within the block.
+func (s *bucketBlockSet) labelMatchers(matchers ...labels.Matcher) ([]labels.Matcher, bool) {
+	res := make([]labels.Matcher, 0, len(matchers))
+
+	for _, m := range matchers {
+		v := s.labels.Get(m.Name())
+		if v == "" {
+			res = append(res, m)
+			continue
+		}
+		if !m.Matches(v) {
+			return nil, false
+		}
+	}
+	return res, true
+}
+
 // bucketBlock represents a block that is located in a bucket. It holds intermediate
 // state for the block on local disk.
 type bucketBlock struct {
@@ -740,22 +933,27 @@ func newBucketBlock(
 	dir string,
 	indexCache *indexCache,
 	chunkPool *pool.BytesPool,
-) (*bucketBlock, error) {
-	b := &bucketBlock{
+) (b *bucketBlock, err error) {
+	b = &bucketBlock{
 		logger:     logger,
 		bucket:     bkt,
 		indexObj:   path.Join(id.String(), "index"),
 		indexCache: indexCache,
 		chunkPool:  chunkPool,
 	}
-	if err := b.loadMeta(ctx, id, dir); err != nil {
+	defer func() {
+		if err != nil {
+			os.RemoveAll(dir)
+		}
+	}()
+	if err = b.loadMeta(ctx, id, dir); err != nil {
 		return nil, errors.Wrap(err, "load meta")
 	}
-	if err := b.loadIndexCache(ctx, dir); err != nil {
+	if err = b.loadIndexCache(ctx, dir); err != nil {
 		return nil, errors.Wrap(err, "load index cache")
 	}
 	// Get object handles for all chunk files.
-	err := bkt.Iter(ctx, path.Join(id.String(), "chunks"), func(n string) error {
+	err = bkt.Iter(ctx, path.Join(id.String(), "chunks"), func(n string) error {
 		b.chunkObjs = append(b.chunkObjs, n)
 		return nil
 	})
@@ -822,31 +1020,6 @@ func (b *bucketBlock) loadIndexCache(ctx context.Context, dir string) (err error
 	return nil
 }
 
-// blockMatchers checks whether the block potentially holds data for the given
-// time range and label matchers and returns proper matches for this block that
-// are stripped from external label matchers.
-func (b *bucketBlock) blockMatchers(mint, maxt int64, matchers ...labels.Matcher) ([]labels.Matcher, bool) {
-	if b.meta.MaxTime < mint {
-		return nil, false
-	}
-	if b.meta.MinTime > maxt {
-		return nil, false
-	}
-
-	var blockMatchers []labels.Matcher
-	for _, m := range matchers {
-		v, ok := b.meta.Thanos.Labels[m.Name()]
-		if !ok {
-			blockMatchers = append(blockMatchers, m)
-			continue
-		}
-		if !m.Matches(v) {
-			return nil, false
-		}
-	}
-	return blockMatchers, true
-}
-
 func (b *bucketBlock) readIndexRange(ctx context.Context, off, length int64) ([]byte, error) {
 	r, err := b.bucket.GetRange(ctx, b.indexObj, off, length)
 	if err != nil {
@@ -854,7 +1027,6 @@ func (b *bucketBlock) readIndexRange(ctx context.Context, off, length int64) ([]
 	}
 	defer r.Close()
 
-	// NOTE(bplotka): Huge amount of memory is allocated here. We need to cache it.
 	c, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, errors.Wrap(err, "read range")
@@ -1197,7 +1369,7 @@ func (r *bucketChunkReader) addPreload(id uint64) error {
 
 // preload all added chunk IDs. Must be called before the first call to Chunk is made.
 func (r *bucketChunkReader) preload() error {
-	const maxChunkSize = 2048
+	const maxChunkSize = 16000
 	const maxGapSize = 512 * 1024
 
 	var g run.Group
@@ -1256,15 +1428,8 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, offs []uint32, seq i
 		if len(cb) < n+int(l)+1 {
 			return errors.Errorf("preloaded chunk too small, expecting %d", n+int(l)+1)
 		}
-		cb = cb[n : n+int(l)+1]
-
-		c, err := chunkenc.FromData(chunkenc.Encoding(cb[0]), cb[1:])
-		if err != nil {
-			return errors.Wrap(err, "instantiate chunk")
-		}
-
 		cid := uint64(seq<<32) | uint64(o)
-		r.chunks[cid] = c
+		r.chunks[cid] = rawChunk(cb[n : n+int(l)+1])
 	}
 	return nil
 }
@@ -1279,6 +1444,31 @@ func (r *bucketChunkReader) Chunk(id uint64) (chunkenc.Chunk, error) {
 	r.stats.chunksTouchedSizeSum += len(c.Bytes())
 
 	return c, nil
+}
+
+// rawChunk is a helper type that wraps a chunk's raw bytes and implements the chunkenc.Chunk
+// interface over it.
+// It is used to Store API responses which don't need to introspect and validate the chunk's contents.
+type rawChunk []byte
+
+func (b rawChunk) Encoding() chunkenc.Encoding {
+	return chunkenc.Encoding(b[0])
+}
+
+func (b rawChunk) Bytes() []byte {
+	return b[1:]
+}
+
+func (b rawChunk) Iterator() chunkenc.Iterator {
+	panic("invalid call")
+}
+
+func (b rawChunk) Appender() (chunkenc.Appender, error) {
+	panic("invalid call")
+}
+
+func (b rawChunk) NumSamples() int {
+	panic("invalid call")
 }
 
 func (r *bucketChunkReader) Close() error {
