@@ -1,5 +1,9 @@
 # Rule
 
+_**NOTE:** The rule component is experimental since it has conceptual tradeoffs that might not be faveorable for most use cases. It is recommended to keep deploying rules to the relevant Prometheus servers._
+
+_The rule component should in particular not be used to circumvent solving rule deployment properly at the configuration management level._
+
 The rule component evaluates Prometheus recording and alerting rules against random query nodes in its cluster. Rule results are written back to disk in the Prometheus 2.0 storage format. Rule nodes at the same time participate in the cluster themselves as source store nodes and upload their generated TSDB blocks to an object store.
 
 The data of each rule node can be labeled to satisfy the clusters labeling scheme. High-availability pairs can be run in parallel and should be distinguished by the designated replica label, just like regular Prometheus servers.
