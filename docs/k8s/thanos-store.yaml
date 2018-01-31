@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: thanos-store
+spec:
+  serviceName: "thanos-store"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: thanos
+      component: store
+      thanos-peer: 'true'
+  template:
+    metadata:
+      labels:
+        app: thanos
+        component: store
+        thanos-peer: 'true'
+    spec:
+      containers:
+      - name: thanos-store
+        image: improbable-eng/thanos:dev
+        args:
+        - "store"
+        - "--tsdb.path=/var/thanos/store"
+        - "--cluster.peers=thanos-peers.default.svc:10900"
+        - "--gcs.bucket=example-bucket"
+        ports:
+        - name: http
+          containerPort: 10902
+        - name: grpc
+          containerPort: 10901
+        - name: cluster
+          containerPort: 10900
+        volumeMounts:
+        - name: data
+          mountPath: /var/thanos/store
+      volumes:
+      - name: data
+        emptyDir: {}

@@ -61,6 +61,8 @@ thanos sidecar \
 Configuration of initial peers is flexible and the argument can be repeated for Thanos to try different approaches.
 Additional flags for cluster configuration exist but are typically not needed. Check the `--help` output for further information.
 
+* _[Example Kubernetes manifest](k8s/prometheus.yaml)_
+
 ### External Labels
 
 Prometheus allows to configure "external labels" for a Prometheus instance. Those are meant to globally identify the role of a given Prometheus instance. As Thanos aims to aggregate data across all Prometheus servers, providing a consistent of external labels for all Prometheus server becomes crucial!
@@ -94,6 +96,7 @@ thanos query \
 
 Go to the configured HTTP address that should now show a UI similar to that of Prometheus itself. If the cluster formed correctly you can now query data across all Prometheus servers within the cluster.
 
+* _[Example Kubernetes manifest](k8s/thanos-query.yaml)_
 ## Store Gateway
 
 The sidecar backs up data into your object storage of your choice. But now we also want to query all that data again. The store gateway does just that by implementing the same gRPC data API as the sidecars but backing it with data it can find in your object storage bucket.
@@ -109,6 +112,7 @@ thanos store \
 
 The store node occupies small amounts of disk space for caching basic information about data in the object storage. This will rarely exceed more than a few gigabytes and is used to improve restart times. It is not useful but not required to preserve it across restarts.
 
+* _[Example Kubernetes manifest](k8s/thanos-store.yaml)_
 ## Compactor
 
 A local Prometheus installation periodically compacts older data to improve query efficieny. Since the sidecar backs up data as soon as possible, we need a way to apply the same process to data in the object storage.

@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: prometheus-meta
+spec:
+  serviceName: "prometheus-meta"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+      prometheus: meta
+      thanos-peer: 'true'
+  template:
+    metadata:
+      labels:
+        app: prometheus
+        prometheus: meta
+        thanos-peer: 'true'
+    spec:
+      containers:
+      - name: prometheus
+        image: quay.io/prometheus/prometheus:v2.1.0
+        args:
+        - "--storage.tsdb.retention=24h"
+        - "--config.file=/etc/prometheus/prometheus.yml"
+        - "--storage.tsdb.path=/var/prometheus"
+        ports:
+        - name: http
+          containerPort: 9090
+        volumeMounts:
+        - name: config
+          mountPath: /etc/prometheus
+        - name: data
+          mountPath: /var/prometheus
+      - name: thanos-sidecar
+        image: improbable-eng/thanos:dev
+        args:
+        - "sidecar"
+        - "--tsdb.path=/var/prometheus"
+        - "--cluster.peers=thanos-peers.default.svc:10900"
+        ports:
+        - name: http
+          containerPort: 10902
+        - name: grpc
+          containerPort: 10901
+        - name: cluster
+          containerPort: 10900
+        volumeMounts:
+        - name: data
+          mountPath: /var/prometheus
+      volumes:
+      - name: config
+        configMap:
+          name: prometheus-meta-config
+      - name: data
+        emptyDir: {}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-meta-config
+data:
+  prometheus.yml: |-
+    global:
+      external_labels:
+        monitor: meta
+      scrape_interval: 15s
+    scrape_configs:
+    - job_name: "prometheus"
+      static_configs:
+      - targets:
+        - "localhost:9090"
+        - "localhost:10902"
+    
