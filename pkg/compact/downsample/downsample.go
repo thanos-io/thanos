@@ -105,7 +105,11 @@ func Downsample(
 		for _, c := range chks {
 			aggrChunks = append(aggrChunks, c.Chunk.(AggrChunk))
 		}
-		res, err := downsampleAggr(aggrChunks, &all, chks[0].MinTime, chks[len(chks)-1].MaxTime, resolution)
+		res, err := downsampleAggr(
+			aggrChunks, &all,
+			chks[0].MinTime, chks[len(chks)-1].MaxTime,
+			origMeta.Thanos.Downsample.Resolution, resolution,
+		)
 		if err != nil {
 			return id, errors.Wrap(err, "downsample aggregate block")
 		}
@@ -361,6 +365,33 @@ func currentWindow(t, r int64) int64 {
 	return t - (t % r) + r - 1
 }
 
+// rangeFullness returns the fraction of how the range [mint, maxt] covered
+// with count samples at the given step size.
+// It return value is bounded to [0, 1].
+func rangeFullness(mint, maxt, step int64, count int) float64 {
+	f := float64(count) / (float64(maxt-mint) / float64(step))
+	if f > 1 {
+		return 1
+	}
+	return f
+}
+
+// targetChunkCount calculates how many chunks should be produced when downsampling a series.
+// It consider the total time range, the number of input sample, the input and output resolution.
+func targetChunkCount(mint, maxt, inRes, outRes int64, count int) (x int) {
+	// We compute how many samples we could produce for the given time range and adjust
+	// it by how densely the range is actually filled given the number of input samples and their
+	// resolution.
+	maxSamples := float64((maxt - mint) / outRes)
+	expSamples := int(maxSamples*rangeFullness(mint, maxt, inRes, count)) + 1
+
+	// Increase the number of target chunks until we each chunk will have less than
+	// 140 samples on average.
+	for x = 1; expSamples/x > 140; x++ {
+	}
+	return x
+}
+
 // downsampleRaw create a series of aggregation chunks for the given sample data.
 func downsampleRaw(data []sample, resolution int64) []chunks.Meta {
 	if len(data) == 0 {
@@ -368,11 +399,13 @@ func downsampleRaw(data []sample, resolution int64) []chunks.Meta {
 	}
 	var (
 		mint, maxt = data[0].t, data[len(data)-1].t
-		ns         = int((maxt-mint)/resolution) + 1
-		nc, _      = targetChunkSize(ns)
-		chks       = make([]chunks.Meta, 0, nc)
-		batchSize  = (len(data) / nc) + 1
+		// We assume a raw resolution of 1 minute. In practice it will often be lower
+		// but this is sufficient for our heuristic to produce well-sized chunks.
+		numChunks = targetChunkCount(mint, maxt, 1*60*1000, resolution, len(data))
+		chks      = make([]chunks.Meta, 0, numChunks)
+		batchSize = (len(data) / numChunks) + 1
 	)
+
 	for len(data) > 0 {
 		j := batchSize
 		if j > len(data) {
@@ -390,7 +423,6 @@ func downsampleRaw(data []sample, resolution int64) []chunks.Meta {
 		data = data[j:]
 
 		lastT := downsampleBatch(batch, resolution, ab.add)
-
 		// Finalize the chunk's counter aggregate with the last true sample.
 		ab.apps[AggrCounter].Append(lastT, batch[len(batch)-1].v)
 
@@ -431,15 +463,18 @@ func downsampleBatch(data []sample, resolution int64, add func(int64, *aggregato
 }
 
 // downsampleAggr downsamples a sequence of aggregation chunks to the given resolution.
-func downsampleAggr(chks []AggrChunk, buf *[]sample, mint, maxt, resolution int64) ([]chunks.Meta, error) {
+func downsampleAggr(chks []AggrChunk, buf *[]sample, mint, maxt, inResolution, outResolution int64) ([]chunks.Meta, error) {
 	// We downsample aggregates only along chunk boundaries. This is required for counters
 	// to be downsampled correctly since a chunks' last counter value is the true last value
 	// of the original series. We need to preserve it even across multiple aggregation iterations.
+	var numSamples int
+	for _, c := range chks {
+		numSamples += c.NumSamples()
+	}
 	var (
-		ns        = int((maxt-mint)/resolution) + 1
-		nc, _     = targetChunkSize(ns)
-		res       = make([]chunks.Meta, 0, nc)
-		batchSize = len(chks) / nc
+		numChunks = targetChunkCount(mint, maxt, inResolution, outResolution, numSamples)
+		res       = make([]chunks.Meta, 0, numChunks)
+		batchSize = len(chks) / numChunks
 	)
 
 	for len(chks) > 0 {
@@ -450,7 +485,7 @@ func downsampleAggr(chks []AggrChunk, buf *[]sample, mint, maxt, resolution int6
 		part := chks[:j]
 		chks = chks[j:]
 
-		mint, maxt, c, err := downsampleAggrBatch(part, buf, resolution)
+		mint, maxt, c, err := downsampleAggrBatch(part, buf, outResolution)
 		if err != nil {
 			return nil, err
 		}
@@ -463,6 +498,8 @@ func downsampleAggr(chks []AggrChunk, buf *[]sample, mint, maxt, resolution int6
 	return res, nil
 }
 
+// expandChunkIterator reads all samples from the iterater and appends them to buf.
+// Stale markers and out of order samples are skipped.
 func expandChunkIterator(it chunkenc.Iterator, buf *[]sample) error {
 	// For safety reasons, we check for each sample that it does not go back in time.
 	// If it does, we skip it.
@@ -470,6 +507,9 @@ func expandChunkIterator(it chunkenc.Iterator, buf *[]sample) error {
 
 	for it.Next() {
 		t, v := it.At()
+		if value.IsStaleNaN(v) {
+			continue
+		}
 		if t >= lastT {
 			*buf = append(*buf, sample{t, v})
 			lastT = t
@@ -569,15 +609,6 @@ func downsampleAggrBatch(chks []AggrChunk, buf *[]sample, resolution int64) (min
 	ab.apps[AggrCounter].Append(lastT, it.lastV)
 
 	return mint, maxt, ab.encode(), nil
-}
-
-// targetChunkSize computes an intended sample count per chunk given a fixed length
-// of samples in the series.
-// It aims to split the series into chunks of length 70 or higher.
-func targetChunkSize(l int) (c, s int) {
-	for c = 1; l/c > 140; c++ {
-	}
-	return c, (l / c) + 1
 }
 
 type sample struct {

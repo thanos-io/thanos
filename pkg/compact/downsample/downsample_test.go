@@ -22,6 +22,19 @@ import (
 	"github.com/prometheus/tsdb/labels"
 )
 
+func TestExpandChunkIterator(t *testing.T) {
+	// Validate that expanding the chunk iterator filters out-of-order samples
+	// and staleness markers.
+	// Same timestamps are okay since we use them for counter markers.
+	var res []sample
+	expandChunkIterator(newSampleIterator([]sample{
+		{100, 1}, {200, 2}, {200, 3}, {201, 4}, {200, 5},
+		{300, 6}, {400, math.Float64frombits(value.StaleNaN)}, {500, 5},
+	}), &res)
+
+	testutil.Equals(t, []sample{{100, 1}, {200, 2}, {200, 3}, {201, 4}, {300, 6}, {500, 5}}, res)
+}
+
 func TestAggrChunk(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
