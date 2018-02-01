@@ -411,10 +411,10 @@ func downsampleRaw(data []sample, resolution int64) []chunks.Meta {
 		if j > len(data) {
 			j = len(data)
 		}
-		// The batch we took might end in the middle of a downsampling window. We have to additionally
-		// grab all following samples still within our current window.
 		curW := currentWindow(data[j-1].t, resolution)
 
+		// The batch we took might end in the middle of a downsampling window. We additionally grab
+		// all further samples in the window to keep our samples regular.
 		for ; j < len(data) && data[j].t <= curW; j++ {
 		}
 
@@ -441,6 +441,7 @@ func downsampleBatch(data []sample, resolution int64, add func(int64, *aggregato
 	var (
 		aggr  aggregator
 		nextT = int64(-1)
+		lastT = data[len(data)-1].t
 	)
 	// Fill up one aggregate chunk with up to m samples.
 	for _, s := range data {
@@ -453,6 +454,13 @@ func downsampleBatch(data []sample, resolution int64, add func(int64, *aggregato
 			}
 			aggr.reset()
 			nextT = currentWindow(s.t, resolution)
+			// Limit next timestamp to not go beyond the batch. A subsequent batch
+			// may overlap in time range otherwise.
+			// We have aligned batches for raw downsamplings but subsequent downsamples
+			// are forced to be chunk-boundary aligned and cannot guarantee this.
+			if nextT > lastT {
+				nextT = lastT
+			}
 		}
 		aggr.add(s.v)
 	}
