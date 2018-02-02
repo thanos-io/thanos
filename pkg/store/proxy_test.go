@@ -1,11 +1,9 @@
 package store
 
 import (
-	"testing"
-
 	"context"
-
 	"io"
+	"testing"
 
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"

@@ -2,11 +2,10 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"testing"
 	"time"
-
-	"fmt"
 
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"

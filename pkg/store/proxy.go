@@ -2,11 +2,9 @@ package store
 
 import (
 	"context"
-	"sync"
-
 	"io"
-
 	"math"
+	"sync"
 
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"

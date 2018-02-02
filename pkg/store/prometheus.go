@@ -12,19 +12,18 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/go-kit/kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
+	"github.com/improbable-eng/thanos/pkg/store/prompb"
+	"github.com/improbable-eng/thanos/pkg/store/storepb"
+	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/store/prompb"
-	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/improbable-eng/thanos/pkg/tracing"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 // PrometheusStore implements the store node API on top of the Prometheus remote read API.
