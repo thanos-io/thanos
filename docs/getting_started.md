@@ -61,7 +61,7 @@ thanos sidecar \
 Configuration of initial peers is flexible and the argument can be repeated for Thanos to try different approaches.
 Additional flags for cluster configuration exist but are typically not needed. Check the `--help` output for further information.
 
-* _[Example Kubernetes manifest](k8s/prometheus.yaml)_
+* _[Example Kubernetes manifest](../kube/manifests/prometheus.yaml)_
 
 ### External Labels
 

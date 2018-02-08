@@ -1,7 +1,6 @@
 # PromLTS kubernetes test setup.
 
-This directory contains scripts and k8s resource definitions for PromLTS. This allows to test is locally, 
-as well as on external clusters.
+This directory contains example, runnable scripts and k8s resource definitions for Thanos.
 
 ## Local mini-kube
 
@@ -11,8 +10,7 @@ To run minikube with Prometheus:
 What it does:
   - run minikube
   - setup kubectl and local custom kube/config
-  - deploy local Prometheus which will be exposed on 10.0.0.88:9090 accessible from you local machine.
-  
+
 To use cluster from your terminal do:
 `source ./kube/envs.sh`
 
@@ -20,17 +18,19 @@ From now on you can use `kubectl` as well as `minikube` command, including `mini
 
 ## Example setup.
 
-This directory covers are required k8s manifest to start example setup that will include:
+This section covers are required k8s manifest to start example setup that will include:
 - Thanos headless service for discovery purposes.
 - Prometheus + Thanos sidecar.
 - Thanos query node
 
 This setup will have GCS upload disabled, but will show how we can proxy requests from Prometheus.
 
-This example can be easily extended to show the HA Prometheus use case. (TODO)
+This example can be easily extended to show the HA Prometheus use case.
 
 To run example setup:
-1. `bash kube/apply-example.sh`
+1. `source ./kube/envs.sh`
+2. `kubectl apply -f kube/manifests/prometheus.yaml`
+<TBD>
 
 You will be now able to reach Prometheus on http://prometheus.default.svc.cluster.local:9090/graph
 And Thanos Query UI on http://thanos-query.default.svc.cluster.local:19099/graph
@@ -38,7 +38,7 @@ And Thanos Query UI on http://thanos-query.default.svc.cluster.local:19099/graph
 Thanos Query UI should show exactly the same data as Prometheus.
 
 To tear down example setup:
-1. `bash kube/delete-example.sh`
+1. `kubectl delete -f kube/manifests/prometheus.yaml`
 
 ## Long term storage setup
 

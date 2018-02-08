@@ -9,8 +9,8 @@ usage() { echo "Usage: $0 [-d <vm-driver>] (specify vm-driver, by default none -
 install() {
     mkdir -p bin
     pushd ${DIR}/bin
-        echo "Downloading kubectl 1.7 locally"
-        curl -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/v1.8.0/bin/linux/amd64/kubectl && chmod +x kubectl
+        echo "Downloading kubectl 1.9 locally"
+        curl -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/v1.9.0/bin/linux/amd64/kubectl && chmod +x kubectl
 
         echo "Downloading minikube"
         curl -Lo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 && chmod +x minikube
@@ -43,7 +43,7 @@ mkdir -p .kube || true
 touch .kube/config
 
 if minikube status | grep -E "(Stopped)|minikube: $"; then
-    sudo -E ${DIR}/bin/minikube start --vm-driver=${DRIVER} --kubernetes-version=v1.8.0
+    sudo -E ${DIR}/bin/minikube start --vm-driver=${DRIVER} --kubernetes-version=v1.9.0
 fi
 
 # This for loop waits until kubectl can access the api server that Minikube has created.
