@@ -33,7 +33,7 @@ To run example setup:
 3. `kubectl apply -f kube/manifests/thanos-query.yaml`
 
 You will be now able to reach Prometheus on http://prometheus.default.svc.cluster.local:9090/graph
-And Thanos Query UI on http://thanos-query.default.svc.cluster.local:19092/graph
+And Thanos Query UI on http://thanos-query.default.svc.cluster.local:9090/graph
 
 If you cannot access these items from browser ensure that you have `10.0.0.10` address in your resolv.conf.
 Alternatively you can look for service address using `kubectl get svc` and go to proper IP address.
@@ -62,10 +62,10 @@ To run example setup:
 4. `source ./kube/envs.sh`
 5. `kubectl apply -f kube/manifests/prometheus-gcs.yaml`
 6. `kubectl apply -f kube/manifests/thanos-query.yaml`
-6. `kubectl apply -f kube/manifests/thanos-store.yaml`
+7. `kubectl apply -f kube/manifests/thanos-store.yaml`
 
 You will be now able to reach Prometheus on http://prometheus-gcs.default.svc.cluster.local:9090/graph
-And Thanos Query UI on http://thanos-query.default.svc.cluster.local:19092/graph
+And Thanos Query UI on http://thanos-query.default.svc.cluster.local:9090/graph
 
 Thanos Query UI should show exactly the same data as Prometheus, but also older data if it's running longer that 24h.
 

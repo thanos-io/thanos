@@ -40,6 +40,9 @@ Rolling this out has little to zero impact on the running Prometheus instance. I
 
 If you are not interested in backing up any data, the `--gcs.bucket` flag can simply be omitted.
 
+* _[Example Kubernetes manifest](../kube/manifests/prometheus.yaml)_
+* _[Example Kubernetes manifest with GCS upload](../kube/manifests/prometheus-gcs.yaml)_
+
 ### Query Access
 
 Thanos comes with a highly efficient gRPC-based Store API for metric data access across all its components. The sidecar implements it in front of its connected Prometheus server. While it is ready to use with the above example, we must additionally configure the sidecar to join a Thanos cluster.
@@ -62,6 +65,7 @@ Configuration of initial peers is flexible and the argument can be repeated for 
 Additional flags for cluster configuration exist but are typically not needed. Check the `--help` output for further information.
 
 * _[Example Kubernetes manifest](../kube/manifests/prometheus.yaml)_
+* _[Example Kubernetes manifest with GCS upload](../kube/manifests/prometheus-gcs.yaml)_
 
 ### External Labels
 
@@ -105,7 +109,8 @@ thanos query \
 
 Go to the configured HTTP address that should now show a UI similar to that of Prometheus itself. If the cluster formed correctly you can now query data across all Prometheus servers within the cluster.
 
-* _[Example Kubernetes manifest](k8s/thanos-query.yaml)_
+* _[Example Kubernetes manifest](../kube/manifests/thanos-query.yaml)_
+
 ## Store Gateway
 
 The sidecar backs up data into your object storage of your choice. But now we also want to query all that data again. The store gateway does just that by implementing the same gRPC data API as the sidecars but backing it with data it can find in your object storage bucket.
@@ -121,7 +126,8 @@ thanos store \
 
 The store gateway occupies small amounts of disk space for caching basic information about data in the object storage. This will rarely exceed more than a few gigabytes and is used to improve restart times. It is not useful but not required to preserve it across restarts.
 
-* _[Example Kubernetes manifest](k8s/thanos-store.yaml)_
+* _[Example Kubernetes manifest](../kube/manifests/thanos-store.yaml)_
+
 ## Compactor
 
 A local Prometheus installation periodically compacts older data to improve query efficieny. Since the sidecar backs up data as soon as possible, we need a way to apply the same process to data in the object storage.
@@ -137,3 +143,7 @@ thanos compact \
 The compactor is not in the critical path of querying or data backup. It can either be run as a periodic batch job or be left running to always compact data as soon as possible. It is recommended to provide 100-300GB of local disk space for data processing.
 
 _NOTE: The compactor must be run as a **singleton** and must not run when manually modifying data in the bucket._
+
+# All-in-one example
+
+You can find one-box example with minikube [here](../kube/README.md).

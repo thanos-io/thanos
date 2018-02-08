@@ -11,12 +11,12 @@ spec:
   selector:
     matchLabels:
       app: prometheus-gcs
-      thanos-peer: 'true'
+      thanos-peer: "true"
   template:
     metadata:
       labels:
         app: prometheus-gcs
-        thanos-peer: 'true'
+        thanos-peer: "true"
     spec:
       containers:
       - name: prometheus
@@ -166,4 +166,4 @@ spec:
     targetPort: cluster
   selector:
     # Useful endpoint for gathering all thanos components for common gossip cluster.
-    thanos-peer: 'true'
+    thanos-peer: "true"

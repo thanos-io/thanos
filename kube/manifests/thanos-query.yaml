@@ -10,18 +10,19 @@ spec:
   selector:
     matchLabels:
       app: thanos-query
-      thanos-peer: 'true'
+      thanos-peer: "true"
   template:
     metadata:
       labels:
         app: thanos-query
-        thanos-peer: 'true'
+        thanos-peer: "true"
     spec:
       containers:
       - name: thanos-query
         image: improbable/thanos:latest
         args:
         - "query"
+        - "--log.level=debug"
         - "--cluster.peers=thanos-peers.default.svc.cluster.local:10900"
         ports:
         - name: http

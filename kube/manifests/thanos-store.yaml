@@ -8,12 +8,12 @@ spec:
   selector:
     matchLabels:
       app: thanos
-      thanos-peer: 'true'
+      thanos-peer: "true"
   template:
     metadata:
       labels:
         app: thanos
-        thanos-peer: 'true'
+        thanos-peer: "true"
     spec:
       containers:
       - name: thanos-store
