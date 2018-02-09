@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: thanos-store
+spec:
+  serviceName: "thanos-store"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: thanos
+      thanos-peer: "true"
+  template:
+    metadata:
+      labels:
+        app: thanos
+        thanos-peer: "true"
+    spec:
+      containers:
+      - name: thanos-store
+        image: improbable/thanos:latest
+        env:
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: /creds/gcs-credentials.json
+        args:
+        - "store"
+        - "--log.level=debug"
+        - "--tsdb.path=/var/thanos/store"
+        - "--cluster.peers=thanos-peers.default.svc.cluster.local:10900"
+        # NOTE: This is required to be added in GCS prior startup of this.
+        - "--gcs.bucket=<bucket-name>"
+        ports:
+        - name: http
+          containerPort: 10902
+        - name: grpc
+          containerPort: 10901
+        - name: cluster
+          containerPort: 10900
+        volumeMounts:
+        - mountPath: /creds/
+          name: gcs-credentials
+          readOnly: true
+        - name: data
+          mountPath: /var/thanos/store
+      volumes:
+      - name: data
+        emptyDir: {}
+      - name: gcs-credentials
+        secret:
+          defaultMode: 420
+          # NOTE: gcs-credentials secret with single file gcs-credentials.json is required.
+          secretName: gcs-credentials

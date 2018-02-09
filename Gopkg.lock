@@ -257,7 +257,7 @@
   branch = "queryparams"
   name = "github.com/prometheus/prometheus"
   packages = ["pkg/labels","pkg/rulefmt","pkg/textparse","pkg/timestamp","pkg/value","promql","rules","storage","storage/tsdb","template","util/stats","util/strutil","util/testutil"]
-  revision = "7c8fece5a44ceb81a317086a0edba1850a23980f"
+  revision = "126770e81fa24752b30cbcde54cb96d95b243ea5"
 
 [[projects]]
   branch = "master"
@@ -347,7 +347,7 @@
   branch = "v2"
   name = "gopkg.in/yaml.v2"
   packages = ["."]
-  revision = "d670f9405373e636a5a2765eea47fac0c9bc91a4"
+  revision = "287cf08546ab5e7e37d55a84f7ed3fd1db036de5"
 
 [solve-meta]
   analyzer-name = "dep"

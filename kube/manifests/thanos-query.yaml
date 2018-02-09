@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: thanos-query
+  labels:
+    app: thanos-query
+    thanos-peer: "true"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: thanos-query
+      thanos-peer: "true"
+  template:
+    metadata:
+      labels:
+        app: thanos-query
+        thanos-peer: "true"
+    spec:
+      containers:
+      - name: thanos-query
+        image: improbable/thanos:latest
+        args:
+        - "query"
+        - "--log.level=debug"
+        - "--cluster.peers=thanos-peers.default.svc.cluster.local:10900"
+        ports:
+        - name: http
+          containerPort: 10902
+        - name: grpc
+          containerPort: 10901
+        - name: cluster
+          containerPort: 10900
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: thanos-query
+  name: thanos-query
+spec:
+  externalTrafficPolicy: Cluster
+  ports:
+  - port: 9090
+    protocol: TCP
+    targetPort: http
+    name: http-query
+  selector:
+    app: thanos-query
+  sessionAffinity: None
+  type: NodePort
+status:
+  loadBalancer: {}

@@ -3,7 +3,11 @@ FILES             ?= $(shell find . -type f -name '*.go' -not -path "./vendor/*"
 DOCKER_IMAGE_NAME ?= thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))
 
-all: install-tools format build
+all: install-tools deps format build
+
+deps:
+	@echo ">> dep ensure"
+	@dep ensure
 
 format:
 	@echo ">> formatting code"
@@ -54,4 +58,4 @@ docs:
 	@go build ./cmd/thanos/...
 	@scripts/genflagdocs.sh
 
-.PHONY: all install-tools format vet build assets docker docs
+.PHONY: all install-tools format vet build assets docker docs deps
