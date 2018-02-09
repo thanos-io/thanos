@@ -10,7 +10,7 @@ storage while retaining fast query latencies. Additionally, it provides
 a global query view across all Prometheus installations and can merge
 data from Prometheus HA pairs on the fly.
 
-* **[Getting Started](docs/getting-started.md)**
+* **[Getting Started](docs/getting_started.md)**
 * [Design](docs/design.md)
 * [Prom Meetup Slides](https://www.slideshare.net/BartomiejPotka/thanos-global-durable-prometheus-monitoring)
 
