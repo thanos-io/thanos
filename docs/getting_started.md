@@ -15,6 +15,7 @@ Thanos has no official releases yet. With a working installation of the Go toolc
 
 ```
 go get github.com/improbable-eng/thanos/...
+make
 ```
 
 The `thanos` binary should now be in your `$PATH` and is the only thing required to deploy any of its components.
