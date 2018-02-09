@@ -1,0 +1,7 @@
+.alert_header {
+  cursor: pointer;
+}
+
+.alert_details {
+  display: none;
+}
