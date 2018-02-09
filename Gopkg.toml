@@ -26,10 +26,6 @@
   version = "0.16.0"
 
 [[constraint]]
-  branch = "master"
-  name = "github.com/alecthomas/units"
-
-[[constraint]]
   name = "github.com/go-kit/kit"
   version = "0.6.0"
 
