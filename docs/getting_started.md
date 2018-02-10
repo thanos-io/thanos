@@ -14,6 +14,7 @@ The following examples configure Thanos to work against a Google Cloud Storage b
 Thanos has no official releases yet. With a working installation of the Go toolchain, Thanos can be downloaded and built by running
 
 ```
+export PATH=${GOPATH}/bin:${PATH} # Make sure go/bin is in your PATH.
 go get -d github.com/improbable-eng/thanos/...
 make
 ```
