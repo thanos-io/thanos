@@ -161,13 +161,11 @@ func (s *Shipper) Sync(ctx context.Context) {
 	}
 }
 
+// sync uploads block with given meta, no matter what compaction level it is.
+// We assume that compactor will delete redundant blocks.
 func (s *Shipper) sync(ctx context.Context, meta *block.Meta) (err error) {
 	dir := filepath.Join(s.dir, meta.ULID.String())
 
-	// We only ship of the first compacted block level.
-	if meta.Compaction.Level > 1 {
-		return nil
-	}
 	ok, err := s.bucket.Exists(ctx, path.Join(meta.ULID.String(), "meta.json"))
 	if err != nil {
 		return errors.Wrap(err, "check exists")
