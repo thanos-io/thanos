@@ -257,7 +257,7 @@
   branch = "queryparams"
   name = "github.com/prometheus/prometheus"
   packages = ["pkg/labels","pkg/rulefmt","pkg/textparse","pkg/timestamp","pkg/value","promql","rules","storage","storage/tsdb","template","util/stats","util/strutil","util/testutil"]
-  revision = "126770e81fa24752b30cbcde54cb96d95b243ea5"
+  revision = "0c998d511934e8ab89c5baac0f50ea8833797533"
 
 [[projects]]
   branch = "master"
