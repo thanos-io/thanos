@@ -123,10 +123,12 @@ func runQuery(
 	storeAddrs []string,
 ) error {
 	var (
-		stores           = newStoreSet(logger, reg, tracer, peer, storeAddrs)
-		proxy            = store.NewProxyStore(logger, stores.Get, selectorLset)
-		engine           = promql.NewEngine(logger, reg, maxConcurrentQueries, queryTimeout)
+		stores = newStoreSet(logger, reg, tracer, peer, storeAddrs)
+		proxy  = store.NewProxyStore(logger, func(context.Context) ([]*store.Info, error) {
+			return stores.Get(), nil
+		}, selectorLset)
 		queryableCreator = query.NewQueryableCreator(logger, proxy, replicaLabel)
+		engine           = promql.NewEngine(logger, reg, maxConcurrentQueries, queryTimeout)
 	)
 	// Periodically update the store set with the addresses we see in our cluster.
 	{

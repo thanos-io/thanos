@@ -67,7 +67,10 @@ func TestQueryStore_Series(t *testing.T) {
 			MaxTime: 302,
 		},
 	}
-	q := NewProxyStore(nil, func() []*Info { return cls }, tlabels.FromStrings("fed", "a"))
+	q := NewProxyStore(nil,
+		func(context.Context) ([]*Info, error) { return cls, nil },
+		tlabels.FromStrings("fed", "a"),
+	)
 
 	ctx := context.Background()
 	s1 := newStoreSeriesServer(ctx)
