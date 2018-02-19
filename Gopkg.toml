@@ -59,8 +59,7 @@
 
 [[constraint]]
   name = "github.com/prometheus/prometheus"
-  #version = "2.0.0"
-  branch = "queryparams" # Contains query metadata passed from the query engine. Will be merged upstream eventually.
+  branch = "master"
 
 [[constraint]]
   branch = "master"
