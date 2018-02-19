@@ -1,0 +1,31 @@
+package: github.com/lovoo/gcloud-opentracing
+ignore:
+- appengine
+import:
+- package: cloud.google.com/go
+  subpackages:
+  - trace/apiv1
+- package: github.com/golang/protobuf
+  subpackages:
+  - ptypes/timestamp
+- package: github.com/opentracing/basictracer-go
+- package: github.com/opentracing/opentracing-go
+  subpackages:
+  - ext
+- package: golang.org/x/net
+  subpackages:
+  - context
+- package: google.golang.org/api
+  subpackages:
+  - option
+  - support/bundler
+- package: google.golang.org/genproto
+  subpackages:
+  - googleapis/devtools/cloudtrace/v1
+- package: google.golang.org/grpc
+- package: github.com/googleapis/gax-go
+testImport:
+- package: github.com/stretchr/testify
+  subpackages:
+  - assert
+
