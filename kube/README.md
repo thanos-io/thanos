@@ -69,7 +69,8 @@ And Thanos Query UI on http://thanos-query.default.svc.cluster.local:9090/graph
 
 Thanos Query UI should show exactly the same data as Prometheus, but also older data if it's running longer that 24h.
 
-After 3h sidecar should upload first block to GCS. You can make that quicker by changing prometheus `storage.tsdb.{min,max}-block-duration` to smaller value (e.g 20m)
+After 3h (default `storage.tsdb.{min,max}-block-duration` flag value) sidecar should upload first block to GCS.
+You can make that quicker by changing prometheus `storage.tsdb.{min,max}-block-duration` to smaller value (e.g 20m)
 
 To tear down example setup:
 1. `source ./kube/envs.sh`

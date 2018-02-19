@@ -6,7 +6,7 @@ The following examples configure Thanos to work against a Google Cloud Storage b
 
 ## Requirements
 
-* One or more [Prometheus](https://prometheus.io) installations
+* One or more [Prometheus](https://prometheus.io) v2.0.0 installations
 * An object storage bucket (optional)
 
 ## Get Thanos!
@@ -22,7 +22,7 @@ The `thanos` binary should now be in your `$PATH` and is the only thing required
 
 ## Sidecars
 
-Thanos integrates with existing Prometheus servers through a sidecar process, which runs on same machine/in the same pod as the Prometheus server itself. It only works with Prometheus instances of version 2.0 or higher.
+Thanos integrates with existing Prometheus servers through a sidecar process, which runs on same machine/in the same pod as the Prometheus server itself. It only works with Prometheus instances of version 2.0.
 
 The sidecar is responsible for backing up data into an object storage bucket and providing querying access to the underlying Prometheus instance for other Thanos components.
 
@@ -114,8 +114,8 @@ Go to the configured HTTP address that should now show a UI similar to that of P
 
 ## Store Gateway
 
-The sidecar backs up data into your object storage of your choice. But now we also want to query all that data again. The store gateway does just that by implementing the same gRPC data API as the sidecars but backing it with data it can find in your object storage bucket.
-
+As the sidecar backs up data into the object storage of your choice, you can decrease Prometheus retention and store less locally. However we need a way to query all that historical data again.
+The store gateway does just that by implementing the same gRPC data API as the sidecars but backing it with data it can find in your object storage bucket.
 Just like sidecars and query nodes, the store gateway joins the gossip cluster and is automatically picked up by running query nodes as yet another data provider.
 
 ```
