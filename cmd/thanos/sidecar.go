@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io/ioutil"
 	"math"
 	"net"
 	"net/http"
@@ -10,8 +11,6 @@ import (
 	"path"
 	"sync"
 	"time"
-
-	"io/ioutil"
 
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
