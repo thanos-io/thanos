@@ -348,8 +348,8 @@ func (api *API) labelValues(r *http.Request) (interface{}, []error, *apiError) {
 	}
 
 	var (
-		warnmtx             sync.Mutex
-		warnings            []error
+		warnmtx  sync.Mutex
+		warnings []error
 	)
 	partialErrReporter := func(err error) {
 		warnmtx.Lock()
