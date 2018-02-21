@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"io/ioutil"
+
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -265,9 +267,20 @@ func runSidecar(
 	}
 
 	if uploads {
+		compactionEnabled, noFlagEndpoint, err := queryIsCompactionEnabled(context.Background(), promURL)
+		if err != nil {
+			return errors.Wrap(err, "flag endpoint query")
+		}
+
+		if !noFlagEndpoint && compactionEnabled {
+			return errors.New("Cannot run sidecar uploading when local compaction is enabled on Prometheus. Set " +
+				"'storage.tsdb.max-block-duration' to the same value as 'storage.tsdb.max-block-duration' on Prometheus " +
+				"to disable compaction or turn off sidecar data backup.")
+		}
+
 		bkt = objstore.BucketWithMetrics(bucket, bkt, reg)
 
-		s := shipper.New(logger, nil, dataDir, bkt, externalLabels.Get)
+		s := shipper.New(logger, reg, dataDir, bkt, externalLabels.Get, noFlagEndpoint)
 
 		ctx, cancel := context.WithCancel(context.Background())
 
@@ -349,6 +362,12 @@ func queryExternalLabels(ctx context.Context, base *url.URL) (labels.Labels, err
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		b, _ := ioutil.ReadAll(resp.Body)
+		return nil, errors.Errorf("Got non-200 response from request config against %s. "+
+			"Code: %v. Message: %s", u.String(), resp.StatusCode, string(b))
+	}
+
 	var d struct {
 		Data struct {
 			YAML string `json:"yaml"`
@@ -366,4 +385,47 @@ func queryExternalLabels(ctx context.Context, base *url.URL) (labels.Labels, err
 		return nil, errors.Wrap(err, "parse Prometheus config")
 	}
 	return labels.FromMap(cfg.Global.ExternalLabels), nil
+}
+
+func queryIsCompactionEnabled(ctx context.Context, base *url.URL) (isCompEnabled bool, noFlagEndpoint bool, err error) {
+	u := *base
+	u.Path = path.Join(u.Path, "/api/v1/status/flags")
+
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return false, false, errors.Wrap(err, "create request")
+	}
+
+	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return false, false, errors.Wrapf(err, "request flags against %s", u.String())
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusMethodNotAllowed {
+			// Flag endpoint is not there yet. It was added in Prometheus v2.2.
+			return false, true, nil
+		}
+
+		b, _ := ioutil.ReadAll(resp.Body)
+		return false, false, errors.Errorf("Got non-200 response from request flags against %s. "+
+			"Code: %v. Message: %s", u.String(), resp.StatusCode, string(b))
+	}
+
+	var d struct {
+		Data struct {
+			MinBlockDuration string `json:"storage.tsdb.min-block-duration"`
+			MaxBlockDuration string `json:"storage.tsdb.max-block-duration"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+		return false, false, errors.Wrap(err, "decode response")
+	}
+
+	if d.Data.MinBlockDuration == "" || d.Data.MaxBlockDuration == "" {
+		// Flag name changed?
+		return false, false, errors.New("Failed to determine if compaction is enabled. Flags are empty.")
+	}
+	return d.Data.MaxBlockDuration != d.Data.MinBlockDuration, false, nil
 }

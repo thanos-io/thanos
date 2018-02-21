@@ -424,7 +424,7 @@ func runRule(
 	if uploads {
 		bkt = objstore.BucketWithMetrics(bucket, bkt, reg)
 
-		s := shipper.New(logger, nil, dataDir, bkt, func() labels.Labels { return lset })
+		s := shipper.New(logger, reg, dataDir, bkt, func() labels.Labels { return lset }, false)
 
 		ctx, cancel := context.WithCancel(context.Background())
 

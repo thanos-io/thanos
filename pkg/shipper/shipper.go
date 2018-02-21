@@ -68,6 +68,10 @@ type Shipper struct {
 	metrics *metrics
 	bucket  objstore.Bucket
 	labels  func() labels.Labels
+
+	// Shipper is not safe to use when local Prometheus compaction is enabled. If we cannot determine if the compaction is
+	// enabled we can run shipper with the safe shipping. In this mode it ships only blocks with compaction level 1.
+	onlyFirstCompactLvl bool
 }
 
 // New creates a new shipper that detects new TSDB blocks in dir and uploads them
@@ -78,6 +82,7 @@ func New(
 	dir string,
 	bucket objstore.Bucket,
 	lbls func() labels.Labels,
+	onlyFirstCompactLvl bool,
 ) *Shipper {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -86,11 +91,12 @@ func New(
 		lbls = func() labels.Labels { return nil }
 	}
 	return &Shipper{
-		logger:  logger,
-		dir:     dir,
-		bucket:  bucket,
-		labels:  lbls,
-		metrics: newMetrics(r),
+		logger:              logger,
+		dir:                 dir,
+		bucket:              bucket,
+		labels:              lbls,
+		metrics:             newMetrics(r),
+		onlyFirstCompactLvl: onlyFirstCompactLvl,
 	}
 }
 
@@ -148,6 +154,12 @@ func (s *Shipper) Sync(ctx context.Context) {
 		// Do not sync a block if we already uploaded it. If it is no longer found in the bucket,
 		// it was generally removed by the compaction process.
 		if _, ok := hasUploaded[m.ULID]; !ok {
+
+			// If compaction is 'potentially' enabled, we can only safely ship of the first compacted block level.
+			if s.onlyFirstCompactLvl && m.Compaction.Level > 1 {
+				return nil
+			}
+
 			if err := s.sync(ctx, m); err != nil {
 				level.Error(s.logger).Log("msg", "shipping failed", "block", m.ULID, "err", err)
 				return nil
