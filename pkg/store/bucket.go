@@ -441,7 +441,7 @@ func (s *BucketStore) blockSeries(
 	// They are ready to use ONLY after preloadPostings was called successfully.
 	lazyPostings, err := tsdb.PostingsForMatchers(indexr, matchers...)
 	if err != nil {
-		return nil, stats, err
+		return nil, stats, errors.Wrap(err, "get postings for matchers")
 	}
 	// If the tree was reduced to the empty postings list, don't preload the registered
 	// leaf postings and return early with an empty result.
@@ -449,17 +449,27 @@ func (s *BucketStore) blockSeries(
 		return storepb.EmptySeriesSet(), stats, nil
 	}
 	if err := indexr.preloadPostings(); err != nil {
-		return nil, stats, err
+		return nil, stats, errors.Wrap(err, "preload postings")
 	}
 	// Get result postings list by resolving the postings tree.
 	ps, err := index.ExpandPostings(lazyPostings)
 	if err != nil {
-		return nil, stats, err
+		return nil, stats, errors.Wrap(err, "expand postings")
+	}
+
+	// As of version two all series entries are 16 byte padded. All references
+	// we get have to account for that to get the correct offset.
+	// We do it right at the beginning as it's easier than doing it more fine-grained
+	// at the loading level.
+	if indexr.block.indexVersion >= 2 {
+		for i, id := range ps {
+			ps[i] = id * 16
+		}
 	}
 
 	// Preload all series index data
 	if err := indexr.preloadSeries(ps); err != nil {
-		return nil, stats, err
+		return nil, stats, errors.Wrap(err, "preload series")
 	}
 
 	// Transform all series into the response types and mark their relevant chunks
@@ -471,7 +481,7 @@ func (s *BucketStore) blockSeries(
 	)
 	for _, id := range ps {
 		if err := indexr.Series(id, &lset, &chks); err != nil {
-			return nil, stats, err
+			return nil, stats, errors.Wrap(err, "read series")
 		}
 		s := seriesEntry{
 			lset: make([]storepb.Label, 0, len(lset)),
@@ -915,9 +925,10 @@ type bucketBlock struct {
 	indexCache *indexCache
 	chunkPool  *pool.BytesPool
 
-	symbols  map[uint32]string
-	lvals    map[string][]string
-	postings map[labels.Label]index.Range
+	indexVersion int
+	symbols      map[uint32]string
+	lvals        map[string][]string
+	postings     map[labels.Label]index.Range
 
 	indexObj  string
 	chunkObjs []string
@@ -988,7 +999,7 @@ func (b *bucketBlock) loadMeta(ctx context.Context, id ulid.ULID, dir string) er
 func (b *bucketBlock) loadIndexCache(ctx context.Context, dir string) (err error) {
 	cachefn := filepath.Join(dir, block.IndexCacheFilename)
 
-	b.symbols, b.lvals, b.postings, err = block.ReadIndexCache(cachefn)
+	b.indexVersion, b.symbols, b.lvals, b.postings, err = block.ReadIndexCache(cachefn)
 	if err == nil {
 		return nil
 	}
@@ -1013,7 +1024,7 @@ func (b *bucketBlock) loadIndexCache(ctx context.Context, dir string) (err error
 		return errors.Wrap(err, "write index cache")
 	}
 
-	b.symbols, b.lvals, b.postings, err = block.ReadIndexCache(cachefn)
+	b.indexVersion, b.symbols, b.lvals, b.postings, err = block.ReadIndexCache(cachefn)
 	if err != nil {
 		return errors.Wrap(err, "read index cache")
 	}
@@ -1073,7 +1084,7 @@ type bucketIndexReader struct {
 	logger log.Logger
 	ctx    context.Context
 	block  *bucketBlock
-	dec    *index.DecoderV1
+	dec    *index.Decoder
 	stats  *queryStats
 	cache  *indexCache
 
@@ -1087,7 +1098,7 @@ func newBucketIndexReader(ctx context.Context, logger log.Logger, block *bucketB
 		logger:       logger,
 		ctx:          ctx,
 		block:        block,
-		dec:          &index.DecoderV1{},
+		dec:          &index.Decoder{},
 		stats:        &queryStats{},
 		cache:        cache,
 		loadedSeries: map[uint64][]byte{},
