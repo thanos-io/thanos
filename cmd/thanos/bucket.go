@@ -2,33 +2,23 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
-
-	"github.com/improbable-eng/thanos/pkg/block"
-
-	"github.com/go-kit/kit/log/level"
-
-	"github.com/oklog/ulid"
-
-	"cloud.google.com/go/storage"
-	"github.com/go-kit/kit/log"
-	"encoding/json"
-	"fmt"
-	"os"
-	"path"
 	"text/template"
 	"time"
 
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/oklog/run"
+	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -70,7 +60,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 		// Dummy actor to immediately kill the group after the run function returns.
 		g.Add(func() error { return nil }, func(error) {})
 
-		return runBucketList(logger, *gcsBucket, *lsOutput)
+		return runBucketList(*gcsBucket, *lsOutput)
 	}
 }
 
@@ -172,7 +162,23 @@ func repairBlock(ctx context.Context, bkt objstore.Bucket, id ulid.ULID) (resid 
 	return resid, nil
 }
 
-func runBucketList(logger log.Logger, gcsBucket, format string) error {
+func parseMeta(ctx context.Context, bkt objstore.Bucket, name string) (block.Meta, error) {
+	rc, err := bkt.Get(ctx, path.Join(name, "meta.json"))
+	if err != nil {
+		return block.Meta{}, errors.Wrap(err, "get reader for meta.json")
+	}
+	defer rc.Close()
+
+	// Do a full decode/encode cycle to ensure we only print valid JSON.
+	var m block.Meta
+
+	if err := json.NewDecoder(rc).Decode(&m); err != nil {
+		return block.Meta{}, errors.Wrap(err, "deocde meta.json")
+	}
+	return m, nil
+}
+
+func runBucketList(gcsBucket, format string) error {
 	gcsClient, err := storage.NewClient(context.Background())
 	if err != nil {
 		return errors.Wrap(err, "create GCS client")
@@ -197,17 +203,9 @@ func runBucketList(logger log.Logger, gcsBucket, format string) error {
 		enc.SetIndent("", "\t")
 
 		printBlock = func(name string) error {
-			rc, err := bkt.Get(ctx, path.Join(name, "meta.json"))
+			m, err := parseMeta(ctx, bkt, name)
 			if err != nil {
-				return errors.Wrap(err, "get reader for meta.json")
-			}
-			defer rc.Close()
-
-			// Do a full decode/encode cycle to ensure we only print valid JSON.
-			var m block.Meta
-
-			if err := json.NewDecoder(rc).Decode(&m); err != nil {
-				return errors.Wrap(err, "deocde meta.json")
+				return err
 			}
 			return enc.Encode(&m)
 		}
@@ -217,17 +215,9 @@ func runBucketList(logger log.Logger, gcsBucket, format string) error {
 			return errors.Wrap(err, "invalid template")
 		}
 		printBlock = func(name string) error {
-			rc, err := bkt.Get(ctx, path.Join(name, "meta.json"))
+			m, err := parseMeta(ctx, bkt, name)
 			if err != nil {
-				return errors.Wrap(err, "get reader for meta.json")
-			}
-			defer rc.Close()
-
-			// Do a full decode/encode cycle to ensure we only print valid JSON.
-			var m block.Meta
-
-			if err := json.NewDecoder(rc).Decode(&m); err != nil {
-				return errors.Wrap(err, "deocde meta.json")
+				return err
 			}
 
 			if err := tmpl.Execute(os.Stdout, &m); err != nil {
