@@ -59,7 +59,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the index cache.").
 		Default("250MB").Bytes()
 
-	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes for chunks.").
+	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatble bytes for chunks.").
 		Default("2GB").Bytes()
 
 	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
