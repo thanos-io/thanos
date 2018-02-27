@@ -263,7 +263,7 @@
   branch = "master"
   name = "github.com/prometheus/tsdb"
   packages = [".","chunkenc","chunks","fileutil","index","labels"]
-  revision = "07ef80820ef1250db82f9544f3fcf7f0f63ccee0"
+  revision = "88ddcab17c08237974aba78391f5ae199954d9fa"
 
 [[projects]]
   branch = "master"

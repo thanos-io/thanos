@@ -27,6 +27,7 @@ type postingsRange struct {
 }
 
 type indexCache struct {
+	Version     int
 	Symbols     map[uint32]string
 	LabelValues map[string][]string
 	Postings    []postingsRange
@@ -42,6 +43,7 @@ func WriteIndexCache(fn string, r *index.Reader) error {
 	defer f.Close()
 
 	v := indexCache{
+		Version:     r.Version(),
 		Symbols:     r.SymbolTable(),
 		LabelValues: map[string][]string{},
 	}
@@ -98,6 +100,7 @@ func WriteIndexCache(fn string, r *index.Reader) error {
 
 // ReadIndexCache reads an index cache file.
 func ReadIndexCache(fn string) (
+	version int,
 	symbols map[uint32]string,
 	lvals map[string][]string,
 	postings map[labels.Label]index.Range,
@@ -105,13 +108,13 @@ func ReadIndexCache(fn string) (
 ) {
 	f, err := os.Open(fn)
 	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "open file")
+		return 0, nil, nil, nil, errors.Wrap(err, "open file")
 	}
 	defer f.Close()
 
 	var v indexCache
 	if err := json.NewDecoder(f).Decode(&v); err != nil {
-		return nil, nil, nil, errors.Wrap(err, "decode file")
+		return 0, nil, nil, nil, errors.Wrap(err, "decode file")
 	}
 	strs := map[string]string{}
 	lvals = make(map[string][]string, len(v.LabelValues))
@@ -144,7 +147,7 @@ func ReadIndexCache(fn string) (
 		}
 		postings[l] = index.Range{Start: e.Start, End: e.End}
 	}
-	return v.Symbols, lvals, postings, nil
+	return v.Version, v.Symbols, lvals, postings, nil
 }
 
 // VerifyIndex does a full run over a block index and verifies that it fulfills the order invariants.
