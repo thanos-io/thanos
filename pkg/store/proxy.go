@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb/labels"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -37,7 +38,7 @@ func (i *Info) String() string {
 // ProxyStore implements the store API that proxies request to all given underlying stores.
 type ProxyStore struct {
 	logger         log.Logger
-	stores         func() []*Info
+	stores         func(context.Context) ([]*Info, error)
 	selectorLabels labels.Labels
 }
 
@@ -45,7 +46,7 @@ type ProxyStore struct {
 // Note that there is no deduplication support. Deduplication should be done on the highest level (just before PromQL)
 func NewProxyStore(
 	logger log.Logger,
-	stores func() []*Info,
+	stores func(context.Context) ([]*Info, error),
 	selectorLabels labels.Labels,
 ) *ProxyStore {
 	if logger == nil {
@@ -92,7 +93,11 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		g         errgroup.Group
 	)
 
-	for _, store := range s.stores() {
+	stores, err := s.stores(srv.Context())
+	if err != nil {
+		return grpc.Errorf(codes.Unknown, err.Error())
+	}
+	for _, store := range stores {
 		// We might be able to skip the store if its meta information indicates
 		// it cannot have series matching our query.
 		// NOTE: all matchers are validated in labelsMatches method so we explicitly ignore error.
@@ -235,7 +240,11 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		mtx      sync.Mutex
 		wg       sync.WaitGroup
 	)
-	for _, s := range s.stores() {
+	stores, err := s.stores(ctx)
+	if err != nil {
+		return nil, grpc.Errorf(codes.Unknown, err.Error())
+	}
+	for _, s := range stores {
 		wg.Add(1)
 		go func(s *Info) {
 			defer wg.Done()
