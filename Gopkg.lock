@@ -344,6 +344,12 @@
   version = "v2.2.6"
 
 [[projects]]
+  name = "gopkg.in/fsnotify.v1"
+  packages = ["."]
+  revision = "c2828203cd70a50dcccfb2761f8b1f8ceef9a8e9"
+  version = "v1.4.7"
+
+[[projects]]
   branch = "v2"
   name = "gopkg.in/yaml.v2"
   packages = ["."]
@@ -352,6 +358,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "f0edde0085bf55f84f68f9fd691a9a4a4a546ca5e3188ddfd6696e9efb10f0fd"
+  inputs-digest = "3c77f727c61609b23f526cf268080622e3b3ec6240d6c6eb688cd7f51897e7db"
   solver-name = "gps-cdcl"
   solver-version = 1

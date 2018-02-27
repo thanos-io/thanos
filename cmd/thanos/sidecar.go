@@ -18,6 +18,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
+	"github.com/improbable-eng/thanos/pkg/reloader"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
@@ -50,20 +51,22 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
 		PlaceHolder("<bucket>").String()
 
-	s3Bucket := cmd.Flag("s3.bucket", "S3-Compatible API bucket name for stored blocks.").
-		PlaceHolder("<bucket>").Envar("S3_BUCKET").String()
+	var s3config s3.Config
 
-	s3Endpoint := cmd.Flag("s3.endpoint", "S3-Compatible API endpoint for stored blocks.").
-		PlaceHolder("<api-url>").Envar("S3_ENDPOINT").String()
+	cmd.Flag("s3.bucket", "S3-Compatible API bucket name for stored blocks.").
+		PlaceHolder("<bucket>").Envar("S3_BUCKET").StringVar(&s3config.Bucket)
 
-	s3AccessKey := cmd.Flag("s3.access-key", "Access key for an S3-Compatible API.").
-		PlaceHolder("<key>").Envar("S3_ACCESS_KEY").String()
+	cmd.Flag("s3.endpoint", "S3-Compatible API endpoint for stored blocks.").
+		PlaceHolder("<api-url>").Envar("S3_ENDPOINT").StringVar(&s3config.Endpoint)
 
-	s3SecretKey := cmd.Flag("s3.secret-key", "Secret key for an S3-Compatible API.").
-		PlaceHolder("<key>").Envar("S3_SECRET_KEY").String()
+	cmd.Flag("s3.access-key", "Access key for an S3-Compatible API.").
+		PlaceHolder("<key>").Envar("S3_ACCESS_KEY").StringVar(&s3config.AccessKey)
 
-	s3Insecure := cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
-		Default("false").Envar("S3_INSECURE").Bool()
+	cmd.Flag("s3.secret-key", "Secret key for an S3-Compatible API.").
+		PlaceHolder("<key>").Envar("S3_SECRET_KEY").StringVar(&s3config.SecretKey)
+
+	cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
+		Default("false").Envar("S3_INSECURE").BoolVar(&s3config.Insecure)
 
 	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
 
@@ -79,8 +82,36 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 	pushPullInterval := cmd.Flag("cluster.pushpull-interval", "interval for gossip state syncs . Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage.").
 		Default(cluster.DefaultPushPullInterval.String()).Duration()
 
+	reloaderCfgFile := cmd.Flag("reloader.config-file", "config file watched by the reloader").
+		Default("").String()
+
+	reloaderCfgSubstFile := cmd.Flag("reloader.config-envsubst-file", "output file for environment variable substituted config file").
+		Default("").String()
+
+	reloaderRuleDir := cmd.Flag("reloader.rule-dir", "rule directory for the reloader to refresh").String()
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
-		return runSidecar(g, logger, reg, tracer, *grpcAddr, *httpAddr, *promURL, *dataDir, *clusterBindAddr, *clusterAdvertiseAddr, *peers, *gossipInterval, *pushPullInterval, *gcsBucket, *s3Bucket, *s3Endpoint, *s3AccessKey, *s3SecretKey, *s3Insecure)
+		rl := reloader.New(
+			log.With(logger, "component", "reloader"),
+			reloader.ReloadURLFromBase(*promURL),
+			*reloaderCfgFile,
+			*reloaderCfgSubstFile,
+			*reloaderRuleDir,
+		)
+		return runSidecar(g, logger, reg, tracer,
+			*grpcAddr,
+			*httpAddr,
+			*promURL,
+			*dataDir,
+			*clusterBindAddr,
+			*clusterAdvertiseAddr,
+			*peers,
+			*gossipInterval,
+			*pushPullInterval,
+			*gcsBucket,
+			&s3config,
+			rl,
+		)
 	}
 }
 
@@ -99,12 +130,18 @@ func runSidecar(
 	gossipInterval time.Duration,
 	pushPullInterval time.Duration,
 	gcsBucket string,
-	s3Bucket string,
-	s3Endpoint string,
-	s3AccessKey string,
-	s3SecretKey string,
-	s3Insecure bool,
+	s3Config *s3.Config,
+	reloader *reloader.Reloader,
 ) error {
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+
+		g.Add(func() error {
+			return reloader.Watch(ctx)
+		}, func(error) {
+			cancel()
+		})
+	}
 	externalLabels := &extLabelSet{promURL: promURL}
 
 	// Blocking query of external labels before anything else.
@@ -232,14 +269,6 @@ func runSidecar(
 		closeFn      = func() error { return nil }
 		uploads bool = true
 	)
-
-	s3Config := &s3.Config{
-		Bucket:    s3Bucket,
-		Endpoint:  s3Endpoint,
-		AccessKey: s3AccessKey,
-		SecretKey: s3SecretKey,
-		Insecure:  s3Insecure,
-	}
 
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
