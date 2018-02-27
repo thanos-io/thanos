@@ -34,7 +34,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 		Default("./data").String()
 
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks.").
-		PlaceHolder("<bucket>").Required().String()
+		PlaceHolder("<bucket>").String()
 
 	s3Bucket := cmd.Flag("s3.bucket", "S3-Compatible API bucket name for stored blocks.").
 		PlaceHolder("<bucket>").Envar("S3_BUCKET").String()
