@@ -28,7 +28,7 @@ import (
 // Referenced environment variables must be of the form `$(var)` (not `$var` or `${var}`).
 type Reloader struct {
 	logger           log.Logger
-	promURL          *url.URL
+	reloadURL        *url.URL
 	cfgFilename      string
 	cfgSubstFilename string
 	ruleDir          string
@@ -41,10 +41,10 @@ type Reloader struct {
 // If cfgEnvsubstFile is not empty, environment variables in the config file will be
 // substituted and the out put written into the given path. Promethes should then
 // use cfgEnvsubstFile as its config file path.
-func New(logger log.Logger, promURL *url.URL, cfgFile, cfgEnvsubstFile, ruleDir string) *Reloader {
+func New(logger log.Logger, reloadURL *url.URL, cfgFile, cfgEnvsubstFile, ruleDir string) *Reloader {
 	return &Reloader{
 		logger:           logger,
-		promURL:          promURL,
+		reloadURL:        reloadURL,
 		cfgFilename:      cfgFile,
 		cfgSubstFilename: cfgEnvsubstFile,
 	}
@@ -193,7 +193,7 @@ func (r *Reloader) refreshRules() (bool, error) {
 }
 
 func (r *Reloader) triggerReload(ctx context.Context) error {
-	req, err := http.NewRequest("POST", r.promURL.String(), nil)
+	req, err := http.NewRequest("POST", r.reloadURL.String(), nil)
 	if err != nil {
 		return errors.Wrap(err, "create request")
 	}
