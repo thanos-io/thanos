@@ -39,7 +39,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 		Default("./data").String()
 
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
-		PlaceHolder("<bucket>").Required().String()
+		PlaceHolder("<bucket>").String()
 
 	s3Bucket := cmd.Flag("s3.bucket", "S3-Compatible API bucket name for stored blocks.").
 		PlaceHolder("<bucket>").Envar("S3_BUCKET").String()
