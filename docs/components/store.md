@@ -31,9 +31,9 @@ Flags:
                                 to. If empty, tracing will be disabled.
       --gcloudtrace.sample-factor=1  
                                 How often we send traces (1/<sample-factor>).
-      --grpc-address="0.0.0.0:10901"  
+      --grpc-address=":10901"  
                                 listen address for gRPC endpoints
-      --http-address="0.0.0.0:10902"  
+      --http-address=":10902"  
                                 listen address for HTTP endpoints
       --tsdb.path="./data"      data directory of TSDB
       --gcs.bucket=<bucket>     Google Cloud Storage bucket name for stored
@@ -45,7 +45,7 @@ Flags:
       --cluster.peers=CLUSTER.PEERS ...  
                                 initial peers to join the cluster. It can be
                                 either <ip:port>, or <domain:port>
-      --cluster.address="0.0.0.0:10900"  
+      --cluster.address=":10900"  
                                 listen address for clutser
       --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS  
                                 explicit address to advertise in cluster

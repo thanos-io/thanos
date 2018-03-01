@@ -123,13 +123,13 @@ func Join(
 		level.Warn(l).Log("err", "provide --cluster.advertise-address as a routable IP address or hostname")
 	}
 
-	// If the API listens on 0.0.0.0, deduce it to the advertise IP.
+	// If the API listens on any interface, deduce it to the advertise IP.
 	if initialState.APIAddr != "" {
 		apiHost, apiPort, err := net.SplitHostPort(initialState.APIAddr)
 		if err != nil {
 			return nil, errors.Wrap(err, "invalid API address")
 		}
-		if apiHost == "0.0.0.0" {
+		if apiHost == "0.0.0.0" || apiHost == "::" || apiHost == "" {
 			initialState.APIAddr = net.JoinHostPort(ip.String(), apiPort)
 		}
 	}

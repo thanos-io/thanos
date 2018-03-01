@@ -47,9 +47,9 @@ Flags:
       --data-dir="data/"        data directory
       --rule-file=rules/ ...    rule files that should be used by rule manager.
                                 Can be in glob format (repeated)
-      --http-address="0.0.0.0:10902"  
+      --http-address=":10902"  
                                 listen host:port for HTTP endpoints
-      --grpc-address="0.0.0.0:10901"  
+      --grpc-address=":10901"  
                                 listen host:port for gRPC endpoints
       --eval-interval=30s       the default evaluation interval to use
       --tsdb.block-duration=2h  block duration for TSDB block
@@ -67,7 +67,7 @@ Flags:
       --cluster.peers=CLUSTER.PEERS ...  
                                 initial peers to join the cluster. It can be
                                 either <ip:port>, or <domain:port>
-      --cluster.address="0.0.0.0:10900"  
+      --cluster.address=":10900"  
                                 listen address for cluster
       --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS  
                                 explicit address to advertise in cluster

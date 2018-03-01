@@ -69,7 +69,7 @@ EOF
     --config.file         data/prom${i}/prometheus.yml \
     --storage.tsdb.path   data/prom${i} \
     --log.level           warn \
-    --web.listen-address  0.0.0.0:909${i} &
+    --web.listen-address  :909${i} &
 
   sleep 0.25
 done
@@ -81,12 +81,12 @@ for i in `seq 1 3`
 do
   thanos sidecar \
     --debug.name                sidecar-${i} \
-    --grpc-address              0.0.0.0:1909${i} \
-    --http-address              0.0.0.0:1919${i} \
+    --grpc-address              :1909${i} \
+    --http-address              :1919${i} \
     --prometheus.url            http://localhost:909${i} \
     --tsdb.path                 data/prom${i} \
     --gcs.bucket                "${GCS_BUCKET}" \
-    --cluster.address           0.0.0.0:1939${i} \
+    --cluster.address           :1939${i} \
     --cluster.advertise-address 127.0.0.1:1939${i} \
     --cluster.peers             127.0.0.1:19391 &
 
@@ -100,11 +100,11 @@ then
   thanos store \
     --debug.name                store \
     --log.level debug \
-    --grpc-address              0.0.0.0:19691 \
-    --http-address              0.0.0.0:19791 \
+    --grpc-address              :19691 \
+    --http-address              :19791 \
     --tsdb.path                 data/store \
     --gcs.bucket                "${GCS_BUCKET}" \
-    --cluster.address           0.0.0.0:19891 \
+    --cluster.address           :19891 \
     --cluster.advertise-address 127.0.0.1:19891 \
     --cluster.peers             127.0.0.1:19391 &
 fi
@@ -116,9 +116,9 @@ for i in `seq 1 2`
 do
   thanos query \
     --debug.name                query-${i} \
-    --grpc-address              0.0.0.0:1999${i} \
-    --http-address              0.0.0.0:1949${i} \
-    --cluster.address           0.0.0.0:1959${i} \
+    --grpc-address              :1999${i} \
+    --http-address              :1949${i} \
+    --cluster.address           :1959${i} \
     --cluster.advertise-address 127.0.0.1:1959${i} \
     --cluster.peers             127.0.0.1:19391 &
 done
