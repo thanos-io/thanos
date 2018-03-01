@@ -27,6 +27,9 @@ import (
 func registerCompact(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "continously compacts blocks in an object store bucket")
 
+	haltOnError := cmd.Flag("debug.halt-on-error", "halt the process if a critical compaction error is detected").
+		Hidden().Bool()
+
 	httpAddr := cmd.Flag("http-address", "listen host:port for HTTP endpoints").
 		Default(defaultHTTPAddr).String()
 
@@ -36,26 +39,35 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks.").
 		PlaceHolder("<bucket>").String()
 
-	s3Bucket := cmd.Flag("s3.bucket", "S3-Compatible API bucket name for stored blocks.").
-		PlaceHolder("<bucket>").Envar("S3_BUCKET").String()
+	var s3config s3.Config
 
-	s3Endpoint := cmd.Flag("s3.endpoint", "S3-Compatible API endpoint for stored blocks.").
-		PlaceHolder("<api-url>").Envar("S3_ENDPOINT").String()
+	cmd.Flag("s3.bucket", "S3-Compatible API bucket name for stored blocks.").
+		PlaceHolder("<bucket>").Envar("S3_BUCKET").StringVar(&s3config.Bucket)
 
-	s3AccessKey := cmd.Flag("s3.access-key", "Access key for an S3-Compatible API.").
-		PlaceHolder("<key>").Envar("S3_ACCESS_KEY").String()
+	cmd.Flag("s3.endpoint", "S3-Compatible API endpoint for stored blocks.").
+		PlaceHolder("<api-url>").Envar("S3_ENDPOINT").StringVar(&s3config.Endpoint)
 
-	s3SecretKey := cmd.Flag("s3.secret-key", "Secret key for an S3-Compatible API.").
-		PlaceHolder("<key>").Envar("S3_SECRET_KEY").String()
+	cmd.Flag("s3.access-key", "Access key for an S3-Compatible API.").
+		PlaceHolder("<key>").Envar("S3_ACCESS_KEY").StringVar(&s3config.AccessKey)
 
-	s3Insecure := cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
-		Default("false").Envar("S3_INSECURE").Bool()
+	cmd.Flag("s3.secret-key", "Secret key for an S3-Compatible API.").
+		PlaceHolder("<key>").Envar("S3_SECRET_KEY").StringVar(&s3config.SecretKey)
+
+	cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
+		Default("false").Envar("S3_INSECURE").BoolVar(&s3config.Insecure)
 
 	syncDelay := cmd.Flag("sync-delay", "minimum age of blocks before they are being processed.").
 		Default("2h").Duration()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
-		return runCompact(g, logger, reg, *httpAddr, *dataDir, *gcsBucket, *s3Bucket, *s3Endpoint, *s3AccessKey, *s3SecretKey, *s3Insecure, *syncDelay)
+		return runCompact(g, logger, reg,
+			*httpAddr,
+			*dataDir,
+			*gcsBucket,
+			&s3config,
+			*syncDelay,
+			*haltOnError,
+		)
 	}
 }
 
@@ -66,25 +78,21 @@ func runCompact(
 	httpAddr string,
 	dataDir string,
 	gcsBucket string,
-	s3Bucket string,
-	s3Endpoint string,
-	s3AccessKey string,
-	s3SecretKey string,
-	s3Insecure bool,
+	s3Config *s3.Config,
 	syncDelay time.Duration,
+	haltOnError bool,
 ) error {
 	var (
 		bkt    objstore.Bucket
 		bucket string
 	)
 
-	s3Config := &s3.Config{
-		Bucket:    s3Bucket,
-		Endpoint:  s3Endpoint,
-		AccessKey: s3AccessKey,
-		SecretKey: s3SecretKey,
-		Insecure:  s3Insecure,
-	}
+	halted := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_compactor_halted",
+		Help: "Set to 1 if the compactor halted due to an unexpected error",
+	})
+	halted.Set(0)
+	reg.MustRegister(halted)
 
 	if gcsBucket != "" {
 		gcsClient, err := storage.NewClient(context.Background())
@@ -113,24 +121,6 @@ func runCompact(
 	}
 	// Start cycle of syncing blocks from the bucket and garbage collecting the bucket.
 	{
-		ctx, cancel := context.WithCancel(context.Background())
-
-		g.Add(func() error {
-			return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
-				if err := sy.SyncMetas(ctx); err != nil {
-					level.Error(logger).Log("msg", "sync failed", "err", err)
-				}
-				if err := sy.GarbageCollect(ctx); err != nil {
-					level.Error(logger).Log("msg", "garbage collection failed", "err", err)
-				}
-				return nil
-			})
-		}, func(error) {
-			cancel()
-		})
-	}
-	// Check grouped blocks and run compaction over them.
-	{
 		// Instantiate the compactor with different time slices. Timestamps in TSDB
 		// are in milliseconds.
 		comp, err := tsdb.NewLeveledCompactor(reg, logger, []int64{
@@ -147,9 +137,26 @@ func runCompact(
 
 		g.Add(func() error {
 			return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
+				if err := sy.SyncMetas(ctx); err != nil {
+					level.Error(logger).Log("msg", "sync failed", "err", err)
+				}
+				if err := sy.GarbageCollect(ctx); err != nil {
+					level.Error(logger).Log("msg", "garbage collection failed", "err", err)
+				}
 				for _, g := range sy.Groups() {
 					if _, err := g.Compact(ctx, comp); err != nil {
 						level.Error(logger).Log("msg", "compaction failed", "err", err)
+						// The HaltError type signals that we hit a critical bug and should block
+						// for investigation.
+						if compact.IsHaltError(err) {
+							if haltOnError {
+								level.Error(logger).Log("msg", "critical error detected; halting")
+								halted.Set(1)
+								select {}
+							} else {
+								return errors.Wrap(err, "critical error detected")
+							}
+						}
 					}
 				}
 				return nil
