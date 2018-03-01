@@ -7,17 +7,17 @@ import (
 	"github.com/pkg/errors"
 )
 
-// calculateAdvertiseAddress attempts to clone logic from deep within memberlist
+// calculateAdvertiseIP attempts to clone logic from deep within memberlist
 // (NetTransport.FinalAdvertiseAddr) in order to surface its conclusions to the
 // application, so we can provide more actionable error messages if the user has
 // inadvertantly misconfigured their cluster.
 //
 // https://github.com/hashicorp/memberlist/blob/022f081/net_transport.go#L126
-func calculateAdvertiseAddress(bindAddr, advertiseAddr string) (net.IP, error) {
-	if advertiseAddr != "" {
-		ip := net.ParseIP(advertiseAddr)
+func calculateAdvertiseIP(bindIP, advertiseIP string) (net.IP, error) {
+	if advertiseIP != "" {
+		ip := net.ParseIP(advertiseIP)
 		if ip == nil {
-			return nil, errors.Errorf("failed to parse advertise addr '%s'", advertiseAddr)
+			return nil, errors.Errorf("failed to parse advertise IP '%s'", advertiseIP)
 		}
 		if ip4 := ip.To4(); ip4 != nil {
 			ip = ip4
@@ -25,13 +25,13 @@ func calculateAdvertiseAddress(bindAddr, advertiseAddr string) (net.IP, error) {
 		return ip, nil
 	}
 
-	if bindAddr == "0.0.0.0" {
+	if bindIP == "0.0.0.0" {
 		privateIP, err := sockaddr.GetPrivateIP()
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get private IP")
 		}
 		if privateIP == "" {
-			return nil, errors.Wrap(err, "no private IP found, explicit advertise addr not provided")
+			return nil, errors.Wrap(err, "no private IP found, explicit advertise IP not provided")
 		}
 		ip := net.ParseIP(privateIP)
 		if ip == nil {
@@ -40,9 +40,9 @@ func calculateAdvertiseAddress(bindAddr, advertiseAddr string) (net.IP, error) {
 		return ip, nil
 	}
 
-	ip := net.ParseIP(bindAddr)
+	ip := net.ParseIP(bindIP)
 	if ip == nil {
-		return nil, errors.Errorf("failed to parse bind addr '%s'", bindAddr)
+		return nil, errors.Errorf("failed to parse bind IP '%s'", bindIP)
 	}
 	return ip, nil
 }
