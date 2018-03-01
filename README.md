@@ -30,4 +30,5 @@ data from Prometheus HA pairs on the fly.
 
 Contributions are very welcome!
 
+
 [![Build Status](https://travis-ci.org/improbable-eng/thanos.svg?branch=master)](https://travis-ci.org/improbable-eng/thanos) [![Go Report Card](https://goreportcard.com/badge/github.com/improbable-eng/thanos)](https://goreportcard.com/report/github.com/improbable-eng/thanos)
