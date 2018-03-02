@@ -21,6 +21,11 @@
 #  version = "2.4.0"
 
 
+[prune]
+  go-tests = true
+  unused-packages = true
+  non-go = true
+
 [[constraint]]
   name = "cloud.google.com/go"
   version = "0.16.0"
