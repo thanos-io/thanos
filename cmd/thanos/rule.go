@@ -87,8 +87,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	s3AccessKey := cmd.Flag("s3.access-key", "Access key for an S3-Compatible API.").
 		PlaceHolder("<key>").Envar("S3_ACCESS_KEY").String()
 
-	s3SecretKey := cmd.Flag("s3.secret-key", "Secret key for an S3-Compatible API.").
-		PlaceHolder("<key>").Envar("S3_SECRET_KEY").String()
+	s3SecretKey := os.Getenv("S3_SECRET_KEY")
 
 	s3Insecure := cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
 		Default("false").Envar("S3_INSECURE").Bool()
@@ -148,7 +147,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			NoLockfile:       true,
 			WALFlushInterval: 30 * time.Second,
 		}
-		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *httpAddr, *grpcAddr, *evalInterval, *dataDir, *ruleFiles, peer, *gcsBucket, *s3Bucket, *s3Endpoint, *s3AccessKey, *s3SecretKey, *s3Insecure, tsdbOpts)
+		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *httpAddr, *grpcAddr, *evalInterval, *dataDir, *ruleFiles, peer, *gcsBucket, *s3Bucket, *s3Endpoint, *s3AccessKey, s3SecretKey, *s3Insecure, tsdbOpts)
 	}
 }
 
