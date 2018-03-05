@@ -8,6 +8,9 @@ import (
 
 	"context"
 
+	"time"
+
+	"github.com/fortytw2/leaktest"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/opentracing/basictracer-go"
 )
@@ -15,6 +18,8 @@ import (
 // This test shows that if sample factor will enable tracing on client process, even when it would be disabled on server
 // it will be still enabled for all spans within this span.
 func TestContextTracing_ClientEnablesTracing(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	m := &basictracer.InMemorySpanRecorder{}
 	r := &forceRecorder{wrapped: m}
 

@@ -5,6 +5,9 @@ import (
 	"io"
 	"testing"
 
+	"time"
+
+	"github.com/fortytw2/leaktest"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/pkg/errors"
@@ -17,6 +20,8 @@ import (
 )
 
 func TestQueryStore_Series(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	cls := []*Info{
 		{
 			Client: &storeClient{
@@ -144,6 +149,8 @@ func TestQueryStore_Series(t *testing.T) {
 }
 
 func TestStoreMatches(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	cases := []struct {
 		s          *Info
 		mint, maxt int64

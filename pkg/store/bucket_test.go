@@ -13,6 +13,7 @@ import (
 
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 
+	"github.com/fortytw2/leaktest"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -23,8 +24,10 @@ import (
 )
 
 // TODO(bplotka): This should go to the e2e tests package. Here should be mocked test.
+// TODO(bplotka): Add leaktest when this is done: https://github.com/improbable-eng/thanos/issues/234
 func TestBucketStore_e2e(t *testing.T) {
-	bkt, cleanup := testutil.NewObjectStoreBucket(t)
+	bkt, cleanup, err := testutil.NewObjectStoreBucket(t)
+	testutil.Ok(t, err)
 	defer cleanup()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -194,6 +197,8 @@ func TestBucketStore_e2e(t *testing.T) {
 }
 
 func TestBucketBlockSet_addGet(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	set := newBucketBlockSet(labels.Labels{})
 
 	type resBlock struct {
@@ -290,6 +295,8 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 }
 
 func TestBucketBlockSet_remove(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	set := newBucketBlockSet(labels.Labels{})
 
 	type resBlock struct {
@@ -318,6 +325,8 @@ func TestBucketBlockSet_remove(t *testing.T) {
 }
 
 func TestBucketBlockSet_labelMatchers(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	set := newBucketBlockSet(labels.FromStrings("a", "b", "c", "d"))
 
 	cases := []struct {
@@ -364,6 +373,8 @@ func TestBucketBlockSet_labelMatchers(t *testing.T) {
 }
 
 func TestPartitionRanges(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	const maxGapSize = 1024 * 512
 
 	for _, c := range []struct {

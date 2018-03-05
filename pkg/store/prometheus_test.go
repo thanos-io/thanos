@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fortytw2/leaktest"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/prometheus/prometheus/pkg/timestamp"
@@ -15,6 +16,8 @@ import (
 )
 
 func TestPrometheusStore_Series(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	p, err := testutil.NewPrometheus()
 	testutil.Ok(t, err)
 
@@ -87,6 +90,8 @@ func expandChunk(cit chunkenc.Iterator) (res []sample) {
 }
 
 func TestPrometheusStore_LabelValues(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	p, err := testutil.NewPrometheus()
 	testutil.Ok(t, err)
 
@@ -117,6 +122,8 @@ func TestPrometheusStore_LabelValues(t *testing.T) {
 }
 
 func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	p, err := testutil.NewPrometheus()
 	testutil.Ok(t, err)
 

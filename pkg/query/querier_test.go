@@ -8,6 +8,9 @@ import (
 	"math/rand"
 	"testing"
 
+	"time"
+
+	"github.com/fortytw2/leaktest"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/pkg/errors"
@@ -17,6 +20,8 @@ import (
 )
 
 func TestQuerier_Series(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	testProxy := &storeServer{
 		resps: []*storepb.SeriesResponse{
 			storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
@@ -70,6 +75,8 @@ func TestQuerier_Series(t *testing.T) {
 }
 
 func TestSortReplicaLabel(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	set := []storepb.Series{
 		{Labels: []storepb.Label{
 			{"a", "1"},
@@ -132,6 +139,8 @@ func expandSeries(t testing.TB, it storage.SeriesIterator) (res []sample) {
 }
 
 func TestDedupSeriesSet(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	input := []struct {
 		lset []storepb.Label
 		vals []sample
@@ -220,6 +229,8 @@ func TestDedupSeriesSet(t *testing.T) {
 }
 
 func TestDedupSeriesIterator(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	// The deltas between timestamps should be at least 10000 to not be affected
 	// by the initial penalty of 5000, that will cause the second iterator to seek
 	// ahead this far at least once.
