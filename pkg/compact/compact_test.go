@@ -171,9 +171,9 @@ func TestSyncer_GarbageCollect(t *testing.T) {
 	groups, err := sy.Groups()
 	testutil.Ok(t, err)
 
-	testutil.Equals(t, "{}@0", groups[0].Key())
+	testutil.Equals(t, "0@{}", groups[0].Key())
 	testutil.Equals(t, []ulid.ULID{metas[9].ULID, m3.ULID}, groups[0].IDs())
-	testutil.Equals(t, "{}@1000", groups[1].Key())
+	testutil.Equals(t, "1000@{}", groups[1].Key())
 	testutil.Equals(t, []ulid.ULID{m4.ULID}, groups[1].IDs())
 }
 

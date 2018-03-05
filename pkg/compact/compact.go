@@ -418,7 +418,7 @@ func newGroup(
 
 // Key returns an identifier for the group.
 func (cg *Group) Key() string {
-	return fmt.Sprintf("%s@%d", cg.labels, cg.resolution)
+	return fmt.Sprintf("%d@%s", cg.resolution, cg.labels)
 }
 
 // Add the block with the given meta to the group.
