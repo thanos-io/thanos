@@ -8,6 +8,8 @@ jobs:
     working_directory: /go/src/github.com/improbable-eng/thanos
     steps:
       - checkout
+      - setup_remote_docker:
+            version: 17.07.0-ce
       - run: make install-tools
       - run: dep ensure
       - run:
@@ -21,3 +23,18 @@ jobs:
             fi
       - run: make format
       - run: make test
+      - run: make docker
+      - run:
+          name: Run tests on generated Docker image
+          command: |
+            docker run improbable/thanos --help
+            docker run improbable/thanos sidecar --help
+            docker run improbable/thanos store --help
+            docker run improbable/thanos query --help
+      - deploy:
+          name: Push Docker image
+          command: |
+            docker login -u="${DOCKER_USERNAME}" -p="${DOCKER_PASSWORD}"
+            if [ "${CIRCLE_BRANCH}" == "master" ]; then
+              make docker-push
+            fi
