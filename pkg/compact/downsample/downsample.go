@@ -106,9 +106,12 @@ func Downsample(
 			aggrChunks = append(aggrChunks, c.Chunk.(AggrChunk))
 		}
 		res, err := downsampleAggr(
-			aggrChunks, &all,
-			chks[0].MinTime, chks[len(chks)-1].MaxTime,
-			origMeta.Thanos.Downsample.Resolution, resolution,
+			aggrChunks,
+			&all,
+			chks[0].MinTime,
+			chks[len(chks)-1].MaxTime,
+			origMeta.Thanos.Downsample.Resolution,
+			resolution,
 		)
 		if err != nil {
 			return id, errors.Wrap(err, "downsample aggregate block")
@@ -385,7 +388,7 @@ func targetChunkCount(mint, maxt, inRes, outRes int64, count int) (x int) {
 	maxSamples := float64((maxt - mint) / outRes)
 	expSamples := int(maxSamples*rangeFullness(mint, maxt, inRes, count)) + 1
 
-	// Increase the number of target chunks until we each chunk will have less than
+	// Increase the number of target chunks until each chunk will have less than
 	// 140 samples on average.
 	for x = 1; expSamples/x > 140; x++ {
 	}
@@ -471,7 +474,7 @@ func downsampleBatch(data []sample, resolution int64, add func(int64, *aggregato
 }
 
 // downsampleAggr downsamples a sequence of aggregation chunks to the given resolution.
-func downsampleAggr(chks []AggrChunk, buf *[]sample, mint, maxt, inResolution, outResolution int64) ([]chunks.Meta, error) {
+func downsampleAggr(chks []AggrChunk, buf *[]sample, mint, maxt, inRes, outRes int64) ([]chunks.Meta, error) {
 	// We downsample aggregates only along chunk boundaries. This is required for counters
 	// to be downsampled correctly since a chunks' last counter value is the true last value
 	// of the original series. We need to preserve it even across multiple aggregation iterations.
@@ -480,7 +483,7 @@ func downsampleAggr(chks []AggrChunk, buf *[]sample, mint, maxt, inResolution, o
 		numSamples += c.NumSamples()
 	}
 	var (
-		numChunks = targetChunkCount(mint, maxt, inResolution, outResolution, numSamples)
+		numChunks = targetChunkCount(mint, maxt, inRes, outRes, numSamples)
 		res       = make([]chunks.Meta, 0, numChunks)
 		batchSize = len(chks) / numChunks
 	)
@@ -493,7 +496,7 @@ func downsampleAggr(chks []AggrChunk, buf *[]sample, mint, maxt, inResolution, o
 		part := chks[:j]
 		chks = chks[j:]
 
-		mint, maxt, c, err := downsampleAggrBatch(part, buf, outResolution)
+		mint, maxt, c, err := downsampleAggrBatch(part, buf, outRes)
 		if err != nil {
 			return nil, err
 		}
