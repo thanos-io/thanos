@@ -12,37 +12,29 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb/labels"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 // Info holds meta information about a store.
-type Info struct {
-	// Client connection used by client.
-	ClientConn *grpc.ClientConn
-
+type Client interface {
 	// Client to access the store.
-	Client storepb.StoreClient
-
-	Addr string
+	storepb.StoreClient
 
 	// Labels that apply to all date exposed by the backing store.
-	Labels []storepb.Label
+	Labels() []storepb.Label
 
 	// Minimum and maximum time range of data in the store.
-	MinTime, MaxTime int64
-}
+	RangeTime() (mint int64, maxt int64)
 
-func (i *Info) String() string {
-	return i.Addr
+	// String representation fo logging mostly.
+	String() string
 }
-
 
 // ProxyStore implements the store API that proxies request to all given underlying stores.
 type ProxyStore struct {
 	logger         log.Logger
-	stores         func(context.Context) ([]*Info, error)
+	stores         func(context.Context) ([]Client, error)
 	selectorLabels labels.Labels
 }
 
@@ -50,7 +42,7 @@ type ProxyStore struct {
 // Note that there is no deduplication support. Deduplication should be done on the highest level (just before PromQL)
 func NewProxyStore(
 	logger log.Logger,
-	stores func(context.Context) ([]*Info, error),
+	stores func(context.Context) ([]Client, error),
 	selectorLabels labels.Labels,
 ) *ProxyStore {
 	if logger == nil {
@@ -99,16 +91,16 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 
 	stores, err := s.stores(srv.Context())
 	if err != nil {
-		return grpc.Errorf(codes.Unknown, err.Error())
+		return status.Errorf(codes.Unknown, err.Error())
 	}
-	for _, store := range stores {
+	for _, st := range stores {
 		// We might be able to skip the store if its meta information indicates
 		// it cannot have series matching our query.
 		// NOTE: all matchers are validated in labelsMatches method so we explicitly ignore error.
-		if ok, _ := storeMatches(store, r.MinTime, r.MaxTime, newMatchers...); !ok {
+		if ok, _ := storeMatches(st, r.MinTime, r.MaxTime, newMatchers...); !ok {
 			continue
 		}
-		sc, err := store.Client.Series(srv.Context(), &storepb.SeriesRequest{
+		sc, err := st.Series(srv.Context(), &storepb.SeriesRequest{
 			MinTime:             r.MinTime,
 			MaxTime:             r.MaxTime,
 			Matchers:            newMatchers,
@@ -205,12 +197,13 @@ func (s *streamSeriesSet) Err() error {
 }
 
 // matchStore returns true if the given store may hold data for the given label matchers.
-func storeMatches(s *Info, mint, maxt int64, matchers ...storepb.LabelMatcher) (bool, error) {
-	if mint > s.MaxTime || maxt < s.MinTime {
+func storeMatches(s Client, mint, maxt int64, matchers ...storepb.LabelMatcher) (bool, error) {
+	storeMinTime, storeMaxTime := s.RangeTime()
+	if mint > storeMaxTime || maxt < storeMinTime {
 		return false, nil
 	}
 	for _, m := range matchers {
-		for _, l := range s.Labels {
+		for _, l := range s.Labels() {
 			if l.Name != m.Name {
 				continue
 			}
@@ -246,13 +239,13 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 	)
 	stores, err := s.stores(ctx)
 	if err != nil {
-		return nil, grpc.Errorf(codes.Unknown, err.Error())
+		return nil, status.Errorf(codes.Unknown, err.Error())
 	}
-	for _, s := range stores {
+	for _, st := range stores {
 		wg.Add(1)
-		go func(s *Info) {
+		go func(s Client) {
 			defer wg.Done()
-			resp, err := s.Client.LabelValues(ctx, &storepb.LabelValuesRequest{
+			resp, err := st.LabelValues(ctx, &storepb.LabelValuesRequest{
 				Label: r.Label,
 			})
 			if err != nil {
@@ -268,7 +261,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 			mtx.Unlock()
 
 			return
-		}(s)
+		}(st)
 	}
 
 	wg.Wait()

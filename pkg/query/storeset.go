@@ -6,32 +6,33 @@ import (
 	"sync"
 	"time"
 
+	"fmt"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
-	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
 
 // StoreSet maintains a set of active stores. It is backed by a peer's view of the cluster
 // and a list of static store addresses.
 type StoreSet struct {
-	logger      log.Logger
-	peer        *cluster.Peer
-	staticAddrs []string
-	dialOpts    []grpc.DialOption
+	logger           log.Logger
+	peerAddrs        func() []string
+	staticAddrs      []string
+	dialOpts         []grpc.DialOption
+	gRPCRetryTimeout time.Duration
 
-	mtx          sync.RWMutex
-	staticStores map[string]*store.Info
-	peerStores   map[string]*store.Info
-
+	mtx                  sync.RWMutex
+	stores               map[string]*storeRef
 	storeNodeConnections prometheus.Gauge
 }
 
@@ -40,8 +41,8 @@ func NewStoreSet(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	peer *cluster.Peer,
-	static []string,
+	peerAddrs func() []string,
+	staticAddrs []string,
 ) *StoreSet {
 	storeNodeConnections := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_store_nodes_grpc_connections",
@@ -80,125 +81,178 @@ func NewStoreSet(
 	if reg != nil {
 		reg.MustRegister(grpcMets, storeNodeConnections)
 	}
+	if peerAddrs == nil {
+		peerAddrs = func() []string { return nil }
+	}
 	return &StoreSet{
 		logger:               logger,
-		peer:                 peer,
-		staticAddrs:          static,
+		peerAddrs:            peerAddrs,
+		staticAddrs:          staticAddrs,
 		dialOpts:             dialOpts,
 		storeNodeConnections: storeNodeConnections,
+		gRPCRetryTimeout:     3 * time.Second,
 	}
 }
 
-func (s *StoreSet) createClientConn(ctx context.Context, addr string, stores map[string]*store.Info) (*grpc.ClientConn, error) {
-	if st, ok := s.staticStores[addr]; ok {
-		return st.ClientConn, nil
-	}
+type storeRef struct {
+	storepb.StoreClient
 
-	// Consider blocking to catch errors sooner.
-	conn, err := grpc.DialContext(ctx, addr, s.dialOpts...)
-	if err != nil {
-		return nil, errors.Wrap(err, "dialing connection")
-	}
+	mtx    sync.RWMutex
+	cc     *grpc.ClientConn
+	addr   string
+	static bool
 
-	return conn, nil
+	// Meta (can change during runtime).
+	labels  []storepb.Label
+	minTime int64
+	maxTime int64
 }
 
-func (s *StoreSet) UpdateStatic(ctx context.Context) {
-	stores := make(map[string]*store.Info, len(s.staticStores))
-
-	// TODO(bplotka): Pack it in errgroup.
-	for _, addr := range s.staticAddrs {
-		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-
-		conn, err := s.createClientConn(ctx, addr, s.staticStores)
-		if err != nil {
-			level.Warn(s.logger).Log("msg", "failed to create client connection for static address", "addr", addr, "err", err)
-			continue
-		}
-
-		client := storepb.NewStoreClient(conn)
-		resp, err := client.Info(ctx, &storepb.InfoRequest{})
-		if err != nil {
-			level.Warn(s.logger).Log("msg", "fetching store info failed", "addr", addr, "err", err)
-			// If this fails, close connection explicitly.
-			conn.Close()
-			continue
-		}
-
-		// We need to handle explicitly unavailable static stores. They are not part of gossip so won't automatically
-		// removed from `stores` if they are unavailable.
-		// TODO(bplotka): Remove dynamically if not responding. Where should we do check? Just here? It's feel not so often.
-		stores[addr] = &store.Info{
-			Addr:       addr,
-			ClientConn: conn,
-			Client:     client,
-			Labels:     resp.Labels,
-			MinTime:    resp.MinTime,
-			MaxTime:    resp.MaxTime,
-		}
-	}
-
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
-
-	s.staticStores = stores
-	s.storeNodeConnections.Set(float64(len(s.peerStores) + len(s.staticStores)))
+func (s *storeRef) Labels() []storepb.Label {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+	return s.labels
 }
 
-// UpdatePeers updates the store set to the new set of addresses and labels for that not seen peer.
-func (s *StoreSet) UpdatePeers(ctx context.Context) {
-	stores := make(map[string]*store.Info, len(s.peerStores))
-
-	for _, ps := range s.peer.PeerStates(cluster.PeerTypesStoreAPIs()...) {
-		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-
-		conn, err := s.createClientConn(ctx, ps.APIAddr, s.peerStores)
-		if err != nil {
-			level.Warn(s.logger).Log("msg", "failed to create client connection for peer address", "addr", ps.APIAddr, "err", err)
-			continue
-		}
-
-		// We always assume, that healthy store node from gossip will be ready to serve gRPC traffic, so
-		// we immediately put it as ready store (dial is non-blocking).
-		stores[ps.APIAddr] = &store.Info{
-			Addr:       ps.APIAddr,
-			ClientConn: conn,
-			Client:     storepb.NewStoreClient(conn),
-			Labels:     ps.Metadata.Labels,
-			MinTime:    ps.Metadata.MinTime,
-			MaxTime:    ps.Metadata.MaxTime,
-		}
-	}
-
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
-
-	for addr, st := range s.peerStores {
-		if _, ok := stores[addr]; ok {
-			continue
-		}
-		// Peer does not exists anymore.
-		st.ClientConn.Close()
-	}
-
-	s.peerStores = stores
-	s.storeNodeConnections.Set(float64(len(s.peerStores) + len(s.staticStores)))
-}
-
-// Get returns a list of all active stores.
-func (s *StoreSet) Get() []*store.Info {
+func (s *storeRef) RangeTime() (int64, int64) {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 
-	stores := make([]*store.Info, 0, len(s.peerStores)+len(s.staticStores))
+	return s.minTime, s.maxTime
+}
 
-	for _, st := range s.staticStores {
-		stores = append(stores, st)
+func (s *storeRef) String() string {
+	if s.static {
+		return fmt.Sprintf("[static] %s", s.addr)
 	}
-	for _, st := range s.peerStores {
+	return fmt.Sprintf("[gossip] %s", s.addr)
+}
+
+func (s *storeRef) close() {
+	s.cc.Close()
+}
+
+func (s *StoreSet) updateStore(ctx context.Context, addr string, static bool) (*storeRef, error) {
+	ctx, cancel := context.WithTimeout(ctx, s.gRPCRetryTimeout)
+	defer cancel()
+
+	st, ok := s.stores[addr]
+	if !ok {
+		// New store or was unhealthy and was removed in the past - create new one.
+		conn, err := grpc.DialContext(ctx, addr, s.dialOpts...)
+		if err != nil {
+			return nil, errors.Wrap(err, "dialing connection")
+		}
+
+		st = &storeRef{
+			StoreClient: storepb.NewStoreClient(conn),
+			cc:          conn,
+			addr:        addr,
+			static:      static,
+		}
+	}
+
+	// Try to reach host until timeout. If we are unable -> host is unhealthy.
+	resp, err := st.Info(ctx, &storepb.InfoRequest{}, grpc.FailFast(false))
+	if err != nil {
+		st.close()
+		return nil, errors.Wrapf(err, "fetching store info from %s", addr)
+	}
+
+	st.labels = resp.Labels
+	st.maxTime = resp.MaxTime
+	st.minTime = resp.MinTime
+	return st, nil
+}
+
+// Update updates the store set
+func (s *StoreSet) Update(ctx context.Context) {
+	var (
+		stores   = make(map[string]*storeRef, len(s.stores))
+		innerMtx sync.Mutex
+		g        errgroup.Group
+	)
+
+	for _, storeAddr := range s.staticAddrs {
+		addr := storeAddr
+		g.Go(func() error {
+			st, err := s.updateStore(ctx, addr, true)
+			if err != nil {
+				return err
+			}
+			innerMtx.Lock()
+			if dupSt, ok := stores[addr]; ok {
+				level.Error(s.logger).Log("msg", "duplicated address in static store nodes.", "addr", addr)
+				dupSt.close()
+			}
+			stores[addr] = st
+			innerMtx.Unlock()
+
+			return nil
+		})
+	}
+
+	for _, storeAddr := range s.peerAddrs() {
+		addr := storeAddr
+		g.Go(func() error {
+			if _, ok := stores[addr]; ok {
+				level.Warn(s.logger).Log("msg", "statically configured node is also available via gossip.", "addr", addr)
+				return nil
+			}
+
+			st, err := s.updateStore(ctx, addr, false)
+			if err != nil {
+				return err
+			}
+			innerMtx.Lock()
+			if dupSt, ok := stores[addr]; ok {
+				level.Error(s.logger).Log("msg", "duplicated address in gossip store nodes.", "addr", addr)
+				dupSt.close()
+			}
+			stores[addr] = st
+			innerMtx.Unlock()
+
+			return nil
+		})
+	}
+
+	err := g.Wait()
+	if err != nil {
+		level.Warn(s.logger).Log("msg", "update of some store nodes failed", "err", err)
+	}
+
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	// Remove stores that where not updated in this update, because were not in s.peerAddr() this time.
+	for addr, st := range s.stores {
+		if _, ok := stores[addr]; ok {
+			continue
+		}
+
+		// Peer does not exists anymore.
+		st.close()
+	}
+
+	s.stores = stores
+	s.storeNodeConnections.Set(float64(len(s.stores)))
+}
+
+// Get returns a list of all active stores.
+func (s *StoreSet) Get() []store.Client {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	stores := make([]store.Client, 0, len(s.stores))
+
+	for _, st := range s.stores {
 		stores = append(stores, st)
 	}
 	return stores
+}
+
+func (s *StoreSet) Close() {
+	for _, st := range s.stores {
+		st.close()
+	}
 }

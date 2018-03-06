@@ -74,6 +74,16 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 		if err != nil {
 			return errors.Wrap(err, "parse federation labels")
 		}
+
+		lookupStores := map[string]struct{}{}
+		for _, s := range *stores {
+			if _, ok := lookupStores[s]; ok {
+				return errors.Errorf("Address %s is duplicated for --store flag.", s)
+			}
+
+			lookupStores[s] = struct{}{}
+		}
+
 		return runQuery(g, logger, reg, tracer,
 			*httpAddr,
 			*grpcAddr,
@@ -104,8 +114,20 @@ func runQuery(
 	storeAddrs []string,
 ) error {
 	var (
-		stores = query.NewStoreSet(logger, reg, tracer, peer, storeAddrs)
-		proxy  = store.NewProxyStore(logger, func(context.Context) ([]*store.Info, error) {
+		stores = query.NewStoreSet(
+			logger,
+			reg,
+			tracer,
+			func() []string {
+				var addrs []string
+				for _, ps := range peer.PeerStates(cluster.PeerTypesStoreAPIs()...) {
+					addrs = append(addrs, ps.APIAddr)
+				}
+				return addrs
+			},
+			storeAddrs,
+		)
+		proxy = store.NewProxyStore(logger, func(context.Context) ([]store.Client, error) {
 			return stores.Get(), nil
 		}, selectorLset)
 		queryableCreator = query.NewQueryableCreator(logger, proxy, replicaLabel)
@@ -115,12 +137,13 @@ func runQuery(
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			return runutil.Repeat(3*time.Minute, ctx.Done(), func() error {
-				stores.UpdateStatic(ctx)
+			return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
+				stores.Update(ctx)
 				return nil
 			})
 		}, func(error) {
 			cancel()
+			stores.Close()
 		})
 	}
 	{
@@ -139,18 +162,6 @@ func runQuery(
 		}, func(error) {
 			cancel()
 			peer.Close(5 * time.Second)
-		})
-	}
-	{
-		ctx, cancel := context.WithCancel(context.Background())
-
-		g.Add(func() error {
-			return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
-				stores.UpdatePeers(ctx)
-				return nil
-			})
-		}, func(error) {
-			cancel()
 		})
 	}
 	// Start query API + UI HTTP server.

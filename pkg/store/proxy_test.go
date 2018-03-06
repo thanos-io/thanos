@@ -19,61 +19,82 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+type testClient struct {
+	// Just to pass interface check.
+	storepb.StoreClient
+
+	labels  []storepb.Label
+	minTime int64
+	maxTime int64
+}
+
+func (c *testClient) Labels() []storepb.Label {
+	return c.labels
+}
+
+func (c *testClient) RangeTime() (int64, int64) {
+	return c.minTime, c.maxTime
+}
+
+func (c *testClient) String() string {
+	return "test"
+}
+
 func TestQueryStore_Series(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
-	cls := []*Info{
-		{
-			Client: &storeClient{
+	cls := []Client{
+		&testClient{
+			StoreClient: &storeClient{
 				RespSet: []*storepb.SeriesResponse{
 					storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
 					storepb.NewWarnSeriesResponse(errors.New("partial error")),
 					storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{2, 2}, {3, 3}, {4, 4}}),
 				},
 			},
-			MinTime: 1,
-			MaxTime: 300,
+			minTime: 1,
+			maxTime: 300,
 		},
-		{
-			Client: &storeClient{
+		&testClient{
+			StoreClient: &storeClient{
 				RespSet: []*storepb.SeriesResponse{
 					storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
 				},
 			},
-			MinTime: 1,
-			MaxTime: 300,
+			minTime: 1,
+			maxTime: 300,
 		},
-		{
-			Client: &storeClient{
+		&testClient{
+			StoreClient: &storeClient{
 				RespSet: []*storepb.SeriesResponse{
 					storepb.NewWarnSeriesResponse(errors.New("partial error")),
 				},
 			},
-			MinTime: 1,
-			MaxTime: 300,
+			minTime: 1,
+			maxTime: 300,
 		},
-		{
-			Client: &storeClient{
+		&testClient{
+			StoreClient: &storeClient{
 				RespSet: []*storepb.SeriesResponse{
 					storeSeriesResponse(t, labels.FromStrings("a", "c"), []sample{{100, 1}, {300, 3}, {400, 4}}),
 				},
 			},
-			MinTime: 1,
-			MaxTime: 300,
+			minTime: 1,
+			maxTime: 300,
 		},
-		{
-			Client: &storeClient{
+		&testClient{
+			StoreClient: &storeClient{
 				RespSet: []*storepb.SeriesResponse{
 					storeSeriesResponse(t, labels.FromStrings("a", "outside"), []sample{{1, 1}}),
 				},
 			},
 			// Outside range for store itself.
-			MinTime: 301,
-			MaxTime: 302,
+			minTime: 301,
+			maxTime: 302,
 		},
 	}
 	q := NewProxyStore(nil,
-		func(context.Context) ([]*Info, error) { return cls, nil },
+		func(context.Context) ([]Client, error) { return cls, nil },
 		tlabels.FromStrings("fed", "a"),
 	)
 
@@ -152,65 +173,65 @@ func TestStoreMatches(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	cases := []struct {
-		s          *Info
+		s          Client
 		mint, maxt int64
 		ms         []storepb.LabelMatcher
 		ok         bool
 	}{
 		{
-			s: &Info{Labels: []storepb.Label{{"a", "b"}}},
+			s: &testClient{labels: []storepb.Label{{"a", "b"}}},
 			ms: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "1"},
 			},
 			ok: true,
 		},
 		{
-			s:    &Info{MinTime: 100, MaxTime: 200},
+			s:    &testClient{minTime: 100, maxTime: 200},
 			mint: 201,
 			maxt: 300,
 			ok:   false,
 		},
 		{
-			s:    &Info{MinTime: 100, MaxTime: 200},
+			s:    &testClient{minTime: 100, maxTime: 200},
 			mint: 200,
 			maxt: 300,
 			ok:   true,
 		},
 		{
-			s:    &Info{MinTime: 100, MaxTime: 200},
+			s:    &testClient{minTime: 100, maxTime: 200},
 			mint: 50,
 			maxt: 99,
 			ok:   false,
 		},
 		{
-			s:    &Info{MinTime: 100, MaxTime: 200},
+			s:    &testClient{minTime: 100, maxTime: 200},
 			mint: 50,
 			maxt: 100,
 			ok:   true,
 		},
 		{
-			s: &Info{Labels: []storepb.Label{{"a", "b"}}},
+			s: &testClient{labels: []storepb.Label{{"a", "b"}}},
 			ms: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
 			},
 			ok: true,
 		},
 		{
-			s: &Info{Labels: []storepb.Label{{"a", "b"}}},
+			s: &testClient{labels: []storepb.Label{{"a", "b"}}},
 			ms: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "c"},
 			},
 			ok: false,
 		},
 		{
-			s: &Info{Labels: []storepb.Label{{"a", "b"}}},
+			s: &testClient{labels: []storepb.Label{{"a", "b"}}},
 			ms: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "b|c"},
 			},
 			ok: true,
 		},
 		{
-			s: &Info{Labels: []storepb.Label{{"a", "b"}}},
+			s: &testClient{labels: []storepb.Label{{"a", "b"}}},
 			ms: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_NEQ, Name: "a", Value: ""},
 			},
