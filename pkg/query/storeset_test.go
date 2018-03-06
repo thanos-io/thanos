@@ -119,11 +119,14 @@ func TestStoreSet_StaticStores_AllAvailable(t *testing.T) {
 	initialStoreAddr := st.StoreAddresses()
 	storeSet := NewStoreSet(nil, nil, nil, nil, initialStoreAddr)
 
+	// Should not matter how many of these we run.
+	storeSet.UpdateStatic(context.Background())
+	storeSet.UpdateStatic(context.Background())
 	storeSet.UpdateStatic(context.Background())
 	defer func() {
-		// Make sure gRPC finalizers will clean up client connections.
-		storeSet.staticStores = nil
-		time.Sleep(9*time.Second)
+		for _, store := range storeSet.staticStores {
+			store.ClientConn.Close()
+		}
 	}()
 
 	testutil.Assert(t, len(storeSet.staticStores) == 2, "all services should respond just fine, so we expect all clients to be ready.")
@@ -138,7 +141,7 @@ func TestStoreSet_StaticStores_AllAvailable(t *testing.T) {
 	//unavailableAddress := initialStoreAddr[0]
 	//st.CloseOne(unavailableAddress)
 	//
-	//// Expect UpdateStatic to tear down that node.
+	//// TODO(bplotka): Expect UpdateStatic to tear down that store client.
 }
 
 func TestStoreSet_StaticStores_OneAvailable(t *testing.T) {
@@ -149,12 +152,19 @@ func TestStoreSet_StaticStores_OneAvailable(t *testing.T) {
 	defer st.Close()
 
 	initialStoreAddr := st.StoreAddresses()
-	unavailableAddress := initialStoreAddr[0]
-	st.CloseOne(unavailableAddress)
+	st.CloseOne(initialStoreAddr[0])
 
 	storeSet := NewStoreSet(nil, nil, nil, nil, initialStoreAddr)
 
+	// Should not matter how many of these we run.
 	storeSet.UpdateStatic(context.Background())
+	storeSet.UpdateStatic(context.Background())
+	storeSet.UpdateStatic(context.Background())
+	defer func() {
+		for _, store := range storeSet.staticStores {
+			store.ClientConn.Close()
+		}
+	}()
 	testutil.Assert(t, len(storeSet.staticStores) == 1, "only one service should respond just fine, so we expect one client to be ready.")
 
 	addr := initialStoreAddr[1]
@@ -164,4 +174,26 @@ func TestStoreSet_StaticStores_OneAvailable(t *testing.T) {
 	testutil.Equals(t, 1, len(store.Labels))
 	testutil.Equals(t, "addr", store.Labels[0].Name)
 	testutil.Equals(t, addr, store.Labels[0].Value)
+}
+
+func TestStoreSet_StaticStores_NoneAvailable(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	st, err := newTestStores(2)
+	testutil.Ok(t, err)
+	defer st.Close()
+
+	initialStoreAddr := st.StoreAddresses()
+	st.CloseOne(initialStoreAddr[0])
+	st.CloseOne(initialStoreAddr[1])
+
+	storeSet := NewStoreSet(nil, nil, nil, nil, initialStoreAddr)
+
+	// Should not matter how many of these we run.
+	storeSet.UpdateStatic(context.Background())
+	storeSet.UpdateStatic(context.Background())
+	storeSet.UpdateStatic(context.Background())
+	testutil.Assert(t, len(storeSet.staticStores) == 0, "none of services should respond just fine, so we expect no client to be ready.")
+
+	// Leak test will ensure that we don't keep client connection around.
 }

@@ -19,10 +19,13 @@ import (
 
 // Info holds meta information about a store.
 type Info struct {
-	Addr string
+	// Client connection used by client.
+	ClientConn *grpc.ClientConn
 
 	// Client to access the store.
 	Client storepb.StoreClient
+
+	Addr string
 
 	// Labels that apply to all date exposed by the backing store.
 	Labels []storepb.Label
@@ -34,6 +37,7 @@ type Info struct {
 func (i *Info) String() string {
 	return i.Addr
 }
+
 
 // ProxyStore implements the store API that proxies request to all given underlying stores.
 type ProxyStore struct {

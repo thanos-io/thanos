@@ -3,7 +3,6 @@ package query
 import (
 	"context"
 	"math"
-	"runtime"
 	"sync"
 	"time"
 
@@ -90,9 +89,9 @@ func NewStoreSet(
 	}
 }
 
-func (s *StoreSet) createClientConn(ctx context.Context, addr string, stores map[string]*store.Info) (storepb.StoreClient, error) {
+func (s *StoreSet) createClientConn(ctx context.Context, addr string, stores map[string]*store.Info) (*grpc.ClientConn, error) {
 	if st, ok := s.staticStores[addr]; ok {
-		return st.Client, nil
+		return st.ClientConn, nil
 	}
 
 	// Consider blocking to catch errors sooner.
@@ -100,9 +99,8 @@ func (s *StoreSet) createClientConn(ctx context.Context, addr string, stores map
 	if err != nil {
 		return nil, errors.Wrap(err, "dialing connection")
 	}
-	runtime.SetFinalizer(conn, func(cc *grpc.ClientConn) { cc.Close() })
 
-	return storepb.NewStoreClient(conn), nil
+	return conn, nil
 }
 
 func (s *StoreSet) UpdateStatic(ctx context.Context) {
@@ -113,28 +111,31 @@ func (s *StoreSet) UpdateStatic(ctx context.Context) {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
-		client, err := s.createClientConn(ctx, addr, s.staticStores)
+		conn, err := s.createClientConn(ctx, addr, s.staticStores)
 		if err != nil {
 			level.Warn(s.logger).Log("msg", "failed to create client connection for static address", "addr", addr, "err", err)
 			continue
 		}
 
-		// If this fails, close connection explicitly.
+		client := storepb.NewStoreClient(conn)
 		resp, err := client.Info(ctx, &storepb.InfoRequest{})
 		if err != nil {
 			level.Warn(s.logger).Log("msg", "fetching store info failed", "addr", addr, "err", err)
+			// If this fails, close connection explicitly.
+			conn.Close()
 			continue
 		}
 
 		// We need to handle explicitly unavailable static stores. They are not part of gossip so won't automatically
 		// removed from `stores` if they are unavailable.
-		// TODO(bplotka): Remove if not responding.
+		// TODO(bplotka): Remove dynamically if not responding. Where should we do check? Just here? It's feel not so often.
 		stores[addr] = &store.Info{
-			Addr:    addr,
-			Client:  client,
-			Labels:  resp.Labels,
-			MinTime: resp.MinTime,
-			MaxTime: resp.MaxTime,
+			Addr:       addr,
+			ClientConn: conn,
+			Client:     client,
+			Labels:     resp.Labels,
+			MinTime:    resp.MinTime,
+			MaxTime:    resp.MaxTime,
 		}
 	}
 
@@ -153,7 +154,7 @@ func (s *StoreSet) UpdatePeers(ctx context.Context) {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
-		client, err := s.createClientConn(ctx, ps.APIAddr, s.peerStores)
+		conn, err := s.createClientConn(ctx, ps.APIAddr, s.peerStores)
 		if err != nil {
 			level.Warn(s.logger).Log("msg", "failed to create client connection for peer address", "addr", ps.APIAddr, "err", err)
 			continue
@@ -162,16 +163,25 @@ func (s *StoreSet) UpdatePeers(ctx context.Context) {
 		// We always assume, that healthy store node from gossip will be ready to serve gRPC traffic, so
 		// we immediately put it as ready store (dial is non-blocking).
 		stores[ps.APIAddr] = &store.Info{
-			Addr:    ps.APIAddr,
-			Client:  client,
-			Labels:  ps.Metadata.Labels,
-			MinTime: ps.Metadata.MinTime,
-			MaxTime: ps.Metadata.MaxTime,
+			Addr:       ps.APIAddr,
+			ClientConn: conn,
+			Client:     storepb.NewStoreClient(conn),
+			Labels:     ps.Metadata.Labels,
+			MinTime:    ps.Metadata.MinTime,
+			MaxTime:    ps.Metadata.MaxTime,
 		}
 	}
 
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
+
+	for addr, st := range s.peerStores {
+		if _, ok := stores[addr]; ok {
+			continue
+		}
+		// Peer does not exists anymore.
+		st.ClientConn.Close()
+	}
 
 	s.peerStores = stores
 	s.storeNodeConnections.Set(float64(len(s.peerStores) + len(s.staticStores)))
