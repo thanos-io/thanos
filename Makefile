@@ -63,4 +63,4 @@ docs:
 	@go build ./cmd/thanos/...
 	@scripts/genflagdocs.sh
 
-.PHONY: all install-tools format vet build assets docker docs deps
+.PHONY: all install-tools format vet build assets docker docker-push docs deps

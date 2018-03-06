@@ -34,7 +34,7 @@ jobs:
       - deploy:
           name: Push Docker image
           command: |
-            docker login -u="${DOCKER_USERNAME}" -p="${DOCKER_PASSWORD}"
             if [ "${CIRCLE_BRANCH}" == "master" ]; then
+              docker login -u="${DOCKER_USERNAME}" -p="${DOCKER_PASSWORD}"
               make docker-push
             fi
