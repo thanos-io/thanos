@@ -33,9 +33,9 @@ import (
 )
 
 const (
-	defaultClusterAddr = "0.0.0.0:10900"
-	defaultGRPCAddr    = "0.0.0.0:10901"
-	defaultHTTPAddr    = "0.0.0.0:10902"
+	defaultClusterAddr = ":10900"
+	defaultGRPCAddr    = ":10901"
+	defaultHTTPAddr    = ":10902"
 )
 
 type setupFunc func(*run.Group, log.Logger, *prometheus.Registry, opentracing.Tracer) error

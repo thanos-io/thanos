@@ -8,7 +8,7 @@ This can either be a repeated list of peer addresses or a DNS name, which it wil
 
 ```
 $ thanos query \
-    --http-address     "0.0.0.0:9090" \
+    --http-address     ":9090" \
     --cluster.peers    "thanos-cluster.example.org" \
 ```
 
@@ -19,7 +19,7 @@ Two or more series that have that are only distinguished by the given replica la
 
 ```
 $ thanos query \
-    --http-address     "0.0.0.0:9090" \
+    --http-address     ":9090" \
     --replica-label    "replica" \
     --cluster.peers    "thanos-cluster.example.org" \
 ```
@@ -45,7 +45,7 @@ Flags:
                                  to. If empty, tracing will be disabled.
       --gcloudtrace.sample-factor=1  
                                  How often we send traces (1/<sample-factor>).
-      --http-address="0.0.0.0:10902"  
+      --http-address=":10902"  
                                  listen host:port for HTTP endpoints
       --query.timeout=2m         maximum time to process query by query node
       --query.max-concurrent=20  maximum number of queries processed
@@ -58,7 +58,7 @@ Flags:
       --cluster.peers=CLUSTER.PEERS ...  
                                  initial peers to join the cluster. It can be
                                  either <ip:port>, or <domain:port>
-      --cluster.address="0.0.0.0:10900"  
+      --cluster.address=":10900"  
                                  listen address for cluster
       --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS  
                                  explicit address to advertise in cluster

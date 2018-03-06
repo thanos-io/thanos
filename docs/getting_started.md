@@ -93,7 +93,7 @@ It implements Prometheus's official HTTP API and can thus seamlessly be used wit
 
 ```
 thanos query \
-    --http-address "0.0.0.0:19092" \         # Endpoint for the UI
+    --http-address ":19092" \         # Endpoint for the UI
     --cluster.peers all.thanos.internal.org  # Discovery of initial cluster peers
 ```
 
@@ -103,7 +103,7 @@ Providing the label name to the query component will enable the deduplication.
 
 ```
 thanos query \
-    --http-address "0.0.0.0:19092" \
+    --http-address ":19092" \
     --cluster.peers all.thanos.internal.org \
     --replica-label replica
 ```

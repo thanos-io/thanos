@@ -32,7 +32,7 @@ Flags:
                              If empty, tracing will be disabled.
       --gcloudtrace.sample-factor=1  
                              How often we send traces (1/<sample-factor>).
-      --http-address="0.0.0.0:10902"  
+      --http-address=":10902"  
                              listen host:port for HTTP endpoints
       --data-dir="./data"    data directory to cache blocks and process
                              compactions

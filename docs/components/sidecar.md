@@ -39,9 +39,9 @@ Flags:
                              If empty, tracing will be disabled.
       --gcloudtrace.sample-factor=1  
                              How often we send traces (1/<sample-factor>).
-      --grpc-address="0.0.0.0:10901"  
+      --grpc-address=":10901"  
                              listen address for gRPC endpoints
-      --http-address="0.0.0.0:10902"  
+      --http-address=":10902"  
                              listen address for HTTP endpoints
       --prometheus.url=http://localhost:9090  
                              URL at which to reach Prometheus's API
@@ -52,7 +52,7 @@ Flags:
       --cluster.peers=CLUSTER.PEERS ...  
                              initial peers to join the cluster. It can be either
                              <ip:port>, or <domain:port>
-      --cluster.address="0.0.0.0:10900"  
+      --cluster.address=":10900"  
                              listen address for cluster
       --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS  
                              explicit address to advertise in cluster
