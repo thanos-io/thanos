@@ -69,6 +69,7 @@ EOF
     --config.file         data/prom${i}/prometheus.yml \
     --storage.tsdb.path   data/prom${i} \
     --log.level           warn \
+    --web.enable-lifecycle \
     --web.listen-address  0.0.0.0:909${i} &
 
   sleep 0.25
