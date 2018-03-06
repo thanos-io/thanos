@@ -28,10 +28,7 @@ jobs:
           name: Run tests on generated Docker image
           command: |
             docker run improbable/thanos --help
-            docker run improbable/thanos sidecar --help
-            docker run improbable/thanos store --help
-            docker run improbable/thanos query --help
-      - deploy:
+     - deploy:
           name: Push Docker image
           command: |
             if [ "${CIRCLE_BRANCH}" == "master" ]; then
