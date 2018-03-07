@@ -2,6 +2,7 @@ package e2e_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -11,15 +12,14 @@ import (
 	"testing"
 	"time"
 
-	"context"
-
 	"github.com/oklog/run"
 	"github.com/pkg/errors"
 )
 
 var (
+	promHTTPPort = func(i int) string { return fmt.Sprintf("%d", 9090+i) }
 	// We keep this one with localhost, to have perfect match with what Prometheus will expose in up metric.
-	promHTTP = func(i int) string { return fmt.Sprintf("localhost:%d", 9090+i) }
+	promHTTP = func(i int) string { return fmt.Sprintf("localhost:%s", promHTTPPort(i)) }
 
 	sidecarGRPC    = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19090+i) }
 	sidecarHTTP    = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19190+i) }
@@ -34,20 +34,22 @@ var (
 	rulerCluster = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19990+i) }
 )
 
+type configConstructor func(port int) string
 type config struct {
-	promConfigFn func(port int) string
-	rules        string
-	workDir      string
+	// Each config is for each Prometheus.
+	promConfigFns []configConstructor
+	rules         string
+	workDir       string
 
-	numPrometheus    int
-	numQueries       int
-	numRules         int
-	numAlertmanagers int
+	numQueries          int
+	queriesReplicaLabel string
+	numRules            int
+	numAlertmanagers    int
 }
 
 func evalClusterPeersFlags(cfg config) []string {
 	var flags []string
-	for i := 1; i <= cfg.numPrometheus; i++ {
+	for i := 1; i <= len(cfg.promConfigFns); i++ {
 		flags = append(flags, "--cluster.peers", sidecarCluster(i))
 	}
 	for i := 1; i <= cfg.numQueries; i++ {
@@ -66,13 +68,14 @@ func spinup(t testing.TB, ctx context.Context, cfg config) (chan error, error) {
 		clusterPeers = evalClusterPeersFlags(cfg)
 	)
 
-	for i := 1; i <= cfg.numPrometheus; i++ {
+	for k, cfgFn := range cfg.promConfigFns {
+		i := k + 1
 		promDir := fmt.Sprintf("%s/data/prom%d", cfg.workDir, i)
 
 		if err := os.MkdirAll(promDir, 0777); err != nil {
 			return nil, errors.Wrap(err, "create prom dir failed")
 		}
-		err := ioutil.WriteFile(promDir+"/prometheus.yml", []byte(cfg.promConfigFn(9090+i)), 0666)
+		err := ioutil.WriteFile(promDir+"/prometheus.yml", []byte(cfgFn(9090+i)), 0666)
 		if err != nil {
 			return nil, errors.Wrap(err, "creating prom config failed")
 		}
@@ -99,6 +102,7 @@ func spinup(t testing.TB, ctx context.Context, cfg config) (chan error, error) {
 			},
 				clusterPeers...)...,
 		))
+
 		time.Sleep(200 * time.Millisecond)
 	}
 
@@ -113,6 +117,7 @@ func spinup(t testing.TB, ctx context.Context, cfg config) (chan error, error) {
 				"--cluster.gossip-interval", "200ms",
 				"--cluster.pushpull-interval", "200ms",
 				"--log.level", "debug",
+				"--query.replica-label", cfg.queriesReplicaLabel,
 			},
 				clusterPeers...)...,
 		))
@@ -224,7 +229,7 @@ receivers:
 		})
 	}
 
-	var unexpectedExit = make(chan error, 1)
+	unexpectedExit := make(chan error, 1)
 	go func(g run.Group) {
 		err := g.Run()
 		if err != nil {

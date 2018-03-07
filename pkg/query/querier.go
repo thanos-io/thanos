@@ -180,11 +180,7 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 		q.partialErrReport(errors.New(w))
 	}
 
-	if q.isDedupEnabled() {
-		// TODO(fabxc): this could potentially pushed further down into the store API
-		// to make true streaming possible.
-		sortDedupLabels(resp.seriesSet, q.replicaLabel)
-
+	if !q.isDedupEnabled() {
 		// Return data without any deduplication.
 		return promSeriesSet{
 			mint: q.mint,
@@ -193,6 +189,10 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 			aggr: resAggr,
 		}, nil
 	}
+
+	// TODO(fabxc): this could potentially pushed further down into the store API
+	// to make true streaming possible.
+	sortDedupLabels(resp.seriesSet, q.replicaLabel)
 
 	set := promSeriesSet{
 		mint: q.mint,
