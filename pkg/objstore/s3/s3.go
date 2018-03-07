@@ -25,7 +25,7 @@ const DirDelim = "/"
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
 type Bucket struct {
 	bucket   string
-	client   *minio.Core
+	client   *minio.Client
 	opsTotal *prometheus.CounterVec
 }
 
@@ -51,7 +51,7 @@ func (conf *Config) Validate() error {
 
 // NewBucket returns a new Bucket using the provided s3 config values.
 func NewBucket(conf *Config, reg prometheus.Registerer) (*Bucket, error) {
-	client, err := minio.NewCore(conf.Endpoint, conf.AccessKey, conf.SecretKey, !conf.Insecure)
+	client, err := minio.NewV4(conf.Endpoint, conf.AccessKey, conf.SecretKey, !conf.Insecure)
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize s3 client")
 	}
@@ -81,7 +81,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		dir = strings.TrimSuffix(dir, DirDelim) + DirDelim
 	}
 
-	for object := range b.client.Client.ListObjects(b.bucket, dir, false, ctx.Done()) {
+	for object := range b.client.ListObjects(b.bucket, dir, false, ctx.Done()) {
 		// this sometimes happens with empty buckets
 		if object.Key == "" {
 			continue
