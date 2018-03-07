@@ -14,3 +14,11 @@ install:
 
 script:
 - make format test
+- make docker
+
+after_success:
+- if [ "$TRAVIS_BRANCH" == "master" ]; then
+  docker login -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD";
+  fi
+- cd $HOME/gopath/src/github.com/improbable-eng/thanos
+- make docker-push
