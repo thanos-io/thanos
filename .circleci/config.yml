@@ -25,7 +25,7 @@ jobs:
       - run: make test
       - run: make docker
       - run: 
-          name:Run tests on generated Docker image
+          name: Run tests on generated Docker image
           command: |
             docker run improbable/thanos --help
       - deploy:
