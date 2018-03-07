@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"os"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -50,8 +51,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	cmd.Flag("s3.access-key", "Access key for an S3-Compatible API.").
 		PlaceHolder("<key>").Envar("S3_ACCESS_KEY").StringVar(&s3config.AccessKey)
 
-	cmd.Flag("s3.secret-key", "Secret key for an S3-Compatible API.").
-		PlaceHolder("<key>").Envar("S3_SECRET_KEY").StringVar(&s3config.SecretKey)
+	s3config.SecretKey = os.Getenv("S3_SECRET_KEY")
 
 	cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
 		Default("false").Envar("S3_INSECURE").BoolVar(&s3config.Insecure)
