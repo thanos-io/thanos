@@ -24,8 +24,11 @@ jobs:
       - run: make format
       - run: make test
       - run: make docker
-      - run: docker run improbable/thanos --help
-     - deploy:
+      - run: 
+          name:Run tests on generated Docker image
+          command: |
+            docker run improbable/thanos --help
+      - deploy:
           name: Push Docker image
           command: |
             if [ "${CIRCLE_BRANCH}" == "master" ]; then
