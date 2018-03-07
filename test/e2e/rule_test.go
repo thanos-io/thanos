@@ -92,7 +92,7 @@ groups:
 		qtime := time.Now()
 
 		// The time series written for the firing alerting rule must be queryable.
-		res, err := queryPrometheus(ctx, "http://"+queryHTTP(1), time.Now(), "ALERTS")
+		res, err := queryPrometheus(ctx, "http://"+queryHTTP(1), time.Now(), "ALERTS", false)
 		if err != nil {
 			return err
 		}
