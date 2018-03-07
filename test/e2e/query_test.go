@@ -3,12 +3,10 @@ package e2e_test
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
-	"sync"
 	"testing"
 	"time"
 
@@ -31,9 +29,7 @@ func TestQuerySimple(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-
-	unexpectedExit, err := spinup(t, ctx, config{
+	exit, err := spinup(t, ctx, config{
 		promConfigFn: func(port int) string {
 			// Self scraping config with unique external label.
 			return fmt.Sprintf(`
@@ -54,12 +50,18 @@ scrape_configs:
 	})
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)
+		cancel()
 		return
 	}
 
+	defer func() {
+		cancel()
+		<-exit
+	}()
+
 	err = runutil.Retry(time.Second, ctx.Done(), func() error {
 		select {
-		case err := <-unexpectedExit:
+		case err := <-exit:
 			t.Errorf("Some process exited unexpectedly: %v", err)
 			return nil
 		default:
@@ -133,16 +135,4 @@ func queryPrometheus(ctx context.Context, ustr string, ts time.Time, q string) (
 		return nil, err
 	}
 	return m.Data.Result, nil
-}
-
-// safeWriter wraps an io.Writer and makes it thread safe.
-type safeWriter struct {
-	io.Writer
-	mtx sync.Mutex
-}
-
-func (w *safeWriter) Write(b []byte) (int, error) {
-	w.mtx.Lock()
-	defer w.mtx.Unlock()
-	return w.Writer.Write(b)
 }

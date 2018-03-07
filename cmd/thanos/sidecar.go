@@ -294,6 +294,10 @@ func runSidecar(
 	}
 
 	if uploads {
+		if externalLabels.Get().Len() == 0 {
+			return errors.New("No external labels for Prometheus specified. Unique labels need to be attached to the resulted blocks. Stopping now.")
+		}
+
 		bkt = objstore.BucketWithMetrics(bucket, bkt, reg)
 
 		s := shipper.New(logger, nil, dataDir, bkt, externalLabels.Get)

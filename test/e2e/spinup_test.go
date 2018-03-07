@@ -177,12 +177,7 @@ receivers:
 		))
 	}
 
-	var (
-		stderr, stdout bytes.Buffer
-		stderrw        = &safeWriter{Writer: &stderr}
-		stdoutw        = &safeWriter{Writer: &stdout}
-		g              run.Group
-	)
+	var g run.Group
 
 	// Interrupt go routine.
 	{
@@ -201,8 +196,9 @@ receivers:
 
 	// Run go routine for each command.
 	for _, c := range commands {
-		c.Stderr = stderrw
-		c.Stdout = stdoutw
+		var stderr, stdout bytes.Buffer
+		c.Stderr = &stderr
+		c.Stdout = &stdout
 
 		err := c.Start()
 		if err != nil {
@@ -215,8 +211,12 @@ receivers:
 		g.Add(func() error {
 			err := cmd.Wait()
 
-			t.Logf("STDERR\n %s", stderr.String())
-			t.Logf("STDOUT\n %s", stdout.String())
+			if stderr.Len() > 0 {
+				t.Logf("%s STDERR\n %s", cmd.Path, stderr.String())
+			}
+			if stdout.Len() > 0 {
+				t.Logf("%s STDOUT\n %s", cmd.Path, stdout.String())
+			}
 
 			return err
 		}, func(error) {
@@ -224,13 +224,11 @@ receivers:
 		})
 	}
 
-	var unexpectedExit = make(chan error, 1)
+	var exit = make(chan error, 1)
 	go func(g run.Group) {
-		err := g.Run()
-		if err != nil {
-			unexpectedExit <- err
-		}
+		exit <- g.Run()
+		close(exit)
 	}(g)
 
-	return unexpectedExit, nil
+	return exit, nil
 }
