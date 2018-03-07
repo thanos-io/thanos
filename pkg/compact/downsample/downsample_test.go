@@ -12,6 +12,9 @@ import (
 
 	"github.com/prometheus/tsdb/chunks"
 
+	"time"
+
+	"github.com/fortytw2/leaktest"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/prometheus/tsdb/chunkenc"
@@ -20,6 +23,8 @@ import (
 )
 
 func TestAggrChunk(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	var input [5][]sample
 
 	input[AggrCount] = []sample{{100, 30}, {200, 50}, {300, 60}, {400, 67}}
@@ -61,6 +66,8 @@ type testAggrSeries struct {
 }
 
 func TestDownsampleRaw(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	staleMarker := math.Float64frombits(value.StaleNaN)
 
 	input := []*downsampleTestSet{
@@ -82,6 +89,8 @@ func TestDownsampleRaw(t *testing.T) {
 }
 
 func TestDownsampleAggr(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	input := []*downsampleTestSet{
 		{
 			lset: labels.FromStrings("__name__", "a"),
@@ -260,6 +269,8 @@ func TestAverageChunkIterator(t *testing.T) {
 }
 
 func TestCounterSeriesIterator(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	staleMarker := math.Float64frombits(value.StaleNaN)
 
 	chunks := [][]sample{

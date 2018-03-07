@@ -22,13 +22,15 @@ import (
 	"github.com/prometheus/tsdb/labels"
 )
 
+// TODO(bplotka): Add leaktest when this is done: https://github.com/improbable-eng/thanos/issues/234
 func TestShipper_UploadBlocks(t *testing.T) {
 	dir, err := ioutil.TempDir("", "shipper-test")
 	testutil.Ok(t, err)
 	defer os.RemoveAll(dir)
 
-	bucket, close := testutil.NewObjectStoreBucket(t)
-	defer close()
+	bucket, cleanup, err := testutil.NewObjectStoreBucket(t)
+	testutil.Ok(t, err)
+	defer cleanup()
 
 	shipper := New(nil, nil, dir, bucket, func() labels.Labels {
 		return labels.FromStrings("prometheus", "prom-1")

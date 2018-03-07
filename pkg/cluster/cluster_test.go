@@ -1,20 +1,19 @@
 package cluster
 
 import (
+	"context"
 	"fmt"
+	"reflect"
+	"sort"
 	"testing"
 	"time"
 
-	"context"
-	"errors"
-	"sort"
-
-	"reflect"
-
+	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 )
@@ -62,11 +61,15 @@ func sortStr(str []string) []string {
 }
 
 func TestPeers_PropagatingState(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	addr1, peer1, err := joinPeer(1, nil)
 	testutil.Ok(t, err)
+	defer peer1.Close(5 * time.Second)
 
 	addr2, peer2, err := joinPeer(2, []string{addr1})
 	testutil.Ok(t, err)
+	defer peer2.Close(5 * time.Second)
 
 	// peer2 should see two members with their data.
 	expected := sortStr([]string{addr1, addr2})

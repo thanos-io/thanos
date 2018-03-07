@@ -22,13 +22,15 @@ import (
 	"github.com/oklog/ulid"
 )
 
+// TODO(bplotka): Add leaktest when this is done: https://github.com/improbable-eng/thanos/issues/234
 func TestSyncer_SyncMetas(t *testing.T) {
 	dir, err := ioutil.TempDir("", "test-syncer")
 	testutil.Ok(t, err)
 	defer os.RemoveAll(dir)
 
-	bkt, close := testutil.NewObjectStoreBucket(t)
-	defer close()
+	bkt, cleanup, err := testutil.NewObjectStoreBucket(t)
+	testutil.Ok(t, err)
+	defer cleanup()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
@@ -79,13 +81,15 @@ func TestSyncer_SyncMetas(t *testing.T) {
 	testutil.Equals(t, ids[5:], got)
 }
 
+// TODO(bplotka): Add leaktest when this is done: https://github.com/improbable-eng/thanos/issues/234
 func TestSyncer_GarbageCollect(t *testing.T) {
 	dir, err := ioutil.TempDir("", "test-syncer")
 	testutil.Ok(t, err)
 	defer os.RemoveAll(dir)
 
-	bkt, close := testutil.NewObjectStoreBucket(t)
-	defer close()
+	bkt, cleanup, err := testutil.NewObjectStoreBucket(t)
+	testutil.Ok(t, err)
+	defer cleanup()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
@@ -180,13 +184,15 @@ func TestSyncer_GarbageCollect(t *testing.T) {
 	testutil.Equals(t, exp, rem)
 }
 
+// TODO(bplotka): Add leaktest when this is done: https://github.com/improbable-eng/thanos/issues/234
 func TestGroup_Compact(t *testing.T) {
 	dir, err := ioutil.TempDir("", "test-syncer")
 	testutil.Ok(t, err)
 	defer os.RemoveAll(dir)
 
-	bkt, close := testutil.NewObjectStoreBucket(t)
-	defer close()
+	bkt, cleanup, err := testutil.NewObjectStoreBucket(t)
+	testutil.Ok(t, err)
+	defer cleanup()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
