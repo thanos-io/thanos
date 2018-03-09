@@ -83,7 +83,7 @@ func runBucketCheck(logger log.Logger, bkt objstore.Bucket, repair bool) error {
 	for _, id := range all {
 		level.Info(logger).Log("msg", "verify block", "id", id)
 
-		if err := verifyBlock(ctx, bkt, id); err != nil {
+		if err = verifyBlock(ctx, bkt, id); err != nil {
 			level.Warn(logger).Log("msg", "detected issue", "id", id, "err", err)
 		}
 		if err == nil || !repair {

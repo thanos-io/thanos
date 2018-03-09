@@ -115,7 +115,7 @@ func runCompact(
 
 	bkt = objstore.BucketWithMetrics(bucket, bkt, reg)
 
-	sy, err := compact.NewSyncer(logger, reg, dataDir, bkt, syncDelay)
+	sy, err := compact.NewSyncer(logger, reg, bkt, syncDelay)
 	if err != nil {
 		return err
 	}
@@ -143,19 +143,26 @@ func runCompact(
 				if err := sy.GarbageCollect(ctx); err != nil {
 					level.Error(logger).Log("msg", "garbage collection failed", "err", err)
 				}
-				for _, g := range sy.Groups() {
-					if _, err := g.Compact(ctx, comp); err != nil {
-						level.Error(logger).Log("msg", "compaction failed", "err", err)
-						// The HaltError type signals that we hit a critical bug and should block
-						// for investigation.
-						if compact.IsHaltError(err) {
-							if haltOnError {
-								level.Error(logger).Log("msg", "critical error detected; halting")
-								halted.Set(1)
-								select {}
-							} else {
-								return errors.Wrap(err, "critical error detected")
-							}
+				groups, err := sy.Groups()
+				if err != nil {
+					return errors.Wrap(err, "build compaction groups")
+				}
+				for _, g := range groups {
+					os.RemoveAll(dataDir)
+					// While we do all compactions sequentially we just compact within the top-level dir.
+					if _, err := g.Compact(ctx, dataDir, comp); err == nil {
+						continue
+					}
+					level.Error(logger).Log("msg", "compaction failed", "err", err)
+					// The HaltError type signals that we hit a critical bug and should block
+					// for investigation.
+					if compact.IsHaltError(err) {
+						if haltOnError {
+							level.Error(logger).Log("msg", "critical error detected; halting")
+							halted.Set(1)
+							select {}
+						} else {
+							return errors.Wrap(err, "critical error detected")
 						}
 					}
 				}

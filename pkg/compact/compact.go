@@ -2,18 +2,22 @@ package compact
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path"
 	"path/filepath"
-	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/compact/downsample"
+
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/prometheus/tsdb/fileutil"
+	"github.com/prometheus/tsdb/labels"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -21,7 +25,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/labels"
 )
 
 // Syncer syncronizes block metas from a bucket into a local directory.
@@ -29,11 +32,10 @@ import (
 type Syncer struct {
 	logger    log.Logger
 	reg       prometheus.Registerer
-	dir       string
 	bkt       objstore.Bucket
 	syncDelay time.Duration
 	mtx       sync.Mutex
-	groups    map[string]*Group
+	blocks    map[ulid.ULID]*block.Meta
 	metrics   *syncerMetrics
 }
 
@@ -102,47 +104,26 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 
 // NewSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewSyncer(logger log.Logger, reg prometheus.Registerer, dir string, bkt objstore.Bucket, syncDelay time.Duration) (*Syncer, error) {
+func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, syncDelay time.Duration) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
-	if err := os.MkdirAll(dir, 0777); err != nil {
-		return nil, err
-	}
-
-	c := &Syncer{
+	return &Syncer{
 		logger:    logger,
 		reg:       reg,
-		dir:       dir,
 		syncDelay: syncDelay,
-		groups:    map[string]*Group{},
+		blocks:    map[ulid.ULID]*block.Meta{},
 		bkt:       bkt,
 		metrics:   newSyncerMetrics(reg),
-	}
-	return c, errors.Wrap(c.reloadGroups(), "reload groups")
-}
-
-func (c *Syncer) reloadGroups() error {
-	groupDir := filepath.Join(c.dir, "groups")
-
-	if err := os.RemoveAll(groupDir); err != nil {
-		return errors.Wrap(err, "remove old groups")
-	}
-	if err := os.MkdirAll(groupDir, 0777); err != nil {
-		return errors.Wrap(err, "create group dir")
-	}
-
-	return iterBlocks(c.dir, func(dir string, _ ulid.ULID) error {
-		if err := c.add(dir); err != nil {
-			return errors.Wrap(err, "add block to groups")
-		}
-		return nil
-	})
+	}, nil
 }
 
 // SyncMetas synchronizes all meta files from blocks in the bucket into
 // the given directory.
 func (c *Syncer) SyncMetas(ctx context.Context) error {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
 	begin := time.Now()
 
 	err := c.syncMetas(ctx)
@@ -157,23 +138,9 @@ func (c *Syncer) SyncMetas(ctx context.Context) error {
 
 func (c *Syncer) syncMetas(ctx context.Context) error {
 	// Read back all block metas so we can detect deleted blocks.
-	var (
-		local  = map[ulid.ULID]*block.Meta{}
-		remote = map[ulid.ULID]struct{}{}
-	)
-	err := iterBlocks(c.dir, func(dir string, id ulid.ULID) error {
-		meta, err := block.ReadMetaFile(dir)
-		if err != nil {
-			return err
-		}
-		local[id] = meta
-		return nil
-	})
-	if err != nil {
-		return errors.Wrap(err, "read local blocks")
-	}
+	remote := map[ulid.ULID]struct{}{}
 
-	err = c.bkt.Iter(ctx, "", func(name string) error {
+	err := c.bkt.Iter(ctx, "", func(name string) error {
 		if !strings.HasSuffix(name, "/") {
 			return nil
 		}
@@ -183,13 +150,9 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 		}
 		remote[id] = struct{}{}
 
-		dir := filepath.Join(c.dir, name)
-
 		// Check if we already have this block cached locally.
-		if _, err = os.Stat(dir); err == nil {
+		if _, ok := c.blocks[id]; ok {
 			return nil
-		} else if !os.IsNotExist(err) {
-			return err
 		}
 
 		// ULIDs contain a millisecond timestamp. We do not consider blocks
@@ -200,30 +163,21 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 		}
 		level.Debug(c.logger).Log("msg", "download meta", "block", id)
 
-		tmpdir := dir + ".tmp"
-
-		if err := os.MkdirAll(tmpdir, 0777); err != nil {
-			return err
-		}
-		defer os.RemoveAll(tmpdir)
-
-		src := path.Join(name, "meta.json")
-
-		if err := objstore.DownloadFile(ctx, c.bkt, src, tmpdir); err != nil {
+		rc, err := c.bkt.Get(ctx, path.Join(id.String(), "meta.json"))
+		if err != nil {
 			level.Warn(c.logger).Log("msg", "downloading meta.json failed", "block", id, "err", err)
 			return nil
 		}
-		if err := renameFile(tmpdir, dir); err != nil {
-			level.Warn(c.logger).Log("msg", "rename temp dir", "block", id, "err", err)
+		defer rc.Close()
+
+		var meta block.Meta
+		if err := json.NewDecoder(rc).Decode(&meta); err != nil {
+			level.Warn(c.logger).Log("msg", "decoding meta.json failed", "block", id, "err", err)
 			return nil
 		}
-		// The first time we see a new block, we sort it into a group. The compactor
-		// may delete a block from a group after having compacted it.
-		// This prevents re-compacting the same data. The block remain in the top-level
-		// directory until it has actually been deleted from the bucket.
-		if err := c.add(dir); err != nil {
-			level.Warn(c.logger).Log("msg", "add new block to group", "err", err)
-		}
+		remote[id] = struct{}{}
+		c.blocks[id] = &meta
+
 		return nil
 	})
 	if err != nil {
@@ -231,100 +185,87 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 	}
 
 	// Delete all local block dirs that no longer exist in the bucket.
-	for id, meta := range local {
-		if _, ok := remote[id]; ok {
-			continue
-		}
-
-		if err := os.RemoveAll(filepath.Join(c.dir, id.String())); err != nil {
-			level.Warn(c.logger).Log("msg", "delete outdated block", "block", id, "err", err)
-		}
-		if err := os.RemoveAll(filepath.Join(c.dir, "groups", c.groupKey(meta), id.String())); err != nil {
-			level.Warn(c.logger).Log("msg", "delete outdated block from group", "block", id, "err", err)
+	for id := range c.blocks {
+		if _, ok := remote[id]; !ok {
+			delete(c.blocks, id)
 		}
 	}
-
 	return nil
 }
 
-func (c *Syncer) groupKey(meta *block.Meta) string {
-	return fmt.Sprintf("%x", labels.FromMap(meta.Thanos.Labels).Hash())
+// groupKey returns a unique identifier for the group the block belongs to. It considers
+// the downsampling resolution and the block's labels.
+func groupKey(meta *block.Meta) string {
+	return fmt.Sprintf("%d@%s", meta.Thanos.Downsample.Resolution, labels.FromMap(meta.Thanos.Labels))
 }
 
-// add adds the block in the given directory to its respective compaction group.
-func (c *Syncer) add(bdir string) error {
-	meta, err := block.ReadMetaFile(bdir)
-	if err != nil {
-		return errors.Wrap(err, "read meta file")
-	}
-	h := c.groupKey(meta)
-
+// Groups returns the compaction groups for all blocks currently known to the syncer.
+func (c *Syncer) Groups() (res []*Group, err error) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
-	g, ok := c.groups[h]
-	if !ok {
-		g, err = newGroup(
-			log.With(c.logger, "compactionGroup", h),
-			c.reg,
-			c.bkt,
-			filepath.Join(c.dir, "groups", h),
-			meta.Thanos.Labels,
-		)
-		if err != nil {
-			return errors.Wrap(err, "create compaction group")
+	groups := map[string]*Group{}
+
+	for _, m := range c.blocks {
+		g, ok := groups[groupKey(m)]
+		if !ok {
+			g, err = newGroup(
+				log.With(c.logger, "compactionGroup", groupKey(m)),
+				c.reg,
+				c.bkt,
+				labels.FromMap(m.Thanos.Labels),
+				m.Thanos.Downsample.Resolution,
+			)
+			if err != nil {
+				return nil, errors.Wrap(err, "create compaction group")
+			}
+			groups[groupKey(m)] = g
+			res = append(res, g)
 		}
-		c.groups[h] = g
+		g.Add(m)
 	}
-	return g.Add(meta)
-}
-
-// Groups returns the compaction groups created by the Syncer.
-func (c *Syncer) Groups() (res []*Group) {
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
-
-	for _, g := range c.groups {
-		res = append(res, g)
-	}
-	return res
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].Key() < res[j].Key()
+	})
+	return res, nil
 }
 
 // GarbageCollect deletes blocks from the bucket if their data is available as part of a
 // block with a higher compaction level.
 func (c *Syncer) GarbageCollect(ctx context.Context) error {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
 	begin := time.Now()
 
-	err := c.garbageCollect(ctx)
-	if err != nil {
-		c.metrics.garbageCollectionFailures.Inc()
-	}
-	c.metrics.garbageCollections.Inc()
-	c.metrics.garbageCollectionDuration.Observe(time.Since(begin).Seconds())
+	// Run a separate round of garbage collections for each valid resolution.
+	for _, res := range []int64{
+		downsample.ResLevel0, downsample.ResLevel1, downsample.ResLevel2,
+	} {
+		err := c.garbageCollect(ctx, res)
+		if err != nil {
+			c.metrics.garbageCollectionFailures.Inc()
+		}
+		c.metrics.garbageCollections.Inc()
+		c.metrics.garbageCollectionDuration.Observe(time.Since(begin).Seconds())
 
-	return err
+		if err != nil {
+			return errors.Wrapf(err, "garbage collect resolution %d", res)
+		}
+	}
+	return nil
 }
 
-func (c *Syncer) garbageCollect(ctx context.Context) error {
+func (c *Syncer) garbageCollect(ctx context.Context, resolution int64) error {
 	// Map each block to its highest priority parent. Initial blocks have themselves
 	// in their source section, i.e. are their own parent.
-	var (
-		all     = map[ulid.ULID]*block.Meta{}
-		parents = map[ulid.ULID]ulid.ULID{}
-	)
-	err := iterBlocks(c.dir, func(dir string, _ ulid.ULID) error {
-		meta, err := block.ReadMetaFile(dir)
-		if err != nil {
-			return errors.Wrap(err, "read meta")
-		}
-		all[meta.ULID] = meta
-		return nil
-	})
-	if err != nil {
-		return err
-	}
+	parents := map[ulid.ULID]ulid.ULID{}
 
-	for id, meta := range all {
+	for id, meta := range c.blocks {
+		// Skip any block that has a different resolution.
+		if meta.Thanos.Downsample.Resolution != resolution {
+			continue
+		}
 		// For each source block we contain, check whether we are the highest priority parent block.
 		for _, sid := range meta.Compaction.Sources {
 			pid, ok := parents[sid]
@@ -333,7 +274,7 @@ func (c *Syncer) garbageCollect(ctx context.Context) error {
 				parents[sid] = id
 				continue
 			}
-			pmeta, ok := all[pid]
+			pmeta, ok := c.blocks[pid]
 			if !ok {
 				return errors.Errorf("previous parent block %s not found", pid)
 			}
@@ -359,7 +300,11 @@ func (c *Syncer) garbageCollect(ctx context.Context) error {
 		topParents[pid] = struct{}{}
 	}
 
-	for id := range all {
+	for id, meta := range c.blocks {
+		// Skip any block that has a different resolution.
+		if meta.Thanos.Downsample.Resolution != resolution {
+			continue
+		}
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -376,40 +321,27 @@ func (c *Syncer) garbageCollect(ctx context.Context) error {
 		if err != nil {
 			return errors.Wrapf(err, "delete block %s from bucket", id)
 		}
+		// Immediately update our in-memory state so no further call to SyncMetas is needed
+		/// after running garbage collection.
+		delete(c.blocks, id)
 		c.metrics.garbageCollectedBlocks.Inc()
 	}
 	return nil
 }
 
 type groupMetrics struct {
-	cachedBlocksCount float64
-
 	compactions        prometheus.Counter
 	compactionFailures prometheus.Counter
 	compactionDuration prometheus.Histogram
 }
 
-func mapToString(m map[string]string) string {
-	var s string
-
-	var i int
-	for k, v := range m {
-		if i > 0 {
-			s += ";"
-		}
-		i++
-		s += fmt.Sprintf("%s=%s", k, v)
-	}
-	return s
-}
-
-func newGroupMetrics(reg prometheus.Registerer, labels map[string]string, getBlocksFunc func() (ids []ulid.ULID, err error)) *groupMetrics {
+func newGroupMetrics(reg prometheus.Registerer, lset labels.Labels, getBlocks func() []ulid.ULID) *groupMetrics {
 	var m groupMetrics
 
 	// We cannot just append labels as metric labels, because it will conflict with the things generated by given Thanos
 	// source represent by this group.
 	groupLabels := map[string]string{
-		"group_labels": mapToString(labels),
+		"group_labels": strings.Trim(lset.String(), "{}"),
 	}
 
 	groupBlocksCount := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
@@ -417,12 +349,7 @@ func newGroupMetrics(reg prometheus.Registerer, labels map[string]string, getBlo
 		Help:        "Number of currently loaded blocks for group.",
 		ConstLabels: groupLabels,
 	}, func() float64 {
-		b, err := getBlocksFunc()
-		if err != nil {
-			return float64(m.cachedBlocksCount)
-		}
-		m.cachedBlocksCount = float64(len(b))
-		return float64(len(b))
+		return float64(len(getBlocks()))
 	})
 
 	m.compactions = prometheus.NewCounter(prometheus.CounterOpts{
@@ -458,30 +385,40 @@ func newGroupMetrics(reg prometheus.Registerer, labels map[string]string, getBlo
 // Group captures a set of blocks that have the same origin labels.
 // Those blocks generally contain the same series and can thus efficiently be compacted.
 type Group struct {
-	logger  log.Logger
-	mtx     sync.Mutex
-	dir     string
-	bkt     objstore.Bucket
-	labels  map[string]string
-	metrics *groupMetrics
+	logger     log.Logger
+	bkt        objstore.Bucket
+	labels     labels.Labels
+	resolution int64
+	mtx        sync.Mutex
+	blocks     map[ulid.ULID]*block.Meta
+	metrics    *groupMetrics
 }
 
 // newGroup returns a new compaction group.
-func newGroup(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, dir string, labels map[string]string) (*Group, error) {
+func newGroup(
+	logger log.Logger,
+	reg prometheus.Registerer,
+	bkt objstore.Bucket,
+	lset labels.Labels,
+	resolution int64,
+) (*Group, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
-	if err := os.MkdirAll(dir, 0777); err != nil {
-		return nil, err
-	}
 	g := &Group{
-		logger: logger,
-		dir:    dir,
-		bkt:    bkt,
-		labels: labels,
+		logger:     logger,
+		bkt:        bkt,
+		labels:     lset,
+		resolution: resolution,
+		blocks:     map[ulid.ULID]*block.Meta{},
 	}
-	g.metrics = newGroupMetrics(reg, labels, g.IDs)
+	g.metrics = newGroupMetrics(reg, lset, g.IDs)
 	return g, nil
+}
+
+// Key returns an identifier for the group.
+func (cg *Group) Key() string {
+	return fmt.Sprintf("%d@%s", cg.resolution, cg.labels)
 }
 
 // Add the block with the given meta to the group.
@@ -489,43 +426,50 @@ func (cg *Group) Add(meta *block.Meta) error {
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
 
-	if !reflect.DeepEqual(cg.labels, meta.Thanos.Labels) {
+	if !cg.labels.Equals(labels.FromMap(meta.Thanos.Labels)) {
 		return errors.New("block and group labels do not match")
 	}
-
-	bdir := filepath.Join(cg.dir, meta.ULID.String())
-
-	if err := os.MkdirAll(bdir, 0777); err != nil {
-		return errors.Wrap(err, "create block dir")
+	if cg.resolution != meta.Thanos.Downsample.Resolution {
+		return errors.New("block and group resolution do not match")
 	}
-	return block.WriteMetaFile(bdir, meta)
-}
-
-// Dir returns the groups directory.
-func (cg *Group) Dir() string {
-	return cg.dir
+	cg.blocks[meta.ULID] = meta
+	return nil
 }
 
 // IDs returns all sorted IDs of blocks in the group.
-func (cg *Group) IDs() (ids []ulid.ULID, err error) {
-	err = iterBlocks(cg.dir, func(_ string, id ulid.ULID) error {
+func (cg *Group) IDs() (ids []ulid.ULID) {
+	cg.mtx.Lock()
+	defer cg.mtx.Unlock()
+
+	for id := range cg.blocks {
 		ids = append(ids, id)
-		return nil
+	}
+	sort.Slice(ids, func(i, j int) bool {
+		return ids[i].Compare(ids[j]) < 0
 	})
-	return ids, err
+	return ids
 }
 
 // Labels returns the labels that all blocks in the group share.
-func (cg *Group) Labels() map[string]string {
+func (cg *Group) Labels() labels.Labels {
 	return cg.labels
+}
+
+// Resolution returns the common resolution of blocks in the group.
+func (cg *Group) Resolution() int64 {
+	return cg.resolution
 }
 
 // Compact plans and runs a single compaction against the group. The compacted result
 // is uploaded into the bucket the blocks were retrieved from.
-func (cg *Group) Compact(ctx context.Context, comp tsdb.Compactor) (ulid.ULID, error) {
+func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor) (ulid.ULID, error) {
 	begin := time.Now()
 
-	id, err := cg.compact(ctx, comp)
+	if err := os.MkdirAll(dir, 0777); err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "create compaction dir")
+	}
+
+	id, err := cg.compact(ctx, dir, comp)
 	if err != nil {
 		cg.metrics.compactionFailures.Inc()
 	}
@@ -555,12 +499,24 @@ func IsHaltError(err error) bool {
 	return ok1 || ok2
 }
 
-func (cg *Group) compact(ctx context.Context, comp tsdb.Compactor) (id ulid.ULID, err error) {
-	// Planning a compaction works purely based on the meta.json files in our group's dir.
+func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (id ulid.ULID, err error) {
 	cg.mtx.Lock()
-	plan, err := comp.Plan(cg.dir)
-	cg.mtx.Unlock()
+	defer cg.mtx.Unlock()
 
+	// Planning a compaction works purely based on the meta.json files in our group's dir.
+	// So we first dump all our memory block metas into the directory.
+	for _, meta := range cg.blocks {
+		bdir := filepath.Join(dir, meta.ULID.String())
+
+		if err := os.MkdirAll(bdir, 0777); err != nil {
+			return id, errors.Wrap(err, "create planning block dir")
+		}
+		if err := block.WriteMetaFile(bdir, meta); err != nil {
+			return id, errors.Wrap(err, "write planning meta file")
+		}
+	}
+	// Plan against the written meta.json files.
+	plan, err := comp.Plan(dir)
 	if err != nil {
 		return id, errors.Wrap(err, "plan compaction")
 	}
@@ -588,40 +544,29 @@ func (cg *Group) compact(ctx context.Context, comp tsdb.Compactor) (id ulid.ULID
 		}
 	}
 
-	// Once we have a plan we need to download the actual data. We don't touch
-	// the main directory but use an intermediate one instead.
-	wdir := filepath.Join(cg.dir, "tmp")
-
-	if err := os.MkdirAll(wdir, 0777); err != nil {
-		return id, errors.Wrap(err, "create working dir")
-	}
-	defer os.RemoveAll(wdir)
-
-	var compDirs []string
+	// Once we have a plan we need to download the actual data.
 	begin := time.Now()
 
 	for _, b := range plan {
-		ids := filepath.Base(b)
-		dst := filepath.Join(wdir, ids)
+		idStr := filepath.Base(b)
 
-		if err := objstore.DownloadDir(ctx, cg.bkt, ids, dst); err != nil {
-			return id, errors.Wrapf(err, "download block %s", ids)
+		if err := objstore.DownloadDir(ctx, cg.bkt, idStr, b); err != nil {
+			return id, errors.Wrapf(err, "download block %s", idStr)
 		}
-		compDirs = append(compDirs, dst)
 	}
 	level.Debug(cg.logger).Log("msg", "downloaded blocks",
 		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin))
 
 	begin = time.Now()
 
-	id, err = comp.Compact(wdir, compDirs...)
+	id, err = comp.Compact(dir, plan...)
 	if err != nil {
 		return id, errors.Wrapf(err, "compact blocks %v", plan)
 	}
 	level.Debug(cg.logger).Log("msg", "compacted blocks",
 		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin))
 
-	bdir := filepath.Join(wdir, id.String())
+	bdir := filepath.Join(dir, id.String())
 
 	os.Remove(filepath.Join(bdir, "tombstones"))
 
@@ -629,7 +574,7 @@ func (cg *Group) compact(ctx context.Context, comp tsdb.Compactor) (id ulid.ULID
 	if err != nil {
 		return id, errors.Wrap(err, "read new meta")
 	}
-	newMeta.Thanos.Labels = cg.labels
+	newMeta.Thanos.Labels = cg.labels.Map()
 
 	if err := block.WriteMetaFile(bdir, newMeta); err != nil {
 		return id, errors.Wrap(err, "write new meta")
