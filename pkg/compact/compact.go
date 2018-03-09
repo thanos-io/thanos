@@ -433,7 +433,6 @@ func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return ulid.ULID{}, errors.Wrap(err, "create compaction dir")
 	}
-
 	id, err := cg.compact(ctx, dir, comp)
 	if err != nil {
 		cg.compactionFailures.Inc()
