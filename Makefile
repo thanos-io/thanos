@@ -52,7 +52,6 @@ assets:
 docker: build
 	@echo ">> building docker image"
 	@docker build -t improbable/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)" .
-	@docker tag improbable/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)" improbable/"$(DOCKER_IMAGE_NAME)":latest
 
 docker-push:
 	@echo ">> pushing image"
