@@ -34,49 +34,63 @@ type Reloader struct {
 	ruleDir          string
 	lastCfgHash      []byte
 	lastRulesHash    []byte
+	ruleInterval     time.Duration
 }
 
 // New creates a new reloader that watches the given config file and rule directory
 // and triggers a Prometheus reload upon changes.
 // If cfgEnvsubstFile is not empty, environment variables in the config file will be
-// substituted and the out put written into the given path. Promethes should then
+// substituted and the out put written into the given path. Prometheus should then
 // use cfgEnvsubstFile as its config file path.
 func New(logger log.Logger, reloadURL *url.URL, cfgFile, cfgEnvsubstFile, ruleDir string) *Reloader {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
 	return &Reloader{
 		logger:           logger,
 		reloadURL:        reloadURL,
 		cfgFilename:      cfgFile,
 		cfgSubstFilename: cfgEnvsubstFile,
+		ruleDir:          ruleDir,
+		ruleInterval:     3 * time.Minute,
 	}
 }
 
 // Watch starts to watch the config file and processes it until the context
 // gets canceled.
 func (r *Reloader) Watch(ctx context.Context) error {
-	w, err := fsnotify.NewWatcher()
+	configWatcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return errors.Wrap(err, "create watcher")
 	}
-	defer w.Close()
+	defer configWatcher.Close()
 
-	cfgDir := filepath.Dir(r.cfgFilename)
+	if r.cfgFilename != "" {
+		if err := configWatcher.Add(r.cfgFilename); err != nil {
+			return errors.Wrap(err, "add config file watch")
+		}
+		level.Info(r.logger).Log(
+			"msg", "started watching config file for changes",
+			"in", r.cfgFilename,
+			"out", r.cfgSubstFilename)
+		if _, err := r.applyConfig(); err != nil {
+			return errors.Wrap(err, "initial apply")
+		}
+		if err := r.triggerReload(ctx); err != nil {
+			level.Error(r.logger).Log("msg", "triggering reload failed", "err", err)
+		}
+	}
 
-	if err := w.Add(cfgDir); err != nil {
-		return errors.Wrap(err, "add config file directory watch")
-	}
-	if _, err := r.applyConfig(); err != nil {
-		return errors.Wrap(err, "initial apply")
-	}
-	if err := r.triggerReload(ctx); err != nil {
-		level.Error(r.logger).Log("msg", "triggering reload failed", "err", err)
-	}
-
-	tick := time.NewTicker(3 * time.Minute)
+	tick := time.NewTicker(r.ruleInterval)
 	defer tick.Stop()
 
 	for {
 		select {
-		case event := <-w.Events:
+		case event := <-configWatcher.Events:
+			if r.cfgFilename == "" {
+				continue
+			}
+
 			level.Debug(r.logger).Log("msg", "received watch event", "op", event.Op, "name", event.Name)
 
 			if event.Name != r.cfgFilename {
@@ -92,11 +106,13 @@ func (r *Reloader) Watch(ctx context.Context) error {
 			if err := r.triggerReload(ctx); err != nil {
 				level.Error(r.logger).Log("msg", "triggering reload failed", "err", err)
 			}
-
-		case err := <-w.Errors:
+		case err := <-configWatcher.Errors:
 			level.Error(r.logger).Log("msg", "watch error", "err", err)
 
 		case <-tick.C:
+			if r.ruleDir == "" {
+				continue
+			}
 			changes, err := r.refreshRules()
 			if err != nil {
 				level.Error(r.logger).Log("msg", "refreshing rules failed", "err", err)
@@ -130,9 +146,6 @@ func hashFile(h hash.Hash, fn string) error {
 }
 
 func (r *Reloader) applyConfig() (ok bool, err error) {
-	if r.cfgFilename == "" {
-		return false, nil
-	}
 	h := sha256.New()
 
 	if err := hashFile(h, r.cfgFilename); err != nil {
@@ -143,9 +156,9 @@ func (r *Reloader) applyConfig() (ok bool, err error) {
 	if bytes.Equal(r.lastCfgHash, hb) {
 		return false, nil
 	}
-	r.lastCfgHash = hb
 
 	if r.cfgSubstFilename == "" {
+		r.lastCfgHash = hb
 		return true, nil
 	}
 
@@ -153,6 +166,7 @@ func (r *Reloader) applyConfig() (ok bool, err error) {
 	if err != nil {
 		return false, errors.Wrap(err, "read file")
 	}
+
 	b, err = expandEnv(b)
 	if err != nil {
 		return false, errors.Wrap(err, "expand environment variables")
@@ -161,24 +175,32 @@ func (r *Reloader) applyConfig() (ok bool, err error) {
 	if err := ioutil.WriteFile(r.cfgSubstFilename, b, 0666); err != nil {
 		return false, errors.Wrap(err, "write file")
 	}
+	r.lastCfgHash = hb
+	level.Info(r.logger).Log(
+		"msg", "config file expanded and generated",
+		"in", r.cfgFilename,
+		"out", r.cfgSubstFilename)
 	return true, nil
 }
 
 func (r *Reloader) refreshRules() (bool, error) {
-	if r.ruleDir == "" {
-		return false, nil
-	}
 	h := sha256.New()
 
-	err := filepath.Walk(r.ruleDir, func(path string, _ os.FileInfo, err error) error {
+	err := filepath.Walk(r.ruleDir, func(path string, f os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
+
+		if f.IsDir() {
+			return nil
+		}
+
 		if err := hashFile(h, path); err != nil {
 			return err
 		}
 		return nil
 	})
+
 	if err != nil {
 		return false, errors.Wrap(err, "build hash")
 	}
