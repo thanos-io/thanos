@@ -219,7 +219,9 @@ func TestGroup_Compact(t *testing.T) {
 	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(dir, b2.String()), b2.String()))
 	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(dir, b3.String()), b3.String()))
 
-	g, err := newGroup(nil, nil, bkt, nil, 0)
+	metrics := newSyncerMetrics(nil)
+
+	g, err := newGroup(nil, nil, bkt, nil, 0, metrics.compactions, metrics.compactionFailures)
 	testutil.Ok(t, err)
 
 	comp, err := tsdb.NewLeveledCompactor(nil, log.NewLogfmtLogger(os.Stderr), []int64{1000, 3000}, nil)

@@ -22,6 +22,19 @@ import (
 	"github.com/prometheus/tsdb/labels"
 )
 
+func TestExpandChunkIterator(t *testing.T) {
+	// Validate that expanding the chunk iterator filters out-of-order samples
+	// and staleness markers.
+	// Same timestamps are okay since we use them for counter markers.
+	var res []sample
+	expandChunkIterator(newSampleIterator([]sample{
+		{100, 1}, {200, 2}, {200, 3}, {201, 4}, {200, 5},
+		{300, 6}, {400, math.Float64frombits(value.StaleNaN)}, {500, 5},
+	}), &res)
+
+	testutil.Equals(t, []sample{{100, 1}, {200, 2}, {200, 3}, {201, 4}, {300, 6}, {500, 5}}, res)
+}
+
 func TestAggrChunk(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
@@ -77,11 +90,11 @@ func TestDownsampleRaw(t *testing.T) {
 				{20, 1}, {40, 2}, {60, 3}, {80, 1}, {100, 2}, {101, staleMarker}, {120, 5}, {180, 10}, {250, 1},
 			},
 			output: map[AggrType][]sample{
-				AggrCount:   {{99, 4}, {199, 3}, {299, 1}},
-				AggrSum:     {{99, 7}, {199, 17}, {299, 1}},
-				AggrMin:     {{99, 1}, {199, 2}, {299, 1}},
-				AggrMax:     {{99, 3}, {199, 10}, {299, 1}},
-				AggrCounter: {{99, 4}, {199, 13}, {299, 14}, {299, 1}},
+				AggrCount:   {{99, 4}, {199, 3}, {250, 1}},
+				AggrSum:     {{99, 7}, {199, 17}, {250, 1}},
+				AggrMin:     {{99, 1}, {199, 2}, {250, 1}},
+				AggrMax:     {{99, 3}, {199, 10}, {250, 1}},
+				AggrCounter: {{99, 4}, {199, 13}, {250, 14}, {250, 1}},
 			},
 		},
 	}
@@ -118,7 +131,7 @@ func TestDownsampleAggr(t *testing.T) {
 				AggrSum:     []sample{{499, 29}, {999, 100}},
 				AggrMin:     []sample{{499, -3}, {999, 0}},
 				AggrMax:     []sample{{499, 10}, {999, 100}},
-				AggrCounter: []sample{{499, 210}, {999, 320}, {1499, 430}, {1499, 110}},
+				AggrCounter: []sample{{499, 210}, {999, 320}, {1299, 430}, {1299, 110}},
 			},
 		},
 	}

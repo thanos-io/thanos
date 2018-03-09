@@ -92,6 +92,7 @@ func runCompact(
 		Help: "Set to 1 if the compactor halted due to an unexpected error",
 	})
 	halted.Set(0)
+
 	reg.MustRegister(halted)
 
 	if gcsBucket != "" {
