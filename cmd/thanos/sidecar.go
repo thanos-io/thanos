@@ -98,18 +98,22 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			*reloaderCfgSubstFile,
 			*reloaderRuleDir,
 		)
-		return runSidecar(g, logger, reg, tracer,
+		peer, err := cluster.New(logger, reg, *clusterBindAddr, *clusterAdvertiseAddr, *peers, false, *gossipInterval, *pushPullInterval)
+		if err != nil {
+			return errors.Wrap(err, "new cluster peer")
+		}
+		return runSidecar(
+			g,
+			logger,
+			reg,
+			tracer,
 			*grpcAddr,
 			*httpAddr,
 			*promURL,
 			*dataDir,
-			*clusterBindAddr,
-			*clusterAdvertiseAddr,
-			*peers,
-			*gossipInterval,
-			*pushPullInterval,
 			*gcsBucket,
 			&s3config,
+			peer,
 			rl,
 		)
 	}
@@ -124,65 +128,99 @@ func runSidecar(
 	httpAddr string,
 	promURL *url.URL,
 	dataDir string,
-	clusterBindAddr string,
-	clusterAdvertiseAddr string,
-	knownPeers []string,
-	gossipInterval time.Duration,
-	pushPullInterval time.Duration,
 	gcsBucket string,
 	s3Config *s3.Config,
+	peer *cluster.Peer,
 	reloader *reloader.Reloader,
 ) error {
+	var externalLabels = &extLabelSet{promURL: promURL}
+
+	// Setup all the concurrent groups.
+	{
+		promUp := prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "thanos_sidecar_prometheus_up",
+			Help: "Boolean indicator whether the sidecar can reach its Prometheus peer.",
+		})
+		lastHeartbeat := prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "thanos_sidecar_last_heartbeat_success_time_seconds",
+			Help: "Second timestamp of the last successful heartbeat.",
+		})
+		reg.MustRegister(promUp, lastHeartbeat)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			// Blocking query of external labels before joining as a Source Peer into gossip.
+			// We retry infinitely until we reach and fetch labels from our Prometheus.
+			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
+				err := externalLabels.Update(ctx)
+				if err != nil {
+					level.Warn(logger).Log(
+						"msg", "failed to fetch initial external labels. Is Prometheus running? Retrying",
+						"err", err,
+					)
+					promUp.Set(0)
+					return err
+				}
+
+				promUp.Set(1)
+				lastHeartbeat.Set(float64(time.Now().Unix()))
+				return nil
+			})
+			if err != nil {
+				return errors.Wrap(err, "initial external labels query")
+			}
+
+			// New gossip cluster.
+			err = peer.Join(
+				cluster.PeerState{
+					Type:    cluster.PeerTypeSource,
+					APIAddr: grpcAddr,
+					Metadata: cluster.PeerMetadata{
+						Labels: externalLabels.GetPB(),
+						// Start out with the full time range. The shipper will constrain it later.
+						// TODO(fabxc): minimum timestamp is never adjusted if shipping is disabled.
+						MinTime: 0,
+						MaxTime: math.MaxInt64,
+					},
+				},
+			)
+			if err != nil {
+				return errors.Wrap(err, "join cluster")
+			}
+
+			// Periodically query the Prometheus config. We use this as a heartbeat as well as for updating
+			// the external labels we apply.
+			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+				iterCtx, iterCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer iterCancel()
+
+				err := externalLabels.Update(iterCtx)
+				if err != nil {
+					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
+					promUp.Set(0)
+				} else {
+					// Update gossip.
+					peer.SetLabels(externalLabels.GetPB())
+
+					promUp.Set(1)
+					lastHeartbeat.Set(float64(time.Now().Unix()))
+				}
+
+				return nil
+			})
+		}, func(error) {
+			cancel()
+			peer.Close(2 * time.Second)
+		})
+	}
 	{
 		ctx, cancel := context.WithCancel(context.Background())
-
 		g.Add(func() error {
 			return reloader.Watch(ctx)
 		}, func(error) {
 			cancel()
 		})
 	}
-	externalLabels := &extLabelSet{promURL: promURL}
-
-	// Blocking query of external labels before anything else.
-	// We retry infinitely until we reach and fetch labels from our Prometheus.
-	{
-		ctx := context.Background()
-		err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
-			err := externalLabels.Update(ctx)
-			if err != nil {
-				level.Warn(logger).Log(
-					"msg", "failed to fetch initial external labels. Retrying",
-					"err", err,
-				)
-			}
-			return err
-		})
-		if err != nil {
-			return errors.Wrap(err, "initial external labels query")
-		}
-	}
-
-	peer, err := cluster.Join(logger, reg, clusterBindAddr, clusterAdvertiseAddr, knownPeers,
-		cluster.PeerState{
-			Type:    cluster.PeerTypeSource,
-			APIAddr: grpcAddr,
-			Metadata: cluster.PeerMetadata{
-				Labels: externalLabels.GetPB(),
-				// Start out with the full time range. The shipper will constrain it later.
-				// TODO(fabxc): minimum timestamp is never adjusted if shipping is disabled.
-				MinTime: 0,
-				MaxTime: math.MaxInt64,
-			},
-		}, false,
-		gossipInterval,
-		pushPullInterval,
-	)
-	if err != nil {
-		return errors.Wrap(err, "join cluster")
-	}
-
-	// Setup all the concurrent groups.
 	{
 		mux := http.NewServeMux()
 		registerMetrics(mux, reg)
@@ -224,43 +262,6 @@ func runSidecar(
 			l.Close()
 		})
 	}
-	// Periodically query the Prometheus config. We use this as a heartbeat as well as for updating
-	// the external labels we apply.
-	{
-		promUp := prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "thanos_sidecar_prometheus_up",
-			Help: "Boolean indicator whether the sidecar can reach its Prometheus peer.",
-		})
-		lastHeartbeat := prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "thanos_sidecar_last_heartbeat_success_time_seconds",
-			Help: "Second timestamp of the last successful heartbeat.",
-		})
-		reg.MustRegister(promUp, lastHeartbeat)
-
-		ctx, cancel := context.WithCancel(context.Background())
-		g.Add(func() error {
-			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
-				iterCtx, iterCancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer iterCancel()
-
-				err := externalLabels.Update(iterCtx)
-				if err != nil {
-					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
-					promUp.Set(0)
-				} else {
-					// Update gossip.
-					peer.SetLabels(externalLabels.GetPB())
-
-					promUp.Set(1)
-					lastHeartbeat.Set(float64(time.Now().Unix()))
-				}
-
-				return nil
-			})
-		}, func(error) {
-			cancel()
-		})
-	}
 
 	var (
 		bkt    objstore.Bucket
@@ -282,6 +283,7 @@ func runSidecar(
 		closeFn = gcsClient.Close
 		bucket = gcsBucket
 	} else if s3Config.Validate() == nil {
+		var err error
 		bkt, err = s3.NewBucket(s3Config, reg)
 		if err != nil {
 			return errors.Wrap(err, "create s3 client")
