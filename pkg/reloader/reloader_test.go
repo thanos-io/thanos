@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/fortytw2/leaktest"
+	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 )
 
@@ -26,11 +27,18 @@ func TestReloader_ConfigApply(t *testing.T) {
 	defer l.Close()
 
 	reloads := 0
+	i := 0
 	promHandlerMu := sync.Mutex{}
 	srv := &http.Server{}
 	srv.Handler = http.HandlerFunc(func(resp http.ResponseWriter, r *http.Request) {
 		promHandlerMu.Lock()
 		defer promHandlerMu.Unlock()
+		i++
+		if i%2 == 0 {
+			// Every second request, fail to ensure that retry works.
+			resp.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
 
 		reloads++
 		resp.WriteHeader(http.StatusOK)
@@ -52,9 +60,10 @@ func TestReloader_ConfigApply(t *testing.T) {
 		input  = path.Join(dir, "in", "cfg.yaml.tmpl")
 		output = path.Join(dir, "out", "cfg.yaml")
 	)
-	reloader := New(nil, reloadURL)
+	reloader := New(nil, reloadURL, input, output, "")
+	reloader.retryInteval = 100 * time.Millisecond
 
-	testNoConfig(t, reloader, input, output)
+	testNoConfig(t, reloader)
 
 	testutil.Ok(t, ioutil.WriteFile(input, []byte(`
 config:
@@ -63,7 +72,7 @@ config:
   c: $(TEST_RELOADER_THANOS_ENV2)
 `), os.ModePerm))
 
-	testUnsetVariables(t, reloader, input, output)
+	testUnsetVariables(t, reloader)
 
 	testutil.Ok(t, os.Setenv("TEST_RELOADER_THANOS_ENV", "2"))
 	testutil.Ok(t, os.Setenv("TEST_RELOADER_THANOS_ENV2", "3"))
@@ -73,30 +82,31 @@ config:
 		promHandlerMu.Unlock()
 		return reloads
 	}
-	testInitialApply(t, reloader, reloadsFn, input, output)
+	testInitialApply(t, reloader, reloadsFn, output)
 
 	reloads = 0
-
+	reloader.lastCfgHash = []byte{}
+	reloader.lastRuleHash = []byte{}
 	testOnChangeApply(t, reloader, reloadsFn, input, output)
 }
 
-func testNoConfig(t *testing.T, reloader *Reloader, input, output string) {
+func testNoConfig(t *testing.T, reloader *Reloader) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	err := reloader.WatchConfig(ctx, input, output)
+	err := reloader.Watch(ctx)
 	cancel()
 	testutil.NotOk(t, err)
 	testutil.Assert(t, strings.HasSuffix(err.Error(), "no such file or directory"), "expect error since there is no input config.")
 }
 
-func testUnsetVariables(t *testing.T, reloader *Reloader, input, output string) {
+func testUnsetVariables(t *testing.T, reloader *Reloader) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	err := reloader.WatchConfig(ctx, input, output)
+	err := reloader.Watch(ctx)
 	cancel()
 	testutil.NotOk(t, err)
 	testutil.Assert(t, strings.HasSuffix(err.Error(), `found reference to unset environment variable "TEST_RELOADER_THANOS_ENV"`), "expect error since there envvars are not set.")
 }
 
-func testInitialApply(t *testing.T, reloader *Reloader, reloadsFn func() int, input, output string) {
+func testInitialApply(t *testing.T, reloader *Reloader, reloadsFn func() int, output string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	go func() {
 		for {
@@ -114,7 +124,7 @@ func testInitialApply(t *testing.T, reloader *Reloader, reloadsFn func() int, in
 			}
 		}
 	}()
-	err := reloader.WatchConfig(ctx, input, output)
+	err := reloader.Watch(ctx)
 	cancel()
 	testutil.Ok(t, err)
 
@@ -157,7 +167,7 @@ config:
 			}
 		}
 	}()
-	err := reloader.WatchConfig(ctx, input, output)
+	err := reloader.Watch(ctx)
 	cancel()
 	testutil.Ok(t, err)
 
@@ -181,11 +191,19 @@ func TestReloader_RuleApply(t *testing.T) {
 	defer l.Close()
 
 	reloads := 0
+	i := 0
 	promHandlerMu := sync.Mutex{}
 	srv := &http.Server{}
 	srv.Handler = http.HandlerFunc(func(resp http.ResponseWriter, r *http.Request) {
 		promHandlerMu.Lock()
 		defer promHandlerMu.Unlock()
+
+		i++
+		if i%2 == 0 {
+			// Every second request, fail to ensure that retry works.
+			resp.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
 
 		reloads++
 		resp.WriteHeader(http.StatusOK)
@@ -202,6 +220,7 @@ func TestReloader_RuleApply(t *testing.T) {
 
 	reloader := New(nil, reloadURL, "", "", dir)
 	reloader.ruleInterval = 100 * time.Millisecond
+	reloader.retryInteval = 100 * time.Millisecond
 
 	reloadsFn := func() int {
 		promHandlerMu.Lock()

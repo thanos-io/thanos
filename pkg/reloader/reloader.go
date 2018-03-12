@@ -28,9 +28,16 @@ import (
 // It optionally substitutes environment variables in the configuration.
 // Referenced environment variables must be of the form `$(var)` (not `$var` or `${var}`).
 type Reloader struct {
-	logger       log.Logger
-	reloadURL    *url.URL
-	retryInteval time.Duration
+	logger          log.Logger
+	reloadURL       *url.URL
+	cfgFile         string
+	cfgEnvsubstFile string
+	ruleDir         string
+	ruleInterval    time.Duration
+	retryInteval    time.Duration
+
+	lastCfgHash  []byte
+	lastRuleHash []byte
 }
 
 // New creates a new reloader that watches the given config file and rule directory
@@ -38,50 +45,56 @@ type Reloader struct {
 // If cfgEnvsubstFile is not empty, environment variables in the config file will be
 // substituted and the out put written into the given path. Prometheus should then
 // use cfgEnvsubstFile as its config file path.
-func New(logger log.Logger, reloadURL *url.URL) *Reloader {
+func New(logger log.Logger, reloadURL *url.URL, cfgFile string, cfgEnvsubstFile string, ruleDir string) *Reloader {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	return &Reloader{
-		logger:       logger,
-		reloadURL:    reloadURL,
-		retryInteval: 5 * time.Second,
+		logger:          logger,
+		reloadURL:       reloadURL,
+		cfgFile:         cfgFile,
+		cfgEnvsubstFile: cfgEnvsubstFile,
+		ruleDir:         ruleDir,
+		ruleInterval:    3 * time.Minute,
+		retryInteval:    5 * time.Second,
 	}
 }
 
-// Watch starts to watch the config file and processes it until the context
-// gets canceled.
-func (r *Reloader) WatchConfig(ctx context.Context, cfgFile string, cfgEnvsubstFile string) error {
-	if cfgFile == "" {
-		return errors.New("empty input config file path")
-	}
-
+// Watch starts to watch the config file and rules and process them until the context
+// gets canceled. Config file gets env expanded if cfgEnvsubstFile is specified and reload is trigger if
+// config or rules changed.
+func (r *Reloader) Watch(ctx context.Context) error {
 	configWatcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return errors.Wrap(err, "create watcher")
 	}
 	defer configWatcher.Close()
 
-	if err := configWatcher.Add(cfgFile); err != nil {
-		return errors.Wrap(err, "add config file watch")
-	}
-	level.Info(r.logger).Log(
-		"msg", "started watching config file for changes",
-		"in", cfgFile,
-		"out", cfgEnvsubstFile)
-
-	var lastHash []byte
 	initial := make(chan struct{}, 1)
-	initial <- struct{}{}
+	if r.cfgFile != "" {
+		if err := configWatcher.Add(r.cfgFile); err != nil {
+			return errors.Wrap(err, "add config file watch")
+		}
+		level.Info(r.logger).Log(
+			"msg", "started watching config file for changes",
+			"in", r.cfgFile,
+			"out", r.cfgEnvsubstFile)
+		initial <- struct{}{}
+	}
+
+	tick := time.NewTicker(r.ruleInterval)
+	defer tick.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-initial:
+		case <-tick.C:
 		case event := <-configWatcher.Events:
 			level.Debug(r.logger).Log("msg", "received watch event", "op", event.Op, "name", event.Name)
 
-			if event.Name != cfgFile {
+			if event.Name != r.cfgFile {
 				continue
 			}
 		case err := <-configWatcher.Errors:
@@ -89,71 +102,36 @@ func (r *Reloader) WatchConfig(ctx context.Context, cfgFile string, cfgEnvsubstF
 			continue
 		}
 
-		h := sha256.New()
-		if err := hashFile(h, cfgFile); err != nil {
-			return errors.Wrap(err, "hash file")
-		}
-
-		hb := h.Sum(nil)
-		if bytes.Equal(lastHash, hb) {
-			// Nothing to do.
-			return nil
-		}
-
-		if cfgEnvsubstFile != "" {
-			b, err := ioutil.ReadFile(cfgFile)
-			if err != nil {
-				return errors.Wrap(err, "read file")
-			}
-
-			b, err = expandEnv(b)
-			if err != nil {
-				return errors.Wrap(err, "expand environment variables")
-			}
-
-			if err := ioutil.WriteFile(cfgEnvsubstFile, b, 0666); err != nil {
-				return errors.Wrap(err, "write file")
-			}
-		}
-
-		// Retry trigger reload until it suceeddes.
-		err := runutil.RetryWithLog(r.logger, r.retryInteval, ctx.Done(), func() error {
-			if err := r.triggerReload(ctx); err != nil {
-				return errors.Wrap(err, "trigger config reload")
-			}
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-
-		lastHash = hb
-		level.Info(r.logger).Log(
-			"msg", "config file refreshed",
-			"in", cfgFile,
-			"out", cfgEnvsubstFile)
-	}
-}
-
-func (r *Reloader) WatchRules(ctx context.Context, ruleDir string, ruleInterval time.Duration) error {
-	if ruleDir == "" {
-		return errors.New("empty rule dir")
-	}
-
-	tick := time.NewTicker(ruleInterval)
-	defer tick.Stop()
-
-	var lastHash []byte
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-tick.C:
-		}
-
-		err := runutil.RetryWithLog(r.logger, r.retryInteval, ctx.Done(), func() error {
+		var (
+			cfgHash  []byte
+			ruleHash []byte
+		)
+		if r.cfgFile != "" {
 			h := sha256.New()
-			err := filepath.Walk(ruleDir, func(path string, f os.FileInfo, err error) error {
+			if err := hashFile(h, r.cfgFile); err != nil {
+				return errors.Wrap(err, "hash file")
+			}
+			cfgHash = h.Sum(nil)
+			if r.cfgEnvsubstFile != "" {
+				b, err := ioutil.ReadFile(r.cfgFile)
+				if err != nil {
+					return errors.Wrap(err, "read file")
+				}
+
+				b, err = expandEnv(b)
+				if err != nil {
+					return errors.Wrap(err, "expand environment variables")
+				}
+
+				if err := ioutil.WriteFile(r.cfgEnvsubstFile, b, 0666); err != nil {
+					return errors.Wrap(err, "write file")
+				}
+			}
+		}
+
+		if r.ruleDir != "" {
+			h := sha256.New()
+			err := filepath.Walk(r.ruleDir, func(path string, f os.FileInfo, err error) error {
 				if err != nil {
 					return err
 				}
@@ -170,24 +148,33 @@ func (r *Reloader) WatchRules(ctx context.Context, ruleDir string, ruleInterval 
 			if err != nil {
 				return errors.Wrap(err, "build hash")
 			}
+			ruleHash = h.Sum(nil)
+		}
 
-			hb := h.Sum(nil)
-			if bytes.Equal(hb, lastHash) {
-				return nil
-			}
+		if bytes.Equal(r.lastCfgHash, cfgHash) && bytes.Equal(r.lastRuleHash, ruleHash) {
+			// Nothing to do.
+			continue
+		}
 
+		// Retry trigger reload until it succeeded or next tick is near.
+		retryCtx, cancel := context.WithTimeout(ctx, r.ruleInterval)
+		err := runutil.RetryWithLog(r.logger, r.retryInteval, retryCtx.Done(), func() error {
 			if err := r.triggerReload(ctx); err != nil {
-				return errors.Wrap(err, "trigger rule reload")
+				return errors.Wrap(err, "trigger reload")
 			}
-			lastHash = hb
-			level.Info(r.logger).Log(
-				"msg", "rule files refreshed",
-				"ruleDir", ruleDir)
 
+			r.lastCfgHash = cfgHash
+			r.lastRuleHash = ruleHash
+			level.Info(r.logger).Log(
+				"msg", "Prometheus reload triggered",
+				"cfg_in", r.cfgFile,
+				"cfg_out", r.cfgEnvsubstFile,
+				"rule_dir", r.ruleDir)
 			return nil
 		})
+		cancel()
 		if err != nil {
-			return err
+			level.Error(r.logger).Log("msg", "Failed to trigger reload. Retrying.", "err", err)
 		}
 	}
 }
