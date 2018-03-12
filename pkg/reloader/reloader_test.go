@@ -52,9 +52,9 @@ func TestReloader_ConfigApply(t *testing.T) {
 		input  = path.Join(dir, "in", "cfg.yaml.tmpl")
 		output = path.Join(dir, "out", "cfg.yaml")
 	)
-	reloader := New(nil, reloadURL, input, output, "")
+	reloader := New(nil, reloadURL)
 
-	testNoConfig(t, reloader)
+	testNoConfig(t, reloader, input, output)
 
 	testutil.Ok(t, ioutil.WriteFile(input, []byte(`
 config:
@@ -63,7 +63,7 @@ config:
   c: $(TEST_RELOADER_THANOS_ENV2)
 `), os.ModePerm))
 
-	testUnsetVariables(t, reloader)
+	testUnsetVariables(t, reloader, input, output)
 
 	testutil.Ok(t, os.Setenv("TEST_RELOADER_THANOS_ENV", "2"))
 	testutil.Ok(t, os.Setenv("TEST_RELOADER_THANOS_ENV2", "3"))
@@ -73,30 +73,30 @@ config:
 		promHandlerMu.Unlock()
 		return reloads
 	}
-	testInitialApply(t, reloader, reloadsFn, output)
+	testInitialApply(t, reloader, reloadsFn, input, output)
 
 	reloads = 0
 
 	testOnChangeApply(t, reloader, reloadsFn, input, output)
 }
 
-func testNoConfig(t *testing.T, reloader *Reloader) {
+func testNoConfig(t *testing.T, reloader *Reloader, input, output string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	err := reloader.Watch(ctx)
+	err := reloader.WatchConfig(ctx, input, output)
 	cancel()
 	testutil.NotOk(t, err)
 	testutil.Assert(t, strings.HasSuffix(err.Error(), "no such file or directory"), "expect error since there is no input config.")
 }
 
-func testUnsetVariables(t *testing.T, reloader *Reloader) {
+func testUnsetVariables(t *testing.T, reloader *Reloader, input, output string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	err := reloader.Watch(ctx)
+	err := reloader.WatchConfig(ctx, input, output)
 	cancel()
 	testutil.NotOk(t, err)
 	testutil.Assert(t, strings.HasSuffix(err.Error(), `found reference to unset environment variable "TEST_RELOADER_THANOS_ENV"`), "expect error since there envvars are not set.")
 }
 
-func testInitialApply(t *testing.T, reloader *Reloader, reloadsFn func() int, output string) {
+func testInitialApply(t *testing.T, reloader *Reloader, reloadsFn func() int, input, output string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	go func() {
 		for {
@@ -114,7 +114,7 @@ func testInitialApply(t *testing.T, reloader *Reloader, reloadsFn func() int, ou
 			}
 		}
 	}()
-	err := reloader.Watch(ctx)
+	err := reloader.WatchConfig(ctx, input, output)
 	cancel()
 	testutil.Ok(t, err)
 
@@ -157,7 +157,7 @@ config:
 			}
 		}
 	}()
-	err := reloader.Watch(ctx)
+	err := reloader.WatchConfig(ctx, input, output)
 	cancel()
 	testutil.Ok(t, err)
 

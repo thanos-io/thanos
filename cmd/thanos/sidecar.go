@@ -94,9 +94,6 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 		rl := reloader.New(
 			log.With(logger, "component", "reloader"),
 			reloader.ReloadURLFromBase(*promURL),
-			*reloaderCfgFile,
-			*reloaderCfgSubstFile,
-			*reloaderRuleDir,
 		)
 		return runSidecar(g, logger, reg, tracer,
 			*grpcAddr,
@@ -111,6 +108,9 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			*gcsBucket,
 			&s3config,
 			rl,
+			*reloaderCfgFile,
+			*reloaderCfgSubstFile,
+			*reloaderRuleDir,
 		)
 	}
 }
@@ -132,12 +132,24 @@ func runSidecar(
 	gcsBucket string,
 	s3Config *s3.Config,
 	reloader *reloader.Reloader,
+	reloaderCfgFile string,
+	reloaderCfgSubstFile string,
+	reloaderRuleDir string,
 ) error {
-	{
+	if reloaderCfgFile != "" {
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-			return reloader.Watch(ctx)
+			return reloader.WatchConfig(ctx, reloaderCfgFile, reloaderCfgSubstFile)
+		}, func(error) {
+			cancel()
+		})
+	}
+	if reloaderRuleDir != "" {
+		ctx, cancel := context.WithCancel(context.Background())
+
+		g.Add(func() error {
+			return reloader.WatchRules(ctx, reloaderRuleDir, 3*time.Minute)
 		}, func(error) {
 			cancel()
 		})
