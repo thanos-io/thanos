@@ -2,6 +2,7 @@ package runutil
 
 import (
 	"time"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 )
@@ -39,7 +40,7 @@ func RetryWithLog(logger log.Logger, interval time.Duration, stopc <-chan struct
 		if err = f(); err == nil {
 			return nil
 		} else {
-			level.Error(logger).Log("msg", "function failed. Retrying","err", err)
+			level.Error(logger).Log("msg", "function failed. Retrying", "err", err)
 		}
 		select {
 		case <-stopc:

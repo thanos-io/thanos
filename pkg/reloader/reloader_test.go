@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/fortytw2/leaktest"
-	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 )
 
@@ -61,7 +60,7 @@ func TestReloader_ConfigApply(t *testing.T) {
 		output = path.Join(dir, "out", "cfg.yaml")
 	)
 	reloader := New(nil, reloadURL, input, output, "")
-	reloader.retryInteval = 100 * time.Millisecond
+	reloader.retryInterval = 100 * time.Millisecond
 
 	testNoConfig(t, reloader)
 
@@ -220,7 +219,7 @@ func TestReloader_RuleApply(t *testing.T) {
 
 	reloader := New(nil, reloadURL, "", "", dir)
 	reloader.ruleInterval = 100 * time.Millisecond
-	reloader.retryInteval = 100 * time.Millisecond
+	reloader.retryInterval = 100 * time.Millisecond
 
 	reloadsFn := func() int {
 		promHandlerMu.Lock()
