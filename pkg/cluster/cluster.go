@@ -107,6 +107,8 @@ func New(
 		if err != nil {
 			return nil, errors.Wrap(err, "invalid advertise address, wrong port")
 		}
+	} else if bindHost == "" {
+		return nil, errors.New("advertise address needs to be specified if gRPC address is in form of ':<port>'")
 	}
 
 	resolvedPeers, err := resolvePeers(context.Background(), knownPeers, advertiseAddr, net.Resolver{}, waitIfEmpty)
