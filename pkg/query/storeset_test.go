@@ -2,9 +2,9 @@ package query
 
 import (
 	"context"
+	"math"
 	"net"
 	"testing"
-
 	"time"
 
 	"github.com/fortytw2/leaktest"
@@ -14,6 +14,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+var testGRPCOpts = []grpc.DialOption{
+	grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32)),
+	grpc.WithInsecure(),
+}
 
 type testStore struct {
 	info storepb.InfoResponse
@@ -120,7 +125,7 @@ func TestStoreSet_AllAvailable_ThenDown(t *testing.T) {
 
 	// Testing if duplicates can cause weird results.
 	initialStoreAddr = append(initialStoreAddr, initialStoreAddr[0])
-	storeSet := NewStoreSet(nil, nil, nil, nil, initialStoreAddr)
+	storeSet := NewStoreSet(nil, nil, func() []string { return initialStoreAddr }, testGRPCOpts)
 	storeSet.gRPCRetryTimeout = 2 * time.Second
 	defer storeSet.Close()
 
@@ -164,7 +169,7 @@ func TestStoreSet_StaticStores_OneAvailable(t *testing.T) {
 	initialStoreAddr := st.StoreAddresses()
 	st.CloseOne(initialStoreAddr[0])
 
-	storeSet := NewStoreSet(nil, nil, nil, nil, initialStoreAddr)
+	storeSet := NewStoreSet(nil, nil, func() []string { return initialStoreAddr }, testGRPCOpts)
 	storeSet.gRPCRetryTimeout = 2 * time.Second
 	defer storeSet.Close()
 
@@ -194,7 +199,7 @@ func TestStoreSet_StaticStores_NoneAvailable(t *testing.T) {
 	st.CloseOne(initialStoreAddr[0])
 	st.CloseOne(initialStoreAddr[1])
 
-	storeSet := NewStoreSet(nil, nil, nil, nil, initialStoreAddr)
+	storeSet := NewStoreSet(nil, nil, func() []string { return initialStoreAddr }, testGRPCOpts)
 	storeSet.gRPCRetryTimeout = 2 * time.Second
 
 	// Should not matter how many of these we run.

@@ -27,7 +27,7 @@ type Client interface {
 	// Minimum and maximum time range of data in the store.
 	RangeTime() (mint int64, maxt int64)
 
-	// String representation fo logging mostly.
+	// String representation for logging mostly.
 	String() string
 }
 
@@ -245,7 +245,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		wg.Add(1)
 		go func(s Client) {
 			defer wg.Done()
-			resp, err := st.LabelValues(ctx, &storepb.LabelValuesRequest{
+			resp, err := s.LabelValues(ctx, &storepb.LabelValuesRequest{
 				Label: r.Label,
 			})
 			if err != nil {

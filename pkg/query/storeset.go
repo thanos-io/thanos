@@ -2,20 +2,14 @@ package query
 
 import (
 	"context"
-	"math"
+	"fmt"
 	"sync"
 	"time"
 
-	"fmt"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/improbable-eng/thanos/pkg/tracing"
-	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
@@ -26,8 +20,7 @@ import (
 // and a list of static store addresses.
 type StoreSet struct {
 	logger           log.Logger
-	peerAddrs        func() []string
-	staticAddrs      []string
+	storeAddrs       func() []string
 	dialOpts         []grpc.DialOption
 	gRPCRetryTimeout time.Duration
 
@@ -40,54 +33,26 @@ type StoreSet struct {
 func NewStoreSet(
 	logger log.Logger,
 	reg *prometheus.Registry,
-	tracer opentracing.Tracer,
-	peerAddrs func() []string,
-	staticAddrs []string,
+	storeAddrs func() []string,
+	dialOpts []grpc.DialOption,
 ) *StoreSet {
 	storeNodeConnections := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_store_nodes_grpc_connections",
 		Help: "Number indicating current number of gRPC connection to store nodes. This indicates also to how many stores query node have access to.",
 	})
-	grpcMets := grpc_prometheus.NewClientMetrics()
-	grpcMets.EnableClientHandlingTimeHistogram(
-		grpc_prometheus.WithHistogramBuckets([]float64{
-			0.001, 0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4,
-		}),
-	)
-	dialOpts := []grpc.DialOption{
-		// We want to make sure that we can receive huge gRPC messages from storeAPI.
-		// On TCP level we can be fine, but the gRPC overhead for huge messages could be significant.
-		// Current limit is ~2GB.
-		// TODO(bplotka): Split sent chunks on store node per max 4MB chunks if needed.
-		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32)),
-		grpc.WithInsecure(),
-		grpc.WithUnaryInterceptor(
-			grpc_middleware.ChainUnaryClient(
-				grpcMets.UnaryClientInterceptor(),
-				tracing.UnaryClientInterceptor(tracer),
-			),
-		),
-		grpc.WithStreamInterceptor(
-			grpc_middleware.ChainStreamClient(
-				grpcMets.StreamClientInterceptor(),
-				tracing.StreamClientInterceptor(tracer),
-			),
-		),
-	}
 
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	if reg != nil {
-		reg.MustRegister(grpcMets, storeNodeConnections)
+		reg.MustRegister(storeNodeConnections)
 	}
-	if peerAddrs == nil {
-		peerAddrs = func() []string { return nil }
+	if storeAddrs == nil {
+		storeAddrs = func() []string { return nil }
 	}
 	return &StoreSet{
 		logger:               logger,
-		peerAddrs:            peerAddrs,
-		staticAddrs:          staticAddrs,
+		storeAddrs:           storeAddrs,
 		dialOpts:             dialOpts,
 		storeNodeConnections: storeNodeConnections,
 		gRPCRetryTimeout:     3 * time.Second,
@@ -97,10 +62,9 @@ func NewStoreSet(
 type storeRef struct {
 	storepb.StoreClient
 
-	mtx    sync.RWMutex
-	cc     *grpc.ClientConn
-	addr   string
-	static bool
+	mtx  sync.RWMutex
+	cc   *grpc.ClientConn
+	addr string
 
 	// Meta (can change during runtime).
 	labels  []storepb.Label
@@ -122,17 +86,14 @@ func (s *storeRef) RangeTime() (int64, int64) {
 }
 
 func (s *storeRef) String() string {
-	if s.static {
-		return fmt.Sprintf("[static] %s", s.addr)
-	}
-	return fmt.Sprintf("[gossip] %s", s.addr)
+	return fmt.Sprintf("%s", s.addr)
 }
 
 func (s *storeRef) close() {
 	s.cc.Close()
 }
 
-func (s *StoreSet) updateStore(ctx context.Context, addr string, static bool) (*storeRef, error) {
+func (s *StoreSet) updateStore(ctx context.Context, addr string) (*storeRef, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.gRPCRetryTimeout)
 	defer cancel()
 
@@ -148,11 +109,10 @@ func (s *StoreSet) updateStore(ctx context.Context, addr string, static bool) (*
 			StoreClient: storepb.NewStoreClient(conn),
 			cc:          conn,
 			addr:        addr,
-			static:      static,
 		}
 	}
 
-	// Try to reach host until timeout. If we are unable -> host is unhealthy.
+	// Try to reach host until timeout. If we are unable, the host is unhealthy.
 	resp, err := st.Info(ctx, &storepb.InfoRequest{}, grpc.FailFast(false))
 	if err != nil {
 		st.close()
@@ -173,40 +133,16 @@ func (s *StoreSet) Update(ctx context.Context) {
 		g        errgroup.Group
 	)
 
-	for _, storeAddr := range s.staticAddrs {
+	for _, storeAddr := range s.storeAddrs() {
 		addr := storeAddr
 		g.Go(func() error {
-			st, err := s.updateStore(ctx, addr, true)
+			st, err := s.updateStore(ctx, addr)
 			if err != nil {
 				return err
 			}
 			innerMtx.Lock()
 			if dupSt, ok := stores[addr]; ok {
-				level.Error(s.logger).Log("msg", "duplicated address in static store nodes.", "addr", addr)
-				dupSt.close()
-			}
-			stores[addr] = st
-			innerMtx.Unlock()
-
-			return nil
-		})
-	}
-
-	for _, storeAddr := range s.peerAddrs() {
-		addr := storeAddr
-		g.Go(func() error {
-			if _, ok := stores[addr]; ok {
-				level.Warn(s.logger).Log("msg", "statically configured node is also available via gossip.", "addr", addr)
-				return nil
-			}
-
-			st, err := s.updateStore(ctx, addr, false)
-			if err != nil {
-				return err
-			}
-			innerMtx.Lock()
-			if dupSt, ok := stores[addr]; ok {
-				level.Error(s.logger).Log("msg", "duplicated address in gossip store nodes.", "addr", addr)
+				level.Error(s.logger).Log("msg", "duplicated address in gossip or static store nodes.", "addr", addr)
 				dupSt.close()
 			}
 			stores[addr] = st

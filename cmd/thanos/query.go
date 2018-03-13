@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"math"
 	"net"
 	"net/http"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/grpc-ecosystem/go-grpc-middleware"
+	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/query/api"
@@ -15,6 +18,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
+	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -97,6 +101,41 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	}
 }
 
+func storeClientGRPCOpts(reg *prometheus.Registry, tracer opentracing.Tracer) []grpc.DialOption {
+	grpcMets := grpc_prometheus.NewClientMetrics()
+	grpcMets.EnableClientHandlingTimeHistogram(
+		grpc_prometheus.WithHistogramBuckets([]float64{
+			0.001, 0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4,
+		}),
+	)
+	dialOpts := []grpc.DialOption{
+		// We want to make sure that we can receive huge gRPC messages from storeAPI.
+		// On TCP level we can be fine, but the gRPC overhead for huge messages could be significant.
+		// Current limit is ~2GB.
+		// TODO(bplotka): Split sent chunks on store node per max 4MB chunks if needed.
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32)),
+		grpc.WithInsecure(),
+		grpc.WithUnaryInterceptor(
+			grpc_middleware.ChainUnaryClient(
+				grpcMets.UnaryClientInterceptor(),
+				tracing.UnaryClientInterceptor(tracer),
+			),
+		),
+		grpc.WithStreamInterceptor(
+			grpc_middleware.ChainStreamClient(
+				grpcMets.StreamClientInterceptor(),
+				tracing.StreamClientInterceptor(tracer),
+			),
+		),
+	}
+
+	if reg != nil {
+		reg.MustRegister(grpcMets)
+	}
+
+	return dialOpts
+}
+
 // runQuery starts a server that exposes PromQL Query API. It is responsible for querying configured
 // store nodes, merging and duplicating the data to satisfy user query.
 func runQuery(
@@ -117,15 +156,14 @@ func runQuery(
 		stores = query.NewStoreSet(
 			logger,
 			reg,
-			tracer,
-			func() []string {
-				var addrs []string
+			func() (addrs []string) {
+				addrs = append(addrs, storeAddrs...)
 				for _, ps := range peer.PeerStates(cluster.PeerTypesStoreAPIs()...) {
 					addrs = append(addrs, ps.APIAddr)
 				}
 				return addrs
 			},
-			storeAddrs,
+			storeClientGRPCOpts(reg, tracer),
 		)
 		proxy = store.NewProxyStore(logger, func(context.Context) ([]store.Client, error) {
 			return stores.Get(), nil
