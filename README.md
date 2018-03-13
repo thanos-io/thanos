@@ -30,4 +30,5 @@ data from Prometheus HA pairs on the fly.
 
 Contributions are very welcome!
 
-[![CircleCI](https://circleci.com/gh/improbable-eng/thanos.svg?style=svg)](https://circleci.com/gh/improbable-eng/thanos) [![Go Report Card](https://goreportcard.com/badge/github.com/improbable-eng/thanos)](https://goreportcard.com/report/github.com/improbable-eng/thanos)
+[![CircleCI](https://circleci.com/gh/improbable-eng/thanos.svg?style=svg)](https://circleci.com/gh/improbable-eng/thanos)
+[![Go Report Card](https://goreportcard.com/badge/github.com/improbable-eng/thanos)](https://goreportcard.com/report/github.com/improbable-eng/thanos)
