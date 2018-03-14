@@ -61,6 +61,12 @@
   revision = "bb3d318650d48840a39aa21a027c6630e198e626"
 
 [[projects]]
+  name = "github.com/fortytw2/leaktest"
+  packages = ["."]
+  revision = "7dad53304f9614c1c365755c1176a8e876fee3e8"
+  version = "v1.1.0"
+
+[[projects]]
   name = "github.com/go-ini/ini"
   packages = ["."]
   revision = "32e4c1e6bc4e7d0d8451aa6b75200d19e37a536a"
@@ -335,7 +341,6 @@
   revision = "646adff2ac79efd246e5404db839c30afbb064d9"
 
 [[projects]]
-  branch = "master"
   name = "github.com/prometheus/tsdb"
   packages = [
     ".",
@@ -345,7 +350,7 @@
     "index",
     "labels"
   ]
-  revision = "88ddcab17c08237974aba78391f5ae199954d9fa"
+  revision = "659ed644294eec6310cef0685b002a3aed8c8f85"
 
 [[projects]]
   branch = "master"
@@ -540,6 +545,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "3c77f727c61609b23f526cf268080622e3b3ec6240d6c6eb688cd7f51897e7db"
+  inputs-digest = "ae11ea357135b7d58761d9e7f7703f29a21f870285661b8142e3310eb1d568e3"
   solver-name = "gps-cdcl"
   solver-version = 1
