@@ -56,6 +56,9 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	s3Insecure := cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
 		Default("false").Envar("S3_INSECURE").Bool()
 
+	s3SignatureV2 := cmd.Flag("s3.signature-version2", "Whether to use S3 Signature Version 2; otherwise Signature Version 4 will be used.").
+		Default("false").Envar("S3_SIGNATURE_VERSION2").Bool()
+
 	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the index cache.").
 		Default("250MB").Bytes()
 
@@ -109,6 +112,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			*s3AccessKey,
 			s3SecretKey,
 			*s3Insecure,
+			*s3SignatureV2,
 			*dataDir,
 			*grpcAddr,
 			*httpAddr,
@@ -133,6 +137,7 @@ func runStore(
 	s3AccessKey string,
 	s3SecretKey string,
 	s3Insecure bool,
+	s3SignatureV2 bool,
 	dataDir string,
 	grpcAddr string,
 	httpAddr string,
@@ -149,11 +154,12 @@ func runStore(
 		)
 
 		s3Config := &s3.Config{
-			Bucket:    s3Bucket,
-			Endpoint:  s3Endpoint,
-			AccessKey: s3AccessKey,
-			SecretKey: s3SecretKey,
-			Insecure:  s3Insecure,
+			Bucket:      s3Bucket,
+			Endpoint:    s3Endpoint,
+			AccessKey:   s3AccessKey,
+			SecretKey:   s3SecretKey,
+			Insecure:    s3Insecure,
+			SignatureV2: s3SignatureV2,
 		}
 
 		if gcsBucket != "" {

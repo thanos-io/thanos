@@ -92,6 +92,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	s3Insecure := cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
 		Default("false").Envar("S3_INSECURE").Bool()
 
+	s3SignatureV2 := cmd.Flag("s3.signature-version2", "Whether to use S3 Signature Version 2; otherwise Signature Version 4 will be used.").
+		Default("false").Envar("S3_SIGNATURE_VERSION2").Bool()
+
 	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
 
 	clusterBindAddr := cmd.Flag("cluster.address", "listen address for cluster").
@@ -147,7 +150,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			NoLockfile:       true,
 			WALFlushInterval: 30 * time.Second,
 		}
-		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *httpAddr, *grpcAddr, *evalInterval, *dataDir, *ruleFiles, peer, *gcsBucket, *s3Bucket, *s3Endpoint, *s3AccessKey, s3SecretKey, *s3Insecure, tsdbOpts)
+		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *httpAddr, *grpcAddr, *evalInterval, *dataDir, *ruleFiles, peer, *gcsBucket, *s3Bucket, *s3Endpoint, *s3AccessKey, s3SecretKey, *s3Insecure, *s3SignatureV2, tsdbOpts)
 	}
 }
 
@@ -172,6 +175,7 @@ func runRule(
 	s3AccessKey string,
 	s3SecretKey string,
 	s3Insecure bool,
+	s3SignatureV2 bool,
 	tsdbOpts *tsdb.Options,
 ) error {
 	db, err := tsdb.Open(dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts)
@@ -390,11 +394,12 @@ func runRule(
 	)
 
 	s3Config := &s3.Config{
-		Bucket:    s3Bucket,
-		Endpoint:  s3Endpoint,
-		AccessKey: s3AccessKey,
-		SecretKey: s3SecretKey,
-		Insecure:  s3Insecure,
+		Bucket:      s3Bucket,
+		Endpoint:    s3Endpoint,
+		AccessKey:   s3AccessKey,
+		SecretKey:   s3SecretKey,
+		Insecure:    s3Insecure,
+		SignatureV2: s3SignatureV2,
 	}
 
 	// The background shipper continuously scans the data directory and uploads

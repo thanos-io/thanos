@@ -31,11 +31,12 @@ type Bucket struct {
 
 // Config encapsulates the necessary config values to instantiate an s3 client.
 type Config struct {
-	Bucket    string
-	Endpoint  string
-	AccessKey string
-	SecretKey string
-	Insecure  bool
+	Bucket      string
+	Endpoint    string
+	AccessKey   string
+	SecretKey   string
+	Insecure    bool
+	SignatureV2 bool
 }
 
 // Validate checks to see if any of the s3 config options are set.
@@ -51,7 +52,14 @@ func (conf *Config) Validate() error {
 
 // NewBucket returns a new Bucket using the provided s3 config values.
 func NewBucket(conf *Config, reg prometheus.Registerer) (*Bucket, error) {
-	client, err := minio.NewV4(conf.Endpoint, conf.AccessKey, conf.SecretKey, !conf.Insecure)
+	var f func(string, string, string, bool) (*minio.Client, error)
+	if conf.SignatureV2 {
+		f = minio.NewV2
+	} else {
+		f = minio.NewV4
+	}
+
+	client, err := f(conf.Endpoint, conf.AccessKey, conf.SecretKey, !conf.Insecure)
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize s3 client")
 	}
