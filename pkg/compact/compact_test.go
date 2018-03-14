@@ -215,9 +215,19 @@ func TestGroup_Compact(t *testing.T) {
 	}, 100, 1001, 2000)
 	testutil.Ok(t, err)
 
+	// Due to TSDB compaction delay (not compacting fresh block), we need one more block to be pushed to trigger compaction.
+	freshB, err := testutil.CreateBlock(dir, []labels.Labels{
+		{{Name: "a", Value: "2"}},
+		{{Name: "a", Value: "3"}},
+		{{Name: "a", Value: "4"}},
+		{{Name: "a", Value: "5"}},
+	}, 100, 3001, 4000)
+	testutil.Ok(t, err)
+
 	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(dir, b1.String()), b1.String()))
 	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(dir, b2.String()), b2.String()))
 	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(dir, b3.String()), b3.String()))
+	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(dir, freshB.String()), freshB.String()))
 
 	metrics := newSyncerMetrics(nil)
 
