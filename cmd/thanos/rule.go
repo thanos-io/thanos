@@ -114,33 +114,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 		if err != nil {
 			return errors.Wrap(err, "parse labels")
 		}
-		var storeLset []storepb.Label
-		for _, l := range lset {
-			storeLset = append(storeLset, storepb.Label{Name: l.Name, Value: l.Value})
-		}
-		peer, err := cluster.Join(
-			logger,
-			reg,
-			*clusterBindAddr,
-			*clusterAdvertiseAddr,
-			*peers,
-			cluster.PeerState{
-				Type:    cluster.PeerTypeSource,
-				APIAddr: *grpcAddr,
-				Metadata: cluster.PeerMetadata{
-					Labels: storeLset,
-					// Start out with the full time range. The shipper will constrain it later.
-					// TODO(fabxc): minimum timestamp is never adjusted if shipping is disabled.
-					MinTime: 0,
-					MaxTime: math.MaxInt64,
-				},
-			},
-			true,
-			*gossipInterval,
-			*pushPullInterval,
-		)
+		peer, err := cluster.New(logger, reg, *clusterBindAddr, *clusterAdvertiseAddr, *peers, false, *gossipInterval, *pushPullInterval)
 		if err != nil {
-			return errors.Wrap(err, "join cluster")
+			return errors.Wrap(err, "new cluster peer")
 		}
 
 		tsdbOpts := &tsdb.Options{
@@ -253,6 +229,36 @@ func runRule(
 			return nil
 		}, func(error) {
 			cancel()
+		})
+	}
+	{
+		var storeLset []storepb.Label
+		for _, l := range lset {
+			storeLset = append(storeLset, storepb.Label{Name: l.Name, Value: l.Value})
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			err := peer.Join(cluster.PeerState{
+				Type:    cluster.PeerTypeSource,
+				APIAddr: grpcAddr,
+				Metadata: cluster.PeerMetadata{
+					Labels: storeLset,
+					// Start out with the full time range. The shipper will constrain it later.
+					// TODO(fabxc): minimum timestamp is never adjusted if shipping is disabled.
+					MinTime: 0,
+					MaxTime: math.MaxInt64,
+				},
+			})
+			if err != nil {
+				return errors.Wrap(err, "join cluster")
+			}
+
+			<-ctx.Done()
+			return nil
+		}, func(error) {
+			cancel()
+			peer.Close(5 * time.Second)
 		})
 	}
 	{

@@ -80,27 +80,9 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 		Default(cluster.DefaultPushPullInterval.String()).Duration()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
-		pstate := cluster.PeerState{
-			Type:    cluster.PeerTypeStore,
-			APIAddr: *grpcAddr,
-			Metadata: cluster.PeerMetadata{
-				MinTime: math.MinInt64,
-				MaxTime: math.MaxInt64,
-			},
-		}
-		p, err := cluster.Join(
-			logger,
-			reg,
-			*clusterBindAddr,
-			*clusterAdvertiseAddr,
-			*peers,
-			pstate,
-			false,
-			*gossipInterval,
-			*pushPullInterval,
-		)
+		peer, err := cluster.New(logger, reg, *clusterBindAddr, *clusterAdvertiseAddr, *peers, false, *gossipInterval, *pushPullInterval)
 		if err != nil {
-			return errors.Wrap(err, "join cluster")
+			return errors.Wrap(err, "new cluster peer")
 		}
 		return runStore(g,
 			logger,
@@ -116,7 +98,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			*dataDir,
 			*grpcAddr,
 			*httpAddr,
-			p,
+			peer,
 			uint64(*indexCacheSize),
 			uint64(*chunkPoolSize),
 		)
@@ -227,6 +209,28 @@ func runStore(
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			l.Close()
+		})
+	}
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			err := peer.Join(cluster.PeerState{
+				Type:    cluster.PeerTypeStore,
+				APIAddr: grpcAddr,
+				Metadata: cluster.PeerMetadata{
+					MinTime: math.MinInt64,
+					MaxTime: math.MaxInt64,
+				},
+			})
+			if err != nil {
+				return errors.Wrap(err, "join cluster")
+			}
+
+			<-ctx.Done()
+			return nil
+		}, func(error) {
+			cancel()
+			peer.Close(5 * time.Second)
 		})
 	}
 	{

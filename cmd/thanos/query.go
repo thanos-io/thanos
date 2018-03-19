@@ -72,23 +72,10 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 		PlaceHolder("<store>").Strings()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
-		pstate := cluster.PeerState{
-			Type:    cluster.PeerTypeQuery,
-			APIAddr: *httpAddr,
-		}
-		peer, err := cluster.Join(logger, reg,
-			*clusterBindAddr,
-			*clusterAdvertiseAddr,
-			*peers,
-			pstate,
-			true,
-			*gossipInterval,
-			*pushPullInterval,
-		)
+		peer, err := cluster.New(logger, reg, *clusterBindAddr, *clusterAdvertiseAddr, *peers, true, *gossipInterval, *pushPullInterval)
 		if err != nil {
-			return errors.Wrap(err, "join cluster")
+			return errors.Wrap(err, "new cluster peer")
 		}
-
 		selectorLset, err := parseFlagLabels(*selectorLabels)
 		if err != nil {
 			return errors.Wrap(err, "parse federation labels")
@@ -133,7 +120,6 @@ func runQuery(
 	// Periodically update the store set with the addresses we see in our cluster.
 	{
 		ctx, cancel := context.WithCancel(context.Background())
-
 		g.Add(func() error {
 			return runutil.Repeat(3*time.Minute, ctx.Done(), func() error {
 				stores.UpdateStatic(ctx)
@@ -141,6 +127,24 @@ func runQuery(
 			})
 		}, func(error) {
 			cancel()
+		})
+	}
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			err := peer.Join(cluster.PeerState{
+				Type:    cluster.PeerTypeQuery,
+				APIAddr: httpAddr,
+			})
+			if err != nil {
+				return errors.Wrap(err, "join cluster")
+			}
+
+			<-ctx.Done()
+			return nil
+		}, func(error) {
+			cancel()
+			peer.Close(5 * time.Second)
 		})
 	}
 	{

@@ -40,18 +40,23 @@ func joinPeer(num int, knownPeers []string) (peerAddr string, peer *Peer, err er
 		},
 	}
 
-	peer, err = Join(
+	peer, err = New(
 		log.NewNopLogger(),
 		prometheus.NewRegistry(),
 		peerAddr,
 		peerAddr,
 		knownPeers,
-		peerState1,
 		false,
 		100*time.Millisecond,
 		50*time.Millisecond,
 	)
-
+	if err != nil {
+		return "", nil, err
+	}
+	err = peer.Join(peerState1)
+	if err != nil {
+		return "", nil, err
+	}
 	return peerAddr, peer, nil
 }
 
@@ -78,7 +83,7 @@ func TestPeers_PropagatingState(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	testutil.Ok(t, runutil.Retry(1*time.Second, ctx.Done(), func() error {
-		if len(peer1.data) > 1 {
+		if len(peer1.data.Data()) > 1 {
 			return nil
 		}
 		return errors.New("I am alone here")

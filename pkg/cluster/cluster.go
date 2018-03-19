@@ -2,7 +2,6 @@ package cluster
 
 import (
 	"context"
-	"encoding/json"
 	"io/ioutil"
 	"math/rand"
 	"net"
@@ -24,12 +23,18 @@ import (
 
 // Peer is a single peer in a gossip cluster.
 type Peer struct {
-	logger log.Logger
-	mlist *memberlist.Memberlist
+	logger   log.Logger
+	mlistMtx sync.RWMutex
+	mlist    *memberlist.Memberlist
+	stopc    chan struct{}
 
-	mtx   sync.RWMutex
-	data  map[string]PeerState
-	stopc chan struct{}
+	cfg        *memberlist.Config
+	addr       net.IP
+	knownPeers []string
+
+	data                 *data
+	gossipMsgsReceived   prometheus.Counter
+	gossipClusterMembers prometheus.Gauge
 }
 
 const (
@@ -70,13 +75,13 @@ type PeerMetadata struct {
 	MaxTime int64
 }
 
-func Join(
+// New returns "alone" peer that is ready to join.
+func New(
 	l log.Logger,
 	reg *prometheus.Registry,
 	bindAddr string,
 	advertiseAddr string,
 	knownPeers []string,
-	initialState PeerState,
 	waitIfEmpty bool,
 	pushPullInterval time.Duration,
 	gossipInterval time.Duration,
@@ -102,6 +107,8 @@ func Join(
 		if err != nil {
 			return nil, errors.Wrap(err, "invalid advertise address, wrong port")
 		}
+	} else if bindHost == "" {
+		return nil, errors.New("advertise address needs to be specified if gRPC address is in form of ':<port>'")
 	}
 
 	resolvedPeers, err := resolvePeers(context.Background(), knownPeers, advertiseAddr, net.Resolver{}, waitIfEmpty)
@@ -120,17 +127,6 @@ func Join(
 		level.Warn(l).Log("err", "provide --cluster.advertise-address as a routable IP address or hostname")
 	}
 
-	// If the API listens on 0.0.0.0, deduce it to the advertise IP.
-	if initialState.APIAddr != "" {
-		apiHost, apiPort, err := net.SplitHostPort(initialState.APIAddr)
-		if err != nil {
-			return nil, errors.Wrap(err, "invalid API address")
-		}
-		if apiHost == "0.0.0.0" {
-			initialState.APIAddr = net.JoinHostPort(addr.String(), apiPort)
-		}
-	}
-
 	l = log.With(l, "component", "cluster")
 
 	// TODO(fabxc): generate human-readable but random names?
@@ -139,19 +135,10 @@ func Join(
 		return nil, err
 	}
 
-	p := &Peer{
-		logger:l,
-		data:  map[string]PeerState{},
-		stopc: make(chan struct{}),
-	}
-	d := newDelegate(l, reg, p)
-
 	cfg := memberlist.DefaultLANConfig()
 	cfg.Name = name.String()
 	cfg.BindAddr = bindHost
 	cfg.BindPort = bindPort
-	cfg.Delegate = d
-	cfg.Events = d
 	cfg.GossipInterval = gossipInterval
 	cfg.PushPullInterval = pushPullInterval
 	cfg.LogOutput = ioutil.Discard
@@ -160,37 +147,90 @@ func Join(
 		cfg.AdvertisePort = advertisePort
 	}
 
-	ml, err := memberlist.Create(cfg)
-	if err != nil {
-		return nil, errors.Wrap(err, "create memberlist")
-	}
-	p.mlist = ml
+	gossipMsgsReceived := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_gossip_messages_received_total",
+		Help: "Total gossip NotifyMsg calls.",
+	})
+	gossipClusterMembers := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_cluster_members",
+		Help: "Number indicating current number of members in cluster.",
+	})
 
-	n, _ := ml.Join(knownPeers)
-	level.Debug(l).Log("msg", "joined cluster", "peers", n)
+	reg.MustRegister(gossipMsgsReceived)
+	reg.MustRegister(gossipClusterMembers)
 
-	if n > 0 {
-		go p.warnIfAlone(l, 10*time.Second)
-	}
-
-	// Initialize state with ourselves.
-	p.mtx.RLock()
-	p.data[p.Name()] = initialState
-	p.mtx.RUnlock()
-
-	return p, nil
+	return &Peer{
+		logger:               l,
+		addr:                 addr,
+		knownPeers:           knownPeers,
+		cfg:                  cfg,
+		gossipMsgsReceived:   gossipMsgsReceived,
+		gossipClusterMembers: gossipClusterMembers,
+		stopc:                make(chan struct{}),
+		data:                 &data{data: map[string]PeerState{}},
+	}, nil
 }
 
-func (p *Peer) warnIfAlone(logger log.Logger, d time.Duration) {
+// Join joins to the memberlist gossip cluster using knownPeers and initialState.
+func (p *Peer) Join(initialState PeerState) error {
+	if p.hasJoined() {
+		return errors.New("peer already joined. Close it first to rejoin.")
+	}
+
+	var ml *memberlist.Memberlist
+	d := newDelegate(p.logger, ml.NumMembers, p.data, p.gossipMsgsReceived, p.gossipClusterMembers)
+	p.cfg.Delegate = d
+	p.cfg.Events = d
+
+	// If the API listens on 0.0.0.0, deduce it to the advertise IP.
+	if initialState.APIAddr != "" {
+		apiHost, apiPort, err := net.SplitHostPort(initialState.APIAddr)
+		if err != nil {
+			return errors.Wrap(err, "invalid API address")
+		}
+		if apiHost == "0.0.0.0" {
+			initialState.APIAddr = net.JoinHostPort(p.addr.String(), apiPort)
+		}
+	}
+
+	ml, err := memberlist.Create(p.cfg)
+	if err != nil {
+		return errors.Wrap(err, "create memberlist")
+	}
+
+	n, _ := ml.Join(p.knownPeers)
+	level.Debug(p.logger).Log("msg", "joined cluster", "peers", n)
+
+	if n > 0 {
+		go warnIfAlone(p.logger, 10*time.Second, p.stopc, ml.NumMembers)
+	}
+
+	p.mlistMtx.Lock()
+	p.mlist = ml
+	p.mlistMtx.Unlock()
+
+	// Initialize state with ourselves.
+	p.data.Set(p.Name(), initialState)
+	return nil
+}
+
+func (p *Peer) hasJoined() bool {
+	p.mlistMtx.RLock()
+	defer p.mlistMtx.RUnlock()
+
+	return p.mlist != nil
+}
+
+func warnIfAlone(logger log.Logger, d time.Duration, stopc chan struct{}, numNodes func() int) {
 	tick := time.NewTicker(d)
 	defer tick.Stop()
 
 	for {
 		select {
-		case <-p.stopc:
+		case <-stopc:
 			return
 		case <-tick.C:
-			if n := p.mlist.NumMembers(); n <= 1 {
+			if n := numNodes(); n <= 1 {
 				level.Warn(logger).Log("NumMembers", n, "msg", "I appear to be alone in the cluster")
 			}
 		}
@@ -200,49 +240,61 @@ func (p *Peer) warnIfAlone(logger log.Logger, d time.Duration) {
 // SetLabels updates internal metadata's labels stored in PeerState for this peer.
 // Note that this data will be propagated based on gossipInterval we set.
 func (p *Peer) SetLabels(labels []storepb.Label) {
-	p.mtx.Lock()
-	defer p.mtx.Unlock()
+	if !p.hasJoined() {
+		return
+	}
 
-	s := p.data[p.Name()]
+	s, _ := p.data.Get(p.Name())
 	s.Metadata.Labels = labels
-	p.data[p.Name()] = s
+	p.data.Set(p.Name(), s)
 }
 
 // SetTimestamps updates internal metadata's timestamps stored in PeerState for this peer.
 // Note that this data will be propagated based on gossipInterval we set.
 func (p *Peer) SetTimestamps(mint int64, maxt int64) {
-	p.mtx.Lock()
-	defer p.mtx.Unlock()
+	if !p.hasJoined() {
+		return
+	}
 
-	s := p.data[p.Name()]
+	s, _ := p.data.Get(p.Name())
 	s.Metadata.MinTime = mint
 	s.Metadata.MaxTime = maxt
-	p.data[p.Name()] = s
+	p.data.Set(p.Name(), s)
 }
 
 // Close leaves the cluster waiting up to timeout and shutdowns peer if cluster left.
 // TODO(bplotka): Add this method into run.Group closing logic for each command. This will improve graceful shutdown.
 func (p *Peer) Close(timeout time.Duration) {
+	if !p.hasJoined() {
+		return
+	}
+
 	err := p.mlist.Leave(timeout)
 	if err != nil {
 		level.Error(p.logger).Log("msg", "memberlist leave failed", "err", err)
 	}
 	close(p.stopc)
 	p.mlist.Shutdown()
+	p.mlist = nil
 }
 
 // Name returns the unique ID of this peer in the cluster.
 func (p *Peer) Name() string {
+	if !p.hasJoined() {
+		return ""
+	}
+
 	return p.mlist.LocalNode().Name
 }
 
 // Peers returns a sorted address list of peers of the given type.
 func (p *Peer) Peers(t PeerType) (ps []string) {
-	p.mtx.RLock()
-	defer p.mtx.RUnlock()
+	if !p.hasJoined() {
+		return nil
+	}
 
 	for _, o := range p.mlist.Members() {
-		os, ok := p.data[o.Name]
+		os, ok := p.data.Get(o.Name)
 		if !ok || os.Type != t {
 			continue
 		}
@@ -259,11 +311,12 @@ func PeerTypesStoreAPIs() []PeerType {
 
 // PeerStates returns the custom state information for each peer.
 func (p *Peer) PeerStates(types ...PeerType) (ps []PeerState) {
-	p.mtx.RLock()
-	defer p.mtx.RUnlock()
+	if !p.hasJoined() {
+		return nil
+	}
 
 	for _, o := range p.mlist.Members() {
-		os, ok := p.data[o.Name]
+		os, ok := p.data.Get(o.Name)
 		if !ok {
 			continue
 		}
@@ -277,19 +330,15 @@ func (p *Peer) PeerStates(types ...PeerType) (ps []PeerState) {
 	return ps
 }
 
-// ClusterSize returns the current number of alive members in the cluster.
-func (p *Peer) ClusterSize() int {
-	return p.mlist.NumMembers()
-}
-
 // Info returns a JSON-serializable dump of cluster state.
 // Useful for debug.
 func (p *Peer) Info() map[string]interface{} {
-	p.mtx.RLock()
-	defer p.mtx.RUnlock()
+	if !p.hasJoined() {
+		return nil
+	}
 
 	d := map[string]PeerState{}
-	for k, v := range p.data {
+	for k, v := range p.data.Data() {
 		d[k] = v
 	}
 
@@ -299,128 +348,6 @@ func (p *Peer) Info() map[string]interface{} {
 		"n":       p.mlist.NumMembers(),
 		"state":   d,
 	}
-}
-
-// delegate implements memberlist.Delegate and memberlist.EventDelegate
-// and broadcasts its peer's state in the cluster.
-type delegate struct {
-	*Peer
-
-	logger log.Logger
-	bcast  *memberlist.TransmitLimitedQueue
-
-	gossipMsgsReceived   prometheus.Counter
-	gossipClusterMembers prometheus.Gauge
-}
-
-func newDelegate(l log.Logger, reg *prometheus.Registry, p *Peer) *delegate {
-	bcast := &memberlist.TransmitLimitedQueue{
-		NumNodes:       p.ClusterSize,
-		RetransmitMult: 3,
-	}
-	gossipMsgsReceived := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "thanos_gossip_messages_received_total",
-		Help: "Total gossip NotifyMsg calls.",
-	})
-	gossipClusterMembers := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "thanos_cluster_members",
-		Help: "Number indicating current number of members in cluster.",
-	})
-
-	reg.MustRegister(gossipMsgsReceived)
-	reg.MustRegister(gossipClusterMembers)
-
-	return &delegate{
-		logger:               l,
-		Peer:                 p,
-		bcast:                bcast,
-		gossipMsgsReceived:   gossipMsgsReceived,
-		gossipClusterMembers: gossipClusterMembers,
-	}
-}
-
-func (d *delegate) init(self string, numMembers func() int) {
-	d.mtx.Lock()
-	defer d.mtx.Unlock()
-
-	d.bcast = &memberlist.TransmitLimitedQueue{
-		NumNodes:       numMembers,
-		RetransmitMult: 3,
-	}
-}
-
-// NodeMeta retrieves meta-data about the current node when broadcasting an alive message.
-func (d *delegate) NodeMeta(limit int) []byte {
-	return []byte{}
-}
-
-// NotifyMsg is the callback invoked when a user-level gossip message is received.
-func (d *delegate) NotifyMsg(b []byte) {
-	var data map[string]PeerState
-	if err := json.Unmarshal(b, &data); err != nil {
-		level.Error(d.logger).Log("method", "NotifyMsg", "b", strings.TrimSpace(string(b)), "err", err)
-		return
-	}
-	d.gossipMsgsReceived.Inc()
-
-	d.mtx.Lock()
-	defer d.mtx.Unlock()
-	for k, v := range data {
-		// Removing data is handled by NotifyLeave
-		d.data[k] = v
-	}
-}
-
-// GetBroadcasts is called when user data messages can be broadcasted.
-func (d *delegate) GetBroadcasts(overhead, limit int) [][]byte {
-	d.mtx.RLock()
-	defer d.mtx.RUnlock()
-	return d.bcast.GetBroadcasts(overhead, limit)
-}
-
-// LocalState is called when gossip fetches local state.
-func (d *delegate) LocalState(_ bool) []byte {
-	d.mtx.RLock()
-	defer d.mtx.RUnlock()
-
-	b, err := json.Marshal(&d.data)
-	if err != nil {
-		panic(err)
-	}
-	return b
-}
-
-func (d *delegate) MergeRemoteState(buf []byte, _ bool) {
-	var data map[string]PeerState
-	if err := json.Unmarshal(buf, &data); err != nil {
-		level.Error(d.logger).Log("method", "MergeRemoteState", "err", err)
-		return
-	}
-	d.mtx.Lock()
-	defer d.mtx.Unlock()
-	for k, v := range data {
-		d.data[k] = v
-	}
-}
-
-// NotifyJoin is called if a peer joins the cluster.
-func (d *delegate) NotifyJoin(n *memberlist.Node) {
-	d.gossipClusterMembers.Inc()
-	level.Debug(d.logger).Log("received", "NotifyJoin", "node", n.Name, "addr", n.Address())
-}
-
-// NotifyLeave is called if a peer leaves the cluster.
-func (d *delegate) NotifyLeave(n *memberlist.Node) {
-	d.gossipClusterMembers.Dec()
-	level.Debug(d.logger).Log("received", "NotifyLeave", "node", n.Name, "addr", n.Address())
-	d.mtx.Lock()
-	defer d.mtx.Unlock()
-	delete(d.data, n.Name)
-}
-
-// NotifyUpdate is called if a cluster peer gets updated.
-func (d *delegate) NotifyUpdate(n *memberlist.Node) {
-	level.Debug(d.logger).Log("received", "NotifyUpdate", "node", n.Name, "addr", n.Address())
 }
 
 func resolvePeers(ctx context.Context, peers []string, myAddress string, res net.Resolver, waitIfEmpty bool) ([]string, error) {
