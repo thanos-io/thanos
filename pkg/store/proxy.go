@@ -25,10 +25,7 @@ type Client interface {
 	Labels() []storepb.Label
 
 	// Minimum and maximum time range of data in the store.
-	RangeTime() (mint int64, maxt int64)
-
-	// String representation for logging mostly.
-	String() string
+	TimeRange() (mint int64, maxt int64)
 }
 
 // ProxyStore implements the store API that proxies request to all given underlying stores.
@@ -198,7 +195,7 @@ func (s *streamSeriesSet) Err() error {
 
 // matchStore returns true if the given store may hold data for the given label matchers.
 func storeMatches(s Client, mint, maxt int64, matchers ...storepb.LabelMatcher) (bool, error) {
-	storeMinTime, storeMaxTime := s.RangeTime()
+	storeMinTime, storeMaxTime := s.TimeRange()
 	if mint > storeMaxTime || maxt < storeMinTime {
 		return false, nil
 	}

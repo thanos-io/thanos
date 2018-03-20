@@ -16,11 +16,50 @@ import (
 	"google.golang.org/grpc"
 )
 
-// StoreSet maintains a set of active stores. It is backed by a peer's view of the cluster
-// and a list of static store addresses.
+type StoreSpec interface {
+	// Address for the store spec. It is used as ID for store.
+	Addr() string
+	// Metadata returns current labels and min, max ranges for store.
+	// It can change for every call for this method.
+	// If metadata call fails we assume that store is no longer accessible and we should not use it.
+	// NOTE: It is implementation responsibility to retry until context timeout, but a caller responsibilty to manage
+	// given store connection.
+	Metadata(ctx context.Context, client storepb.StoreClient) (labels []storepb.Label, mint int64, maxt int64, err error)
+}
+
+type staticStoreSpec struct {
+	addr string
+}
+
+// NewStaticStoreSpec creates store spec for static store.
+// This is used only for query command but we include this here to properly test this spec inside storeset_test.go
+func NewStaticStoreSpec(addr string) StoreSpec {
+	return &staticStoreSpec{addr: addr}
+}
+
+func (s *staticStoreSpec) Addr() string {
+	// API addr should not change between state changes.
+	return s.addr
+}
+
+// Metadata method for static store tries to reach host Info method until context timeout. If we are unable to get metadata after
+// that time, we assume that the host is unhealthy and return error.
+func (s *staticStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient) (labels []storepb.Label, mint int64, maxt int64, err error) {
+	resp, err := client.Info(ctx, &storepb.InfoRequest{}, grpc.FailFast(false))
+	if err != nil {
+		return nil, 0, 0, errors.Wrapf(err, "fetching store info from %s", s.addr)
+	}
+	return resp.Labels, resp.MinTime, resp.MaxTime, nil
+}
+
+// StoreSet maintains a set of active stores. It is backed up by Store Specifications that are dynamically fetched on
+// every Update() call.
 type StoreSet struct {
-	logger           log.Logger
-	storeAddrs       func() []string
+	logger log.Logger
+
+	// Store specifications can change dynamically. If some store is missing from the list, we assuming it is no longer
+	// accessible and we close gRPC client for it.
+	storeSpecs       func() []StoreSpec
 	dialOpts         []grpc.DialOption
 	gRPCRetryTimeout time.Duration
 
@@ -33,7 +72,7 @@ type StoreSet struct {
 func NewStoreSet(
 	logger log.Logger,
 	reg *prometheus.Registry,
-	storeAddrs func() []string,
+	storeSpecs func() []StoreSpec,
 	dialOpts []grpc.DialOption,
 ) *StoreSet {
 	storeNodeConnections := prometheus.NewGauge(prometheus.GaugeOpts{
@@ -47,12 +86,12 @@ func NewStoreSet(
 	if reg != nil {
 		reg.MustRegister(storeNodeConnections)
 	}
-	if storeAddrs == nil {
-		storeAddrs = func() []string { return nil }
+	if storeSpecs == nil {
+		storeSpecs = func() []StoreSpec { return nil }
 	}
 	return &StoreSet{
 		logger:               logger,
-		storeAddrs:           storeAddrs,
+		storeSpecs:           storeSpecs,
 		dialOpts:             dialOpts,
 		storeNodeConnections: storeNodeConnections,
 		gRPCRetryTimeout:     3 * time.Second,
@@ -78,7 +117,7 @@ func (s *storeRef) Labels() []storepb.Label {
 	return s.labels
 }
 
-func (s *storeRef) RangeTime() (int64, int64) {
+func (s *storeRef) TimeRange() (int64, int64) {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 
@@ -93,10 +132,11 @@ func (s *storeRef) close() {
 	s.cc.Close()
 }
 
-func (s *StoreSet) updateStore(ctx context.Context, addr string) (*storeRef, error) {
+func (s *StoreSet) updateStore(ctx context.Context, spec StoreSpec) (*storeRef, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.gRPCRetryTimeout)
 	defer cancel()
 
+	addr := spec.Addr()
 	st, ok := s.stores[addr]
 	if !ok {
 		// New store or was unhealthy and was removed in the past - create new one.
@@ -112,20 +152,16 @@ func (s *StoreSet) updateStore(ctx context.Context, addr string) (*storeRef, err
 		}
 	}
 
-	// Try to reach host until timeout. If we are unable, the host is unhealthy.
-	resp, err := st.Info(ctx, &storepb.InfoRequest{}, grpc.FailFast(false))
+	var err error
+	st.labels, st.minTime, st.maxTime, err = spec.Metadata(ctx, st.StoreClient)
 	if err != nil {
 		st.close()
-		return nil, errors.Wrapf(err, "fetching store info from %s", addr)
+		return nil, err
 	}
-
-	st.labels = resp.Labels
-	st.maxTime = resp.MaxTime
-	st.minTime = resp.MinTime
 	return st, nil
 }
 
-// Update updates the store set
+// Update updates the store set. It fetches current list of store specs from function and grabs fresh metadata.
 func (s *StoreSet) Update(ctx context.Context) {
 	var (
 		stores   = make(map[string]*storeRef, len(s.stores))
@@ -133,10 +169,11 @@ func (s *StoreSet) Update(ctx context.Context) {
 		g        errgroup.Group
 	)
 
-	for _, storeAddr := range s.storeAddrs() {
-		addr := storeAddr
+	for _, storeSpec := range s.storeSpecs() {
+		spec := storeSpec
 		g.Go(func() error {
-			st, err := s.updateStore(ctx, addr)
+			addr := spec.Addr()
+			st, err := s.updateStore(ctx, spec)
 			if err != nil {
 				return err
 			}
@@ -180,7 +217,6 @@ func (s *StoreSet) Get() []store.Client {
 	defer s.mtx.RUnlock()
 
 	stores := make([]store.Client, 0, len(s.stores))
-
 	for _, st := range s.stores {
 		stores = append(stores, st)
 	}

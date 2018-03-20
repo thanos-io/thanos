@@ -114,6 +114,15 @@ func (s *testStores) CloseOne(addr string) {
 	delete(s.srvs, addr)
 }
 
+func specsFromAddrFunc(addrs []string) func() []StoreSpec {
+	return func() (specs []StoreSpec) {
+		for _, addr := range addrs {
+			specs = append(specs, NewStaticStoreSpec(addr))
+		}
+		return specs
+	}
+}
+
 func TestStoreSet_AllAvailable_ThenDown(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
@@ -125,7 +134,7 @@ func TestStoreSet_AllAvailable_ThenDown(t *testing.T) {
 
 	// Testing if duplicates can cause weird results.
 	initialStoreAddr = append(initialStoreAddr, initialStoreAddr[0])
-	storeSet := NewStoreSet(nil, nil, func() []string { return initialStoreAddr }, testGRPCOpts)
+	storeSet := NewStoreSet(nil, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts)
 	storeSet.gRPCRetryTimeout = 2 * time.Second
 	defer storeSet.Close()
 
@@ -169,7 +178,7 @@ func TestStoreSet_StaticStores_OneAvailable(t *testing.T) {
 	initialStoreAddr := st.StoreAddresses()
 	st.CloseOne(initialStoreAddr[0])
 
-	storeSet := NewStoreSet(nil, nil, func() []string { return initialStoreAddr }, testGRPCOpts)
+	storeSet := NewStoreSet(nil, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts)
 	storeSet.gRPCRetryTimeout = 2 * time.Second
 	defer storeSet.Close()
 
@@ -199,7 +208,7 @@ func TestStoreSet_StaticStores_NoneAvailable(t *testing.T) {
 	st.CloseOne(initialStoreAddr[0])
 	st.CloseOne(initialStoreAddr[1])
 
-	storeSet := NewStoreSet(nil, nil, func() []string { return initialStoreAddr }, testGRPCOpts)
+	storeSet := NewStoreSet(nil, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts)
 	storeSet.gRPCRetryTimeout = 2 * time.Second
 
 	// Should not matter how many of these we run.

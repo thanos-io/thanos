@@ -152,16 +152,21 @@ func runQuery(
 	selectorLset labels.Labels,
 	storeAddrs []string,
 ) error {
+	var staticSpecs []query.StoreSpec
+	for _, addr := range storeAddrs {
+		staticSpecs = append(staticSpecs, query.NewStaticStoreSpec(addr))
+	}
 	var (
 		stores = query.NewStoreSet(
 			logger,
 			reg,
-			func() (addrs []string) {
-				addrs = append(addrs, storeAddrs...)
-				for _, ps := range peer.PeerStates(cluster.PeerTypesStoreAPIs()...) {
-					addrs = append(addrs, ps.APIAddr)
+			func() (specs []query.StoreSpec) {
+				specs = append(staticSpecs)
+
+				for id, ps := range peer.PeerStates(cluster.PeerTypesStoreAPIs()...) {
+					specs = append(specs, &gossipSpec{id: id, addr: ps.APIAddr, peer: peer})
 				}
-				return addrs
+				return specs
 			},
 			storeClientGRPCOpts(reg, tracer),
 		)
@@ -246,4 +251,25 @@ func runQuery(
 	}
 	level.Info(logger).Log("msg", "starting query node", "peer", peer.Name())
 	return nil
+}
+
+type gossipSpec struct {
+	id   string
+	addr string
+
+	peer *cluster.Peer
+}
+
+func (s *gossipSpec) Addr() string {
+	return s.addr
+}
+
+// Metadata method for gossip store tries get current peer state. If nothing is found, it means that gossip assumed
+// this host is unhealthy in the meantime.
+func (s *gossipSpec) Metadata(_ context.Context, _ storepb.StoreClient) (labels []storepb.Label, mint int64, maxt int64, err error) {
+	state, ok := s.peer.PeerState(s.id)
+	if !ok {
+		return nil, 0, 0, errors.Errorf("peer %s is no longer in gossip cluster", s.id)
+	}
+	return state.Metadata.Labels, state.Metadata.MinTime, state.Metadata.MaxTime, nil
 }
