@@ -180,7 +180,7 @@ func runRule(
 			return strings.Compare(ids[i], ids[j]) < 0
 		})
 
-		for _, i := range rand.Perm(len(peers)) {
+		for _, i := range rand.Perm(len(ids)) {
 			vec, err := queryPrometheusInstant(ctx, logger, peers[ids[i]].APIAddr, q, t)
 			if err != nil {
 				return nil, err

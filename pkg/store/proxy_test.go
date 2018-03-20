@@ -32,7 +32,7 @@ func (c *testClient) Labels() []storepb.Label {
 	return c.labels
 }
 
-func (c *testClient) RangeTime() (int64, int64) {
+func (c *testClient) TimeRange() (int64, int64) {
 	return c.minTime, c.maxTime
 }
 
