@@ -514,8 +514,8 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		}
 
 		// Ensure all input blocks are valid.
-		if err := block.VerifyIndex(filepath.Join(idStr, "index")); err != nil {
-			return id, errors.Wrapf(halt(err), "invalid plan block %s", idStr)
+		if err := block.VerifyIndex(filepath.Join(b, "index")); err != nil {
+			return id, errors.Wrapf(halt(err), "invalid plan block %s", b)
 		}
 	}
 	level.Debug(cg.logger).Log("msg", "downloaded blocks",
