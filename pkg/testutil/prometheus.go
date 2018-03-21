@@ -29,6 +29,8 @@ type Prometheus struct {
 	running bool
 	cmd     *exec.Cmd
 	addr    string
+
+	compaction bool
 }
 
 func NewTSDB() (*tsdb.DB, error) {
@@ -75,10 +77,19 @@ func (p *Prometheus) Start() error {
 		return err
 	}
 
+	minDur := "2h"
+	maxDur := "2h"
+	if p.compaction {
+		minDur = "2h"
+		maxDur = "32h"
+	}
+
 	p.addr = fmt.Sprintf("localhost:%d", port)
 	p.cmd = exec.Command(
 		"prometheus",
 		"--storage.tsdb.path="+p.db.Dir(),
+		"--storage.tsdb.min-block-duration=" + minDur,
+		"--storage.tsdb.max-block-duration=" + maxDur,
 		"--web.listen-address="+p.addr,
 		"--config.file="+filepath.Join(p.db.Dir(), "prometheus.yml"),
 	)
@@ -99,6 +110,7 @@ func (p *Prometheus) Addr() string {
 }
 
 // SetConfig updates the contents of the config file.
+// It does not support dynamic reload.
 func (p *Prometheus) SetConfig(s string) error {
 	f, err := os.Create(filepath.Join(p.dir, "prometheus.yml"))
 	if err != nil {
@@ -108,6 +120,11 @@ func (p *Prometheus) SetConfig(s string) error {
 
 	_, err = f.Write([]byte(s))
 	return err
+}
+
+// SetCompaction sets if Prometheus should be started with compaction enabled or disabled.
+func (p *Prometheus) SetCompaction(v bool) {
+	p.compaction = v
 }
 
 // Stop terminates Prometheus and clean up its data directory.

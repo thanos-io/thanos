@@ -12,9 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/objstore"
-
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/prometheus/pkg/timestamp"
@@ -34,7 +33,7 @@ func TestShipper_UploadBlocks(t *testing.T) {
 
 	shipper := New(nil, nil, dir, bucket, func() labels.Labels {
 		return labels.FromStrings("prometheus", "prom-1")
-	})
+	}, true)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -65,6 +64,11 @@ func TestShipper_UploadBlocks(t *testing.T) {
 		meta.Version = 1
 		meta.ULID = id
 
+		if i == 9 {
+			// Test if onlyFirstCompactLvl works.
+			meta.Compaction.Level = 2
+		}
+
 		metab, err := json.Marshal(&meta)
 		testutil.Ok(t, err)
 
@@ -92,7 +96,17 @@ func TestShipper_UploadBlocks(t *testing.T) {
 
 		testutil.Ok(t, enc.Encode(&meta))
 
-		// We will delete the fifth block and do not expect it to be re-uploaded later
+		// Ninth (last) block has compaction level 2 and we set shipper to avoid compacted blocks.
+		if i == 9 {
+			// Expect nineth block to not be uploaded.
+			_, err := bucket.Get(ctx, id.String()+"/meta.json")
+			testutil.NotOk(t, err)
+
+			// This is a last block.
+			break
+		}
+
+		// We will delete the fifth block and do not expect it to be re-uploaded later.
 		if i != 4 {
 			expBlocks[id] = struct{}{}
 
@@ -103,7 +117,8 @@ func TestShipper_UploadBlocks(t *testing.T) {
 		} else {
 			testutil.Ok(t, objstore.DeleteDir(ctx, bucket, ids[4].String()))
 		}
-		// The shipper meta file should show all blocks as uploaded.
+
+		// The shipper meta file should show all blocks as uploaded except nineth.
 		shipMeta, err := ReadMetaFile(dir)
 		testutil.Ok(t, err)
 		testutil.Equals(t, &Meta{Version: 1, Uploaded: ids[:i+1]}, shipMeta)
