@@ -5,7 +5,6 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"net"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -287,47 +286,50 @@ func (p *Peer) Name() string {
 	return p.mlist.LocalNode().Name
 }
 
-// Peers returns a sorted address list of peers of the given type.
-func (p *Peer) Peers(t PeerType) (ps []string) {
-	if !p.hasJoined() {
-		return nil
-	}
-
-	for _, o := range p.mlist.Members() {
-		os, ok := p.data.Get(o.Name)
-		if !ok || os.Type != t {
-			continue
-		}
-		ps = append(ps, o.Address())
-	}
-	sort.Strings(ps)
-	return ps
-}
-
 // PeerTypesStoreAPIs gives a PeerType that allows all types that exposes StoreAPI.
 func PeerTypesStoreAPIs() []PeerType {
 	return []PeerType{PeerTypeStore, PeerTypeSource}
 }
 
-// PeerStates returns the custom state information for each peer.
-func (p *Peer) PeerStates(types ...PeerType) (ps []PeerState) {
+// PeerStates returns the custom state information for each peer by memberlist peer id (name).
+func (p *Peer) PeerStates(types ...PeerType) map[string]PeerState {
 	if !p.hasJoined() {
 		return nil
 	}
 
+	ps := map[string]PeerState{}
 	for _, o := range p.mlist.Members() {
 		os, ok := p.data.Get(o.Name)
 		if !ok {
 			continue
 		}
+
+		if len(types) == 0 {
+			ps[o.Name] = os
+			continue
+		}
+
 		for _, t := range types {
 			if os.Type == t {
-				ps = append(ps, os)
+				ps[o.Name] = os
 				break
 			}
 		}
 	}
 	return ps
+}
+
+// PeerStates returns the custom state information by memberlist peer name.
+func (p *Peer) PeerState(id string) (PeerState, bool) {
+	if !p.hasJoined() {
+		return PeerState{}, false
+	}
+
+	ps, ok := p.data.Get(id)
+	if !ok {
+		return PeerState{}, false
+	}
+	return ps, true
 }
 
 // Info returns a JSON-serializable dump of cluster state.

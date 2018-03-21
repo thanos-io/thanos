@@ -172,9 +172,16 @@ func runRule(
 	// back or the context get canceled.
 	queryFn := func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {
 		peers := peer.PeerStates(cluster.PeerTypeQuery)
+		var ids []string
+		for id := range peers {
+			ids = append(ids, id)
+		}
+		sort.Slice(ids, func(i int, j int) bool {
+			return strings.Compare(ids[i], ids[j]) < 0
+		})
 
-		for _, i := range rand.Perm(len(peers)) {
-			vec, err := queryPrometheusInstant(ctx, logger, peers[i].APIAddr, q, t)
+		for _, i := range rand.Perm(len(ids)) {
+			vec, err := queryPrometheusInstant(ctx, logger, peers[ids[i]].APIAddr, q, t)
 			if err != nil {
 				return nil, err
 			}

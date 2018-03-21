@@ -27,7 +27,7 @@ func joinPeer(num int, knownPeers []string) (peerAddr string, peer *Peer, err er
 	now := time.Now()
 	peerState1 := PeerState{
 		Type:    PeerTypeSource,
-		APIAddr: fmt.Sprintf("sidecar-address:%d", num),
+		APIAddr: apiAddr(num),
 		Metadata: PeerMetadata{
 			Labels: []storepb.Label{
 				{
@@ -60,9 +60,8 @@ func joinPeer(num int, knownPeers []string) (peerAddr string, peer *Peer, err er
 	return peerAddr, peer, nil
 }
 
-func sortStr(str []string) []string {
-	sort.Strings(str)
-	return str
+func apiAddr(num int) string {
+	return fmt.Sprintf("sidecar-address:%d", num)
 }
 
 func TestPeers_PropagatingState(t *testing.T) {
@@ -72,13 +71,20 @@ func TestPeers_PropagatingState(t *testing.T) {
 	testutil.Ok(t, err)
 	defer peer1.Close(5 * time.Second)
 
-	addr2, peer2, err := joinPeer(2, []string{addr1})
+	_, peer2, err := joinPeer(2, []string{addr1})
 	testutil.Ok(t, err)
 	defer peer2.Close(5 * time.Second)
 
 	// peer2 should see two members with their data.
-	expected := sortStr([]string{addr1, addr2})
-	testutil.Equals(t, expected, sortStr(peer2.Peers(PeerTypeSource)))
+	expected := []string{apiAddr(1), apiAddr(2)}
+	testutil.Equals(t, expected, apiAddrs(peer2.PeerStates(PeerTypeSource)))
+
+	// Check if we have consistent info for PeerStates vs PeerState.
+	for id, ps := range peer2.PeerStates() {
+		directPs, ok := peer2.PeerState(id)
+		testutil.Assert(t, ok, "listed id should be gettable")
+		testutil.Equals(t, ps, directPs)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -90,7 +96,14 @@ func TestPeers_PropagatingState(t *testing.T) {
 	}))
 
 	// peer1 should see two members with their data.
-	testutil.Equals(t, expected, sortStr(peer1.Peers(PeerTypeSource)))
+	testutil.Equals(t, expected, apiAddrs(peer1.PeerStates(PeerTypeSource)))
+
+	// Check if we have consistent info for PeerStates vs PeerState.
+	for id, ps := range peer1.PeerStates() {
+		directPs, ok := peer1.PeerState(id)
+		testutil.Assert(t, ok, "listed id should be gettable")
+		testutil.Equals(t, ps, directPs)
+	}
 
 	// Update peer1 state.
 	now := time.Now()
@@ -122,4 +135,12 @@ func TestPeers_PropagatingState(t *testing.T) {
 		}
 		return errors.New("outdated metadata")
 	}))
+}
+
+func apiAddrs(states map[string]PeerState) (addrs []string) {
+	for _, ps := range states {
+		addrs = append(addrs, ps.APIAddr)
+	}
+	sort.Strings(addrs)
+	return addrs
 }

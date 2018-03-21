@@ -5,14 +5,12 @@ import (
 	"math"
 	"net"
 	"net/http"
-	"runtime"
-	"sync"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/grpc-ecosystem/go-grpc-middleware"
+	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/query/api"
@@ -80,6 +78,16 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 		if err != nil {
 			return errors.Wrap(err, "parse federation labels")
 		}
+
+		lookupStores := map[string]struct{}{}
+		for _, s := range *stores {
+			if _, ok := lookupStores[s]; ok {
+				return errors.Errorf("Address %s is duplicated for --store flag.", s)
+			}
+
+			lookupStores[s] = struct{}{}
+		}
+
 		return runQuery(g, logger, reg, tracer,
 			*httpAddr,
 			*grpcAddr,
@@ -91,6 +99,41 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*stores,
 		)
 	}
+}
+
+func storeClientGRPCOpts(reg *prometheus.Registry, tracer opentracing.Tracer) []grpc.DialOption {
+	grpcMets := grpc_prometheus.NewClientMetrics()
+	grpcMets.EnableClientHandlingTimeHistogram(
+		grpc_prometheus.WithHistogramBuckets([]float64{
+			0.001, 0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4,
+		}),
+	)
+	dialOpts := []grpc.DialOption{
+		// We want to make sure that we can receive huge gRPC messages from storeAPI.
+		// On TCP level we can be fine, but the gRPC overhead for huge messages could be significant.
+		// Current limit is ~2GB.
+		// TODO(bplotka): Split sent chunks on store node per max 4MB chunks if needed.
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32)),
+		grpc.WithInsecure(),
+		grpc.WithUnaryInterceptor(
+			grpc_middleware.ChainUnaryClient(
+				grpcMets.UnaryClientInterceptor(),
+				tracing.UnaryClientInterceptor(tracer),
+			),
+		),
+		grpc.WithStreamInterceptor(
+			grpc_middleware.ChainStreamClient(
+				grpcMets.StreamClientInterceptor(),
+				tracing.StreamClientInterceptor(tracer),
+			),
+		),
+	}
+
+	if reg != nil {
+		reg.MustRegister(grpcMets)
+	}
+
+	return dialOpts
 }
 
 // runQuery starts a server that exposes PromQL Query API. It is responsible for querying configured
@@ -109,9 +152,25 @@ func runQuery(
 	selectorLset labels.Labels,
 	storeAddrs []string,
 ) error {
+	var staticSpecs []query.StoreSpec
+	for _, addr := range storeAddrs {
+		staticSpecs = append(staticSpecs, query.NewStaticStoreSpec(addr))
+	}
 	var (
-		stores = newStoreSet(logger, reg, tracer, peer, storeAddrs)
-		proxy  = store.NewProxyStore(logger, func(context.Context) ([]*store.Info, error) {
+		stores = query.NewStoreSet(
+			logger,
+			reg,
+			func() (specs []query.StoreSpec) {
+				specs = append(staticSpecs)
+
+				for id, ps := range peer.PeerStates(cluster.PeerTypesStoreAPIs()...) {
+					specs = append(specs, &gossipSpec{id: id, addr: ps.APIAddr, peer: peer})
+				}
+				return specs
+			},
+			storeClientGRPCOpts(reg, tracer),
+		)
+		proxy = store.NewProxyStore(logger, func(context.Context) ([]store.Client, error) {
 			return stores.Get(), nil
 		}, selectorLset)
 		queryableCreator = query.NewQueryableCreator(logger, proxy, replicaLabel)
@@ -121,12 +180,13 @@ func runQuery(
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			return runutil.Repeat(3*time.Minute, ctx.Done(), func() error {
-				stores.UpdateStatic(ctx)
+			return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
+				stores.Update(ctx)
 				return nil
 			})
 		}, func(error) {
 			cancel()
+			stores.Close()
 		})
 	}
 	{
@@ -145,18 +205,6 @@ func runQuery(
 		}, func(error) {
 			cancel()
 			peer.Close(5 * time.Second)
-		})
-	}
-	{
-		ctx, cancel := context.WithCancel(context.Background())
-
-		g.Add(func() error {
-			return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
-				stores.UpdatePeers(ctx)
-				return nil
-			})
-		}, func(error) {
-			cancel()
 		})
 	}
 	// Start query API + UI HTTP server.
@@ -205,176 +253,23 @@ func runQuery(
 	return nil
 }
 
-// storeSet maintains a set of active stores. It is backed by a peer's view of the cluster
-// and a list of static store addresses.
-type storeSet struct {
-	logger      log.Logger
-	peer        *cluster.Peer
-	staticAddrs []string
-	dialOpts    []grpc.DialOption
+type gossipSpec struct {
+	id   string
+	addr string
 
-	mtx          sync.RWMutex
-	staticStores map[string]*store.Info
-	peerStores   map[string]*store.Info
-
-	storeNodeConnections prometheus.Gauge
+	peer *cluster.Peer
 }
 
-// newStoreSet returns a new set of stores from cluster peers and statically configured ones.
-func newStoreSet(
-	logger log.Logger,
-	reg *prometheus.Registry,
-	tracer opentracing.Tracer,
-	peer *cluster.Peer,
-	static []string,
-) *storeSet {
-	storeNodeConnections := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "thanos_store_nodes_grpc_connections",
-		Help: "Number indicating current number of gRPC connection to store nodes. This indicates also to how many stores query node have access to.",
-	})
-	grpcMets := grpc_prometheus.NewClientMetrics()
-
-	grpcMets.EnableClientHandlingTimeHistogram(
-		grpc_prometheus.WithHistogramBuckets([]float64{
-			0.001, 0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4,
-		}),
-	)
-	dialOpts := []grpc.DialOption{
-		// We want to make sure that we can receive huge gRPC messages from storeAPI.
-		// On TCP level we can be fine, but the gRPC overhead for huge messages could be significant.
-		// Current limit is ~2GB.
-		// TODO(bplotka): Split sent chunks on store node per max 4MB chunks if needed.
-		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32)),
-		grpc.WithInsecure(),
-		grpc.WithUnaryInterceptor(
-			grpc_middleware.ChainUnaryClient(
-				grpcMets.UnaryClientInterceptor(),
-				tracing.UnaryClientInterceptor(tracer),
-			),
-		),
-		grpc.WithStreamInterceptor(
-			grpc_middleware.ChainStreamClient(
-				grpcMets.StreamClientInterceptor(),
-				tracing.StreamClientInterceptor(tracer),
-			),
-		),
-	}
-
-	if logger == nil {
-		logger = log.NewNopLogger()
-	}
-	if reg != nil {
-		reg.MustRegister(grpcMets, storeNodeConnections)
-	}
-	return &storeSet{
-		logger:               logger,
-		peer:                 peer,
-		staticAddrs:          static,
-		dialOpts:             dialOpts,
-		storeNodeConnections: storeNodeConnections,
-	}
+func (s *gossipSpec) Addr() string {
+	return s.addr
 }
 
-func (s *storeSet) dialConn(ctx context.Context, addr string) (*grpc.ClientConn, error) {
-	conn, err := grpc.DialContext(ctx, addr, s.dialOpts...)
-	if err != nil {
-		return nil, err
+// Metadata method for gossip store tries get current peer state. If nothing is found, it means that gossip assumed
+// this host is unhealthy in the meantime.
+func (s *gossipSpec) Metadata(_ context.Context, _ storepb.StoreClient) (labels []storepb.Label, mint int64, maxt int64, err error) {
+	state, ok := s.peer.PeerState(s.id)
+	if !ok {
+		return nil, 0, 0, errors.Errorf("peer %s is no longer in gossip cluster", s.id)
 	}
-	runtime.SetFinalizer(conn, func(cc *grpc.ClientConn) { cc.Close() })
-
-	return conn, nil
-}
-
-func (s *storeSet) UpdateStatic(ctx context.Context) {
-	stores := make(map[string]*store.Info, len(s.staticStores))
-
-	for _, addr := range s.staticAddrs {
-		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-
-		var client storepb.StoreClient
-
-		if store, ok := s.staticStores[addr]; ok {
-			client = store.Client
-		} else {
-			conn, err := s.dialConn(ctx, addr)
-			if err != nil {
-				level.Warn(s.logger).Log("msg", "dialing connection failed", "addr", addr, "err", err)
-				continue
-			}
-			client = storepb.NewStoreClient(conn)
-		}
-
-		resp, err := client.Info(ctx, &storepb.InfoRequest{})
-		if err != nil {
-			level.Warn(s.logger).Log("msg", "fetching store info failed", "addr", addr, "err", err)
-			continue
-		}
-		stores[addr] = &store.Info{
-			Addr:    addr,
-			Client:  client,
-			Labels:  resp.Labels,
-			MinTime: resp.MinTime,
-			MaxTime: resp.MaxTime,
-		}
-	}
-
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
-
-	s.staticStores = stores
-	s.storeNodeConnections.Set(float64(len(s.peerStores) + len(s.staticStores)))
-}
-
-// Update the store set to the new set of addresses and labels for that addresses.
-// New background processes initiated respect the lifecycle of the given context.
-func (s *storeSet) UpdatePeers(ctx context.Context) {
-	stores := make(map[string]*store.Info, len(s.peerStores))
-
-	for _, ps := range s.peer.PeerStates(cluster.PeerTypesStoreAPIs()...) {
-		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-
-		var client storepb.StoreClient
-
-		if store, ok := s.peerStores[ps.APIAddr]; ok {
-			client = store.Client
-		} else {
-			conn, err := s.dialConn(ctx, ps.APIAddr)
-			if err != nil {
-				level.Warn(s.logger).Log("msg", "dialing connection failed", "addr", ps.APIAddr, "err", err)
-				continue
-			}
-			client = storepb.NewStoreClient(conn)
-		}
-		stores[ps.APIAddr] = &store.Info{
-			Addr:    ps.APIAddr,
-			Client:  client,
-			Labels:  ps.Metadata.Labels,
-			MinTime: ps.Metadata.MinTime,
-			MaxTime: ps.Metadata.MaxTime,
-		}
-	}
-
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
-
-	s.peerStores = stores
-	s.storeNodeConnections.Set(float64(len(s.peerStores) + len(s.staticStores)))
-}
-
-// Get returns a list of all active stores.
-func (s *storeSet) Get() []*store.Info {
-	s.mtx.RLock()
-	defer s.mtx.RUnlock()
-
-	stores := make([]*store.Info, 0, len(s.peerStores)+len(s.staticStores))
-
-	for _, store := range s.staticStores {
-		stores = append(stores, store)
-	}
-	for _, store := range s.peerStores {
-		stores = append(stores, store)
-	}
-	return stores
+	return state.Metadata.Labels, state.Metadata.MinTime, state.Metadata.MaxTime, nil
 }
