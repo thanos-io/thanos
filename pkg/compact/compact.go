@@ -507,7 +507,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		}
 	}
 
-	// Once we have a plan we need to download the actual data.
+	// Once we have a plan we need to download the actual data. test
 	begin := time.Now()
 
 	for _, b := range plan {
