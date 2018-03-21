@@ -133,7 +133,7 @@ func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket
 }
 
 // SyncMetas synchronizes all meta files from blocks in the bucket into
-// the given directory.
+// the memory.
 func (c *Syncer) SyncMetas(ctx context.Context) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
@@ -214,18 +214,17 @@ func groupKey(meta *block.Meta) string {
 }
 
 // Groups returns the compaction groups for all blocks currently known to the syncer.
+// It creates all groups from the scratch on every call.
 func (c *Syncer) Groups() (res []*Group, err error) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
 	groups := map[string]*Group{}
-
 	for _, m := range c.blocks {
 		g, ok := groups[groupKey(m)]
 		if !ok {
 			g, err = newGroup(
 				log.With(c.logger, "compactionGroup", groupKey(m)),
-				c.reg,
 				c.bkt,
 				labels.FromMap(m.Thanos.Labels),
 				m.Thanos.Downsample.Resolution,
@@ -345,7 +344,7 @@ func (c *Syncer) garbageCollect(ctx context.Context, resolution int64) error {
 	return nil
 }
 
-// Group captures a set of blocks that have the same origin labels.
+// Group captures a set of blocks that have the same origin labels and downsampling resolution.
 // Those blocks generally contain the same series and can thus efficiently be compacted.
 type Group struct {
 	logger             log.Logger
@@ -361,7 +360,6 @@ type Group struct {
 // newGroup returns a new compaction group.
 func newGroup(
 	logger log.Logger,
-	reg prometheus.Registerer,
 	bkt objstore.Bucket,
 	lset labels.Labels,
 	resolution int64,
@@ -422,7 +420,7 @@ func (cg *Group) Labels() labels.Labels {
 	return cg.labels
 }
 
-// Resolution returns the common resolution of blocks in the group.
+// Resolution returns the common downsampling resolution of blocks in the group.
 func (cg *Group) Resolution() int64 {
 	return cg.resolution
 }
@@ -466,11 +464,10 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
 
-	// Planning a compaction works purely based on the meta.json files in our group's dir.
+	// Planning a compaction works purely based on the meta.json files in our future group's dir.
 	// So we first dump all our memory block metas into the directory.
 	for _, meta := range cg.blocks {
 		bdir := filepath.Join(dir, meta.ULID.String())
-
 		if err := os.MkdirAll(bdir, 0777); err != nil {
 			return id, errors.Wrap(err, "create planning block dir")
 		}
@@ -478,14 +475,17 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 			return id, errors.Wrap(err, "write planning meta file")
 		}
 	}
+
 	// Plan against the written meta.json files.
 	plan, err := comp.Plan(dir)
 	if err != nil {
 		return id, errors.Wrap(err, "plan compaction")
 	}
 	if len(plan) == 0 {
+		// Nothing to do.
 		return id, nil
 	}
+
 	// Due to #183 we verify that none of the blocks in the plan have overlapping sources.
 	// This is one potential source of how we could end up with duplicated chunks.
 	uniqueSources := map[ulid.ULID]struct{}{}
@@ -501,10 +501,6 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 			}
 			uniqueSources[s] = struct{}{}
 		}
-		// Ensure all input blocks are valid.
-		if err := block.VerifyIndex(filepath.Join(pdir, "index")); err != nil {
-			return id, errors.Wrapf(halt(err), "invalid plan block %s", pdir)
-		}
 	}
 
 	// Once we have a plan we need to download the actual data.
@@ -515,6 +511,11 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 
 		if err := objstore.DownloadDir(ctx, cg.bkt, idStr, b); err != nil {
 			return id, errors.Wrapf(err, "download block %s", idStr)
+		}
+
+		// Ensure all input blocks are valid.
+		if err := block.VerifyIndex(filepath.Join(idStr, "index")); err != nil {
+			return id, errors.Wrapf(halt(err), "invalid plan block %s", idStr)
 		}
 	}
 	level.Debug(cg.logger).Log("msg", "downloaded blocks",
