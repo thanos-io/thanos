@@ -18,6 +18,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/compact"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
+	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
@@ -30,7 +31,9 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	cmd := app.Command(name, "inspect metric data in an object storage bucket")
 
 	gcsBucket := cmd.Flag("gcs-bucket", "Google Cloud Storage bucket name for stored blocks.").
-		PlaceHolder("<bucket>").Required().String()
+		PlaceHolder("<bucket>").String()
+
+	s3Config := s3.RegisterS3Params(cmd)
 
 	check := cmd.Command("check", "verify all blocks in the bucket")
 
@@ -38,16 +41,15 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 		Short('r').Default("false").Bool()
 
 	m[name+" check"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer) error {
+		bkt, closeFn, err := getBucketClient(gcsBucket, *s3Config, reg)
+		if err != nil {
+			return err
+		}
+
 		// Dummy actor to immediately kill the group after the run function returns.
 		g.Add(func() error { return nil }, func(error) {})
 
-		gcsClient, err := storage.NewClient(context.Background())
-		if err != nil {
-			return errors.Wrap(err, "create GCS client")
-		}
-		defer gcsClient.Close()
-
-		bkt := gcs.NewBucket(*gcsBucket, gcsClient.Bucket(*gcsBucket), reg)
+		defer closeFn()
 
 		return runBucketCheck(logger, bkt, *checkRepair)
 	}
@@ -57,11 +59,18 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	lsOutput := ls.Flag("ouput", "format in which to print each block's information; may be 'json' or custom template").
 		Short('o').Default("").String()
 
-	m[name+" ls"] = func(g *run.Group, logger log.Logger, _ *prometheus.Registry, _ opentracing.Tracer) error {
+	m[name+" ls"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer) error {
+		bkt, closeFn, err := getBucketClient(gcsBucket, *s3Config, reg)
+		if err != nil {
+			return err
+		}
+
 		// Dummy actor to immediately kill the group after the run function returns.
 		g.Add(func() error { return nil }, func(error) {})
 
-		return runBucketList(*gcsBucket, *lsOutput)
+		defer closeFn()
+
+		return runBucketList(bkt, *lsOutput)
 	}
 }
 
@@ -179,15 +188,7 @@ func parseMeta(ctx context.Context, bkt objstore.Bucket, name string) (block.Met
 	return m, nil
 }
 
-func runBucketList(gcsBucket, format string) error {
-	gcsClient, err := storage.NewClient(context.Background())
-	if err != nil {
-		return errors.Wrap(err, "create GCS client")
-	}
-
-	var bkt objstore.Bucket
-	bkt = gcs.NewBucket(gcsBucket, gcsClient.Bucket(gcsBucket), nil)
-
+func runBucketList(bkt objstore.Bucket, format string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
@@ -229,4 +230,32 @@ func runBucketList(gcsBucket, format string) error {
 		}
 	}
 	return bkt.Iter(ctx, "", printBlock)
+}
+
+func getBucketClient(gcsBucket *string, s3Config s3.Config, reg *prometheus.Registry) (objstore.Bucket, func() error, error) {
+	var (
+		bkt     objstore.Bucket
+		closeFn = func() error { return nil }
+	)
+
+	// Initialize object storage clients.
+	if *gcsBucket != "" {
+		gcsClient, err := storage.NewClient(context.Background())
+		if err != nil {
+			return bkt, closeFn, errors.Wrap(err, "create GCS client")
+		}
+		bkt = gcs.NewBucket(*gcsBucket, gcsClient.Bucket(*gcsBucket), reg)
+		closeFn = gcsClient.Close
+	} else if s3Config.Validate() == nil {
+		b, err := s3.NewBucket(&s3Config, reg)
+		if err != nil {
+			return bkt, closeFn, errors.Wrap(err, "create s3 client")
+		}
+
+		bkt = b
+	} else {
+		return bkt, closeFn, errors.New("no valid GCS or S3 configuration supplied")
+	}
+
+	return bkt, closeFn, nil
 }

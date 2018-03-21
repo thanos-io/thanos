@@ -5,7 +5,6 @@ import (
 	"math"
 	"net"
 	"net/http"
-	"os"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -42,22 +41,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
 		PlaceHolder("<bucket>").String()
 
-	s3Bucket := cmd.Flag("s3.bucket", "S3-Compatible API bucket name for stored blocks.").
-		PlaceHolder("<bucket>").Envar("S3_BUCKET").String()
-
-	s3Endpoint := cmd.Flag("s3.endpoint", "S3-Compatible API endpoint for stored blocks.").
-		PlaceHolder("<api-url>").Envar("S3_ENDPOINT").String()
-
-	s3AccessKey := cmd.Flag("s3.access-key", "Access key for an S3-Compatible API.").
-		PlaceHolder("<key>").Envar("S3_ACCESS_KEY").String()
-
-	s3SecretKey := os.Getenv("S3_SECRET_KEY")
-
-	s3Insecure := cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
-		Default("false").Envar("S3_INSECURE").Bool()
-
-	s3SignatureV2 := cmd.Flag("s3.signature-version2", "Whether to use S3 Signature Version 2; otherwise Signature Version 4 will be used.").
-		Default("false").Envar("S3_SIGNATURE_VERSION2").Bool()
+	s3Config := s3.RegisterS3Params(cmd)
 
 	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the index cache.").
 		Default("250MB").Bytes()
@@ -89,12 +73,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			reg,
 			tracer,
 			*gcsBucket,
-			*s3Bucket,
-			*s3Endpoint,
-			*s3AccessKey,
-			s3SecretKey,
-			*s3Insecure,
-			*s3SignatureV2,
+			s3Config,
 			*dataDir,
 			*grpcAddr,
 			*httpAddr,
@@ -114,12 +93,7 @@ func runStore(
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	gcsBucket string,
-	s3Bucket string,
-	s3Endpoint string,
-	s3AccessKey string,
-	s3SecretKey string,
-	s3Insecure bool,
-	s3SignatureV2 bool,
+	s3Config *s3.Config,
 	dataDir string,
 	grpcAddr string,
 	httpAddr string,
@@ -134,15 +108,6 @@ func runStore(
 			closeFn = func() error { return nil }
 			bucket  string
 		)
-
-		s3Config := &s3.Config{
-			Bucket:      s3Bucket,
-			Endpoint:    s3Endpoint,
-			AccessKey:   s3AccessKey,
-			SecretKey:   s3SecretKey,
-			Insecure:    s3Insecure,
-			SignatureV2: s3SignatureV2,
-		}
 
 		if gcsBucket != "" {
 			gcsClient, err := storage.NewClient(context.Background())

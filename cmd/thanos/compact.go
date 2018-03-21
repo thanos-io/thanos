@@ -41,24 +41,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks.").
 		PlaceHolder("<bucket>").String()
 
-	var s3config s3.Config
-
-	cmd.Flag("s3.bucket", "S3-Compatible API bucket name for stored blocks.").
-		PlaceHolder("<bucket>").Envar("S3_BUCKET").StringVar(&s3config.Bucket)
-
-	cmd.Flag("s3.endpoint", "S3-Compatible API endpoint for stored blocks.").
-		PlaceHolder("<api-url>").Envar("S3_ENDPOINT").StringVar(&s3config.Endpoint)
-
-	cmd.Flag("s3.access-key", "Access key for an S3-Compatible API.").
-		PlaceHolder("<key>").Envar("S3_ACCESS_KEY").StringVar(&s3config.AccessKey)
-
-	s3config.SecretKey = os.Getenv("S3_SECRET_KEY")
-
-	cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
-		Default("false").Envar("S3_INSECURE").BoolVar(&s3config.Insecure)
-
-	cmd.Flag("s3.signature-version2", "Whether to use S3 Signature Version 2; otherwise Signature Version 4 will be used.").
-		Default("false").Envar("S3_SIGNATURE_VERSION2").BoolVar(&s3config.SignatureV2)
+	s3config := s3.RegisterS3Params(cmd)
 
 	syncDelay := cmd.Flag("sync-delay", "Minimum age of blocks before they are being processed.").
 		Default("2h").Duration()
@@ -71,7 +54,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			*httpAddr,
 			*dataDir,
 			*gcsBucket,
-			&s3config,
+			s3config,
 			*syncDelay,
 			*haltOnError,
 			*wait,
