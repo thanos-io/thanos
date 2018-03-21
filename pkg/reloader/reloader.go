@@ -17,11 +17,11 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/pkg/errors"
-	fsnotify "gopkg.in/fsnotify.v1"
 )
 
 // Reloader can watch config files and trigger reloads of a Prometheus server.
