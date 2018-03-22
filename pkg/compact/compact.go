@@ -16,7 +16,6 @@ import (
 
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/prometheus/tsdb/fileutil"
 	"github.com/prometheus/tsdb/labels"
 
 	"github.com/go-kit/kit/log"
@@ -509,7 +508,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	for _, b := range plan {
 		idStr := filepath.Base(b)
 
-		if err := objstore.DownloadDir(ctx, cg.bkt, idStr, b); err != nil {
+		if err := DownloadBlockDir(ctx, cg.bkt, idStr, b); err != nil {
 			return id, errors.Wrapf(err, "download block %s", idStr)
 		}
 
@@ -567,41 +566,26 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	return id, nil
 }
 
-// iterBlocks calls f for each meta.json of block directories in dir.
-func iterBlocks(dir string, f func(dir string, id ulid.ULID) error) error {
-	names, err := fileutil.ReadDir(dir)
+// DownloadBlockDir downloads directory that is mean to be block directory (ends with ULID and contains block data).
+func DownloadBlockDir(ctx context.Context, bucket objstore.Bucket, blockDir, dst string) error {
+	if _, err := ulid.Parse(path.Base(blockDir)); err != nil {
+		return errors.Errorf("given directory is not block directory %s", blockDir)
+	}
+
+	if err := objstore.DownloadDir(ctx, bucket, blockDir, dst); err != nil {
+		return err
+	}
+
+	chunksDir := filepath.Join(dst, "chunks")
+	_, err := os.Stat(chunksDir)
+	if os.IsNotExist(err) {
+		// This can happen if block is empty. We cannot easily upload empty directory, so create one here.
+		return os.Mkdir(chunksDir, os.ModePerm)
+	}
+
 	if err != nil {
-		return errors.Wrap(err, "read dir")
+		return errors.Wrapf(err, "stat %s", chunksDir)
 	}
-	for _, n := range names {
-		id, err := ulid.Parse(n)
-		if err != nil {
-			continue
-		}
-		if err := f(filepath.Join(dir, n), id); err != nil {
-			return err
-		}
-	}
+
 	return nil
-}
-
-func renameFile(from, to string) error {
-	if err := os.RemoveAll(to); err != nil {
-		return err
-	}
-	if err := os.Rename(from, to); err != nil {
-		return err
-	}
-
-	// Directory was renamed; sync parent dir to persist rename.
-	pdir, err := fileutil.OpenDir(filepath.Dir(to))
-	if err != nil {
-		return err
-	}
-
-	if err = fileutil.Fsync(pdir); err != nil {
-		pdir.Close()
-		return err
-	}
-	return pdir.Close()
 }

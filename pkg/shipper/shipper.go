@@ -165,9 +165,12 @@ func (s *Shipper) sync(ctx context.Context, meta *block.Meta) (err error) {
 	dir := filepath.Join(s.dir, meta.ULID.String())
 
 	// We only ship of the first compacted block level.
+	// TODO(bplotka): https://github.com/improbable-eng/thanos/issues/206
 	if meta.Compaction.Level > 1 {
 		return nil
 	}
+
+	// Check against bucket if the meta file for this block exists.
 	ok, err := s.bucket.Exists(ctx, path.Join(meta.ULID.String(), "meta.json"))
 	if err != nil {
 		return errors.Wrap(err, "check exists")
