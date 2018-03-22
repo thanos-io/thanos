@@ -249,7 +249,7 @@ func TestGroup_Compact(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	metrics := newSyncerMetrics(nil)
-	g, err := newGroup(nil, bkt, nil, 0, metrics.compactions, metrics.compactionFailures)
+	g, err := newGroup(nil, bkt, nil, 0, metrics.compactions.WithLabelValues(""), metrics.compactionFailures.WithLabelValues(""))
 	testutil.Ok(t, err)
 
 	comp, err := tsdb.NewLeveledCompactor(nil, log.NewLogfmtLogger(os.Stderr), []int64{1000, 3000}, nil)
