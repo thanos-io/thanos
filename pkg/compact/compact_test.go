@@ -26,7 +26,7 @@ import (
 
 // TODO(bplotka): Add leaktest when this is done: https://github.com/improbable-eng/thanos/issues/234
 func TestSyncer_SyncMetas(t *testing.T) {
-	dir, err := ioutil.TempDir("", "test-syncer")
+	dir, err := ioutil.TempDir("", "test-compact-sync")
 	testutil.Ok(t, err)
 	defer os.RemoveAll(dir)
 
@@ -80,7 +80,7 @@ func TestSyncer_SyncMetas(t *testing.T) {
 
 // TODO(bplotka): Add leaktest when this is done: https://github.com/improbable-eng/thanos/issues/234
 func TestSyncer_GarbageCollect(t *testing.T) {
-	dir, err := ioutil.TempDir("", "test-syncer")
+	dir, err := ioutil.TempDir("", "test-compact-gc")
 	testutil.Ok(t, err)
 	defer os.RemoveAll(dir)
 
@@ -179,9 +179,9 @@ func TestSyncer_GarbageCollect(t *testing.T) {
 
 // TODO(bplotka): Add leaktest when this is done: https://github.com/improbable-eng/thanos/issues/234
 func TestGroup_Compact(t *testing.T) {
-	dir, err := ioutil.TempDir("", "test-syncer")
+	prepareDir, err := ioutil.TempDir("", "test-compact-prepare")
 	testutil.Ok(t, err)
-	defer os.RemoveAll(dir)
+	defer os.RemoveAll(prepareDir)
 
 	bkt, cleanup, err := testutil.NewObjectStoreBucket(t)
 	testutil.Ok(t, err)
@@ -190,7 +190,8 @@ func TestGroup_Compact(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	b1, err := testutil.CreateBlock(dir, []labels.Labels{
+	var metas []*block.Meta
+	b1, err := testutil.CreateBlock(prepareDir, []labels.Labels{
 		{{Name: "a", Value: "1"}},
 		{{Name: "a", Value: "2"}},
 		{{Name: "a", Value: "3"}},
@@ -198,8 +199,11 @@ func TestGroup_Compact(t *testing.T) {
 	}, 100, 0, 1000)
 	testutil.Ok(t, err)
 
-	// Mix order to make sure compact is able to deduct min time / max time.
-	b3, err := testutil.CreateBlock(dir, []labels.Labels{
+	meta, err := block.ReadMetaFile(filepath.Join(prepareDir, b1.String()))
+	testutil.Ok(t, err)
+	metas = append(metas, meta)
+
+	b3, err := testutil.CreateBlock(prepareDir, []labels.Labels{
 		{{Name: "a", Value: "3"}},
 		{{Name: "a", Value: "4"}},
 		{{Name: "a", Value: "5"}},
@@ -207,7 +211,12 @@ func TestGroup_Compact(t *testing.T) {
 	}, 100, 2001, 3000)
 	testutil.Ok(t, err)
 
-	b2, err := testutil.CreateBlock(dir, []labels.Labels{
+	// Mix order to make sure compact is able to deduct min time / max time.
+	meta, err = block.ReadMetaFile(filepath.Join(prepareDir, b3.String()))
+	testutil.Ok(t, err)
+	metas = append(metas, meta)
+
+	b2, err := testutil.CreateBlock(prepareDir, []labels.Labels{
 		{{Name: "a", Value: "2"}},
 		{{Name: "a", Value: "3"}},
 		{{Name: "a", Value: "4"}},
@@ -215,8 +224,12 @@ func TestGroup_Compact(t *testing.T) {
 	}, 100, 1001, 2000)
 	testutil.Ok(t, err)
 
+	meta, err = block.ReadMetaFile(filepath.Join(prepareDir, b2.String()))
+	testutil.Ok(t, err)
+	metas = append(metas, meta)
+
 	// Due to TSDB compaction delay (not compacting fresh block), we need one more block to be pushed to trigger compaction.
-	freshB, err := testutil.CreateBlock(dir, []labels.Labels{
+	freshB, err := testutil.CreateBlock(prepareDir, []labels.Labels{
 		{{Name: "a", Value: "2"}},
 		{{Name: "a", Value: "3"}},
 		{{Name: "a", Value: "4"}},
@@ -224,14 +237,23 @@ func TestGroup_Compact(t *testing.T) {
 	}, 100, 3001, 4000)
 	testutil.Ok(t, err)
 
-	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(dir, b1.String()), b1.String()))
-	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(dir, b2.String()), b2.String()))
-	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(dir, b3.String()), b3.String()))
-	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(dir, freshB.String()), freshB.String()))
+	meta, err = block.ReadMetaFile(filepath.Join(prepareDir, freshB.String()))
+	testutil.Ok(t, err)
+	metas = append(metas, meta)
+
+	// Upload and forget about tmp dir with all blocks. We want to ensure same state we will have on compactor.
+	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(prepareDir, b1.String()), b1.String()))
+	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(prepareDir, b2.String()), b2.String()))
+	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(prepareDir, b3.String()), b3.String()))
+	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(prepareDir, freshB.String()), freshB.String()))
+
+	// Create fresh, empty directory for actual test.
+	dir, err := ioutil.TempDir("", "test-compact")
+	testutil.Ok(t, err)
+	defer os.RemoveAll(dir)
 
 	metrics := newSyncerMetrics(nil)
-
-	g, err := newGroup(nil, nil, bkt, nil, 0, metrics.compactions, metrics.compactionFailures)
+	g, err := newGroup(nil, bkt, nil, 0, metrics.compactions, metrics.compactionFailures)
 	testutil.Ok(t, err)
 
 	comp, err := tsdb.NewLeveledCompactor(nil, log.NewLogfmtLogger(os.Stderr), []int64{1000, 3000}, nil)
@@ -239,12 +261,21 @@ func TestGroup_Compact(t *testing.T) {
 
 	id, err := g.Compact(ctx, dir, comp)
 	testutil.Ok(t, err)
+	testutil.Assert(t, id == ulid.ULID{}, "group should be empty, but somehow compaction took place")
+
+	// Add all metas that would be gathered by syncMetas.
+	for _, m := range metas {
+		testutil.Ok(t, g.Add(m))
+	}
+
+	id, err = g.Compact(ctx, dir, comp)
+	testutil.Ok(t, err)
 	testutil.Assert(t, id != ulid.ULID{}, "no compaction took place")
 
 	resDir := filepath.Join(dir, id.String())
 	testutil.Ok(t, objstore.DownloadDir(ctx, bkt, id.String(), resDir))
 
-	meta, err := block.ReadMetaFile(resDir)
+	meta, err = block.ReadMetaFile(resDir)
 	testutil.Ok(t, err)
 
 	testutil.Equals(t, int64(0), meta.MinTime)

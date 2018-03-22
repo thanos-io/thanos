@@ -148,8 +148,6 @@ func runCompact(
 		f := func() error {
 			// Loop over bucket and compact until there's no work left.
 			for {
-				done := true
-
 				if err := sy.SyncMetas(ctx); err != nil {
 					level.Error(logger).Log("msg", "sync failed", "err", err)
 				}
@@ -160,6 +158,7 @@ func runCompact(
 				if err != nil {
 					return errors.Wrap(err, "build compaction groups")
 				}
+				done := true
 				for _, g := range groups {
 					os.RemoveAll(dataDir)
 					// While we do all compactions sequentially we just compact within the top-level dir.
@@ -189,7 +188,7 @@ func runCompact(
 					break
 				}
 			}
-			// After all comapctions are done, work down the downsampling backlog.
+			// After all compactions are done, work down the downsampling backlog.
 			// We run two passes of this to ensure that the 1h downsampling is generated
 			// for 5m downsamplings created in the first run.
 			level.Info(logger).Log("msg", "start first pass of downsampling")
@@ -201,7 +200,7 @@ func runCompact(
 			level.Info(logger).Log("msg", "start second pass of downsampling")
 
 			if err := downsampleBucket(ctx, logger, bkt, dataDir); err != nil {
-				return errors.Wrap(err, "second pass ofdownsampling failed")
+				return errors.Wrap(err, "second pass of downsampling failed")
 			}
 			return nil
 		}
