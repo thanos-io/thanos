@@ -15,6 +15,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/compact"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/oklog/run"
@@ -131,7 +132,7 @@ func repairBlock(ctx context.Context, bkt objstore.Bucket, id ulid.ULID) (resid 
 
 	bdir := filepath.Join(tmpdir, id.String())
 
-	if err := objstore.DownloadDir(ctx, bkt, id.String(), bdir); err != nil {
+	if err := compact.DownloadBlockDir(ctx, bkt, id.String(), bdir); err != nil {
 		return resid, errors.Wrap(err, "download block")
 	}
 	meta, err := block.ReadMetaFile(bdir)

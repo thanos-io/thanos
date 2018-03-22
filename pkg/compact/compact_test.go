@@ -216,12 +216,8 @@ func TestGroup_Compact(t *testing.T) {
 	testutil.Ok(t, err)
 	metas = append(metas, meta)
 
-	b2, err := testutil.CreateBlock(prepareDir, []labels.Labels{
-		{{Name: "a", Value: "2"}},
-		{{Name: "a", Value: "3"}},
-		{{Name: "a", Value: "4"}},
-		{{Name: "a", Value: "5"}},
-	}, 100, 1001, 2000)
+	// Empty block. This can happen when TSDB does not have any samples for min-block-size time.
+	b2, err := testutil.CreateBlock(prepareDir, []labels.Labels{}, 100, 1001, 2000)
 	testutil.Ok(t, err)
 
 	meta, err = block.ReadMetaFile(filepath.Join(prepareDir, b2.String()))
@@ -281,7 +277,7 @@ func TestGroup_Compact(t *testing.T) {
 	testutil.Equals(t, int64(0), meta.MinTime)
 	testutil.Equals(t, int64(3000), meta.MaxTime)
 	testutil.Equals(t, uint64(6), meta.Stats.NumSeries)
-	testutil.Equals(t, uint64(3*4*100), meta.Stats.NumSamples)
+	testutil.Equals(t, uint64(2*4*100), meta.Stats.NumSamples) // Only 2 times 4*100 because one block was empty.
 	testutil.Equals(t, 2, meta.Compaction.Level)
 	testutil.Equals(t, []ulid.ULID{b1, b3, b2}, meta.Compaction.Sources)
 }
