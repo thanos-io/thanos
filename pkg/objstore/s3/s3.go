@@ -4,11 +4,13 @@ package s3
 import (
 	"context"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/minio/minio-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 const (
@@ -37,6 +39,30 @@ type Config struct {
 	SecretKey   string
 	Insecure    bool
 	SignatureV2 bool
+}
+
+// RegisterS3Params registers the s3 flags and returns an initialized Config struct.
+func RegisterS3Params(cmd *kingpin.CmdClause) *Config {
+	var s3config Config
+
+	cmd.Flag("s3.bucket", "S3-Compatible API bucket name for stored blocks.").
+		PlaceHolder("<bucket>").Envar("S3_BUCKET").StringVar(&s3config.Bucket)
+
+	cmd.Flag("s3.endpoint", "S3-Compatible API endpoint for stored blocks.").
+		PlaceHolder("<api-url>").Envar("S3_ENDPOINT").StringVar(&s3config.Endpoint)
+
+	cmd.Flag("s3.access-key", "Access key for an S3-Compatible API.").
+		PlaceHolder("<key>").Envar("S3_ACCESS_KEY").StringVar(&s3config.AccessKey)
+
+	s3config.SecretKey = os.Getenv("S3_SECRET_KEY")
+
+	cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
+		Default("false").Envar("S3_INSECURE").BoolVar(&s3config.Insecure)
+
+	cmd.Flag("s3.signature-version2", "Whether to use S3 Signature Version 2; otherwise Signature Version 4 will be used.").
+		Default("false").Envar("S3_SIGNATURE_VERSION2").BoolVar(&s3config.SignatureV2)
+
+	return &s3config
 }
 
 // Validate checks to see if any of the s3 config options are set.
