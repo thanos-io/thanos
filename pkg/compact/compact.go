@@ -46,8 +46,8 @@ type syncerMetrics struct {
 	garbageCollections        prometheus.Counter
 	garbageCollectionFailures prometheus.Counter
 	garbageCollectionDuration prometheus.Histogram
-	compactions               prometheus.Counter
-	compactionFailures        prometheus.Counter
+	compactions               *prometheus.CounterVec
+	compactionFailures        *prometheus.CounterVec
 }
 
 func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
@@ -90,14 +90,14 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 		},
 	})
 
-	m.compactions = prometheus.NewCounter(prometheus.CounterOpts{
+	m.compactions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_group_compactions_total",
 		Help: "Total number of group compactions attempts.",
-	})
-	m.compactionFailures = prometheus.NewCounter(prometheus.CounterOpts{
+	}, []string{"group"})
+	m.compactionFailures = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_group_compactions_failures_total",
 		Help: "Total number of failed group compactions.",
-	})
+	}, []string{"group"})
 
 	if reg != nil {
 		reg.MustRegister(
@@ -227,8 +227,8 @@ func (c *Syncer) Groups() (res []*Group, err error) {
 				c.bkt,
 				labels.FromMap(m.Thanos.Labels),
 				m.Thanos.Downsample.Resolution,
-				c.metrics.compactions,
-				c.metrics.compactionFailures,
+				c.metrics.compactions.WithLabelValues(groupKey(m)),
+				c.metrics.compactionFailures.WithLabelValues(groupKey(m)),
 			)
 			if err != nil {
 				return nil, errors.Wrap(err, "create compaction group")
