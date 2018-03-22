@@ -105,7 +105,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			MaxResolutionWindow: r.MaxResolutionWindow,
 		})
 		if err != nil {
-			respCh <- storepb.NewWarnSeriesResponse(errors.Wrap(err, "fetch series"))
+			respCh <- storepb.NewWarnSeriesResponse(errors.Wrapf(err, "fetch series for store %v", st.Labels()))
 			continue
 		}
 
