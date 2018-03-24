@@ -43,7 +43,7 @@
   name = "github.com/grpc-ecosystem/go-grpc-prometheus"
 
 [[constraint]]
-  revision = "659ed644294eec6310cef0685b002a3aed8c8f85"
+  revision = "195bc0d286b077f5633eb4bda76743620588b2fa"
   name = "github.com/prometheus/tsdb"
 
 [[constraint]]
