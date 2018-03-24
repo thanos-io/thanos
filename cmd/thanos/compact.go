@@ -46,7 +46,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	syncDelay := cmd.Flag("sync-delay", "Minimum age of blocks before they are being processed.").
 		Default("2h").Duration()
 
-	wait := cmd.Flag("wait", "Do not exit after all compactions have been processed and wait wait for now work.").
+	wait := cmd.Flag("wait", "Do not exit after all compactions have been processed and wait for new work.").
 		Short('w').Bool()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
@@ -119,8 +119,8 @@ func runCompact(
 		comp, err := tsdb.NewLeveledCompactor(reg, logger, []int64{
 			int64(2 * time.Hour / time.Millisecond),
 			int64(8 * time.Hour / time.Millisecond),
-			int64(2 * 24 * time.Hour / time.Millisecond),
-			int64(14 * 24 * time.Hour / time.Millisecond),
+			int64(2 * 24 * time.Hour / time.Millisecond), // dwo days
+			int64(14 * 24 * time.Hour / time.Millisecond), // 2 weeks
 		}, nil)
 		if err != nil {
 			return errors.Wrap(err, "create compactor")

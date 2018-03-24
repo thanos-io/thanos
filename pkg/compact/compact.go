@@ -153,14 +153,7 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 	// Read back all block metas so we can detect deleted blocks.
 	remote := map[ulid.ULID]struct{}{}
 
-	err := c.bkt.Iter(ctx, "", func(name string) error {
-		if !strings.HasSuffix(name, "/") {
-			return nil
-		}
-		id, err := ulid.Parse(name[:len(name)-1])
-		if err != nil {
-			return nil
-		}
+	err := ForeachBlockID(ctx, c.bkt, func(id ulid.ULID) error {
 		remote[id] = struct{}{}
 
 		// Check if we already have this block cached locally.
@@ -176,18 +169,12 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 		}
 		level.Debug(c.logger).Log("msg", "download meta", "block", id)
 
-		rc, err := c.bkt.Get(ctx, path.Join(id.String(), "meta.json"))
+		meta, err := DownloadMeta(ctx, c.bkt, id)
 		if err != nil {
-			level.Warn(c.logger).Log("msg", "downloading meta.json failed", "block", id, "err", err)
+			level.Warn(c.logger).Log("msg", "downloading meta.json failed", "err", err)
 			return nil
 		}
-		defer rc.Close()
 
-		var meta block.Meta
-		if err := json.NewDecoder(rc).Decode(&meta); err != nil {
-			level.Warn(c.logger).Log("msg", "decoding meta.json failed", "block", id, "err", err)
-			return nil
-		}
 		remote[id] = struct{}{}
 		c.blocks[id] = &meta
 
@@ -206,10 +193,14 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 	return nil
 }
 
-// groupKey returns a unique identifier for the group the block belongs to. It considers
+// GroupKey returns a unique identifier for the group the block belongs to. It considers
 // the downsampling resolution and the block's labels.
-func groupKey(meta *block.Meta) string {
-	return fmt.Sprintf("%d@%s", meta.Thanos.Downsample.Resolution, labels.FromMap(meta.Thanos.Labels))
+func GroupKey(meta block.Meta) string {
+	return groupKey(meta.Thanos.Downsample.Resolution, labels.FromMap(meta.Thanos.Labels))
+}
+
+func groupKey(res int64, lbls labels.Labels) string {
+	return fmt.Sprintf("%d@%s", res, lbls)
 }
 
 // Groups returns the compaction groups for all blocks currently known to the syncer.
@@ -220,20 +211,20 @@ func (c *Syncer) Groups() (res []*Group, err error) {
 
 	groups := map[string]*Group{}
 	for _, m := range c.blocks {
-		g, ok := groups[groupKey(m)]
+		g, ok := groups[GroupKey(*m)]
 		if !ok {
 			g, err = newGroup(
-				log.With(c.logger, "compactionGroup", groupKey(m)),
+				log.With(c.logger, "compactionGroup", GroupKey(*m)),
 				c.bkt,
 				labels.FromMap(m.Thanos.Labels),
 				m.Thanos.Downsample.Resolution,
-				c.metrics.compactions.WithLabelValues(groupKey(m)),
-				c.metrics.compactionFailures.WithLabelValues(groupKey(m)),
+				c.metrics.compactions.WithLabelValues(GroupKey(*m)),
+				c.metrics.compactionFailures.WithLabelValues(GroupKey(*m)),
 			)
 			if err != nil {
 				return nil, errors.Wrap(err, "create compaction group")
 			}
-			groups[groupKey(m)] = g
+			groups[GroupKey(*m)] = g
 			res = append(res, g)
 		}
 		g.Add(m)
@@ -270,16 +261,18 @@ func (c *Syncer) GarbageCollect(ctx context.Context) error {
 	return nil
 }
 
-func (c *Syncer) garbageCollect(ctx context.Context, resolution int64) error {
+func (c *Syncer) GarbageBlocks(resolution int64) (ids []ulid.ULID, err error) {
 	// Map each block to its highest priority parent. Initial blocks have themselves
 	// in their source section, i.e. are their own parent.
 	parents := map[ulid.ULID]ulid.ULID{}
 
 	for id, meta := range c.blocks {
+
 		// Skip any block that has a different resolution.
 		if meta.Thanos.Downsample.Resolution != resolution {
 			continue
 		}
+
 		// For each source block we contain, check whether we are the highest priority parent block.
 		for _, sid := range meta.Compaction.Sources {
 			pid, ok := parents[sid]
@@ -290,7 +283,7 @@ func (c *Syncer) garbageCollect(ctx context.Context, resolution int64) error {
 			}
 			pmeta, ok := c.blocks[pid]
 			if !ok {
-				return errors.Errorf("previous parent block %s not found", pid)
+				return nil, errors.Errorf("previous parent block %s not found", pid)
 			}
 			// The current block is the higher priority parent for the source if its
 			// compaction level is higher than that of the previously set parent.
@@ -319,12 +312,26 @@ func (c *Syncer) garbageCollect(ctx context.Context, resolution int64) error {
 		if meta.Thanos.Downsample.Resolution != resolution {
 			continue
 		}
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
 		if _, ok := topParents[id]; ok {
 			continue
 		}
+
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func (c *Syncer) garbageCollect(ctx context.Context, resolution int64) error {
+	garbageIds, err := c.GarbageBlocks(resolution)
+	if err != nil {
+		return err
+	}
+
+	for _, id := range garbageIds {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
 		// Spawn a new context so we always delete a block in full on shutdown.
 		delCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 
@@ -335,6 +342,7 @@ func (c *Syncer) garbageCollect(ctx context.Context, resolution int64) error {
 		if err != nil {
 			return errors.Wrapf(err, "delete block %s from bucket", id)
 		}
+
 		// Immediately update our in-memory state so no further call to SyncMetas is needed
 		/// after running garbage collection.
 		delete(c.blocks, id)
@@ -382,7 +390,7 @@ func newGroup(
 
 // Key returns an identifier for the group.
 func (cg *Group) Key() string {
-	return fmt.Sprintf("%d@%s", cg.resolution, cg.labels)
+	return groupKey(cg.resolution, cg.labels)
 }
 
 // Add the block with the given meta to the group.
@@ -588,4 +596,36 @@ func DownloadBlockDir(ctx context.Context, bucket objstore.Bucket, blockDir, dst
 	}
 
 	return nil
+}
+
+// DownloadMeta downloads only meta file from bucket by block ID.
+func DownloadMeta(ctx context.Context, bkt objstore.Bucket, id ulid.ULID) (block.Meta, error) {
+	rc, err := bkt.Get(ctx, path.Join(id.String(), "meta.json"))
+	if err != nil {
+		return block.Meta{}, errors.Wrapf(err, "meta.json bkt get for %s", id.String())
+	}
+	defer rc.Close()
+
+	// Do a full decode/encode cycle to ensure we only print valid JSON.
+	var m block.Meta
+
+	if err := json.NewDecoder(rc).Decode(&m); err != nil {
+		return block.Meta{}, errors.Wrapf(err, "decode meta.json for block %s", id.String())
+	}
+	return m, nil
+}
+
+// ForeachBlockID runs doFn for each block ID in the given bucket.
+func ForeachBlockID(ctx context.Context, bucket objstore.Bucket, doFn func(ulid.ULID) error) error {
+	return bucket.Iter(ctx, "", func(name string) error {
+		if !strings.HasSuffix(name, "/") {
+			return nil
+		}
+		id, err := ulid.Parse(name[:len(name)-1])
+		if err != nil {
+			return nil
+		}
+
+		return doFn(id)
+	})
 }
