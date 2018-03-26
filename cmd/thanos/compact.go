@@ -30,7 +30,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	cmd := app.Command(name, "continously compacts blocks in an object store bucket")
 
 	haltOnError := cmd.Flag("debug.halt-on-error", "halt the process if a critical compaction error is detected").
-		Hidden().Bool()
+		Hidden().Default("true").Bool()
 
 	httpAddr := cmd.Flag("http-address", "listen host:port for HTTP endpoints").
 		Default(defaultHTTPAddr).String()
@@ -44,7 +44,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	s3config := s3.RegisterS3Params(cmd)
 
 	syncDelay := cmd.Flag("sync-delay", "Minimum age of blocks before they are being processed.").
-		Default("2h").Duration()
+		Default("30m").Duration()
 
 	wait := cmd.Flag("wait", "Do not exit after all compactions have been processed and wait for new work.").
 		Short('w').Bool()
