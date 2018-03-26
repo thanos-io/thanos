@@ -17,7 +17,6 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/compact"
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
@@ -224,7 +223,7 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 	begin := time.Now()
 	bdir := filepath.Join(dir, m.ULID.String())
 
-	err := compact.DownloadBlockDir(ctx, bkt, m.ULID.String(), bdir)
+	err := block.DownloadDir(ctx, bkt, m.ULID.String(), bdir)
 	if err != nil {
 		return errors.Wrapf(err, "download block %s", m.ULID)
 	}

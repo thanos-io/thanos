@@ -46,8 +46,11 @@ func NewWithRepair(logger log.Logger, bkt objstore.Bucket, issues []Issue) *Veri
 
 // Verify verifies registered issues.
 func (v *Verifier) Verify(ctx context.Context) error {
-	level.Warn(v.logger).Log("msg", "!!!! GLOBAL COMPACTOR SHOULD __NOT__ BE RUNNING ON SAME BUCKET !!!!", "issues",
-		len(v.issues), "repair", v.repair)
+	level.Warn(v.logger).Log(
+		"msg", "GLOBAL COMPACTOR SHOULD __NOT__ BE RUNNING ON THE SAME BUCKET",
+		"issues", len(v.issues),
+		"repair", v.repair,
+	)
 
 	if len(v.issues) == 0 {
 		return errors.New("nothing to verify. No issue registered")
@@ -56,7 +59,6 @@ func (v *Verifier) Verify(ctx context.Context) error {
 	// TODO(blotka): Wrap bucket with BucketWithMetrics and print metrics after each issue (e.g how many blocks where touched).
 	// TODO(bplotka): Implement disk "bucket" to allow this verify to work on local disk space as well.
 	for _, issueFn := range v.issues {
-		// TOOD(bplotka): Consider more block-aware verifier (that maintains current blocks in system for cache them)
 		err := issueFn(ctx, v.logger, v.bkt, v.repair)
 		if err != nil {
 			return errors.Wrap(err, "verify")

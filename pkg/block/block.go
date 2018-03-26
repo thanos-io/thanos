@@ -8,6 +8,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"context"
+	"path"
+	"strings"
+
+	"github.com/improbable-eng/thanos/pkg/objstore"
+	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/fileutil"
@@ -94,4 +100,60 @@ func renameFile(from, to string) error {
 		return err
 	}
 	return pdir.Close()
+}
+
+// DownloadDir downloads directory that is mean to be block directory (ends with ULID and contains block data).
+func DownloadDir(ctx context.Context, bucket objstore.Bucket, blockDir, dst string) error {
+	if _, err := ulid.Parse(path.Base(blockDir)); err != nil {
+		return errors.Errorf("given directory is not block directory %s", blockDir)
+	}
+
+	if err := objstore.DownloadDir(ctx, bucket, blockDir, dst); err != nil {
+		return err
+	}
+
+	chunksDir := filepath.Join(dst, "chunks")
+	_, err := os.Stat(chunksDir)
+	if os.IsNotExist(err) {
+		// This can happen if block is empty. We cannot easily upload empty directory, so create one here.
+		return os.Mkdir(chunksDir, os.ModePerm)
+	}
+
+	if err != nil {
+		return errors.Wrapf(err, "stat %s", chunksDir)
+	}
+
+	return nil
+}
+
+// DownloadMeta downloads only meta file from bucket by block ID.
+func DownloadMeta(ctx context.Context, bkt objstore.Bucket, id ulid.ULID) (Meta, error) {
+	rc, err := bkt.Get(ctx, path.Join(id.String(), "meta.json"))
+	if err != nil {
+		return Meta{}, errors.Wrapf(err, "meta.json bkt get for %s", id.String())
+	}
+	defer rc.Close()
+
+	// Do a full decode/encode cycle to ensure we only print valid JSON.
+	var m Meta
+
+	if err := json.NewDecoder(rc).Decode(&m); err != nil {
+		return Meta{}, errors.Wrapf(err, "decode meta.json for block %s", id.String())
+	}
+	return m, nil
+}
+
+// Foreach runs doFn for each block ID in the given bucket.
+func Foreach(ctx context.Context, bucket objstore.Bucket, doFn func(ulid.ULID) error) error {
+	return bucket.Iter(ctx, "", func(name string) error {
+		if !strings.HasSuffix(name, "/") {
+			return nil
+		}
+		id, err := ulid.Parse(name[:len(name)-1])
+		if err != nil {
+			return nil
+		}
+
+		return doFn(id)
+	})
 }

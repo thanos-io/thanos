@@ -10,7 +10,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/compact"
+	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
@@ -30,7 +30,7 @@ var (
 	}
 
 	issuesMap = map[string]verifier.Issue{
-		verifier.IndexIssueID: verifier.IndexIssue(),
+		verifier.IndexIssueID:            verifier.IndexIssue(),
 		verifier.OverlappedBlocksIssueID: verifier.OverlappedBlocksIssue(),
 	}
 )
@@ -112,7 +112,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 			enc.SetIndent("", "\t")
 
 			printBlock = func(id ulid.ULID) error {
-				m, err := compact.DownloadMeta(ctx, bkt, id)
+				m, err := block.DownloadMeta(ctx, bkt, id)
 				if err != nil {
 					return err
 				}
@@ -124,7 +124,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 				return errors.Wrap(err, "invalid template")
 			}
 			printBlock = func(id ulid.ULID) error {
-				m, err := compact.DownloadMeta(ctx, bkt, id)
+				m, err := block.DownloadMeta(ctx, bkt, id)
 				if err != nil {
 					return err
 				}
@@ -137,7 +137,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 			}
 		}
 
-		return compact.ForeachBlockID(ctx, bkt, printBlock)
+		return block.Foreach(ctx, bkt, printBlock)
 	}
 }
 

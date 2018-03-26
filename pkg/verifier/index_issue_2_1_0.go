@@ -11,7 +11,6 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/compact"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
@@ -27,7 +26,7 @@ func IndexIssue() Issue {
 	return func(ctx context.Context, logger log.Logger, bkt objstore.Bucket, repair bool) error {
 		level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", IndexIssueID)
 
-		err := compact.ForeachBlockID(ctx, bkt, func(id ulid.ULID) error {
+		blockFn := func(id ulid.ULID) error {
 			tmpdir, err := ioutil.TempDir("", fmt.Sprintf("index-issue-block-%s", id))
 			if err != nil {
 				return err
@@ -55,7 +54,7 @@ func IndexIssue() Issue {
 
 			level.Info(logger).Log("msg", "repairing block", "id", id, "issue", IndexIssueID)
 
-			meta, err := compact.DownloadMeta(ctx, bkt, id)
+			meta, err := block.DownloadMeta(ctx, bkt, id)
 			if err != nil {
 				return errors.Wrap(err, "download meta file")
 			}
@@ -85,8 +84,9 @@ func IndexIssue() Issue {
 			}
 
 			return nil
-		})
+		}
 
+		err := block.Foreach(ctx, bkt, blockFn)
 		if err != nil {
 			return errors.Wrap(err, IndexIssueID)
 		}
