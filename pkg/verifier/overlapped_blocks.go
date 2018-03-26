@@ -24,21 +24,28 @@ func OverlappedBlocksIssue() Issue {
 	return func(ctx context.Context, logger log.Logger, bkt objstore.Bucket, repair bool) error {
 		level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", OverlappedBlocksIssueID)
 
-		var metas []block.Meta
+		metas := map[string][]block.Meta{}
 		err := block.Foreach(ctx, bkt, func(id ulid.ULID) error {
 			m, err := block.DownloadMeta(ctx, bkt, id)
 			if err != nil {
 				return err
 			}
 
-			metas = append(metas, m)
+			metas[compact.GroupKey(m)] = append(metas[compact.GroupKey(m)], m)
 			return nil
 		})
 		if err != nil {
 			return errors.Wrap(err, OverlappedBlocksIssueID)
 		}
 
-		overlappedBlocks := findOverlappedBlocks(metas)
+		var overlappedBlocks [][]block.Meta
+		for _, groupMetas := range metas {
+			overlap := findOverlappedBlocks(groupMetas)
+			if len(overlap) > 0 {
+				overlappedBlocks = append(overlappedBlocks, overlap...)
+			}
+		}
+
 		if len(overlappedBlocks) == 0 {
 			// All good.
 			return nil
