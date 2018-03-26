@@ -102,13 +102,9 @@ func renameFile(from, to string) error {
 	return pdir.Close()
 }
 
-// DownloadDir downloads directory that is mean to be block directory (ends with ULID and contains block data).
-func DownloadDir(ctx context.Context, bucket objstore.Bucket, blockDir, dst string) error {
-	if _, err := ulid.Parse(path.Base(blockDir)); err != nil {
-		return errors.Errorf("given directory is not block directory %s", blockDir)
-	}
-
-	if err := objstore.DownloadDir(ctx, bucket, blockDir, dst); err != nil {
+// DownloadDir downloads directory that is mean to be block directory.
+func DownloadDir(ctx context.Context, bucket objstore.Bucket, id ulid.ULID, dst string) error {
+	if err := objstore.DownloadDir(ctx, bucket, id.String(), dst); err != nil {
 		return err
 	}
 
@@ -126,6 +122,12 @@ func DownloadDir(ctx context.Context, bucket objstore.Bucket, blockDir, dst stri
 	return nil
 }
 
+// DeleteDir removes directory that is mean to be block directory.
+// NOTE: Prefer this method instead of objstore.DeleteDir to avoid deleting empty dir (whole bucket) by mistake.
+func DeleteDir(ctx context.Context, bucket objstore.Bucket, id ulid.ULID) error {
+	return objstore.DeleteDir(ctx, bucket, id.String())
+}
+
 // DownloadMeta downloads only meta file from bucket by block ID.
 func DownloadMeta(ctx context.Context, bkt objstore.Bucket, id ulid.ULID) (Meta, error) {
 	rc, err := bkt.Get(ctx, path.Join(id.String(), "meta.json"))
@@ -134,9 +136,7 @@ func DownloadMeta(ctx context.Context, bkt objstore.Bucket, id ulid.ULID) (Meta,
 	}
 	defer rc.Close()
 
-	// Do a full decode/encode cycle to ensure we only print valid JSON.
 	var m Meta
-
 	if err := json.NewDecoder(rc).Decode(&m); err != nil {
 		return Meta{}, errors.Wrapf(err, "decode meta.json for block %s", id.String())
 	}

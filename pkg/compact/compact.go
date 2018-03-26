@@ -334,7 +334,7 @@ func (c *Syncer) garbageCollect(ctx context.Context, resolution int64) error {
 
 		level.Info(c.logger).Log("msg", "deleting outdated block", "block", id)
 
-		err := objstore.DeleteDir(delCtx, c.bkt, id.String())
+		err := block.DeleteDir(delCtx, c.bkt, id)
 		cancel()
 		if err != nil {
 			return errors.Wrapf(err, "delete block %s from bucket", id)
@@ -512,8 +512,12 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 
 	for _, b := range plan {
 		idStr := filepath.Base(b)
+		id, err := ulid.Parse(idStr)
+		if err != nil {
+			return id, errors.Wrapf(err, "plan dir %s", b)
+		}
 
-		if err := block.DownloadDir(ctx, cg.bkt, idStr, b); err != nil {
+		if err := block.DownloadDir(ctx, cg.bkt, id, b); err != nil {
 			return id, errors.Wrapf(err, "download block %s", idStr)
 		}
 

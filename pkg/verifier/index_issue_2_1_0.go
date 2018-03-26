@@ -79,7 +79,7 @@ func IndexIssue() Issue {
 			if err != nil {
 				return errors.Wrapf(err, "upload of %s failed", resid)
 			}
-			if err := objstore.DeleteDir(ctx, bkt, id.String()); err != nil {
+			if err := block.DeleteDir(ctx, bkt, id); err != nil {
 				return errors.Wrapf(err, "deleting old block %s failed", id)
 			}
 

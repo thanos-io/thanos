@@ -12,8 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/objstore"
-
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/ulid"
@@ -101,7 +99,7 @@ func TestShipper_UploadBlocks(t *testing.T) {
 			expFiles[id.String()+"/chunks/0001"] = []byte("chunkcontents1")
 			expFiles[id.String()+"/chunks/0002"] = []byte("chunkcontents2")
 		} else {
-			testutil.Ok(t, objstore.DeleteDir(ctx, bucket, ids[4].String()))
+			testutil.Ok(t, block.DeleteDir(ctx, bucket, ids[4]))
 		}
 		// The shipper meta file should show all blocks as uploaded.
 		shipMeta, err := ReadMetaFile(dir)
