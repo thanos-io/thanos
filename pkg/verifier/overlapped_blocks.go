@@ -110,7 +110,7 @@ func findOverlappedBlocks(metas []block.Meta) (overlappedBlocks [][]block.Meta) 
 		if len(rollingBlocks) > 0 {
 			var overlaps []block.Meta
 			for _, r := range rollingBlocks {
-				// It can happen that blocks started or finished in the same time. That's not a collision.
+				// It can happen that two blocks one started, second finished in the same time. That's not a collision.
 				if r.MinTime == currT.t || r.MaxTime == currT.t {
 					continue
 				}
