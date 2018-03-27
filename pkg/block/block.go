@@ -7,10 +7,8 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-
 	"context"
 	"path"
-	"strings"
 
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/oklog/ulid"
@@ -144,12 +142,6 @@ func DownloadMeta(ctx context.Context, bkt objstore.Bucket, id ulid.ULID) (Meta,
 }
 
 func IsBlockDir(path string) (id ulid.ULID, ok bool) {
-	if !strings.HasSuffix(path, "/") {
-		return id, false
-	}
 	id, err := ulid.Parse(filepath.Base(path))
-	if err != nil {
-		return id, false
-	}
-	return id, true
+	return id, err == nil
 }
