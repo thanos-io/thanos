@@ -186,12 +186,8 @@ func VerifyIndex(fn string) error {
 		if lastLset != nil && labels.Compare(lastLset, lset) >= 0 {
 			return errors.Errorf("series %v out of order; previous %v", lset, lastLset)
 		}
-		l0 := lset[0]
-		for _, l := range lset[1:] {
-			if l.Name <= l0.Name {
-				return errors.Errorf("out-of-order label set %s for series %d", lset, id)
-			}
-			l0 = l
+		if !sort.IsSorted(lset) {
+			return errors.Errorf("out-of-order label set %s for series %d", lset, id)
 		}
 		if len(chks) == 0 {
 			return errors.Errorf("empty chunks for series %d", id)
