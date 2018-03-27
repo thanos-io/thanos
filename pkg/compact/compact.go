@@ -571,29 +571,28 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	if err := objstore.UploadDir(ctx, cg.bkt, bdir, compID.String()); err != nil {
 		return compID, errors.Wrap(err, "upload block")
 	}
-	level.Debug(cg.logger).Log("msg", "uploaded block", "block", compID, "duration", time.Since(begin))
+	level.Debug(cg.logger).Log("msg", "uploaded block", "result_block", compID, "duration", time.Since(begin))
 
 	// Delete the blocks we just compacted from the group and bucket so they do not get included
 	// into the next planning cycle.
 	// Eventually the block we just uploaded should get synced into the group again (including sync-delay).
 	for _, b := range plan {
-		idStr := filepath.Base(b)
-		id, err := ulid.Parse(idStr)
+		id, err := ulid.Parse(filepath.Base(b))
 		if err != nil {
 			return compID, errors.Wrapf(err, "plan dir %s", b)
 		}
 
 		if err := os.RemoveAll(b); err != nil {
-			return compID, errors.Wrapf(err, "remove compacted block dir %s", id)
+			return compID, errors.Wrapf(err, "remove old block dir %s", id)
 		}
 
 		// Spawn a new context so we always delete a block in full on shutdown.
 		delCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		level.Info(cg.logger).Log("msg", "deleting compacted block", "block", id, "compacted", compID)
+		level.Info(cg.logger).Log("msg", "deleting compacted block", "old_block", id, "result_block", compID)
 		err = block.Delete(delCtx, cg.bkt, id)
 		cancel()
 		if err != nil {
-			return compID, errors.Wrapf(err, "delete compacted block %s from bucket ", id)
+			return compID, errors.Wrapf(err, "delete old block %s from bucket ", id)
 		}
 		cg.groupGarbageCollectedBlocks.Inc()
 	}
