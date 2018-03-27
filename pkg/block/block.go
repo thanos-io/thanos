@@ -7,7 +7,11 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"context"
+	"path"
 
+	"github.com/improbable-eng/thanos/pkg/objstore"
+	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/fileutil"
@@ -94,4 +98,50 @@ func renameFile(from, to string) error {
 		return err
 	}
 	return pdir.Close()
+}
+
+// Download downloads directory that is mean to be block directory.
+func Download(ctx context.Context, bucket objstore.Bucket, id ulid.ULID, dst string) error {
+	if err := objstore.DownloadDir(ctx, bucket, id.String(), dst); err != nil {
+		return err
+	}
+
+	chunksDir := filepath.Join(dst, "chunks")
+	_, err := os.Stat(chunksDir)
+	if os.IsNotExist(err) {
+		// This can happen if block is empty. We cannot easily upload empty directory, so create one here.
+		return os.Mkdir(chunksDir, os.ModePerm)
+	}
+
+	if err != nil {
+		return errors.Wrapf(err, "stat %s", chunksDir)
+	}
+
+	return nil
+}
+
+// Delete removes directory that is mean to be block directory.
+// NOTE: Prefer this method instead of objstore.Delete to avoid deleting empty dir (whole bucket) by mistake.
+func Delete(ctx context.Context, bucket objstore.Bucket, id ulid.ULID) error {
+	return objstore.DeleteDir(ctx, bucket, id.String())
+}
+
+// DownloadMeta downloads only meta file from bucket by block ID.
+func DownloadMeta(ctx context.Context, bkt objstore.Bucket, id ulid.ULID) (Meta, error) {
+	rc, err := bkt.Get(ctx, path.Join(id.String(), "meta.json"))
+	if err != nil {
+		return Meta{}, errors.Wrapf(err, "meta.json bkt get for %s", id.String())
+	}
+	defer rc.Close()
+
+	var m Meta
+	if err := json.NewDecoder(rc).Decode(&m); err != nil {
+		return Meta{}, errors.Wrapf(err, "decode meta.json for block %s", id.String())
+	}
+	return m, nil
+}
+
+func IsBlockDir(path string) (id ulid.ULID, ok bool) {
+	id, err := ulid.Parse(filepath.Base(path))
+	return id, err == nil
 }
