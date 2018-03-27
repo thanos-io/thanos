@@ -13,15 +13,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/objstore"
-
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/labels"
-
+	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/ulid"
+	"github.com/pkg/errors"
+	"github.com/prometheus/tsdb"
+	"github.com/prometheus/tsdb/labels"
 )
 
 // TODO(bplotka): Add leaktest when this is done: https://github.com/improbable-eng/thanos/issues/234
@@ -249,7 +248,15 @@ func TestGroup_Compact(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	metrics := newSyncerMetrics(nil)
-	g, err := newGroup(nil, bkt, nil, 0, metrics.compactions.WithLabelValues(""), metrics.compactionFailures.WithLabelValues(""))
+	g, err := newGroup(
+		nil,
+		bkt,
+		nil,
+		0,
+		metrics.compactions.WithLabelValues(""),
+		metrics.compactionFailures.WithLabelValues(""),
+		metrics.garbageCollectedBlocks,
+	)
 	testutil.Ok(t, err)
 
 	comp, err := tsdb.NewLeveledCompactor(nil, log.NewLogfmtLogger(os.Stderr), []int64{1000, 3000}, nil)
@@ -280,4 +287,16 @@ func TestGroup_Compact(t *testing.T) {
 	testutil.Equals(t, uint64(2*4*100), meta.Stats.NumSamples) // Only 2 times 4*100 because one block was empty.
 	testutil.Equals(t, 2, meta.Compaction.Level)
 	testutil.Equals(t, []ulid.ULID{b1, b3, b2}, meta.Compaction.Sources)
+
+	// Check object storage. All blocks that were included in new compacted one should be removed.
+	err = bkt.Iter(ctx, "", func(n string) error {
+		id := ulid.MustParse(n[:len(n)-1])
+		for _, source := range meta.Compaction.Sources {
+			if id.Compare(source) == 0 {
+				return errors.Errorf("Unexpectedly found %s block in bucket", source.String())
+			}
+		}
+		return nil
+	})
+	testutil.Ok(t, err)
 }
