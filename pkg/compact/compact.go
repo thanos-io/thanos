@@ -150,7 +150,12 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 	// Read back all block metas so we can detect deleted blocks.
 	remote := map[ulid.ULID]struct{}{}
 
-	err := block.Foreach(ctx, c.bkt, func(id ulid.ULID) error {
+	err := c.bkt.Iter(ctx, "", func(name string) error {
+		id, ok := block.IsBlockDir(name)
+		if !ok {
+			return nil
+		}
+
 		remote[id] = struct{}{}
 
 		// Check if we already have this block cached locally.
@@ -334,7 +339,7 @@ func (c *Syncer) garbageCollect(ctx context.Context, resolution int64) error {
 
 		level.Info(c.logger).Log("msg", "deleting outdated block", "block", id)
 
-		err := block.DeleteDir(delCtx, c.bkt, id)
+		err := block.Delete(delCtx, c.bkt, id)
 		cancel()
 		if err != nil {
 			return errors.Wrapf(err, "delete block %s from bucket", id)
@@ -517,7 +522,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 			return id, errors.Wrapf(err, "plan dir %s", b)
 		}
 
-		if err := block.DownloadDir(ctx, cg.bkt, id, b); err != nil {
+		if err := block.Download(ctx, cg.bkt, id, b); err != nil {
 			return id, errors.Wrapf(err, "download block %s", idStr)
 		}
 

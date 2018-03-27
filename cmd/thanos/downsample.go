@@ -223,7 +223,7 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 	begin := time.Now()
 	bdir := filepath.Join(dir, m.ULID.String())
 
-	err := block.DownloadDir(ctx, bkt, m.ULID, bdir)
+	err := block.Download(ctx, bkt, m.ULID, bdir)
 	if err != nil {
 		return errors.Wrapf(err, "download block %s", m.ULID)
 	}

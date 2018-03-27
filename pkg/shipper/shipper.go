@@ -208,7 +208,7 @@ func (s *Shipper) sync(ctx context.Context, meta *block.Meta) (err error) {
 		return nil
 	}
 	// Cleanup the dir with an uncancelable context.
-	if err2 := block.DeleteDir(context.Background(), s.bucket, meta.ULID); err2 != nil {
+	if err2 := block.Delete(context.Background(), s.bucket, meta.ULID); err2 != nil {
 		level.Warn(s.logger).Log("msg", "cleaning up block failed", "block", meta.ULID, "err", err)
 	}
 	return err

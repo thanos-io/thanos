@@ -102,8 +102,8 @@ func renameFile(from, to string) error {
 	return pdir.Close()
 }
 
-// DownloadDir downloads directory that is mean to be block directory.
-func DownloadDir(ctx context.Context, bucket objstore.Bucket, id ulid.ULID, dst string) error {
+// Download downloads directory that is mean to be block directory.
+func Download(ctx context.Context, bucket objstore.Bucket, id ulid.ULID, dst string) error {
 	if err := objstore.DownloadDir(ctx, bucket, id.String(), dst); err != nil {
 		return err
 	}
@@ -122,9 +122,9 @@ func DownloadDir(ctx context.Context, bucket objstore.Bucket, id ulid.ULID, dst 
 	return nil
 }
 
-// DeleteDir removes directory that is mean to be block directory.
-// NOTE: Prefer this method instead of objstore.DeleteDir to avoid deleting empty dir (whole bucket) by mistake.
-func DeleteDir(ctx context.Context, bucket objstore.Bucket, id ulid.ULID) error {
+// Delete removes directory that is mean to be block directory.
+// NOTE: Prefer this method instead of objstore.Delete to avoid deleting empty dir (whole bucket) by mistake.
+func Delete(ctx context.Context, bucket objstore.Bucket, id ulid.ULID) error {
 	return objstore.DeleteDir(ctx, bucket, id.String())
 }
 
@@ -143,17 +143,13 @@ func DownloadMeta(ctx context.Context, bkt objstore.Bucket, id ulid.ULID) (Meta,
 	return m, nil
 }
 
-// Foreach runs doFn for each block ID in the given bucket.
-func Foreach(ctx context.Context, bucket objstore.Bucket, doFn func(ulid.ULID) error) error {
-	return bucket.Iter(ctx, "", func(name string) error {
-		if !strings.HasSuffix(name, "/") {
-			return nil
-		}
-		id, err := ulid.Parse(name[:len(name)-1])
-		if err != nil {
-			return nil
-		}
-
-		return doFn(id)
-	})
+func IsBlockDir(path string) (id ulid.ULID, ok bool) {
+	if !strings.HasSuffix(path, "/") {
+		return id, false
+	}
+	id, err := ulid.Parse(filepath.Base(path))
+	if err != nil {
+		return id, false
+	}
+	return id, true
 }

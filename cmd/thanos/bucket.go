@@ -24,14 +24,15 @@ import (
 )
 
 var (
-	allIssues = []string{
-		verifier.IndexIssueID,
-		verifier.OverlappedBlocksIssueID,
-	}
-
 	issuesMap = map[string]verifier.Issue{
-		verifier.IndexIssueID:            verifier.IndexIssue(),
-		verifier.OverlappedBlocksIssueID: verifier.OverlappedBlocksIssue(),
+		verifier.IndexIssueID:            verifier.IndexIssue,
+		verifier.OverlappedBlocksIssueID: verifier.OverlappedBlocksIssue,
+	}
+	allIssues = func() (s []string) {
+		for id := range issuesMap {
+			s = append(s, id)
+		}
+		return s
 	}
 )
 
@@ -48,7 +49,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	verifyRepair := verify.Flag("repair", "attempt to repair blocks for which issues were detected").
 		Short('r').Default("false").Bool()
 	verifyIssues := verify.Flag("issues", "issues to verify (and optionally repair)").
-		Short('i').Default(allIssues...).Strings()
+		Short('i').Default(allIssues()...).Strings()
 	m[name+" verify"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer) error {
 		bkt, closeFn, err := getBucketClient(gcsBucket, *s3Config, reg)
 		if err != nil {
@@ -137,7 +138,13 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 			}
 		}
 
-		return block.Foreach(ctx, bkt, printBlock)
+		return bkt.Iter(ctx, "", func(name string) error {
+			id, ok := block.IsBlockDir(name)
+			if !ok {
+				return nil
+			}
+			return printBlock(id)
+		})
 	}
 }
 

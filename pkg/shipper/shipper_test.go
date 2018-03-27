@@ -99,7 +99,7 @@ func TestShipper_UploadBlocks(t *testing.T) {
 			expFiles[id.String()+"/chunks/0001"] = []byte("chunkcontents1")
 			expFiles[id.String()+"/chunks/0002"] = []byte("chunkcontents2")
 		} else {
-			testutil.Ok(t, block.DeleteDir(ctx, bucket, ids[4]))
+			testutil.Ok(t, block.Delete(ctx, bucket, ids[4]))
 		}
 		// The shipper meta file should show all blocks as uploaded.
 		shipMeta, err := ReadMetaFile(dir)

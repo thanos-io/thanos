@@ -20,57 +20,60 @@ const OverlappedBlocksIssueID = "overlapped_blocks"
 
 // OverlappedBlocksIssue checks bucket for blocks with overlapped time ranges.
 // No repair is available for this issue.
-func OverlappedBlocksIssue() Issue {
-	return func(ctx context.Context, logger log.Logger, bkt objstore.Bucket, repair bool) error {
-		level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", OverlappedBlocksIssueID)
+func OverlappedBlocksIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, repair bool) error {
+	level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", OverlappedBlocksIssueID)
 
-		metas := map[string][]block.Meta{}
-		err := block.Foreach(ctx, bkt, func(id ulid.ULID) error {
-			m, err := block.DownloadMeta(ctx, bkt, id)
-			if err != nil {
-				return err
-			}
-
-			metas[compact.GroupKey(m)] = append(metas[compact.GroupKey(m)], m)
+	metas := map[string][]block.Meta{}
+	err := bkt.Iter(ctx, "", func(name string) error {
+		id, ok := block.IsBlockDir(name)
+		if !ok {
 			return nil
-		})
+		}
+
+		m, err := block.DownloadMeta(ctx, bkt, id)
 		if err != nil {
-			return errors.Wrap(err, OverlappedBlocksIssueID)
+			return err
 		}
 
-		var overlappedBlocks [][]block.Meta
-		for _, groupMetas := range metas {
-			overlap := findOverlappedBlocks(groupMetas)
-			if len(overlap) > 0 {
-				overlappedBlocks = append(overlappedBlocks, overlap...)
-			}
-		}
+		metas[compact.GroupKey(m)] = append(metas[compact.GroupKey(m)], m)
+		return nil
+	})
+	if err != nil {
+		return errors.Wrap(err, OverlappedBlocksIssueID)
+	}
 
-		if len(overlappedBlocks) == 0 {
-			// All good.
-			return nil
+	var overlappedBlocks [][]block.Meta
+	for _, groupMetas := range metas {
+		overlap := findOverlappedBlocks(groupMetas)
+		if len(overlap) > 0 {
+			overlappedBlocks = append(overlappedBlocks, overlap...)
 		}
+	}
 
-		for _, o := range overlappedBlocks {
-			var info []string
-			for _, m := range o {
-				r := time.Duration((m.MaxTime-m.MinTime)/1000) * time.Second
-				info = append(info, fmt.Sprintf(
-					"[id: %s mint: %d maxt: %d <%s>]",
-					m.ULID.String(),
-					m.MinTime,
-					m.MaxTime,
-					r.String(),
-				))
-			}
-			level.Warn(logger).Log("msg", "found overlapped blocks", "group", compact.GroupKey(o[0]), "blocks", strings.Join(info, ","))
-		}
-
-		if repair {
-			level.Warn(logger).Log("msg", "repair is not implemented for this issue", "issue", OverlappedBlocksIssueID)
-		}
+	if len(overlappedBlocks) > 0 {
+		// All good.
 		return nil
 	}
+
+	for _, o := range overlappedBlocks {
+		var info []string
+		for _, m := range o {
+			r := time.Duration((m.MaxTime-m.MinTime)/1000) * time.Second
+			info = append(info, fmt.Sprintf(
+				"[id: %s mint: %d maxt: %d <%s>]",
+				m.ULID.String(),
+				m.MinTime,
+				m.MaxTime,
+				r.String(),
+			))
+		}
+		level.Warn(logger).Log("msg", "found overlapped blocks", "group", compact.GroupKey(o[0]), "blocks", strings.Join(info, ","))
+	}
+
+	if repair {
+		level.Warn(logger).Log("msg", "repair is not implemented for this issue", "issue", OverlappedBlocksIssueID)
+	}
+	return nil
 }
 
 type timestampToMeta struct {
@@ -89,12 +92,12 @@ func findOverlappedBlocks(metas []block.Meta) (overlappedBlocks [][]block.Meta) 
 		copy := m
 		timestamps = append(timestamps, timestampToMeta{meta: &copy, t: m.MinTime}, timestampToMeta{meta: &copy, t: m.MaxTime})
 	}
-	sort.Slice(timestamps, func(i int, j int) bool {
+	sort.SliceStable(timestamps, func(i int, j int) bool {
 		return timestamps[i].t < timestamps[j].t
 	})
 
 	// Blocks which we started but not yet finished.
-	var rollingBlocks = map[ulid.ULID]*block.Meta{}
+	rollingBlocks := map[ulid.ULID]*block.Meta{}
 	for _, currT := range timestamps {
 		_, ok := rollingBlocks[currT.meta.ULID]
 		if ok {
@@ -116,29 +119,30 @@ func findOverlappedBlocks(metas []block.Meta) (overlappedBlocks [][]block.Meta) 
 				overlaps = append(overlaps, *r)
 			}
 
-			if len(overlaps) > 0 {
-				// Check if any overlap group contains same blocks. If yes, we can add to group
-				// instead of creating new overlap slice.
-				found := false
-				for i, existingOverlaps := range overlappedBlocks {
-					// Sort to be able to compare.
-					sort.Slice(overlaps, func(i int, j int) bool {
-						return overlaps[i].ULID.Compare(overlaps[j].ULID) < 0
-					})
-					if metaSliceEquals(existingOverlaps, overlaps) {
-						found = true
-						overlappedBlocks[i] = append(overlappedBlocks[i], *currT.meta)
-						break
-					}
+			if len(overlaps) == 0 {
+				continue
+			}
+			// Check if any overlap group contains same blocks. If yes, we can add to group
+			// instead of creating new overlap slice.
+			found := false
+			for i, existingOverlaps := range overlappedBlocks {
+				// Sort to be able to compare.
+				sort.Slice(overlaps, func(i int, j int) bool {
+					return overlaps[i].ULID.Compare(overlaps[j].ULID) < 0
+				})
+				if metaSliceEquals(existingOverlaps, overlaps) {
+					found = true
+					overlappedBlocks[i] = append(overlappedBlocks[i], *currT.meta)
+					break
 				}
+			}
 
-				if !found {
-					overlaps := append(overlaps, *currT.meta)
-					sort.Slice(overlaps, func(i int, j int) bool {
-						return overlaps[i].ULID.Compare(overlaps[j].ULID) < 0
-					})
-					overlappedBlocks = append(overlappedBlocks, overlaps)
-				}
+			if !found {
+				overlaps := append(overlaps, *currT.meta)
+				sort.Slice(overlaps, func(i int, j int) bool {
+					return overlaps[i].ULID.Compare(overlaps[j].ULID) < 0
+				})
+				overlappedBlocks = append(overlappedBlocks, overlaps)
 			}
 		}
 
