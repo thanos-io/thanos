@@ -81,7 +81,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	}
 
 	ls := cmd.Command("ls", "list all blocks in the bucket")
-	lsOutput := ls.Flag("ouput", "format in which to print each block's information; may be 'json' or custom template").
+	lsOutput := ls.Flag("output", "format in which to print each block's information; may be 'json' or custom template").
 		Short('o').Default("").String()
 	m[name+" ls"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer) error {
 		bkt, closeFn, err := getBucketClient(gcsBucket, *s3Config, reg)
