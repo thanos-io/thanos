@@ -84,9 +84,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	}
 }
 
-// runStore starts a daemon that connects to a cluster of other store nodes through gossip.
-// It also connects to a Google Cloud Storage bucket and serves data queries to a subset of its contents.
-// The served subset is determined through HRW hashing against the block's ULIDs and the known peers.
+// runStore starts a daemon that serves queries to cluster peers using data from an object store.
 func runStore(
 	g *run.Group,
 	logger log.Logger,
