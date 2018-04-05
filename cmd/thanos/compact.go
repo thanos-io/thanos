@@ -117,9 +117,10 @@ func runCompact(
 		// Instantiate the compactor with different time slices. Timestamps in TSDB
 		// are in milliseconds.
 		comp, err := tsdb.NewLeveledCompactor(reg, logger, []int64{
+			int64(1 * time.Hour / time.Millisecond),
 			int64(2 * time.Hour / time.Millisecond),
 			int64(8 * time.Hour / time.Millisecond),
-			int64(2 * 24 * time.Hour / time.Millisecond),  // dwo days
+			int64(2 * 24 * time.Hour / time.Millisecond),  // 2 days
 			int64(14 * 24 * time.Hour / time.Millisecond), // 2 weeks
 		}, nil)
 		if err != nil {
