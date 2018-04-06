@@ -3,12 +3,12 @@
 package block
 
 import (
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"os"
-	"path/filepath"
-	"context"
 	"path"
+	"path/filepath"
 
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/oklog/ulid"

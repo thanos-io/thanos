@@ -24,7 +24,7 @@ const DuplicatedCompactionIssueID = "duplicated_compaction"
 // Bug resulted in source block not being removed immediately after compaction, so we were compacting again and again same sources
 // until sync-delay passes.
 // The expected result of this are same overlapped blocks with exactly the same sources, time ranges and stats.
-func DuplicatedCompactionIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, repair bool) error {
+func DuplicatedCompactionIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool) error {
 	level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", DuplicatedCompactionIssueID)
 
 	metas := map[string][]tsdb.BlockMeta{}
@@ -98,7 +98,15 @@ func DuplicatedCompactionIssue(ctx context.Context, logger log.Logger, bkt objst
 		return nil
 	}
 
-	// TODO(bplotka): Add "safe" deletion (move to special time-limited bucket).
+	for _, id := range toKill {
+		if err := SafeDelete(ctx, bkt, backupBkt, id); err != nil {
+			return err
+		}
+		level.Info(logger).Log("msg", "Removed duplicated block.", "id", id, "issue", DuplicatedCompactionIssueID)
+	}
+
+	level.Info(logger).Log("msg", "Removed all duplicated blocks. You might want to rerun this verify to check if there is still any unrelated overlap",
+		"issue", DuplicatedCompactionIssueID)
 	return nil
 }
 
