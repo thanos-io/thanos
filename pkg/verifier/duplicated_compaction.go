@@ -102,7 +102,7 @@ func DuplicatedCompactionIssue(ctx context.Context, logger log.Logger, bkt objst
 		if err := SafeDelete(ctx, bkt, backupBkt, id); err != nil {
 			return err
 		}
-		level.Info(logger).Log("msg", "Removed duplicated block.", "id", id, "issue", DuplicatedCompactionIssueID)
+		level.Info(logger).Log("msg", "Removed duplicated block", "id", id, "issue", DuplicatedCompactionIssueID)
 	}
 
 	level.Info(logger).Log("msg", "Removed all duplicated blocks. You might want to rerun this verify to check if there is still any unrelated overlap",

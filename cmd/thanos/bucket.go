@@ -47,7 +47,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	verify := cmd.Command("verify", "verify all blocks in the bucket against specified issues")
 	verifyRepair := verify.Flag("repair", "attempt to repair blocks for which issues were detected").
 		Short('r').Default("false").Bool()
-	// NOTE(bplotka): Currently we supported backup buckets only in the same project.
+	// NOTE(bplotka): Currently we support backup buckets only in the same project.
 	verifyBackupGCSBucket := cmd.Flag("gcs-backup-bucket", "Google Cloud Storage bucket name to backup blocks on repair operations.").
 		PlaceHolder("<bucket>").String()
 	verifyBackupS3Bucket := cmd.Flag("s3-backup-bucket", "S3 bucket name to backup blocks on repair operations.").
