@@ -154,8 +154,8 @@ func interrupt(cancel <-chan struct{}) error {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 	select {
-	case <-c:
-		return nil
+	case s:= <-c:
+		return errors.Errorf("caught %s signal. Exiting.", s.String())
 	case <-cancel:
 		return errors.New("canceled")
 	}

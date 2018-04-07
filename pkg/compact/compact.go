@@ -156,7 +156,6 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 		}
 
 		remote[id] = struct{}{}
-
 		// Check if we already have this block cached locally.
 		if _, ok := c.blocks[id]; ok {
 			return nil
@@ -191,6 +190,7 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 			delete(c.blocks, id)
 		}
 	}
+
 	return nil
 }
 
@@ -478,9 +478,41 @@ func IsHaltError(err error) bool {
 	return ok1 || ok2
 }
 
+func (cg *Group) areBlocksOverlapping(newBlocks ...block.Meta) error {
+	var (
+		metas   []tsdb.BlockMeta
+		exclude = map[ulid.ULID]struct{}{}
+	)
+
+	for _, m := range newBlocks {
+		metas = append(metas, m.BlockMeta)
+
+		for _, s := range m.Compaction.Sources {
+			exclude[s] = struct{}{}
+		}
+	}
+
+	for _, m := range cg.blocks {
+		if _, ok := exclude[m.ULID]; ok {
+			continue
+		}
+		metas = append(metas, m.BlockMeta)
+	}
+
+	if overlaps := tsdb.OverlappingBlocks(metas); len(overlaps) > 0 {
+		return errors.Errorf("overlaps found while gathering blocks. %s", overlaps)
+	}
+	return nil
+}
+
 func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (compID ulid.ULID, err error) {
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
+
+	// Check for overlapped blocks.
+	if err := cg.areBlocksOverlapping(); err != nil {
+		return compID, errors.Wrap(halt(err), "pre compaction overlap check")
+	}
 
 	// Planning a compaction works purely based on the meta.json files in our future group's dir.
 	// So we first dump all our memory block metas into the directory.
@@ -574,6 +606,11 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	// Ensure the output block is valid.
 	if err := block.VerifyIndex(filepath.Join(bdir, "index")); err != nil {
 		return compID, errors.Wrapf(halt(err), "invalid result block %s", bdir)
+	}
+
+	// Ensure the output block is not overlapping with anything else.
+	if err := cg.areBlocksOverlapping(*newMeta); err != nil {
+		return compID, errors.Wrapf(halt(err), "resulted compacted block %s overlaps with something", bdir)
 	}
 
 	begin = time.Now()
