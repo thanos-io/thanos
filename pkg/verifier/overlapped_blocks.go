@@ -19,6 +19,27 @@ const OverlappedBlocksIssueID = "overlapped_blocks"
 func OverlappedBlocksIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ objstore.Bucket, repair bool) error {
 	level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", OverlappedBlocksIssueID)
 
+	overlaps, err := fetchOverlaps(ctx, bkt)
+	if err != nil {
+		return errors.Wrap(err, OverlappedBlocksIssueID)
+	}
+
+	if len(overlaps) == 0 {
+		// All good.
+		return nil
+	}
+
+	for k, o := range overlaps {
+		level.Warn(logger).Log("msg", "found overlapped blocks", "group", k, "overlap", o)
+	}
+
+	if repair {
+		level.Warn(logger).Log("msg", "repair is not implemented for this issue", "issue", OverlappedBlocksIssueID)
+	}
+	return nil
+}
+
+func fetchOverlaps(ctx context.Context, bkt objstore.Bucket) (map[string]tsdb.Overlaps, error) {
 	metas := map[string][]tsdb.BlockMeta{}
 	err := bkt.Iter(ctx, "", func(name string) error {
 		id, ok := block.IsBlockDir(name)
@@ -35,7 +56,7 @@ func OverlappedBlocksIssue(ctx context.Context, logger log.Logger, bkt objstore.
 		return nil
 	})
 	if err != nil {
-		return errors.Wrap(err, OverlappedBlocksIssueID)
+		return nil, err
 	}
 
 	overlaps := map[string]tsdb.Overlaps{}
@@ -46,17 +67,5 @@ func OverlappedBlocksIssue(ctx context.Context, logger log.Logger, bkt objstore.
 		}
 	}
 
-	if len(overlaps) == 0 {
-		// All good.
-		return nil
-	}
-
-	for k, o := range overlaps {
-		level.Warn(logger).Log("msg", "found overlapped blocks", "group", k, "overlap", o)
-	}
-
-	if repair {
-		level.Warn(logger).Log("msg", "repair is not implemented for this issue", "issue", OverlappedBlocksIssueID)
-	}
-	return nil
+	return overlaps, nil
 }
