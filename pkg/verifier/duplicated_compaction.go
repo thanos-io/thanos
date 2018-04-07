@@ -21,7 +21,8 @@ const DuplicatedCompactionIssueID = "duplicated_compaction"
 // DuplicatedCompactionIssue was a bug fixed in https://github.com/improbable-eng/thanos/commit/94e26c63e52ba45b713fd998638d0e7b2492664f.
 // Bug resulted in source block not being removed immediately after compaction, so we were compacting again and again same sources
 // until sync-delay passes.
-// The expected result of this are same overlapped blocks with exactly the same sources, time ranges and stats.
+// The expected print of this are same overlapped blocks with exactly the same sources, time ranges and stats.
+// If repair is enabled, all but one duplicates are safely deleted.
 func DuplicatedCompactionIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool) error {
 	level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", DuplicatedCompactionIssueID)
 
@@ -69,18 +70,16 @@ func DuplicatedCompactionIssue(ctx context.Context, logger log.Logger, bkt objst
 		}
 	}
 
-	// The
-
+	level.Warn(logger).Log("msg", "Found duplicated blocks that are ok to be removed", "ULIDs", fmt.Sprintf("%v", toKill), "num", len(toKill), "issue", DuplicatedCompactionIssueID)
 	if !repair {
-		level.Warn(logger).Log("msg", "Found duplicated blocks that are ok to be removed", "ULIDs", fmt.Sprintf("%v", toKill), "issue", DuplicatedCompactionIssueID)
 		return nil
 	}
 
-	for _, id := range toKill {
+	for i, id := range toKill {
 		if err := SafeDelete(ctx, bkt, backupBkt, id); err != nil {
 			return err
 		}
-		level.Info(logger).Log("msg", "Removed duplicated block", "id", id, "issue", DuplicatedCompactionIssueID)
+		level.Info(logger).Log("msg", "Removed duplicated block", "id", id, "to-be-removed", len(toKill)-(i+1), "removed", i+1, "issue", DuplicatedCompactionIssueID)
 	}
 
 	level.Info(logger).Log("msg", "Removed all duplicated blocks. You might want to rerun this verify to check if there is still any unrelated overlap",
