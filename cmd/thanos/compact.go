@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -130,6 +131,11 @@ func runCompact(
 		ctx, cancel := context.WithCancel(context.Background())
 
 		f := func() error {
+			var (
+				compactDir      = path.Join(dataDir, "compact-work-dir")
+				downsamplingDir = path.Join(dataDir, "downsampling-work-dir")
+			)
+
 			// Loop over bucket and compact until there's no work left.
 			for {
 				if err := sy.SyncMetas(ctx); err != nil {
@@ -144,9 +150,12 @@ func runCompact(
 				}
 				done := true
 				for _, g := range groups {
-					os.RemoveAll(dataDir)
+					if err := os.RemoveAll(compactDir); err != nil {
+						return errors.Wrap(err, "clean working directory before compact")
+					}
+
 					// While we do all compactions sequentially we just compact within the top-level dir.
-					id, err := g.Compact(ctx, dataDir, comp)
+					id, err := g.Compact(ctx, compactDir, comp)
 					if err == nil {
 						// If the returned ID has a zero value, the group had no blocks to be compacted.
 						// We keep going through the outer loop until no group has any work left.
@@ -177,13 +186,13 @@ func runCompact(
 			// for 5m downsamplings created in the first run.
 			level.Info(logger).Log("msg", "start first pass of downsampling")
 
-			if err := downsampleBucket(ctx, logger, bkt, dataDir); err != nil {
+			if err := downsampleBucket(ctx, logger, bkt, downsamplingDir); err != nil {
 				return errors.Wrap(err, "first pass of downsampling failed")
 			}
 
 			level.Info(logger).Log("msg", "start second pass of downsampling")
 
-			if err := downsampleBucket(ctx, logger, bkt, dataDir); err != nil {
+			if err := downsampleBucket(ctx, logger, bkt, downsamplingDir); err != nil {
 				return errors.Wrap(err, "second pass of downsampling failed")
 			}
 			return nil
