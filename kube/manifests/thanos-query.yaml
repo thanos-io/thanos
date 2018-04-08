@@ -24,6 +24,7 @@ spec:
         - "query"
         - "--log.level=debug"
         - "--cluster.peers=thanos-peers.default.svc.cluster.local:10900"
+        - "--query.replica-label=replica"
         ports:
         - name: http
           containerPort: 10902
@@ -49,5 +50,3 @@ spec:
     app: thanos-query
   sessionAffinity: None
   type: NodePort
-status:
-  loadBalancer: {}

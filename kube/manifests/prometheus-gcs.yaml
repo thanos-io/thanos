@@ -7,7 +7,7 @@ metadata:
     thanos-peer: "true"
 spec:
   serviceName: "prometheus"
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: prometheus-gcs
@@ -18,16 +18,32 @@ spec:
         app: prometheus-gcs
         thanos-peer: "true"
     spec:
+## Commented out because Minikube has only one node, should be commented in for any production setup
+#      affinity:
+#        podAntiAffinity:
+#          requiredDuringSchedulingIgnoredDuringExecution:
+#          - labelSelector:
+#              matchExpressions:
+#              - key: app
+#                operator: In
+#                values:
+#                - prometheus
+#            topologyKey: kubernetes.io/hostname
       containers:
       - name: prometheus
         image: quay.io/prometheus/prometheus:v2.0.0
-        args:
-        - "--storage.tsdb.retention=24h"
-        - "--config.file=/etc/prometheus/prometheus.yml"
-        - "--storage.tsdb.path=/var/prometheus"
-        - "--storage.tsdb.min-block-duration=2h"
-        - "--storage.tsdb.max-block-duration=2h"
-        - "--web.enable-lifecycle"
+        command:
+        - "/bin/sh"
+        - "-c"
+        - >-
+            sed s/'@@HOSTNAME@@'/${HOSTNAME}/g /etc/prometheus/prometheus.yml.tmpl > /tmp/prometheus.yml
+            && exec /bin/prometheus
+            --storage.tsdb.retention=24h
+            --config.file=/tmp/prometheus.yml
+            --storage.tsdb.path=/var/prometheus
+            --storage.tsdb.min-block-duration=2h
+            --storage.tsdb.max-block-duration=2h
+            --web.enable-lifecycle
         ports:
         - name: http
           containerPort: 9090
@@ -78,10 +94,11 @@ kind: ConfigMap
 metadata:
   name: prometheus-config-gcs
 data:
-  prometheus.yml: |-
+  prometheus.yml.tmpl: |-
     global:
       external_labels:
         monitor: prometheus
+        replica: '@@HOSTNAME@@'
 
     scrape_configs:
     - job_name: kubelets
