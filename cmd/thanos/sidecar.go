@@ -122,6 +122,14 @@ func runSidecar(
 
 	// Setup all the concurrent groups.
 	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			return reloader.Watch(ctx)
+		}, func(error) {
+			cancel()
+		})
+	}
+	{
 		promUp := prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "thanos_sidecar_prometheus_up",
 			Help: "Boolean indicator whether the sidecar can reach its Prometheus peer.",
@@ -196,14 +204,6 @@ func runSidecar(
 		}, func(error) {
 			cancel()
 			peer.Close(2 * time.Second)
-		})
-	}
-	{
-		ctx, cancel := context.WithCancel(context.Background())
-		g.Add(func() error {
-			return reloader.Watch(ctx)
-		}, func(error) {
-			cancel()
 		})
 	}
 	{
