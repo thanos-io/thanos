@@ -27,6 +27,7 @@ spec:
         - "--storage.tsdb.path=/var/prometheus"
         - "--storage.tsdb.min-block-duration=2h"
         - "--storage.tsdb.max-block-duration=2h"
+        - "--web.enable-lifecycle"
         ports:
         - name: http
           containerPort: 9090
