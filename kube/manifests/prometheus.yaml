@@ -32,24 +32,19 @@ spec:
       containers:
       - name: prometheus
         image: quay.io/prometheus/prometheus:v2.0.0
-        command:
-        - "/bin/sh"
-        - "-c"
-        - >-
-            sed s/'@@HOSTNAME@@'/${HOSTNAME}/g /etc/prometheus/prometheus.yml.tmpl > /tmp/prometheus.yml
-            && exec /bin/prometheus
-            --storage.tsdb.retention=24h
-            --config.file=/tmp/prometheus.yml
-            --storage.tsdb.path=/var/prometheus
-            --storage.tsdb.min-block-duration=2h
-            --storage.tsdb.max-block-duration=2h
-            --web.enable-lifecycle
+        args:
+        - "--storage.tsdb.retention=24h"
+        - "--config.file=/etc/prometheus-shared/prometheus.yml"
+        - "--storage.tsdb.path=/var/prometheus"
+        - "--storage.tsdb.min-block-duration=2h"
+        - "--storage.tsdb.max-block-duration=2h"
+        - "--web.enable-lifecycle"
         ports:
         - name: http
           containerPort: 9090
         volumeMounts:
-        - name: config
-          mountPath: /etc/prometheus
+        - name: config-shared
+          mountPath: /etc/prometheus-shared
         - name: data
           mountPath: /var/prometheus
       - name: thanos-sidecar
@@ -60,6 +55,8 @@ spec:
         - "--tsdb.path=/var/prometheus"
         - "--prometheus.url=http://127.0.0.1:9090"
         - "--cluster.peers=thanos-peers.default.svc.cluster.local:10900"
+        - "--reloader.config-file=/etc/prometheus/prometheus.yml.tmpl"
+        - "--reloader.config-envsubst-file=/etc/prometheus-shared/prometheus.yml"
         ports:
         - name: http
           containerPort: 10902
@@ -70,10 +67,16 @@ spec:
         volumeMounts:
         - name: data
           mountPath: /var/prometheus
+        - name: config-shared
+          mountPath: /etc/prometheus-shared
+        - name: config
+          mountPath: /etc/prometheus
       volumes:
       - name: config
         configMap:
           name: prometheus-config
+      - name: config-shared
+        emptyDir: {}
       - name: data
         emptyDir: {}
 ---
@@ -86,7 +89,7 @@ data:
     global:
       external_labels:
         monitor: prometheus
-        replica: '@@HOSTNAME@@'
+        replica: '$(HOSTNAME)'
 
     scrape_configs:
     - job_name: kubelets
