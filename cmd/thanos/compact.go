@@ -132,8 +132,8 @@ func runCompact(
 
 		f := func() error {
 			var (
-				compactDir      = path.Join(dataDir, "compact-work-dir")
-				downsamplingDir = path.Join(dataDir, "downsampling-work-dir")
+				compactDir      = path.Join(dataDir, "compact")
+				downsamplingDir = path.Join(dataDir, "downsample")
 			)
 
 			// Loop over bucket and compact until there's no work left.
@@ -150,10 +150,6 @@ func runCompact(
 				}
 				done := true
 				for _, g := range groups {
-					if err := os.RemoveAll(compactDir); err != nil {
-						return errors.Wrap(err, "clean working directory before compact")
-					}
-
 					// While we do all compactions sequentially we just compact within the top-level dir.
 					id, err := g.Compact(ctx, compactDir, comp)
 					if err == nil {

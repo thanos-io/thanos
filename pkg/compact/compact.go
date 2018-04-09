@@ -441,9 +441,13 @@ func (cg *Group) Resolution() int64 {
 // Compact plans and runs a single compaction against the group. The compacted result
 // is uploaded into the bucket the blocks were retrieved from.
 func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor) (ulid.ULID, error) {
+	if err := os.RemoveAll(dir); err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "clean compaction dir")
+	}
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return ulid.ULID{}, errors.Wrap(err, "create compaction dir")
 	}
+
 	id, err := cg.compact(ctx, dir, comp)
 	if err != nil {
 		cg.compactionFailures.Inc()
