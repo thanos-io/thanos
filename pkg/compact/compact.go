@@ -4,23 +4,22 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"sync"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/compact/downsample"
-
-	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/prometheus/tsdb/labels"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/compact/downsample"
+	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/tsdb"
+	"github.com/prometheus/tsdb/labels"
 )
 
 // Syncer syncronizes block metas from a bucket into a local directory.
@@ -441,10 +440,16 @@ func (cg *Group) Resolution() int64 {
 // Compact plans and runs a single compaction against the group. The compacted result
 // is uploaded into the bucket the blocks were retrieved from.
 func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor) (ulid.ULID, error) {
-	if err := os.MkdirAll(dir, 0777); err != nil {
-		return ulid.ULID{}, errors.Wrap(err, "create compaction dir")
+	subDir := path.Join(dir, cg.Key())
+
+	if err := os.RemoveAll(subDir); err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "clean compaction group dir")
 	}
-	id, err := cg.compact(ctx, dir, comp)
+	if err := os.MkdirAll(subDir, 0777); err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "create compaction group dir")
+	}
+
+	id, err := cg.compact(ctx, subDir, comp)
 	if err != nil {
 		cg.compactionFailures.Inc()
 	}
@@ -508,6 +513,11 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		if err != nil {
 			return compID, errors.Wrapf(err, "read meta from %s", pdir)
 		}
+
+		if cg.Key() != GroupKey(*meta) {
+			return compID, halt(errors.Wrapf(err, "compact planned compaction for mixed groups. group: %s, planned block's group: %s", cg.Key(), GroupKey(*meta)))
+		}
+
 		for _, s := range meta.Compaction.Sources {
 			if _, ok := uniqueSources[s]; ok {
 				return compID, halt(errors.Errorf("overlapping sources detected for plan %v", plan))
