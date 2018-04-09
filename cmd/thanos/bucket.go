@@ -63,7 +63,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 		backupS3Config := *s3Config
 		backupS3Config.Bucket = *verifyBackupS3Bucket
 		backupBkt, backupCloseFn, err := client.NewBucket(verifyBackupGCSBucket, backupS3Config, reg)
-		if err == client.NotFoundError {
+		if err == client.ErrNotFound {
 			if *verifyRepair {
 				return errors.Wrap(err, "repair is specified, so backup client is required")
 			}

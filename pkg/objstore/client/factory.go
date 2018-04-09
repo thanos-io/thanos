@@ -11,7 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-var NotFoundError = errors.New("no valid GCS or S3 configuration supplied")
+var ErrNotFound = errors.New("no valid GCS or S3 configuration supplied")
 
 // NewBucket initializes and returns new object storage clients.
 // TODO(bplotka): Use that in every command.
@@ -32,5 +32,5 @@ func NewBucket(gcsBucket *string, s3Config s3.Config, reg *prometheus.Registry) 
 		return b, func() error { return nil }, nil
 	}
 
-	return nil, nil, NotFoundError
+	return nil, nil, ErrNotFound
 }
