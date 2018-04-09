@@ -21,7 +21,7 @@ const IndexIssueID = "index-issue-prom-2_1"
 // It rewrites the problematic blocks while fixing repairable inconsistencies.
 // If the replacement was created successfully it is uploaded to the bucket and the input
 // block is deleted.
-func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, repair bool) error {
+func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ objstore.Bucket, repair bool) error {
 	level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", IndexIssueID)
 
 	blockFn := func(name string) error {

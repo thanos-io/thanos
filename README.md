@@ -1,4 +1,4 @@
-![Thanos](docs/img/Thanos-logo_fullmedium.png)
+<p align="center"><img src="docs/img/Thanos-logo_fullmedium.png" alt="Thanos Logo"></p>
 
 ## Overview
 
