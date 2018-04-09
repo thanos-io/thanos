@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: thanos-store
-        image: improbable/thanos:latest
+        image: improbable/thanos:master
         env:
         - name: GOOGLE_APPLICATION_CREDENTIALS
           value: /creds/gcs-credentials.json

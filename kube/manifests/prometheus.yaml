@@ -48,7 +48,7 @@ spec:
         - name: data
           mountPath: /var/prometheus
       - name: thanos-sidecar
-        image: improbable/thanos:latest
+        image: improbable/thanos:master
         args:
         - "sidecar"
         - "--log.level=debug"
