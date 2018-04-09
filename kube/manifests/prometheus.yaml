@@ -7,7 +7,7 @@ metadata:
     thanos-peer: "true"
 spec:
   serviceName: "prometheus"
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: prometheus
@@ -18,12 +18,23 @@ spec:
         app: prometheus
         thanos-peer: "true"
     spec:
+## Commented out because Minikube has only one node, should be commented in for any production setup
+#      affinity:
+#        podAntiAffinity:
+#          requiredDuringSchedulingIgnoredDuringExecution:
+#          - labelSelector:
+#              matchExpressions:
+#              - key: app
+#                operator: In
+#                values:
+#                - prometheus
+#            topologyKey: kubernetes.io/hostname
       containers:
       - name: prometheus
         image: quay.io/prometheus/prometheus:v2.0.0
         args:
         - "--storage.tsdb.retention=24h"
-        - "--config.file=/etc/prometheus/prometheus.yml"
+        - "--config.file=/etc/prometheus-shared/prometheus.yml"
         - "--storage.tsdb.path=/var/prometheus"
         - "--storage.tsdb.min-block-duration=2h"
         - "--storage.tsdb.max-block-duration=2h"
@@ -32,18 +43,20 @@ spec:
         - name: http
           containerPort: 9090
         volumeMounts:
-        - name: config
-          mountPath: /etc/prometheus
+        - name: config-shared
+          mountPath: /etc/prometheus-shared
         - name: data
           mountPath: /var/prometheus
       - name: thanos-sidecar
-        image: improbable/thanos:latest
+        image: improbable/thanos:master
         args:
         - "sidecar"
         - "--log.level=debug"
         - "--tsdb.path=/var/prometheus"
         - "--prometheus.url=http://127.0.0.1:9090"
         - "--cluster.peers=thanos-peers.default.svc.cluster.local:10900"
+        - "--reloader.config-file=/etc/prometheus/prometheus.yml.tmpl"
+        - "--reloader.config-envsubst-file=/etc/prometheus-shared/prometheus.yml"
         ports:
         - name: http
           containerPort: 10902
@@ -54,10 +67,16 @@ spec:
         volumeMounts:
         - name: data
           mountPath: /var/prometheus
+        - name: config-shared
+          mountPath: /etc/prometheus-shared
+        - name: config
+          mountPath: /etc/prometheus
       volumes:
       - name: config
         configMap:
           name: prometheus-config
+      - name: config-shared
+        emptyDir: {}
       - name: data
         emptyDir: {}
 ---
@@ -66,10 +85,11 @@ kind: ConfigMap
 metadata:
   name: prometheus-config
 data:
-  prometheus.yml: |-
+  prometheus.yml.tmpl: |-
     global:
       external_labels:
         monitor: prometheus
+        replica: '$(HOSTNAME)'
 
     scrape_configs:
     - job_name: kubelets
