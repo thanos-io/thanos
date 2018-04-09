@@ -60,6 +60,8 @@ spec:
         - "--cluster.peers=thanos-peers.default.svc.cluster.local:10900"
        # NOTE: This is required to be added in GCS prior startup of this.
         - "--gcs.bucket=<bucket-name>"
+        - "--reloader.config-file=/etc/prometheus/prometheus.yml.tmpl"
+        - "--reloader.config-envsubst-file=/etc/prometheus-shared/prometheus.yml"
         ports:
         - name: http
           containerPort: 10902
