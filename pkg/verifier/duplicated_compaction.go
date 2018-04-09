@@ -10,8 +10,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/compact"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
@@ -23,35 +21,14 @@ const DuplicatedCompactionIssueID = "duplicated_compaction"
 // DuplicatedCompactionIssue was a bug fixed in https://github.com/improbable-eng/thanos/commit/94e26c63e52ba45b713fd998638d0e7b2492664f.
 // Bug resulted in source block not being removed immediately after compaction, so we were compacting again and again same sources
 // until sync-delay passes.
-// The expected result of this are same overlapped blocks with exactly the same sources, time ranges and stats.
-func DuplicatedCompactionIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, repair bool) error {
+// The expected print of this are same overlapped blocks with exactly the same sources, time ranges and stats.
+// If repair is enabled, all but one duplicates are safely deleted.
+func DuplicatedCompactionIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool) error {
 	level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", DuplicatedCompactionIssueID)
 
-	metas := map[string][]tsdb.BlockMeta{}
-	err := bkt.Iter(ctx, "", func(name string) error {
-		id, ok := block.IsBlockDir(name)
-		if !ok {
-			return nil
-		}
-
-		m, err := block.DownloadMeta(ctx, bkt, id)
-		if err != nil {
-			return err
-		}
-
-		metas[compact.GroupKey(m)] = append(metas[compact.GroupKey(m)], m.BlockMeta)
-		return nil
-	})
+	overlaps, err := fetchOverlaps(ctx, bkt)
 	if err != nil {
 		return errors.Wrap(err, DuplicatedCompactionIssueID)
-	}
-
-	overlaps := map[string]tsdb.Overlaps{}
-	for k, groupMetas := range metas {
-		o := tsdb.OverlappingBlocks(groupMetas)
-		if len(o) > 0 {
-			overlaps[k] = o
-		}
 	}
 
 	if len(overlaps) == 0 {
@@ -88,17 +65,25 @@ func DuplicatedCompactionIssue(ctx context.Context, logger log.Logger, bkt objst
 
 			if len(dups) == 0 {
 				level.Warn(logger).Log("msg", "found overlapped blocks, but all of the blocks are unique. Seems like unrelated issue. Ignoring overlap", "group", k,
-					"range", fmt.Sprintf("%v", r), "overlap", sprintMetas(blocks), "err", err, "issue", DuplicatedCompactionIssueID)
+					"range", fmt.Sprintf("%v", r), "overlap", sprintMetas(blocks), "issue", DuplicatedCompactionIssueID)
 			}
 		}
 	}
 
+	level.Warn(logger).Log("msg", "Found duplicated blocks that are ok to be removed", "ULIDs", fmt.Sprintf("%v", toKill), "num", len(toKill), "issue", DuplicatedCompactionIssueID)
 	if !repair {
-		level.Warn(logger).Log("msg", "Found duplicated blocks that are ok to be removed", "ULIDs", fmt.Sprintf("%v", toKill), "issue", DuplicatedCompactionIssueID)
 		return nil
 	}
 
-	// TODO(bplotka): Add "safe" deletion (move to special time-limited bucket).
+	for i, id := range toKill {
+		if err := SafeDelete(ctx, bkt, backupBkt, id); err != nil {
+			return err
+		}
+		level.Info(logger).Log("msg", "Removed duplicated block", "id", id, "to-be-removed", len(toKill)-(i+1), "removed", i+1, "issue", DuplicatedCompactionIssueID)
+	}
+
+	level.Info(logger).Log("msg", "Removed all duplicated blocks. You might want to rerun this verify to check if there is still any unrelated overlap",
+		"issue", DuplicatedCompactionIssueID)
 	return nil
 }
 

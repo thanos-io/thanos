@@ -11,15 +11,15 @@ import (
 
 // Issue is an function that does verification and repair only if repair arg is true.
 // It should log affected blocks using warn level logs. It should be safe for issue to run on healthy bucket.
-type Issue func(ctx context.Context, logger log.Logger, bkt objstore.Bucket, repair bool) error
+type Issue func(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool) error
 
 // Verifier runs given issues to verify if bucket is healthy.
 type Verifier struct {
-	logger log.Logger
-	bkt    objstore.Bucket
-	repair bool
-
-	issues []Issue
+	logger    log.Logger
+	bkt       objstore.Bucket
+	backupBkt objstore.Bucket
+	issues    []Issue
+	repair    bool
 }
 
 // New returns verifier that only logs affected blocks.
@@ -28,19 +28,18 @@ func New(logger log.Logger, bkt objstore.Bucket, issues []Issue) *Verifier {
 		logger: logger,
 		bkt:    bkt,
 		issues: issues,
-
 		repair: false,
 	}
 }
 
 // NewWithRepair returns verifier that logs affected blocks and attempts to repair them.
-func NewWithRepair(logger log.Logger, bkt objstore.Bucket, issues []Issue) *Verifier {
+func NewWithRepair(logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, issues []Issue) *Verifier {
 	return &Verifier{
-		logger: logger,
-		bkt:    bkt,
-		issues: issues,
-
-		repair: true,
+		logger:    logger,
+		bkt:       bkt,
+		backupBkt: backupBkt,
+		issues:    issues,
+		repair:    true,
 	}
 }
 
@@ -59,7 +58,7 @@ func (v *Verifier) Verify(ctx context.Context) error {
 	// TODO(blotka): Wrap bucket with BucketWithMetrics and print metrics after each issue (e.g how many blocks where touched).
 	// TODO(bplotka): Implement disk "bucket" to allow this verify to work on local disk space as well.
 	for _, issueFn := range v.issues {
-		err := issueFn(ctx, v.logger, v.bkt, v.repair)
+		err := issueFn(ctx, v.logger, v.bkt, v.backupBkt, v.repair)
 		if err != nil {
 			return errors.Wrap(err, "verify")
 		}

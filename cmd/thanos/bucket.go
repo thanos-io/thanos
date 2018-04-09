@@ -8,11 +8,9 @@ import (
 	"text/template"
 	"time"
 
-	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
+	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/verifier"
 	"github.com/oklog/run"
@@ -49,11 +47,30 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	verify := cmd.Command("verify", "verify all blocks in the bucket against specified issues")
 	verifyRepair := verify.Flag("repair", "attempt to repair blocks for which issues were detected").
 		Short('r').Default("false").Bool()
+	// NOTE(bplotka): Currently we support backup buckets only in the same project.
+	verifyBackupGCSBucket := cmd.Flag("gcs-backup-bucket", "Google Cloud Storage bucket name to backup blocks on repair operations.").
+		PlaceHolder("<bucket>").String()
+	verifyBackupS3Bucket := cmd.Flag("s3-backup-bucket", "S3 bucket name to backup blocks on repair operations.").
+		PlaceHolder("<bucket>").String()
 	verifyIssues := verify.Flag("issues", fmt.Sprintf("issues to verify (and optionally repair). Possible values: %v", allIssues())).
 		Short('i').Default(verifier.IndexIssueID, verifier.OverlappedBlocksIssueID).Strings()
 	m[name+" verify"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer) error {
-		bkt, closeFn, err := getBucketClient(gcsBucket, *s3Config, reg)
+		bkt, closeFn, err := client.NewBucket(gcsBucket, *s3Config, reg)
 		if err != nil {
+			return err
+		}
+
+		backupS3Config := *s3Config
+		backupS3Config.Bucket = *verifyBackupS3Bucket
+		backupBkt, backupCloseFn, err := client.NewBucket(verifyBackupGCSBucket, backupS3Config, reg)
+		if err == client.ErrNotFound {
+			if *verifyRepair {
+				return errors.Wrap(err, "repair is specified, so backup client is required")
+			}
+			// No repair - no need for backup bucket.
+			backupCloseFn = func() error { return nil }
+
+		} else if err != nil {
 			return err
 		}
 
@@ -61,6 +78,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 		g.Add(func() error { return nil }, func(error) {})
 
 		defer closeFn()
+		defer backupCloseFn()
 
 		var (
 			ctx    = context.Background()
@@ -73,7 +91,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 		}
 
 		if *verifyRepair {
-			v = verifier.NewWithRepair(logger, bkt, issues)
+			v = verifier.NewWithRepair(logger, bkt, backupBkt, issues)
 		} else {
 			v = verifier.New(logger, bkt, issues)
 		}
@@ -85,7 +103,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	lsOutput := ls.Flag("output", "format in which to print each block's information; may be 'json' or custom template").
 		Short('o').Default("").String()
 	m[name+" ls"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer) error {
-		bkt, closeFn, err := getBucketClient(gcsBucket, *s3Config, reg)
+		bkt, closeFn, err := client.NewBucket(gcsBucket, *s3Config, reg)
 		if err != nil {
 			return err
 		}
@@ -147,32 +165,4 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 			return printBlock(id)
 		})
 	}
-}
-
-func getBucketClient(gcsBucket *string, s3Config s3.Config, reg *prometheus.Registry) (objstore.Bucket, func() error, error) {
-	var (
-		bkt     objstore.Bucket
-		closeFn = func() error { return nil }
-	)
-
-	// Initialize object storage clients.
-	if *gcsBucket != "" {
-		gcsClient, err := storage.NewClient(context.Background())
-		if err != nil {
-			return bkt, closeFn, errors.Wrap(err, "create GCS client")
-		}
-		bkt = gcs.NewBucket(*gcsBucket, gcsClient.Bucket(*gcsBucket), reg)
-		closeFn = gcsClient.Close
-	} else if s3Config.Validate() == nil {
-		b, err := s3.NewBucket(&s3Config, reg)
-		if err != nil {
-			return bkt, closeFn, errors.Wrap(err, "create s3 client")
-		}
-
-		bkt = b
-	} else {
-		return bkt, closeFn, errors.New("no valid GCS or S3 configuration supplied")
-	}
-
-	return bkt, closeFn, nil
 }
