@@ -137,7 +137,7 @@ func main() {
 	{
 		cancel := make(chan struct{})
 		g.Add(func() error {
-			return interrupt(cancel)
+			return interrupt(logger, cancel)
 		}, func(error) {
 			close(cancel)
 		})
@@ -150,12 +150,13 @@ func main() {
 	level.Info(logger).Log("msg", "exiting")
 }
 
-func interrupt(cancel <-chan struct{}) error {
+func interrupt(logger log.Logger, cancel <-chan struct{}) error {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 	select {
-	case s:= <-c:
-		return errors.Errorf("caught %s signal. Exiting.", s.String())
+	case s := <-c:
+		level.Info(logger).Log("msg", "caught signal. Exiting.", "signal", s)
+		return nil
 	case <-cancel:
 		return errors.New("canceled")
 	}

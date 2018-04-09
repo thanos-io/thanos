@@ -478,18 +478,18 @@ func IsHaltError(err error) bool {
 	return ok1 || ok2
 }
 
-func (cg *Group) areBlocksOverlapping(newBlocks ...block.Meta) error {
+func (cg *Group) areBlocksOverlapping(include *block.Meta, excludeDirs ...string) error {
 	var (
 		metas   []tsdb.BlockMeta
 		exclude = map[ulid.ULID]struct{}{}
 	)
 
-	for _, m := range newBlocks {
-		metas = append(metas, m.BlockMeta)
-
-		for _, s := range m.Compaction.Sources {
-			exclude[s] = struct{}{}
+	for _, e := range excludeDirs {
+		id, err := ulid.Parse(filepath.Base(e))
+		if err != nil {
+			return errors.Wrapf(err, "overlaps find dir %s", e)
 		}
+		exclude[id] = struct{}{}
 	}
 
 	for _, m := range cg.blocks {
@@ -497,6 +497,10 @@ func (cg *Group) areBlocksOverlapping(newBlocks ...block.Meta) error {
 			continue
 		}
 		metas = append(metas, m.BlockMeta)
+	}
+
+	if include != nil {
+		metas = append(metas, include.BlockMeta)
 	}
 
 	if overlaps := tsdb.OverlappingBlocks(metas); len(overlaps) > 0 {
@@ -510,7 +514,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	defer cg.mtx.Unlock()
 
 	// Check for overlapped blocks.
-	if err := cg.areBlocksOverlapping(); err != nil {
+	if err := cg.areBlocksOverlapping(nil); err != nil {
 		return compID, errors.Wrap(halt(err), "pre compaction overlap check")
 	}
 
@@ -609,7 +613,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	}
 
 	// Ensure the output block is not overlapping with anything else.
-	if err := cg.areBlocksOverlapping(*newMeta); err != nil {
+	if err := cg.areBlocksOverlapping(newMeta, plan...); err != nil {
 		return compID, errors.Wrapf(halt(err), "resulted compacted block %s overlaps with something", bdir)
 	}
 
