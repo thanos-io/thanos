@@ -281,7 +281,7 @@ func GatherIndexIssueStats(fn string, minTime int64, maxTime int64) (stats Index
 
 // Repair open the block with given id in dir and creates a new one with the same data.
 // Fixable inconsistencies are resolved in the new block.
-func Repair(dir string, id ulid.ULID) (resid ulid.ULID, err error) {
+func Repair(dir string, id ulid.ULID, toRemove map[string][]chunks.Meta) (resid ulid.ULID, err error) {
 	bdir := filepath.Join(dir, id.String())
 	entropy := rand.New(rand.NewSource(time.Now().UnixNano()))
 	resid = ulid.MustNew(ulid.Now(), entropy)
@@ -330,7 +330,7 @@ func Repair(dir string, id ulid.ULID) (resid ulid.ULID, err error) {
 	resmeta.ULID = resid
 	resmeta.Stats = tsdb.BlockStats{} // reset stats
 
-	if err := rewrite(indexr, chunkr, indexw, chunkw, &resmeta); err != nil {
+	if err := rewrite(indexr, chunkr, indexw, chunkw, &resmeta, toRemove); err != nil {
 		return resid, errors.Wrap(err, "rewrite block")
 	}
 	if err := WriteMetaFile(resdir, &resmeta); err != nil {
@@ -343,7 +343,7 @@ var castagnoli = crc32.MakeTable(crc32.Castagnoli)
 
 // sanitizeChunkSequence ensures order of the input chunks and drops any duplicates.
 // It errors if the sequence contains non-dedupable overlaps.
-func sanitizeChunkSequence(chks []chunks.Meta) ([]chunks.Meta, error) {
+func sanitizeChunkSequence(chks []chunks.Meta, toRemove []chunks.Meta) ([]chunks.Meta, error) {
 	if len(chks) == 0 {
 		return nil, nil
 	}
@@ -354,9 +354,24 @@ func sanitizeChunkSequence(chks []chunks.Meta) ([]chunks.Meta, error) {
 	repl := make([]chunks.Meta, 0, len(chks))
 	last := chks[0]
 
+	if isThere(last.Ref, toRemove) {
+		// omit first.
+		if len(chks) == 1 {
+			return nil, nil
+		}
+		// Not checked.
+		last = chks[1]
+	}
+
 	repl = append(repl, last)
 
 	for _, c := range chks[1:] {
+		if isThere(c.Ref, toRemove) {
+			last = c
+			// Omit something that need to be removed.
+			continue
+		}
+
 		if c.MinTime > last.MaxTime {
 			repl = append(repl, c)
 			last = c
@@ -378,12 +393,21 @@ func sanitizeChunkSequence(chks []chunks.Meta) ([]chunks.Meta, error) {
 	return repl, nil
 }
 
+func isThere(ref uint64, toRemove []chunks.Meta) bool {
+	for _, t := range toRemove {
+		if ref == t.Ref {
+			return true
+		}
+	}
+	return false
+}
 // rewrite writes all data from the readers back into the writers while cleaning
 // up mis-ordered and duplicated chunks.
 func rewrite(
 	indexr tsdb.IndexReader, chunkr tsdb.ChunkReader,
 	indexw tsdb.IndexWriter, chunkw tsdb.ChunkWriter,
 	meta *Meta,
+	toRemove map[string][]chunks.Meta,
 ) error {
 	symbols, err := indexr.Symbols()
 	if err != nil {
@@ -421,7 +445,7 @@ func rewrite(
 				return err
 			}
 		}
-		chks, err := sanitizeChunkSequence(chks)
+		chks, err := sanitizeChunkSequence(chks, toRemove[lset.String()])
 		if err != nil {
 			return err
 		}
