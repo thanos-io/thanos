@@ -544,6 +544,9 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	// This is one potential source of how we could end up with duplicated chunks.
 	uniqueSources := map[ulid.ULID]struct{}{}
 
+	// Once we have a plan we need to download the actual data.
+	begin := time.Now()
+
 	for _, pdir := range plan {
 		meta, err := block.ReadMetaFile(pdir)
 		if err != nil {
@@ -560,28 +563,22 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 			}
 			uniqueSources[s] = struct{}{}
 		}
-	}
 
-	// Once we have a plan we need to download the actual data.
-	begin := time.Now()
-
-	for _, b := range plan {
-		idStr := filepath.Base(b)
-		id, err := ulid.Parse(idStr)
+		id, err := ulid.Parse(filepath.Base(pdir))
 		if err != nil {
-			return compID, errors.Wrapf(err, "plan dir %s", b)
+			return compID, errors.Wrapf(err, "plan dir %s", pdir)
 		}
 
-		if err := block.Download(ctx, cg.bkt, id, b); err != nil {
-			return compID, errors.Wrapf(err, "download block %s", idStr)
+		if err := block.Download(ctx, cg.bkt, id, pdir); err != nil {
+			return compID, errors.Wrapf(err, "download block %s", id)
 		}
 
 		// Ensure all input blocks are valid.
-		if err := block.VerifyIndex(filepath.Join(b, "index")); err != nil {
-			return compID, errors.Wrapf(halt(err), "invalid plan block %s", b)
+		if err := block.VerifyIndex(filepath.Join(pdir, "index"), meta.MinTime, meta.MaxTime); err != nil {
+			return compID, errors.Wrapf(halt(err), "invalid plan block %s", pdir)
 		}
 	}
-	level.Debug(cg.logger).Log("msg", "downloaded blocks",
+	level.Debug(cg.logger).Log("msg", "downloaded and verified blocks",
 		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin))
 
 	begin = time.Now()
@@ -608,7 +605,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	}
 
 	// Ensure the output block is valid.
-	if err := block.VerifyIndex(filepath.Join(bdir, "index")); err != nil {
+	if err := block.VerifyIndex(filepath.Join(bdir, "index"), newMeta.MinTime, newMeta.MaxTime); err != nil {
 		return compID, errors.Wrapf(halt(err), "invalid result block %s", bdir)
 	}
 

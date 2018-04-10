@@ -15,16 +15,17 @@ import (
 	"github.com/pkg/errors"
 )
 
-const IndexIssueID = "index-issue-prom-2_1"
+const IndexIssueID = "index_issue"
 
-// IndexIssue verifies TSDB index issue from Prometheus 2.1.
+// IndexIssue verifies any known index issue.
 // It rewrites the problematic blocks while fixing repairable inconsistencies.
 // If the replacement was created successfully it is uploaded to the bucket and the input
 // block is deleted.
+// NOTE: This also verifies all indexes against chunks mismatches and duplicates.
 func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ objstore.Bucket, repair bool) error {
 	level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", IndexIssueID)
 
-	blockFn := func(name string) error {
+	err := bkt.Iter(ctx, "", func(name string) error {
 		id, ok := block.IsBlockDir(name)
 		if !ok {
 			return nil
@@ -36,14 +37,26 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ o
 		}
 		defer os.RemoveAll(tmpdir)
 
-		// Get index file.
 		indexPath := filepath.Join(tmpdir, "index")
 		err = objstore.DownloadFile(ctx, bkt, path.Join(id.String(), "index"), indexPath)
 		if err != nil {
 			return errors.Wrapf(err, "download index file %s", path.Join(id.String(), "index"))
 		}
+		meta, err := block.DownloadMeta(ctx, bkt, id)
+		if err != nil {
+			return errors.Wrapf(err, "download meta file %s", id)
+		}
 
-		err = block.VerifyIndex(indexPath)
+		stats, outsiders, err := block.GatherIndexIssueStats(indexPath, meta.MinTime, meta.MaxTime)
+		if err != nil {
+			return errors.Wrapf(err, "gather index issues %s", id)
+		}
+
+		if outsiders.Len() > 0 {
+			level.Warn(logger).Log("msg", "detected outsiders", "id", id, "issue", IndexIssueID, "num", outsiders.Len())
+		}
+
+		err = stats.ErrSummary()
 		if err == nil {
 			return nil
 		}
@@ -55,12 +68,11 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ o
 			return nil
 		}
 
-		level.Info(logger).Log("msg", "repairing block", "id", id, "issue", IndexIssueID)
-
-		meta, err := block.DownloadMeta(ctx, bkt, id)
-		if err != nil {
-			return errors.Wrap(err, "download meta file")
+		if stats.OutOfOrderSum > stats.ExactSum {
+			level.Warn(logger).Log("msg", "detected overlaps are not entirely by duplicated chunks. We are able to repair only duplicates", "id", id, "issue", IndexIssueID)
 		}
+
+		level.Info(logger).Log("msg", "repairing block", "id", id, "issue", IndexIssueID)
 
 		if meta.Thanos.Downsample.Resolution > 0 {
 			return errors.New("cannot repair downsampled blocks")
@@ -72,7 +84,7 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ o
 		}
 
 		// Verify repaired block before uploading it.
-		if err := block.VerifyIndex(filepath.Join(tmpdir, resid.String(), "index")); err != nil {
+		if err := block.VerifyIndex(filepath.Join(tmpdir, resid.String(), "index"), meta.MinTime, meta.MaxTime); err != nil {
 			return errors.Wrap(err, "repaired block is invalid")
 		}
 
@@ -87,11 +99,9 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ o
 		}
 
 		return nil
-	}
-
-	err := bkt.Iter(ctx, "", blockFn)
+	})
 	if err != nil {
-		return errors.Wrap(err, IndexIssueID)
+		return errors.Wrapf(err, "verify iter, issue %s", IndexIssueID)
 	}
 
 	level.Info(logger).Log("msg", "verified issue", "with-repair", repair, "issue", IndexIssueID)

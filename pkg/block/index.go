@@ -151,73 +151,132 @@ func ReadIndexCache(fn string) (
 }
 
 // VerifyIndex does a full run over a block index and verifies that it fulfills the order invariants.
-func VerifyIndex(fn string) error {
+func VerifyIndex(fn string, minTime int64, maxTime int64) error {
+	stats, outsiders, err := GatherIndexIssueStats(fn, minTime, maxTime)
+	if err != nil {
+		return err
+	}
+
+	err = stats.ErrSummary()
+	if err != nil {
+		return errors.Wrapf(err, "outsiders: %d", outsiders.Len())
+	}
+
+	if outsiders.Len() > 0 {
+		return errors.Errorf("No chunks are out of order, but found some outsider blocks. (Blocks that outside of block time range): %d", outsiders.Len())
+	}
+
+	return nil
+}
+
+type IndexIssueStats struct {
+	Total int
+
+	OutOfOrderCount int
+	OutOfOrderSum   int
+	ExactSum        int
+}
+
+func (i IndexIssueStats) ErrSummary() error {
+	if i.OutOfOrderCount > 0 {
+		return errors.Errorf("%d/%d series have an average of %.3f out-of-order chunks. "+
+			"%.3f of these are exact duplicates (in terms of data and time range).",
+			i.OutOfOrderCount, i.Total, float64(i.OutOfOrderSum)/float64(i.OutOfOrderCount),
+			float64(i.ExactSum)/float64(i.OutOfOrderSum))
+	}
+
+	return nil
+}
+
+type ChunkOutsiders map[string][]chunks.Meta
+
+func (o ChunkOutsiders) Len() (all int) {
+	for _, chks := range o {
+		all += len(chks)
+	}
+	return all
+}
+
+// GatherIndexIssueStats returns useful counters as well as outsider chunks (chunks outside of block time range) that helps to assess index health.
+func GatherIndexIssueStats(fn string, minTime int64, maxTime int64) (stats IndexIssueStats, outsiders ChunkOutsiders, err error) {
 	r, err := index.NewFileReader(fn)
 	if err != nil {
-		return errors.Wrap(err, "open index file")
+		return stats, nil, errors.Wrap(err, "open index file")
 	}
 	defer r.Close()
 
 	p, err := r.Postings(index.AllPostingsKey())
 	if err != nil {
-		return errors.Wrap(err, "get all postings")
+		return stats, nil, errors.Wrap(err, "get all postings")
 	}
 	var (
 		lastLset labels.Labels
 		lset     labels.Labels
 		chks     []chunks.Meta
-
-		total            int
-		outOfCorderCount int
-		outOfOrderSum    int
 	)
 	for p.Next() {
 		lastLset = append(lastLset[:0], lset...)
 
 		id := p.At()
-		total++
+		stats.Total++
 
 		if err := r.Series(id, &lset, &chks); err != nil {
-			return errors.Wrap(err, "read series")
+			return stats, nil, errors.Wrap(err, "read series")
 		}
 		if len(lset) == 0 {
-			return errors.Errorf("empty label set detected for series %d", id)
+			return stats, nil, errors.Errorf("empty label set detected for series %d", id)
 		}
 		if lastLset != nil && labels.Compare(lastLset, lset) >= 0 {
-			return errors.Errorf("series %v out of order; previous %v", lset, lastLset)
+			return stats, nil, errors.Errorf("series %v out of order; previous %v", lset, lastLset)
 		}
 		l0 := lset[0]
 		for _, l := range lset[1:] {
 			if l.Name <= l0.Name {
-				return errors.Errorf("out-of-order label set %s for series %d", lset, id)
+				return stats, nil, errors.Errorf("out-of-order label set %s for series %d", lset, id)
 			}
 			l0 = l
 		}
 		if len(chks) == 0 {
-			return errors.Errorf("empty chunks for series %d", id)
+			return stats, nil, errors.Errorf("empty chunks for series %d", id)
 		}
-		c0 := chks[0]
+
 		ooo := 0
 
-		for _, c := range chks[1:] {
-			if c.MinTime <= c0.MaxTime {
+		if chks[0].MinTime < minTime || chks[0].MaxTime > maxTime {
+			outsiders[lset.String()] = append(outsiders[lset.String()], chks[0])
+		}
+		for i, c := range chks[1:] {
+			c0 := chks[i]
+
+			if c.MinTime < minTime || c.MaxTime > maxTime {
+				outsiders[lset.String()] = append(outsiders[lset.String()], chks[0])
+			}
+
+			if c.MinTime > c0.MaxTime {
+				continue
+			}
+
+			// Chunks overlaps or duplicates.
+			if c.MinTime == c0.MinTime && c.MaxTime == c0.MaxTime {
+				ca := crc32.Checksum(c0.Chunk.Bytes(), castagnoli)
+				cb := crc32.Checksum(c.Chunk.Bytes(), castagnoli)
+				if ca == cb {
+					// Duplicate.
+					stats.ExactSum++
+				}
 				ooo++
 			}
-			c0 = c
 		}
 		if ooo > 0 {
-			outOfCorderCount++
-			outOfOrderSum += ooo
+			stats.OutOfOrderCount++
+			stats.OutOfOrderSum += ooo
 		}
 	}
 	if p.Err() != nil {
-		return errors.Wrap(err, "walk postings")
+		return stats, nil, errors.Wrap(err, "walk postings")
 	}
-	if outOfCorderCount > 0 {
-		return errors.Errorf("%d/%d series have an average of %.3f out-of-order chunks",
-			outOfCorderCount, total, float64(outOfOrderSum)/float64(outOfCorderCount))
-	}
-	return nil
+
+	return stats, outsiders, nil
 }
 
 // Repair open the block with given id in dir and creates a new one with the same data.

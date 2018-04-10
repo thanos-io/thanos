@@ -87,7 +87,11 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 		)
 
 		for _, i := range *verifyIssues {
-			issues = append(issues, issuesMap[i])
+			issueFn, ok := issuesMap[i]
+			if !ok {
+				return errors.Errorf("no such issue name %s", i)
+			}
+			issues = append(issues, issueFn)
 		}
 
 		if *verifyRepair {
