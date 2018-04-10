@@ -149,7 +149,6 @@ func runCompact(
 				}
 				done := true
 				for _, g := range groups {
-					// While we do all compactions sequentially we just compact within the top-level dir.
 					id, err := g.Compact(ctx, compactDir, comp)
 					if err == nil {
 						// If the returned ID has a zero value, the group had no blocks to be compacted.
