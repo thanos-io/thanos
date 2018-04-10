@@ -84,8 +84,21 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ o
 		}
 
 		// Verify repaired block before uploading it.
-		if err := block.VerifyIndex(filepath.Join(tmpdir, resid.String(), "index"), meta.MinTime, meta.MaxTime); err != nil {
+		stats, newOutsiders, err := block.GatherIndexIssueStats(filepath.Join(tmpdir, resid.String(), "index"), meta.MinTime, meta.MaxTime)
+		if err != nil {
+			return errors.Wrapf(err, "gather index issues %s for repaired block %s", id, resid)
+		}
+
+		err = stats.ErrSummary()
+		if err != nil {
 			return errors.Wrap(err, "repaired block is invalid")
+		}
+
+		if newOutsiders.Len() > 0 {
+			level.Warn(logger).Log("msg", "detected outsiders", "id", id, "issue", IndexIssueID, "num", outsiders.Len())
+			if outsiders.Len() == 0 {
+				return errors.Wrap(err, "repaired block is invalid. New outsiders introduced.")
+			}
 		}
 
 		level.Info(logger).Log("msg", "create repaired block", "newID", resid, "issue", IndexIssueID)
