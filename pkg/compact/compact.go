@@ -156,22 +156,23 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 		}
 
 		remote[id] = struct{}{}
+
 		// Check if we already have this block cached locally.
 		if _, ok := c.blocks[id]; ok {
 			return nil
 		}
 
-		// ULIDs contain a millisecond timestamp. We do not consider blocks
-		// that have been created too recently to avoid races when a block
-		// is only partially uploaded.
-		if ulid.Now()-id.Time() < uint64(c.syncDelay/time.Millisecond) {
-			return nil
-		}
 		level.Debug(c.logger).Log("msg", "download meta", "block", id)
 
 		meta, err := block.DownloadMeta(ctx, c.bkt, id)
 		if err != nil {
-			level.Warn(c.logger).Log("msg", "downloading meta.json failed", "err", err)
+			return errors.Wrapf(err, "downloading meta.json for %s", id)
+		}
+
+		// ULIDs contain a millisecond timestamp. We do not consider blocks that have been created too recently to
+		// avoid races when a block is only partially uploaded. This relates only to level 1 blocks.
+		// NOTE: It is not safe to miss compacted block in sync step. Compactor needs to aware of ALL old blocks.
+		if meta.Compaction.Level == 1 && ulid.Now()-id.Time() < uint64(c.syncDelay/time.Millisecond) {
 			return nil
 		}
 
@@ -181,7 +182,7 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 		return nil
 	})
 	if err != nil {
-		return errors.Wrap(err, "retrieve bucket block metas")
+		return retry(errors.Wrap(err, "retrieve bucket block metas"))
 	}
 
 	// Delete all local block dirs that no longer exist in the bucket.
@@ -342,7 +343,7 @@ func (c *Syncer) garbageCollect(ctx context.Context, resolution int64) error {
 		err := block.Delete(delCtx, c.bkt, id)
 		cancel()
 		if err != nil {
-			return errors.Wrapf(err, "delete block %s from bucket", id)
+			return retry(errors.Wrapf(err, "delete block %s from bucket", id))
 		}
 
 		// Immediately update our in-memory state so no further call to SyncMetas is needed
@@ -473,9 +474,31 @@ func (e HaltError) Error() string {
 
 // IsHaltError returns true if the base error is a HaltError.
 func IsHaltError(err error) bool {
-	_, ok1 := errors.Cause(err).(HaltError)
-	_, ok2 := errors.Cause(err).(*HaltError)
-	return ok1 || ok2
+	_, ok := errors.Cause(err).(HaltError)
+	return ok
+}
+
+// RetryError is a type wrapper for errors that should trigger warning log and retry whole compaction loop, but aborting
+// current compaction further progress.
+type RetryError struct {
+	err error
+}
+
+func retry(err error) error {
+	if IsHaltError(err) {
+		return err
+	}
+	return RetryError{err: err}
+}
+
+func (e RetryError) Error() string {
+	return e.err.Error()
+}
+
+// IsRetryError returns true if the base error is a RetryError.
+func IsRetryError(err error) bool {
+	_, ok := errors.Cause(err).(RetryError)
+	return ok
 }
 
 func (cg *Group) areBlocksOverlapping(include *block.Meta, excludeDirs ...string) error {
@@ -515,7 +538,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 
 	// Check for overlapped blocks.
 	if err := cg.areBlocksOverlapping(nil); err != nil {
-		return compID, errors.Wrap(halt(err), "pre compaction overlap check")
+		return compID, halt(errors.Wrap(err, "pre compaction overlap check"))
 	}
 
 	// Planning a compaction works purely based on the meta.json files in our future group's dir.
@@ -570,12 +593,12 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		}
 
 		if err := block.Download(ctx, cg.bkt, id, pdir); err != nil {
-			return compID, errors.Wrapf(err, "download block %s", id)
+			return compID, retry(errors.Wrapf(err, "download block %s", id))
 		}
 
 		// Ensure all input blocks are valid.
 		if err := block.VerifyIndex(filepath.Join(pdir, "index"), meta.MinTime, meta.MaxTime); err != nil {
-			return compID, errors.Wrapf(halt(err), "invalid plan block %s", pdir)
+			return compID, halt(errors.Wrapf(err, "invalid plan block %s", pdir))
 		}
 	}
 	level.Debug(cg.logger).Log("msg", "downloaded and verified blocks",
@@ -585,7 +608,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 
 	compID, err = comp.Compact(dir, plan...)
 	if err != nil {
-		return compID, errors.Wrapf(err, "compact blocks %v", plan)
+		return compID, halt(errors.Wrapf(err, "compact blocks %v", plan))
 	}
 	level.Debug(cg.logger).Log("msg", "compacted blocks",
 		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin))
@@ -606,18 +629,18 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 
 	// Ensure the output block is valid.
 	if err := block.VerifyIndex(filepath.Join(bdir, "index"), newMeta.MinTime, newMeta.MaxTime); err != nil {
-		return compID, errors.Wrapf(halt(err), "invalid result block %s", bdir)
+		return compID, halt(errors.Wrapf(err, "invalid result block %s", bdir))
 	}
 
 	// Ensure the output block is not overlapping with anything else.
 	if err := cg.areBlocksOverlapping(newMeta, plan...); err != nil {
-		return compID, errors.Wrapf(halt(err), "resulted compacted block %s overlaps with something", bdir)
+		return compID, halt(errors.Wrapf(err, "resulted compacted block %s overlaps with something", bdir))
 	}
 
 	begin = time.Now()
 
 	if err := objstore.UploadDir(ctx, cg.bkt, bdir, compID.String()); err != nil {
-		return compID, errors.Wrap(err, "upload block")
+		return compID, retry(errors.Wrap(err, "upload block"))
 	}
 	level.Debug(cg.logger).Log("msg", "uploaded block", "result_block", compID, "duration", time.Since(begin))
 
@@ -640,7 +663,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		err = block.Delete(delCtx, cg.bkt, id)
 		cancel()
 		if err != nil {
-			return compID, errors.Wrapf(err, "delete old block %s from bucket ", id)
+			return compID, retry(errors.Wrapf(err, "delete old block %s from bucket ", id))
 		}
 		cg.groupGarbageCollectedBlocks.Inc()
 	}

@@ -43,7 +43,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	s3config := s3.RegisterS3Params(cmd)
 
-	syncDelay := cmd.Flag("sync-delay", "Minimum age of blocks before they are being processed.").
+	syncDelay := cmd.Flag("sync-delay", "Minimum age of fresh (non-compacted) blocks before they are being processed.").
 		Default("30m").Duration()
 
 	wait := cmd.Flag("wait", "Do not exit after all compactions have been processed and wait for new work.").
@@ -82,6 +82,10 @@ func runCompact(
 	halted := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compactor_halted",
 		Help: "Set to 1 if the compactor halted due to an unexpected error",
+	})
+	retried := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compactor_retries_total",
+		Help: "Total number of retries after retriable compactor error",
 	})
 	halted.Set(0)
 
@@ -137,12 +141,18 @@ func runCompact(
 
 			// Loop over bucket and compact until there's no work left.
 			for {
+				level.Info(logger).Log("msg", "start sync of metas")
+
 				if err := sy.SyncMetas(ctx); err != nil {
-					level.Error(logger).Log("msg", "sync failed", "err", err)
+					return errors.Wrap(err, "sync")
 				}
+
+				level.Info(logger).Log("msg", "start of GC")
+
 				if err := sy.GarbageCollect(ctx); err != nil {
-					level.Error(logger).Log("msg", "garbage collection failed", "err", err)
+					return errors.Wrap(err, "garbage")
 				}
+
 				groups, err := sy.Groups()
 				if err != nil {
 					return errors.Wrap(err, "build compaction groups")
@@ -150,32 +160,20 @@ func runCompact(
 				done := true
 				for _, g := range groups {
 					id, err := g.Compact(ctx, compactDir, comp)
-					if err == nil {
-						// If the returned ID has a zero value, the group had no blocks to be compacted.
-						// We keep going through the outer loop until no group has any work left.
-						if id != (ulid.ULID{}) {
-							done = false
-						}
-						continue
+					if err != nil {
+						return errors.Wrap(err, "compaction")
 					}
-
-					level.Error(logger).Log("msg", "compaction failed", "err", err)
-					// The HaltError type signals that we hit a critical bug and should block
-					// for investigation.
-					if compact.IsHaltError(err) {
-						if haltOnError {
-							level.Error(logger).Log("msg", "critical error detected; halting")
-							halted.Set(1)
-							select {}
-						} else {
-							return errors.Wrap(err, "critical error detected")
-						}
+					// If the returned ID has a zero value, the group had no blocks to be compacted.
+					// We keep going through the outer loop until no group has any work left.
+					if id != (ulid.ULID{}) {
+						done = false
 					}
 				}
 				if done {
 					break
 				}
 			}
+
 			// After all compactions are done, work down the downsampling backlog.
 			// We run two passes of this to ensure that the 1h downsampling is generated
 			// for 5m downsamplings created in the first run.
@@ -197,7 +195,36 @@ func runCompact(
 			if !wait {
 				return f()
 			}
-			return runutil.Repeat(5*time.Minute, ctx.Done(), f)
+
+			// --wait=true is specified.
+			return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
+				err := f()
+				if err != nil {
+					// The HaltError type signals that we hit a critical bug and should block
+					// for investigation.
+					// You should alert on this being halted.
+					if compact.IsHaltError(err) {
+						if haltOnError {
+							level.Error(logger).Log("msg", "critical error detected; halting", "err", err)
+							halted.Set(1)
+							select {}
+						} else {
+							return errors.Wrap(err, "critical error detected")
+						}
+					}
+
+					// The RetryError signals that we hit an retriable error (transient error, no connection).
+					// You should alert on this being triggered to frequently.
+					if compact.IsRetryError(err) {
+						level.Error(logger).Log("msg", "retriable error", "err", err)
+						retried.Inc()
+						// TODO(bplotka): use actual "retry()" here instead of waiting 5 minutes?
+						return nil
+					}
+				}
+
+				return err
+			})
 		}, func(error) {
 			cancel()
 		})

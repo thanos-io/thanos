@@ -13,6 +13,7 @@ import (
 )
 
 // Bucket provides read and write access to an object storage bucket.
+// NOTE: We assume strong consistency for write-read flow.
 type Bucket interface {
 	BucketReader
 
