@@ -22,7 +22,7 @@ const IndexIssueID = "index_issue"
 // If the replacement was created successfully it is uploaded to the bucket and the input
 // block is deleted.
 // NOTE: This also verifies all indexes against chunks mismatches and duplicates.
-func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ objstore.Bucket, repair bool) error {
+func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool) error {
 	level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", IndexIssueID)
 
 	err := bkt.Iter(ctx, "", func(name string) error {
@@ -31,7 +31,7 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ o
 			return nil
 		}
 
-		tmpdir, err := ioutil.TempDir("", fmt.Sprintf("index-issue-block-%s", id))
+		tmpdir, err := ioutil.TempDir("", fmt.Sprintf("index-issue-block-%s-", id))
 		if err != nil {
 			return err
 		}
@@ -78,7 +78,8 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ o
 			return errors.New("cannot repair downsampled blocks")
 		}
 
-		err = block.Download(ctx, bkt, id, tmpdir)
+		level.Info(logger).Log("msg", "downloading block to be repaired", "id", id, "issue", IndexIssueID)
+		err = block.Download(ctx, bkt, id, path.Join(tmpdir, id.String()))
 		if err != nil {
 			return errors.Errorf("download block %s", id)
 		}
@@ -100,8 +101,8 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ o
 		if err != nil {
 			return errors.Wrapf(err, "upload of %s failed", resid)
 		}
-		if err := block.Delete(ctx, bkt, id); err != nil {
-			return errors.Wrapf(err, "deleting old block %s failed", id)
+		if err := SafeDelete(ctx, bkt, backupBkt, id); err != nil {
+			return errors.Wrapf(err, "safe deleting old block %s failed", id)
 		}
 
 		return nil

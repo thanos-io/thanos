@@ -370,7 +370,7 @@ func sanitizeChunkSequence(chks []chunks.Meta, mint int64, maxt int64) ([]chunks
 			repl = append(repl, c)
 			continue
 		}
-		
+
 		last := repl[i-1]
 
 		if c.MinTime > last.MaxTime {
