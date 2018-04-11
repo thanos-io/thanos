@@ -442,6 +442,11 @@ func rewrite(
 		if err != nil {
 			return err
 		}
+
+		if len(chks) == 0 {
+			continue
+		}
+
 		if err := chunkw.WriteChunks(chks...); err != nil {
 			return errors.Wrap(err, "write chunks")
 		}
