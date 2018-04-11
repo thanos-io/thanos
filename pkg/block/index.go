@@ -152,18 +152,14 @@ func ReadIndexCache(fn string) (
 
 // VerifyIndex does a full run over a block index and verifies that it fulfills the order invariants.
 func VerifyIndex(fn string, minTime int64, maxTime int64) error {
-	stats, outsiders, err := GatherIndexIssueStats(fn, minTime, maxTime)
+	stats, err := GatherIndexIssueStats(fn, minTime, maxTime)
 	if err != nil {
 		return err
 	}
 
 	err = stats.ErrSummary()
 	if err != nil {
-		return errors.Wrapf(err, "outsiders: %d", outsiders.Len())
-	}
-
-	if outsiders.Len() > 0 {
-		return errors.Errorf("No chunks are out of order, but found some outsider blocks. (Blocks that outside of block time range): %d", outsiders.Len())
+		return err
 	}
 
 	return nil
@@ -175,45 +171,47 @@ type IndexIssueStats struct {
 	OutOfOrderCount int
 	OutOfOrderSum   int
 	ExactSum        int
+
+	// Chunks that are before or after time range in meta.
+	Outsiders int
+	// Outsiders that will be never accessed. They are completely out of time range specified in block meta.
+	CompleteOutsiders int
 }
 
 func (i IndexIssueStats) ErrSummary() error {
 	if i.OutOfOrderCount > 0 {
 		return errors.Errorf("%d/%d series have an average of %.3f out-of-order chunks. "+
-			"%.3f of these are exact duplicates (in terms of data and time range).",
+			"%.3f of these are exact duplicates (in terms of data and time range). Outsiders: %d, complete outsiders: %d",
 			i.OutOfOrderCount, i.Total, float64(i.OutOfOrderSum)/float64(i.OutOfOrderCount),
-			float64(i.ExactSum)/float64(i.OutOfOrderSum))
+			float64(i.ExactSum)/float64(i.OutOfOrderSum), i.Outsiders, i.CompleteOutsiders)
+	}
+
+	if i.Outsiders > 0 {
+		return errors.Errorf("No chunks are out of order, but found some outsider blocks. (Blocks that outside of block time range): %d. Complete: %d",
+			i.Outsiders, i.CompleteOutsiders)
 	}
 
 	return nil
 }
 
-type ChunkOutsiders map[string][]chunks.Meta
-
-func (o ChunkOutsiders) Len() (all int) {
-	for _, chks := range o {
-		all += len(chks)
-	}
-	return all
-}
-
 // GatherIndexIssueStats returns useful counters as well as outsider chunks (chunks outside of block time range) that helps to assess index health.
-func GatherIndexIssueStats(fn string, minTime int64, maxTime int64) (stats IndexIssueStats, outsiders ChunkOutsiders, err error) {
+func GatherIndexIssueStats(fn string, minTime int64, maxTime int64) (stats IndexIssueStats, err error) {
 	r, err := index.NewFileReader(fn)
 	if err != nil {
-		return stats, nil, errors.Wrap(err, "open index file")
+		return stats, errors.Wrap(err, "open index file")
 	}
 	defer r.Close()
 
 	p, err := r.Postings(index.AllPostingsKey())
 	if err != nil {
-		return stats, nil, errors.Wrap(err, "get all postings")
+		return stats, errors.Wrap(err, "get all postings")
 	}
 	var (
 		lastLset labels.Labels
 		lset     labels.Labels
 		chks     []chunks.Meta
 	)
+
 	for p.Next() {
 		lastLset = append(lastLset[:0], lset...)
 
@@ -221,35 +219,40 @@ func GatherIndexIssueStats(fn string, minTime int64, maxTime int64) (stats Index
 		stats.Total++
 
 		if err := r.Series(id, &lset, &chks); err != nil {
-			return stats, nil, errors.Wrap(err, "read series")
+			return stats, errors.Wrap(err, "read series")
 		}
 		if len(lset) == 0 {
-			return stats, nil, errors.Errorf("empty label set detected for series %d", id)
+			return stats, errors.Errorf("empty label set detected for series %d", id)
 		}
 		if lastLset != nil && labels.Compare(lastLset, lset) >= 0 {
-			return stats, nil, errors.Errorf("series %v out of order; previous %v", lset, lastLset)
+			return stats, errors.Errorf("series %v out of order; previous %v", lset, lastLset)
 		}
 		l0 := lset[0]
 		for _, l := range lset[1:] {
 			if l.Name <= l0.Name {
-				return stats, nil, errors.Errorf("out-of-order label set %s for series %d", lset, id)
+				return stats, errors.Errorf("out-of-order label set %s for series %d", lset, id)
 			}
 			l0 = l
 		}
 		if len(chks) == 0 {
-			return stats, nil, errors.Errorf("empty chunks for series %d", id)
+			return stats, errors.Errorf("empty chunks for series %d", id)
 		}
 
 		ooo := 0
-
 		if chks[0].MinTime < minTime || chks[0].MaxTime > maxTime {
-			outsiders[lset.String()] = append(outsiders[lset.String()], chks[0])
+			stats.Outsiders++
+			if chks[0].MinTime > maxTime || chks[0].MaxTime < minTime {
+				stats.CompleteOutsiders++
+			}
 		}
 		for i, c := range chks[1:] {
 			c0 := chks[i]
 
 			if c.MinTime < minTime || c.MaxTime > maxTime {
-				outsiders[lset.String()] = append(outsiders[lset.String()], chks[0])
+				stats.Outsiders++
+				if c.MinTime > maxTime || c.MaxTime < minTime {
+					stats.CompleteOutsiders++
+				}
 			}
 
 			if c.MinTime > c0.MaxTime {
@@ -273,13 +276,16 @@ func GatherIndexIssueStats(fn string, minTime int64, maxTime int64) (stats Index
 		}
 	}
 	if p.Err() != nil {
-		return stats, nil, errors.Wrap(err, "walk postings")
+		return stats, errors.Wrap(err, "walk postings")
 	}
 
-	return stats, outsiders, nil
+	return stats, nil
 }
 
 // Repair open the block with given id in dir and creates a new one with the same data.
+// It:
+// - removes out of order duplicates
+// - all "complete" outsiders (they will not accessed anyway)
 // Fixable inconsistencies are resolved in the new block.
 func Repair(dir string, id ulid.ULID) (resid ulid.ULID, err error) {
 	bdir := filepath.Join(dir, id.String())
@@ -343,7 +349,7 @@ var castagnoli = crc32.MakeTable(crc32.Castagnoli)
 
 // sanitizeChunkSequence ensures order of the input chunks and drops any duplicates.
 // It errors if the sequence contains non-dedupable overlaps.
-func sanitizeChunkSequence(chks []chunks.Meta) ([]chunks.Meta, error) {
+func sanitizeChunkSequence(chks []chunks.Meta, mint int64, maxt int64) ([]chunks.Meta, error) {
 	if len(chks) == 0 {
 		return nil, nil
 	}
@@ -351,11 +357,11 @@ func sanitizeChunkSequence(chks []chunks.Meta) ([]chunks.Meta, error) {
 	sort.Slice(chks, func(i, j int) bool {
 		return chks[i].MinTime < chks[j].MinTime
 	})
+
+	// Remove duplicates.
 	repl := make([]chunks.Meta, 0, len(chks))
 	last := chks[0]
-
 	repl = append(repl, last)
-
 	for _, c := range chks[1:] {
 		if c.MinTime > last.MaxTime {
 			repl = append(repl, c)
@@ -375,7 +381,17 @@ func sanitizeChunkSequence(chks []chunks.Meta) ([]chunks.Meta, error) {
 			return nil, errors.Errorf("non-sequential chunks not equal: %x and %x", ca, cb)
 		}
 	}
-	return repl, nil
+
+	repl2 := make([]chunks.Meta, 0, len(chks))
+	for _, c := range chks {
+		if c.MinTime > maxt || c.MaxTime < mint {
+			// "Complete" outsider. Ignore.
+			continue
+		}
+
+		repl2 = append(repl2, c)
+	}
+	return repl2, nil
 }
 
 // rewrite writes all data from the readers back into the writers while cleaning
@@ -421,7 +437,7 @@ func rewrite(
 				return err
 			}
 		}
-		chks, err := sanitizeChunkSequence(chks)
+		chks, err := sanitizeChunkSequence(chks, meta.MinTime, meta.MaxTime)
 		if err != nil {
 			return err
 		}

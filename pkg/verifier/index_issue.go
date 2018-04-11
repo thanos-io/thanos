@@ -47,13 +47,9 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ o
 			return errors.Wrapf(err, "download meta file %s", id)
 		}
 
-		stats, outsiders, err := block.GatherIndexIssueStats(indexPath, meta.MinTime, meta.MaxTime)
+		stats, err := block.GatherIndexIssueStats(indexPath, meta.MinTime, meta.MaxTime)
 		if err != nil {
 			return errors.Wrapf(err, "gather index issues %s", id)
-		}
-
-		if outsiders.Len() > 0 {
-			level.Warn(logger).Log("msg", "detected outsiders", "id", id, "issue", IndexIssueID, "num", outsiders.Len())
 		}
 
 		err = stats.ErrSummary()
@@ -72,6 +68,10 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ o
 			level.Warn(logger).Log("msg", "detected overlaps are not entirely by duplicated chunks. We are able to repair only duplicates", "id", id, "issue", IndexIssueID)
 		}
 
+		if stats.Outsiders > stats.CompleteOutsiders {
+			level.Warn(logger).Log("msg", "detected outsiders are not all 'complete' outsiders. We can safely delete only complete outsiders", "id", id, "issue", IndexIssueID)
+		}
+
 		level.Info(logger).Log("msg", "repairing block", "id", id, "issue", IndexIssueID)
 
 		if meta.Thanos.Downsample.Resolution > 0 {
@@ -84,21 +84,9 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ o
 		}
 
 		// Verify repaired block before uploading it.
-		stats, newOutsiders, err := block.GatherIndexIssueStats(filepath.Join(tmpdir, resid.String(), "index"), meta.MinTime, meta.MaxTime)
+		err = block.VerifyIndex(filepath.Join(tmpdir, resid.String(), "index"), meta.MinTime, meta.MaxTime)
 		if err != nil {
-			return errors.Wrapf(err, "gather index issues %s for repaired block %s", id, resid)
-		}
-
-		err = stats.ErrSummary()
-		if err != nil {
-			return errors.Wrap(err, "repaired block is invalid")
-		}
-
-		if newOutsiders.Len() > 0 {
-			level.Warn(logger).Log("msg", "detected outsiders", "id", id, "issue", IndexIssueID, "num", outsiders.Len())
-			if outsiders.Len() == 0 {
-				return errors.Wrap(err, "repaired block is invalid. New outsiders introduced.")
-			}
+			return errors.Wrapf(err, "repaired block is invalid %s", resid)
 		}
 
 		level.Info(logger).Log("msg", "create repaired block", "newID", resid, "issue", IndexIssueID)
