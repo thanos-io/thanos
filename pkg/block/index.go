@@ -358,16 +358,26 @@ func sanitizeChunkSequence(chks []chunks.Meta, mint int64, maxt int64) ([]chunks
 		return chks[i].MinTime < chks[j].MinTime
 	})
 
-	// Remove duplicates.
+	// Remove duplicates and complete outsiders.
 	repl := make([]chunks.Meta, 0, len(chks))
-	last := chks[0]
-	repl = append(repl, last)
-	for _, c := range chks[1:] {
-		if c.MinTime > last.MaxTime {
-			repl = append(repl, c)
-			last = c
+	for i, c := range chks {
+		if c.MinTime > maxt || c.MaxTime < mint {
+			// "Complete" outsider. Ignore.
 			continue
 		}
+
+		if i == 0 {
+			repl = append(repl, c)
+			continue
+		}
+		
+		last := repl[i-1]
+
+		if c.MinTime > last.MaxTime {
+			repl = append(repl, c)
+			continue
+		}
+
 		// Verify that the overlapping chunks are exact copies so we can safely discard
 		// the current one.
 		if c.MinTime != last.MinTime || c.MaxTime != last.MaxTime {
@@ -382,16 +392,7 @@ func sanitizeChunkSequence(chks []chunks.Meta, mint int64, maxt int64) ([]chunks
 		}
 	}
 
-	repl2 := make([]chunks.Meta, 0, len(chks))
-	for _, c := range chks {
-		if c.MinTime > maxt || c.MaxTime < mint {
-			// "Complete" outsider. Ignore.
-			continue
-		}
-
-		repl2 = append(repl2, c)
-	}
-	return repl2, nil
+	return repl, nil
 }
 
 // rewrite writes all data from the readers back into the writers while cleaning
