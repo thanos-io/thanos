@@ -23,9 +23,12 @@ import (
 
 var (
 	issuesMap = map[string]verifier.Issue{
-		verifier.IndexIssueID:                verifier.IndexIssue,
-		verifier.OverlappedBlocksIssueID:     verifier.OverlappedBlocksIssue,
+		verifier.IndexIssueID:            verifier.IndexIssue,
+		verifier.OverlappedBlocksIssueID: verifier.OverlappedBlocksIssue,
+
+		// If you know what you are doing!
 		verifier.DuplicatedCompactionIssueID: verifier.DuplicatedCompactionIssue,
+		verifier.SeparatedBlocksID:           verifier.SeparatedBlocks,
 	}
 	allIssues = func() (s []string) {
 		for id := range issuesMap {
