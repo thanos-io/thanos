@@ -78,11 +78,11 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 			return errors.New("cannot repair downsampled blocks")
 		}
 
-		level.Info(logger).Log("msg", "downloading block to be repaired", "id", id, "issue", IndexIssueID)
 		err = block.Download(ctx, bkt, id, path.Join(tmpdir, id.String()))
 		if err != nil {
-			return errors.Errorf("download block %s", id)
+			return errors.Wrapf(err, "download block %s", id)
 		}
+		level.Info(logger).Log("msg", "downloaded block to be repaired", "id", id, "issue", IndexIssueID)
 
 		resid, err := block.Repair(tmpdir, id)
 		if err != nil {
@@ -95,16 +95,17 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 			return errors.Wrapf(err, "repaired block is invalid %s", resid)
 		}
 
-		level.Info(logger).Log("msg", "create repaired block", "newID", resid, "issue", IndexIssueID)
-
+		level.Info(logger).Log("msg", "uploading repaired block", "newID", resid, "issue", IndexIssueID)
 		err = objstore.UploadDir(ctx, bkt, filepath.Join(tmpdir, resid.String()), resid.String())
 		if err != nil {
 			return errors.Wrapf(err, "upload of %s failed", resid)
 		}
+
+		level.Info(logger).Log("msg", "safe deleting broken block", "id", id, "issue", IndexIssueID)
 		if err := SafeDelete(ctx, bkt, backupBkt, id); err != nil {
 			return errors.Wrapf(err, "safe deleting old block %s failed", id)
 		}
-
+		level.Info(logger).Log("msg", "all good, continuing", "id", id, "issue", IndexIssueID)
 		return nil
 	})
 	if err != nil {
