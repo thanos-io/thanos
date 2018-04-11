@@ -37,17 +37,17 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ o
 		}
 		defer os.RemoveAll(tmpdir)
 
-		indexPath := filepath.Join(tmpdir, "index")
-		err = objstore.DownloadFile(ctx, bkt, path.Join(id.String(), "index"), indexPath)
+		err = objstore.DownloadFile(ctx, bkt, path.Join(id.String(), "index"), filepath.Join(tmpdir, "index"))
 		if err != nil {
 			return errors.Wrapf(err, "download index file %s", path.Join(id.String(), "index"))
 		}
+
 		meta, err := block.DownloadMeta(ctx, bkt, id)
 		if err != nil {
 			return errors.Wrapf(err, "download meta file %s", id)
 		}
 
-		stats, err := block.GatherIndexIssueStats(indexPath, meta.MinTime, meta.MaxTime)
+		stats, err := block.GatherIndexIssueStats(filepath.Join(tmpdir, "index"), meta.MinTime, meta.MaxTime)
 		if err != nil {
 			return errors.Wrapf(err, "gather index issues %s", id)
 		}
@@ -78,7 +78,12 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ o
 			return errors.New("cannot repair downsampled blocks")
 		}
 
-		resid, err := block.Repair(tmpdir, meta.ULID)
+		err = block.Download(ctx, bkt, id, tmpdir)
+		if err != nil {
+			return errors.Errorf("download block %s", id)
+		}
+
+		resid, err := block.Repair(tmpdir, id)
 		if err != nil {
 			return errors.Wrapf(err, "repair failed for block %s", id)
 		}
