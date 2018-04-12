@@ -443,7 +443,7 @@ func (api *API) series(r *http.Request) (interface{}, []error, *apiError) {
 
 	var sets []storage.SeriesSet
 	for _, mset := range matcherSets {
-		s, err := q.Select(nil, mset...)
+		s, err := q.Select(&storage.SelectParams{}, mset...)
 		if err != nil {
 			return nil, nil, &apiError{errorExec, err}
 		}
