@@ -2,7 +2,6 @@ package downsample
 
 import (
 	"context"
-	"encoding/binary"
 	"math"
 	"os"
 	"path/filepath"
@@ -121,7 +120,7 @@ func Downsample(
 	if pall.Err() != nil {
 		return id, errors.Wrap(pall.Err(), "iterate series set")
 	}
-	comp, err := tsdb.NewLeveledCompactor(nil, log.NewNopLogger(), []int64{rng}, AggrChunkPool{})
+	comp, err := tsdb.NewLeveledCompactor(nil, log.NewNopLogger(), []int64{rng}, NewPool())
 	if err != nil {
 		return id, errors.Wrap(err, "create compactor")
 	}
@@ -235,6 +234,41 @@ func (b *memBlock) Close() error {
 	return nil
 }
 
+// currentWindow returns the end timestamp of the window that t falls into.
+func currentWindow(t, r int64) int64 {
+	// The next timestamp is the next number after s.t that's aligned with window.
+	// We substract 1 because block ranges are [from, to) and the last sample would
+	// go out of bounds otherwise.
+	return t - (t % r) + r - 1
+}
+
+// rangeFullness returns the fraction of how the range [mint, maxt] covered
+// with count samples at the given step size.
+// It return value is bounded to [0, 1].
+func rangeFullness(mint, maxt, step int64, count int) float64 {
+	f := float64(count) / (float64(maxt-mint) / float64(step))
+	if f > 1 {
+		return 1
+	}
+	return f
+}
+
+// targetChunkCount calculates how many chunks should be produced when downsampling a series.
+// It consider the total time range, the number of input sample, the input and output resolution.
+func targetChunkCount(mint, maxt, inRes, outRes int64, count int) (x int) {
+	// We compute how many samples we could produce for the given time range and adjust
+	// it by how densely the range is actually filled given the number of input samples and their
+	// resolution.
+	maxSamples := float64((maxt - mint) / outRes)
+	expSamples := int(maxSamples*rangeFullness(mint, maxt, inRes, count)) + 1
+
+	// Increase the number of target chunks until each chunk will have less than
+	// 140 samples on average.
+	for x = 1; expSamples/x > 140; x++ {
+	}
+	return x
+}
+
 // aggregator collects commulative stats for a stream of values.
 type aggregator struct {
 	total   int     // total samples processed
@@ -247,7 +281,7 @@ type aggregator struct {
 	last    float64 // last added value
 }
 
-// reset the stats to start a new aggregation window.
+// Reset the stats to start a new aggregation window.
 func (a *aggregator) reset() {
 	a.count = 0
 	a.sum = 0
@@ -258,7 +292,7 @@ func (a *aggregator) reset() {
 func (a *aggregator) add(v float64) {
 	if a.total > 0 {
 		if v < a.last {
-			// Counter reset, correct the value.
+			// Counter Reset, correct the value.
 			a.counter += v
 			a.resets++
 		} else {
@@ -281,34 +315,6 @@ func (a *aggregator) add(v float64) {
 	if v > a.max {
 		a.max = v
 	}
-}
-
-// AggrType represents an aggregation type.
-type AggrType uint8
-
-// Valid aggregations.
-const (
-	AggrCount AggrType = iota
-	AggrSum
-	AggrMin
-	AggrMax
-	AggrCounter
-)
-
-func (t AggrType) String() string {
-	switch t {
-	case AggrCount:
-		return "count"
-	case AggrSum:
-		return "sum"
-	case AggrMin:
-		return "min"
-	case AggrMax:
-		return "max"
-	case AggrCounter:
-		return "counter"
-	}
-	return "<unknown>"
 }
 
 // aggrChunkBuilder builds chunks for multiple different aggregates.
@@ -356,43 +362,16 @@ func (b *aggrChunkBuilder) add(t int64, aggr *aggregator) {
 	b.added++
 }
 
-func (b *aggrChunkBuilder) encode() AggrChunk {
-	return EncodeAggrChunk(b.chunks)
+func (b *aggrChunkBuilder) finalizeChunk(lastT int64, trueSample float64) {
+	b.apps[AggrCounter].Append(lastT, trueSample)
 }
 
-// currentWindow returns the end timestamp of the window that t falls into.
-func currentWindow(t, r int64) int64 {
-	// The next timestamp is the next number after s.t that's aligned with window.
-	// We substract 1 because block ranges are [from, to) and the last sample would
-	// go out of bounds otherwise.
-	return t - (t % r) + r - 1
-}
-
-// rangeFullness returns the fraction of how the range [mint, maxt] covered
-// with count samples at the given step size.
-// It return value is bounded to [0, 1].
-func rangeFullness(mint, maxt, step int64, count int) float64 {
-	f := float64(count) / (float64(maxt-mint) / float64(step))
-	if f > 1 {
-		return 1
+func (b *aggrChunkBuilder) encode() chunks.Meta {
+	return chunks.Meta{
+		MinTime: b.mint,
+		MaxTime: b.maxt,
+		Chunk:   EncodeAggrChunk(b.chunks),
 	}
-	return f
-}
-
-// targetChunkCount calculates how many chunks should be produced when downsampling a series.
-// It consider the total time range, the number of input sample, the input and output resolution.
-func targetChunkCount(mint, maxt, inRes, outRes int64, count int) (x int) {
-	// We compute how many samples we could produce for the given time range and adjust
-	// it by how densely the range is actually filled given the number of input samples and their
-	// resolution.
-	maxSamples := float64((maxt - mint) / outRes)
-	expSamples := int(maxSamples*rangeFullness(mint, maxt, inRes, count)) + 1
-
-	// Increase the number of target chunks until each chunk will have less than
-	// 140 samples on average.
-	for x = 1; expSamples/x > 140; x++ {
-	}
-	return x
 }
 
 // downsampleRaw create a series of aggregation chunks for the given sample data.
@@ -426,14 +405,11 @@ func downsampleRaw(data []sample, resolution int64) []chunks.Meta {
 		data = data[j:]
 
 		lastT := downsampleBatch(batch, resolution, ab.add)
-		// Finalize the chunk's counter aggregate with the last true sample.
-		ab.apps[AggrCounter].Append(lastT, batch[len(batch)-1].v)
 
-		chks = append(chks, chunks.Meta{
-			MinTime: ab.mint,
-			MaxTime: ab.maxt,
-			Chunk:   ab.encode(),
-		})
+		// Finalize the chunk's counter aggregate with the last true sample.
+		ab.finalizeChunk(lastT, batch[len(batch)-1].v)
+
+		chks = append(chks, ab.encode())
 	}
 	return chks
 }
@@ -496,15 +472,11 @@ func downsampleAggr(chks []AggrChunk, buf *[]sample, mint, maxt, inRes, outRes i
 		part := chks[:j]
 		chks = chks[j:]
 
-		mint, maxt, c, err := downsampleAggrBatch(part, buf, outRes)
+		chk, err := downsampleAggrBatch(part, buf, outRes)
 		if err != nil {
 			return nil, err
 		}
-		res = append(res, chunks.Meta{
-			MinTime: mint,
-			MaxTime: maxt,
-			Chunk:   c,
-		})
+		res = append(res, chk)
 	}
 	return res, nil
 }
@@ -529,14 +501,14 @@ func expandChunkIterator(it chunkenc.Iterator, buf *[]sample) error {
 	return it.Err()
 }
 
-func downsampleAggrBatch(chks []AggrChunk, buf *[]sample, resolution int64) (mint, maxt int64, c AggrChunk, err error) {
+func downsampleAggrBatch(chks []AggrChunk, buf *[]sample, resolution int64) (chk chunks.Meta, err error) {
 	ab := &aggrChunkBuilder{}
-	mint, maxt = math.MaxInt64, math.MinInt64
+	mint, maxt := int64(math.MaxInt64), int64(math.MinInt64)
 
 	// do does a generic aggregation for count, sum, min, and max aggregates.
 	// Counters need special treatment.
 	do := func(at AggrType, f func(a *aggregator) float64) error {
-		(*buf) = (*buf)[:0]
+		*buf = (*buf)[:0]
 		// Expand all samples for the aggregate type.
 		for _, chk := range chks {
 			c, err := chk.Get(at)
@@ -568,32 +540,32 @@ func downsampleAggrBatch(chks []AggrChunk, buf *[]sample, resolution int64) (min
 	if err := do(AggrCount, func(a *aggregator) float64 {
 		return a.sum
 	}); err != nil {
-		return 0, 0, nil, err
+		return chk, err
 	}
 	if err = do(AggrSum, func(a *aggregator) float64 {
 		return a.sum
 	}); err != nil {
-		return 0, 0, nil, err
+		return chk, err
 	}
 	if err := do(AggrMin, func(a *aggregator) float64 {
 		return a.min
 	}); err != nil {
-		return 0, 0, nil, err
+		return chk, err
 	}
 	if err := do(AggrMax, func(a *aggregator) float64 {
 		return a.max
 	}); err != nil {
-		return 0, 0, nil, err
+		return chk, err
 	}
 
 	// Handle counters by reading them properly.
 	acs := make([]chunkenc.Iterator, 0, len(chks))
-	for _, chk := range chks {
-		c, err := chk.Get(AggrCounter)
+	for _, achk := range chks {
+		c, err := achk.Get(AggrCounter)
 		if err == ErrAggrNotExist {
 			continue
 		} else if err != nil {
-			return 0, 0, nil, err
+			return chk, err
 		}
 		acs = append(acs, c.Iterator())
 	}
@@ -601,10 +573,12 @@ func downsampleAggrBatch(chks []AggrChunk, buf *[]sample, resolution int64) (min
 	it := NewCounterSeriesIterator(acs...)
 
 	if err := expandChunkIterator(it, buf); err != nil {
-		return 0, 0, nil, err
+		return chk, err
 	}
 	if len(*buf) == 0 {
-		return mint, maxt, ab.encode(), nil
+		ab.mint = mint
+		ab.maxt = maxt
+		return ab.encode(), nil
 	}
 	ab.chunks[AggrCounter] = chunkenc.NewXORChunk()
 	ab.apps[AggrCounter], _ = ab.chunks[AggrCounter].Appender()
@@ -619,7 +593,9 @@ func downsampleAggrBatch(chks []AggrChunk, buf *[]sample, resolution int64) (min
 	})
 	ab.apps[AggrCounter].Append(lastT, it.lastV)
 
-	return mint, maxt, ab.encode(), nil
+	ab.mint = mint
+	ab.maxt = maxt
+	return ab.encode(), nil
 }
 
 type sample struct {
@@ -630,87 +606,6 @@ type sample struct {
 type series struct {
 	lset   labels.Labels
 	chunks []chunks.Meta
-}
-
-// AggrChunk is a chunk that is composed of a set of aggregates for the same underlying data.
-// Not all aggregates must be present.
-type AggrChunk []byte
-
-// EncodeAggrChunk encodes a new aggregate chunk from the array of chunks for each aggregate.
-// Each array entry corresponds to the respective AggrType number.
-func EncodeAggrChunk(chks [5]chunkenc.Chunk) AggrChunk {
-	var b []byte
-	buf := [8]byte{}
-
-	for _, c := range chks {
-		// Unset aggregates are marked with a zero length entry.
-		if c == nil {
-			n := binary.PutUvarint(buf[:], 0)
-			b = append(b, buf[:n]...)
-			continue
-		}
-		l := len(c.Bytes())
-		n := binary.PutUvarint(buf[:], uint64(l))
-		b = append(b, buf[:n]...)
-		b = append(b, byte(c.Encoding()))
-		b = append(b, c.Bytes()...)
-	}
-	return AggrChunk(b)
-}
-
-func (c AggrChunk) Bytes() []byte {
-	return []byte(c)
-}
-
-func (c AggrChunk) Appender() (chunkenc.Appender, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (c AggrChunk) Iterator() chunkenc.Iterator {
-	return chunkenc.NewNopIterator()
-}
-
-func (c AggrChunk) NumSamples() int {
-	x, err := c.Get(AggrCount)
-	if err != nil {
-		return 0
-	}
-	return x.NumSamples()
-}
-
-// ErrAggrNotExist is returned if a requested aggregation is not present in an AggrChunk.
-var ErrAggrNotExist = errors.New("aggregate does not exist")
-
-// ChunkEncAggr is the top level encoding byte for the AggrChunk.
-// It picks the highest number possible to prevent future collisions with upstream encodings.
-const ChunkEncAggr = chunkenc.Encoding(0xff)
-
-func (c AggrChunk) Encoding() chunkenc.Encoding {
-	return ChunkEncAggr
-}
-
-// Get returns the sub-chunk for the given aggregate type if it exists.
-func (c AggrChunk) Get(t AggrType) (chunkenc.Chunk, error) {
-	b := c[:]
-	var x []byte
-
-	for i := AggrType(0); i <= t; i++ {
-		l, n := binary.Uvarint(b)
-		if n < 1 || len(b[n:]) < int(l)+1 {
-			return nil, errors.New("invalid size")
-		}
-		b = b[n:]
-		// If length is set to zero explicitly, that means the aggregate is unset.
-		if l == 0 {
-			if i == t {
-				return nil, ErrAggrNotExist
-			}
-			continue
-		}
-		x = b[:int(l)+1]
-		b = b[int(l)+1:]
-	}
-	return chunkenc.FromData(chunkenc.Encoding(x[0]), x[1:])
 }
 
 // CounterSeriesIterator iterates over an ordered sequence of chunks and treats decreasing
@@ -844,14 +739,4 @@ func (it *AverageChunkIterator) Err() error {
 		return it.sumIt.Err()
 	}
 	return it.err
-}
-
-type AggrChunkPool struct{}
-
-func (p AggrChunkPool) Get(e chunkenc.Encoding, b []byte) (chunkenc.Chunk, error) {
-	return AggrChunk(b), nil
-}
-
-func (p AggrChunkPool) Put(c chunkenc.Chunk) error {
-	return nil
 }

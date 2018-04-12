@@ -239,7 +239,7 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 	if m.Thanos.Downsample.Resolution == 0 {
 		pool = chunkenc.NewPool()
 	} else {
-		pool = downsample.AggrChunkPool{}
+		pool = downsample.NewPool()
 	}
 
 	b, err := tsdb.OpenBlock(bdir, pool)
