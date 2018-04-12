@@ -31,6 +31,15 @@ type UI struct {
 	now   func() model.Time
 }
 
+type thanosVersion struct {
+	Version   string `json:"version"`
+	Revision  string `json:"revision"`
+	Branch    string `json:"branch"`
+	BuildUser string `json:"buildUser"`
+	BuildDate string `json:"buildDate"`
+	GoVersion string `json:"goVersion"`
+}
+
 func New(logger log.Logger, flagsMap map[string]string) *UI {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -70,11 +79,18 @@ func (u *UI) status(w http.ResponseWriter, r *http.Request) {
 	u.executeTemplate(w, "status.html", struct {
 		Birth   time.Time
 		CWD     string
-		Version string
+		Version thanosVersion
 	}{
-		Birth:   u.birth,
-		CWD:     u.cwd,
-		Version: version.Info(),
+		Birth: u.birth,
+		CWD:   u.cwd,
+		Version: thanosVersion{
+			Version:   version.Version,
+			Revision:  version.Revision,
+			Branch:    version.Branch,
+			BuildUser: version.BuildUser,
+			BuildDate: version.BuildDate,
+			GoVersion: version.GoVersion,
+		},
 	})
 }
 
