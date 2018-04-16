@@ -281,7 +281,7 @@ type aggregator struct {
 	last    float64 // last added value
 }
 
-// Reset the stats to start a new aggregation window.
+// reset the stats to start a new aggregation window.
 func (a *aggregator) reset() {
 	a.count = 0
 	a.sum = 0
@@ -292,7 +292,7 @@ func (a *aggregator) reset() {
 func (a *aggregator) add(v float64) {
 	if a.total > 0 {
 		if v < a.last {
-			// Counter Reset, correct the value.
+			// Counter reset, correct the value.
 			a.counter += v
 			a.resets++
 		} else {

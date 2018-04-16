@@ -40,7 +40,7 @@ func (p *pool) Get(e chunkenc.Encoding, b []byte) (chunkenc.Chunk, error) {
 func (p *pool) Put(c chunkenc.Chunk) error {
 	switch c.Encoding() {
 	case ChunkEncAggr:
-		xc, ok := c.(*AggrChunk)
+		ac, ok := c.(*AggrChunk)
 		// This may happen often with wrapped chunks. Nothing we can really do about
 		// it but returning an error would cause a lot of allocations again. Thus,
 		// we just skip it.
@@ -49,8 +49,8 @@ func (p *pool) Put(c chunkenc.Chunk) error {
 		}
 
 		// Clear []byte.
-		*xc = AggrChunk(nil)
-		p.aggr.Put(xc)
+		*ac = AggrChunk(nil)
+		p.aggr.Put(ac)
 	}
 
 	return p.wrapped.Put(c)
