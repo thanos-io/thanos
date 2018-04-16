@@ -111,7 +111,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			NoLockfile:       true,
 			WALFlushInterval: 30 * time.Second,
 		}
-		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *httpAddr, *grpcAddr, *evalInterval, *dataDir, *ruleFiles, peer, *gcsBucket, s3Config, tsdbOpts)
+		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *httpAddr, *grpcAddr, *evalInterval, *dataDir, *ruleFiles, peer, *gcsBucket, s3Config, tsdbOpts, name)
 	}
 }
 
@@ -133,6 +133,7 @@ func runRule(
 	gcsBucket string,
 	s3Config *s3.Config,
 	tsdbOpts *tsdb.Options,
+	component string,
 ) error {
 	db, err := tsdb.Open(dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts)
 	if err != nil {
@@ -398,7 +399,7 @@ func runRule(
 		closeFn = gcsClient.Close
 		bucket = gcsBucket
 	} else if s3Config.Validate() == nil {
-		bkt, err = s3.NewBucket(s3Config, reg)
+		bkt, err = s3.NewBucket(s3Config, reg, component)
 		if err != nil {
 			return errors.Wrap(err, "create s3 client")
 		}

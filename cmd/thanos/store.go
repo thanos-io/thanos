@@ -80,6 +80,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			peer,
 			uint64(*indexCacheSize),
 			uint64(*chunkPoolSize),
+			name,
 		)
 	}
 }
@@ -98,6 +99,7 @@ func runStore(
 	peer *cluster.Peer,
 	indexCacheSizeBytes uint64,
 	chunkPoolSizeBytes uint64,
+	component string,
 ) error {
 	{
 		var (
@@ -117,7 +119,7 @@ func runStore(
 			closeFn = gcsClient.Close
 			bucket = gcsBucket
 		} else if s3Config.Validate() == nil {
-			b, err := s3.NewBucket(s3Config, reg)
+			b, err := s3.NewBucket(s3Config, reg, component)
 			if err != nil {
 				return errors.Wrap(err, "create s3 client")
 			}

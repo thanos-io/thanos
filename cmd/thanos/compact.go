@@ -58,6 +58,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			*syncDelay,
 			*haltOnError,
 			*wait,
+			name,
 		)
 	}
 }
@@ -73,6 +74,7 @@ func runCompact(
 	syncDelay time.Duration,
 	haltOnError bool,
 	wait bool,
+	component string,
 ) error {
 	var (
 		bkt    objstore.Bucket
