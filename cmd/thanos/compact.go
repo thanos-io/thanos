@@ -24,6 +24,10 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/tsdb"
 	"gopkg.in/alecthomas/kingpin.v2"
+	"google.golang.org/api/option"
+	"fmt"
+	"runtime"
+	"github.com/prometheus/common/version"
 )
 
 func registerCompact(m map[string]setupFunc, app *kingpin.Application, name string) {
@@ -90,14 +94,15 @@ func runCompact(
 	reg.MustRegister(halted)
 
 	if gcsBucket != "" {
-		gcsClient, err := storage.NewClient(context.Background())
+		gcsOptions := option.WithUserAgent(fmt.Sprintf("thanos-%s/%s (%s)", component, version.Version, runtime.Version()))
+		gcsClient, err := storage.NewClient(context.Background(), gcsOptions)
 		if err != nil {
 			return errors.Wrap(err, "create GCS client")
 		}
 		bkt = gcs.NewBucket(gcsBucket, gcsClient.Bucket(gcsBucket), reg)
 		bucket = gcsBucket
 	} else if s3Config.Validate() == nil {
-		b, err := s3.NewBucket(s3Config, reg)
+		b, err := s3.NewBucket(s3Config, reg, component)
 		if err != nil {
 			return errors.Wrap(err, "create s3 client")
 		}
