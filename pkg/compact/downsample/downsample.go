@@ -61,7 +61,7 @@ func Downsample(
 		return id, errors.Wrap(err, "get all postings list")
 	}
 	var (
-		aggrChunks []AggrChunk
+		aggrChunks []*AggrChunk
 		all        []sample
 		chks       []chunks.Meta
 	)
@@ -99,7 +99,7 @@ func Downsample(
 
 		// Downsample a block that contains aggregate chunks already.
 		for _, c := range chks {
-			aggrChunks = append(aggrChunks, c.Chunk.(AggrChunk))
+			aggrChunks = append(aggrChunks, c.Chunk.(*AggrChunk))
 		}
 		res, err := downsampleAggr(
 			aggrChunks,
@@ -438,7 +438,7 @@ func downsampleBatch(data []sample, resolution int64, add func(int64, *aggregato
 }
 
 // downsampleAggr downsamples a sequence of aggregation chunks to the given resolution.
-func downsampleAggr(chks []AggrChunk, buf *[]sample, mint, maxt, inRes, outRes int64) ([]chunks.Meta, error) {
+func downsampleAggr(chks []*AggrChunk, buf *[]sample, mint, maxt, inRes, outRes int64) ([]chunks.Meta, error) {
 	// We downsample aggregates only along chunk boundaries. This is required for counters
 	// to be downsampled correctly since a chunks' last counter value is the true last value
 	// of the original series. We need to preserve it even across multiple aggregation iterations.
@@ -489,7 +489,7 @@ func expandChunkIterator(it chunkenc.Iterator, buf *[]sample) error {
 	return it.Err()
 }
 
-func downsampleAggrBatch(chks []AggrChunk, buf *[]sample, resolution int64) (chk chunks.Meta, err error) {
+func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (chk chunks.Meta, err error) {
 	ab := &aggrChunkBuilder{}
 	mint, maxt := int64(math.MaxInt64), int64(math.MinInt64)
 

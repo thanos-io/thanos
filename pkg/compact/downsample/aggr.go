@@ -1,4 +1,3 @@
-
 package downsample
 
 import (
@@ -18,7 +17,7 @@ type AggrChunk []byte
 
 // EncodeAggrChunk encodes a new aggregate chunk from the array of chunks for each aggregate.
 // Each array entry corresponds to the respective AggrType number.
-func EncodeAggrChunk(chks [5]chunkenc.Chunk) AggrChunk {
+func EncodeAggrChunk(chks [5]chunkenc.Chunk) *AggrChunk {
 	var b []byte
 	buf := [8]byte{}
 
@@ -35,7 +34,8 @@ func EncodeAggrChunk(chks [5]chunkenc.Chunk) AggrChunk {
 		b = append(b, byte(c.Encoding()))
 		b = append(b, c.Bytes()...)
 	}
-	return AggrChunk(b)
+	chk := AggrChunk(b)
+	return &chk
 }
 
 func (c AggrChunk) Bytes() []byte {
