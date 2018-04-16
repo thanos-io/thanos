@@ -186,7 +186,7 @@ func (s *Shipper) sync(ctx context.Context, meta *block.Meta) (err error) {
 
 	// We hard-link the files into a temporary upload directory so we are not affected
 	// by other operations happening against the TSDB directory.
-	updir := filepath.Join(s.dir, "thanos", "upload")
+	updir := filepath.Join(s.dir, "thanos", "upload", meta.ULID.String())
 
 	if err := os.RemoveAll(updir); err != nil {
 		return errors.Wrap(err, "clean upload directory")

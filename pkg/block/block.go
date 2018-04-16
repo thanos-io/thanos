@@ -236,8 +236,9 @@ func Finalize(bdir string, extLset map[string]string, resolution int64, downsamp
 		return nil, errors.Wrap(err, "write new meta")
 	}
 
-	// Best effort.
-	os.Remove(filepath.Join(bdir, "tombstones"))
+	if err = os.Remove(filepath.Join(bdir, "tombstones")); err != nil {
+		return nil, errors.Wrap(err, "remove tombstones")
+	}
 
 	return newMeta, nil
 }

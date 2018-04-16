@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"path"
+
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/oklog/ulid"
@@ -194,7 +196,7 @@ func CreateBlock(
 		return id, errors.Wrap(err, "write block")
 	}
 
-	if _, err = block.Finalize(dir, extLset.Map(), resolution, nil); err != nil {
+	if _, err = block.Finalize(path.Join(dir, id.String()), extLset.Map(), resolution, nil); err != nil {
 		return id, errors.Wrap(err, "finalize block")
 	}
 
