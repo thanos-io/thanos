@@ -158,6 +158,7 @@ func runCompact(
 						}
 						continue
 					}
+
 					level.Error(logger).Log("msg", "compaction failed", "err", err)
 					// The HaltError type signals that we hit a critical bug and should block
 					// for investigation.
