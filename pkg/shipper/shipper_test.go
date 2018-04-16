@@ -60,6 +60,7 @@ func TestShipper_UploadBlocks(t *testing.T) {
 				MinTime: timestamp.FromTime(now.Add(time.Duration(i) * time.Hour)),
 				MaxTime: timestamp.FromTime(now.Add((time.Duration(i) * time.Hour) + 1)),
 			},
+			// The external labels must be attached to the meta file on upload.
 			Thanos: block.ThanosMeta{
 				Labels: map[string]string{
 					"test": "val",
@@ -80,6 +81,9 @@ func TestShipper_UploadBlocks(t *testing.T) {
 
 		shipMeta, err := ReadMetaFile(dir)
 		testutil.Ok(t, err)
+		if len(shipMeta.Uploaded) == 0 {
+			shipMeta.Uploaded = []ulid.ULID{}
+		}
 		testutil.Equals(t, &Meta{Version: 1, Uploaded: ids[:i]}, shipMeta)
 
 		testutil.Ok(t, os.MkdirAll(tmp+"/chunks", 0777))
@@ -90,9 +94,6 @@ func TestShipper_UploadBlocks(t *testing.T) {
 
 		// After rename sync should upload the block.
 		shipper.Sync(ctx)
-
-		// The external labels must be attached to the meta file on upload.
-		meta.Thanos.Labels = map[string]string{"prometheus": "prom-1"}
 
 		var buf bytes.Buffer
 		enc := json.NewEncoder(&buf)

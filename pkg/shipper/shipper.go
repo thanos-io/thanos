@@ -314,6 +314,7 @@ func ReadMetaFile(dir string) (*Meta, error) {
 	if m.Version != 1 {
 		return nil, errors.Errorf("unexpected meta file version %d", m.Version)
 	}
+
 	return &m, nil
 }
 

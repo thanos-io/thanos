@@ -238,6 +238,6 @@ func Finalize(bdir string, extLset map[string]string, resolution int64, downsamp
 
 	// Best effort.
 	os.Remove(filepath.Join(bdir, "tombstones"))
-	
+
 	return newMeta, nil
 }
