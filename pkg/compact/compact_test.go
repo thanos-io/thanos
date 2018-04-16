@@ -290,7 +290,7 @@ func TestGroup_Compact(t *testing.T) {
 
 	// Check thanos meta.
 	testutil.Assert(t, extLset.Equals(labels.FromMap(meta.Thanos.Labels)), "ext labels does not match")
-	testutil.Equals(t, int64(123), meta.Thanos.Downsample.Resolution)
+	testutil.Equals(t, int64(124), meta.Thanos.Downsample.Resolution)
 
 	// Check object storage. All blocks that were included in new compacted one should be removed.
 	err = bkt.Iter(ctx, "", func(n string) error {

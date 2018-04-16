@@ -134,7 +134,7 @@ func TestShipper_UploadBlocks(t *testing.T) {
 		act, err := ioutil.ReadAll(rc)
 		testutil.Ok(t, err)
 		testutil.Ok(t, rc.Close())
-		testutil.Equals(t, exp, act)
+		testutil.Equals(t, string(exp), string(act))
 	}
 	// Verify the fifth block is still deleted by the end.
 	ok, err := bucket.Exists(ctx, ids[4].String()+"/meta.json")

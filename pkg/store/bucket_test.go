@@ -46,7 +46,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		labels.FromStrings("a", "2", "c", "1"),
 		labels.FromStrings("a", "2", "c", "2"),
 	}
-	extLset := labels.FromStrings("test", "val")
+	extLset := labels.FromStrings("ext1", "val1")
 
 	start := time.Now()
 	now := start
@@ -75,7 +75,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		// Add labels to the meta of the second block.
 		meta, err := block.ReadMetaFile(dir2)
 		testutil.Ok(t, err)
-		meta.Thanos.Labels = map[string]string{"ext": "value"}
+		meta.Thanos.Labels = map[string]string{"ext2": "value2"}
 		testutil.Ok(t, block.WriteMetaFile(dir2, meta))
 
 		testutil.Ok(t, block.Upload(ctx, bkt, dir1))
@@ -113,14 +113,14 @@ func TestBucketStore_e2e(t *testing.T) {
 	testutil.Equals(t, []string{"1", "2"}, vals.Values)
 
 	pbseries := [][]storepb.Label{
-		{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}},
-		{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}},
-		{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext", Value: "value"}},
-		{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext", Value: "value"}},
-		{{Name: "a", Value: "2"}, {Name: "b", Value: "1"}},
-		{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
-		{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}, {Name: "ext", Value: "value"}},
-		{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext", Value: "value"}},
+		{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+		{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+		{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+		{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+		{{Name: "a", Value: "2"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+		{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+		{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+		{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
 	}
 	srv := newStoreSeriesServer(ctx)
 
