@@ -128,7 +128,7 @@ func Delete(ctx context.Context, bucket objstore.Bucket, id ulid.ULID) error {
 
 // DownloadMeta downloads only meta file from bucket by block ID.
 func DownloadMeta(ctx context.Context, bkt objstore.Bucket, id ulid.ULID) (Meta, error) {
-	rc, err := bkt.Get(ctx, path.Join(id.String(), "meta.json"))
+	rc, err := bkt.Get(ctx, path.Join(id.String(), MetaFilename))
 	if err != nil {
 		return Meta{}, errors.Wrapf(err, "meta.json bkt get for %s", id.String())
 	}

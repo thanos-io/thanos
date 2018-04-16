@@ -8,7 +8,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/prometheus/tsdb/chunkenc"
@@ -124,14 +123,12 @@ func downsampleBucket(
 	var metas []*block.Meta
 
 	err := bkt.Iter(ctx, "", func(name string) error {
-		if !strings.HasSuffix(name, "/") {
+		id, ok := block.IsBlockDir(name)
+		if !ok {
 			return nil
 		}
-		id, err := ulid.Parse(name[:len(name)-1])
-		if err != nil {
-			return nil
-		}
-		rc, err := bkt.Get(ctx, path.Join(id.String(), "meta.json"))
+
+		rc, err := bkt.Get(ctx, path.Join(id.String(), block.MetaFilename))
 		if err != nil {
 			return errors.Wrapf(err, "get meta for block %s", id)
 		}
