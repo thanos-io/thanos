@@ -220,10 +220,6 @@ func IsBlockDir(path string) (id ulid.ULID, ok bool) {
 // useful for Thanos.
 // NOTE: It should be used after writing any block by any Thanos component, otherwise we will miss crucial metadata.
 func Finalize(bdir string, extLset map[string]string, resolution int64, downsampledMeta *tsdb.BlockMeta) (*Meta, error) {
-	if err := os.Remove(filepath.Join(bdir, "tombstones")); err != nil {
-		return nil, errors.Wrap(err, "remove tombstones")
-	}
-
 	newMeta, err := ReadMetaFile(bdir)
 	if err != nil {
 		return nil, errors.Wrap(err, "read new meta")
@@ -239,5 +235,9 @@ func Finalize(bdir string, extLset map[string]string, resolution int64, downsamp
 	if err := WriteMetaFile(bdir, newMeta); err != nil {
 		return nil, errors.Wrap(err, "write new meta")
 	}
+
+	// Best effort.
+	os.Remove(filepath.Join(bdir, "tombstones"))
+	
 	return newMeta, nil
 }
