@@ -31,9 +31,8 @@ func TestShipper_UploadBlocks(t *testing.T) {
 	testutil.Ok(t, err)
 	defer cleanup()
 
-	shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bucket, func() labels.Labels {
-		return labels.FromStrings("prometheus", "prom-1")
-	})
+	extLset := labels.FromStrings("prometheus", "prom-1")
+	shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bucket, func() labels.Labels { return extLset })
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -59,12 +58,6 @@ func TestShipper_UploadBlocks(t *testing.T) {
 			BlockMeta: tsdb.BlockMeta{
 				MinTime: timestamp.FromTime(now.Add(time.Duration(i) * time.Hour)),
 				MaxTime: timestamp.FromTime(now.Add((time.Duration(i) * time.Hour) + 1)),
-			},
-			// The external labels must be attached to the meta file on upload.
-			Thanos: block.ThanosMeta{
-				Labels: map[string]string{
-					"test": "val",
-				},
 			},
 		}
 		meta.Version = 1
@@ -94,6 +87,9 @@ func TestShipper_UploadBlocks(t *testing.T) {
 
 		// After rename sync should upload the block.
 		shipper.Sync(ctx)
+
+		// The external labels must be attached to the meta file on upload.
+		meta.Thanos.Labels = extLset.Map()
 
 		var buf bytes.Buffer
 		enc := json.NewEncoder(&buf)

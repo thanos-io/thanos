@@ -46,7 +46,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		labels.FromStrings("a", "2", "c", "1"),
 		labels.FromStrings("a", "2", "c", "2"),
 	}
-	extLset := labels.FromStrings("ext1", "val1")
+	extLset := labels.FromStrings("ext1", "value1")
 
 	start := time.Now()
 	now := start

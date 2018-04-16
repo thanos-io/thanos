@@ -294,7 +294,11 @@ func TestGroup_Compact(t *testing.T) {
 
 	// Check object storage. All blocks that were included in new compacted one should be removed.
 	err = bkt.Iter(ctx, "", func(n string) error {
-		id := ulid.MustParse(n[:len(n)-1])
+		id, ok := block.IsBlockDir(n)
+		if !ok {
+			return nil
+		}
+
 		for _, source := range meta.Compaction.Sources {
 			if id.Compare(source) == 0 {
 				return errors.Errorf("Unexpectedly found %s block in bucket", source.String())

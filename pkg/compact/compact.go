@@ -660,5 +660,6 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		}
 		cg.groupGarbageCollectedBlocks.Inc()
 	}
+
 	return compID, nil
 }
