@@ -127,7 +127,7 @@ func Downsample(
 	}
 	bdir := filepath.Join(dir, id.String())
 
-	_, err = block.Finalize(bdir, origMeta.Thanos.Labels, origMeta.Thanos.Downsample.Resolution, &origMeta.BlockMeta)
+	_, err = block.Finalize(bdir, origMeta.Thanos.Labels, resolution, &origMeta.BlockMeta)
 	if err != nil {
 		return id, errors.Wrapf(err, "failed to finalize the block %s", bdir)
 	}
