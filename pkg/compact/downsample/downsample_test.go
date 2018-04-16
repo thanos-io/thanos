@@ -1,7 +1,6 @@
 package downsample
 
 import (
-	"context"
 	"io/ioutil"
 	"math"
 	"os"
@@ -154,7 +153,7 @@ func testDownsample(t *testing.T, data []*downsampleTestSet, meta *block.Meta, r
 		mb.addSeries(ser)
 	}
 
-	id, err := Downsample(context.Background(), meta, mb, dir, resolution)
+	id, err := Downsample(meta, mb, dir, resolution)
 	testutil.Ok(t, err)
 
 	exp := map[uint64]map[AggrType][]sample{}

@@ -247,7 +247,7 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 		return errors.Wrapf(err, "open block %s", m.ULID)
 	}
 
-	id, err := downsample.Downsample(ctx, m, b, dir, resolution)
+	id, err := downsample.Downsample(m, b, dir, resolution)
 	if err != nil {
 		return errors.Wrapf(err, "downsample block %s to window %d", m.ULID, resolution)
 	}

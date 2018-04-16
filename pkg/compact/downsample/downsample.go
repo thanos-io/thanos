@@ -1,9 +1,7 @@
 package downsample
 
 import (
-	"context"
 	"math"
-	"os"
 	"path/filepath"
 	"sort"
 
@@ -29,7 +27,6 @@ const (
 
 // Downsample downsamples the given block. It writes a new block into dir and returns its ID.
 func Downsample(
-	ctx context.Context,
 	origMeta *block.Meta,
 	b tsdb.BlockReader,
 	dir string,
@@ -130,18 +127,9 @@ func Downsample(
 	}
 	bdir := filepath.Join(dir, id.String())
 
-	meta, err := block.ReadMetaFile(bdir)
+	_, err = block.Finalize(bdir, origMeta.Thanos.Labels, origMeta.Thanos.Downsample.Resolution, &origMeta.BlockMeta)
 	if err != nil {
-		return id, errors.Wrap(err, "read block meta")
-	}
-	meta.Thanos.Labels = origMeta.Thanos.Labels
-	meta.Thanos.Downsample.Resolution = resolution
-	meta.Compaction = origMeta.Compaction
-
-	os.Remove(filepath.Join(bdir, "tombstones"))
-
-	if err := block.WriteMetaFile(bdir, meta); err != nil {
-		return id, errors.Wrap(err, "write block meta")
+		return id, errors.Wrapf(err, "failed to finalize the block %s", bdir)
 	}
 	return id, nil
 }

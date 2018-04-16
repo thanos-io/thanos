@@ -145,3 +145,29 @@ func IsBlockDir(path string) (id ulid.ULID, ok bool) {
 	id, err := ulid.Parse(filepath.Base(path))
 	return id, err == nil
 }
+
+// Finalize sets Thanos meta to the block meta JSON and saves it to the disk. It also removes tombstones which are not
+// useful for Thanos.
+// NOTE: It should be used after writing any block by any Thanos component, otherwise we will miss crucial metadata.
+func Finalize(bdir string, extLset map[string]string, resolution int64, downsampledMeta *tsdb.BlockMeta) (*Meta, error) {
+	if err := os.Remove(filepath.Join(bdir, "tombstones")); err != nil {
+		return nil, errors.Wrap(err, "remove tombstones")
+	}
+
+	newMeta, err := ReadMetaFile(bdir)
+	if err != nil {
+		return nil, errors.Wrap(err, "read new meta")
+	}
+	newMeta.Thanos.Labels = extLset
+	newMeta.Thanos.Downsample.Resolution = resolution
+
+	// While downsampling we need to copy original compaction.
+	if downsampledMeta != nil {
+		newMeta.Compaction = downsampledMeta.Compaction
+	}
+
+	if err := WriteMetaFile(bdir, newMeta); err != nil {
+		return nil, errors.Wrap(err, "write new meta")
+	}
+	return newMeta, nil
+}

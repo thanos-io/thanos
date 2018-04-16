@@ -615,16 +615,9 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 
 	bdir := filepath.Join(dir, compID.String())
 
-	os.Remove(filepath.Join(bdir, "tombstones"))
-
-	newMeta, err := block.ReadMetaFile(bdir)
+	newMeta, err := block.Finalize(bdir, cg.labels.Map(), cg.resolution, nil)
 	if err != nil {
-		return compID, errors.Wrap(err, "read new meta")
-	}
-	newMeta.Thanos.Labels = cg.labels.Map()
-
-	if err := block.WriteMetaFile(bdir, newMeta); err != nil {
-		return compID, errors.Wrap(err, "write new meta")
+		return compID, errors.Wrapf(err, "failed to finalize the block %s", bdir)
 	}
 
 	// Ensure the output block is valid.
