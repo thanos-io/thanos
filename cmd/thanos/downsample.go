@@ -226,7 +226,7 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 	}
 	level.Info(logger).Log("msg", "downloaded block", "id", m.ULID, "duration", time.Since(begin))
 
-	if err := block.VerifyIndex(filepath.Join(bdir, "index"), m.MinTime, m.MaxTime); err != nil {
+	if err := block.VerifyIndex(filepath.Join(bdir, block.IndexFilename), m.MinTime, m.MaxTime); err != nil {
 		return errors.Wrap(err, "input block index not valid")
 	}
 
@@ -253,13 +253,13 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 	level.Info(logger).Log("msg", "downsampled block",
 		"from", m.ULID, "to", id, "duration", time.Since(begin))
 
-	if err := block.VerifyIndex(filepath.Join(resdir, "index"), m.MinTime, m.MaxTime); err != nil {
+	if err := block.VerifyIndex(filepath.Join(resdir, block.IndexFilename), m.MinTime, m.MaxTime); err != nil {
 		return errors.Wrap(err, "output block index not valid")
 	}
 
 	begin = time.Now()
 
-	err = objstore.UploadDir(ctx, bkt, resdir, id.String())
+	err = block.Upload(ctx, bkt, resdir)
 	if err != nil {
 		return errors.Wrapf(err, "upload downsampled block %s", id)
 	}

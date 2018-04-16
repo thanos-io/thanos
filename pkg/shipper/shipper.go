@@ -203,15 +203,7 @@ func (s *Shipper) sync(ctx context.Context, meta *block.Meta) (err error) {
 	if err := block.WriteMetaFile(updir, meta); err != nil {
 		return errors.Wrap(err, "write meta file")
 	}
-	err = objstore.UploadDir(ctx, s.bucket, updir, meta.ULID.String())
-	if err == nil {
-		return nil
-	}
-	// Cleanup the dir with an uncancelable context.
-	if err2 := block.Delete(context.Background(), s.bucket, meta.ULID); err2 != nil {
-		level.Warn(s.logger).Log("msg", "cleaning up block failed", "block", meta.ULID, "err", err)
-	}
-	return err
+	return block.Upload(ctx, s.bucket, updir)
 }
 
 // iterBlockMetas calls f with the block meta for each block found in dir. It logs
@@ -249,20 +241,20 @@ func (s *Shipper) iterBlockMetas(f func(m *block.Meta) error) error {
 }
 
 func hardlinkBlock(src, dst string) error {
-	chunkDir := filepath.Join(dst, "chunks")
+	chunkDir := filepath.Join(dst, block.ChunksDirname)
 
 	if err := os.MkdirAll(chunkDir, 0777); err != nil {
 		return errors.Wrap(err, "create chunks dir")
 	}
 
-	files, err := fileutil.ReadDir(filepath.Join(src, "chunks"))
+	files, err := fileutil.ReadDir(filepath.Join(src, block.ChunksDirname))
 	if err != nil {
 		return errors.Wrap(err, "read chunk dir")
 	}
 	for i, fn := range files {
-		files[i] = filepath.Join("chunks", fn)
+		files[i] = filepath.Join(block.ChunksDirname, fn)
 	}
-	files = append(files, block.MetaFilename, "index")
+	files = append(files, block.MetaFilename, block.IndexFilename)
 
 	for _, fn := range files {
 		if err := os.Link(filepath.Join(src, fn), filepath.Join(dst, fn)); err != nil {

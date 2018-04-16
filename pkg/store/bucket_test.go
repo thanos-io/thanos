@@ -15,7 +15,6 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
@@ -77,9 +76,8 @@ func TestBucketStore_e2e(t *testing.T) {
 		meta.Thanos.Labels = map[string]string{"ext": "value"}
 		testutil.Ok(t, block.WriteMetaFile(dir2, meta))
 
-		// TODO(fabxc): remove the component dependency by factoring out the block interface.
-		testutil.Ok(t, objstore.UploadDir(ctx, bkt, dir1, id1.String()))
-		testutil.Ok(t, objstore.UploadDir(ctx, bkt, dir2, id2.String()))
+		testutil.Ok(t, block.Upload(ctx, bkt, dir1))
+		testutil.Ok(t, block.Upload(ctx, bkt, dir2))
 
 		testutil.Ok(t, os.RemoveAll(dir1))
 		testutil.Ok(t, os.RemoveAll(dir2))

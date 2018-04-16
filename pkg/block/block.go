@@ -10,6 +10,8 @@ import (
 	"path"
 	"path/filepath"
 
+	"fmt"
+
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
@@ -35,8 +37,17 @@ type ThanosMeta struct {
 	} `json:"downsample"`
 }
 
-// MetaFilename is the known JSON filename for meta information.
-const MetaFilename = "meta.json"
+const (
+	// MetaFilename is the known JSON filename for meta information.
+	MetaFilename = "meta.json"
+	// IndexFilename is the known index file for block index.
+	IndexFilename = "index"
+	// ChunksDirname is the known dir name for chunks with compressed samples.
+	ChunksDirname = "chunks"
+
+	// DebugMetas is a directory for debug meta files that happen in the past. Useful for debugging.
+	DebugMetas = "debug/metas"
+)
 
 // WriteMetaFile writes the given meta into <dir>/meta.json.
 func WriteMetaFile(dir string, meta *Meta) error {
@@ -106,7 +117,7 @@ func Download(ctx context.Context, bucket objstore.Bucket, id ulid.ULID, dst str
 		return err
 	}
 
-	chunksDir := filepath.Join(dst, "chunks")
+	chunksDir := filepath.Join(dst, ChunksDirname)
 	_, err := os.Stat(chunksDir)
 	if os.IsNotExist(err) {
 		// This can happen if block is empty. We cannot easily upload empty directory, so create one here.
@@ -118,6 +129,65 @@ func Download(ctx context.Context, bucket objstore.Bucket, id ulid.ULID, dst str
 	}
 
 	return nil
+}
+
+// Upload uploads block from given block dir that ends with block id.
+// It makes sure cleanup is done on error to avoid partial block uploads.
+// It also verifies basic features of Thanos block.
+// TODO(bplotka): Ensure bucket operations have reasonable backoff retries.
+func Upload(ctx context.Context, bkt objstore.Bucket, bdir string) error {
+	df, err := os.Stat(bdir)
+	if err != nil {
+		return errors.Wrap(err, "stat bdir")
+	}
+	if !df.IsDir() {
+		return errors.Errorf("%s is not a directory", bdir)
+	}
+
+	// Verify dir.
+	id, err := ulid.Parse(df.Name())
+	if err != nil {
+		return errors.Wrap(err, "not a block dir")
+	}
+
+	meta, err := ReadMetaFile(bdir)
+	if err != nil {
+		// No meta or broken meta file.
+		return errors.Wrap(err, "read meta")
+	}
+
+	if meta.Thanos.Labels == nil || len(meta.Thanos.Labels) == 0 {
+		return errors.Errorf("empty external labels are not allowed for Thanos block.")
+	}
+
+	if objstore.UploadFile(ctx, bkt, path.Join(bdir, MetaFilename), path.Join(DebugMetas, fmt.Sprintf("%s.json", id))); err != nil {
+		return errors.Wrap(err, "upload meta file to debug dir")
+	}
+
+	if err := objstore.UploadDir(ctx, bkt, path.Join(bdir, ChunksDirname), path.Join(id.String(), ChunksDirname)); err != nil {
+		return cleanUp(bkt, id, errors.Wrap(err, "upload chunks"))
+	}
+
+	if objstore.UploadFile(ctx, bkt, path.Join(bdir, IndexFilename), path.Join(id.String(), IndexFilename)); err != nil {
+		return cleanUp(bkt, id, errors.Wrap(err, "upload index"))
+	}
+
+	// Meta.json always need to be uploaded as a last item. This will allow to assume block directories without meta file
+	// to be pending uploads.
+	if objstore.UploadFile(ctx, bkt, path.Join(bdir, MetaFilename), path.Join(id.String(), MetaFilename)); err != nil {
+		return cleanUp(bkt, id, errors.Wrap(err, "upload meta file"))
+	}
+
+	return nil
+}
+
+func cleanUp(bkt objstore.Bucket, id ulid.ULID, err error) error {
+	// Cleanup the dir with an uncancelable context.
+	cleanErr := Delete(context.Background(), bkt, id)
+	if cleanErr != nil {
+		return errors.Wrapf(err, "failed to clean block after upload issue. Partial block in system. Err: %s", err.Error())
+	}
+	return err
 }
 
 // Delete removes directory that is mean to be block directory.

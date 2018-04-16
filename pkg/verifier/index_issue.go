@@ -37,9 +37,9 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 		}
 		defer os.RemoveAll(tmpdir)
 
-		err = objstore.DownloadFile(ctx, bkt, path.Join(id.String(), "index"), filepath.Join(tmpdir, "index"))
+		err = objstore.DownloadFile(ctx, bkt, path.Join(id.String(), block.IndexFilename), filepath.Join(tmpdir, block.IndexFilename))
 		if err != nil {
-			return errors.Wrapf(err, "download index file %s", path.Join(id.String(), "index"))
+			return errors.Wrapf(err, "download index file %s", path.Join(id.String(), block.IndexFilename))
 		}
 
 		meta, err := block.DownloadMeta(ctx, bkt, id)
@@ -47,7 +47,7 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 			return errors.Wrapf(err, "download meta file %s", id)
 		}
 
-		stats, err := block.GatherIndexIssueStats(filepath.Join(tmpdir, "index"), meta.MinTime, meta.MaxTime)
+		stats, err := block.GatherIndexIssueStats(filepath.Join(tmpdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
 		if err != nil {
 			return errors.Wrapf(err, "gather index issues %s", id)
 		}
@@ -90,14 +90,13 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 		}
 
 		// Verify repaired block before uploading it.
-		err = block.VerifyIndex(filepath.Join(tmpdir, resid.String(), "index"), meta.MinTime, meta.MaxTime)
+		err = block.VerifyIndex(filepath.Join(tmpdir, resid.String(), block.IndexFilename), meta.MinTime, meta.MaxTime)
 		if err != nil {
 			return errors.Wrapf(err, "repaired block is invalid %s", resid)
 		}
 
 		level.Info(logger).Log("msg", "uploading repaired block", "newID", resid, "issue", IndexIssueID)
-		err = objstore.UploadDir(ctx, bkt, filepath.Join(tmpdir, resid.String()), resid.String())
-		if err != nil {
+		if err = block.Upload(ctx, bkt, filepath.Join(tmpdir, resid.String())); err != nil {
 			return errors.Wrapf(err, "upload of %s failed", resid)
 		}
 

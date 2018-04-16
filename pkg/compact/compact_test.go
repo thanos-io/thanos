@@ -237,10 +237,10 @@ func TestGroup_Compact(t *testing.T) {
 	metas = append(metas, meta)
 
 	// Upload and forget about tmp dir with all blocks. We want to ensure same state we will have on compactor.
-	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(prepareDir, b1.String()), b1.String()))
-	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(prepareDir, b2.String()), b2.String()))
-	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(prepareDir, b3.String()), b3.String()))
-	testutil.Ok(t, objstore.UploadDir(ctx, bkt, filepath.Join(prepareDir, freshB.String()), freshB.String()))
+	testutil.Ok(t, block.Upload(ctx, bkt, filepath.Join(prepareDir, b1.String())))
+	testutil.Ok(t, block.Upload(ctx, bkt, filepath.Join(prepareDir, b2.String())))
+	testutil.Ok(t, block.Upload(ctx, bkt, filepath.Join(prepareDir, b3.String())))
+	testutil.Ok(t, block.Upload(ctx, bkt, filepath.Join(prepareDir, freshB.String())))
 
 	// Create fresh, empty directory for actual test.
 	dir, err := ioutil.TempDir("", "test-compact")

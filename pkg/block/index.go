@@ -318,13 +318,13 @@ func Repair(dir string, id ulid.ULID) (resid ulid.ULID, err error) {
 
 	resdir := filepath.Join(dir, resid.String())
 
-	chunkw, err := chunks.NewWriter(filepath.Join(resdir, "chunks"))
+	chunkw, err := chunks.NewWriter(filepath.Join(resdir, ChunksDirname))
 	if err != nil {
 		return resid, errors.Wrap(err, "open chunk writer")
 	}
 	defer chunkw.Close()
 
-	indexw, err := index.NewWriter(filepath.Join(resdir, "index"))
+	indexw, err := index.NewWriter(filepath.Join(resdir, IndexFilename))
 	if err != nil {
 		return resid, errors.Wrap(err, "open index writer")
 	}
