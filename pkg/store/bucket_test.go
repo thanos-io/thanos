@@ -46,6 +46,8 @@ func TestBucketStore_e2e(t *testing.T) {
 		labels.FromStrings("a", "2", "c", "1"),
 		labels.FromStrings("a", "2", "c", "2"),
 	}
+	extLset := labels.FromStrings("test", "val")
+
 	start := time.Now()
 	now := start
 
@@ -63,9 +65,9 @@ func TestBucketStore_e2e(t *testing.T) {
 
 		// Create two blocks per time slot. Only add 10 samples each so only one chunk
 		// gets created each. This way we can easily verify we got 10 chunks per series below.
-		id1, err := testutil.CreateBlock(dir, series[:4], 10, mint, maxt)
+		id1, err := testutil.CreateBlock(dir, series[:4], 10, mint, maxt, extLset, 0)
 		testutil.Ok(t, err)
-		id2, err := testutil.CreateBlock(dir, series[4:], 10, mint, maxt)
+		id2, err := testutil.CreateBlock(dir, series[4:], 10, mint, maxt, extLset, 0)
 		testutil.Ok(t, err)
 
 		dir1, dir2 := filepath.Join(dir, id1.String()), filepath.Join(dir, id2.String())

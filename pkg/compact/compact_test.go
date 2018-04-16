@@ -15,7 +15,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
@@ -190,12 +189,13 @@ func TestGroup_Compact(t *testing.T) {
 	defer cancel()
 
 	var metas []*block.Meta
+	extLset := labels.Labels{{Name: "e1", Value: "1"}}
 	b1, err := testutil.CreateBlock(prepareDir, []labels.Labels{
 		{{Name: "a", Value: "1"}},
 		{{Name: "a", Value: "2"}},
 		{{Name: "a", Value: "3"}},
 		{{Name: "a", Value: "4"}},
-	}, 100, 0, 1000)
+	}, 100, 0, 1000, extLset, 124)
 	testutil.Ok(t, err)
 
 	meta, err := block.ReadMetaFile(filepath.Join(prepareDir, b1.String()))
@@ -207,7 +207,7 @@ func TestGroup_Compact(t *testing.T) {
 		{{Name: "a", Value: "4"}},
 		{{Name: "a", Value: "5"}},
 		{{Name: "a", Value: "6"}},
-	}, 100, 2001, 3000)
+	}, 100, 2001, 3000, extLset, 124)
 	testutil.Ok(t, err)
 
 	// Mix order to make sure compact is able to deduct min time / max time.
@@ -216,7 +216,7 @@ func TestGroup_Compact(t *testing.T) {
 	metas = append(metas, meta)
 
 	// Empty block. This can happen when TSDB does not have any samples for min-block-size time.
-	b2, err := testutil.CreateBlock(prepareDir, []labels.Labels{}, 100, 1001, 2000)
+	b2, err := testutil.CreateBlock(prepareDir, []labels.Labels{}, 100, 1001, 2000, extLset, 124)
 	testutil.Ok(t, err)
 
 	meta, err = block.ReadMetaFile(filepath.Join(prepareDir, b2.String()))
@@ -229,7 +229,7 @@ func TestGroup_Compact(t *testing.T) {
 		{{Name: "a", Value: "3"}},
 		{{Name: "a", Value: "4"}},
 		{{Name: "a", Value: "5"}},
-	}, 100, 3001, 4000)
+	}, 100, 3001, 4000, extLset, 124)
 	testutil.Ok(t, err)
 
 	meta, err = block.ReadMetaFile(filepath.Join(prepareDir, freshB.String()))
@@ -251,8 +251,8 @@ func TestGroup_Compact(t *testing.T) {
 	g, err := newGroup(
 		nil,
 		bkt,
-		nil,
-		0,
+		extLset,
+		124,
 		metrics.compactions.WithLabelValues(""),
 		metrics.compactionFailures.WithLabelValues(""),
 		metrics.garbageCollectedBlocks,
@@ -276,7 +276,7 @@ func TestGroup_Compact(t *testing.T) {
 	testutil.Assert(t, id != ulid.ULID{}, "no compaction took place")
 
 	resDir := filepath.Join(dir, id.String())
-	testutil.Ok(t, objstore.DownloadDir(ctx, bkt, id.String(), resDir))
+	testutil.Ok(t, block.Download(ctx, bkt, id, resDir))
 
 	meta, err = block.ReadMetaFile(resDir)
 	testutil.Ok(t, err)
@@ -287,6 +287,10 @@ func TestGroup_Compact(t *testing.T) {
 	testutil.Equals(t, uint64(2*4*100), meta.Stats.NumSamples) // Only 2 times 4*100 because one block was empty.
 	testutil.Equals(t, 2, meta.Compaction.Level)
 	testutil.Equals(t, []ulid.ULID{b1, b3, b2}, meta.Compaction.Sources)
+
+	// Check thanos meta.
+	testutil.Assert(t, extLset.Equals(labels.FromMap(meta.Thanos.Labels)), "ext labels does not match")
+	testutil.Equals(t, int64(123), meta.Thanos.Downsample.Resolution)
 
 	// Check object storage. All blocks that were included in new compacted one should be removed.
 	err = bkt.Iter(ctx, "", func(n string) error {

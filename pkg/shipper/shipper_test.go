@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/ulid"
@@ -30,7 +31,7 @@ func TestShipper_UploadBlocks(t *testing.T) {
 	testutil.Ok(t, err)
 	defer cleanup()
 
-	shipper := New(nil, nil, dir, bucket, func() labels.Labels {
+	shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bucket, func() labels.Labels {
 		return labels.FromStrings("prometheus", "prom-1")
 	})
 
@@ -59,6 +60,11 @@ func TestShipper_UploadBlocks(t *testing.T) {
 				MinTime: timestamp.FromTime(now.Add(time.Duration(i) * time.Hour)),
 				MaxTime: timestamp.FromTime(now.Add((time.Duration(i) * time.Hour) + 1)),
 			},
+			Thanos: block.ThanosMeta{
+				Labels: map[string]string{
+					"test": "val",
+				},
+			},
 		}
 		meta.Version = 1
 		meta.ULID = id
@@ -71,6 +77,10 @@ func TestShipper_UploadBlocks(t *testing.T) {
 
 		// Running shipper while a block is being written to temp dir should not trigger uploads.
 		shipper.Sync(ctx)
+
+		shipMeta, err := ReadMetaFile(dir)
+		testutil.Ok(t, err)
+		testutil.Equals(t, &Meta{Version: 1, Uploaded: ids[:i]}, shipMeta)
 
 		testutil.Ok(t, os.MkdirAll(tmp+"/chunks", 0777))
 		testutil.Ok(t, ioutil.WriteFile(tmp+"/chunks/0001", []byte("chunkcontents1"), 0666))
@@ -102,7 +112,7 @@ func TestShipper_UploadBlocks(t *testing.T) {
 			testutil.Ok(t, block.Delete(ctx, bucket, ids[4]))
 		}
 		// The shipper meta file should show all blocks as uploaded.
-		shipMeta, err := ReadMetaFile(dir)
+		shipMeta, err = ReadMetaFile(dir)
 		testutil.Ok(t, err)
 		testutil.Equals(t, &Meta{Version: 1, Uploaded: ids[:i+1]}, shipMeta)
 

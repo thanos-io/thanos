@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
@@ -138,6 +139,8 @@ func CreateBlock(
 	series []labels.Labels,
 	numSamples int,
 	mint, maxt int64,
+	extLset labels.Labels,
+	resolution int64,
 ) (id ulid.ULID, err error) {
 	h, err := tsdb.NewHead(nil, nil, tsdb.NopWAL(), 10000000000)
 	if err != nil {
@@ -185,5 +188,15 @@ func CreateBlock(
 	if err != nil {
 		return id, errors.Wrap(err, "create compactor")
 	}
-	return c.Write(dir, h, mint, maxt)
+
+	id, err = c.Write(dir, h, mint, maxt)
+	if err != nil {
+		return id, errors.Wrap(err, "write block")
+	}
+
+	if _, err = block.Finalize(dir, extLset.Map(), resolution, nil); err != nil {
+		return id, errors.Wrap(err, "finalize block")
+	}
+
+	return id, nil
 }

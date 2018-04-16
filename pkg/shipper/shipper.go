@@ -144,7 +144,7 @@ func (s *Shipper) Sync(ctx context.Context) {
 	// Reset the uploaded slice so we can rebuild it only with blocks that still exist locally.
 	meta.Uploaded = nil
 
-	s.iterBlockMetas(func(m *block.Meta) error {
+	if err = s.iterBlockMetas(func(m *block.Meta) error {
 		// Do not sync a block if we already uploaded it. If it is no longer found in the bucket,
 		// it was generally removed by the compaction process.
 		if _, ok := hasUploaded[m.ULID]; !ok {
@@ -155,7 +155,10 @@ func (s *Shipper) Sync(ctx context.Context) {
 		}
 		meta.Uploaded = append(meta.Uploaded, m.ULID)
 		return nil
-	})
+	}); err != nil {
+		level.Error(s.logger).Log("msg", "iter block metas failed", "err", err)
+		return
+	}
 	if err := WriteMetaFile(s.dir, meta); err != nil {
 		level.Warn(s.logger).Log("msg", "updating meta file failed", "err", err)
 	}
