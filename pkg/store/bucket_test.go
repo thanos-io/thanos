@@ -140,8 +140,8 @@ func TestBucketStore_e2e(t *testing.T) {
 	}
 
 	pbseries = [][]storepb.Label{
-		{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}},
-		{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
+		{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+		{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
 	}
 	srv = newStoreSeriesServer(ctx)
 
