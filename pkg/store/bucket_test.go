@@ -162,15 +162,15 @@ func TestBucketStore_e2e(t *testing.T) {
 
 	// Matching by external label should work as well.
 	pbseries = [][]storepb.Label{
-		{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext", Value: "value"}},
-		{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext", Value: "value"}},
+		{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+		{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
 	}
 	srv = newStoreSeriesServer(ctx)
 
 	err = store.Series(&storepb.SeriesRequest{
 		Matchers: []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
-			{Type: storepb.LabelMatcher_EQ, Name: "ext", Value: "value"},
+			{Type: storepb.LabelMatcher_EQ, Name: "ext2", Value: "value2"},
 		},
 		MinTime: timestamp.FromTime(start),
 		MaxTime: timestamp.FromTime(now),
@@ -187,7 +187,7 @@ func TestBucketStore_e2e(t *testing.T) {
 	err = store.Series(&storepb.SeriesRequest{
 		Matchers: []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
-			{Type: storepb.LabelMatcher_EQ, Name: "ext", Value: "wrong-value"},
+			{Type: storepb.LabelMatcher_EQ, Name: "ext2", Value: "wrong-value"},
 		},
 		MinTime: timestamp.FromTime(start),
 		MaxTime: timestamp.FromTime(now),
