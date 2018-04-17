@@ -171,7 +171,7 @@ func (s *Shipper) sync(ctx context.Context, meta *block.Meta) (err error) {
 	}
 
 	// Check against bucket if the meta file for this block exists.
-	ok, err := s.bucket.Exists(ctx, path.Join(meta.ULID.String(), "meta.json"))
+	ok, err := s.bucket.Exists(ctx, path.Join(meta.ULID.String(), block.MetaFilename))
 	if err != nil {
 		return errors.Wrap(err, "check exists")
 	}
@@ -262,7 +262,7 @@ func hardlinkBlock(src, dst string) error {
 	for i, fn := range files {
 		files[i] = filepath.Join("chunks", fn)
 	}
-	files = append(files, "meta.json", "index")
+	files = append(files, block.MetaFilename, "index")
 
 	for _, fn := range files {
 		if err := os.Link(filepath.Join(src, fn), filepath.Join(dst, fn)); err != nil {

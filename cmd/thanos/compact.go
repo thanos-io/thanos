@@ -11,6 +11,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/compact"
+	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
@@ -126,7 +127,7 @@ func runCompact(
 			int64(8 * time.Hour / time.Millisecond),
 			int64(2 * 24 * time.Hour / time.Millisecond),  // 2 days
 			int64(14 * 24 * time.Hour / time.Millisecond), // 2 weeks
-		}, nil)
+		}, downsample.NewPool())
 		if err != nil {
 			return errors.Wrap(err, "create compactor")
 		}

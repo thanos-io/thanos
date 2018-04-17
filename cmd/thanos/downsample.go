@@ -8,7 +8,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/prometheus/tsdb/chunkenc"
@@ -124,14 +123,12 @@ func downsampleBucket(
 	var metas []*block.Meta
 
 	err := bkt.Iter(ctx, "", func(name string) error {
-		if !strings.HasSuffix(name, "/") {
+		id, ok := block.IsBlockDir(name)
+		if !ok {
 			return nil
 		}
-		id, err := ulid.Parse(name[:len(name)-1])
-		if err != nil {
-			return nil
-		}
-		rc, err := bkt.Get(ctx, path.Join(id.String(), "meta.json"))
+
+		rc, err := bkt.Get(ctx, path.Join(id.String(), block.MetaFilename))
 		if err != nil {
 			return errors.Wrapf(err, "get meta for block %s", id)
 		}
@@ -239,7 +236,7 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 	if m.Thanos.Downsample.Resolution == 0 {
 		pool = chunkenc.NewPool()
 	} else {
-		pool = downsample.AggrChunkPool{}
+		pool = downsample.NewPool()
 	}
 
 	b, err := tsdb.OpenBlock(bdir, pool)
@@ -247,7 +244,7 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 		return errors.Wrapf(err, "open block %s", m.ULID)
 	}
 
-	id, err := downsample.Downsample(ctx, m, b, dir, resolution)
+	id, err := downsample.Downsample(m, b, dir, resolution)
 	if err != nil {
 		return errors.Wrapf(err, "downsample block %s to window %d", m.ULID, resolution)
 	}

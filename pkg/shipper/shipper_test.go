@@ -114,7 +114,7 @@ func TestShipper_UploadBlocks(t *testing.T) {
 	}
 
 	for id := range expBlocks {
-		ok, _ := bucket.Exists(nil, path.Join(id.String(), "meta.json"))
+		ok, _ := bucket.Exists(nil, path.Join(id.String(), block.MetaFilename))
 		testutil.Assert(t, ok, "block %s was not uploaded", id)
 	}
 	for fn, exp := range expFiles {

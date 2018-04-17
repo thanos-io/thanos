@@ -980,7 +980,7 @@ func (b *bucketBlock) loadMeta(ctx context.Context, id ulid.ULID, dir string) er
 		if err := os.MkdirAll(dir, 0777); err != nil {
 			return errors.Wrap(err, "create dir")
 		}
-		src := path.Join(id.String(), "meta.json")
+		src := path.Join(id.String(), block.MetaFilename)
 
 		if err := objstore.DownloadFile(ctx, b.bucket, src, dir); err != nil {
 			return errors.Wrap(err, "download meta.json")
