@@ -40,7 +40,7 @@ func RetryWithLog(logger log.Logger, interval time.Duration, stopc <-chan struct
 		if err = f(); err == nil {
 			return nil
 		} else {
-			level.Error(logger).Log("msg", "function failed. Retrying", "err", err)
+			level.Error(logger).Log("msg", "function failed. Retrying in next tick", "err", err)
 		}
 		select {
 		case <-stopc:
