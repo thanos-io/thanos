@@ -37,7 +37,7 @@ Contributions are very welcome!
 ## Community
 
 Thanos is an open source project and we welcome new contributers and members 
-of the community. Here are ways that you can reach out and communicate with the community:
+of the community. Here are ways to get in touch with the community:
 
 * Slack: [#thanos](https://join.slack.com/t/improbable-eng/shared_invite/enQtMzQ1ODcyMzQ5MjM4LWY5ZWZmNGM2ODc5MmViNmQ3ZTA3ZTY3NzQwOTBlMTkzZmIxZTIxODk0OWU3YjZhNWVlNDU3MDlkZGViZjhkMjc)
 * Twitter: [@improbableio](https://twitter.com/Improbableio)
