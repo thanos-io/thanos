@@ -189,6 +189,8 @@ func runCompact(
 			if err := downsampleBucket(ctx, logger, bkt, downsamplingDir); err != nil {
 				return errors.Wrap(err, "second pass of downsampling failed")
 			}
+
+			level.Info(logger).Log("msg", "compaction iteration done")
 			return nil
 		}
 

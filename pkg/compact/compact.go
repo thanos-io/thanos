@@ -597,7 +597,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		}
 
 		// Ensure all input blocks are valid.
-		if err := block.VerifyIndex(filepath.Join(pdir, "index"), meta.MinTime, meta.MaxTime); err != nil {
+		if err := block.VerifyIndex(filepath.Join(pdir, block.IndexFilename), meta.MinTime, meta.MaxTime); err != nil {
 			return compID, halt(errors.Wrapf(err, "invalid plan block %s", pdir))
 		}
 	}
@@ -621,7 +621,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	}
 
 	// Ensure the output block is valid.
-	if err := block.VerifyIndex(filepath.Join(bdir, "index"), newMeta.MinTime, newMeta.MaxTime); err != nil {
+	if err := block.VerifyIndex(filepath.Join(bdir, block.IndexFilename), newMeta.MinTime, newMeta.MaxTime); err != nil {
 		return compID, halt(errors.Wrapf(err, "invalid result block %s", bdir))
 	}
 
@@ -632,8 +632,8 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 
 	begin = time.Now()
 
-	if err := objstore.UploadDir(ctx, cg.bkt, bdir, compID.String()); err != nil {
-		return compID, retry(errors.Wrap(err, "upload block"))
+	if err := block.Upload(ctx, cg.bkt, bdir); err != nil {
+		return compID, retry(errors.Wrapf(err, "upload of %s failed", compID))
 	}
 	level.Debug(cg.logger).Log("msg", "uploaded block", "result_block", compID, "duration", time.Since(begin))
 
@@ -660,5 +660,6 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		}
 		cg.groupGarbageCollectedBlocks.Inc()
 	}
+
 	return compID, nil
 }

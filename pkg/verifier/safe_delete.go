@@ -39,12 +39,12 @@ func SafeDelete(ctx context.Context, bkt objstore.Bucket, backupBkt objstore.Buc
 		return errors.Wrap(err, "download from source")
 	}
 
-	if err := objstore.UploadDir(ctx, backupBkt, dir, id.String()); err != nil {
+	if err := block.Upload(ctx, backupBkt, dir); err != nil {
 		return errors.Wrap(err, "upload to backup")
 	}
 
 	// Block uploaded, so we are ok to remove from src bucket.
-	if err := objstore.DeleteDir(ctx, bkt, id.String()); err != nil {
+	if err := block.Delete(ctx, bkt, id); err != nil {
 		return errors.Wrap(err, "delete from source")
 	}
 

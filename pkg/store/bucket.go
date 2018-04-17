@@ -948,7 +948,7 @@ func newBucketBlock(
 	b = &bucketBlock{
 		logger:     logger,
 		bucket:     bkt,
-		indexObj:   path.Join(id.String(), "index"),
+		indexObj:   path.Join(id.String(), block.IndexFilename),
 		indexCache: indexCache,
 		chunkPool:  chunkPool,
 	}
@@ -964,7 +964,7 @@ func newBucketBlock(
 		return nil, errors.Wrap(err, "load index cache")
 	}
 	// Get object handles for all chunk files.
-	err = bkt.Iter(ctx, path.Join(id.String(), "chunks"), func(n string) error {
+	err = bkt.Iter(ctx, path.Join(id.String(), block.ChunksDirname), func(n string) error {
 		b.chunkObjs = append(b.chunkObjs, n)
 		return nil
 	})
@@ -1007,7 +1007,7 @@ func (b *bucketBlock) loadIndexCache(ctx context.Context, dir string) (err error
 		return errors.Wrap(err, "read index cache")
 	}
 	// No cache exists is on disk yet, build it from a the downloaded index and retry.
-	fn := filepath.Join(dir, "index")
+	fn := filepath.Join(dir, block.IndexFilename)
 
 	if err := objstore.DownloadFile(ctx, b.bucket, b.indexObj, fn); err != nil {
 		return errors.Wrap(err, "download index file")

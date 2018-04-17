@@ -15,7 +15,6 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
@@ -47,6 +46,8 @@ func TestBucketStore_e2e(t *testing.T) {
 		labels.FromStrings("a", "2", "c", "1"),
 		labels.FromStrings("a", "2", "c", "2"),
 	}
+	extLset := labels.FromStrings("ext1", "value1")
+
 	start := time.Now()
 	now := start
 
@@ -64,9 +65,9 @@ func TestBucketStore_e2e(t *testing.T) {
 
 		// Create two blocks per time slot. Only add 10 samples each so only one chunk
 		// gets created each. This way we can easily verify we got 10 chunks per series below.
-		id1, err := testutil.CreateBlock(dir, series[:4], 10, mint, maxt)
+		id1, err := testutil.CreateBlock(dir, series[:4], 10, mint, maxt, extLset, 0)
 		testutil.Ok(t, err)
-		id2, err := testutil.CreateBlock(dir, series[4:], 10, mint, maxt)
+		id2, err := testutil.CreateBlock(dir, series[4:], 10, mint, maxt, extLset, 0)
 		testutil.Ok(t, err)
 
 		dir1, dir2 := filepath.Join(dir, id1.String()), filepath.Join(dir, id2.String())
@@ -74,12 +75,11 @@ func TestBucketStore_e2e(t *testing.T) {
 		// Add labels to the meta of the second block.
 		meta, err := block.ReadMetaFile(dir2)
 		testutil.Ok(t, err)
-		meta.Thanos.Labels = map[string]string{"ext": "value"}
+		meta.Thanos.Labels = map[string]string{"ext2": "value2"}
 		testutil.Ok(t, block.WriteMetaFile(dir2, meta))
 
-		// TODO(fabxc): remove the component dependency by factoring out the block interface.
-		testutil.Ok(t, objstore.UploadDir(ctx, bkt, dir1, id1.String()))
-		testutil.Ok(t, objstore.UploadDir(ctx, bkt, dir2, id2.String()))
+		testutil.Ok(t, block.Upload(ctx, bkt, dir1))
+		testutil.Ok(t, block.Upload(ctx, bkt, dir2))
 
 		testutil.Ok(t, os.RemoveAll(dir1))
 		testutil.Ok(t, os.RemoveAll(dir2))
@@ -113,14 +113,14 @@ func TestBucketStore_e2e(t *testing.T) {
 	testutil.Equals(t, []string{"1", "2"}, vals.Values)
 
 	pbseries := [][]storepb.Label{
-		{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}},
-		{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}},
-		{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext", Value: "value"}},
-		{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext", Value: "value"}},
-		{{Name: "a", Value: "2"}, {Name: "b", Value: "1"}},
-		{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
-		{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}, {Name: "ext", Value: "value"}},
-		{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext", Value: "value"}},
+		{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+		{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+		{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+		{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+		{{Name: "a", Value: "2"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+		{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+		{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+		{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
 	}
 	srv := newStoreSeriesServer(ctx)
 
@@ -140,8 +140,8 @@ func TestBucketStore_e2e(t *testing.T) {
 	}
 
 	pbseries = [][]storepb.Label{
-		{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}},
-		{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
+		{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+		{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
 	}
 	srv = newStoreSeriesServer(ctx)
 
@@ -162,15 +162,15 @@ func TestBucketStore_e2e(t *testing.T) {
 
 	// Matching by external label should work as well.
 	pbseries = [][]storepb.Label{
-		{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext", Value: "value"}},
-		{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext", Value: "value"}},
+		{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+		{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
 	}
 	srv = newStoreSeriesServer(ctx)
 
 	err = store.Series(&storepb.SeriesRequest{
 		Matchers: []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
-			{Type: storepb.LabelMatcher_EQ, Name: "ext", Value: "value"},
+			{Type: storepb.LabelMatcher_EQ, Name: "ext2", Value: "value2"},
 		},
 		MinTime: timestamp.FromTime(start),
 		MaxTime: timestamp.FromTime(now),
@@ -187,7 +187,7 @@ func TestBucketStore_e2e(t *testing.T) {
 	err = store.Series(&storepb.SeriesRequest{
 		Matchers: []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
-			{Type: storepb.LabelMatcher_EQ, Name: "ext", Value: "wrong-value"},
+			{Type: storepb.LabelMatcher_EQ, Name: "ext2", Value: "wrong-value"},
 		},
 		MinTime: timestamp.FromTime(start),
 		MaxTime: timestamp.FromTime(now),

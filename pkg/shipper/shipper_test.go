@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/ulid"
@@ -30,9 +31,8 @@ func TestShipper_UploadBlocks(t *testing.T) {
 	testutil.Ok(t, err)
 	defer cleanup()
 
-	shipper := New(nil, nil, dir, bucket, func() labels.Labels {
-		return labels.FromStrings("prometheus", "prom-1")
-	})
+	extLset := labels.FromStrings("prometheus", "prom-1")
+	shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bucket, func() labels.Labels { return extLset })
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -72,6 +72,13 @@ func TestShipper_UploadBlocks(t *testing.T) {
 		// Running shipper while a block is being written to temp dir should not trigger uploads.
 		shipper.Sync(ctx)
 
+		shipMeta, err := ReadMetaFile(dir)
+		testutil.Ok(t, err)
+		if len(shipMeta.Uploaded) == 0 {
+			shipMeta.Uploaded = []ulid.ULID{}
+		}
+		testutil.Equals(t, &Meta{Version: 1, Uploaded: ids[:i]}, shipMeta)
+
 		testutil.Ok(t, os.MkdirAll(tmp+"/chunks", 0777))
 		testutil.Ok(t, ioutil.WriteFile(tmp+"/chunks/0001", []byte("chunkcontents1"), 0666))
 		testutil.Ok(t, ioutil.WriteFile(tmp+"/chunks/0002", []byte("chunkcontents2"), 0666))
@@ -82,7 +89,7 @@ func TestShipper_UploadBlocks(t *testing.T) {
 		shipper.Sync(ctx)
 
 		// The external labels must be attached to the meta file on upload.
-		meta.Thanos.Labels = map[string]string{"prometheus": "prom-1"}
+		meta.Thanos.Labels = extLset.Map()
 
 		var buf bytes.Buffer
 		enc := json.NewEncoder(&buf)
@@ -102,7 +109,7 @@ func TestShipper_UploadBlocks(t *testing.T) {
 			testutil.Ok(t, block.Delete(ctx, bucket, ids[4]))
 		}
 		// The shipper meta file should show all blocks as uploaded.
-		shipMeta, err := ReadMetaFile(dir)
+		shipMeta, err = ReadMetaFile(dir)
 		testutil.Ok(t, err)
 		testutil.Equals(t, &Meta{Version: 1, Uploaded: ids[:i+1]}, shipMeta)
 
@@ -123,7 +130,7 @@ func TestShipper_UploadBlocks(t *testing.T) {
 		act, err := ioutil.ReadAll(rc)
 		testutil.Ok(t, err)
 		testutil.Ok(t, rc.Close())
-		testutil.Equals(t, exp, act)
+		testutil.Equals(t, string(exp), string(act))
 	}
 	// Verify the fifth block is still deleted by the end.
 	ok, err := bucket.Exists(ctx, ids[4].String()+"/meta.json")

@@ -162,11 +162,11 @@ func testDownsample(t *testing.T, data []*downsampleTestSet, meta *block.Meta, r
 	for _, d := range data {
 		exp[d.lset.Hash()] = d.output
 	}
-	indexr, err := index.NewFileReader(filepath.Join(dir, id.String(), "index"))
+	indexr, err := index.NewFileReader(filepath.Join(dir, id.String(), block.IndexFilename))
 	testutil.Ok(t, err)
 	defer indexr.Close()
 
-	chunkr, err := chunks.NewDirReader(filepath.Join(dir, id.String(), "chunks"), NewPool())
+	chunkr, err := chunks.NewDirReader(filepath.Join(dir, id.String(), block.ChunksDirname), NewPool())
 	testutil.Ok(t, err)
 	defer chunkr.Close()
 
