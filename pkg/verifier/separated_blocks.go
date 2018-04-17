@@ -132,8 +132,12 @@ func SeparatedBlocks(ctx context.Context, logger log.Logger, bkt objstore.Bucket
 					return errors.Wrapf(err, "merge blocks %s and %s", a.ULID, b.ULID)
 				}
 
+				if _, err := block.Finalize(path.Join(tmpdir, resid.String()), bmeta.Thanos.Labels, bmeta.Thanos.Downsample.Resolution, nil); err != nil {
+					return errors.Wrapf(err, "finalizing of %s failed", resid)
+				}
+
 				level.Info(logger).Log("msg", "uploading merged block", "newID", resid, "issue", SeparatedBlocksID)
-				err = objstore.UploadDir(ctx, bkt, filepath.Join(tmpdir, resid.String()), resid.String())
+				err = block.Upload(ctx, bkt, filepath.Join(tmpdir, resid.String()))
 				if err != nil {
 					return errors.Wrapf(err, "upload of %s failed", resid)
 				}
