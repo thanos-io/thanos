@@ -155,6 +155,10 @@ func runSidecar(
 				return errors.Wrap(err, "initial external labels query")
 			}
 
+			if len(externalLabels.Get()) == 0 {
+				return errors.New("no external labels configured on Prometheus server, uniquely identifying external labels must be configured")
+			}
+
 			// New gossip cluster.
 			err = peer.Join(
 				cluster.PeerState{
