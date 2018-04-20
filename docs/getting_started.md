@@ -105,7 +105,7 @@ Providing the label name to the query component will enable the deduplication.
 thanos query \
     --http-address "0.0.0.0:19092" \
     --cluster.peers all.thanos.internal.org \
-    --replica-label replica
+    --query.replica-label replica
 ```
 
 Go to the configured HTTP address that should now show a UI similar to that of Prometheus itself. If the cluster formed correctly you can now query data across all Prometheus servers within the cluster.
