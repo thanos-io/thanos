@@ -210,6 +210,7 @@ func (api *API) query(r *http.Request) (interface{}, []error, *apiError) {
 		warnmtx.Unlock()
 	}
 
+	enableDeduplication = true
 	// Allow disabling deduplication on demand.
 	if dedup := r.FormValue("dedup"); dedup != "" {
 		var err error
@@ -302,6 +303,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *apiError) {
 		warnmtx.Unlock()
 	}
 
+	enableDeduplication = true
 	// Allow disabling deduplication on demand.
 	if dedup := r.FormValue("dedup"); dedup != "" {
 		var err error
@@ -426,6 +428,7 @@ func (api *API) series(r *http.Request) (interface{}, []error, *apiError) {
 		warnmtx.Unlock()
 	}
 
+	enableDeduplication = true
 	// Allow disabling deduplication on demand.
 	if dedup := r.FormValue("dedup"); dedup != "" {
 		var err error
