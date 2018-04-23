@@ -46,7 +46,7 @@ Flags:
                                 initial peers to join the cluster. It can be
                                 either <ip:port>, or <domain:port>
       --cluster.address="0.0.0.0:10900"  
-                                listen address for clutser
+                                listen address for cluster
       --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS  
                                 explicit address to advertise in cluster
 

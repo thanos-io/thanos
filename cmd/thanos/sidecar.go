@@ -100,6 +100,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			s3Config,
 			peer,
 			rl,
+			name,
 		)
 	}
 }
@@ -117,6 +118,7 @@ func runSidecar(
 	s3Config *s3.Config,
 	peer *cluster.Peer,
 	reloader *reloader.Reloader,
+	component string,
 ) error {
 	var externalLabels = &extLabelSet{promURL: promURL}
 
@@ -269,7 +271,7 @@ func runSidecar(
 		bucket = gcsBucket
 	} else if s3Config.Validate() == nil {
 		var err error
-		bkt, err = s3.NewBucket(s3Config, reg)
+		bkt, err = s3.NewBucket(s3Config, reg, component)
 		if err != nil {
 			return errors.Wrap(err, "create s3 client")
 		}

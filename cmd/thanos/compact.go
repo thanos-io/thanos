@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"path"
+	"runtime"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -23,7 +25,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/common/version"
 	"github.com/prometheus/tsdb"
+	"google.golang.org/api/option"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -59,6 +63,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			*syncDelay,
 			*haltOnError,
 			*wait,
+			name,
 		)
 	}
 }
@@ -74,6 +79,7 @@ func runCompact(
 	syncDelay time.Duration,
 	haltOnError bool,
 	wait bool,
+	component string,
 ) error {
 	var (
 		bkt    objstore.Bucket
@@ -93,14 +99,15 @@ func runCompact(
 	reg.MustRegister(halted)
 
 	if gcsBucket != "" {
-		gcsClient, err := storage.NewClient(context.Background())
+		gcsOptions := option.WithUserAgent(fmt.Sprintf("thanos-%s/%s (%s)", component, version.Version, runtime.Version()))
+		gcsClient, err := storage.NewClient(context.Background(), gcsOptions)
 		if err != nil {
 			return errors.Wrap(err, "create GCS client")
 		}
 		bkt = gcs.NewBucket(gcsBucket, gcsClient.Bucket(gcsBucket), reg)
 		bucket = gcsBucket
 	} else if s3Config.Validate() == nil {
-		b, err := s3.NewBucket(s3Config, reg)
+		b, err := s3.NewBucket(s3Config, reg, component)
 		if err != nil {
 			return errors.Wrap(err, "create s3 client")
 		}

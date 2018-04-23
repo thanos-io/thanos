@@ -3,13 +3,16 @@ package s3
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/minio/minio-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/version"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -77,7 +80,7 @@ func (conf *Config) Validate() error {
 }
 
 // NewBucket returns a new Bucket using the provided s3 config values.
-func NewBucket(conf *Config, reg prometheus.Registerer) (*Bucket, error) {
+func NewBucket(conf *Config, reg prometheus.Registerer, component string) (*Bucket, error) {
 	var f func(string, string, string, bool) (*minio.Client, error)
 	if conf.SignatureV2 {
 		f = minio.NewV2
@@ -86,6 +89,7 @@ func NewBucket(conf *Config, reg prometheus.Registerer) (*Bucket, error) {
 	}
 
 	client, err := f(conf.Endpoint, conf.AccessKey, conf.SecretKey, !conf.Insecure)
+	client.SetAppInfo(fmt.Sprintf("thanos-%s", component), fmt.Sprintf("%s (%s)", version.Version, runtime.Version()))
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize s3 client")
 	}
