@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/tsdb/labels"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
@@ -66,6 +68,30 @@ type StoreSet struct {
 	mtx                  sync.RWMutex
 	stores               map[string]*storeRef
 	storeNodeConnections prometheus.Gauge
+	externalLabelStores  map[string]int
+}
+
+type storeSetNodeCollector struct {
+	externalLabelOccurrences func() map[string]int
+}
+
+var (
+	nodeInfoDesc = prometheus.NewDesc(
+		"thanos_store_node_info",
+		"Number of nodes with the same external labels identified by their hash. If any time-series is larger than 1, external label uniqueness is not true",
+		[]string{"external_labels"}, nil,
+	)
+)
+
+func (c *storeSetNodeCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- nodeInfoDesc
+}
+
+func (c *storeSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
+	externalLabelOccurrences := c.externalLabelOccurrences()
+	for externalLabels, occurrences := range externalLabelOccurrences {
+		ch <- prometheus.MustNewConstMetric(nodeInfoDesc, prometheus.GaugeValue, float64(occurrences), externalLabels)
+	}
 }
 
 // NewStoreSet returns a new set of stores from cluster peers and statically configured ones.
@@ -89,13 +115,22 @@ func NewStoreSet(
 	if storeSpecs == nil {
 		storeSpecs = func() []StoreSpec { return nil }
 	}
-	return &StoreSet{
+
+	ss := &StoreSet{
 		logger:               logger,
 		storeSpecs:           storeSpecs,
 		dialOpts:             dialOpts,
 		storeNodeConnections: storeNodeConnections,
 		gRPCRetryTimeout:     3 * time.Second,
+		externalLabelStores:  map[string]int{},
 	}
+
+	storeNodeCollector := &storeSetNodeCollector{externalLabelOccurrences: ss.externalLabelOccurrences}
+	if reg != nil {
+		reg.MustRegister(storeNodeCollector)
+	}
+
+	return ss
 }
 
 type storeRef struct {
@@ -197,10 +232,20 @@ func (s *StoreSet) Update(ctx context.Context) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
+	// Record the number of occurrences of external label combinations.
+	externalLabelStores := map[string]int{}
+	for _, st := range s.stores {
+		externalLabelStores[externalLabelsFromStore(st)]++
+	}
+
 	// Remove stores that where not updated in this update, because were not in s.peerAddr() this time.
 	for addr, st := range s.stores {
 		if _, ok := stores[addr]; ok {
-			continue
+			if externalLabelStores[externalLabelsFromStore(st)] == 1 {
+				continue
+			}
+
+			level.Warn(s.logger).Log("msg", "dropping store, external labels are not unique", "address", st.addr)
 		}
 
 		// Peer does not exists anymore.
@@ -208,7 +253,33 @@ func (s *StoreSet) Update(ctx context.Context) {
 	}
 
 	s.stores = stores
+	s.externalLabelStores = externalLabelStores
 	s.storeNodeConnections.Set(float64(len(s.stores)))
+}
+
+func externalLabelsFromStore(st *storeRef) string {
+	tsdbLabels := labels.Labels{}
+	for _, l := range st.labels {
+		tsdbLabels = append(tsdbLabels, labels.Label{
+			Name:  l.Name,
+			Value: l.Value,
+		})
+	}
+	sort.Sort(tsdbLabels)
+
+	return tsdbLabels.String()
+}
+
+func (s *StoreSet) externalLabelOccurrences() map[string]int {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	r := make(map[string]int, len(s.externalLabelStores))
+	for k, v := range s.externalLabelStores {
+		r[k] = v
+	}
+
+	return r
 }
 
 // Get returns a list of all active stores.
