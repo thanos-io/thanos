@@ -94,8 +94,6 @@ func (r *Reloader) Watch(ctx context.Context) error {
 			return nil
 		case <-tick.C:
 		case event := <-configWatcher.Events:
-			level.Debug(r.logger).Log("msg", "received watch event", "op", event.Op, "name", event.Name)
-
 			if event.Name != r.cfgFile {
 				continue
 			}
