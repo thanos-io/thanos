@@ -304,17 +304,17 @@ func Repair(dir string, id ulid.ULID) (resid ulid.ULID, err error) {
 	if err != nil {
 		return resid, errors.Wrap(err, "open block")
 	}
+	defer b.Close()
+
 	indexr, err := b.Index()
 	if err != nil {
 		return resid, errors.Wrap(err, "open index")
 	}
-	defer indexr.Close()
 
 	chunkr, err := b.Chunks()
 	if err != nil {
 		return resid, errors.Wrap(err, "open chunks")
 	}
-	defer chunkr.Close()
 
 	resdir := filepath.Join(dir, resid.String())
 
