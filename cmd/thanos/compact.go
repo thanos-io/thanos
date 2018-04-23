@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"path"
+	"runtime"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -22,12 +24,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
-	"github.com/prometheus/tsdb"
-	"gopkg.in/alecthomas/kingpin.v2"
-	"google.golang.org/api/option"
-	"fmt"
-	"runtime"
 	"github.com/prometheus/common/version"
+	"github.com/prometheus/tsdb"
+	"google.golang.org/api/option"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 func registerCompact(m map[string]setupFunc, app *kingpin.Application, name string) {
