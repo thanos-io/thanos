@@ -218,7 +218,7 @@ func (s *Shipper) iterBlockMetas(f func(m *block.Meta) error) error {
 		return errors.Wrap(err, "read dir")
 	}
 	for _, n := range names {
-		if _, err := ulid.Parse(n); err != nil {
+		if _, ok := block.IsBlockDir(n); !ok {
 			continue
 		}
 		dir := filepath.Join(s.dir, n)

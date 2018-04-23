@@ -108,7 +108,6 @@ func runStore(
 			closeFn = func() error { return nil }
 			bucket  string
 		)
-
 		if gcsBucket != "" {
 			gcsClient, err := storage.NewClient(context.Background())
 			if err != nil {
@@ -143,8 +142,15 @@ func runStore(
 		if err != nil {
 			return errors.Wrap(err, "create object storage store")
 		}
-		ctx, cancel := context.WithCancel(context.Background())
 
+		begin := time.Now()
+		level.Debug(logger).Log("msg", "initializing bucket store")
+		if err := bs.InitialSync(context.Background()); err != nil {
+			return errors.Wrap(err, "bucket store initial sync")
+		}
+		level.Debug(logger).Log("msg", "bucket store ready", "init_duration", time.Since(begin).String())
+
+		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			err := runutil.Repeat(3*time.Minute, ctx.Done(), func() error {
 				if err := bs.SyncBlocks(ctx); err != nil {
