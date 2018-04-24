@@ -243,6 +243,7 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 	if err != nil {
 		return errors.Wrapf(err, "open block %s", m.ULID)
 	}
+	defer b.Close()
 
 	id, err := downsample.Downsample(m, b, dir, resolution)
 	if err != nil {
