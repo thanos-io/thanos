@@ -341,14 +341,21 @@ func (s *BucketStore) addBlock(ctx context.Context, id ulid.ULID) (err error) {
 		if err != nil {
 			s.metrics.blockLoadFailures.Inc()
 			if err2 := os.RemoveAll(dir); err2 != nil {
-				level.Warn(s.logger).Log("msg", "failed to remove block we cannot load", "err", err)
+				level.Warn(s.logger).Log("msg", "failed to remove block we cannot load", "err", err2)
 			}
 		}
 	}()
 	s.metrics.blockLoads.Inc()
 
-	b, err := newBucketBlock(ctx, log.With(s.logger, "block", id),
-		s.bucket, id, dir, s.indexCache, s.chunkPool)
+	b, err := newBucketBlock(
+		ctx,
+		log.With(s.logger, "block", id),
+		s.bucket,
+		id,
+		dir,
+		s.indexCache,
+		s.chunkPool,
+	)
 	if err != nil {
 		return errors.Wrap(err, "new bucket block")
 	}
