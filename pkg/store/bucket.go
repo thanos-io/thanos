@@ -201,6 +201,7 @@ func NewBucketStore(
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return nil, errors.Wrap(err, "create dir")
 	}
+
 	fns, err := fileutil.ReadDir(dir)
 	if err != nil {
 		return nil, errors.Wrap(err, "read dir")
@@ -233,6 +234,7 @@ func (s *BucketStore) Close() (err error) {
 }
 
 // SyncBlocks synchronizes the stores state with the Bucket bucket.
+// It will reuse disk space as persistent cache based on s.dir param.
 func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 	var wg sync.WaitGroup
 	blockc := make(chan ulid.ULID)
@@ -274,7 +276,7 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 	wg.Wait()
 
 	if err != nil {
-		return err
+		return errors.Wrap(err, "iter")
 	}
 	// Drop all blocks that are no longer present in the bucket.
 	for id := range s.blocks {
@@ -287,6 +289,36 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 		}
 		s.metrics.blockDrops.Inc()
 	}
+
+	return nil
+}
+
+// InitialSync perform blocking sync with extra step at the end to delete locally saved blocks that are no longer
+// present in the bucket. The mismatch of these can only happen between restarts, so we can do that only once per startup.
+func (s *BucketStore) InitialSync(ctx context.Context) error {
+	if err := s.SyncBlocks(ctx); err != nil {
+		return errors.Wrap(err, "sync block")
+	}
+
+	names, err := fileutil.ReadDir(s.dir)
+	if err != nil {
+		return errors.Wrap(err, "read dir")
+	}
+	for _, n := range names {
+		id, ok := block.IsBlockDir(n)
+		if !ok {
+			continue
+		}
+		if b := s.getBlock(id); b != nil {
+			continue
+		}
+
+		// No such block loaded, remove the local dir.
+		if err := os.RemoveAll(path.Join(s.dir, id.String())); err != nil {
+			level.Warn(s.logger).Log("msg", "failed to remove block which is not needed", "err", err)
+		}
+	}
+
 	return nil
 }
 
@@ -308,15 +340,24 @@ func (s *BucketStore) addBlock(ctx context.Context, id ulid.ULID) (err error) {
 	defer func() {
 		if err != nil {
 			s.metrics.blockLoadFailures.Inc()
-			os.RemoveAll(dir)
+			if err2 := os.RemoveAll(dir); err2 != nil {
+				level.Warn(s.logger).Log("msg", "failed to remove block we cannot load", "err", err2)
+			}
 		}
 	}()
 	s.metrics.blockLoads.Inc()
 
-	b, err := newBucketBlock(ctx, log.With(s.logger, "block", id),
-		s.bucket, id, dir, s.indexCache, s.chunkPool)
+	b, err := newBucketBlock(
+		ctx,
+		log.With(s.logger, "block", id),
+		s.bucket,
+		id,
+		dir,
+		s.indexCache,
+		s.chunkPool,
+	)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "new bucket block")
 	}
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
@@ -343,18 +384,18 @@ func (s *BucketStore) addBlock(ctx context.Context, id ulid.ULID) (err error) {
 func (s *BucketStore) removeBlock(id ulid.ULID) error {
 	s.mtx.Lock()
 	b, ok := s.blocks[id]
-	delete(s.blocks, id)
-
 	if ok {
 		lset := labels.FromMap(b.meta.Thanos.Labels)
 		s.blockSets[lset.Hash()].remove(id)
+		delete(s.blocks, id)
 	}
 	s.mtx.Unlock()
-	s.metrics.blocksLoaded.Dec()
 
 	if !ok {
 		return nil
 	}
+
+	s.metrics.blocksLoaded.Dec()
 	if err := b.Close(); err != nil {
 		return errors.Wrap(err, "close block")
 	}
@@ -951,16 +992,12 @@ func newBucketBlock(
 		indexObj:   path.Join(id.String(), block.IndexFilename),
 		indexCache: indexCache,
 		chunkPool:  chunkPool,
+		dir:        dir,
 	}
-	defer func() {
-		if err != nil {
-			os.RemoveAll(dir)
-		}
-	}()
-	if err = b.loadMeta(ctx, id, dir); err != nil {
+	if err = b.loadMeta(ctx, id); err != nil {
 		return nil, errors.Wrap(err, "load meta")
 	}
-	if err = b.loadIndexCache(ctx, dir); err != nil {
+	if err = b.loadIndexCache(ctx); err != nil {
 		return nil, errors.Wrap(err, "load index cache")
 	}
 	// Get object handles for all chunk files.
@@ -974,21 +1011,21 @@ func newBucketBlock(
 	return b, nil
 }
 
-func (b *bucketBlock) loadMeta(ctx context.Context, id ulid.ULID, dir string) error {
+func (b *bucketBlock) loadMeta(ctx context.Context, id ulid.ULID) error {
 	// If we haven't seen the block before download the meta.json file.
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		if err := os.MkdirAll(dir, 0777); err != nil {
+	if _, err := os.Stat(b.dir); os.IsNotExist(err) {
+		if err := os.MkdirAll(b.dir, 0777); err != nil {
 			return errors.Wrap(err, "create dir")
 		}
 		src := path.Join(id.String(), block.MetaFilename)
 
-		if err := objstore.DownloadFile(ctx, b.bucket, src, dir); err != nil {
+		if err := objstore.DownloadFile(ctx, b.bucket, src, b.dir); err != nil {
 			return errors.Wrap(err, "download meta.json")
 		}
 	} else if err != nil {
 		return err
 	}
-	meta, err := block.ReadMetaFile(dir)
+	meta, err := block.ReadMetaFile(b.dir)
 	if err != nil {
 		return errors.Wrap(err, "read meta.json")
 	}
@@ -996,8 +1033,8 @@ func (b *bucketBlock) loadMeta(ctx context.Context, id ulid.ULID, dir string) er
 	return nil
 }
 
-func (b *bucketBlock) loadIndexCache(ctx context.Context, dir string) (err error) {
-	cachefn := filepath.Join(dir, block.IndexCacheFilename)
+func (b *bucketBlock) loadIndexCache(ctx context.Context) (err error) {
+	cachefn := filepath.Join(b.dir, block.IndexCacheFilename)
 
 	b.indexVersion, b.symbols, b.lvals, b.postings, err = block.ReadIndexCache(cachefn)
 	if err == nil {
@@ -1007,7 +1044,7 @@ func (b *bucketBlock) loadIndexCache(ctx context.Context, dir string) (err error
 		return errors.Wrap(err, "read index cache")
 	}
 	// No cache exists is on disk yet, build it from a the downloaded index and retry.
-	fn := filepath.Join(dir, block.IndexFilename)
+	fn := filepath.Join(b.dir, block.IndexFilename)
 
 	if err := objstore.DownloadFile(ctx, b.bucket, b.indexObj, fn); err != nil {
 		return errors.Wrap(err, "download index file")
