@@ -316,6 +316,8 @@ func (s *BucketStore) InitialSync(ctx context.Context) error {
 		// No such block loaded, remove the local dir.
 		return os.RemoveAll(path.Join(s.dir, id.String()))
 	}
+
+	return nil
 }
 
 func (s *BucketStore) numBlocks() int {
