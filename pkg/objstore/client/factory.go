@@ -18,7 +18,6 @@ import (
 var ErrNotFound = errors.New("no valid GCS or S3 configuration supplied")
 
 // NewBucket initializes and returns new object storage clients.
-// TODO(bplotka): Use that in every command.
 func NewBucket(gcsBucket *string, s3Config s3.Config, reg *prometheus.Registry, component string) (objstore.Bucket, func() error, error) {
 	if *gcsBucket != "" {
 		gcsOptions := option.WithUserAgent(fmt.Sprintf("thanos-%s/%s (%s)", component, version.Version, runtime.Version()))
@@ -26,7 +25,9 @@ func NewBucket(gcsBucket *string, s3Config s3.Config, reg *prometheus.Registry, 
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "create GCS client")
 		}
-		return gcs.NewBucket(*gcsBucket, gcsClient.Bucket(*gcsBucket), reg), gcsClient.Close, nil
+		b := gcs.NewBucket(*gcsBucket, gcsClient.Bucket(*gcsBucket), reg)
+		bkt := objstore.BucketWithMetrics(*gcsBucket, b, reg)
+		return bkt, gcsClient.Close, nil
 	}
 
 	if s3Config.Validate() == nil {
@@ -34,7 +35,8 @@ func NewBucket(gcsBucket *string, s3Config s3.Config, reg *prometheus.Registry, 
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "create s3 client")
 		}
-		return b, func() error { return nil }, nil
+		bkt := objstore.BucketWithMetrics(s3Config.Bucket, b, reg)
+		return bkt, func() error { return nil }, nil
 	}
 
 	return nil, nil, ErrNotFound

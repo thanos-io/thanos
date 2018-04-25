@@ -7,12 +7,11 @@ import (
 	"net/http"
 	"time"
 
-	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
+	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
@@ -105,31 +104,17 @@ func runStore(
 		var (
 			bkt objstore.Bucket
 			// closeFn gets called when the sync loop ends to close clients, clean up, etc
-			closeFn = func() error { return nil }
-			bucket  string
+			closeFn       = func() error { return nil }
+			err     error = nil
 		)
-		if gcsBucket != "" {
-			gcsClient, err := storage.NewClient(context.Background())
+		if gcsBucket != "" || s3Config.Validate() == nil {
+			bkt, closeFn, err = client.NewBucket(&gcsBucket, *s3Config, reg, component)
 			if err != nil {
-				return errors.Wrap(err, "create GCS client")
+				return err
 			}
-
-			bkt = gcs.NewBucket(gcsBucket, gcsClient.Bucket(gcsBucket), reg)
-			closeFn = gcsClient.Close
-			bucket = gcsBucket
-		} else if s3Config.Validate() == nil {
-			b, err := s3.NewBucket(s3Config, reg, component)
-			if err != nil {
-				return errors.Wrap(err, "create s3 client")
-			}
-
-			bkt = b
-			bucket = s3Config.Bucket
 		} else {
 			return errors.New("no valid GCS or S3 configuration supplied")
 		}
-
-		bkt = objstore.BucketWithMetrics(bucket, bkt, reg)
 
 		bs, err := store.NewBucketStore(
 			logger,

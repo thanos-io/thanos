@@ -19,13 +19,12 @@ import (
 	"syscall"
 	"time"
 
-	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/alert"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
+	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
@@ -380,8 +379,7 @@ func runRule(
 	}
 
 	var (
-		bkt    objstore.Bucket
-		bucket string
+		bkt objstore.Bucket
 		// closeFn gets called when the sync loop ends to close clients, clean up, etc
 		closeFn = func() error { return nil }
 		uploads = true
@@ -389,30 +387,17 @@ func runRule(
 
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	if gcsBucket != "" {
-		gcsClient, err := storage.NewClient(context.Background())
+	if gcsBucket != "" || s3Config.Validate() == nil {
+		bkt, closeFn, err = client.NewBucket(&gcsBucket, *s3Config, reg, component)
 		if err != nil {
-			return errors.Wrap(err, "create GCS client")
+			return err
 		}
-
-		bkt = gcs.NewBucket(gcsBucket, gcsClient.Bucket(gcsBucket), reg)
-		closeFn = gcsClient.Close
-		bucket = gcsBucket
-	} else if s3Config.Validate() == nil {
-		bkt, err = s3.NewBucket(s3Config, reg, component)
-		if err != nil {
-			return errors.Wrap(err, "create s3 client")
-		}
-
-		bucket = s3Config.Bucket
 	} else {
 		level.Info(logger).Log("msg", "No GCS or S3 bucket configured, uploads will be disabled")
 		uploads = false
 	}
 
 	if uploads {
-		bkt = objstore.BucketWithMetrics(bucket, bkt, reg)
-
 		s := shipper.New(logger, nil, dataDir, bkt, func() labels.Labels { return lset })
 
 		ctx, cancel := context.WithCancel(context.Background())
