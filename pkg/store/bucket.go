@@ -314,7 +314,9 @@ func (s *BucketStore) InitialSync(ctx context.Context) error {
 		}
 
 		// No such block loaded, remove the local dir.
-		return os.RemoveAll(path.Join(s.dir, id.String()))
+		if err := os.RemoveAll(path.Join(s.dir, id.String())); err != nil {
+			level.Warn(s.logger).Log("msg", "failed to remove block which is not needed", "err", err)
+		}
 	}
 
 	return nil
