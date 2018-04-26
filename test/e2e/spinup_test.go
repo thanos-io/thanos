@@ -34,12 +34,11 @@ var (
 	rulerCluster = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19990+i) }
 )
 
-type configConstructor func(port int) string
 type config struct {
 	// Each config is for each Prometheus.
-	promConfigFns []configConstructor
-	rules         string
-	workDir       string
+	promConfigs []string
+	rules       string
+	workDir     string
 
 	numQueries          int
 	queriesReplicaLabel string
@@ -49,7 +48,7 @@ type config struct {
 
 func evalClusterPeersFlags(cfg config) []string {
 	var flags []string
-	for i := 1; i <= len(cfg.promConfigFns); i++ {
+	for i := 1; i <= len(cfg.promConfigs); i++ {
 		flags = append(flags, "--cluster.peers", sidecarCluster(i))
 	}
 	for i := 1; i <= cfg.numQueries; i++ {
@@ -68,14 +67,14 @@ func spinup(t testing.TB, ctx context.Context, cfg config) (chan error, error) {
 		clusterPeers = evalClusterPeersFlags(cfg)
 	)
 
-	for k, cfgFn := range cfg.promConfigFns {
+	for k, promConfig := range cfg.promConfigs {
 		i := k + 1
 		promDir := fmt.Sprintf("%s/data/prom%d", cfg.workDir, i)
 
 		if err := os.MkdirAll(promDir, 0777); err != nil {
 			return nil, errors.Wrap(err, "create prom dir failed")
 		}
-		err := ioutil.WriteFile(promDir+"/prometheus.yml", []byte(cfgFn(9090+i)), 0666)
+		err := ioutil.WriteFile(promDir+"/prometheus.yml", []byte(promConfig), 0666)
 		if err != nil {
 			return nil, errors.Wrap(err, "creating prom config failed")
 		}
@@ -182,12 +181,7 @@ receivers:
 		))
 	}
 
-	var (
-		stderr, stdout bytes.Buffer
-		stderrw        = &safeWriter{Writer: &stderr}
-		stdoutw        = &safeWriter{Writer: &stdout}
-		g              run.Group
-	)
+	var g run.Group
 
 	// Interrupt go routine.
 	{
@@ -206,8 +200,9 @@ receivers:
 
 	// Run go routine for each command.
 	for _, c := range commands {
-		c.Stderr = stderrw
-		c.Stdout = stdoutw
+		var stderr, stdout bytes.Buffer
+		c.Stderr = &stderr
+		c.Stdout = &stdout
 
 		err := c.Start()
 		if err != nil {
@@ -220,8 +215,12 @@ receivers:
 		g.Add(func() error {
 			err := cmd.Wait()
 
-			t.Logf("STDERR\n %s", stderr.String())
-			t.Logf("STDOUT\n %s", stdout.String())
+			if stderr.Len() > 0 {
+				t.Logf("%s STDERR\n %s", cmd.Path, stderr.String())
+			}
+			if stdout.Len() > 0 {
+				t.Logf("%s STDOUT\n %s", cmd.Path, stdout.String())
+			}
 
 			return err
 		}, func(error) {
@@ -229,13 +228,11 @@ receivers:
 		})
 	}
 
-	unexpectedExit := make(chan error, 1)
+	var exit = make(chan error, 1)
 	go func(g run.Group) {
-		err := g.Run()
-		if err != nil {
-			unexpectedExit <- err
-		}
+		exit <- g.Run()
+		close(exit)
 	}(g)
 
-	return unexpectedExit, nil
+	return exit, nil
 }

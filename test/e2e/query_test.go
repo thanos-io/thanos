@@ -4,13 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
-	"reflect"
-	"sync"
 	"testing"
 	"time"
 
@@ -28,117 +25,126 @@ func TestQuerySimple(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
 
-	unexpectedExit, err := spinup(t, ctx, config{
-		promConfigFns: []configConstructor{
-			func(port int) string {
-				// Self scraping config with unique external label.
-				return fmt.Sprintf(`
+	firstPromPort := promHTTPPort(1)
+	exit, err := spinup(t, ctx, config{
+		promConfigs: []string{
+			// Self scraping config with unique external label.
+			fmt.Sprintf(`
 global:
   external_labels:
-    prometheus: prom-%d
+    prometheus: prom-%s
+    replica: 0
 scrape_configs:
 - job_name: prometheus
   scrape_interval: 1s
   static_configs:
   - targets:
-    - "localhost:%d"
-`, port, port)
-			},
-			func(port int) string {
-				// Self scraping config for first of two HA replica Prometheus.
-				return fmt.Sprintf(`
-global:
-  external_labels:
-    prometheus: prom-ha
-scrape_configs:
-- job_name: prometheus
-  scrape_interval: 1s
-  static_configs:
-  - targets:
-    - "localhost:%d"
-`, port)
-			},
-			func(port int) string {
-				// Self scraping config for second of two HA replica Prometheus.
-				return fmt.Sprintf(`
+    - "localhost:%s"
+`, firstPromPort, firstPromPort),
+			// Config for first of two HA replica Prometheus.
+			fmt.Sprintf(`
 global:
   external_labels:
     prometheus: prom-ha
+    replica: 0
 scrape_configs:
 - job_name: prometheus
   scrape_interval: 1s
   static_configs:
   - targets:
-    - "localhost:%d"
-`, port)
-			},
+    - "localhost:%s"
+`, firstPromPort),
+			// Config for second of two HA replica Prometheus.
+			fmt.Sprintf(`
+global:
+  external_labels:
+    prometheus: prom-ha
+    replica: 1
+scrape_configs:
+- job_name: prometheus
+  scrape_interval: 1s
+  static_configs:
+  - targets:
+    - "localhost:%s"
+`, firstPromPort),
 		},
-		workDir:    dir,
-		numQueries: 2,
-		// instance is added by default as address of the scrape target.
-		queriesReplicaLabel: "instance",
+		workDir:             dir,
+		numQueries:          2,
+		queriesReplicaLabel: "replica",
 	})
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)
+		cancel()
 		return
 	}
+
+	defer func() {
+		cancel()
+		<-exit
+	}()
+
+	var (
+		res         model.Vector
+		criticalErr error
+	)
 
 	// Try query without deduplication.
 	err = runutil.Retry(time.Second, ctx.Done(), func() error {
 		select {
-		case err := <-unexpectedExit:
+		case criticalErr = <-exit:
 			t.Errorf("Some process exited unexpectedly: %v", err)
 			return nil
 		default:
 		}
 
-		res, err := queryPrometheus(ctx, "http://"+queryHTTP(1), time.Now(), "up", false)
+		var err error
+		res, err = queryPrometheus(ctx, "http://"+queryHTTP(1), time.Now(), "up", false)
 		if err != nil {
 			return err
 		}
 		if len(res) != 3 {
 			return errors.Errorf("unexpected result size %d", len(res))
 		}
-
-		// In our model result are always sorted.
-		match := reflect.DeepEqual(model.Metric{
-			"__name__":   "up",
-			"instance":   model.LabelValue(promHTTP(1)),
-			"job":        "prometheus",
-			"prometheus": model.LabelValue("prom-" + promHTTPPort(1)),
-		}, res[0].Metric)
-		match = match && reflect.DeepEqual(model.Metric{
-			"__name__":   "up",
-			"instance":   model.LabelValue(promHTTP(2)),
-			"job":        "prometheus",
-			"prometheus": "prom-ha",
-		}, res[1].Metric)
-		match = match && reflect.DeepEqual(model.Metric{
-			"__name__":   "up",
-			"instance":   model.LabelValue(promHTTP(3)),
-			"job":        "prometheus",
-			"prometheus": "prom-ha",
-		}, res[2].Metric)
-
-		if !match {
-			return errors.New("metrics mismatch, retrying...")
-		}
 		return nil
 	})
 	testutil.Ok(t, err)
+	testutil.Ok(t, criticalErr)
+
+	// In our model result are always sorted.
+	testutil.Equals(t, model.Metric{
+		"__name__":   "up",
+		"instance":   model.LabelValue(promHTTP(1)),
+		"job":        "prometheus",
+		"prometheus": model.LabelValue("prom-" + promHTTPPort(1)),
+		"replica":    model.LabelValue("0"),
+	}, res[0].Metric)
+	testutil.Equals(t, model.Metric{
+		"__name__":   "up",
+		"instance":   model.LabelValue(promHTTP(1)),
+		"job":        "prometheus",
+		"prometheus": "prom-ha",
+		"replica":    model.LabelValue("0"),
+	}, res[1].Metric)
+	testutil.Equals(t, model.Metric{
+		"__name__":   "up",
+		"instance":   model.LabelValue(promHTTP(1)),
+		"job":        "prometheus",
+		"prometheus": "prom-ha",
+		"replica":    model.LabelValue("1"),
+	}, res[2].Metric)
 
 	// Try query with deduplication.
 	err = runutil.Retry(time.Second, ctx.Done(), func() error {
 		select {
-		case err := <-unexpectedExit:
+		case criticalErr = <-exit:
 			t.Errorf("Some process exited unexpectedly: %v", err)
 			return nil
 		default:
 		}
 
-		res, err := queryPrometheus(ctx, "http://"+queryHTTP(1), time.Now(), "up", true)
+		var err error
+		res, err = queryPrometheus(ctx, "http://"+queryHTTP(1), time.Now(), "up", true)
 		if err != nil {
 			return err
 		}
@@ -146,23 +152,23 @@ scrape_configs:
 			return errors.Errorf("unexpected result size for query with deduplication %d", len(res))
 		}
 
-		match := reflect.DeepEqual(model.Metric{
-			"__name__":   "up",
-			"job":        "prometheus",
-			"prometheus": model.LabelValue("prom-" + promHTTPPort(1)),
-		}, res[0].Metric)
-		match = match && reflect.DeepEqual(model.Metric{
-			"__name__":   "up",
-			"job":        "prometheus",
-			"prometheus": "prom-ha",
-		}, res[1].Metric)
-
-		if !match {
-			return errors.New("metrics mismatch for query with deduplication, retrying...")
-		}
 		return nil
 	})
 	testutil.Ok(t, err)
+	testutil.Ok(t, criticalErr)
+
+	testutil.Equals(t, model.Metric{
+		"__name__":   "up",
+		"instance":   model.LabelValue(promHTTP(1)),
+		"job":        "prometheus",
+		"prometheus": model.LabelValue("prom-" + promHTTPPort(1)),
+	}, res[0].Metric)
+	testutil.Equals(t, model.Metric{
+		"__name__":   "up",
+		"instance":   model.LabelValue(promHTTP(1)),
+		"job":        "prometheus",
+		"prometheus": "prom-ha",
+	}, res[1].Metric)
 }
 
 // queryPrometheus runs an instant query against the Prometheus HTTP v1 API.
@@ -198,16 +204,4 @@ func queryPrometheus(ctx context.Context, ustr string, ts time.Time, q string, d
 		return nil, err
 	}
 	return m.Data.Result, nil
-}
-
-// safeWriter wraps an io.Writer and makes it thread safe.
-type safeWriter struct {
-	io.Writer
-	mtx sync.Mutex
-}
-
-func (w *safeWriter) Write(b []byte) (int, error) {
-	w.mtx.Lock()
-	defer w.mtx.Unlock()
-	return w.Writer.Write(b)
 }

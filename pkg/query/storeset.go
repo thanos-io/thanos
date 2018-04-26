@@ -252,10 +252,12 @@ func (s *StoreSet) Update(ctx context.Context) {
 	}
 
 	// Swap old store set with new one, excluding these with duplicated external labels.
-	s.stores = make(map[string]*storeRef, len(s.stores))
+	s.stores = make(map[string]*storeRef, len(stores))
 	for addr, st := range stores {
-		// Check if it has some ext labels specified. If no, it means that it might be a store node and it is fine to have
-		// access to multiple of store nodes in the querier. If it has some, block duplicates.
+		// Check if it has some ext labels specified.
+		// No external labels means strictly store gateway or ruler and it is fine to have access to multiple instances of them.
+		//
+		// Sidecar will error out if it will be configured with empty external labels.
 		if len(st.Labels()) == 0 || externalLabelStores[externalLabelsFromStore(st)] == 1 {
 			s.stores[addr] = st
 			continue
