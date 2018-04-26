@@ -172,7 +172,10 @@ func (s *StoreSet) updateStore(ctx context.Context, spec StoreSpec) (*storeRef, 
 	defer cancel()
 
 	addr := spec.Addr()
+
+	s.mtx.RLock()
 	st, ok := s.stores[addr]
+	s.mtx.RUnlock()
 	if !ok {
 		// New store or was unhealthy and was removed in the past - create new one.
 		conn, err := grpc.DialContext(ctx, addr, s.dialOpts...)
@@ -229,30 +232,40 @@ func (s *StoreSet) Update(ctx context.Context) {
 		level.Warn(s.logger).Log("msg", "update of some store nodes failed", "err", err)
 	}
 
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
-
-	// Record the number of occurrences of external label combinations.
+	// Record the number of occurrences of external label combinations for current store slice.
 	externalLabelStores := map[string]int{}
-	for _, st := range s.stores {
+	for _, st := range stores {
 		externalLabelStores[externalLabelsFromStore(st)]++
 	}
+
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
 
 	// Remove stores that where not updated in this update, because were not in s.peerAddr() this time.
 	for addr, st := range s.stores {
 		if _, ok := stores[addr]; ok {
-			if externalLabelStores[externalLabelsFromStore(st)] == 1 {
-				continue
-			}
-
-			level.Warn(s.logger).Log("msg", "dropping store, external labels are not unique", "address", st.addr)
+			continue
 		}
 
 		// Peer does not exists anymore.
 		st.close()
 	}
 
-	s.stores = stores
+	// Swap old store set with new one, excluding these with duplicated external labels.
+	s.stores = make(map[string]*storeRef, len(s.stores))
+	for addr, st := range stores {
+		// Check if it has some ext labels specified. If no, it means that it might be a store node and it is fine to have
+		// access to multiple of store nodes in the querier. If it has some, block duplicates.
+		if len(st.Labels()) == 0 || externalLabelStores[externalLabelsFromStore(st)] == 1 {
+			s.stores[addr] = st
+			continue
+		}
+
+		level.Warn(s.logger).Log("msg", "dropping store, external labels are not unique", "address", addr)
+
+		st.close()
+	}
+
 	s.externalLabelStores = externalLabelStores
 	s.storeNodeConnections.Set(float64(len(s.stores)))
 }
