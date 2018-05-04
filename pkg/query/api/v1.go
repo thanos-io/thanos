@@ -168,7 +168,7 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 type queryData struct {
 	ResultType promql.ValueType `json:"resultType"`
 	Result     promql.Value     `json:"result"`
-	Warnings   []error          `json:"warnings"`
+	Warnings   []error          `json:"warnings,omitempty"`
 }
 
 func (api *API) options(r *http.Request) (interface{}, []error, *apiError) {
