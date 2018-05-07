@@ -150,7 +150,7 @@ func runSidecar(
 				}
 
 				promUp.Set(1)
-				lastHeartbeat.Set(float64(time.Now().Unix()))
+				lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
 				return nil
 			})
 			if err != nil {
@@ -194,7 +194,7 @@ func runSidecar(
 					peer.SetLabels(externalLabels.GetPB())
 
 					promUp.Set(1)
-					lastHeartbeat.Set(float64(time.Now().Unix()))
+					lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
 				}
 
 				return nil
