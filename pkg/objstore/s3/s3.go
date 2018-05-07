@@ -107,7 +107,10 @@ func NewBucket(conf *Config, reg prometheus.Registerer, component string) (*Buck
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
-		ResponseHeaderTimeout: 10 * time.Second,
+		// The ResponseHeaderTimeout here is the only change from the
+		// default minio transport, it was introduced to cover cases
+		// where the tcp connection works but the server never answers
+		ResponseHeaderTimeout: 15 * time.Second,
 		// Set this value so that the underlying transport round-tripper
 		// doesn't try to auto decode the body of objects with
 		// content-encoding set to `gzip`.
