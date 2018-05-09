@@ -61,18 +61,10 @@ func runDownsample(
 	syncDelay time.Duration,
 	component string,
 ) error {
-	var (
-		bkt objstore.Bucket
-		err error = nil
-		// closeFn gets called when the sync loop ends to close clients, clean up, etc
-		closeFn = func() error { return nil }
-	)
 
-	if gcsBucket != "" || s3Config.Validate() == nil {
-		bkt, closeFn, err = client.NewBucket(&gcsBucket, *s3Config, reg, component)
-		if err != nil {
-			return err
-		}
+	bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
+	if err != nil {
+		return err
 	}
 
 	// Start cycle of syncing blocks from the bucket and garbage collecting the bucket.
@@ -80,6 +72,7 @@ func runDownsample(
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
+			defer closeFn()
 			level.Info(logger).Log("msg", "start first pass of downsampling")
 
 			if err := downsampleBucket(ctx, logger, bkt, dataDir); err != nil {
@@ -92,7 +85,6 @@ func runDownsample(
 				return errors.Wrap(err, "downsampling failed")
 			}
 
-			defer closeFn()
 			return nil
 		}, func(error) {
 			cancel()

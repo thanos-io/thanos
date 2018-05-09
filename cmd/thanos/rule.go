@@ -23,7 +23,6 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/alert"
 	"github.com/improbable-eng/thanos/pkg/cluster"
-	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -378,20 +377,13 @@ func runRule(
 		})
 	}
 
-	var (
-		bkt objstore.Bucket
-		// closeFn gets called when the sync loop ends to close clients, clean up, etc
-		closeFn = func() error { return nil }
-		uploads = true
-	)
+	var uploads bool = true
 
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	if gcsBucket != "" || s3Config.Validate() == nil {
-		bkt, closeFn, err = client.NewBucket(&gcsBucket, *s3Config, reg, component)
-		if err != nil {
-			return err
-		}
+	bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
+	if err != nil && err != client.ErrNotFound {
+		return err
 	} else {
 		level.Info(logger).Log("msg", "No GCS or S3 bucket configured, uploads will be disabled")
 		uploads = false

@@ -10,7 +10,6 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/cluster"
-	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -101,19 +100,9 @@ func runStore(
 	component string,
 ) error {
 	{
-		var (
-			bkt objstore.Bucket
-			// closeFn gets called when the sync loop ends to close clients, clean up, etc
-			closeFn       = func() error { return nil }
-			err     error = nil
-		)
-		if gcsBucket != "" || s3Config.Validate() == nil {
-			bkt, closeFn, err = client.NewBucket(&gcsBucket, *s3Config, reg, component)
-			if err != nil {
-				return err
-			}
-		} else {
-			return errors.New("no valid GCS or S3 configuration supplied")
+		bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
+		if err != nil {
+			return err
 		}
 
 		bs, err := store.NewBucketStore(
@@ -137,6 +126,7 @@ func runStore(
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
+			defer closeFn()
 			err := runutil.Repeat(3*time.Minute, ctx.Done(), func() error {
 				if err := bs.SyncBlocks(ctx); err != nil {
 					level.Warn(logger).Log("msg", "syncing blocks failed", "err", err)
@@ -146,8 +136,6 @@ func runStore(
 			})
 
 			bs.Close()
-			closeFn()
-
 			return err
 		}, func(error) {
 			cancel()
