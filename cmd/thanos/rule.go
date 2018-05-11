@@ -384,8 +384,10 @@ func runRule(
 	bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
 	if err != nil && err != client.ErrNotFound {
 		return err
-	} else {
-		level.Info(logger).Log("msg", "No GCS or S3 bucket configured, uploads will be disabled")
+	}
+
+	if err == client.ErrNotFound {
+		level.Info(logger).Log("msg", "No GCS or S3 bucket was configured, uploads will be disabled")
 		uploads = false
 	}
 

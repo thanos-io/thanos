@@ -25,9 +25,7 @@ func NewBucket(gcsBucket *string, s3Config s3.Config, reg *prometheus.Registry, 
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "create GCS client")
 		}
-		b := gcs.NewBucket(*gcsBucket, gcsClient.Bucket(*gcsBucket), reg)
-		bkt := objstore.BucketWithMetrics(*gcsBucket, b, reg)
-		return bkt, gcsClient.Close, nil
+		return objstore.BucketWithMetrics(*gcsBucket, gcs.NewBucket(*gcsBucket, gcsClient.Bucket(*gcsBucket), reg), reg), gcsClient.Close, nil
 	}
 
 	if s3Config.Validate() == nil {
@@ -35,8 +33,7 @@ func NewBucket(gcsBucket *string, s3Config s3.Config, reg *prometheus.Registry, 
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "create s3 client")
 		}
-		bkt := objstore.BucketWithMetrics(s3Config.Bucket, b, reg)
-		return bkt, func() error { return nil }, nil
+		return objstore.BucketWithMetrics(s3Config.Bucket, b, reg), func() error { return nil }, nil
 	}
 
 	return nil, nil, ErrNotFound
