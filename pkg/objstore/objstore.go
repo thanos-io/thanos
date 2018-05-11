@@ -26,7 +26,7 @@ type Bucket interface {
 
 // BucketReader provides read access to an object storage bucket.
 type BucketReader interface {
-	// Iter calls f for each entry in the given directory. The argument to f is the full
+	// Iter calls f for each entry in the given directory (not recursive.). The argument to f is the full
 	// object name including the prefix of the inspected directory.
 	Iter(ctx context.Context, dir string, f func(string) error) error
 
@@ -37,7 +37,11 @@ type BucketReader interface {
 	GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error)
 
 	// Exists checks if the given object exists in the bucket.
+	// TODO(bplotka): Consider removing Exists in favor of helper that do Get & IsObjNotFoundErr (less code to maintain).
 	Exists(ctx context.Context, name string) (bool, error)
+
+	// IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
+	IsObjNotFoundErr(err error) bool
 }
 
 // UploadDir uploads all files in srcdir to the bucket with into a top-level directory
@@ -273,6 +277,10 @@ func (b *metricBucket) Delete(ctx context.Context, name string) error {
 	b.opsDuration.WithLabelValues(op).Observe(time.Since(start).Seconds())
 
 	return err
+}
+
+func (b *metricBucket) IsObjNotFoundErr(err error) bool {
+	return b.bkt.IsObjNotFoundErr(err)
 }
 
 type timingReadCloser struct {

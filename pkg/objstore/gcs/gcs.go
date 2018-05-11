@@ -6,7 +6,13 @@ import (
 	"io"
 	"strings"
 
+	"fmt"
+	"math/rand"
+	"testing"
+	"time"
+
 	"cloud.google.com/go/storage"
+	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/api/iterator"
 )
@@ -127,4 +133,40 @@ func (b *Bucket) Delete(ctx context.Context, name string) error {
 	b.opsTotal.WithLabelValues(opObjectDelete).Inc()
 
 	return b.bkt.Object(name).Delete(ctx)
+}
+
+// IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
+func (b *Bucket) IsObjNotFoundErr(err error) bool {
+	return err == storage.ErrObjectNotExist
+}
+
+// NewTestBucket creates test bkt client that before returning creates temporary bucket.
+// In a close function it empties and deletes the bucket.
+func NewTestBucket(t testing.TB, project string) (objstore.Bucket, func(), error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	gcsClient, err := storage.NewClient(ctx)
+	if err != nil {
+		cancel()
+		return nil, nil, err
+	}
+	src := rand.NewSource(time.Now().UnixNano())
+	name := fmt.Sprintf("test_%s_%x", strings.ToLower(t.Name()), src.Int63())
+
+	bkt := gcsClient.Bucket(name)
+	err = bkt.Create(ctx, project, nil)
+	if err != nil {
+		cancel()
+		gcsClient.Close()
+		return nil, nil, err
+	}
+
+	b := NewBucket(name, bkt, nil)
+	return b, func() {
+		objstore.EmptyBucket(t, ctx, b)
+		if err := bkt.Delete(ctx); err != nil {
+			t.Logf("deleting bucket failed: %s", err)
+		}
+		cancel()
+		gcsClient.Close()
+	}, nil
 }

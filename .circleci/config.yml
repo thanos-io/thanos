@@ -22,7 +22,16 @@ jobs:
               echo "Awesome! GCS integration tests are enabled."
             fi
       - run: make format
-      - run: make test
+      - run:
+          name: "Run all tests"
+          # TODO(bplotka): Setup some S3 tests for CI.
+          command: |
+            if ! [ -n ${GCP_PROJECT} ]; then
+              export THANOS_SKIP_GCS_TESTS="true"
+            fi
+            export THANOS_SKIP_S3_AWS_TESTS="true"
+
+            make test
       - run: make docker
       - run: 
           name: Run tests on generated Docker image

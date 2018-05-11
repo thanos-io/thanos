@@ -15,7 +15,7 @@ import (
 	"github.com/prometheus/tsdb/labels"
 )
 
-func TestPrometheusStore_Series(t *testing.T) {
+func TestPrometheusStore_Series_e2e(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	p, err := testutil.NewPrometheus()
@@ -89,7 +89,7 @@ func expandChunk(cit chunkenc.Iterator) (res []sample) {
 	return res
 }
 
-func TestPrometheusStore_LabelValues(t *testing.T) {
+func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	p, err := testutil.NewPrometheus()
@@ -121,7 +121,7 @@ func TestPrometheusStore_LabelValues(t *testing.T) {
 	testutil.Equals(t, []string{"a", "b", "c"}, resp.Values)
 }
 
-func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
+func TestPrometheusStore_Series_MatchExternalLabel_e2e(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	p, err := testutil.NewPrometheus()
