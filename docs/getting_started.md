@@ -4,6 +4,8 @@ At its heart Thanos provides a global query view, data backup, and access histor
 
 The following examples configure Thanos to work against a Google Cloud Storage bucket. However, any object storage (S3, HDFS, DigitalOcean Spaces, ...) can be used by using the equivalent flags to connect to the S3 API.
 
+See [this](object_stores.md) for up-to-date list of available object stores for Thanos.
+
 ## Requirements
 
 * One or more [Prometheus](https://prometheus.io) v2.0.0 installations
