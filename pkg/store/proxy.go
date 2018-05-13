@@ -16,7 +16,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// Info holds meta information about a store.
+// Client holds meta information about a store.
 type Client interface {
 	// Client to access the store.
 	storepb.StoreClient
@@ -218,6 +218,7 @@ func storeMatches(s Client, mint, maxt int64, matchers ...storepb.LabelMatcher) 
 	return true, nil
 }
 
+// LabelNames returns all known label names.
 func (s *ProxyStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
 	*storepb.LabelNamesResponse, error,
 ) {

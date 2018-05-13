@@ -30,7 +30,7 @@ func Retry(interval time.Duration, stopc <-chan struct{}, f func() error) error 
 	return RetryWithLog(log.NewNopLogger(), interval, stopc, f)
 }
 
-// Retry executes f every interval seconds until timeout or no error is returned from f. It logs an error on each f error.
+// RetryWithLog executes f every interval seconds until timeout or no error is returned from f. It logs an error on each f error.
 func RetryWithLog(logger log.Logger, interval time.Duration, stopc <-chan struct{}, f func() error) error {
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
@@ -39,9 +39,8 @@ func RetryWithLog(logger log.Logger, interval time.Duration, stopc <-chan struct
 	for {
 		if err = f(); err == nil {
 			return nil
-		} else {
-			level.Error(logger).Log("msg", "function failed. Retrying in next tick", "err", err)
 		}
+		level.Error(logger).Log("msg", "function failed. Retrying in next tick", "err", err)
 		select {
 		case <-stopc:
 			return err
