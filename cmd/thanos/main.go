@@ -51,9 +51,9 @@ func main() {
 	app.Version(version.Print("thanos"))
 	app.HelpFlag.Short('h')
 
-	debugName := app.Flag("debug.name", "name to prefix to log lines").Hidden().String()
+	debugName := app.Flag("debug.name", "Name to add as prefix to log lines.").Hidden().String()
 
-	logLevel := app.Flag("log.level", "log filtering level").
+	logLevel := app.Flag("log.level", "Log filtering level.").
 		Default("info").Enum("error", "warn", "info", "debug")
 
 	gcloudTraceProject := app.Flag("gcloudtrace.project", "GCP project to send Google Cloud Trace tracings to. If empty, tracing will be disabled.").

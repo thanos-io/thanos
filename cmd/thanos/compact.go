@@ -34,13 +34,13 @@ import (
 func registerCompact(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "continously compacts blocks in an object store bucket")
 
-	haltOnError := cmd.Flag("debug.halt-on-error", "halt the process if a critical compaction error is detected").
+	haltOnError := cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
 		Hidden().Default("true").Bool()
 
-	httpAddr := cmd.Flag("http-address", "listen host:port for HTTP endpoints").
+	httpAddr := cmd.Flag("http-address", "Listen host:port for HTTP endpoints.").
 		Default(defaultHTTPAddr).String()
 
-	dataDir := cmd.Flag("data-dir", "data directory to cache blocks and process compactions").
+	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process compactions.").
 		Default("./data").String()
 
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks.").
