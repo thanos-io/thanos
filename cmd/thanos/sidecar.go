@@ -267,6 +267,12 @@ func runSidecar(
 	}
 
 	if uploads {
+		// Ensure we close up everything properly.
+		defer func() {
+			if err != nil {
+				closeFn()
+			}
+		}()
 
 		s := shipper.New(logger, nil, dataDir, bkt, externalLabels.Get)
 

@@ -67,7 +67,7 @@ func runDownsample(
 		return err
 	}
 
-	// Ensure we close up everything properly
+	// Ensure we close up everything properly.
 	defer func() {
 		if err != nil {
 			closeFn()

@@ -392,6 +392,13 @@ func runRule(
 	}
 
 	if uploads {
+		// Ensure we close up everything properly.
+		defer func() {
+			if err != nil {
+				closeFn()
+			}
+		}()
+
 		s := shipper.New(logger, nil, dataDir, bkt, func() labels.Labels { return lset })
 
 		ctx, cancel := context.WithCancel(context.Background())

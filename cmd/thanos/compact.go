@@ -91,7 +91,13 @@ func runCompact(
 	if err != nil {
 		return err
 	}
-	defer closeFn()
+
+	// Ensure we close up everything properly.
+	defer func() {
+		if err != nil {
+			closeFn()
+		}
+	}()
 
 	sy, err := compact.NewSyncer(logger, reg, bkt, syncDelay)
 	if err != nil {
@@ -175,6 +181,8 @@ func runCompact(
 		}
 
 		g.Add(func() error {
+			defer closeFn()
+
 			if !wait {
 				return f()
 			}
