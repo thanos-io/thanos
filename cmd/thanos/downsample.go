@@ -67,6 +67,13 @@ func runDownsample(
 		return err
 	}
 
+	// Ensure we close up everything properly
+	defer func() {
+		if err != nil {
+			closeFn()
+		}
+	}()
+
 	// Start cycle of syncing blocks from the bucket and garbage collecting the bucket.
 	{
 		ctx, cancel := context.WithCancel(context.Background())

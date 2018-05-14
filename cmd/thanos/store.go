@@ -105,6 +105,13 @@ func runStore(
 			return err
 		}
 
+		// Ensure we close up everything properly
+		defer func() {
+			if err != nil {
+				closeFn()
+			}
+		}()
+
 		bs, err := store.NewBucketStore(
 			logger,
 			reg,
