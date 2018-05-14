@@ -51,47 +51,47 @@ import (
 func registerRule(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "ruler evaluating Prometheus rules against given Query nodes, exposing Store API and storing old blocks in bucket")
 
-	labelStrs := cmd.Flag("label", "labels applying to all generated metrics (repeated)").
+	labelStrs := cmd.Flag("label", "Labels to be applied to all generated metrics (repeated).").
 		PlaceHolder("<name>=\"<value>\"").Strings()
 
 	dataDir := cmd.Flag("data-dir", "data directory").Default("data/").String()
 
-	ruleFiles := cmd.Flag("rule-file", "rule files that should be used by rule manager. Can be in glob format (repeated)").
+	ruleFiles := cmd.Flag("rule-file", "Rule files that should be used by rule manager. Can be in glob format (repeated).").
 		Default("rules/").Strings()
 
-	httpAddr := cmd.Flag("http-address", "listen host:port for HTTP endpoints").
+	httpAddr := cmd.Flag("http-address", "Listen host:port for HTTP endpoints.").
 		Default(defaultHTTPAddr).String()
 
-	grpcAddr := cmd.Flag("grpc-address", "listen host:port for gRPC endpoints").
+	grpcAddr := cmd.Flag("grpc-address", "Listen host:port for gRPC endpoints.").
 		Default(defaultGRPCAddr).String()
 
-	evalInterval := cmd.Flag("eval-interval", "the default evaluation interval to use").
+	evalInterval := cmd.Flag("eval-interval", "The default evaluation interval to use.").
 		Default("30s").Duration()
-	tsdbBlockDuration := cmd.Flag("tsdb.block-duration", "block duration for TSDB block").
+	tsdbBlockDuration := cmd.Flag("tsdb.block-duration", "Block duration for TSDB block.").
 		Default("2h").Duration()
-	tsdbRetention := cmd.Flag("tsdb.retention", "block retention time on local disk").
+	tsdbRetention := cmd.Flag("tsdb.retention", "Block retention time on local disk.").
 		Default("48h").Duration()
 
 	alertmgrs := cmd.Flag("alertmanagers.url", "Alertmanager URLs to push firing alerts to. The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Alertmanager IPs through respective DNS lookups. The port defaults to 9093 or the SRV record's value. The URL path is used as a prefix for the regular Alertmanager API path.").
 		Strings()
 
-	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty ruler won't store any block inside Google Cloud Storage").
+	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty, ruler won't store any block inside Google Cloud Storage.").
 		PlaceHolder("<bucket>").String()
 
 	s3Config := s3.RegisterS3Params(cmd)
 
-	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
+	peers := cmd.Flag("cluster.peers", "Initial peers to join the cluster. It can be either <ip:port>, or <domain:port>.").Strings()
 
-	clusterBindAddr := cmd.Flag("cluster.address", "listen address for cluster").
+	clusterBindAddr := cmd.Flag("cluster.address", "Listen address for cluster.").
 		Default(defaultClusterAddr).String()
 
-	gossipInterval := cmd.Flag("cluster.gossip-interval", "interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth.").
+	gossipInterval := cmd.Flag("cluster.gossip-interval", "Interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth.").
 		Default(cluster.DefaultGossipInterval.String()).Duration()
 
-	pushPullInterval := cmd.Flag("cluster.pushpull-interval", "interval for gossip state syncs . Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage.").
+	pushPullInterval := cmd.Flag("cluster.pushpull-interval", "Interval for gossip state syncs. Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage.").
 		Default(cluster.DefaultPushPullInterval.String()).Duration()
 
-	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
+	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "Explicit address to advertise in cluster.").
 		String()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
