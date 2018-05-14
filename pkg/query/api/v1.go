@@ -202,7 +202,7 @@ func (api *API) query(r *http.Request) (interface{}, []error, *apiError) {
 	var (
 		warnmtx             sync.Mutex
 		warnings            []error
-		enableDeduplication bool = true
+		enableDeduplication = true
 	)
 	partialErrReporter := func(err error) {
 		warnmtx.Lock()
@@ -294,7 +294,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *apiError) {
 	var (
 		warnmtx             sync.Mutex
 		warnings            []error
-		enableDeduplication bool = true
+		enableDeduplication = true
 	)
 	partialErrReporter := func(err error) {
 		warnmtx.Lock()
@@ -418,7 +418,7 @@ func (api *API) series(r *http.Request) (interface{}, []error, *apiError) {
 	var (
 		warnmtx             sync.Mutex
 		warnings            []error
-		enableDeduplication bool = true
+		enableDeduplication = true
 	)
 	partialErrReporter := func(err error) {
 		warnmtx.Lock()

@@ -258,8 +258,8 @@ func runSidecar(
 		bkt    objstore.Bucket
 		bucket string
 		// closeFn gets called when the sync loop ends to close clients, clean up, etc
-		closeFn      = func() error { return nil }
-		uploads bool = true
+		closeFn = func() error { return nil }
+		uploads = true
 	)
 
 	// The background shipper continuously scans the data directory and uploads
