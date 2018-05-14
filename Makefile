@@ -1,7 +1,7 @@
 PREFIX            ?= $(shell pwd)
 FILES             ?= $(shell find . -type f -name '*.go' -not -path "./vendor/*")
 DOCKER_IMAGE_NAME ?= thanos
-DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))
+DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --short HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse HEAD)
 
 all: install-tools deps format build
 
