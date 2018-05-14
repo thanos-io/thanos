@@ -12,13 +12,13 @@ import (
 
 	"github.com/prometheus/tsdb/chunkenc"
 
-	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
+	"github.com/improbable-eng/thanos/pkg/objstore/client"
+	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
@@ -43,8 +43,10 @@ func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name s
 	syncDelay := cmd.Flag("sync-delay", "Minimum age of blocks before they are being processed.").
 		Default("2h").Duration()
 
+	s3Config := s3.RegisterS3Params(cmd)
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
-		return runDownsample(g, logger, reg, *httpAddr, *dataDir, *gcsBucket, *syncDelay)
+		return runDownsample(g, logger, reg, *httpAddr, *dataDir, *gcsBucket, s3Config, *syncDelay, name)
 	}
 }
 
@@ -55,21 +57,29 @@ func runDownsample(
 	httpAddr string,
 	dataDir string,
 	gcsBucket string,
+	s3Config *s3.Config,
 	syncDelay time.Duration,
+	component string,
 ) error {
-	gcsClient, err := storage.NewClient(context.Background())
+
+	bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
 	if err != nil {
-		return errors.Wrap(err, "create GCS client")
+		return err
 	}
-	var bkt objstore.Bucket
-	bkt = gcs.NewBucket(gcsBucket, gcsClient.Bucket(gcsBucket), reg)
-	bkt = objstore.BucketWithMetrics(gcsBucket, bkt, reg)
+
+	// Ensure we close up everything properly.
+	defer func() {
+		if err != nil {
+			closeFn()
+		}
+	}()
 
 	// Start cycle of syncing blocks from the bucket and garbage collecting the bucket.
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
+			defer closeFn()
 			level.Info(logger).Log("msg", "start first pass of downsampling")
 
 			if err := downsampleBucket(ctx, logger, bkt, dataDir); err != nil {
@@ -81,6 +91,7 @@ func runDownsample(
 			if err := downsampleBucket(ctx, logger, bkt, dataDir); err != nil {
 				return errors.Wrap(err, "downsampling failed")
 			}
+
 			return nil
 		}, func(error) {
 			cancel()

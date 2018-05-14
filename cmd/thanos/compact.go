@@ -2,20 +2,16 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"net/http"
 	"path"
-	"runtime"
 	"time"
 
-	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/compact"
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
-	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
+	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/query/ui"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -25,9 +21,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
-	"github.com/prometheus/common/version"
 	"github.com/prometheus/tsdb"
-	"google.golang.org/api/option"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -81,11 +75,6 @@ func runCompact(
 	wait bool,
 	component string,
 ) error {
-	var (
-		bkt    objstore.Bucket
-		bucket string
-	)
-
 	halted := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compactor_halted",
 		Help: "Set to 1 if the compactor halted due to an unexpected error",
@@ -98,27 +87,17 @@ func runCompact(
 
 	reg.MustRegister(halted)
 
-	if gcsBucket != "" {
-		gcsOptions := option.WithUserAgent(fmt.Sprintf("thanos-%s/%s (%s)", component, version.Version, runtime.Version()))
-		gcsClient, err := storage.NewClient(context.Background(), gcsOptions)
-		if err != nil {
-			return errors.Wrap(err, "create GCS client")
-		}
-		bkt = gcs.NewBucket(gcsBucket, gcsClient.Bucket(gcsBucket), reg)
-		bucket = gcsBucket
-	} else if s3Config.Validate() == nil {
-		b, err := s3.NewBucket(s3Config, reg, component)
-		if err != nil {
-			return errors.Wrap(err, "create s3 client")
-		}
-
-		bkt = b
-		bucket = s3Config.Bucket
-	} else {
-		return errors.New("no valid GCS or S3 configuration supplied")
+	bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
+	if err != nil {
+		return err
 	}
 
-	bkt = objstore.BucketWithMetrics(bucket, bkt, reg)
+	// Ensure we close up everything properly.
+	defer func() {
+		if err != nil {
+			closeFn()
+		}
+	}()
 
 	sy, err := compact.NewSyncer(logger, reg, bkt, syncDelay)
 	if err != nil {
@@ -202,6 +181,8 @@ func runCompact(
 		}
 
 		g.Add(func() error {
+			defer closeFn()
+
 			if !wait {
 				return f()
 			}

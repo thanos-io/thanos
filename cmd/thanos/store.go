@@ -7,12 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/cluster"
-	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
+	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
@@ -102,34 +100,17 @@ func runStore(
 	component string,
 ) error {
 	{
-		var (
-			bkt objstore.Bucket
-			// closeFn gets called when the sync loop ends to close clients, clean up, etc
-			closeFn = func() error { return nil }
-			bucket  string
-		)
-		if gcsBucket != "" {
-			gcsClient, err := storage.NewClient(context.Background())
-			if err != nil {
-				return errors.Wrap(err, "create GCS client")
-			}
-
-			bkt = gcs.NewBucket(gcsBucket, gcsClient.Bucket(gcsBucket), reg)
-			closeFn = gcsClient.Close
-			bucket = gcsBucket
-		} else if s3Config.Validate() == nil {
-			b, err := s3.NewBucket(s3Config, reg, component)
-			if err != nil {
-				return errors.Wrap(err, "create s3 client")
-			}
-
-			bkt = b
-			bucket = s3Config.Bucket
-		} else {
-			return errors.New("no valid GCS or S3 configuration supplied")
+		bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
+		if err != nil {
+			return err
 		}
 
-		bkt = objstore.BucketWithMetrics(bucket, bkt, reg)
+		// Ensure we close up everything properly.
+		defer func() {
+			if err != nil {
+				closeFn()
+			}
+		}()
 
 		bs, err := store.NewBucketStore(
 			logger,
@@ -152,6 +133,7 @@ func runStore(
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
+			defer closeFn()
 			err := runutil.Repeat(3*time.Minute, ctx.Done(), func() error {
 				if err := bs.SyncBlocks(ctx); err != nil {
 					level.Warn(logger).Log("msg", "syncing blocks failed", "err", err)
@@ -161,8 +143,6 @@ func runStore(
 			})
 
 			bs.Close()
-			closeFn()
-
 			return err
 		}, func(error) {
 			cancel()
