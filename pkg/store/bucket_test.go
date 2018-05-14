@@ -94,7 +94,8 @@ func TestBucketStore_e2e(t *testing.T) {
 		})
 	}()
 
-	ctx, _ = context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 
 	err = runutil.Retry(100*time.Millisecond, ctx.Done(), func() error {
 		if store.numBlocks() < 6 {

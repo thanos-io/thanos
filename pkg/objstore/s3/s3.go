@@ -5,9 +5,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"os"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/minio/minio-go"
 	"github.com/pkg/errors"
@@ -89,10 +92,33 @@ func NewBucket(conf *Config, reg prometheus.Registerer, component string) (*Buck
 	}
 
 	client, err := f(conf.Endpoint, conf.AccessKey, conf.SecretKey, !conf.Insecure)
-	client.SetAppInfo(fmt.Sprintf("thanos-%s", component), fmt.Sprintf("%s (%s)", version.Version, runtime.Version()))
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize s3 client")
 	}
+	client.SetAppInfo(fmt.Sprintf("thanos-%s", component), fmt.Sprintf("%s (%s)", version.Version, runtime.Version()))
+	client.SetCustomTransport(&http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		// The ResponseHeaderTimeout here is the only change from the
+		// default minio transport, it was introduced to cover cases
+		// where the tcp connection works but the server never answers
+		ResponseHeaderTimeout: 15 * time.Second,
+		// Set this value so that the underlying transport round-tripper
+		// doesn't try to auto decode the body of objects with
+		// content-encoding set to `gzip`.
+		//
+		// Refer:
+		//    https://golang.org/src/net/http/transport.go?h=roundTrip#L1843
+		DisableCompression: true,
+	})
 
 	bkt := &Bucket{
 		bucket: conf.Bucket,

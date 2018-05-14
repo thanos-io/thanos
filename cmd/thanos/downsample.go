@@ -29,18 +29,18 @@ import (
 )
 
 func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "continously compacts blocks in an object store bucket")
+	cmd := app.Command(name, "continously downsamples blocks in an object store bucket")
 
 	httpAddr := cmd.Flag("http-address", "listen host:port for HTTP endpoints").
 		Default(defaultHTTPAddr).String()
 
-	dataDir := cmd.Flag("data-dir", "data directory to cache blocks and process compactions").
+	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
 		Default("./data").String()
 
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks.").
 		PlaceHolder("<bucket>").Required().String()
 
-	syncDelay := cmd.Flag("sync-delay", "minimum age of blocks before they are being processed.").
+	syncDelay := cmd.Flag("sync-delay", "Minimum age of blocks before they are being processed.").
 		Default("2h").Duration()
 
 	s3Config := s3.RegisterS3Params(cmd)

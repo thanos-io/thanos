@@ -173,7 +173,7 @@ func New(
 // Join joins to the memberlist gossip cluster using knownPeers and initialState.
 func (p *Peer) Join(initialState PeerState) error {
 	if p.hasJoined() {
-		return errors.New("peer already joined. Close it first to rejoin.")
+		return errors.New("peer already joined; close it first to rejoin")
 	}
 
 	var ml *memberlist.Memberlist
@@ -319,7 +319,7 @@ func (p *Peer) PeerStates(types ...PeerType) map[string]PeerState {
 	return ps
 }
 
-// PeerStates returns the custom state information by memberlist peer name.
+// PeerState returns the custom state information by memberlist peer name.
 func (p *Peer) PeerState(id string) (PeerState, bool) {
 	if !p.hasJoined() {
 		return PeerState{}, false
@@ -361,7 +361,6 @@ func resolvePeers(ctx context.Context, peers []string, myAddress string, res net
 			return nil, errors.Wrapf(err, "split host/port for peer %s", peer)
 		}
 
-		retryCtx, cancel := context.WithCancel(ctx)
 		ips, err := res.LookupIPAddr(ctx, host)
 		if err != nil {
 			// Assume direct address.
@@ -371,6 +370,8 @@ func resolvePeers(ctx context.Context, peers []string, myAddress string, res net
 
 		if len(ips) == 0 {
 			var lookupErrSpotted bool
+			retryCtx, cancel := context.WithCancel(ctx)
+			defer cancel()
 
 			err := runutil.Retry(2*time.Second, retryCtx.Done(), func() error {
 				if lookupErrSpotted {

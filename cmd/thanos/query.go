@@ -34,39 +34,39 @@ import (
 func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
 
-	httpAddr := cmd.Flag("http-address", "listen host:port for HTTP endpoints").
+	httpAddr := cmd.Flag("http-address", "Listen host:port for HTTP endpoints.").
 		Default(defaultHTTPAddr).String()
 
-	grpcAddr := cmd.Flag("grpc-address", "listen host:port for gRPC endpoints").
+	grpcAddr := cmd.Flag("grpc-address", "Listen host:port for gRPC endpoints.").
 		Default(defaultGRPCAddr).String()
 
-	queryTimeout := cmd.Flag("query.timeout", "maximum time to process query by query node").
+	queryTimeout := cmd.Flag("query.timeout", "Maximum time to process query by query node.").
 		Default("2m").Duration()
 
-	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "maximum number of queries processed concurrently by query node").
+	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
 		Default("20").Int()
 
-	replicaLabel := cmd.Flag("query.replica-label", "label to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter").
+	replicaLabel := cmd.Flag("query.replica-label", "Label to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter.").
 		String()
 
-	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
+	peers := cmd.Flag("cluster.peers", "Initial peers to join the cluster. It can be either <ip:port>, or <domain:port>.").Strings()
 
-	clusterBindAddr := cmd.Flag("cluster.address", "listen address for cluster").
+	clusterBindAddr := cmd.Flag("cluster.address", "Listen address for cluster.").
 		Default(defaultClusterAddr).String()
 
-	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
+	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "Explicit address to advertise in cluster.").
 		String()
 
-	gossipInterval := cmd.Flag("cluster.gossip-interval", "interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth.").
+	gossipInterval := cmd.Flag("cluster.gossip-interval", "Interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth.").
 		Default(cluster.DefaultGossipInterval.String()).Duration()
 
-	pushPullInterval := cmd.Flag("cluster.pushpull-interval", "interval for gossip state syncs . Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage.").
+	pushPullInterval := cmd.Flag("cluster.pushpull-interval", "Interval for gossip state syncs. Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage.").
 		Default(cluster.DefaultPushPullInterval.String()).Duration()
 
-	selectorLabels := cmd.Flag("selector-label", "query selector labels that will be exposed in info endpoint (repeated)").
+	selectorLabels := cmd.Flag("selector-label", "Query selector labels that will be exposed in info endpoint (repeated).").
 		PlaceHolder("<name>=\"<value>\"").Strings()
 
-	stores := cmd.Flag("store", "addresses of statically configured store API servers (repeatable)").
+	stores := cmd.Flag("store", "Addresses of statically configured store API servers (repeatable).").
 		PlaceHolder("<store>").Strings()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {

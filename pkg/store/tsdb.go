@@ -16,15 +16,16 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// TSDBStore implements the store API against a local TSDB instance.
+// It attaches the provided external labels to all results. It only responds with raw data
+// and does not support downsampling.
 type TSDBStore struct {
 	logger log.Logger
 	db     *tsdb.DB
 	labels labels.Labels
 }
 
-// NewTSDBStore implements the store API against a local TSDB instance.
-// It attaches the provided external labels to all results. It only responds with raw data
-// and does not support downsampling.
+// NewTSDBStore creates a new TSDBStore.
 func NewTSDBStore(logger log.Logger, reg prometheus.Registerer, db *tsdb.DB, externalLabels labels.Labels) *TSDBStore {
 	if logger == nil {
 		logger = log.NewNopLogger()

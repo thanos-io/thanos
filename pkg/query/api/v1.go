@@ -168,7 +168,7 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 type queryData struct {
 	ResultType promql.ValueType `json:"resultType"`
 	Result     promql.Value     `json:"result"`
-	Warnings   []error          `json:"warnings"`
+	Warnings   []error          `json:"warnings,omitempty"`
 }
 
 func (api *API) options(r *http.Request) (interface{}, []error, *apiError) {
@@ -202,7 +202,7 @@ func (api *API) query(r *http.Request) (interface{}, []error, *apiError) {
 	var (
 		warnmtx             sync.Mutex
 		warnings            []error
-		enableDeduplication bool = true
+		enableDeduplication = true
 	)
 	partialErrReporter := func(err error) {
 		warnmtx.Lock()
@@ -294,7 +294,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *apiError) {
 	var (
 		warnmtx             sync.Mutex
 		warnings            []error
-		enableDeduplication bool = true
+		enableDeduplication = true
 	)
 	partialErrReporter := func(err error) {
 		warnmtx.Lock()
@@ -418,7 +418,7 @@ func (api *API) series(r *http.Request) (interface{}, []error, *apiError) {
 	var (
 		warnmtx             sync.Mutex
 		warnings            []error
-		enableDeduplication bool = true
+		enableDeduplication = true
 	)
 	partialErrReporter := func(err error) {
 		warnmtx.Lock()

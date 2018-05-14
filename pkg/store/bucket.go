@@ -202,20 +202,6 @@ func NewBucketStore(
 		return nil, errors.Wrap(err, "create dir")
 	}
 
-	fns, err := fileutil.ReadDir(dir)
-	if err != nil {
-		return nil, errors.Wrap(err, "read dir")
-	}
-	for _, dn := range fns {
-		id, err := ulid.Parse(dn)
-		if err != nil {
-			continue
-		}
-		if err := s.addBlock(context.TODO(), id); err != nil {
-			level.Warn(s.logger).Log("msg", "loading block failed", "id", id, "err", err)
-			continue
-		}
-	}
 	return s, nil
 }
 

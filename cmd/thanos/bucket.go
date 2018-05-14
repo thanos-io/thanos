@@ -52,7 +52,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 		PlaceHolder("<bucket>").String()
 	verifyBackupS3Bucket := cmd.Flag("s3-backup-bucket", "S3 bucket name to backup blocks on repair operations.").
 		PlaceHolder("<bucket>").String()
-	verifyIssues := verify.Flag("issues", fmt.Sprintf("issues to verify (and optionally repair). Possible values: %v", allIssues())).
+	verifyIssues := verify.Flag("issues", fmt.Sprintf("Issues to verify (and optionally repair). Possible values: %v", allIssues())).
 		Short('i').Default(verifier.IndexIssueID, verifier.OverlappedBlocksIssueID).Strings()
 	m[name+" verify"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer) error {
 		bkt, closeFn, err := client.NewBucket(gcsBucket, *s3Config, reg, name)
@@ -104,7 +104,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	}
 
 	ls := cmd.Command("ls", "list all blocks in the bucket")
-	lsOutput := ls.Flag("output", "format in which to print each block's information; may be 'json' or custom template").
+	lsOutput := ls.Flag("output", "Format in which to print each block's information. May be 'json' or custom template.").
 		Short('o').Default("").String()
 	m[name+" ls"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer) error {
 		bkt, closeFn, err := client.NewBucket(gcsBucket, *s3Config, reg, name)

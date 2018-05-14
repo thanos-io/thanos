@@ -16,6 +16,9 @@ spec:
       labels:
         app: thanos-query
         thanos-peer: "true"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "10902"
     spec:
       containers:
       - name: thanos-query

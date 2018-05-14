@@ -34,44 +34,44 @@ import (
 func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "sidecar for Prometheus server")
 
-	grpcAddr := cmd.Flag("grpc-address", "listen address for gRPC endpoints").
+	grpcAddr := cmd.Flag("grpc-address", "Listen address for gRPC endpoints.").
 		Default(defaultGRPCAddr).String()
 
-	httpAddr := cmd.Flag("http-address", "listen address for HTTP endpoints").
+	httpAddr := cmd.Flag("http-address", "Listen address for HTTP endpoints.").
 		Default(defaultHTTPAddr).String()
 
-	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API").
+	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API.").
 		Default("http://localhost:9090").URL()
 
-	dataDir := cmd.Flag("tsdb.path", "data directory of TSDB").
+	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").
 		Default("./data").String()
 
-	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
+	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty, sidecar won't store any block inside Google Cloud Storage.").
 		PlaceHolder("<bucket>").String()
 
 	s3Config := s3.RegisterS3Params(cmd)
 
-	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
+	peers := cmd.Flag("cluster.peers", "Initial peers to join the cluster. It can be either <ip:port>, or <domain:port>.").Strings()
 
-	clusterBindAddr := cmd.Flag("cluster.address", "listen address for cluster").
+	clusterBindAddr := cmd.Flag("cluster.address", "Listen address for cluster.").
 		Default(defaultClusterAddr).String()
 
-	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
+	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "Explicit address to advertise in cluster.").
 		String()
 
-	gossipInterval := cmd.Flag("cluster.gossip-interval", "interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth.").
+	gossipInterval := cmd.Flag("cluster.gossip-interval", "Interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth.").
 		Default(cluster.DefaultGossipInterval.String()).Duration()
 
-	pushPullInterval := cmd.Flag("cluster.pushpull-interval", "interval for gossip state syncs . Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage.").
+	pushPullInterval := cmd.Flag("cluster.pushpull-interval", "Interval for gossip state syncs. Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage.").
 		Default(cluster.DefaultPushPullInterval.String()).Duration()
 
-	reloaderCfgFile := cmd.Flag("reloader.config-file", "config file watched by the reloader").
+	reloaderCfgFile := cmd.Flag("reloader.config-file", "Config file watched by the reloader.").
 		Default("").String()
 
-	reloaderCfgSubstFile := cmd.Flag("reloader.config-envsubst-file", "output file for environment variable substituted config file").
+	reloaderCfgSubstFile := cmd.Flag("reloader.config-envsubst-file", "Output file for environment variable substituted config file.").
 		Default("").String()
 
-	reloaderRuleDir := cmd.Flag("reloader.rule-dir", "rule directory for the reloader to refresh").String()
+	reloaderRuleDir := cmd.Flag("reloader.rule-dir", "Rule directory for the reloader to refresh.").String()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
 		rl := reloader.New(
@@ -148,7 +148,7 @@ func runSidecar(
 				}
 
 				promUp.Set(1)
-				lastHeartbeat.Set(float64(time.Now().Unix()))
+				lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
 				return nil
 			})
 			if err != nil {
@@ -192,7 +192,7 @@ func runSidecar(
 					peer.SetLabels(externalLabels.GetPB())
 
 					promUp.Set(1)
-					lastHeartbeat.Set(float64(time.Now().Unix()))
+					lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
 				}
 
 				return nil

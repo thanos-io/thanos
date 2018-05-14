@@ -27,16 +27,16 @@ import (
 func registerStore(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "store node giving access to blocks in a GCS bucket")
 
-	grpcAddr := cmd.Flag("grpc-address", "listen address for gRPC endpoints").
+	grpcAddr := cmd.Flag("grpc-address", "Listen address for gRPC endpoints.").
 		Default(defaultGRPCAddr).String()
 
-	httpAddr := cmd.Flag("http-address", "listen address for HTTP endpoints").
+	httpAddr := cmd.Flag("http-address", "Listen address for HTTP endpoints.").
 		Default(defaultHTTPAddr).String()
 
-	dataDir := cmd.Flag("tsdb.path", "data directory of TSDB").
+	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").
 		Default("./data").String()
 
-	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage").
+	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage.").
 		PlaceHolder("<bucket>").String()
 
 	s3Config := s3.RegisterS3Params(cmd)
@@ -47,18 +47,18 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes for chunks.").
 		Default("2GB").Bytes()
 
-	peers := cmd.Flag("cluster.peers", "initial peers to join the cluster. It can be either <ip:port>, or <domain:port>").Strings()
+	peers := cmd.Flag("cluster.peers", "Initial peers to join the cluster. It can be either <ip:port>, or <domain:port>.").Strings()
 
-	clusterBindAddr := cmd.Flag("cluster.address", "listen address for cluster").
+	clusterBindAddr := cmd.Flag("cluster.address", "Listen address for cluster.").
 		Default(defaultClusterAddr).String()
 
-	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
+	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "Explicit address to advertise in cluster.").
 		String()
 
-	gossipInterval := cmd.Flag("cluster.gossip-interval", "interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth.").
+	gossipInterval := cmd.Flag("cluster.gossip-interval", "Interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth.").
 		Default(cluster.DefaultGossipInterval.String()).Duration()
 
-	pushPullInterval := cmd.Flag("cluster.pushpull-interval", "interval for gossip state syncs . Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage.").
+	pushPullInterval := cmd.Flag("cluster.pushpull-interval", "Interval for gossip state syncs. Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage.").
 		Default(cluster.DefaultPushPullInterval.String()).Duration()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
