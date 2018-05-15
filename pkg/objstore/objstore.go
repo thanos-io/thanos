@@ -18,7 +18,7 @@ type Bucket interface {
 	BucketReader
 
 	// Upload the contents of the reader as an object into the bucket.
-	Upload(ctx context.Context, name string, r io.Reader) error
+	Upload(ctx context.Context, name string, r io.Reader, filesize int64) error
 
 	// Delete removes the object with the given name.
 	Delete(ctx context.Context, name string) error
@@ -71,7 +71,12 @@ func UploadFile(ctx context.Context, bkt Bucket, src, dst string) error {
 	}
 	defer r.Close()
 
-	if err := bkt.Upload(ctx, dst, r); err != nil {
+	stat, err := r.Stat()
+	if err != nil {
+		return errors.Wrapf(err, "stat file %s", src)
+	}
+
+	if err := bkt.Upload(ctx, dst, r, stat.Size()); err != nil {
 		return errors.Wrapf(err, "upload file %s as %s", src, dst)
 	}
 	return nil
@@ -244,11 +249,11 @@ func (b *metricBucket) Exists(ctx context.Context, name string) (bool, error) {
 	return ok, err
 }
 
-func (b *metricBucket) Upload(ctx context.Context, name string, r io.Reader) error {
+func (b *metricBucket) Upload(ctx context.Context, name string, r io.Reader, filesize int64) error {
 	const op = "upload"
 	start := time.Now()
 
-	err := b.bkt.Upload(ctx, name, r)
+	err := b.bkt.Upload(ctx, name, r, filesize)
 	if err != nil {
 		b.opsFailures.WithLabelValues(op).Inc()
 	} else {

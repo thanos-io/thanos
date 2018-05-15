@@ -62,7 +62,7 @@ func TestSyncer_SyncMetas(t *testing.T) {
 	for _, m := range metas[5:] {
 		var buf bytes.Buffer
 		testutil.Ok(t, json.NewEncoder(&buf).Encode(&m))
-		testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), block.MetaFilename), &buf))
+		testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), block.MetaFilename), &buf, int64(buf.Len())))
 	}
 
 	groups, err := sy.Groups()
@@ -139,7 +139,7 @@ func TestSyncer_GarbageCollect(t *testing.T) {
 		fmt.Println("create", m.ULID)
 		var buf bytes.Buffer
 		testutil.Ok(t, json.NewEncoder(&buf).Encode(&m))
-		testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), block.MetaFilename), &buf))
+		testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), block.MetaFilename), &buf, int64(buf.Len())))
 	}
 
 	// Do one initial synchronization with the bucket.
