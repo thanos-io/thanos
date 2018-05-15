@@ -72,32 +72,9 @@ Flags:
 ```
 
 
-## S3 configuration
-
-Thanos uses minio client to upload prometheus data into s3.
-
-To configure S3 you need to set these s3 flags:
-- --s3.endpoint
-- --s3.bucket
-- --s3.access-key
-
-and set `S3_SECRET_KEY` environment variable with AWS secret key.
-
-Instead of using flags you can pass all the configuration via environment flags:
-- `S3_BUCKET`
-- `S3_ENDPOINT`
-- `S3_ACCESS_KEY`
-- `S3_SECRET_KEY`
-- `S3_INSECURE`
-- `S3_SIGNATURE_VERSION2`
-
-AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region)
-
-If you are getting access denied errors try running with `aws `
-
 ## Reloader Configuration
 
-Thanos can watch changes in prometheus configuration and refresh Prometheus configuration if `--web.enable-lifecycle` enabled.
+Thanos can watch changes in Prometheus configuration and refresh Prometheus configuration if `--web.enable-lifecycle` enabled.
 
 You can configure watching for changes in directory via `--reloader.rule-dir=DIR_NAME` flag.
 
