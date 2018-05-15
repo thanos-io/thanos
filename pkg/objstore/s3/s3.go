@@ -191,9 +191,10 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 }
 
 // Upload the contents of the reader as an object into the bucket.
-func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
+func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader, filesize int64) error {
 	b.opsTotal.WithLabelValues(opObjectInsert).Inc()
-	_, err := b.client.PutObjectWithContext(ctx, b.bucket, name, r, -1, minio.PutObjectOptions{})
+
+	_, err := b.client.PutObjectWithContext(ctx, b.bucket, name, r, filesize, minio.PutObjectOptions{})
 	return errors.Wrap(err, "upload s3 object")
 }
 

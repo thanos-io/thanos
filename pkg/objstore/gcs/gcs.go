@@ -111,7 +111,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 }
 
 // Upload writes the file specified in src to remote GCS location specified as target.
-func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
+func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader, filesize int64) error {
 	b.opsTotal.WithLabelValues(opObjectInsert).Inc()
 
 	w := b.bkt.Object(name).NewWriter(ctx)
