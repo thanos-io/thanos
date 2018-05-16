@@ -231,13 +231,12 @@
     ".",
     "pkg/credentials",
     "pkg/encrypt",
-    "pkg/policy",
     "pkg/s3signer",
     "pkg/s3utils",
     "pkg/set"
   ]
-  revision = "14f1d472d115bac5ca4804094aa87484a72ced61"
-  version = "4.0.6"
+  revision = "c6108c47ba5d86548404ebf9e51c5ca18769fe79"
+  version = "6.0.1"
 
 [[projects]]
   branch = "master"
@@ -374,6 +373,8 @@
   branch = "master"
   name = "golang.org/x/crypto"
   packages = [
+    "argon2",
+    "blake2b",
     "ed25519",
     "ed25519/internal/edwards25519",
     "ssh/terminal"
@@ -545,6 +546,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "15d0a5000c42f10d9595edc860a16c0fdce64f864ff1a60adf07daec183a9719"
+  inputs-digest = "eaeee5a92d2a762dc5e29b9096799f331d4e511094693ce518d617d90c5745d8"
   solver-name = "gps-cdcl"
   solver-version = 1

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/pkg/encrypt"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/version"
@@ -34,17 +35,19 @@ const DirDelim = "/"
 type Bucket struct {
 	bucket   string
 	client   *minio.Client
+	sse      encrypt.ServerSide
 	opsTotal *prometheus.CounterVec
 }
 
 // Config encapsulates the necessary config values to instantiate an s3 client.
 type Config struct {
-	Bucket      string
-	Endpoint    string
-	AccessKey   string
-	SecretKey   string
-	Insecure    bool
-	SignatureV2 bool
+	Bucket       string
+	Endpoint     string
+	AccessKey    string
+	SecretKey    string
+	Insecure     bool
+	SignatureV2  bool
+	SSEEnprytion bool
 }
 
 // RegisterS3Params registers the s3 flags and returns an initialized Config struct.
@@ -67,6 +70,9 @@ func RegisterS3Params(cmd *kingpin.CmdClause) *Config {
 
 	cmd.Flag("s3.signature-version2", "Whether to use S3 Signature Version 2; otherwise Signature Version 4 will be used.").
 		Default("false").Envar("S3_SIGNATURE_VERSION2").BoolVar(&s3config.SignatureV2)
+
+	cmd.Flag("s3.encrypt-sse", "Whether to use Server Side Encryption").
+		Default("false").Envar("S3_SSE_ENCRYPTION").BoolVar(&s3config.SSEEnprytion)
 
 	return &s3config
 }
@@ -120,9 +126,15 @@ func NewBucket(conf *Config, reg prometheus.Registerer, component string) (*Buck
 		DisableCompression: true,
 	})
 
+	var sse encrypt.ServerSide
+	if conf.SSEEnprytion {
+		sse = encrypt.NewSSE()
+	}
+
 	bkt := &Bucket{
 		bucket: conf.Bucket,
 		client: client,
+		sse:    sse,
 		opsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name:        "thanos_objstore_s3_bucket_operations_total",
 			Help:        "Total number of operations that were executed against an s3 bucket.",
@@ -161,13 +173,13 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 // Get returns a reader for the given object name.
 func (b *Bucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
 	b.opsTotal.WithLabelValues(opObjectGet).Inc()
-	return b.client.GetObjectWithContext(ctx, b.bucket, name, minio.GetObjectOptions{})
+	return b.client.GetObjectWithContext(ctx, b.bucket, name, minio.GetObjectOptions{ServerSideEncryption: b.sse})
 }
 
 // GetRange returns a new range reader for the given object name and range.
 func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
 	b.opsTotal.WithLabelValues(opObjectGet).Inc()
-	opts := &minio.GetObjectOptions{}
+	opts := &minio.GetObjectOptions{ServerSideEncryption: b.sse}
 	err := opts.SetRange(off, off+length)
 	if err != nil {
 		return nil, err
@@ -193,7 +205,11 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	b.opsTotal.WithLabelValues(opObjectInsert).Inc()
-	_, err := b.client.PutObjectWithContext(ctx, b.bucket, name, r, -1, minio.PutObjectOptions{})
+
+	_, err := b.client.PutObjectWithContext(ctx, b.bucket, name, r, -1,
+		minio.PutObjectOptions{ServerSideEncryption: b.sse},
+	)
+
 	return errors.Wrap(err, "upload s3 object")
 }
 
