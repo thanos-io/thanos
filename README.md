@@ -17,6 +17,7 @@ data from Prometheus HA pairs on the fly.
 * **[Getting Started](docs/getting_started.md)**
 * [Design](docs/design.md)
 * [Prom Meetup Slides](https://www.slideshare.net/BartomiejPotka/thanos-global-durable-prometheus-monitoring)
+* [Introduction blog post](https://improbable.io/games/blog/thanos-prometheus-at-scale)
 
 ## Features
 
