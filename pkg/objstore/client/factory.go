@@ -9,6 +9,8 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
+	"github.com/vglafirov/thanos/pkg/objstore/azure"
+
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/version"
@@ -18,7 +20,7 @@ import (
 var ErrNotFound = errors.New("no valid GCS or S3 configuration supplied")
 
 // NewBucket initializes and returns new object storage clients.
-func NewBucket(gcsBucket *string, s3Config s3.Config, reg *prometheus.Registry, component string) (objstore.Bucket, func() error, error) {
+func NewBucket(gcsBucket *string, s3Config s3.Config, azureConfig azure.Config, reg *prometheus.Registry, component string) (objstore.Bucket, func() error, error) {
 	if *gcsBucket != "" {
 		gcsOptions := option.WithUserAgent(fmt.Sprintf("thanos-%s/%s (%s)", component, version.Version, runtime.Version()))
 		gcsClient, err := storage.NewClient(context.Background(), gcsOptions)
@@ -34,6 +36,14 @@ func NewBucket(gcsBucket *string, s3Config s3.Config, reg *prometheus.Registry, 
 			return nil, nil, errors.Wrap(err, "create s3 client")
 		}
 		return objstore.BucketWithMetrics(s3Config.Bucket, b, reg), func() error { return nil }, nil
+	}
+
+	if azureConfig.Validate() == nil {
+		b, err := azure.NewBucket(&azureConfig, reg, component)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "create Azure client")
+		}
+		return objstore.BucketWithMetrics(azureConfig.Bucket, b, reg), func() error { return nil }, nil
 	}
 
 	return nil, nil, ErrNotFound

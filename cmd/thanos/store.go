@@ -19,6 +19,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/vglafirov/thanos/pkg/objstore/azure"
 	"google.golang.org/grpc"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
@@ -40,6 +41,8 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 		PlaceHolder("<bucket>").String()
 
 	s3Config := s3.RegisterS3Params(cmd)
+
+	azureConfig := azure.RegisterAzureParams(cmd)
 
 	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the index cache.").
 		Default("250MB").Bytes()
@@ -72,6 +75,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			tracer,
 			*gcsBucket,
 			s3Config,
+			azureConfig,
 			*dataDir,
 			*grpcAddr,
 			*httpAddr,
@@ -91,6 +95,7 @@ func runStore(
 	tracer opentracing.Tracer,
 	gcsBucket string,
 	s3Config *s3.Config,
+	azureConfig *azure.Config,
 	dataDir string,
 	grpcAddr string,
 	httpAddr string,
@@ -100,7 +105,7 @@ func runStore(
 	component string,
 ) error {
 	{
-		bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
+		bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, azureConfig, reg, component)
 		if err != nil {
 			return err
 		}

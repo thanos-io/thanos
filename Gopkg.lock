@@ -196,6 +196,36 @@
   version = "v0.1.0"
 
 [[projects]]
+  name = "github.com/improbable-eng/thanos"
+  packages = [
+    "pkg/alert",
+    "pkg/block",
+    "pkg/cluster",
+    "pkg/compact",
+    "pkg/compact/downsample",
+    "pkg/objstore",
+    "pkg/objstore/client",
+    "pkg/objstore/gcs",
+    "pkg/objstore/s3",
+    "pkg/pool",
+    "pkg/query",
+    "pkg/query/api",
+    "pkg/query/ui",
+    "pkg/reloader",
+    "pkg/runutil",
+    "pkg/shipper",
+    "pkg/store",
+    "pkg/store/prompb",
+    "pkg/store/storepb",
+    "pkg/strutil",
+    "pkg/testutil",
+    "pkg/tracing",
+    "pkg/verifier"
+  ]
+  revision = "d7e84167c68a5211608e762403a38f3b0ea34c70"
+  version = "v0.1.0-rc.0"
+
+[[projects]]
   name = "github.com/julienschmidt/httprouter"
   packages = ["."]
   revision = "8c199fb6259ffc1af525cc3ad52ee60ba8359669"
@@ -546,6 +576,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "eaeee5a92d2a762dc5e29b9096799f331d4e511094693ce518d617d90c5745d8"
+  inputs-digest = "f7eafcb96d580efea7912f85bdca73ab946c212705a4e95a44be73f0a65faf23"
   solver-name = "gps-cdcl"
   solver-version = 1
