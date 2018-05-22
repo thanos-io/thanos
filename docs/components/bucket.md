@@ -6,7 +6,7 @@ It is normally run as a stand alone command to aid with troubleshooting.
 Example:
 
 ```
-$ thanos bucket verify -r --gcs.bucket example-bucket
+$ thanos bucket verify --gcs.bucket example-bucket
 ```
 
 Bucket can be extended to add more subcommands that will be helpful when working with object storage buckets
@@ -69,7 +69,7 @@ Subcommands:
 Example:
 
 ```
-$ thanos bucket verify -r --gcs.bucket example-bucket
+$ thanos bucket verify --gcs.bucket example-bucket
 ``` 
 
 [embedmd]:# (flags/bucket_verify.txt)
@@ -123,7 +123,7 @@ Flags:
 Example:
 
 ```
-$ thanos bucket ls -o="json" --gcs.bucket example-bucket
+$ thanos bucket ls -o json --gcs.bucket example-bucket
 ``` 
 
 [embedmd]:# (flags/bucket_ls.txt)
