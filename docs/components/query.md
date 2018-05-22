@@ -39,28 +39,48 @@ Flags:
   -h, --help                     Show context-sensitive help (also try
                                  --help-long and --help-man).
       --version                  Show application version.
-      --log.level=info           log filtering level
+      --log.level=info           Log filtering level.
       --gcloudtrace.project=GCLOUDTRACE.PROJECT  
                                  GCP project to send Google Cloud Trace tracings
                                  to. If empty, tracing will be disabled.
       --gcloudtrace.sample-factor=1  
                                  How often we send traces (1/<sample-factor>).
+                                 If 0 no trace will be sent periodically, unless
+                                 forced by baggage item. See
+                                 `pkg/tracing/tracing.go` for details.
       --http-address="0.0.0.0:10902"  
-                                 listen host:port for HTTP endpoints
-      --query.timeout=2m         maximum time to process query by query node
-      --query.max-concurrent=20  maximum number of queries processed
-                                 concurrently by query node
+                                 Listen host:port for HTTP endpoints.
+      --grpc-address="0.0.0.0:10901"  
+                                 Listen host:port for gRPC endpoints.
+      --query.timeout=2m         Maximum time to process query by query node.
+      --query.max-concurrent=20  Maximum number of queries processed
+                                 concurrently by query node.
       --query.replica-label=QUERY.REPLICA-LABEL  
-                                 label to treat as a replica indicator along
+                                 Label to treat as a replica indicator along
                                  which data is deduplicated. Still you will be
                                  able to query without deduplication using
-                                 'dedup=false' parameter
+                                 'dedup=false' parameter.
       --cluster.peers=CLUSTER.PEERS ...  
-                                 initial peers to join the cluster. It can be
-                                 either <ip:port>, or <domain:port>
+                                 Initial peers to join the cluster. It can be
+                                 either <ip:port>, or <domain:port>.
       --cluster.address="0.0.0.0:10900"  
-                                 listen address for cluster
+                                 Listen address for cluster.
       --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS  
-                                 explicit address to advertise in cluster
+                                 Explicit address to advertise in cluster.
+      --cluster.gossip-interval=5s  
+                                 Interval between sending gossip messages. By
+                                 lowering this value (more frequent) gossip
+                                 messages are propagated across the cluster more
+                                 quickly at the expense of increased bandwidth.
+      --cluster.pushpull-interval=5s  
+                                 Interval for gossip state syncs. Setting this
+                                 interval lower (more frequent) will increase
+                                 convergence speeds across larger clusters at
+                                 the expense of increased bandwidth usage.
+      --selector-label=<name>="<value>" ...  
+                                 Query selector labels that will be exposed in
+                                 info endpoint (repeated).
+      --store=<store> ...        Addresses of statically configured store API
+                                 servers (repeatable).
 
 ```

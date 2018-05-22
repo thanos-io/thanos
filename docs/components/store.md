@@ -17,7 +17,7 @@ In general about 1MB of local disk space is required per TSDB block stored in th
 
 [embedmd]:# (flags/store.txt $)
 ```$
-usage: thanos store --gcs.bucket=<bucket> [<flags>]
+usage: thanos store [<flags>]
 
 store node giving access to blocks in a GCS bucket
 
@@ -25,29 +25,50 @@ Flags:
   -h, --help                    Show context-sensitive help (also try
                                 --help-long and --help-man).
       --version                 Show application version.
-      --log.level=info          log filtering level
+      --log.level=info          Log filtering level.
       --gcloudtrace.project=GCLOUDTRACE.PROJECT  
                                 GCP project to send Google Cloud Trace tracings
                                 to. If empty, tracing will be disabled.
       --gcloudtrace.sample-factor=1  
-                                How often we send traces (1/<sample-factor>).
+                                How often we send traces (1/<sample-factor>). If
+                                0 no trace will be sent periodically, unless
+                                forced by baggage item. See
+                                `pkg/tracing/tracing.go` for details.
       --grpc-address="0.0.0.0:10901"  
-                                listen address for gRPC endpoints
+                                Listen address for gRPC endpoints.
       --http-address="0.0.0.0:10902"  
-                                listen address for HTTP endpoints
-      --tsdb.path="./data"      data directory of TSDB
+                                Listen address for HTTP endpoints.
+      --tsdb.path="./data"      Data directory of TSDB.
       --gcs.bucket=<bucket>     Google Cloud Storage bucket name for stored
                                 blocks. If empty sidecar won't store any block
-                                inside Google Cloud Storage
+                                inside Google Cloud Storage.
+      --s3.bucket=<bucket>      S3-Compatible API bucket name for stored blocks.
+      --s3.endpoint=<api-url>   S3-Compatible API endpoint for stored blocks.
+      --s3.access-key=<key>     Access key for an S3-Compatible API.
+      --s3.insecure             Whether to use an insecure connection with an
+                                S3-Compatible API.
+      --s3.signature-version2   Whether to use S3 Signature Version 2; otherwise
+                                Signature Version 4 will be used.
+      --s3.encrypt-sse          Whether to use Server Side Encryption
       --index-cache-size=250MB  Maximum size of items held in the index cache.
-      --chunk-pool-size=2GB     Maximum size of concurrently allocatble bytes
+      --chunk-pool-size=2GB     Maximum size of concurrently allocatable bytes
                                 for chunks.
       --cluster.peers=CLUSTER.PEERS ...  
-                                initial peers to join the cluster. It can be
-                                either <ip:port>, or <domain:port>
+                                Initial peers to join the cluster. It can be
+                                either <ip:port>, or <domain:port>.
       --cluster.address="0.0.0.0:10900"  
-                                listen address for cluster
+                                Listen address for cluster.
       --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS  
-                                explicit address to advertise in cluster
+                                Explicit address to advertise in cluster.
+      --cluster.gossip-interval=5s  
+                                Interval between sending gossip messages. By
+                                lowering this value (more frequent) gossip
+                                messages are propagated across the cluster more
+                                quickly at the expense of increased bandwidth.
+      --cluster.pushpull-interval=5s  
+                                Interval for gossip state syncs. Setting this
+                                interval lower (more frequent) will increase
+                                convergence speeds across larger clusters at the
+                                expense of increased bandwidth usage.
 
 ```
