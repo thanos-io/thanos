@@ -25,50 +25,66 @@ $ thanos query \
 
 [embedmd]:# (flags/sidecar.txt $)
 ```$
-
 usage: thanos sidecar [<flags>]
 
 sidecar for Prometheus server
 
 Flags:
-  -h, --help                     Show context-sensitive help (also try --help-long and --help-man).
+  -h, --help                     Show context-sensitive help (also try
+                                 --help-long and --help-man).
       --version                  Show application version.
-      --log.level=info           log filtering level
-      --gcloudtrace.project=GCLOUDTRACE.PROJECT
-                                 GCP project to send Google Cloud Trace tracings to. If empty, tracing will be disabled.
-      --gcloudtrace.sample-factor=1
-                                 How often we send traces (1/<sample-factor>). If 0 no trace will be sent periodically, unless forced by baggage item. See
+      --log.level=info           Log filtering level.
+      --gcloudtrace.project=GCLOUDTRACE.PROJECT  
+                                 GCP project to send Google Cloud Trace tracings
+                                 to. If empty, tracing will be disabled.
+      --gcloudtrace.sample-factor=1  
+                                 How often we send traces (1/<sample-factor>).
+                                 If 0 no trace will be sent periodically, unless
+                                 forced by baggage item. See
                                  `pkg/tracing/tracing.go` for details.
-      --grpc-address="0.0.0.0:10901"
-                                 listen address for gRPC endpoints
-      --http-address="0.0.0.0:10902"
-                                 listen address for HTTP endpoints
-      --prometheus.url=http://localhost:9090
-                                 URL at which to reach Prometheus's API
-      --tsdb.path="./data"       data directory of TSDB
-      --gcs.bucket=<bucket>      Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage
-      --s3.bucket=<bucket>       S3-Compatible API bucket name for stored blocks.
+      --grpc-address="0.0.0.0:10901"  
+                                 Listen address for gRPC endpoints.
+      --http-address="0.0.0.0:10902"  
+                                 Listen address for HTTP endpoints.
+      --prometheus.url=http://localhost:9090  
+                                 URL at which to reach Prometheus's API.
+      --tsdb.path="./data"       Data directory of TSDB.
+      --gcs.bucket=<bucket>      Google Cloud Storage bucket name for stored
+                                 blocks. If empty, sidecar won't store any block
+                                 inside Google Cloud Storage.
+      --s3.bucket=<bucket>       S3-Compatible API bucket name for stored
+                                 blocks.
       --s3.endpoint=<api-url>    S3-Compatible API endpoint for stored blocks.
       --s3.access-key=<key>      Access key for an S3-Compatible API.
-      --s3.insecure              Whether to use an insecure connection with an S3-Compatible API.
-      --s3.signature-version2    Whether to use S3 Signature Version 2; otherwise Signature Version 4 will be used.
-      --cluster.peers=CLUSTER.PEERS ...
-                                 initial peers to join the cluster. It can be either <ip:port>, or <domain:port>
-      --cluster.address="0.0.0.0:10900"
-                                 listen address for cluster
-      --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS
-                                 explicit address to advertise in cluster
-      --cluster.gossip-interval=5s
-                                 interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly
-                                 at the expense of increased bandwidth.
-      --cluster.pushpull-interval=5s
-                                 interval for gossip state syncs . Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the
-                                 expense of increased bandwidth usage.
-      --reloader.config-file=""  config file watched by the reloader
-      --reloader.config-envsubst-file=""
-                                 output file for environment variable substituted config file
-      --reloader.rule-dir=RELOADER.RULE-DIR
-                                 rule directory for the reloader to refresh
+      --s3.insecure              Whether to use an insecure connection with an
+                                 S3-Compatible API.
+      --s3.signature-version2    Whether to use S3 Signature Version 2;
+                                 otherwise Signature Version 4 will be used.
+      --s3.encrypt-sse           Whether to use Server Side Encryption
+      --cluster.peers=CLUSTER.PEERS ...  
+                                 Initial peers to join the cluster. It can be
+                                 either <ip:port>, or <domain:port>.
+      --cluster.address="0.0.0.0:10900"  
+                                 Listen address for cluster.
+      --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS  
+                                 Explicit address to advertise in cluster.
+      --cluster.gossip-interval=5s  
+                                 Interval between sending gossip messages. By
+                                 lowering this value (more frequent) gossip
+                                 messages are propagated across the cluster more
+                                 quickly at the expense of increased bandwidth.
+      --cluster.pushpull-interval=5s  
+                                 Interval for gossip state syncs. Setting this
+                                 interval lower (more frequent) will increase
+                                 convergence speeds across larger clusters at
+                                 the expense of increased bandwidth usage.
+      --reloader.config-file=""  Config file watched by the reloader.
+      --reloader.config-envsubst-file=""  
+                                 Output file for environment variable
+                                 substituted config file.
+      --reloader.rule-dir=RELOADER.RULE-DIR  
+                                 Rule directory for the reloader to refresh.
+
 ```
 
 
