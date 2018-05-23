@@ -16,6 +16,18 @@
   version = "v0.16.0"
 
 [[projects]]
+  name = "github.com/Azure/azure-pipeline-go"
+  packages = ["pipeline"]
+  revision = "098e490af5dc2a905cdc5b64cafda6887b29164b"
+  version = "0.1.6"
+
+[[projects]]
+  name = "github.com/Azure/azure-storage-blob-go"
+  packages = ["2017-07-29/azblob"]
+  revision = "66ba96e49ebbdc3cd26970c6c675c906d304b5e2"
+  version = "0.1.4"
+
+[[projects]]
   name = "github.com/NYTimes/gziphandler"
   packages = ["."]
   revision = "d6f46609c7629af3a02d791a4666866eed3cbd3e"
@@ -576,6 +588,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "f7eafcb96d580efea7912f85bdca73ab946c212705a4e95a44be73f0a65faf23"
+  inputs-digest = "87d5eb04d51767a9c6a62e37645b5db6e29d349df5e8b08d0900078dbfd7420c"
   solver-name = "gps-cdcl"
   solver-version = 1

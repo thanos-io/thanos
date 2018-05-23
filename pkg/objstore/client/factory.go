@@ -43,7 +43,7 @@ func NewBucket(gcsBucket *string, s3Config s3.Config, azureConfig azure.Config, 
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "create Azure client")
 		}
-		return objstore.BucketWithMetrics(azureConfig.Bucket, b, reg), func() error { return nil }, nil
+		return objstore.BucketWithMetrics(azureConfig.StorageAccountName, b, reg), func() error { return nil }, nil
 	}
 
 	return nil, nil, ErrNotFound
