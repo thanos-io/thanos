@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/url"
 
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	blob "github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
@@ -20,8 +19,8 @@ type Config struct {
 
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
 type Bucket struct {
-	ctx      context.Context
-	opsTotal *prometheus.CounterVec
+	containerURL blob.ContainerURL
+	opsTotal     *prometheus.CounterVec
 }
 
 // RegisterAzureParams registers the Azure flags and returns an initialized Config struct.
@@ -49,32 +48,24 @@ func (conf *Config) Validate() error {
 // NewBucket returns a new Bucket using the provided Azure config.
 func NewBucket(conf *Config, reg prometheus.Registerer, component string) (*Bucket, error) {
 
-	// Create a default request pipeline using your storage account name and account key.
-	credential := azblob.NewSharedKeyCredential(conf.StorageAccountName, conf.StorageAccountKey)
-	pipeline := azblob.NewPipeline(credential, azblob.PipelineOptions{})
-
-	// Create a random string for the quick start container
 	containerName := fmt.Sprintf("thanos-%s", component)
-
-	// From the Azure portal, get your storage account blob service URL endpoint.
-	URL, _ := url.Parse(
-		fmt.Sprintf("https://%s.blob.core.windows.net/%s", conf.StorageAccountName, containerName))
-
-	// Create a ContainerURL object that wraps the container URL and a request
-	// pipeline to make requests.
-	containerURL := azblob.NewContainerURL(*URL, pipeline)
-
 	ctx := context.Background()
 
-	// Create the container
-	_, err := containerURL.Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
+	container, err := getContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, containerName)
 	if err != nil {
-		fmt.Printf("Error: %s", azblob.StorageError(err).ServiceCode())
-		return nil, err
+		serviceError := err.(blob.StorageError)
+		if serviceError.ServiceCode() == "ContainerNotFound" {
+			container, err = createContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, containerName)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
 	}
 
 	bkt := &Bucket{
-		ctx: ctx,
+		containerURL: container,
 		opsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name:        "thanos_objstore_azure_storage_operations_total",
 			Help:        "Total number of operations that were executed against an Azure storage account.",
