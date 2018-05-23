@@ -43,6 +43,8 @@ test: test-deps
 	@go test $(shell go list ./... | grep -v /vendor/)
 
 assets:
+	@echo ">> deleting asset file"
+	@rm pkg/query/ui/bindata.go || true
 	@echo ">> writing assets"
 	@go get -u github.com/jteeuwen/go-bindata/...
 	@go-bindata $(bindata_flags) -pkg ui -o pkg/query/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  pkg/query/ui/templates/... pkg/query/ui/static/...

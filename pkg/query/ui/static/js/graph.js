@@ -314,6 +314,7 @@ Prometheus.Graph.prototype.getOptions = function() {
     "range_input",
     "end_input",
     "step_input",
+    "downsample_input",
     "stacked"
   ];
 
@@ -419,7 +420,8 @@ Prometheus.Graph.prototype.submitQuery = function() {
 
   var startTime = new Date().getTime();
   var rangeSeconds = self.parseDuration(self.rangeInput.val());
-  var resolution = parseInt(self.queryForm.find("input[name=step_input]").val()) || Math.max(Math.floor(rangeSeconds / 250), 1);
+  var renderResolution = parseInt(self.queryForm.find("input[name=step_input]").val()) || Math.max(Math.floor(rangeSeconds / 250), 1);
+  var maxSourceResolution = self.queryForm.find("select[name=max_source_res_input]").val();
   var endDate = self.getEndDate() / 1000;
 
   if (self.queryXhr) {
@@ -436,7 +438,8 @@ Prometheus.Graph.prototype.submitQuery = function() {
   if (self.options.tab === 0) {
     params.start = endDate - rangeSeconds;
     params.end = endDate;
-    params.step = resolution;
+    params.step = renderResolution;
+    params.max_source_res = maxSourceResolution;
     url = PATH_PREFIX + "/api/v1/query_range";
     success = function(json, textStatus) { self.handleGraphResponse(json, textStatus); };
   } else {
@@ -485,7 +488,7 @@ Prometheus.Graph.prototype.submitQuery = function() {
             totalTimeSeries = xhr.responseJSON.data.result.length;
           }
         }
-        self.evalStats.html("Load time: " + duration + "ms <br /> Resolution: " + resolution + "s <br />" + "Total time series: " + totalTimeSeries);
+        self.evalStats.html("Load time: " + duration + "ms <br /> Resolution: " + renderResolution + "s <br />" + "Total time series: " + totalTimeSeries);
         self.spinner.hide();
       }
   });
