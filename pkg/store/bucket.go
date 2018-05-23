@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"strings"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
@@ -630,6 +632,34 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 	return nil
 }
 
+func debugFoundBlockSetOverview(logger log.Logger, mint, maxt int64, lset labels.Labels, bs []*bucketBlock) {
+	if len(bs) == 0 {
+		level.Debug(logger).Log("msg", "No block found", "mint", mint, "maxt", maxt, "lset", lset.String())
+		return
+	}
+
+	var parts []string
+
+	currRes := bs[0].meta.Thanos.Downsample.Resolution
+	currMin := bs[0].meta.MinTime
+	currMax := bs[0].meta.MaxTime
+	for i := 1; i < len(bs); i++ {
+		if currRes == bs[i].meta.Thanos.Downsample.Resolution {
+			currMax = bs[i].meta.MaxTime
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("Range: %d-%d Resolution: %d", currMin, currMax, currRes))
+
+		currRes = bs[i].meta.Thanos.Downsample.Resolution
+		currMin = bs[i].meta.MinTime
+		currMax = bs[i].meta.MaxTime
+	}
+
+	parts = append(parts, fmt.Sprintf("Range: %d-%d Resolution: %d", currMin, currMax, currRes))
+
+	level.Debug(logger).Log("msg", "Blocks source resolutions", "blocks", len(bs), "mint", mint, "maxt", maxt, "lset", lset.String(), "spans", strings.Join(parts, "\n"))
+}
+
 // Series implements the storepb.StoreServer interface.
 func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	matchers, err := translateMatchers(req.Matchers)
@@ -650,6 +680,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			continue
 		}
 		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow)
+
+		debugFoundBlockSetOverview(s.logger, req.MinTime, req.MaxTime, bs.labels, blocks)
 
 		for _, b := range blocks {
 			stats.blocksQueried++
@@ -827,7 +859,7 @@ type bucketBlockSet struct {
 }
 
 // newBucketBlockSet initializes a new set with the known downsampling windows hard-configured.
-// The set currently does not support arbtirary ranges.
+// The set currently does not support arbitrary ranges.
 func newBucketBlockSet(lset labels.Labels) *bucketBlockSet {
 	return &bucketBlockSet{
 		labels:      lset,
@@ -909,7 +941,7 @@ func (s *bucketBlockSet) getFor(mint, maxt, minResolution int64) (bs []*bucketBl
 		bs = append(bs, b)
 	}
 	// Our current resolution might not cover all data, recursively fill the gaps at the start
-	// end end of [mint, maxt] with higher resolution blocks.
+	// and end of [mint, maxt] with higher resolution blocks.
 	i++
 	// No higher resolution left, we are done.
 	if i >= len(s.resolutions) {
