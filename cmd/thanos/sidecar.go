@@ -34,11 +34,7 @@ import (
 func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "sidecar for Prometheus server")
 
-	grpcAddr := cmd.Flag("grpc-address", "Listen address for gRPC endpoints.").
-		Default(defaultGRPCAddr).String()
-
-	httpAddr := cmd.Flag("http-address", "Listen address for HTTP endpoints.").
-		Default(defaultHTTPAddr).String()
+	grpcBindAddr, httpBindAddr, newPeerFn := registerServerFlags(cmd)
 
 	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API.").
 		Default("http://localhost:9090").URL()
@@ -50,20 +46,6 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 		PlaceHolder("<bucket>").String()
 
 	s3Config := s3.RegisterS3Params(cmd)
-
-	peers := cmd.Flag("cluster.peers", "Initial peers to join the cluster. It can be either <ip:port>, or <domain:port>.").Strings()
-
-	clusterBindAddr := cmd.Flag("cluster.address", "Listen address for cluster.").
-		Default(defaultClusterAddr).String()
-
-	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "Explicit address to advertise in cluster.").
-		String()
-
-	gossipInterval := cmd.Flag("cluster.gossip-interval", "Interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth.").
-		Default(cluster.DefaultGossipInterval.String()).Duration()
-
-	pushPullInterval := cmd.Flag("cluster.pushpull-interval", "Interval for gossip state syncs. Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage.").
-		Default(cluster.DefaultPushPullInterval.String()).Duration()
 
 	reloaderCfgFile := cmd.Flag("reloader.config-file", "Config file watched by the reloader.").
 		Default("").String()
@@ -81,7 +63,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			*reloaderCfgSubstFile,
 			*reloaderRuleDir,
 		)
-		peer, err := cluster.New(logger, reg, *clusterBindAddr, *clusterAdvertiseAddr, *peers, false, *gossipInterval, *pushPullInterval)
+		peer, err := newPeerFn(logger, reg, false, "", false)
 		if err != nil {
 			return errors.Wrap(err, "new cluster peer")
 		}
@@ -90,8 +72,8 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			logger,
 			reg,
 			tracer,
-			*grpcAddr,
-			*httpAddr,
+			*grpcBindAddr,
+			*httpBindAddr,
 			*promURL,
 			*dataDir,
 			*gcsBucket,
@@ -108,8 +90,8 @@ func runSidecar(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	grpcAddr string,
-	httpAddr string,
+	grpcBindAddr string,
+	httpBindAddr string,
 	promURL *url.URL,
 	dataDir string,
 	gcsBucket string,
@@ -160,20 +142,13 @@ func runSidecar(
 			}
 
 			// New gossip cluster.
-			err = peer.Join(
-				cluster.PeerState{
-					Type:    cluster.PeerTypeSource,
-					APIAddr: grpcAddr,
-					Metadata: cluster.PeerMetadata{
-						Labels: externalLabels.GetPB(),
-						// Start out with the full time range. The shipper will constrain it later.
-						// TODO(fabxc): minimum timestamp is never adjusted if shipping is disabled.
-						MinTime: 0,
-						MaxTime: math.MaxInt64,
-					},
-				},
-			)
-			if err != nil {
+			if err = peer.Join(cluster.PeerTypeSource, cluster.PeerMetadata{
+				Labels: externalLabels.GetPB(),
+				// Start out with the full time range. The shipper will constrain it later.
+				// TODO(fabxc): minimum timestamp is never adjusted if shipping is disabled.
+				MinTime: 0,
+				MaxTime: math.MaxInt64,
+			}); err != nil {
 				return errors.Wrap(err, "join cluster")
 			}
 
@@ -210,24 +185,11 @@ func runSidecar(
 			cancel()
 		})
 	}
-	{
-		mux := http.NewServeMux()
-		registerMetrics(mux, reg)
-		registerProfile(mux)
-
-		l, err := net.Listen("tcp", httpAddr)
-		if err != nil {
-			return errors.Wrap(err, "listen metrics address")
-		}
-
-		g.Add(func() error {
-			return errors.Wrap(http.Serve(l, mux), "serve metrics")
-		}, func(error) {
-			l.Close()
-		})
+	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
+		return err
 	}
 	{
-		l, err := net.Listen("tcp", grpcAddr)
+		l, err := net.Listen("tcp", grpcBindAddr)
 		if err != nil {
 			return errors.Wrap(err, "listen API address")
 		}
@@ -245,6 +207,7 @@ func runSidecar(
 		storepb.RegisterStoreServer(s, promStore)
 
 		g.Add(func() error {
+			level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			s.Stop()
@@ -252,7 +215,7 @@ func runSidecar(
 		})
 	}
 
-	var uploads bool = true
+	var uploads = true
 
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.

@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"net"
-	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -31,22 +29,16 @@ import (
 func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "continously downsamples blocks in an object store bucket")
 
-	httpAddr := cmd.Flag("http-address", "listen host:port for HTTP endpoints").
-		Default(defaultHTTPAddr).String()
-
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
 		Default("./data").String()
 
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks.").
 		PlaceHolder("<bucket>").Required().String()
 
-	syncDelay := cmd.Flag("sync-delay", "Minimum age of blocks before they are being processed.").
-		Default("2h").Duration()
-
 	s3Config := s3.RegisterS3Params(cmd)
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
-		return runDownsample(g, logger, reg, *httpAddr, *dataDir, *gcsBucket, s3Config, *syncDelay, name)
+		return runDownsample(g, logger, reg, *dataDir, *gcsBucket, s3Config, name)
 	}
 }
 
@@ -54,11 +46,9 @@ func runDownsample(
 	g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
-	httpAddr string,
 	dataDir string,
 	gcsBucket string,
 	s3Config *s3.Config,
-	syncDelay time.Duration,
 	component string,
 ) error {
 
@@ -97,25 +87,8 @@ func runDownsample(
 			cancel()
 		})
 	}
-	// Start metric and profiling endpoints.
-	{
-		mux := http.NewServeMux()
-		registerMetrics(mux, reg)
-		registerProfile(mux)
 
-		l, err := net.Listen("tcp", httpAddr)
-		if err != nil {
-			return errors.Wrapf(err, "listen on address %s", httpAddr)
-		}
-
-		g.Add(func() error {
-			return errors.Wrap(http.Serve(l, mux), "serve query")
-		}, func(error) {
-			l.Close()
-		})
-	}
-
-	level.Info(logger).Log("msg", "starting compact node")
+	level.Info(logger).Log("msg", "starting downsample node")
 	return nil
 }
 

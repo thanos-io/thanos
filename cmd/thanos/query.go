@@ -34,11 +34,10 @@ import (
 func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
 
-	httpAddr := cmd.Flag("http-address", "Listen host:port for HTTP endpoints.").
-		Default(defaultHTTPAddr).String()
+	grpcBindAddr, httpBindAddr, newPeerFn := registerServerFlags(cmd)
 
-	grpcAddr := cmd.Flag("grpc-address", "Listen host:port for gRPC endpoints.").
-		Default(defaultGRPCAddr).String()
+	httpAdvertiseAddr := cmd.Flag("http-advertise-address", "Explicit (external) host:port address to advertise for HTTP QueryAPI in gossip cluster. If empty, 'http-address' will be used.").
+		String()
 
 	queryTimeout := cmd.Flag("query.timeout", "Maximum time to process query by query node.").
 		Default("2m").Duration()
@@ -49,20 +48,6 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	replicaLabel := cmd.Flag("query.replica-label", "Label to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter.").
 		String()
 
-	peers := cmd.Flag("cluster.peers", "Initial peers to join the cluster. It can be either <ip:port>, or <domain:port>.").Strings()
-
-	clusterBindAddr := cmd.Flag("cluster.address", "Listen address for cluster.").
-		Default(defaultClusterAddr).String()
-
-	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "Explicit address to advertise in cluster.").
-		String()
-
-	gossipInterval := cmd.Flag("cluster.gossip-interval", "Interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth.").
-		Default(cluster.DefaultGossipInterval.String()).Duration()
-
-	pushPullInterval := cmd.Flag("cluster.pushpull-interval", "Interval for gossip state syncs. Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage.").
-		Default(cluster.DefaultPushPullInterval.String()).Duration()
-
 	selectorLabels := cmd.Flag("selector-label", "Query selector labels that will be exposed in info endpoint (repeated).").
 		PlaceHolder("<name>=\"<value>\"").Strings()
 
@@ -70,7 +55,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 		PlaceHolder("<store>").Strings()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
-		peer, err := cluster.New(logger, reg, *clusterBindAddr, *clusterAdvertiseAddr, *peers, true, *gossipInterval, *pushPullInterval)
+		peer, err := newPeerFn(logger, reg, true, *httpAdvertiseAddr, true)
 		if err != nil {
 			return errors.Wrap(err, "new cluster peer")
 		}
@@ -88,9 +73,13 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			lookupStores[s] = struct{}{}
 		}
 
-		return runQuery(g, logger, reg, tracer,
-			*httpAddr,
-			*grpcAddr,
+		return runQuery(
+			g,
+			logger,
+			reg,
+			tracer,
+			*grpcBindAddr,
+			*httpBindAddr,
 			*maxConcurrentQueries,
 			*queryTimeout,
 			*replicaLabel,
@@ -143,8 +132,8 @@ func runQuery(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	httpAddr string,
-	grpcAddr string,
+	grpcBindAddr string,
+	httpBindAddr string,
 	maxConcurrentQueries int,
 	queryTimeout time.Duration,
 	replicaLabel string,
@@ -164,7 +153,7 @@ func runQuery(
 				specs = append(staticSpecs)
 
 				for id, ps := range peer.PeerStates(cluster.PeerTypesStoreAPIs()...) {
-					specs = append(specs, &gossipSpec{id: id, addr: ps.APIAddr, peer: peer})
+					specs = append(specs, &gossipSpec{id: id, addr: ps.StoreAPIAddr, peer: peer})
 				}
 				return specs
 			},
@@ -192,11 +181,8 @@ func runQuery(
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			err := peer.Join(cluster.PeerState{
-				Type:    cluster.PeerTypeQuery,
-				APIAddr: httpAddr,
-			})
-			if err != nil {
+			// New gossip cluster.
+			if err := peer.Join(cluster.PeerTypeQuery, cluster.PeerMetadata{}); err != nil {
 				return errors.Wrap(err, "join cluster")
 			}
 
@@ -220,12 +206,13 @@ func runQuery(
 		registerProfile(mux)
 		mux.Handle("/", router)
 
-		l, err := net.Listen("tcp", httpAddr)
+		l, err := net.Listen("tcp", httpBindAddr)
 		if err != nil {
-			return errors.Wrapf(err, "listen HTTP on address %s", httpAddr)
+			return errors.Wrapf(err, "listen HTTP on address %s", httpBindAddr)
 		}
 
 		g.Add(func() error {
+			level.Info(logger).Log("msg", "Listening for query and metrics", "address", httpBindAddr)
 			return errors.Wrap(http.Serve(l, mux), "serve query")
 		}, func(error) {
 			l.Close()
@@ -233,7 +220,7 @@ func runQuery(
 	}
 	// Start query (proxy) gRPC StoreAPI.
 	{
-		l, err := net.Listen("tcp", grpcAddr)
+		l, err := net.Listen("tcp", grpcBindAddr)
 		if err != nil {
 			return errors.Wrapf(err, "listen gRPC on address")
 		}
@@ -243,13 +230,14 @@ func runQuery(
 		storepb.RegisterStoreServer(s, proxy)
 
 		g.Add(func() error {
+			level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			s.Stop()
 			l.Close()
 		})
 	}
-	level.Info(logger).Log("msg", "starting query node", "peer", peer.Name())
+	level.Info(logger).Log("msg", "starting query node")
 	return nil
 }
 

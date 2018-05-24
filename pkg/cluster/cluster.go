@@ -28,12 +28,16 @@ type Peer struct {
 	stopc    chan struct{}
 
 	cfg        *memberlist.Config
-	addr       net.IP
 	knownPeers []string
 
 	data                 *data
 	gossipMsgsReceived   prometheus.Counter
 	gossipClusterMembers prometheus.Gauge
+
+	// Own External gRPC StoreAPI host:port (if any) to propagate to other peers.
+	advertiseStoreAPIAddr string
+	// Own External HTTP QueryAPI host:port (if any) to propagate to other peers.
+	advQueryAPIAddress string
 }
 
 const (
@@ -58,14 +62,21 @@ const (
 
 // PeerState contains state for the peer.
 type PeerState struct {
-	Type    PeerType
-	APIAddr string
+	// Type represents type of the peer holding the state.
+	Type PeerType
 
+	// StoreAPIAddr is a host:port address of gRPC StoreAPI of the peer holding the state. Required for PeerTypeSource and PeerTypeStore.
+	StoreAPIAddr string
+	// QueryAPIAddr is a host:port address of HTTP QueryAPI of the peer holding the state. Required for PeerTypeQuery type only.
+	QueryAPIAddr string
+
+	// Metadata holds metadata of the peer holding the state.
 	Metadata PeerMetadata
 }
 
 // PeerMetadata are the information that can change in runtime of the peer.
 type PeerMetadata struct {
+	// Labels represents external labels for the peer. Only relevant for PeerTypeSource. Empty for other types.
 	Labels []storepb.Label
 
 	// MinTime indicates the minTime of the oldest block available from this peer.
@@ -80,11 +91,15 @@ func New(
 	reg *prometheus.Registry,
 	bindAddr string,
 	advertiseAddr string,
+	advertiseStoreAPIAddr string,
+	advQueryAPIAddress string,
 	knownPeers []string,
 	waitIfEmpty bool,
 	pushPullInterval time.Duration,
 	gossipInterval time.Duration,
 ) (*Peer, error) {
+	l = log.With(l, "component", "cluster")
+
 	bindHost, bindPortStr, err := net.SplitHostPort(bindAddr)
 	if err != nil {
 		return nil, err
@@ -93,21 +108,17 @@ func New(
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid listen address")
 	}
-	var advertiseHost string
-	var advertisePort int
 
-	if advertiseAddr != "" {
-		var advertisePortStr string
-		advertiseHost, advertisePortStr, err = net.SplitHostPort(advertiseAddr)
-		if err != nil {
-			return nil, errors.Wrap(err, "invalid advertise address")
-		}
-		advertisePort, err = strconv.Atoi(advertisePortStr)
-		if err != nil {
-			return nil, errors.Wrap(err, "invalid advertise address, wrong port")
-		}
-	} else if bindHost == "" {
-		return nil, errors.New("advertise address needs to be specified if gRPC address is in form of ':<port>'")
+	// Best-effort deduction of advertise address.
+	advertiseHost, advertisePort, err := CalculateAdvertiseAddress(bindAddr, advertiseAddr)
+	if err != nil {
+		level.Warn(l).Log("err", "couldn't deduce an advertise address: "+err.Error())
+	}
+
+	if IsUnroutable(advertiseHost) {
+		level.Warn(l).Log("err", "this node advertises itself on an unroutable address", "host", advertiseHost, "port", advertisePort)
+		level.Warn(l).Log("err", "this node will be unreachable in the cluster")
+		level.Warn(l).Log("err", "provide --cluster.advertise-address as a routable IP address or hostname")
 	}
 
 	resolvedPeers, err := resolvePeers(context.Background(), knownPeers, advertiseAddr, net.Resolver{}, waitIfEmpty)
@@ -115,18 +126,6 @@ func New(
 		return nil, errors.Wrap(err, "resolve peers")
 	}
 	level.Debug(l).Log("msg", "resolved peers to following addresses", "peers", strings.Join(resolvedPeers, ","))
-
-	// Initial validation of user-specified advertise address.
-	addr, err := calculateAdvertiseAddress(bindHost, advertiseHost)
-	if err != nil {
-		level.Warn(l).Log("err", "couldn't deduce an advertise address: "+err.Error())
-	} else if hasNonlocal(resolvedPeers) && isUnroutable(addr.String()) {
-		level.Warn(l).Log("err", "this node advertises itself on an unroutable address", "addr", addr.String())
-		level.Warn(l).Log("err", "this node will be unreachable in the cluster")
-		level.Warn(l).Log("err", "provide --cluster.advertise-address as a routable IP address or hostname")
-	}
-
-	l = log.With(l, "component", "cluster")
 
 	// TODO(fabxc): generate human-readable but random names?
 	name, err := ulid.New(ulid.Now(), rand.New(rand.NewSource(time.Now().UnixNano())))
@@ -160,18 +159,19 @@ func New(
 
 	return &Peer{
 		logger:               l,
-		addr:                 addr,
 		knownPeers:           knownPeers,
 		cfg:                  cfg,
 		gossipMsgsReceived:   gossipMsgsReceived,
 		gossipClusterMembers: gossipClusterMembers,
 		stopc:                make(chan struct{}),
 		data:                 &data{data: map[string]PeerState{}},
+		advertiseStoreAPIAddr: advertiseStoreAPIAddr,
+		advQueryAPIAddress:    advQueryAPIAddress,
 	}, nil
 }
 
-// Join joins to the memberlist gossip cluster using knownPeers and initialState.
-func (p *Peer) Join(initialState PeerState) error {
+// Join joins to the memberlist gossip cluster using knownPeers and given peerType and initialMetadata.
+func (p *Peer) Join(peerType PeerType, initialMetadata PeerMetadata) error {
 	if p.hasJoined() {
 		return errors.New("peer already joined; close it first to rejoin")
 	}
@@ -181,24 +181,13 @@ func (p *Peer) Join(initialState PeerState) error {
 	p.cfg.Delegate = d
 	p.cfg.Events = d
 
-	// If the API listens on 0.0.0.0, deduce it to the advertise IP.
-	if initialState.APIAddr != "" {
-		apiHost, apiPort, err := net.SplitHostPort(initialState.APIAddr)
-		if err != nil {
-			return errors.Wrap(err, "invalid API address")
-		}
-		if apiHost == "0.0.0.0" {
-			initialState.APIAddr = net.JoinHostPort(p.addr.String(), apiPort)
-		}
-	}
-
 	ml, err := memberlist.Create(p.cfg)
 	if err != nil {
 		return errors.Wrap(err, "create memberlist")
 	}
 
 	n, _ := ml.Join(p.knownPeers)
-	level.Debug(p.logger).Log("msg", "joined cluster", "peers", n)
+	level.Debug(p.logger).Log("msg", "joined cluster", "peers", n, "peerType", peerType)
 
 	if n > 0 {
 		go warnIfAlone(p.logger, 10*time.Second, p.stopc, ml.NumMembers)
@@ -209,7 +198,12 @@ func (p *Peer) Join(initialState PeerState) error {
 	p.mlistMtx.Unlock()
 
 	// Initialize state with ourselves.
-	p.data.Set(p.Name(), initialState)
+	p.data.Set(p.Name(), PeerState{
+		Type:         peerType,
+		StoreAPIAddr: p.advertiseStoreAPIAddr,
+		QueryAPIAddr: p.advQueryAPIAddress,
+		Metadata:     initialMetadata,
+	})
 	return nil
 }
 
@@ -421,27 +415,10 @@ func removeMyAddr(ips []net.IPAddr, targetPort string, myAddr string) []net.IPAd
 	return result
 }
 
-func hasNonlocal(clusterPeers []string) bool {
-	for _, peer := range clusterPeers {
-		if host, _, err := net.SplitHostPort(peer); err == nil {
-			peer = host
-		}
-		if ip := net.ParseIP(peer); ip != nil && !ip.IsLoopback() {
-			return true
-		} else if ip == nil && strings.ToLower(peer) != "localhost" {
-			return true
-		}
-	}
-	return false
-}
-
-func isUnroutable(addr string) bool {
-	if host, _, err := net.SplitHostPort(addr); err == nil {
-		addr = host
-	}
-	if ip := net.ParseIP(addr); ip != nil && (ip.IsUnspecified() || ip.IsLoopback()) {
+func IsUnroutable(host string) bool {
+	if ip := net.ParseIP(host); ip != nil && (ip.IsUnspecified() || ip.IsLoopback()) {
 		return true // typically 0.0.0.0 or localhost
-	} else if ip == nil && strings.ToLower(addr) == "localhost" {
+	} else if ip == nil && strings.ToLower(host) == "localhost" {
 		return true
 	}
 	return false

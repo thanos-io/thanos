@@ -35,7 +35,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
-	"github.com/prometheus/common/route"
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
@@ -49,6 +48,8 @@ import (
 func registerRule(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "ruler evaluating Prometheus rules against given Query nodes, exposing Store API and storing old blocks in bucket")
 
+	grpcBindAddr, httpBindAddr, newPeerFn := registerServerFlags(cmd)
+
 	labelStrs := cmd.Flag("label", "Labels to be applied to all generated metrics (repeated).").
 		PlaceHolder("<name>=\"<value>\"").Strings()
 
@@ -56,12 +57,6 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	ruleFiles := cmd.Flag("rule-file", "Rule files that should be used by rule manager. Can be in glob format (repeated).").
 		Default("rules/").Strings()
-
-	httpAddr := cmd.Flag("http-address", "Listen host:port for HTTP endpoints.").
-		Default(defaultHTTPAddr).String()
-
-	grpcAddr := cmd.Flag("grpc-address", "Listen host:port for gRPC endpoints.").
-		Default(defaultGRPCAddr).String()
 
 	evalInterval := cmd.Flag("eval-interval", "The default evaluation interval to use.").
 		Default("30s").Duration()
@@ -78,26 +73,12 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	s3Config := s3.RegisterS3Params(cmd)
 
-	peers := cmd.Flag("cluster.peers", "Initial peers to join the cluster. It can be either <ip:port>, or <domain:port>.").Strings()
-
-	clusterBindAddr := cmd.Flag("cluster.address", "Listen address for cluster.").
-		Default(defaultClusterAddr).String()
-
-	gossipInterval := cmd.Flag("cluster.gossip-interval", "Interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth.").
-		Default(cluster.DefaultGossipInterval.String()).Duration()
-
-	pushPullInterval := cmd.Flag("cluster.pushpull-interval", "Interval for gossip state syncs. Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage.").
-		Default(cluster.DefaultPushPullInterval.String()).Duration()
-
-	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "Explicit address to advertise in cluster.").
-		String()
-
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
 			return errors.Wrap(err, "parse labels")
 		}
-		peer, err := cluster.New(logger, reg, *clusterBindAddr, *clusterAdvertiseAddr, *peers, false, *gossipInterval, *pushPullInterval)
+		peer, err := newPeerFn(logger, reg, false, "", false)
 		if err != nil {
 			return errors.Wrap(err, "new cluster peer")
 		}
@@ -109,7 +90,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			NoLockfile:       true,
 			WALFlushInterval: 30 * time.Second,
 		}
-		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *httpAddr, *grpcAddr, *evalInterval, *dataDir, *ruleFiles, peer, *gcsBucket, s3Config, tsdbOpts, name)
+		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *grpcBindAddr, *httpBindAddr, *evalInterval, *dataDir, *ruleFiles, peer, *gcsBucket, s3Config, tsdbOpts, name)
 	}
 }
 
@@ -122,8 +103,8 @@ func runRule(
 	tracer opentracing.Tracer,
 	lset labels.Labels,
 	alertmgrURLs []string,
-	httpAddr string,
-	grpcAddr string,
+	grpcBindAddr string,
+	httpBindAddr string,
 	evalInterval time.Duration,
 	dataDir string,
 	ruleFiles []string,
@@ -160,7 +141,7 @@ func runRule(
 		})
 
 		for _, i := range rand.Perm(len(ids)) {
-			vec, err := queryPrometheusInstant(ctx, logger, peers[ids[i]].APIAddr, q, t)
+			vec, err := queryPrometheusInstant(ctx, logger, peers[ids[i]].QueryAPIAddr, q, t)
 			if err != nil {
 				return nil, err
 			}
@@ -225,18 +206,14 @@ func runRule(
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			err := peer.Join(cluster.PeerState{
-				Type:    cluster.PeerTypeSource,
-				APIAddr: grpcAddr,
-				Metadata: cluster.PeerMetadata{
-					Labels: storeLset,
-					// Start out with the full time range. The shipper will constrain it later.
-					// TODO(fabxc): minimum timestamp is never adjusted if shipping is disabled.
-					MinTime: 0,
-					MaxTime: math.MaxInt64,
-				},
-			})
-			if err != nil {
+			// New gossip cluster.
+			if err = peer.Join(cluster.PeerTypeSource, cluster.PeerMetadata{
+				Labels: storeLset,
+				// Start out with the full time range. The shipper will constrain it later.
+				// TODO(fabxc): minimum timestamp is never adjusted if shipping is disabled.
+				MinTime: 0,
+				MaxTime: math.MaxInt64,
+			}); err != nil {
 				return errors.Wrap(err, "join cluster")
 			}
 
@@ -339,7 +316,7 @@ func runRule(
 
 	// Start HTTP and gRPC servers.
 	{
-		l, err := net.Listen("tcp", grpcAddr)
+		l, err := net.Listen("tcp", grpcBindAddr)
 		if err != nil {
 			return errors.Wrap(err, "listen API address")
 		}
@@ -357,27 +334,11 @@ func runRule(
 			l.Close()
 		})
 	}
-	{
-		router := route.New()
-
-		mux := http.NewServeMux()
-		registerMetrics(mux, reg)
-		registerProfile(mux)
-		mux.Handle("/", router)
-
-		l, err := net.Listen("tcp", httpAddr)
-		if err != nil {
-			return errors.Wrapf(err, "listen on address %s", httpAddr)
-		}
-
-		g.Add(func() error {
-			return errors.Wrap(http.Serve(l, mux), "serve query")
-		}, func(error) {
-			l.Close()
-		})
+	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
+		return err
 	}
 
-	var uploads bool = true
+	var uploads = true
 
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.

@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"net"
-	"net/http"
 	"path"
 	"time"
 
@@ -13,14 +11,12 @@ import (
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
-	"github.com/improbable-eng/thanos/pkg/query/ui"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/route"
 	"github.com/prometheus/tsdb"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
@@ -32,7 +28,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 		Hidden().Default("true").Bool()
 
 	httpAddr := cmd.Flag("http-address", "Listen host:port for HTTP endpoints.").
-		Default(defaultHTTPAddr).String()
+		Default("0.0.0.0:10902").String()
 
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process compactions.").
 		Default("./data").String()
@@ -66,7 +62,7 @@ func runCompact(
 	g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
-	httpAddr string,
+	httpBindAddr string,
 	dataDir string,
 	gcsBucket string,
 	s3Config *s3.Config,
@@ -220,26 +216,8 @@ func runCompact(
 			cancel()
 		})
 	}
-	// Start metric and profiling endpoints.
-	{
-		router := route.New()
-		ui.New(logger, nil).Register(router)
-
-		mux := http.NewServeMux()
-		registerMetrics(mux, reg)
-		registerProfile(mux)
-		mux.Handle("/", router)
-
-		l, err := net.Listen("tcp", httpAddr)
-		if err != nil {
-			return errors.Wrapf(err, "listen on address %s", httpAddr)
-		}
-
-		g.Add(func() error {
-			return errors.Wrap(http.Serve(l, mux), "serve query")
-		}, func(error) {
-			l.Close()
-		})
+	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
+		return err
 	}
 
 	level.Info(logger).Log("msg", "starting compact node")
