@@ -15,11 +15,13 @@ import (
 type Config struct {
 	StorageAccountName string
 	StorageAccountKey  string
+	ContainerName      string
 }
 
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
 type Bucket struct {
 	containerURL blob.ContainerURL
+	config       *Config
 	opsTotal     *prometheus.CounterVec
 }
 
@@ -49,9 +51,11 @@ func (conf *Config) Validate() error {
 func NewBucket(conf *Config, reg prometheus.Registerer, component string) (*Bucket, error) {
 
 	containerName := fmt.Sprintf("thanos-%s", component)
+
 	ctx := context.Background()
 
 	container, err := getContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, containerName)
+
 	if err != nil {
 		serviceError := err.(blob.StorageError)
 		if serviceError.ServiceCode() == "ContainerNotFound" {
@@ -66,6 +70,7 @@ func NewBucket(conf *Config, reg prometheus.Registerer, component string) (*Buck
 
 	bkt := &Bucket{
 		containerURL: container,
+		config:       conf,
 		opsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name:        "thanos_objstore_azure_storage_operations_total",
 			Help:        "Total number of operations that were executed against an Azure storage account.",
@@ -87,16 +92,45 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 
 // Get returns a reader for the given object name.
 func (b *Bucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
-	return nil, nil
+	pageblob := getPageBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
+	properties, err := pageblob.GetProperties(ctx, blob.BlobAccessConditions{})
+	if err != nil {
+		return nil, err
+	}
+	resp, err := pageblob.Download(ctx, 0, properties.ContentLength(), blob.BlobAccessConditions{}, false)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body(blob.RetryReaderOptions{MaxRetryRequests: 3}).Close()
+
+	return resp.Body(blob.RetryReaderOptions{MaxRetryRequests: 3}), nil
 }
 
 // GetRange returns a new range reader for the given object name and range.
 func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
-	return nil, nil
+	pageblob := getPageBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
+	resp, err := pageblob.Download(ctx, off, length, blob.BlobAccessConditions{}, false)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body(blob.RetryReaderOptions{MaxRetryRequests: 3}).Close()
+
+	return resp.Body(blob.RetryReaderOptions{MaxRetryRequests: 3}), nil
 }
 
 // Exists checks if the given object exists.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
+	pageblob := getPageBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
+
+	resp, err := pageblob.GetProperties(ctx, blob.BlobAccessConditions{})
+	if err != nil {
+		if resp.StatusCode() == 404 {
+			return false, nil
+		}
+		return false, err
+	}
 	return true, nil
 }
 
@@ -107,5 +141,10 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
+	pageblob := getPageBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
+	_, err := pageblob.Delete(ctx, blob.DeleteSnapshotsOptionInclude, blob.BlobAccessConditions{})
+	if err != nil {
+		return err
+	}
 	return nil
 }

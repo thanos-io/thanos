@@ -1,7 +1,6 @@
 package azure
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net/url"
@@ -44,15 +43,14 @@ func createContainer(ctx context.Context, accountName, accountKey, containerName
 	return c, err
 }
 
-func getPageBlobURL(ctx context.Context, accountName, containerName, blobName string) blob.PageBlobURL {
-	container := getContainerURL(ctx, accountName, containerName)
-	blob := container.NewPageBlobURL(blobName)
-	return blob
+func getPageBlobURL(ctx context.Context, accountName, accountKey, containerName, blobName string) blob.PageBlobURL {
+	container := getContainerURL(ctx, accountName, accountKey, containerName)
+	return container.NewPageBlobURL(blobName)
 }
 
 // createPageBlob creates a new test blob in the container specified by env var
-func createPageBlob(ctx context.Context, accountName, containerName, blobName string, pages int) (blob.PageBlobURL, error) {
-	b := getPageBlobURL(ctx, accountName, containerName, blobName)
+func createPageBlob(ctx context.Context, accountName, accountKey, containerName, blobName string, pages int) (blob.PageBlobURL, error) {
+	b := getPageBlobURL(ctx, accountName, accountKey, containerName, blobName)
 
 	_, err := b.Create(
 		ctx,
@@ -68,48 +66,48 @@ func createPageBlob(ctx context.Context, accountName, containerName, blobName st
 }
 
 // putPage adds a page to the page blob
-func putPage(ctx context.Context, accountName, containerName, blobName, message string, page int) error {
-	b := getPageBlobURL(ctx, accountName, containerName, blobName)
+// func putPage(ctx context.Context, accountName, containerName, blobName, message string, page int) error {
+// 	b := getPageBlobURL(ctx, accountName, containerName, blobName)
 
-	fullMessage := make([]byte, blob.PageBlobPageBytes)
-	for i, e := range []byte(message) {
-		fullMessage[i] = e
-	}
+// 	fullMessage := make([]byte, blob.PageBlobPageBytes)
+// 	for i, e := range []byte(message) {
+// 		fullMessage[i] = e
+// 	}
 
-	_, err := b.PutPages(ctx,
-		blob.PageRange{
-			Start: int32(page * blob.PageBlobPageBytes),
-			End:   int32((page+1)*blob.PageBlobPageBytes - 1),
-		},
-		bytes.NewReader(fullMessage),
-		blob.BlobAccessConditions{},
-	)
-	return err
-}
+// 	_, err := b.PutPages(ctx,
+// 		blob.PageRange{
+// 			Start: int32(page * blob.PageBlobPageBytes),
+// 			End:   int32((page+1)*blob.PageBlobPageBytes - 1),
+// 		},
+// 		bytes.NewReader(fullMessage),
+// 		blob.BlobAccessConditions{},
+// 	)
+// 	return err
+// }
 
-// clearPage clears the specified page in the page blob
-func clearPage(ctx context.Context, accountName, containerName, blobName string, page int) error {
-	b := getPageBlobURL(ctx, accountName, containerName, blobName)
+// // clearPage clears the specified page in the page blob
+// func clearPage(ctx context.Context, accountName, containerName, blobName string, page int) error {
+// 	b := getPageBlobURL(ctx, accountName, containerName, blobName)
 
-	_, err := b.ClearPages(ctx,
-		blob.PageRange{
-			Start: int32(page * blob.PageBlobPageBytes),
-			End:   int32((page+1)*blob.PageBlobPageBytes - 1),
-		},
-		blob.BlobAccessConditions{},
-	)
-	return err
-}
+// 	_, err := b.ClearPages(ctx,
+// 		blob.PageRange{
+// 			Start: int32(page * blob.PageBlobPageBytes),
+// 			End:   int32((page+1)*blob.PageBlobPageBytes - 1),
+// 		},
+// 		blob.BlobAccessConditions{},
+// 	)
+// 	return err
+// }
 
-// getPageRanges gets a list of valid page ranges in the page blob
-func getPageRanges(ctx context.Context, accountName, containerName, blobName string, pages int) (*blob.PageList, error) {
-	b := getPageBlobURL(ctx, accountName, containerName, blobName)
-	return b.GetPageRanges(
-		ctx,
-		blob.BlobRange{
-			Offset: 0 * blob.PageBlobPageBytes,
-			Count:  int64(pages*blob.PageBlobPageBytes - 1),
-		},
-		blob.BlobAccessConditions{},
-	)
-}
+// // getPageRanges gets a list of valid page ranges in the page blob
+// func getPageRanges(ctx context.Context, accountName, containerName, blobName string, pages int) (*blob.PageList, error) {
+// 	b := getPageBlobURL(ctx, accountName, containerName, blobName)
+// 	return b.GetPageRanges(
+// 		ctx,
+// 		blob.BlobRange{
+// 			Offset: 0 * blob.PageBlobPageBytes,
+// 			Count:  int64(pages*blob.PageBlobPageBytes - 1),
+// 		},
+// 		blob.BlobAccessConditions{},
+// 	)
+// }
