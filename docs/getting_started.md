@@ -22,6 +22,8 @@ make
 
 The `thanos` binary should now be in your `$PATH` and is the only thing required to deploy any of its components.
 
+Thanos as a docker image is available on [docker hub](https://hub.docker.com/r/improbable/thanos/).
+
 ## Sidecars
 
 Thanos integrates with existing Prometheus servers through a sidecar process, which runs on same machine/in the same pod as the Prometheus server itself. It only works with Prometheus instances of version 2.0.
