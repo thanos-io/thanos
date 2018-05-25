@@ -104,7 +104,7 @@
                         </div>
 
                         <div class="prometheus_input_group pull-left">
-                          <input class="input" title="Resolution in seconds" placeholder="Res. (s)" type="text" name="step_input" id="step_input{{id}}" value="{{step_input}}" size="6">
+                          <input class="input" title="Render resolution in seconds" placeholder="Re. res. (s)" type="text" name="step_input" id="step_input{{id}}" value="{{step_input}}" size="6">
                         </div>
 
                         <div class="prometheus_input_group pull-left">
@@ -113,6 +113,15 @@
                           </button>
                           <input type="hidden" name="stacked" value="{{stacked}}">
                         </div>
+
+                        <div class="prometheus_input_group pull-left">
+                           <select name="max_source_resolution_input" title="Downsampling option" id="max_source_resolution_input{{id}}">
+                              <option value="">Auto downsampling</option>
+                              <option value="0s">Only raw data</option>
+                              <option value="5m">Max 5m downsampling</option>
+                              <option value="1h">Max 1h downsampling</option>
+                           </select>
+                       </div>
                       </div>
 
                       <div class="graph_area"></div>

@@ -41,7 +41,7 @@ import (
 )
 
 func testQueryableCreator(queryable storage.Queryable) query.QueryableCreator {
-	return func(deduplicate bool, p query.PartialErrReporter) storage.Queryable {
+	return func(_ bool, _ time.Duration, _ query.PartialErrReporter) storage.Queryable {
 		return queryable
 	}
 }
