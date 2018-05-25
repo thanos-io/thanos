@@ -421,7 +421,7 @@ Prometheus.Graph.prototype.submitQuery = function() {
   var startTime = new Date().getTime();
   var rangeSeconds = self.parseDuration(self.rangeInput.val());
   var renderResolution = parseInt(self.queryForm.find("input[name=step_input]").val()) || Math.max(Math.floor(rangeSeconds / 250), 1);
-  var maxSourceResolution = self.queryForm.find("select[name=max_source_res_input]").val();
+  var maxSourceResolution = self.queryForm.find("select[name=max_source_resolution_input]").val();
   var endDate = self.getEndDate() / 1000;
 
   if (self.queryXhr) {
@@ -439,7 +439,7 @@ Prometheus.Graph.prototype.submitQuery = function() {
     params.start = endDate - rangeSeconds;
     params.end = endDate;
     params.step = renderResolution;
-    params.max_source_res = maxSourceResolution;
+    params.max_source_resolution = maxSourceResolution;
     url = PATH_PREFIX + "/api/v1/query_range";
     success = function(json, textStatus) { self.handleGraphResponse(json, textStatus); };
   } else {

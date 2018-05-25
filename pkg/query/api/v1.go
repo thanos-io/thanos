@@ -274,10 +274,10 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *apiError) {
 	}
 
 	maxSourceResolution := step / 5 // By default fit at least 5 samples between steps.
-	if val := r.FormValue("max_source_res"); val != "" {
+	if val := r.FormValue("max_source_resolution"); val != "" {
 		maxSourceResolution, err = parseDuration(val)
 		if err != nil {
-			return nil, nil, &apiError{errorBadData, errors.Wrap(err, "param max_source_res")}
+			return nil, nil, &apiError{errorBadData, errors.Wrap(err, "param max_source_resolution")}
 		}
 	}
 
