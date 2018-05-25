@@ -23,7 +23,7 @@
 
 [[projects]]
   name = "github.com/Azure/azure-storage-blob-go"
-  packages = ["2017-07-29/azblob"]
+  packages = ["2016-05-31/azblob"]
   revision = "66ba96e49ebbdc3cd26970c6c675c906d304b5e2"
   version = "0.1.4"
 
@@ -588,6 +588,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "87d5eb04d51767a9c6a62e37645b5db6e29d349df5e8b08d0900078dbfd7420c"
+  inputs-digest = "f2c7c8f4f6e00344ceb2da06fae60050291b3c0a15c103737e0249b0895ab46f"
   solver-name = "gps-cdcl"
   solver-version = 1

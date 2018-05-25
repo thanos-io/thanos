@@ -1,6 +1,7 @@
 package azure
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -136,6 +137,27 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
+	exists, err := b.Exists(ctx, name)
+	if err != nil {
+		return err
+	}
+	var pageblob blob.PageBlobURL
+
+	if !exists {
+		pageblob, _ = createPageBlob(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name, 0)
+	}
+
+	buff := bytes.NewBuffer(nil)
+
+	_, err = pageblob.UploadPages(
+		ctx,
+		0,
+		bytes.NewReader(buff.Bytes()),
+		blob.BlobAccessConditions{},
+	)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
