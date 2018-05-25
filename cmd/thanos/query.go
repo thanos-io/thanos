@@ -143,7 +143,7 @@ func runQuery(
 ) error {
 	var staticSpecs []query.StoreSpec
 	for _, addr := range storeAddrs {
-		staticSpecs = append(staticSpecs, query.NewStaticStoreSpec(addr))
+		staticSpecs = append(staticSpecs, query.NewGRPCStoreSpec(addr))
 	}
 	var (
 		stores = query.NewStoreSet(
@@ -252,9 +252,8 @@ func (s *gossipSpec) Addr() string {
 	return s.addr
 }
 
-// Metadata method for gossip store tries get current peer state. If nothing is found, it means that gossip assumed
-// this host is unhealthy in the meantime.
-func (s *gossipSpec) Metadata(_ context.Context, _ storepb.StoreClient) (labels []storepb.Label, mint int64, maxt int64, err error) {
+// Metadata method for gossip store tries get current peer state.
+func (s *gossipSpec) Metadata(ctx context.Context, client storepb.StoreClient) (labels []storepb.Label, mint int64, maxt int64, err error) {
 	state, ok := s.peer.PeerState(s.id)
 	if !ok {
 		return nil, 0, 0, errors.Errorf("peer %s is no longer in gossip cluster", s.id)

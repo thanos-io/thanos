@@ -29,24 +29,24 @@ type StoreSpec interface {
 	Metadata(ctx context.Context, client storepb.StoreClient) (labels []storepb.Label, mint int64, maxt int64, err error)
 }
 
-type staticStoreSpec struct {
+type grpcStoreSpec struct {
 	addr string
 }
 
-// NewStaticStoreSpec creates store spec for static store.
-// This is used only for query command but we include this here to properly test this spec inside storeset_test.go
-func NewStaticStoreSpec(addr string) StoreSpec {
-	return &staticStoreSpec{addr: addr}
+// NewGRPCStoreSpec creates store pure gRPC spec.
+// It uses Info gRPC call to get Metadata.
+func NewGRPCStoreSpec(addr string) StoreSpec {
+	return &grpcStoreSpec{addr: addr}
 }
 
-func (s *staticStoreSpec) Addr() string {
+func (s *grpcStoreSpec) Addr() string {
 	// API addr should not change between state changes.
 	return s.addr
 }
 
 // Metadata method for static store tries to reach host Info method until context timeout. If we are unable to get metadata after
 // that time, we assume that the host is unhealthy and return error.
-func (s *staticStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient) (labels []storepb.Label, mint int64, maxt int64, err error) {
+func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient) (labels []storepb.Label, mint int64, maxt int64, err error) {
 	resp, err := client.Info(ctx, &storepb.InfoRequest{}, grpc.FailFast(false))
 	if err != nil {
 		return nil, 0, 0, errors.Wrapf(err, "fetching store info from %s", s.addr)
@@ -61,9 +61,9 @@ type StoreSet struct {
 
 	// Store specifications can change dynamically. If some store is missing from the list, we assuming it is no longer
 	// accessible and we close gRPC client for it.
-	storeSpecs       func() []StoreSpec
-	dialOpts         []grpc.DialOption
-	gRPCRetryTimeout time.Duration
+	storeSpecs          func() []StoreSpec
+	dialOpts            []grpc.DialOption
+	gRPCInfoCallTimeout time.Duration
 
 	mtx                  sync.RWMutex
 	stores               map[string]*storeRef
@@ -117,12 +117,13 @@ func NewStoreSet(
 	}
 
 	ss := &StoreSet{
-		logger:               logger,
+		logger:               log.With(logger, "component", "storeset"),
 		storeSpecs:           storeSpecs,
 		dialOpts:             dialOpts,
 		storeNodeConnections: storeNodeConnections,
-		gRPCRetryTimeout:     3 * time.Second,
+		gRPCInfoCallTimeout:  10 * time.Second,
 		externalLabelStores:  map[string]int{},
+		stores:               make(map[string]*storeRef),
 	}
 
 	storeNodeCollector := &storeSetNodeCollector{externalLabelOccurrences: ss.externalLabelOccurrences}
@@ -168,7 +169,7 @@ func (s *storeRef) close() {
 }
 
 func (s *StoreSet) updateStore(ctx context.Context, spec StoreSpec) (*storeRef, error) {
-	ctx, cancel := context.WithTimeout(ctx, s.gRPCRetryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, s.gRPCInfoCallTimeout)
 	defer cancel()
 
 	addr := spec.Addr()
@@ -176,26 +177,35 @@ func (s *StoreSet) updateStore(ctx context.Context, spec StoreSpec) (*storeRef, 
 	s.mtx.RLock()
 	st, ok := s.stores[addr]
 	s.mtx.RUnlock()
-	if !ok {
-		// New store or was unhealthy and was removed in the past - create new one.
-		conn, err := grpc.DialContext(ctx, addr, s.dialOpts...)
-		if err != nil {
-			return nil, errors.Wrap(err, "dialing connection")
-		}
-
-		st = &storeRef{
-			StoreClient: storepb.NewStoreClient(conn),
-			cc:          conn,
-			addr:        addr,
-		}
-	}
 
 	var err error
-	st.labels, st.minTime, st.maxTime, err = spec.Metadata(ctx, st.StoreClient)
+	if ok {
+		// Check existing store. Is it healthy? What are current metadata.
+		st.labels, st.minTime, st.maxTime, err = spec.Metadata(ctx, st.StoreClient)
+		if err != nil {
+			st.close()
+			return nil, err
+		}
+		return st, nil
+	}
+
+	// New store or was unhealthy and was removed in the past - create new one.
+	conn, err := grpc.DialContext(ctx, addr, s.dialOpts...)
+	if err != nil {
+		return nil, errors.Wrap(err, "dialing connection")
+	}
+	st = &storeRef{StoreClient: storepb.NewStoreClient(conn), cc: conn, addr: addr}
+
+	// Initial info call for all types of stores (gossip + static) to check gRPC StoreAPI.
+	resp, err := st.StoreClient.Info(ctx, &storepb.InfoRequest{}, grpc.FailFast(false))
 	if err != nil {
 		st.close()
-		return nil, err
+		return nil, errors.Wrapf(err, "initial store client info fetch from %s", spec.Addr())
 	}
+	st.labels = resp.Labels
+	st.minTime = resp.MinTime
+	st.maxTime = resp.MaxTime
+
 	return st, nil
 }
 
@@ -215,21 +225,23 @@ func (s *StoreSet) Update(ctx context.Context) {
 			if err != nil {
 				return err
 			}
-			innerMtx.Lock()
-			if dupSt, ok := stores[addr]; ok {
-				level.Error(s.logger).Log("msg", "duplicated address in gossip or static store nodes.", "storeAPIAddr", addr)
-				dupSt.close()
-			}
-			stores[addr] = st
-			innerMtx.Unlock()
 
+			innerMtx.Lock()
+			defer innerMtx.Unlock()
+
+			if _, ok := stores[addr]; ok {
+				st.close()
+				return errors.Errorf("duplicated address %s in gossip or static store nodes", addr)
+			}
+
+			// Add to the new store map.
+			stores[addr] = st
 			return nil
 		})
 	}
 
-	err := g.Wait()
-	if err != nil {
-		level.Warn(s.logger).Log("msg", "update of some store nodes failed", "err", err)
+	if err := g.Wait(); err != nil {
+		level.Warn(s.logger).Log("msg", "update of some store nodes failed, ignoring these.", "err", err)
 	}
 
 	// Record the number of occurrences of external label combinations for current store slice.
@@ -241,7 +253,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
-	// Remove stores that where not updated in this update, because were not in s.peerAddr() this time.
+	// Close stores that where not healthy this time and dropped from stores map.
 	for addr, st := range s.stores {
 		if _, ok := stores[addr]; ok {
 			continue
@@ -249,17 +261,24 @@ func (s *StoreSet) Update(ctx context.Context) {
 
 		// Peer does not exists anymore.
 		st.close()
+		delete(s.stores, addr)
+
+		level.Info(s.logger).Log("msg", "store unhealthy or does not exists, closed gRPC client and removed from storeset", "address", addr)
 	}
 
-	// Swap old store set with new one, excluding these with duplicated external labels.
-	s.stores = make(map[string]*storeRef, len(stores))
+	// Add stores that are not yet in s.stores.
 	for addr, st := range stores {
+		if _, ok := s.stores[addr]; ok {
+			continue
+		}
+
 		// Check if it has some ext labels specified.
 		// No external labels means strictly store gateway or ruler and it is fine to have access to multiple instances of them.
 		//
 		// Sidecar will error out if it will be configured with empty external labels.
 		if len(st.Labels()) == 0 || externalLabelStores[externalLabelsFromStore(st)] == 1 {
 			s.stores[addr] = st
+			level.Info(s.logger).Log("msg", "adding new store to query storeset", "address", addr)
 			continue
 		}
 

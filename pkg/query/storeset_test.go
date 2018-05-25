@@ -125,7 +125,7 @@ func (s *testStores) CloseOne(addr string) {
 func specsFromAddrFunc(addrs []string) func() []StoreSpec {
 	return func() (specs []StoreSpec) {
 		for _, addr := range addrs {
-			specs = append(specs, NewStaticStoreSpec(addr))
+			specs = append(specs, NewGRPCStoreSpec(addr))
 		}
 		return specs
 	}
@@ -143,7 +143,7 @@ func TestStoreSet_AllAvailable_ThenDown(t *testing.T) {
 	// Testing if duplicates can cause weird results.
 	initialStoreAddr = append(initialStoreAddr, initialStoreAddr[0])
 	storeSet := NewStoreSet(nil, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts)
-	storeSet.gRPCRetryTimeout = 2 * time.Second
+	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 	defer storeSet.Close()
 
 	// Should not matter how many of these we run.
@@ -186,7 +186,7 @@ func TestStoreSet_StaticStores_OneAvailable(t *testing.T) {
 	st.CloseOne(initialStoreAddr[0])
 
 	storeSet := NewStoreSet(nil, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts)
-	storeSet.gRPCRetryTimeout = 2 * time.Second
+	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 	defer storeSet.Close()
 
 	// Should not matter how many of these we run.
@@ -216,7 +216,7 @@ func TestStoreSet_StaticStores_NoneAvailable(t *testing.T) {
 	st.CloseOne(initialStoreAddr[1])
 
 	storeSet := NewStoreSet(nil, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts)
-	storeSet.gRPCRetryTimeout = 2 * time.Second
+	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 
 	// Should not matter how many of these we run.
 	storeSet.Update(context.Background())
@@ -260,7 +260,7 @@ func TestStoreSet_AllAvailable_BlockExtLsetDuplicates(t *testing.T) {
 	initialStoreAddr := st.StoreAddresses()
 
 	storeSet := NewStoreSet(nil, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts)
-	storeSet.gRPCRetryTimeout = 2 * time.Second
+	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 	defer storeSet.Close()
 
 	// Should not matter how many of these we run.
