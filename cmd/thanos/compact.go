@@ -48,7 +48,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	wait := cmd.Flag("wait", "Do not exit after all compactions have been processed and wait for new work.").
 		Short('w').Bool()
 
-	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
+	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		return runCompact(g, logger, reg,
 			*httpAddr,
 			*dataDir,

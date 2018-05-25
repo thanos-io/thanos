@@ -61,7 +61,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	pushPullInterval := cmd.Flag("cluster.pushpull-interval", "Interval for gossip state syncs. Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage.").
 		Default(cluster.DefaultPushPullInterval.String()).Duration()
 
-	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
+	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, verbose bool) error {
 		peer, err := cluster.New(logger, reg, *clusterBindAddr, *clusterAdvertiseAddr, *peers, false, *gossipInterval, *pushPullInterval)
 		if err != nil {
 			return errors.Wrap(err, "new cluster peer")
@@ -79,6 +79,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			uint64(*indexCacheSize),
 			uint64(*chunkPoolSize),
 			name,
+			verbose,
 		)
 	}
 }
@@ -98,6 +99,7 @@ func runStore(
 	indexCacheSizeBytes uint64,
 	chunkPoolSizeBytes uint64,
 	component string,
+	verbose bool,
 ) error {
 	{
 		bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
@@ -119,6 +121,7 @@ func runStore(
 			dataDir,
 			indexCacheSizeBytes,
 			chunkPoolSizeBytes,
+			verbose,
 		)
 		if err != nil {
 			return errors.Wrap(err, "create object storage store")

@@ -69,7 +69,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	stores := cmd.Flag("store", "Addresses of statically configured store API servers (repeatable).").
 		PlaceHolder("<store>").Strings()
 
-	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
+	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		peer, err := cluster.New(logger, reg, *clusterBindAddr, *clusterAdvertiseAddr, *peers, true, *gossipInterval, *pushPullInterval)
 		if err != nil {
 			return errors.Wrap(err, "new cluster peer")

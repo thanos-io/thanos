@@ -45,7 +45,7 @@ func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name s
 
 	s3Config := s3.RegisterS3Params(cmd)
 
-	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) error {
+	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		return runDownsample(g, logger, reg, *httpAddr, *dataDir, *gcsBucket, s3Config, *syncDelay, name)
 	}
 }

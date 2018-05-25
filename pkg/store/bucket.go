@@ -166,6 +166,9 @@ type BucketStore struct {
 	mtx       sync.RWMutex
 	blocks    map[ulid.ULID]*bucketBlock
 	blockSets map[uint64]*bucketBlockSet
+
+	// Verbose enabled additional logging.
+	verbose bool
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -177,6 +180,7 @@ func NewBucketStore(
 	dir string,
 	indexCacheSizeBytes uint64,
 	maxChunkPoolBytes uint64,
+	verbose bool,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -197,6 +201,7 @@ func NewBucketStore(
 		chunkPool:  chunkPool,
 		blocks:     map[ulid.ULID]*bucketBlock{},
 		blockSets:  map[uint64]*bucketBlockSet{},
+		verbose:    verbose,
 	}
 	s.metrics = newBucketStoreMetrics(reg, s)
 
@@ -632,27 +637,34 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 	return nil
 }
 
+// debugFoundBlockSetOverview logs on debug level what exactly blocks we used for query in terms of
+// labels and resolution. This is important because we allow mixed resolution results, so it is quite crucial
+// to be aware what exactly resolution we see on query.
+// TODO(bplotka): Consider adding resolution label to all results to propagate that info to UI and Query API.
 func debugFoundBlockSetOverview(logger log.Logger, mint, maxt int64, lset labels.Labels, bs []*bucketBlock) {
 	if len(bs) == 0 {
 		level.Debug(logger).Log("msg", "No block found", "mint", mint, "maxt", maxt, "lset", lset.String())
 		return
 	}
 
-	var parts []string
-
-	currRes := bs[0].meta.Thanos.Downsample.Resolution
-	currMin := bs[0].meta.MinTime
-	currMax := bs[0].meta.MaxTime
-	for i := 1; i < len(bs); i++ {
-		if currRes == bs[i].meta.Thanos.Downsample.Resolution {
-			currMax = bs[i].meta.MaxTime
+	var (
+		parts            []string
+		currRes          = int64(-1)
+		currMin, currMax int64
+	)
+	for _, b := range bs {
+		if currRes == b.meta.Thanos.Downsample.Resolution {
+			currMax = b.meta.MaxTime
 			continue
 		}
-		parts = append(parts, fmt.Sprintf("Range: %d-%d Resolution: %d", currMin, currMax, currRes))
 
-		currRes = bs[i].meta.Thanos.Downsample.Resolution
-		currMin = bs[i].meta.MinTime
-		currMax = bs[i].meta.MaxTime
+		if currRes != -1 {
+			parts = append(parts, fmt.Sprintf("Range: %d-%d Resolution: %d", currMin, currMax, currRes))
+		}
+
+		currRes = b.meta.Thanos.Downsample.Resolution
+		currMin = b.meta.MinTime
+		currMax = b.meta.MaxTime
 	}
 
 	parts = append(parts, fmt.Sprintf("Range: %d-%d Resolution: %d", currMin, currMax, currRes))
@@ -681,7 +693,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		}
 		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow)
 
-		debugFoundBlockSetOverview(s.logger, req.MinTime, req.MaxTime, bs.labels, blocks)
+		if s.verbose {
+			debugFoundBlockSetOverview(s.logger, req.MinTime, req.MaxTime, bs.labels, blocks)
+		}
 
 		for _, b := range blocks {
 			stats.blocksQueried++
