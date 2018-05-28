@@ -5,13 +5,17 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
+	"testing"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/minio/minio-go"
 	"github.com/minio/minio-go/pkg/encrypt"
 	"github.com/pkg/errors"
@@ -77,13 +81,23 @@ func RegisterS3Params(cmd *kingpin.CmdClause) *Config {
 	return &s3config
 }
 
-// Validate checks to see if any of the s3 config options are set.
+// Validate checks to see if mandatory s3 config options are set.
 func (conf *Config) Validate() error {
 	if conf.Bucket == "" ||
 		conf.Endpoint == "" ||
 		conf.AccessKey == "" ||
 		conf.SecretKey == "" {
 		return errors.New("insufficient s3 configuration information")
+	}
+	return nil
+}
+
+// ValidateForTests checks to see if mandatory s3 config options for tests are set.
+func (conf *Config) ValidateForTests() error {
+	if conf.Endpoint == "" ||
+		conf.AccessKey == "" ||
+		conf.SecretKey == "" {
+		return errors.New("insufficient s3 test configuration information")
 	}
 	return nil
 }
@@ -192,8 +206,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 	b.opsTotal.WithLabelValues(opObjectStat).Inc()
 	_, err := b.client.StatObject(b.bucket, name, minio.StatObjectOptions{})
 	if err != nil {
-		errResponse := minio.ToErrorResponse(err)
-		if errResponse.Code == "NoSuchKey" {
+		if b.IsObjNotFoundErr(err) {
 			return false, nil
 		}
 		return false, errors.Wrap(err, "stat s3 object")
@@ -217,4 +230,62 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 func (b *Bucket) Delete(ctx context.Context, name string) error {
 	b.opsTotal.WithLabelValues(opObjectDelete).Inc()
 	return b.client.RemoveObject(b.bucket, name)
+}
+
+// IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
+func (b *Bucket) IsObjNotFoundErr(err error) bool {
+	return minio.ToErrorResponse(err).Code == "NoSuchKey"
+}
+
+func configFromEnv() *Config {
+	c := &Config{
+		Bucket:    os.Getenv("S3_BUCKET"),
+		Endpoint:  os.Getenv("S3_ENDPOINT"),
+		AccessKey: os.Getenv("S3_ACCESS_KEY"),
+		SecretKey: os.Getenv("S3_SECRET_KEY"),
+	}
+
+	insecure, err := strconv.ParseBool(os.Getenv("S3_INSECURE"))
+	if err != nil {
+		c.Insecure = insecure
+	}
+	signV2, err := strconv.ParseBool(os.Getenv("S3_SIGNATURE_VERSION2"))
+	if err != nil {
+		c.SignatureV2 = signV2
+	}
+	return c
+}
+
+// NewTestBucket creates test bkt client that before returning creates temporary bucket.
+// In a close function it empties and deletes the bucket.
+func NewTestBucket(t testing.TB, location string) (objstore.Bucket, func(), error) {
+	t.Log("Using test AWS bucket.")
+
+	c := configFromEnv()
+	if err := c.ValidateForTests(); err != nil {
+		return nil, nil, err
+	}
+
+	b, err := NewBucket(c, nil, "thanos-e2e-test")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	src := rand.NewSource(time.Now().UnixNano())
+
+	// Bucket name need to conform: https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-s3-bucket-naming-requirements.html
+	name := strings.Replace(fmt.Sprintf("test_%s_%x", strings.ToLower(t.Name()), src.Int63()), "_", "-", -1)
+	if len(name) >= 63 {
+		name = name[:63]
+	}
+	if err := b.client.MakeBucket(name, location); err != nil {
+		return nil, nil, err
+	}
+
+	return b, func() {
+		objstore.EmptyBucket(t, context.Background(), b)
+		if err := b.client.RemoveBucket(name); err != nil {
+			t.Logf("deleting bucket failed: %s", err)
+		}
+	}, nil
 }
