@@ -38,7 +38,7 @@ const (
 	defaultHTTPAddr    = "0.0.0.0:10902"
 )
 
-type setupFunc func(*run.Group, log.Logger, *prometheus.Registry, opentracing.Tracer, bool) error
+type setupFunc func(*run.Group, log.Logger, *prometheus.Registry, opentracing.Tracer) error
 
 func main() {
 	if os.Getenv("DEBUG") != "" {
@@ -128,7 +128,7 @@ func main() {
 		})
 	}
 
-	if err := cmds[cmd](&g, logger, metrics, tracer, *logLevel == "debug"); err != nil {
+	if err := cmds[cmd](&g, logger, metrics, tracer); err != nil {
 		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command failed", cmd))
 		os.Exit(1)
 	}

@@ -30,5 +30,4 @@ Release candidate: [v0.1.0-rc.0](https://github.com/improbable-eng/thanos/releas
 - Verify commands with potential fixes (experimental).
 - Compact / Downsample offline commands.
 - Bucket commands.
-- Downsampling support for UI.
 
