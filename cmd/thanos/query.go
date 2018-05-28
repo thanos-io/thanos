@@ -34,7 +34,7 @@ import (
 func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
 
-	grpcBindAddr, httpBindAddr, newPeerFn := registerServerFlags(cmd)
+	grpcBindAddr, httpBindAddr, newPeerFn := regCommonServerFlags(cmd)
 
 	httpAdvertiseAddr := cmd.Flag("http-advertise-address", "Explicit (external) host:port address to advertise for HTTP QueryAPI in gossip cluster. If empty, 'http-address' will be used.").
 		String()

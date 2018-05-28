@@ -34,7 +34,7 @@ import (
 func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "sidecar for Prometheus server")
 
-	grpcBindAddr, httpBindAddr, newPeerFn := registerServerFlags(cmd)
+	grpcBindAddr, httpBindAddr, newPeerFn := regCommonServerFlags(cmd)
 
 	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API.").
 		Default("http://localhost:9090").URL()

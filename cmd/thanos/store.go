@@ -26,7 +26,7 @@ import (
 func registerStore(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "store node giving access to blocks in a GCS bucket")
 
-	grpcBindAddr, httpBindAddr, newPeerFn := registerServerFlags(cmd)
+	grpcBindAddr, httpBindAddr, newPeerFn := regCommonServerFlags(cmd)
 
 	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").
 		Default("./data").String()

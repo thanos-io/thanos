@@ -37,7 +37,7 @@ type Peer struct {
 	// Own External gRPC StoreAPI host:port (if any) to propagate to other peers.
 	advertiseStoreAPIAddr string
 	// Own External HTTP QueryAPI host:port (if any) to propagate to other peers.
-	advQueryAPIAddress string
+	advertiseQueryAPIAddress string
 }
 
 const (
@@ -92,7 +92,7 @@ func New(
 	bindAddr string,
 	advertiseAddr string,
 	advertiseStoreAPIAddr string,
-	advQueryAPIAddress string,
+	advertiseQueryAPIAddress string,
 	knownPeers []string,
 	waitIfEmpty bool,
 	pushPullInterval time.Duration,
@@ -165,8 +165,8 @@ func New(
 		gossipClusterMembers: gossipClusterMembers,
 		stopc:                make(chan struct{}),
 		data:                 &data{data: map[string]PeerState{}},
-		advertiseStoreAPIAddr: advertiseStoreAPIAddr,
-		advQueryAPIAddress:    advQueryAPIAddress,
+		advertiseStoreAPIAddr:    advertiseStoreAPIAddr,
+		advertiseQueryAPIAddress: advertiseQueryAPIAddress,
 	}, nil
 }
 
@@ -201,7 +201,7 @@ func (p *Peer) Join(peerType PeerType, initialMetadata PeerMetadata) error {
 	p.data.Set(p.Name(), PeerState{
 		Type:         peerType,
 		StoreAPIAddr: p.advertiseStoreAPIAddr,
-		QueryAPIAddr: p.advQueryAPIAddress,
+		QueryAPIAddr: p.advertiseQueryAPIAddress,
 		Metadata:     initialMetadata,
 	})
 	return nil

@@ -27,8 +27,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	haltOnError := cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
 		Hidden().Default("true").Bool()
 
-	httpAddr := cmd.Flag("http-address", "Listen host:port for HTTP endpoints.").
-		Default("0.0.0.0:10902").String()
+	httpAddr := regHTTPAddrFlag(cmd)
 
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process compactions.").
 		Default("./data").String()

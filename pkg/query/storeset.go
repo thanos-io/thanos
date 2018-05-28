@@ -19,7 +19,7 @@ import (
 )
 
 type StoreSpec interface {
-	// StoreAPI Address for the store spec. It is used as ID for store.
+	// Addr returns StoreAPI Address for the store spec. It is used as ID for store.
 	Addr() string
 	// Metadata returns current labels and min, max ranges for store.
 	// It can change for every call for this method.
