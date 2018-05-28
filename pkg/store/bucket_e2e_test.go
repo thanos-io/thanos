@@ -77,7 +77,7 @@ func TestBucketStore_e2e(t *testing.T) {
 			testutil.Ok(t, os.RemoveAll(dir2))
 		}
 
-		store, err := NewBucketStore(nil, nil, bkt, dir, 100, 0)
+		store, err := NewBucketStore(nil, nil, bkt, dir, 100, 0, false)
 		testutil.Ok(t, err)
 
 		go func() {
