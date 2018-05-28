@@ -168,7 +168,7 @@ type BucketStore struct {
 	blockSets map[uint64]*bucketBlockSet
 
 	// Verbose enabled additional logging.
-	verbose bool
+	debugLogging bool
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -180,7 +180,7 @@ func NewBucketStore(
 	dir string,
 	indexCacheSizeBytes uint64,
 	maxChunkPoolBytes uint64,
-	verbose bool,
+	debugLogging bool,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -194,14 +194,14 @@ func NewBucketStore(
 		return nil, errors.Wrap(err, "create chunk pool")
 	}
 	s := &BucketStore{
-		logger:     logger,
-		bucket:     bucket,
-		dir:        dir,
-		indexCache: indexCache,
-		chunkPool:  chunkPool,
-		blocks:     map[ulid.ULID]*bucketBlock{},
-		blockSets:  map[uint64]*bucketBlockSet{},
-		verbose:    verbose,
+		logger:       logger,
+		bucket:       bucket,
+		dir:          dir,
+		indexCache:   indexCache,
+		chunkPool:    chunkPool,
+		blocks:       map[ulid.ULID]*bucketBlock{},
+		blockSets:    map[uint64]*bucketBlockSet{},
+		debugLogging: debugLogging,
 	}
 	s.metrics = newBucketStoreMetrics(reg, s)
 
@@ -693,7 +693,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		}
 		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow)
 
-		if s.verbose {
+		if s.debugLogging {
 			debugFoundBlockSetOverview(s.logger, req.MinTime, req.MaxTime, bs.labels, blocks)
 		}
 
