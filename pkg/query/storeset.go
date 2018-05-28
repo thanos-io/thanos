@@ -44,7 +44,7 @@ func (s *grpcStoreSpec) Addr() string {
 	return s.addr
 }
 
-// Metadata method for static store tries to reach host Info method until context timeout. If we are unable to get metadata after
+// Metadata method for gRPC store API tries to reach host Info method until context timeout. If we are unable to get metadata after
 // that time, we assume that the host is unhealthy and return error.
 func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient) (labels []storepb.Label, mint int64, maxt int64, err error) {
 	resp, err := client.Info(ctx, &storepb.InfoRequest{}, grpc.FailFast(false))
@@ -177,12 +177,12 @@ func (s *StoreSet) updateStore(ctx context.Context, spec StoreSpec) (*storeRef, 
 	s.mtx.RLock()
 	st, ok := s.stores[addr]
 	s.mtx.RUnlock()
-
-	var err error
 	if ok {
+		var err error
 		// Check existing store. Is it healthy? What are current metadata.
 		st.labels, st.minTime, st.maxTime, err = spec.Metadata(ctx, st.StoreClient)
 		if err != nil {
+			// Peer unhealthy. Close it and return nil. This will remove store from s.stores.
 			st.close()
 			return nil, err
 		}
