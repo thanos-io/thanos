@@ -5,8 +5,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/go-kit/kit/log"
+	"time"
 
+	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/pkg/errors"
@@ -21,43 +22,47 @@ type PartialErrReporter func(error)
 
 // QueryableCreator returns implementation of promql.Queryable that fetches data from the proxy store API endpoints.
 // If deduplication is enabled, all data retrieved from it will be deduplicated along the replicaLabel by default.
-type QueryableCreator func(deduplicate bool, p PartialErrReporter) storage.Queryable
+// maxSourceResolution controls downsampling resolution that is allowed.
+type QueryableCreator func(deduplicate bool, maxSourceResolution time.Duration, p PartialErrReporter) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
 func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLabel string) QueryableCreator {
-	return func(deduplicate bool, p PartialErrReporter) storage.Queryable {
+	return func(deduplicate bool, maxSourceResolution time.Duration, p PartialErrReporter) storage.Queryable {
 		return &queryable{
-			logger:           logger,
-			replicaLabel:     replicaLabel,
-			proxy:            proxy,
-			deduplicate:      deduplicate,
-			partialErrReport: p,
+			logger:              logger,
+			replicaLabel:        replicaLabel,
+			proxy:               proxy,
+			deduplicate:         deduplicate,
+			maxSourceResolution: maxSourceResolution,
+			partialErrReport:    p,
 		}
 	}
 }
 
 type queryable struct {
-	logger           log.Logger
-	replicaLabel     string
-	proxy            storepb.StoreServer
-	deduplicate      bool
-	partialErrReport PartialErrReporter
+	logger              log.Logger
+	replicaLabel        string
+	proxy               storepb.StoreServer
+	deduplicate         bool
+	partialErrReport    PartialErrReporter
+	maxSourceResolution time.Duration
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabel, q.proxy, q.deduplicate, q.partialErrReport), nil
+	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabel, q.proxy, q.deduplicate, int64(q.maxSourceResolution/time.Millisecond), q.partialErrReport), nil
 }
 
 type querier struct {
-	ctx              context.Context
-	logger           log.Logger
-	cancel           func()
-	mint, maxt       int64
-	replicaLabel     string
-	proxy            storepb.StoreServer
-	deduplicate      bool
-	partialErrReport PartialErrReporter
+	ctx                 context.Context
+	logger              log.Logger
+	cancel              func()
+	mint, maxt          int64
+	replicaLabel        string
+	proxy               storepb.StoreServer
+	deduplicate         bool
+	partialErrReport    PartialErrReporter
+	maxSourceResolution int64
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -69,6 +74,7 @@ func newQuerier(
 	replicaLabel string,
 	proxy storepb.StoreServer,
 	deduplicate bool,
+	maxSourceResolution int64,
 	partialErrReport PartialErrReporter,
 ) *querier {
 	if logger == nil {
@@ -79,15 +85,16 @@ func newQuerier(
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	return &querier{
-		ctx:              ctx,
-		logger:           logger,
-		cancel:           cancel,
-		mint:             mint,
-		maxt:             maxt,
-		replicaLabel:     replicaLabel,
-		proxy:            proxy,
-		deduplicate:      deduplicate,
-		partialErrReport: partialErrReport,
+		ctx:                 ctx,
+		logger:              logger,
+		cancel:              cancel,
+		mint:                mint,
+		maxt:                maxt,
+		replicaLabel:        replicaLabel,
+		proxy:               proxy,
+		deduplicate:         deduplicate,
+		maxSourceResolution: maxSourceResolution,
+		partialErrReport:    partialErrReport,
 	}
 }
 
@@ -170,7 +177,7 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 		MinTime:             q.mint,
 		MaxTime:             q.maxt,
 		Matchers:            sms,
-		MaxResolutionWindow: params.Step / 5, // Fit at least 5 samples between steps.
+		MaxResolutionWindow: q.maxSourceResolution,
 		Aggregates:          queryAggrs,
 	}, resp); err != nil {
 		return nil, errors.Wrap(err, "proxy Series()")

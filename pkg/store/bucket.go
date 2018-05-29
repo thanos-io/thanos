@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"strings"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
@@ -164,6 +166,9 @@ type BucketStore struct {
 	mtx       sync.RWMutex
 	blocks    map[ulid.ULID]*bucketBlock
 	blockSets map[uint64]*bucketBlockSet
+
+	// Verbose enabled additional logging.
+	debugLogging bool
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -175,6 +180,7 @@ func NewBucketStore(
 	dir string,
 	indexCacheSizeBytes uint64,
 	maxChunkPoolBytes uint64,
+	debugLogging bool,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -188,13 +194,14 @@ func NewBucketStore(
 		return nil, errors.Wrap(err, "create chunk pool")
 	}
 	s := &BucketStore{
-		logger:     logger,
-		bucket:     bucket,
-		dir:        dir,
-		indexCache: indexCache,
-		chunkPool:  chunkPool,
-		blocks:     map[ulid.ULID]*bucketBlock{},
-		blockSets:  map[uint64]*bucketBlockSet{},
+		logger:       logger,
+		bucket:       bucket,
+		dir:          dir,
+		indexCache:   indexCache,
+		chunkPool:    chunkPool,
+		blocks:       map[ulid.ULID]*bucketBlock{},
+		blockSets:    map[uint64]*bucketBlockSet{},
+		debugLogging: debugLogging,
 	}
 	s.metrics = newBucketStoreMetrics(reg, s)
 
@@ -630,6 +637,41 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 	return nil
 }
 
+// debugFoundBlockSetOverview logs on debug level what exactly blocks we used for query in terms of
+// labels and resolution. This is important because we allow mixed resolution results, so it is quite crucial
+// to be aware what exactly resolution we see on query.
+// TODO(bplotka): Consider adding resolution label to all results to propagate that info to UI and Query API.
+func debugFoundBlockSetOverview(logger log.Logger, mint, maxt int64, lset labels.Labels, bs []*bucketBlock) {
+	if len(bs) == 0 {
+		level.Debug(logger).Log("msg", "No block found", "mint", mint, "maxt", maxt, "lset", lset.String())
+		return
+	}
+
+	var (
+		parts            []string
+		currRes          = int64(-1)
+		currMin, currMax int64
+	)
+	for _, b := range bs {
+		if currRes == b.meta.Thanos.Downsample.Resolution {
+			currMax = b.meta.MaxTime
+			continue
+		}
+
+		if currRes != -1 {
+			parts = append(parts, fmt.Sprintf("Range: %d-%d Resolution: %d", currMin, currMax, currRes))
+		}
+
+		currRes = b.meta.Thanos.Downsample.Resolution
+		currMin = b.meta.MinTime
+		currMax = b.meta.MaxTime
+	}
+
+	parts = append(parts, fmt.Sprintf("Range: %d-%d Resolution: %d", currMin, currMax, currRes))
+
+	level.Debug(logger).Log("msg", "Blocks source resolutions", "blocks", len(bs), "mint", mint, "maxt", maxt, "lset", lset.String(), "spans", strings.Join(parts, "\n"))
+}
+
 // Series implements the storepb.StoreServer interface.
 func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	matchers, err := translateMatchers(req.Matchers)
@@ -650,6 +692,10 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			continue
 		}
 		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow)
+
+		if s.debugLogging {
+			debugFoundBlockSetOverview(s.logger, req.MinTime, req.MaxTime, bs.labels, blocks)
+		}
 
 		for _, b := range blocks {
 			stats.blocksQueried++
@@ -827,7 +873,7 @@ type bucketBlockSet struct {
 }
 
 // newBucketBlockSet initializes a new set with the known downsampling windows hard-configured.
-// The set currently does not support arbtirary ranges.
+// The set currently does not support arbitrary ranges.
 func newBucketBlockSet(lset labels.Labels) *bucketBlockSet {
 	return &bucketBlockSet{
 		labels:      lset,
@@ -909,7 +955,7 @@ func (s *bucketBlockSet) getFor(mint, maxt, minResolution int64) (bs []*bucketBl
 		bs = append(bs, b)
 	}
 	// Our current resolution might not cover all data, recursively fill the gaps at the start
-	// end end of [mint, maxt] with higher resolution blocks.
+	// and end of [mint, maxt] with higher resolution blocks.
 	i++
 	// No higher resolution left, we are done.
 	if i >= len(s.resolutions) {

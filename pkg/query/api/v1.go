@@ -224,7 +224,7 @@ func (api *API) query(r *http.Request) (interface{}, []error, *apiError) {
 	defer span.Finish()
 
 	begin := api.now()
-	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDeduplication, partialErrReporter), r.FormValue("query"), ts)
+	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDeduplication, 0, partialErrReporter), r.FormValue("query"), ts)
 	if err != nil {
 		return nil, nil, &apiError{errorBadData, err}
 	}
@@ -265,11 +265,24 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *apiError) {
 
 	step, err := parseDuration(r.FormValue("step"))
 	if err != nil {
-		return nil, nil, &apiError{errorBadData, err}
+		return nil, nil, &apiError{errorBadData, errors.Wrap(err, "param step")}
 	}
 
 	if step <= 0 {
 		err := errors.New("zero or negative query resolution step widths are not accepted. Try a positive integer")
+		return nil, nil, &apiError{errorBadData, err}
+	}
+
+	maxSourceResolution := step / 5 // By default fit at least 5 samples between steps.
+	if val := r.FormValue("max_source_resolution"); val != "" {
+		maxSourceResolution, err = parseDuration(val)
+		if err != nil {
+			return nil, nil, &apiError{errorBadData, errors.Wrap(err, "param max_source_resolution")}
+		}
+	}
+
+	if maxSourceResolution < 0 {
+		err := errors.New("negative query max source resolution is not accepted. Try a positive integer")
 		return nil, nil, &apiError{errorBadData, err}
 	}
 
@@ -316,7 +329,13 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *apiError) {
 	defer span.Finish()
 
 	begin := api.now()
-	qry, err := api.queryEngine.NewRangeQuery(api.queryableCreate(enableDeduplication, partialErrReporter), r.FormValue("query"), start, end, step)
+	qry, err := api.queryEngine.NewRangeQuery(
+		api.queryableCreate(enableDeduplication, maxSourceResolution, partialErrReporter),
+		r.FormValue("query"),
+		start,
+		end,
+		step,
+	)
 	if err != nil {
 		return nil, nil, &apiError{errorBadData, err}
 	}
@@ -357,7 +376,7 @@ func (api *API) labelValues(r *http.Request) (interface{}, []error, *apiError) {
 		warnmtx.Unlock()
 	}
 
-	q, err := api.queryableCreate(true, partialErrReporter).Querier(ctx, math.MinInt64, math.MaxInt64)
+	q, err := api.queryableCreate(true, 0, partialErrReporter).Querier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, nil, &apiError{errorExec, err}
 	}
@@ -435,7 +454,7 @@ func (api *API) series(r *http.Request) (interface{}, []error, *apiError) {
 		}
 	}
 
-	q, err := api.queryableCreate(enableDeduplication, partialErrReporter).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
+	q, err := api.queryableCreate(enableDeduplication, 0, partialErrReporter).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &apiError{errorExec, err}
 	}
