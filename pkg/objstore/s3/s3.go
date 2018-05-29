@@ -58,16 +58,16 @@ type Config struct {
 func RegisterS3Params(cmd *kingpin.CmdClause) *Config {
 
 	var (
-		s3config  Config
+		s3Config  Config
 		accessKey string
 		secretKey string
 	)
 
 	cmd.Flag("s3.bucket", "S3-Compatible API bucket name for stored blocks.").
-		PlaceHolder("<bucket>").Envar("S3_BUCKET").StringVar(&s3config.Bucket)
+		PlaceHolder("<bucket>").Envar("S3_BUCKET").StringVar(&s3Config.Bucket)
 
 	cmd.Flag("s3.endpoint", "S3-Compatible API endpoint for stored blocks.").
-		PlaceHolder("<api-url>").Envar("S3_ENDPOINT").StringVar(&s3config.Endpoint)
+		PlaceHolder("<api-url>").Envar("S3_ENDPOINT").StringVar(&s3Config.Endpoint)
 
 	cmd.Flag("s3.access-key", "Access key for an S3-Compatible API.").
 		PlaceHolder("<access-key>").StringVar(&accessKey)
@@ -76,13 +76,13 @@ func RegisterS3Params(cmd *kingpin.CmdClause) *Config {
 		PlaceHolder("<secret-key>").StringVar(&secretKey)
 
 	cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
-		Default("false").Envar("S3_INSECURE").BoolVar(&s3config.Insecure)
+		Default("false").Envar("S3_INSECURE").BoolVar(&s3Config.Insecure)
 
 	cmd.Flag("s3.signature-version2", "Whether to use S3 Signature Version 2; otherwise Signature Version 4 will be used.").
-		Default("false").Envar("S3_SIGNATURE_VERSION2").BoolVar(&s3config.SignatureV2)
+		Default("false").Envar("S3_SIGNATURE_VERSION2").BoolVar(&s3Config.SignatureV2)
 
 	cmd.Flag("s3.encrypt-sse", "Whether to use Server Side Encryption").
-		Default("false").Envar("S3_SSE_ENCRYPTION").BoolVar(&s3config.SSEEnprytion)
+		Default("false").Envar("S3_SSE_ENCRYPTION").BoolVar(&s3Config.SSEEnprytion)
 
 	if accessKey == "" || secretKey == "" {
 		creds := credentials.NewChainCredentials(
@@ -90,15 +90,15 @@ func RegisterS3Params(cmd *kingpin.CmdClause) *Config {
 				&credentials.EnvAWS{},
 				&credentials.IAM{},
 			})
-		s3config.Credentials = creds
+		s3Config.Credentials = creds
 	} else {
-		if s3config.SignatureV2 {
-			s3config.Credentials = credentials.NewStaticV2(accessKey, secretKey, "")
+		if s3Config.SignatureV2 {
+			s3Config.Credentials = credentials.NewStaticV2(accessKey, secretKey, "")
 		} else {
-			s3config.Credentials = credentials.NewStaticV4(accessKey, secretKey, "")
+			s3Config.Credentials = credentials.NewStaticV4(accessKey, secretKey, "")
 		}
 	}
-	return &s3config
+	return &s3Config
 }
 
 // Validate checks to see if mandatory s3 config options are set.
