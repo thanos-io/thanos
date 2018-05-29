@@ -4,7 +4,7 @@ The store component of Thanos implements the Store API on top of historical data
 It keeps a small amount of information about all remote blocks on local disk and keeps it in sync with the bucket. This data is generally safe to delete across restarts at the cost of increased startup times.
 
 ```
-$ thanos query \
+$ thanos store \
     --tsdb.path        "/local/state/data/dir" \
     --gcs.bucket       "example-bucket" \
     --cluster.peers    "thanos-cluster.example.org"
