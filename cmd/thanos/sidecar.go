@@ -14,7 +14,6 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/cluster"
-	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/reloader"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -26,6 +25,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/vglafirov/thanos/pkg/objstore/azure"
+	"github.com/vglafirov/thanos/pkg/objstore/client"
 	"google.golang.org/grpc"
 	"gopkg.in/alecthomas/kingpin.v2"
 	yaml "gopkg.in/yaml.v2"
@@ -50,6 +51,8 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 		PlaceHolder("<bucket>").String()
 
 	s3Config := s3.RegisterS3Params(cmd)
+
+	azureConfig := azure.RegisterAzureParams(cmd)
 
 	peers := cmd.Flag("cluster.peers", "Initial peers to join the cluster. It can be either <ip:port>, or <domain:port>.").Strings()
 
@@ -96,6 +99,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			*dataDir,
 			*gcsBucket,
 			s3Config,
+			azureConfig,
 			peer,
 			rl,
 			name,
@@ -114,6 +118,7 @@ func runSidecar(
 	dataDir string,
 	gcsBucket string,
 	s3Config *s3.Config,
+	azureConfig *azure.Config,
 	peer *cluster.Peer,
 	reloader *reloader.Reloader,
 	component string,
@@ -256,13 +261,13 @@ func runSidecar(
 
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
+	bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, *azureConfig, reg, component)
 	if err != nil && err != client.ErrNotFound {
 		return err
 	}
 
 	if err == client.ErrNotFound {
-		level.Info(logger).Log("msg", "No GCS or S3 bucket was configured, uploads will be disabled")
+		level.Info(logger).Log("msg", "No cloud storage bucket was configured, uploads will be disabled")
 		uploads = false
 	}
 

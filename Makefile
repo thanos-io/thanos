@@ -21,10 +21,6 @@ build:
 	@echo ">> building binaries"
 	@promu build --prefix $(PREFIX)
 
-crossbuild:
-	@echo ">> building crossplatform binaries"
-	@promu crossbuild
-
 install-tools:
 	@echo ">> fetching goimports"
 	@go get -u golang.org/x/tools/cmd/goimports

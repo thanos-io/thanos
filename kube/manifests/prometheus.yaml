@@ -21,6 +21,7 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "10902"
     spec:
+      serviceAccount: prometheus
 ## Commented out because Minikube has only one node, should be commented in for any production setup
 #      affinity:
 #        podAntiAffinity:
@@ -51,7 +52,8 @@ spec:
         - name: data
           mountPath: /var/prometheus
       - name: thanos-sidecar
-        image: improbable/thanos:master
+        image: thanos
+        imagePullPolicy: IfNotPresent
         args:
         - "sidecar"
         - "--log.level=debug"
