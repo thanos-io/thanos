@@ -100,7 +100,14 @@ func runSidecar(
 	reloader *reloader.Reloader,
 	component string,
 ) error {
-	var externalLabels = &extLabelSet{promURL: promURL}
+	var metadata = &metadata{
+		promURL: promURL,
+
+		// Start out with the full time range. The shipper will constrain it later.
+		// TODO(fabxc): minimum timestamp is never adjusted if shipping is disabled.
+		mint: 0,
+		maxt: math.MaxInt64,
+	}
 
 	// Setup all the concurrent groups.
 	{
@@ -119,8 +126,7 @@ func runSidecar(
 			// Blocking query of external labels before joining as a Source Peer into gossip.
 			// We retry infinitely until we reach and fetch labels from our Prometheus.
 			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
-				err := externalLabels.Update(ctx)
-				if err != nil {
+				if err := metadata.UpdateLabels(ctx); err != nil {
 					level.Warn(logger).Log(
 						"msg", "failed to fetch initial external labels. Is Prometheus running? Retrying",
 						"err", err,
@@ -137,17 +143,16 @@ func runSidecar(
 				return errors.Wrap(err, "initial external labels query")
 			}
 
-			if len(externalLabels.Get()) == 0 {
+			if len(metadata.GetLabels()) == 0 {
 				return errors.New("no external labels configured on Prometheus server, uniquely identifying external labels must be configured")
 			}
 
 			// New gossip cluster.
+			mint, maxt := metadata.GetTimestamps()
 			if err = peer.Join(cluster.PeerTypeSource, cluster.PeerMetadata{
-				Labels: externalLabels.GetPB(),
-				// Start out with the full time range. The shipper will constrain it later.
-				// TODO(fabxc): minimum timestamp is never adjusted if shipping is disabled.
-				MinTime: 0,
-				MaxTime: math.MaxInt64,
+				Labels:  metadata.GetLabelsPB(),
+				MinTime: mint,
+				MaxTime: maxt,
 			}); err != nil {
 				return errors.Wrap(err, "join cluster")
 			}
@@ -158,13 +163,12 @@ func runSidecar(
 				iterCtx, iterCancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer iterCancel()
 
-				err := externalLabels.Update(iterCtx)
-				if err != nil {
+				if err := metadata.UpdateLabels(iterCtx); err != nil {
 					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
 					promUp.Set(0)
 				} else {
 					// Update gossip.
-					peer.SetLabels(externalLabels.GetPB())
+					peer.SetLabels(metadata.GetLabelsPB())
 
 					promUp.Set(1)
 					lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
@@ -198,7 +202,7 @@ func runSidecar(
 		var client http.Client
 
 		promStore, err := store.NewPrometheusStore(
-			logger, prometheus.DefaultRegisterer, &client, promURL, externalLabels.Get)
+			logger, &client, promURL, metadata.GetLabels, metadata.GetTimestamps)
 		if err != nil {
 			return errors.Wrap(err, "create Prometheus store")
 		}
@@ -237,8 +241,7 @@ func runSidecar(
 			}
 		}()
 
-		s := shipper.New(logger, nil, dataDir, bkt, externalLabels.Get)
-
+		s := shipper.New(logger, nil, dataDir, bkt, metadata.GetLabels)
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
@@ -251,7 +254,10 @@ func runSidecar(
 				if err != nil {
 					level.Warn(logger).Log("msg", "reading timestamps failed", "err", err)
 				} else {
-					peer.SetTimestamps(minTime, math.MaxInt64)
+					metadata.UpdateTimestamps(minTime, math.MaxInt64)
+
+					mint, maxt := metadata.GetTimestamps()
+					peer.SetTimestamps(mint, maxt)
 				}
 				return nil
 			})
@@ -264,14 +270,16 @@ func runSidecar(
 	return nil
 }
 
-type extLabelSet struct {
+type metadata struct {
 	promURL *url.URL
 
 	mtx    sync.Mutex
+	mint   int64
+	maxt   int64
 	labels labels.Labels
 }
 
-func (s *extLabelSet) Update(ctx context.Context) error {
+func (s *metadata) UpdateLabels(ctx context.Context) error {
 	elset, err := queryExternalLabels(ctx, s.promURL)
 	if err != nil {
 		return err
@@ -284,14 +292,23 @@ func (s *extLabelSet) Update(ctx context.Context) error {
 	return nil
 }
 
-func (s *extLabelSet) Get() labels.Labels {
+func (s *metadata) UpdateTimestamps(mint int64, maxt int64) error {
+	s.mtx.Lock()
+	s.mint = mint
+	s.maxt = maxt
+	s.mtx.Unlock()
+
+	return nil
+}
+
+func (s *metadata) GetLabels() labels.Labels {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
 	return s.labels
 }
 
-func (s *extLabelSet) GetPB() []storepb.Label {
+func (s *metadata) GetLabelsPB() []storepb.Label {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -303,6 +320,13 @@ func (s *extLabelSet) GetPB() []storepb.Label {
 		})
 	}
 	return lset
+}
+
+func (s *metadata) GetTimestamps() (mint int64, maxt int64) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	return s.mint, s.maxt
 }
 
 func queryExternalLabels(ctx context.Context, base *url.URL) (labels.Labels, error) {

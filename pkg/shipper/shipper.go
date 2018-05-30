@@ -110,7 +110,7 @@ func (s *Shipper) Timestamps() (minTime, maxSyncTime int64, err error) {
 	minTime = math.MaxInt64
 	maxSyncTime = math.MinInt64
 
-	s.iterBlockMetas(func(m *block.Meta) error {
+	if err := s.iterBlockMetas(func(m *block.Meta) error {
 		if m.MinTime < minTime {
 			minTime = m.MinTime
 		}
@@ -118,7 +118,15 @@ func (s *Shipper) Timestamps() (minTime, maxSyncTime int64, err error) {
 			maxSyncTime = m.MaxTime
 		}
 		return nil
-	})
+	}); err != nil {
+		return 0, 0, errors.Wrap(err, "iter Block metas for timestamp")
+	}
+
+	if minTime == math.MaxInt64 {
+		// No block yet found. We cannot assume any min block size so propagate 0 minTime.
+		minTime = 0
+	}
+
 	return minTime, maxSyncTime, nil
 }
 
@@ -144,6 +152,8 @@ func (s *Shipper) Sync(ctx context.Context) {
 	// Reset the uploaded slice so we can rebuild it only with blocks that still exist locally.
 	meta.Uploaded = nil
 
+	// TODO(bplotka): If there are no blocks in the system check for WAL dir to ensure we have actually
+	// access to real TSDB dir (!).
 	if err = s.iterBlockMetas(func(m *block.Meta) error {
 		// Do not sync a block if we already uploaded it. If it is no longer found in the bucket,
 		// it was generally removed by the compaction process.
