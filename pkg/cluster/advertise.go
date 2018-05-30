@@ -34,6 +34,10 @@ func CalculateAdvertiseAddress(bindAddr, advertiseAddr string) (string, int, err
 		return "", 0, errors.Wrapf(err, "invalid bind address '%s', wrong port", bindAddr)
 	}
 
+	if bindIntPort == 0 {
+		return "", 0, errors.Errorf("invalid bind address '%s'. We don't allow port to be 0", bindAddr)
+	}
+
 	if bindHost == "" || bindHost == "0.0.0.0" {
 		privateIP, err := sockaddr.GetPrivateIP()
 		if err != nil {
