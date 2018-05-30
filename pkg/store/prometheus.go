@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"math"
 	"net/http"
 	"net/url"
 	"path"
@@ -19,7 +18,6 @@ import (
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc/codes"
@@ -33,6 +31,7 @@ type PrometheusStore struct {
 	client         *http.Client
 	buffers        sync.Pool
 	externalLabels func() labels.Labels
+	timestamps     func() (mint int64, maxt int64)
 }
 
 // NewPrometheusStore returns a new PrometheusStore that uses the given HTTP client
@@ -40,10 +39,10 @@ type PrometheusStore struct {
 // It attaches the provided external labels to all results.
 func NewPrometheusStore(
 	logger log.Logger,
-	reg prometheus.Registerer,
 	client *http.Client,
 	baseURL *url.URL,
 	externalLabels func() labels.Labels,
+	timestamps func() (mint int64, maxt int64),
 ) (*PrometheusStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -58,6 +57,7 @@ func NewPrometheusStore(
 		base:           baseURL,
 		client:         client,
 		externalLabels: externalLabels,
+		timestamps:     timestamps,
 	}
 	return p, nil
 }
@@ -67,10 +67,11 @@ func NewPrometheusStore(
 // This is fine for now, but might be needed in future.
 func (p *PrometheusStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	lset := p.externalLabels()
+	mint, maxt := p.timestamps()
 
 	res := &storepb.InfoResponse{
-		MinTime: 0,
-		MaxTime: math.MaxInt64,
+		MinTime: mint,
+		MaxTime: maxt,
 		Labels:  make([]storepb.Label, 0, len(lset)),
 	}
 	for _, l := range lset {
@@ -214,6 +215,10 @@ func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prom
 }
 
 func labelsMatches(lset labels.Labels, ms []storepb.LabelMatcher) (bool, []storepb.LabelMatcher, error) {
+	if len(lset) == 0 {
+		return true, ms, nil
+	}
+
 	var newMatcher []storepb.LabelMatcher
 	for _, m := range ms {
 		// Validate all matchers.

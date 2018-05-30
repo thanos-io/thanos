@@ -121,6 +121,12 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 
 		seriesSet = append(seriesSet, startStreamSeriesSet(sc, respCh, 10))
 	}
+	if len(seriesSet) == 0 {
+		err := errors.New("No store matched for this query")
+		level.Warn(s.logger).Log("err", err)
+		respCh <- storepb.NewWarnSeriesResponse(err)
+		return nil
+	}
 
 	g.Go(func() error {
 		defer close(respCh)

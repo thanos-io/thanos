@@ -38,10 +38,10 @@ func TestPrometheusStore_Series_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, nil, u,
+	proxy, err := NewPrometheusStore(nil, nil, u,
 		func() labels.Labels {
 			return labels.FromStrings("region", "eu-west")
-		})
+		}, nil)
 	testutil.Ok(t, err)
 
 	// Query all three samples except for the first one. Since we round up queried data
@@ -110,7 +110,7 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, nil, u, nil)
+	proxy, err := NewPrometheusStore(nil, nil, u, nil, nil)
 	testutil.Ok(t, err)
 
 	resp, err := proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
@@ -144,10 +144,10 @@ func TestPrometheusStore_Series_MatchExternalLabel_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, nil, u,
+	proxy, err := NewPrometheusStore(nil, nil, u,
 		func() labels.Labels {
 			return labels.FromStrings("region", "eu-west")
-		})
+		}, nil)
 	testutil.Ok(t, err)
 	srv := newStoreSeriesServer(ctx)
 
@@ -182,4 +182,27 @@ func TestPrometheusStore_Series_MatchExternalLabel_e2e(t *testing.T) {
 
 	// No series.
 	testutil.Equals(t, 0, len(srv.SeriesSet))
+}
+
+func TestPrometheusStore_Info(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	proxy, err := NewPrometheusStore(nil, nil, nil,
+		func() labels.Labels {
+			return labels.FromStrings("region", "eu-west")
+		},
+		func() (int64, int64) {
+			return 123, 456
+		})
+	testutil.Ok(t, err)
+
+	resp, err := proxy.Info(ctx, &storepb.InfoRequest{})
+	testutil.Ok(t, err)
+
+	testutil.Equals(t, []storepb.Label{{Name: "region", Value: "eu-west"}}, resp.Labels)
+	testutil.Equals(t, int64(123), resp.MinTime)
+	testutil.Equals(t, int64(456), resp.MaxTime)
 }
