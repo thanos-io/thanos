@@ -14,7 +14,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/tsdb/labels"
-	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
 
@@ -29,24 +28,24 @@ type StoreSpec interface {
 	Metadata(ctx context.Context, client storepb.StoreClient) (labels []storepb.Label, mint int64, maxt int64, err error)
 }
 
-type staticStoreSpec struct {
+type grpcStoreSpec struct {
 	addr string
 }
 
-// NewStaticStoreSpec creates store spec for static store.
-// This is used only for query command but we include this here to properly test this spec inside storeset_test.go
-func NewStaticStoreSpec(addr string) StoreSpec {
-	return &staticStoreSpec{addr: addr}
+// NewGRPCStoreSpec creates store pure gRPC spec.
+// It uses Info gRPC call to get Metadata.
+func NewGRPCStoreSpec(addr string) StoreSpec {
+	return &grpcStoreSpec{addr: addr}
 }
 
-func (s *staticStoreSpec) Addr() string {
+func (s *grpcStoreSpec) Addr() string {
 	// API addr should not change between state changes.
 	return s.addr
 }
 
-// Metadata method for static store tries to reach host Info method until context timeout. If we are unable to get metadata after
+// Metadata method for gRPC store API tries to reach host Info method until context timeout. If we are unable to get metadata after
 // that time, we assume that the host is unhealthy and return error.
-func (s *staticStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient) (labels []storepb.Label, mint int64, maxt int64, err error) {
+func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient) (labels []storepb.Label, mint int64, maxt int64, err error) {
 	resp, err := client.Info(ctx, &storepb.InfoRequest{}, grpc.FailFast(false))
 	if err != nil {
 		return nil, 0, 0, errors.Wrapf(err, "fetching store info from %s", s.addr)
@@ -61,9 +60,9 @@ type StoreSet struct {
 
 	// Store specifications can change dynamically. If some store is missing from the list, we assuming it is no longer
 	// accessible and we close gRPC client for it.
-	storeSpecs       func() []StoreSpec
-	dialOpts         []grpc.DialOption
-	gRPCRetryTimeout time.Duration
+	storeSpecs          func() []StoreSpec
+	dialOpts            []grpc.DialOption
+	gRPCInfoCallTimeout time.Duration
 
 	mtx                  sync.RWMutex
 	stores               map[string]*storeRef
@@ -117,12 +116,13 @@ func NewStoreSet(
 	}
 
 	ss := &StoreSet{
-		logger:               logger,
+		logger:               log.With(logger, "component", "storeset"),
 		storeSpecs:           storeSpecs,
 		dialOpts:             dialOpts,
 		storeNodeConnections: storeNodeConnections,
-		gRPCRetryTimeout:     3 * time.Second,
+		gRPCInfoCallTimeout:  10 * time.Second,
 		externalLabelStores:  map[string]int{},
+		stores:               make(map[string]*storeRef),
 	}
 
 	storeNodeCollector := &storeSetNodeCollector{externalLabelOccurrences: ss.externalLabelOccurrences}
@@ -146,6 +146,15 @@ type storeRef struct {
 	maxTime int64
 }
 
+func (s *storeRef) Update(labels []storepb.Label, minTime int64, maxTime int64) {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	s.labels = labels
+	s.minTime = minTime
+	s.maxTime = maxTime
+}
+
 func (s *storeRef) Labels() []storepb.Label {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
@@ -167,109 +176,122 @@ func (s *storeRef) close() {
 	s.cc.Close()
 }
 
-func (s *StoreSet) updateStore(ctx context.Context, spec StoreSpec) (*storeRef, error) {
-	ctx, cancel := context.WithTimeout(ctx, s.gRPCRetryTimeout)
-	defer cancel()
-
-	addr := spec.Addr()
-
-	s.mtx.RLock()
-	st, ok := s.stores[addr]
-	s.mtx.RUnlock()
-	if !ok {
-		// New store or was unhealthy and was removed in the past - create new one.
-		conn, err := grpc.DialContext(ctx, addr, s.dialOpts...)
-		if err != nil {
-			return nil, errors.Wrap(err, "dialing connection")
-		}
-
-		st = &storeRef{
-			StoreClient: storepb.NewStoreClient(conn),
-			cc:          conn,
-			addr:        addr,
-		}
-	}
-
-	var err error
-	st.labels, st.minTime, st.maxTime, err = spec.Metadata(ctx, st.StoreClient)
-	if err != nil {
-		st.close()
-		return nil, err
-	}
-	return st, nil
-}
-
-// Update updates the store set. It fetches current list of store specs from function and grabs fresh metadata.
+// Update updates the store set. It fetches current list of store specs from function and updates the fresh metadata
+// from all stores.
 func (s *StoreSet) Update(ctx context.Context) {
-	var (
-		stores   = make(map[string]*storeRef, len(s.stores))
-		innerMtx sync.Mutex
-		g        errgroup.Group
-	)
-
-	for _, storeSpec := range s.storeSpecs() {
-		spec := storeSpec
-		g.Go(func() error {
-			addr := spec.Addr()
-			st, err := s.updateStore(ctx, spec)
-			if err != nil {
-				return err
-			}
-			innerMtx.Lock()
-			if dupSt, ok := stores[addr]; ok {
-				level.Error(s.logger).Log("msg", "duplicated address in gossip or static store nodes.", "storeAPIAddr", addr)
-				dupSt.close()
-			}
-			stores[addr] = st
-			innerMtx.Unlock()
-
-			return nil
-		})
-	}
-
-	err := g.Wait()
-	if err != nil {
-		level.Warn(s.logger).Log("msg", "update of some store nodes failed", "err", err)
-	}
+	healthyStores := s.getHealthyStores(ctx)
 
 	// Record the number of occurrences of external label combinations for current store slice.
 	externalLabelStores := map[string]int{}
-	for _, st := range stores {
+	for _, st := range healthyStores {
 		externalLabelStores[externalLabelsFromStore(st)]++
 	}
 
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
-	// Remove stores that where not updated in this update, because were not in s.peerAddr() this time.
+	// Close stores that where not healthy this time (are not in healthy stores map).
 	for addr, st := range s.stores {
-		if _, ok := stores[addr]; ok {
+		if _, ok := healthyStores[addr]; ok {
 			continue
 		}
 
 		// Peer does not exists anymore.
 		st.close()
+		delete(s.stores, addr)
+
+		level.Info(s.logger).Log("msg", "store unhealthy or does not exists, closed gRPC client and removed from storeset", "address", addr)
 	}
 
-	// Swap old store set with new one, excluding these with duplicated external labels.
-	s.stores = make(map[string]*storeRef, len(stores))
-	for addr, st := range stores {
-		// Check if it has some ext labels specified.
-		// No external labels means strictly store gateway or ruler and it is fine to have access to multiple instances of them.
-		//
-		// Sidecar will error out if it will be configured with empty external labels.
-		if len(st.Labels()) == 0 || externalLabelStores[externalLabelsFromStore(st)] == 1 {
-			s.stores[addr] = st
+	// Add stores that are not yet in s.stores.
+	for addr, st := range healthyStores {
+		if _, ok := s.stores[addr]; ok {
 			continue
 		}
 
-		level.Warn(s.logger).Log("msg", "dropping store, external labels are not unique", "address", addr)
+		// Check if it has some external labels specified.
+		// No external labels means strictly store gateway or ruler and it is fine to have access to multiple instances of them.
+		//
+		// Sidecar will error out if it will be configured with empty external labels.
+		if len(st.Labels()) > 0 && externalLabelStores[externalLabelsFromStore(st)] != 1 {
+			st.close()
+			level.Warn(s.logger).Log("msg", "dropping store, external labels are not unique", "address", addr)
+			continue
+		}
 
-		st.close()
+		s.stores[addr] = st
+		level.Info(s.logger).Log("msg", "adding new store to query storeset", "address", addr)
 	}
 
 	s.externalLabelStores = externalLabelStores
 	s.storeNodeConnections.Set(float64(len(s.stores)))
+}
+
+func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
+	var (
+		unique = make(map[string]struct{})
+
+		healthyStores = make(map[string]*storeRef, len(s.stores))
+		mtx           sync.Mutex
+		wg            sync.WaitGroup
+	)
+
+	// Gather healthy stores map concurrently. Build new store if does not exist already.
+	for _, storeSpec := range s.storeSpecs() {
+		if _, ok := unique[storeSpec.Addr()]; ok {
+			level.Warn(s.logger).Log("msg", "duplicated address in gossip or static store nodes", "address", storeSpec.Addr())
+			continue
+		}
+		unique[storeSpec.Addr()] = struct{}{}
+
+		wg.Add(1)
+		go func(spec StoreSpec) {
+			defer wg.Done()
+
+			addr := spec.Addr()
+
+			ctx, cancel := context.WithTimeout(ctx, s.gRPCInfoCallTimeout)
+			defer cancel()
+
+			st, ok := s.stores[addr]
+			if ok {
+				// Check existing store. Is it healthy? What are current metadata?
+				labels, minTime, maxTime, err := spec.Metadata(ctx, st.StoreClient)
+				if err != nil {
+					// Peer unhealthy. Do not include in healthy stores.
+					level.Warn(s.logger).Log("msg", "update of store node failed", "err", err, "address", addr)
+					return
+				}
+				st.Update(labels, minTime, maxTime)
+			} else {
+				// New store or was unhealthy and was removed in the past - create new one.
+				conn, err := grpc.DialContext(ctx, addr, s.dialOpts...)
+				if err != nil {
+					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "dialing connection"), "address", addr)
+					return
+				}
+				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), cc: conn, addr: addr}
+
+				// Initial info call for all types of stores (gossip + static) to check gRPC StoreAPI.
+				resp, err := st.StoreClient.Info(ctx, &storepb.InfoRequest{}, grpc.FailFast(false))
+				if err != nil {
+					st.close()
+					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "initial store client info fetch"), "address", addr)
+					return
+				}
+				st.Update(resp.Labels, resp.MinTime, resp.MaxTime)
+			}
+
+			mtx.Lock()
+			defer mtx.Unlock()
+
+			healthyStores[addr] = st
+		}(storeSpec)
+	}
+
+	wg.Wait()
+
+	return healthyStores
 }
 
 func externalLabelsFromStore(st *storeRef) string {
