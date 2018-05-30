@@ -143,14 +143,14 @@ func runSidecar(
 				return errors.Wrap(err, "initial external labels query")
 			}
 
-			if len(metadata.GetLabels()) == 0 {
+			if len(metadata.Labels()) == 0 {
 				return errors.New("no external labels configured on Prometheus server, uniquely identifying external labels must be configured")
 			}
 
 			// New gossip cluster.
-			mint, maxt := metadata.GetTimestamps()
+			mint, maxt := metadata.Timestamps()
 			if err = peer.Join(cluster.PeerTypeSource, cluster.PeerMetadata{
-				Labels:  metadata.GetLabelsPB(),
+				Labels:  metadata.LabelsPB(),
 				MinTime: mint,
 				MaxTime: maxt,
 			}); err != nil {
@@ -168,7 +168,7 @@ func runSidecar(
 					promUp.Set(0)
 				} else {
 					// Update gossip.
-					peer.SetLabels(metadata.GetLabelsPB())
+					peer.SetLabels(metadata.LabelsPB())
 
 					promUp.Set(1)
 					lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
@@ -202,7 +202,7 @@ func runSidecar(
 		var client http.Client
 
 		promStore, err := store.NewPrometheusStore(
-			logger, &client, promURL, metadata.GetLabels, metadata.GetTimestamps)
+			logger, &client, promURL, metadata.Labels, metadata.Timestamps)
 		if err != nil {
 			return errors.Wrap(err, "create Prometheus store")
 		}
@@ -241,7 +241,7 @@ func runSidecar(
 			}
 		}()
 
-		s := shipper.New(logger, nil, dataDir, bkt, metadata.GetLabels)
+		s := shipper.New(logger, nil, dataDir, bkt, metadata.Labels)
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
@@ -256,7 +256,7 @@ func runSidecar(
 				} else {
 					metadata.UpdateTimestamps(minTime, math.MaxInt64)
 
-					mint, maxt := metadata.GetTimestamps()
+					mint, maxt := metadata.Timestamps()
 					peer.SetTimestamps(mint, maxt)
 				}
 				return nil
@@ -286,29 +286,29 @@ func (s *metadata) UpdateLabels(ctx context.Context) error {
 	}
 
 	s.mtx.Lock()
-	s.labels = elset
-	s.mtx.Unlock()
+	defer s.mtx.Unlock()
 
+	s.labels = elset
 	return nil
 }
 
 func (s *metadata) UpdateTimestamps(mint int64, maxt int64) error {
 	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
 	s.mint = mint
 	s.maxt = maxt
-	s.mtx.Unlock()
-
 	return nil
 }
 
-func (s *metadata) GetLabels() labels.Labels {
+func (s *metadata) Labels() labels.Labels {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
 	return s.labels
 }
 
-func (s *metadata) GetLabelsPB() []storepb.Label {
+func (s *metadata) LabelsPB() []storepb.Label {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -322,7 +322,7 @@ func (s *metadata) GetLabelsPB() []storepb.Label {
 	return lset
 }
 
-func (s *metadata) GetTimestamps() (mint int64, maxt int64) {
+func (s *metadata) Timestamps() (mint int64, maxt int64) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 

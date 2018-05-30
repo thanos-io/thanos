@@ -160,6 +160,8 @@ func (s *Shipper) Sync(ctx context.Context) {
 		if _, ok := hasUploaded[m.ULID]; !ok {
 			if err := s.sync(ctx, m); err != nil {
 				level.Error(s.logger).Log("msg", "shipping failed", "block", m.ULID, "err", err)
+				// No error returned, just log line. This is because we want other blocks to be uploaded even
+				// though this one failed. It will be retried on second Sync iteration.
 				return nil
 			}
 		}
