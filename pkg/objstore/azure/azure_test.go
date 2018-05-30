@@ -41,8 +41,8 @@ func TestBucket_Exists(t *testing.T) {
 				ctx:  context.Background(),
 				name: "test_bucket",
 			},
-			want:    true,
-			wantErr: false,
+			want:    false,
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {

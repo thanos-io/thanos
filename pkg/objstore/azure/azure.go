@@ -91,6 +91,11 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 	return nil
 }
 
+// IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
+func (b *Bucket) IsObjNotFoundErr(err error) bool {
+	return false
+}
+
 // Get returns a reader for the given object name.
 func (b *Bucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
 	pageblob := getPageBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
@@ -126,13 +131,12 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 	pageblob := getPageBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
 
 	resp, err := pageblob.GetProperties(ctx, blob.BlobAccessConditions{})
-	if err != nil {
-		if resp.StatusCode() == 404 {
-			return false, nil
+	if resp != nil {
+		if resp.StatusCode() == 200 {
+			return true, nil
 		}
-		return false, err
 	}
-	return true, nil
+	return false, err
 }
 
 // Upload the contents of the reader as an object into the bucket.

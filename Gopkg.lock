@@ -218,6 +218,8 @@
     "pkg/objstore",
     "pkg/objstore/client",
     "pkg/objstore/gcs",
+    "pkg/objstore/inmem",
+    "pkg/objstore/objtesting",
     "pkg/objstore/s3",
     "pkg/pool",
     "pkg/query",
@@ -234,8 +236,8 @@
     "pkg/tracing",
     "pkg/verifier"
   ]
-  revision = "d7e84167c68a5211608e762403a38f3b0ea34c70"
-  version = "v0.1.0-rc.0"
+  revision = "2c636654cf04d7cbfd70d2dcacd017b3a44de6b1"
+  version = "v0.1.0-rc.1"
 
 [[projects]]
   name = "github.com/julienschmidt/httprouter"
@@ -588,6 +590,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "87d5eb04d51767a9c6a62e37645b5db6e29d349df5e8b08d0900078dbfd7420c"
+  inputs-digest = "bf98dbb001105d7341943d54aaf278310a3323d408cd87817bff6f0b01bfe77f"
   solver-name = "gps-cdcl"
   solver-version = 1
