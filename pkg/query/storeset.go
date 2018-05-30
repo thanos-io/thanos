@@ -14,7 +14,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/tsdb/labels"
-	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
 
@@ -234,7 +233,7 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 
 		healthyStores = make(map[string]*storeRef, len(s.stores))
 		mtx           sync.Mutex
-		g             errgroup.Group
+		wg            sync.WaitGroup
 	)
 
 	// Gather healthy stores map concurrently. Build new store if does not exist already.
@@ -245,8 +244,10 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 		}
 		unique[storeSpec.Addr()] = struct{}{}
 
-		spec := storeSpec
-		g.Go(func() error {
+		wg.Add(1)
+		go func(spec StoreSpec) {
+			defer wg.Done()
+
 			addr := spec.Addr()
 
 			ctx, cancel := context.WithTimeout(ctx, s.gRPCInfoCallTimeout)
@@ -258,14 +259,16 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 				labels, minTime, maxTime, err := spec.Metadata(ctx, st.StoreClient)
 				if err != nil {
 					// Peer unhealthy. Do not include in healthy stores.
-					return err
+					level.Warn(s.logger).Log("msg", "update of store node failed", "err", err, "address", addr)
+					return
 				}
 				st.Update(labels, minTime, maxTime)
 			} else {
 				// New store or was unhealthy and was removed in the past - create new one.
 				conn, err := grpc.DialContext(ctx, addr, s.dialOpts...)
 				if err != nil {
-					return errors.Wrap(err, "dialing connection")
+					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "dialing connection"), "address", addr)
+					return
 				}
 				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), cc: conn, addr: addr}
 
@@ -273,7 +276,8 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 				resp, err := st.StoreClient.Info(ctx, &storepb.InfoRequest{}, grpc.FailFast(false))
 				if err != nil {
 					st.close()
-					return errors.Wrapf(err, "initial store client info fetch from %s", spec.Addr())
+					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "initial store client info fetch"), "address", addr)
+					return
 				}
 				st.Update(resp.Labels, resp.MinTime, resp.MaxTime)
 			}
@@ -282,13 +286,10 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 			defer mtx.Unlock()
 
 			healthyStores[addr] = st
-			return nil
-		})
+		}(storeSpec)
 	}
 
-	if err := g.Wait(); err != nil {
-		level.Warn(s.logger).Log("msg", "update of some store nodes failed, ignoring these.", "err", err)
-	}
+	wg.Wait()
 
 	return healthyStores
 }
