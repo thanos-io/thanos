@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"fmt"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/cluster"
@@ -119,6 +121,19 @@ func runSidecar(
 	component string,
 ) error {
 	var externalLabels = &extLabelSet{promURL: promURL}
+	var uploads = true
+
+	// The background shipper continuously scans the data directory and uploads
+	// new blocks to Google Cloud Storage or an S3-compatible storage service.
+	bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
+	if err != nil && err != client.ErrNotFound {
+		return err
+	}
+
+	if err == client.ErrNotFound {
+		level.Info(logger).Log("msg", "No GCS or S3 bucket was configured, uploads will be disabled")
+		uploads = false
+	}
 
 	// Setup all the concurrent groups.
 	{
@@ -214,6 +229,70 @@ func runSidecar(
 		mux := http.NewServeMux()
 		registerMetrics(mux, reg)
 		registerProfile(mux)
+		if uploads {
+			mux.HandleFunc("/snapshot", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if r.Method != "POST" {
+					w.WriteHeader(http.StatusMethodNotAllowed)
+					json.NewEncoder(w).Encode(&response{
+						Status:    statusError,
+						ErrorType: "not_allowed",
+					})
+					return
+				}
+
+				apiErr := func() *apiError {
+					resp, err := http.Post(promURL.String()+snapshotPath, "", nil)
+					if err != nil {
+						return &apiError{err: err, typ: errorUnavailable}
+					}
+
+					sResponse := &response{}
+					err = json.NewDecoder(resp.Body).Decode(sResponse)
+					if err != nil {
+						return &apiError{err: err, typ: errorInternal}
+					}
+
+					if sResponse.Status != statusSuccess {
+						return &apiError{err: err, typ: errorInternal}
+					}
+
+					sDir := path.Join(dataDir, "snapshots", sResponse.Data.Name)
+					meta, _ := shipper.ReadMetaFile(dataDir)
+					if meta != nil {
+						shipper.WriteMetaFile(sDir, meta)
+					}
+
+					s := shipper.New(logger, nil, sDir, bkt, externalLabels.Get)
+					s.Sync(context.Background())
+					return nil
+				}()
+
+				if apiErr != nil {
+					var code int
+					switch apiErr.typ {
+					case errorUnavailable:
+						code = http.StatusServiceUnavailable
+					case errorInternal:
+						code = http.StatusInternalServerError
+					default:
+						code = http.StatusInternalServerError
+					}
+					w.WriteHeader(code)
+					json.NewEncoder(w).Encode(&response{
+						Status:    statusError,
+						ErrorType: apiErr.typ,
+						Error:     apiErr.err.Error(),
+					})
+					return
+				}
+
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(&response{
+					Status: statusSuccess,
+				})
+			})
+		}
 
 		l, err := net.Listen("tcp", httpAddr)
 		if err != nil {
@@ -252,20 +331,6 @@ func runSidecar(
 		})
 	}
 
-	var uploads bool = true
-
-	// The background shipper continuously scans the data directory and uploads
-	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
-	if err != nil && err != client.ErrNotFound {
-		return err
-	}
-
-	if err == client.ErrNotFound {
-		level.Info(logger).Log("msg", "No GCS or S3 bucket was configured, uploads will be disabled")
-		uploads = false
-	}
-
 	if uploads {
 		// Ensure we close up everything properly.
 		defer func() {
@@ -275,9 +340,7 @@ func runSidecar(
 		}()
 
 		s := shipper.New(logger, nil, dataDir, bkt, externalLabels.Get)
-
 		ctx, cancel := context.WithCancel(context.Background())
-
 		g.Add(func() error {
 			defer closeFn()
 
@@ -373,4 +436,43 @@ func queryExternalLabels(ctx context.Context, base *url.URL) (labels.Labels, err
 		return nil, errors.Wrap(err, "parse Prometheus config")
 	}
 	return labels.FromMap(cfg.Global.ExternalLabels), nil
+}
+
+type resStatus string
+
+const (
+	snapshotPath = "/api/v1/admin/tsdb/snapshot"
+)
+
+const (
+	statusSuccess resStatus = "success"
+	statusError             = "error"
+)
+
+type apiError struct {
+	typ errorType
+	err error
+}
+
+func (e *apiError) Error() string {
+	return fmt.Sprintf("%s: %s", e.typ, e.err)
+}
+
+type errorType string
+
+const (
+	errorInternal    errorType = "internal"
+	errorUnavailable           = "unavailable"
+)
+
+type response struct {
+	Status    resStatus        `json:"status"`
+	Data      snapshotResponse `json:"data,omitempty"`
+	ErrorType errorType        `json:"errorType,omitempty"`
+	Error     string           `json:"error,omitempty"`
+	Warnings  []string         `json:"warnings,omitempty"`
+}
+
+type snapshotResponse struct {
+	Name string `json:"name"`
 }
