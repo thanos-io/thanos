@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
-Release candidate: [v0.1.0-rc.0](https://github.com/improbable-eng/thanos/releases/tag/v0.1.0-rc.0)
+Release candidate: [v0.1.0-rc.1](https://github.com/improbable-eng/thanos/releases/tag/v0.1.0-rc.1)
 
 ### Added
 - Gossip layer for all components.

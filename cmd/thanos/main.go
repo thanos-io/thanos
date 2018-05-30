@@ -14,6 +14,8 @@ import (
 
 	"math"
 
+	"net"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -30,12 +32,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
-)
-
-const (
-	defaultClusterAddr = "0.0.0.0:10900"
-	defaultGRPCAddr    = "0.0.0.0:10901"
-	defaultHTTPAddr    = "0.0.0.0:10902"
 )
 
 type setupFunc func(*run.Group, log.Logger, *prometheus.Registry, opentracing.Tracer, bool) error
@@ -213,4 +209,24 @@ func defaultGRPCServerOpts(logger log.Logger, reg *prometheus.Registry, tracer o
 			grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 		),
 	}
+}
+
+// metricHTTPListenGroup is a run.Group that servers HTTP endpoint with only Prometheus metrics.
+func metricHTTPListenGroup(g *run.Group, logger log.Logger, reg *prometheus.Registry, httpBindAddr string) error {
+	mux := http.NewServeMux()
+	registerMetrics(mux, reg)
+	registerProfile(mux)
+
+	l, err := net.Listen("tcp", httpBindAddr)
+	if err != nil {
+		return errors.Wrap(err, "listen metrics address")
+	}
+
+	g.Add(func() error {
+		level.Info(logger).Log("msg", "Listening for metrics", "address", httpBindAddr)
+		return errors.Wrap(http.Serve(l, mux), "serve metrics")
+	}, func(error) {
+		l.Close()
+	})
+	return nil
 }

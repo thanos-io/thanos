@@ -12,7 +12,7 @@ Prometheus servers connected to the Thanos cluster via the sidecar are subject t
 The retention is recommended to not be lower than three times the block duration. This achieves resilience in the face of connectivity issues to the object storage since all local data will remain available within the Thanos cluster. If connectivity gets restored the backlog of blocks gets uploaded to the object storage.
 
 ```
-$ thanos query \
+$ thanos sidecar \
     --tsdb.path        "/path/to/prometheus/data/dir" \
     --prometheus.url   "http://localhost:9090" \
     --gcs.bucket       "example-bucket" \
@@ -95,4 +95,3 @@ Thanos can watch changes in Prometheus configuration and refresh Prometheus conf
 You can configure watching for changes in directory via `--reloader.rule-dir=DIR_NAME` flag.
 
 Thanos sidecar can watch `--reloader.config-file=CONFIG_FILE` configuration file, evalute environment variables found in there and produce generated config in `--reloader.config-envsubst-file=OUT_CONFIG_FILE` file.
-

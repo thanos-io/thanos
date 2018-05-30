@@ -35,11 +35,7 @@ import (
 func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "sidecar for Prometheus server")
 
-	grpcAddr := cmd.Flag("grpc-address", "Listen address for gRPC endpoints.").
-		Default(defaultGRPCAddr).String()
-
-	httpAddr := cmd.Flag("http-address", "Listen address for HTTP endpoints.").
-		Default(defaultHTTPAddr).String()
+	grpcBindAddr, httpBindAddr, newPeerFn := regCommonServerFlags(cmd)
 
 	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API.").
 		Default("http://localhost:9090").URL()
@@ -53,20 +49,6 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 	s3Config := s3.RegisterS3Params(cmd)
 
 	azureConfig := azure.RegisterAzureParams(cmd)
-
-	peers := cmd.Flag("cluster.peers", "Initial peers to join the cluster. It can be either <ip:port>, or <domain:port>.").Strings()
-
-	clusterBindAddr := cmd.Flag("cluster.address", "Listen address for cluster.").
-		Default(defaultClusterAddr).String()
-
-	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "Explicit address to advertise in cluster.").
-		String()
-
-	gossipInterval := cmd.Flag("cluster.gossip-interval", "Interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth.").
-		Default(cluster.DefaultGossipInterval.String()).Duration()
-
-	pushPullInterval := cmd.Flag("cluster.pushpull-interval", "Interval for gossip state syncs. Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage.").
-		Default(cluster.DefaultPushPullInterval.String()).Duration()
 
 	reloaderCfgFile := cmd.Flag("reloader.config-file", "Config file watched by the reloader.").
 		Default("").String()
@@ -84,7 +66,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			*reloaderCfgSubstFile,
 			*reloaderRuleDir,
 		)
-		peer, err := cluster.New(logger, reg, *clusterBindAddr, *clusterAdvertiseAddr, *peers, false, *gossipInterval, *pushPullInterval)
+		peer, err := newPeerFn(logger, reg, false, "", false)
 		if err != nil {
 			return errors.Wrap(err, "new cluster peer")
 		}
@@ -93,8 +75,8 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			logger,
 			reg,
 			tracer,
-			*grpcAddr,
-			*httpAddr,
+			*grpcBindAddr,
+			*httpBindAddr,
 			*promURL,
 			*dataDir,
 			*gcsBucket,
@@ -112,8 +94,8 @@ func runSidecar(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	grpcAddr string,
-	httpAddr string,
+	grpcBindAddr string,
+	httpBindAddr string,
 	promURL *url.URL,
 	dataDir string,
 	gcsBucket string,
@@ -123,7 +105,14 @@ func runSidecar(
 	reloader *reloader.Reloader,
 	component string,
 ) error {
-	var externalLabels = &extLabelSet{promURL: promURL}
+	var metadata = &metadata{
+		promURL: promURL,
+
+		// Start out with the full time range. The shipper will constrain it later.
+		// TODO(fabxc): minimum timestamp is never adjusted if shipping is disabled.
+		mint: 0,
+		maxt: math.MaxInt64,
+	}
 
 	// Setup all the concurrent groups.
 	{
@@ -142,8 +131,7 @@ func runSidecar(
 			// Blocking query of external labels before joining as a Source Peer into gossip.
 			// We retry infinitely until we reach and fetch labels from our Prometheus.
 			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
-				err := externalLabels.Update(ctx)
-				if err != nil {
+				if err := metadata.UpdateLabels(ctx); err != nil {
 					level.Warn(logger).Log(
 						"msg", "failed to fetch initial external labels. Is Prometheus running? Retrying",
 						"err", err,
@@ -160,25 +148,17 @@ func runSidecar(
 				return errors.Wrap(err, "initial external labels query")
 			}
 
-			if len(externalLabels.Get()) == 0 {
+			if len(metadata.Labels()) == 0 {
 				return errors.New("no external labels configured on Prometheus server, uniquely identifying external labels must be configured")
 			}
 
 			// New gossip cluster.
-			err = peer.Join(
-				cluster.PeerState{
-					Type:    cluster.PeerTypeSource,
-					APIAddr: grpcAddr,
-					Metadata: cluster.PeerMetadata{
-						Labels: externalLabels.GetPB(),
-						// Start out with the full time range. The shipper will constrain it later.
-						// TODO(fabxc): minimum timestamp is never adjusted if shipping is disabled.
-						MinTime: 0,
-						MaxTime: math.MaxInt64,
-					},
-				},
-			)
-			if err != nil {
+			mint, maxt := metadata.Timestamps()
+			if err = peer.Join(cluster.PeerTypeSource, cluster.PeerMetadata{
+				Labels:  metadata.LabelsPB(),
+				MinTime: mint,
+				MaxTime: maxt,
+			}); err != nil {
 				return errors.Wrap(err, "join cluster")
 			}
 
@@ -188,13 +168,12 @@ func runSidecar(
 				iterCtx, iterCancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer iterCancel()
 
-				err := externalLabels.Update(iterCtx)
-				if err != nil {
+				if err := metadata.UpdateLabels(iterCtx); err != nil {
 					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
 					promUp.Set(0)
 				} else {
 					// Update gossip.
-					peer.SetLabels(externalLabels.GetPB())
+					peer.SetLabels(metadata.LabelsPB())
 
 					promUp.Set(1)
 					lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
@@ -215,24 +194,11 @@ func runSidecar(
 			cancel()
 		})
 	}
-	{
-		mux := http.NewServeMux()
-		registerMetrics(mux, reg)
-		registerProfile(mux)
-
-		l, err := net.Listen("tcp", httpAddr)
-		if err != nil {
-			return errors.Wrap(err, "listen metrics address")
-		}
-
-		g.Add(func() error {
-			return errors.Wrap(http.Serve(l, mux), "serve metrics")
-		}, func(error) {
-			l.Close()
-		})
+	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
+		return err
 	}
 	{
-		l, err := net.Listen("tcp", grpcAddr)
+		l, err := net.Listen("tcp", grpcBindAddr)
 		if err != nil {
 			return errors.Wrap(err, "listen API address")
 		}
@@ -241,7 +207,7 @@ func runSidecar(
 		var client http.Client
 
 		promStore, err := store.NewPrometheusStore(
-			logger, prometheus.DefaultRegisterer, &client, promURL, externalLabels.Get)
+			logger, &client, promURL, metadata.Labels, metadata.Timestamps)
 		if err != nil {
 			return errors.Wrap(err, "create Prometheus store")
 		}
@@ -250,6 +216,7 @@ func runSidecar(
 		storepb.RegisterStoreServer(s, promStore)
 
 		g.Add(func() error {
+			level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			s.Stop()
@@ -257,7 +224,7 @@ func runSidecar(
 		})
 	}
 
-	var uploads bool = true
+	var uploads = true
 
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
@@ -279,8 +246,7 @@ func runSidecar(
 			}
 		}()
 
-		s := shipper.New(logger, nil, dataDir, bkt, externalLabels.Get)
-
+		s := shipper.New(logger, nil, dataDir, bkt, metadata.Labels)
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
@@ -293,7 +259,10 @@ func runSidecar(
 				if err != nil {
 					level.Warn(logger).Log("msg", "reading timestamps failed", "err", err)
 				} else {
-					peer.SetTimestamps(minTime, math.MaxInt64)
+					metadata.UpdateTimestamps(minTime, math.MaxInt64)
+
+					mint, maxt := metadata.Timestamps()
+					peer.SetTimestamps(mint, maxt)
 				}
 				return nil
 			})
@@ -306,34 +275,45 @@ func runSidecar(
 	return nil
 }
 
-type extLabelSet struct {
+type metadata struct {
 	promURL *url.URL
 
 	mtx    sync.Mutex
+	mint   int64
+	maxt   int64
 	labels labels.Labels
 }
 
-func (s *extLabelSet) Update(ctx context.Context) error {
+func (s *metadata) UpdateLabels(ctx context.Context) error {
 	elset, err := queryExternalLabels(ctx, s.promURL)
 	if err != nil {
 		return err
 	}
 
 	s.mtx.Lock()
-	s.labels = elset
-	s.mtx.Unlock()
+	defer s.mtx.Unlock()
 
+	s.labels = elset
 	return nil
 }
 
-func (s *extLabelSet) Get() labels.Labels {
+func (s *metadata) UpdateTimestamps(mint int64, maxt int64) error {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	s.mint = mint
+	s.maxt = maxt
+	return nil
+}
+
+func (s *metadata) Labels() labels.Labels {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
 	return s.labels
 }
 
-func (s *extLabelSet) GetPB() []storepb.Label {
+func (s *metadata) LabelsPB() []storepb.Label {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -345,6 +325,13 @@ func (s *extLabelSet) GetPB() []storepb.Label {
 		})
 	}
 	return lset
+}
+
+func (s *metadata) Timestamps() (mint int64, maxt int64) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	return s.mint, s.maxt
 }
 
 func queryExternalLabels(ctx context.Context, base *url.URL) (labels.Labels, error) {

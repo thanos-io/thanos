@@ -51,7 +51,7 @@ assets:
 	@go fmt ./pkg/query/ui
 
 docker: build
-	@echo ">> building docker image"
+	@echo ">> building docker image '${DOCKER_IMAGE_NAME}'"
 	@docker build -t "${DOCKER_IMAGE_NAME}" .
 
 docker-push:

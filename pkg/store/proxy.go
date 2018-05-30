@@ -6,7 +6,10 @@ import (
 	"math"
 	"sync"
 
+	"fmt"
+
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/strutil"
 	"github.com/pkg/errors"
@@ -88,6 +91,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 
 	stores, err := s.stores(srv.Context())
 	if err != nil {
+		level.Error(s.logger).Log("err", err)
 		return status.Errorf(codes.Unknown, err.Error())
 	}
 	for _, st := range stores {
@@ -105,11 +109,23 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			MaxResolutionWindow: r.MaxResolutionWindow,
 		})
 		if err != nil {
-			respCh <- storepb.NewWarnSeriesResponse(errors.Wrapf(err, "fetch series for store %v", st.Labels()))
+			storeID := fmt.Sprintf("%v", st.Labels())
+			if storeID == "" {
+				storeID = "Store Gateway"
+			}
+			err = errors.Wrapf(err, "fetch series for %s", storeID)
+			level.Error(s.logger).Log("err", err)
+			respCh <- storepb.NewWarnSeriesResponse(err)
 			continue
 		}
 
 		seriesSet = append(seriesSet, startStreamSeriesSet(sc, respCh, 10))
+	}
+	if len(seriesSet) == 0 {
+		err := errors.New("No store matched for this query")
+		level.Warn(s.logger).Log("err", err)
+		respCh <- storepb.NewWarnSeriesResponse(err)
+		return nil
 	}
 
 	g.Go(func() error {
@@ -130,7 +146,12 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		}
 	}
 
-	return g.Wait()
+	if err := g.Wait(); err != nil {
+		level.Error(s.logger).Log("err", err)
+		return err
+	}
+	return nil
+
 }
 
 // streamSeriesSet iterates over incoming stream of series.

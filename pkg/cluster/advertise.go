@@ -3,46 +3,51 @@ package cluster
 import (
 	"net"
 
+	"strconv"
+
 	"github.com/hashicorp/go-sockaddr"
 	"github.com/pkg/errors"
 )
 
-// calculateAdvertiseAddress attempts to clone logic from deep within memberlist
-// (NetTransport.FinalAdvertiseAddr) in order to surface its conclusions to the
-// application, so we can provide more actionable error messages if the user has
-// inadvertantly misconfigured their cluster.
-//
-// https://github.com/hashicorp/memberlist/blob/022f081/net_transport.go#L126
-func calculateAdvertiseAddress(bindAddr, advertiseAddr string) (net.IP, error) {
+// CalculateAdvertiseAddress deduce the external, advertise address that should be routable from other components.
+func CalculateAdvertiseAddress(bindAddr, advertiseAddr string) (string, int, error) {
 	if advertiseAddr != "" {
-		ip := net.ParseIP(advertiseAddr)
-		if ip == nil {
-			return nil, errors.Errorf("failed to parse advertise addr '%s'", advertiseAddr)
+		advHost, advPort, err := net.SplitHostPort(advertiseAddr)
+		if err != nil {
+			return "", 0, errors.Wrap(err, "invalid advertise address")
 		}
-		if ip4 := ip.To4(); ip4 != nil {
-			ip = ip4
+		advIntPort, err := strconv.Atoi(advPort)
+		if err != nil {
+			return "", 0, errors.Wrapf(err, "invalid advertise address '%s', wrong port", advertiseAddr)
 		}
-		return ip, nil
+		return advHost, advIntPort, nil
 	}
 
-	if bindAddr == "0.0.0.0" {
+	// We expect bindAddr to be in form of ip:port.
+	bindHost, bindPort, err := net.SplitHostPort(bindAddr)
+	if err != nil {
+		return "", 0, errors.Wrapf(err, "invalid bind address '%s'", bindAddr)
+	}
+
+	bindIntPort, err := strconv.Atoi(bindPort)
+	if err != nil {
+		return "", 0, errors.Wrapf(err, "invalid bind address '%s', wrong port", bindAddr)
+	}
+
+	if bindIntPort == 0 {
+		return "", 0, errors.Errorf("invalid bind address '%s'. We don't allow port to be 0", bindAddr)
+	}
+
+	if bindHost == "" || bindHost == "0.0.0.0" {
 		privateIP, err := sockaddr.GetPrivateIP()
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to get private IP")
+			return "", 0, errors.Wrap(err, "failed to get private IP")
 		}
 		if privateIP == "" {
-			return nil, errors.Wrap(err, "no private IP found, explicit advertise addr not provided")
+			return "", 0, errors.Wrap(err, "no private IP found, explicit advertise addr not provided")
 		}
-		ip := net.ParseIP(privateIP)
-		if ip == nil {
-			return nil, errors.Errorf("failed to parse private IP '%s'", privateIP)
-		}
-		return ip, nil
+		return privateIP, bindIntPort, nil
 	}
 
-	ip := net.ParseIP(bindAddr)
-	if ip == nil {
-		return nil, errors.Errorf("failed to parse bind addr '%s'", bindAddr)
-	}
-	return ip, nil
+	return bindHost, bindIntPort, nil
 }
