@@ -4,7 +4,6 @@ import (
 	"context"
 	"math"
 	"net"
-	"net/http"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -27,11 +26,7 @@ import (
 func registerStore(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "store node giving access to blocks in a GCS bucket")
 
-	grpcAddr := cmd.Flag("grpc-address", "Listen address for gRPC endpoints.").
-		Default(defaultGRPCAddr).String()
-
-	httpAddr := cmd.Flag("http-address", "Listen address for HTTP endpoints.").
-		Default(defaultHTTPAddr).String()
+	grpcBindAddr, httpBindAddr, newPeerFn := regCommonServerFlags(cmd)
 
 	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").
 		Default("./data").String()
@@ -47,22 +42,8 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes for chunks.").
 		Default("2GB").Bytes()
 
-	peers := cmd.Flag("cluster.peers", "Initial peers to join the cluster. It can be either <ip:port>, or <domain:port>.").Strings()
-
-	clusterBindAddr := cmd.Flag("cluster.address", "Listen address for cluster.").
-		Default(defaultClusterAddr).String()
-
-	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "Explicit address to advertise in cluster.").
-		String()
-
-	gossipInterval := cmd.Flag("cluster.gossip-interval", "Interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth.").
-		Default(cluster.DefaultGossipInterval.String()).Duration()
-
-	pushPullInterval := cmd.Flag("cluster.pushpull-interval", "Interval for gossip state syncs. Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage.").
-		Default(cluster.DefaultPushPullInterval.String()).Duration()
-
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
-		peer, err := cluster.New(logger, reg, *clusterBindAddr, *clusterAdvertiseAddr, *peers, false, *gossipInterval, *pushPullInterval)
+		peer, err := newPeerFn(logger, reg, false, "", false)
 		if err != nil {
 			return errors.Wrap(err, "new cluster peer")
 		}
@@ -73,8 +54,8 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			*gcsBucket,
 			s3Config,
 			*dataDir,
-			*grpcAddr,
-			*httpAddr,
+			*grpcBindAddr,
+			*httpBindAddr,
 			peer,
 			uint64(*indexCacheSize),
 			uint64(*chunkPoolSize),
@@ -93,8 +74,8 @@ func runStore(
 	gcsBucket string,
 	s3Config *s3.Config,
 	dataDir string,
-	grpcAddr string,
-	httpAddr string,
+	grpcBindAddr string,
+	httpBindAddr string,
 	peer *cluster.Peer,
 	indexCacheSizeBytes uint64,
 	chunkPoolSizeBytes uint64,
@@ -151,7 +132,7 @@ func runStore(
 			cancel()
 		})
 
-		l, err := net.Listen("tcp", grpcAddr)
+		l, err := net.Listen("tcp", grpcBindAddr)
 		if err != nil {
 			return errors.Wrap(err, "listen API address")
 		}
@@ -160,6 +141,7 @@ func runStore(
 		storepb.RegisterStoreServer(s, bs)
 
 		g.Add(func() error {
+			level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			l.Close()
@@ -168,15 +150,11 @@ func runStore(
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			err := peer.Join(cluster.PeerState{
-				Type:    cluster.PeerTypeStore,
-				APIAddr: grpcAddr,
-				Metadata: cluster.PeerMetadata{
-					MinTime: math.MinInt64,
-					MaxTime: math.MaxInt64,
-				},
-			})
-			if err != nil {
+			// New gossip cluster.
+			if err := peer.Join(cluster.PeerTypeStore, cluster.PeerMetadata{
+				MinTime: math.MinInt64,
+				MaxTime: math.MaxInt64,
+			}); err != nil {
 				return errors.Wrap(err, "join cluster")
 			}
 
@@ -187,21 +165,8 @@ func runStore(
 			peer.Close(5 * time.Second)
 		})
 	}
-	{
-		mux := http.NewServeMux()
-		registerMetrics(mux, reg)
-		registerProfile(mux)
-
-		l, err := net.Listen("tcp", httpAddr)
-		if err != nil {
-			return errors.Wrap(err, "listen metrics address")
-		}
-
-		g.Add(func() error {
-			return errors.Wrap(http.Serve(l, mux), "serve metrics")
-		}, func(error) {
-			l.Close()
-		})
+	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
+		return err
 	}
 
 	level.Info(logger).Log("msg", "starting store node")

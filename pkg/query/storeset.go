@@ -19,7 +19,7 @@ import (
 )
 
 type StoreSpec interface {
-	// Address for the store spec. It is used as ID for store.
+	// Addr returns StoreAPI Address for the store spec. It is used as ID for store.
 	Addr() string
 	// Metadata returns current labels and min, max ranges for store.
 	// It can change for every call for this method.
@@ -217,7 +217,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 			}
 			innerMtx.Lock()
 			if dupSt, ok := stores[addr]; ok {
-				level.Error(s.logger).Log("msg", "duplicated address in gossip or static store nodes.", "addr", addr)
+				level.Error(s.logger).Log("msg", "duplicated address in gossip or static store nodes.", "storeAPIAddr", addr)
 				dupSt.close()
 			}
 			stores[addr] = st
