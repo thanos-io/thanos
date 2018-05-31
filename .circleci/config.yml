@@ -17,7 +17,7 @@ jobs:
           # GCS integration tests are run only for author's PR that have write access, because these tests
           # require credentials. Env variables that sets up these tests will work only for these kind of PRs.
           command: |
-            if [ -n ${GCP_PROJECT} ]; then
+            if ! [ -z ${GCP_PROJECT} ]; then
               echo $GOOGLE_APPLICATION_CREDENTIALS_CONTENT > /go/src/github.com/improbable-eng/thanos/circleci-gcs-creds.json
               echo "Awesome! GCS integration tests are enabled."
             fi
@@ -26,10 +26,12 @@ jobs:
           name: "Run all tests"
           # TODO(bplotka): Setup some S3 tests for CI.
           command: |
-            if ! [ -n ${GCP_PROJECT} ]; then
+            if [ -z ${GCP_PROJECT} ]; then
               export THANOS_SKIP_GCS_TESTS="true"
+              echo "Skipping GCS tests."
             fi
             export THANOS_SKIP_S3_AWS_TESTS="true"
+            echo "Skipping AWS tests."
 
             make test
       - run: make docker
