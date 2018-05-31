@@ -2,30 +2,42 @@ PREFIX            ?= $(shell pwd)
 FILES             ?= $(shell find . -type f -name '*.go' -not -path "./vendor/*")
 DOCKER_IMAGE_NAME ?= thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
+FIRST_GOPATH      ?= $(firstword $(subst :, ,$(shell go env GOPATH)))
+PROMU             ?= $(FIRST_GOPATH)/bin/promu
+GOIMPORTS         ?= $(FIRST_GOPATH)/bin/goimports
+DEP               ?= $(FIRST_GOPATH)/bin/dep
 
 all: install-tools deps format build
 
-deps:
-	@echo ">> dep ensure"
-	@dep ensure
+deps: vendor
 
-format:
+vendor: Gopkg.toml Gopkg.lock | $(DEP)
+	@echo ">> dep ensure"
+	@$(DEP) ensure
+
+format: $(GOIMPORTS)
 	@echo ">> formatting code"
-	@goimports -w $(FILES)
+	@$(GOIMPORTS) -w $(FILES)
 
 vet:
 	@echo ">> vetting code"
 	@go vet ./...
 
-build:
+build: deps $(PROMU)
 	@echo ">> building binaries"
-	@promu build --prefix $(PREFIX)
+	@$(PROMU) build --prefix $(PREFIX)
 
-install-tools:
+install-tools: $(PROMU) $(GOIMPORTS) $(DEP)
+
+$(GOIMPORTS):
 	@echo ">> fetching goimports"
 	@go get -u golang.org/x/tools/cmd/goimports
+
+$(PROMU):
 	@echo ">> fetching promu"
 	@go get -u github.com/prometheus/promu
+
+$(DEP):
 	@echo ">> fetching dep"
 	@go get -u github.com/golang/dep/cmd/dep
 
