@@ -2,6 +2,14 @@ PREFIX            ?= $(shell pwd)
 FILES             ?= $(shell find . -type f -name '*.go' -not -path "./vendor/*")
 DOCKER_IMAGE_NAME ?= thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
+# $GOPATH/bin might not be in $PATH, so we can't assume `which` would give use
+# the path of promu, dep et al. As for selecting the first GOPATH, we assume:
+# - most people only have one GOPATH at a time;
+# - if you don't have one or any of those tools installed, running `go get`
+#   would place them in the first GOPATH.
+# It's possible that any of the tools would be installed in the other GOPATHs,
+# but for simplicity sake we just make sure they exist in the first one, and
+# then keep using those.
 FIRST_GOPATH      ?= $(firstword $(subst :, ,$(shell go env GOPATH)))
 PROMU             ?= $(FIRST_GOPATH)/bin/promu
 GOIMPORTS         ?= $(FIRST_GOPATH)/bin/goimports
