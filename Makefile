@@ -23,7 +23,7 @@ vendor: Gopkg.toml Gopkg.lock | $(DEP)
 	@echo ">> dep ensure"
 	@$(DEP) ensure
 
-format: $(GOIMPORTS)
+format: $(GOIMPORTS) deps
 	@echo ">> formatting code"
 	@$(GOIMPORTS) -w $(FILES)
 
