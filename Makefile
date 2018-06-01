@@ -27,8 +27,6 @@ build: deps $(PROMU)
 	@echo ">> building binaries"
 	@$(PROMU) build --prefix $(PREFIX)
 
-install-tools: $(PROMU) $(GOIMPORTS) $(DEP)
-
 $(GOIMPORTS):
 	@echo ">> fetching goimports"
 	@go get -u golang.org/x/tools/cmd/goimports

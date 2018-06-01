@@ -10,7 +10,6 @@ jobs:
       - checkout
       - setup_remote_docker:
             version: 17.07.0-ce
-      - run: make install-tools
       - run: dep ensure
       - run:
           name: Create Secret if PR is not forked
