@@ -3,7 +3,6 @@ package objtesting
 import (
 	"os"
 	"testing"
-
 	"time"
 
 	"github.com/fortytw2/leaktest"
@@ -35,7 +34,7 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 		testutil.Ok(t, err)
 
 		ok := t.Run("gcs", func(t *testing.T) {
-			// TODO(bplotka): Add leaktest when we fix potential leak in GCS native client.
+			// TODO(bplotka): Add leaktest when https://github.com/GoogleCloudPlatform/google-cloud-go/issues/1025 is resolved.
 			testFn(t, bkt)
 		})
 		closeFn()
@@ -55,7 +54,9 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 		testutil.Ok(t, err)
 
 		ok := t.Run("aws s3", func(t *testing.T) {
-			defer leaktest.CheckTimeout(t, 10*time.Second)()
+			// TODO(bplotka): Add leaktest when we fix potential leak in minio library.
+			// We cannot use leaktest for detecting our own potential leaks, when leaktest detects leaks in minio itself.
+			// This needs to be investigated more.
 
 			testFn(t, bkt)
 		})

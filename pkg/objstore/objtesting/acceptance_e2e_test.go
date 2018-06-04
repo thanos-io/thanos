@@ -10,11 +10,11 @@ import (
 	"github.com/improbable-eng/thanos/pkg/testutil"
 )
 
-// TestObjStoreAcceptanceTest tests all known implementation against interface behaviour contract we agreed on.
+// TestObjStoreAcceptanceTest_e2e tests all known implementation against interface behaviour contract we agreed on.
 // This ensures consistent behaviour across all implementations.
 // NOTE: This test assumes strong consistency, but in the same way it does not guarantee that if it passes, the
 // used object store is strongly consistent.
-func TestObjStoreAcceptanceTest(t *testing.T) {
+func TestObjStore_AcceptanceTest_e2e(t *testing.T) {
 	ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
 		_, err := bkt.Get(context.Background(), "")
 		testutil.NotOk(t, err)
@@ -38,6 +38,13 @@ func TestObjStoreAcceptanceTest(t *testing.T) {
 		content, err := ioutil.ReadAll(rc1)
 		testutil.Ok(t, err)
 		testutil.Equals(t, "@test-data@", string(content))
+
+		rc2, err := bkt.GetRange(context.Background(), "id1/obj_1.some", 1, 3)
+		testutil.Ok(t, err)
+		defer rc2.Close()
+		content, err = ioutil.ReadAll(rc2)
+		testutil.Ok(t, err)
+		testutil.Equals(t, "tes", string(content))
 
 		ok, err = bkt.Exists(context.Background(), "id1/obj_1.some")
 		testutil.Ok(t, err)
@@ -99,5 +106,4 @@ func TestObjStoreAcceptanceTest(t *testing.T) {
 			return nil
 		}))
 	})
-
 }

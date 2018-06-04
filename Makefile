@@ -57,7 +57,7 @@ proto:
 	@./scripts/genproto.sh
 
 test: test-deps
-	@echo ">> running all tests"
+	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS="true" or/and  export THANOS_SKIP_S3_AWS_TESTS="true" if you want to skip e2e tests against real store buckets"
 	@go test $(shell go list ./... | grep -v /vendor/)
 
 assets:
