@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"net"
 	"net/http"
@@ -143,6 +144,10 @@ func runQuery(
 ) error {
 	var staticSpecs []query.StoreSpec
 	for _, addr := range storeAddrs {
+		if addr == "" {
+			return errors.New("static store address cannot be empty")
+		}
+
 		staticSpecs = append(staticSpecs, query.NewGRPCStoreSpec(addr))
 	}
 	var (
@@ -153,6 +158,11 @@ func runQuery(
 				specs = append(staticSpecs)
 
 				for id, ps := range peer.PeerStates(cluster.PeerTypesStoreAPIs()...) {
+					if ps.StoreAPIAddr == "" {
+						level.Error(logger).Log("msg", "Gossip found peer that propagates empty address, ignoring.", "lset", fmt.Sprintf("%v", ps.Metadata.Labels))
+						continue
+					}
+
 					specs = append(specs, &gossipSpec{id: id, addr: ps.StoreAPIAddr, peer: peer})
 				}
 				return specs

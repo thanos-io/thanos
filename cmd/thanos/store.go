@@ -151,10 +151,13 @@ func runStore(
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			// New gossip cluster.
-			if err := peer.Join(cluster.PeerTypeStore, cluster.PeerMetadata{
-				MinTime: math.MinInt64,
-				MaxTime: math.MaxInt64,
-			}); err != nil {
+			if err := peer.Join(
+				cluster.PeerTypeStore,
+				cluster.PeerMetadata{
+					MinTime: math.MinInt64,
+					MaxTime: math.MaxInt64,
+				},
+			); err != nil {
 				return errors.Wrap(err, "join cluster")
 			}
 

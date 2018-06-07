@@ -187,7 +187,7 @@ func (p *Peer) Join(peerType PeerType, initialMetadata PeerMetadata) error {
 	}
 
 	n, _ := ml.Join(p.knownPeers)
-	level.Debug(p.logger).Log("msg", "joined cluster", "peers", n, "peerType", peerType)
+	level.Debug(p.logger).Log("msg", "joined cluster", "peerType", peerType)
 
 	if n > 0 {
 		go warnIfAlone(p.logger, 10*time.Second, p.stopc, ml.NumMembers)
@@ -204,6 +204,7 @@ func (p *Peer) Join(peerType PeerType, initialMetadata PeerMetadata) error {
 		QueryAPIAddr: p.advertiseQueryAPIAddress,
 		Metadata:     initialMetadata,
 	})
+
 	return nil
 }
 
@@ -302,7 +303,6 @@ func (p *Peer) PeerStates(types ...PeerType) map[string]PeerState {
 			ps[o.Name] = os
 			continue
 		}
-
 		for _, t := range types {
 			if os.Type == t {
 				ps[o.Name] = os
