@@ -22,9 +22,9 @@ NOTE: Currently Thanos requires strong consistency (write-read) for object store
 
 At that point, anyone can use your provider!
 
-## S3 configuration
+## AWS S3 configuration
 
-Thanos uses minio client to upload Prometheus data into s3.
+Thanos uses minio client to upload Prometheus data into AWS s3.
 
 To configure S3 bucket as an object store you need to set these mandatory S3 flags:
 - --s3.endpoint
@@ -47,6 +47,73 @@ Make sure you use a correct signature version with `--s3.signature-version2`, ot
 
 For debug purposes you can `--s3.insecure` to switch to plain insecure HTTP instead of HTTPS
 
+### AWS Policies
+
+Example working AWS IAM policy for user:
+
+* For deployment (policy for Thanos services):
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "Statement",
+            "Effect": "Allow",
+            "Action": [
+                "s3:ListBucket",
+                "s3:GetObject",
+                "s3:DeleteObject",
+                "s3:PutObject"
+            ],
+            "Resource": [
+                "arn:aws:s3:::<bucket>/*",
+                "arn:aws:s3:::<bucket>"
+            ]
+        }
+    ]
+}
+```
+(No bucket policy)
+
+To test the policy, set env vars for S3 access for *empty, not used* bucket as well as:
+THANOS_SKIP_GCS_TESTS=true
+THANOS_ALLOW_EXISTING_BUCKET_USE=true
+
+And run: `GOCACHE=off go test -v -run TestObjStore_AcceptanceTest_e2e ./pkg/...`
+
+* For testing (policy to run e2e tests):
+
+We need access to CreateBucket and DeleteBucket and access to all buckets:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "Statement",
+            "Effect": "Allow",
+            "Action": [
+                "s3:ListBucket",
+                "s3:GetObject",
+                "s3:DeleteObject",
+                "s3:PutObject",
+                "s3:CreateBucket",
+                "s3:DeleteBucket"
+            ],
+            "Resource": [
+                "arn:aws:s3:::<bucket>/*",
+                "arn:aws:s3:::<bucket>"
+            ]
+        }
+    ]
+}
+```
+
+With this policy you should be able to run set `THANOS_SKIP_GCS_TESTS=true` and unset `S3_BUCKET` and run all tests using `make test`.
+
+Details about AWS policies: https://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html
+
 ## GCP Configuration 
 
 To configure Google Cloud Storage bucket as an object store you need to set `--gcs.bucket` with GCS bucket name and configure Google Application credentials.
@@ -65,3 +132,19 @@ Application credentials are configured via JSON file, the client looks for:
 
 You can read more on how to get application credential json file in [https://cloud.google.com/docs/authentication/production](https://cloud.google.com/docs/authentication/production)
 
+### GCS Policies
+
+For deployment:
+
+`Storage Object Creator` and ` Storage Object Viewer`
+
+For testing:
+
+`Storage Object Admin` for ability to create and delete temporary buckets.
+
+
+## Other minio supported S3 object storages
+
+Minio client used for AWS S3 can be potentially configured against other S3-compatible object storages.
+
+<TBD>

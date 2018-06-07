@@ -153,14 +153,15 @@ func NewTestBucket(t testing.TB, project string) (objstore.Bucket, func(), error
 	name := fmt.Sprintf("test_%s_%x", strings.ToLower(t.Name()), src.Int63())
 
 	bkt := gcsClient.Bucket(name)
-	err = bkt.Create(ctx, project, nil)
-	if err != nil {
+	if err = bkt.Create(ctx, project, nil); err != nil {
 		cancel()
 		gcsClient.Close()
 		return nil, nil, err
 	}
 
 	b := NewBucket(name, bkt, nil)
+
+	t.Log("created temporary GCS bucket for GCS tests with name", name, "in project", project)
 	return b, func() {
 		objstore.EmptyBucket(t, ctx, b)
 		if err := bkt.Delete(ctx); err != nil {
