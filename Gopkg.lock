@@ -582,6 +582,12 @@
   version = "v2.2.6"
 
 [[projects]]
+  name = "gopkg.in/h2non/gock.v1"
+  packages = ["."]
+  revision = "550b7ca3aa563b9974e2391274ea55a940d05ca9"
+  version = "v1.0.8"
+
+[[projects]]
   branch = "v2"
   name = "gopkg.in/yaml.v2"
   packages = ["."]
@@ -590,6 +596,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "bf98dbb001105d7341943d54aaf278310a3323d408cd87817bff6f0b01bfe77f"
+  inputs-digest = "4d546fa8adc357a0f4b71d3f8e443b511b1ca140012ad2877b423bf200baa852"
   solver-name = "gps-cdcl"
   solver-version = 1

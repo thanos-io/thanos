@@ -20,7 +20,10 @@ func getContainerURL(ctx context.Context, accountName, accountKey, containerName
 	p := blob.NewPipeline(c, blob.PipelineOptions{
 		Telemetry: blob.TelemetryOptions{Value: "Thanos"},
 	})
-	u, _ := url.Parse(fmt.Sprintf(blobFormatString, accountName))
+	u, err := url.Parse(fmt.Sprintf(blobFormatString, accountName))
+	if err != nil {
+		return blob.ContainerURL{}
+	}
 	service := blob.NewServiceURL(*u, p)
 	container := service.NewContainerURL(containerName)
 	return container
@@ -43,24 +46,7 @@ func createContainer(ctx context.Context, accountName, accountKey, containerName
 	return c, err
 }
 
-func getPageBlobURL(ctx context.Context, accountName, accountKey, containerName, blobName string) blob.PageBlobURL {
+func getBlobURL(ctx context.Context, accountName, accountKey, containerName, blobName string) blob.BlockBlobURL {
 	container := getContainerURL(ctx, accountName, accountKey, containerName)
-	return container.NewPageBlobURL(blobName)
-}
-
-// createPageBlob creates a new test blob in the container specified by env var
-func createPageBlob(ctx context.Context, accountName, accountKey, containerName, blobName string, pages int) (blob.PageBlobURL, error) {
-	b := getPageBlobURL(ctx, accountName, accountKey, containerName, blobName)
-
-	_, err := b.Create(
-		ctx,
-		int64(blob.PageBlobPageBytes*pages),
-		0,
-		blob.BlobHTTPHeaders{
-			ContentType: "text/plain",
-		},
-		blob.Metadata{},
-		blob.BlobAccessConditions{},
-	)
-	return b, err
+	return container.NewBlockBlobURL(blobName)
 }

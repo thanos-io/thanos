@@ -7,6 +7,8 @@ COPY . /go/src/github.com/vglafirov/thanos
 
 WORKDIR /go/src/github.com/vglafirov/thanos
 
+RUN make test
+
 RUN make
 
 FROM quay.io/prometheus/busybox:latest

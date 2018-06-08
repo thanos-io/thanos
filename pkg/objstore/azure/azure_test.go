@@ -3,6 +3,9 @@ package azure
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	blob "github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
@@ -10,6 +13,9 @@ import (
 )
 
 func TestBucket_Exists(t *testing.T) {
+
+	fmt.Printf("URL: %s\n", blobFormatString)
+
 	type fields struct {
 		containerURL blob.ContainerURL
 		config       *Config
@@ -23,6 +29,7 @@ func TestBucket_Exists(t *testing.T) {
 		name    string
 		fields  fields
 		args    args
+		reply   int
 		want    bool
 		wantErr bool
 	}{
@@ -31,18 +38,38 @@ func TestBucket_Exists(t *testing.T) {
 			fields: fields{
 				containerURL: blob.ContainerURL{},
 				config: &Config{
-					"NotName",
+					"testing",
 					base64.StdEncoding.EncodeToString([]byte("NoKey")),
-					"NoContainer",
+					"testing",
 				},
 				opsTotal: &prometheus.CounterVec{},
 			},
 			args: args{
 				ctx:  context.Background(),
-				name: "test_bucket",
+				name: "no_bucket",
 			},
+			reply:   404,
 			want:    false,
-			wantErr: true,
+			wantErr: false,
+		},
+		{
+			name: "ExistedBucket",
+			fields: fields{
+				containerURL: blob.ContainerURL{},
+				config: &Config{
+					"testing",
+					base64.StdEncoding.EncodeToString([]byte("NoKey")),
+					"testing",
+				},
+				opsTotal: &prometheus.CounterVec{},
+			},
+			args: args{
+				ctx:  context.Background(),
+				name: "bucket",
+			},
+			reply:   200,
+			want:    true,
+			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
@@ -52,6 +79,12 @@ func TestBucket_Exists(t *testing.T) {
 				config:       tt.fields.config,
 				opsTotal:     tt.fields.opsTotal,
 			}
+			var apiStub = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tt.reply)
+			}))
+
+			blobFormatString = apiStub.URL + "/%s"
+
 			got, err := b.Exists(tt.args.ctx, tt.args.name)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Bucket.Exists() error = %v, wantErr %v", err, tt.wantErr)
