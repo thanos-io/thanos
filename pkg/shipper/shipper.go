@@ -68,6 +68,7 @@ type Shipper struct {
 	metrics *metrics
 	bucket  objstore.Bucket
 	labels  func() labels.Labels
+	source  block.SourceType
 }
 
 // New creates a new shipper that detects new TSDB blocks in dir and uploads them
@@ -78,6 +79,7 @@ func New(
 	dir string,
 	bucket objstore.Bucket,
 	lbls func() labels.Labels,
+	source block.SourceType,
 ) *Shipper {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -91,6 +93,7 @@ func New(
 		bucket:  bucket,
 		labels:  lbls,
 		metrics: newMetrics(r),
+		source:  source,
 	}
 }
 
@@ -215,6 +218,7 @@ func (s *Shipper) sync(ctx context.Context, meta *block.Meta) (err error) {
 	if lset := s.labels(); lset != nil {
 		meta.Thanos.Labels = lset.Map()
 	}
+	meta.Thanos.Source = s.source
 	if err := block.WriteMetaFile(updir, meta); err != nil {
 		return errors.Wrap(err, "write meta file")
 	}

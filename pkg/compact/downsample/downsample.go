@@ -9,6 +9,8 @@ import (
 	"github.com/prometheus/prometheus/pkg/value"
 	"github.com/prometheus/tsdb/chunkenc"
 
+	"os"
+
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
@@ -127,9 +129,18 @@ func Downsample(
 	}
 	bdir := filepath.Join(dir, id.String())
 
-	_, err = block.Finalize(bdir, origMeta.Thanos.Labels, resolution, &origMeta.BlockMeta)
+	var tmeta block.ThanosMeta
+	tmeta = origMeta.Thanos
+	tmeta.Source = block.CompactorSource
+	tmeta.Downsample.Resolution = resolution
+
+	_, err = block.InjectThanosMeta(bdir, tmeta, &origMeta.BlockMeta)
 	if err != nil {
 		return id, errors.Wrapf(err, "failed to finalize the block %s", bdir)
+	}
+
+	if err = os.Remove(filepath.Join(bdir, "tombstones")); err != nil {
+		return id, errors.Wrap(err, "remove tombstones")
 	}
 	return id, nil
 }
@@ -394,7 +405,7 @@ func downsampleRaw(data []sample, resolution int64) []chunks.Meta {
 
 		lastT := downsampleBatch(batch, resolution, ab.add)
 
-		// Finalize the chunk's counter aggregate with the last true sample.
+		// InjectThanosMeta the chunk's counter aggregate with the last true sample.
 		ab.finalizeChunk(lastT, batch[len(batch)-1].v)
 
 		chks = append(chks, ab.encode())

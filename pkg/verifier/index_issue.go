@@ -12,6 +12,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/objstore"
+	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 )
 
@@ -22,12 +23,16 @@ const IndexIssueID = "index_issue"
 // If the replacement was created successfully it is uploaded to the bucket and the input
 // block is deleted.
 // NOTE: This also verifies all indexes against chunks mismatches and duplicates.
-func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool) error {
+func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool) error {
 	level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", IndexIssueID)
 
 	err := bkt.Iter(ctx, "", func(name string) error {
 		id, ok := block.IsBlockDir(name)
 		if !ok {
+			return nil
+		}
+
+		if idMatcher != nil && !idMatcher(id) {
 			return nil
 		}
 
@@ -37,8 +42,7 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 		}
 		defer os.RemoveAll(tmpdir)
 
-		err = objstore.DownloadFile(ctx, bkt, path.Join(id.String(), block.IndexFilename), filepath.Join(tmpdir, block.IndexFilename))
-		if err != nil {
+		if err = objstore.DownloadFile(ctx, bkt, path.Join(id.String(), block.IndexFilename), filepath.Join(tmpdir, block.IndexFilename)); err != nil {
 			return errors.Wrapf(err, "download index file %s", path.Join(id.String(), block.IndexFilename))
 		}
 
@@ -52,8 +56,7 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 			return errors.Wrapf(err, "gather index issues %s", id)
 		}
 
-		err = stats.ErrSummary()
-		if err == nil {
+		if err = stats.AnyErr(); err == nil {
 			return nil
 		}
 
@@ -64,34 +67,40 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 			return nil
 		}
 
-		if stats.OutOfOrderSum > stats.ExactSum {
+		if stats.OutOfOrderChunks > stats.DuplicatedChunks {
 			level.Warn(logger).Log("msg", "detected overlaps are not entirely by duplicated chunks. We are able to repair only duplicates", "id", id, "issue", IndexIssueID)
 		}
 
-		if stats.Outsiders > stats.CompleteOutsiders {
-			level.Warn(logger).Log("msg", "detected outsiders are not all 'complete' outsiders. We can safely delete only complete outsiders", "id", id, "issue", IndexIssueID)
+		if stats.OutsideChunks > (stats.CompleteOutsideChunks + stats.Issue347OutsideChunks) {
+			level.Warn(logger).Log("msg", "detected outsiders are not all 'complete' outsiders or outsiders from https://github.com/prometheus/tsdb/issues/347. We can safely delete only these outsiders", "id", id, "issue", IndexIssueID)
 		}
-
-		level.Info(logger).Log("msg", "repairing block", "id", id, "issue", IndexIssueID)
 
 		if meta.Thanos.Downsample.Resolution > 0 {
 			return errors.New("cannot repair downsampled blocks")
 		}
 
-		err = block.Download(ctx, bkt, id, path.Join(tmpdir, id.String()))
-		if err != nil {
+		level.Info(logger).Log("msg", "downloading block for repair", "id", id, "issue", IndexIssueID)
+		if err = block.Download(ctx, bkt, id, path.Join(tmpdir, id.String())); err != nil {
 			return errors.Wrapf(err, "download block %s", id)
 		}
 		level.Info(logger).Log("msg", "downloaded block to be repaired", "id", id, "issue", IndexIssueID)
 
-		resid, err := block.Repair(tmpdir, id)
+		level.Info(logger).Log("msg", "repairing block", "id", id, "issue", IndexIssueID)
+		resid, err := block.Repair(
+			tmpdir,
+			id,
+			block.BucketRepairSource,
+			block.IgnoreCompleteOutsideChunk,
+			block.IgnoreDuplicateOutsideChunk,
+			block.IgnoreIssue347OutsideChunk,
+		)
 		if err != nil {
 			return errors.Wrapf(err, "repair failed for block %s", id)
 		}
+		level.Info(logger).Log("msg", "verifying repaired block", "id", id, "newID", resid, "issue", IndexIssueID)
 
 		// Verify repaired block before uploading it.
-		err = block.VerifyIndex(filepath.Join(tmpdir, resid.String(), block.IndexFilename), meta.MinTime, meta.MaxTime)
-		if err != nil {
+		if err := block.VerifyIndex(filepath.Join(tmpdir, resid.String(), block.IndexFilename), meta.MinTime, meta.MaxTime); err != nil {
 			return errors.Wrapf(err, "repaired block is invalid %s", resid)
 		}
 

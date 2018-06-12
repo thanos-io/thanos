@@ -54,6 +54,8 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 		PlaceHolder("<bucket>").String()
 	verifyIssues := verify.Flag("issues", fmt.Sprintf("Issues to verify (and optionally repair). Possible values: %v", allIssues())).
 		Short('i').Default(verifier.IndexIssueID, verifier.OverlappedBlocksIssueID).Strings()
+	verifyIDWhitelist := verify.Flag("id-whitelist", "Block IDs to verify (and optionally repair) only. "+
+		"If none is specified, all blocks will be verified. Repeated field").Strings()
 	m[name+" verify"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
 		bkt, closeFn, err := client.NewBucket(gcsBucket, *s3Config, reg, name)
 		if err != nil {
@@ -100,7 +102,26 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 			v = verifier.New(logger, bkt, issues)
 		}
 
-		return v.Verify(ctx)
+		idMatcher := func(ulid.ULID) bool { return true }
+		if len(*verifyIDWhitelist) > 0 {
+			whilelistIDs := map[string]struct{}{}
+			for _, bid := range *verifyIDWhitelist {
+				id, err := ulid.Parse(bid)
+				if err != nil {
+					return errors.Wrap(err, "invalid ULID found in --id-whitelist flag")
+				}
+				whilelistIDs[id.String()] = struct{}{}
+			}
+
+			idMatcher = func(id ulid.ULID) bool {
+				if _, ok := whilelistIDs[id.String()]; !ok {
+					return false
+				}
+				return true
+			}
+		}
+
+		return v.Verify(ctx, idMatcher)
 	}
 
 	ls := cmd.Command("ls", "list all blocks in the bucket")

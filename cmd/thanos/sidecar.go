@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
@@ -241,7 +242,7 @@ func runSidecar(
 			}
 		}()
 
-		s := shipper.New(logger, nil, dataDir, bkt, metadata.Labels)
+		s := shipper.New(logger, nil, dataDir, bkt, metadata.Labels, block.SidecarSource)
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
