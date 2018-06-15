@@ -19,6 +19,30 @@ import (
 	"github.com/prometheus/tsdb/fileutil"
 )
 
+const (
+	// MetaFilename is the known JSON filename for meta information.
+	MetaFilename = "meta.json"
+	// IndexFilename is the known index file for block index.
+	IndexFilename = "index"
+	// ChunksDirname is the known dir name for chunks with compressed samples.
+	ChunksDirname = "chunks"
+
+	// DebugMetas is a directory for debug meta files that happen in the past. Useful for debugging.
+	DebugMetas = "debug/metas"
+)
+
+type SourceType string
+
+const (
+	UnknownSource         SourceType = ""
+	SidecarSource         SourceType = "sidecar"
+	CompactorSource       SourceType = "compactor"
+	CompactorRepairSource SourceType = "compactor.repair"
+	RulerSource           SourceType = "ruler"
+	BucketRepairSource    SourceType = "bucket.repair"
+	TestSource            SourceType = "test"
+)
+
 // Meta describes the a block's meta. It wraps the known TSDB meta structure and
 // extends it by Thanos-specific fields.
 type Meta struct {
@@ -31,23 +55,16 @@ type Meta struct {
 
 // ThanosMeta holds block meta information specific to Thanos.
 type ThanosMeta struct {
-	Labels     map[string]string `json:"labels"`
-	Downsample struct {
-		Resolution int64 `json:"resolution"`
-	} `json:"downsample"`
+	Labels     map[string]string    `json:"labels"`
+	Downsample ThanosDownsampleMeta `json:"downsample"`
+
+	// Source is a real upload source of the block.
+	Source SourceType `json:"source"`
 }
 
-const (
-	// MetaFilename is the known JSON filename for meta information.
-	MetaFilename = "meta.json"
-	// IndexFilename is the known index file for block index.
-	IndexFilename = "index"
-	// ChunksDirname is the known dir name for chunks with compressed samples.
-	ChunksDirname = "chunks"
-
-	// DebugMetas is a directory for debug meta files that happen in the past. Useful for debugging.
-	DebugMetas = "debug/metas"
-)
+type ThanosDownsampleMeta struct {
+	Resolution int64 `json:"resolution"`
+}
 
 // WriteMetaFile writes the given meta into <dir>/meta.json.
 func WriteMetaFile(dir string, meta *Meta) error {
@@ -216,16 +233,14 @@ func IsBlockDir(path string) (id ulid.ULID, ok bool) {
 	return id, err == nil
 }
 
-// Finalize sets Thanos meta to the block meta JSON and saves it to the disk. It also removes tombstones which are not
-// useful for Thanos.
+// InjectThanosMeta sets Thanos meta to the block meta JSON and saves it to the disk.
 // NOTE: It should be used after writing any block by any Thanos component, otherwise we will miss crucial metadata.
-func Finalize(bdir string, extLset map[string]string, resolution int64, downsampledMeta *tsdb.BlockMeta) (*Meta, error) {
+func InjectThanosMeta(bdir string, meta ThanosMeta, downsampledMeta *tsdb.BlockMeta) (*Meta, error) {
 	newMeta, err := ReadMetaFile(bdir)
 	if err != nil {
 		return nil, errors.Wrap(err, "read new meta")
 	}
-	newMeta.Thanos.Labels = extLset
-	newMeta.Thanos.Downsample.Resolution = resolution
+	newMeta.Thanos = meta
 
 	// While downsampling we need to copy original compaction.
 	if downsampledMeta != nil {
@@ -234,10 +249,6 @@ func Finalize(bdir string, extLset map[string]string, resolution int64, downsamp
 
 	if err := WriteMetaFile(bdir, newMeta); err != nil {
 		return nil, errors.Wrap(err, "write new meta")
-	}
-
-	if err = os.Remove(filepath.Join(bdir, "tombstones")); err != nil {
-		return nil, errors.Wrap(err, "remove tombstones")
 	}
 
 	return newMeta, nil

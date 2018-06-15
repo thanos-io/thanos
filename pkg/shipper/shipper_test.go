@@ -20,7 +20,7 @@ func TestShipperTimestamps(t *testing.T) {
 	testutil.Ok(t, err)
 	defer os.RemoveAll(dir)
 
-	s := New(nil, nil, dir, nil, nil)
+	s := New(nil, nil, dir, nil, nil, block.TestSource)
 
 	// Missing thanos meta file.
 	_, _, err = s.Timestamps()

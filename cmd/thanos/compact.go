@@ -142,14 +142,23 @@ func runCompact(
 				done := true
 				for _, g := range groups {
 					id, err := g.Compact(ctx, compactDir, comp)
-					if err != nil {
-						return errors.Wrap(err, "compaction")
+					if err == nil {
+						// If the returned ID has a zero value, the group had no blocks to be compacted.
+						// We keep going through the outer loop until no group has any work left.
+						if id != (ulid.ULID{}) {
+							done = false
+						}
+						continue
 					}
-					// If the returned ID has a zero value, the group had no blocks to be compacted.
-					// We keep going through the outer loop until no group has any work left.
-					if id != (ulid.ULID{}) {
-						done = false
+
+					if compact.IsIssue347Error(err) {
+						err = compact.RepairIssue347(ctx, logger, bkt, err)
+						if err == nil {
+							done = false
+							continue
+						}
 					}
+					return errors.Wrap(err, "compaction")
 				}
 				if done {
 					break

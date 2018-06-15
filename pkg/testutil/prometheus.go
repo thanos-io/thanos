@@ -12,8 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"path"
-
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/oklog/ulid"
@@ -196,8 +194,16 @@ func CreateBlock(
 		return id, errors.Wrap(err, "write block")
 	}
 
-	if _, err = block.Finalize(path.Join(dir, id.String()), extLset.Map(), resolution, nil); err != nil {
+	if _, err = block.InjectThanosMeta(filepath.Join(dir, id.String()), block.ThanosMeta{
+		Labels:     extLset.Map(),
+		Downsample: block.ThanosDownsampleMeta{Resolution: resolution},
+		Source:     block.TestSource,
+	}, nil); err != nil {
 		return id, errors.Wrap(err, "finalize block")
+	}
+
+	if err = os.Remove(filepath.Join(dir, id.String(), "tombstones")); err != nil {
+		return id, errors.Wrap(err, "remove tombstones")
 	}
 
 	return id, nil

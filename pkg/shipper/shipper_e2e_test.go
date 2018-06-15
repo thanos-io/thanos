@@ -30,7 +30,7 @@ func TestShipper_UploadBlocks_e2e(t *testing.T) {
 		defer os.RemoveAll(dir)
 
 		extLset := labels.FromStrings("prometheus", "prom-1")
-		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset })
+		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, block.TestSource)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -60,6 +60,7 @@ func TestShipper_UploadBlocks_e2e(t *testing.T) {
 			}
 			meta.Version = 1
 			meta.ULID = id
+			meta.Thanos.Source = block.TestSource
 
 			metab, err := json.Marshal(&meta)
 			testutil.Ok(t, err)

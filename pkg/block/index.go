@@ -2,6 +2,7 @@ package block
 
 import (
 	"encoding/json"
+	"fmt"
 	"hash/crc32"
 	"math/rand"
 	"os"
@@ -157,45 +158,94 @@ func VerifyIndex(fn string, minTime int64, maxTime int64) error {
 		return err
 	}
 
-	err = stats.ErrSummary()
-	if err != nil {
-		return err
+	return stats.AnyErr()
+}
+
+type Stats struct {
+	// TotalSeries represents total number of series in block.
+	TotalSeries int
+	// OutOfOrderSeries represents number of series that have out of order chunks.
+	OutOfOrderSeries int
+
+	// OutOfOrderChunks represents number of chunks that are out of order (older time range is after younger one)
+	OutOfOrderChunks int
+	// DuplicatedChunks represents number of exactly the same chunks within same series.
+	DuplicatedChunks int
+	// OutsideChunks represents number of all chunks that are before or after time range specified in block meta.
+	OutsideChunks int
+	// CompleteOutsideChunks is subset of OutsideChunks that will be never accessed. They are completely out of time range specified in block meta.
+	CompleteOutsideChunks int
+	// Issue347OutsideChunks represents subset of OutsideChunks that are outsiders caused by https://github.com/prometheus/tsdb/issues/347
+	// and is something that Thanos handle.
+	//
+	// Specifically we mean here chunks with minTime == block.maxTime and maxTime > block.MaxTime. These are
+	// are segregated into separate counters. These chunks are safe to be deleted, since they are duplicated across 2 blocks.
+	Issue347OutsideChunks int
+}
+
+// Issue347OutsideChunksErr returns error if stats indicates issue347 block issue, that is repaired explicitly before compaction (on plan block).
+func (i Stats) Issue347OutsideChunksErr() error {
+	if i.Issue347OutsideChunks > 0 {
+		return errors.Errorf("found %d chunks outside the block time range introduced by https://github.com/prometheus/tsdb/issues/347", i.Issue347OutsideChunks)
+	}
+	return nil
+}
+
+// CriticalErr returns error if stats indicates critical block issue, that might solved only by manual repair procedure.
+func (i Stats) CriticalErr() error {
+	var errMsg []string
+
+	if i.OutOfOrderSeries > 0 {
+		errMsg = append(errMsg, fmt.Sprintf(
+			"%d/%d series have an average of %.3f out-of-order chunks: "+
+				"%.3f of these are exact duplicates (in terms of data and time range)",
+			i.OutOfOrderSeries,
+			i.TotalSeries,
+			float64(i.OutOfOrderChunks)/float64(i.OutOfOrderSeries),
+			float64(i.DuplicatedChunks)/float64(i.OutOfOrderChunks),
+		))
+	}
+
+	n := i.OutsideChunks - (i.CompleteOutsideChunks + i.Issue347OutsideChunks)
+	if n > 0 {
+		errMsg = append(errMsg, fmt.Sprintf("found %d chunks non-completely outside the block time range", n))
+	}
+
+	if i.CompleteOutsideChunks > 0 {
+		errMsg = append(errMsg, fmt.Sprintf("found %d chunks completely outside the block time range", i.CompleteOutsideChunks))
+	}
+
+	if len(errMsg) > 0 {
+		return errors.New(strings.Join(errMsg, ", "))
 	}
 
 	return nil
 }
 
-type IndexIssueStats struct {
-	Total int
+// AnyErr returns error if stats indicates any block issue.
+func (i Stats) AnyErr() error {
+	var errMsg []string
 
-	OutOfOrderCount int
-	OutOfOrderSum   int
-	ExactSum        int
-
-	// Chunks that are before or after time range in meta.
-	Outsiders int
-	// Outsiders that will be never accessed. They are completely out of time range specified in block meta.
-	CompleteOutsiders int
-}
-
-func (i IndexIssueStats) ErrSummary() error {
-	if i.OutOfOrderCount > 0 {
-		return errors.Errorf("%d/%d series have an average of %.3f out-of-order chunks. "+
-			"%.3f of these are exact duplicates (in terms of data and time range). Outsiders: %d, complete outsiders: %d",
-			i.OutOfOrderCount, i.Total, float64(i.OutOfOrderSum)/float64(i.OutOfOrderCount),
-			float64(i.ExactSum)/float64(i.OutOfOrderSum), i.Outsiders, i.CompleteOutsiders)
+	if err := i.CriticalErr(); err != nil {
+		errMsg = append(errMsg, err.Error())
 	}
 
-	if i.Outsiders > 0 {
-		return errors.Errorf("No chunks are out of order, but found some outsider blocks. (Blocks that outside of block time range): %d. Complete: %d",
-			i.Outsiders, i.CompleteOutsiders)
+	if err := i.Issue347OutsideChunksErr(); err != nil {
+		errMsg = append(errMsg, err.Error())
+	}
+
+	if len(errMsg) > 0 {
+		return errors.New(strings.Join(errMsg, ", "))
 	}
 
 	return nil
 }
 
-// GatherIndexIssueStats returns useful counters as well as outsider chunks (chunks outside of block time range) that helps to assess index health.
-func GatherIndexIssueStats(fn string, minTime int64, maxTime int64) (stats IndexIssueStats, err error) {
+// GatherIndexIssueStats returns useful counters as well as outsider chunks (chunks outside of block time range) that
+// helps to assess index health.
+// It considers https://github.com/prometheus/tsdb/issues/347 as something that Thanos can handle.
+// See Stats.Issue347OutsideChunks for details.
+func GatherIndexIssueStats(fn string, minTime int64, maxTime int64) (stats Stats, err error) {
 	r, err := index.NewFileReader(fn)
 	if err != nil {
 		return stats, errors.Wrap(err, "open index file")
@@ -212,11 +262,12 @@ func GatherIndexIssueStats(fn string, minTime int64, maxTime int64) (stats Index
 		chks     []chunks.Meta
 	)
 
+	// Per series.
 	for p.Next() {
 		lastLset = append(lastLset[:0], lset...)
 
 		id := p.At()
-		stats.Total++
+		stats.TotalSeries++
 
 		if err := r.Series(id, &lset, &chks); err != nil {
 			return stats, errors.Wrap(err, "read series")
@@ -239,22 +290,22 @@ func GatherIndexIssueStats(fn string, minTime int64, maxTime int64) (stats Index
 		}
 
 		ooo := 0
-		if chks[0].MinTime < minTime || chks[0].MaxTime > maxTime {
-			stats.Outsiders++
-			if chks[0].MinTime > maxTime || chks[0].MaxTime < minTime {
-				stats.CompleteOutsiders++
-			}
-		}
-		for i, c := range chks[1:] {
-			c0 := chks[i]
-
+		// Per chunk in series.
+		for i, c := range chks {
 			if c.MinTime < minTime || c.MaxTime > maxTime {
-				stats.Outsiders++
+				stats.OutsideChunks++
 				if c.MinTime > maxTime || c.MaxTime < minTime {
-					stats.CompleteOutsiders++
+					stats.CompleteOutsideChunks++
+				} else if c.MinTime == maxTime {
+					stats.Issue347OutsideChunks++
 				}
 			}
 
+			if i == 0 {
+				continue
+			}
+
+			c0 := chks[i-1]
 			if c.MinTime > c0.MaxTime {
 				continue
 			}
@@ -265,14 +316,14 @@ func GatherIndexIssueStats(fn string, minTime int64, maxTime int64) (stats Index
 				cb := crc32.Checksum(c.Chunk.Bytes(), castagnoli)
 				if ca == cb {
 					// Duplicate.
-					stats.ExactSum++
+					stats.DuplicatedChunks++
 				}
 				ooo++
 			}
 		}
 		if ooo > 0 {
-			stats.OutOfOrderCount++
-			stats.OutOfOrderSum += ooo
+			stats.OutOfOrderSeries++
+			stats.OutOfOrderChunks += ooo
 		}
 	}
 	if p.Err() != nil {
@@ -282,12 +333,20 @@ func GatherIndexIssueStats(fn string, minTime int64, maxTime int64) (stats Index
 	return stats, nil
 }
 
-// Repair open the block with given id in dir and creates a new one with the same data.
+type ignoreFnType func(mint, maxt int64, prev *chunks.Meta, curr *chunks.Meta) (bool, error)
+
+// Repair open the block with given id in dir and creates a new one with fixed data.
 // It:
 // - removes out of order duplicates
 // - all "complete" outsiders (they will not accessed anyway)
+// - removes all near "complete" outside chunks introduced by https://github.com/prometheus/tsdb/issues/347.
 // Fixable inconsistencies are resolved in the new block.
-func Repair(dir string, id ulid.ULID) (resid ulid.ULID, err error) {
+// TODO(bplotka): https://github.com/improbable-eng/thanos/issues/378
+func Repair(dir string, id ulid.ULID, source SourceType, ignoreChkFns ...ignoreFnType) (resid ulid.ULID, err error) {
+	if len(ignoreChkFns) == 0 {
+		return resid, errors.New("no ignore chunk function specified")
+	}
+
 	bdir := filepath.Join(dir, id.String())
 	entropy := rand.New(rand.NewSource(time.Now().UnixNano()))
 	resid = ulid.MustNew(ulid.Now(), entropy)
@@ -310,11 +369,13 @@ func Repair(dir string, id ulid.ULID) (resid ulid.ULID, err error) {
 	if err != nil {
 		return resid, errors.Wrap(err, "open index")
 	}
+	defer indexr.Close()
 
 	chunkr, err := b.Chunks()
 	if err != nil {
 		return resid, errors.Wrap(err, "open chunks")
 	}
+	defer chunkr.Close()
 
 	resdir := filepath.Join(dir, resid.String())
 
@@ -335,8 +396,9 @@ func Repair(dir string, id ulid.ULID) (resid ulid.ULID, err error) {
 	resmeta := *meta
 	resmeta.ULID = resid
 	resmeta.Stats = tsdb.BlockStats{} // reset stats
+	resmeta.Thanos.Source = source    // update source
 
-	if err := rewrite(indexr, chunkr, indexw, chunkw, &resmeta); err != nil {
+	if err := rewrite(indexr, chunkr, indexw, chunkw, &resmeta, ignoreChkFns); err != nil {
 		return resid, errors.Wrap(err, "rewrite block")
 	}
 	if err := WriteMetaFile(resdir, &resmeta); err != nil {
@@ -347,9 +409,50 @@ func Repair(dir string, id ulid.ULID) (resid ulid.ULID, err error) {
 
 var castagnoli = crc32.MakeTable(crc32.Castagnoli)
 
+func IgnoreCompleteOutsideChunk(mint int64, maxt int64, _ *chunks.Meta, curr *chunks.Meta) (bool, error) {
+	if curr.MinTime > maxt || curr.MaxTime < mint {
+		// "Complete" outsider. Ignore.
+		return true, nil
+	}
+	return false, nil
+}
+
+func IgnoreIssue347OutsideChunk(_ int64, maxt int64, _ *chunks.Meta, curr *chunks.Meta) (bool, error) {
+	if curr.MinTime == maxt {
+		// "Near" outsider from issue https://github.com/prometheus/tsdb/issues/347. Ignore.
+		return true, nil
+	}
+	return false, nil
+}
+
+func IgnoreDuplicateOutsideChunk(_ int64, _ int64, last *chunks.Meta, curr *chunks.Meta) (bool, error) {
+	if last == nil {
+		return false, nil
+	}
+
+	if curr.MinTime > last.MaxTime {
+		return false, nil
+	}
+
+	// Verify that the overlapping chunks are exact copies so we can safely discard
+	// the current one.
+	if curr.MinTime != last.MinTime || curr.MaxTime != last.MaxTime {
+		return false, errors.Errorf("non-sequential chunks not equal: [%d, %d] and [%d, %d]",
+			last.MaxTime, last.MaxTime, curr.MinTime, curr.MaxTime)
+	}
+	ca := crc32.Checksum(last.Chunk.Bytes(), castagnoli)
+	cb := crc32.Checksum(curr.Chunk.Bytes(), castagnoli)
+
+	if ca != cb {
+		return false, errors.Errorf("non-sequential chunks not equal: %x and %x", ca, cb)
+	}
+
+	return true, nil
+}
+
 // sanitizeChunkSequence ensures order of the input chunks and drops any duplicates.
 // It errors if the sequence contains non-dedupable overlaps.
-func sanitizeChunkSequence(chks []chunks.Meta, mint int64, maxt int64) ([]chunks.Meta, error) {
+func sanitizeChunkSequence(chks []chunks.Meta, mint int64, maxt int64, ignoreChkFns []ignoreFnType) ([]chunks.Meta, error) {
 	if len(chks) == 0 {
 		return nil, nil
 	}
@@ -358,38 +461,25 @@ func sanitizeChunkSequence(chks []chunks.Meta, mint int64, maxt int64) ([]chunks
 		return chks[i].MinTime < chks[j].MinTime
 	})
 
-	// Remove duplicates and complete outsiders.
+	// Remove duplicates, complete outsiders and near outsiders.
 	repl := make([]chunks.Meta, 0, len(chks))
-	for i, c := range chks {
-		if c.MinTime > maxt || c.MaxTime < mint {
-			// "Complete" outsider. Ignore.
-			continue
+	var last *chunks.Meta
+
+OUTER:
+	for _, c := range chks {
+		for _, ignoreChkFn := range ignoreChkFns {
+			ignore, err := ignoreChkFn(mint, maxt, last, &c)
+			if err != nil {
+				return nil, errors.Wrap(err, "ignore function")
+			}
+
+			if ignore {
+				continue OUTER
+			}
 		}
 
-		if i == 0 {
-			repl = append(repl, c)
-			continue
-		}
-
-		last := repl[i-1]
-
-		if c.MinTime > last.MaxTime {
-			repl = append(repl, c)
-			continue
-		}
-
-		// Verify that the overlapping chunks are exact copies so we can safely discard
-		// the current one.
-		if c.MinTime != last.MinTime || c.MaxTime != last.MaxTime {
-			return nil, errors.Errorf("non-sequential chunks not equal: [%d, %d] and [%d, %d]",
-				last.MaxTime, last.MaxTime, c.MinTime, c.MaxTime)
-		}
-		ca := crc32.Checksum(last.Chunk.Bytes(), castagnoli)
-		cb := crc32.Checksum(c.Chunk.Bytes(), castagnoli)
-
-		if ca != cb {
-			return nil, errors.Errorf("non-sequential chunks not equal: %x and %x", ca, cb)
-		}
+		last = &c
+		repl = append(repl, c)
 	}
 
 	return repl, nil
@@ -401,6 +491,7 @@ func rewrite(
 	indexr tsdb.IndexReader, chunkr tsdb.ChunkReader,
 	indexw tsdb.IndexWriter, chunkw tsdb.ChunkWriter,
 	meta *Meta,
+	ignoreChkFns []ignoreFnType,
 ) error {
 	symbols, err := indexr.Symbols()
 	if err != nil {
@@ -438,7 +529,8 @@ func rewrite(
 				return err
 			}
 		}
-		chks, err := sanitizeChunkSequence(chks, meta.MinTime, meta.MaxTime)
+
+		chks, err := sanitizeChunkSequence(chks, meta.MinTime, meta.MaxTime, ignoreChkFns)
 		if err != nil {
 			return err
 		}
