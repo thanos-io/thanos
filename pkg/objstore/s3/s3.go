@@ -46,12 +46,12 @@ type Bucket struct {
 
 // Config encapsulates the necessary config values to instantiate an s3 client.
 type Config struct {
-	Bucket       string
-	Endpoint     string
-	Credentials  *credentials.Credentials
-	Insecure     bool
-	SignatureV2  bool
-	SSEEnprytion bool
+	Bucket        string
+	Endpoint      string
+	Credentials   *credentials.Credentials
+	Insecure      bool
+	SignatureV2   bool
+	SSEEncryption bool
 }
 
 // RegisterS3Params registers the s3 flags and returns an initialized Config struct.
@@ -82,14 +82,15 @@ func RegisterS3Params(cmd *kingpin.CmdClause) *Config {
 		Default("false").Envar("S3_SIGNATURE_VERSION2").BoolVar(&s3Config.SignatureV2)
 
 	cmd.Flag("s3.encrypt-sse", "Whether to use Server Side Encryption").
-		Default("false").Envar("S3_SSE_ENCRYPTION").BoolVar(&s3Config.SSEEnprytion)
+		Default("false").Envar("S3_SSE_ENCRYPTION").BoolVar(&s3Config.SSEEncryption)
 
 	if accessKey == "" || secretKey == "" {
 		creds := credentials.NewChainCredentials(
 			[]credentials.Provider{
 				&credentials.EnvAWS{},
 				&credentials.IAM{},
-			})
+			},
+		)
 		s3Config.Credentials = creds
 	} else {
 		if s3Config.SignatureV2 {
@@ -152,7 +153,7 @@ func NewBucket(conf *Config, reg prometheus.Registerer, component string) (*Buck
 	})
 
 	var sse encrypt.ServerSide
-	if conf.SSEEnprytion {
+	if conf.SSEEncryption {
 		sse = encrypt.NewSSE()
 	}
 
