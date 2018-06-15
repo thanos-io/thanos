@@ -85,13 +85,12 @@ func RegisterS3Params(cmd *kingpin.CmdClause) *Config {
 		Default("false").Envar("S3_SSE_ENCRYPTION").BoolVar(&s3Config.SSEEncryption)
 
 	if accessKey == "" || secretKey == "" {
-		creds := credentials.NewChainCredentials(
+		s3Config.Credentials = credentials.NewChainCredentials(
 			[]credentials.Provider{
 				&credentials.EnvAWS{},
 				&credentials.IAM{},
 			},
 		)
-		s3Config.Credentials = creds
 	} else {
 		if s3Config.SignatureV2 {
 			s3Config.Credentials = credentials.NewStaticV2(accessKey, secretKey, "")
