@@ -1,8 +1,51 @@
 {
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    },
+    {
+      "name": "VAR_LABELSELECTOR",
+      "type": "constant",
+      "label": "labelselector",
+      "value": "app",
+      "description": ""
+    },
+    {
+      "name": "VAR_LABELVALUE",
+      "type": "constant",
+      "label": "labelvalue",
+      "value": "thanos-compact",
+      "description": ""
+    }
+  ],
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "5.0.3"
+    },
+    {
+      "type": "panel",
+      "id": "graph",
+      "name": "Graph",
+      "version": "5.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "5.0.0"
+    }
+  ],
   "annotations": {
     "list": [
       {
-        "$$hashKey": "object:1316",
         "builtIn": 1,
         "datasource": "-- Grafana --",
         "enable": true,
@@ -16,8 +59,8 @@
   "editable": true,
   "gnetId": null,
   "graphTooltip": 1,
-  "id": 12,
-  "iteration": 1529388430936,
+  "id": null,
+  "iteration": 1529400107539,
   "links": [],
   "panels": [
     {
@@ -39,7 +82,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Prometheus",
+      "datasource": "${DS_PROMETHEUS}",
       "editable": true,
       "error": false,
       "fill": 1,
@@ -156,7 +199,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Prometheus",
+      "datasource": "${DS_PROMETHEUS}",
       "editable": true,
       "error": false,
       "fill": 1,
@@ -273,7 +316,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Prometheus",
+      "datasource": "${DS_PROMETHEUS}",
       "editable": true,
       "error": false,
       "fill": 1,
@@ -400,7 +443,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Prometheus",
+      "datasource": "${DS_PROMETHEUS}",
       "editable": true,
       "error": false,
       "fill": 1,
@@ -484,7 +527,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Prometheus",
+      "datasource": "${DS_PROMETHEUS}",
       "fill": 1,
       "gridPos": {
         "h": 7,
@@ -565,7 +608,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "Prometheus",
+      "datasource": "${DS_PROMETHEUS}",
       "editable": true,
       "error": false,
       "fill": 1,
@@ -723,11 +766,8 @@
       },
       {
         "allValue": ".*",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        },
-        "datasource": "Prometheus",
+        "current": {},
+        "datasource": "${DS_PROMETHEUS}",
         "hide": 0,
         "includeAll": true,
         "label": "namespace",
@@ -746,38 +786,36 @@
       },
       {
         "current": {
-          "text": "app",
-          "value": "app"
+          "value": "${VAR_LABELSELECTOR}",
+          "text": "${VAR_LABELSELECTOR}"
         },
         "hide": 2,
         "label": null,
         "name": "labelselector",
         "options": [
           {
-            "selected": true,
-            "text": "app",
-            "value": "app"
+            "value": "${VAR_LABELSELECTOR}",
+            "text": "${VAR_LABELSELECTOR}"
           }
         ],
-        "query": "app",
+        "query": "${VAR_LABELSELECTOR}",
         "type": "constant"
       },
       {
         "current": {
-          "text": "thanos-compact",
-          "value": "thanos-compact"
+          "value": "${VAR_LABELVALUE}",
+          "text": "${VAR_LABELVALUE}"
         },
         "hide": 2,
         "label": null,
         "name": "labelvalue",
         "options": [
           {
-            "selected": true,
-            "text": "thanos-compact",
-            "value": "thanos-compact"
+            "value": "${VAR_LABELVALUE}",
+            "text": "${VAR_LABELVALUE}"
           }
         ],
-        "query": "thanos-compact",
+        "query": "${VAR_LABELVALUE}",
         "type": "constant"
       }
     ]
@@ -814,5 +852,5 @@
   "timezone": "browser",
   "title": "Thanos Compaction",
   "uid": "s48S7j4ik",
-  "version": 10
+  "version": 2
 }

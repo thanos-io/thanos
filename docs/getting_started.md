@@ -154,4 +154,4 @@ You can find one-box example with minikube [here](../kube/README.md).
 
 # Dashboards
 
-You can find Grafana dashboards [here](monitoring/monitoring.md)
+You can find Grafana dashboards [here](../examples/grafana/monitoring.md)
