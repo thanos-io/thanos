@@ -34,6 +34,8 @@ func regCommonServerFlags(cmd *kingpin.CmdClause) (*string, *string, func(log.Lo
 	pushPullInterval := cmd.Flag("cluster.pushpull-interval", "Interval for gossip state syncs. Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage.").
 		Default(cluster.DefaultPushPullInterval.String()).Duration()
 
+	refreshInterval := cmd.Flag("cluster.refresh-interval", "Interval for membership to refresh cluster.peers state, 0 disables refresh.").Default(cluster.DefaultRefreshInterval.String()).Duration()
+
 	return grpcBindAddr,
 		httpBindAddr,
 		func(logger log.Logger, reg *prometheus.Registry, waitIfEmpty bool, httpAdvertiseAddr string, queryAPIEnabled bool) (*cluster.Peer, error) {
@@ -66,7 +68,7 @@ func regCommonServerFlags(cmd *kingpin.CmdClause) (*string, *string, func(log.Lo
 				level.Info(logger).Log("msg", "QueryAPI address that will be propagated through gossip", "address", advQueryAPIAddress)
 			}
 
-			return cluster.New(logger, reg, *clusterBindAddr, *clusterAdvertiseAddr, advStoreAPIAddress, advQueryAPIAddress, *peers, waitIfEmpty, *gossipInterval, *pushPullInterval)
+			return cluster.New(logger, reg, *clusterBindAddr, *clusterAdvertiseAddr, advStoreAPIAddress, advQueryAPIAddress, *peers, waitIfEmpty, *gossipInterval, *pushPullInterval, *refreshInterval)
 		}
 }
 

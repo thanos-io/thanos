@@ -27,8 +27,9 @@ type Peer struct {
 	mlist    *memberlist.Memberlist
 	stopc    chan struct{}
 
-	cfg        *memberlist.Config
-	knownPeers []string
+	cfg             *memberlist.Config
+	knownPeers      []string
+	refreshInterval time.Duration
 
 	data                 *data
 	gossipMsgsReceived   prometheus.Counter
@@ -43,6 +44,7 @@ type Peer struct {
 const (
 	DefaultPushPullInterval = 5 * time.Second
 	DefaultGossipInterval   = 5 * time.Second
+	DefaultRefreshInterval  = 30 * time.Second
 )
 
 // PeerType describes a peer's role in the cluster.
@@ -97,6 +99,7 @@ func New(
 	waitIfEmpty bool,
 	pushPullInterval time.Duration,
 	gossipInterval time.Duration,
+	refreshInterval time.Duration,
 ) (*Peer, error) {
 	l = log.With(l, "component", "cluster")
 
@@ -161,6 +164,7 @@ func New(
 		logger:               l,
 		knownPeers:           knownPeers,
 		cfg:                  cfg,
+		refreshInterval:      refreshInterval,
 		gossipMsgsReceived:   gossipMsgsReceived,
 		gossipClusterMembers: gossipClusterMembers,
 		stopc:                make(chan struct{}),
@@ -204,6 +208,45 @@ func (p *Peer) Join(peerType PeerType, initialMetadata PeerMetadata) error {
 		QueryAPIAddr: p.advertiseQueryAPIAddress,
 		Metadata:     initialMetadata,
 	})
+
+	if p.refreshInterval != 0 {
+		go p.periodicallyRefresh()
+	}
+
+	return nil
+}
+
+func (p *Peer) periodicallyRefresh() {
+	tick := time.NewTicker(p.refreshInterval)
+	defer tick.Stop()
+
+	for {
+		select {
+		case <-p.stopc:
+			return
+		case <-tick.C:
+			if err := p.Refresh(); err != nil {
+				level.Error(p.logger).Log("msg", "Refreshing memberlist", "err", err)
+			}
+		}
+	}
+}
+
+// Refresh renews membership cluster, this will refresh DNS names and join newly added members
+func (p *Peer) Refresh() error {
+	p.mlistMtx.Lock()
+	defer p.mlistMtx.Unlock()
+
+	if p.mlist == nil {
+		return nil
+	}
+
+	prev := p.mlist.NumMembers()
+	curr, err := p.mlist.Join(p.knownPeers)
+	if err != nil {
+		return errors.Wrap(err, "could not refresh memberlist cluster")
+	}
+	level.Debug(p.logger).Log("msg", "refreshed cluster", "before", prev, "after", curr)
 
 	return nil
 }
