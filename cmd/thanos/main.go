@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"math"
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -12,10 +14,9 @@ import (
 	"runtime/debug"
 	"syscall"
 
-	"math"
+	gmetrics "github.com/armon/go-metrics"
 
-	"net"
-
+	gprom "github.com/armon/go-metrics/prometheus"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -103,6 +104,19 @@ func main() {
 		version.NewCollector("thanos"),
 		prometheus.NewGoCollector(),
 	)
+
+	prometheus.DefaultRegisterer = metrics
+	// Memberlist uses go-metrics
+	sink, err := gprom.NewPrometheusSink()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command failed", cmd))
+		os.Exit(1)
+	}
+	_, err = gmetrics.NewGlobal(gmetrics.DefaultConfig(cmd), sink)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command failed", cmd))
+		os.Exit(1)
+	}
 
 	var g run.Group
 	var tracer opentracing.Tracer
