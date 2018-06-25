@@ -45,7 +45,7 @@ type Peer struct {
 const (
 	DefaultPushPullInterval = 5 * time.Second
 	DefaultGossipInterval   = 5 * time.Second
-	DefaultRefreshInterval  = 30 * time.Second
+	DefaultRefreshInterval  = 60 * time.Second
 )
 
 // PeerType describes a peer's role in the cluster.
@@ -249,6 +249,7 @@ func (p *Peer) Refresh() error {
 	}
 
 	currMembers := p.mlist.Members()
+	var notConnected []string
 	for _, peer := range resolvedPeers {
 		var isPeerFound bool
 
@@ -260,16 +261,22 @@ func (p *Peer) Refresh() error {
 		}
 
 		if !isPeerFound {
-			curr, err := p.mlist.Join([]string{peer})
-			if err != nil {
-				level.Debug(p.logger).Log("msg", "refresh cluster could not join peer", "peer", peer)
-			}
-
-			level.Debug(p.logger).Log("msg", "refresh cluster peer joined", "peer", peer, "before", len(currMembers), "after", curr)
+			notConnected = append(notConnected, peer)
 		}
 	}
 
-	level.Debug(p.logger).Log("msg", "refresh cluster done", "peers", strings.Join(p.knownPeers, ","), "resolvedPeers", strings.Join(resolvedPeers, ","))
+	if len(notConnected) == 0 {
+		level.Debug(p.logger).Log("msg", "refresh cluster done", "peers", strings.Join(p.knownPeers, ","), "resolvedPeers", strings.Join(resolvedPeers, ","))
+		return nil
+	}
+
+	curr, err := p.mlist.Join(notConnected)
+	if err != nil {
+		level.Error(p.logger).Log("msg", "refresh cluster could not join peers", "peers", strings.Join(notConnected, ","))
+	}
+
+	level.Debug(p.logger).Log("msg", "refresh cluster done, peers joined", "peers", strings.Join(notConnected, ","), "before", len(currMembers), "after", curr)
+
 	return nil
 }
 
