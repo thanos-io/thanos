@@ -60,7 +60,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1529400107539,
+  "iteration": 1529906222108,
   "links": [],
   "panels": [
     {
@@ -821,7 +821,7 @@
     ]
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {
@@ -852,5 +852,5 @@
   "timezone": "browser",
   "title": "Thanos Compaction",
   "uid": "s48S7j4ik",
-  "version": 2
+  "version": 3
 }

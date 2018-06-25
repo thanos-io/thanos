@@ -66,7 +66,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1529400170306,
+  "iteration": 1529906270695,
   "links": [],
   "panels": [
     {
@@ -870,7 +870,7 @@
       ]
     }
   ],
-  "refresh": false,
+  "refresh": "30s",
   "revision": null,
   "schemaVersion": 16,
   "style": "dark",
@@ -1003,8 +1003,8 @@
     ]
   },
   "time": {
-    "from": "2018-06-18T10:19:05.006Z",
-    "to": "2018-06-18T11:19:05.006Z"
+    "from": "now-30m",
+    "to": "now"
   },
   "timepicker": {
     "refresh_intervals": [
@@ -1034,5 +1034,5 @@
   "timezone": "browser",
   "title": "Thanos Query",
   "uid": "opwl5gSiz",
-  "version": 1
+  "version": 2
 }

@@ -60,7 +60,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1529400200713,
+  "iteration": 1529906350696,
   "links": [],
   "panels": [
     {
@@ -1264,7 +1264,7 @@
     ]
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {
@@ -1295,5 +1295,5 @@
   "timezone": "browser",
   "title": "Thanos Store",
   "uid": "KqPVKRIiz",
-  "version": 1
+  "version": 2
 }

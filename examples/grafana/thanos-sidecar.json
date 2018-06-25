@@ -66,7 +66,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1529400188253,
+  "iteration": 1529906347607,
   "links": [],
   "panels": [
     {
@@ -1099,7 +1099,7 @@
     ]
   },
   "time": {
-    "from": "now-3h",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {
@@ -1130,5 +1130,5 @@
   "timezone": "browser",
   "title": "Thanos Sidecar",
   "uid": "IOteEKHik",
-  "version": 1
+  "version": 2
 }

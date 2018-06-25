@@ -1,6 +1,6 @@
 # Grafana Dashboards
 
-There are 4 Grafana dashboards target for environments running Kubernetes:
+There are 4 Grafana dashboards targeted for environments running Kubernetes:
 
 - [Thanos Compact](thanos-compact.json)
 - [Thanos Query](thanos-query.json)
@@ -8,6 +8,7 @@ There are 4 Grafana dashboards target for environments running Kubernetes:
 - [Thanos Sidecar](thanos-sidecar.json)
 
 You can import them via `Import -> Paste JSON` in Grafana.
+These dashboards require Grafana 5, importing them in older versions are known not to work.
 
 # Configuration
 
