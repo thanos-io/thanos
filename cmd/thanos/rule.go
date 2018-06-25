@@ -40,6 +40,7 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage/tsdb"
+	"github.com/prometheus/prometheus/util/strutil"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -72,6 +73,8 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty, ruler won't store any block inside Google Cloud Storage.").
 		PlaceHolder("<bucket>").String()
 
+	externalQueryURL := cmd.Flag("external.query.url", "The external Thanos Query URL").PlaceHolder("<external-query-url>").String()
+
 	s3Config := s3.RegisterS3Params(cmd)
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
@@ -83,6 +86,10 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 		if err != nil {
 			return errors.Wrap(err, "new cluster peer")
 		}
+		externalQueryURL, err := url.Parse(*externalQueryURL)
+		if err != nil {
+			return errors.Wrap(err, "parse external query url")
+		}
 
 		tsdbOpts := &tsdb.Options{
 			MinBlockDuration: model.Duration(*tsdbBlockDuration),
@@ -91,7 +98,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			NoLockfile:       true,
 			WALFlushInterval: 30 * time.Second,
 		}
-		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *grpcBindAddr, *httpBindAddr, *evalInterval, *dataDir, *ruleFiles, peer, *gcsBucket, s3Config, tsdbOpts, name)
+		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *grpcBindAddr, *httpBindAddr, *evalInterval, *dataDir, *ruleFiles, peer, *gcsBucket, s3Config, tsdbOpts, name, externalQueryURL)
 	}
 }
 
@@ -114,6 +121,7 @@ func runRule(
 	s3Config *s3.Config,
 	tsdbOpts *tsdb.Options,
 	component string,
+	externalQueryURL *url.URL,
 ) error {
 	db, err := tsdb.Open(dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts)
 	if err != nil {
@@ -169,9 +177,10 @@ func runRule(
 					continue
 				}
 				a := &alert.Alert{
-					StartsAt:    alrt.FiredAt,
-					Labels:      alrt.Labels,
-					Annotations: alrt.Annotations,
+					StartsAt:     alrt.FiredAt,
+					Labels:       alrt.Labels,
+					Annotations:  alrt.Annotations,
+					GeneratorURL: externalQueryURL.String() + strutil.TableLinkForExpression(expr),
 				}
 				if !alrt.ResolvedAt.IsZero() {
 					a.EndsAt = alrt.ResolvedAt
