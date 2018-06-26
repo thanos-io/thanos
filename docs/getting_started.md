@@ -151,3 +151,7 @@ _NOTE: The compactor must be run as a **singleton** and must not run when manual
 # All-in-one example
 
 You can find one-box example with minikube [here](../kube/README.md).
+
+# Dashboards
+
+You can find Grafana dashboards [here](../examples/grafana/monitoring.md)
