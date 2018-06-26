@@ -247,6 +247,7 @@ func runQuery(
 			l.Close()
 		})
 	}
+
 	level.Info(logger).Log("msg", "starting query node")
 	return nil
 }

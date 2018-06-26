@@ -38,6 +38,7 @@ func joinPeer(num int, knownPeers []string) (peerAddr string, peer *Peer, err er
 		false,
 		100*time.Millisecond,
 		50*time.Millisecond,
+		30*time.Millisecond,
 	)
 	if err != nil {
 		return "", nil, err
