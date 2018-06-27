@@ -46,6 +46,7 @@ If you are not interested in backing up any data, the `--gcs.bucket` flag can si
 
 * _[Example Kubernetes manifest](../kube/manifests/prometheus.yaml)_
 * _[Example Kubernetes manifest with GCS upload](../kube/manifests/prometheus-gcs.yaml)_
+* _[Details & Config for other object stores](./docs/storage.md)_
 
 ### Query Access
 
@@ -122,9 +123,9 @@ Go to the configured HTTP address that should now show a UI similar to that of P
 
 ## Communication Between Components
 
-Components in a Thanos cluster can be connected through a gossip protocol to advertise membership and propagate metadata about other known nodes. We need to add gossip to efficiently discover other nodes in the cluster and the metrics information they can access.
+Components in a Thanos cluster can be connected through a gossip protocol to advertise membership and propagate metadata about other known nodes or by setting static store flags of known components. We added gossip to efficiently and dynamically discover other nodes in the cluster and the metrics information they can access.
 
-This is especially useful for the Query node to know all endpoints to query and the time windows of each nodes, thus reducing the overhead of querying all nodes in the cluster.
+This is especially useful for the Query node to know all endpoints to query, time windows and external labels for each node, thus reducing the overhead of querying all nodes in the cluster.
 
 Given a sidecar we can have it join a gossip cluster by advertising itself to other peers within the network.
 
@@ -142,7 +143,7 @@ thanos sidecar \
 
 With the above configuration a single node will advertise itself in the cluster and query for other members of the cluster (from itself) when you add more sidecars / components you will probably want to sent `cluset.peers` to a well known peer that will allow you to discover other peers within the cluster.
 
-When a peer advertises itself / joins a gossip cluster it sends information about all the peers it currently knows about (including itself). This information for each peer allows you to see what type of component a peer is (Source, Store, Query), the peers Store API address (used for querying) and meta data about the labels and time window the peer holds information about.
+When a peer advertises itself / joins a gossip cluster it sends information about all the peers it currently knows about (including itself). This information for each peer allows you to see what type of component a peer is (Source, Store, Query), the peers Store API address (used for querying) and meta data about the external labels and time window the peer holds information about.
 
 Once the Peer joins the cluster it will periodically update the information it sends out with new / updated information about other peers and the time windows for the metrics that it can access.
 
@@ -155,7 +156,7 @@ thanos query \
     --cluster.peers             127.0.0.1:19391 \       # Static cluster peer where the node will get info about the cluster
 ```
 
-The Query component however does not have to utilize gossip to discover other nodes and instead can be setup to use a static list of well known addresses to query. These are repeatable so can add as many endpoint as needed. However, if you only use `store` you will not be able to discover nodes added to the cluster.
+The Query component however does not have to utilize gossip to discover other nodes and instead can be setup to use a static list of well known addresses to query. These are repeatable so can add as many endpoint as needed. However, if you only use `store` you will automatically discover nodes added to the cluster.
 
 ```
 thanos query \
@@ -179,6 +180,9 @@ thanos query \
     --store                     0.0.0.0:18092   \       # Also repeatable
 ```
 
+When to use gossip vs store flags?
+- Use gossip if you want to maintain single gossip cluster that is able to dynamically join and remove components.
+- Use static store when you want to have full control of which components are connected. It is also easier to user static store options when setting up communication with remote (cross-cluster) components e.g (sidecar in different network through some proxy)
 
 Configuration of initial peers is flexible and the argument can be repeated for Thanos to try different approaches.
 Additional flags for cluster configuration exist but are typically not needed. Check the `--help` output for further information.
