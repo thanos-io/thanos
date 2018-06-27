@@ -198,7 +198,7 @@ func runSidecar(
 		if err != nil {
 			return errors.Wrap(err, "listen API address")
 		}
-		logger := log.With(logger, "component", "store")
+		logger := log.With(logger, "component", "sidecar")
 
 		var client http.Client
 
