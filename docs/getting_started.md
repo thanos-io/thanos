@@ -35,9 +35,9 @@ The following configures the sidecar to backup data into a Google Cloud Storage 
 
 ```
 thanos sidecar \
-    --prometheus.url http://localhost:9090 \  # Prometheus's HTTP address
-    --tsdb.path /var/prometheus \             # Data directory of Prometheus
-    --gcs.bucket example-bucket \             # Bucket to upload data to
+    --prometheus.url    http://localhost:9090 \     # Prometheus's HTTP address
+    --tsdb.path         /var/prometheus \           # Data directory of Prometheus
+    --gcs.bucket        example-bucket \            # Bucket to upload data to
 ```
 
 Rolling this out has little to zero impact on the running Prometheus instance. It is a good start to ensure you are backing up your data while figuring out the other pieces of Thanos.
@@ -46,27 +46,25 @@ If you are not interested in backing up any data, the `--gcs.bucket` flag can si
 
 * _[Example Kubernetes manifest](../kube/manifests/prometheus.yaml)_
 * _[Example Kubernetes manifest with GCS upload](../kube/manifests/prometheus-gcs.yaml)_
+* _[Details & Config for other object stores](./storage.md)_
 
 ### Query Access
 
 Thanos comes with a highly efficient gRPC-based Store API for metric data access across all its components. The sidecar implements it in front of its connected Prometheus server. While it is ready to use with the above example, we must additionally configure the sidecar to join a Thanos cluster.
 
-Components in a Thanos cluster are connected through a gossip protocol to advertise membership and propagate metadata about the data and services they provide.
-
-We a set of initial peers addresses to the sidecar. They only must be valid on startup and subsequent cluster changes are automatically adapted to.
+Let's extend the above sidecar to expose their gRPC Store API so that we can query metrics.
 
 ```
 thanos sidecar \
-    --prometheus.url http://localhost:9090 \
-    --tsdb.path /var/prometheus \
-    --cluster.peers 10.9.1.4 \                      # Static cluster peer (default port)
-    --cluster.peers 10.9.2.6:10900 \                # We can pass multiple of them (custom port)
-    --cluster.peers all.thanos.internal.org \       # Make Thanos lookup all addresses behind a domain
-    --cluster.peers all.thanos.internal.org:18088 \ # Specify a custom port
+    --prometheus.url            http://localhost:9090 \
+    --tsdb.path                 /var/prometheus \
+    --gcs.bucket                example-bucket \
+    --grpc-address              0.0.0.0:19091 \            # gRPC endpoint for Store API (will be used to perform PromQL queries)
+    --http-address              0.0.0.0:19191 \            # HTTP endpoint for collecting metrics on Thanos sidecar
+    --cluster.address           0.0.0.0:19391 \            # Endpoint used to meta data about the current node
+    --cluster.advertise-address 127.0.0.1:19391 \          # Location at which the node advertise itself at to other members of the cluster
+    --cluster.peers             127.0.0.1:19391 \          # Static cluster peer where the node will get info about the cluster
 ```
-
-Configuration of initial peers is flexible and the argument can be repeated for Thanos to try different approaches.
-Additional flags for cluster configuration exist but are typically not needed. Check the `--help` output for further information.
 
 * _[Example Kubernetes manifest](../kube/manifests/prometheus.yaml)_
 * _[Example Kubernetes manifest with GCS upload](../kube/manifests/prometheus-gcs.yaml)_
@@ -96,8 +94,14 @@ It implements Prometheus's official HTTP API and can thus seamlessly be used wit
 
 ```
 thanos query \
-    --http-address "0.0.0.0:19092" \         # Endpoint for the UI
-    --cluster.peers all.thanos.internal.org  # Discovery of initial cluster peers
+    --http-address              0.0.0.0:19192 \         # Endpoint for Query UI
+    --grpc-address              0.0.0.0:19092 \         # gRPC endpoint for Store API
+    --cluster.address           0.0.0.0:19591 \
+    --cluster.advertise-address 127.0.0.1:19591 \
+    --cluster.peers             127.0.0.1:19391 \       # Static cluster peer where the node will get info about the cluster
+    --cluster.peers             127.0.0.1:19392 \       # Another cluster peer (many can be added to discover nodes)
+    --store                     0.0.0.0:18091   \       # Static gRPC Store API Address for the query node to query
+    --store                     0.0.0.0:18092   \       # Also repeatable
 ```
 
 The query component is also capable of merging data collected from Prometheus HA pairs. This requires a consistent choice of an external label for Prometheus servers that identifies replicas. Other external labels must be identical. A typical choice is simply the label name "replica" while its value is freely chosable.
@@ -106,14 +110,85 @@ Providing the label name to the query component will enable the deduplication.
 
 ```
 thanos query \
-    --http-address "0.0.0.0:19092" \
-    --cluster.peers all.thanos.internal.org \
-    --query.replica-label replica
+    --http-address              0.0.0.0:19092 \
+    --cluster.address           0.0.0.0:19591 \
+    --cluster.advertise-address 127.0.0.1:19591 \
+    --cluster.peers             127.0.0.1:19391 \
+    --query.replica-label       replica \               # Replica label for de-duplication
 ```
 
 Go to the configured HTTP address that should now show a UI similar to that of Prometheus itself. If the cluster formed correctly you can now query data across all Prometheus servers within the cluster.
 
 * _[Example Kubernetes manifest](../kube/manifests/thanos-query.yaml)_
+
+## Communication Between Components
+
+Components in a Thanos cluster can be connected through a gossip protocol to advertise membership and propagate metadata about other known nodes or by setting static store flags of known components. We added gossip to efficiently and dynamically discover other nodes in the cluster and the metrics information they can access.
+
+This is especially useful for the Query node to know all endpoints to query, time windows and external labels for each node, thus reducing the overhead of querying all nodes in the cluster.
+
+Given a sidecar we can have it join a gossip cluster by advertising itself to other peers within the network.
+
+```
+thanos sidecar \
+    --prometheus.url            http://localhost:9090 \
+    --tsdb.path                 /var/prometheus \
+    --gcs.bucket                example-bucket \
+    --grpc-address              0.0.0.0:19091 \            # gRPC endpoint for Store API (will be used to perform PromQL queries)
+    --http-address              0.0.0.0:19191 \            # HTTP endpoint for collecting metrics on Thanos sidecar
+    --cluster.address           0.0.0.0:19391 \            # Endpoint used to meta data about the current node
+    --cluster.advertise-address 127.0.0.1:19391 \          # Location at which the node advertise itself at to other members of the cluster
+    --cluster.peers             127.0.0.1:19391 \          # Static cluster peer where the node will get info about the cluster (repeatable)
+```
+
+With the above configuration a single node will advertise itself in the cluster and query for other members of the cluster (from itself) when you add more sidecars / components you will probably want to sent `cluset.peers` to a well known peer that will allow you to discover other peers within the cluster.
+
+When a peer advertises itself / joins a gossip cluster it sends information about all the peers it currently knows about (including itself). This information for each peer allows you to see what type of component a peer is (Source, Store, Query), the peers Store API address (used for querying) and meta data about the external labels and time window the peer holds information about.
+
+Once the Peer joins the cluster it will periodically update the information it sends out with new / updated information about other peers and the time windows for the metrics that it can access.
+
+```
+thanos query \
+    --http-address              0.0.0.0:19192 \         # Endpoint for Query UI
+    --grpc-address              0.0.0.0:19092 \         # gRPC endpoint for Store API
+    --cluster.address           0.0.0.0:19591 \
+    --cluster.advertise-address 127.0.0.1:19591 \
+    --cluster.peers             127.0.0.1:19391 \       # Static cluster peer where the node will get info about the cluster
+```
+
+The Query component however does not have to utilize gossip to discover other nodes and instead can be setup to use a static list of well known addresses to query. These are repeatable so can add as many endpoint as needed. However, if you only use `store` you will automatically discover nodes added to the cluster.
+
+```
+thanos query \
+    --http-address              0.0.0.0:19192 \         # Endpoint for Query UI
+    --grpc-address              0.0.0.0:19092 \         # gRPC endpoint for Store API
+    --store                     0.0.0.0:19091   \       # Static gRPC Store API Address for the query node to query
+    --store                     0.0.0.0:19092   \       # Also repeatable
+```
+
+You can mix both static `store` and `cluster` based approaches:
+
+```
+thanos query \
+    --http-address              0.0.0.0:19192 \         # Endpoint for Query UI
+    --grpc-address              0.0.0.0:19092 \         # gRPC endpoint for Store API
+    --cluster.address           0.0.0.0:19591 \
+    --cluster.advertise-address 127.0.0.1:19591 \
+    --cluster.peers             127.0.0.1:19391 \       # Static cluster peer where the node will get info about the cluster
+    --cluster.peers             127.0.0.1:19392 \       # Another cluster peer (many can be added to discover nodes)
+    --store                     0.0.0.0:18091   \       # Static gRPC Store API Address for the query node to query
+    --store                     0.0.0.0:18092   \       # Also repeatable
+```
+
+When to use gossip vs store flags?
+- Use gossip if you want to maintain single gossip cluster that is able to dynamically join and remove components.
+- Use static store when you want to have full control of which components are connected. It is also easier to user static store options when setting up communication with remote (cross-cluster) components e.g (sidecar in different network through some proxy)
+
+Configuration of initial peers is flexible and the argument can be repeated for Thanos to try different approaches.
+Additional flags for cluster configuration exist but are typically not needed. Check the `--help` output for further information.
+
+* _[Example Kubernetes manifest](../kube/manifests/prometheus.yaml)_
+* _[Example Kubernetes manifest with GCS upload](../kube/manifests/prometheus-gcs.yaml)_
 
 ## Store Gateway
 
@@ -123,9 +198,11 @@ Just like sidecars and query nodes, the store gateway joins the gossip cluster a
 
 ```
 thanos store \
-    --tsdb.path /var/thanos/store \         # Disk space for local caches
-    --gcs.bucket example-bucket \           # Bucket to fetch data from
-    --cluster.peers all.thanos.internal.org 
+    --tsdb.path                 /var/thanos/store \     # Disk space for local caches
+    --gcs.bucket                example-bucket \        # Bucket to fetch data from
+    --cluster.address           0.0.0.0:19891 \
+    --cluster.advertise-address 127.0.0.1:19891 \
+    --cluster.peers             127.0.0.1:19391 \
 ```
 
 The store gateway occupies small amounts of disk space for caching basic information about data in the object storage. This will rarely exceed more than a few gigabytes and is used to improve restart times. It is not useful but not required to preserve it across restarts.
