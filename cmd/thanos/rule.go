@@ -231,7 +231,10 @@ func runRule(
 
 		g.Add(func() error {
 			for {
-				sdr.Send(ctx, alertQ.Pop(ctx.Done()))
+				// TODO(bplotka): Investigate what errors it can return and if just "sdr.Send" retry is enough.
+				if err := sdr.Send(ctx, alertQ.Pop(ctx.Done())); err != nil {
+					level.Warn(logger).Log("msg", "sending alerts failed", "err", err)
+				}
 
 				select {
 				case <-ctx.Done():
@@ -332,7 +335,7 @@ func runRule(
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			s.Stop()
-			l.Close()
+			runutil.LogOnErr(logger, l, "store gRPC listener")
 		})
 	}
 	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
@@ -343,7 +346,7 @@ func runRule(
 
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
+	bkt, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
 	if err != nil && err != client.ErrNotFound {
 		return err
 	}
@@ -357,7 +360,7 @@ func runRule(
 		// Ensure we close up everything properly.
 		defer func() {
 			if err != nil {
-				closeFn()
+				runutil.LogOnErr(logger, bkt, "bucket client")
 			}
 		}()
 
@@ -366,7 +369,7 @@ func runRule(
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-			defer closeFn()
+			defer runutil.LogOnErr(logger, bkt, "bucket client")
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				s.Sync(ctx)
@@ -416,7 +419,7 @@ func queryPrometheusInstant(ctx context.Context, logger log.Logger, addr, query 
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer runutil.LogOnErr(logger, resp.Body, "query body")
 
 	// Always try to decode a vector. Scalar rules won't work for now and arguably
 	// have no relevant use case.

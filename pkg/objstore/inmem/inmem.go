@@ -143,3 +143,5 @@ func (b *Bucket) Delete(_ context.Context, name string) error {
 func (b *Bucket) IsObjNotFoundErr(err error) bool {
 	return err == errNotFound
 }
+
+func (b *Bucket) Close() error { return nil }

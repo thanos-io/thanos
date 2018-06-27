@@ -263,12 +263,13 @@ func (p *Peer) Close(timeout time.Duration) {
 		return
 	}
 
-	err := p.mlist.Leave(timeout)
-	if err != nil {
+	if err := p.mlist.Leave(timeout); err != nil {
 		level.Error(p.logger).Log("msg", "memberlist leave failed", "err", err)
 	}
 	close(p.stopc)
-	p.mlist.Shutdown()
+	if err := p.mlist.Shutdown(); err != nil {
+		level.Error(p.logger).Log("msg", "memberlist shutdown failed", "err", err)
+	}
 	p.mlist = nil
 }
 

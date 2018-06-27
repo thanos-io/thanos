@@ -31,6 +31,11 @@ vet:
 	@echo ">> vetting code"
 	@go vet ./...
 
+# TODO(bplotka): Make errcheck required stage and validate it on CI (once we fix all the issues claimed by errcheck).
+errcheck:
+	@echo ">> errchecking the code"
+	@errcheck -verbose -exclude .errcheck_excludes.txt ./...
+
 build: deps $(PROMU)
 	@echo ">> building binaries"
 	@$(PROMU) build --prefix $(PREFIX)
@@ -82,4 +87,4 @@ docs:
 	@go build ./cmd/thanos/...
 	@scripts/genflagdocs.sh
 
-.PHONY: all install-tools format vet build assets docker docker-push docs deps
+.PHONY: all install-tools format vet errcheck build assets docker docker-push docs deps

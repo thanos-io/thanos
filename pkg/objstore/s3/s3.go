@@ -254,6 +254,8 @@ func (b *Bucket) IsObjNotFoundErr(err error) bool {
 	return minio.ToErrorResponse(err).Code == "NoSuchKey"
 }
 
+func (b *Bucket) Close() error { return nil }
+
 func configFromEnv() *Config {
 	c := &Config{
 		Bucket:    os.Getenv("S3_BUCKET"),

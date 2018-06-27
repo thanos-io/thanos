@@ -28,7 +28,7 @@ func TestSyncer_SyncMetas_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
 		dir, err := ioutil.TempDir("", "test-compact-sync")
 		testutil.Ok(t, err)
-		defer os.RemoveAll(dir)
+		defer testutil.Ok(t, os.RemoveAll(dir))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
@@ -80,7 +80,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
 		dir, err := ioutil.TempDir("", "test-compact-gc")
 		testutil.Ok(t, err)
-		defer os.RemoveAll(dir)
+		defer testutil.Ok(t, os.RemoveAll(dir))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()

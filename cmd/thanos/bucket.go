@@ -12,6 +12,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/verifier"
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
@@ -57,30 +58,27 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	verifyIDWhitelist := verify.Flag("id-whitelist", "Block IDs to verify (and optionally repair) only. "+
 		"If none is specified, all blocks will be verified. Repeated field").Strings()
 	m[name+" verify"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
-		bkt, closeFn, err := client.NewBucket(gcsBucket, *s3Config, reg, name)
+		bkt, err := client.NewBucket(gcsBucket, *s3Config, reg, name)
 		if err != nil {
 			return err
 		}
+		defer runutil.LogOnErr(logger, bkt, "bucket client")
 
 		backupS3Config := *s3Config
 		backupS3Config.Bucket = *verifyBackupS3Bucket
-		backupBkt, backupCloseFn, err := client.NewBucket(verifyBackupGCSBucket, backupS3Config, reg, name)
+		backupBkt, err := client.NewBucket(verifyBackupGCSBucket, backupS3Config, reg, name)
 		if err == client.ErrNotFound {
 			if *verifyRepair {
 				return errors.Wrap(err, "repair is specified, so backup client is required")
 			}
-			// No repair - no need for backup bucket.
-			backupCloseFn = func() error { return nil }
-
 		} else if err != nil {
 			return err
+		} else {
+			defer runutil.LogOnErr(logger, backupBkt, "backup bucket client")
 		}
 
 		// Dummy actor to immediately kill the group after the run function returns.
 		g.Add(func() error { return nil }, func(error) {})
-
-		defer closeFn()
-		defer backupCloseFn()
 
 		var (
 			ctx    = context.Background()
@@ -128,7 +126,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	lsOutput := ls.Flag("output", "Format in which to print each block's information. May be 'json' or custom template.").
 		Short('o').Default("").String()
 	m[name+" ls"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
-		bkt, closeFn, err := client.NewBucket(gcsBucket, *s3Config, reg, name)
+		bkt, err := client.NewBucket(gcsBucket, *s3Config, reg, name)
 		if err != nil {
 			return err
 		}
@@ -136,7 +134,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 		// Dummy actor to immediately kill the group after the run function returns.
 		g.Add(func() error { return nil }, func(error) {})
 
-		defer closeFn()
+		defer runutil.LogOnErr(logger, bkt, "bucket client")
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()

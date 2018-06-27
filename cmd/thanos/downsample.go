@@ -17,6 +17,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
@@ -52,7 +53,7 @@ func runDownsample(
 	component string,
 ) error {
 
-	bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
+	bkt, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
 	if err != nil {
 		return err
 	}
@@ -60,7 +61,7 @@ func runDownsample(
 	// Ensure we close up everything properly.
 	defer func() {
 		if err != nil {
-			closeFn()
+			runutil.LogOnErr(logger, bkt, "bucket client")
 		}
 	}()
 
@@ -69,7 +70,8 @@ func runDownsample(
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-			defer closeFn()
+			defer runutil.LogOnErr(logger, bkt, "bucket client")
+
 			level.Info(logger).Log("msg", "start first pass of downsampling")
 
 			if err := downsampleBucket(ctx, logger, bkt, dataDir); err != nil {
@@ -116,7 +118,7 @@ func downsampleBucket(
 		if err != nil {
 			return errors.Wrapf(err, "get meta for block %s", id)
 		}
-		defer rc.Close()
+		defer runutil.LogOnErr(logger, rc, "block reader")
 
 		var m block.Meta
 		if err := json.NewDecoder(rc).Decode(&m); err != nil {
@@ -227,7 +229,7 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 	if err != nil {
 		return errors.Wrapf(err, "open block %s", m.ULID)
 	}
-	defer b.Close()
+	defer runutil.LogOnErr(log.With(logger, "outcome", "potential left mmap file handlers left"), b, "tsdb reader")
 
 	id, err := downsample.Downsample(m, b, dir, resolution)
 	if err != nil {
@@ -253,8 +255,13 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 
 	begin = time.Now()
 
-	os.RemoveAll(bdir)
-	os.RemoveAll(resdir)
+	// It is not harmful if these fails.
+	if err := os.RemoveAll(bdir); err != nil {
+		level.Warn(logger).Log("msg", "failed to clean directory", "dir", bdir, "err", err)
+	}
+	if err := os.RemoveAll(resdir); err != nil {
+		level.Warn(logger).Log("msg", "failed to clean directory", "resdir", bdir, "err", err)
+	}
 
 	return nil
 }

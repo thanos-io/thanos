@@ -225,7 +225,7 @@ func runQuery(
 			level.Info(logger).Log("msg", "Listening for query and metrics", "address", httpBindAddr)
 			return errors.Wrap(http.Serve(l, mux), "serve query")
 		}, func(error) {
-			l.Close()
+			runutil.LogOnErr(logger, l, "query and metric listener")
 		})
 	}
 	// Start query (proxy) gRPC StoreAPI.
@@ -244,7 +244,7 @@ func runQuery(
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			s.Stop()
-			l.Close()
+			runutil.LogOnErr(logger, l, "store gRPC listener")
 		})
 	}
 	level.Info(logger).Log("msg", "starting query node")

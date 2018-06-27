@@ -36,17 +36,20 @@ const DirDelim = "/"
 type Bucket struct {
 	bkt      *storage.BucketHandle
 	opsTotal *prometheus.CounterVec
+
+	closer io.Closer
 }
 
 // NewBucket returns a new Bucket against the given bucket handle.
-func NewBucket(name string, b *storage.BucketHandle, reg prometheus.Registerer) *Bucket {
+func NewBucket(name string, cl *storage.Client, reg prometheus.Registerer) *Bucket {
 	bkt := &Bucket{
-		bkt: b,
+		bkt: cl.Bucket(name),
 		opsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name:        "thanos_objstore_gcs_bucket_operations_total",
 			Help:        "Total number of operations that were executed against a Google Compute Storage bucket.",
 			ConstLabels: prometheus.Labels{"bucket": name},
 		}, []string{"operation"}),
+		closer: cl,
 	}
 	if reg != nil {
 		reg.MustRegister()
@@ -140,6 +143,10 @@ func (b *Bucket) IsObjNotFoundErr(err error) bool {
 	return err == storage.ErrObjectNotExist
 }
 
+func (b *Bucket) Close() error {
+	return b.closer.Close()
+}
+
 // NewTestBucket creates test bkt client that before returning creates temporary bucket.
 // In a close function it empties and deletes the bucket.
 func NewTestBucket(t testing.TB, project string) (objstore.Bucket, func(), error) {
@@ -155,11 +162,11 @@ func NewTestBucket(t testing.TB, project string) (objstore.Bucket, func(), error
 	bkt := gcsClient.Bucket(name)
 	if err = bkt.Create(ctx, project, nil); err != nil {
 		cancel()
-		gcsClient.Close()
+		_ = gcsClient.Close()
 		return nil, nil, err
 	}
 
-	b := NewBucket(name, bkt, nil)
+	b := NewBucket(name, gcsClient, nil)
 
 	t.Log("created temporary GCS bucket for GCS tests with name", name, "in project", project)
 	return b, func() {
@@ -168,6 +175,8 @@ func NewTestBucket(t testing.TB, project string) (objstore.Bucket, func(), error
 			t.Logf("deleting bucket failed: %s", err)
 		}
 		cancel()
-		gcsClient.Close()
+		if err := b.Close(); err != nil {
+			t.Logf("closing bucket failed: %s", err)
+		}
 	}, nil
 }
