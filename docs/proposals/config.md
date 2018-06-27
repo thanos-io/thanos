@@ -10,7 +10,22 @@ Currently, each scraper manages their own configuration via [Prometheus Configur
 
 As we start to dynamically scale the collection of metrics (new Prometheus instances) or increase the targets for a current tenant we wish to keep the collection of metrics to a consistent node and not re-allocate shards to other scrapers. 
 
-One key use case would be keeping metrics from a given tenant (customer / team etc.) on a consistant and minimal amount of nodes.
+This approach is not intended to replace current horizontal scaling strategies in Prometheus but enable new strategies for environments where the number of targets can be highly dynamic and require spinning up and removing scrapers based on the workload. Typically most Prometheus setus would have a static number of targets and therefore able to use `hashmod` within Prometheus. If adding a new scraper infrequent churn from each Prometheus TSDB would be reduced and not impact the system.
+We have seen the `hashmod` scaling approach have a problem with hot shards in the past whereby a given Prometheus instance may endup being overloaded by the number or amount of data from its targets and is difficult to redistribute the load onto other Promethus instances in the scrape pool.
+
+
+## Goals
+
+The primary goal of having a specific `config` component are:
+
+- enable auto-scaling of scrapers to meet the needs of dynamic targets
+- Opt-in approach users can and should use existing scaling if it works for their use case
+
+Secondary goals of the proposal would be:
+
+- reduce churn on the underlying Prometheus TSDB
+- multi-tenant aware, query minimal scrapers for data
+- reduce hot sharding issues
 
 ## Proposal
 
@@ -52,6 +67,12 @@ The config component will keep track of what sidecar's are in the cluster at any
 - We would wish to dynamically configure what targets / labels are on each Prometheus instance within the Thanos cluster
 - Allocate targets to a Prometheus instance based on data such as CPU utilization of a node.
 - Ensure that as we scale the number of Prometheus instances in the scrape pool we do not move scrape targets to other instances.
+
+### Example Use Case
+
+Currently we have the use case whereby a customer can deploy a game into our environment and we may need to dramatically increase the number of targets being scraped.
+In doing so we may need to scale the number of instances of Prometheus in our scrape pool; we would want to ensure that it has minimal impact to the existing collection of metrics and ensure we do not over oad any scrapers by the resharding of targets.
+This deployment may only last for a number of hours (whilst other may last days, weeks, or months) and then will be removed. Therefore removing the targets and scaling down the number of Prometheus instances in the pool.
 
 ## Implementation
 
@@ -101,7 +122,6 @@ The alternatives below might be a good starting point for users that do not need
 
 An alternative to this is to use the existing [hashmod](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config) functionality within Prometheus to enable [horizontal scaling](https://www.robustperception.io/scaling-and-federating-prometheus/), in this scenario a user would supply their entire configuaration to every Prometheus node and use hashing to scale out.
 The main downside of this is that as a Prometheus instance is added or removed from the cluster the targets will be moved to a new scrape instance. This is bad if you are wanting to keep tenants to a minimal number of Prometheus instances.
-We have seen this approach also have a problem with hot shards in the past whereby a given Prometheus instance may endup being overloaded and is difficult to redistribute the load onto other Promethus instances in the scrape pool.
 
 ### Prometheus & Consistant Hashing
 
