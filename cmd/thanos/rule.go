@@ -73,7 +73,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty, ruler won't store any block inside Google Cloud Storage.").
 		PlaceHolder("<bucket>").String()
 
-	externalQueryURL := cmd.Flag("external.query.url", "The external Thanos Query URL").PlaceHolder("<external-query-url>").String()
+	alertQueryURL := cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field").String()
 
 	s3Config := s3.RegisterS3Params(cmd)
 
@@ -86,9 +86,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 		if err != nil {
 			return errors.Wrap(err, "new cluster peer")
 		}
-		externalQueryURL, err := url.Parse(*externalQueryURL)
+		alertQueryURL, err := url.Parse(*alertQueryURL)
 		if err != nil {
-			return errors.Wrap(err, "parse external query url")
+			return errors.Wrap(err, "parse alert query url")
 		}
 
 		tsdbOpts := &tsdb.Options{
@@ -98,7 +98,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			NoLockfile:       true,
 			WALFlushInterval: 30 * time.Second,
 		}
-		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *grpcBindAddr, *httpBindAddr, *evalInterval, *dataDir, *ruleFiles, peer, *gcsBucket, s3Config, tsdbOpts, name, externalQueryURL)
+		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *grpcBindAddr, *httpBindAddr, *evalInterval, *dataDir, *ruleFiles, peer, *gcsBucket, s3Config, tsdbOpts, name, alertQueryURL)
 	}
 }
 
@@ -121,7 +121,7 @@ func runRule(
 	s3Config *s3.Config,
 	tsdbOpts *tsdb.Options,
 	component string,
-	externalQueryURL *url.URL,
+	alertQueryURL *url.URL,
 ) error {
 	db, err := tsdb.Open(dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts)
 	if err != nil {
@@ -180,7 +180,7 @@ func runRule(
 					StartsAt:     alrt.FiredAt,
 					Labels:       alrt.Labels,
 					Annotations:  alrt.Annotations,
-					GeneratorURL: externalQueryURL.String() + strutil.TableLinkForExpression(expr),
+					GeneratorURL: alertQueryURL.String() + strutil.TableLinkForExpression(expr),
 				}
 				if !alrt.ResolvedAt.IsZero() {
 					a.EndsAt = alrt.ResolvedAt
