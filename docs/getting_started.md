@@ -46,7 +46,7 @@ If you are not interested in backing up any data, the `--gcs.bucket` flag can si
 
 * _[Example Kubernetes manifest](../kube/manifests/prometheus.yaml)_
 * _[Example Kubernetes manifest with GCS upload](../kube/manifests/prometheus-gcs.yaml)_
-* _[Details & Config for other object stores](./docs/storage.md)_
+* _[Details & Config for other object stores](./storage.md)_
 
 ### Query Access
 
