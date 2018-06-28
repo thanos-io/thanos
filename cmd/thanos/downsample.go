@@ -53,7 +53,7 @@ func runDownsample(
 	component string,
 ) error {
 
-	bkt, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
+	bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, reg, component)
 	if err != nil {
 		return err
 	}
@@ -61,7 +61,7 @@ func runDownsample(
 	// Ensure we close up everything properly.
 	defer func() {
 		if err != nil {
-			runutil.LogOnErr(logger, bkt, "bucket client")
+			runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 		}
 	}()
 
@@ -70,7 +70,7 @@ func runDownsample(
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-			defer runutil.LogOnErr(logger, bkt, "bucket client")
+			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
 			level.Info(logger).Log("msg", "start first pass of downsampling")
 
@@ -118,7 +118,7 @@ func downsampleBucket(
 		if err != nil {
 			return errors.Wrapf(err, "get meta for block %s", id)
 		}
-		defer runutil.LogOnErr(logger, rc, "block reader")
+		defer runutil.CloseWithLogOnErr(logger, rc, "block reader")
 
 		var m block.Meta
 		if err := json.NewDecoder(rc).Decode(&m); err != nil {
@@ -206,13 +206,13 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 	begin := time.Now()
 	bdir := filepath.Join(dir, m.ULID.String())
 
-	err := block.Download(ctx, bkt, m.ULID, bdir)
+	err := block.Download(ctx, logger, bkt, m.ULID, bdir)
 	if err != nil {
 		return errors.Wrapf(err, "download block %s", m.ULID)
 	}
 	level.Info(logger).Log("msg", "downloaded block", "id", m.ULID, "duration", time.Since(begin))
 
-	if err := block.VerifyIndex(filepath.Join(bdir, block.IndexFilename), m.MinTime, m.MaxTime); err != nil {
+	if err := block.VerifyIndex(logger, filepath.Join(bdir, block.IndexFilename), m.MinTime, m.MaxTime); err != nil {
 		return errors.Wrap(err, "input block index not valid")
 	}
 
@@ -229,9 +229,9 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 	if err != nil {
 		return errors.Wrapf(err, "open block %s", m.ULID)
 	}
-	defer runutil.LogOnErr(log.With(logger, "outcome", "potential left mmap file handlers left"), b, "tsdb reader")
+	defer runutil.CloseWithLogOnErr(log.With(logger, "outcome", "potential left mmap file handlers left"), b, "tsdb reader")
 
-	id, err := downsample.Downsample(m, b, dir, resolution)
+	id, err := downsample.Downsample(logger, m, b, dir, resolution)
 	if err != nil {
 		return errors.Wrapf(err, "downsample block %s to window %d", m.ULID, resolution)
 	}
@@ -240,13 +240,13 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 	level.Info(logger).Log("msg", "downsampled block",
 		"from", m.ULID, "to", id, "duration", time.Since(begin))
 
-	if err := block.VerifyIndex(filepath.Join(resdir, block.IndexFilename), m.MinTime, m.MaxTime); err != nil {
+	if err := block.VerifyIndex(logger, filepath.Join(resdir, block.IndexFilename), m.MinTime, m.MaxTime); err != nil {
 		return errors.Wrap(err, "output block index not valid")
 	}
 
 	begin = time.Now()
 
-	err = block.Upload(ctx, bkt, resdir)
+	err = block.Upload(ctx, logger, bkt, resdir)
 	if err != nil {
 		return errors.Wrapf(err, "upload downsampled block %s", id)
 	}

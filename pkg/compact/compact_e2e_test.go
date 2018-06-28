@@ -26,10 +26,6 @@ import (
 
 func TestSyncer_SyncMetas_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
-		dir, err := ioutil.TempDir("", "test-compact-sync")
-		testutil.Ok(t, err)
-		defer testutil.Ok(t, os.RemoveAll(dir))
-
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
@@ -78,10 +74,6 @@ func TestSyncer_SyncMetas_e2e(t *testing.T) {
 
 func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
-		dir, err := ioutil.TempDir("", "test-compact-gc")
-		testutil.Ok(t, err)
-		defer testutil.Ok(t, os.RemoveAll(dir))
-
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
@@ -176,7 +168,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
 		prepareDir, err := ioutil.TempDir("", "test-compact-prepare")
 		testutil.Ok(t, err)
-		defer os.RemoveAll(prepareDir)
+		defer func() { testutil.Ok(t, os.RemoveAll(prepareDir)) }()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
@@ -230,15 +222,15 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		metas = append(metas, meta)
 
 		// Upload and forget about tmp dir with all blocks. We want to ensure same state we will have on compactor.
-		testutil.Ok(t, block.Upload(ctx, bkt, filepath.Join(prepareDir, b1.String())))
-		testutil.Ok(t, block.Upload(ctx, bkt, filepath.Join(prepareDir, b2.String())))
-		testutil.Ok(t, block.Upload(ctx, bkt, filepath.Join(prepareDir, b3.String())))
-		testutil.Ok(t, block.Upload(ctx, bkt, filepath.Join(prepareDir, freshB.String())))
+		testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(prepareDir, b1.String())))
+		testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(prepareDir, b2.String())))
+		testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(prepareDir, b3.String())))
+		testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(prepareDir, freshB.String())))
 
 		// Create fresh, empty directory for actual test.
 		dir, err := ioutil.TempDir("", "test-compact")
 		testutil.Ok(t, err)
-		defer os.RemoveAll(dir)
+		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
 		metrics := newSyncerMetrics(nil)
 		g, err := newGroup(
@@ -269,7 +261,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		testutil.Assert(t, id != ulid.ULID{}, "no compaction took place")
 
 		resDir := filepath.Join(dir, id.String())
-		testutil.Ok(t, block.Download(ctx, bkt, id, resDir))
+		testutil.Ok(t, block.Download(ctx, log.NewNopLogger(), bkt, id, resDir))
 
 		meta, err = block.ReadMetaFile(resDir)
 		testutil.Ok(t, err)

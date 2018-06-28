@@ -12,6 +12,7 @@ import (
 	"os"
 
 	"github.com/go-kit/kit/log"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
@@ -29,6 +30,7 @@ const (
 
 // Downsample downsamples the given block. It writes a new block into dir and returns its ID.
 func Downsample(
+	logger log.Logger,
 	origMeta *block.Meta,
 	b tsdb.BlockReader,
 	dir string,
@@ -42,13 +44,13 @@ func Downsample(
 	if err != nil {
 		return id, errors.Wrap(err, "open index reader")
 	}
-	defer indexr.Close()
+	defer runutil.CloseWithErrCapture(logger, &err, indexr, "downsample index reader")
 
 	chunkr, err := b.Chunks()
 	if err != nil {
 		return id, errors.Wrap(err, "open chunk reader")
 	}
-	defer chunkr.Close()
+	defer runutil.CloseWithErrCapture(logger, &err, chunkr, "downsample chunk reader")
 
 	rng := origMeta.MaxTime - origMeta.MinTime
 
@@ -134,7 +136,7 @@ func Downsample(
 	tmeta.Source = block.CompactorSource
 	tmeta.Downsample.Resolution = resolution
 
-	_, err = block.InjectThanosMeta(bdir, tmeta, &origMeta.BlockMeta)
+	_, err = block.InjectThanosMeta(logger, bdir, tmeta, &origMeta.BlockMeta)
 	if err != nil {
 		return id, errors.Wrapf(err, "failed to finalize the block %s", bdir)
 	}

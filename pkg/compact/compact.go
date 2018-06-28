@@ -165,7 +165,7 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 
 		level.Debug(c.logger).Log("msg", "download meta", "block", id)
 
-		meta, err := block.DownloadMeta(ctx, c.bkt, id)
+		meta, err := block.DownloadMeta(ctx, c.logger, c.bkt, id)
 		if err != nil {
 			return errors.Wrapf(err, "downloading meta.json for %s", id)
 		}
@@ -585,7 +585,7 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	}()
 
 	bdir := filepath.Join(tmpdir, ie.id.String())
-	if err := block.Download(ctx, bkt, ie.id, bdir); err != nil {
+	if err := block.Download(ctx, logger, bkt, ie.id, bdir); err != nil {
 		return retry(errors.Wrapf(err, "download block %s", ie.id))
 	}
 
@@ -594,18 +594,18 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 		return errors.Wrapf(err, "read meta from %s", bdir)
 	}
 
-	resid, err := block.Repair(tmpdir, ie.id, block.CompactorRepairSource, block.IgnoreIssue347OutsideChunk)
+	resid, err := block.Repair(logger, tmpdir, ie.id, block.CompactorRepairSource, block.IgnoreIssue347OutsideChunk)
 	if err != nil {
 		return errors.Wrapf(err, "repair failed for block %s", ie.id)
 	}
 
 	// Verify repaired id before uploading it.
-	if err := block.VerifyIndex(filepath.Join(tmpdir, resid.String(), block.IndexFilename), meta.MinTime, meta.MaxTime); err != nil {
+	if err := block.VerifyIndex(logger, filepath.Join(tmpdir, resid.String(), block.IndexFilename), meta.MinTime, meta.MaxTime); err != nil {
 		return errors.Wrapf(err, "repaired block is invalid %s", resid)
 	}
 
 	level.Info(logger).Log("msg", "uploading repaired block", "newID", resid)
-	if err = block.Upload(ctx, bkt, filepath.Join(tmpdir, resid.String())); err != nil {
+	if err = block.Upload(ctx, logger, bkt, filepath.Join(tmpdir, resid.String())); err != nil {
 		return retry(errors.Wrapf(err, "upload of %s failed", resid))
 	}
 
@@ -639,7 +639,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		if err := os.MkdirAll(bdir, 0777); err != nil {
 			return compID, errors.Wrap(err, "create planning block dir")
 		}
-		if err := block.WriteMetaFile(bdir, meta); err != nil {
+		if err := block.WriteMetaFile(cg.logger, bdir, meta); err != nil {
 			return compID, errors.Wrap(err, "write planning meta file")
 		}
 	}
@@ -687,12 +687,12 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 			return compID, errors.Errorf("mismatch between meta %s and dir %s", meta.ULID, id)
 		}
 
-		if err := block.Download(ctx, cg.bkt, id, pdir); err != nil {
+		if err := block.Download(ctx, cg.logger, cg.bkt, id, pdir); err != nil {
 			return compID, retry(errors.Wrapf(err, "download block %s", id))
 		}
 
 		// Ensure all input blocks are valid.
-		stats, err := block.GatherIndexIssueStats(filepath.Join(pdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
+		stats, err := block.GatherIndexIssueStats(cg.logger, filepath.Join(pdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
 		if err != nil {
 			return compID, errors.Wrapf(err, "gather index issues for block %s", pdir)
 		}
@@ -719,7 +719,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 
 	bdir := filepath.Join(dir, compID.String())
 
-	newMeta, err := block.InjectThanosMeta(bdir, block.ThanosMeta{
+	newMeta, err := block.InjectThanosMeta(cg.logger, bdir, block.ThanosMeta{
 		Labels:     cg.labels.Map(),
 		Downsample: block.ThanosDownsampleMeta{Resolution: cg.resolution},
 		Source:     block.CompactorSource,
@@ -733,7 +733,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	}
 
 	// Ensure the output block is valid.
-	if err := block.VerifyIndex(filepath.Join(bdir, block.IndexFilename), newMeta.MinTime, newMeta.MaxTime); err != nil {
+	if err := block.VerifyIndex(cg.logger, filepath.Join(bdir, block.IndexFilename), newMeta.MinTime, newMeta.MaxTime); err != nil {
 		return compID, halt(errors.Wrapf(err, "invalid result block %s", bdir))
 	}
 
@@ -744,7 +744,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 
 	begin = time.Now()
 
-	if err := block.Upload(ctx, cg.bkt, bdir); err != nil {
+	if err := block.Upload(ctx, cg.logger, cg.bkt, bdir); err != nil {
 		return compID, retry(errors.Wrapf(err, "upload of %s failed", compID))
 	}
 	level.Debug(cg.logger).Log("msg", "uploaded block", "result_block", compID, "duration", time.Since(begin))

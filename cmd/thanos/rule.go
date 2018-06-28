@@ -344,7 +344,7 @@ func runRule(
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			s.Stop()
-			runutil.LogOnErr(logger, l, "store gRPC listener")
+			runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
 		})
 	}
 	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
@@ -355,7 +355,7 @@ func runRule(
 
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
+	bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, reg, component)
 	if err != nil && err != client.ErrNotFound {
 		return err
 	}
@@ -369,7 +369,7 @@ func runRule(
 		// Ensure we close up everything properly.
 		defer func() {
 			if err != nil {
-				runutil.LogOnErr(logger, bkt, "bucket client")
+				runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 			}
 		}()
 
@@ -378,7 +378,7 @@ func runRule(
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-			defer runutil.LogOnErr(logger, bkt, "bucket client")
+			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				s.Sync(ctx)
@@ -428,7 +428,7 @@ func queryPrometheusInstant(ctx context.Context, logger log.Logger, addr, query 
 	if err != nil {
 		return nil, err
 	}
-	defer runutil.LogOnErr(logger, resp.Body, "query body")
+	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
 
 	// Always try to decode a vector. Scalar rules won't work for now and arguably
 	// have no relevant use case.

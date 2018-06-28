@@ -68,7 +68,7 @@ func (r *Reloader) Watch(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "create watcher")
 	}
-	defer configWatcher.Close()
+	defer runutil.CloseWithLogOnErr(r.logger, configWatcher, "config watcher close")
 
 	if r.cfgFile != "" {
 		if err := configWatcher.Add(r.cfgFile); err != nil {
@@ -205,9 +205,16 @@ func hashFile(h hash.Hash, fn string) error {
 	if err != nil {
 		return err
 	}
-	h.Write([]byte{'\xff'})
-	h.Write([]byte(fn))
-	h.Write([]byte{'\xff'})
+
+	if _, err := h.Write([]byte{'\xff'}); err != nil {
+		return err
+	}
+	if _, err := h.Write([]byte(fn)); err != nil {
+		return err
+	}
+	if _, err := h.Write([]byte{'\xff'}); err != nil {
+		return err
+	}
 
 	if _, err := io.Copy(h, f); err != nil {
 		return err
@@ -226,7 +233,7 @@ func (r *Reloader) triggerReload(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "reload request failed")
 	}
-	defer resp.Body.Close()
+	defer runutil.CloseWithLogOnErr(r.logger, resp.Body, "trigger reload resp body")
 
 	if resp.StatusCode != 200 {
 		return errors.Errorf("received non-200 response: %s", resp.Status)

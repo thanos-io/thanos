@@ -83,7 +83,7 @@ func runStore(
 	verbose bool,
 ) error {
 	{
-		bkt, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
+		bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, reg, component)
 		if err != nil {
 			return err
 		}
@@ -91,7 +91,7 @@ func runStore(
 		// Ensure we close up everything properly.
 		defer func() {
 			if err != nil {
-				runutil.LogOnErr(logger, bkt, "bucket client")
+				runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 			}
 		}()
 
@@ -117,7 +117,7 @@ func runStore(
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			defer runutil.LogOnErr(logger, bkt, "bucket client")
+			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
 			err := runutil.Repeat(3*time.Minute, ctx.Done(), func() error {
 				if err := bs.SyncBlocks(ctx); err != nil {
@@ -127,7 +127,7 @@ func runStore(
 				return nil
 			})
 
-			runutil.LogOnErr(logger, bs, "bucket store")
+			runutil.CloseWithLogOnErr(logger, bs, "bucket store")
 			return err
 		}, func(error) {
 			cancel()
@@ -145,7 +145,7 @@ func runStore(
 			level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
-			runutil.LogOnErr(logger, l, "store gRPC listener")
+			runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
 		})
 	}
 	{

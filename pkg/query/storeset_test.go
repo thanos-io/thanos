@@ -91,7 +91,7 @@ func startStore(lsetFn func(addr string) []storepb.Label) (*grpc.Server, string,
 	srv := grpc.NewServer()
 	storepb.RegisterStoreServer(srv, &testStore{info: storepb.InfoResponse{Labels: lsetFn(listener.Addr().String())}})
 	go func() {
-		srv.Serve(listener)
+		_ = srv.Serve(listener)
 	}()
 
 	return srv, listener.Addr().String(), nil

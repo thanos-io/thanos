@@ -9,6 +9,7 @@ import (
 
 	"path"
 
+	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/ulid"
@@ -18,7 +19,9 @@ import (
 func TestShipperTimestamps(t *testing.T) {
 	dir, err := ioutil.TempDir("", "shipper-test")
 	testutil.Ok(t, err)
-	defer os.RemoveAll(dir)
+	defer func() {
+		testutil.Ok(t, os.RemoveAll(dir))
+	}()
 
 	s := New(nil, nil, dir, nil, nil, block.TestSource)
 
@@ -27,7 +30,7 @@ func TestShipperTimestamps(t *testing.T) {
 	testutil.NotOk(t, err)
 
 	meta := &Meta{Version: 1}
-	testutil.Ok(t, WriteMetaFile(dir, meta))
+	testutil.Ok(t, WriteMetaFile(log.NewNopLogger(), dir, meta))
 
 	// Nothing uploaded, nothing in the filesystem. We assume that
 	// we are still waiting for TSDB to dump first TSDB block.
@@ -38,7 +41,7 @@ func TestShipperTimestamps(t *testing.T) {
 
 	id1 := ulid.MustNew(1, nil)
 	testutil.Ok(t, os.Mkdir(path.Join(dir, id1.String()), os.ModePerm))
-	testutil.Ok(t, block.WriteMetaFile(path.Join(dir, id1.String()), &block.Meta{
+	testutil.Ok(t, block.WriteMetaFile(log.NewNopLogger(), path.Join(dir, id1.String()), &block.Meta{
 		Version: 1,
 		BlockMeta: tsdb.BlockMeta{
 			ULID:    id1,
@@ -53,7 +56,7 @@ func TestShipperTimestamps(t *testing.T) {
 
 	id2 := ulid.MustNew(2, nil)
 	testutil.Ok(t, os.Mkdir(path.Join(dir, id2.String()), os.ModePerm))
-	testutil.Ok(t, block.WriteMetaFile(path.Join(dir, id2.String()), &block.Meta{
+	testutil.Ok(t, block.WriteMetaFile(log.NewNopLogger(), path.Join(dir, id2.String()), &block.Meta{
 		Version: 1,
 		BlockMeta: tsdb.BlockMeta{
 			ULID:    id2,
@@ -70,7 +73,7 @@ func TestShipperTimestamps(t *testing.T) {
 		Version:  1,
 		Uploaded: []ulid.ULID{id1},
 	}
-	testutil.Ok(t, WriteMetaFile(dir, meta))
+	testutil.Ok(t, WriteMetaFile(log.NewNopLogger(), dir, meta))
 	mint, maxt, err = s.Timestamps()
 	testutil.Ok(t, err)
 	testutil.Equals(t, int64(1000), mint)

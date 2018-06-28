@@ -216,7 +216,7 @@ func runSidecar(
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			s.Stop()
-			runutil.LogOnErr(logger, l, "store gRPC listener")
+			runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
 		})
 	}
 
@@ -224,7 +224,7 @@ func runSidecar(
 
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
+	bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, reg, component)
 	if err != nil && err != client.ErrNotFound {
 		return err
 	}
@@ -238,7 +238,7 @@ func runSidecar(
 		// Ensure we close up everything properly.
 		defer func() {
 			if err != nil {
-				runutil.LogOnErr(logger, bkt, "bucket client")
+				runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 			}
 		}()
 
@@ -246,7 +246,7 @@ func runSidecar(
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-			defer runutil.LogOnErr(logger, bkt, "bucket client")
+			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				s.Sync(ctx)
@@ -341,7 +341,7 @@ func queryExternalLabels(ctx context.Context, logger log.Logger, base *url.URL) 
 	if err != nil {
 		return nil, errors.Wrapf(err, "request config against %s", u.String())
 	}
-	defer runutil.LogOnErr(logger, resp.Body, "query body")
+	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
 
 	var d struct {
 		Data struct {
