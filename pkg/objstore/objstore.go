@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -15,6 +16,7 @@ import (
 // Bucket provides read and write access to an object storage bucket.
 // NOTE: We assume strong consistency for write-read flow.
 type Bucket interface {
+	io.Closer
 	BucketReader
 
 	// Upload the contents of the reader as an object into the bucket.
@@ -73,7 +75,7 @@ func UploadFile(ctx context.Context, bkt Bucket, src, dst string) error {
 	if err != nil {
 		return errors.Wrapf(err, "open file %s", src)
 	}
-	defer r.Close()
+	defer runutil.LogOnErr(nil, r, "close file %s", src)
 
 	if err := bkt.Upload(ctx, dst, r); err != nil {
 		return errors.Wrapf(err, "upload file %s as %s", src, dst)
@@ -281,6 +283,10 @@ func (b *metricBucket) Delete(ctx context.Context, name string) error {
 
 func (b *metricBucket) IsObjNotFoundErr(err error) bool {
 	return b.bkt.IsObjNotFoundErr(err)
+}
+
+func (b *metricBucket) Close() error {
+	return b.bkt.Close()
 }
 
 type timingReadCloser struct {

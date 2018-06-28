@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
@@ -41,7 +42,7 @@ func WriteIndexCache(fn string, r *index.Reader) error {
 	if err != nil {
 		return errors.Wrap(err, "create file")
 	}
-	defer f.Close()
+	defer runutil.LogOnErr(nil, f, "index cache writer")
 
 	v := indexCache{
 		Version:     r.Version(),
@@ -111,7 +112,7 @@ func ReadIndexCache(fn string) (
 	if err != nil {
 		return 0, nil, nil, nil, errors.Wrap(err, "open file")
 	}
-	defer f.Close()
+	defer runutil.LogOnErr(nil, f, "index reader")
 
 	var v indexCache
 	if err := json.NewDecoder(f).Decode(&v); err != nil {
@@ -250,7 +251,7 @@ func GatherIndexIssueStats(fn string, minTime int64, maxTime int64) (stats Stats
 	if err != nil {
 		return stats, errors.Wrap(err, "open index file")
 	}
-	defer r.Close()
+	defer runutil.LogOnErr(nil, r, "gather index issue file reader")
 
 	p, err := r.Postings(index.AllPostingsKey())
 	if err != nil {
@@ -363,19 +364,19 @@ func Repair(dir string, id ulid.ULID, source SourceType, ignoreChkFns ...ignoreF
 	if err != nil {
 		return resid, errors.Wrap(err, "open block")
 	}
-	defer b.Close()
+	defer runutil.BestEffortErr(nil, &err, b, "repair block reader")
 
 	indexr, err := b.Index()
 	if err != nil {
 		return resid, errors.Wrap(err, "open index")
 	}
-	defer indexr.Close()
+	defer runutil.BestEffortErr(nil, &err, indexr, "repair index reader")
 
 	chunkr, err := b.Chunks()
 	if err != nil {
 		return resid, errors.Wrap(err, "open chunks")
 	}
-	defer chunkr.Close()
+	defer runutil.BestEffortErr(nil, &err, chunkr, "repair chunk reader")
 
 	resdir := filepath.Join(dir, resid.String())
 
@@ -383,13 +384,13 @@ func Repair(dir string, id ulid.ULID, source SourceType, ignoreChkFns ...ignoreF
 	if err != nil {
 		return resid, errors.Wrap(err, "open chunk writer")
 	}
-	defer chunkw.Close()
+	defer runutil.BestEffortErr(nil, &err, chunkw, "repair chunk writer")
 
 	indexw, err := index.NewWriter(filepath.Join(resdir, IndexFilename))
 	if err != nil {
 		return resid, errors.Wrap(err, "open index writer")
 	}
-	defer indexw.Close()
+	defer runutil.BestEffortErr(nil, &err, indexw, "repair index writer")
 
 	// TODO(fabxc): adapt so we properly handle the version once we update to an upstream
 	// that has multiple.

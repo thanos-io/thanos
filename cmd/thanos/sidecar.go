@@ -127,7 +127,7 @@ func runSidecar(
 			// Blocking query of external labels before joining as a Source Peer into gossip.
 			// We retry infinitely until we reach and fetch labels from our Prometheus.
 			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
-				if err := metadata.UpdateLabels(ctx); err != nil {
+				if err := metadata.UpdateLabels(ctx, logger); err != nil {
 					level.Warn(logger).Log(
 						"msg", "failed to fetch initial external labels. Is Prometheus running? Retrying",
 						"err", err,
@@ -164,7 +164,7 @@ func runSidecar(
 				iterCtx, iterCancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer iterCancel()
 
-				if err := metadata.UpdateLabels(iterCtx); err != nil {
+				if err := metadata.UpdateLabels(iterCtx, logger); err != nil {
 					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
 					promUp.Set(0)
 				} else {
@@ -216,7 +216,7 @@ func runSidecar(
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			s.Stop()
-			l.Close()
+			runutil.LogOnErr(logger, l, "store gRPC listener")
 		})
 	}
 
@@ -224,7 +224,7 @@ func runSidecar(
 
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
+	bkt, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
 	if err != nil && err != client.ErrNotFound {
 		return err
 	}
@@ -238,7 +238,7 @@ func runSidecar(
 		// Ensure we close up everything properly.
 		defer func() {
 			if err != nil {
-				closeFn()
+				runutil.LogOnErr(logger, bkt, "bucket client")
 			}
 		}()
 
@@ -246,7 +246,7 @@ func runSidecar(
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-			defer closeFn()
+			defer runutil.LogOnErr(logger, bkt, "bucket client")
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				s.Sync(ctx)
@@ -280,8 +280,8 @@ type metadata struct {
 	labels labels.Labels
 }
 
-func (s *metadata) UpdateLabels(ctx context.Context) error {
-	elset, err := queryExternalLabels(ctx, s.promURL)
+func (s *metadata) UpdateLabels(ctx context.Context, logger log.Logger) error {
+	elset, err := queryExternalLabels(ctx, logger, s.promURL)
 	if err != nil {
 		return err
 	}
@@ -293,13 +293,12 @@ func (s *metadata) UpdateLabels(ctx context.Context) error {
 	return nil
 }
 
-func (s *metadata) UpdateTimestamps(mint int64, maxt int64) error {
+func (s *metadata) UpdateTimestamps(mint int64, maxt int64) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
 	s.mint = mint
 	s.maxt = maxt
-	return nil
 }
 
 func (s *metadata) Labels() labels.Labels {
@@ -330,7 +329,7 @@ func (s *metadata) Timestamps() (mint int64, maxt int64) {
 	return s.mint, s.maxt
 }
 
-func queryExternalLabels(ctx context.Context, base *url.URL) (labels.Labels, error) {
+func queryExternalLabels(ctx context.Context, logger log.Logger, base *url.URL) (labels.Labels, error) {
 	u := *base
 	u.Path = path.Join(u.Path, "/api/v1/status/config")
 
@@ -342,7 +341,7 @@ func queryExternalLabels(ctx context.Context, base *url.URL) (labels.Labels, err
 	if err != nil {
 		return nil, errors.Wrapf(err, "request config against %s", u.String())
 	}
-	defer resp.Body.Close()
+	defer runutil.LogOnErr(logger, resp.Body, "query body")
 
 	var d struct {
 		Data struct {

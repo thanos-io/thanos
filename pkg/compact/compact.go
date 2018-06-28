@@ -239,7 +239,9 @@ func (c *Syncer) Groups() (res []*Group, err error) {
 			groups[GroupKey(*m)] = g
 			res = append(res, g)
 		}
-		g.Add(m)
+		if err := g.Add(m); err != nil {
+			return nil, errors.Wrap(err, "add compaction group")
+		}
 	}
 	sort.Slice(res, func(i, j int) bool {
 		return res[i].Key() < res[j].Key()
@@ -575,7 +577,12 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(tmpdir)
+
+	defer func() {
+		if err := os.RemoveAll(tmpdir); err != nil {
+			level.Warn(logger).Log("msg", "failed to remote tmpdir", "err", err, "tmpdir", tmpdir)
+		}
+	}()
 
 	bdir := filepath.Join(tmpdir, ie.id.String())
 	if err := block.Download(ctx, bkt, ie.id, bdir); err != nil {

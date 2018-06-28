@@ -82,7 +82,7 @@ func runCompact(
 
 	reg.MustRegister(halted)
 
-	bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
+	bkt, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
 	if err != nil {
 		return err
 	}
@@ -90,7 +90,7 @@ func runCompact(
 	// Ensure we close up everything properly.
 	defer func() {
 		if err != nil {
-			closeFn()
+			runutil.LogOnErr(logger, bkt, "bucket client")
 		}
 	}()
 
@@ -185,7 +185,7 @@ func runCompact(
 		}
 
 		g.Add(func() error {
-			defer closeFn()
+			defer runutil.LogOnErr(logger, bkt, "bucket client")
 
 			if !wait {
 				return f()

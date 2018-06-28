@@ -19,6 +19,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 )
 
@@ -322,7 +323,7 @@ func (s *Sender) sendOne(ctx context.Context, url string, b []byte) error {
 	if err != nil {
 		return errors.Wrapf(err, "send request to %q", url)
 	}
-	defer resp.Body.Close()
+	defer runutil.LogOnErr(nil, resp.Body, "send one alert")
 
 	if resp.StatusCode/100 != 2 {
 		return errors.Errorf("bad response status %v from %q", resp.Status, url)

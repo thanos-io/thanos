@@ -13,6 +13,7 @@ import (
 	"fmt"
 
 	"github.com/improbable-eng/thanos/pkg/objstore"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
@@ -81,7 +82,7 @@ func WriteMetaFile(dir string, meta *Meta) error {
 	enc.SetIndent("", "\t")
 
 	if err := enc.Encode(meta); err != nil {
-		f.Close()
+		runutil.LogOnErr(nil, f, "close meta")
 		return err
 	}
 	if err := f.Close(); err != nil {
@@ -122,7 +123,7 @@ func renameFile(from, to string) error {
 	}
 
 	if err = fileutil.Fsync(pdir); err != nil {
-		pdir.Close()
+		runutil.LogOnErr(nil, pdir, "close dir")
 		return err
 	}
 	return pdir.Close()
@@ -177,7 +178,7 @@ func Upload(ctx context.Context, bkt objstore.Bucket, bdir string) error {
 		return errors.Errorf("empty external labels are not allowed for Thanos block.")
 	}
 
-	if objstore.UploadFile(ctx, bkt, path.Join(bdir, MetaFilename), path.Join(DebugMetas, fmt.Sprintf("%s.json", id))); err != nil {
+	if err := objstore.UploadFile(ctx, bkt, path.Join(bdir, MetaFilename), path.Join(DebugMetas, fmt.Sprintf("%s.json", id))); err != nil {
 		return errors.Wrap(err, "upload meta file to debug dir")
 	}
 
@@ -185,13 +186,13 @@ func Upload(ctx context.Context, bkt objstore.Bucket, bdir string) error {
 		return cleanUp(bkt, id, errors.Wrap(err, "upload chunks"))
 	}
 
-	if objstore.UploadFile(ctx, bkt, path.Join(bdir, IndexFilename), path.Join(id.String(), IndexFilename)); err != nil {
+	if err := objstore.UploadFile(ctx, bkt, path.Join(bdir, IndexFilename), path.Join(id.String(), IndexFilename)); err != nil {
 		return cleanUp(bkt, id, errors.Wrap(err, "upload index"))
 	}
 
 	// Meta.json always need to be uploaded as a last item. This will allow to assume block directories without meta file
 	// to be pending uploads.
-	if objstore.UploadFile(ctx, bkt, path.Join(bdir, MetaFilename), path.Join(id.String(), MetaFilename)); err != nil {
+	if err := objstore.UploadFile(ctx, bkt, path.Join(bdir, MetaFilename), path.Join(id.String(), MetaFilename)); err != nil {
 		return cleanUp(bkt, id, errors.Wrap(err, "upload meta file"))
 	}
 
@@ -219,7 +220,7 @@ func DownloadMeta(ctx context.Context, bkt objstore.Bucket, id ulid.ULID) (Meta,
 	if err != nil {
 		return Meta{}, errors.Wrapf(err, "meta.json bkt get for %s", id.String())
 	}
-	defer rc.Close()
+	defer runutil.LogOnErr(nil, rc, "download meta bucket client")
 
 	var m Meta
 	if err := json.NewDecoder(rc).Decode(&m); err != nil {
