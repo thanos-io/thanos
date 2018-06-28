@@ -92,5 +92,5 @@ Flags:
                                 expense of increased bandwidth usage.
       --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS  
                                 Explicit address to advertise in cluster.
-
+      --alert.query-url         The external Thanos Query URL that would be set in all alerts 'Source' field
 ```
