@@ -6,6 +6,7 @@ There are 4 Grafana dashboards targeted for environments running Kubernetes:
 - [Thanos Query](thanos-query.json)
 - [Thanos Store](thanos-store.json)
 - [Thanos Sidecar](thanos-sidecar.json)
+- [Thanos Rule](thanos-rule.json)
 
 You can import them via `Import -> Paste JSON` in Grafana.
 These dashboards require Grafana 5, importing them in older versions are known not to work.
