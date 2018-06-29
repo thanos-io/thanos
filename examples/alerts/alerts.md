@@ -33,11 +33,41 @@ Here are some example alerts configured for Kubernetes environment.
     impact: Long term storage queries will be slower 
     action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
     dashboard: COMPACTION_URL
+- alert: ThanosCompactNotRunIn24Hours
+  expr: (time() - max(thanos_objstore_bucket_last_successful_upload_time{app="thanos-compact"}) ) /60/60 > 24
+  labels:
+    team: TEAM
+  annotations:
+    summary: Thanos Compaction has not been run in 24 hours
+    impact: Long term storage queries will be slower 
+    action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
+    dashboard: COMPACTION_URL
+- alert: ThanosComactionIsNotRunning
+  expr: up{app="thanos-compact"} == 0 or absent({app="thanos-compact"})
+  for: 5m
+  labels:
+    team: TEAM
+  annotations:
+    summary: Thanos Compaction is not running
+    impact: Long term storage queries will be slower 
+    action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
+    dashboard: COMPACTION_URL
+- alert: ThanosComactionMultipleCompactionsAreRunning
+  expr: sum(up{app="thanos-compact"}) > 1
+  for: 5m
+  labels:
+    team: TEAM
+  annotations:
+    summary: Multiple replicas of Thanos compaction shouldn't be running.
+    impact: Metrics in long term storage may be corrupted
+    action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
+    dashboard: COMPACTION_URL
+
 ```
 
 ## Ruler
 
-For Thanos ruler we run alerts some alerts in local Prometheus:
+For Thanos ruler we run some alerts in local Prometheus, to make sure that Thanos Rule is working:
 
 ```
 - alert: ThanosRuleIsDown
@@ -60,11 +90,6 @@ For Thanos ruler we run alerts some alerts in local Prometheus:
     impact: Alerts are not working
     action: 'check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace'
     dashboard: RULE_DASHBOARD
-```
-
-And some alerts running in thanos rule:
-
-```
 - alert: ThanosRuleGrpcErrorRate
   expr: rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable",app="thanos-rule"}[5m]) > 0
   for: 5m
@@ -87,6 +112,16 @@ And some alerts running in thanos rule:
     team: TEAM
   annotations:
     summary: Thanos Store is returning Internal/Unavailable errors 
+    impact: Long Term Storage Prometheus queries are failing
+    action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
+    dashboard: GATEWAY_URL
+- alert: ThanosStoreBucketOperationsFailed
+  expr: rate(thanos_objstore_bucket_operation_failures_total{app="thanos-store"}[5m]) > 0
+  for: 5m
+  labels:
+    team: TEAM
+  annotations:
+    summary: Thanos Store is failing to do bucket operations
     impact: Long Term Storage Prometheus queries are failing
     action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
     dashboard: GATEWAY_URL
