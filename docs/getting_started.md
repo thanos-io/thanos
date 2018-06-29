@@ -231,4 +231,8 @@ You can find one-box example with minikube [here](../kube/README.md).
 
 # Dashboards
 
-You can find Grafana dashboards [here](../examples/grafana/monitoring.md)
+You can find example Grafana dashboards [here](../examples/grafana/monitoring.md)
+
+# Alerts
+
+You can find example Alert configuration [here](../examples/alerts/alerts.md)
