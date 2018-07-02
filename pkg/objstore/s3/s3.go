@@ -17,6 +17,7 @@ import (
 
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/pkg/credentials"
 	"github.com/minio/minio-go/pkg/encrypt"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -45,48 +46,66 @@ type Bucket struct {
 
 // Config encapsulates the necessary config values to instantiate an s3 client.
 type Config struct {
-	Bucket       string
-	Endpoint     string
-	AccessKey    string
-	SecretKey    string
-	Insecure     bool
-	SignatureV2  bool
-	SSEEnprytion bool
+	Bucket        string
+	Endpoint      string
+	Credentials   *credentials.Credentials
+	Insecure      bool
+	SignatureV2   bool
+	SSEEncryption bool
 }
 
 // RegisterS3Params registers the s3 flags and returns an initialized Config struct.
 func RegisterS3Params(cmd *kingpin.CmdClause) *Config {
-	var s3config Config
+
+	var (
+		s3Config  Config
+		accessKey string
+		secretKey string
+	)
 
 	cmd.Flag("s3.bucket", "S3-Compatible API bucket name for stored blocks.").
-		PlaceHolder("<bucket>").Envar("S3_BUCKET").StringVar(&s3config.Bucket)
+		PlaceHolder("<bucket>").Envar("S3_BUCKET").StringVar(&s3Config.Bucket)
 
 	cmd.Flag("s3.endpoint", "S3-Compatible API endpoint for stored blocks.").
-		PlaceHolder("<api-url>").Envar("S3_ENDPOINT").StringVar(&s3config.Endpoint)
+		PlaceHolder("<api-url>").Envar("S3_ENDPOINT").StringVar(&s3Config.Endpoint)
 
 	cmd.Flag("s3.access-key", "Access key for an S3-Compatible API.").
-		PlaceHolder("<key>").Envar("S3_ACCESS_KEY").StringVar(&s3config.AccessKey)
+		PlaceHolder("<access-key>").StringVar(&accessKey)
 
-	s3config.SecretKey = os.Getenv("S3_SECRET_KEY")
+	cmd.Flag("s3.secret-key", "Secrety key for an S3-Compatible API.").
+		PlaceHolder("<secret-key>").StringVar(&secretKey)
 
 	cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
-		Default("false").Envar("S3_INSECURE").BoolVar(&s3config.Insecure)
+		Default("false").Envar("S3_INSECURE").BoolVar(&s3Config.Insecure)
 
 	cmd.Flag("s3.signature-version2", "Whether to use S3 Signature Version 2; otherwise Signature Version 4 will be used.").
-		Default("false").Envar("S3_SIGNATURE_VERSION2").BoolVar(&s3config.SignatureV2)
+		Default("false").Envar("S3_SIGNATURE_VERSION2").BoolVar(&s3Config.SignatureV2)
 
 	cmd.Flag("s3.encrypt-sse", "Whether to use Server Side Encryption").
-		Default("false").Envar("S3_SSE_ENCRYPTION").BoolVar(&s3config.SSEEnprytion)
+		Default("false").Envar("S3_SSE_ENCRYPTION").BoolVar(&s3Config.SSEEncryption)
 
-	return &s3config
+	if accessKey == "" || secretKey == "" {
+		s3Config.Credentials = credentials.NewChainCredentials(
+			[]credentials.Provider{
+				&credentials.EnvAWS{},
+				&credentials.IAM{},
+			},
+		)
+	} else {
+		if s3Config.SignatureV2 {
+			s3Config.Credentials = credentials.NewStaticV2(accessKey, secretKey, "")
+		} else {
+			s3Config.Credentials = credentials.NewStaticV4(accessKey, secretKey, "")
+		}
+	}
+	return &s3Config
 }
 
 // Validate checks to see if mandatory s3 config options are set.
 func (conf *Config) Validate() error {
 	if conf.Bucket == "" ||
 		conf.Endpoint == "" ||
-		conf.AccessKey == "" ||
-		conf.SecretKey == "" {
+		conf.Credentials == nil {
 		return errors.New("insufficient s3 configuration information")
 	}
 	return nil
@@ -95,8 +114,7 @@ func (conf *Config) Validate() error {
 // ValidateForTests checks to see if mandatory s3 config options for tests are set.
 func (conf *Config) ValidateForTests() error {
 	if conf.Endpoint == "" ||
-		conf.AccessKey == "" ||
-		conf.SecretKey == "" {
+		conf.Credentials == nil {
 		return errors.New("insufficient s3 test configuration information")
 	}
 	return nil
@@ -104,14 +122,7 @@ func (conf *Config) ValidateForTests() error {
 
 // NewBucket returns a new Bucket using the provided s3 config values.
 func NewBucket(conf *Config, reg prometheus.Registerer, component string) (*Bucket, error) {
-	var f func(string, string, string, bool) (*minio.Client, error)
-	if conf.SignatureV2 {
-		f = minio.NewV2
-	} else {
-		f = minio.NewV4
-	}
-
-	client, err := f(conf.Endpoint, conf.AccessKey, conf.SecretKey, !conf.Insecure)
+	client, err := minio.NewWithCredentials(conf.Endpoint, conf.Credentials, !conf.Insecure, "")
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize s3 client")
 	}
@@ -141,7 +152,7 @@ func NewBucket(conf *Config, reg prometheus.Registerer, component string) (*Buck
 	})
 
 	var sse encrypt.ServerSide
-	if conf.SSEEnprytion {
+	if conf.SSEEncryption {
 		sse = encrypt.NewSSE()
 	}
 
@@ -258,10 +269,9 @@ func (b *Bucket) Close() error { return nil }
 
 func configFromEnv() *Config {
 	c := &Config{
-		Bucket:    os.Getenv("S3_BUCKET"),
-		Endpoint:  os.Getenv("S3_ENDPOINT"),
-		AccessKey: os.Getenv("S3_ACCESS_KEY"),
-		SecretKey: os.Getenv("S3_SECRET_KEY"),
+		Bucket:      os.Getenv("S3_BUCKET"),
+		Endpoint:    os.Getenv("S3_ENDPOINT"),
+		Credentials: credentials.NewEnvAWS(),
 	}
 
 	insecure, err := strconv.ParseBool(os.Getenv("S3_INSECURE"))
