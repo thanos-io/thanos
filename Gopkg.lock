@@ -39,7 +39,10 @@
 [[projects]]
   branch = "master"
   name = "github.com/armon/go-metrics"
-  packages = ["."]
+  packages = [
+    ".",
+    "prometheus"
+  ]
   revision = "7aa49fde808223f8dadfdbfd3a20ff6c19e5f9ec"
 
 [[projects]]
@@ -546,6 +549,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "eaeee5a92d2a762dc5e29b9096799f331d4e511094693ce518d617d90c5745d8"
+  inputs-digest = "01f42491c7ac8bb0d47771086f629f63dc66bbaa9ce9a595b681d3e362e4bbcc"
   solver-name = "gps-cdcl"
   solver-version = 1
