@@ -36,17 +36,28 @@ errcheck:
 	@echo ">> errchecking the code"
 	@errcheck -verbose -exclude .errcheck_excludes.txt ./...
 
-build: deps $(PROMU)
+build: deps promu
 	@echo ">> building binaries"
 	@$(PROMU) build --prefix $(PREFIX)
+
+.PHONY: crossbuild
+crossbuild: deps promu
+	@echo ">> crossbuilding all binaries"
+	$(PROMU) crossbuild -v
+
+.PHONY: tarball
+tarball: promu
+	@echo ">> building release tarball"
+	$(PROMU) tarball --prefix $(PREFIX) $(BIN_DIR)
 
 $(GOIMPORTS):
 	@echo ">> fetching goimports"
 	@go get -u golang.org/x/tools/cmd/goimports
 
-$(PROMU):
+.PHONY: promu
+promu:
 	@echo ">> fetching promu"
-	@go get -u github.com/prometheus/promu
+	GOOS= GOARCH= go get -u github.com/prometheus/promu
 
 $(DEP):
 	@echo ">> fetching dep"

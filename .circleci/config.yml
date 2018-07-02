@@ -1,7 +1,7 @@
 # NOTE: Current plan gives 1500 build minutes per month.
 version: 2
 jobs:
-  build:
+  test:
     docker:
       # Available from https://hub.docker.com/r/circleci/golang/
       - image: circleci/golang:1.10
@@ -32,15 +32,53 @@ jobs:
             echo "Skipping AWS tests."
 
             make test
+
+  build:
+    machine: true
+    working_directory: /home/circleci/.go_workspace/src/github.com/improbable-eng/thanos
+    steps:
+      - checkout
+      - run: make promu
+      - run: make crossbuild
+      - persist_to_workspace:
+          root: .
+          paths:
+          - .build
+
+  publish_master:
+    docker:
+      # Available from https://hub.docker.com/r/circleci/golang/
+      - image: circleci/golang:1.10
+    working_directory: /go/src/github.com/improbable-eng/thanos
+    steps:
+      - checkout
+      - setup_remote_docker:
+          version: 17.07.0-ce
+      - attach_workspace:
+          at: .
+      - run: ln -s .build/linux-amd64/thanos thanos
       - run: make docker
-      - run: 
-          name: Run tests on generated Docker image
-          command: |
-            docker run thanos --help
-      - deploy:
-          name: Push Docker image
-          command: |
-            if [ "${CIRCLE_BRANCH}" == "master" ]; then
-              docker login -u="${DOCKER_USERNAME}" -p="${DOCKER_PASSWORD}"
-              make docker-push
-            fi
+      - run: docker run thanos --help
+      - run: docker login -u="${DOCKER_USERNAME}" -p="${DOCKER_PASSWORD}"
+      - run: make docker-push
+
+
+workflows:
+  version: 2
+  thanos:
+    jobs:
+    - test:
+        filters:
+          tags:
+            only: /.*/
+    - build:
+        filters:
+          tags:
+            only: /.*/
+    - publish_master:
+        requires:
+        - test
+        - build
+        filters:
+          branches:
+            only: master

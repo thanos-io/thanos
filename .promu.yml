@@ -11,3 +11,9 @@ build:
         -X {{repoPath}}/vendor/github.com/prometheus/common/version.Branch={{.Branch}}
         -X {{repoPath}}/vendor/github.com/prometheus/common/version.BuildUser={{user}}@{{host}}
         -X {{repoPath}}/vendor/github.com/prometheus/common/version.BuildDate={{date "20060102-15:04:05"}}
+crossbuild:
+    platforms:
+        - linux/amd64
+        - darwin/amd64
+        - linux/arm64
+        - windows/amd64

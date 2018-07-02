@@ -8,3 +8,8 @@ kube/.minikube
 
 # Ignore e2e working dirs.
 data/
+
+# Ignore promu artifacts.
+/.build
+/.release
+/.tarballs
