@@ -1,5 +1,5 @@
 // Package reloader contains helpers to trigger reloads of Prometheus instances
-// on configuration changes and to substitude environment variables in config files.
+// on configuration changes and to substitute environment variables in config files.
 package reloader
 
 import (

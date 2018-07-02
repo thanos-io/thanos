@@ -102,7 +102,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	}
 }
 
-// runRule runs a rule evaluation component that continously evaluates alerting and recording
+// runRule runs a rule evaluation component that continuously evaluates alerting and recording
 // rules. It sends alert notifications and writes TSDB data for results like a regular Prometheus server.
 func runRule(
 	g *run.Group,
