@@ -62,6 +62,34 @@ jobs:
       - run: docker login -u="${DOCKER_USERNAME}" -p="${DOCKER_PASSWORD}"
       - run: make docker-push
 
+  publish_release:
+    docker:
+      # Available from https://hub.docker.com/r/circleci/golang/
+      - image: circleci/golang:1.10
+    working_directory: /go/src/github.com/improbable-eng/thanos
+    steps:
+      - checkout
+      - setup_remote_docker:
+          version: 17.07.0-ce
+      - attach_workspace:
+          at: .
+      - run: make promu
+      - run: promu crossbuild tarballs
+      - run: promu checksum .tarballs
+      - run: promu release .tarballs
+      - store_artifacts:
+          path: .tarballs
+          destination: releases
+      - run: ln -s .build/linux-amd64/thanos thanos
+      - run: make docker
+      - run: docker run thanos --help
+      - run: docker login -u="${DOCKER_USERNAME}" -p="${DOCKER_PASSWORD}"
+      - run: make docker-push DOCKER_IMAGE_TAG=$CIRCLE_TAG
+      - run: |
+          # Only tag stable releases as latest.
+          if [[ "$CIRCLE_TAG" =~ ^v[0-9]+(\.[0-9]+){2}$ ]]; then
+            make docker-tag-latest DOCKER_IMAGE_TAG=$CIRCLE_TAG
+          fi
 
 workflows:
   version: 2
@@ -82,3 +110,12 @@ workflows:
         filters:
           branches:
             only: master
+    - publish_release:
+        requires:
+        - test
+        - build
+        filters:
+          tags:
+            only: /^v[0-9]+(\.[0-9]+){2}(-.+|[^-.]*)$/
+          branches:
+            ignore: /.*/

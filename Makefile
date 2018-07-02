@@ -58,6 +58,11 @@ docker-push:
 	@docker tag "${DOCKER_IMAGE_NAME}" improbable/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
 	@docker push improbable/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
 
+docker-tag-latest:
+	@echo ">> tag latest"
+	@docker tag improbable/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)" improbable/"$(DOCKER_IMAGE_NAME):latest"
+	@docker push improbable/"$(DOCKER_IMAGE_NAME):latest"
+
 # docs regenerates flags in docs for all thanos commands.
 .PHONY: docs
 docs:
