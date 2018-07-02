@@ -22,7 +22,7 @@ import (
 )
 
 func registerCompact(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "continously compacts blocks in an object store bucket")
+	cmd := app.Command(name, "continuously compacts blocks in an object store bucket")
 
 	haltOnError := cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
 		Hidden().Default("true").Bool()

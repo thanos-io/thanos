@@ -236,7 +236,7 @@ func (b *memBlock) Close() error {
 // currentWindow returns the end timestamp of the window that t falls into.
 func currentWindow(t, r int64) int64 {
 	// The next timestamp is the next number after s.t that's aligned with window.
-	// We substract 1 because block ranges are [from, to) and the last sample would
+	// We subtract 1 because block ranges are [from, to) and the last sample would
 	// go out of bounds otherwise.
 	return t - (t % r) + r - 1
 }
@@ -692,7 +692,7 @@ func (it *CounterSeriesIterator) Err() error {
 	return it.chks[it.i].Err()
 }
 
-// AverageChunkIterator emits an artifical series of average samples based in aggregate
+// AverageChunkIterator emits an artificial series of average samples based in aggregate
 // chunks with sum and count aggregates.
 type AverageChunkIterator struct {
 	cntIt chunkenc.Iterator

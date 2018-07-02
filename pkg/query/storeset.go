@@ -23,7 +23,7 @@ type StoreSpec interface {
 	// Metadata returns current labels and min, max ranges for store.
 	// It can change for every call for this method.
 	// If metadata call fails we assume that store is no longer accessible and we should not use it.
-	// NOTE: It is implementation responsibility to retry until context timeout, but a caller responsibilty to manage
+	// NOTE: It is implementation responsibility to retry until context timeout, but a caller responsibility to manage
 	// given store connection.
 	Metadata(ctx context.Context, client storepb.StoreClient) (labels []storepb.Label, mint int64, maxt int64, err error)
 }

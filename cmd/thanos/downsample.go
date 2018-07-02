@@ -28,7 +28,7 @@ import (
 )
 
 func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "continously downsamples blocks in an object store bucket")
+	cmd := app.Command(name, "continuously downsamples blocks in an object store bucket")
 
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
 		Default("./data").String()
@@ -169,7 +169,7 @@ func downsampleBucket(
 			}
 			// Only downsample blocks once we are sure to get roughly 2 chunks out of it.
 			// NOTE(fabxc): this must match with at which block size the compactor creates downsampled
-			// blockes. Otherwise we may never downsample some data.
+			// blocks. Otherwise we may never downsample some data.
 			if m.MaxTime-m.MinTime < 40*60*60*1000 {
 				continue
 			}
@@ -190,7 +190,7 @@ func downsampleBucket(
 			}
 			// Only downsample blocks once we are sure to get roughly 2 chunks out of it.
 			// NOTE(fabxc): this must match with at which block size the compactor creates downsampled
-			// blockes. Otherwise we may never downsample some data.
+			// blocks. Otherwise we may never downsample some data.
 			if m.MaxTime-m.MinTime < 10*24*60*60*1000 {
 				continue
 			}
