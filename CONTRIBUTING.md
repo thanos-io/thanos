@@ -10,16 +10,28 @@ Please follow the [code of conduct](CODE_OF_CONDUCT.md) in all your interactions
 
 1. Read [getting started docs](docs/getting_started.md) and prepare Thanos.
 2. Familarize yourself with [Makefile](Makefile) commands like `format`, `build`, `proto` and `test`.
-3. Fork improbable-eng/thanos.git and start development from your own folk. Here are sample steps to setup your development enviroment.
-```
+3. Fork improbable-eng/thanos.git and start development from your own fork. Here are sample steps to setup your development environment:
+```console
 $ mkdir -p $GOPATH/src/github.com/improbable-eng
 $ cd $GOPATH/src/github.com/improbable-eng
 $ git clone https://github.com/<your_github_id>/thanos.git
 $ cd thanos
+$ git add remote upstream https://github.com/improbable-eng/thanos.git
+$ git remote update
+$ git merge upstream/master
 $ make build
 $ ./thanos -h
 ```
-4. Keep PRs as small as possible. Chain them if needed (base PR on other PRs).
+4. Keep PRs as small as possible. For each of your PR, you create one branch based on the lateest master. Chain them if needed (base PR on other PRs). Here are sample steps you can follow. You can get more details about the workflow from [here](https://gist.github.com/Chaser324/ce0505fbed06b947d962).
+```console
+$ git checkout master
+$ git remote update
+$ git merge upstream/master
+$ git checkout -b <your_branch_for_new_pr>
+$ make build
+$ <Iterate your development>
+$ git push origin <your_branch_for_new_pr>
+```
 5. If you don't have a live object store ready add these envvars to skip tests for these:
 - THANOS_SKIP_GCS_TESTS to skip GCS tests.
 - THANOS_SKIP_S3_AWS_TESTS to skip AWS tests.
