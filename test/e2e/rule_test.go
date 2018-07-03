@@ -24,7 +24,7 @@ import (
 func TestRuleComponent(t *testing.T) {
 	dir, err := ioutil.TempDir("", "test_rule")
 	testutil.Ok(t, err)
-	defer os.RemoveAll(dir)
+	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
 	const alwaysFireRule = `
 groups:
@@ -144,7 +144,7 @@ func queryAlertmanagerAlerts(ctx context.Context, url string) ([]*model.Alert, e
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer runutil.CloseWithLogOnErr(nil, resp.Body, "close body query alertmanager")
 
 	var v struct {
 		Data []*model.Alert `json:"data"`

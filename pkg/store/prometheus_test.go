@@ -24,16 +24,19 @@ func TestPrometheusStore_Series_e2e(t *testing.T) {
 	baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
 
 	a := p.Appender()
-	a.Add(labels.FromStrings("a", "b"), baseT+100, 1)
-	a.Add(labels.FromStrings("a", "b"), baseT+200, 2)
-	a.Add(labels.FromStrings("a", "b"), baseT+300, 3)
+	_, err = a.Add(labels.FromStrings("a", "b"), baseT+100, 1)
+	testutil.Ok(t, err)
+	_, err = a.Add(labels.FromStrings("a", "b"), baseT+200, 2)
+	testutil.Ok(t, err)
+	_, err = a.Add(labels.FromStrings("a", "b"), baseT+300, 3)
+	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	testutil.Ok(t, p.Start())
-	defer p.Stop()
+	defer func() { testutil.Ok(t, p.Stop()) }()
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
@@ -96,16 +99,18 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 	testutil.Ok(t, err)
 
 	a := p.Appender()
-	a.Add(labels.FromStrings("a", "b"), 0, 1)
-	a.Add(labels.FromStrings("a", "c"), 0, 1)
-	a.Add(labels.FromStrings("a", "a"), 0, 1)
+	_, err = a.Add(labels.FromStrings("a", "b"), 0, 1)
+	testutil.Ok(t, err)
+	_, err = a.Add(labels.FromStrings("a", "c"), 0, 1)
+	testutil.Ok(t, err)
+	_, err = a.Add(labels.FromStrings("a", "a"), 0, 1)
 	testutil.Ok(t, a.Commit())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	testutil.Ok(t, p.Start())
-	defer p.Stop()
+	defer func() { testutil.Ok(t, p.Stop()) }()
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
@@ -130,16 +135,19 @@ func TestPrometheusStore_Series_MatchExternalLabel_e2e(t *testing.T) {
 	baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
 
 	a := p.Appender()
-	a.Add(labels.FromStrings("a", "b"), baseT+100, 1)
-	a.Add(labels.FromStrings("a", "b"), baseT+200, 2)
-	a.Add(labels.FromStrings("a", "b"), baseT+300, 3)
+	_, err = a.Add(labels.FromStrings("a", "b"), baseT+100, 1)
+	testutil.Ok(t, err)
+	_, err = a.Add(labels.FromStrings("a", "b"), baseT+200, 2)
+	testutil.Ok(t, err)
+	_, err = a.Add(labels.FromStrings("a", "b"), baseT+300, 3)
+	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	testutil.Ok(t, p.Start())
-	defer p.Stop()
+	defer func() { testutil.Ok(t, p.Stop()) }()
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)

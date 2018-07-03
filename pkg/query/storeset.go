@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/pkg/errors"
@@ -144,6 +145,8 @@ type storeRef struct {
 	labels  []storepb.Label
 	minTime int64
 	maxTime int64
+
+	logger log.Logger
 }
 
 func (s *storeRef) Update(labels []storepb.Label, minTime int64, maxTime int64) {
@@ -173,7 +176,7 @@ func (s *storeRef) String() string {
 }
 
 func (s *storeRef) close() {
-	s.cc.Close()
+	runutil.CloseWithLogOnErr(s.logger, s.cc, fmt.Sprintf("store %v connection close", s.addr))
 }
 
 // Update updates the store set. It fetches current list of store specs from function and updates the fresh metadata
@@ -270,7 +273,7 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "dialing connection"), "address", addr)
 					return
 				}
-				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), cc: conn, addr: addr}
+				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), cc: conn, addr: addr, logger: s.logger}
 
 				// Initial info call for all types of stores (gossip + static) to check gRPC StoreAPI.
 				resp, err := st.StoreClient.Info(ctx, &storepb.InfoRequest{}, grpc.FailFast(false))

@@ -27,7 +27,9 @@ func TestShipper_UploadBlocks_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
 		dir, err := ioutil.TempDir("", "shipper-e2e-test")
 		testutil.Ok(t, err)
-		defer os.RemoveAll(dir)
+		defer func() {
+			testutil.Ok(t, os.RemoveAll(dir))
+		}()
 
 		extLset := labels.FromStrings("prometheus", "prom-1")
 		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, block.TestSource)

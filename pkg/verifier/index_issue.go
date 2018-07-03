@@ -40,18 +40,22 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 		if err != nil {
 			return err
 		}
-		defer os.RemoveAll(tmpdir)
+		defer func() {
+			if err := os.RemoveAll(tmpdir); err != nil {
+				level.Warn(logger).Log("msg", "failed to delete dir", "tmpdir", tmpdir, "err", err)
+			}
+		}()
 
-		if err = objstore.DownloadFile(ctx, bkt, path.Join(id.String(), block.IndexFilename), filepath.Join(tmpdir, block.IndexFilename)); err != nil {
+		if err = objstore.DownloadFile(ctx, logger, bkt, path.Join(id.String(), block.IndexFilename), filepath.Join(tmpdir, block.IndexFilename)); err != nil {
 			return errors.Wrapf(err, "download index file %s", path.Join(id.String(), block.IndexFilename))
 		}
 
-		meta, err := block.DownloadMeta(ctx, bkt, id)
+		meta, err := block.DownloadMeta(ctx, logger, bkt, id)
 		if err != nil {
 			return errors.Wrapf(err, "download meta file %s", id)
 		}
 
-		stats, err := block.GatherIndexIssueStats(filepath.Join(tmpdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
+		stats, err := block.GatherIndexIssueStats(logger, filepath.Join(tmpdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
 		if err != nil {
 			return errors.Wrapf(err, "gather index issues %s", id)
 		}
@@ -80,13 +84,14 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 		}
 
 		level.Info(logger).Log("msg", "downloading block for repair", "id", id, "issue", IndexIssueID)
-		if err = block.Download(ctx, bkt, id, path.Join(tmpdir, id.String())); err != nil {
+		if err = block.Download(ctx, logger, bkt, id, path.Join(tmpdir, id.String())); err != nil {
 			return errors.Wrapf(err, "download block %s", id)
 		}
 		level.Info(logger).Log("msg", "downloaded block to be repaired", "id", id, "issue", IndexIssueID)
 
 		level.Info(logger).Log("msg", "repairing block", "id", id, "issue", IndexIssueID)
 		resid, err := block.Repair(
+			logger,
 			tmpdir,
 			id,
 			block.BucketRepairSource,
@@ -100,17 +105,17 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 		level.Info(logger).Log("msg", "verifying repaired block", "id", id, "newID", resid, "issue", IndexIssueID)
 
 		// Verify repaired block before uploading it.
-		if err := block.VerifyIndex(filepath.Join(tmpdir, resid.String(), block.IndexFilename), meta.MinTime, meta.MaxTime); err != nil {
+		if err := block.VerifyIndex(logger, filepath.Join(tmpdir, resid.String(), block.IndexFilename), meta.MinTime, meta.MaxTime); err != nil {
 			return errors.Wrapf(err, "repaired block is invalid %s", resid)
 		}
 
 		level.Info(logger).Log("msg", "uploading repaired block", "newID", resid, "issue", IndexIssueID)
-		if err = block.Upload(ctx, bkt, filepath.Join(tmpdir, resid.String())); err != nil {
+		if err = block.Upload(ctx, logger, bkt, filepath.Join(tmpdir, resid.String())); err != nil {
 			return errors.Wrapf(err, "upload of %s failed", resid)
 		}
 
 		level.Info(logger).Log("msg", "safe deleting broken block", "id", id, "issue", IndexIssueID)
-		if err := SafeDelete(ctx, bkt, backupBkt, id); err != nil {
+		if err := SafeDelete(ctx, logger, bkt, backupBkt, id); err != nil {
 			return errors.Wrapf(err, "safe deleting old block %s failed", id)
 		}
 		level.Info(logger).Log("msg", "all good, continuing", "id", id, "issue", IndexIssueID)

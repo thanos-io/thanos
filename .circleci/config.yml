@@ -20,6 +20,7 @@ jobs:
               echo "Awesome! GCS integration tests are enabled."
             fi
       - run: make format
+      - run: make errcheck
       - run:
           name: "Run all tests"
           # TODO(bplotka): Setup some S3 tests for CI.
@@ -38,7 +39,6 @@ jobs:
     working_directory: /home/circleci/.go_workspace/src/github.com/improbable-eng/thanos
     steps:
       - checkout
-      - run: make promu
       - run: make crossbuild
       - persist_to_workspace:
           root: .

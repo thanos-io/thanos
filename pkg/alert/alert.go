@@ -323,7 +323,7 @@ func (s *Sender) sendOne(ctx context.Context, url string, b []byte) error {
 	if err != nil {
 		return errors.Wrapf(err, "send request to %q", url)
 	}
-	defer runutil.LogOnErr(nil, resp.Body, "send one alert")
+	defer runutil.CloseWithLogOnErr(s.logger, resp.Body, "send one alert")
 
 	if resp.StatusCode/100 != 2 {
 		return errors.Errorf("bad response status %v from %q", resp.Status, url)

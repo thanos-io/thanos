@@ -243,7 +243,7 @@ func metricHTTPListenGroup(g *run.Group, logger log.Logger, reg *prometheus.Regi
 		level.Info(logger).Log("msg", "Listening for metrics", "address", httpBindAddr)
 		return errors.Wrap(http.Serve(l, mux), "serve metrics")
 	}, func(error) {
-		runutil.LogOnErr(logger, l, "metric listener")
+		runutil.CloseWithLogOnErr(logger, l, "metric listener")
 	})
 	return nil
 }

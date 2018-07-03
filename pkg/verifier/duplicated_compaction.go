@@ -30,7 +30,7 @@ func DuplicatedCompactionIssue(ctx context.Context, logger log.Logger, bkt objst
 
 	level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", DuplicatedCompactionIssueID)
 
-	overlaps, err := fetchOverlaps(ctx, bkt)
+	overlaps, err := fetchOverlaps(ctx, logger, bkt)
 	if err != nil {
 		return errors.Wrap(err, DuplicatedCompactionIssueID)
 	}
@@ -80,7 +80,7 @@ func DuplicatedCompactionIssue(ctx context.Context, logger log.Logger, bkt objst
 	}
 
 	for i, id := range toKill {
-		if err := SafeDelete(ctx, bkt, backupBkt, id); err != nil {
+		if err := SafeDelete(ctx, logger, bkt, backupBkt, id); err != nil {
 			return err
 		}
 		level.Info(logger).Log("msg", "Removed duplicated block", "id", id, "to-be-removed", len(toKill)-(i+1), "removed", i+1, "issue", DuplicatedCompactionIssueID)

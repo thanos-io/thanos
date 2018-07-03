@@ -34,14 +34,14 @@ func TestObjStore_AcceptanceTest_e2e(t *testing.T) {
 		// Double check we can immediately read it.
 		rc1, err := bkt.Get(context.Background(), "id1/obj_1.some")
 		testutil.Ok(t, err)
-		defer rc1.Close()
+		defer func() { testutil.Ok(t, rc1.Close()) }()
 		content, err := ioutil.ReadAll(rc1)
 		testutil.Ok(t, err)
 		testutil.Equals(t, "@test-data@", string(content))
 
 		rc2, err := bkt.GetRange(context.Background(), "id1/obj_1.some", 1, 3)
 		testutil.Ok(t, err)
-		defer rc2.Close()
+		defer func() { testutil.Ok(t, rc2.Close()) }()
 		content, err = ioutil.ReadAll(rc2)
 		testutil.Ok(t, err)
 		testutil.Equals(t, "tes", string(content))

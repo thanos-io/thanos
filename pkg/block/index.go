@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
@@ -37,12 +38,12 @@ type indexCache struct {
 
 // WriteIndexCache writes a cache file containing the first lookup stages
 // for an index file.
-func WriteIndexCache(fn string, r *index.Reader) error {
+func WriteIndexCache(logger log.Logger, fn string, r *index.Reader) error {
 	f, err := os.Create(fn)
 	if err != nil {
 		return errors.Wrap(err, "create file")
 	}
-	defer runutil.LogOnErr(nil, f, "index cache writer")
+	defer runutil.CloseWithLogOnErr(logger, f, "index cache writer")
 
 	v := indexCache{
 		Version:     r.Version(),
@@ -101,7 +102,7 @@ func WriteIndexCache(fn string, r *index.Reader) error {
 }
 
 // ReadIndexCache reads an index cache file.
-func ReadIndexCache(fn string) (
+func ReadIndexCache(logger log.Logger, fn string) (
 	version int,
 	symbols map[uint32]string,
 	lvals map[string][]string,
@@ -112,7 +113,7 @@ func ReadIndexCache(fn string) (
 	if err != nil {
 		return 0, nil, nil, nil, errors.Wrap(err, "open file")
 	}
-	defer runutil.LogOnErr(nil, f, "index reader")
+	defer runutil.CloseWithLogOnErr(logger, f, "index reader")
 
 	var v indexCache
 	if err := json.NewDecoder(f).Decode(&v); err != nil {
@@ -153,8 +154,8 @@ func ReadIndexCache(fn string) (
 }
 
 // VerifyIndex does a full run over a block index and verifies that it fulfills the order invariants.
-func VerifyIndex(fn string, minTime int64, maxTime int64) error {
-	stats, err := GatherIndexIssueStats(fn, minTime, maxTime)
+func VerifyIndex(logger log.Logger, fn string, minTime int64, maxTime int64) error {
+	stats, err := GatherIndexIssueStats(logger, fn, minTime, maxTime)
 	if err != nil {
 		return err
 	}
@@ -246,12 +247,12 @@ func (i Stats) AnyErr() error {
 // helps to assess index health.
 // It considers https://github.com/prometheus/tsdb/issues/347 as something that Thanos can handle.
 // See Stats.Issue347OutsideChunks for details.
-func GatherIndexIssueStats(fn string, minTime int64, maxTime int64) (stats Stats, err error) {
+func GatherIndexIssueStats(logger log.Logger, fn string, minTime int64, maxTime int64) (stats Stats, err error) {
 	r, err := index.NewFileReader(fn)
 	if err != nil {
 		return stats, errors.Wrap(err, "open index file")
 	}
-	defer runutil.LogOnErr(nil, r, "gather index issue file reader")
+	defer runutil.CloseWithErrCapture(logger, &err, r, "gather index issue file reader")
 
 	p, err := r.Postings(index.AllPostingsKey())
 	if err != nil {
@@ -343,7 +344,7 @@ type ignoreFnType func(mint, maxt int64, prev *chunks.Meta, curr *chunks.Meta) (
 // - removes all near "complete" outside chunks introduced by https://github.com/prometheus/tsdb/issues/347.
 // Fixable inconsistencies are resolved in the new block.
 // TODO(bplotka): https://github.com/improbable-eng/thanos/issues/378
-func Repair(dir string, id ulid.ULID, source SourceType, ignoreChkFns ...ignoreFnType) (resid ulid.ULID, err error) {
+func Repair(logger log.Logger, dir string, id ulid.ULID, source SourceType, ignoreChkFns ...ignoreFnType) (resid ulid.ULID, err error) {
 	if len(ignoreChkFns) == 0 {
 		return resid, errors.New("no ignore chunk function specified")
 	}
@@ -364,19 +365,19 @@ func Repair(dir string, id ulid.ULID, source SourceType, ignoreChkFns ...ignoreF
 	if err != nil {
 		return resid, errors.Wrap(err, "open block")
 	}
-	defer runutil.BestEffortErr(nil, &err, b, "repair block reader")
+	defer runutil.CloseWithErrCapture(logger, &err, b, "repair block reader")
 
 	indexr, err := b.Index()
 	if err != nil {
 		return resid, errors.Wrap(err, "open index")
 	}
-	defer runutil.BestEffortErr(nil, &err, indexr, "repair index reader")
+	defer runutil.CloseWithErrCapture(logger, &err, indexr, "repair index reader")
 
 	chunkr, err := b.Chunks()
 	if err != nil {
 		return resid, errors.Wrap(err, "open chunks")
 	}
-	defer runutil.BestEffortErr(nil, &err, chunkr, "repair chunk reader")
+	defer runutil.CloseWithErrCapture(logger, &err, chunkr, "repair chunk reader")
 
 	resdir := filepath.Join(dir, resid.String())
 
@@ -384,13 +385,13 @@ func Repair(dir string, id ulid.ULID, source SourceType, ignoreChkFns ...ignoreF
 	if err != nil {
 		return resid, errors.Wrap(err, "open chunk writer")
 	}
-	defer runutil.BestEffortErr(nil, &err, chunkw, "repair chunk writer")
+	defer runutil.CloseWithErrCapture(logger, &err, chunkw, "repair chunk writer")
 
 	indexw, err := index.NewWriter(filepath.Join(resdir, IndexFilename))
 	if err != nil {
 		return resid, errors.Wrap(err, "open index writer")
 	}
-	defer runutil.BestEffortErr(nil, &err, indexw, "repair index writer")
+	defer runutil.CloseWithErrCapture(logger, &err, indexw, "repair index writer")
 
 	// TODO(fabxc): adapt so we properly handle the version once we update to an upstream
 	// that has multiple.
@@ -402,7 +403,7 @@ func Repair(dir string, id ulid.ULID, source SourceType, ignoreChkFns ...ignoreF
 	if err := rewrite(indexr, chunkr, indexw, chunkw, &resmeta, ignoreChkFns); err != nil {
 		return resid, errors.Wrap(err, "rewrite block")
 	}
-	if err := WriteMetaFile(resdir, &resmeta); err != nil {
+	if err := WriteMetaFile(logger, resdir, &resmeta); err != nil {
 		return resid, err
 	}
 	return resid, nil
