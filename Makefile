@@ -41,6 +41,13 @@ crossbuild: deps $(PROMU)
 	@echo ">> crossbuilding all binaries"
 	$(PROMU) crossbuild -v
 
+.PHONY: tarballs-release
+tarballs-release: crossbuild
+	@echo ">> Publishing tarballs"
+	$(PROMU) crossbuild tarballs
+	$(PROMU) checksum .tarballs
+	$(PROMU) release .tarballs
+
 # deps fetches all necessary golang dependencies, since they are not checked into repository.
 .PHONY: deps
 deps: vendor
@@ -57,11 +64,6 @@ docker-push:
 	@echo ">> pushing image"
 	@docker tag "${DOCKER_IMAGE_NAME}" improbable/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
 	@docker push improbable/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
-
-docker-tag-latest:
-	@echo ">> tag latest"
-	@docker tag improbable/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)" improbable/"$(DOCKER_IMAGE_NAME):latest"
-	@docker push improbable/"$(DOCKER_IMAGE_NAME):latest"
 
 # docs regenerates flags in docs for all thanos commands.
 .PHONY: docs
