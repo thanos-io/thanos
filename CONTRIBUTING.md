@@ -22,7 +22,7 @@ $ git merge upstream/master
 $ make build
 $ ./thanos -h
 ```
-4. Keep PRs as small as possible. For each of your PR, you create one branch based on the lateest master. Chain them if needed (base PR on other PRs). Here are sample steps you can follow. You can get more details about the workflow from [here](https://gist.github.com/Chaser324/ce0505fbed06b947d962).
+4. Keep PRs as small as possible. For each of your PR, you create one branch based on the latest master. Chain them if needed (base PR on other PRs). Here are sample steps you can follow. You can get more details about the workflow from [here](https://gist.github.com/Chaser324/ce0505fbed06b947d962).
 ```console
 $ git checkout master
 $ git remote update
