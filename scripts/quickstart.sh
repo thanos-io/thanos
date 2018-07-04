@@ -65,7 +65,7 @@ scrape_configs:
     - "localhost:19492"
 EOF
 
-  prometheus \
+  ./prometheus \
     --config.file         data/prom${i}/prometheus.yml \
     --storage.tsdb.path   data/prom${i} \
     --log.level           warn \
@@ -80,7 +80,7 @@ sleep 0.5
 # Start one sidecar for each Prometheus server.
 for i in `seq 1 3`
 do
-  thanos sidecar \
+  ./thanos sidecar \
     --debug.name                sidecar-${i} \
     --grpc-address              0.0.0.0:1909${i} \
     --http-address              0.0.0.0:1919${i} \
@@ -98,7 +98,7 @@ sleep 0.5
 
 if [ -n "${GCS_BUCKET}" -o -n "${S3_ENDPOINT}" ]
 then
-  thanos store \
+  ./thanos store \
     --debug.name                store \
     --log.level debug \
     --grpc-address              0.0.0.0:19691 \
@@ -115,7 +115,7 @@ sleep 0.5
 # Start to query nodes.
 for i in `seq 1 2`
 do
-  thanos query \
+  ./thanos query \
     --debug.name                query-${i} \
     --grpc-address              0.0.0.0:1999${i} \
     --http-address              0.0.0.0:1949${i} \
