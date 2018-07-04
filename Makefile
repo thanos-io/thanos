@@ -41,6 +41,13 @@ crossbuild: deps $(PROMU)
 	@echo ">> crossbuilding all binaries"
 	$(PROMU) crossbuild -v
 
+.PHONY: tarballs-release
+tarballs-release: crossbuild
+	@echo ">> Publishing tarballs"
+	$(PROMU) crossbuild tarballs
+	$(PROMU) checksum .tarballs
+	$(PROMU) release .tarballs
+
 # deps fetches all necessary golang dependencies, since they are not checked into repository.
 .PHONY: deps
 deps: vendor
