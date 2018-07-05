@@ -43,9 +43,40 @@ Flags:
                                  forced by baggage item. See
                                  `pkg/tracing/tracing.go` for details.
       --grpc-address="0.0.0.0:10901"  
-                                 Listen address for gRPC endpoints.
+                                 Listen ip:port address for gRPC endpoints
+                                 (StoreAPI). Make sure this address is routable
+                                 from other components if you use gossip,
+                                 'grpc-advertise-address' is empty and you
+                                 require cross-node connection.
+      --grpc-advertise-address=GRPC-ADVERTISE-ADDRESS  
+                                 Explicit (external) host:port address to
+                                 advertise for gRPC StoreAPI in gossip cluster.
+                                 If empty, 'grpc-address' will be used.
       --http-address="0.0.0.0:10902"  
-                                 Listen address for HTTP endpoints.
+                                 Listen host:port for HTTP endpoints.
+      --cluster.address="0.0.0.0:10900"  
+                                 Listen ip:port address for gossip cluster.
+      --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS  
+                                 Explicit (external) ip:port address to
+                                 advertise for gossip in gossip cluster. Used
+                                 internally for membership only
+      --cluster.peers=CLUSTER.PEERS ...  
+                                 Initial peers to join the cluster. It can be
+                                 either <ip:port>, or <domain:port>. A lookup
+                                 resolution is done only at the startup.
+      --cluster.gossip-interval=5s  
+                                 Interval between sending gossip messages. By
+                                 lowering this value (more frequent) gossip
+                                 messages are propagated across the cluster more
+                                 quickly at the expense of increased bandwidth.
+      --cluster.pushpull-interval=5s  
+                                 Interval for gossip state syncs. Setting this
+                                 interval lower (more frequent) will increase
+                                 convergence speeds across larger clusters at
+                                 the expense of increased bandwidth usage.
+      --cluster.refresh-interval=1m0s  
+                                 Interval for membership to refresh
+                                 cluster.peers state, 0 disables refresh.
       --prometheus.url=http://localhost:9090  
                                  URL at which to reach Prometheus's API.
       --tsdb.path="./data"       Data directory of TSDB.
@@ -61,23 +92,6 @@ Flags:
       --s3.signature-version2    Whether to use S3 Signature Version 2;
                                  otherwise Signature Version 4 will be used.
       --s3.encrypt-sse           Whether to use Server Side Encryption
-      --cluster.peers=CLUSTER.PEERS ...  
-                                 Initial peers to join the cluster. It can be
-                                 either <ip:port>, or <domain:port>.
-      --cluster.address="0.0.0.0:10900"  
-                                 Listen address for cluster.
-      --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS  
-                                 Explicit address to advertise in cluster.
-      --cluster.gossip-interval=5s  
-                                 Interval between sending gossip messages. By
-                                 lowering this value (more frequent) gossip
-                                 messages are propagated across the cluster more
-                                 quickly at the expense of increased bandwidth.
-      --cluster.pushpull-interval=5s  
-                                 Interval for gossip state syncs. Setting this
-                                 interval lower (more frequent) will increase
-                                 convergence speeds across larger clusters at
-                                 the expense of increased bandwidth usage.
       --reloader.config-file=""  Config file watched by the reloader.
       --reloader.config-envsubst-file=""  
                                  Output file for environment variable
