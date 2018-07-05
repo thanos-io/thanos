@@ -42,7 +42,7 @@ crossbuild: deps $(PROMU)
 	$(PROMU) crossbuild -v
 
 .PHONY: tarballs-release
-tarballs-release: crossbuild
+tarballs-release: $(PROMU)
 	@echo ">> Publishing tarballs"
 	$(PROMU) crossbuild tarballs
 	$(PROMU) checksum .tarballs
