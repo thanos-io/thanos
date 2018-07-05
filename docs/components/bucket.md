@@ -111,8 +111,12 @@ Flags:
                                detected
   -i, --issues=index_issue... ...  
                                Issues to verify (and optionally repair).
-                               Possible values: [index_issue overlapped_blocks
-                               duplicated_compaction]
+                               Possible values: [overlapped_blocks
+                               duplicated_compaction index_issue]
+      --id-whitelist=ID-WHITELIST ...  
+                               Block IDs to verify (and optionally repair) only.
+                               If none is specified, all blocks will be
+                               verified. Repeated field
 
 ```
 
@@ -130,7 +134,7 @@ $ thanos bucket ls -o json --gcs.bucket example-bucket
 ```txt
 usage: thanos bucket ls [<flags>]
 
-lqist all blocks in the bucket
+list all blocks in the bucket
 
 Flags:
   -h, --help                   Show context-sensitive help (also try --help-long
