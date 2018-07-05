@@ -90,6 +90,9 @@ proto:
 	@go get -u github.com/gogo/protobuf/protoc-gen-gogofast
 	@./scripts/genproto.sh
 
+.PHONY: promu
+promu: $(PROMU)
+
 # tarball builds release tarball.
 .PHONY: tarball
 tarball: $(PROMU)
