@@ -2,7 +2,7 @@ package cluster
 
 import (
 	"context"
-	"io/ioutil"
+	stdlog "log"
 	"math/rand"
 	"net"
 	"strconv"
@@ -46,6 +46,11 @@ const (
 	DefaultPushPullInterval = 5 * time.Second
 	DefaultGossipInterval   = 5 * time.Second
 	DefaultRefreshInterval  = 60 * time.Second
+
+	// peer's network types
+	DefaultLocalPeerType = "local"
+	DefaultLanPeerType   = "lan"
+	DefaultWanPeerType   = "wan"
 )
 
 // PeerType describes a peer's role in the cluster.
@@ -101,6 +106,8 @@ func New(
 	pushPullInterval time.Duration,
 	gossipInterval time.Duration,
 	refreshInterval time.Duration,
+	secretKey []byte,
+	networkType string,
 ) (*Peer, error) {
 	l = log.With(l, "component", "cluster")
 
@@ -137,13 +144,14 @@ func New(
 		return nil, err
 	}
 
-	cfg := memberlist.DefaultLANConfig()
+	cfg := makeConfig(networkType)
 	cfg.Name = name.String()
 	cfg.BindAddr = bindHost
 	cfg.BindPort = bindPort
 	cfg.GossipInterval = gossipInterval
 	cfg.PushPullInterval = pushPullInterval
-	cfg.LogOutput = ioutil.Discard
+	cfg.Logger = stdlog.New(log.NewStdlibAdapter(level.Debug(l)), "peers", stdlog.LstdFlags)
+	cfg.SecretKey = secretKey
 	if advertiseAddr != "" {
 		cfg.AdvertiseAddr = advertiseHost
 		cfg.AdvertisePort = advertisePort
@@ -498,4 +506,21 @@ func IsUnroutable(host string) bool {
 		return true
 	}
 	return false
+}
+
+func makeConfig(networkType string) *memberlist.Config {
+	var mc *memberlist.Config
+
+	switch networkType {
+	case DefaultLanPeerType:
+		mc = memberlist.DefaultLANConfig()
+	case DefaultWanPeerType:
+		mc = memberlist.DefaultWANConfig()
+	case DefaultLocalPeerType:
+		fallthrough
+	default:
+		mc = memberlist.DefaultLocalConfig()
+	}
+
+	return mc
 }

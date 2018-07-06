@@ -36,6 +36,16 @@ func regCommonServerFlags(cmd *kingpin.CmdClause) (*string, *string, func(log.Lo
 
 	refreshInterval := cmd.Flag("cluster.refresh-interval", "Interval for membership to refresh cluster.peers state, 0 disables refresh.").Default(cluster.DefaultRefreshInterval.String()).Duration()
 
+	secretKey := cmd.Flag("cluster.secret-key", "Initial secret key to communicate cluster with encryption. Could be AES-128, AES-192, or AES-256 (hexadecimal data only)").HexBytes()
+
+	networkType := cmd.Flag("cluster.network-type", "Network type with predefined peers configurations. Sets of configurations accounting the latency differences between network types: local, lan or wan").
+		Default(cluster.DefaultLanPeerType).
+		Enum(
+			cluster.DefaultLocalPeerType,
+			cluster.DefaultLanPeerType,
+			cluster.DefaultWanPeerType,
+		)
+
 	return grpcBindAddr,
 		httpBindAddr,
 		func(logger log.Logger, reg *prometheus.Registry, waitIfEmpty bool, httpAdvertiseAddr string, queryAPIEnabled bool) (*cluster.Peer, error) {
@@ -68,7 +78,7 @@ func regCommonServerFlags(cmd *kingpin.CmdClause) (*string, *string, func(log.Lo
 				level.Info(logger).Log("msg", "QueryAPI address that will be propagated through gossip", "address", advQueryAPIAddress)
 			}
 
-			return cluster.New(logger, reg, *clusterBindAddr, *clusterAdvertiseAddr, advStoreAPIAddress, advQueryAPIAddress, *peers, waitIfEmpty, *gossipInterval, *pushPullInterval, *refreshInterval)
+			return cluster.New(logger, reg, *clusterBindAddr, *clusterAdvertiseAddr, advStoreAPIAddress, advQueryAPIAddress, *peers, waitIfEmpty, *gossipInterval, *pushPullInterval, *refreshInterval, *secretKey, *networkType)
 		}
 }
 
