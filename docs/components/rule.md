@@ -10,11 +10,13 @@ The data of each rule node can be labeled to satisfy the clusters labeling schem
 
 ```
 $ thanos rule \
-    --data-dir         "/path/to/data" \
-    --eval-interval    "30s" \
-    --rule-files       "/path/to/rules/*.rules.yaml" \
-    --gcs.bucket       "example-bucket" \
-    --cluster.peers    "thanos-cluster.example.org"
+    --data-dir          "/path/to/data" \
+    --eval-interval     "30s" \
+    --rule-file         "/path/to/rules/*.rules.yaml" \
+    --alert.query-url   "0.0.0.0:9090" \
+    --alertmanagers.url "alert.thanos.io"
+    --gcs.bucket        "example-bucket" \
+    --cluster.peers     "thanos-cluster.example.org"
 ```
 
 As rule nodes outsource query processing to query nodes, they should generally experience little load. If necessary, functional sharding can be applied by splitting up the sets of rules between HA pairs.
