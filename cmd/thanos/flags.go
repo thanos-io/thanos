@@ -29,21 +29,21 @@ func regCommonServerFlags(cmd *kingpin.CmdClause) (*string, *string, func(log.Lo
 	peers := cmd.Flag("cluster.peers", "Initial peers to join the cluster. It can be either <ip:port>, or <domain:port>. A lookup resolution is done only at the startup.").Strings()
 
 	gossipInterval := cmd.Flag("cluster.gossip-interval", "Interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth.").
-		Default(cluster.DefaultGossipInterval.String()).Duration()
+		PlaceHolder("<gossip interval>").Duration()
 
 	pushPullInterval := cmd.Flag("cluster.pushpull-interval", "Interval for gossip state syncs. Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage.").
-		Default(cluster.DefaultPushPullInterval.String()).Duration()
+		PlaceHolder("<push-pull interval>").Duration()
 
 	refreshInterval := cmd.Flag("cluster.refresh-interval", "Interval for membership to refresh cluster.peers state, 0 disables refresh.").Default(cluster.DefaultRefreshInterval.String()).Duration()
 
-	secretKey := cmd.Flag("cluster.secret-key", "Initial secret key to communicate cluster with encryption. Could be AES-128, AES-192, or AES-256 (hexadecimal data only)").HexBytes()
+	secretKey := cmd.Flag("cluster.secret-key", "Initial secret key to encrypt cluster gossip. Can be one of AES-128, AES-192, or AES-256 in hexadecimal format.").HexBytes()
 
 	networkType := cmd.Flag("cluster.network-type", "Network type with predefined peers configurations. Sets of configurations accounting the latency differences between network types: local, lan or wan").
-		Default(cluster.DefaultLanPeerType).
+		Default(cluster.LanNetworkPeerType).
 		Enum(
-			cluster.DefaultLocalPeerType,
-			cluster.DefaultLanPeerType,
-			cluster.DefaultWanPeerType,
+			cluster.LocalNetworkPeerType,
+			cluster.LanNetworkPeerType,
+			cluster.WanNetworkPeerType,
 		)
 
 	return grpcBindAddr,
