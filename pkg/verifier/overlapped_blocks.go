@@ -19,7 +19,7 @@ const OverlappedBlocksIssueID = "overlapped_blocks"
 // No repair is available for this issue.
 func OverlappedBlocksIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool) error {
 	if idMatcher != nil {
-		return errors.Errorf("id matching is not supported by issue %s verifier", DuplicatedCompactionIssueID)
+		return errors.Errorf("id matching is not supported by issue %s verifier", OverlappedBlocksIssueID)
 	}
 
 	level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", OverlappedBlocksIssueID)
