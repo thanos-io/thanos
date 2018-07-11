@@ -1,8 +1,14 @@
 # Thanos Cluster Configuration
 
-Status: **draft** | in-review | rejected | accepted | complete 
+Status: draft | in-review | **rejected** | accepted | complete
 
 Implementation Owner: [@domgreen](https://github.com/domgreen)
+
+## Summary
+
+The proposal of creating a central configuration component within Thanos has been rejected by the community as the requirements are specific to the use case at Improbable and that adding configuration management into Thanos will result in adding more knowledge to the system about what the scrapers are doing and their targets.
+
+Cluster configuration for targets will be implemented in a separate repository and we may look at open sourcing in the future if there are others that have the same needs.
 
 ## Motivation
 
