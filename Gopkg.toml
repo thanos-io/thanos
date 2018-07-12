@@ -35,16 +35,16 @@
   name = "github.com/prometheus/common"
 
 [[constraint]]
-  name = "github.com/prometheus/prometheus"
   branch = "master"
+  name = "github.com/prometheus/prometheus"
 
 [[constraint]]
   branch = "master"
   name = "github.com/grpc-ecosystem/go-grpc-prometheus"
 
 [[constraint]]
-  revision = "bd832fc8274e8fe63999ac749daaaff9d881241f"
   name = "github.com/prometheus/tsdb"
+  revision = "bd832fc8274e8fe63999ac749daaaff9d881241f"
 
 [[constraint]]
   branch = "master"
