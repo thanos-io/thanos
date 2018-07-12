@@ -34,17 +34,6 @@ jobs:
 
             make test
 
-  build:
-    machine: true
-    working_directory: /home/circleci/.go_workspace/src/github.com/improbable-eng/thanos
-    steps:
-      - checkout
-      - run: make crossbuild
-      - persist_to_workspace:
-          root: .
-          paths:
-          - .build
-
   publish_master:
     docker:
       # Available from https://hub.docker.com/r/circleci/golang/
@@ -91,10 +80,6 @@ workflows:
   thanos:
     jobs:
     - test:
-        filters:
-          tags:
-            only: /.*/
-    - build:
         filters:
           tags:
             only: /.*/

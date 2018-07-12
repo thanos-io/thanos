@@ -100,7 +100,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 			v = verifier.New(logger, bkt, issues)
 		}
 
-		idMatcher := func(ulid.ULID) bool { return true }
+		var idMatcher func(ulid.ULID) bool = nil
 		if len(*verifyIDWhitelist) > 0 {
 			whilelistIDs := map[string]struct{}{}
 			for _, bid := range *verifyIDWhitelist {
