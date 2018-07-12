@@ -86,14 +86,12 @@ workflows:
     - publish_master:
         requires:
         - test
-        - build
         filters:
           branches:
             only: master
     - publish_release:
         requires:
         - test
-        - build
         filters:
           tags:
             only: /^v[0-9]+(\.[0-9]+){2}(-.+|[^-.]*)$/
