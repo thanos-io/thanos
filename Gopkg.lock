@@ -346,7 +346,7 @@
     "util/strutil",
     "util/testutil"
   ]
-  revision = "646adff2ac79efd246e5404db839c30afbb064d9"
+  revision = "a9d5034adde51d5a5b309f95103357b819c97ec1"
 
 [[projects]]
   name = "github.com/prometheus/tsdb"
