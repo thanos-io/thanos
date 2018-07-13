@@ -192,8 +192,12 @@ func (p *Peer) Join(peerType PeerType, initialMetadata PeerMetadata) error {
 		return errors.Wrap(err, "create memberlist")
 	}
 
-	n, _ := ml.Join(p.knownPeers)
-	level.Debug(p.logger).Log("msg", "joined cluster", "peerType", peerType)
+	n, err := ml.Join(p.knownPeers)
+	if err != nil {
+		level.Error(p.logger).Log("msg", "none of the peers was can be reached", "peerType", peerType, "knownPeers", strings.Join(p.knownPeers, ","), "err", err)
+	} else {
+		level.Debug(p.logger).Log("msg", "joined cluster", "peerType", peerType, "knownPeers", strings.Join(p.knownPeers, ","))
+	}
 
 	if n > 0 {
 		go warnIfAlone(p.logger, 10*time.Second, p.stopc, ml.NumMembers)
@@ -272,11 +276,10 @@ func (p *Peer) Refresh() error {
 
 	curr, err := p.mlist.Join(notConnected)
 	if err != nil {
-		level.Error(p.logger).Log("msg", "refresh cluster could not join peers", "peers", strings.Join(notConnected, ","))
+		return errors.Wrapf(err, "join peers %s ", strings.Join(notConnected, ","))
 	}
 
 	level.Debug(p.logger).Log("msg", "refresh cluster done, peers joined", "peers", strings.Join(notConnected, ","), "before", len(currMembers), "after", curr)
-
 	return nil
 }
 
