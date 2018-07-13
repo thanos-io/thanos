@@ -10,11 +10,11 @@
   name = "github.com/gogo/protobuf"
   version = "1.0.0"
 
-[[constraint]]
+[[override]]
   branch = "master"
   name = "github.com/hashicorp/go-sockaddr"
 
-[[constraint]]
+[[override]]
   name = "github.com/hashicorp/memberlist"
   version = "0.1.0"
 
@@ -38,7 +38,7 @@
   branch = "master"
   name = "github.com/prometheus/prometheus"
 
-[[constraint]]
+[[override]]
   branch = "master"
   name = "github.com/grpc-ecosystem/go-grpc-prometheus"
 

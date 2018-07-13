@@ -67,13 +67,13 @@ docs:
 
 # errcheck performs static analysis and returns error if any of the errors is not checked.
 .PHONY: errcheck
-errcheck: $(ERRCHECK)
+errcheck: $(ERRCHECK) deps
 	@echo ">> errchecking the code"
 	$(ERRCHECK) -verbose -exclude .errcheck_excludes.txt ./...
 
 # format formats the code (including imports format).
 .PHONY: format
-format: $(GOIMPORTS) deps
+format: $(GOIMPORTS)
 	@echo ">> formatting code"
 	@$(GOIMPORTS) -w $(FILES)
 
