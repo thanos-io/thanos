@@ -45,10 +45,15 @@ type Peer struct {
 const (
 	DefaultRefreshInterval = 60 * time.Second
 
-	// Peer's network types. This are used as a predefined peer configurations for a specified network type.
+	// Peer's network types. These are used as a predefined peer configurations for a specified network type.
 	LocalNetworkPeerType = "local"
 	LanNetworkPeerType   = "lan"
 	WanNetworkPeerType   = "wan"
+)
+
+var (
+	// NetworkPeerTypes is a list of available peers' network types.
+	NetworkPeerTypes = []string{LocalNetworkPeerType, LanNetworkPeerType, WanNetworkPeerType}
 )
 
 // PeerType describes a peer's role in the cluster.
@@ -142,7 +147,7 @@ func New(
 		return nil, err
 	}
 
-	cfg, err := makeConfig(networkType)
+	cfg, err := parseNetworkConfig(networkType)
 	if err != nil {
 		return nil, err
 	}
@@ -513,7 +518,7 @@ func IsUnroutable(host string) bool {
 	return false
 }
 
-func makeConfig(networkType string) (*memberlist.Config, error) {
+func parseNetworkConfig(networkType string) (*memberlist.Config, error) {
 	var mc *memberlist.Config
 
 	switch networkType {
@@ -524,7 +529,10 @@ func makeConfig(networkType string) (*memberlist.Config, error) {
 	case LocalNetworkPeerType:
 		mc = memberlist.DefaultLocalConfig()
 	default:
-		return mc, errors.New("unexpected network type, should be either: local, lan or wan")
+		return nil, errors.Errorf("unexpected network type %s, should be one of: %s",
+			networkType,
+			strings.Join(NetworkPeerTypes, ", "),
+		)
 	}
 
 	return mc, nil
