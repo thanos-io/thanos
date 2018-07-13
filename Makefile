@@ -72,6 +72,8 @@ errcheck: $(ERRCHECK) deps
 	$(ERRCHECK) -verbose -exclude .errcheck_excludes.txt ./...
 
 # format formats the code (including imports format).
+# NOTE: format requires deps to not remove imports that are used, just not resolved.
+# This is not encoded, because it is often used in IDE onSave logic.
 .PHONY: format
 format: $(GOIMPORTS)
 	@echo ">> formatting code"
@@ -123,7 +125,7 @@ vet:
 
 vendor: Gopkg.toml Gopkg.lock | $(DEP)
 	@echo ">> dep ensure"
-	@$(DEP) ensure
+	@$(DEP) ensure $(DEPARGS)
 
 $(GOIMPORTS):
 	@echo ">> fetching goimports"
