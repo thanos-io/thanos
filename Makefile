@@ -69,7 +69,7 @@ docs:
 .PHONY: errcheck
 errcheck: $(ERRCHECK)
 	@echo ">> errchecking the code"
-	$(ERRCHECK) -verbose -exclude .errcheck_excludes.txt ./...
+	$(ERRCHECK) -verbose -exclude .errcheck_excludes.txt ./cmd/... ./pkg/... ./test/...
 
 # format formats the code (including imports format).
 .PHONY: format
