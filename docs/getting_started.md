@@ -18,6 +18,7 @@ Thanos has no official releases yet. With a working installation of the Go [tool
 
 ```
 go get -d github.com/improbable-eng/thanos/...
+cd ${GOPATH}/src/github.com/improbable-eng/thanos
 make
 ```
 
