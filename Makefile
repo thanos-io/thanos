@@ -69,7 +69,7 @@ docs:
 .PHONY: errcheck
 errcheck: $(ERRCHECK) deps
 	@echo ">> errchecking the code"
-	$(ERRCHECK) -verbose -exclude .errcheck_excludes.txt ./...
+	$(ERRCHECK) -verbose -exclude .errcheck_excludes.txt ./cmd/... ./pkg/... ./test/...
 
 # format formats the code (including imports format).
 # NOTE: format requires deps to not remove imports that are used, just not resolved.
@@ -105,7 +105,7 @@ tarballs-release: $(PROMU)
 .PHONY: test
 test: test-deps
 	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS="true" or/and  export THANOS_SKIP_S3_AWS_TESTS="true" if you want to skip e2e tests against real store buckets"
-	@go test $(shell go list ./... | grep -v /vendor/)
+	@go test $(shell go list ./... | grep -v /vendor/ | grep -v /benchmark/)
 
 
 # test-deps installs dependency for e2e tets.
