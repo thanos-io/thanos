@@ -13,7 +13,7 @@ DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(she
 FIRST_GOPATH      ?= $(firstword $(subst :, ,$(shell go env GOPATH)))
 GOIMPORTS         ?= $(FIRST_GOPATH)/bin/goimports
 PROMU             ?= $(FIRST_GOPATH)/bin/promu
-DEP               ?= $(FIRST_GOPATH)/bin/dep
+DEP               ?= $(FIRST_GOPATH)/bin/dep-45be32ba4708aad5e2a
 ERRCHECK          ?= $(FIRST_GOPATH)/bin/errcheck
 
 .PHONY: all
@@ -135,9 +135,14 @@ $(PROMU):
 	@echo ">> fetching promu"
 	GOOS= GOARCH= go get -u github.com/prometheus/promu
 
+# Always pin dep to the correct version. It changes too often.
+# TODO(bplotka): Install dep without using user's `github.com/golang/dep` package. (Use some tmp place).
 $(DEP):
-	@echo ">> fetching dep"
-	@go get -u github.com/golang/dep/cmd/dep
+	@echo ">> fetching dep from 45be32ba4708aad5e2aa8c86f9432c4c4c1f8da2 revision"
+	@go get -d -u github.com/golang/dep/cmd/dep
+	@cd $(FIRST_GOPATH)/src/github.com/golang/dep && git checkout -f -q 45be32ba4708aad5e2aa8c86f9432c4c4c1f8da2
+	@go install github.com/golang/dep/cmd/dep
+	@mv $(FIRST_GOPATH)/bin/dep $(DEP)
 
 $(ERRCHECK):
 	@echo ">> fetching errcheck"
