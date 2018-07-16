@@ -51,7 +51,8 @@ spec:
         - name: data
           mountPath: /var/prometheus
       - name: thanos-sidecar
-        image: improbable/thanos:master
+        # Always use explicit image tags (release or master-<date>-sha) instead of ambigous `latest` or `master`.
+        image: improbable/thanos:v0.1.0-rc.2
         args:
         - "sidecar"
         - "--log.level=debug"
