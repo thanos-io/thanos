@@ -13,7 +13,7 @@ $ thanos rule \
     --data-dir          "/path/to/data" \
     --eval-interval     "30s" \
     --rule-file         "/path/to/rules/*.rules.yaml" \
-    --alert.query-url   "0.0.0.0:9090" \
+    --alert.query-url   "http://0.0.0.0:9090" \
     --alertmanagers.url "alert.thanos.io"
     --gcs.bucket        "example-bucket" \
     --cluster.peers     "thanos-cluster.example.org"
