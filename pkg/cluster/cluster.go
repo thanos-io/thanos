@@ -2,7 +2,7 @@ package cluster
 
 import (
 	"context"
-	"io/ioutil"
+	stdlog "log"
 	"math/rand"
 	"net"
 	"strconv"
@@ -43,9 +43,17 @@ type Peer struct {
 }
 
 const (
-	DefaultPushPullInterval = 5 * time.Second
-	DefaultGossipInterval   = 5 * time.Second
-	DefaultRefreshInterval  = 60 * time.Second
+	DefaultRefreshInterval = 60 * time.Second
+
+	// Peer's network types. These are used as a predefined peer configurations for a specified network type.
+	LocalNetworkPeerType = "local"
+	LanNetworkPeerType   = "lan"
+	WanNetworkPeerType   = "wan"
+)
+
+var (
+	// NetworkPeerTypes is a list of available peers' network types.
+	NetworkPeerTypes = []string{LocalNetworkPeerType, LanNetworkPeerType, WanNetworkPeerType}
 )
 
 // PeerType describes a peer's role in the cluster.
@@ -101,6 +109,8 @@ func New(
 	pushPullInterval time.Duration,
 	gossipInterval time.Duration,
 	refreshInterval time.Duration,
+	secretKey []byte,
+	networkType string,
 ) (*Peer, error) {
 	l = log.With(l, "component", "cluster")
 
@@ -137,13 +147,21 @@ func New(
 		return nil, err
 	}
 
-	cfg := memberlist.DefaultLANConfig()
+	cfg, err := parseNetworkConfig(networkType)
+	if err != nil {
+		return nil, err
+	}
 	cfg.Name = name.String()
 	cfg.BindAddr = bindHost
 	cfg.BindPort = bindPort
-	cfg.GossipInterval = gossipInterval
-	cfg.PushPullInterval = pushPullInterval
-	cfg.LogOutput = ioutil.Discard
+	if gossipInterval != 0 {
+		cfg.GossipInterval = gossipInterval
+	}
+	if pushPullInterval != 0 {
+		cfg.PushPullInterval = pushPullInterval
+	}
+	cfg.Logger = stdlog.New(log.NewStdlibAdapter(level.Debug(l)), "peers", stdlog.LstdFlags)
+	cfg.SecretKey = secretKey
 	if advertiseAddr != "" {
 		cfg.AdvertiseAddr = advertiseHost
 		cfg.AdvertisePort = advertisePort
@@ -498,4 +516,24 @@ func IsUnroutable(host string) bool {
 		return true
 	}
 	return false
+}
+
+func parseNetworkConfig(networkType string) (*memberlist.Config, error) {
+	var mc *memberlist.Config
+
+	switch networkType {
+	case LanNetworkPeerType:
+		mc = memberlist.DefaultLANConfig()
+	case WanNetworkPeerType:
+		mc = memberlist.DefaultWANConfig()
+	case LocalNetworkPeerType:
+		mc = memberlist.DefaultLocalConfig()
+	default:
+		return nil, errors.Errorf("unexpected network type %s, should be one of: %s",
+			networkType,
+			strings.Join(NetworkPeerTypes, ", "),
+		)
+	}
+
+	return mc, nil
 }
