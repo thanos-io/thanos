@@ -22,6 +22,7 @@ jobs:
       - run: make deps DEPARGS="-v"
       - run: make format
       - run: make errcheck
+      - run: make check-docs
       - run:
           name: "Run all tests"
           # TODO(bplotka): Setup some S3 tests for CI.

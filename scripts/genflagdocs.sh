@@ -9,6 +9,7 @@ if ! [[ "$0" =~ "scripts/genflagdocs.sh" ]]; then
 	exit 255
 fi
 
+CHECK=${1:-}
 
 commands=("compact" "query" "rule" "sidecar" "store" "bucket")
 
@@ -22,6 +23,22 @@ for x in "${bucketCommands[@]}"; do
 done
 
 # Change dir so embedmd understand the local references made in our markdown doc.
-pushd "docs/components"
-embedmd -w *.md
-popd
+pushd "docs/components" > /dev/null
+
+# if check arg was passed, instead of the docs generation verifies if docs coincide with the codebase
+if [[ "${CHECK}" == "check" ]]; then
+    set +e
+    DIFF=$(embedmd -d *.md)
+    RESULT=$?
+    if [[ "$RESULT" != "0" ]]; then
+        cat << EOF
+Docs have discrepancies, do 'make docs' and commit changes:
+
+${DIFF}
+EOF
+        exit 2
+    fi
+else
+    embedmd -w *.md
+fi
+popd > /dev/null

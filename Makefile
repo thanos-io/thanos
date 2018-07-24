@@ -15,6 +15,7 @@ GOIMPORTS         ?= $(FIRST_GOPATH)/bin/goimports
 PROMU             ?= $(FIRST_GOPATH)/bin/promu
 DEP               ?= $(FIRST_GOPATH)/bin/dep-45be32ba4708aad5e2a
 ERRCHECK          ?= $(FIRST_GOPATH)/bin/errcheck
+EMBEDMD          ?= $(FIRST_GOPATH)/bin/embedmd
 
 .PHONY: all
 all: deps format errcheck build
@@ -60,10 +61,13 @@ docker-push:
 
 # docs regenerates flags in docs for all thanos commands.
 .PHONY: docs
-docs:
-	@go get -u github.com/campoy/embedmd
-	@go build ./cmd/thanos/...
+docs: $(EMBEDMD) build
 	@scripts/genflagdocs.sh
+
+# check-docs checks if documentation have discrepancy with flags
+.PHONY: check-docs
+check-docs: $(EMBEDMD) build
+	@scripts/genflagdocs.sh check
 
 # errcheck performs static analysis and returns error if any of the errors is not checked.
 .PHONY: errcheck
@@ -147,3 +151,7 @@ $(DEP):
 $(ERRCHECK):
 	@echo ">> fetching errcheck"
 	@go get -u github.com/kisielk/errcheck
+
+$(EMBEDMD):
+	@echo ">> install campoy/embedmd"
+	@go get -u github.com/campoy/embedmd
