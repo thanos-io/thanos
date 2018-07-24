@@ -111,8 +111,8 @@ Flags:
                                detected
   -i, --issues=index_issue... ...  
                                Issues to verify (and optionally repair).
-                               Possible values: [index_issue overlapped_blocks
-                               duplicated_compaction]
+                               Possible values: [duplicated_compaction
+                               index_issue overlapped_blocks]
       --id-whitelist=ID-WHITELIST ...  
                                Block IDs to verify (and optionally repair) only.
                                If none is specified, all blocks will be

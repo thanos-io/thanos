@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"text/template"
 	"time"
 
@@ -32,6 +33,8 @@ var (
 		for id := range issuesMap {
 			s = append(s, id)
 		}
+
+		sort.Strings(s)
 		return s
 	}
 )
