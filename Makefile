@@ -141,6 +141,8 @@ $(DEP):
 	@echo ">> fetching dep from 45be32ba4708aad5e2aa8c86f9432c4c4c1f8da2 revision"
 	@if [ ! -d "$(TMP_GOPATH)/src/github.com/golang/dep" ]; then \
 		GOPATH=$(TMP_GOPATH) go get -d -u github.com/golang/dep/cmd/dep; \
+	else \
+		git fetch; \
 	fi
 	@cd $(TMP_GOPATH)/src/github.com/golang/dep && git checkout -f -q 45be32ba4708aad5e2aa8c86f9432c4c4c1f8da2
 	@GOPATH=$(TMP_GOPATH) go install github.com/golang/dep/cmd/dep
