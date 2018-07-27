@@ -3,6 +3,8 @@ package store
 import (
 	"sync"
 
+	"math"
+
 	lru "github.com/hashicorp/golang-lru/simplelru"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
@@ -97,7 +99,7 @@ func newIndexCache(reg prometheus.Registerer, maxBytes uint64) (*indexCache, err
 
 		c.curSize -= uint64(len(v))
 	}
-	l, err := lru.NewLRU(1e12, onEvict)
+	l, err := lru.NewLRU(math.MaxInt64, onEvict)
 	if err != nil {
 		return nil, err
 	}
