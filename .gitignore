@@ -14,3 +14,6 @@ data/
 /.build
 /.release
 /.tarballs
+
+/.idea
+/*.iml
