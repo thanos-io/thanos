@@ -1,7 +1,6 @@
 package cluster
 
 import (
-	"context"
 	stdlog "log"
 	"math/rand"
 	"net"
@@ -13,7 +12,6 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/hashicorp/memberlist"
-	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
@@ -28,7 +26,8 @@ type Peer struct {
 	stopc    chan struct{}
 
 	cfg             *memberlist.Config
-	knownPeers      []string
+	discovery       PeerDiscovery
+	initialPeers    []string
 	advertiseAddr   string
 	refreshInterval time.Duration
 
@@ -104,7 +103,7 @@ func New(
 	advertiseAddr string,
 	advertiseStoreAPIAddr string,
 	advertiseQueryAPIAddress string,
-	knownPeers []string,
+	discovery PeerDiscovery,
 	waitIfEmpty bool,
 	pushPullInterval time.Duration,
 	gossipInterval time.Duration,
@@ -135,7 +134,7 @@ func New(
 		level.Warn(l).Log("err", "provide --cluster.advertise-address as a routable IP address or hostname")
 	}
 
-	resolvedPeers, err := resolvePeers(context.Background(), knownPeers, advertiseAddr, *net.DefaultResolver, waitIfEmpty)
+	resolvedPeers, err := discovery.ResolvePeers(advertiseAddr, waitIfEmpty)
 	if err != nil {
 		return nil, errors.Wrap(err, "resolve peers")
 	}
@@ -181,7 +180,7 @@ func New(
 
 	return &Peer{
 		logger:                   l,
-		knownPeers:               knownPeers,
+		initialPeers:             resolvedPeers,
 		cfg:                      cfg,
 		refreshInterval:          refreshInterval,
 		gossipMsgsReceived:       gossipMsgsReceived,
@@ -191,10 +190,11 @@ func New(
 		advertiseAddr:            advertiseAddr,
 		advertiseStoreAPIAddr:    advertiseStoreAPIAddr,
 		advertiseQueryAPIAddress: advertiseQueryAPIAddress,
+		discovery:                discovery,
 	}, nil
 }
 
-// Join joins to the memberlist gossip cluster using knownPeers and given peerType and initialMetadata.
+// Join joins to the memberlist gossip cluster using initialPeers and given peerType and initialMetadata.
 func (p *Peer) Join(peerType PeerType, initialMetadata PeerMetadata) error {
 	if p.hasJoined() {
 		return errors.New("peer already joined; close it first to rejoin")
@@ -210,11 +210,11 @@ func (p *Peer) Join(peerType PeerType, initialMetadata PeerMetadata) error {
 		return errors.Wrap(err, "create memberlist")
 	}
 
-	n, err := ml.Join(p.knownPeers)
+	n, err := ml.Join(p.initialPeers)
 	if err != nil {
-		level.Error(p.logger).Log("msg", "none of the peers was can be reached", "peerType", peerType, "knownPeers", strings.Join(p.knownPeers, ","), "err", err)
+		level.Error(p.logger).Log("msg", "none of the peers was can be reached", "peerType", peerType, "initialPeers", strings.Join(p.initialPeers, ","), "err", err)
 	} else {
-		level.Debug(p.logger).Log("msg", "joined cluster", "peerType", peerType, "knownPeers", strings.Join(p.knownPeers, ","))
+		level.Debug(p.logger).Log("msg", "joined cluster", "peerType", peerType, "initialPeers", strings.Join(p.initialPeers, ","))
 	}
 
 	if n > 0 {
@@ -265,7 +265,7 @@ func (p *Peer) Refresh() error {
 		return nil
 	}
 
-	resolvedPeers, err := resolvePeers(context.Background(), p.knownPeers, p.advertiseAddr, *net.DefaultResolver, false)
+	resolvedPeers, err := p.discovery.ResolvePeers(p.advertiseAddr, false)
 	if err != nil {
 		return errors.Wrapf(err, "refresh cluster could not resolve peers: %v", resolvedPeers)
 	}
@@ -288,7 +288,7 @@ func (p *Peer) Refresh() error {
 	}
 
 	if len(notConnected) == 0 {
-		level.Debug(p.logger).Log("msg", "refresh cluster done", "peers", strings.Join(p.knownPeers, ","), "resolvedPeers", strings.Join(resolvedPeers, ","))
+		level.Debug(p.logger).Log("msg", "refresh cluster done", "resolvedPeers", strings.Join(resolvedPeers, ","))
 		return nil
 	}
 
@@ -438,75 +438,6 @@ func (p *Peer) Info() map[string]interface{} {
 		"n":       p.mlist.NumMembers(),
 		"state":   d,
 	}
-}
-
-func resolvePeers(ctx context.Context, peers []string, myAddress string, res net.Resolver, waitIfEmpty bool) ([]string, error) {
-	var resolvedPeers []string
-
-	for _, peer := range peers {
-		host, port, err := net.SplitHostPort(peer)
-		if err != nil {
-			return nil, errors.Wrapf(err, "split host/port for peer %s", peer)
-		}
-
-		ips, err := res.LookupIPAddr(ctx, host)
-		if err != nil {
-			// Assume direct address.
-			resolvedPeers = append(resolvedPeers, peer)
-			continue
-		}
-
-		if len(ips) == 0 {
-			var lookupErrSpotted bool
-			retryCtx, cancel := context.WithCancel(ctx)
-			defer cancel()
-
-			err := runutil.Retry(2*time.Second, retryCtx.Done(), func() error {
-				if lookupErrSpotted {
-					// We need to invoke cancel in next run of retry when lookupErrSpotted to preserve LookupIPAddr error.
-					cancel()
-				}
-
-				ips, err = res.LookupIPAddr(retryCtx, host)
-				if err != nil {
-					lookupErrSpotted = true
-					return errors.Wrapf(err, "IP Addr lookup for peer %s", peer)
-				}
-
-				ips = removeMyAddr(ips, port, myAddress)
-				if len(ips) == 0 {
-					if !waitIfEmpty {
-						return nil
-					}
-					return errors.New("empty IPAddr result. Retrying")
-				}
-
-				return nil
-			})
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		for _, ip := range ips {
-			resolvedPeers = append(resolvedPeers, net.JoinHostPort(ip.String(), port))
-		}
-	}
-
-	return resolvedPeers, nil
-}
-
-func removeMyAddr(ips []net.IPAddr, targetPort string, myAddr string) []net.IPAddr {
-	var result []net.IPAddr
-
-	for _, ip := range ips {
-		if net.JoinHostPort(ip.String(), targetPort) == myAddr {
-			continue
-		}
-		result = append(result, ip)
-	}
-
-	return result
 }
 
 func IsUnroutable(host string) bool {
