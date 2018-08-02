@@ -63,7 +63,7 @@ All data is uploaded as it is created by the Prometheus server/storage engine. T
 
 A store node acts as a gateway to block data that is stored in an object storage bucket. It implements the same gRPC API as data sources to provide access to all metric data found in the bucket.
 
-It continiously synchronizes which blocks exist in the bucket and translates requests for metric data into obejct storage requests. It implements various strategies to minimize the number of requests to the object storage such as filtering relevant blocks by their meta data (e.g. time range and labels) and caching frequent index lookups.
+It continuously synchronizes which blocks exist in the bucket and translates requests for metric data into object storage requests. It implements various strategies to minimize the number of requests to the object storage such as filtering relevant blocks by their meta data (e.g. time range and labels) and caching frequent index lookups.
 
 The Prometheus 2.0 storage layout is optimized for minimal read amplification. For example, sample data for the same time series is sequentially aligned in a chunk file. Similarly, series for the same metric name are sequentially aligned as well.  
 The store node is aware of the files' layout and translates data requests into a plan of a minimum amount of object storage request. Each requests may fetch up to hundreds of thousands of chunks at once. This is essential to satisfy even big queries with a limited amount of requests to the object storage.
