@@ -110,11 +110,9 @@ func (conf *Config) ValidateForTests() error {
 func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, component string) (*Bucket, error) {
 	var chain []credentials.Provider
 	if conf.AccessKey != "" {
-		var signature credentials.SignatureType
+		signature := credentials.SignatureV4
 		if conf.SignatureV2 {
 			signature = credentials.SignatureV2
-		} else {
-			signature = credentials.SignatureV4
 		}
 
 		chain = []credentials.Provider{&credentials.Static{
