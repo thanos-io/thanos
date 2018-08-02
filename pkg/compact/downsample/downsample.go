@@ -677,12 +677,13 @@ func (it *CounterSeriesIterator) At() (t int64, v float64) {
 
 func (it *CounterSeriesIterator) Seek(x int64) bool {
 	for {
+		if t, _ := it.At(); t >= x {
+			return true
+		}
+
 		ok := it.Next()
 		if !ok {
 			return false
-		}
-		if t, _ := it.At(); t >= x {
-			return true
 		}
 	}
 }
