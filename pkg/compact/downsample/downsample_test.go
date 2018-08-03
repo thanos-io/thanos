@@ -17,7 +17,6 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/testutil"
-	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
@@ -268,13 +267,40 @@ func TestCounterSeriesIterator(t *testing.T) {
 }
 
 func TestCounterSeriesIteratorSeek(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
 	chunks := [][]sample{
 		{{100, 10}, {200, 20}, {300, 10}, {400, 20}, {400, 5}},
 	}
+
 	exp := []sample{
-		{100, 10}, {200, 20}, {300, 30}, {400, 40},
+		{200, 20}, {300, 30}, {400, 40},
+	}
+
+	var its []chunkenc.Iterator
+	for _, c := range chunks {
+		its = append(its, newSampleIterator(c))
+	}
+
+	var res []sample
+	x := NewCounterSeriesIterator(its...)
+
+	ok := x.Seek(150)
+	testutil.Assert(t, ok, "Seek should return true")
+	testutil.Ok(t, x.Err())
+	for {
+		ts, v := x.At()
+		res = append(res, sample{ts, v})
+
+		ok = x.Next()
+		if !ok {
+			break
+		}
+	}
+	testutil.Equals(t, exp, res)
+}
+
+func TestCounterSeriesIteratorSeekExtendTs(t *testing.T) {
+	chunks := [][]sample{
+		{{100, 10}, {200, 20}, {300, 10}, {400, 20}, {400, 5}},
 	}
 
 	var its []chunkenc.Iterator
@@ -283,22 +309,42 @@ func TestCounterSeriesIteratorSeek(t *testing.T) {
 	}
 
 	x := NewCounterSeriesIterator(its...)
-	var it *storage.BufferedSeriesIterator
-	it = storage.NewBuffer(x, 500)
-	ok := it.Seek(500)
-	if !ok {
-		if it.Err() != nil {
-			testutil.Ok(t, it.Err())
-		}
+
+	ok := x.Seek(500)
+	testutil.Assert(t, !ok, "Seek should return false")
+}
+
+func TestCounterSeriesIteratorSeekAfterNext(t *testing.T) {
+	chunks := [][]sample{
+		{{100, 10}},
+	}
+	exp := []sample{
+		{100, 10},
 	}
 
-	buf := it.Buffer()
-	var out []sample
-	for buf.Next() {
-		t, v := buf.At()
-		out = append(out, sample{t: t, v: v})
+	var its []chunkenc.Iterator
+	for _, c := range chunks {
+		its = append(its, newSampleIterator(c))
 	}
-	testutil.Equals(t, exp, out)
+
+	var res []sample
+	x := NewCounterSeriesIterator(its...)
+
+	x.Next()
+
+	ok := x.Seek(50)
+	testutil.Assert(t, ok, "Seek should return true")
+	testutil.Ok(t, x.Err())
+	for {
+		ts, v := x.At()
+		res = append(res, sample{ts, v})
+
+		ok = x.Next()
+		if !ok {
+			break
+		}
+	}
+	testutil.Equals(t, exp, res)
 }
 
 type sampleIterator struct {
