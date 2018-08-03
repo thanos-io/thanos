@@ -17,6 +17,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/testutil"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
@@ -264,6 +265,40 @@ func TestCounterSeriesIterator(t *testing.T) {
 	}
 	testutil.Ok(t, x.Err())
 	testutil.Equals(t, exp, res)
+}
+
+func TestCounterSeriesIteratorSeek(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	chunks := [][]sample{
+		{{100, 10}, {200, 20}, {300, 10}, {400, 20}, {400, 5}},
+	}
+	exp := []sample{
+		{100, 10}, {200, 20}, {300, 30}, {400, 40},
+	}
+
+	var its []chunkenc.Iterator
+	for _, c := range chunks {
+		its = append(its, newSampleIterator(c))
+	}
+
+	x := NewCounterSeriesIterator(its...)
+	var it *storage.BufferedSeriesIterator
+	it = storage.NewBuffer(x, 500)
+	ok := it.Seek(500)
+	if !ok {
+		if it.Err() != nil {
+			testutil.Ok(t, it.Err())
+		}
+	}
+
+	buf := it.Buffer()
+	var out []sample
+	for buf.Next() {
+		t, v := buf.At()
+		out = append(out, sample{t: t, v: v})
+	}
+	testutil.Equals(t, exp, out)
 }
 
 type sampleIterator struct {
