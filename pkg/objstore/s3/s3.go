@@ -19,6 +19,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/pkg/credentials"
 	"github.com/minio/minio-go/pkg/encrypt"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -48,13 +49,13 @@ type Bucket struct {
 
 // Config encapsulates the necessary config values to instantiate an s3 client.
 type Config struct {
-	Bucket       string
-	Endpoint     string
-	AccessKey    string
-	SecretKey    string
-	Insecure     bool
-	SignatureV2  bool
-	SSEEnprytion bool
+	Bucket        string
+	Endpoint      string
+	AccessKey     string
+	secretKey     string
+	Insecure      bool
+	SignatureV2   bool
+	SSEEncryption bool
 }
 
 // RegisterS3Params registers the s3 flags and returns an initialized Config struct.
@@ -70,7 +71,7 @@ func RegisterS3Params(cmd *kingpin.CmdClause) *Config {
 	cmd.Flag("s3.access-key", "Access key for an S3-Compatible API.").
 		PlaceHolder("<key>").Envar("S3_ACCESS_KEY").StringVar(&s3config.AccessKey)
 
-	s3config.SecretKey = os.Getenv("S3_SECRET_KEY")
+	s3config.secretKey = os.Getenv("S3_SECRET_KEY")
 
 	cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
 		Default("false").Envar("S3_INSECURE").BoolVar(&s3config.Insecure)
@@ -79,7 +80,7 @@ func RegisterS3Params(cmd *kingpin.CmdClause) *Config {
 		Default("false").Envar("S3_SIGNATURE_VERSION2").BoolVar(&s3config.SignatureV2)
 
 	cmd.Flag("s3.encrypt-sse", "Whether to use Server Side Encryption").
-		Default("false").Envar("S3_SSE_ENCRYPTION").BoolVar(&s3config.SSEEnprytion)
+		Default("false").Envar("S3_SSE_ENCRYPTION").BoolVar(&s3config.SSEEncryption)
 
 	return &s3config
 }
@@ -88,8 +89,8 @@ func RegisterS3Params(cmd *kingpin.CmdClause) *Config {
 func (conf *Config) Validate() error {
 	if conf.Bucket == "" ||
 		conf.Endpoint == "" ||
-		conf.AccessKey == "" ||
-		conf.SecretKey == "" {
+		(conf.AccessKey == "" && conf.secretKey != "") ||
+		(conf.AccessKey != "" && conf.secretKey == "") {
 		return errors.New("insufficient s3 configuration information")
 	}
 	return nil
@@ -99,7 +100,7 @@ func (conf *Config) Validate() error {
 func (conf *Config) ValidateForTests() error {
 	if conf.Endpoint == "" ||
 		conf.AccessKey == "" ||
-		conf.SecretKey == "" {
+		conf.secretKey == "" {
 		return errors.New("insufficient s3 test configuration information")
 	}
 	return nil
@@ -107,14 +108,33 @@ func (conf *Config) ValidateForTests() error {
 
 // NewBucket returns a new Bucket using the provided s3 config values.
 func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, component string) (*Bucket, error) {
-	var f func(string, string, string, bool) (*minio.Client, error)
-	if conf.SignatureV2 {
-		f = minio.NewV2
+	var chain []credentials.Provider
+	if conf.AccessKey != "" {
+		signature := credentials.SignatureV4
+		if conf.SignatureV2 {
+			signature = credentials.SignatureV2
+		}
+
+		chain = []credentials.Provider{&credentials.Static{
+			Value: credentials.Value{
+				AccessKeyID:     conf.AccessKey,
+				SecretAccessKey: conf.secretKey,
+				SignerType:      signature,
+			},
+		}}
 	} else {
-		f = minio.NewV4
+		chain = []credentials.Provider{
+			&credentials.IAM{
+				Client: &http.Client{
+					Transport: http.DefaultTransport,
+				},
+			},
+			&credentials.FileAWSCredentials{},
+			&credentials.EnvAWS{},
+		}
 	}
 
-	client, err := f(conf.Endpoint, conf.AccessKey, conf.SecretKey, !conf.Insecure)
+	client, err := minio.NewWithCredentials(conf.Endpoint, credentials.NewChainCredentials(chain), !conf.Insecure, "")
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize s3 client")
 	}
@@ -144,7 +164,7 @@ func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, compo
 	})
 
 	var sse encrypt.ServerSide
-	if conf.SSEEnprytion {
+	if conf.SSEEncryption {
 		sse = encrypt.NewSSE()
 	}
 
@@ -266,7 +286,7 @@ func configFromEnv() *Config {
 		Bucket:    os.Getenv("S3_BUCKET"),
 		Endpoint:  os.Getenv("S3_ENDPOINT"),
 		AccessKey: os.Getenv("S3_ACCESS_KEY"),
-		SecretKey: os.Getenv("S3_SECRET_KEY"),
+		secretKey: os.Getenv("S3_SECRET_KEY"),
 	}
 
 	insecure, err := strconv.ParseBool(os.Getenv("S3_INSECURE"))
