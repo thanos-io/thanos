@@ -266,6 +266,87 @@ func TestCounterSeriesIterator(t *testing.T) {
 	testutil.Equals(t, exp, res)
 }
 
+func TestCounterSeriesIteratorSeek(t *testing.T) {
+	chunks := [][]sample{
+		{{100, 10}, {200, 20}, {300, 10}, {400, 20}, {400, 5}},
+	}
+
+	exp := []sample{
+		{200, 20}, {300, 30}, {400, 40},
+	}
+
+	var its []chunkenc.Iterator
+	for _, c := range chunks {
+		its = append(its, newSampleIterator(c))
+	}
+
+	var res []sample
+	x := NewCounterSeriesIterator(its...)
+
+	ok := x.Seek(150)
+	testutil.Assert(t, ok, "Seek should return true")
+	testutil.Ok(t, x.Err())
+	for {
+		ts, v := x.At()
+		res = append(res, sample{ts, v})
+
+		ok = x.Next()
+		if !ok {
+			break
+		}
+	}
+	testutil.Equals(t, exp, res)
+}
+
+func TestCounterSeriesIteratorSeekExtendTs(t *testing.T) {
+	chunks := [][]sample{
+		{{100, 10}, {200, 20}, {300, 10}, {400, 20}, {400, 5}},
+	}
+
+	var its []chunkenc.Iterator
+	for _, c := range chunks {
+		its = append(its, newSampleIterator(c))
+	}
+
+	x := NewCounterSeriesIterator(its...)
+
+	ok := x.Seek(500)
+	testutil.Assert(t, !ok, "Seek should return false")
+}
+
+func TestCounterSeriesIteratorSeekAfterNext(t *testing.T) {
+	chunks := [][]sample{
+		{{100, 10}},
+	}
+	exp := []sample{
+		{100, 10},
+	}
+
+	var its []chunkenc.Iterator
+	for _, c := range chunks {
+		its = append(its, newSampleIterator(c))
+	}
+
+	var res []sample
+	x := NewCounterSeriesIterator(its...)
+
+	x.Next()
+
+	ok := x.Seek(50)
+	testutil.Assert(t, ok, "Seek should return true")
+	testutil.Ok(t, x.Err())
+	for {
+		ts, v := x.At()
+		res = append(res, sample{ts, v})
+
+		ok = x.Next()
+		if !ok {
+			break
+		}
+	}
+	testutil.Equals(t, exp, res)
+}
+
 type sampleIterator struct {
 	l []sample
 	i int
