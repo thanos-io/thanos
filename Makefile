@@ -16,7 +16,7 @@ GOIMPORTS         ?= $(FIRST_GOPATH)/bin/goimports
 PROMU             ?= $(FIRST_GOPATH)/bin/promu
 DEP               ?= $(FIRST_GOPATH)/bin/dep-45be32ba4708aad5e2a
 ERRCHECK          ?= $(FIRST_GOPATH)/bin/errcheck
-EMBEDMD          ?= $(FIRST_GOPATH)/bin/embedmd
+EMBEDMD           ?= $(FIRST_GOPATH)/bin/embedmd
 
 .PHONY: all
 all: deps format errcheck build
@@ -76,6 +76,12 @@ errcheck: $(ERRCHECK) deps
 	@echo ">> errchecking the code"
 	$(ERRCHECK) -verbose -exclude .errcheck_excludes.txt ./cmd/... ./pkg/... ./test/...
 
+# force-deps ensure dep without checking if toml or lock of vendor folder changed.
+.PHONY: force-deps
+force-deps: $(DEP)
+	@echo ">> dep ensure"
+	@$(DEP) ensure $(DEPARGS)
+
 # format formats the code (including imports format).
 # NOTE: format requires deps to not remove imports that are used, just not resolved.
 # This is not encoded, because it is often used in IDE onSave logic.
@@ -112,7 +118,6 @@ test: test-deps
 	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS="true" or/and  export THANOS_SKIP_S3_AWS_TESTS="true" if you want to skip e2e tests against real store buckets"
 	@go test $(shell go list ./... | grep -v /vendor/ | grep -v /benchmark/)
 
-
 # test-deps installs dependency for e2e tets.
 .PHONY: test-deps
 test-deps: deps
@@ -128,9 +133,8 @@ vet:
 
 # non-phony targets
 
-vendor: Gopkg.toml Gopkg.lock | $(DEP)
-	@echo ">> dep ensure"
-	@$(DEP) ensure $(DEPARGS)
+vendor: Gopkg.toml Gopkg.lock
+	@$(MAKE) force-deps
 
 $(GOIMPORTS):
 	@echo ">> fetching goimports"
