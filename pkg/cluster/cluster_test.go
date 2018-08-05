@@ -27,14 +27,15 @@ func joinPeer(num int, knownPeers []string) (peerAddr string, peer *Peer, err er
 	peerAddr = fmt.Sprintf("127.0.0.1:%d", port)
 	now := time.Now()
 
+	logger := log.NewNopLogger()
 	peer, err = New(
-		log.NewNopLogger(),
+		logger,
 		prometheus.NewRegistry(),
 		peerAddr,
 		peerAddr,
 		apiAddr(num),
 		"",
-		knownPeers,
+		StaticPeerList(knownPeers)(&logger),
 		false,
 		100*time.Millisecond,
 		50*time.Millisecond,
