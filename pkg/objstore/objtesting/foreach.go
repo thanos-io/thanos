@@ -8,6 +8,7 @@ import (
 	"github.com/fortytw2/leaktest"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/azure"
+	"github.com/improbable-eng/thanos/pkg/objstore/cos"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/objstore/inmem"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
@@ -99,5 +100,21 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 		}
 	} else {
 		t.Log("THANOS_SKIP_SWIFT_TESTS envvar present. Skipping test against swift.")
+	}
+
+	// Optional COS.
+	if _, ok := os.LookupEnv("THANOS_SKIP_TENCENT_COS_TESTS"); !ok {
+		bkt, closeFn, err := cos.NewTestBucket(t)
+		testutil.Ok(t, err)
+
+		ok := t.Run("Tencent cos", func(t *testing.T) {
+			testFn(t, bkt)
+		})
+		closeFn()
+		if !ok {
+			return
+		}
+	} else {
+		t.Log("THANOS_SKIP_TENCENT_COS_TESTS envvar present. Skipping test against Tencent COS.")
 	}
 }
