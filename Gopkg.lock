@@ -694,6 +694,7 @@
     "github.com/hashicorp/memberlist",
     "github.com/lovoo/gcloud-opentracing",
     "github.com/minio/minio-go",
+    "github.com/minio/minio-go/pkg/credentials",
     "github.com/minio/minio-go/pkg/encrypt",
     "github.com/oklog/run",
     "github.com/oklog/ulid",
