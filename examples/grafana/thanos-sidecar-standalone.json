@@ -1,45 +1,16 @@
 {
-  "__inputs": [
-    {
-      "name": "DS_PROMETHEUS",
-      "label": "Prometheus",
-      "description": "",
-      "type": "datasource",
-      "pluginId": "prometheus",
-      "pluginName": "Prometheus"
-    },
-    {
-      "name": "VAR_LABELVALUE",
-      "type": "constant",
-      "label": "labelvalue",
-      "value": "prometheus",
-      "description": ""
-    },
-    {
-      "name": "VAR_LABELSELECTOR",
-      "type": "constant",
-      "label": "labelselector",
-      "value": "name",
-      "description": ""
-    }
-  ],
+  "__inputs": [],
   "__requires": [
     {
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "5.0.3"
+      "version": "5.2.1"
     },
     {
       "type": "panel",
       "id": "graph",
       "name": "Graph",
-      "version": "5.0.0"
-    },
-    {
-      "type": "datasource",
-      "id": "prometheus",
-      "name": "Prometheus",
       "version": "5.0.0"
     },
     {
@@ -66,7 +37,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1529906347607,
+  "iteration": 1533596207001,
   "links": [],
   "panels": [
     {
@@ -92,7 +63,7 @@
         "rgba(237, 129, 40, 0.89)",
         "#d44a3a"
       ],
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": "$datasource",
       "format": "dateTimeFromNow",
       "gauge": {
         "maxValue": 100,
@@ -147,8 +118,10 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "min(thanos_objstore_bucket_last_successful_upload_time{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"})*1000",
+          "expr": "min(thanos_objstore_bucket_last_successful_upload_time{instance=~\"$instance\"})*1000",
           "format": "time_series",
+          "instant": false,
+          "interval": "",
           "intervalFactor": 1,
           "refId": "A"
         }
@@ -175,7 +148,7 @@
         "rgba(237, 129, 40, 0.89)",
         "#d44a3a"
       ],
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": "$datasource",
       "format": "dateTimeFromNow",
       "gauge": {
         "maxValue": 100,
@@ -229,7 +202,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "min(thanos_sidecar_last_heartbeat_success_time_seconds{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"})*1000",
+          "expr": "min(thanos_sidecar_last_heartbeat_success_time_seconds{instance=~\"$instance\"})*1000",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
@@ -253,7 +226,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": "$datasource",
       "editable": true,
       "error": false,
       "fill": 1,
@@ -293,10 +266,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(grpc_server_handled_total{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}[$interval])) by (grpc_code, grpc_method, kubernetes_namespace)",
+          "expr": "sum(rate(grpc_server_handled_total{instance=~\"$instance\"}[$interval])) by (grpc_code, grpc_method)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{grpc_code}} {{grpc_method}}  {{kubernetes_namespace}}",
+          "legendFormat": "{{grpc_code}} {{grpc_method}}",
           "refId": "A"
         }
       ],
@@ -335,14 +308,18 @@
           "min": "0",
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": "$datasource",
       "editable": true,
       "error": false,
       "fill": 1,
@@ -382,10 +359,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.9999, sum(rate(grpc_server_handling_seconds_bucket{$labelselector=\"$labelvalue\"}[$interval])) by (grpc_method, le, kubernetes_namespace))",
+          "expr": "histogram_quantile(0.9999, sum(rate(grpc_server_handling_seconds_bucket{instance=~\"$instance\"}[$interval])) by (grpc_method, le))",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "99.99 {{grpc_method}} {{kubernetes_namespace}}",
+          "legendFormat": "99.99 {{grpc_method}}",
           "refId": "A"
         }
       ],
@@ -424,14 +401,18 @@
           "min": "0",
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": "$datasource",
       "editable": true,
       "error": false,
       "fill": 1,
@@ -471,10 +452,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(thanos_objstore_bucket_operations_total{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}[$interval])) by (kubernetes_namespace, operation)",
+          "expr": "sum(rate(thanos_objstore_bucket_operations_total{instance=~\"$instance\"}[$interval])) by (operation)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{operation}} {{kubernetes_namespace}}",
+          "legendFormat": "{{operation}}",
           "refId": "A"
         }
       ],
@@ -513,14 +494,18 @@
           "min": "0",
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": "$datasource",
       "editable": true,
       "error": false,
       "fill": 1,
@@ -560,10 +545,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(thanos_objstore_bucket_operation_failures_total{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}[$interval])) by (operation,kubernetes_namespace)",
+          "expr": "sum(rate(thanos_objstore_bucket_operation_failures_total{instance=~\"$instance\"}[$interval])) by (operation)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{operation}} {{kubernetes_namespace}}",
+          "legendFormat": "{{operation}}",
           "refId": "A"
         }
       ],
@@ -602,14 +587,18 @@
           "min": "0",
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": "$datasource",
       "editable": true,
       "error": false,
       "fill": 1,
@@ -649,11 +638,11 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.9999, sum(rate(thanos_objstore_bucket_operation_duration_seconds_bucket{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}[$interval])) by (kubernetes_namespace,le))",
+          "expr": "histogram_quantile(0.9999, sum(rate(thanos_objstore_bucket_operation_duration_seconds_bucket{instance=~\"$instance\"}[$interval])) by (le))",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 2,
-          "legendFormat": "99.99 bucket ops {{kubernetes_namespace}}",
+          "legendFormat": "99.99 bucket ops ",
           "refId": "C"
         }
       ],
@@ -692,7 +681,11 @@
           "min": "0",
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "collapsed": false,
@@ -713,7 +706,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": "$datasource",
       "editable": true,
       "error": false,
       "fill": 1,
@@ -747,10 +740,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "go_memstats_heap_alloc_bytes{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}",
+          "expr": "go_memstats_heap_alloc_bytes{instance=~\"$instance\", job=\"thanos\"}",
           "format": "time_series",
           "intervalFactor": 2,
-          "legendFormat": "{{kubernetes_namespace}} {{kubernetes_pod_name}}",
+          "legendFormat": "{{instance}}",
           "refId": "A",
           "step": 2
         }
@@ -790,14 +783,18 @@
           "min": null,
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": "$datasource",
       "fill": 1,
       "gridPos": {
         "h": 7,
@@ -829,10 +826,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "go_goroutines{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}",
+          "expr": "go_goroutines{instance=~\"$instance\", job=\"thanos\"}",
           "format": "time_series",
           "intervalFactor": 2,
-          "legendFormat": "{{kubernetes_namespace}} {{kubernetes_pod_name}}",
+          "legendFormat": "{{instance}}",
           "refId": "A",
           "step": 2
         }
@@ -871,14 +868,18 @@
           "min": null,
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": "$datasource",
       "editable": true,
       "error": false,
       "fill": 1,
@@ -914,18 +915,12 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "go_gc_duration_seconds{$labelselector=\"$labelvalue\", quantile=\"1\"}",
+          "expr": "go_gc_duration_seconds{instance=~\"$instance\", quantile=\"1\", job=\"thanos\"}",
           "format": "time_series",
           "intervalFactor": 2,
-          "legendFormat": "{{quantile}} {{kubernetes_namespace}} {{kubernetes_pod_name}}",
+          "legendFormat": "{{quantile}}",
           "refId": "A",
           "step": 2
-        },
-        {
-          "expr": "",
-          "format": "time_series",
-          "intervalFactor": 1,
-          "refId": "B"
         }
       ],
       "thresholds": [],
@@ -963,7 +958,11 @@
           "min": null,
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     }
   ],
   "refresh": "30s",
@@ -1043,33 +1042,16 @@
         "type": "interval"
       },
       {
-        "current": {
-          "value": "${VAR_LABELVALUE}",
-          "text": "${VAR_LABELVALUE}"
-        },
-        "hide": 2,
-        "label": "",
-        "name": "labelvalue",
-        "options": [
-          {
-            "value": "${VAR_LABELVALUE}",
-            "text": "${VAR_LABELVALUE}"
-          }
-        ],
-        "query": "${VAR_LABELVALUE}",
-        "type": "constant"
-      },
-      {
         "allValue": ".*",
         "current": {},
-        "datasource": "${DS_PROMETHEUS}",
+        "datasource": "$datasource",
         "hide": 0,
-        "includeAll": true,
-        "label": "namespace",
-        "multi": false,
-        "name": "namespace",
+        "includeAll": false,
+        "label": "Instance",
+        "multi": true,
+        "name": "instance",
         "options": [],
-        "query": "label_values(kubernetes_namespace)",
+        "query": "label_values(thanos_sidecar_prometheus_up, instance)",
         "refresh": 1,
         "regex": "",
         "sort": 0,
@@ -1081,25 +1063,22 @@
       },
       {
         "current": {
-          "value": "${VAR_LABELSELECTOR}",
-          "text": "${VAR_LABELSELECTOR}"
+          "text": "default",
+          "value": "default"
         },
-        "hide": 2,
-        "label": null,
-        "name": "labelselector",
-        "options": [
-          {
-            "value": "${VAR_LABELSELECTOR}",
-            "text": "${VAR_LABELSELECTOR}"
-          }
-        ],
-        "query": "${VAR_LABELSELECTOR}",
-        "type": "constant"
+        "hide": 0,
+        "label": "Datasource",
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource"
       }
     ]
   },
   "time": {
-    "from": "now-30m",
+    "from": "now/d",
     "to": "now"
   },
   "timepicker": {
@@ -1130,5 +1109,5 @@
   "timezone": "browser",
   "title": "Thanos Sidecar",
   "uid": "IOteEKHik",
-  "version": 2
+  "version": 9
 }

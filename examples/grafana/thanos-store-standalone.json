@@ -31,7 +31,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1533593298626,
+  "iteration": 1533596097206,
   "links": [],
   "panels": [
     {
@@ -479,21 +479,21 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(thanos_objstore_bucket_operation_failures_total{instance=\"$instance\"}[$interval])) by (operation,instance)",
+          "expr": "sum(rate(thanos_objstore_bucket_operation_failures_total{instance=~\"$instance\"}[$interval])) by (operation,instance)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "bucket {{operation}} {{instance}}",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(thanos_bucket_store_block_drop_failures_total{instance=\"$instance\"}[$interval])) by (instance)",
+          "expr": "sum(rate(thanos_bucket_store_block_drop_failures_total{instance=~\"$instance\"}[$interval])) by (instance)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "block drop {{instance}}",
           "refId": "B"
         },
         {
-          "expr": "sum(rate(thanos_bucket_store_block_load_failures_total{instance=\"$instance\"}[$interval])) by (instance)",
+          "expr": "sum(rate(thanos_bucket_store_block_load_failures_total{instance=~\"$instance\"}[$interval])) by (instance)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "block load {{instance}}",
@@ -586,7 +586,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.9999, sum(rate(thanos_objstore_bucket_operation_duration_seconds_bucket{instance=\"$instance\"}[$interval])) by (instance, le, operation))",
+          "expr": "histogram_quantile(0.9999, sum(rate(thanos_objstore_bucket_operation_duration_seconds_bucket{instance=~\"$instance\"}[$interval])) by (instance, le, operation))",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 2,
@@ -594,14 +594,14 @@
           "refId": "C"
         },
         {
-          "expr": "histogram_quantile(0.9999, sum(rate(thanos_bucket_store_series_get_all_duration_seconds_bucket{instance=\"$instance\"}[$interval])) by (instance,le))",
+          "expr": "histogram_quantile(0.9999, sum(rate(thanos_bucket_store_series_get_all_duration_seconds_bucket{instance=~\"$instance\"}[$interval])) by (instance,le))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "99.99 get all {{instance}}",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.9999, sum(rate(thanos_bucket_store_series_merge_duration_seconds_bucket{instance=\"$instance\"}[$interval])) by (instance,le))",
+          "expr": "histogram_quantile(0.9999, sum(rate(thanos_bucket_store_series_merge_duration_seconds_bucket{instance=~\"$instance\"}[$interval])) by (instance,le))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "99.99 merge {{instance}}",
@@ -693,28 +693,28 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(thanos_store_index_cache_items_added_total{instance=\"$instance\"}[$interval])) by (instance, item_type)",
+          "expr": "sum(rate(thanos_store_index_cache_items_added_total{instance=~\"$instance\"}[$interval])) by (instance, item_type)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "added {{item_type}} {{instance}}",
           "refId": "D"
         },
         {
-          "expr": "sum(rate(thanos_store_index_cache_items_evicted_total{instance=\"$instance\"}[$interval])) by (instance, item_type)",
+          "expr": "sum(rate(thanos_store_index_cache_items_evicted_total{instance=~\"$instance\"}[$interval])) by (instance, item_type)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "evicted {{item_type}} {{instance}}",
           "refId": "E"
         },
         {
-          "expr": "sum(rate(thanos_store_index_cache_requests_total{instance=\"$instance\"}[$interval])) by (instance, item_type)",
+          "expr": "sum(rate(thanos_store_index_cache_requests_total{instance=~\"$instance\"}[$interval])) by (instance, item_type)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "requests {{item_type}} {{instance}}",
           "refId": "F"
         },
         {
-          "expr": "sum(rate(thanos_store_index_cache_hits_total{instance=\"$instance\"}[$interval])) by (instance, item_type)",
+          "expr": "sum(rate(thanos_store_index_cache_hits_total{instance=~\"$instance\"}[$interval])) by (instance, item_type)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "hits {{item_type}} {{instance}}",
@@ -807,7 +807,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "thanos_bucket_store_series_blocks_queried{instance=\"$instance\",quantile=\"0.99\"}",
+          "expr": "thanos_bucket_store_series_blocks_queried{instance=~\"$instance\",quantile=\"0.99\"}",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 2,
@@ -815,7 +815,7 @@
           "refId": "C"
         },
         {
-          "expr": "thanos_bucket_store_series_data_fetched{instance=\"$instance\",quantile=\"0.99\"}",
+          "expr": "thanos_bucket_store_series_data_fetched{instance=~\"$instance\",quantile=\"0.99\"}",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 1,
@@ -823,7 +823,7 @@
           "refId": "A"
         },
         {
-          "expr": "thanos_bucket_store_series_result_series{instance=\"$instance\",quantile=\"0.99\"}",
+          "expr": "thanos_bucket_store_series_result_series{instance=~\"$instance\",quantile=\"0.99\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "result series {{instance}}",
@@ -924,7 +924,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "go_memstats_heap_alloc_bytes{instance=\"$instance\", job=\"thanos-store\"}",
+          "expr": "go_memstats_heap_alloc_bytes{instance=~\"$instance\", job=\"thanos-store\"}",
           "format": "time_series",
           "intervalFactor": 2,
           "legendFormat": "{{instance}}",
@@ -1010,7 +1010,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "go_goroutines{instance=\"$instance\", job=\"thanos-store\"}",
+          "expr": "go_goroutines{instance=~\"$instance\", job=\"thanos-store\"}",
           "format": "time_series",
           "intervalFactor": 2,
           "legendFormat": "{{instance}}",
@@ -1097,7 +1097,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "go_gc_duration_seconds{instance=\"$instance\", job=\"thanos-store\", quantile=\"1\"}",
+          "expr": "go_gc_duration_seconds{instance=~\"$instance\", job=\"thanos-store\", quantile=\"1\"}",
           "format": "time_series",
           "intervalFactor": 2,
           "legendFormat": "{{instance}}",
@@ -1228,9 +1228,9 @@
         "current": {},
         "datasource": "$datasource",
         "hide": 0,
-        "includeAll": false,
+        "includeAll": true,
         "label": "Instance",
-        "multi": false,
+        "multi": true,
         "name": "instance",
         "options": [],
         "query": "label_values(grpc_server_handled_total{job=\"thanos-store\"}, instance)",
@@ -1245,8 +1245,6 @@
       },
       {
         "current": {
-          "selected": true,
-          "tags": [],
           "text": "Prometheus",
           "value": "Prometheus"
         },
@@ -1293,5 +1291,5 @@
   "timezone": "browser",
   "title": "Thanos Store",
   "uid": "KqPVKRIiz",
-  "version": 8
+  "version": 9
 }

@@ -7,20 +7,6 @@
       "type": "datasource",
       "pluginId": "prometheus",
       "pluginName": "Prometheus"
-    },
-    {
-      "name": "VAR_LABELSELECTOR",
-      "type": "constant",
-      "label": "labelselector",
-      "value": "app",
-      "description": ""
-    },
-    {
-      "name": "VAR_LABELVALUE",
-      "type": "constant",
-      "label": "labelvalue",
-      "value": "thanos-compact",
-      "description": ""
     }
   ],
   "__requires": [
@@ -28,7 +14,7 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "5.0.3"
+      "version": "5.2.1"
     },
     {
       "type": "panel",
@@ -60,7 +46,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1529906222108,
+  "iteration": 1533595760785,
   "links": [],
   "panels": [
     {
@@ -82,7 +68,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": "$datasource",
       "editable": true,
       "error": false,
       "fill": 1,
@@ -122,38 +108,38 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(prometheus_tsdb_compactions_total{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}[$interval])) by (kubernetes_namespace)",
+          "expr": "sum(rate(prometheus_tsdb_compactions_total{instance=~\"$instance\"}[$interval]))",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "compaction {{kubernetes_namespace}}",
+          "legendFormat": "compaction {{instance}}",
           "refId": "B"
         },
         {
-          "expr": "sum(rate(thanos_objstore_bucket_operations_total{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}[$interval])) by (kubernetes_namespace)",
+          "expr": "sum(rate(thanos_objstore_bucket_operations_total{instance=~\"$instance\"}[$interval]))",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "bucket ops {{kubernetes_namespace}}",
+          "legendFormat": "bucket ops {{instance}}",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(thanos_compact_garbage_collections_total{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}[$interval])) by (kubernetes_namespace)",
+          "expr": "sum(rate(thanos_compact_garbage_collections_total{instance=~\"$instance\"}[$interval]))",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "gc ops  {{kubernetes_namespace}}",
+          "legendFormat": "gc ops  {{instance}}",
           "refId": "C"
         },
         {
-          "expr": "sum(rate(thanos_compact_group_compactions_total{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}[$interval])) by (kubernetes_namespace)",
+          "expr": "sum(rate(thanos_compact_group_compactions_total{instance=~\"$instance\"}[$interval]))",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "group compact  {{kubernetes_namespace}}",
+          "legendFormat": "group compact  {{instance}}",
           "refId": "D"
         },
         {
-          "expr": "sum(rate(thanos_compact_sync_meta_total{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}[$interval])) by (kubernetes_namespace)",
+          "expr": "sum(rate(thanos_compact_sync_meta_total{instance=~\"$instance\"}[$interval]))",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "sync metas  {{kubernetes_namespace}}",
+          "legendFormat": "sync metas  {{instance}}",
           "refId": "E"
         }
       ],
@@ -192,14 +178,18 @@
           "min": "0",
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": "$datasource",
       "editable": true,
       "error": false,
       "fill": 1,
@@ -239,38 +229,38 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(prometheus_tsdb_compactions_failed_total{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}[$interval])) by (kubernetes_namespace)",
+          "expr": "sum(rate(prometheus_tsdb_compactions_failed_total{instance=~\"$instance\"}[$interval])) by (instance)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "compaction {{kubernetes_namespace}}",
+          "legendFormat": "compaction {{instance}}",
           "refId": "B"
         },
         {
-          "expr": "sum(rate(thanos_objstore_bucket_operation_failures_total{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}[$interval])) by (kubernetes_namespace)",
+          "expr": "sum(rate(thanos_objstore_bucket_operation_failures_total{instance=~\"$instance\"}[$interval])) by (instance)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "bucket ops {{kubernetes_namespace}}",
+          "legendFormat": "bucket ops {{instance}}",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(thanos_compact_garbage_collection_failures_total{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}[$interval])) by (kubernetes_namespace)",
+          "expr": "sum(rate(thanos_compact_garbage_collection_failures_total{instance=~\"$instance\"}[$interval])) by (instance)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "gc ops  {{kubernetes_namespace}}",
+          "legendFormat": "gc ops  {{instance}}",
           "refId": "C"
         },
         {
-          "expr": "sum(rate(thanos_compact_group_compactions_failures_total{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}[$interval])) by (kubernetes_namespace)",
+          "expr": "sum(rate(thanos_compact_group_compactions_failures_total{instance=~\"$instance\"}[$interval])) by (instance)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "group compact  {{kubernetes_namespace}}",
+          "legendFormat": "group compact  {{instance}}",
           "refId": "D"
         },
         {
-          "expr": "sum(rate(thanos_compact_sync_meta_failures_total{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}[$interval])) by (kubernetes_namespace)",
+          "expr": "sum(rate(thanos_compact_sync_meta_failures_total{instance=~\"$instance\"}[$interval])) by (instance)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "sync metas  {{kubernetes_namespace}}",
+          "legendFormat": "sync metas  {{instance}}",
           "refId": "E"
         }
       ],
@@ -309,7 +299,11 @@
           "min": "0",
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
@@ -356,34 +350,34 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.9999, sum(rate(thanos_compact_garbage_collection_duration_seconds_bucket{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}[$interval])) by (kubernetes_namespace,le))",
+          "expr": "histogram_quantile(0.9999, sum(rate(thanos_compact_garbage_collection_duration_seconds_bucket{instance=~\"$instance\"}[$interval])) by (instance,le))",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 2,
-          "legendFormat": "99.99 gc {{kubernetes_namespace}}",
+          "legendFormat": "99.99 gc {{instance}}",
           "refId": "A",
           "step": 2
         },
         {
-          "expr": "histogram_quantile(0.9999, sum(rate(thanos_compact_sync_meta_duration_seconds_bucket{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}[$interval])) by (kubernetes_namespace,le))",
+          "expr": "histogram_quantile(0.9999, sum(rate(thanos_compact_sync_meta_duration_seconds_bucket{instance=~\"$instance\"}[$interval])) by (instance,le))",
           "format": "time_series",
           "intervalFactor": 2,
-          "legendFormat": "99.99 sync meta  {{kubernetes_namespace}}",
+          "legendFormat": "99.99 sync meta  {{instance}}",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.9999, sum(rate(thanos_objstore_bucket_operation_duration_seconds_bucket{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}[$interval])) by (kubernetes_namespace,le))",
+          "expr": "histogram_quantile(0.9999, sum(rate(thanos_objstore_bucket_operation_duration_seconds_bucket{instance=~\"$instance\"}[$interval])) by (instance,le))",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 2,
-          "legendFormat": "99.99 bucket ops {{kubernetes_namespace}}",
+          "legendFormat": "99.99 bucket ops {{instance}}",
           "refId": "C"
         },
         {
-          "expr": "histogram_quantile(0.9999, sum(rate(prometheus_tsdb_compaction_duration_seconds_bucket{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}[$interval])) by (kubernetes_namespace,le))",
+          "expr": "histogram_quantile(0.9999, sum(rate(prometheus_tsdb_compaction_duration_seconds_bucket{instance=~\"$instance\"}[$interval])) by (instance,le))",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "99.99 compact {{kubernetes_namespace}}",
+          "legendFormat": "99.99 compact {{instance}}",
           "refId": "D"
         }
       ],
@@ -422,7 +416,11 @@
           "min": "0",
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "collapsed": false,
@@ -477,10 +475,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "go_memstats_heap_alloc_bytes{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}",
+          "expr": "go_memstats_heap_alloc_bytes{instance=~\"$instance\", job=\"thanos-compact\"}",
           "format": "time_series",
           "intervalFactor": 2,
-          "legendFormat": "{{kubernetes_namespace}} {{kubernetes_pod_name}}",
+          "legendFormat": "{{instance}}",
           "refId": "A",
           "step": 2
         }
@@ -520,7 +518,11 @@
           "min": null,
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
@@ -559,10 +561,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "go_goroutines{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}",
+          "expr": "go_goroutines{instance=~\"$instance\", job=\"thanos-compact\"}",
           "format": "time_series",
           "intervalFactor": 2,
-          "legendFormat": "{{kubernetes_namespace}} {{kubernetes_pod_name}}",
+          "legendFormat": "{{instance}}",
           "refId": "A",
           "step": 2
         }
@@ -601,7 +603,11 @@
           "min": null,
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
@@ -642,10 +648,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "go_gc_duration_seconds{$labelselector=\"$labelvalue\", quantile=\"1\"}",
+          "expr": "go_gc_duration_seconds{instance=~\"$instance\", job=\"thanos-compact\", quantile=\"1\"}",
           "format": "time_series",
           "intervalFactor": 2,
-          "legendFormat": "{{kubernetes_namespace}} {{kubernetes_pod_name}} ",
+          "legendFormat": "{{instance}}",
           "refId": "A",
           "step": 2
         }
@@ -685,7 +691,11 @@
           "min": null,
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     }
   ],
   "refresh": "30s",
@@ -765,58 +775,38 @@
         "type": "interval"
       },
       {
-        "allValue": ".*",
-        "current": {},
-        "datasource": "${DS_PROMETHEUS}",
+        "current": {
+          "text": "default",
+          "value": "default"
+        },
         "hide": 0,
-        "includeAll": true,
-        "label": "namespace",
-        "multi": false,
-        "name": "namespace",
+        "label": "Datasource",
+        "name": "datasource",
         "options": [],
-        "query": "label_values(kubernetes_namespace)",
+        "query": "prometheus",
         "refresh": 1,
         "regex": "",
-        "sort": 0,
+        "type": "datasource"
+      },
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": "$datasource",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Instance",
+        "multi": true,
+        "name": "instance",
+        "options": [],
+        "query": "label_values(thanos_compact_garbage_collected_blocks_total, instance)",
+        "refresh": 1,
+        "regex": "",
+        "sort": 1,
         "tagValuesQuery": "",
         "tags": [],
         "tagsQuery": "",
         "type": "query",
         "useTags": false
-      },
-      {
-        "current": {
-          "value": "${VAR_LABELSELECTOR}",
-          "text": "${VAR_LABELSELECTOR}"
-        },
-        "hide": 2,
-        "label": null,
-        "name": "labelselector",
-        "options": [
-          {
-            "value": "${VAR_LABELSELECTOR}",
-            "text": "${VAR_LABELSELECTOR}"
-          }
-        ],
-        "query": "${VAR_LABELSELECTOR}",
-        "type": "constant"
-      },
-      {
-        "current": {
-          "value": "${VAR_LABELVALUE}",
-          "text": "${VAR_LABELVALUE}"
-        },
-        "hide": 2,
-        "label": null,
-        "name": "labelvalue",
-        "options": [
-          {
-            "value": "${VAR_LABELVALUE}",
-            "text": "${VAR_LABELVALUE}"
-          }
-        ],
-        "query": "${VAR_LABELVALUE}",
-        "type": "constant"
       }
     ]
   },
@@ -852,5 +842,5 @@
   "timezone": "browser",
   "title": "Thanos Compaction",
   "uid": "s48S7j4ik",
-  "version": 3
+  "version": 8
 }

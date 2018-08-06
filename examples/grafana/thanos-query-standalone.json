@@ -7,20 +7,6 @@
       "type": "datasource",
       "pluginId": "prometheus",
       "pluginName": "Prometheus"
-    },
-    {
-      "name": "VAR_LABELVALUE",
-      "type": "constant",
-      "label": "labelvalue",
-      "value": "thanos-query",
-      "description": ""
-    },
-    {
-      "name": "VAR_LABELSELECTOR",
-      "type": "constant",
-      "label": "labelselector",
-      "value": "app",
-      "description": ""
     }
   ],
   "__requires": [
@@ -28,7 +14,7 @@
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "5.0.3"
+      "version": "5.2.1"
     },
     {
       "type": "panel",
@@ -53,7 +39,7 @@
     "list": [
       {
         "builtIn": 1,
-        "datasource": "-- Grafana --",
+        "datasource": "${DS_PROMETHEUS}",
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -66,7 +52,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1529906270695,
+  "iteration": 1533596699489,
   "links": [],
   "panels": [
     {
@@ -88,7 +74,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": "$datasource",
       "editable": true,
       "error": false,
       "fill": 1,
@@ -128,10 +114,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(grpc_client_handled_total{$labelselector=\"$labelvalue\",kubernetes_pod_name=~\"$pod\"}[$interval])) by (kubernetes_pod_name, grpc_code, grpc_method)",
+          "expr": "sum(rate(grpc_client_handled_total{instance=~\"$instance\"}[$interval])) by (instance, grpc_code, grpc_method)",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{grpc_code}} {{grpc_method}} {{kubernetes_pod_name}}",
+          "legendFormat": "{{grpc_code}} {{grpc_method}} {{instance}}",
           "refId": "A"
         }
       ],
@@ -170,14 +156,18 @@
           "min": "0",
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": "$datasource",
       "editable": true,
       "error": false,
       "fill": 1,
@@ -217,10 +207,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.9999, sum(rate(grpc_client_handling_seconds_bucket{$labelselector=\"$labelvalue\",kubernetes_pod_name=~\"$pod\"}[$interval])) by (grpc_method,kubernetes_pod_name, le))",
+          "expr": "histogram_quantile(0.9999, sum(rate(grpc_client_handling_seconds_bucket{instance=~\"$instance\"}[$interval])) by (grpc_method,instance, le))",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "99.99 {{grpc_method}} {{kubernetes_pod_name}}",
+          "legendFormat": "99.99 {{grpc_method}} {{instance}}",
           "refId": "A"
         }
       ],
@@ -259,14 +249,18 @@
           "min": "0",
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": "$datasource",
       "editable": true,
       "error": false,
       "fill": 1,
@@ -306,17 +300,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.9999, sum(rate(thanos_query_api_instant_query_duration_seconds_bucket{$labelselector=\"$labelvalue\",kubernetes_pod_name=~\"$pod\"}[$interval])) by (kubernetes_pod_name, le))",
+          "expr": "histogram_quantile(0.9999, sum(rate(thanos_query_api_instant_query_duration_seconds_bucket{instance=~\"$instance\"}[$interval])) by (instance, le))",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "instant_query {{kubernetes_pod_name}}",
+          "legendFormat": "instant_query {{instance}}",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.9999, sum(rate(thanos_query_api_range_query_duration_seconds_bucket{$labelselector=\"$labelvalue\",kubernetes_pod_name=~\"$pod\"}[$interval])) by (kubernetes_pod_name, le))",
+          "expr": "histogram_quantile(0.9999, sum(rate(thanos_query_api_range_query_duration_seconds_bucket{instance=~\"$instance\"}[$interval])) by (instance, le))",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "range_query {{kubernetes_pod_name}}",
+          "legendFormat": "range_query {{instance}}",
           "refId": "B"
         }
       ],
@@ -355,14 +349,18 @@
           "min": "0",
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": "$datasource",
       "fill": 1,
       "gridPos": {
         "h": 7,
@@ -396,10 +394,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(prometheus_engine_query_duration_seconds{$labelselector=\"$labelvalue\",kubernetes_pod_name=~\"$pod\",quantile=\"0.99\"}[$interval])",
+          "expr": "rate(prometheus_engine_query_duration_seconds{instance=~\"$instance\",quantile=\"0.99\"}[$interval])",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{kubernetes_pod_name}} {{slice}}",
+          "legendFormat": "{{instance}} {{slice}}",
           "refId": "A"
         }
       ],
@@ -437,14 +435,18 @@
           "min": null,
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": "$datasource",
       "fill": 1,
       "gridPos": {
         "h": 9,
@@ -478,11 +480,11 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(prometheus_engine_queries{$labelselector=\"$labelvalue\",kubernetes_pod_name=~\"$pod\"}[$interval])",
+          "expr": "rate(prometheus_engine_queries{job=~\"thanos-query\",instance=~\"$instance\"}[$interval])",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
-          "legendFormat": "{{kubernetes_pod_name}}",
+          "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
@@ -520,11 +522,15 @@
           "min": null,
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "columns": [],
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": "$datasource",
       "fontSize": "100%",
       "gridPos": {
         "h": 9,
@@ -552,9 +558,11 @@
             "rgba(50, 172, 45, 0.97)"
           ],
           "decimals": 2,
+          "mappingType": 1,
           "pattern": "external_labels",
+          "sanitize": false,
           "thresholds": [],
-          "type": "number",
+          "type": "string",
           "unit": "short"
         },
         {
@@ -590,7 +598,7 @@
       ],
       "targets": [
         {
-          "expr": "min(thanos_store_node_info{$labelselector=\"$labelvalue\"}) by (external_labels)",
+          "expr": "min(thanos_store_node_info) by (external_labels)",
           "format": "table",
           "instant": true,
           "interval": "",
@@ -623,7 +631,7 @@
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": "$datasource",
       "editable": true,
       "error": false,
       "fill": 1,
@@ -657,10 +665,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "go_memstats_heap_alloc_bytes{$labelselector=\"$labelvalue\",kubernetes_pod_name=~\"$pod\"}",
+          "expr": "go_memstats_heap_alloc_bytes{job=~\"thanos-query\",instance=~\"$instance\"}",
           "format": "time_series",
           "intervalFactor": 2,
-          "legendFormat": "{{kubernetes_pod_name}}",
+          "legendFormat": "{{instance}}",
           "refId": "A",
           "step": 2
         }
@@ -700,14 +708,18 @@
           "min": null,
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": "$datasource",
       "fill": 1,
       "gridPos": {
         "h": 7,
@@ -739,10 +751,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "go_goroutines{$labelselector=\"$labelvalue\"}",
+          "expr": "go_goroutines{job=~\"thanos-query\",instance=~\"$instance\"}",
           "format": "time_series",
           "intervalFactor": 2,
-          "legendFormat": "{{kubernetes_pod_name}}",
+          "legendFormat": "{{instance}}",
           "refId": "A",
           "step": 2
         }
@@ -781,14 +793,18 @@
           "min": null,
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
-      "datasource": "${DS_PROMETHEUS}",
+      "datasource": "$datasource",
       "editable": true,
       "error": false,
       "fill": 1,
@@ -824,10 +840,10 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "go_gc_duration_seconds{$labelselector=\"$labelvalue\",kubernetes_pod_name=~\"$pod\"}",
+          "expr": "go_gc_duration_seconds{job=~\"thanos-query\",instance=~\"$instance\"}",
           "format": "time_series",
           "intervalFactor": 2,
-          "legendFormat": "{{quantile}} {{kubernetes_pod_name}}",
+          "legendFormat": "{{quantile}} {{instance}}",
           "refId": "A",
           "step": 2
         }
@@ -867,10 +883,14 @@
           "min": null,
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     }
   ],
-  "refresh": "30s",
+  "refresh": false,
   "revision": null,
   "schemaVersion": 16,
   "style": "dark",
@@ -949,17 +969,17 @@
       {
         "allValue": ".*",
         "current": {},
-        "datasource": "${DS_PROMETHEUS}",
+        "datasource": "$datasource",
         "hide": 0,
         "includeAll": true,
-        "label": "pod",
+        "label": "instance",
         "multi": false,
-        "name": "pod",
+        "name": "instance",
         "options": [],
-        "query": "label_values(thanos_build_info{app=\"thanos-query\"}, kubernetes_pod_name)",
+        "query": "label_values(up{job=~\"thanos-query\"}, instance)",
         "refresh": 1,
         "regex": "",
-        "sort": 0,
+        "sort": 1,
         "tagValuesQuery": "",
         "tags": [],
         "tagsQuery": "",
@@ -968,42 +988,22 @@
       },
       {
         "current": {
-          "value": "${VAR_LABELVALUE}",
-          "text": "${VAR_LABELVALUE}"
+          "text": "default",
+          "value": "default"
         },
-        "hide": 2,
-        "label": null,
-        "name": "labelvalue",
-        "options": [
-          {
-            "value": "${VAR_LABELVALUE}",
-            "text": "${VAR_LABELVALUE}"
-          }
-        ],
-        "query": "${VAR_LABELVALUE}",
-        "type": "constant"
-      },
-      {
-        "current": {
-          "value": "${VAR_LABELSELECTOR}",
-          "text": "${VAR_LABELSELECTOR}"
-        },
-        "hide": 2,
-        "label": null,
-        "name": "labelselector",
-        "options": [
-          {
-            "value": "${VAR_LABELSELECTOR}",
-            "text": "${VAR_LABELSELECTOR}"
-          }
-        ],
-        "query": "${VAR_LABELSELECTOR}",
-        "type": "constant"
+        "hide": 0,
+        "label": "Datasource",
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource"
       }
     ]
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-3h",
     "to": "now"
   },
   "timepicker": {
@@ -1034,5 +1034,5 @@
   "timezone": "browser",
   "title": "Thanos Query",
   "uid": "opwl5gSiz",
-  "version": 2
+  "version": 15
 }
