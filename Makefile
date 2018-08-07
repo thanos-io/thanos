@@ -30,6 +30,9 @@ assets:
 	@go get -u github.com/jteeuwen/go-bindata/...
 	@go-bindata $(bindata_flags) -pkg ui -o pkg/query/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  pkg/query/ui/templates/... pkg/query/ui/static/...
 	@go fmt ./pkg/query/ui
+	@go-bindata $(bindata_flags) -pkg ui -o pkg/rule/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  pkg/rule/ui/templates/... pkg/rule/ui/static/...
+	@go fmt ./pkg/rule/ui
+
 
 # build builds Thanos binary using `promu`.
 .PHONY: build

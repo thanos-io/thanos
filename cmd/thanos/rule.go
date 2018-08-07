@@ -26,6 +26,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
+	"github.com/improbable-eng/thanos/pkg/rule/ui"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
@@ -36,6 +37,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/common/route"
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
@@ -197,6 +199,7 @@ func runRule(
 			NotifyFunc:  notify,
 			Logger:      log.With(logger, "component", "rules"),
 			Appendable:  tsdb.Adapter(db, 0),
+			Registerer:  reg,
 			ExternalURL: nil,
 		})
 		g.Add(func() error {
@@ -327,7 +330,7 @@ func runRule(
 		})
 	}
 
-	// Start HTTP and gRPC servers.
+	// Start gRPC server.
 	{
 		l, err := net.Listen("tcp", grpcBindAddr)
 		if err != nil {
@@ -347,8 +350,27 @@ func runRule(
 			runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
 		})
 	}
-	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
-		return err
+	// Start UI & metrics HTTP server.
+	{
+		router := route.New()
+		ui.New(logger, mgr, alertQueryURL.String()).Register(router)
+
+		mux := http.NewServeMux()
+		registerMetrics(mux, reg)
+		registerProfile(mux)
+		mux.Handle("/", router)
+
+		l, err := net.Listen("tcp", httpBindAddr)
+		if err != nil {
+			return errors.Wrapf(err, "listen HTTP on address %s", httpBindAddr)
+		}
+
+		g.Add(func() error {
+			level.Info(logger).Log("msg", "Listening for ui requests", "address", httpBindAddr)
+			return errors.Wrap(http.Serve(l, mux), "serve query")
+		}, func(error) {
+			runutil.CloseWithLogOnErr(logger, l, "query and metric listener")
+		})
 	}
 
 	var uploads = true
