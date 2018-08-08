@@ -1,6 +1,7 @@
 package cos
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -116,7 +117,17 @@ func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, compo
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	b.opsTotal.WithLabelValues(opObjectInsert).Inc()
 
-	_, err := b.client.Object.Put(ctx, name, r, nil)
+	reader, length, err := objectLength(r)
+	if nil != err {
+		return errors.Wrap(err, "length of cos object")
+	}
+	opt := &cos.ObjectPutOptions{
+		ObjectPutHeaderOptions: &cos.ObjectPutHeaderOptions{
+			ContentLength: length,
+		},
+	}
+
+	_, err = b.client.Object.Put(ctx, name, reader, opt)
 	if nil != err {
 		return errors.Wrap(err, "upload cos object")
 	}
@@ -308,6 +319,34 @@ func setRange(opts *cos.ObjectGetOptions, start, end int64) error {
 		return errors.Errorf("Invalid range specified: start=%d end=%d", start, end)
 	}
 	return nil
+}
+
+func objectLength(src io.Reader) (io.Reader, int, error) {
+	switch o := src.(type) {
+	case *os.File:
+		fi, err := o.Stat()
+		if err != nil {
+			return nil, -1, err
+		}
+
+		return src, int(fi.Size()), nil
+	default:
+		buf, err := toBuffer(o)
+		if err != nil {
+			return nil, -1, err
+		}
+		return buf, buf.Len(), nil
+	}
+}
+
+func toBuffer(src io.Reader) (*bytes.Buffer, error) {
+	buffer := bytes.NewBuffer(make([]byte, 0))
+	_, err := io.Copy(buffer, src)
+	if err != nil {
+		return nil, err
+	}
+
+	return buffer, nil
 }
 
 func configFromEnv() *Config {
