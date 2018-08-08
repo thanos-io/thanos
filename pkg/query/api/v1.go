@@ -30,6 +30,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/query"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -96,20 +97,23 @@ type apiFunc func(r *http.Request) (interface{}, []error, *apiError)
 // API can register a set of endpoints in a router and handle
 // them using the provided storage and query engine.
 type API struct {
+	logger          log.Logger
 	queryableCreate query.QueryableCreator
 	queryEngine     *promql.Engine
 
-	instantQueryDuration prometheus.Histogram
-	rangeQueryDuration   prometheus.Histogram
-
-	now func() time.Time
+	instantQueryDuration   prometheus.Histogram
+	rangeQueryDuration     prometheus.Histogram
+	enableAutodownsampling bool
+	now                    func() time.Time
 }
 
 // NewAPI returns an initialized API type.
 func NewAPI(
+	logger log.Logger,
 	reg *prometheus.Registry,
 	qe *promql.Engine,
 	c query.QueryableCreator,
+	enableAutodownsampling bool,
 ) *API {
 	instantQueryDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name: "thanos_query_api_instant_query_duration_seconds",
@@ -131,11 +135,13 @@ func NewAPI(
 		rangeQueryDuration,
 	)
 	return &API{
-		queryEngine:          qe,
-		queryableCreate:      c,
-		instantQueryDuration: instantQueryDuration,
-		rangeQueryDuration:   rangeQueryDuration,
-		now:                  time.Now,
+		logger:                 logger,
+		queryEngine:            qe,
+		queryableCreate:        c,
+		instantQueryDuration:   instantQueryDuration,
+		rangeQueryDuration:     rangeQueryDuration,
+		enableAutodownsampling: enableAutodownsampling,
+		now: time.Now,
 	}
 }
 
@@ -273,7 +279,11 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *apiError) {
 		return nil, nil, &apiError{errorBadData, err}
 	}
 
-	maxSourceResolution := step / 5 // By default fit at least 5 samples between steps.
+	maxSourceResolution := 0 * time.Second
+	if api.enableAutodownsampling {
+		// If no max_source_resolution is specified fit at least 5 samples between steps.
+		maxSourceResolution = step / 5
+	}
 	if val := r.FormValue("max_source_resolution"); val != "" {
 		maxSourceResolution, err = parseDuration(val)
 		if err != nil {
@@ -380,7 +390,7 @@ func (api *API) labelValues(r *http.Request) (interface{}, []error, *apiError) {
 	if err != nil {
 		return nil, nil, &apiError{errorExec, err}
 	}
-	defer q.Close()
+	defer runutil.CloseWithLogOnErr(api.logger, q, "queryable labelValues")
 
 	// TODO(fabxc): add back request context.
 
@@ -398,7 +408,10 @@ var (
 )
 
 func (api *API) series(r *http.Request) (interface{}, []error, *apiError) {
-	r.ParseForm()
+	if err := r.ParseForm(); err != nil {
+		return nil, nil, &apiError{errorInternal, errors.Wrap(err, "parse form")}
+	}
+
 	if len(r.Form["match[]"]) == 0 {
 		return nil, nil, &apiError{errorBadData, fmt.Errorf("no match[] parameter provided")}
 	}
@@ -458,7 +471,7 @@ func (api *API) series(r *http.Request) (interface{}, []error, *apiError) {
 	if err != nil {
 		return nil, nil, &apiError{errorExec, err}
 	}
-	defer q.Close()
+	defer runutil.CloseWithLogOnErr(api.logger, q, "queryable series")
 
 	var sets []storage.SeriesSet
 	for _, mset := range matcherSets {
@@ -492,7 +505,7 @@ func respond(w http.ResponseWriter, data interface{}, warnings []error) {
 	for _, warn := range warnings {
 		resp.Warnings = append(resp.Warnings, warn.Error())
 	}
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func respondError(w http.ResponseWriter, apiErr *apiError, data interface{}) {
@@ -513,7 +526,7 @@ func respondError(w http.ResponseWriter, apiErr *apiError, data interface{}) {
 	}
 	w.WriteHeader(code)
 
-	json.NewEncoder(w).Encode(&response{
+	_ = json.NewEncoder(w).Encode(&response{
 		Status:    statusError,
 		ErrorType: apiErr.typ,
 		Error:     apiErr.err.Error(),

@@ -7,6 +7,7 @@ import (
 
 	"fmt"
 
+	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 )
 
@@ -23,12 +24,12 @@ global:
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, p.Start())
-	defer p.Stop()
+	defer func() { testutil.Ok(t, p.Stop()) }()
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	ext, err := queryExternalLabels(context.Background(), u)
+	ext, err := queryExternalLabels(context.Background(), log.NewNopLogger(), u)
 	testutil.Ok(t, err)
 
 	testutil.Equals(t, 2, len(ext))

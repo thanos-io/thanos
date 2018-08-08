@@ -22,6 +22,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/alert"
+	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
@@ -39,6 +40,7 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage/tsdb"
+	"github.com/prometheus/prometheus/util/strutil"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -71,6 +73,8 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty, ruler won't store any block inside Google Cloud Storage.").
 		PlaceHolder("<bucket>").String()
 
+	alertQueryURL := cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field").String()
+
 	s3Config := s3.RegisterS3Params(cmd)
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
@@ -82,6 +86,10 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 		if err != nil {
 			return errors.Wrap(err, "new cluster peer")
 		}
+		alertQueryURL, err := url.Parse(*alertQueryURL)
+		if err != nil {
+			return errors.Wrap(err, "parse alert query url")
+		}
 
 		tsdbOpts := &tsdb.Options{
 			MinBlockDuration: model.Duration(*tsdbBlockDuration),
@@ -90,11 +98,11 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			NoLockfile:       true,
 			WALFlushInterval: 30 * time.Second,
 		}
-		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *grpcBindAddr, *httpBindAddr, *evalInterval, *dataDir, *ruleFiles, peer, *gcsBucket, s3Config, tsdbOpts, name)
+		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *grpcBindAddr, *httpBindAddr, *evalInterval, *dataDir, *ruleFiles, peer, *gcsBucket, s3Config, tsdbOpts, name, alertQueryURL)
 	}
 }
 
-// runRule runs a rule evaluation component that continously evaluates alerting and recording
+// runRule runs a rule evaluation component that continuously evaluates alerting and recording
 // rules. It sends alert notifications and writes TSDB data for results like a regular Prometheus server.
 func runRule(
 	g *run.Group,
@@ -113,6 +121,7 @@ func runRule(
 	s3Config *s3.Config,
 	tsdbOpts *tsdb.Options,
 	component string,
+	alertQueryURL *url.URL,
 ) error {
 	db, err := tsdb.Open(dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts)
 	if err != nil {
@@ -168,9 +177,10 @@ func runRule(
 					continue
 				}
 				a := &alert.Alert{
-					StartsAt:    alrt.FiredAt,
-					Labels:      alrt.Labels,
-					Annotations: alrt.Annotations,
+					StartsAt:     alrt.FiredAt,
+					Labels:       alrt.Labels,
+					Annotations:  alrt.Annotations,
+					GeneratorURL: alertQueryURL.String() + strutil.TableLinkForExpression(expr),
 				}
 				if !alrt.ResolvedAt.IsZero() {
 					a.EndsAt = alrt.ResolvedAt
@@ -230,7 +240,10 @@ func runRule(
 
 		g.Add(func() error {
 			for {
-				sdr.Send(ctx, alertQ.Pop(ctx.Done()))
+				// TODO(bplotka): Investigate what errors it can return and if just "sdr.Send" retry is enough.
+				if err := sdr.Send(ctx, alertQ.Pop(ctx.Done())); err != nil {
+					level.Warn(logger).Log("msg", "sending alerts failed", "err", err)
+				}
 
 				select {
 				case <-ctx.Done():
@@ -331,7 +344,7 @@ func runRule(
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			s.Stop()
-			l.Close()
+			runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
 		})
 	}
 	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
@@ -342,7 +355,7 @@ func runRule(
 
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
+	bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, reg, component)
 	if err != nil && err != client.ErrNotFound {
 		return err
 	}
@@ -356,16 +369,16 @@ func runRule(
 		// Ensure we close up everything properly.
 		defer func() {
 			if err != nil {
-				closeFn()
+				runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 			}
 		}()
 
-		s := shipper.New(logger, nil, dataDir, bkt, func() labels.Labels { return lset })
+		s := shipper.New(logger, nil, dataDir, bkt, func() labels.Labels { return lset }, block.RulerSource)
 
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-			defer closeFn()
+			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				s.Sync(ctx)
@@ -415,7 +428,7 @@ func queryPrometheusInstant(ctx context.Context, logger log.Logger, addr, query 
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
 
 	// Always try to decode a vector. Scalar rules won't work for now and arguably
 	// have no relevant use case.

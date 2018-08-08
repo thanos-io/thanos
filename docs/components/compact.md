@@ -20,7 +20,7 @@ On-disk data is safe to delete between restarts and should be the first attempt 
 ```$
 usage: thanos compact [<flags>]
 
-continously compacts blocks in an object store bucket
+continuously compacts blocks in an object store bucket
 
 Flags:
   -h, --help                   Show context-sensitive help (also try --help-long

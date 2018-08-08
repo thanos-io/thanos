@@ -1,7 +1,7 @@
 # NOTE: Current plan gives 1500 build minutes per month.
 version: 2
 jobs:
-  build:
+  test:
     docker:
       # Available from https://hub.docker.com/r/circleci/golang/
       - image: circleci/golang:1.10
@@ -19,7 +19,10 @@ jobs:
               echo $GOOGLE_APPLICATION_CREDENTIALS_CONTENT > /go/src/github.com/improbable-eng/thanos/circleci-gcs-creds.json
               echo "Awesome! GCS integration tests are enabled."
             fi
+      - run: make deps DEPARGS="-v"
       - run: make format
+      - run: make errcheck
+      - run: make check-docs
       - run:
           name: "Run all tests"
           # TODO(bplotka): Setup some S3 tests for CI.
@@ -32,15 +35,67 @@ jobs:
             echo "Skipping AWS tests."
 
             make test
+
+  publish_master:
+    docker:
+      # Available from https://hub.docker.com/r/circleci/golang/
+      - image: circleci/golang:1.10
+    working_directory: /go/src/github.com/improbable-eng/thanos
+    steps:
+      - checkout
+      - setup_remote_docker:
+          version: 17.07.0-ce
+      - attach_workspace:
+          at: .
+      - run: ln -s .build/linux-amd64/thanos thanos
       - run: make docker
-      - run: 
-          name: Run tests on generated Docker image
-          command: |
-            docker run thanos --help
-      - deploy:
-          name: Push Docker image
-          command: |
-            if [ "${CIRCLE_BRANCH}" == "master" ]; then
-              docker login -u="${DOCKER_USERNAME}" -p="${DOCKER_PASSWORD}"
-              make docker-push
-            fi
+      - run: docker run thanos --help
+      - run: docker login -u="${DOCKER_USERNAME}" -p="${DOCKER_PASSWORD}"
+      - run: make docker-push
+
+  publish_release:
+    docker:
+      # Available from https://hub.docker.com/r/circleci/golang/
+      - image: circleci/golang:1.10
+    working_directory: /go/src/github.com/improbable-eng/thanos
+    steps:
+      - checkout
+      - setup_remote_docker:
+          version: 17.07.0-ce
+      - run: mkdir -v -p ${HOME}/bin
+      - run: curl -L 'https://github.com/aktau/github-release/releases/download/v0.7.2/linux-amd64-github-release.tar.bz2' | tar xvjf - --strip-components 3 -C ${HOME}/bin
+      - run: echo 'export PATH=${HOME}/bin:${PATH}' >> ${BASH_ENV}
+      - attach_workspace:
+          at: .
+      - run: make tarballs-release
+      - store_artifacts:
+          path: .tarballs
+          destination: releases
+      - run: ln -s .build/linux-amd64/thanos thanos
+      - run: make docker
+      - run: docker run thanos --help
+      - run: docker login -u="${DOCKER_USERNAME}" -p="${DOCKER_PASSWORD}"
+      - run: make docker-push DOCKER_IMAGE_TAG=$CIRCLE_TAG
+
+workflows:
+  version: 2
+  thanos:
+    jobs:
+    - test:
+        filters:
+          tags:
+            only: /.*/
+    - publish_master:
+        requires:
+        - test
+        filters:
+          branches:
+            only: master
+    - publish_release:
+        requires:
+        - test
+        filters:
+          tags:
+            only: /^v[0-9]+(\.[0-9]+){2}(-.+|[^-.]*)$/
+          branches:
+            ignore: /.*/

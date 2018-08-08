@@ -15,8 +15,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/objstore"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/pkg/credentials"
 	"github.com/minio/minio-go/pkg/encrypt"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -28,7 +31,7 @@ const (
 	opObjectsList  = "ListBucket"
 	opObjectInsert = "PutObject"
 	opObjectGet    = "GetObject"
-	opObjectStat   = "StatObject"
+	opObjectHead   = "HEADObject"
 	opObjectDelete = "DeleteObject"
 )
 
@@ -37,6 +40,7 @@ const DirDelim = "/"
 
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
 type Bucket struct {
+	logger   log.Logger
 	bucket   string
 	client   *minio.Client
 	sse      encrypt.ServerSide
@@ -45,13 +49,13 @@ type Bucket struct {
 
 // Config encapsulates the necessary config values to instantiate an s3 client.
 type Config struct {
-	Bucket       string
-	Endpoint     string
-	AccessKey    string
-	SecretKey    string
-	Insecure     bool
-	SignatureV2  bool
-	SSEEnprytion bool
+	Bucket        string
+	Endpoint      string
+	AccessKey     string
+	secretKey     string
+	Insecure      bool
+	SignatureV2   bool
+	SSEEncryption bool
 }
 
 // RegisterS3Params registers the s3 flags and returns an initialized Config struct.
@@ -67,7 +71,7 @@ func RegisterS3Params(cmd *kingpin.CmdClause) *Config {
 	cmd.Flag("s3.access-key", "Access key for an S3-Compatible API.").
 		PlaceHolder("<key>").Envar("S3_ACCESS_KEY").StringVar(&s3config.AccessKey)
 
-	s3config.SecretKey = os.Getenv("S3_SECRET_KEY")
+	s3config.secretKey = os.Getenv("S3_SECRET_KEY")
 
 	cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
 		Default("false").Envar("S3_INSECURE").BoolVar(&s3config.Insecure)
@@ -76,7 +80,7 @@ func RegisterS3Params(cmd *kingpin.CmdClause) *Config {
 		Default("false").Envar("S3_SIGNATURE_VERSION2").BoolVar(&s3config.SignatureV2)
 
 	cmd.Flag("s3.encrypt-sse", "Whether to use Server Side Encryption").
-		Default("false").Envar("S3_SSE_ENCRYPTION").BoolVar(&s3config.SSEEnprytion)
+		Default("false").Envar("S3_SSE_ENCRYPTION").BoolVar(&s3config.SSEEncryption)
 
 	return &s3config
 }
@@ -85,8 +89,8 @@ func RegisterS3Params(cmd *kingpin.CmdClause) *Config {
 func (conf *Config) Validate() error {
 	if conf.Bucket == "" ||
 		conf.Endpoint == "" ||
-		conf.AccessKey == "" ||
-		conf.SecretKey == "" {
+		(conf.AccessKey == "" && conf.secretKey != "") ||
+		(conf.AccessKey != "" && conf.secretKey == "") {
 		return errors.New("insufficient s3 configuration information")
 	}
 	return nil
@@ -96,22 +100,41 @@ func (conf *Config) Validate() error {
 func (conf *Config) ValidateForTests() error {
 	if conf.Endpoint == "" ||
 		conf.AccessKey == "" ||
-		conf.SecretKey == "" {
+		conf.secretKey == "" {
 		return errors.New("insufficient s3 test configuration information")
 	}
 	return nil
 }
 
 // NewBucket returns a new Bucket using the provided s3 config values.
-func NewBucket(conf *Config, reg prometheus.Registerer, component string) (*Bucket, error) {
-	var f func(string, string, string, bool) (*minio.Client, error)
-	if conf.SignatureV2 {
-		f = minio.NewV2
+func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, component string) (*Bucket, error) {
+	var chain []credentials.Provider
+	if conf.AccessKey != "" {
+		signature := credentials.SignatureV4
+		if conf.SignatureV2 {
+			signature = credentials.SignatureV2
+		}
+
+		chain = []credentials.Provider{&credentials.Static{
+			Value: credentials.Value{
+				AccessKeyID:     conf.AccessKey,
+				SecretAccessKey: conf.secretKey,
+				SignerType:      signature,
+			},
+		}}
 	} else {
-		f = minio.NewV4
+		chain = []credentials.Provider{
+			&credentials.IAM{
+				Client: &http.Client{
+					Transport: http.DefaultTransport,
+				},
+			},
+			&credentials.FileAWSCredentials{},
+			&credentials.EnvAWS{},
+		}
 	}
 
-	client, err := f(conf.Endpoint, conf.AccessKey, conf.SecretKey, !conf.Insecure)
+	client, err := minio.NewWithCredentials(conf.Endpoint, credentials.NewChainCredentials(chain), !conf.Insecure, "")
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize s3 client")
 	}
@@ -141,11 +164,12 @@ func NewBucket(conf *Config, reg prometheus.Registerer, component string) (*Buck
 	})
 
 	var sse encrypt.ServerSide
-	if conf.SSEEnprytion {
+	if conf.SSEEncryption {
 		sse = encrypt.NewSSE()
 	}
 
 	bkt := &Bucket{
+		logger: logger,
 		bucket: conf.Bucket,
 		client: client,
 		sse:    sse,
@@ -184,26 +208,44 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 	return nil
 }
 
+func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
+	b.opsTotal.WithLabelValues(opObjectGet).Inc()
+	opts := &minio.GetObjectOptions{ServerSideEncryption: b.sse}
+	if length != -1 {
+		if err := opts.SetRange(off, off+length-1); err != nil {
+			return nil, err
+		}
+	}
+	r, err := b.client.GetObjectWithContext(ctx, b.bucket, name, *opts)
+	if err != nil {
+		return nil, err
+	}
+
+	// NotFoundObject error is revealed only after first Read. This does the initial GetRequest. Prefetch this here
+	// for convenience.
+	if _, err := r.Read(nil); err != nil {
+		runutil.CloseWithLogOnErr(b.logger, r, "s3 get range obj close")
+
+		// First GET Object request error.
+		return nil, err
+	}
+
+	return r, nil
+}
+
 // Get returns a reader for the given object name.
 func (b *Bucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
-	b.opsTotal.WithLabelValues(opObjectGet).Inc()
-	return b.client.GetObjectWithContext(ctx, b.bucket, name, minio.GetObjectOptions{ServerSideEncryption: b.sse})
+	return b.getRange(ctx, name, 0, -1)
 }
 
 // GetRange returns a new range reader for the given object name and range.
 func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
-	b.opsTotal.WithLabelValues(opObjectGet).Inc()
-	opts := &minio.GetObjectOptions{ServerSideEncryption: b.sse}
-	err := opts.SetRange(off, off+length)
-	if err != nil {
-		return nil, err
-	}
-	return b.client.GetObjectWithContext(ctx, b.bucket, name, *opts)
+	return b.getRange(ctx, name, off, length)
 }
 
 // Exists checks if the given object exists.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
-	b.opsTotal.WithLabelValues(opObjectStat).Inc()
+	b.opsTotal.WithLabelValues(opObjectHead).Inc()
 	_, err := b.client.StatObject(b.bucket, name, minio.StatObjectOptions{})
 	if err != nil {
 		if b.IsObjNotFoundErr(err) {
@@ -237,12 +279,14 @@ func (b *Bucket) IsObjNotFoundErr(err error) bool {
 	return minio.ToErrorResponse(err).Code == "NoSuchKey"
 }
 
+func (b *Bucket) Close() error { return nil }
+
 func configFromEnv() *Config {
 	c := &Config{
 		Bucket:    os.Getenv("S3_BUCKET"),
 		Endpoint:  os.Getenv("S3_ENDPOINT"),
 		AccessKey: os.Getenv("S3_ACCESS_KEY"),
-		SecretKey: os.Getenv("S3_SECRET_KEY"),
+		secretKey: os.Getenv("S3_SECRET_KEY"),
 	}
 
 	insecure, err := strconv.ParseBool(os.Getenv("S3_INSECURE"))
@@ -259,33 +303,52 @@ func configFromEnv() *Config {
 // NewTestBucket creates test bkt client that before returning creates temporary bucket.
 // In a close function it empties and deletes the bucket.
 func NewTestBucket(t testing.TB, location string) (objstore.Bucket, func(), error) {
-	t.Log("Using test AWS bucket.")
-
 	c := configFromEnv()
 	if err := c.ValidateForTests(); err != nil {
 		return nil, nil, err
 	}
 
-	b, err := NewBucket(c, nil, "thanos-e2e-test")
+	b, err := NewBucket(log.NewNopLogger(), c, nil, "thanos-e2e-test")
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if c.Bucket != "" {
+		if os.Getenv("THANOS_ALLOW_EXISTING_BUCKET_USE") == "" {
+			return nil, nil, errors.New("S3_BUCKET is defined. Normally this tests will create temporary bucket " +
+				"and delete it after test. Unset S3_BUCKET env variable to use default logic. If you really want to run " +
+				"tests against provided (NOT USED!) bucket, set THANOS_ALLOW_EXISTING_BUCKET_USE=true. WARNING: That bucket " +
+				"needs to be manually cleared. This means that it is only useful to run one test in a time. This is due " +
+				"to safety (accidentally pointing prod bucket for test) as well as aws s3 not being fully strong consistent.")
+		}
+
+		if err := b.Iter(context.Background(), "", func(f string) error {
+			return errors.Errorf("bucket %s is not empty", c.Bucket)
+		}); err != nil {
+			return nil, nil, errors.Wrapf(err, "s3 check bucket %s", c.Bucket)
+		}
+
+		t.Log("WARNING. Reusing", c.Bucket, "AWS bucket for AWS tests. Manual cleanup afterwards is required")
+		return b, func() {}, nil
 	}
 
 	src := rand.NewSource(time.Now().UnixNano())
 
 	// Bucket name need to conform: https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-s3-bucket-naming-requirements.html
-	name := strings.Replace(fmt.Sprintf("test_%s_%x", strings.ToLower(t.Name()), src.Int63()), "_", "-", -1)
-	if len(name) >= 63 {
-		name = name[:63]
+	tmpBucketName := strings.Replace(fmt.Sprintf("test_%s_%x", strings.ToLower(t.Name()), src.Int63()), "_", "-", -1)
+	if len(tmpBucketName) >= 63 {
+		tmpBucketName = tmpBucketName[:63]
 	}
-	if err := b.client.MakeBucket(name, location); err != nil {
+	if err := b.client.MakeBucket(tmpBucketName, location); err != nil {
 		return nil, nil, err
 	}
+	b.bucket = tmpBucketName
+	t.Log("created temporary AWS bucket for AWS tests with name", tmpBucketName, "in", location)
 
 	return b, func() {
 		objstore.EmptyBucket(t, context.Background(), b)
-		if err := b.client.RemoveBucket(name); err != nil {
-			t.Logf("deleting bucket failed: %s", err)
+		if err := b.client.RemoveBucket(tmpBucketName); err != nil {
+			t.Logf("deleting bucket %s failed: %s", tmpBucketName, err)
 		}
 	}, nil
 }

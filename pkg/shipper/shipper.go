@@ -15,6 +15,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/objstore"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -68,6 +69,7 @@ type Shipper struct {
 	metrics *metrics
 	bucket  objstore.Bucket
 	labels  func() labels.Labels
+	source  block.SourceType
 }
 
 // New creates a new shipper that detects new TSDB blocks in dir and uploads them
@@ -78,6 +80,7 @@ func New(
 	dir string,
 	bucket objstore.Bucket,
 	lbls func() labels.Labels,
+	source block.SourceType,
 ) *Shipper {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -91,6 +94,7 @@ func New(
 		bucket:  bucket,
 		labels:  lbls,
 		metrics: newMetrics(r),
+		source:  source,
 	}
 }
 
@@ -171,7 +175,7 @@ func (s *Shipper) Sync(ctx context.Context) {
 		level.Error(s.logger).Log("msg", "iter block metas failed", "err", err)
 		return
 	}
-	if err := WriteMetaFile(s.dir, meta); err != nil {
+	if err := WriteMetaFile(s.logger, s.dir, meta); err != nil {
 		level.Warn(s.logger).Log("msg", "updating meta file failed", "err", err)
 	}
 }
@@ -200,13 +204,18 @@ func (s *Shipper) sync(ctx context.Context, meta *block.Meta) (err error) {
 	// by other operations happening against the TSDB directory.
 	updir := filepath.Join(s.dir, "thanos", "upload", meta.ULID.String())
 
+	// Remove updir just in case.
 	if err := os.RemoveAll(updir); err != nil {
 		return errors.Wrap(err, "clean upload directory")
 	}
 	if err := os.MkdirAll(updir, 0777); err != nil {
 		return errors.Wrap(err, "create upload dir")
 	}
-	defer os.RemoveAll(updir)
+	defer func() {
+		if err := os.RemoveAll(updir); err != nil {
+			level.Error(s.logger).Log("msg", "failed to clean upload directory", "err", err)
+		}
+	}()
 
 	if err := hardlinkBlock(dir, updir); err != nil {
 		return errors.Wrap(err, "hard link block")
@@ -215,10 +224,11 @@ func (s *Shipper) sync(ctx context.Context, meta *block.Meta) (err error) {
 	if lset := s.labels(); lset != nil {
 		meta.Thanos.Labels = lset.Map()
 	}
-	if err := block.WriteMetaFile(updir, meta); err != nil {
+	meta.Thanos.Source = s.source
+	if err := block.WriteMetaFile(s.logger, updir, meta); err != nil {
 		return errors.Wrap(err, "write meta file")
 	}
-	return block.Upload(ctx, s.bucket, updir)
+	return block.Upload(ctx, s.logger, s.bucket, updir)
 }
 
 // iterBlockMetas calls f with the block meta for each block found in dir. It logs
@@ -289,7 +299,7 @@ type Meta struct {
 const MetaFilename = "thanos.shipper.json"
 
 // WriteMetaFile writes the given meta into <dir>/thanos.shipper.json.
-func WriteMetaFile(dir string, meta *Meta) error {
+func WriteMetaFile(logger log.Logger, dir string, meta *Meta) error {
 	// Make any changes to the file appear atomic.
 	path := filepath.Join(dir, MetaFilename)
 	tmp := path + ".tmp"
@@ -303,13 +313,13 @@ func WriteMetaFile(dir string, meta *Meta) error {
 	enc.SetIndent("", "\t")
 
 	if err := enc.Encode(meta); err != nil {
-		f.Close()
+		runutil.CloseWithLogOnErr(logger, f, "write meta file close")
 		return err
 	}
 	if err := f.Close(); err != nil {
 		return err
 	}
-	return renameFile(tmp, path)
+	return renameFile(logger, tmp, path)
 }
 
 // ReadMetaFile reads the given meta from <dir>/thanos.shipper.json.
@@ -330,7 +340,7 @@ func ReadMetaFile(dir string) (*Meta, error) {
 	return &m, nil
 }
 
-func renameFile(from, to string) error {
+func renameFile(logger log.Logger, from, to string) error {
 	if err := os.RemoveAll(to); err != nil {
 		return err
 	}
@@ -345,7 +355,7 @@ func renameFile(from, to string) error {
 	}
 
 	if err = fileutil.Fsync(pdir); err != nil {
-		pdir.Close()
+		runutil.CloseWithLogOnErr(logger, pdir, "rename file dir close")
 		return err
 	}
 	return pdir.Close()

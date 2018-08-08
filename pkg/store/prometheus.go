@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -12,8 +13,10 @@ import (
 	"sync"
 
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store/prompb"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/tracing"
@@ -138,6 +141,20 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 
 	for _, e := range resp.Results[0].Timeseries {
 		lset := p.translateAndExtendLabels(e.Labels, ext)
+
+		if len(e.Samples) == 0 {
+			// As found in https://github.com/improbable-eng/thanos/issues/381
+			// Prometheus can give us completely empty time series. Ignore these with log until we figure out that
+			// this is expected from Prometheus perspective.
+			level.Warn(p.logger).Log(
+				"msg",
+				"found timeseries without any chunk. See https://github.com/improbable-eng/thanos/issues/381 for details",
+				"lset",
+				fmt.Sprintf("%v", lset),
+			)
+			continue
+		}
+
 		// We generally expect all samples of the requested range to be traversed
 		// so we just encode all samples into one big chunk regardless of size.
 		enc, cb, err := p.encodeChunk(e.Samples)
@@ -185,7 +202,7 @@ func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prom
 	if err != nil {
 		return nil, errors.Wrap(err, "send request")
 	}
-	defer presp.Body.Close()
+	defer runutil.CloseWithLogOnErr(p.logger, presp.Body, "prom series request body")
 
 	if presp.StatusCode/100 != 2 {
 		return nil, errors.Errorf("request failed with code %s", presp.Status)
@@ -314,7 +331,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	if err != nil {
 		return nil, status.Error(codes.Unknown, err.Error())
 	}
-	defer resp.Body.Close()
+	defer runutil.CloseWithLogOnErr(p.logger, resp.Body, "label values request body")
 
 	var m struct {
 		Data []string `json:"data"`

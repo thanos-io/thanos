@@ -1,3 +1,5 @@
+ignored = ["github.com/improbable-eng/thanos/benchmark/*"]
+
 [[constraint]]
   name = "cloud.google.com/go"
   version = "0.16.0"
@@ -8,13 +10,13 @@
 
 [[constraint]]
   name = "github.com/gogo/protobuf"
-  version = "1.0.0"
+  version = "1.1.0"
 
-[[constraint]]
+[[override]]
   branch = "master"
   name = "github.com/hashicorp/go-sockaddr"
 
-[[constraint]]
+[[override]]
   name = "github.com/hashicorp/memberlist"
   version = "0.1.0"
 
@@ -35,16 +37,16 @@
   name = "github.com/prometheus/common"
 
 [[constraint]]
-  name = "github.com/prometheus/prometheus"
   branch = "master"
+  name = "github.com/prometheus/prometheus"
 
-[[constraint]]
+[[override]]
   branch = "master"
   name = "github.com/grpc-ecosystem/go-grpc-prometheus"
 
 [[constraint]]
-  revision = "bd832fc8274e8fe63999ac749daaaff9d881241f"
   name = "github.com/prometheus/tsdb"
+  revision = "bd832fc8274e8fe63999ac749daaaff9d881241f"
 
 [[constraint]]
   branch = "master"
@@ -60,7 +62,7 @@
 
 [[constraint]]
   name = "google.golang.org/grpc"
-  version = "1.7.2"
+  version = "v1.12.1"
 
 [[constraint]]
   name = "gopkg.in/alecthomas/kingpin.v2"
@@ -74,6 +76,3 @@
   name = "github.com/minio/minio-go"
   version = "6.0.1"
 
-[[constraint]]
-  name = "gopkg.in/h2non/gock.v1"
-  version = "v1.0.8"

@@ -12,10 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	"path"
-
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
@@ -102,12 +101,12 @@ func (p *Prometheus) Addr() string {
 }
 
 // SetConfig updates the contents of the config file.
-func (p *Prometheus) SetConfig(s string) error {
+func (p *Prometheus) SetConfig(s string) (err error) {
 	f, err := os.Create(filepath.Join(p.dir, "prometheus.yml"))
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer runutil.CloseWithErrCapture(nil, &err, f, "prometheus config")
 
 	_, err = f.Write([]byte(s))
 	return err
@@ -115,7 +114,10 @@ func (p *Prometheus) SetConfig(s string) error {
 
 // Stop terminates Prometheus and clean up its data directory.
 func (p *Prometheus) Stop() error {
-	p.cmd.Process.Signal(syscall.SIGTERM)
+	if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		return errors.Wrapf(err, "failed to Prometheus. Kill it manually and cleanr %s dir", p.db.Dir())
+	}
+
 	time.Sleep(time.Second / 2)
 	return p.cleanup()
 }
@@ -148,7 +150,7 @@ func CreateBlock(
 	if err != nil {
 		return id, errors.Wrap(err, "create head block")
 	}
-	defer h.Close()
+	defer runutil.CloseWithErrCapture(log.NewNopLogger(), &err, h, "TSDB Head")
 
 	var g errgroup.Group
 	var timeStepSize = (maxt - mint) / int64(numSamples+1)
@@ -171,7 +173,10 @@ func CreateBlock(
 				for _, lset := range batch {
 					_, err := app.Add(lset, t, rand.Float64())
 					if err != nil {
-						app.Rollback()
+						if rerr := app.Rollback(); rerr != nil {
+							err = errors.Wrapf(err, "rollback failed: %v", rerr)
+						}
+
 						return errors.Wrap(err, "add sample")
 					}
 				}
@@ -196,8 +201,16 @@ func CreateBlock(
 		return id, errors.Wrap(err, "write block")
 	}
 
-	if _, err = block.Finalize(path.Join(dir, id.String()), extLset.Map(), resolution, nil); err != nil {
+	if _, err = block.InjectThanosMeta(log.NewNopLogger(), filepath.Join(dir, id.String()), block.ThanosMeta{
+		Labels:     extLset.Map(),
+		Downsample: block.ThanosDownsampleMeta{Resolution: resolution},
+		Source:     block.TestSource,
+	}, nil); err != nil {
 		return id, errors.Wrap(err, "finalize block")
+	}
+
+	if err = os.Remove(filepath.Join(dir, id.String(), "tombstones")); err != nil {
+		return id, errors.Wrap(err, "remove tombstones")
 	}
 
 	return id, nil

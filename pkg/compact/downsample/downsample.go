@@ -9,7 +9,10 @@ import (
 	"github.com/prometheus/prometheus/pkg/value"
 	"github.com/prometheus/tsdb/chunkenc"
 
+	"os"
+
 	"github.com/go-kit/kit/log"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
@@ -27,6 +30,7 @@ const (
 
 // Downsample downsamples the given block. It writes a new block into dir and returns its ID.
 func Downsample(
+	logger log.Logger,
 	origMeta *block.Meta,
 	b tsdb.BlockReader,
 	dir string,
@@ -40,13 +44,13 @@ func Downsample(
 	if err != nil {
 		return id, errors.Wrap(err, "open index reader")
 	}
-	defer indexr.Close()
+	defer runutil.CloseWithErrCapture(logger, &err, indexr, "downsample index reader")
 
 	chunkr, err := b.Chunks()
 	if err != nil {
 		return id, errors.Wrap(err, "open chunk reader")
 	}
-	defer chunkr.Close()
+	defer runutil.CloseWithErrCapture(logger, &err, chunkr, "downsample chunk reader")
 
 	rng := origMeta.MaxTime - origMeta.MinTime
 
@@ -127,9 +131,18 @@ func Downsample(
 	}
 	bdir := filepath.Join(dir, id.String())
 
-	_, err = block.Finalize(bdir, origMeta.Thanos.Labels, resolution, &origMeta.BlockMeta)
+	var tmeta block.ThanosMeta
+	tmeta = origMeta.Thanos
+	tmeta.Source = block.CompactorSource
+	tmeta.Downsample.Resolution = resolution
+
+	_, err = block.InjectThanosMeta(logger, bdir, tmeta, &origMeta.BlockMeta)
 	if err != nil {
 		return id, errors.Wrapf(err, "failed to finalize the block %s", bdir)
+	}
+
+	if err = os.Remove(filepath.Join(bdir, "tombstones")); err != nil {
+		return id, errors.Wrap(err, "remove tombstones")
 	}
 	return id, nil
 }
@@ -225,7 +238,7 @@ func (b *memBlock) Close() error {
 // currentWindow returns the end timestamp of the window that t falls into.
 func currentWindow(t, r int64) int64 {
 	// The next timestamp is the next number after s.t that's aligned with window.
-	// We substract 1 because block ranges are [from, to) and the last sample would
+	// We subtract 1 because block ranges are [from, to) and the last sample would
 	// go out of bounds otherwise.
 	return t - (t % r) + r - 1
 }
@@ -394,7 +407,7 @@ func downsampleRaw(data []sample, resolution int64) []chunks.Meta {
 
 		lastT := downsampleBatch(batch, resolution, ab.add)
 
-		// Finalize the chunk's counter aggregate with the last true sample.
+		// InjectThanosMeta the chunk's counter aggregate with the last true sample.
 		ab.finalizeChunk(lastT, batch[len(batch)-1].v)
 
 		chks = append(chks, ab.encode())
@@ -664,12 +677,13 @@ func (it *CounterSeriesIterator) At() (t int64, v float64) {
 
 func (it *CounterSeriesIterator) Seek(x int64) bool {
 	for {
+		if t, _ := it.At(); t >= x {
+			return true
+		}
+
 		ok := it.Next()
 		if !ok {
 			return false
-		}
-		if t, _ := it.At(); t >= x {
-			return true
 		}
 	}
 }
@@ -681,7 +695,7 @@ func (it *CounterSeriesIterator) Err() error {
 	return it.chks[it.i].Err()
 }
 
-// AverageChunkIterator emits an artifical series of average samples based in aggregate
+// AverageChunkIterator emits an artificial series of average samples based in aggregate
 // chunks with sum and count aggregates.
 type AverageChunkIterator struct {
 	cntIt chunkenc.Iterator

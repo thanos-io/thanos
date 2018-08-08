@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/reloader"
@@ -131,7 +132,7 @@ func runSidecar(
 			// Blocking query of external labels before joining as a Source Peer into gossip.
 			// We retry infinitely until we reach and fetch labels from our Prometheus.
 			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
-				if err := metadata.UpdateLabels(ctx); err != nil {
+				if err := metadata.UpdateLabels(ctx, logger); err != nil {
 					level.Warn(logger).Log(
 						"msg", "failed to fetch initial external labels. Is Prometheus running? Retrying",
 						"err", err,
@@ -168,7 +169,7 @@ func runSidecar(
 				iterCtx, iterCancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer iterCancel()
 
-				if err := metadata.UpdateLabels(iterCtx); err != nil {
+				if err := metadata.UpdateLabels(iterCtx, logger); err != nil {
 					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
 					promUp.Set(0)
 				} else {
@@ -202,7 +203,7 @@ func runSidecar(
 		if err != nil {
 			return errors.Wrap(err, "listen API address")
 		}
-		logger := log.With(logger, "component", "store")
+		logger := log.With(logger, "component", "sidecar")
 
 		var client http.Client
 
@@ -220,7 +221,7 @@ func runSidecar(
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			s.Stop()
-			l.Close()
+			runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
 		})
 	}
 
@@ -242,15 +243,15 @@ func runSidecar(
 		// Ensure we close up everything properly.
 		defer func() {
 			if err != nil {
-				closeFn()
+				runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 			}
 		}()
 
-		s := shipper.New(logger, nil, dataDir, bkt, metadata.Labels)
+		s := shipper.New(logger, nil, dataDir, bkt, metadata.Labels, block.SidecarSource)
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-			defer closeFn()
+			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				s.Sync(ctx)
@@ -284,8 +285,8 @@ type metadata struct {
 	labels labels.Labels
 }
 
-func (s *metadata) UpdateLabels(ctx context.Context) error {
-	elset, err := queryExternalLabels(ctx, s.promURL)
+func (s *metadata) UpdateLabels(ctx context.Context, logger log.Logger) error {
+	elset, err := queryExternalLabels(ctx, logger, s.promURL)
 	if err != nil {
 		return err
 	}
@@ -297,13 +298,12 @@ func (s *metadata) UpdateLabels(ctx context.Context) error {
 	return nil
 }
 
-func (s *metadata) UpdateTimestamps(mint int64, maxt int64) error {
+func (s *metadata) UpdateTimestamps(mint int64, maxt int64) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
 	s.mint = mint
 	s.maxt = maxt
-	return nil
 }
 
 func (s *metadata) Labels() labels.Labels {
@@ -334,7 +334,7 @@ func (s *metadata) Timestamps() (mint int64, maxt int64) {
 	return s.mint, s.maxt
 }
 
-func queryExternalLabels(ctx context.Context, base *url.URL) (labels.Labels, error) {
+func queryExternalLabels(ctx context.Context, logger log.Logger, base *url.URL) (labels.Labels, error) {
 	u := *base
 	u.Path = path.Join(u.Path, "/api/v1/status/config")
 
@@ -346,7 +346,7 @@ func queryExternalLabels(ctx context.Context, base *url.URL) (labels.Labels, err
 	if err != nil {
 		return nil, errors.Wrapf(err, "request config against %s", u.String())
 	}
-	defer resp.Body.Close()
+	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
 
 	var d struct {
 		Data struct {

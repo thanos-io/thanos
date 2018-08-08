@@ -63,7 +63,7 @@ All data is uploaded as it is created by the Prometheus server/storage engine. T
 
 A store node acts as a gateway to block data that is stored in an object storage bucket. It implements the same gRPC API as data sources to provide access to all metric data found in the bucket.
 
-It continiously synchronizes which blocks exist in the bucket and translates requests for metric data into obejct storage requests. It implements various strategies to minimize the number of requests to the object storage such as filtering relevant blocks by their meta data (e.g. time range and labels) and caching frequent index lookups.
+It continuously synchronizes which blocks exist in the bucket and translates requests for metric data into object storage requests. It implements various strategies to minimize the number of requests to the object storage such as filtering relevant blocks by their meta data (e.g. time range and labels) and caching frequent index lookups.
 
 The Prometheus 2.0 storage layout is optimized for minimal read amplification. For example, sample data for the same time series is sequentially aligned in a chunk file. Similarly, series for the same metric name are sequentially aligned as well.  
 The store node is aware of the files' layout and translates data requests into a plan of a minimum amount of object storage request. Each requests may fetch up to hundreds of thousands of chunks at once. This is essential to satisfy even big queries with a limited amount of requests to the object storage.
@@ -152,11 +152,28 @@ Data that is just accessed locally in conventional Prometheus setups has to be t
 
 Typical object storage prices per GB are at about $0.02. The number of retrievals (typically priced at $0.004 per 10,0000) by the store nodes strongly depend on individual querying pattern. Adding 20% to the total storage cost to account for retrievals and running of store nodes seems like a conservative estimate.
 
-Suppose we want to store 100TB of metric data. At about 1.07 bytes/sample in total data size, this is equivalent to storing 6.5 years of data across an average of 1 million active time series.  
+Suppose we want to store 100TB of metric data. At about 1.07 bytes/sample in total data size, this is equivalent to:
+* storing 48.88 years of data across an average of 1 million active time series with default 15s scrape interval.
+* storing 3.25 years of data across an average of 1 million active time series with 1s scrape interval.
+
+<details>
+<summary>Calculations</summary>
+<br>
+Storing 100TB with 1.07 bytes/sample.
+100 (TB) / 1.07 (bytes/sample) = 1.027580961×10¹⁴ samples.
+We assume avg of 1mln time series, so 102758096.1 samples "available" for single series to fit into 100TB overall.
+
+With 15s scrape interval (4 samples/min):
+102758096.1 (samples) / 4 (samples/min) = 25689524.025 min = ~48.88 years
+
+With 1s scrape interval (60 samples/min):
+102758096.1 (samples) / 60 (samples/min) = 1712634.935 min = ~3.25 years
+</details>
+
+
 The cost for this amount of metric data would cost approximately $2400/month on top of the baseline Prometheus setup.
-In return, being able to reduce the retention time of Prometheus instances from weeks to hours will provide cost savings for local SSD or network block storage (typically $0.17/GB) and reduce memory consumption. This calculation does not yet account for shorter retention spans of low-priority data and downsampling.
-
-
+In return, being able to reduce the retention time of Prometheus instances from weeks to hours will provide cost savings for local SSD or network block storage (typically $0.17/GB) and reduce memory consumption.
+This calculation does not yet account for shorter retention spans of low-priority data and downsampling.
 
 [tsdb-format]: https://github.com/prometheus/tsdb/tree/master/Documentation/format
 [tsdb-talk]: https://www.slideshare.net/FabianReinartz/storing-16-bytes-at-scale-81282712

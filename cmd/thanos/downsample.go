@@ -17,6 +17,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
@@ -27,7 +28,7 @@ import (
 )
 
 func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "continously downsamples blocks in an object store bucket")
+	cmd := app.Command(name, "continuously downsamples blocks in an object store bucket")
 
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
 		Default("./data").String()
@@ -52,7 +53,7 @@ func runDownsample(
 	component string,
 ) error {
 
-	bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, reg, component)
+	bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, reg, component)
 	if err != nil {
 		return err
 	}
@@ -60,7 +61,7 @@ func runDownsample(
 	// Ensure we close up everything properly.
 	defer func() {
 		if err != nil {
-			closeFn()
+			runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 		}
 	}()
 
@@ -69,7 +70,8 @@ func runDownsample(
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-			defer closeFn()
+			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+
 			level.Info(logger).Log("msg", "start first pass of downsampling")
 
 			if err := downsampleBucket(ctx, logger, bkt, dataDir); err != nil {
@@ -116,7 +118,7 @@ func downsampleBucket(
 		if err != nil {
 			return errors.Wrapf(err, "get meta for block %s", id)
 		}
-		defer rc.Close()
+		defer runutil.CloseWithLogOnErr(logger, rc, "block reader")
 
 		var m block.Meta
 		if err := json.NewDecoder(rc).Decode(&m); err != nil {
@@ -167,7 +169,7 @@ func downsampleBucket(
 			}
 			// Only downsample blocks once we are sure to get roughly 2 chunks out of it.
 			// NOTE(fabxc): this must match with at which block size the compactor creates downsampled
-			// blockes. Otherwise we may never downsample some data.
+			// blocks. Otherwise we may never downsample some data.
 			if m.MaxTime-m.MinTime < 40*60*60*1000 {
 				continue
 			}
@@ -188,7 +190,7 @@ func downsampleBucket(
 			}
 			// Only downsample blocks once we are sure to get roughly 2 chunks out of it.
 			// NOTE(fabxc): this must match with at which block size the compactor creates downsampled
-			// blockes. Otherwise we may never downsample some data.
+			// blocks. Otherwise we may never downsample some data.
 			if m.MaxTime-m.MinTime < 10*24*60*60*1000 {
 				continue
 			}
@@ -204,13 +206,13 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 	begin := time.Now()
 	bdir := filepath.Join(dir, m.ULID.String())
 
-	err := block.Download(ctx, bkt, m.ULID, bdir)
+	err := block.Download(ctx, logger, bkt, m.ULID, bdir)
 	if err != nil {
 		return errors.Wrapf(err, "download block %s", m.ULID)
 	}
 	level.Info(logger).Log("msg", "downloaded block", "id", m.ULID, "duration", time.Since(begin))
 
-	if err := block.VerifyIndex(filepath.Join(bdir, block.IndexFilename), m.MinTime, m.MaxTime); err != nil {
+	if err := block.VerifyIndex(logger, filepath.Join(bdir, block.IndexFilename), m.MinTime, m.MaxTime); err != nil {
 		return errors.Wrap(err, "input block index not valid")
 	}
 
@@ -227,9 +229,9 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 	if err != nil {
 		return errors.Wrapf(err, "open block %s", m.ULID)
 	}
-	defer b.Close()
+	defer runutil.CloseWithLogOnErr(log.With(logger, "outcome", "potential left mmap file handlers left"), b, "tsdb reader")
 
-	id, err := downsample.Downsample(m, b, dir, resolution)
+	id, err := downsample.Downsample(logger, m, b, dir, resolution)
 	if err != nil {
 		return errors.Wrapf(err, "downsample block %s to window %d", m.ULID, resolution)
 	}
@@ -238,13 +240,13 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 	level.Info(logger).Log("msg", "downsampled block",
 		"from", m.ULID, "to", id, "duration", time.Since(begin))
 
-	if err := block.VerifyIndex(filepath.Join(resdir, block.IndexFilename), m.MinTime, m.MaxTime); err != nil {
+	if err := block.VerifyIndex(logger, filepath.Join(resdir, block.IndexFilename), m.MinTime, m.MaxTime); err != nil {
 		return errors.Wrap(err, "output block index not valid")
 	}
 
 	begin = time.Now()
 
-	err = block.Upload(ctx, bkt, resdir)
+	err = block.Upload(ctx, logger, bkt, resdir)
 	if err != nil {
 		return errors.Wrapf(err, "upload downsampled block %s", id)
 	}
@@ -253,8 +255,13 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 
 	begin = time.Now()
 
-	os.RemoveAll(bdir)
-	os.RemoveAll(resdir)
+	// It is not harmful if these fails.
+	if err := os.RemoveAll(bdir); err != nil {
+		level.Warn(logger).Log("msg", "failed to clean directory", "dir", bdir, "err", err)
+	}
+	if err := os.RemoveAll(resdir); err != nil {
+		level.Warn(logger).Log("msg", "failed to clean directory", "resdir", bdir, "err", err)
+	}
 
 	return nil
 }

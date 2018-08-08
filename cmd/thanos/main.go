@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"math"
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -12,15 +14,15 @@ import (
 	"runtime/debug"
 	"syscall"
 
-	"math"
+	gmetrics "github.com/armon/go-metrics"
 
-	"net"
-
+	gprom "github.com/armon/go-metrics/prometheus"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
@@ -104,6 +106,19 @@ func main() {
 		prometheus.NewGoCollector(),
 	)
 
+	prometheus.DefaultRegisterer = metrics
+	// Memberlist uses go-metrics
+	sink, err := gprom.NewPrometheusSink()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command failed", cmd))
+		os.Exit(1)
+	}
+	_, err = gmetrics.NewGlobal(gmetrics.DefaultConfig(cmd), sink)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command failed", cmd))
+		os.Exit(1)
+	}
+
 	var g run.Group
 	var tracer opentracing.Tracer
 
@@ -119,7 +134,9 @@ func main() {
 			<-ctx.Done()
 			return ctx.Err()
 		}, func(error) {
-			closeFn()
+			if err := closeFn(); err != nil {
+				level.Warn(logger).Log("msg", "closing tracer failed", "err", err)
+			}
 			cancel()
 		})
 	}
@@ -226,7 +243,7 @@ func metricHTTPListenGroup(g *run.Group, logger log.Logger, reg *prometheus.Regi
 		level.Info(logger).Log("msg", "Listening for metrics", "address", httpBindAddr)
 		return errors.Wrap(http.Serve(l, mux), "serve metrics")
 	}, func(error) {
-		l.Close()
+		runutil.CloseWithLogOnErr(logger, l, "metric listener")
 	})
 	return nil
 }

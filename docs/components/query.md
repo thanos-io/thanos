@@ -48,10 +48,56 @@ Flags:
                                  If 0 no trace will be sent periodically, unless
                                  forced by baggage item. See
                                  `pkg/tracing/tracing.go` for details.
+      --grpc-address="0.0.0.0:10901"  
+                                 Listen ip:port address for gRPC endpoints
+                                 (StoreAPI). Make sure this address is routable
+                                 from other components if you use gossip,
+                                 'grpc-advertise-address' is empty and you
+                                 require cross-node connection.
+      --grpc-advertise-address=GRPC-ADVERTISE-ADDRESS  
+                                 Explicit (external) host:port address to
+                                 advertise for gRPC StoreAPI in gossip cluster.
+                                 If empty, 'grpc-address' will be used.
       --http-address="0.0.0.0:10902"  
                                  Listen host:port for HTTP endpoints.
-      --grpc-address="0.0.0.0:10901"  
-                                 Listen host:port for gRPC endpoints.
+      --cluster.address="0.0.0.0:10900"  
+                                 Listen ip:port address for gossip cluster.
+      --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS  
+                                 Explicit (external) ip:port address to
+                                 advertise for gossip in gossip cluster. Used
+                                 internally for membership only.
+      --cluster.peers=CLUSTER.PEERS ...  
+                                 Initial peers to join the cluster. It can be
+                                 either <ip:port>, or <domain:port>. A lookup
+                                 resolution is done only at the startup.
+      --cluster.gossip-interval=<gossip interval>  
+                                 Interval between sending gossip messages. By
+                                 lowering this value (more frequent) gossip
+                                 messages are propagated across the cluster more
+                                 quickly at the expense of increased bandwidth.
+                                 Default is used from a specified network-type.
+      --cluster.pushpull-interval=<push-pull interval>  
+                                 Interval for gossip state syncs. Setting this
+                                 interval lower (more frequent) will increase
+                                 convergence speeds across larger clusters at
+                                 the expense of increased bandwidth usage.
+                                 Default is used from a specified network-type.
+      --cluster.refresh-interval=1m0s  
+                                 Interval for membership to refresh
+                                 cluster.peers state, 0 disables refresh.
+      --cluster.secret-key=CLUSTER.SECRET-KEY  
+                                 Initial secret key to encrypt cluster gossip.
+                                 Can be one of AES-128, AES-192, or AES-256 in
+                                 hexadecimal format.
+      --cluster.network-type=lan  
+                                 Network type with predefined peers
+                                 configurations. Sets of configurations
+                                 accounting the latency differences between
+                                 network types: local, lan, wan.
+      --http-advertise-address=HTTP-ADVERTISE-ADDRESS  
+                                 Explicit (external) host:port address to
+                                 advertise for HTTP QueryAPI in gossip cluster.
+                                 If empty, 'http-address' will be used.
       --query.timeout=2m         Maximum time to process query by query node.
       --query.max-concurrent=20  Maximum number of queries processed
                                  concurrently by query node.
@@ -60,27 +106,13 @@ Flags:
                                  which data is deduplicated. Still you will be
                                  able to query without deduplication using
                                  'dedup=false' parameter.
-      --cluster.peers=CLUSTER.PEERS ...  
-                                 Initial peers to join the cluster. It can be
-                                 either <ip:port>, or <domain:port>.
-      --cluster.address="0.0.0.0:10900"  
-                                 Listen address for cluster.
-      --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS  
-                                 Explicit address to advertise in cluster.
-      --cluster.gossip-interval=5s  
-                                 Interval between sending gossip messages. By
-                                 lowering this value (more frequent) gossip
-                                 messages are propagated across the cluster more
-                                 quickly at the expense of increased bandwidth.
-      --cluster.pushpull-interval=5s  
-                                 Interval for gossip state syncs. Setting this
-                                 interval lower (more frequent) will increase
-                                 convergence speeds across larger clusters at
-                                 the expense of increased bandwidth usage.
       --selector-label=<name>="<value>" ...  
                                  Query selector labels that will be exposed in
                                  info endpoint (repeated).
       --store=<store> ...        Addresses of statically configured store API
                                  servers (repeatable).
+      --query.auto-downsampling  Enable automatic adjustment (step / 5) to what
+                                 source of data should be used in store gateways
+                                 if no max_source_resolution param is specified.
 
 ```

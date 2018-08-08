@@ -2,7 +2,7 @@ package cluster
 
 import (
 	"context"
-	"io/ioutil"
+	stdlog "log"
 	"math/rand"
 	"net"
 	"strconv"
@@ -27,8 +27,10 @@ type Peer struct {
 	mlist    *memberlist.Memberlist
 	stopc    chan struct{}
 
-	cfg        *memberlist.Config
-	knownPeers []string
+	cfg             *memberlist.Config
+	knownPeers      []string
+	advertiseAddr   string
+	refreshInterval time.Duration
 
 	data                 *data
 	gossipMsgsReceived   prometheus.Counter
@@ -41,8 +43,17 @@ type Peer struct {
 }
 
 const (
-	DefaultPushPullInterval = 5 * time.Second
-	DefaultGossipInterval   = 5 * time.Second
+	DefaultRefreshInterval = 60 * time.Second
+
+	// Peer's network types. These are used as a predefined peer configurations for a specified network type.
+	LocalNetworkPeerType = "local"
+	LanNetworkPeerType   = "lan"
+	WanNetworkPeerType   = "wan"
+)
+
+var (
+	// NetworkPeerTypes is a list of available peers' network types.
+	NetworkPeerTypes = []string{LocalNetworkPeerType, LanNetworkPeerType, WanNetworkPeerType}
 )
 
 // PeerType describes a peer's role in the cluster.
@@ -97,6 +108,9 @@ func New(
 	waitIfEmpty bool,
 	pushPullInterval time.Duration,
 	gossipInterval time.Duration,
+	refreshInterval time.Duration,
+	secretKey []byte,
+	networkType string,
 ) (*Peer, error) {
 	l = log.With(l, "component", "cluster")
 
@@ -121,7 +135,7 @@ func New(
 		level.Warn(l).Log("err", "provide --cluster.advertise-address as a routable IP address or hostname")
 	}
 
-	resolvedPeers, err := resolvePeers(context.Background(), knownPeers, advertiseAddr, net.Resolver{}, waitIfEmpty)
+	resolvedPeers, err := resolvePeers(context.Background(), knownPeers, advertiseAddr, *net.DefaultResolver, waitIfEmpty)
 	if err != nil {
 		return nil, errors.Wrap(err, "resolve peers")
 	}
@@ -133,13 +147,21 @@ func New(
 		return nil, err
 	}
 
-	cfg := memberlist.DefaultLANConfig()
+	cfg, err := parseNetworkConfig(networkType)
+	if err != nil {
+		return nil, err
+	}
 	cfg.Name = name.String()
 	cfg.BindAddr = bindHost
 	cfg.BindPort = bindPort
-	cfg.GossipInterval = gossipInterval
-	cfg.PushPullInterval = pushPullInterval
-	cfg.LogOutput = ioutil.Discard
+	if gossipInterval != 0 {
+		cfg.GossipInterval = gossipInterval
+	}
+	if pushPullInterval != 0 {
+		cfg.PushPullInterval = pushPullInterval
+	}
+	cfg.Logger = stdlog.New(log.NewStdlibAdapter(level.Debug(l)), "peers", stdlog.LstdFlags)
+	cfg.SecretKey = secretKey
 	if advertiseAddr != "" {
 		cfg.AdvertiseAddr = advertiseHost
 		cfg.AdvertisePort = advertisePort
@@ -158,13 +180,15 @@ func New(
 	reg.MustRegister(gossipClusterMembers)
 
 	return &Peer{
-		logger:               l,
-		knownPeers:           knownPeers,
-		cfg:                  cfg,
-		gossipMsgsReceived:   gossipMsgsReceived,
-		gossipClusterMembers: gossipClusterMembers,
-		stopc:                make(chan struct{}),
-		data:                 &data{data: map[string]PeerState{}},
+		logger:                   l,
+		knownPeers:               knownPeers,
+		cfg:                      cfg,
+		refreshInterval:          refreshInterval,
+		gossipMsgsReceived:       gossipMsgsReceived,
+		gossipClusterMembers:     gossipClusterMembers,
+		stopc:                    make(chan struct{}),
+		data:                     &data{data: map[string]PeerState{}},
+		advertiseAddr:            advertiseAddr,
 		advertiseStoreAPIAddr:    advertiseStoreAPIAddr,
 		advertiseQueryAPIAddress: advertiseQueryAPIAddress,
 	}, nil
@@ -186,8 +210,12 @@ func (p *Peer) Join(peerType PeerType, initialMetadata PeerMetadata) error {
 		return errors.Wrap(err, "create memberlist")
 	}
 
-	n, _ := ml.Join(p.knownPeers)
-	level.Debug(p.logger).Log("msg", "joined cluster", "peers", n, "peerType", peerType)
+	n, err := ml.Join(p.knownPeers)
+	if err != nil {
+		level.Error(p.logger).Log("msg", "none of the peers was can be reached", "peerType", peerType, "knownPeers", strings.Join(p.knownPeers, ","), "err", err)
+	} else {
+		level.Debug(p.logger).Log("msg", "joined cluster", "peerType", peerType, "knownPeers", strings.Join(p.knownPeers, ","))
+	}
 
 	if n > 0 {
 		go warnIfAlone(p.logger, 10*time.Second, p.stopc, ml.NumMembers)
@@ -204,6 +232,72 @@ func (p *Peer) Join(peerType PeerType, initialMetadata PeerMetadata) error {
 		QueryAPIAddr: p.advertiseQueryAPIAddress,
 		Metadata:     initialMetadata,
 	})
+
+	if p.refreshInterval != 0 {
+		go p.periodicallyRefresh()
+	}
+
+	return nil
+}
+
+func (p *Peer) periodicallyRefresh() {
+	tick := time.NewTicker(p.refreshInterval)
+	defer tick.Stop()
+
+	for {
+		select {
+		case <-p.stopc:
+			return
+		case <-tick.C:
+			if err := p.Refresh(); err != nil {
+				level.Error(p.logger).Log("msg", "Refreshing memberlist", "err", err)
+			}
+		}
+	}
+}
+
+// Refresh renews membership cluster, this will refresh DNS names and join newly added members
+func (p *Peer) Refresh() error {
+	p.mlistMtx.Lock()
+	defer p.mlistMtx.Unlock()
+
+	if p.mlist == nil {
+		return nil
+	}
+
+	resolvedPeers, err := resolvePeers(context.Background(), p.knownPeers, p.advertiseAddr, *net.DefaultResolver, false)
+	if err != nil {
+		return errors.Wrapf(err, "refresh cluster could not resolve peers: %v", resolvedPeers)
+	}
+
+	currMembers := p.mlist.Members()
+	var notConnected []string
+	for _, peer := range resolvedPeers {
+		var isPeerFound bool
+
+		for _, mem := range currMembers {
+			if mem.Address() == peer {
+				isPeerFound = true
+				break
+			}
+		}
+
+		if !isPeerFound {
+			notConnected = append(notConnected, peer)
+		}
+	}
+
+	if len(notConnected) == 0 {
+		level.Debug(p.logger).Log("msg", "refresh cluster done", "peers", strings.Join(p.knownPeers, ","), "resolvedPeers", strings.Join(resolvedPeers, ","))
+		return nil
+	}
+
+	curr, err := p.mlist.Join(notConnected)
+	if err != nil {
+		return errors.Wrapf(err, "join peers %s ", strings.Join(notConnected, ","))
+	}
+
+	level.Debug(p.logger).Log("msg", "refresh cluster done, peers joined", "peers", strings.Join(notConnected, ","), "before", len(currMembers), "after", curr)
 	return nil
 }
 
@@ -262,12 +356,13 @@ func (p *Peer) Close(timeout time.Duration) {
 		return
 	}
 
-	err := p.mlist.Leave(timeout)
-	if err != nil {
+	if err := p.mlist.Leave(timeout); err != nil {
 		level.Error(p.logger).Log("msg", "memberlist leave failed", "err", err)
 	}
 	close(p.stopc)
-	p.mlist.Shutdown()
+	if err := p.mlist.Shutdown(); err != nil {
+		level.Error(p.logger).Log("msg", "memberlist shutdown failed", "err", err)
+	}
 	p.mlist = nil
 }
 
@@ -302,7 +397,6 @@ func (p *Peer) PeerStates(types ...PeerType) map[string]PeerState {
 			ps[o.Name] = os
 			continue
 		}
-
 		for _, t := range types {
 			if os.Type == t {
 				ps[o.Name] = os
@@ -422,4 +516,24 @@ func IsUnroutable(host string) bool {
 		return true
 	}
 	return false
+}
+
+func parseNetworkConfig(networkType string) (*memberlist.Config, error) {
+	var mc *memberlist.Config
+
+	switch networkType {
+	case LanNetworkPeerType:
+		mc = memberlist.DefaultLANConfig()
+	case WanNetworkPeerType:
+		mc = memberlist.DefaultWANConfig()
+	case LocalNetworkPeerType:
+		mc = memberlist.DefaultLocalConfig()
+	default:
+		return nil, errors.Errorf("unexpected network type %s, should be one of: %s",
+			networkType,
+			strings.Join(NetworkPeerTypes, ", "),
+		)
+	}
+
+	return mc, nil
 }

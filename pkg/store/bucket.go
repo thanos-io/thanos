@@ -12,10 +12,9 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
-
-	"strings"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -23,6 +22,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/pool"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/strutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
@@ -706,8 +706,10 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			// We must keep the readers open until all their data has been sent.
 			indexr := b.indexReader(ctx)
 			chunkr := b.chunkReader(ctx)
-			defer indexr.Close()
-			defer chunkr.Close()
+
+			// Defer all closes to the end of Series method.
+			defer runutil.CloseWithLogOnErr(s.logger, indexr, "series block")
+			defer runutil.CloseWithLogOnErr(s.logger, chunkr, "series block")
 
 			g.Add(func() error {
 				part, pstats, err := s.blockSeries(ctx,
@@ -829,7 +831,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 		// TODO(fabxc): only aggregate chunk metas first and add a subsequent fetch stage
 		// where we consolidate requests.
 		g.Go(func() error {
-			defer indexr.Close()
+			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label values")
 
 			tpls, err := indexr.LabelValues(req.Label)
 			if err != nil {
@@ -1051,7 +1053,7 @@ func (b *bucketBlock) loadMeta(ctx context.Context, id ulid.ULID) error {
 		}
 		src := path.Join(id.String(), block.MetaFilename)
 
-		if err := objstore.DownloadFile(ctx, b.bucket, src, b.dir); err != nil {
+		if err := objstore.DownloadFile(ctx, b.logger, b.bucket, src, b.dir); err != nil {
 			return errors.Wrap(err, "download meta.json")
 		}
 	} else if err != nil {
@@ -1068,32 +1070,36 @@ func (b *bucketBlock) loadMeta(ctx context.Context, id ulid.ULID) error {
 func (b *bucketBlock) loadIndexCache(ctx context.Context) (err error) {
 	cachefn := filepath.Join(b.dir, block.IndexCacheFilename)
 
-	b.indexVersion, b.symbols, b.lvals, b.postings, err = block.ReadIndexCache(cachefn)
+	b.indexVersion, b.symbols, b.lvals, b.postings, err = block.ReadIndexCache(b.logger, cachefn)
 	if err == nil {
 		return nil
 	}
 	if !os.IsNotExist(errors.Cause(err)) {
 		return errors.Wrap(err, "read index cache")
 	}
-	// No cache exists is on disk yet, build it from a the downloaded index and retry.
+	// No cache exists is on disk yet, build it from the downloaded index and retry.
 	fn := filepath.Join(b.dir, block.IndexFilename)
 
-	if err := objstore.DownloadFile(ctx, b.bucket, b.indexObj, fn); err != nil {
+	if err := objstore.DownloadFile(ctx, b.logger, b.bucket, b.indexObj, fn); err != nil {
 		return errors.Wrap(err, "download index file")
 	}
-	defer os.Remove(fn)
+	defer func() {
+		if rerr := os.Remove(fn); rerr != nil {
+			level.Error(b.logger).Log("msg", "failed to remove temp index file", "path", fn, "err", rerr)
+		}
+	}()
 
 	indexr, err := index.NewFileReader(fn)
 	if err != nil {
 		return errors.Wrap(err, "open index reader")
 	}
-	defer indexr.Close()
+	defer runutil.CloseWithLogOnErr(b.logger, indexr, "load index cache reader")
 
-	if err := block.WriteIndexCache(cachefn, indexr); err != nil {
+	if err := block.WriteIndexCache(b.logger, cachefn, indexr); err != nil {
 		return errors.Wrap(err, "write index cache")
 	}
 
-	b.indexVersion, b.symbols, b.lvals, b.postings, err = block.ReadIndexCache(cachefn)
+	b.indexVersion, b.symbols, b.lvals, b.postings, err = block.ReadIndexCache(b.logger, cachefn)
 	if err != nil {
 		return errors.Wrap(err, "read index cache")
 	}
@@ -1105,7 +1111,7 @@ func (b *bucketBlock) readIndexRange(ctx context.Context, off, length int64) ([]
 	if err != nil {
 		return nil, errors.Wrap(err, "get range reader")
 	}
-	defer r.Close()
+	defer runutil.CloseWithLogOnErr(b.logger, r, "readIndexRange close range reader")
 
 	c, err := ioutil.ReadAll(r)
 	if err != nil {
@@ -1125,7 +1131,7 @@ func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length i
 	if err != nil {
 		return nil, errors.Wrap(err, "get range reader")
 	}
-	defer r.Close()
+	defer runutil.CloseWithLogOnErr(b.logger, r, "readChunkRange close range reader")
 
 	if _, err = io.Copy(buf, r); err != nil {
 		return nil, errors.Wrap(err, "read range")
@@ -1558,27 +1564,6 @@ func (r *bucketChunkReader) Close() error {
 		r.block.chunkPool.Put(b)
 	}
 	return nil
-}
-
-func renameFile(from, to string) error {
-	if err := os.RemoveAll(to); err != nil {
-		return err
-	}
-	if err := os.Rename(from, to); err != nil {
-		return err
-	}
-
-	// Directory was renamed; sync parent dir to persist rename.
-	pdir, err := fileutil.OpenDir(filepath.Dir(to))
-	if err != nil {
-		return err
-	}
-
-	if err = fileutil.Fsync(pdir); err != nil {
-		pdir.Close()
-		return err
-	}
-	return pdir.Close()
 }
 
 type queryStats struct {

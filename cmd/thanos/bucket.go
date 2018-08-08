@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"text/template"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/verifier"
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
@@ -31,6 +33,8 @@ var (
 		for id := range issuesMap {
 			s = append(s, id)
 		}
+
+		sort.Strings(s)
 		return s
 	}
 )
@@ -54,31 +58,30 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 		PlaceHolder("<bucket>").String()
 	verifyIssues := verify.Flag("issues", fmt.Sprintf("Issues to verify (and optionally repair). Possible values: %v", allIssues())).
 		Short('i').Default(verifier.IndexIssueID, verifier.OverlappedBlocksIssueID).Strings()
+	verifyIDWhitelist := verify.Flag("id-whitelist", "Block IDs to verify (and optionally repair) only. "+
+		"If none is specified, all blocks will be verified. Repeated field").Strings()
 	m[name+" verify"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
-		bkt, closeFn, err := client.NewBucket(gcsBucket, *s3Config, reg, name)
+		bkt, err := client.NewBucket(logger, gcsBucket, *s3Config, reg, name)
 		if err != nil {
 			return err
 		}
+		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
 		backupS3Config := *s3Config
 		backupS3Config.Bucket = *verifyBackupS3Bucket
-		backupBkt, backupCloseFn, err := client.NewBucket(verifyBackupGCSBucket, backupS3Config, reg, name)
+		backupBkt, err := client.NewBucket(logger, verifyBackupGCSBucket, backupS3Config, reg, name)
 		if err == client.ErrNotFound {
 			if *verifyRepair {
 				return errors.Wrap(err, "repair is specified, so backup client is required")
 			}
-			// No repair - no need for backup bucket.
-			backupCloseFn = func() error { return nil }
-
 		} else if err != nil {
 			return err
+		} else {
+			defer runutil.CloseWithLogOnErr(logger, backupBkt, "backup bucket client")
 		}
 
 		// Dummy actor to immediately kill the group after the run function returns.
 		g.Add(func() error { return nil }, func(error) {})
-
-		defer closeFn()
-		defer backupCloseFn()
 
 		var (
 			ctx    = context.Background()
@@ -100,14 +103,33 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 			v = verifier.New(logger, bkt, issues)
 		}
 
-		return v.Verify(ctx)
+		var idMatcher func(ulid.ULID) bool = nil
+		if len(*verifyIDWhitelist) > 0 {
+			whilelistIDs := map[string]struct{}{}
+			for _, bid := range *verifyIDWhitelist {
+				id, err := ulid.Parse(bid)
+				if err != nil {
+					return errors.Wrap(err, "invalid ULID found in --id-whitelist flag")
+				}
+				whilelistIDs[id.String()] = struct{}{}
+			}
+
+			idMatcher = func(id ulid.ULID) bool {
+				if _, ok := whilelistIDs[id.String()]; !ok {
+					return false
+				}
+				return true
+			}
+		}
+
+		return v.Verify(ctx, idMatcher)
 	}
 
 	ls := cmd.Command("ls", "list all blocks in the bucket")
 	lsOutput := ls.Flag("output", "Format in which to print each block's information. May be 'json' or custom template.").
 		Short('o').Default("").String()
 	m[name+" ls"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
-		bkt, closeFn, err := client.NewBucket(gcsBucket, *s3Config, reg, name)
+		bkt, err := client.NewBucket(logger, gcsBucket, *s3Config, reg, name)
 		if err != nil {
 			return err
 		}
@@ -115,7 +137,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 		// Dummy actor to immediately kill the group after the run function returns.
 		g.Add(func() error { return nil }, func(error) {})
 
-		defer closeFn()
+		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
@@ -136,7 +158,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 			enc.SetIndent("", "\t")
 
 			printBlock = func(id ulid.ULID) error {
-				m, err := block.DownloadMeta(ctx, bkt, id)
+				m, err := block.DownloadMeta(ctx, logger, bkt, id)
 				if err != nil {
 					return err
 				}
@@ -148,7 +170,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 				return errors.Wrap(err, "invalid template")
 			}
 			printBlock = func(id ulid.ULID) error {
-				m, err := block.DownloadMeta(ctx, bkt, id)
+				m, err := block.DownloadMeta(ctx, logger, bkt, id)
 				if err != nil {
 					return err
 				}
