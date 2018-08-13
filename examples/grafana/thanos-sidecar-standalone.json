@@ -37,7 +37,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1533596207001,
+  "iteration": 1534169744290,
   "links": [],
   "panels": [
     {
@@ -74,7 +74,7 @@
       },
       "gridPos": {
         "h": 3,
-        "w": 12,
+        "w": 24,
         "x": 0,
         "y": 1
       },
@@ -93,7 +93,7 @@
         }
       ],
       "maxDataPoints": 100,
-      "minSpan": 2,
+      "minSpan": 1,
       "nullPointMode": "connected",
       "nullText": null,
       "postfix": "",
@@ -107,7 +107,7 @@
           "to": "null"
         }
       ],
-      "repeat": null,
+      "repeat": "instance",
       "repeatDirection": "h",
       "sparkline": {
         "fillColor": "rgba(31, 118, 189, 0.18)",
@@ -127,7 +127,7 @@
         }
       ],
       "thresholds": "",
-      "title": "Last Upload time",
+      "title": "Last Upload time for $instance",
       "type": "singlestat",
       "valueFontSize": "80%",
       "valueMaps": [
@@ -159,9 +159,9 @@
       },
       "gridPos": {
         "h": 3,
-        "w": 12,
-        "x": 12,
-        "y": 1
+        "w": 24,
+        "x": 0,
+        "y": 4
       },
       "id": 30,
       "interval": null,
@@ -178,7 +178,7 @@
         }
       ],
       "maxDataPoints": 100,
-      "minSpan": 2,
+      "minSpan": 1,
       "nullPointMode": "connected",
       "nullText": null,
       "postfix": "",
@@ -192,6 +192,7 @@
           "to": "null"
         }
       ],
+      "repeat": "instance",
       "repeatDirection": "h",
       "sparkline": {
         "fillColor": "rgba(31, 118, 189, 0.18)",
@@ -209,7 +210,7 @@
         }
       ],
       "thresholds": "",
-      "title": "Last Heartbeat time",
+      "title": "Last Heartbeat time for $instance",
       "type": "singlestat",
       "valueFontSize": "80%",
       "valueMaps": [
@@ -234,7 +235,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 4
+        "y": 7
       },
       "id": 31,
       "legend": {
@@ -327,7 +328,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 11
+        "y": 14
       },
       "id": 32,
       "legend": {
@@ -420,7 +421,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 18
+        "y": 21
       },
       "id": 5,
       "legend": {
@@ -513,7 +514,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 18
+        "y": 21
       },
       "id": 27,
       "legend": {
@@ -606,7 +607,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 25
+        "y": 28
       },
       "id": 6,
       "legend": {
@@ -693,7 +694,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 33
+        "y": 36
       },
       "id": 25,
       "panels": [],
@@ -714,7 +715,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 34
+        "y": 37
       },
       "id": 13,
       "legend": {
@@ -800,7 +801,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 34
+        "y": 37
       },
       "id": 19,
       "legend": {
@@ -887,7 +888,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 41
+        "y": 44
       },
       "id": 18,
       "legend": {
@@ -1046,7 +1047,7 @@
         "current": {},
         "datasource": "$datasource",
         "hide": 0,
-        "includeAll": false,
+        "includeAll": true,
         "label": "Instance",
         "multi": true,
         "name": "instance",
@@ -1078,7 +1079,7 @@
     ]
   },
   "time": {
-    "from": "now/d",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {
@@ -1109,5 +1110,5 @@
   "timezone": "browser",
   "title": "Thanos Sidecar",
   "uid": "IOteEKHik",
-  "version": 9
+  "version": 11
 }
