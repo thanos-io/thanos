@@ -57,8 +57,8 @@ docker: build
 .PHONY: docker-push
 docker-push:
 	@echo ">> pushing image"
-	@docker tag "${DOCKER_IMAGE_NAME}" improbable/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
-	@docker push improbable/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
+	@docker tag "${DOCKER_IMAGE_NAME}" registry.uw.systems/telecom/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
+	@docker push registry.uw.systems/telecom/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
 
 # docs regenerates flags in docs for all thanos commands.
 .PHONY: docs

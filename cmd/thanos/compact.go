@@ -106,8 +106,7 @@ func runCompact(
 			int64(1 * time.Hour / time.Millisecond),
 			int64(2 * time.Hour / time.Millisecond),
 			int64(8 * time.Hour / time.Millisecond),
-			int64(2 * 24 * time.Hour / time.Millisecond),  // 2 days
-			int64(14 * 24 * time.Hour / time.Millisecond), // 2 weeks
+			int64(2 * 24 * time.Hour / time.Millisecond), // 2 days
 		}, downsample.NewPool())
 		if err != nil {
 			return errors.Wrap(err, "create compactor")
