@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 
+- Add Thanos Rule UI
+- Add Thanos Rule reload via HTTP POST to /-/reload
+
 Newest release candidate: [v0.1.0-rc.2](https://github.com/improbable-eng/thanos/releases/tag/v0.1.0-rc.2)
 
 ### Added

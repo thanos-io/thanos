@@ -26,12 +26,12 @@ import (
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
-	"github.com/improbable-eng/thanos/pkg/rule/ui"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/tracing"
+	"github.com/improbable-eng/thanos/pkg/ui"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -353,7 +353,11 @@ func runRule(
 	// Start UI & metrics HTTP server.
 	{
 		router := route.New()
-		ui.New(logger, mgr, alertQueryURL.String()).Register(router)
+		router.Post("/-/reload", func(w http.ResponseWriter, r *http.Request) {
+			reload <- struct{}{}
+		})
+
+		ui.NewRuleUI(logger, mgr, alertQueryURL.String()).Register(router)
 
 		mux := http.NewServeMux()
 		registerMetrics(mux, reg)
