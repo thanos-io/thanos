@@ -107,8 +107,9 @@ Flags:
       --reloader.config-envsubst-file=""  
                                  Output file for environment variable
                                  substituted config file.
-      --reloader.rule-dir=RELOADER.RULE-DIR  
-                                 Rule directory for the reloader to refresh.
+      --reloader.rule-dir=RELOADER.RULE-DIR ...  
+                                 Rule directories for the reloader to refresh
+                                 (repeated field).
 
 ```
 
