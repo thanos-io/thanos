@@ -1,0 +1,75 @@
+{{define "head"}}
+  <link type="text/css" rel="stylesheet" href="{{ pathPrefix }}/static/css/alerts.css?v={{ buildVersion }}">
+  <script src="{{ pathPrefix }}/static/js/alerts.js?v={{ buildVersion }}"></script>
+{{end}}
+
+{{define "content"}}
+<div class="container-fluid">
+  <h1>Alerts</h1>
+  <div class="show-annotations">
+     <i class="glyphicon glyphicon-unchecked"></i>
+       <button type="button" class="show-annotations" title="show annotations">Show annotations</button>
+  </div>
+  <table class="table table-bordered table-collapsed">
+    <tbody>
+    {{$alertStateToRowClass := .AlertStateToRowClass}}
+    {{range .AlertingRules}}
+      {{$activeAlerts := .ActiveAlerts}}
+      <tr class="{{index $alertStateToRowClass .State}} alert_header">
+        <td><i class="icon-chevron-down"></i> <b>{{.Name}}</b> ({{len $activeAlerts}} active)</td>
+      </tr>
+      <tr class="alert_details">
+        <td>
+          <div>
+            <pre><code>{{.HTMLSnippet queryURL}}</code></pre>
+          </div>
+          {{if $activeAlerts}}
+          <table class="table table-bordered table-hover table-condensed alert_elements_table">
+            <tr class="">
+              <th>Labels</th>
+              <th>State</th>
+              <th>Active Since</th>
+              <th>Value</th>
+            </tr>
+            {{range $activeAlerts}}
+            <tr>
+              <td>
+                {{range $label, $value := .Labels.Map}}
+                  <span class="label label-primary">{{$label}}="{{$value}}"</span>
+                {{end}}
+              </td>
+              <td><span class="alert alert-{{ .State | alertStateToClass }} state_indicator text-uppercase">{{.State}}</span></td>
+              <td>{{.ActiveAt.UTC}}</td>
+              <td>{{.Value}}</td>
+            </tr>
+            {{ if .Annotations.Map}}
+            <tr style="display:none" class="alert_annotations">
+              <th colspan="4">Annotations</th>
+            </tr>
+            <tr style="display:none" class="alert_annotations">
+              <td colspan="4">
+                <dl>
+                {{range $label, $value := .Annotations.Map}}
+                  <dt>{{$label}}</dt>
+                  <dd>{{$value}}</dd>
+                {{end}}
+                </dl>
+              </td>
+            </tr>
+            {{end}}
+            {{end}}
+          </table>
+          {{end}}
+        </td>
+      </tr>
+    {{else}}
+      <tr>
+        <td>
+            No alerting rules defined
+        </td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}
