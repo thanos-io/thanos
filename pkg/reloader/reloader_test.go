@@ -60,7 +60,7 @@ func TestReloader_ConfigApply(t *testing.T) {
 		input  = path.Join(dir, "in", "cfg.yaml.tmpl")
 		output = path.Join(dir, "out", "cfg.yaml")
 	)
-	reloader := New(nil, reloadURL, input, output, "")
+	reloader := New(nil, reloadURL, input, output, nil)
 	reloader.retryInterval = 100 * time.Millisecond
 
 	testNoConfig(t, reloader)
@@ -219,7 +219,7 @@ func TestReloader_RuleApply(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-	reloader := New(nil, reloadURL, "", "", dir)
+	reloader := New(nil, reloadURL, "", "", []string{dir})
 	reloader.ruleInterval = 100 * time.Millisecond
 	reloader.retryInterval = 100 * time.Millisecond
 
