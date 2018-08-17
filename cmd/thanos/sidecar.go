@@ -37,7 +37,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	grpcBindAddr, httpBindAddr, newPeerFn := regCommonServerFlags(cmd)
 
-	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API.").
+	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API. For better performance use local network.").
 		Default("http://localhost:9090").URL()
 
 	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").

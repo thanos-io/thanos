@@ -89,7 +89,8 @@ Flags:
                                  accounting the latency differences between
                                  network types: local, lan, wan.
       --prometheus.url=http://localhost:9090  
-                                 URL at which to reach Prometheus's API.
+                                 URL at which to reach Prometheus's API. For
+                                 better performance use local network.
       --tsdb.path="./data"       Data directory of TSDB.
       --gcs.bucket=<bucket>      Google Cloud Storage bucket name for stored
                                  blocks. If empty, sidecar won't store any block
