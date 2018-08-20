@@ -123,10 +123,7 @@ func TestQueryStore_Series(t *testing.T) {
 	)
 	testutil.Ok(t, err)
 
-	expected := []struct {
-		lset    []storepb.Label
-		samples []sample
-	}{
+	expected := []rawSeries{
 		{
 			lset:    []storepb.Label{{Name: "a", Value: "a"}},
 			samples: []sample{{0, 0}, {2, 1}, {3, 2}},
@@ -142,9 +139,76 @@ func TestQueryStore_Series(t *testing.T) {
 	}
 
 	// We should have all series given by all our clients.
-	testutil.Equals(t, len(expected), len(s2.SeriesSet))
+	seriesEqual(t, expected, s2.SeriesSet)
 
-	for i, series := range s2.SeriesSet {
+	// We should have all warnings given by all our clients too.
+	testutil.Equals(t, 2, len(s2.Warnings))
+}
+
+func TestQueryStore_Series_SameExtSet(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	cls := []Client{
+		&testClient{
+			StoreClient: &storeClient{
+				RespSet: []*storepb.SeriesResponse{
+					storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
+				},
+			},
+			labels: []storepb.Label{{"ext", "1"}},
+			minTime: 1,
+			maxTime: 300,
+		},
+		&testClient{
+			StoreClient: &storeClient{
+				RespSet: []*storepb.SeriesResponse{
+					storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
+				},
+			},
+			labels:[]storepb.Label{{"ext", "1"}},
+			minTime: 1,
+			maxTime: 300,
+		},
+	}
+	q := NewProxyStore(nil,
+		func(context.Context) ([]Client, error) { return cls, nil },
+		nil,
+	)
+
+	ctx := context.Background()
+	s1 := newStoreSeriesServer(ctx)
+
+	// This should return empty response, since there is external label mismatch.
+	err := q.Series(
+		&storepb.SeriesRequest{
+			MinTime:  1,
+			MaxTime:  300,
+		}, s1,
+	)
+	testutil.Ok(t, err)
+
+	expected := []rawSeries{
+		{
+			lset:    []storepb.Label{{Name: "a", Value: "b"}},
+			samples: []sample{{1, 1}, {2, 2}, {3, 3}, {1, 1}, {2, 2}, {3, 3}},
+		},
+	}
+
+	// We should have all series given by all our clients.
+	seriesEqual(t, expected, s1.SeriesSet)
+
+	testutil.Equals(t, 0, len(s1.Warnings))
+}
+
+type rawSeries struct {
+	lset    []storepb.Label
+	samples []sample
+}
+
+func seriesEqual(t *testing.T, expected []rawSeries, got []storepb.Series) {
+	testutil.Equals(t, len(expected), len(got))
+
+	for i, series := range got {
 		testutil.Equals(t, expected[i].lset, series.Labels)
 
 		k := 0
@@ -164,9 +228,6 @@ func TestQueryStore_Series(t *testing.T) {
 		}
 		testutil.Equals(t, len(expected[i].samples), k)
 	}
-
-	// We should have all warnings given by all our clients too.
-	testutil.Equals(t, 2, len(s2.Warnings))
 }
 
 func TestStoreMatches(t *testing.T) {
