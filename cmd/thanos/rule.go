@@ -125,6 +125,18 @@ func runRule(
 	component string,
 	alertQueryURL *url.URL,
 ) error {
+	configSuccess := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_config_last_reload_successful",
+		Help: "Whether the last configuration reload attempt was successful.",
+	})
+	configSuccessTime := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_config_last_reload_success_timestamp_seconds",
+		Help: "Timestamp of the last successful configuration reload.",
+	})
+
+	reg.MustRegister(configSuccess)
+	reg.MustRegister(configSuccessTime)
+
 	db, err := tsdb.Open(dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts)
 	if err != nil {
 		return errors.Wrap(err, "open TSDB")
@@ -301,8 +313,13 @@ func runRule(
 
 				level.Info(logger).Log("msg", "reload rule files", "numFiles", len(files))
 				if err := mgr.Update(evalInterval, files); err != nil {
+					configSuccess.Set(0)
 					level.Error(logger).Log("msg", "reloading rules failed", "err", err)
+					continue
 				}
+
+				configSuccess.Set(1)
+				configSuccessTime.Set(float64(time.Now().UnixNano()) / 1e9)
 			}
 		}, func(error) {
 			close(cancel)
