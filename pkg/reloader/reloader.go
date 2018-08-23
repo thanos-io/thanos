@@ -15,6 +15,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -32,7 +33,7 @@ type Reloader struct {
 	reloadURL       *url.URL
 	cfgFile         string
 	cfgEnvsubstFile string
-	ruleDir         string
+	ruleDirs        []string
 	ruleInterval    time.Duration
 	retryInterval   time.Duration
 
@@ -45,7 +46,7 @@ type Reloader struct {
 // If cfgEnvsubstFile is not empty, environment variables in the config file will be
 // substituted and the out put written into the given path. Prometheus should then
 // use cfgEnvsubstFile as its config file path.
-func New(logger log.Logger, reloadURL *url.URL, cfgFile string, cfgEnvsubstFile string, ruleDir string) *Reloader {
+func New(logger log.Logger, reloadURL *url.URL, cfgFile string, cfgEnvsubstFile string, ruleDirs []string) *Reloader {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -54,7 +55,7 @@ func New(logger log.Logger, reloadURL *url.URL, cfgFile string, cfgEnvsubstFile 
 		reloadURL:       reloadURL,
 		cfgFile:         cfgFile,
 		cfgEnvsubstFile: cfgEnvsubstFile,
-		ruleDir:         ruleDir,
+		ruleDirs:        ruleDirs,
 		ruleInterval:    3 * time.Minute,
 		retryInterval:   5 * time.Second,
 	}
@@ -141,9 +142,9 @@ func (r *Reloader) apply(ctx context.Context) error {
 		}
 	}
 
-	if r.ruleDir != "" {
-		h := sha256.New()
-		err := filepath.Walk(r.ruleDir, func(path string, f os.FileInfo, err error) error {
+	h := sha256.New()
+	for _, ruleDir := range r.ruleDirs {
+		err := filepath.Walk(ruleDir, func(path string, f os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
@@ -168,8 +169,8 @@ func (r *Reloader) apply(ctx context.Context) error {
 		if err != nil {
 			return errors.Wrap(err, "build hash")
 		}
-		ruleHash = h.Sum(nil)
 	}
+	ruleHash = h.Sum(nil)
 
 	if bytes.Equal(r.lastCfgHash, cfgHash) && bytes.Equal(r.lastRuleHash, ruleHash) {
 		// Nothing to do.
@@ -189,7 +190,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 			"msg", "Prometheus reload triggered",
 			"cfg_in", r.cfgFile,
 			"cfg_out", r.cfgEnvsubstFile,
-			"rule_dir", r.ruleDir)
+			"rule_dirs", strings.Join(r.ruleDirs, ", "))
 		return nil
 	})
 	cancel()

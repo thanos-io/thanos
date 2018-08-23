@@ -38,7 +38,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	grpcBindAddr, httpBindAddr, newPeerFn := regCommonServerFlags(cmd)
 
-	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API.").
+	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API. For better performance use local network.").
 		Default("http://localhost:9090").URL()
 
 	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").
@@ -57,7 +57,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 	reloaderCfgSubstFile := cmd.Flag("reloader.config-envsubst-file", "Output file for environment variable substituted config file.").
 		Default("").String()
 
-	reloaderRuleDir := cmd.Flag("reloader.rule-dir", "Rule directory for the reloader to refresh.").String()
+	reloaderRuleDirs := cmd.Flag("reloader.rule-dir", "Rule directories for the reloader to refresh (repeated field).").Strings()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		rl := reloader.New(
@@ -65,7 +65,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			reloader.ReloadURLFromBase(*promURL),
 			*reloaderCfgFile,
 			*reloaderCfgSubstFile,
-			*reloaderRuleDir,
+			*reloaderRuleDirs,
 		)
 		peer, err := newPeerFn(logger, reg, false, "", false)
 		if err != nil {

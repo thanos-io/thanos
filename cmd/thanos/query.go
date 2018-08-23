@@ -15,11 +15,11 @@ import (
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/query/api"
-	"github.com/improbable-eng/thanos/pkg/query/ui"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/tracing"
+	"github.com/improbable-eng/thanos/pkg/ui"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -211,7 +211,7 @@ func runQuery(
 	// Start query API + UI HTTP server.
 	{
 		router := route.New()
-		ui.New(logger, nil).Register(router)
+		ui.NewQueryUI(logger, nil).Register(router)
 
 		api := v1.NewAPI(logger, reg, engine, queryableCreator, enableAutodownsampling)
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger)

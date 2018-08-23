@@ -1,6 +1,6 @@
 # Rule
 
-_**NOTE:** The rule component is experimental since it has conceptual tradeoffs that might not be faveorable for most use cases. It is recommended to keep deploying rules to the relevant Prometheus servers._
+_**NOTE:** The rule component is experimental since it has conceptual tradeoffs that might not be favorable for most use cases. It is recommended to keep deploying rules to the relevant Prometheus servers._
 
 _The rule component should in particular not be used to circumvent solving rule deployment properly at the configuration management level._
 

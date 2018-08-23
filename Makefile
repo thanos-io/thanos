@@ -25,11 +25,12 @@ all: deps format errcheck build
 .PHONY: assets
 assets:
 	@echo ">> deleting asset file"
-	@rm pkg/query/ui/bindata.go || true
+	@rm pkg/ui/bindata.go || true
 	@echo ">> writing assets"
 	@go get -u github.com/jteeuwen/go-bindata/...
-	@go-bindata $(bindata_flags) -pkg ui -o pkg/query/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  pkg/query/ui/templates/... pkg/query/ui/static/...
-	@go fmt ./pkg/query/ui
+	@go-bindata $(bindata_flags) -pkg ui -o pkg/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  pkg/ui/templates/... pkg/ui/static/...
+	@go fmt ./pkg/ui
+
 
 # build builds Thanos binary using `promu`.
 .PHONY: build
