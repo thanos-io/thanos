@@ -1,13 +1,18 @@
 package azure
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
+	"strings"
 	"testing"
 
-	blob "github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	"github.com/go-kit/kit/log"
+
+	blob "github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vglafirov/thanos/pkg/objstore"
@@ -23,9 +28,11 @@ type Config struct {
 
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
 type Bucket struct {
+	logger       log.Logger
 	containerURL blob.ContainerURL
 	config       *Config
 	opsTotal     *prometheus.CounterVec
+	closer       io.Closer
 }
 
 // RegisterAzureParams registers the Azure flags and returns an initialized Config struct.
@@ -51,7 +58,7 @@ func (conf *Config) Validate() error {
 }
 
 // NewBucket returns a new Bucket using the provided Azure config.
-func NewBucket(conf *Config, reg prometheus.Registerer, component string) (*Bucket, error) {
+func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, component string) (*Bucket, error) {
 
 	containerName := fmt.Sprintf("thanos-%s", component)
 
@@ -59,21 +66,19 @@ func NewBucket(conf *Config, reg prometheus.Registerer, component string) (*Buck
 
 	ctx := context.Background()
 
-	container, err := getContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, containerName)
+	container, err := createContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, containerName)
 
 	if err != nil {
-		serviceError := err.(blob.StorageError)
-		if serviceError.Response().StatusCode == 404 {
-			container, err = createContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, containerName)
+		if err.(blob.StorageError).ServiceCode() == "ContainerAlreadyExists" {
+			container, err = getContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, conf.ContainerName)
 			if err != nil {
 				return nil, err
 			}
-		} else {
-			return nil, err
 		}
 	}
 
 	bkt := &Bucket{
+		logger:       logger,
 		containerURL: container,
 		config:       conf,
 		opsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -92,71 +97,119 @@ func NewBucket(conf *Config, reg prometheus.Registerer, component string) (*Buck
 // Iter calls f for each entry in the given directory. The argument to f is the full
 // object name including the prefix of the inspected directory.
 func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) error {
-	fmt.Printf("Iter called DIR: %s\n", dir)
+
+	var prefix string
+	if dir == "" {
+		prefix = ""
+	} else if !strings.HasSuffix(dir, DirDelim) {
+		prefix = dir + DirDelim
+	} else {
+		prefix = dir
+	}
+
+	list, err := b.containerURL.ListBlobsHierarchySegment(ctx, blob.Marker{}, DirDelim, blob.ListBlobsSegmentOptions{
+		Prefix: prefix,
+	})
+	if err != nil {
+		return err
+	}
+	var listNames []string
+
+	for _, blob := range list.Segment.BlobItems {
+		listNames = append(listNames, blob.Name)
+	}
+
+	for _, blobPrefix := range list.Segment.BlobPrefixes {
+		listNames = append(listNames, blobPrefix.Name)
+	}
+
+	for _, name := range listNames {
+		if err := f(name); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 // IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
 func (b *Bucket) IsObjNotFoundErr(err error) bool {
-	fmt.Print("IsObjNotFoundErr called\n")
-	if err != nil {
-		serviceError := err.(blob.StorageError)
-		if serviceError.Response().StatusCode == 404 {
-			fmt.Print("IsObjNotFoundErr: true\n")
-			return true
-		}
+	if err == nil {
+		return false
 	}
-	fmt.Print("IsObjNotFoundErr: false\n")
-	return false
+	switch errorCode := parseError(err.Error()); errorCode {
+	case "InvalidUri":
+		return true
+	case "BlobNotFound":
+		return true
+	default:
+		return false
+	}
+}
+
+func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length int64) (io.ReadCloser, error) {
+	if len(name) == 0 {
+		return nil, errors.New("X-Ms-Error-Code: [EmptyContainerName]")
+	}
+	exists, err := b.Exists(ctx, name)
+
+	if !exists {
+		return nil, errors.New("X-Ms-Error-Code: [BlobNotFound]")
+	}
+
+	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
+
+	props, err := blobURL.GetProperties(ctx, blob.BlobAccessConditions{})
+	if err != nil {
+		return nil, err
+	}
+
+	var size int64
+	if length > 0 {
+		size = length
+	} else {
+		size = props.ContentLength() - offset
+	}
+
+	var destBuffer []byte
+
+	destBuffer = make([]byte, size)
+
+	err = blob.DownloadBlobToBuffer(context.Background(), blobURL.BlobURL, offset, length,
+		blob.BlobAccessConditions{}, destBuffer, blob.DownloadFromBlobOptions{
+			BlockSize:   blob.BlobDefaultDownloadBlockSize,
+			Parallelism: uint16(3),
+			Progress:    nil,
+		})
+
+	reader := ioutil.NopCloser(bytes.NewReader(destBuffer))
+
+	defer reader.Close()
+
+	return reader, err
 }
 
 // Get returns a reader for the given object name.
 func (b *Bucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
-	exists, err := b.Exists(ctx, name)
-	fmt.Printf("EXISTS: %v ERR: %s\n", exists, err)
-	if exists {
-		blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
-		get, err := blobURL.Download(ctx, 0, 0, blob.BlobAccessConditions{}, false)
-
-		reader := get.Body(blob.RetryReaderOptions{})
-		defer reader.Close()
-
-		return reader, err
-	}
-	return nil, err
+	return b.getBlobReader(ctx, name, 0, blob.CountToEnd)
 }
 
 // GetRange returns a new range reader for the given object name and range.
 func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
-	fmt.Print("GetRange called\n")
-	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
-	get, err := blobURL.Download(ctx, off, length, blob.BlobAccessConditions{}, false)
-	if err != nil {
-		return nil, err
-	}
-	reader := get.Body(blob.RetryReaderOptions{})
-	defer reader.Close()
-
-	return reader, nil
+	return b.getBlobReader(ctx, name, off, length)
 }
 
 // Exists checks if the given object exists.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
-	fmt.Printf("Exists: %s\n", name)
 	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
 	_, err := blobURL.GetProperties(ctx, blob.BlobAccessConditions{})
-	fmt.Printf("ERR: %s\n", err)
-	if !b.IsObjNotFoundErr(err) {
-		fmt.Printf("Exists false: %s\n", err)
-		return false, err
+	if b.IsObjNotFoundErr(err) {
+		return false, nil
 	}
-	fmt.Printf("Exists true: %s\n", err)
-	return true, err
+	return true, nil
 }
 
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
-	fmt.Print("Upload called\n")
 	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
 	_, err := blob.UploadStreamToBlockBlob(ctx, r, blobURL,
 		blob.UploadStreamToBlockBlobOptions{
@@ -174,7 +227,6 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
-	fmt.Print("Delete called\n")
 	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
 	_, err := blobURL.Delete(ctx, blob.DeleteSnapshotsOptionInclude, blob.BlobAccessConditions{})
 	if err != nil {
@@ -186,7 +238,6 @@ func (b *Bucket) Delete(ctx context.Context, name string) error {
 // NewTestBucket creates test bkt client that before returning creates temporary bucket.
 // In a close function it empties and deletes the bucket.
 func NewTestBucket(t testing.TB, component string) (objstore.Bucket, func(), error) {
-	fmt.Print("NewTestBucket called\n")
 
 	t.Log("Using test Azure bucket.")
 
@@ -195,7 +246,7 @@ func NewTestBucket(t testing.TB, component string) (objstore.Bucket, func(), err
 		StorageAccountKey:  os.Getenv("AZURE_STORAGE_ACCESS_KEY"),
 	}
 
-	bkt, err := NewBucket(conf, nil, component)
+	bkt, err := NewBucket(log.NewNopLogger(), conf, nil, component)
 	if err != nil {
 		t.Errorf("Cannot create Azure storage container:")
 		return nil, nil, err
@@ -211,4 +262,9 @@ func NewTestBucket(t testing.TB, component string) (objstore.Bucket, func(), err
 			t.Logf("deleting bucket failed: %s", err)
 		}
 	}, nil
+}
+
+// Close bucket
+func (b *Bucket) Close() error {
+	return b.closer.Close()
 }

@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 
-	blob "github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	blob "github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 )
 
 var (
@@ -49,4 +50,9 @@ func createContainer(ctx context.Context, accountName, accountKey, containerName
 func getBlobURL(ctx context.Context, accountName, accountKey, containerName, blobName string) blob.BlockBlobURL {
 	container := getContainerURL(ctx, accountName, accountKey, containerName)
 	return container.NewBlockBlobURL(blobName)
+}
+
+func parseError(errorCode string) string {
+	ret := strings.Split(strings.SplitAfter(strings.SplitAfter(strings.SplitAfter(errorCode, "X-Ms-Error-Code")[1], ":")[1], "[")[1], "]")[0]
+	return ret
 }

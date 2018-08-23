@@ -18,7 +18,8 @@ import (
 	"google.golang.org/api/option"
 )
 
-var ErrNotFound = errors.New("no valid GCS or S3 configuration supplied")
+//ErrNotFound Config not found Error
+var ErrNotFound = errors.New("no valid GCS, S3 or Azure configuration supplied")
 
 // NewBucket initializes and returns new object storage clients.
 func NewBucket(logger log.Logger, gcsBucket *string, s3Config s3.Config, azureConfig azure.Config, reg *prometheus.Registry, component string) (objstore.Bucket, error) {
@@ -40,11 +41,11 @@ func NewBucket(logger log.Logger, gcsBucket *string, s3Config s3.Config, azureCo
 	}
 
 	if azureConfig.Validate() == nil {
-		b, err := azure.NewBucket(&azureConfig, reg, component)
+		b, err := azure.NewBucket(logger, &azureConfig, reg, component)
 		if err != nil {
-			return nil, nil, errors.Wrap(err, "create Azure client")
+			return nil, errors.Wrap(err, "create Azure client")
 		}
-		return objstore.BucketWithMetrics(azureConfig.StorageAccountName, b, reg), func() error { return nil }, nil
+		return objstore.BucketWithMetrics(azureConfig.StorageAccountName, b, reg), nil
 	}
 
 	return nil, ErrNotFound
