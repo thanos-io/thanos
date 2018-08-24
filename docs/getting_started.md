@@ -6,7 +6,7 @@ In this quick-start guide, we will configure Thanos and all components mentioned
 
 ## Requirements
 
-* One or more [Prometheus](https://prometheus.io) v2.2.1+ installations (v2.0.0 works too but is not recommended)
+* One or more [Prometheus](https://prometheus.io) v2.2.1+ installations
 * golang 1.10+
 * An object storage bucket (optional)
 
@@ -24,7 +24,7 @@ The `thanos` binary should now be in your `$PATH` and is the only thing required
 
 ## [Sidecar](components/sidecar.md)
 
-Thanos integrates with existing Prometheus servers (v2.0+) through a [Sidecar process](https://docs.microsoft.com/en-us/azure/architecture/patterns/sidecar#solution), which runs on the same machine or in the same pod as the Prometheus server/s. 
+Thanos integrates with existing Prometheus (v2.2.1+) servers through a [Sidecar process](https://docs.microsoft.com/en-us/azure/architecture/patterns/sidecar#solution), which runs on the same machine or in the same pod as the Prometheus server/s. 
 
 The purpose of the Sidecar is to backup Prometheus data into an Object Storage bucket, and giving other Thanos components access to the Prometheus instance the Sidecar is attached to. [More details about the Sidecar's functions are available at the sidecar documentation page](components/sidecar.md).
 
