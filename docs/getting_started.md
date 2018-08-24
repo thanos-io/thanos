@@ -24,11 +24,11 @@ The `thanos` binary should now be in your `$PATH` and is the only thing required
 
 ## Sidecars
 
-Thanos integrates with existing Prometheus servers through a sidecar process, which runs on same machine/in the same pod as the Prometheus server itself. It only works with Prometheus instances of version 2.0.
+Thanos integrates with existing Prometheus servers (v2.0+) through a [Sidecar process](https://docs.microsoft.com/en-us/azure/architecture/patterns/sidecar#solution), which runs on the same machine or in the same pod as the Prometheus server/s. 
 
-The sidecar is responsible for backing up data into an object storage bucket and providing querying access to the underlying Prometheus instance for other Thanos components.
+The purpose of the Sidecar is to backup Prometheus data into an Object Storage bucket, and giving other Thanos components access to the Prometheus instance the Sidecar is attached to.
 
-### Backups 
+### Data Backups 
 
 The following configures the sidecar to backup data into a Google Cloud Storage bucket.
 
