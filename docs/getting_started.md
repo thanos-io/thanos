@@ -1,10 +1,8 @@
 # Getting started
 
-At its heart Thanos provides a global query view, data backup, and access historical data as core features. All three are well separated and Thanos deployments can be adapted to make use of each of them individually. This supports using just a subset of its features as well as a gradual rollout that immediately provides some of its benefits.
+Thanos provides a global query view, data backup, and historical data access as its core features in a single binary. All three features can be run independently of each other. This allows you a subset of Thanos features for immediate benefit or testing, while also making it flexible for gradual roll outs in more complex environments. 
 
-The following examples configure Thanos to work against a Google Cloud Storage bucket. However, any object storage (S3, HDFS, DigitalOcean Spaces, ...) can be used by using the equivalent flags to connect to the S3 API.
-
-See [this](storage.md) for up-to-date list of available object stores for Thanos.
+In this quick-start guide, we will configure Thanos and all components mentioned to work against a Google Cloud Storage bucket. Thanos is able to use [many other object stores (S3, S3 API, HDFS, DigitalOcean Spaces, ...)](storage.md), and you can substitute Google Cloud specific flags in this guide with those of your object store detailed in the [Storage document](storage.md).
 
 ## Requirements
 
