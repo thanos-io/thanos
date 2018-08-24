@@ -22,11 +22,11 @@ make
 
 The `thanos` binary should now be in your `$PATH` and is the only thing required to deploy any of its components.
 
-## Sidecars
+## [Sidecar](components/sidecar.md)
 
 Thanos integrates with existing Prometheus servers (v2.0+) through a [Sidecar process](https://docs.microsoft.com/en-us/azure/architecture/patterns/sidecar#solution), which runs on the same machine or in the same pod as the Prometheus server/s. 
 
-The purpose of the Sidecar is to backup Prometheus data into an Object Storage bucket, and giving other Thanos components access to the Prometheus instance the Sidecar is attached to.
+The purpose of the Sidecar is to backup Prometheus data into an Object Storage bucket, and giving other Thanos components access to the Prometheus instance the Sidecar is attached to. [More details about the Sidecar's functions are available at the sidecar documentation page](components/sidecar.md).
 
 ### Data Backup
 
@@ -46,7 +46,7 @@ If you are not interested in backing up any data, the `--gcs.bucket` flag can si
 * _[Example Kubernetes manifest with GCS upload](../kube/manifests/prometheus-gcs.yaml)_
 * _[Details & Config for other object stores](./storage.md)_
 
-### Store API
+### [Store API](components/store.md)
 
 The Sidecar comes with a [gRPC](https://grpc.io/) API called the _[Store API](components/store.md)_. The Store API allows you to query metric data in Prometheus, and data backed up into the Object Store bucket.
 
@@ -84,7 +84,7 @@ global:
 # ...
 ```
 
-## Query Layer
+## [Query Layer](components/query.md)
 
 Now that we have setup the sidecar for one or more Prometheus servers, we want to use Thanos' global query layer to evaluate PromQL queries against all of them at once.
 
