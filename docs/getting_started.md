@@ -72,7 +72,7 @@ thanos sidecar \
 
 ### External Labels
 
-Prometheus allows to configure "external labels" for a Prometheus instance. Those are meant to globally identify the role of a given Prometheus instance. As Thanos aims to aggregate data across all Prometheus servers, providing a consistent of external labels for all Prometheus server becomes crucial!
+Prometheus allows the configuration of "external labels" for a Prometheus instance. Those are meant to globally identify the role of a given Prometheus instance. As Thanos aims to aggregate data across all Prometheus servers, providing a consistent set of external labels for all Prometheus server becomes crucial!
 
 Every Prometheus instance _must_ have a globally unique set of identifying labels. For example, in Prometheus's configuration file:
 
