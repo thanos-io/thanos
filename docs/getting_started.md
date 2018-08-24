@@ -46,22 +46,24 @@ If you are not interested in backing up any data, the `--gcs.bucket` flag can si
 * _[Example Kubernetes manifest with GCS upload](../kube/manifests/prometheus-gcs.yaml)_
 * _[Details & Config for other object stores](./storage.md)_
 
-### Query Access
+### Store API
 
-Thanos comes with a highly efficient gRPC-based Store API for metric data access across all its components. The sidecar implements it in front of its connected Prometheus server. While it is ready to use with the above example, we must additionally configure the sidecar to join a Thanos cluster.
+The Sidecar comes with a [gRPC](https://grpc.io/) API called the _[Store API](components/store.md)_. The Store API allows you to query metric data in Prometheus, and data backed up into the Object Store bucket.
 
-Let's extend the above sidecar to expose their gRPC Store API so that we can query metrics.
+In order to expose the Store API, we also need to put the Sidecar into '_cluster_' mode. A cluster can be made up of one or more Sidecars. Clustering uses the [Gossip Protocol](https://en.wikipedia.org/wiki/Gossip_protocol) to allow Thanos components- including the Sidecar itself- to be able to find other Sidecars. Clustering is explained in greater detail in the [Communication Between Components](#communication-between-components) section.
+
+Let's extend the Sidecar in the previous section to connect to a Prometheus server, expose the Store API, and put the Sidecar into Cluster mode:
 
 ```
 thanos sidecar \
-    --prometheus.url            http://localhost:9090 \
     --tsdb.path                 /var/prometheus \
     --gcs.bucket                example-bucket \
+    --prometheus.url            http://localhost:9090 \    # Location of the Prometheus HTTP server
     --grpc-address              0.0.0.0:19091 \            # gRPC endpoint for Store API (will be used to perform PromQL queries)
-    --http-address              0.0.0.0:19191 \            # HTTP endpoint for collecting metrics on Thanos sidecar
-    --cluster.address           0.0.0.0:19391 \            # Endpoint used to meta data about the current node
-    --cluster.advertise-address 127.0.0.1:19391 \          # Location at which the node advertise itself at to other members of the cluster
-    --cluster.peers             127.0.0.1:19391 \          # Static cluster peer where the node will get info about the cluster
+    --http-address              0.0.0.0:19191 \            # HTTP endpoint for collecting metrics on the Sidecar
+    --cluster.address           0.0.0.0:19391 \            # Gossip endpoint used to expose Gossip metadata for the current node
+    --cluster.advertise-address 127.0.0.1:19391 \          # Gossip endpoint at which the node advertises itself at to other members of the cluster
+    --cluster.peers             127.0.0.1:19391 \          # Static list of peers where the node will get info about the cluster
 ```
 
 * _[Example Kubernetes manifest](../kube/manifests/prometheus.yaml)_
