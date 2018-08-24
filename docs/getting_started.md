@@ -28,13 +28,12 @@ Thanos integrates with existing Prometheus servers (v2.0+) through a [Sidecar pr
 
 The purpose of the Sidecar is to backup Prometheus data into an Object Storage bucket, and giving other Thanos components access to the Prometheus instance the Sidecar is attached to.
 
-### Data Backups 
+### Data Backup
 
-The following configures the sidecar to backup data into a Google Cloud Storage bucket.
+The following configures the Sidecar to only backup Prometheus data into a Google Cloud Storage bucket.
 
 ```
 thanos sidecar \
-    --prometheus.url    http://localhost:9090 \     # Prometheus's HTTP address
     --tsdb.path         /var/prometheus \           # Data directory of Prometheus
     --gcs.bucket        example-bucket \            # Bucket to upload data to
 ```
