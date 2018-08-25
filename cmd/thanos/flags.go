@@ -55,7 +55,7 @@ func regCommonServerFlags(cmd *kingpin.CmdClause) (*string, *string, func(log.Lo
 				return nil, errors.Wrapf(err, "calculate advertise StoreAPI addr for gossip based on bindAddr: %s and advAddr: %s", *grpcBindAddr, *grpcAdvertiseAddr)
 			}
 
-			advStoreAPIAddress := fmt.Sprintf("%s:%d", host, port)
+			advStoreAPIAddress := net.JoinHostPort(host, strconv.Itoa(port))
 			if cluster.IsUnroutable(advStoreAPIAddress) {
 				level.Warn(logger).Log("msg", "this component advertises its gRPC StoreAPI on an unroutable address. This will not work cross-cluster", "addr", advStoreAPIAddress)
 				level.Warn(logger).Log("msg", "provide --grpc-address as routable ip:port or --grpc-advertise-address as a routable host:port")
@@ -70,7 +70,7 @@ func regCommonServerFlags(cmd *kingpin.CmdClause) (*string, *string, func(log.Lo
 					return nil, errors.Wrapf(err, "calculate advertise QueryAPI addr for gossip based on bindAddr: %s and advAddr: %s", *httpBindAddr, advQueryAPIAddress)
 				}
 
-				advQueryAPIAddress = fmt.Sprintf("%s:%d", host, port)
+				advQueryAPIAddress = net.JoinHostPort(host, strconv.Itoa(port))
 				if cluster.IsUnroutable(advQueryAPIAddress) {
 					level.Warn(logger).Log("msg", "this component advertises its HTTP QueryAPI on an unroutable address. This will not work cross-cluster", "addr", advQueryAPIAddress)
 					level.Warn(logger).Log("msg", "provide --http-address as routable ip:port or --http-advertise-address as a routable host:port")
