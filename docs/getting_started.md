@@ -69,11 +69,35 @@ thanos sidecar \
 * _[Example Kubernetes manifest](../kube/manifests/prometheus.yaml)_
 * _[Example Kubernetes manifest with GCS upload](../kube/manifests/prometheus-gcs.yaml)_
 
-### External Labels
+## [Query Layer](components/query.md)
 
-Prometheus allows the configuration of "external labels" for a Prometheus instance. Those are meant to globally identify the role of a given Prometheus instance. As Thanos aims to aggregate data across all Prometheus servers, providing a consistent set of external labels for all Prometheus server becomes crucial!
+Now that we have setup the Sidecar for one or more Prometheus instances, we want to use Thanos' global [Query Layer](components/query.md) to evaluate PromQL queries against all instances at once.
 
-Every Prometheus instance _must_ have a globally unique set of identifying labels. For example, in Prometheus's configuration file:
+The Query component is stateless and horizontally scalable and can be deployed with any number of replicas. Just like Sidecars, it connects to an existing cluster via the gossip protocol, and automatically detects which Prometheus servers need to be contacted for a given PromQL query.
+
+Query also implements Prometheus's offical HTTP API and can thus be used with external tools such as Grafana. It also serves a derivative of Prometheus's UI for ad-hoc querying.
+
+Below, we will set up a Query to connect to our Sidecars, and expose its HTTP UI. 
+
+```
+thanos query \
+    --http-address              0.0.0.0:19192 \         # HTTP Endpoint for Query UI
+    --grpc-address              0.0.0.0:19092 \         # gRPC endpoint for Store API
+    --cluster.address           0.0.0.0:19591 \
+    --cluster.advertise-address 127.0.0.1:19591 \
+    --cluster.peers             127.0.0.1:19391 \       # Static cluster peer where the node will get info about the Sidecar cluster
+    --cluster.peers             127.0.0.1:19392 \       # Another cluster peer (many can be added to discover nodes)
+    --store                     0.0.0.0:18091   \       # Static gRPC Store API Address for the query node to query
+    --store                     0.0.0.0:18092   \       # Also repeatable
+```
+
+Go to the configured HTTP address that should now show a UI similar to that of Prometheus. If the cluster formed correctly you can now query across all Prometheus instances within the cluster.
+
+### Deduplicating Data from Prometheus HA pairs
+
+The Query component is also capable of deduplicating data collected from Prometheus HA pairs. This requires configuring Prometheus's `global.external_labels` configuration block to identify the role of a given Prometheus instance. Providing a consistent set of `external_label` names is very crucial to ensuring the data Query presents is consistent!
+
+A typical choice is simply the label name "replica" while letting the value be whatever you wish. For example, you might set up the following in Prometheus's configuration file:
 
 ```
 global:
@@ -84,29 +108,7 @@ global:
 # ...
 ```
 
-## [Query Layer](components/query.md)
-
-Now that we have setup the sidecar for one or more Prometheus servers, we want to use Thanos' global query layer to evaluate PromQL queries against all of them at once.
-
-The query component is stateless and horizontally scalable and thus can be deployed with any required amount of replicas. Just like sidecars, it connects to the cluster via gossip protocol and automatically detects which Prometheus servers need to be contacted for a given PromQL query.
-
-It implements Prometheus's official HTTP API and can thus seamlessly be used with external tools such as Grafana. Additionaly it servers a derviative of Prometheus's UI for ad-hoc querying.
-
-```
-thanos query \
-    --http-address              0.0.0.0:19192 \         # Endpoint for Query UI
-    --grpc-address              0.0.0.0:19092 \         # gRPC endpoint for Store API
-    --cluster.address           0.0.0.0:19591 \
-    --cluster.advertise-address 127.0.0.1:19591 \
-    --cluster.peers             127.0.0.1:19391 \       # Static cluster peer where the node will get info about the cluster
-    --cluster.peers             127.0.0.1:19392 \       # Another cluster peer (many can be added to discover nodes)
-    --store                     0.0.0.0:18091   \       # Static gRPC Store API Address for the query node to query
-    --store                     0.0.0.0:18092   \       # Also repeatable
-```
-
-The query component is also capable of merging data collected from Prometheus HA pairs. This requires a consistent choice of an external label for Prometheus servers that identifies replicas. Other external labels must be identical. A typical choice is simply the label name "replica" while its value is freely chosable.
-
-Providing the label name to the query component will enable the deduplication.
+Reload your Prometheus instances, and then, in Query, we will enable `replica` as the label we want to enable deduplication to occur on:
 
 ```
 thanos query \
@@ -117,7 +119,7 @@ thanos query \
     --query.replica-label       replica \               # Replica label for de-duplication
 ```
 
-Go to the configured HTTP address that should now show a UI similar to that of Prometheus itself. If the cluster formed correctly you can now query data across all Prometheus servers within the cluster.
+Go to the configured HTTP address, and you should now be able to query across all Prometheus instances and receive de-duplicated data.
 
 * _[Example Kubernetes manifest](../kube/manifests/thanos-query.yaml)_
 
