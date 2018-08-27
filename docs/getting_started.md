@@ -1,8 +1,9 @@
 # Getting started
 
-Thanos provides a global query view, data backup, and historical data access as its core features in a single binary. All three features can be run independently of each other. This allows you a subset of Thanos features for immediate benefit or testing, while also making it flexible for gradual roll outs in more complex environments. 
+Thanos provides a global query view, data backup, and historical data access as its core features in a single binary. All three features can be run independently of each other. This allows you to have a subset of Thanos features ready for immediate benefit or testing, while also making it flexible for gradual roll outs in more complex environments. 
 
-In this quick-start guide, we will configure Thanos and all components mentioned to work against a Google Cloud Storage bucket. Thanos is able to use [many other object stores (S3, S3 API, HDFS, DigitalOcean Spaces, ...)](storage.md), and you can substitute Google Cloud specific flags in this guide with those of your object store detailed in the [Storage document](storage.md).
+In this quick-start guide, we will configure Thanos and all components mentioned to work against a Google Cloud Storage bucket. 
+At the moment, Thanos is able to use [GCS and S3 as storage providers](storage.md), with the ability to add more providers as necessary. You can substitute Google Cloud specific flags in this guide with those of your object store detailed in the [Storage document](storage.md).
 
 ## Requirements
 
@@ -48,32 +49,41 @@ If you are not interested in backing up any data, the `--gcs.bucket` flag can si
 
 ### [Store API](components/store.md)
 
-The Sidecar comes with a [gRPC](https://grpc.io/) API called the _[Store API](components/store.md)_. The Store API allows you to query metric data in Prometheus, and data backed up into the Object Store bucket.
+The Sidecar component comes with a _[Store API](components/store.md)_. The Store API allows you to query metric data in Prometheus and data backed up into the Object Store bucket.
 
-In order to expose the Store API, we also need to put the Sidecar into '_cluster_' mode. A cluster can be made up of one or more Sidecars. Clustering uses the [Gossip Protocol](https://en.wikipedia.org/wiki/Gossip_protocol) to allow Thanos components- including the Sidecar itself- to be able to find other Sidecars. Clustering is explained in greater detail in the [Communication Between Components](#communication-between-components) section.
-
-Let's extend the Sidecar in the previous section to connect to a Prometheus server, expose the Store API, and put the Sidecar into Cluster mode:
+Let's extend the Sidecar in the previous section to connect to a Prometheus server, and expose the Store API.
 
 ```
 thanos sidecar \
     --tsdb.path                 /var/prometheus \
     --gcs.bucket                example-bucket \
     --prometheus.url            http://localhost:9090 \    # Location of the Prometheus HTTP server
-    --grpc-address              0.0.0.0:19091 \            # gRPC endpoint for Store API (will be used to perform PromQL queries)
     --http-address              0.0.0.0:19191 \            # HTTP endpoint for collecting metrics on the Sidecar
-    --cluster.address           0.0.0.0:19391 \            # Gossip endpoint used to expose Gossip metadata for the current node
-    --cluster.advertise-address 127.0.0.1:19391 \          # Gossip endpoint at which the node advertises itself at to other members of the cluster
     --cluster.peers             127.0.0.1:19391 \          # Static list of peers where the node will get info about the cluster
 ```
 
 * _[Example Kubernetes manifest](../kube/manifests/prometheus.yaml)_
 * _[Example Kubernetes manifest with GCS upload](../kube/manifests/prometheus-gcs.yaml)_
 
+### External Labels
+Prometheus allows the configuration of "external labels" of a given Prometheus instance. These are meant to globally identify the role of that instance. As Thanos aims to aggregate data across all instances, providing a consistent set of external labels becomes crucial!
+
+Every Prometheus instance must have a globally unique set of identifying labels. For example, in Prometheus's configuration file:
+
+```
+global:
+  external_labels:
+    region: eu-west
+    monitor: infrastructure
+    replica: A
+# ...
+```
+
 ## [Query Layer](components/query.md)
 
 Now that we have setup the Sidecar for one or more Prometheus instances, we want to use Thanos' global [Query Layer](components/query.md) to evaluate PromQL queries against all instances at once.
 
-The Query component is stateless and horizontally scalable and can be deployed with any number of replicas. Just like Sidecars, it connects to an existing cluster via the gossip protocol, and automatically detects which Prometheus servers need to be contacted for a given PromQL query.
+The Query component is stateless and horizontally scalable and can be deployed with any number of replicas. Once connected to the Sidecars, it automatically detects which Prometheus servers need to be contacted for a given PromQL query.
 
 Query also implements Prometheus's offical HTTP API and can thus be used with external tools such as Grafana. It also serves a derivative of Prometheus's UI for ad-hoc querying.
 
@@ -82,9 +92,6 @@ Below, we will set up a Query to connect to our Sidecars, and expose its HTTP UI
 ```
 thanos query \
     --http-address              0.0.0.0:19192 \         # HTTP Endpoint for Query UI
-    --grpc-address              0.0.0.0:19092 \         # gRPC endpoint for Store API
-    --cluster.address           0.0.0.0:19591 \
-    --cluster.advertise-address 127.0.0.1:19591 \
     --cluster.peers             127.0.0.1:19391 \       # Static cluster peer where the node will get info about the Sidecar cluster
     --cluster.peers             127.0.0.1:19392 \       # Another cluster peer (many can be added to discover nodes)
     --store                     0.0.0.0:18091   \       # Static gRPC Store API Address for the query node to query
@@ -95,7 +102,7 @@ Go to the configured HTTP address that should now show a UI similar to that of P
 
 ### Deduplicating Data from Prometheus HA pairs
 
-The Query component is also capable of deduplicating data collected from Prometheus HA pairs. This requires configuring Prometheus's `global.external_labels` configuration block to identify the role of a given Prometheus instance. Providing a consistent set of `external_label` names is very crucial to ensuring the data Query presents is consistent!
+The Query component is also capable of deduplicating data collected from Prometheus HA pairs. This requires configuring Prometheus's `global.external_labels` configuration block (as mentioned in the [External Labels section](#external-labels)) to identify the role of a given Prometheus instance.
 
 A typical choice is simply the label name "replica" while letting the value be whatever you wish. For example, you might set up the following in Prometheus's configuration file:
 
@@ -112,10 +119,11 @@ Reload your Prometheus instances, and then, in Query, we will enable `replica` a
 
 ```
 thanos query \
-    --http-address              0.0.0.0:19092 \
-    --cluster.address           0.0.0.0:19591 \
-    --cluster.advertise-address 127.0.0.1:19591 \
+    --http-address              0.0.0.0:19192 \
     --cluster.peers             127.0.0.1:19391 \
+    --cluster.peers             127.0.0.1:19392 \
+    --store                     0.0.0.0:18091   \
+    --store                     0.0.0.0:18092   \
     --query.replica-label       replica \               # Replica label for de-duplication
 ```
 
