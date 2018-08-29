@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"path"
+	"sync"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/compact"
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
@@ -17,6 +19,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/tsdb"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
@@ -40,6 +43,9 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	syncDelay := cmd.Flag("sync-delay", "Minimum age of fresh (non-compacted) blocks before they are being processed.").
 		Default("30m").Duration()
 
+	var retention model.Duration
+	cmd.Flag("storage.retention", "How long to retain samples in storage. 0d - disables retention").Default("0d").SetValue(&retention)
+
 	wait := cmd.Flag("wait", "Do not exit after all compactions have been processed and wait for new work.").
 		Short('w').Bool()
 
@@ -52,6 +58,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			*syncDelay,
 			*haltOnError,
 			*wait,
+			time.Duration(retention),
 			name,
 		)
 	}
@@ -68,6 +75,7 @@ func runCompact(
 	syncDelay time.Duration,
 	haltOnError bool,
 	wait bool,
+	retention time.Duration,
 	component string,
 ) error {
 	halted := prometheus.NewGauge(prometheus.GaugeOpts{
@@ -113,9 +121,13 @@ func runCompact(
 			return errors.Wrap(err, "create compactor")
 		}
 
+		mutex := &sync.Mutex{}
 		ctx, cancel := context.WithCancel(context.Background())
 
 		f := func() error {
+			// Wait for retention job to finish
+			mutex.Lock()
+			defer mutex.Unlock()
 			var (
 				compactDir      = path.Join(dataDir, "compact")
 				downsamplingDir = path.Join(dataDir, "downsample")
@@ -223,6 +235,60 @@ func runCompact(
 		}, func(error) {
 			cancel()
 		})
+
+		g.Add(func() error {
+			if retention.Seconds() == 0 {
+				level.Info(logger).Log("msg", "retention is disabled")
+
+				<-ctx.Done()
+			}
+
+			retentionFunc := func() error {
+				//Wait for compaction job to finish
+				mutex.Lock()
+				defer mutex.Unlock()
+
+				level.Info(logger).Log("msg", "start retention", "retention", retention)
+				err := bkt.Iter(ctx, "", func(name string) error {
+					id, ok := block.IsBlockDir(name)
+					if !ok {
+						return nil
+					}
+					m, err := block.DownloadMeta(ctx, logger, bkt, id)
+					if err != nil {
+						return errors.Wrap(err, "download metadata")
+					}
+
+					maxTime := time.Unix(m.MaxTime/1000, 0)
+					if time.Now().After(maxTime.Add(retention)) {
+						level.Info(logger).Log("msg", "deleting block", "id", id, "maxTime", maxTime.String())
+						if err := block.Delete(ctx, bkt, id); err != nil {
+							return errors.Wrap(err, "delete block")
+						}
+					}
+
+					return nil
+				})
+
+				if err != nil {
+					return errors.Wrap(err, "retention")
+				}
+
+				level.Info(logger).Log("msg", "retention done", "retention", retention)
+				return nil
+			}
+
+			if !wait {
+				return retentionFunc()
+			}
+
+			return runutil.Repeat(2*time.Hour, ctx.Done(), func() error {
+				return retentionFunc()
+			})
+		}, func(error) {
+			cancel()
+		})
+
 	}
 	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
 		return err

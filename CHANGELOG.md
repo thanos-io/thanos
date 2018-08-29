@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - Add Thanos Rule UI
 - Add Thanos Rule reload via HTTP POST to /-/reload
+- Add Thanos compact --storage.retention flag, for configuring storage bucket retention period.
 
 Newest release candidate: [v0.1.0-rc.2](https://github.com/improbable-eng/thanos/releases/tag/v0.1.0-rc.2)
 
