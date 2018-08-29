@@ -104,6 +104,7 @@ func main() {
 	metrics.MustRegister(
 		version.NewCollector("thanos"),
 		prometheus.NewGoCollector(),
+		prometheus.NewProcessCollector(os.Getpid(), ""),
 	)
 
 	prometheus.DefaultRegisterer = metrics
