@@ -34,7 +34,7 @@ func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name s
 		Default("./data").String()
 
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks.").
-		PlaceHolder("<bucket>").String()
+		PlaceHolder("<bucket>").Required().String()
 
 	s3Config := s3.RegisterS3Params(cmd)
 
