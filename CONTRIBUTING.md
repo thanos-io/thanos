@@ -16,7 +16,7 @@ $ mkdir -p $GOPATH/src/github.com/improbable-eng
 $ cd $GOPATH/src/github.com/improbable-eng
 $ git clone https://github.com/<your_github_id>/thanos.git
 $ cd thanos
-$ git add remote upstream https://github.com/improbable-eng/thanos.git
+$ git remote add upstream https://github.com/improbable-eng/thanos.git
 $ git remote update
 $ git merge upstream/master
 $ make build
