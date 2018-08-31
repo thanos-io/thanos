@@ -38,36 +38,30 @@ type BucketConfig struct {
 // TODO(jojohappy) should it support multiple bucket?
 func NewBucketConfig(cmd *kingpin.CmdClause) *BucketConfig {
 	var bucketConfig BucketConfig
-	provider := cmd.Flag("provider.type", "Specify the provider for object store. If empty or unsupport provider, Thanos won't read and store any block to the object store. Now supported provider are GCS / S3.").
+	provider := cmd.Flag("provider.type", "Specify the provider for object store. If empty or unsupport provider, Thanos won't read and store any block to the object store. Now supported GCS / S3.").
 		PlaceHolder("<provider>").String()
 
 	bucketConfig.Provider = ObjProvider(strings.ToUpper(strings.Trim(*provider, " ")))
 	cmd.Flag("provider.bucket", "The bucket name for stored blocks.").
 		PlaceHolder("<bucket>").Envar("PROVIDER_BUCKET").StringVar(&bucketConfig.Bucket)
 
-	switch bucketConfig.Provider {
-	case GCS:
-	case S3:
-		cmd.Flag("provider.endpoint", "The object store API endpoint for stored blocks. Support S3-Compatible API").
-			PlaceHolder("<api-url>").Envar("PROVIDER_ENDPOINT").StringVar(&bucketConfig.Endpoint)
+	cmd.Flag("provider.endpoint", "The object store API endpoint for stored blocks. Support S3-Compatible API").
+		PlaceHolder("<api-url>").Envar("PROVIDER_ENDPOINT").StringVar(&bucketConfig.Endpoint)
 
-		cmd.Flag("provider.access-key", "Access key for an object store API. Support S3-Compatible API").
-			PlaceHolder("<key>").Envar("PROVIDER_ACCESS_KEY").StringVar(&bucketConfig.AccessKey)
+	cmd.Flag("provider.access-key", "Access key for an object store API. Support S3-Compatible API").
+		PlaceHolder("<key>").Envar("PROVIDER_ACCESS_KEY").StringVar(&bucketConfig.AccessKey)
 
-		// TODO(jojohappy): should it be encrypted?
-		bucketConfig.secretKey = os.Getenv("PROVIDER_SECRET_KEY")
+	// TODO(jojohappy): should it be encrypted?
+	bucketConfig.secretKey = os.Getenv("PROVIDER_SECRET_KEY")
 
-		cmd.Flag("provider.insecure", "Whether to use an insecure connection with an object store API. Support S3-Compatible API").
-			Default("false").Envar("PROVIDER_INSECURE").BoolVar(&bucketConfig.Insecure)
+	cmd.Flag("provider.insecure", "Whether to use an insecure connection with an object store API. Support S3-Compatible API").
+		Default("false").Envar("PROVIDER_INSECURE").BoolVar(&bucketConfig.Insecure)
 
-		cmd.Flag("provider.signature-version2", "Whether to use S3 Signature Version 2; otherwise Signature Version 4 will be used").
-			Default("false").Envar("PROVIDER_SIGNATURE_VERSION2").BoolVar(&bucketConfig.SignatureV2)
+	cmd.Flag("provider.signature-version2", "Whether to use S3 Signature Version 2; otherwise Signature Version 4 will be used").
+		Default("false").Envar("PROVIDER_SIGNATURE_VERSION2").BoolVar(&bucketConfig.SignatureV2)
 
-		cmd.Flag("provider.encrypt-sse", "Whether to use Server Side Encryption").
-			Default("false").Envar("PROVIDER_SSE_ENCRYPTION").BoolVar(&bucketConfig.SSEEncryption)
-	default:
-		bucketConfig.Provider = Unsupported
-	}
+	cmd.Flag("provider.encrypt-sse", "Whether to use Server Side Encryption").
+		Default("false").Envar("PROVIDER_SSE_ENCRYPTION").BoolVar(&bucketConfig.SSEEncryption)
 
 	return &bucketConfig
 }
@@ -75,19 +69,12 @@ func NewBucketConfig(cmd *kingpin.CmdClause) *BucketConfig {
 // NewBackupBucketConfig return the configuration of backup object store
 func NewBackupBucketConfig(cmd *kingpin.CmdClause) *BucketConfig {
 	var bucketConfig BucketConfig
-	provider := cmd.Flag("provider-backup.type", "Specify the provider for backup object store. If empty or unsupport provider, Thanos won't backup any block to the object store. Now supported provider are GCS / S3.").
+	provider := cmd.Flag("provider-backup.type", "Specify the provider for backup object store. If empty or unsupport provider, Thanos won't backup any block to the object store. Now supported GCS / S3.").
 		PlaceHolder("<provider>").String()
 
 	bucketConfig.Provider = ObjProvider(strings.ToUpper(strings.Trim(*provider, " ")))
 	cmd.Flag("provider-backup.bucket", "The bucket name for backup stored blocks.").
 		PlaceHolder("<bucket>").StringVar(&bucketConfig.Bucket)
-
-	switch bucketConfig.Provider {
-	case GCS:
-	case S3:
-	default:
-		bucketConfig.Provider = Unsupported
-	}
 
 	return &bucketConfig
 }
