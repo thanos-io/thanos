@@ -14,9 +14,9 @@ import (
 	"github.com/go-kit/kit/log/level"
 
 	blob "github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/vglafirov/thanos/pkg/objstore"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 

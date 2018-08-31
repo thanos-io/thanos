@@ -7,11 +7,11 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/improbable-eng/thanos/pkg/objstore"
+	"github.com/improbable-eng/thanos/pkg/objstore/azure"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/objstore/inmem"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/testutil"
-	"github.com/vglafirov/thanos/pkg/objstore/azure"
 )
 
 // ForeachStore runs given test using all available objstore implementations.

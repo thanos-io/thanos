@@ -8,9 +8,9 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/objstore"
+	"github.com/improbable-eng/thanos/pkg/objstore/azure"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
-	"github.com/vglafirov/thanos/pkg/objstore/azure"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"

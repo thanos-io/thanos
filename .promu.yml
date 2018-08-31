@@ -1,5 +1,5 @@
 repository:
-    path: github.com/vglafirov/thanos
+    path: github.com/improbable-eng/thanos
 build:
     binaries:
         - name: thanos
