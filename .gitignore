@@ -10,7 +10,6 @@ kube/.minikube
 
 # Ignore e2e working dirs.
 data/
-kube/manifests/prometheus-azure.yaml
 
 # Ignore promu artifacts.
 /.build
