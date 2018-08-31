@@ -15,8 +15,9 @@ TMP_GOPATH        ?= /tmp/thanos-go
 GOIMPORTS         ?= $(FIRST_GOPATH)/bin/goimports
 PROMU             ?= $(FIRST_GOPATH)/bin/promu
 DEP               ?= $(FIRST_GOPATH)/bin/dep-45be32ba4708aad5e2a
+DEP_FINISHED      ?= .dep-finished
 ERRCHECK          ?= $(FIRST_GOPATH)/bin/errcheck
-EMBEDMD          ?= $(FIRST_GOPATH)/bin/embedmd
+EMBEDMD           ?= $(FIRST_GOPATH)/bin/embedmd
 
 .PHONY: all
 all: deps format errcheck build
@@ -129,9 +130,9 @@ vet:
 
 # non-phony targets
 
-vendor: Gopkg.toml Gopkg.lock | $(DEP)
+vendor: Gopkg.toml Gopkg.lock $(DEP_FINISHED) | $(DEP)
 	@echo ">> dep ensure"
-	@$(DEP) ensure $(DEPARGS)
+	@$(DEP) ensure $(DEPARGS) || rm $(DEP_FINISHED)
 
 $(GOIMPORTS):
 	@echo ">> fetching goimports"
@@ -152,6 +153,9 @@ $(DEP):
 	@cd $(TMP_GOPATH)/src/github.com/golang/dep && git checkout -f -q 45be32ba4708aad5e2aa8c86f9432c4c4c1f8da2
 	@GOPATH=$(TMP_GOPATH) go install github.com/golang/dep/cmd/dep
 	@mv $(TMP_GOPATH)/bin/dep $(DEP)
+
+$(DEP_FINISHED):
+	@touch $(DEP_FINISHED)
 
 $(ERRCHECK):
 	@echo ">> fetching errcheck"
