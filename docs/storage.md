@@ -8,6 +8,7 @@ Current object storage client implementations:
 |----------------------|-------------------|-----------|---------------|
 | Google Cloud Storage | Stable  (production usage)             | yes       | @bplotka   |
 | AWS S3               | Beta  (working PoCs, testing usage)               | no        | ?          |
+| Azure Storage Account | Alpha   | yes       | @vglafirov   |
 
 NOTE: Currently Thanos requires strong consistency (write-read) for object store implementation.
 
@@ -120,7 +121,7 @@ With this policy you should be able to run set `THANOS_SKIP_GCS_TESTS=true` and 
 
 Details about AWS policies: https://docs.aws.amazon.com/AmazonS3/latest/dev/using-with-s3-actions.html
 
-## GCP Configuration 
+## GCP Configuration
 
 To configure Google Cloud Storage bucket as an object store you need to set `--gcs.bucket` with GCS bucket name and configure Google Application credentials.
 

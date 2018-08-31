@@ -229,7 +229,7 @@ func runSidecar(
 
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, *azureConfig, reg, component)
+	bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, *azureConfig, reg, component)
 	if err != nil && err != client.ErrNotFound {
 		return err
 	}

@@ -88,7 +88,7 @@ func runStore(
 	verbose bool,
 ) error {
 	{
-		bkt, closeFn, err := client.NewBucket(&gcsBucket, *s3Config, *azureConfig, reg, component)
+		bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, *azureConfig, reg, component)
 		if err != nil {
 			return err
 		}
