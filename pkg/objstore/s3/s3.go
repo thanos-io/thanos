@@ -24,7 +24,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/version"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 const (
@@ -45,65 +44,6 @@ type Bucket struct {
 	client   *minio.Client
 	sse      encrypt.ServerSide
 	opsTotal *prometheus.CounterVec
-}
-
-// Config encapsulates the necessary config values to instantiate an s3 client.
-type Config struct {
-	Bucket        string
-	Endpoint      string
-	AccessKey     string
-	secretKey     string
-	Insecure      bool
-	SignatureV2   bool
-	SSEEncryption bool
-}
-
-// RegisterS3Params registers the s3 flags and returns an initialized Config struct.
-func RegisterS3Params(cmd *kingpin.CmdClause) *Config {
-	var s3config Config
-
-	cmd.Flag("s3.bucket", "S3-Compatible API bucket name for stored blocks.").
-		PlaceHolder("<bucket>").Envar("S3_BUCKET").StringVar(&s3config.Bucket)
-
-	cmd.Flag("s3.endpoint", "S3-Compatible API endpoint for stored blocks.").
-		PlaceHolder("<api-url>").Envar("S3_ENDPOINT").StringVar(&s3config.Endpoint)
-
-	cmd.Flag("s3.access-key", "Access key for an S3-Compatible API.").
-		PlaceHolder("<key>").Envar("S3_ACCESS_KEY").StringVar(&s3config.AccessKey)
-
-	s3config.secretKey = os.Getenv("S3_SECRET_KEY")
-
-	cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
-		Default("false").Envar("S3_INSECURE").BoolVar(&s3config.Insecure)
-
-	cmd.Flag("s3.signature-version2", "Whether to use S3 Signature Version 2; otherwise Signature Version 4 will be used.").
-		Default("false").Envar("S3_SIGNATURE_VERSION2").BoolVar(&s3config.SignatureV2)
-
-	cmd.Flag("s3.encrypt-sse", "Whether to use Server Side Encryption").
-		Default("false").Envar("S3_SSE_ENCRYPTION").BoolVar(&s3config.SSEEncryption)
-
-	return &s3config
-}
-
-// Validate checks to see if mandatory s3 config options are set.
-func (conf *Config) Validate() error {
-	if conf.Bucket == "" ||
-		conf.Endpoint == "" ||
-		(conf.AccessKey == "" && conf.secretKey != "") ||
-		(conf.AccessKey != "" && conf.secretKey == "") {
-		return errors.New("insufficient s3 configuration information")
-	}
-	return nil
-}
-
-// ValidateForTests checks to see if mandatory s3 config options for tests are set.
-func (conf *Config) ValidateForTests() error {
-	if conf.Endpoint == "" ||
-		conf.AccessKey == "" ||
-		conf.secretKey == "" {
-		return errors.New("insufficient s3 test configuration information")
-	}
-	return nil
 }
 
 // NewBucket returns a new Bucket using the provided s3 config values.
