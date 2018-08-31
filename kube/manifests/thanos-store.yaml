@@ -4,7 +4,6 @@ metadata:
   name: thanos-store
 spec:
   serviceName: "thanos-store"
-  serviceAccount: prometheus
   replicas: 1
   selector:
     matchLabels:
