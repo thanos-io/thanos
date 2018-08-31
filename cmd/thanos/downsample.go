@@ -48,7 +48,7 @@ func runDownsample(
 	component string,
 ) error {
 
-	bkt, err := client.NewBucket(logger, bucketConf, reg, component)
+	bkt, err := client.NewBucket(logger, *bucketConf, reg, component)
 	if err != nil {
 		return err
 	}

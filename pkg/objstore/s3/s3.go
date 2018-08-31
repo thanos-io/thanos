@@ -107,7 +107,7 @@ func (conf *Config) ValidateForTests() error {
 }
 
 // NewBucket returns a new Bucket using the provided s3 config values.
-func NewBucket(logger log.Logger, conf *objstore.BucketConfig, reg prometheus.Registerer, component string) (*Bucket, error) {
+func NewBucket(logger log.Logger, conf objstore.BucketConfig, reg prometheus.Registerer, component string) (*Bucket, error) {
 	var chain []credentials.Provider
 	if conf.AccessKey != "" {
 		signature := credentials.SignatureV4
@@ -312,7 +312,7 @@ func NewTestBucket(t testing.TB, location string) (objstore.Bucket, func(), erro
 		return nil, nil, err
 	}
 
-	b, err := NewBucket(log.NewNopLogger(), c, nil, "thanos-e2e-test")
+	b, err := NewBucket(log.NewNopLogger(), *c, nil, "thanos-e2e-test")
 	if err != nil {
 		return nil, nil, err
 	}
