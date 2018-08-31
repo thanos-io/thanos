@@ -92,18 +92,6 @@ Flags:
                                  URL at which to reach Prometheus's API. For
                                  better performance use local network.
       --tsdb.path="./data"       Data directory of TSDB.
-      --gcs.bucket=<bucket>      Google Cloud Storage bucket name for stored
-                                 blocks. If empty, sidecar won't store any block
-                                 inside Google Cloud Storage.
-      --s3.bucket=<bucket>       S3-Compatible API bucket name for stored
-                                 blocks.
-      --s3.endpoint=<api-url>    S3-Compatible API endpoint for stored blocks.
-      --s3.access-key=<key>      Access key for an S3-Compatible API.
-      --s3.insecure              Whether to use an insecure connection with an
-                                 S3-Compatible API.
-      --s3.signature-version2    Whether to use S3 Signature Version 2;
-                                 otherwise Signature Version 4 will be used.
-      --s3.encrypt-sse           Whether to use Server Side Encryption
       --reloader.config-file=""  Config file watched by the reloader.
       --reloader.config-envsubst-file=""  
                                  Output file for environment variable
@@ -111,6 +99,25 @@ Flags:
       --reloader.rule-dir=RELOADER.RULE-DIR ...  
                                  Rule directories for the reloader to refresh
                                  (repeated field).
+      --provider.type=<provider>  
+                                 Specify the provider for object store. If empty
+                                 or unsupport provider, Thanos won't read and
+                                 store any block to the object store. Now
+                                 supported GCS / S3.
+      --provider.bucket=<bucket>  
+                                 The bucket name for stored blocks.
+      --provider.endpoint=<api-url>  
+                                 The object store API endpoint for stored
+                                 blocks. Support S3-Compatible API
+      --provider.access-key=<key>  
+                                 Access key for an object store API. Support
+                                 S3-Compatible API
+      --provider.insecure        Whether to use an insecure connection with an
+                                 object store API. Support S3-Compatible API
+      --provider.signature-version2  
+                                 Whether to use S3 Signature Version 2;
+                                 otherwise Signature Version 4 will be used
+      --provider.encrypt-sse     Whether to use Server Side Encryption
 
 ```
 

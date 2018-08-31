@@ -23,34 +23,37 @@ usage: thanos bucket [<flags>] <command> [<args> ...]
 inspect metric data in an object storage bucket
 
 Flags:
-  -h, --help                   Show context-sensitive help (also try --help-long
-                               and --help-man).
-      --version                Show application version.
-      --log.level=info         Log filtering level.
+  -h, --help                  Show context-sensitive help (also try --help-long
+                              and --help-man).
+      --version               Show application version.
+      --log.level=info        Log filtering level.
       --gcloudtrace.project=GCLOUDTRACE.PROJECT  
-                               GCP project to send Google Cloud Trace tracings
-                               to. If empty, tracing will be disabled.
+                              GCP project to send Google Cloud Trace tracings
+                              to. If empty, tracing will be disabled.
       --gcloudtrace.sample-factor=1  
-                               How often we send traces (1/<sample-factor>). If
-                               0 no trace will be sent periodically, unless
-                               forced by baggage item. See
-                               `pkg/tracing/tracing.go` for details.
-      --gcs-bucket=<bucket>    Google Cloud Storage bucket name for stored
-                               blocks.
-      --s3.bucket=<bucket>     S3-Compatible API bucket name for stored blocks.
-      --s3.endpoint=<api-url>  S3-Compatible API endpoint for stored blocks.
-      --s3.access-key=<key>    Access key for an S3-Compatible API.
-      --s3.insecure            Whether to use an insecure connection with an
-                               S3-Compatible API.
-      --s3.signature-version2  Whether to use S3 Signature Version 2; otherwise
-                               Signature Version 4 will be used.
-      --s3.encrypt-sse         Whether to use Server Side Encryption
-      --gcs-backup-bucket=<bucket>  
-                               Google Cloud Storage bucket name to backup blocks
-                               on repair operations.
-      --s3-backup-bucket=<bucket>  
-                               S3 bucket name to backup blocks on repair
-                               operations.
+                              How often we send traces (1/<sample-factor>). If 0
+                              no trace will be sent periodically, unless forced
+                              by baggage item. See `pkg/tracing/tracing.go` for
+                              details.
+      --provider.type=<provider>  
+                              Specify the provider for object store. If empty or
+                              unsupport provider, Thanos won't read and store
+                              any block to the object store. Now supported GCS /
+                              S3.
+      --provider.bucket=<bucket>  
+                              The bucket name for stored blocks.
+      --provider.endpoint=<api-url>  
+                              The object store API endpoint for stored blocks.
+                              Support S3-Compatible API
+      --provider.access-key=<key>  
+                              Access key for an object store API. Support
+                              S3-Compatible API
+      --provider.insecure     Whether to use an insecure connection with an
+                              object store API. Support S3-Compatible API
+      --provider.signature-version2  
+                              Whether to use S3 Signature Version 2; otherwise
+                              Signature Version 4 will be used
+      --provider.encrypt-sse  Whether to use Server Side Encryption
 
 Subcommands:
   bucket verify [<flags>]
@@ -79,44 +82,54 @@ usage: thanos bucket verify [<flags>]
 verify all blocks in the bucket against specified issues
 
 Flags:
-  -h, --help                   Show context-sensitive help (also try --help-long
-                               and --help-man).
-      --version                Show application version.
-      --log.level=info         Log filtering level.
+  -h, --help                  Show context-sensitive help (also try --help-long
+                              and --help-man).
+      --version               Show application version.
+      --log.level=info        Log filtering level.
       --gcloudtrace.project=GCLOUDTRACE.PROJECT  
-                               GCP project to send Google Cloud Trace tracings
-                               to. If empty, tracing will be disabled.
+                              GCP project to send Google Cloud Trace tracings
+                              to. If empty, tracing will be disabled.
       --gcloudtrace.sample-factor=1  
-                               How often we send traces (1/<sample-factor>). If
-                               0 no trace will be sent periodically, unless
-                               forced by baggage item. See
-                               `pkg/tracing/tracing.go` for details.
-      --gcs-bucket=<bucket>    Google Cloud Storage bucket name for stored
-                               blocks.
-      --s3.bucket=<bucket>     S3-Compatible API bucket name for stored blocks.
-      --s3.endpoint=<api-url>  S3-Compatible API endpoint for stored blocks.
-      --s3.access-key=<key>    Access key for an S3-Compatible API.
-      --s3.insecure            Whether to use an insecure connection with an
-                               S3-Compatible API.
-      --s3.signature-version2  Whether to use S3 Signature Version 2; otherwise
-                               Signature Version 4 will be used.
-      --s3.encrypt-sse         Whether to use Server Side Encryption
-      --gcs-backup-bucket=<bucket>  
-                               Google Cloud Storage bucket name to backup blocks
-                               on repair operations.
-      --s3-backup-bucket=<bucket>  
-                               S3 bucket name to backup blocks on repair
-                               operations.
-  -r, --repair                 attempt to repair blocks for which issues were
-                               detected
+                              How often we send traces (1/<sample-factor>). If 0
+                              no trace will be sent periodically, unless forced
+                              by baggage item. See `pkg/tracing/tracing.go` for
+                              details.
+      --provider.type=<provider>  
+                              Specify the provider for object store. If empty or
+                              unsupport provider, Thanos won't read and store
+                              any block to the object store. Now supported GCS /
+                              S3.
+      --provider.bucket=<bucket>  
+                              The bucket name for stored blocks.
+      --provider.endpoint=<api-url>  
+                              The object store API endpoint for stored blocks.
+                              Support S3-Compatible API
+      --provider.access-key=<key>  
+                              Access key for an object store API. Support
+                              S3-Compatible API
+      --provider.insecure     Whether to use an insecure connection with an
+                              object store API. Support S3-Compatible API
+      --provider.signature-version2  
+                              Whether to use S3 Signature Version 2; otherwise
+                              Signature Version 4 will be used
+      --provider.encrypt-sse  Whether to use Server Side Encryption
+  -r, --repair                attempt to repair blocks for which issues were
+                              detected
+      --provider-backup.type=<provider>  
+                              Specify the provider for backup object store. If
+                              empty or unsupport provider, Thanos won't backup
+                              any block to the object store. Now supported GCS /
+                              S3.
+      --provider-backup.bucket=<bucket>  
+                              The bucket name for backup stored blocks.
   -i, --issues=index_issue... ...  
-                               Issues to verify (and optionally repair).
-                               Possible values: [duplicated_compaction
-                               index_issue overlapped_blocks]
+                              Issues to verify (and optionally repair). Possible
+                              values: [duplicated_compaction index_issue
+                              overlapped_blocks]
       --id-whitelist=ID-WHITELIST ...  
-                               Block IDs to verify (and optionally repair) only.
-                               If none is specified, all blocks will be
-                               verified. Repeated field
+                              Block IDs to verify (and optionally repair) only.
+                              If none is specified, all blocks will be verified.
+                              Repeated field
 
 ```
 
@@ -137,36 +150,39 @@ usage: thanos bucket ls [<flags>]
 list all blocks in the bucket
 
 Flags:
-  -h, --help                   Show context-sensitive help (also try --help-long
-                               and --help-man).
-      --version                Show application version.
-      --log.level=info         Log filtering level.
+  -h, --help                  Show context-sensitive help (also try --help-long
+                              and --help-man).
+      --version               Show application version.
+      --log.level=info        Log filtering level.
       --gcloudtrace.project=GCLOUDTRACE.PROJECT  
-                               GCP project to send Google Cloud Trace tracings
-                               to. If empty, tracing will be disabled.
+                              GCP project to send Google Cloud Trace tracings
+                              to. If empty, tracing will be disabled.
       --gcloudtrace.sample-factor=1  
-                               How often we send traces (1/<sample-factor>). If
-                               0 no trace will be sent periodically, unless
-                               forced by baggage item. See
-                               `pkg/tracing/tracing.go` for details.
-      --gcs-bucket=<bucket>    Google Cloud Storage bucket name for stored
-                               blocks.
-      --s3.bucket=<bucket>     S3-Compatible API bucket name for stored blocks.
-      --s3.endpoint=<api-url>  S3-Compatible API endpoint for stored blocks.
-      --s3.access-key=<key>    Access key for an S3-Compatible API.
-      --s3.insecure            Whether to use an insecure connection with an
-                               S3-Compatible API.
-      --s3.signature-version2  Whether to use S3 Signature Version 2; otherwise
-                               Signature Version 4 will be used.
-      --s3.encrypt-sse         Whether to use Server Side Encryption
-      --gcs-backup-bucket=<bucket>  
-                               Google Cloud Storage bucket name to backup blocks
-                               on repair operations.
-      --s3-backup-bucket=<bucket>  
-                               S3 bucket name to backup blocks on repair
-                               operations.
-  -o, --output=""              Format in which to print each block's
-                               information. May be 'json' or custom template.
+                              How often we send traces (1/<sample-factor>). If 0
+                              no trace will be sent periodically, unless forced
+                              by baggage item. See `pkg/tracing/tracing.go` for
+                              details.
+      --provider.type=<provider>  
+                              Specify the provider for object store. If empty or
+                              unsupport provider, Thanos won't read and store
+                              any block to the object store. Now supported GCS /
+                              S3.
+      --provider.bucket=<bucket>  
+                              The bucket name for stored blocks.
+      --provider.endpoint=<api-url>  
+                              The object store API endpoint for stored blocks.
+                              Support S3-Compatible API
+      --provider.access-key=<key>  
+                              Access key for an object store API. Support
+                              S3-Compatible API
+      --provider.insecure     Whether to use an insecure connection with an
+                              object store API. Support S3-Compatible API
+      --provider.signature-version2  
+                              Whether to use S3 Signature Version 2; otherwise
+                              Signature Version 4 will be used
+      --provider.encrypt-sse  Whether to use Server Side Encryption
+  -o, --output=""             Format in which to print each block's information.
+                              May be 'json' or custom template.
 
 ```
 
