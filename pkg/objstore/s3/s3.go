@@ -107,7 +107,7 @@ func (conf *Config) ValidateForTests() error {
 }
 
 // NewBucket returns a new Bucket using the provided s3 config values.
-func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, component string) (*Bucket, error) {
+func NewBucket(logger log.Logger, conf *objstore.BucketConfig, reg prometheus.Registerer, component string) (*Bucket, error) {
 	var chain []credentials.Provider
 	if conf.AccessKey != "" {
 		signature := credentials.SignatureV4
@@ -118,7 +118,7 @@ func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, compo
 		chain = []credentials.Provider{&credentials.Static{
 			Value: credentials.Value{
 				AccessKeyID:     conf.AccessKey,
-				SecretAccessKey: conf.secretKey,
+				SecretAccessKey: conf.BucketSecretKey(),
 				SignerType:      signature,
 			},
 		}}
@@ -285,14 +285,14 @@ func (b *Bucket) IsObjNotFoundErr(err error) bool {
 
 func (b *Bucket) Close() error { return nil }
 
-func configFromEnv() *Config {
-	c := &Config{
+func configFromEnv() *objstore.BucketConfig {
+	c := &objstore.BucketConfig{
 		Bucket:    os.Getenv("S3_BUCKET"),
 		Endpoint:  os.Getenv("S3_ENDPOINT"),
 		AccessKey: os.Getenv("S3_ACCESS_KEY"),
-		secretKey: os.Getenv("S3_SECRET_KEY"),
 	}
 
+	c.SetSecretKey(os.Getenv("S3_SECRET_KEY"))
 	insecure, err := strconv.ParseBool(os.Getenv("S3_INSECURE"))
 	if err != nil {
 		c.Insecure = insecure
