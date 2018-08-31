@@ -17,12 +17,12 @@ import (
 )
 
 // NewBucket initializes and returns new object storage clients.
-func NewBucket(logger log.Logger, bucketConf *objstore.BucketConfig, reg *prometheus.Registry, component string) (objstore.Bucket, error) {
+func NewBucket(logger log.Logger, bucketConf objstore.BucketConfig, reg *prometheus.Registry, component string) (objstore.Bucket, error) {
 	err := bucketConf.Validate()
 	if err != nil {
 		return nil, err
 	}
-	switch bucketConf.Provider {
+	switch bucketConf.GetProvider() {
 	case objstore.GCS:
 		gcsOptions := option.WithUserAgent(fmt.Sprintf("thanos-%s/%s (%s)", component, version.Version, runtime.Version()))
 		gcsClient, err := storage.NewClient(context.Background(), gcsOptions)
@@ -37,5 +37,5 @@ func NewBucket(logger log.Logger, bucketConf *objstore.BucketConfig, reg *promet
 		}
 		return objstore.BucketWithMetrics(bucketConf.Bucket, b, reg), nil
 	}
-	return nil, objstore.ErrUnsupported
+	return nil, objstore.ErrNotFound
 }

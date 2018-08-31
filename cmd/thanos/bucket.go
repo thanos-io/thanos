@@ -55,7 +55,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	verifyIDWhitelist := verify.Flag("id-whitelist", "Block IDs to verify (and optionally repair) only. "+
 		"If none is specified, all blocks will be verified. Repeated field").Strings()
 	m[name+" verify"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
-		bkt, err := client.NewBucket(logger, bucketConf, reg, name)
+		bkt, err := client.NewBucket(logger, *bucketConf, reg, name)
 		if err != nil {
 			return err
 		}
@@ -64,8 +64,8 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 		backupBucketConfig := *bucketConf
 		backupBucketConfig.Provider = backupBucketConf.Provider
 		backupBucketConfig.Bucket = backupBucketConf.Bucket
-		backupBkt, err := client.NewBucket(logger, &backupBucketConfig, reg, name)
-		if err == objstore.ErrUnsupported {
+		backupBkt, err := client.NewBucket(logger, backupBucketConfig, reg, name)
+		if err == objstore.ErrNotFound {
 			if *verifyRepair {
 				return errors.Wrap(err, "repair is specified, so backup client is required")
 			}
@@ -124,7 +124,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	lsOutput := ls.Flag("output", "Format in which to print each block's information. May be 'json' or custom template.").
 		Short('o').Default("").String()
 	m[name+" ls"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
-		bkt, err := client.NewBucket(logger, bucketConf, reg, name)
+		bkt, err := client.NewBucket(logger, *bucketConf, reg, name)
 		if err != nil {
 			return err
 		}
