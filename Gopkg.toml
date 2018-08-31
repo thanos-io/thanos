@@ -37,7 +37,7 @@ ignored = ["github.com/improbable-eng/thanos/benchmark/*"]
   name = "github.com/prometheus/common"
 
 [[constraint]]
-  branch = "master"
+  version = "v2.3.2"
   name = "github.com/prometheus/prometheus"
 
 [[override]]

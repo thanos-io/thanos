@@ -1,6 +1,7 @@
 /prometheus
 /thanos
 vendor/
+.dep-finished
 
 # Ignore minikube setup working dirs.
 kube/bin
