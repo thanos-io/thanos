@@ -75,7 +75,7 @@ func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, compo
 
 	ctx := context.Background()
 
-	level.Info(logger).Log("msg", "Starting Azure storage provider", "address", container)
+	level.Info(logger).Log("msg", "Starting Azure storage provider")
 
 	container, err := createContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, containerName)
 	if err != nil {
@@ -90,8 +90,9 @@ func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, compo
 			level.Error(logger).Log("msg", "Error creating container", "address", container)
 			return nil, err
 		}
+	} else {
+		level.Info(logger).Log("msg", "Container successfully created", "address", container)
 	}
-	level.Info(logger).Log("msg", "Container successfully created", "address", container)
 
 	bkt := &Bucket{
 		logger:       logger,
@@ -177,7 +178,7 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 
 	props, err := blobURL.GetProperties(ctx, blob.BlobAccessConditions{})
 	if err != nil {
-		level.Error(b.logger).Log("msg", "Cannot get properties for container", "address", container)
+		level.Error(b.logger).Log("msg", "Cannot get properties for container", "address", name)
 		return nil, err
 	}
 

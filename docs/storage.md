@@ -155,3 +155,17 @@ For testing:
 Minio client used for AWS S3 can be potentially configured against other S3-compatible object storages.
 
 <TBD>
+
+## Azure Configuration
+
+To use Azure Storage as Thanos object store, you need to precreate storage account from Azure portal or using Azure CLI. Follow the instructions from Azure Storage Documentation: [https://docs.microsoft.com/en-us/azure/storage/common/storage-quickstart-create-account](https://docs.microsoft.com/en-us/azure/storage/common/storage-quickstart-create-account?tabs=portal)
+
+To configure Azure Storage account as an object store you need to set these mandatory S3 flags:
+| Parameter       | Description                |
+|-----------------|----------------------------|
+| --azure.storage | Azure Storage account name |
+| --azure.access-key | Azure Storage account access key |
+
+Instead of using flags you can pass all the configuration via environment variables:
+- AZURE_STORAGE_ACCOUNT
+- AZURE_STORAGE_ACCESS_KEY
