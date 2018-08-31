@@ -16,26 +16,26 @@ import (
 	"google.golang.org/api/option"
 )
 
-var ErrNotFound = errors.New("no valid GCS or S3 configuration supplied")
-
 // NewBucket initializes and returns new object storage clients.
-func NewBucket(logger log.Logger, gcsBucket *string, s3Config s3.Config, reg *prometheus.Registry, component string) (objstore.Bucket, error) {
-	if *gcsBucket != "" {
+func NewBucket(logger log.Logger, bucketConf *objstore.BucketConfig, reg *prometheus.Registry, component string) (objstore.Bucket, error) {
+	err := bucketConf.Validate()
+	if err != nil {
+		return nil, err
+	}
+	switch bucketConf.Provider {
+	case objstore.GCS:
 		gcsOptions := option.WithUserAgent(fmt.Sprintf("thanos-%s/%s (%s)", component, version.Version, runtime.Version()))
 		gcsClient, err := storage.NewClient(context.Background(), gcsOptions)
 		if err != nil {
 			return nil, errors.Wrap(err, "create GCS client")
 		}
-		return objstore.BucketWithMetrics(*gcsBucket, gcs.NewBucket(*gcsBucket, gcsClient, reg), reg), nil
-	}
-
-	if s3Config.Validate() == nil {
-		b, err := s3.NewBucket(logger, &s3Config, reg, component)
+		return objstore.BucketWithMetrics(bucketConf.Bucket, gcs.NewBucket(bucketConf.Bucket, gcsClient, reg), reg), nil
+	case objstore.S3:
+		b, err := s3.NewBucket(logger, bucketConf, reg, component)
 		if err != nil {
 			return nil, errors.Wrap(err, "create s3 client")
 		}
-		return objstore.BucketWithMetrics(s3Config.Bucket, b, reg), nil
+		return objstore.BucketWithMetrics(bucketConf.Bucket, b, reg), nil
 	}
-
-	return nil, ErrNotFound
+	return nil, objstore.ErrUnsupported
 }

@@ -24,8 +24,8 @@ import (
 	"github.com/improbable-eng/thanos/pkg/alert"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
-	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
@@ -72,12 +72,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	alertmgrs := cmd.Flag("alertmanagers.url", "Alertmanager URLs to push firing alerts to. The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Alertmanager IPs through respective DNS lookups. The port defaults to 9093 or the SRV record's value. The URL path is used as a prefix for the regular Alertmanager API path.").
 		Strings()
 
-	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty, ruler won't store any block inside Google Cloud Storage.").
-		PlaceHolder("<bucket>").String()
-
 	alertQueryURL := cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field").String()
 
-	s3Config := s3.RegisterS3Params(cmd)
+	bucketConf := objstore.NewBucketConfig(cmd)
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
@@ -112,8 +109,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			*dataDir,
 			*ruleFiles,
 			peer,
-			*gcsBucket,
-			s3Config,
+			bucketConf,
 			tsdbOpts,
 			name,
 			alertQueryURL,
@@ -136,8 +132,7 @@ func runRule(
 	dataDir string,
 	ruleFiles []string,
 	peer *cluster.Peer,
-	gcsBucket string,
-	s3Config *s3.Config,
+	bucketConf *objstore.BucketConfig,
 	tsdbOpts *tsdb.Options,
 	component string,
 	alertQueryURL *url.URL,
@@ -415,13 +410,13 @@ func runRule(
 
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, reg, component)
-	if err != nil && err != client.ErrNotFound {
+	bkt, err := client.NewBucket(logger, bucketConf, reg, component)
+	if err != nil && err != objstore.ErrUnsupported {
 		return err
 	}
 
-	if err == client.ErrNotFound {
-		level.Info(logger).Log("msg", "No GCS or S3 bucket was configured, uploads will be disabled")
+	if err == objstore.ErrUnsupported {
+		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
 		uploads = false
 	}
 
