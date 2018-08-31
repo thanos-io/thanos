@@ -11,12 +11,21 @@ import (
 	"testing"
 
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 
 	blob "github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/vglafirov/thanos/pkg/objstore"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
+)
+
+const (
+	opObjectsList  = "ListBucket"
+	opObjectInsert = "PutObject"
+	opObjectGet    = "GetObject"
+	opObjectHead   = "HEADObject"
+	opObjectDelete = "DeleteObject"
 )
 
 // Config Azure storage configuration
@@ -66,16 +75,23 @@ func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, compo
 
 	ctx := context.Background()
 
-	container, err := createContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, containerName)
+	level.Info(logger).Log("msg", "Starting Azure storage provider", "address", container)
 
+	container, err := createContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, containerName)
 	if err != nil {
 		if err.(blob.StorageError).ServiceCode() == "ContainerAlreadyExists" {
+			level.Info(logger).Log("msg", "Using existent container", "address", container)
 			container, err = getContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, conf.ContainerName)
 			if err != nil {
+				level.Error(logger).Log("msg", "Cannot get existing container", "address", container)
 				return nil, err
 			}
+		} else {
+			level.Error(logger).Log("msg", "Error creating container", "address", container)
+			return nil, err
 		}
 	}
+	level.Info(logger).Log("msg", "Container successfully created", "address", container)
 
 	bkt := &Bucket{
 		logger:       logger,
@@ -97,7 +113,7 @@ func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, compo
 // Iter calls f for each entry in the given directory. The argument to f is the full
 // object name including the prefix of the inspected directory.
 func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) error {
-
+	b.opsTotal.WithLabelValues(opObjectsList).Inc()
 	var prefix string
 	if dir == "" {
 		prefix = ""
@@ -111,6 +127,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		Prefix: prefix,
 	})
 	if err != nil {
+		level.Error(b.logger).Log("msg", "Cannot list blogs in directory %s", dir)
 		return err
 	}
 	var listNames []string
@@ -160,6 +177,7 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 
 	props, err := blobURL.GetProperties(ctx, blob.BlobAccessConditions{})
 	if err != nil {
+		level.Error(b.logger).Log("msg", "Cannot get properties for container", "address", container)
 		return nil, err
 	}
 
@@ -200,6 +218,7 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 
 // Exists checks if the given object exists.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
+	b.opsTotal.WithLabelValues(opObjectHead).Inc()
 	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
 	_, err := blobURL.GetProperties(ctx, blob.BlobAccessConditions{})
 	if b.IsObjNotFoundErr(err) {
@@ -210,6 +229,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
+	b.opsTotal.WithLabelValues(opObjectHead).Inc()
 	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
 	_, err := blob.UploadStreamToBlockBlob(ctx, r, blobURL,
 		blob.UploadStreamToBlockBlobOptions{
@@ -220,6 +240,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 			AccessConditions: blob.BlobAccessConditions{},
 		})
 	if err != nil {
+		level.Error(b.logger).Log("msg", "Cannot upload blob", "address", name)
 		return err
 	}
 	return nil
@@ -227,9 +248,11 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
+	b.opsTotal.WithLabelValues(opObjectHead).Inc()
 	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
 	_, err := blobURL.Delete(ctx, blob.DeleteSnapshotsOptionInclude, blob.BlobAccessConditions{})
 	if err != nil {
+		level.Error(b.logger).Log("msg", "Error deleting blob", "address", name)
 		return err
 	}
 	return nil

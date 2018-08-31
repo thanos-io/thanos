@@ -35,7 +35,7 @@ assets:
 
 # build builds Thanos binary using `promu`.
 .PHONY: build
-build: deps $(PROMU)
+build: $(PROMU)
 	@echo ">> building binaries"
 	@$(PROMU) build --prefix $(PREFIX)
 
