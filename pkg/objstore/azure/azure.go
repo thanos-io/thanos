@@ -3,7 +3,6 @@ package azure
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -69,13 +68,11 @@ func (conf *Config) Validate() error {
 // NewBucket returns a new Bucket using the provided Azure config.
 func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, component string) (*Bucket, error) {
 
-	containerName := fmt.Sprintf("thanos-%s", component)
+	level.Info(logger).Log("msg", "Starting Azure storage provider")
 
-	conf.ContainerName = containerName
+	conf.ContainerName = "thanos-storage"
 
 	ctx := context.Background()
-
-	level.Info(logger).Log("msg", "Starting Azure storage provider")
 
 	container, err := createContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, containerName)
 	if err != nil {
