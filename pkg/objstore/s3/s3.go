@@ -58,7 +58,7 @@ func NewBucket(logger log.Logger, conf objstore.BucketConfig, reg prometheus.Reg
 		chain = []credentials.Provider{&credentials.Static{
 			Value: credentials.Value{
 				AccessKeyID:     conf.AccessKey,
-				SecretAccessKey: conf.BucketSecretKey(),
+				SecretAccessKey: conf.GetSecretKey(),
 				SignerType:      signature,
 			},
 		}}
@@ -123,6 +123,26 @@ func NewBucket(logger log.Logger, conf objstore.BucketConfig, reg prometheus.Reg
 		reg.MustRegister(bkt.opsTotal)
 	}
 	return bkt, nil
+}
+
+// Validate checks to see the config options are set.
+func Validate(conf *objstore.BucketConfig) error {
+	if conf.Endpoint == "" ||
+		(conf.AccessKey == "" && conf.GetSecretKey() != "") ||
+		(conf.AccessKey != "" && conf.GetSecretKey() == "") {
+		return errors.New("insufficient s3 test configuration information")
+	}
+	return nil
+}
+
+// ValidateForTests checks to see the config options for tests are set.
+func ValidateForTests(conf *objstore.BucketConfig) error {
+	if conf.Endpoint == "" ||
+		conf.AccessKey == "" ||
+		conf.GetSecretKey() == "" {
+		return errors.New("insufficient s3 test configuration information")
+	}
+	return nil
 }
 
 // Iter calls f for each entry in the given directory. The argument to f is the full
@@ -248,7 +268,7 @@ func configFromEnv() *objstore.BucketConfig {
 // In a close function it empties and deletes the bucket.
 func NewTestBucket(t testing.TB, location string) (objstore.Bucket, func(), error) {
 	c := configFromEnv()
-	if err := c.ValidateForTests(); err != nil {
+	if err := ValidateForTests(c); err != nil {
 		return nil, nil, err
 	}
 
