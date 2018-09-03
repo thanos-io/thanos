@@ -24,7 +24,7 @@ func TestQuerySimple(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 
 	firstPromPort := promHTTPPort(1)
 	exit, err := spinup(t, ctx, config{
