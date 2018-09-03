@@ -4,26 +4,34 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/pkg/errors"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 type objProvider string
 
 const (
-	GCS         objProvider = "GCS"
-	S3          objProvider = "S3"
-	Unsupported objProvider = "UNSUPPORTED"
+	GCS objProvider = "GCS"
+	S3  objProvider = "S3"
 )
 
-var ErrNotFound = errors.New("no valid provider configuration supplied")
-var ErrMissingGCSBucket = errors.New("missing Google Cloud Storage bucket name for stored blocks")
-var ErrInsufficientS3Info = errors.New("insufficient s3 configuration information")
+func newObjProvider(s kingpin.Settings, op *objProvider) {
+	s.SetValue(op)
+	return
+}
+
+func (p *objProvider) Set(value string) error {
+	*p = objProvider(value)
+	return nil
+}
+
+func (p *objProvider) String() string {
+	return string(*p)
+}
 
 // BucketConfig encapsulates the necessary config values to instantiate an object store client.
 // Use Provider to represent the Object Stores
 type BucketConfig struct {
-	Provider      string
+	Provider      objProvider
 	Bucket        string
 	Endpoint      string
 	AccessKey     string
@@ -38,29 +46,28 @@ type BucketConfig struct {
 func NewBucketConfig(cmd *kingpin.CmdClause) *BucketConfig {
 	var bucketConfig BucketConfig
 
-	cmd.Flag("provider.type", "Specify the provider for object store. If empty or unsupport provider, Thanos won't read and store any block to the object store. Now supported GCS / S3.").
-		PlaceHolder("<provider>").StringVar(&bucketConfig.Provider)
+	newObjProvider(cmd.Flag("objstore.type", "Specify the provider for object store. If empty or unsupported provider, Thanos won't read and store any block to the object store. Now supported GCS / S3.").
+		PlaceHolder("<provider>"), &bucketConfig.Provider)
 
-	cmd.Flag("provider.bucket", "The bucket name for stored blocks.").
-		PlaceHolder("<bucket>").Envar("PROVIDER_BUCKET").StringVar(&bucketConfig.Bucket)
+	cmd.Flag("objstore.bucket", "The bucket name for stored blocks.").
+		PlaceHolder("<bucket>").Envar("OBJSTORE_BUCKET").StringVar(&bucketConfig.Bucket)
 
-	cmd.Flag("provider.endpoint", "The object store API endpoint for stored blocks. Support S3-Compatible API").
-		PlaceHolder("<api-url>").Envar("PROVIDER_ENDPOINT").StringVar(&bucketConfig.Endpoint)
+	cmd.Flag("objstore.endpoint", "The object store API endpoint for stored blocks. Supported S3-Compatible API").
+		PlaceHolder("<api-url>").Envar("OBJSTORE_ENDPOINT").StringVar(&bucketConfig.Endpoint)
 
-	cmd.Flag("provider.access-key", "Access key for an object store API. Support S3-Compatible API").
-		PlaceHolder("<key>").Envar("PROVIDER_ACCESS_KEY").StringVar(&bucketConfig.AccessKey)
+	cmd.Flag("objstore.access-key", "Access key for an object store API. Supported S3-Compatible API").
+		PlaceHolder("<key>").Envar("OBJSTORE_ACCESS_KEY").StringVar(&bucketConfig.AccessKey)
 
-	// TODO(jojohappy): should it be encrypted?
 	bucketConfig.secretKey = os.Getenv("PROVIDER_SECRET_KEY")
 
-	cmd.Flag("provider.insecure", "Whether to use an insecure connection with an object store API. Support S3-Compatible API").
-		Default("false").Envar("PROVIDER_INSECURE").BoolVar(&bucketConfig.Insecure)
+	cmd.Flag("objstore.insecure", "Whether to use an insecure connection with an object store API. Supported S3-Compatible API").
+		Default("false").Envar("OBJSTORE_INSECURE").BoolVar(&bucketConfig.Insecure)
 
-	cmd.Flag("provider.signature-version2", "Whether to use S3 Signature Version 2; otherwise Signature Version 4 will be used").
-		Default("false").Envar("PROVIDER_SIGNATURE_VERSION2").BoolVar(&bucketConfig.SignatureV2)
+	cmd.Flag("objstore.signature-version2", "Whether to use S3 Signature Version 2; otherwise Signature Version 4 will be used").
+		Default("false").Envar("OBJSTORE_SIGNATURE_VERSION2").BoolVar(&bucketConfig.SignatureV2)
 
-	cmd.Flag("provider.encrypt-sse", "Whether to use Server Side Encryption").
-		Default("false").Envar("PROVIDER_SSE_ENCRYPTION").BoolVar(&bucketConfig.SSEEncryption)
+	cmd.Flag("objstore.encrypt-sse", "Whether to use Server Side Encryption").
+		Default("false").Envar("OBJSTORE_SSE_ENCRYPTION").BoolVar(&bucketConfig.SSEEncryption)
 
 	return &bucketConfig
 }
@@ -69,69 +76,26 @@ func NewBucketConfig(cmd *kingpin.CmdClause) *BucketConfig {
 func NewBackupBucketConfig(cmd *kingpin.CmdClause) *BucketConfig {
 	var bucketConfig BucketConfig
 
-	cmd.Flag("provider-backup.type", "Specify the provider for backup object store. If empty or unsupport provider, Thanos won't backup any block to the object store. Now supported GCS / S3.").
-		PlaceHolder("<provider>").StringVar(&bucketConfig.Provider)
-	cmd.Flag("provider-backup.bucket", "The bucket name for backup stored blocks.").
+	newObjProvider(cmd.Flag("objstore-backup.type", "Specify the provider for backup object store. If empty or unsupport provider, Thanos won't backup any block to the object store. Now supported GCS / S3.").
+		PlaceHolder("<provider>"), &bucketConfig.Provider)
+
+	cmd.Flag("objstore-backup.bucket", "The bucket name for backup stored blocks.").
 		PlaceHolder("<bucket>").StringVar(&bucketConfig.Bucket)
 
 	return &bucketConfig
 }
 
-// GetProvider return the provider type
-func (conf *BucketConfig) GetProvider() objProvider {
-	return objProvider(conf.Provider)
-}
-
 // String returns the Provider information
 func (conf *BucketConfig) String() string {
-	return fmt.Sprintf("Provider: %s, Bucket: %s, Endpoint: %s", conf.Provider, conf.Bucket, conf.Endpoint)
+	return fmt.Sprintf("Provider: %s, Bucket: %s, Endpoint: %s", string(conf.Provider), conf.Bucket, conf.Endpoint)
 }
 
-// BucketSecretKey returns the Provider Secret Key
-// TODO(jojohappy): it should return the key decrypted.
-func (conf *BucketConfig) BucketSecretKey() string {
+// GetSecretKey returns the Provider Secret Key
+func (conf *BucketConfig) GetSecretKey() string {
 	return conf.secretKey
 }
 
 // SetSecretKey to setup the Secret Key for the Provider
 func (conf *BucketConfig) SetSecretKey(secretKey string) {
 	conf.secretKey = secretKey
-}
-
-// Validate checks to see the config options are set.
-func (conf *BucketConfig) Validate() error {
-	switch objProvider(conf.Provider) {
-	case GCS:
-		if conf.Bucket == "" {
-			return ErrMissingGCSBucket
-		}
-	case S3:
-		if conf.Endpoint == "" ||
-			(conf.AccessKey == "" && conf.secretKey != "") ||
-			(conf.AccessKey != "" && conf.secretKey == "") {
-			return ErrInsufficientS3Info
-		}
-	default:
-		return ErrNotFound
-	}
-	return nil
-}
-
-// ValidateForTests checks to see the config options for tests are set.
-func (conf *BucketConfig) ValidateForTests() error {
-	switch objProvider(conf.Provider) {
-	case GCS:
-		if conf.Bucket == "" {
-			return ErrMissingGCSBucket
-		}
-	case S3:
-		if conf.Endpoint == "" ||
-			conf.AccessKey == "" ||
-			conf.secretKey == "" {
-			return ErrInsufficientS3Info
-		}
-	default:
-		return ErrNotFound
-	}
-	return nil
 }
