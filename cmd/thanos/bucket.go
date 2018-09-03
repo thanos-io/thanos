@@ -65,7 +65,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 		backupBucketConfig.Provider = backupBucketConf.Provider
 		backupBucketConfig.Bucket = backupBucketConf.Bucket
 		backupBkt, err := client.NewBucket(logger, backupBucketConfig, reg, name)
-		if err == objstore.ErrNotFound {
+		if err == client.ErrNotFound {
 			if *verifyRepair {
 				return errors.Wrap(err, "repair is specified, so backup client is required")
 			}
