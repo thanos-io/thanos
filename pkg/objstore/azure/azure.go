@@ -68,16 +68,18 @@ func (conf *Config) Validate() error {
 // NewBucket returns a new Bucket using the provided Azure config.
 func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, component string) (*Bucket, error) {
 
+	level.Debug(logger).Log("msg", "Creating new Azure bucket connection", "component", component)
 	level.Info(logger).Log("msg", "Starting Azure storage provider")
 
 	conf.ContainerName = "thanos-storage"
 
 	ctx := context.Background()
 
-	container, err := createContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, containerName)
+	container, err := createContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, conf.ContainerName)
 	if err != nil {
 		if err.(blob.StorageError).ServiceCode() == "ContainerAlreadyExists" {
 			level.Info(logger).Log("msg", "Using existent container", "address", container)
+			level.Debug(logger).Log("msg", "Getting connection to existing container", "container", conf.ContainerName)
 			container, err = getContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, conf.ContainerName)
 			if err != nil {
 				level.Error(logger).Log("msg", "Cannot get existing container", "address", container)
@@ -111,6 +113,7 @@ func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, compo
 // Iter calls f for each entry in the given directory. The argument to f is the full
 // object name including the prefix of the inspected directory.
 func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) error {
+	level.Debug(b.logger).Log("msg", "Iterating through the dir", "dir", dir)
 	b.opsTotal.WithLabelValues(opObjectsList).Inc()
 	var prefix string
 	if dir == "" {
@@ -148,6 +151,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 
 // IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
 func (b *Bucket) IsObjNotFoundErr(err error) bool {
+	level.Debug(b.logger).Log("msg", "Check if err it's NotFoundError", "err", err)
 	if err == nil {
 		return false
 	}
@@ -162,6 +166,7 @@ func (b *Bucket) IsObjNotFoundErr(err error) bool {
 }
 
 func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length int64) (io.ReadCloser, error) {
+	level.Debug(b.logger).Log("msg", "Getting blob", "blob", name, "offset", offset, "length", length)
 	if len(name) == 0 {
 		return nil, errors.New("X-Ms-Error-Code: [EmptyContainerName]")
 	}
@@ -216,6 +221,7 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 
 // Exists checks if the given object exists.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
+	level.Debug(b.logger).Log("msg", "Check if blob exists", "blob", name)
 	b.opsTotal.WithLabelValues(opObjectHead).Inc()
 	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
 	_, err := blobURL.GetProperties(ctx, blob.BlobAccessConditions{})
@@ -227,6 +233,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
+	level.Debug(b.logger).Log("msg", "Uploading blob", "blob", name)
 	b.opsTotal.WithLabelValues(opObjectHead).Inc()
 	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
 	_, err := blob.UploadStreamToBlockBlob(ctx, r, blobURL,
@@ -246,6 +253,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
+	level.Debug(b.logger).Log("msg", "Deleting blob", "blob", name)
 	b.opsTotal.WithLabelValues(opObjectHead).Inc()
 	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
 	_, err := blobURL.Delete(ctx, blob.DeleteSnapshotsOptionInclude, blob.BlobAccessConditions{})
