@@ -16,14 +16,15 @@ import (
 	"google.golang.org/api/option"
 )
 
+var ErrNotFound = errors.New("not found bucket")
+
 // NewBucket initializes and returns new object storage clients.
 func NewBucket(logger log.Logger, bucketConf objstore.BucketConfig, reg *prometheus.Registry, component string) (objstore.Bucket, error) {
-	err := bucketConf.Validate()
-	if err != nil {
-		return nil, err
-	}
-	switch bucketConf.GetProvider() {
+	switch bucketConf.Provider {
 	case objstore.GCS:
+		if bucketConf.Bucket == "" {
+			return nil, errors.New("missing Google Cloud Storage bucket name for stored blocks")
+		}
 		gcsOptions := option.WithUserAgent(fmt.Sprintf("thanos-%s/%s (%s)", component, version.Version, runtime.Version()))
 		gcsClient, err := storage.NewClient(context.Background(), gcsOptions)
 		if err != nil {
@@ -31,11 +32,14 @@ func NewBucket(logger log.Logger, bucketConf objstore.BucketConfig, reg *prometh
 		}
 		return objstore.BucketWithMetrics(bucketConf.Bucket, gcs.NewBucket(bucketConf.Bucket, gcsClient, reg), reg), nil
 	case objstore.S3:
+		if err := s3.Validate(&bucketConf); err != nil {
+			return nil, err
+		}
 		b, err := s3.NewBucket(logger, bucketConf, reg, component)
 		if err != nil {
 			return nil, errors.Wrap(err, "create s3 client")
 		}
 		return objstore.BucketWithMetrics(bucketConf.Bucket, b, reg), nil
 	}
-	return nil, objstore.ErrNotFound
+	return nil, ErrNotFound
 }
