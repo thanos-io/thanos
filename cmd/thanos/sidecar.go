@@ -51,7 +51,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	reloaderRuleDirs := cmd.Flag("reloader.rule-dir", "Rule directories for the reloader to refresh (repeated field).").Strings()
 
-	bucketConf := objstore.NewBucketConfig(cmd)
+	bucketConf := objstore.NewBucketConfig(cmd, "")
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		rl := reloader.New(

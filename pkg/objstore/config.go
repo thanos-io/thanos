@@ -3,6 +3,7 @@ package objstore
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/alecthomas/kingpin.v2"
 )
@@ -42,45 +43,37 @@ type BucketConfig struct {
 }
 
 // NewBucketConfig return the configuration of object store
-// TODO(jojohappy) should it support multiple bucket?
-func NewBucketConfig(cmd *kingpin.CmdClause) *BucketConfig {
+func NewBucketConfig(cmd *kingpin.CmdClause, suffix string) *BucketConfig {
 	var bucketConfig BucketConfig
+	flagSuffix := ""
+	envSuffix := ""
+	if strings.Trim(suffix, " ") != "" {
+		flagSuffix = "-" + suffix
+		envSuffix = "_" + strings.ToUpper(suffix)
+	}
 
-	newObjProvider(cmd.Flag("objstore.type", "Specify the provider for object store. If empty or unsupported provider, Thanos won't read and store any block to the object store. Now supported GCS / S3.").
+	newObjProvider(cmd.Flag(fmt.Sprintf("objstore%s.type", flagSuffix), "Specify the provider for object store. If empty or unsupported provider, Thanos won't read and store any block to the object store. Now supported GCS / S3.").
 		PlaceHolder("<provider>"), &bucketConfig.Provider)
 
-	cmd.Flag("objstore.bucket", "The bucket name for stored blocks.").
-		PlaceHolder("<bucket>").Envar("OBJSTORE_BUCKET").StringVar(&bucketConfig.Bucket)
+	cmd.Flag(fmt.Sprintf("objstore%s.bucket", flagSuffix), "The bucket name for stored blocks.").
+		PlaceHolder("<bucket>").Envar(fmt.Sprintf("OBJSTORE%s_BUCKET", envSuffix)).StringVar(&bucketConfig.Bucket)
 
-	cmd.Flag("objstore.endpoint", "The object store API endpoint for stored blocks. Supported S3-Compatible API").
-		PlaceHolder("<api-url>").Envar("OBJSTORE_ENDPOINT").StringVar(&bucketConfig.Endpoint)
+	cmd.Flag(fmt.Sprintf("objstore%s.endpoint", flagSuffix), "The object store API endpoint for stored blocks. Supported S3-Compatible API").
+		PlaceHolder("<api-url>").Envar(fmt.Sprintf("OBJSTORE%s_ENDPOINT", envSuffix)).StringVar(&bucketConfig.Endpoint)
 
-	cmd.Flag("objstore.access-key", "Access key for an object store API. Supported S3-Compatible API").
-		PlaceHolder("<key>").Envar("OBJSTORE_ACCESS_KEY").StringVar(&bucketConfig.AccessKey)
+	cmd.Flag(fmt.Sprintf("objstore%s.access-key", flagSuffix), "Access key for an object store API. Supported S3-Compatible API").
+		PlaceHolder("<key>").Envar(fmt.Sprintf("OBJSTORE%s_ACCESS_KEY", envSuffix)).StringVar(&bucketConfig.AccessKey)
 
-	bucketConfig.secretKey = os.Getenv("PROVIDER_SECRET_KEY")
+	bucketConfig.secretKey = os.Getenv(fmt.Sprintf("OBJSTORE%s_SECRET_KEY", envSuffix))
 
-	cmd.Flag("objstore.insecure", "Whether to use an insecure connection with an object store API. Supported S3-Compatible API").
-		Default("false").Envar("OBJSTORE_INSECURE").BoolVar(&bucketConfig.Insecure)
+	cmd.Flag(fmt.Sprintf("objstore%s.insecure", flagSuffix), "Whether to use an insecure connection with an object store API. Supported S3-Compatible API").
+		Default("false").Envar(fmt.Sprintf("OBJSTORE%s_INSECURE", envSuffix)).BoolVar(&bucketConfig.Insecure)
 
-	cmd.Flag("objstore.signature-version2", "Whether to use S3 Signature Version 2; otherwise Signature Version 4 will be used").
-		Default("false").Envar("OBJSTORE_SIGNATURE_VERSION2").BoolVar(&bucketConfig.SignatureV2)
+	cmd.Flag(fmt.Sprintf("objstore%s.signature-version2", flagSuffix), "Whether to use S3 Signature Version 2; otherwise Signature Version 4 will be used").
+		Default("false").Envar(fmt.Sprintf("OBJSTORE%s_SIGNATURE_VERSION2", envSuffix)).BoolVar(&bucketConfig.SignatureV2)
 
-	cmd.Flag("objstore.encrypt-sse", "Whether to use Server Side Encryption").
-		Default("false").Envar("OBJSTORE_SSE_ENCRYPTION").BoolVar(&bucketConfig.SSEEncryption)
-
-	return &bucketConfig
-}
-
-// NewBackupBucketConfig return the configuration of backup object store
-func NewBackupBucketConfig(cmd *kingpin.CmdClause) *BucketConfig {
-	var bucketConfig BucketConfig
-
-	newObjProvider(cmd.Flag("objstore-backup.type", "Specify the provider for backup object store. If empty or unsupport provider, Thanos won't backup any block to the object store. Now supported GCS / S3.").
-		PlaceHolder("<provider>"), &bucketConfig.Provider)
-
-	cmd.Flag("objstore-backup.bucket", "The bucket name for backup stored blocks.").
-		PlaceHolder("<bucket>").StringVar(&bucketConfig.Bucket)
+	cmd.Flag(fmt.Sprintf("objstore%s.encrypt-sse", flagSuffix), "Whether to use Server Side Encryption").
+		Default("false").Envar(fmt.Sprintf("OBJSTORE%s_SSE_ENCRYPTION", envSuffix)).BoolVar(&bucketConfig.SSEEncryption)
 
 	return &bucketConfig
 }
