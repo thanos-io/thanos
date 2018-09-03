@@ -81,25 +81,25 @@ Flags:
                                 accounting the latency differences between
                                 network types: local, lan, wan.
       --data-dir="./data"       Data directory in which to cache remote blocks.
-      --provider.type=<provider>  
+      --objstore.type=<provider>  
                                 Specify the provider for object store. If empty
-                                or unsupport provider, Thanos won't read and
+                                or unsupported provider, Thanos won't read and
                                 store any block to the object store. Now
                                 supported GCS / S3.
-      --provider.bucket=<bucket>  
+      --objstore.bucket=<bucket>  
                                 The bucket name for stored blocks.
-      --provider.endpoint=<api-url>  
+      --objstore.endpoint=<api-url>  
                                 The object store API endpoint for stored blocks.
-                                Support S3-Compatible API
-      --provider.access-key=<key>  
-                                Access key for an object store API. Support
+                                Supported S3-Compatible API
+      --objstore.access-key=<key>  
+                                Access key for an object store API. Supported
                                 S3-Compatible API
-      --provider.insecure       Whether to use an insecure connection with an
-                                object store API. Support S3-Compatible API
-      --provider.signature-version2  
+      --objstore.insecure       Whether to use an insecure connection with an
+                                object store API. Supported S3-Compatible API
+      --objstore.signature-version2  
                                 Whether to use S3 Signature Version 2; otherwise
                                 Signature Version 4 will be used
-      --provider.encrypt-sse    Whether to use Server Side Encryption
+      --objstore.encrypt-sse    Whether to use Server Side Encryption
       --index-cache-size=250MB  Maximum size of items held in the index cache.
       --chunk-pool-size=2GB     Maximum size of concurrently allocatable bytes
                                 for chunks.

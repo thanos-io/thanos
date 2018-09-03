@@ -35,25 +35,25 @@ Flags:
                               no trace will be sent periodically, unless forced
                               by baggage item. See `pkg/tracing/tracing.go` for
                               details.
-      --provider.type=<provider>  
+      --objstore.type=<provider>  
                               Specify the provider for object store. If empty or
-                              unsupport provider, Thanos won't read and store
+                              unsupported provider, Thanos won't read and store
                               any block to the object store. Now supported GCS /
                               S3.
-      --provider.bucket=<bucket>  
+      --objstore.bucket=<bucket>  
                               The bucket name for stored blocks.
-      --provider.endpoint=<api-url>  
+      --objstore.endpoint=<api-url>  
                               The object store API endpoint for stored blocks.
-                              Support S3-Compatible API
-      --provider.access-key=<key>  
-                              Access key for an object store API. Support
+                              Supported S3-Compatible API
+      --objstore.access-key=<key>  
+                              Access key for an object store API. Supported
                               S3-Compatible API
-      --provider.insecure     Whether to use an insecure connection with an
-                              object store API. Support S3-Compatible API
-      --provider.signature-version2  
+      --objstore.insecure     Whether to use an insecure connection with an
+                              object store API. Supported S3-Compatible API
+      --objstore.signature-version2  
                               Whether to use S3 Signature Version 2; otherwise
                               Signature Version 4 will be used
-      --provider.encrypt-sse  Whether to use Server Side Encryption
+      --objstore.encrypt-sse  Whether to use Server Side Encryption
 
 Subcommands:
   bucket verify [<flags>]
@@ -94,34 +94,48 @@ Flags:
                               no trace will be sent periodically, unless forced
                               by baggage item. See `pkg/tracing/tracing.go` for
                               details.
-      --provider.type=<provider>  
+      --objstore.type=<provider>  
                               Specify the provider for object store. If empty or
-                              unsupport provider, Thanos won't read and store
+                              unsupported provider, Thanos won't read and store
                               any block to the object store. Now supported GCS /
                               S3.
-      --provider.bucket=<bucket>  
+      --objstore.bucket=<bucket>  
                               The bucket name for stored blocks.
-      --provider.endpoint=<api-url>  
+      --objstore.endpoint=<api-url>  
                               The object store API endpoint for stored blocks.
-                              Support S3-Compatible API
-      --provider.access-key=<key>  
-                              Access key for an object store API. Support
+                              Supported S3-Compatible API
+      --objstore.access-key=<key>  
+                              Access key for an object store API. Supported
                               S3-Compatible API
-      --provider.insecure     Whether to use an insecure connection with an
-                              object store API. Support S3-Compatible API
-      --provider.signature-version2  
+      --objstore.insecure     Whether to use an insecure connection with an
+                              object store API. Supported S3-Compatible API
+      --objstore.signature-version2  
                               Whether to use S3 Signature Version 2; otherwise
                               Signature Version 4 will be used
-      --provider.encrypt-sse  Whether to use Server Side Encryption
+      --objstore.encrypt-sse  Whether to use Server Side Encryption
   -r, --repair                attempt to repair blocks for which issues were
                               detected
-      --provider-backup.type=<provider>  
-                              Specify the provider for backup object store. If
-                              empty or unsupport provider, Thanos won't backup
+      --objstore-backup.type=<provider>  
+                              Specify the provider for object store. If empty or
+                              unsupported provider, Thanos won't read and store
                               any block to the object store. Now supported GCS /
                               S3.
-      --provider-backup.bucket=<bucket>  
-                              The bucket name for backup stored blocks.
+      --objstore-backup.bucket=<bucket>  
+                              The bucket name for stored blocks.
+      --objstore-backup.endpoint=<api-url>  
+                              The object store API endpoint for stored blocks.
+                              Supported S3-Compatible API
+      --objstore-backup.access-key=<key>  
+                              Access key for an object store API. Supported
+                              S3-Compatible API
+      --objstore-backup.insecure  
+                              Whether to use an insecure connection with an
+                              object store API. Supported S3-Compatible API
+      --objstore-backup.signature-version2  
+                              Whether to use S3 Signature Version 2; otherwise
+                              Signature Version 4 will be used
+      --objstore-backup.encrypt-sse  
+                              Whether to use Server Side Encryption
   -i, --issues=index_issue... ...  
                               Issues to verify (and optionally repair). Possible
                               values: [duplicated_compaction index_issue
@@ -162,25 +176,25 @@ Flags:
                               no trace will be sent periodically, unless forced
                               by baggage item. See `pkg/tracing/tracing.go` for
                               details.
-      --provider.type=<provider>  
+      --objstore.type=<provider>  
                               Specify the provider for object store. If empty or
-                              unsupport provider, Thanos won't read and store
+                              unsupported provider, Thanos won't read and store
                               any block to the object store. Now supported GCS /
                               S3.
-      --provider.bucket=<bucket>  
+      --objstore.bucket=<bucket>  
                               The bucket name for stored blocks.
-      --provider.endpoint=<api-url>  
+      --objstore.endpoint=<api-url>  
                               The object store API endpoint for stored blocks.
-                              Support S3-Compatible API
-      --provider.access-key=<key>  
-                              Access key for an object store API. Support
+                              Supported S3-Compatible API
+      --objstore.access-key=<key>  
+                              Access key for an object store API. Supported
                               S3-Compatible API
-      --provider.insecure     Whether to use an insecure connection with an
-                              object store API. Support S3-Compatible API
-      --provider.signature-version2  
+      --objstore.insecure     Whether to use an insecure connection with an
+                              object store API. Supported S3-Compatible API
+      --objstore.signature-version2  
                               Whether to use S3 Signature Version 2; otherwise
                               Signature Version 4 will be used
-      --provider.encrypt-sse  Whether to use Server Side Encryption
+      --objstore.encrypt-sse  Whether to use Server Side Encryption
   -o, --output=""             Format in which to print each block's information.
                               May be 'json' or custom template.
 
