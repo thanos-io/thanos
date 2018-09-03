@@ -411,11 +411,11 @@ func runRule(
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
 	bkt, err := client.NewBucket(logger, *bucketConf, reg, component)
-	if err != nil && err != objstore.ErrNotFound {
+	if err != nil && err != client.ErrNotFound {
 		return err
 	}
 
-	if err == objstore.ErrNotFound {
+	if err == client.ErrNotFound {
 		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
 		uploads = false
 	}
