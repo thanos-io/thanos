@@ -1,6 +1,6 @@
 # Deprecated gossip clustering in favor of File SD
 
-Status: draft | **in-review** | rejected | accepted | complete
+Status: draft | in-review | rejected | **accepted** | complete
 
 Implementation Owner: [@bplotka](https://github.com/Bplotka)
 
@@ -56,7 +56,7 @@ are too.. static. (: We need [File SD](https://github.com/improbable-eng/thanos/
 * Add File Service Discovery (SD): https://github.com/improbable-eng/thanos/issues/492
 * Remove gossip from the documentation, be clear what talks with what (!)
 * Deprecate gossip in code.
-* Remove gossip code and flags AFTER some time (month?)
+* Remove gossip code and flags AFTER [File SD](https://github.com/improbable-eng/thanos/issues/492 is done and stable.
 
 ### Backwards compatibility
 
