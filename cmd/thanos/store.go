@@ -28,7 +28,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 
 	grpcBindAddr, httpBindAddr, newPeerFn := regCommonServerFlags(cmd)
 
-	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").
+	dataDir := cmd.Flag("data-dir", "Data directory in which to cache remote blocks.").
 		Default("./data").String()
 
 	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage.").
