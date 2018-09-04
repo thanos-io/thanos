@@ -204,8 +204,6 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 
 	reader := ioutil.NopCloser(bytes.NewReader(destBuffer))
 
-	defer reader.Close()
-
 	return reader, err
 }
 
@@ -280,9 +278,6 @@ func NewTestBucket(t testing.TB, component string) (objstore.Bucket, func(), err
 		t.Errorf("Cannot create Azure storage container:")
 		return nil, nil, err
 	}
-
-	//	src := rand.NewSource(time.Now().UnixNano())
-	//	name := fmt.Sprintf("test_%s_%x", strings.ToLower(t.Name()), src.Int63())
 
 	return bkt, func() {
 		objstore.EmptyBucket(t, context.Background(), bkt)
