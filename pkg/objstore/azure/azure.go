@@ -287,7 +287,7 @@ func NewTestBucket(t testing.TB, component string) (objstore.Bucket, func(), err
 
 	return bkt, func() {
 		objstore.EmptyBucket(t, ctx, bkt)
-		bkt.Delete(ctx, bkt.config.ContainerName)
+		err = bkt.Delete(ctx, conf.ContainerName)
 		if err != nil {
 			t.Logf("deleting bucket failed: %s", err)
 		}
