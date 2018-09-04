@@ -516,7 +516,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:3a2cd3e4815469d0a8fad881966023406563b791d9807709de28d04f9d5ed40f"
+  digest = "1:16db3d6f4f8bbe4b7b42cb8808e68457fea4bd7aea410b77c8c9a6dc26253a60"
   name = "golang.org/x/crypto"
   packages = [
     "argon2",
@@ -526,7 +526,7 @@
     "ssh/terminal",
   ]
   pruneopts = ""
-  revision = "182538f80094b6a8efaade63a8fd8e0d9d5843dd"
+  revision = "0709b304e793a5edb4a2c0145f281ecdc20838a4"
 
 [[projects]]
   branch = "master"
