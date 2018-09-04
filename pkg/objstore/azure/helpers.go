@@ -3,6 +3,7 @@ package azure
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/url"
 	"strings"
 
@@ -12,6 +13,18 @@ import (
 var (
 	blobFormatString = `https://%s.blob.core.windows.net`
 )
+
+type blobReadCloser struct {
+	Reader io.Reader
+}
+
+func (r *blobReadCloser) Read(b []byte) (n int, err error) {
+	return r.Reader.Read(b)
+}
+
+func (r *blobReadCloser) Close() error {
+	return nil
+}
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const DirDelim = "/"

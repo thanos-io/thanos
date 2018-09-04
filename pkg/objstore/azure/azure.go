@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
@@ -40,7 +39,7 @@ type Bucket struct {
 	containerURL blob.ContainerURL
 	config       *Config
 	opsTotal     *prometheus.CounterVec
-	closer       io.Closer
+	closer       blobReadCloser
 }
 
 // RegisterAzureParams registers the Azure flags and returns an initialized Config struct.
@@ -202,9 +201,13 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 			Progress:    nil,
 		})
 
-	reader := ioutil.NopCloser(bytes.NewReader(destBuffer))
+	reader := bytes.NewReader(destBuffer)
 
-	return reader, err
+	readerCloser := &blobReadCloser{
+		Reader: reader,
+	}
+
+	return readerCloser, err
 }
 
 // Get returns a reader for the given object name.
@@ -271,7 +274,10 @@ func NewTestBucket(t testing.TB, component string) (objstore.Bucket, func(), err
 	conf := &Config{
 		StorageAccountName: os.Getenv("AZURE_STORAGE_ACCOUNT"),
 		StorageAccountKey:  os.Getenv("AZURE_STORAGE_ACCESS_KEY"),
+		ContainerName:      "thanos-test",
 	}
+
+	ctx := context.Background()
 
 	bkt, err := NewBucket(log.NewNopLogger(), conf, nil, component)
 	if err != nil {
@@ -280,8 +286,8 @@ func NewTestBucket(t testing.TB, component string) (objstore.Bucket, func(), err
 	}
 
 	return bkt, func() {
-		objstore.EmptyBucket(t, context.Background(), bkt)
-		bkt.Delete(context.Background(), bkt.config.ContainerName)
+		objstore.EmptyBucket(t, ctx, bkt)
+		bkt.Delete(ctx, bkt.config.ContainerName)
 		if err != nil {
 			t.Logf("deleting bucket failed: %s", err)
 		}
