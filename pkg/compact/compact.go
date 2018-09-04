@@ -775,3 +775,71 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 
 	return compID, nil
 }
+
+// BucketCompactor compacts blocks in a bucket.
+type BucketCompactor struct {
+	logger     log.Logger
+	sy         *Syncer
+	comp       tsdb.Compactor
+	compactDir string
+	bkt        objstore.Bucket
+}
+
+// NewBucketCompactor creates a new bucket compactor.
+func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, compactDir string, bkt objstore.Bucket) *BucketCompactor {
+	return &BucketCompactor{
+		logger:     logger,
+		sy:         sy,
+		comp:       comp,
+		compactDir: compactDir,
+		bkt:        bkt,
+	}
+}
+
+// Compact runs compaction over bucket.
+func (c *BucketCompactor) Compact(ctx context.Context) error {
+	// Loop over bucket and compact until there's no work left.
+	for {
+		level.Info(c.logger).Log("msg", "start sync of metas")
+
+		if err := c.sy.SyncMetas(ctx); err != nil {
+			return errors.Wrap(err, "sync")
+		}
+
+		level.Info(c.logger).Log("msg", "start of GC")
+
+		if err := c.sy.GarbageCollect(ctx); err != nil {
+			return errors.Wrap(err, "garbage")
+		}
+
+		groups, err := c.sy.Groups()
+		if err != nil {
+			return errors.Wrap(err, "build compaction groups")
+		}
+		done := true
+		for _, g := range groups {
+			id, err := g.Compact(ctx, c.compactDir, c.comp)
+			if err == nil {
+				// If the returned ID has a zero value, the group had no blocks to be compacted.
+				// We keep going through the outer loop until no group has any work left.
+				if id != (ulid.ULID{}) {
+					done = false
+				}
+				continue
+			}
+
+			if IsIssue347Error(err) {
+				err = RepairIssue347(ctx, c.logger, c.bkt, err)
+				if err == nil {
+					done = false
+					continue
+				}
+			}
+			return errors.Wrap(err, "compaction")
+		}
+		if done {
+			break
+		}
+	}
+	return nil
+}

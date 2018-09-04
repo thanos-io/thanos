@@ -141,7 +141,7 @@ func NewAPI(
 		instantQueryDuration:   instantQueryDuration,
 		rangeQueryDuration:     rangeQueryDuration,
 		enableAutodownsampling: enableAutodownsampling,
-		now: time.Now,
+		now:                    time.Now,
 	}
 }
 
