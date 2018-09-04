@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/objstore/azure"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -47,6 +48,8 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 
 	s3Config := s3.RegisterS3Params(cmd)
 
+	azureConfig := azure.RegisterAzureParams(cmd)
+
 	// Verify command.
 	verify := cmd.Command("verify", "verify all blocks in the bucket against specified issues")
 	verifyRepair := verify.Flag("repair", "attempt to repair blocks for which issues were detected").
@@ -61,7 +64,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	verifyIDWhitelist := verify.Flag("id-whitelist", "Block IDs to verify (and optionally repair) only. "+
 		"If none is specified, all blocks will be verified. Repeated field").Strings()
 	m[name+" verify"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
-		bkt, err := client.NewBucket(logger, gcsBucket, *s3Config, reg, name)
+		bkt, err := client.NewBucket(logger, gcsBucket, *s3Config, *azureConfig, reg, name)
 		if err != nil {
 			return err
 		}
@@ -69,7 +72,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 
 		backupS3Config := *s3Config
 		backupS3Config.Bucket = *verifyBackupS3Bucket
-		backupBkt, err := client.NewBucket(logger, verifyBackupGCSBucket, backupS3Config, reg, name)
+		backupBkt, err := client.NewBucket(logger, verifyBackupGCSBucket, backupS3Config, *azureConfig, reg, name)
 		if err == client.ErrNotFound {
 			if *verifyRepair {
 				return errors.Wrap(err, "repair is specified, so backup client is required")
@@ -129,7 +132,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	lsOutput := ls.Flag("output", "Format in which to print each block's information. May be 'json' or custom template.").
 		Short('o').Default("").String()
 	m[name+" ls"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
-		bkt, err := client.NewBucket(logger, gcsBucket, *s3Config, reg, name)
+		bkt, err := client.NewBucket(logger, gcsBucket, *s3Config, *azureConfig, reg, name)
 		if err != nil {
 			return err
 		}

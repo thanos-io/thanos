@@ -15,6 +15,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/improbable-eng/thanos/pkg/objstore"
+	"github.com/improbable-eng/thanos/pkg/objstore/azure"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -38,8 +39,10 @@ func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name s
 
 	s3Config := s3.RegisterS3Params(cmd)
 
+	azureConfig := azure.RegisterAzureParams(cmd)
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
-		return runDownsample(g, logger, reg, *dataDir, *gcsBucket, s3Config, name)
+		return runDownsample(g, logger, reg, *dataDir, *gcsBucket, s3Config, azureConfig, name)
 	}
 }
 
@@ -50,10 +53,11 @@ func runDownsample(
 	dataDir string,
 	gcsBucket string,
 	s3Config *s3.Config,
+	azureConfig *azure.Config,
 	component string,
 ) error {
 
-	bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, reg, component)
+	bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, *azureConfig, reg, component)
 	if err != nil {
 		return err
 	}

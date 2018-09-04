@@ -9,6 +9,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/compact"
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
+	"github.com/improbable-eng/thanos/pkg/objstore/azure"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -37,6 +38,8 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	s3config := s3.RegisterS3Params(cmd)
 
+	azureConfig := azure.RegisterAzureParams(cmd)
+
 	syncDelay := cmd.Flag("sync-delay", "Minimum age of fresh (non-compacted) blocks before they are being processed.").
 		Default("30m").Duration()
 
@@ -49,6 +52,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			*dataDir,
 			*gcsBucket,
 			s3config,
+			azureConfig,
 			*syncDelay,
 			*haltOnError,
 			*wait,
@@ -65,6 +69,7 @@ func runCompact(
 	dataDir string,
 	gcsBucket string,
 	s3Config *s3.Config,
+	azureConfig *azure.Config,
 	syncDelay time.Duration,
 	haltOnError bool,
 	wait bool,
@@ -82,7 +87,7 @@ func runCompact(
 
 	reg.MustRegister(halted)
 
-	bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, reg, component)
+	bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, *azureConfig, reg, component)
 	if err != nil {
 		return err
 	}

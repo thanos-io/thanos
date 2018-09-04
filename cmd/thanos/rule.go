@@ -24,6 +24,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/alert"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/objstore/azure"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -79,6 +80,8 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	s3Config := s3.RegisterS3Params(cmd)
 
+	azureConfig := azure.RegisterAzureParams(cmd)
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
@@ -100,7 +103,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			NoLockfile:       true,
 			WALFlushInterval: 30 * time.Second,
 		}
-		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *grpcBindAddr, *httpBindAddr, *evalInterval, *dataDir, *ruleFiles, peer, *gcsBucket, s3Config, tsdbOpts, name, alertQueryURL)
+		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *grpcBindAddr, *httpBindAddr, *evalInterval, *dataDir, *ruleFiles, peer, *gcsBucket, s3Config, azureConfig, tsdbOpts, name, alertQueryURL)
 	}
 }
 
@@ -121,6 +124,7 @@ func runRule(
 	peer *cluster.Peer,
 	gcsBucket string,
 	s3Config *s3.Config,
+	azureConfig *azure.Config,
 	tsdbOpts *tsdb.Options,
 	component string,
 	alertQueryURL *url.URL,
@@ -398,7 +402,7 @@ func runRule(
 
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, reg, component)
+	bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, *azureConfig, reg, component)
 	if err != nil && err != client.ErrNotFound {
 		return err
 	}
