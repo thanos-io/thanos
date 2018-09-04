@@ -122,5 +122,7 @@ Flags:
       --s3.signature-version2   Whether to use S3 Signature Version 2; otherwise
                                 Signature Version 4 will be used.
       --s3.encrypt-sse          Whether to use Server Side Encryption
+      --azure.storage=<sa>      Azure storage account name.
+      --azure.access-key=<key>  Azure storage account access key.
 
 ```
