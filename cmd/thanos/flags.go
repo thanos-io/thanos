@@ -9,6 +9,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -85,4 +86,11 @@ func regCommonServerFlags(cmd *kingpin.CmdClause) (*string, *string, func(log.Lo
 
 func regHTTPAddrFlag(cmd *kingpin.CmdClause) *string {
 	return cmd.Flag("http-address", "Listen host:port for HTTP endpoints.").Default("0.0.0.0:10902").String()
+}
+
+func modelDuration(flags *kingpin.FlagClause) *model.Duration {
+	var value = new(model.Duration)
+	flags.SetValue(value)
+
+	return value
 }

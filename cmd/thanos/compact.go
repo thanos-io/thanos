@@ -16,7 +16,6 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/tsdb"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
@@ -40,8 +39,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	syncDelay := cmd.Flag("sync-delay", "Minimum age of fresh (non-compacted) blocks before they are being processed.").
 		Default("30m").Duration()
 
-	var retention model.Duration
-	cmd.Flag("storage.retention", "How long to retain samples in storage. 0d - disables retention").Default("0d").SetValue(&retention)
+	retention := modelDuration(cmd.Flag("storage.retention", "How long to retain samples in storage. 0d - disables retention").Default("0d"))
 
 	wait := cmd.Flag("wait", "Do not exit after all compactions have been processed and wait for new work.").
 		Short('w').Bool()
@@ -55,7 +53,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			*syncDelay,
 			*haltOnError,
 			*wait,
-			time.Duration(retention),
+			time.Duration(*retention),
 			name,
 		)
 	}
