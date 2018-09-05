@@ -68,7 +68,6 @@ func (conf *Config) Validate() error {
 func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, component string) (*Bucket, error) {
 
 	level.Debug(logger).Log("msg", "Creating new Azure bucket connection", "component", component)
-	level.Info(logger).Log("msg", "Starting Azure storage provider")
 
 	conf.ContainerName = "thanos-storage"
 
@@ -77,7 +76,7 @@ func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, compo
 	container, err := createContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, conf.ContainerName)
 	if err != nil {
 		if err.(blob.StorageError).ServiceCode() == "ContainerAlreadyExists" {
-			level.Info(logger).Log("msg", "Using existent container", "address", container)
+			level.Debug(logger).Log("msg", "Using existing container", "address", container)
 			level.Debug(logger).Log("msg", "Getting connection to existing container", "container", conf.ContainerName)
 			container, err = getContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, conf.ContainerName)
 			if err != nil {

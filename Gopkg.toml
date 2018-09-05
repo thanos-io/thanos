@@ -78,4 +78,4 @@ ignored = ["github.com/improbable-eng/thanos/benchmark/*"]
 
 [[constraint]]
   name = "github.com/Azure/azure-storage-blob-go"
-  branch = "master"
+  revision = "197d1c0aea1b9eedbbaee0a1a32bf81e879bde80"

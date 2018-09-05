@@ -34,7 +34,6 @@
   version = "0.1.7"
 
 [[projects]]
-  branch = "master"
   digest = "1:9267d48ec1ac29ae66cb064f2217ec5f0a2b8e22904dd018eba54a6140f82fd5"
   name = "github.com/Azure/azure-storage-blob-go"
   packages = ["2018-03-28/azblob"]
@@ -577,7 +576,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:649f2e24b22ef65ea110a3ce82f327019aec48f625586ea9716e53152e013a88"
+  digest = "1:54bad0d07b2d834122adaf5ecc35e4df006a4e0bb6114f2466b73e2cc6f03583"
   name = "golang.org/x/sys"
   packages = [
     "cpu",
@@ -585,7 +584,7 @@
     "windows",
   ]
   pruneopts = ""
-  revision = "2b024373dcd9800f0cae693839fac6ede8d64a8c"
+  revision = "ebe1bf3edb3325c393447059974de898d5133eb8"
 
 [[projects]]
   digest = "1:af9bfca4298ef7502c52b1459df274eed401a4f5498b900e9a92d28d3d87ac5a"
