@@ -103,7 +103,7 @@ then
     --log.level debug \
     --grpc-address              0.0.0.0:19691 \
     --http-address              0.0.0.0:19791 \
-    --tsdb.path                 data/store \
+    --data-dir                  data/store \
     --gcs.bucket                "${GCS_BUCKET}" \
     --cluster.address           0.0.0.0:19891 \
     --cluster.advertise-address 127.0.0.1:19891 \

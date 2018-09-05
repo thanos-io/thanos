@@ -80,7 +80,7 @@ Flags:
                                 configurations. Sets of configurations
                                 accounting the latency differences between
                                 network types: local, lan, wan.
-      --tsdb.path="./data"      Data directory of TSDB.
+      --data-dir="./data"       Data directory in which to cache remote blocks.
       --gcs.bucket=<bucket>     Google Cloud Storage bucket name for stored
                                 blocks. If empty sidecar won't store any block
                                 inside Google Cloud Storage.

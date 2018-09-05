@@ -7,7 +7,7 @@ source ${DIR}/envs.sh
 usage() { echo "Usage: $0 [-d <vm-driver>] (specify vm-driver, by default none - works only on linux) [-i] (install required binaries)" 1>&2; exit 1; }
 
 install() {
-    mkdir -p bin
+    mkdir -p ${DIR}/bin
     pushd ${DIR}/bin
         echo "Downloading kubectl 1.9 locally"
         curl -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/v1.9.0/bin/linux/amd64/kubectl && chmod +x kubectl
