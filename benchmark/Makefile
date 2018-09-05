@@ -13,7 +13,7 @@ deps: $(DEP)
 .PHONY: build
 build:
 	@echo ">> building thanosbench"
-	@go install github.com/improbable-eng/thanosbench/cmd/thanosbench
+	@go install github.com/improbable-eng/thanos/benchmark/cmd/thanosbench
 
 format: $(GOIMPORTS) deps
 	@echo ">> formatting code"
