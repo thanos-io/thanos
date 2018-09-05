@@ -36,10 +36,10 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	s3config := s3.RegisterS3Params(cmd)
 
-	syncDelay := cmd.Flag("sync-delay", "Minimum age of fresh (non-compacted) blocks before they are being processed.").
-		Default("30m").Duration()
+	syncDelay := modelDuration(cmd.Flag("sync-delay", "Minimum age of fresh (non-compacted) blocks before they are being processed.").
+		Default("30m"))
 
-	retention := modelDuration(cmd.Flag("storage.retention", "How long to retain samples in storage. 0d - disables retention").Default("0d"))
+	retention := modelDuration(cmd.Flag("retention.default", "How long to retain samples in bucket. 0d - disables retention").Default("0d"))
 
 	wait := cmd.Flag("wait", "Do not exit after all compactions have been processed and wait for new work.").
 		Short('w').Bool()
@@ -50,7 +50,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			*dataDir,
 			*gcsBucket,
 			s3config,
-			*syncDelay,
+			time.Duration(*syncDelay),
 			*haltOnError,
 			*wait,
 			time.Duration(*retention),
@@ -122,10 +122,8 @@ func runCompact(
 
 	compactor := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt)
 
-	var retentionPolicy compact.RetentionPolicy
 	if retention.Seconds() != 0 {
-		level.Info(logger).Log("msg", "retention is enabled")
-		retentionPolicy = compact.NewTimeBasedRetentionPolicy(logger, bkt, retention)
+		level.Info(logger).Log("msg", "default retention policy is enabled", "duration", retention)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -133,6 +131,7 @@ func runCompact(
 		if err := compactor.Compact(ctx); err != nil {
 			return errors.Wrap(err, "compaction failed")
 		}
+
 		// After all compactions are done, work down the downsampling backlog.
 		// We run two passes of this to ensure that the 1h downsampling is generated
 		// for 5m downsamplings created in the first run.
@@ -148,12 +147,12 @@ func runCompact(
 			return errors.Wrap(err, "second pass of downsampling failed")
 		}
 
-		if retentionPolicy != nil {
-			if err := retentionPolicy.Apply(ctx); err != nil {
+		if retention.Seconds() != 0 {
+			if err := compact.ApplyDefaultRetentionPolicy(ctx, logger, bkt, retention); err != nil {
 				return errors.Wrap(err, "retention failed")
 			}
 		}
-		level.Info(logger).Log("msg", "compaction iteration done")
+		level.Info(logger).Log("msg", "compaction, downsampling and optional retention apply iteration done")
 		return nil
 	}
 
@@ -166,8 +165,7 @@ func runCompact(
 
 		// --wait=true is specified.
 		return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
-			err := f()
-			if err != nil {
+			if err := f(); err != nil {
 				// The HaltError type signals that we hit a critical bug and should block
 				// for investigation.
 				// You should alert on this being halted.

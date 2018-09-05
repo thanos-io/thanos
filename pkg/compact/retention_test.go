@@ -22,9 +22,7 @@ func TestTimeBasedRetentionPolicyOnEmptyBucket(t *testing.T) {
 	logger := log.NewNopLogger()
 	bkt := inmem.NewBucket()
 
-	retPolicy := compact.NewTimeBasedRetentionPolicy(logger, bkt, 24*time.Hour)
-
-	testutil.Ok(t, retPolicy.Apply(context.TODO()))
+	testutil.Ok(t, compact.ApplyDefaultRetentionPolicy(context.TODO(), logger, bkt, 24*time.Hour))
 
 	var (
 		want []string
@@ -42,13 +40,11 @@ func TestTimeBasedRetentionPolicyKeepsBucketsBeforeDuration(t *testing.T) {
 	logger := log.NewNopLogger()
 	bkt := inmem.NewBucket()
 
-	retPolicy := compact.NewTimeBasedRetentionPolicy(logger, bkt, 24*time.Hour)
-
 	uploadMockBlock(t, bkt, "01CPHBEX20729MJQZXE3W0BW48", time.Now().Add(-3*24*time.Hour), time.Now().Add(-2*24*time.Hour))
 	uploadMockBlock(t, bkt, "01CPHBEX20729MJQZXE3W0BW49", time.Now().Add(-2*24*time.Hour), time.Now().Add(-24*time.Hour))
 	uploadMockBlock(t, bkt, "01CPHBEX20729MJQZXE3W0BW50", time.Now().Add(-24*time.Hour), time.Now().Add(-23*time.Hour))
 	uploadMockBlock(t, bkt, "01CPHBEX20729MJQZXE3W0BW51", time.Now().Add(-23*time.Hour), time.Now().Add(-6*time.Hour))
-	testutil.Ok(t, retPolicy.Apply(context.TODO()))
+	testutil.Ok(t, compact.ApplyDefaultRetentionPolicy(context.TODO(), logger, bkt, 24*time.Hour))
 
 	want := []string{"01CPHBEX20729MJQZXE3W0BW50/", "01CPHBEX20729MJQZXE3W0BW51/"}
 

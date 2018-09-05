@@ -829,8 +829,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 			}
 
 			if IsIssue347Error(err) {
-				err = RepairIssue347(ctx, c.logger, c.bkt, err)
-				if err == nil {
+				if err = RepairIssue347(ctx, c.logger, c.bkt, err); err == nil {
 					done = false
 					continue
 				}

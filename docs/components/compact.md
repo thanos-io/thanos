@@ -51,7 +51,7 @@ Flags:
       --s3.encrypt-sse         Whether to use Server Side Encryption
       --sync-delay=30m         Minimum age of fresh (non-compacted) blocks
                                before they are being processed.
-      --storage.retention=0d   How long to retain samples in storage. 0d -
+      --retention.default=0d   How long to retain samples in bucket. 0d -
                                disables retention
   -w, --wait                   Do not exit after all compactions have been
                                processed and wait for new work.

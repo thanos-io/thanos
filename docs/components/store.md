@@ -68,7 +68,7 @@ Flags:
                                 convergence speeds across larger clusters at the
                                 expense of increased bandwidth usage. Default is
                                 used from a specified network-type.
-      --cluster.refresh-interval=1m0s  
+      --cluster.refresh-interval=1m  
                                 Interval for membership to refresh cluster.peers
                                 state, 0 disables refresh.
       --cluster.secret-key=CLUSTER.SECRET-KEY  

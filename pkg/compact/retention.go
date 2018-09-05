@@ -11,44 +11,23 @@ import (
 	"github.com/pkg/errors"
 )
 
-// RetentionPolicy describes retention policy.
-type RetentionPolicy interface {
-	Apply(context.Context) error
-}
-
-// TimeBasedRetentionPolicy is a retention policy based on blocks age.
-type TimeBasedRetentionPolicy struct {
-	logger            log.Logger
-	bkt               objstore.Bucket
-	retentionDuration time.Duration
-}
-
-// NewTimeBasedRetentionPolicy creates new TimeBasedRetentionPolicy.
-func NewTimeBasedRetentionPolicy(logger log.Logger, bkt objstore.Bucket, retentionDuration time.Duration) *TimeBasedRetentionPolicy {
-	return &TimeBasedRetentionPolicy{
-		logger:            logger,
-		bkt:               bkt,
-		retentionDuration: retentionDuration,
-	}
-}
-
 // Apply removes blocks older than rententionDuration based on blocks MaxTime.
-func (tbr *TimeBasedRetentionPolicy) Apply(ctx context.Context) error {
-	level.Info(tbr.logger).Log("msg", "start retention", "retentionDuration", tbr.retentionDuration)
-	if err := tbr.bkt.Iter(ctx, "", func(name string) error {
+func ApplyDefaultRetentionPolicy(ctx context.Context, logger log.Logger, bkt objstore.Bucket, retentionDuration time.Duration) error {
+	level.Info(logger).Log("msg", "start default retention")
+	if err := bkt.Iter(ctx, "", func(name string) error {
 		id, ok := block.IsBlockDir(name)
 		if !ok {
 			return nil
 		}
-		m, err := block.DownloadMeta(ctx, tbr.logger, tbr.bkt, id)
+		m, err := block.DownloadMeta(ctx, logger, bkt, id)
 		if err != nil {
 			return errors.Wrap(err, "download metadata")
 		}
 
 		maxTime := time.Unix(m.MaxTime/1000, 0)
-		if time.Now().After(maxTime.Add(tbr.retentionDuration)) {
-			level.Info(tbr.logger).Log("msg", "deleting block", "id", id, "maxTime", maxTime.String())
-			if err := block.Delete(ctx, tbr.bkt, id); err != nil {
+		if time.Now().After(maxTime.Add(retentionDuration)) {
+			level.Info(logger).Log("msg", "deleting block", "id", id, "maxTime", maxTime.String())
+			if err := block.Delete(ctx, bkt, id); err != nil {
 				return errors.Wrap(err, "delete block")
 			}
 		}
@@ -58,6 +37,6 @@ func (tbr *TimeBasedRetentionPolicy) Apply(ctx context.Context) error {
 		return errors.Wrap(err, "retention")
 	}
 
-	level.Info(tbr.logger).Log("msg", "retention done")
+	level.Info(logger).Log("msg", "default retention apply done")
 	return nil
 }
