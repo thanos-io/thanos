@@ -165,31 +165,33 @@ func runCompact(
 
 		// --wait=true is specified.
 		return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
-			if err := f(); err != nil {
-				// The HaltError type signals that we hit a critical bug and should block
-				// for investigation.
-				// You should alert on this being halted.
-				if compact.IsHaltError(err) {
-					if haltOnError {
-						level.Error(logger).Log("msg", "critical error detected; halting", "err", err)
-						halted.Set(1)
-						select {}
-					} else {
-						return errors.Wrap(err, "critical error detected")
-					}
-				}
-
-				// The RetryError signals that we hit an retriable error (transient error, no connection).
-				// You should alert on this being triggered to frequently.
-				if compact.IsRetryError(err) {
-					level.Error(logger).Log("msg", "retriable error", "err", err)
-					retried.Inc()
-					// TODO(bplotka): use actual "retry()" here instead of waiting 5 minutes?
-					return nil
+			err := f()
+			if err == nil {
+				return nil
+			}
+			// The HaltError type signals that we hit a critical bug and should block
+			// for investigation.
+			// You should alert on this being halted.
+			if compact.IsHaltError(err) {
+				if haltOnError {
+					level.Error(logger).Log("msg", "critical error detected; halting", "err", err)
+					halted.Set(1)
+					select {}
+				} else {
+					return errors.Wrap(err, "critical error detected")
 				}
 			}
 
-			return err
+			// The RetryError signals that we hit an retriable error (transient error, no connection).
+			// You should alert on this being triggered to frequently.
+			if compact.IsRetryError(err) {
+				level.Error(logger).Log("msg", "retriable error", "err", err)
+				retried.Inc()
+				// TODO(bplotka): use actual "retry()" here instead of waiting 5 minutes?
+				return nil
+			}
+
+			return errors.Wrap(err, "error executing compaction")
 		})
 	}, func(error) {
 		cancel()
