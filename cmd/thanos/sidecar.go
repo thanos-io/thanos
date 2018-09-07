@@ -15,7 +15,6 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/cluster"
-	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/reloader"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -51,7 +50,8 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	reloaderRuleDirs := cmd.Flag("reloader.rule-dir", "Rule directories for the reloader to refresh (repeated field).").Strings()
 
-	bucketConf := objstore.NewBucketConfig(cmd, "")
+	bucketConf := cmd.Flag("objstore.config", "The configuration of bucket for stored blocks.").
+		PlaceHolder("<bucket.config>").String()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		rl := reloader.New(
@@ -74,7 +74,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			*httpBindAddr,
 			*promURL,
 			*dataDir,
-			bucketConf,
+			*bucketConf,
 			peer,
 			rl,
 			name,
@@ -91,7 +91,7 @@ func runSidecar(
 	httpBindAddr string,
 	promURL *url.URL,
 	dataDir string,
-	bucketConf *objstore.BucketConfig,
+	bucketConf string,
 	peer *cluster.Peer,
 	reloader *reloader.Reloader,
 	component string,
@@ -219,7 +219,7 @@ func runSidecar(
 
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, err := client.NewBucket(logger, *bucketConf, reg, component)
+	bkt, err := client.NewBucket(logger, bucketConf, reg, component)
 	if err != nil && err != client.ErrNotFound {
 		return err
 	}

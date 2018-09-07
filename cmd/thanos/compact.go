@@ -9,7 +9,6 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/compact"
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
-	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/run"
@@ -31,7 +30,8 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process compactions.").
 		Default("./data").String()
 
-	bucketConf := objstore.NewBucketConfig(cmd, "")
+	bucketConf := cmd.Flag("objstore.config", "The configuration of bucket for stored blocks.").
+		PlaceHolder("<bucket.config>").String()
 
 	syncDelay := modelDuration(cmd.Flag("sync-delay", "Minimum age of fresh (non-compacted) blocks before they are being processed.").
 		Default("30m"))
@@ -45,7 +45,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 		return runCompact(g, logger, reg,
 			*httpAddr,
 			*dataDir,
-			bucketConf,
+			*bucketConf,
 			time.Duration(*syncDelay),
 			*haltOnError,
 			*wait,
@@ -61,7 +61,7 @@ func runCompact(
 	reg *prometheus.Registry,
 	httpBindAddr string,
 	dataDir string,
-	bucketConf *objstore.BucketConfig,
+	bucketConf string,
 	syncDelay time.Duration,
 	haltOnError bool,
 	wait bool,
@@ -80,7 +80,7 @@ func runCompact(
 
 	reg.MustRegister(halted)
 
-	bkt, err := client.NewBucket(logger, *bucketConf, reg, component)
+	bkt, err := client.NewBucket(logger, bucketConf, reg, component)
 	if err != nil {
 		return err
 	}

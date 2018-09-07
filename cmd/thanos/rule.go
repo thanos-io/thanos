@@ -24,7 +24,6 @@ import (
 	"github.com/improbable-eng/thanos/pkg/alert"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/cluster"
-	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
@@ -74,7 +73,8 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	alertQueryURL := cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field").String()
 
-	bucketConf := objstore.NewBucketConfig(cmd, "")
+	bucketConf := cmd.Flag("objstore.config", "The configuration of bucket for stored blocks.").
+		PlaceHolder("<bucket.config>").String()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
@@ -109,7 +109,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			*dataDir,
 			*ruleFiles,
 			peer,
-			bucketConf,
+			*bucketConf,
 			tsdbOpts,
 			name,
 			alertQueryURL,
@@ -132,7 +132,7 @@ func runRule(
 	dataDir string,
 	ruleFiles []string,
 	peer *cluster.Peer,
-	bucketConf *objstore.BucketConfig,
+	bucketConf string,
 	tsdbOpts *tsdb.Options,
 	component string,
 	alertQueryURL *url.URL,
@@ -410,7 +410,7 @@ func runRule(
 
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, err := client.NewBucket(logger, *bucketConf, reg, component)
+	bkt, err := client.NewBucket(logger, bucketConf, reg, component)
 	if err != nil && err != client.ErrNotFound {
 		return err
 	}

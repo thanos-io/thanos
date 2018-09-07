@@ -26,6 +26,9 @@ type Bucket interface {
 
 	// Delete removes the object with the given name.
 	Delete(ctx context.Context, name string) error
+
+	// GetBucket return the bucket name for the provider
+	GetBucket() string
 }
 
 // BucketReader provides read access to an object storage bucket.
@@ -303,6 +306,10 @@ func (b *metricBucket) IsObjNotFoundErr(err error) bool {
 
 func (b *metricBucket) Close() error {
 	return b.bkt.Close()
+}
+
+func (b *metricBucket) GetBucket() string {
+	return b.bkt.GetBucket()
 }
 
 type timingReadCloser struct {

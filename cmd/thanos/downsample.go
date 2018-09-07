@@ -32,10 +32,11 @@ func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name s
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
 		Default("./data").String()
 
-	bucketConf := objstore.NewBucketConfig(cmd, "")
+	bucketConf := cmd.Flag("objstore.config", "The configuration of bucket for stored blocks.").
+		PlaceHolder("<bucket.config>").String()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
-		return runDownsample(g, logger, reg, *dataDir, bucketConf, name)
+		return runDownsample(g, logger, reg, *dataDir, *bucketConf, name)
 	}
 }
 
@@ -44,11 +45,11 @@ func runDownsample(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	dataDir string,
-	bucketConf *objstore.BucketConfig,
+	bucketConf string,
 	component string,
 ) error {
 
-	bkt, err := client.NewBucket(logger, *bucketConf, reg, component)
+	bkt, err := client.NewBucket(logger, bucketConf, reg, component)
 	if err != nil {
 		return err
 	}

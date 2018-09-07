@@ -9,7 +9,6 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/cluster"
-	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
@@ -31,7 +30,8 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache remote blocks.").
 		Default("./data").String()
 
-	bucketConf := objstore.NewBucketConfig(cmd, "")
+	bucketConf := cmd.Flag("objstore.config", "The configuration of bucket for stored blocks.").
+		PlaceHolder("<bucket.config>").String()
 
 	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the index cache.").
 		Default("250MB").Bytes()
@@ -48,7 +48,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			logger,
 			reg,
 			tracer,
-			bucketConf,
+			*bucketConf,
 			*dataDir,
 			*grpcBindAddr,
 			*httpBindAddr,
@@ -67,7 +67,7 @@ func runStore(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	bucketConf *objstore.BucketConfig,
+	bucketConf string,
 	dataDir string,
 	grpcBindAddr string,
 	httpBindAddr string,
@@ -78,7 +78,7 @@ func runStore(
 	verbose bool,
 ) error {
 	{
-		bkt, err := client.NewBucket(logger, *bucketConf, reg, component)
+		bkt, err := client.NewBucket(logger, bucketConf, reg, component)
 		if err != nil {
 			return err
 		}
