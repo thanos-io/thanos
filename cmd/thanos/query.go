@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"net"
 	"net/http"
@@ -28,6 +31,7 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -35,10 +39,15 @@ import (
 func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
 
-	grpcBindAddr, httpBindAddr, newPeerFn := regCommonServerFlags(cmd)
+	grpcBindAddr, httpBindAddr, srvCert, srvKey, srvClientCA, newPeerFn := regCommonServerFlags(cmd)
 
 	httpAdvertiseAddr := cmd.Flag("http-advertise-address", "Explicit (external) host:port address to advertise for HTTP QueryAPI in gossip cluster. If empty, 'http-address' will be used.").
 		String()
+
+	secure := cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").Bool()
+	cert := cmd.Flag("grpc-client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").String()
+	key := cmd.Flag("grpc-client-tls-key", "TLS Key for the client's certificate").Default("").String()
+	caCert := cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").Default("").String()
 
 	queryTimeout := modelDuration(cmd.Flag("query.timeout", "Maximum time to process query by query node.").
 		Default("2m"))
@@ -83,6 +92,13 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			reg,
 			tracer,
 			*grpcBindAddr,
+			*srvCert,
+			*srvKey,
+			*srvClientCA,
+			*secure,
+			*cert,
+			*key,
+			*caCert,
 			*httpBindAddr,
 			*maxConcurrentQueries,
 			time.Duration(*queryTimeout),
@@ -95,7 +111,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	}
 }
 
-func storeClientGRPCOpts(reg *prometheus.Registry, tracer opentracing.Tracer) []grpc.DialOption {
+func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, secure bool, cert, key, caCert string) ([]grpc.DialOption, error) {
 	grpcMets := grpc_prometheus.NewClientMetrics()
 	grpcMets.EnableClientHandlingTimeHistogram(
 		grpc_prometheus.WithHistogramBuckets([]float64{
@@ -108,7 +124,6 @@ func storeClientGRPCOpts(reg *prometheus.Registry, tracer opentracing.Tracer) []
 		// Current limit is ~2GB.
 		// TODO(bplotka): Split sent chunks on store node per max 4MB chunks if needed.
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32)),
-		grpc.WithInsecure(),
 		grpc.WithUnaryInterceptor(
 			grpc_middleware.ChainUnaryClient(
 				grpcMets.UnaryClientInterceptor(),
@@ -127,7 +142,52 @@ func storeClientGRPCOpts(reg *prometheus.Registry, tracer opentracing.Tracer) []
 		reg.MustRegister(grpcMets)
 	}
 
-	return dialOpts
+	if !secure {
+		dialOpts = append(dialOpts, grpc.WithInsecure())
+		return dialOpts, nil
+	}
+
+	level.Info(logger).Log("msg", "Enabling client to server TLS")
+
+	var certPool *x509.CertPool
+
+	if caCert != "" {
+		caPEM, err := ioutil.ReadFile(caCert)
+		if err != nil {
+			return nil, errors.Wrap(err, "reading client CA")
+		}
+
+		certPool = x509.NewCertPool()
+		if !certPool.AppendCertsFromPEM(caPEM) {
+			return nil, errors.Wrap(err, "building client CA")
+		}
+		level.Info(logger).Log("msg", "TLS Client using provided certificate pool")
+	} else {
+		var err error
+		certPool, err = x509.SystemCertPool()
+		if err != nil {
+			return nil, errors.Wrap(err, "reading system certificate pool")
+		}
+		level.Info(logger).Log("msg", "TLS Client using system certificate pool")
+	}
+
+	tlsCfg := &tls.Config{
+		RootCAs: certPool,
+	}
+
+	if cert != "" {
+		cert, err := tls.LoadX509KeyPair(cert, key)
+		if err != nil {
+			return nil, errors.Wrap(err, "client credentials")
+		}
+		tlsCfg.Certificates = []tls.Certificate{cert}
+		level.Info(logger).Log("msg", "TLS Client authentication enabled")
+	}
+
+	creds := credentials.NewTLS(tlsCfg)
+	dialOpts = append(dialOpts, grpc.WithTransportCredentials(creds))
+
+	return dialOpts, nil
 }
 
 // runQuery starts a server that exposes PromQL Query API. It is responsible for querying configured
@@ -138,6 +198,13 @@ func runQuery(
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	grpcBindAddr string,
+	srvCert string,
+	srvKey string,
+	srvClientCA string,
+	secure bool,
+	cert string,
+	key string,
+	caCert string,
 	httpBindAddr string,
 	maxConcurrentQueries int,
 	queryTimeout time.Duration,
@@ -155,6 +222,12 @@ func runQuery(
 
 		staticSpecs = append(staticSpecs, query.NewGRPCStoreSpec(addr))
 	}
+
+	dialOpts, err := storeClientGRPCOpts(logger, reg, tracer, secure, cert, key, caCert)
+	if err != nil {
+		return errors.Wrap(err, "building gRPC client")
+	}
+
 	var (
 		stores = query.NewStoreSet(
 			logger,
@@ -172,7 +245,7 @@ func runQuery(
 				}
 				return specs
 			},
-			storeClientGRPCOpts(reg, tracer),
+			dialOpts,
 		)
 		proxy = store.NewProxyStore(logger, func(context.Context) ([]store.Client, error) {
 			return stores.Get(), nil
@@ -241,7 +314,12 @@ func runQuery(
 		}
 		logger := log.With(logger, "component", "query")
 
-		s := grpc.NewServer(defaultGRPCServerOpts(logger, reg, tracer)...)
+		opts, err := defaultGRPCServerOpts(logger, reg, tracer, srvCert, srvKey, srvClientCA)
+		if err != nil {
+			return errors.Wrapf(err, "build gRPC server")
+		}
+
+		s := grpc.NewServer(opts...)
 		storepb.RegisterStoreServer(s, proxy)
 
 		g.Add(func() error {

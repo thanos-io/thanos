@@ -16,14 +16,25 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
-func regCommonServerFlags(cmd *kingpin.CmdClause) (*string, *string, func(log.Logger, *prometheus.Registry, bool, string, bool) (*cluster.Peer, error)) {
-	grpcBindAddr := cmd.Flag("grpc-address", "Listen ip:port address for gRPC endpoints (StoreAPI). Make sure this address is routable from other components if you use gossip, 'grpc-advertise-address' is empty and you require cross-node connection.").
+func regCommonServerFlags(cmd *kingpin.CmdClause) (
+	grpcBindAddr *string,
+	httpBindAddr *string,
+	grpcTLSSrvCert *string,
+	grpcTLSSrvKey *string,
+	grpcTLSSrvClientCA *string,
+	peerFunc func(log.Logger, *prometheus.Registry, bool, string, bool) (*cluster.Peer, error)) {
+
+	grpcBindAddr = cmd.Flag("grpc-address", "Listen ip:port address for gRPC endpoints (StoreAPI). Make sure this address is routable from other components if you use gossip, 'grpc-advertise-address' is empty and you require cross-node connection.").
 		Default("0.0.0.0:10901").String()
 
 	grpcAdvertiseAddr := cmd.Flag("grpc-advertise-address", "Explicit (external) host:port address to advertise for gRPC StoreAPI in gossip cluster. If empty, 'grpc-address' will be used.").
 		String()
 
-	httpBindAddr := regHTTPAddrFlag(cmd)
+	grpcTLSSrvKey = cmd.Flag("grpc-server-tls-key", "TLS Key for the gRPC server, leave blank to disable TLS").Default("").String()
+	grpcTLSSrvCert = cmd.Flag("grpc-server-tls-cert", "TLS Certificate for gRPC server, leave blank to disable TLS").Default("").String()
+	grpcTLSSrvClientCA = cmd.Flag("grpc-server-tls-client-ca", "TLS CA to verify clients against").Default("").String()
+
+	httpBindAddr = regHTTPAddrFlag(cmd)
 
 	clusterBindAddr := cmd.Flag("cluster.address", "Listen ip:port address for gossip cluster.").
 		Default("0.0.0.0:10900").String()
@@ -53,6 +64,9 @@ func regCommonServerFlags(cmd *kingpin.CmdClause) (*string, *string, func(log.Lo
 
 	return grpcBindAddr,
 		httpBindAddr,
+		grpcTLSSrvCert,
+		grpcTLSSrvKey,
+		grpcTLSSrvClientCA,
 		func(logger log.Logger, reg *prometheus.Registry, waitIfEmpty bool, httpAdvertiseAddr string, queryAPIEnabled bool) (*cluster.Peer, error) {
 			host, port, err := cluster.CalculateAdvertiseAddress(*grpcBindAddr, *grpcAdvertiseAddr)
 			if err != nil {

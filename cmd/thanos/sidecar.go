@@ -34,7 +34,7 @@ import (
 func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "sidecar for Prometheus server")
 
-	grpcBindAddr, httpBindAddr, newPeerFn := regCommonServerFlags(cmd)
+	grpcBindAddr, httpBindAddr, cert, key, clientCA, newPeerFn := regCommonServerFlags(cmd)
 
 	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API. For better performance use local network.").
 		Default("http://localhost:9090").URL()
@@ -71,6 +71,9 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			reg,
 			tracer,
 			*grpcBindAddr,
+			*cert,
+			*key,
+			*clientCA,
 			*httpBindAddr,
 			*promURL,
 			*dataDir,
@@ -88,6 +91,9 @@ func runSidecar(
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	grpcBindAddr string,
+	cert string,
+	key string,
+	clientCA string,
 	httpBindAddr string,
 	promURL *url.URL,
 	dataDir string,
@@ -203,7 +209,11 @@ func runSidecar(
 			return errors.Wrap(err, "create Prometheus store")
 		}
 
-		s := grpc.NewServer(defaultGRPCServerOpts(logger, reg, tracer)...)
+		opts, err := defaultGRPCServerOpts(logger, reg, tracer, cert, key, clientCA)
+		if err != nil {
+			return errors.Wrap(err, "setup gRPC server")
+		}
+		s := grpc.NewServer(opts...)
 		storepb.RegisterStoreServer(s, promStore)
 
 		g.Add(func() error {
