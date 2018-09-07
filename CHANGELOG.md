@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - Add Thanos Rule UI
 - Add Thanos Rule reload via HTTP POST to /-/reload
+- Add Thanos compact --retention.default flag, for configuring storage bucket retention period.
+- Removes support for multiple units in duration. For example: 1m0s won't work, while 1m will work.
+- Adds support for y,w,d time units 
 
 Newest release candidate: [v0.1.0-rc.2](https://github.com/improbable-eng/thanos/releases/tag/v0.1.0-rc.2)
 

@@ -62,12 +62,12 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	ruleFiles := cmd.Flag("rule-file", "Rule files that should be used by rule manager. Can be in glob format (repeated).").
 		Default("rules/").Strings()
 
-	evalInterval := cmd.Flag("eval-interval", "The default evaluation interval to use.").
-		Default("30s").Duration()
-	tsdbBlockDuration := cmd.Flag("tsdb.block-duration", "Block duration for TSDB block.").
-		Default("2h").Duration()
-	tsdbRetention := cmd.Flag("tsdb.retention", "Block retention time on local disk.").
-		Default("48h").Duration()
+	evalInterval := modelDuration(cmd.Flag("eval-interval", "The default evaluation interval to use.").
+		Default("30s"))
+	tsdbBlockDuration := modelDuration(cmd.Flag("tsdb.block-duration", "Block duration for TSDB block.").
+		Default("2h"))
+	tsdbRetention := modelDuration(cmd.Flag("tsdb.retention", "Block retention time on local disk.").
+		Default("48h"))
 
 	alertmgrs := cmd.Flag("alertmanagers.url", "Alertmanager URLs to push firing alerts to. The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Alertmanager IPs through respective DNS lookups. The port defaults to 9093 or the SRV record's value. The URL path is used as a prefix for the regular Alertmanager API path.").
 		Strings()
@@ -94,13 +94,30 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 		}
 
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration: model.Duration(*tsdbBlockDuration),
-			MaxBlockDuration: model.Duration(*tsdbBlockDuration),
-			Retention:        model.Duration(*tsdbRetention),
+			MinBlockDuration: *tsdbBlockDuration,
+			MaxBlockDuration: *tsdbBlockDuration,
+			Retention:        *tsdbRetention,
 			NoLockfile:       true,
 			WALFlushInterval: 30 * time.Second,
 		}
-		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *grpcBindAddr, *httpBindAddr, *evalInterval, *dataDir, *ruleFiles, peer, *gcsBucket, s3Config, tsdbOpts, name, alertQueryURL)
+		return runRule(g,
+			logger,
+			reg,
+			tracer,
+			lset,
+			*alertmgrs,
+			*grpcBindAddr,
+			*httpBindAddr,
+			time.Duration(*evalInterval),
+			*dataDir,
+			*ruleFiles,
+			peer,
+			*gcsBucket,
+			s3Config,
+			tsdbOpts,
+			name,
+			alertQueryURL,
+		)
 	}
 }
 
