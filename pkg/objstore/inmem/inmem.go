@@ -145,3 +145,8 @@ func (b *Bucket) IsObjNotFoundErr(err error) bool {
 }
 
 func (b *Bucket) Close() error { return nil }
+
+// GetBucket return the bucket name
+func (b *Bucket) GetBucket() string {
+	return "inmem"
+}
