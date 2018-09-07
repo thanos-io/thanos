@@ -24,6 +24,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/version"
+	yaml "gopkg.in/yaml.v2"
 )
 
 const (
@@ -37,6 +38,17 @@ const (
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const DirDelim = "/"
 
+// s3Config stores the configuration for gcs bucket
+type s3Config struct {
+	Bucket        string `yaml:"bucket"`
+	Endpoint      string `yaml:"endpoint"`
+	AccessKey     string `yaml:"access-key"`
+	SecretKey     string `yaml:"secret-key"`
+	Insecure      bool   `yaml:"insecure"`
+	SignatureV2   bool   `yaml:"signature-version2"`
+	SSEEncryption bool   `yaml:"encrypt-sse"`
+}
+
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
 type Bucket struct {
 	logger   log.Logger
@@ -47,18 +59,27 @@ type Bucket struct {
 }
 
 // NewBucket returns a new Bucket using the provided s3 config values.
-func NewBucket(logger log.Logger, conf objstore.BucketConfig, reg prometheus.Registerer, component string) (*Bucket, error) {
+func NewBucket(logger log.Logger, conf []byte, reg prometheus.Registerer, component string) (*Bucket, error) {
 	var chain []credentials.Provider
-	if conf.AccessKey != "" {
+	var config s3Config
+	err := yaml.Unmarshal(conf, &config)
+	if err != nil {
+		return nil, err
+	}
+	err = Validate(config)
+	if err != nil {
+		return nil, err
+	}
+	if config.AccessKey != "" {
 		signature := credentials.SignatureV4
-		if conf.SignatureV2 {
+		if config.SignatureV2 {
 			signature = credentials.SignatureV2
 		}
 
 		chain = []credentials.Provider{&credentials.Static{
 			Value: credentials.Value{
-				AccessKeyID:     conf.AccessKey,
-				SecretAccessKey: conf.GetSecretKey(),
+				AccessKeyID:     config.AccessKey,
+				SecretAccessKey: config.SecretKey,
 				SignerType:      signature,
 			},
 		}}
@@ -74,7 +95,7 @@ func NewBucket(logger log.Logger, conf objstore.BucketConfig, reg prometheus.Reg
 		}
 	}
 
-	client, err := minio.NewWithCredentials(conf.Endpoint, credentials.NewChainCredentials(chain), !conf.Insecure, "")
+	client, err := minio.NewWithCredentials(config.Endpoint, credentials.NewChainCredentials(chain), !config.Insecure, "")
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize s3 client")
 	}
@@ -104,19 +125,19 @@ func NewBucket(logger log.Logger, conf objstore.BucketConfig, reg prometheus.Reg
 	})
 
 	var sse encrypt.ServerSide
-	if conf.SSEEncryption {
+	if config.SSEEncryption {
 		sse = encrypt.NewSSE()
 	}
 
 	bkt := &Bucket{
 		logger: logger,
-		bucket: conf.Bucket,
+		bucket: config.Bucket,
 		client: client,
 		sse:    sse,
 		opsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name:        "thanos_objstore_s3_bucket_operations_total",
 			Help:        "Total number of operations that were executed against an s3 bucket.",
-			ConstLabels: prometheus.Labels{"bucket": conf.Bucket},
+			ConstLabels: prometheus.Labels{"bucket": config.Bucket},
 		}, []string{"operation"}),
 	}
 	if reg != nil {
@@ -125,21 +146,26 @@ func NewBucket(logger log.Logger, conf objstore.BucketConfig, reg prometheus.Reg
 	return bkt, nil
 }
 
+// GetBucket return the bucket name for s3
+func (b *Bucket) GetBucket() string {
+	return b.bucket
+}
+
 // Validate checks to see the config options are set.
-func Validate(conf *objstore.BucketConfig) error {
+func Validate(conf s3Config) error {
 	if conf.Endpoint == "" ||
-		(conf.AccessKey == "" && conf.GetSecretKey() != "") ||
-		(conf.AccessKey != "" && conf.GetSecretKey() == "") {
+		(conf.AccessKey == "" && conf.SecretKey != "") ||
+		(conf.AccessKey != "" && conf.SecretKey == "") {
 		return errors.New("insufficient s3 test configuration information")
 	}
 	return nil
 }
 
 // ValidateForTests checks to see the config options for tests are set.
-func ValidateForTests(conf *objstore.BucketConfig) error {
+func ValidateForTests(conf s3Config) error {
 	if conf.Endpoint == "" ||
 		conf.AccessKey == "" ||
-		conf.GetSecretKey() == "" {
+		conf.SecretKey == "" {
 		return errors.New("insufficient s3 test configuration information")
 	}
 	return nil
@@ -245,14 +271,14 @@ func (b *Bucket) IsObjNotFoundErr(err error) bool {
 
 func (b *Bucket) Close() error { return nil }
 
-func configFromEnv() *objstore.BucketConfig {
-	c := &objstore.BucketConfig{
+func configFromEnv() s3Config {
+	c := s3Config{
 		Bucket:    os.Getenv("S3_BUCKET"),
 		Endpoint:  os.Getenv("S3_ENDPOINT"),
 		AccessKey: os.Getenv("S3_ACCESS_KEY"),
+		SecretKey: os.Getenv("S3_SECRET_KEY"),
 	}
 
-	c.SetSecretKey(os.Getenv("S3_SECRET_KEY"))
 	insecure, err := strconv.ParseBool(os.Getenv("S3_INSECURE"))
 	if err != nil {
 		c.Insecure = insecure
@@ -271,8 +297,11 @@ func NewTestBucket(t testing.TB, location string) (objstore.Bucket, func(), erro
 	if err := ValidateForTests(c); err != nil {
 		return nil, nil, err
 	}
-
-	b, err := NewBucket(log.NewNopLogger(), *c, nil, "thanos-e2e-test")
+	bc, err := yaml.Marshal(c)
+	if err != nil {
+		return nil, nil, err
+	}
+	b, err := NewBucket(log.NewNopLogger(), bc, nil, "thanos-e2e-test")
 	if err != nil {
 		return nil, nil, err
 	}

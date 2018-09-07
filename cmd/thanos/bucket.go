@@ -11,7 +11,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/verifier"
@@ -42,14 +41,16 @@ var (
 func registerBucket(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "inspect metric data in an object storage bucket")
 
-	bucketConf := objstore.NewBucketConfig(cmd, "")
+	bucketConf := cmd.Flag("objstore.config", "The configuration of bucket for stored blocks.").
+		PlaceHolder("<bucket.config>").String()
 
 	// Verify command.
 	verify := cmd.Command("verify", "verify all blocks in the bucket against specified issues")
 	verifyRepair := verify.Flag("repair", "attempt to repair blocks for which issues were detected").
 		Short('r').Default("false").Bool()
 	// NOTE(bplotka): Currently we support backup buckets only in the same project.
-	backupBucketConf := objstore.NewBucketConfig(verify, "backup")
+	backupBucketConf := verify.Flag("objstore-backup.config", "The configuration of backup bucket for stored blocks.").
+		PlaceHolder("<bucket-backup.config>").String()
 	verifyIssues := verify.Flag("issues", fmt.Sprintf("Issues to verify (and optionally repair). Possible values: %v", allIssues())).
 		Short('i').Default(verifier.IndexIssueID, verifier.OverlappedBlocksIssueID).Strings()
 	verifyIDWhitelist := verify.Flag("id-whitelist", "Block IDs to verify (and optionally repair) only. "+
@@ -61,10 +62,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 		}
 		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
-		backupBucketConfig := *bucketConf
-		backupBucketConfig.Provider = backupBucketConf.Provider
-		backupBucketConfig.Bucket = backupBucketConf.Bucket
-		backupBkt, err := client.NewBucket(logger, backupBucketConfig, reg, name)
+		backupBkt, err := client.NewBucket(logger, *backupBucketConf, reg, name)
 		if err == client.ErrNotFound {
 			if *verifyRepair {
 				return errors.Wrap(err, "repair is specified, so backup client is required")
