@@ -81,25 +81,9 @@ Flags:
                                 accounting the latency differences between
                                 network types: local, lan, wan.
       --data-dir="./data"       Data directory in which to cache remote blocks.
-      --objstore.type=<provider>  
-                                Specify the provider for object store. If empty
-                                or unsupported provider, Thanos won't read and
-                                store any block to the object store. Now
-                                supported GCS / S3.
-      --objstore.bucket=<bucket>  
-                                The bucket name for stored blocks.
-      --objstore.endpoint=<api-url>  
-                                The object store API endpoint for stored blocks.
-                                Supported S3-Compatible API
-      --objstore.access-key=<key>  
-                                Access key for an object store API. Supported
-                                S3-Compatible API
-      --objstore.insecure       Whether to use an insecure connection with an
-                                object store API. Supported S3-Compatible API
-      --objstore.signature-version2  
-                                Whether to use S3 Signature Version 2; otherwise
-                                Signature Version 4 will be used
-      --objstore.encrypt-sse    Whether to use Server Side Encryption
+      --objstore.config=<bucket.config>  
+                                The yaml format configuration of bucket for
+                                stored blocks.
       --index-cache-size=250MB  Maximum size of items held in the index cache.
       --chunk-pool-size=2GB     Maximum size of concurrently allocatable bytes
                                 for chunks.

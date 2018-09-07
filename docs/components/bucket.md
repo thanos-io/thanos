@@ -23,37 +23,20 @@ usage: thanos bucket [<flags>] <command> [<args> ...]
 inspect metric data in an object storage bucket
 
 Flags:
-  -h, --help                  Show context-sensitive help (also try --help-long
-                              and --help-man).
-      --version               Show application version.
-      --log.level=info        Log filtering level.
+  -h, --help            Show context-sensitive help (also try --help-long and
+                        --help-man).
+      --version         Show application version.
+      --log.level=info  Log filtering level.
       --gcloudtrace.project=GCLOUDTRACE.PROJECT  
-                              GCP project to send Google Cloud Trace tracings
-                              to. If empty, tracing will be disabled.
+                        GCP project to send Google Cloud Trace tracings to. If
+                        empty, tracing will be disabled.
       --gcloudtrace.sample-factor=1  
-                              How often we send traces (1/<sample-factor>). If 0
-                              no trace will be sent periodically, unless forced
-                              by baggage item. See `pkg/tracing/tracing.go` for
-                              details.
-      --objstore.type=<provider>  
-                              Specify the provider for object store. If empty or
-                              unsupported provider, Thanos won't read and store
-                              any block to the object store. Now supported GCS /
-                              S3.
-      --objstore.bucket=<bucket>  
-                              The bucket name for stored blocks.
-      --objstore.endpoint=<api-url>  
-                              The object store API endpoint for stored blocks.
-                              Supported S3-Compatible API
-      --objstore.access-key=<key>  
-                              Access key for an object store API. Supported
-                              S3-Compatible API
-      --objstore.insecure     Whether to use an insecure connection with an
-                              object store API. Supported S3-Compatible API
-      --objstore.signature-version2  
-                              Whether to use S3 Signature Version 2; otherwise
-                              Signature Version 4 will be used
-      --objstore.encrypt-sse  Whether to use Server Side Encryption
+                        How often we send traces (1/<sample-factor>). If 0 no
+                        trace will be sent periodically, unless forced by
+                        baggage item. See `pkg/tracing/tracing.go` for details.
+      --objstore.config=<bucket.config>  
+                        The yaml format configuration of bucket for stored
+                        blocks.
 
 Subcommands:
   bucket verify [<flags>]
@@ -82,68 +65,32 @@ usage: thanos bucket verify [<flags>]
 verify all blocks in the bucket against specified issues
 
 Flags:
-  -h, --help                  Show context-sensitive help (also try --help-long
-                              and --help-man).
-      --version               Show application version.
-      --log.level=info        Log filtering level.
+  -h, --help            Show context-sensitive help (also try --help-long and
+                        --help-man).
+      --version         Show application version.
+      --log.level=info  Log filtering level.
       --gcloudtrace.project=GCLOUDTRACE.PROJECT  
-                              GCP project to send Google Cloud Trace tracings
-                              to. If empty, tracing will be disabled.
+                        GCP project to send Google Cloud Trace tracings to. If
+                        empty, tracing will be disabled.
       --gcloudtrace.sample-factor=1  
-                              How often we send traces (1/<sample-factor>). If 0
-                              no trace will be sent periodically, unless forced
-                              by baggage item. See `pkg/tracing/tracing.go` for
-                              details.
-      --objstore.type=<provider>  
-                              Specify the provider for object store. If empty or
-                              unsupported provider, Thanos won't read and store
-                              any block to the object store. Now supported GCS /
-                              S3.
-      --objstore.bucket=<bucket>  
-                              The bucket name for stored blocks.
-      --objstore.endpoint=<api-url>  
-                              The object store API endpoint for stored blocks.
-                              Supported S3-Compatible API
-      --objstore.access-key=<key>  
-                              Access key for an object store API. Supported
-                              S3-Compatible API
-      --objstore.insecure     Whether to use an insecure connection with an
-                              object store API. Supported S3-Compatible API
-      --objstore.signature-version2  
-                              Whether to use S3 Signature Version 2; otherwise
-                              Signature Version 4 will be used
-      --objstore.encrypt-sse  Whether to use Server Side Encryption
-  -r, --repair                attempt to repair blocks for which issues were
-                              detected
-      --objstore-backup.type=<provider>  
-                              Specify the provider for object store. If empty or
-                              unsupported provider, Thanos won't read and store
-                              any block to the object store. Now supported GCS /
-                              S3.
-      --objstore-backup.bucket=<bucket>  
-                              The bucket name for stored blocks.
-      --objstore-backup.endpoint=<api-url>  
-                              The object store API endpoint for stored blocks.
-                              Supported S3-Compatible API
-      --objstore-backup.access-key=<key>  
-                              Access key for an object store API. Supported
-                              S3-Compatible API
-      --objstore-backup.insecure  
-                              Whether to use an insecure connection with an
-                              object store API. Supported S3-Compatible API
-      --objstore-backup.signature-version2  
-                              Whether to use S3 Signature Version 2; otherwise
-                              Signature Version 4 will be used
-      --objstore-backup.encrypt-sse  
-                              Whether to use Server Side Encryption
+                        How often we send traces (1/<sample-factor>). If 0 no
+                        trace will be sent periodically, unless forced by
+                        baggage item. See `pkg/tracing/tracing.go` for details.
+      --objstore.config=<bucket.config>  
+                        The yaml format configuration of bucket for stored
+                        blocks.
+  -r, --repair          attempt to repair blocks for which issues were detected
+      --objstore-backup.config=<bucket-backup.config>  
+                        The yaml format configuration of backup bucket for
+                        stored blocks.
   -i, --issues=index_issue... ...  
-                              Issues to verify (and optionally repair). Possible
-                              values: [duplicated_compaction index_issue
-                              overlapped_blocks]
+                        Issues to verify (and optionally repair). Possible
+                        values: [duplicated_compaction index_issue
+                        overlapped_blocks]
       --id-whitelist=ID-WHITELIST ...  
-                              Block IDs to verify (and optionally repair) only.
-                              If none is specified, all blocks will be verified.
-                              Repeated field
+                        Block IDs to verify (and optionally repair) only. If
+                        none is specified, all blocks will be verified. Repeated
+                        field
 
 ```
 
@@ -164,39 +111,22 @@ usage: thanos bucket ls [<flags>]
 list all blocks in the bucket
 
 Flags:
-  -h, --help                  Show context-sensitive help (also try --help-long
-                              and --help-man).
-      --version               Show application version.
-      --log.level=info        Log filtering level.
+  -h, --help            Show context-sensitive help (also try --help-long and
+                        --help-man).
+      --version         Show application version.
+      --log.level=info  Log filtering level.
       --gcloudtrace.project=GCLOUDTRACE.PROJECT  
-                              GCP project to send Google Cloud Trace tracings
-                              to. If empty, tracing will be disabled.
+                        GCP project to send Google Cloud Trace tracings to. If
+                        empty, tracing will be disabled.
       --gcloudtrace.sample-factor=1  
-                              How often we send traces (1/<sample-factor>). If 0
-                              no trace will be sent periodically, unless forced
-                              by baggage item. See `pkg/tracing/tracing.go` for
-                              details.
-      --objstore.type=<provider>  
-                              Specify the provider for object store. If empty or
-                              unsupported provider, Thanos won't read and store
-                              any block to the object store. Now supported GCS /
-                              S3.
-      --objstore.bucket=<bucket>  
-                              The bucket name for stored blocks.
-      --objstore.endpoint=<api-url>  
-                              The object store API endpoint for stored blocks.
-                              Supported S3-Compatible API
-      --objstore.access-key=<key>  
-                              Access key for an object store API. Supported
-                              S3-Compatible API
-      --objstore.insecure     Whether to use an insecure connection with an
-                              object store API. Supported S3-Compatible API
-      --objstore.signature-version2  
-                              Whether to use S3 Signature Version 2; otherwise
-                              Signature Version 4 will be used
-      --objstore.encrypt-sse  Whether to use Server Side Encryption
-  -o, --output=""             Format in which to print each block's information.
-                              May be 'json' or custom template.
+                        How often we send traces (1/<sample-factor>). If 0 no
+                        trace will be sent periodically, unless forced by
+                        baggage item. See `pkg/tracing/tracing.go` for details.
+      --objstore.config=<bucket.config>  
+                        The yaml format configuration of bucket for stored
+                        blocks.
+  -o, --output=""       Format in which to print each block's information. May
+                        be 'json' or custom template.
 
 ```
 

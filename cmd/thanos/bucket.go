@@ -41,7 +41,7 @@ var (
 func registerBucket(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "inspect metric data in an object storage bucket")
 
-	bucketConf := cmd.Flag("objstore.config", "The configuration of bucket for stored blocks.").
+	bucketConf := cmd.Flag("objstore.config", "The yaml format configuration of bucket for stored blocks.").
 		PlaceHolder("<bucket.config>").String()
 
 	// Verify command.
@@ -49,7 +49,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	verifyRepair := verify.Flag("repair", "attempt to repair blocks for which issues were detected").
 		Short('r').Default("false").Bool()
 	// NOTE(bplotka): Currently we support backup buckets only in the same project.
-	backupBucketConf := verify.Flag("objstore-backup.config", "The configuration of backup bucket for stored blocks.").
+	backupBucketConf := verify.Flag("objstore-backup.config", "The yaml format configuration of backup bucket for stored blocks.").
 		PlaceHolder("<bucket-backup.config>").String()
 	verifyIssues := verify.Flag("issues", fmt.Sprintf("Issues to verify (and optionally repair). Possible values: %v", allIssues())).
 		Short('i').Default(verifier.IndexIssueID, verifier.OverlappedBlocksIssueID).Strings()

@@ -23,43 +23,27 @@ usage: thanos compact [<flags>]
 continuously compacts blocks in an object store bucket
 
 Flags:
-  -h, --help                  Show context-sensitive help (also try --help-long
-                              and --help-man).
-      --version               Show application version.
-      --log.level=info        Log filtering level.
+  -h, --help               Show context-sensitive help (also try --help-long and
+                           --help-man).
+      --version            Show application version.
+      --log.level=info     Log filtering level.
       --gcloudtrace.project=GCLOUDTRACE.PROJECT  
-                              GCP project to send Google Cloud Trace tracings
-                              to. If empty, tracing will be disabled.
+                           GCP project to send Google Cloud Trace tracings to.
+                           If empty, tracing will be disabled.
       --gcloudtrace.sample-factor=1  
-                              How often we send traces (1/<sample-factor>). If 0
-                              no trace will be sent periodically, unless forced
-                              by baggage item. See `pkg/tracing/tracing.go` for
-                              details.
+                           How often we send traces (1/<sample-factor>). If 0 no
+                           trace will be sent periodically, unless forced by
+                           baggage item. See `pkg/tracing/tracing.go` for
+                           details.
       --http-address="0.0.0.0:10902"  
-                              Listen host:port for HTTP endpoints.
-      --data-dir="./data"     Data directory in which to cache blocks and
-                              process compactions.
-      --objstore.type=<provider>  
-                              Specify the provider for object store. If empty or
-                              unsupported provider, Thanos won't read and store
-                              any block to the object store. Now supported GCS /
-                              S3.
-      --objstore.bucket=<bucket>  
-                              The bucket name for stored blocks.
-      --objstore.endpoint=<api-url>  
-                              The object store API endpoint for stored blocks.
-                              Supported S3-Compatible API
-      --objstore.access-key=<key>  
-                              Access key for an object store API. Supported
-                              S3-Compatible API
-      --objstore.insecure     Whether to use an insecure connection with an
-                              object store API. Supported S3-Compatible API
-      --objstore.signature-version2  
-                              Whether to use S3 Signature Version 2; otherwise
-                              Signature Version 4 will be used
-      --objstore.encrypt-sse  Whether to use Server Side Encryption
-      --sync-delay=30m        Minimum age of fresh (non-compacted) blocks before
-                              they are being processed.
+                           Listen host:port for HTTP endpoints.
+      --data-dir="./data"  Data directory in which to cache blocks and process
+                           compactions.
+      --objstore.config=<bucket.config>  
+                           The yaml format configuration of bucket for stored
+                           blocks.
+      --sync-delay=30m     Minimum age of fresh (non-compacted) blocks before
+                           they are being processed.
       --retention.resolution-raw=0d  
                                How long to retain raw samples in bucket. 0d -
                                disables this retention
@@ -69,7 +53,7 @@ Flags:
       --retention.resolution-1h=0d  
                                How long to retain samples of resolution 2 (1
                                hour) in bucket. 0d - disables this retention
-  -w, --wait                  Do not exit after all compactions have been
-                              processed and wait for new work.
+  -w, --wait               Do not exit after all compactions have been processed
+                           and wait for new work.
 
 ```
