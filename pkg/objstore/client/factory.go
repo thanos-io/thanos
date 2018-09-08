@@ -21,25 +21,25 @@ const (
 )
 
 type BucketConfig struct {
-	Type    objProvider `yaml:"type"`
-	Content interface{} `yaml:"content"`
+	Type   objProvider `yaml:"type"`
+	Config interface{} `yaml:"config"`
 }
 
 var ErrNotFound = errors.New("not found bucket")
 
 // NewBucket initializes and returns new object storage clients.
-func NewBucket(logger log.Logger, config string, reg *prometheus.Registry, component string) (objstore.Bucket, error) {
+func NewBucket(logger log.Logger, conf string, reg *prometheus.Registry, component string) (objstore.Bucket, error) {
 	var err error
 	var bucketConf BucketConfig
-	if config == "" {
+	if conf == "" {
 		return nil, ErrNotFound
 	}
-	err = yaml.Unmarshal([]byte(config), &bucketConf)
+	err = yaml.Unmarshal([]byte(conf), &bucketConf)
 	if err != nil {
 		return nil, errors.Wrap(err, "unmarshal objstore.config")
 	}
 
-	content, err := yaml.Marshal(bucketConf.Content)
+	config, err := yaml.Marshal(bucketConf.Config)
 	if err != nil {
 		return nil, err
 	}
@@ -47,9 +47,9 @@ func NewBucket(logger log.Logger, config string, reg *prometheus.Registry, compo
 	var bucket objstore.Bucket
 	switch bucketConf.Type {
 	case GCS:
-		bucket, err = gcs.NewBucket(logger, context.Background(), content, reg, component)
+		bucket, err = gcs.NewBucket(logger, context.Background(), config, reg, component)
 	case S3:
-		bucket, err = s3.NewBucket(logger, content, reg, component)
+		bucket, err = s3.NewBucket(logger, config, reg, component)
 	default:
 		return nil, ErrNotFound
 	}
