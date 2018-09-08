@@ -15,8 +15,10 @@ The retention is recommended to not be lower than three times the block duration
 $ thanos sidecar \
     --tsdb.path        "/path/to/prometheus/data/dir" \
     --prometheus.url   "http://localhost:9090" \
-    --gcs.bucket       "example-bucket" \
     --cluster.peers    "thanos-cluster.example.org" \
+    --objstore.config="type: GCS
+config:
+    bucket: example-bucket"
 ```
 
 ## Deployment

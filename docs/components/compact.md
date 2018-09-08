@@ -6,7 +6,9 @@ It is generally not semantically concurrency safe and must be deployed as a sing
 Example:
 
 ```
-$ thanos compact --gcs.bucket example-bucket --data-dir /tmp/thanos-compact
+$ thanos compact --data-dir /tmp/thanos-compact --objstore.config="type: GCS
+config:
+    bucket: example-bucket"
 ```
 
 The compactor needs local disk space to store intermediate data for its processing. Generally, about 100GB are recommended for it to keep working as the compacted time ranges grow over time.

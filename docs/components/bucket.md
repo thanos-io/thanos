@@ -6,7 +6,9 @@ It is normally run as a stand alone command to aid with troubleshooting.
 Example:
 
 ```
-$ thanos bucket verify --gcs.bucket example-bucket
+$ thanos bucket verify --objstore.config="type: GCS
+config:
+    bucket: example-bucket"
 ```
 
 Bucket can be extended to add more subcommands that will be helpful when working with object storage buckets
