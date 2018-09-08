@@ -34,8 +34,7 @@ func NewBucket(logger log.Logger, conf string, reg *prometheus.Registry, compone
 	if conf == "" {
 		return nil, ErrNotFound
 	}
-	err = yaml.Unmarshal([]byte(conf), &bucketConf)
-	if err != nil {
+	if err := yaml.Unmarshal([]byte(conf), &bucketConf); err != nil {
 		return nil, errors.Wrap(err, "unmarshal objstore.config")
 	}
 
