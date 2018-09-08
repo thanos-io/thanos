@@ -111,8 +111,7 @@ Flags:
       --alert.query-url=ALERT.QUERY-URL  
                                 The external Thanos Query URL that would be set
                                 in all alerts 'Source' field
-      --objstore.config=<bucket.config>  
-                                The yaml format configuration of bucket for
-                                stored blocks.
+      --objstore.config=<bucket.config.yaml>  
+                                The object store configuration in yaml format.
 
 ```

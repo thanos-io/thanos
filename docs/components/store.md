@@ -19,7 +19,7 @@ In general about 1MB of local disk space is required per TSDB block stored in th
 ```$
 usage: thanos store [<flags>]
 
-store node giving access to blocks in a supported bucket provider
+store node giving access to blocks in a bucket provider. Now supported GCS / S3.
 
 Flags:
   -h, --help                    Show context-sensitive help (also try
@@ -81,9 +81,8 @@ Flags:
                                 accounting the latency differences between
                                 network types: local, lan, wan.
       --data-dir="./data"       Data directory in which to cache remote blocks.
-      --objstore.config=<bucket.config>  
-                                The yaml format configuration of bucket for
-                                stored blocks.
+      --objstore.config=<bucket.config.yaml>  
+                                The object store configuration in yaml format.
       --index-cache-size=250MB  Maximum size of items held in the index cache.
       --chunk-pool-size=2GB     Maximum size of concurrently allocatable bytes
                                 for chunks.
