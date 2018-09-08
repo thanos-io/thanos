@@ -42,7 +42,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	cmd := app.Command(name, "inspect metric data in an object storage bucket")
 
 	bucketConf := cmd.Flag("objstore.config", "The object store configuration in yaml format.").
-		PlaceHolder("<bucket.config>").String()
+		PlaceHolder("<bucket.config>").Required().String()
 
 	// Verify command.
 	verify := cmd.Command("verify", "verify all blocks in the bucket against specified issues")

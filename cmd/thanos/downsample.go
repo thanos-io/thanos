@@ -33,7 +33,7 @@ func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name s
 		Default("./data").String()
 
 	bucketConf := cmd.Flag("objstore.config", "The object store configuration in yaml format.").
-		PlaceHolder("<bucket.config>").String()
+		PlaceHolder("<bucket.config>").Required().String()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		return runDownsample(g, logger, reg, *dataDir, *bucketConf, name)
