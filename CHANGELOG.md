@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Removes support for multiple units in duration. For example: 1m0s won't work, while 1m will work.
 - Adds support for y,w,d time units 
 - Add Thanos bucket ls -o wide, which provides more detailed information about blocks stored in the bucket.
+- Use the configuration of bucket in yaml format.
 
 Newest release candidate: [v0.1.0-rc.2](https://github.com/improbable-eng/thanos/releases/tag/v0.1.0-rc.2)
 
