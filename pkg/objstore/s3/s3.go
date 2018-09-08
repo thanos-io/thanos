@@ -43,10 +43,10 @@ type s3Config struct {
 	Bucket        string `yaml:"bucket"`
 	Endpoint      string `yaml:"endpoint"`
 	AccessKey     string `yaml:"access-key"`
-	SecretKey     string `yaml:"secret-key"`
 	Insecure      bool   `yaml:"insecure"`
 	SignatureV2   bool   `yaml:"signature-version2"`
 	SSEEncryption bool   `yaml:"encrypt-sse"`
+	secretKey     string
 }
 
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
@@ -66,6 +66,7 @@ func NewBucket(logger log.Logger, conf []byte, reg prometheus.Registerer, compon
 	if err != nil {
 		return nil, err
 	}
+	config.secretKey = os.Getenv("S3_SECRET_KEY")
 	err = Validate(config)
 	if err != nil {
 		return nil, err
@@ -79,7 +80,7 @@ func NewBucket(logger log.Logger, conf []byte, reg prometheus.Registerer, compon
 		chain = []credentials.Provider{&credentials.Static{
 			Value: credentials.Value{
 				AccessKeyID:     config.AccessKey,
-				SecretAccessKey: config.SecretKey,
+				SecretAccessKey: config.secretKey,
 				SignerType:      signature,
 			},
 		}}
@@ -154,8 +155,8 @@ func (b *Bucket) GetBucket() string {
 // Validate checks to see the config options are set.
 func Validate(conf s3Config) error {
 	if conf.Endpoint == "" ||
-		(conf.AccessKey == "" && conf.SecretKey != "") ||
-		(conf.AccessKey != "" && conf.SecretKey == "") {
+		(conf.AccessKey == "" && conf.secretKey != "") ||
+		(conf.AccessKey != "" && conf.secretKey == "") {
 		return errors.New("insufficient s3 test configuration information")
 	}
 	return nil
@@ -165,7 +166,7 @@ func Validate(conf s3Config) error {
 func ValidateForTests(conf s3Config) error {
 	if conf.Endpoint == "" ||
 		conf.AccessKey == "" ||
-		conf.SecretKey == "" {
+		conf.secretKey == "" {
 		return errors.New("insufficient s3 test configuration information")
 	}
 	return nil
@@ -276,7 +277,7 @@ func configFromEnv() s3Config {
 		Bucket:    os.Getenv("S3_BUCKET"),
 		Endpoint:  os.Getenv("S3_ENDPOINT"),
 		AccessKey: os.Getenv("S3_ACCESS_KEY"),
-		SecretKey: os.Getenv("S3_SECRET_KEY"),
+		secretKey: os.Getenv("S3_SECRET_KEY"),
 	}
 
 	insecure, err := strconv.ParseBool(os.Getenv("S3_INSECURE"))
