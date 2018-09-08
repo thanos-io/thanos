@@ -8,6 +8,14 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 ## Unreleased
 
+- Add Thanos Rule UI
+- Add Thanos Rule reload via HTTP POST to /-/reload
+- Add Thanos compact --retention.default flag, for configuring storage bucket retention period.
+- Removes support for multiple units in duration. For example: 1m0s won't work, while 1m will work.
+- Adds support for y,w,d time units 
+- Add Thanos bucket ls -o wide, which provides more detailed information about blocks stored in the bucket.
+- Use the configuration of bucket in yaml format.
+
 ## [v0.1.0](https://github.com/improbable-eng/thanos/releases/tag/v0.1.0) - 2018.09.14
 
 Initial version to have a stable reference before [gossip protocol removal](https://github.com/improbable-eng/thanos/blob/master/docs/proposals/gossip-removal.md).
