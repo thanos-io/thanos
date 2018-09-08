@@ -99,9 +99,8 @@ Flags:
       --reloader.rule-dir=RELOADER.RULE-DIR ...  
                                  Rule directories for the reloader to refresh
                                  (repeated field).
-      --objstore.config=<bucket.config>  
-                                 The yaml format configuration of bucket for
-                                 stored blocks.
+      --objstore.config=<bucket.config.yaml>  
+                                 The object store configuration in yaml format.
 
 ```
 

@@ -31,7 +31,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 		Default("./data").String()
 
 	bucketConf := cmd.Flag("objstore.config", "The object store configuration in yaml format.").
-		PlaceHolder("<bucket.config>").String()
+		PlaceHolder("<bucket.config.yaml>").String()
 
 	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the index cache.").
 		Default("250MB").Bytes()
