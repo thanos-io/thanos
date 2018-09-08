@@ -5,9 +5,11 @@ It keeps a small amount of information about all remote blocks on local disk and
 
 ```
 $ thanos store \
-    --data-dir         "/local/state/data/dir" \
-    --gcs.bucket       "example-bucket" \
-    --cluster.peers    "thanos-cluster.example.org"
+    --data-dir        "/local/state/data/dir" \
+    --cluster.peers    "thanos-cluster.example.org" \
+    --objstore.config="type: GCS
+config:
+    bucket: example-bucket"
 ```
 
 In general about 1MB of local disk space is required per TSDB block stored in the object storage bucket.

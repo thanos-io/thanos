@@ -14,9 +14,11 @@ $ thanos rule \
     --eval-interval     "30s" \
     --rule-file         "/path/to/rules/*.rules.yaml" \
     --alert.query-url   "http://0.0.0.0:9090" \
-    --alertmanagers.url "alert.thanos.io"
-    --gcs.bucket        "example-bucket" \
-    --cluster.peers     "thanos-cluster.example.org"
+    --alertmanagers.url "alert.thanos.io" \
+    --cluster.peers     "thanos-cluster.example.org" \
+    --objstore.config="type: GCS
+config:
+    bucket: example-bucket"
 ```
 
 As rule nodes outsource query processing to query nodes, they should generally experience little load. If necessary, functional sharding can be applied by splitting up the sets of rules between HA pairs.
