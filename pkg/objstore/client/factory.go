@@ -49,8 +49,10 @@ func NewBucket(logger log.Logger, conf string, reg *prometheus.Registry, compone
 		bucket, err = gcs.NewBucket(logger, context.Background(), config, reg, component)
 	case S3:
 		bucket, err = s3.NewBucket(logger, config, reg, component)
-	default:
+	case "":
 		return nil, ErrNotFound
+	default:
+		return nil, errors.Errorf("bucket with type %s is not supported", bucketConf.Type)
 	}
 	if err != nil {
 		return nil, errors.Wrap(err, fmt.Sprintf("create %s client", bucketConf.Type))
