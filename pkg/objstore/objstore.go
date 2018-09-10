@@ -27,7 +27,7 @@ type Bucket interface {
 	// Delete removes the object with the given name.
 	Delete(ctx context.Context, name string) error
 
-	// GetBucket return the bucket name for the provider
+	// GetBucket returns the bucket name for the provider.
 	GetBucket() string
 }
 

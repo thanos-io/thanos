@@ -48,7 +48,6 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	verify := cmd.Command("verify", "verify all blocks in the bucket against specified issues")
 	verifyRepair := verify.Flag("repair", "attempt to repair blocks for which issues were detected").
 		Short('r').Default("false").Bool()
-	// NOTE(bplotka): Currently we support backup buckets only in the same project.
 	backupBucketConf := verify.Flag("objstore-backup.config", "The backup object store configuration in yaml format.").
 		PlaceHolder("<bucket-backup.config.yaml>").String()
 	verifyIssues := verify.Flag("issues", fmt.Sprintf("Issues to verify (and optionally repair). Possible values: %v", allIssues())).
