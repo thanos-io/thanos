@@ -138,13 +138,13 @@ func runCompact(
 	}
 
 	if retentionByResolution[downsample.ResLevel0].Seconds() != 0 {
-		level.Info(logger).Log("msg", "retention policy of raw samples is enabled", "duration", retention)
+		level.Info(logger).Log("msg", "retention policy of raw samples is enabled", "duration", retentionByResolution[downsample.ResLevel0])
 	}
 	if retentionByResolution[downsample.ResLevel1].Seconds() != 0 {
-		level.Info(logger).Log("msg", "retention policy of 5 min aggregated samples is enabled", "duration", retention)
+		level.Info(logger).Log("msg", "retention policy of 5 min aggregated samples is enabled", "duration", retentionByResolution[downsample.ResLevel0])
 	}
 	if retentionByResolution[downsample.ResLevel2].Seconds() != 0 {
-		level.Info(logger).Log("msg", "retention policy of 1 hour aggregated samples is enabled", "duration", retention)
+		level.Info(logger).Log("msg", "retention policy of 1 hour aggregated samples is enabled", "duration", retentionByResolution[downsample.ResLevel0])
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
