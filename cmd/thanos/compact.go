@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"path"
 	"time"
 
@@ -41,6 +42,10 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	retention := modelDuration(cmd.Flag("retention.default", "How long to retain samples in bucket. 0d - disables retention").Default("0d"))
 
+	retentionRes0 := modelDuration(cmd.Flag("retention.res0", "How long to retain raw samples in bucket. 0d - disables this retention").Default("0d"))
+	retentionRes1 := modelDuration(cmd.Flag("retention.res1", "How long to retain samples of resolution 1 (5 minutes) in bucket. 0d - disables this retention").Default("0d"))
+	retentionRes2 := modelDuration(cmd.Flag("retention.res2", "How long to retain samples of resolution 2 (1 hour) in bucket. 0d - disables this retention").Default("0d"))
+
 	wait := cmd.Flag("wait", "Do not exit after all compactions have been processed and wait for new work.").
 		Short('w').Bool()
 
@@ -54,6 +59,11 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			*haltOnError,
 			*wait,
 			time.Duration(*retention),
+			map[int64]time.Duration{
+				downsample.ResLevel0: time.Duration(*retentionRes0),
+				downsample.ResLevel1: time.Duration(*retentionRes1),
+				downsample.ResLevel2: time.Duration(*retentionRes2),
+			},
 			name,
 		)
 	}
@@ -71,6 +81,7 @@ func runCompact(
 	haltOnError bool,
 	wait bool,
 	retention time.Duration,
+	retentionByResolution map[int64]time.Duration,
 	component string,
 ) error {
 	halted := prometheus.NewGauge(prometheus.GaugeOpts{
@@ -126,6 +137,16 @@ func runCompact(
 		level.Info(logger).Log("msg", "default retention policy is enabled", "duration", retention)
 	}
 
+	if retentionByResolution[downsample.ResLevel0].Seconds() != 0 {
+		level.Info(logger).Log("msg", "retention policy of raw samples is enabled", "duration", retention)
+	}
+	if retentionByResolution[downsample.ResLevel1].Seconds() != 0 {
+		level.Info(logger).Log("msg", "retention policy of 5 min aggregated samples is enabled", "duration", retention)
+	}
+	if retentionByResolution[downsample.ResLevel2].Seconds() != 0 {
+		level.Info(logger).Log("msg", "retention policy of 1 hour aggregated samples is enabled", "duration", retention)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	f := func() error {
 		if err := compactor.Compact(ctx); err != nil {
@@ -152,6 +173,15 @@ func runCompact(
 				return errors.Wrap(err, "retention failed")
 			}
 		}
+
+		for resolution, retentionDuration := range retentionByResolution {
+			if retentionDuration != 0 {
+				if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, retentionDuration, resolution); err != nil {
+					return errors.Wrap(err, fmt.Sprintf("retention for resolution %d failed", resolution))
+				}
+			}
+		}
+
 		level.Info(logger).Log("msg", "compaction, downsampling and optional retention apply iteration done")
 		return nil
 	}
