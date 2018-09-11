@@ -80,7 +80,7 @@ func runStore(
 	{
 		bkt, err := client.NewBucket(logger, bucketConf, reg, component)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "create bucket client")
 		}
 
 		// Ensure we close up everything properly.
