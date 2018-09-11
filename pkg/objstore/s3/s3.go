@@ -145,8 +145,8 @@ func NewBucket(logger log.Logger, conf []byte, reg prometheus.Registerer, compon
 	return bkt, nil
 }
 
-// GetBucket returns the bucket name for s3.
-func (b *Bucket) GetBucket() string {
+// Name returns the bucket name for s3.
+func (b *Bucket) Name() string {
 	return b.bucket
 }
 
