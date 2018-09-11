@@ -20,7 +20,7 @@ On-disk data is safe to delete between restarts and should be the first attempt 
 
 [embedmd]:# (flags/compact.txt $)
 ```$
-usage: thanos compact [<flags>]
+usage: thanos compact --objstore.config=<bucket.config.yaml> [<flags>]
 
 continuously compacts blocks in an object store bucket
 
