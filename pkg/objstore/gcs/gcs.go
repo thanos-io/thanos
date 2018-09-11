@@ -47,7 +47,7 @@ type Bucket struct {
 	logger   log.Logger
 	bkt      *storage.BucketHandle
 	opsTotal *prometheus.CounterVec
-	bucket   string
+	name     string
 
 	closer io.Closer
 }
@@ -75,7 +75,7 @@ func NewBucket(ctx context.Context, logger log.Logger, conf []byte, reg promethe
 			ConstLabels: prometheus.Labels{"bucket": gc.Bucket},
 		}, []string{"operation"}),
 		closer: gcsClient,
-		bucket: gc.Bucket,
+		name:   gc.Bucket,
 	}
 	if reg != nil {
 		reg.MustRegister()
@@ -85,7 +85,7 @@ func NewBucket(ctx context.Context, logger log.Logger, conf []byte, reg promethe
 
 // Name returns the bucket name for gcs.
 func (b *Bucket) Name() string {
-	return b.bucket
+	return b.name
 }
 
 // Iter calls f for each entry in the given directory. The argument to f is the full
@@ -204,7 +204,7 @@ func NewTestBucket(t testing.TB, project string) (objstore.Bucket, func(), error
 		return nil, nil, err
 	}
 
-	t.Log("created temporary GCS bucket for GCS tests with name", b.bucket, "in project", project)
+	t.Log("created temporary GCS bucket for GCS tests with name", b.name, "in project", project)
 	return b, func() {
 		objstore.EmptyBucket(t, ctx, b)
 		if err := b.bkt.Delete(ctx); err != nil {
