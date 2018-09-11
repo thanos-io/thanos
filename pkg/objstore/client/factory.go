@@ -40,7 +40,7 @@ func NewBucket(logger log.Logger, conf string, reg *prometheus.Registry, compone
 
 	config, err := yaml.Marshal(bucketConf.Config)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "marshal content of bucket configuration")
 	}
 
 	var bucket objstore.Bucket
