@@ -19,7 +19,7 @@ In general about 1MB of local disk space is required per TSDB block stored in th
 
 [embedmd]:# (flags/store.txt $)
 ```$
-usage: thanos store [<flags>]
+usage: thanos store --objstore.config=<bucket.config.yaml> [<flags>]
 
 store node giving access to blocks in a bucket provider. Now supported GCS / S3.
 
