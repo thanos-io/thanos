@@ -46,7 +46,7 @@ func NewBucket(logger log.Logger, conf string, reg *prometheus.Registry, compone
 	var bucket objstore.Bucket
 	switch bucketConf.Type {
 	case GCS:
-		bucket, err = gcs.NewBucket(logger, context.Background(), config, reg, component)
+		bucket, err = gcs.NewBucket(context.Background(), logger, config, reg, component)
 	case S3:
 		bucket, err = s3.NewBucket(logger, config, reg, component)
 	default:
@@ -55,5 +55,5 @@ func NewBucket(logger log.Logger, conf string, reg *prometheus.Registry, compone
 	if err != nil {
 		return nil, errors.Wrap(err, fmt.Sprintf("create %s client", bucketConf.Type))
 	}
-	return objstore.BucketWithMetrics(bucket.GetBucket(), bucket, reg), nil
+	return objstore.BucketWithMetrics(bucket.Name(), bucket, reg), nil
 }

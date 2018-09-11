@@ -53,7 +53,7 @@ type Bucket struct {
 }
 
 // NewBucket returns a new Bucket against the given bucket handle.
-func NewBucket(logger log.Logger, ctx context.Context, conf []byte, reg prometheus.Registerer, component string) (*Bucket, error) {
+func NewBucket(ctx context.Context, logger log.Logger, conf []byte, reg prometheus.Registerer, component string) (*Bucket, error) {
 	var gc gcsConfig
 	if err := yaml.Unmarshal(conf, &gc); err != nil {
 		return nil, err
@@ -83,8 +83,8 @@ func NewBucket(logger log.Logger, ctx context.Context, conf []byte, reg promethe
 	return bkt, nil
 }
 
-// GetBucket returns the bucket name for gcs.
-func (b *Bucket) GetBucket() string {
+// Name returns the bucket name for gcs.
+func (b *Bucket) Name() string {
 	return b.bucket
 }
 
@@ -192,7 +192,7 @@ func NewTestBucket(t testing.TB, project string) (objstore.Bucket, func(), error
 		return nil, nil, err
 	}
 
-	b, err := NewBucket(log.NewNopLogger(), ctx, bc, nil, "thanos-e2e-test")
+	b, err := NewBucket(ctx, log.NewNopLogger(), bc, nil, "thanos-e2e-test")
 	if err != nil {
 		cancel()
 		return nil, nil, err
