@@ -52,7 +52,7 @@ type s3Config struct {
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
 type Bucket struct {
 	logger   log.Logger
-	bucket   string
+	name     string
 	client   *minio.Client
 	sse      encrypt.ServerSide
 	opsTotal *prometheus.CounterVec
@@ -130,7 +130,7 @@ func NewBucket(logger log.Logger, conf []byte, reg prometheus.Registerer, compon
 
 	bkt := &Bucket{
 		logger: logger,
-		bucket: config.Bucket,
+		name:   config.Bucket,
 		client: client,
 		sse:    sse,
 		opsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -147,7 +147,7 @@ func NewBucket(logger log.Logger, conf []byte, reg prometheus.Registerer, compon
 
 // Name returns the bucket name for s3.
 func (b *Bucket) Name() string {
-	return b.bucket
+	return b.name
 }
 
 // Validate checks to see the config options are set.
@@ -180,7 +180,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		dir = strings.TrimSuffix(dir, DirDelim) + DirDelim
 	}
 
-	for object := range b.client.ListObjects(b.bucket, dir, false, ctx.Done()) {
+	for object := range b.client.ListObjects(b.name, dir, false, ctx.Done()) {
 		// Catch the error when failed to list objects.
 		if object.Err != nil {
 			return object.Err
@@ -205,7 +205,7 @@ func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (
 			return nil, err
 		}
 	}
-	r, err := b.client.GetObjectWithContext(ctx, b.bucket, name, *opts)
+	r, err := b.client.GetObjectWithContext(ctx, b.name, name, *opts)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +235,7 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 // Exists checks if the given object exists.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 	b.opsTotal.WithLabelValues(opObjectHead).Inc()
-	_, err := b.client.StatObject(b.bucket, name, minio.StatObjectOptions{})
+	_, err := b.client.StatObject(b.name, name, minio.StatObjectOptions{})
 	if err != nil {
 		if b.IsObjNotFoundErr(err) {
 			return false, nil
@@ -250,7 +250,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	b.opsTotal.WithLabelValues(opObjectInsert).Inc()
 
-	_, err := b.client.PutObjectWithContext(ctx, b.bucket, name, r, -1,
+	_, err := b.client.PutObjectWithContext(ctx, b.name, name, r, -1,
 		minio.PutObjectOptions{ServerSideEncryption: b.sse},
 	)
 
@@ -260,7 +260,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
 	b.opsTotal.WithLabelValues(opObjectDelete).Inc()
-	return b.client.RemoveObject(b.bucket, name)
+	return b.client.RemoveObject(b.name, name)
 }
 
 // IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
@@ -334,7 +334,7 @@ func NewTestBucket(t testing.TB, location string) (objstore.Bucket, func(), erro
 	if err := b.client.MakeBucket(tmpBucketName, location); err != nil {
 		return nil, nil, err
 	}
-	b.bucket = tmpBucketName
+	b.name = tmpBucketName
 	t.Log("created temporary AWS bucket for AWS tests with name", tmpBucketName, "in", location)
 
 	return b, func() {
