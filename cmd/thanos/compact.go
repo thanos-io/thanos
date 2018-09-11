@@ -32,7 +32,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 		Default("./data").String()
 
 	bucketConf := cmd.Flag("objstore.config", "The object store configuration in yaml format.").
-		PlaceHolder("<bucket.config.yaml>").String()
+		PlaceHolder("<bucket.config.yaml>").Required().String()
 
 	syncDelay := modelDuration(cmd.Flag("sync-delay", "Minimum age of fresh (non-compacted) blocks before they are being processed.").
 		Default("30m"))
