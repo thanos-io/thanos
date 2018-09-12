@@ -19,9 +19,9 @@ Two or more series that have that are only distinguished by the given replica la
 
 ```
 $ thanos query \
-    --http-address     "0.0.0.0:9090" \
-    --replica-label    "replica" \
-    --cluster.peers    "thanos-cluster.example.org" \
+    --http-address        "0.0.0.0:9090" \
+    --query.replica-label "replica" \
+    --cluster.peers       "thanos-cluster.example.org" \
 ```
 
 ## Deployment
