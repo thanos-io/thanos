@@ -196,6 +196,10 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 	}
 
 	for object := range b.client.ListObjects(b.bucket, dir, false, ctx.Done()) {
+		// catch the error when failed to list objects
+		if object.Err != nil {
+			return object.Err
+		}
 		// this sometimes happens with empty buckets
 		if object.Key == "" {
 			continue
