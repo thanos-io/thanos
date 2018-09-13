@@ -12,11 +12,38 @@ DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(she
 # then keep using those.
 FIRST_GOPATH      ?= $(firstword $(subst :, ,$(shell go env GOPATH)))
 TMP_GOPATH        ?= /tmp/thanos-go
-GOIMPORTS         ?= $(FIRST_GOPATH)/bin/goimports
-PROMU             ?= $(FIRST_GOPATH)/bin/promu
-DEP               ?= $(FIRST_GOPATH)/bin/dep-45be32ba4708aad5e2a
-ERRCHECK          ?= $(FIRST_GOPATH)/bin/errcheck
-EMBEDMD          ?= $(FIRST_GOPATH)/bin/embedmd
+BIN_DIR           ?= $(FIRST_GOPATH)/bin
+GOIMPORTS         ?= $(BIN_DIR)/goimports
+PROMU             ?= $(BIN_DIR)/promu
+DEP_FINISHED      ?= .dep-finished
+ERRCHECK          ?= $(BIN_DIR)/errcheck
+EMBEDMD           ?= $(BIN_DIR)/embedmd
+
+DEP               ?= $(BIN_DIR)/dep-$(DEP_VERSION)
+
+DEP_VERSION             ?=45be32ba4708aad5e2aa8c86f9432c4c4c1f8da2
+# TODO(bplotka): Add more recent version after https://github.com/prometheus/prometheus/issues/4551 is fixed.
+SUPPORTED_PROM_VERSIONS ?=v2.0.0 v2.2.1
+ALERTMANAGER_VERSION    ?=v0.15.2
+
+# fetch_go_bin_version downloads (go gets) the binary from specific version and installs it in $(BIN_DIR)/<bin>-<version>
+# arguments:
+# $(1): Install path. (e.g github.com/golang/dep/cmd/dep)
+# $(2): Tag or revision for checkout.
+define fetch_go_bin_version
+	@echo ">> fetching $(1)@$(2) revision/version"
+	@if [ ! -d "$(TMP_GOPATH)/src/$(1)" ]; then \
+    	GOPATH=$(TMP_GOPATH) go get -d -u $(1); \
+    else \
+    	git fetch; \
+    fi
+    @cd $(TMP_GOPATH)/src/$(1) && git checkout -f -q $(2)
+    @echo ">> installing $(1)@$(2)"
+    @GOBIN=$(TMP_GOPATH)/bin GOPATH=$(TMP_GOPATH) go install $(1)
+    @mv $(TMP_GOPATH)/bin/$(shell basename $(1)) $(BIN_DIR)/$(shell basename $(1))-$(2)
+    @echo ">> produced $(BIN_DIR)/$(shell basename $(1))-$(2)"
+
+endef
 
 .PHONY: all
 all: deps format errcheck build
@@ -107,19 +134,21 @@ tarballs-release: $(PROMU)
 	$(PROMU) checksum .tarballs
 	$(PROMU) release .tarballs
 
-# test runs all Thanos golang tests.
+# test runs all Thanos golang tests against each supported version of Prometheus.
 .PHONY: test
 test: test-deps
 	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS="true" or/and  export THANOS_SKIP_S3_AWS_TESTS="true" if you want to skip e2e tests against real store buckets"
-	@go test $(shell go list ./... | grep -v /vendor/ | grep -v /benchmark/)
-
+	@for ver in $(SUPPORTED_PROM_VERSIONS); do \
+		THANOS_TEST_PROMETHEUS_PATH="prometheus-$$ver" THANOS_TEST_ALERTMANAGER_PATH="alertmanager-$(ALERTMANAGER_VERSION)" go test $(shell go list ./... | grep -v /vendor/ | grep -v /benchmark/); \
+	done
 
 # test-deps installs dependency for e2e tets.
+# It installs current Thanos, supported versions of Prometheus and alertmanager to test against in e2e.
 .PHONY: test-deps
 test-deps: deps
 	@go install github.com/improbable-eng/thanos/cmd/thanos
-	@go get -u github.com/prometheus/prometheus/cmd/prometheus
-	@go get -u github.com/prometheus/alertmanager/cmd/alertmanager
+	$(foreach ver,$(SUPPORTED_PROM_VERSIONS),$(call fetch_go_bin_version,github.com/prometheus/prometheus/cmd/prometheus,$(ver)))
+	$(call fetch_go_bin_version,github.com/prometheus/alertmanager/cmd/alertmanager,$(ALERTMANAGER_VERSION))
 
 # vet vets the code.
 .PHONY: vet
@@ -129,9 +158,9 @@ vet:
 
 # non-phony targets
 
-vendor: Gopkg.toml Gopkg.lock | $(DEP)
+vendor: Gopkg.toml Gopkg.lock $(DEP_FINISHED) | $(DEP)
 	@echo ">> dep ensure"
-	@$(DEP) ensure $(DEPARGS)
+	@$(DEP) ensure $(DEPARGS) || rm $(DEP_FINISHED)
 
 $(GOIMPORTS):
 	@echo ">> fetching goimports"
@@ -141,17 +170,11 @@ $(PROMU):
 	@echo ">> fetching promu"
 	GOOS= GOARCH= go get -u github.com/prometheus/promu
 
-# Always pin dep to the correct version. It changes too often.
 $(DEP):
-	@echo ">> fetching dep from 45be32ba4708aad5e2aa8c86f9432c4c4c1f8da2 revision"
-	@if [ ! -d "$(TMP_GOPATH)/src/github.com/golang/dep" ]; then \
-		GOPATH=$(TMP_GOPATH) go get -d -u github.com/golang/dep/cmd/dep; \
-	else \
-		git fetch; \
-	fi
-	@cd $(TMP_GOPATH)/src/github.com/golang/dep && git checkout -f -q 45be32ba4708aad5e2aa8c86f9432c4c4c1f8da2
-	@GOPATH=$(TMP_GOPATH) go install github.com/golang/dep/cmd/dep
-	@mv $(TMP_GOPATH)/bin/dep $(DEP)
+	$(call fetch_go_bin_version,github.com/golang/dep/cmd/dep,$(DEP_VERSION))
+
+$(DEP_FINISHED):
+	@touch $(DEP_FINISHED)
 
 $(ERRCHECK):
 	@echo ">> fetching errcheck"

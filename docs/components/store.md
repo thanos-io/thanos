@@ -5,7 +5,7 @@ It keeps a small amount of information about all remote blocks on local disk and
 
 ```
 $ thanos store \
-    --tsdb.path        "/local/state/data/dir" \
+    --data-dir         "/local/state/data/dir" \
     --gcs.bucket       "example-bucket" \
     --cluster.peers    "thanos-cluster.example.org"
 ```
@@ -68,7 +68,7 @@ Flags:
                                 convergence speeds across larger clusters at the
                                 expense of increased bandwidth usage. Default is
                                 used from a specified network-type.
-      --cluster.refresh-interval=1m0s  
+      --cluster.refresh-interval=1m  
                                 Interval for membership to refresh cluster.peers
                                 state, 0 disables refresh.
       --cluster.secret-key=CLUSTER.SECRET-KEY  
@@ -80,7 +80,7 @@ Flags:
                                 configurations. Sets of configurations
                                 accounting the latency differences between
                                 network types: local, lan, wan.
-      --tsdb.path="./data"      Data directory of TSDB.
+      --data-dir="./data"       Data directory in which to cache remote blocks.
       --gcs.bucket=<bucket>     Google Cloud Storage bucket name for stored
                                 blocks. If empty sidecar won't store any block
                                 inside Google Cloud Storage.

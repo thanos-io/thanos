@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/testutil"
+
 	"github.com/oklog/run"
 	"github.com/pkg/errors"
 )
@@ -79,7 +81,7 @@ func spinup(t testing.TB, ctx context.Context, cfg config) (chan error, error) {
 			return nil, errors.Wrap(err, "creating prom config failed")
 		}
 
-		commands = append(commands, exec.Command("prometheus",
+		commands = append(commands, exec.Command(testutil.PrometheusBinary(),
 			"--config.file", promDir+"/prometheus.yml",
 			"--storage.tsdb.path", promDir,
 			"--log.level", "info",
@@ -174,7 +176,7 @@ receivers:
 		if err != nil {
 			return nil, errors.Wrap(err, "creating alertmanager config file failed")
 		}
-		commands = append(commands, exec.Command("alertmanager",
+		commands = append(commands, exec.Command(testutil.AlertmanagerBinary(),
 			"--config.file", dir+"/config.yaml",
 			"--web.listen-address", "127.0.0.1:29093",
 			"--log.level", "debug",

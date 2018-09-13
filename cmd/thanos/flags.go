@@ -2,13 +2,17 @@ package main
 
 import (
 	"fmt"
+	"net"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -29,13 +33,13 @@ func regCommonServerFlags(cmd *kingpin.CmdClause) (*string, *string, func(log.Lo
 
 	peers := cmd.Flag("cluster.peers", "Initial peers to join the cluster. It can be either <ip:port>, or <domain:port>. A lookup resolution is done only at the startup.").Strings()
 
-	gossipInterval := cmd.Flag("cluster.gossip-interval", "Interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth. Default is used from a specified network-type.").
-		PlaceHolder("<gossip interval>").Duration()
+	gossipInterval := modelDuration(cmd.Flag("cluster.gossip-interval", "Interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth. Default is used from a specified network-type.").
+		PlaceHolder("<gossip interval>"))
 
-	pushPullInterval := cmd.Flag("cluster.pushpull-interval", "Interval for gossip state syncs. Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage. Default is used from a specified network-type.").
-		PlaceHolder("<push-pull interval>").Duration()
+	pushPullInterval := modelDuration(cmd.Flag("cluster.pushpull-interval", "Interval for gossip state syncs. Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage. Default is used from a specified network-type.").
+		PlaceHolder("<push-pull interval>"))
 
-	refreshInterval := cmd.Flag("cluster.refresh-interval", "Interval for membership to refresh cluster.peers state, 0 disables refresh.").Default(cluster.DefaultRefreshInterval.String()).Duration()
+	refreshInterval := modelDuration(cmd.Flag("cluster.refresh-interval", "Interval for membership to refresh cluster.peers state, 0 disables refresh.").Default(cluster.DefaultRefreshInterval.String()))
 
 	secretKey := cmd.Flag("cluster.secret-key", "Initial secret key to encrypt cluster gossip. Can be one of AES-128, AES-192, or AES-256 in hexadecimal format.").HexBytes()
 
@@ -55,7 +59,7 @@ func regCommonServerFlags(cmd *kingpin.CmdClause) (*string, *string, func(log.Lo
 				return nil, errors.Wrapf(err, "calculate advertise StoreAPI addr for gossip based on bindAddr: %s and advAddr: %s", *grpcBindAddr, *grpcAdvertiseAddr)
 			}
 
-			advStoreAPIAddress := fmt.Sprintf("%s:%d", host, port)
+			advStoreAPIAddress := net.JoinHostPort(host, strconv.Itoa(port))
 			if cluster.IsUnroutable(advStoreAPIAddress) {
 				level.Warn(logger).Log("msg", "this component advertises its gRPC StoreAPI on an unroutable address. This will not work cross-cluster", "addr", advStoreAPIAddress)
 				level.Warn(logger).Log("msg", "provide --grpc-address as routable ip:port or --grpc-advertise-address as a routable host:port")
@@ -70,7 +74,7 @@ func regCommonServerFlags(cmd *kingpin.CmdClause) (*string, *string, func(log.Lo
 					return nil, errors.Wrapf(err, "calculate advertise QueryAPI addr for gossip based on bindAddr: %s and advAddr: %s", *httpBindAddr, advQueryAPIAddress)
 				}
 
-				advQueryAPIAddress = fmt.Sprintf("%s:%d", host, port)
+				advQueryAPIAddress = net.JoinHostPort(host, strconv.Itoa(port))
 				if cluster.IsUnroutable(advQueryAPIAddress) {
 					level.Warn(logger).Log("msg", "this component advertises its HTTP QueryAPI on an unroutable address. This will not work cross-cluster", "addr", advQueryAPIAddress)
 					level.Warn(logger).Log("msg", "provide --http-address as routable ip:port or --http-advertise-address as a routable host:port")
@@ -79,10 +83,30 @@ func regCommonServerFlags(cmd *kingpin.CmdClause) (*string, *string, func(log.Lo
 				level.Info(logger).Log("msg", "QueryAPI address that will be propagated through gossip", "address", advQueryAPIAddress)
 			}
 
-			return cluster.New(logger, reg, *clusterBindAddr, *clusterAdvertiseAddr, advStoreAPIAddress, advQueryAPIAddress, *peers, waitIfEmpty, *gossipInterval, *pushPullInterval, *refreshInterval, *secretKey, *networkType)
+			return cluster.New(logger,
+				reg,
+				*clusterBindAddr,
+				*clusterAdvertiseAddr,
+				advStoreAPIAddress,
+				advQueryAPIAddress,
+				*peers,
+				waitIfEmpty,
+				time.Duration(*gossipInterval),
+				time.Duration(*pushPullInterval),
+				time.Duration(*refreshInterval),
+				*secretKey,
+				*networkType,
+			)
 		}
 }
 
 func regHTTPAddrFlag(cmd *kingpin.CmdClause) *string {
 	return cmd.Flag("http-address", "Listen host:port for HTTP endpoints.").Default("0.0.0.0:10902").String()
+}
+
+func modelDuration(flags *kingpin.FlagClause) *model.Duration {
+	var value = new(model.Duration)
+	flags.SetValue(value)
+
+	return value
 }

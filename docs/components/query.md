@@ -19,9 +19,9 @@ Two or more series that have that are only distinguished by the given replica la
 
 ```
 $ thanos query \
-    --http-address     "0.0.0.0:9090" \
-    --replica-label    "replica" \
-    --cluster.peers    "thanos-cluster.example.org" \
+    --http-address        "0.0.0.0:9090" \
+    --query.replica-label "replica" \
+    --cluster.peers       "thanos-cluster.example.org" \
 ```
 
 ## Deployment
@@ -82,7 +82,7 @@ Flags:
                                  convergence speeds across larger clusters at
                                  the expense of increased bandwidth usage.
                                  Default is used from a specified network-type.
-      --cluster.refresh-interval=1m0s  
+      --cluster.refresh-interval=1m  
                                  Interval for membership to refresh
                                  cluster.peers state, 0 disables refresh.
       --cluster.secret-key=CLUSTER.SECRET-KEY  

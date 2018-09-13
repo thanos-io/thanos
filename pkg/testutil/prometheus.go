@@ -22,6 +22,31 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	// TODO(bplotka): Change default version to something more recent after https://github.com/prometheus/prometheus/issues/4551 is fixed.
+	defaultPrometheusVersion   = "v2.2.1"
+	defaultAlertmanagerVersion = "v0.15.2"
+
+	promBinEnvVar         = "THANOS_TEST_PROMETHEUS_PATH"
+	alertmanagerBinEnvVar = "THANOS_TEST_ALERTMANAGER_PATH"
+)
+
+func PrometheusBinary() string {
+	b := os.Getenv(promBinEnvVar)
+	if b == "" {
+		return fmt.Sprintf("prometheus-%s", defaultPrometheusVersion)
+	}
+	return b
+}
+
+func AlertmanagerBinary() string {
+	b := os.Getenv(alertmanagerBinEnvVar)
+	if b == "" {
+		return fmt.Sprintf("prometheus-%s", defaultAlertmanagerVersion)
+	}
+	return b
+}
+
 // Prometheus represents a test instance for integration testing.
 // It can be populated with data before being started.
 type Prometheus struct {
@@ -86,7 +111,7 @@ func (p *Prometheus) Start() error {
 
 	p.addr = fmt.Sprintf("localhost:%d", port)
 	p.cmd = exec.Command(
-		"prometheus",
+		PrometheusBinary(),
 		"--storage.tsdb.path="+p.db.Dir(),
 		"--web.listen-address="+p.addr,
 		"--web.route-prefix="+p.prefix,

@@ -40,8 +40,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	httpAdvertiseAddr := cmd.Flag("http-advertise-address", "Explicit (external) host:port address to advertise for HTTP QueryAPI in gossip cluster. If empty, 'http-address' will be used.").
 		String()
 
-	queryTimeout := cmd.Flag("query.timeout", "Maximum time to process query by query node.").
-		Default("2m").Duration()
+	queryTimeout := modelDuration(cmd.Flag("query.timeout", "Maximum time to process query by query node.").
+		Default("2m"))
 
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
 		Default("20").Int()
@@ -85,7 +85,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*grpcBindAddr,
 			*httpBindAddr,
 			*maxConcurrentQueries,
-			*queryTimeout,
+			time.Duration(*queryTimeout),
 			*replicaLabel,
 			peer,
 			selectorLset,

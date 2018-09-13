@@ -155,7 +155,7 @@ func TestQueryStore_Series_SameExtSet(t *testing.T) {
 					storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
 				},
 			},
-			labels: []storepb.Label{{"ext", "1"}},
+			labels:  []storepb.Label{{"ext", "1"}},
 			minTime: 1,
 			maxTime: 300,
 		},
@@ -165,7 +165,7 @@ func TestQueryStore_Series_SameExtSet(t *testing.T) {
 					storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
 				},
 			},
-			labels:[]storepb.Label{{"ext", "1"}},
+			labels:  []storepb.Label{{"ext", "1"}},
 			minTime: 1,
 			maxTime: 300,
 		},
@@ -181,8 +181,8 @@ func TestQueryStore_Series_SameExtSet(t *testing.T) {
 	// This should return empty response, since there is external label mismatch.
 	err := q.Series(
 		&storepb.SeriesRequest{
-			MinTime:  1,
-			MaxTime:  300,
+			MinTime: 1,
+			MaxTime: 300,
 		}, s1,
 	)
 	testutil.Ok(t, err)
