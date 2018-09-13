@@ -56,10 +56,10 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			time.Duration(*syncDelay),
 			*haltOnError,
 			*wait,
-			map[int64]time.Duration{
-				downsample.ResLevel0: time.Duration(*retentionRaw),
-				downsample.ResLevel1: time.Duration(*retention5m),
-				downsample.ResLevel2: time.Duration(*retention1h),
+			map[compact.ResolutionLevel]time.Duration{
+				compact.ResolutionLevelRaw: time.Duration(*retentionRaw),
+				compact.ResolutionLevel5m:  time.Duration(*retention5m),
+				compact.ResolutionLevel1h:  time.Duration(*retention1h),
 			},
 			name,
 		)
@@ -77,7 +77,7 @@ func runCompact(
 	syncDelay time.Duration,
 	haltOnError bool,
 	wait bool,
-	retentionByResolution map[int64]time.Duration,
+	retentionByResolution map[compact.ResolutionLevel]time.Duration,
 	component string,
 ) error {
 	halted := prometheus.NewGauge(prometheus.GaugeOpts{
@@ -129,14 +129,14 @@ func runCompact(
 
 	compactor := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt)
 
-	if retentionByResolution[downsample.ResLevel0].Seconds() != 0 {
-		level.Info(logger).Log("msg", "retention policy of raw samples is enabled", "duration", retentionByResolution[downsample.ResLevel0])
+	if retentionByResolution[compact.ResolutionLevelRaw].Seconds() != 0 {
+		level.Info(logger).Log("msg", "retention policy of raw samples is enabled", "duration", retentionByResolution[compact.ResolutionLevelRaw])
 	}
-	if retentionByResolution[downsample.ResLevel1].Seconds() != 0 {
-		level.Info(logger).Log("msg", "retention policy of 5 min aggregated samples is enabled", "duration", retentionByResolution[downsample.ResLevel1])
+	if retentionByResolution[compact.ResolutionLevel5m].Seconds() != 0 {
+		level.Info(logger).Log("msg", "retention policy of 5 min aggregated samples is enabled", "duration", retentionByResolution[compact.ResolutionLevel5m])
 	}
-	if retentionByResolution[downsample.ResLevel2].Seconds() != 0 {
-		level.Info(logger).Log("msg", "retention policy of 1 hour aggregated samples is enabled", "duration", retentionByResolution[downsample.ResLevel2])
+	if retentionByResolution[compact.ResolutionLevel1h].Seconds() != 0 {
+		level.Info(logger).Log("msg", "retention policy of 1 hour aggregated samples is enabled", "duration", retentionByResolution[compact.ResolutionLevel1h])
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

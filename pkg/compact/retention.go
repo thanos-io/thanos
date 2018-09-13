@@ -13,7 +13,7 @@ import (
 
 // Apply removes blocks depending on the specified retentionByResolution based on blocks MaxTime.
 // A value of 0 disables the retention for its resolution.
-func ApplyRetentionPolicyByResolution(ctx context.Context, logger log.Logger, bkt objstore.Bucket, retentionByResolution map[int64]time.Duration) error {
+func ApplyRetentionPolicyByResolution(ctx context.Context, logger log.Logger, bkt objstore.Bucket, retentionByResolution map[ResolutionLevel]time.Duration) error {
 	level.Info(logger).Log("msg", "start retention")
 	if err := bkt.Iter(ctx, "", func(name string) error {
 		id, ok := block.IsBlockDir(name)
@@ -25,7 +25,7 @@ func ApplyRetentionPolicyByResolution(ctx context.Context, logger log.Logger, bk
 			return errors.Wrap(err, "download metadata")
 		}
 
-		retentionDuration, ok := retentionByResolution[m.Thanos.Downsample.Resolution]
+		retentionDuration, ok := retentionByResolution[ResolutionLevel(m.Thanos.Downsample.Resolution)]
 		if !ok {
 			level.Info(logger).Log("msg", "retention for resolution undefined", "resolution", m.Thanos.Downsample.Resolution)
 			return nil

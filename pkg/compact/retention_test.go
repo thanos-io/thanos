@@ -23,10 +23,10 @@ func TestTimeBasedRetentionPolicyByResolutionOnEmptyBucket(t *testing.T) {
 	logger := log.NewNopLogger()
 	bkt := inmem.NewBucket()
 
-	retentionsByResolution := map[int64]time.Duration{
-		downsample.ResLevel0: 24 * time.Hour,
-		downsample.ResLevel1: 0,
-		downsample.ResLevel2: 0,
+	retentionsByResolution := map[compact.ResolutionLevel]time.Duration{
+		compact.ResolutionLevelRaw: 24 * time.Hour,
+		compact.ResolutionLevel5m:  0,
+		compact.ResolutionLevel1h:  0,
 	}
 
 	testutil.Ok(t, compact.ApplyRetentionPolicyByResolution(context.TODO(), logger, bkt, retentionsByResolution))
@@ -47,10 +47,10 @@ func TestTimeBasedRetentionPolicyByResolutionKeepsBucketsBeforeDuration(t *testi
 	logger := log.NewNopLogger()
 	bkt := inmem.NewBucket()
 
-	retentionsByResolution := map[int64]time.Duration{
-		downsample.ResLevel0: 24 * time.Hour,
-		downsample.ResLevel1: 0,
-		downsample.ResLevel2: 0,
+	retentionsByResolution := map[compact.ResolutionLevel]time.Duration{
+		compact.ResolutionLevelRaw: 24 * time.Hour,
+		compact.ResolutionLevel5m:  0,
+		compact.ResolutionLevel1h:  0,
 	}
 
 	uploadMockBlock(t, bkt, "01CPHBEX20729MJQZXE3W0BW48", time.Now().Add(-3*24*time.Hour), time.Now().Add(-2*24*time.Hour), downsample.ResLevel0)
