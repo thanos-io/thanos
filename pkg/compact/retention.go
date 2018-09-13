@@ -2,7 +2,6 @@ package compact
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -12,9 +11,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Apply removes blocks older than rententionDuration based on blocks MaxTime.
-func ApplyDefaultRetentionPolicy(ctx context.Context, logger log.Logger, bkt objstore.Bucket, retentionDuration time.Duration) error {
-	level.Info(logger).Log("msg", "start default retention")
+// Apply removes blocks depending on the specified retentionByResolution based on blocks MaxTime.
+// A value of 0 disables the retention for its resolution.
+func ApplyRetentionPolicyByResolution(ctx context.Context, logger log.Logger, bkt objstore.Bucket, retentionByResolution map[int64]time.Duration) error {
+	level.Info(logger).Log("msg", "start retention")
 	if err := bkt.Iter(ctx, "", func(name string) error {
 		id, ok := block.IsBlockDir(name)
 		if !ok {
@@ -23,6 +23,17 @@ func ApplyDefaultRetentionPolicy(ctx context.Context, logger log.Logger, bkt obj
 		m, err := block.DownloadMeta(ctx, logger, bkt, id)
 		if err != nil {
 			return errors.Wrap(err, "download metadata")
+		}
+
+		retentionDuration, ok := retentionByResolution[m.Thanos.Downsample.Resolution]
+		if !ok {
+			level.Info(logger).Log("msg", "retention for resolution undefined", "resolution", m.Thanos.Downsample.Resolution)
+			return nil
+		}
+
+		if retentionDuration.Seconds() == 0 {
+			level.Info(logger).Log("msg", "skip retention for block", "id", id, "resolution", m.Thanos.Downsample.Resolution)
+			return nil
 		}
 
 		maxTime := time.Unix(m.MaxTime/1000, 0)
@@ -38,38 +49,6 @@ func ApplyDefaultRetentionPolicy(ctx context.Context, logger log.Logger, bkt obj
 		return errors.Wrap(err, "retention")
 	}
 
-	level.Info(logger).Log("msg", "default retention apply done")
-	return nil
-}
-
-// Apply removes blocks of resolution older than rententionDuration based on blocks MaxTime.
-func ApplyRetentionPolicyByResolution(ctx context.Context, logger log.Logger, bkt objstore.Bucket, retentionDuration time.Duration, resolution int64) error {
-	level.Info(logger).Log("msg", fmt.Sprintf("start retention of resolution %d", resolution))
-	if err := bkt.Iter(ctx, "", func(name string) error {
-		id, ok := block.IsBlockDir(name)
-		if !ok {
-			return nil
-		}
-		m, err := block.DownloadMeta(ctx, logger, bkt, id)
-		if err != nil {
-			return errors.Wrap(err, "download metadata")
-		}
-
-		if m.Thanos.Downsample.Resolution == resolution {
-			maxTime := time.Unix(m.MaxTime/1000, 0)
-			if time.Now().After(maxTime.Add(retentionDuration)) {
-				level.Info(logger).Log("msg", "deleting block", "id", id, "maxTime", maxTime.String())
-				if err := block.Delete(ctx, bkt, id); err != nil {
-					return errors.Wrap(err, "delete block")
-				}
-			}
-		}
-
-		return nil
-	}); err != nil {
-		return errors.Wrap(err, "retention")
-	}
-
-	level.Info(logger).Log("msg", fmt.Sprintf("retention of resolution %d apply done", resolution))
+	level.Info(logger).Log("msg", "retention apply done")
 	return nil
 }

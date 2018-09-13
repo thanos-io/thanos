@@ -40,11 +40,9 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	syncDelay := modelDuration(cmd.Flag("sync-delay", "Minimum age of fresh (non-compacted) blocks before they are being processed.").
 		Default("30m"))
 
-	retention := modelDuration(cmd.Flag("retention.default", "How long to retain samples in bucket. 0d - disables retention").Default("0d"))
-
-	retentionRes0 := modelDuration(cmd.Flag("retention.res0", "How long to retain raw samples in bucket. 0d - disables this retention").Default("0d"))
-	retentionRes1 := modelDuration(cmd.Flag("retention.res1", "How long to retain samples of resolution 1 (5 minutes) in bucket. 0d - disables this retention").Default("0d"))
-	retentionRes2 := modelDuration(cmd.Flag("retention.res2", "How long to retain samples of resolution 2 (1 hour) in bucket. 0d - disables this retention").Default("0d"))
+	retentionRaw := modelDuration(cmd.Flag("retention.resolution-raw", "How long to retain raw samples in bucket. 0d - disables this retention").Default("0d"))
+	retention5m := modelDuration(cmd.Flag("retention.resolution-5m", "How long to retain samples of resolution 1 (5 minutes) in bucket. 0d - disables this retention").Default("0d"))
+	retention1h := modelDuration(cmd.Flag("retention.resolution-1h", "How long to retain samples of resolution 2 (1 hour) in bucket. 0d - disables this retention").Default("0d"))
 
 	wait := cmd.Flag("wait", "Do not exit after all compactions have been processed and wait for new work.").
 		Short('w').Bool()
@@ -58,11 +56,10 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			time.Duration(*syncDelay),
 			*haltOnError,
 			*wait,
-			time.Duration(*retention),
 			map[int64]time.Duration{
-				downsample.ResLevel0: time.Duration(*retentionRes0),
-				downsample.ResLevel1: time.Duration(*retentionRes1),
-				downsample.ResLevel2: time.Duration(*retentionRes2),
+				downsample.ResLevel0: time.Duration(*retentionRaw),
+				downsample.ResLevel1: time.Duration(*retention5m),
+				downsample.ResLevel2: time.Duration(*retention1h),
 			},
 			name,
 		)
@@ -80,7 +77,6 @@ func runCompact(
 	syncDelay time.Duration,
 	haltOnError bool,
 	wait bool,
-	retention time.Duration,
 	retentionByResolution map[int64]time.Duration,
 	component string,
 ) error {
@@ -133,18 +129,14 @@ func runCompact(
 
 	compactor := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt)
 
-	if retention.Seconds() != 0 {
-		level.Info(logger).Log("msg", "default retention policy is enabled", "duration", retention)
-	}
-
 	if retentionByResolution[downsample.ResLevel0].Seconds() != 0 {
 		level.Info(logger).Log("msg", "retention policy of raw samples is enabled", "duration", retentionByResolution[downsample.ResLevel0])
 	}
 	if retentionByResolution[downsample.ResLevel1].Seconds() != 0 {
-		level.Info(logger).Log("msg", "retention policy of 5 min aggregated samples is enabled", "duration", retentionByResolution[downsample.ResLevel0])
+		level.Info(logger).Log("msg", "retention policy of 5 min aggregated samples is enabled", "duration", retentionByResolution[downsample.ResLevel1])
 	}
 	if retentionByResolution[downsample.ResLevel2].Seconds() != 0 {
-		level.Info(logger).Log("msg", "retention policy of 1 hour aggregated samples is enabled", "duration", retentionByResolution[downsample.ResLevel0])
+		level.Info(logger).Log("msg", "retention policy of 1 hour aggregated samples is enabled", "duration", retentionByResolution[downsample.ResLevel2])
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -168,18 +160,8 @@ func runCompact(
 			return errors.Wrap(err, "second pass of downsampling failed")
 		}
 
-		if retention.Seconds() != 0 {
-			if err := compact.ApplyDefaultRetentionPolicy(ctx, logger, bkt, retention); err != nil {
-				return errors.Wrap(err, "retention failed")
-			}
-		}
-
-		for resolution, retentionDuration := range retentionByResolution {
-			if retentionDuration != 0 {
-				if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, retentionDuration, resolution); err != nil {
-					return errors.Wrap(err, fmt.Sprintf("retention for resolution %d failed", resolution))
-				}
-			}
+		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, retentionByResolution); err != nil {
+			return errors.Wrap(err, fmt.Sprintf("retention failed"))
 		}
 
 		level.Info(logger).Log("msg", "compaction, downsampling and optional retention apply iteration done")

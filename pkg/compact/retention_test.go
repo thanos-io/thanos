@@ -19,50 +19,17 @@ import (
 	"github.com/prometheus/tsdb"
 )
 
-func TestTimeBasedRetentionPolicyOnEmptyBucket(t *testing.T) {
-	logger := log.NewNopLogger()
-	bkt := inmem.NewBucket()
-
-	testutil.Ok(t, compact.ApplyDefaultRetentionPolicy(context.TODO(), logger, bkt, 24*time.Hour))
-
-	var (
-		want []string
-		got  []string
-	)
-	testutil.Ok(t, bkt.Iter(context.TODO(), "", func(name string) error {
-		got = append(got, name)
-		return nil
-	}))
-
-	testutil.Equals(t, got, want)
-}
-
-func TestTimeBasedRetentionPolicyKeepsBucketsBeforeDuration(t *testing.T) {
-	logger := log.NewNopLogger()
-	bkt := inmem.NewBucket()
-
-	uploadMockBlock(t, bkt, "01CPHBEX20729MJQZXE3W0BW48", time.Now().Add(-3*24*time.Hour), time.Now().Add(-2*24*time.Hour), downsample.ResLevel0)
-	uploadMockBlock(t, bkt, "01CPHBEX20729MJQZXE3W0BW49", time.Now().Add(-2*24*time.Hour), time.Now().Add(-24*time.Hour), downsample.ResLevel1)
-	uploadMockBlock(t, bkt, "01CPHBEX20729MJQZXE3W0BW50", time.Now().Add(-24*time.Hour), time.Now().Add(-23*time.Hour), downsample.ResLevel2)
-	uploadMockBlock(t, bkt, "01CPHBEX20729MJQZXE3W0BW51", time.Now().Add(-23*time.Hour), time.Now().Add(-6*time.Hour), downsample.ResLevel0)
-	testutil.Ok(t, compact.ApplyDefaultRetentionPolicy(context.TODO(), logger, bkt, 24*time.Hour))
-
-	want := []string{"01CPHBEX20729MJQZXE3W0BW50/", "01CPHBEX20729MJQZXE3W0BW51/"}
-
-	var got []string
-	testutil.Ok(t, bkt.Iter(context.TODO(), "", func(name string) error {
-		got = append(got, name)
-		return nil
-	}))
-
-	testutil.Equals(t, got, want)
-}
-
 func TestTimeBasedRetentionPolicyByResolutionOnEmptyBucket(t *testing.T) {
 	logger := log.NewNopLogger()
 	bkt := inmem.NewBucket()
 
-	testutil.Ok(t, compact.ApplyRetentionPolicyByResolution(context.TODO(), logger, bkt, 24*time.Hour, downsample.ResLevel0))
+	retentionsByResolution := map[int64]time.Duration{
+		downsample.ResLevel0: 24 * time.Hour,
+		downsample.ResLevel1: 0,
+		downsample.ResLevel2: 0,
+	}
+
+	testutil.Ok(t, compact.ApplyRetentionPolicyByResolution(context.TODO(), logger, bkt, retentionsByResolution))
 
 	var (
 		want []string
@@ -80,11 +47,17 @@ func TestTimeBasedRetentionPolicyByResolutionKeepsBucketsBeforeDuration(t *testi
 	logger := log.NewNopLogger()
 	bkt := inmem.NewBucket()
 
+	retentionsByResolution := map[int64]time.Duration{
+		downsample.ResLevel0: 24 * time.Hour,
+		downsample.ResLevel1: 0,
+		downsample.ResLevel2: 0,
+	}
+
 	uploadMockBlock(t, bkt, "01CPHBEX20729MJQZXE3W0BW48", time.Now().Add(-3*24*time.Hour), time.Now().Add(-2*24*time.Hour), downsample.ResLevel0)
 	uploadMockBlock(t, bkt, "01CPHBEX20729MJQZXE3W0BW49", time.Now().Add(-2*24*time.Hour), time.Now().Add(-24*time.Hour), downsample.ResLevel1)
 	uploadMockBlock(t, bkt, "01CPHBEX20729MJQZXE3W0BW50", time.Now().Add(-24*time.Hour), time.Now().Add(-23*time.Hour), downsample.ResLevel2)
 	uploadMockBlock(t, bkt, "01CPHBEX20729MJQZXE3W0BW51", time.Now().Add(-23*time.Hour), time.Now().Add(-6*time.Hour), downsample.ResLevel0)
-	testutil.Ok(t, compact.ApplyRetentionPolicyByResolution(context.TODO(), logger, bkt, 24*time.Hour, downsample.ResLevel0))
+	testutil.Ok(t, compact.ApplyRetentionPolicyByResolution(context.TODO(), logger, bkt, retentionsByResolution))
 
 	want := []string{"01CPHBEX20729MJQZXE3W0BW49/", "01CPHBEX20729MJQZXE3W0BW50/", "01CPHBEX20729MJQZXE3W0BW51/"}
 
