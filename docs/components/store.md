@@ -5,7 +5,7 @@ It keeps a small amount of information about all remote blocks on local disk and
 
 ```
 $ thanos store \
-    --tsdb.path        "/local/state/data/dir" \
+    --data-dir         "/local/state/data/dir" \
     --gcs.bucket       "example-bucket" \
     --cluster.peers    "thanos-cluster.example.org"
 ```
