@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/objstore"
+	"github.com/improbable-eng/thanos/pkg/objstore/azure"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 
@@ -17,8 +18,9 @@ import (
 type objProvider string
 
 const (
-	GCS objProvider = "GCS"
-	S3  objProvider = "S3"
+	GCS   objProvider = "GCS"
+	S3    objProvider = "S3"
+	AZURE objProvider = "AZURE"
 )
 
 type BucketConfig struct {
@@ -50,6 +52,8 @@ func NewBucket(logger log.Logger, conf string, reg *prometheus.Registry, compone
 		bucket, err = gcs.NewBucket(context.Background(), logger, config, reg, component)
 	case S3:
 		bucket, err = s3.NewBucket(logger, config, reg, component)
+	case AZURE:
+		bucket, err = azure.NewBucket(logger, config, reg, component)
 	default:
 		return nil, errors.Errorf("bucket with type %s is not supported", bucketConf.Type)
 	}
