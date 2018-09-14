@@ -16,6 +16,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	yaml "gopkg.in/yaml.v2"
 )
 
 const (
@@ -28,9 +29,9 @@ const (
 
 // Config Azure storage configuration
 type Config struct {
-	StorageAccountName string
-	StorageAccountKey  string
-	ContainerName      string
+	StorageAccountName string `yaml:"storage-account"`
+	StorageAccountKey  string `yaml:"storage-account-key"`
+	ContainerName      string `yaml:"container"`
 }
 
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
@@ -65,11 +66,19 @@ func (conf *Config) Validate() error {
 }
 
 // NewBucket returns a new Bucket using the provided Azure config.
-func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, component string) (*Bucket, error) {
+func NewBucket(logger log.Logger, azureConfig []byte, reg prometheus.Registerer, component string) (*Bucket, error) {
 
 	level.Debug(logger).Log("msg", "Creating new Azure bucket connection", "component", component)
 
-	conf.ContainerName = "thanos-storage"
+	var conf Config
+	if err := yaml.Unmarshal(azureConfig, &conf); err != nil {
+		return nil, err
+	}
+
+	err := conf.Validate()
+	if err != nil {
+		return nil, err
+	}
 
 	ctx := context.Background()
 
@@ -94,7 +103,7 @@ func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, compo
 	bkt := &Bucket{
 		logger:       logger,
 		containerURL: container,
-		config:       conf,
+		config:       &conf,
 		opsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name:        "thanos_objstore_azure_storage_operations_total",
 			Help:        "Total number of operations that were executed against an Azure storage account.",
@@ -264,6 +273,11 @@ func (b *Bucket) Delete(ctx context.Context, name string) error {
 	return nil
 }
 
+// Name returns the bucket name for gcs.
+func (b *Bucket) Name() string {
+	return b.config.ContainerName
+}
+
 // NewTestBucket creates test bkt client that before returning creates temporary bucket.
 // In a close function it empties and deletes the bucket.
 func NewTestBucket(t testing.TB, component string) (objstore.Bucket, func(), error) {
@@ -273,12 +287,17 @@ func NewTestBucket(t testing.TB, component string) (objstore.Bucket, func(), err
 	conf := &Config{
 		StorageAccountName: os.Getenv("AZURE_STORAGE_ACCOUNT"),
 		StorageAccountKey:  os.Getenv("AZURE_STORAGE_ACCESS_KEY"),
-		ContainerName:      "thanos-test",
+		ContainerName:      "thanos-e2e-test",
+	}
+
+	bc, err := yaml.Marshal(conf)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	ctx := context.Background()
 
-	bkt, err := NewBucket(log.NewNopLogger(), conf, nil, component)
+	bkt, err := NewBucket(log.NewNopLogger(), bc, nil, component)
 	if err != nil {
 		t.Errorf("Cannot create Azure storage container:")
 		return nil, nil, err

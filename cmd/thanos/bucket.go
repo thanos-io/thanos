@@ -11,7 +11,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/objstore/azure"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/verifier"
@@ -44,8 +43,6 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 
 	bucketConf := cmd.Flag("objstore.config", "The object store configuration in yaml format.").
 		PlaceHolder("<bucket.config.yaml>").Required().String()
-
-	azureConfig := azure.RegisterAzureParams(cmd)
 
 	// Verify command.
 	verify := cmd.Command("verify", "verify all blocks in the bucket against specified issues")

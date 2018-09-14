@@ -24,7 +24,6 @@ import (
 	"github.com/improbable-eng/thanos/pkg/alert"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/cluster"
-	"github.com/improbable-eng/thanos/pkg/objstore/azure"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
@@ -76,8 +75,6 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	bucketConf := cmd.Flag("objstore.config", "The object store configuration in yaml format.").
 		PlaceHolder("<bucket.config.yaml>").String()
-
-	azureConfig := azure.RegisterAzureParams(cmd)
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)

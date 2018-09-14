@@ -15,7 +15,6 @@ import (
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/objstore/azure"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/run"
@@ -35,8 +34,6 @@ func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name s
 
 	bucketConf := cmd.Flag("objstore.config", "The object store configuration in yaml format.").
 		PlaceHolder("<bucket.config.yaml>").Required().String()
-
-	azureConfig := azure.RegisterAzureParams(cmd)
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		return runDownsample(g, logger, reg, *dataDir, *bucketConf, name)

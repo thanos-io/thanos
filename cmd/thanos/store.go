@@ -9,7 +9,6 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/cluster"
-	"github.com/improbable-eng/thanos/pkg/objstore/azure"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
@@ -24,7 +23,7 @@ import (
 
 // registerStore registers a store command.
 func registerStore(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "store node giving access to blocks in a bucket provider. Now supported GCS / S3.")
+	cmd := app.Command(name, "store node giving access to blocks in a bucket provider. Now supported GCS, S3 and Azure.")
 
 	grpcBindAddr, httpBindAddr, newPeerFn := regCommonServerFlags(cmd)
 
@@ -33,8 +32,6 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 
 	bucketConf := cmd.Flag("objstore.config", "The object store configuration in yaml format.").
 		PlaceHolder("<bucket.config.yaml>").Required().String()
-
-	azureConfig := azure.RegisterAzureParams(cmd)
 
 	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the index cache.").
 		Default("250MB").Bytes()
