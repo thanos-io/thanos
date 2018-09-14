@@ -28,7 +28,7 @@ At that point, anyone can use your provider!
 Thanos uses minio client to upload Prometheus data into AWS s3.
 
 To configure S3 bucket as an object store you need to set these mandatory S3 variables in yaml format:
-```
+```yaml
 --objstore.config="type: S3
 config:
     bucket: <bucket>
@@ -129,7 +129,7 @@ Details about AWS policies: https://docs.aws.amazon.com/AmazonS3/latest/dev/usin
 To configure Google Cloud Storage bucket as an object store you need to set `bucket` with GCS bucket name and configure Google Application credentials.
 
 For example:
-```
+```yaml
 --objstore.config="type: GCS
 config:
     bucket: <bucket>"
@@ -170,12 +170,11 @@ Minio client used for AWS S3 can be potentially configured against other S3-comp
 
 To use Azure Storage as Thanos object store, you need to precreate storage account from Azure portal or using Azure CLI. Follow the instructions from Azure Storage Documentation: [https://docs.microsoft.com/en-us/azure/storage/common/storage-quickstart-create-account](https://docs.microsoft.com/en-us/azure/storage/common/storage-quickstart-create-account?tabs=portal)
 
-To configure Azure Storage account as an object store you need to set these mandatory S3 flags:
-| Parameter       | Description                |
-|-----------------|----------------------------|
-| --azure.storage | Azure Storage account name |
-| --azure.access-key | Azure Storage account access key |
-
-Instead of using flags you can pass all the configuration via environment variables:
-- AZURE_STORAGE_ACCOUNT
-- AZURE_STORAGE_ACCESS_KEY
+To configure Azure Storage account as an object store you need to pass Azure Storage Account and container configuration to `--objstore.config` flag in following format:
+```yaml
+--objstore.config="type: AZURE
+config:
+    storage-account: <Name of Azure Storage Account>"
+    storage-account-key: <Storage Account key>
+    container: <Blob container>"
+```
