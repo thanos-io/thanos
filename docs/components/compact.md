@@ -29,19 +29,19 @@ Flags:
                               and --help-man).
       --version               Show application version.
       --log.level=info        Log filtering level.
-      --gcloudtrace.project=GCLOUDTRACE.PROJECT
+      --gcloudtrace.project=GCLOUDTRACE.PROJECT  
                               GCP project to send Google Cloud Trace tracings
                               to. If empty, tracing will be disabled.
-      --gcloudtrace.sample-factor=1
+      --gcloudtrace.sample-factor=1  
                               How often we send traces (1/<sample-factor>). If 0
                               no trace will be sent periodically, unless forced
                               by baggage item. See `pkg/tracing/tracing.go` for
                               details.
-      --http-address="0.0.0.0:10902"
+      --http-address="0.0.0.0:10902"  
                               Listen host:port for HTTP endpoints.
       --data-dir="./data"     Data directory in which to cache blocks and
                               process compactions.
-      --objstore.config=<bucket.config.yaml>
+      --objstore.config=<bucket.config.yaml>  
                               The object store configuration in yaml format.
       --sync-delay=30m        Minimum age of fresh (non-compacted) blocks before
                               they are being processed.
