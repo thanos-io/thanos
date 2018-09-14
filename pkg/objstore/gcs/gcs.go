@@ -3,18 +3,23 @@ package gcs
 
 import (
 	"context"
-	"io"
-	"strings"
-
 	"fmt"
+	"io"
 	"math/rand"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/objstore"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/version"
 	"google.golang.org/api/iterator"
+	"google.golang.org/api/option"
+	yaml "gopkg.in/yaml.v2"
 )
 
 const (
@@ -32,29 +37,55 @@ const (
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const DirDelim = "/"
 
+// gcsConfig stores the configuration for gcs bucket.
+type gcsConfig struct {
+	Bucket string `yaml:"bucket"`
+}
+
 // Bucket implements the store.Bucket and shipper.Bucket interfaces against GCS.
 type Bucket struct {
+	logger   log.Logger
 	bkt      *storage.BucketHandle
 	opsTotal *prometheus.CounterVec
+	name     string
 
 	closer io.Closer
 }
 
 // NewBucket returns a new Bucket against the given bucket handle.
-func NewBucket(name string, cl *storage.Client, reg prometheus.Registerer) *Bucket {
+func NewBucket(ctx context.Context, logger log.Logger, conf []byte, reg prometheus.Registerer, component string) (*Bucket, error) {
+	var gc gcsConfig
+	if err := yaml.Unmarshal(conf, &gc); err != nil {
+		return nil, err
+	}
+	if gc.Bucket == "" {
+		return nil, errors.New("missing Google Cloud Storage bucket name for stored blocks")
+	}
+	gcsOptions := option.WithUserAgent(fmt.Sprintf("thanos-%s/%s (%s)", component, version.Version, runtime.Version()))
+	gcsClient, err := storage.NewClient(ctx, gcsOptions)
+	if err != nil {
+		return nil, err
+	}
 	bkt := &Bucket{
-		bkt: cl.Bucket(name),
+		logger: logger,
+		bkt:    gcsClient.Bucket(gc.Bucket),
 		opsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name:        "thanos_objstore_gcs_bucket_operations_total",
 			Help:        "Total number of operations that were executed against a Google Compute Storage bucket.",
-			ConstLabels: prometheus.Labels{"bucket": name},
+			ConstLabels: prometheus.Labels{"bucket": gc.Bucket},
 		}, []string{"operation"}),
-		closer: cl,
+		closer: gcsClient,
+		name:   gc.Bucket,
 	}
 	if reg != nil {
 		reg.MustRegister()
 	}
-	return bkt
+	return bkt, nil
+}
+
+// Name returns the bucket name for gcs.
+func (b *Bucket) Name() string {
+	return b.name
 }
 
 // Iter calls f for each entry in the given directory. The argument to f is the full
@@ -151,27 +182,32 @@ func (b *Bucket) Close() error {
 // In a close function it empties and deletes the bucket.
 func NewTestBucket(t testing.TB, project string) (objstore.Bucket, func(), error) {
 	ctx, cancel := context.WithCancel(context.Background())
-	gcsClient, err := storage.NewClient(ctx)
+	src := rand.NewSource(time.Now().UnixNano())
+	gTestConfig := gcsConfig{
+		Bucket: fmt.Sprintf("test_%s_%x", strings.ToLower(t.Name()), src.Int63()),
+	}
+
+	bc, err := yaml.Marshal(gTestConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	b, err := NewBucket(ctx, log.NewNopLogger(), bc, nil, "thanos-e2e-test")
 	if err != nil {
 		cancel()
 		return nil, nil, err
 	}
-	src := rand.NewSource(time.Now().UnixNano())
-	name := fmt.Sprintf("test_%s_%x", strings.ToLower(t.Name()), src.Int63())
 
-	bkt := gcsClient.Bucket(name)
-	if err = bkt.Create(ctx, project, nil); err != nil {
+	if err = b.bkt.Create(ctx, project, nil); err != nil {
 		cancel()
-		_ = gcsClient.Close()
+		_ = b.Close()
 		return nil, nil, err
 	}
 
-	b := NewBucket(name, gcsClient, nil)
-
-	t.Log("created temporary GCS bucket for GCS tests with name", name, "in project", project)
+	t.Log("created temporary GCS bucket for GCS tests with name", b.name, "in project", project)
 	return b, func() {
 		objstore.EmptyBucket(t, ctx, b)
-		if err := bkt.Delete(ctx); err != nil {
+		if err := b.bkt.Delete(ctx); err != nil {
 			t.Logf("deleting bucket failed: %s", err)
 		}
 		cancel()

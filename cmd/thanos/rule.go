@@ -26,7 +26,6 @@ import (
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore/azure"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
-	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
@@ -63,22 +62,20 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	ruleFiles := cmd.Flag("rule-file", "Rule files that should be used by rule manager. Can be in glob format (repeated).").
 		Default("rules/").Strings()
 
-	evalInterval := cmd.Flag("eval-interval", "The default evaluation interval to use.").
-		Default("30s").Duration()
-	tsdbBlockDuration := cmd.Flag("tsdb.block-duration", "Block duration for TSDB block.").
-		Default("2h").Duration()
-	tsdbRetention := cmd.Flag("tsdb.retention", "Block retention time on local disk.").
-		Default("48h").Duration()
+	evalInterval := modelDuration(cmd.Flag("eval-interval", "The default evaluation interval to use.").
+		Default("30s"))
+	tsdbBlockDuration := modelDuration(cmd.Flag("tsdb.block-duration", "Block duration for TSDB block.").
+		Default("2h"))
+	tsdbRetention := modelDuration(cmd.Flag("tsdb.retention", "Block retention time on local disk.").
+		Default("48h"))
 
 	alertmgrs := cmd.Flag("alertmanagers.url", "Alertmanager URLs to push firing alerts to. The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Alertmanager IPs through respective DNS lookups. The port defaults to 9093 or the SRV record's value. The URL path is used as a prefix for the regular Alertmanager API path.").
 		Strings()
 
-	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty, ruler won't store any block inside Google Cloud Storage.").
-		PlaceHolder("<bucket>").String()
-
 	alertQueryURL := cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field").String()
 
-	s3Config := s3.RegisterS3Params(cmd)
+	bucketConf := cmd.Flag("objstore.config", "The object store configuration in yaml format.").
+		PlaceHolder("<bucket.config.yaml>").String()
 
 	azureConfig := azure.RegisterAzureParams(cmd)
 
@@ -97,13 +94,29 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 		}
 
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration: model.Duration(*tsdbBlockDuration),
-			MaxBlockDuration: model.Duration(*tsdbBlockDuration),
-			Retention:        model.Duration(*tsdbRetention),
+			MinBlockDuration: *tsdbBlockDuration,
+			MaxBlockDuration: *tsdbBlockDuration,
+			Retention:        *tsdbRetention,
 			NoLockfile:       true,
 			WALFlushInterval: 30 * time.Second,
 		}
-		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *grpcBindAddr, *httpBindAddr, *evalInterval, *dataDir, *ruleFiles, peer, *gcsBucket, s3Config, azureConfig, tsdbOpts, name, alertQueryURL)
+		return runRule(g,
+			logger,
+			reg,
+			tracer,
+			lset,
+			*alertmgrs,
+			*grpcBindAddr,
+			*httpBindAddr,
+			time.Duration(*evalInterval),
+			*dataDir,
+			*ruleFiles,
+			peer,
+			*bucketConf,
+			tsdbOpts,
+			name,
+			alertQueryURL,
+		)
 	}
 }
 
@@ -122,9 +135,7 @@ func runRule(
 	dataDir string,
 	ruleFiles []string,
 	peer *cluster.Peer,
-	gcsBucket string,
-	s3Config *s3.Config,
-	azureConfig *azure.Config,
+	bucketConf string,
 	tsdbOpts *tsdb.Options,
 	component string,
 	alertQueryURL *url.URL,
@@ -402,13 +413,13 @@ func runRule(
 
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, *azureConfig, reg, component)
+	bkt, err := client.NewBucket(logger, bucketConf, reg, component)
 	if err != nil && err != client.ErrNotFound {
 		return err
 	}
 
 	if err == client.ErrNotFound {
-		level.Info(logger).Log("msg", "No GCS or S3 bucket was configured, uploads will be disabled")
+		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
 		uploads = false
 	}
 

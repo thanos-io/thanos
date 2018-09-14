@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - Add Thanos Rule UI
 - Add Thanos Rule reload via HTTP POST to /-/reload
+- Add Thanos compact --retention.default flag, for configuring storage bucket retention period.
+- Removes support for multiple units in duration. For example: 1m0s won't work, while 1m will work.
+- Adds support for y,w,d time units 
+- Add Thanos bucket ls -o wide, which provides more detailed information about blocks stored in the bucket.
+- Remove support of those flags for bucket
+    - --gcs-bucket=\<bucket\>
+    - --s3.bucket=\<bucket\>
+    - --s3.endpoint=\<api-url\>
+    - --s3.access-key=\<key\>
+    - --s3.insecure
+    - --s3.signature-version2
+    - --s3.encrypt-sse
+    - --gcs-backup-bucket=\<bucket\>
+    - --s3-backup-bucket=\<bucket\>
+- Remove support of those environment variables for bucket
+    * S3_BUCKET
+    * S3_ENDPOINT
+    * S3_ACCESS_KEY
+    * S3_INSECURE
+    * S3_SIGNATURE_VERSION2
+- Add flag `--objstore.config` for the configuration of bucket in yaml format. Note that detailed information in document [storage](docs/storage.md).
 
 Newest release candidate: [v0.1.0-rc.2](https://github.com/improbable-eng/thanos/releases/tag/v0.1.0-rc.2)
 

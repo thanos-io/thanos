@@ -3,50 +3,58 @@ package client
 import (
 	"context"
 	"fmt"
-	"runtime"
 
-	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/objstore/azure"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/version"
-	"google.golang.org/api/option"
+	yaml "gopkg.in/yaml.v2"
 )
 
-//ErrNotFound Config not found Error
-var ErrNotFound = errors.New("no valid GCS, S3 or Azure configuration supplied")
+type objProvider string
+
+const (
+	GCS objProvider = "GCS"
+	S3  objProvider = "S3"
+)
+
+type BucketConfig struct {
+	Type   objProvider `yaml:"type"`
+	Config interface{} `yaml:"config"`
+}
+
+var ErrNotFound = errors.New("not found bucket")
 
 // NewBucket initializes and returns new object storage clients.
-func NewBucket(logger log.Logger, gcsBucket *string, s3Config s3.Config, azureConfig azure.Config, reg *prometheus.Registry, component string) (objstore.Bucket, error) {
-	if *gcsBucket != "" {
-		gcsOptions := option.WithUserAgent(fmt.Sprintf("thanos-%s/%s (%s)", component, version.Version, runtime.Version()))
-		gcsClient, err := storage.NewClient(context.Background(), gcsOptions)
-		if err != nil {
-			return nil, errors.Wrap(err, "create GCS client")
-		}
-		return objstore.BucketWithMetrics(*gcsBucket, gcs.NewBucket(*gcsBucket, gcsClient, reg), reg), nil
+func NewBucket(logger log.Logger, conf string, reg *prometheus.Registry, component string) (objstore.Bucket, error) {
+	var err error
+	var bucketConf BucketConfig
+	if conf == "" {
+		return nil, ErrNotFound
+	}
+	if err := yaml.Unmarshal([]byte(conf), &bucketConf); err != nil {
+		return nil, errors.Wrap(err, "unmarshal objstore.config")
 	}
 
-	if s3Config.Validate() == nil {
-		b, err := s3.NewBucket(logger, &s3Config, reg, component)
-		if err != nil {
-			return nil, errors.Wrap(err, "create s3 client")
-		}
-		return objstore.BucketWithMetrics(s3Config.Bucket, b, reg), nil
+	config, err := yaml.Marshal(bucketConf.Config)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal content of bucket configuration")
 	}
 
-	if azureConfig.Validate() == nil {
-		b, err := azure.NewBucket(logger, &azureConfig, reg, component)
-		if err != nil {
-			return nil, errors.Wrap(err, "create Azure client")
-		}
-		return objstore.BucketWithMetrics(azureConfig.StorageAccountName, b, reg), nil
+	var bucket objstore.Bucket
+	switch bucketConf.Type {
+	case GCS:
+		bucket, err = gcs.NewBucket(context.Background(), logger, config, reg, component)
+	case S3:
+		bucket, err = s3.NewBucket(logger, config, reg, component)
+	default:
+		return nil, errors.Errorf("bucket with type %s is not supported", bucketConf.Type)
 	}
-
-	return nil, ErrNotFound
+	if err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("create %s client", bucketConf.Type))
+	}
+	return objstore.BucketWithMetrics(bucket.Name(), bucket, reg), nil
 }

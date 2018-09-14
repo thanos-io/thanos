@@ -17,7 +17,6 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/azure"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
-	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
@@ -34,15 +33,13 @@ func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name s
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
 		Default("./data").String()
 
-	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks.").
-		PlaceHolder("<bucket>").String()
-
-	s3Config := s3.RegisterS3Params(cmd)
+	bucketConf := cmd.Flag("objstore.config", "The object store configuration in yaml format.").
+		PlaceHolder("<bucket.config.yaml>").Required().String()
 
 	azureConfig := azure.RegisterAzureParams(cmd)
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
-		return runDownsample(g, logger, reg, *dataDir, *gcsBucket, s3Config, azureConfig, name)
+		return runDownsample(g, logger, reg, *dataDir, *bucketConf, name)
 	}
 }
 
@@ -51,13 +48,11 @@ func runDownsample(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	dataDir string,
-	gcsBucket string,
-	s3Config *s3.Config,
-	azureConfig *azure.Config,
+	bucketConf string,
 	component string,
 ) error {
 
-	bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, *azureConfig, reg, component)
+	bkt, err := client.NewBucket(logger, bucketConf, reg, component)
 	if err != nil {
 		return err
 	}

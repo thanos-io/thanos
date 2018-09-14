@@ -15,9 +15,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/cluster"
-	"github.com/improbable-eng/thanos/pkg/objstore/azure"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
-	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/reloader"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
@@ -44,13 +42,6 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").
 		Default("./data").String()
 
-	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty, sidecar won't store any block inside Google Cloud Storage.").
-		PlaceHolder("<bucket>").String()
-
-	s3Config := s3.RegisterS3Params(cmd)
-
-	azureConfig := azure.RegisterAzureParams(cmd)
-
 	reloaderCfgFile := cmd.Flag("reloader.config-file", "Config file watched by the reloader.").
 		Default("").String()
 
@@ -58,6 +49,9 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 		Default("").String()
 
 	reloaderRuleDirs := cmd.Flag("reloader.rule-dir", "Rule directories for the reloader to refresh (repeated field).").Strings()
+
+	bucketConf := cmd.Flag("objstore.config", "The object store configuration in yaml format.").
+		PlaceHolder("<bucket.config.yaml>").String()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		rl := reloader.New(
@@ -80,9 +74,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			*httpBindAddr,
 			*promURL,
 			*dataDir,
-			*gcsBucket,
-			s3Config,
-			azureConfig,
+			*bucketConf,
 			peer,
 			rl,
 			name,
@@ -99,9 +91,7 @@ func runSidecar(
 	httpBindAddr string,
 	promURL *url.URL,
 	dataDir string,
-	gcsBucket string,
-	s3Config *s3.Config,
-	azureConfig *azure.Config,
+	bucketConf string,
 	peer *cluster.Peer,
 	reloader *reloader.Reloader,
 	component string,
@@ -229,13 +219,13 @@ func runSidecar(
 
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, *azureConfig, reg, component)
+	bkt, err := client.NewBucket(logger, bucketConf, reg, component)
 	if err != nil && err != client.ErrNotFound {
 		return err
 	}
 
 	if err == client.ErrNotFound {
-		level.Info(logger).Log("msg", "No cloud storage bucket was configured, uploads will be disabled")
+		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
 		uploads = false
 	}
 
