@@ -3,8 +3,10 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"net"
 	"reflect"
 	"sort"
+	"strconv"
 	"testing"
 	"time"
 
@@ -185,6 +187,11 @@ func TestCalculateAdvAddress(t *testing.T) {
 			bind:     "0.0.0.0:5555",
 			expected: privateIP + ":5555",
 		},
+		{
+			bind:      "[::]:1234",
+			advertise: "[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:1234",
+			expected:  "[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:1234",
+		},
 	} {
 		if ok := t.Run("", func(t *testing.T) {
 			host, port, err := CalculateAdvertiseAddress(tc.bind, tc.advertise)
@@ -194,7 +201,7 @@ func TestCalculateAdvAddress(t *testing.T) {
 				return
 			}
 			testutil.Ok(t, err)
-			testutil.Equals(t, tc.expected, fmt.Sprintf("%s:%d", host, port))
+			testutil.Equals(t, tc.expected, net.JoinHostPort(host, strconv.Itoa(port)))
 
 		}); !ok {
 			return

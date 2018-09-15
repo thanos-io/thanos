@@ -47,6 +47,11 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	wait := cmd.Flag("wait", "Do not exit after all compactions have been processed and wait for new work.").
 		Short('w').Bool()
 
+	// TODO(bplotka): Remove this flag once https://github.com/improbable-eng/thanos/issues/297 is fixed.
+	disableDownsampling := cmd.Flag("debug.disable-downsampling", "Disables downsampling. This is not recommended " +
+		"as querying long time ranges without non-downsampled data is not efficient and not useful (is not possible to render all for human eye).").
+		Hidden().Default("false").Bool()
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		return runCompact(g, logger, reg,
 			*httpAddr,
@@ -62,6 +67,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 				compact.ResolutionLevel1h:  time.Duration(*retention1h),
 			},
 			name,
+			*disableDownsampling,
 		)
 	}
 }
@@ -79,6 +85,7 @@ func runCompact(
 	wait bool,
 	retentionByResolution map[compact.ResolutionLevel]time.Duration,
 	component string,
+	disableDownsampling bool,
 ) error {
 	halted := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compactor_halted",
@@ -144,27 +151,33 @@ func runCompact(
 		if err := compactor.Compact(ctx); err != nil {
 			return errors.Wrap(err, "compaction failed")
 		}
+		level.Info(logger).Log("msg", "compaction iterations done")
 
-		// After all compactions are done, work down the downsampling backlog.
-		// We run two passes of this to ensure that the 1h downsampling is generated
-		// for 5m downsamplings created in the first run.
-		level.Info(logger).Log("msg", "start first pass of downsampling")
+		// TODO(bplotka): Remove "disableDownsampling" once https://github.com/improbable-eng/thanos/issues/297 is fixed.
+		if !disableDownsampling {
+			// After all compactions are done, work down the downsampling backlog.
+			// We run two passes of this to ensure that the 1h downsampling is generated
+			// for 5m downsamplings created in the first run.
+			level.Info(logger).Log("msg", "start first pass of downsampling")
 
-		if err := downsampleBucket(ctx, logger, bkt, downsamplingDir); err != nil {
-			return errors.Wrap(err, "first pass of downsampling failed")
-		}
+			if err := downsampleBucket(ctx, logger, bkt, downsamplingDir); err != nil {
+				return errors.Wrap(err, "first pass of downsampling failed")
+			}
 
-		level.Info(logger).Log("msg", "start second pass of downsampling")
+			level.Info(logger).Log("msg", "start second pass of downsampling")
 
-		if err := downsampleBucket(ctx, logger, bkt, downsamplingDir); err != nil {
-			return errors.Wrap(err, "second pass of downsampling failed")
+			if err := downsampleBucket(ctx, logger, bkt, downsamplingDir); err != nil {
+				return errors.Wrap(err, "second pass of downsampling failed")
+			}
+			level.Info(logger).Log("msg", "downsampling iterations done")
+		} else {
+			level.Warn(logger).Log("msg", "downsampling was explicitly disabled")
 		}
 
 		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, retentionByResolution); err != nil {
 			return errors.Wrap(err, fmt.Sprintf("retention failed"))
 		}
-
-		level.Info(logger).Log("msg", "compaction, downsampling and optional retention apply iteration done")
+    level.Info(logger).Log("msg", "retention iterations done")
 		return nil
 	}
 

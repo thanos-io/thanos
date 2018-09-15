@@ -153,6 +153,23 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 				fmt.Fprintln(os.Stdout, id.String())
 				return nil
 			}
+		case "wide":
+			printBlock = func(id ulid.ULID) error {
+				m, err := block.DownloadMeta(ctx, logger, bkt, id)
+				if err != nil {
+					return err
+				}
+
+				minTime := time.Unix(m.MinTime/1000, 0)
+				maxTime := time.Unix(m.MaxTime/1000, 0)
+
+				if _, err = fmt.Fprintf(os.Stdout, "%s -- %s - %s Diff: %s, Compaction: %d, Downsample: %d, Source: %s\n",
+					m.ULID, minTime.Format("2006-01-02 15:04"), maxTime.Format("2006-01-02 15:04"), maxTime.Sub(minTime),
+					m.Compaction.Level, m.Thanos.Downsample.Resolution, m.Thanos.Source); err != nil {
+					return err
+				}
+				return nil
+			}
 		case "json":
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "\t")
