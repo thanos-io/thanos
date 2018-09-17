@@ -30,7 +30,8 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
     * S3_ACCESS_KEY
     * S3_INSECURE
     * S3_SIGNATURE_VERSION2
-- Add flag `--objstore.config` for the configuration of bucket in yaml format. Note that detailed information in document [storage](docs/storage.md).
+    * S3_SECRET_KEY
+- Add flag `--objstore.config.file` to reference to the bucket configuration file in yaml format. Note that detailed information in document [storage](docs/storage.md).
 
 ## [v0.1.0](https://github.com/improbable-eng/thanos/releases/tag/v0.1.0) - 2018.09.14
 
