@@ -231,8 +231,12 @@ func (b *metricBucket) Get(ctx context.Context, name string) (io.ReadCloser, err
 		b.opsFailures.WithLabelValues(op).Inc()
 		return nil, err
 	}
-	rc = newTimingReadCloser(rc,
-		b.opsDuration.WithLabelValues(op), b.opsFailures.WithLabelValues(op))
+	rc = newTimingReadCloser(
+		rc,
+		op,
+		b.opsDuration,
+		b.opsFailures,
+	)
 
 	return rc, nil
 }
@@ -246,8 +250,12 @@ func (b *metricBucket) GetRange(ctx context.Context, name string, off, length in
 		b.opsFailures.WithLabelValues(op).Inc()
 		return nil, err
 	}
-	rc = newTimingReadCloser(rc,
-		b.opsDuration.WithLabelValues(op), b.opsFailures.WithLabelValues(op))
+	rc = newTimingReadCloser(
+		rc,
+		op,
+		b.opsDuration,
+		b.opsFailures,
+	)
 
 	return rc, nil
 }
@@ -310,15 +318,20 @@ type timingReadCloser struct {
 
 	ok       bool
 	start    time.Time
-	duration prometheus.Histogram
-	failed   prometheus.Counter
+	op       string
+	duration *prometheus.HistogramVec
+	failed   *prometheus.CounterVec
 }
 
-func newTimingReadCloser(rc io.ReadCloser, dur prometheus.Histogram, failed prometheus.Counter) *timingReadCloser {
+func newTimingReadCloser(rc io.ReadCloser, op string, dur *prometheus.HistogramVec, failed *prometheus.CounterVec) *timingReadCloser {
+	// Initialize the metrics with 0.
+	dur.WithLabelValues(op)
+	failed.WithLabelValues(op)
 	return &timingReadCloser{
 		ReadCloser: rc,
 		ok:         true,
 		start:      time.Now(),
+		op:         op,
 		duration:   dur,
 		failed:     failed,
 	}
@@ -326,9 +339,9 @@ func newTimingReadCloser(rc io.ReadCloser, dur prometheus.Histogram, failed prom
 
 func (rc *timingReadCloser) Close() error {
 	err := rc.ReadCloser.Close()
-	rc.duration.Observe(time.Since(rc.start).Seconds())
+	rc.duration.WithLabelValues(rc.op).Observe(time.Since(rc.start).Seconds())
 	if rc.ok && err != nil {
-		rc.failed.Inc()
+		rc.failed.WithLabelValues(rc.op).Inc()
 		rc.ok = false
 	}
 	return err
@@ -337,7 +350,7 @@ func (rc *timingReadCloser) Close() error {
 func (rc *timingReadCloser) Read(b []byte) (n int, err error) {
 	n, err = rc.ReadCloser.Read(b)
 	if rc.ok && err != nil && err != io.EOF {
-		rc.failed.Inc()
+		rc.failed.WithLabelValues(rc.op).Inc()
 		rc.ok = false
 	}
 	return n, err
