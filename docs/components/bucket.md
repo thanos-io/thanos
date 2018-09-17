@@ -6,9 +6,15 @@ It is normally run as a stand alone command to aid with troubleshooting.
 Example:
 
 ```
-$ thanos bucket verify --objstore.config="type: GCS
+$ thanos bucket verify --objstore.config.file=bucket.yml
+```
+
+The content of `bucket.yml`:
+
+```yaml
+type: GCS
 config:
-    bucket: example-bucket"
+  bucket: example-bucket
 ```
 
 Bucket can be extended to add more subcommands that will be helpful when working with object storage buckets
@@ -20,7 +26,7 @@ by adding a new command within `/cmd/thanos/bucket.go`
 
 [embedmd]:# (flags/bucket.txt $)
 ```$
-usage: thanos bucket --objstore.config=<bucket.config.yaml> <command> [<args> ...]
+usage: thanos bucket --objstore.config.file=<bucket.config.path> <command> [<args> ...]
 
 inspect metric data in an object storage bucket
 
@@ -36,8 +42,8 @@ Flags:
                         How often we send traces (1/<sample-factor>). If 0 no
                         trace will be sent periodically, unless forced by
                         baggage item. See `pkg/tracing/tracing.go` for details.
-      --objstore.config=<bucket.config.yaml>  
-                        The object store configuration in yaml format.
+      --objstore.config.file=<bucket.config.path>  
+                        The object store configuration file path.
 
 Subcommands:
   bucket verify [<flags>]
@@ -77,8 +83,8 @@ Flags:
                         How often we send traces (1/<sample-factor>). If 0 no
                         trace will be sent periodically, unless forced by
                         baggage item. See `pkg/tracing/tracing.go` for details.
-      --objstore.config=<bucket.config.yaml>  
-                        The object store configuration in yaml format.
+      --objstore.config.file=<bucket.config.path>  
+                        The object store configuration file path.
   -r, --repair          attempt to repair blocks for which issues were detected
       --objstore-backup.config=<bucket-backup.config.yaml>  
                         The backup object store configuration in yaml format.
@@ -121,8 +127,8 @@ Flags:
                         How often we send traces (1/<sample-factor>). If 0 no
                         trace will be sent periodically, unless forced by
                         baggage item. See `pkg/tracing/tracing.go` for details.
-      --objstore.config=<bucket.config.yaml>  
-                        The object store configuration in yaml format.
+      --objstore.config.file=<bucket.config.path>  
+                        The object store configuration file path.
   -o, --output=""       Format in which to print each block's information. May
                         be 'json' or custom template.
 

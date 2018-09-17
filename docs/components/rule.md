@@ -16,9 +16,15 @@ $ thanos rule \
     --alert.query-url   "http://0.0.0.0:9090" \
     --alertmanagers.url "alert.thanos.io" \
     --cluster.peers     "thanos-cluster.example.org" \
-    --objstore.config="type: GCS
+    --objstore.config.file "bucket.yml"
+```
+
+The content of `bucket.yml`:
+
+```yaml
+type: GCS
 config:
-    bucket: example-bucket"
+  bucket: example-bucket
 ```
 
 As rule nodes outsource query processing to query nodes, they should generally experience little load. If necessary, functional sharding can be applied by splitting up the sets of rules between HA pairs.
@@ -113,7 +119,7 @@ Flags:
       --alert.query-url=ALERT.QUERY-URL  
                                 The external Thanos Query URL that would be set
                                 in all alerts 'Source' field
-      --objstore.config=<bucket.config.yaml>  
-                                The object store configuration in yaml format.
+      --objstore.config.file=<bucket.config.path>  
+                                The object store configuration file path.
 
 ```

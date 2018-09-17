@@ -26,20 +26,20 @@ At that point, anyone can use your provider!
 
 Thanos uses minio client to upload Prometheus data into AWS s3.
 
-To configure S3 bucket as an object store you need to set these mandatory S3 variables in yaml format:
+To configure S3 bucket as an object store you need to set these mandatory S3 variables in yaml format stored in a file:
 ```
---objstore.config="type: S3
+type: S3
 config:
     bucket: <bucket>
     endpoint: <endpoint>
     access-key: <access-key>
     insecure: <true|false>
     signature-version2: <true|false>
-    encrypt-sse: <true|false>"
+    encrypt-sse: <true|false>
+    secret-key: <secret-key>
 ```
 
-Meanwhile you also should set the `secret-key` via environment variables:
-- `S3_SECRET_KEY`
+Set the flags `--objstore.config.file` to reference to the configuration file.
 
 AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region)
 
@@ -129,10 +129,12 @@ To configure Google Cloud Storage bucket as an object store you need to set `buc
 
 For example:
 ```
---objstore.config="type: GCS
+type: GCS
 config:
-    bucket: <bucket>"
+    bucket: <bucket>
 ```
+
+Set the flags `--objstore.config.file` to reference to the configuration file.
 
 Application credentials are configured via JSON file, the client looks for:
 

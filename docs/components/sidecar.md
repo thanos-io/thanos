@@ -16,9 +16,15 @@ $ thanos sidecar \
     --tsdb.path        "/path/to/prometheus/data/dir" \
     --prometheus.url   "http://localhost:9090" \
     --cluster.peers    "thanos-cluster.example.org" \
-    --objstore.config="type: GCS
+    --objstore.config.file  "bucket.yml"
+```
+
+The content of `bucket.yml`:
+
+```yaml
+type: GCS
 config:
-    bucket: example-bucket"
+  bucket: example-bucket
 ```
 
 ## Deployment
@@ -101,8 +107,8 @@ Flags:
       --reloader.rule-dir=RELOADER.RULE-DIR ...  
                                  Rule directories for the reloader to refresh
                                  (repeated field).
-      --objstore.config=<bucket.config.yaml>  
-                                 The object store configuration in yaml format.
+      --objstore.config.file=<bucket.config.path>  
+                                 The object store configuration file path.
 
 ```
 
