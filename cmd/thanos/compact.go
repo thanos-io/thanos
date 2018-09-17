@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"path"
 	"time"
 
@@ -39,13 +40,15 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	syncDelay := modelDuration(cmd.Flag("sync-delay", "Minimum age of fresh (non-compacted) blocks before they are being processed.").
 		Default("30m"))
 
-	retention := modelDuration(cmd.Flag("retention.default", "How long to retain samples in bucket. 0d - disables retention").Default("0d"))
+	retentionRaw := modelDuration(cmd.Flag("retention.resolution-raw", "How long to retain raw samples in bucket. 0d - disables this retention").Default("0d"))
+	retention5m := modelDuration(cmd.Flag("retention.resolution-5m", "How long to retain samples of resolution 1 (5 minutes) in bucket. 0d - disables this retention").Default("0d"))
+	retention1h := modelDuration(cmd.Flag("retention.resolution-1h", "How long to retain samples of resolution 2 (1 hour) in bucket. 0d - disables this retention").Default("0d"))
 
 	wait := cmd.Flag("wait", "Do not exit after all compactions have been processed and wait for new work.").
 		Short('w').Bool()
 
 	// TODO(bplotka): Remove this flag once https://github.com/improbable-eng/thanos/issues/297 is fixed.
-	disableDownsampling := cmd.Flag("debug.disable-downsampling", "Disables downsampling. This is not recommended " +
+	disableDownsampling := cmd.Flag("debug.disable-downsampling", "Disables downsampling. This is not recommended "+
 		"as querying long time ranges without non-downsampled data is not efficient and not useful (is not possible to render all for human eye).").
 		Hidden().Default("false").Bool()
 
@@ -58,7 +61,11 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			time.Duration(*syncDelay),
 			*haltOnError,
 			*wait,
-			time.Duration(*retention),
+			map[compact.ResolutionLevel]time.Duration{
+				compact.ResolutionLevelRaw: time.Duration(*retentionRaw),
+				compact.ResolutionLevel5m:  time.Duration(*retention5m),
+				compact.ResolutionLevel1h:  time.Duration(*retention1h),
+			},
 			name,
 			*disableDownsampling,
 		)
@@ -76,7 +83,7 @@ func runCompact(
 	syncDelay time.Duration,
 	haltOnError bool,
 	wait bool,
-	retention time.Duration,
+	retentionByResolution map[compact.ResolutionLevel]time.Duration,
 	component string,
 	disableDownsampling bool,
 ) error {
@@ -129,8 +136,14 @@ func runCompact(
 
 	compactor := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt)
 
-	if retention.Seconds() != 0 {
-		level.Info(logger).Log("msg", "default retention policy is enabled", "duration", retention)
+	if retentionByResolution[compact.ResolutionLevelRaw].Seconds() != 0 {
+		level.Info(logger).Log("msg", "retention policy of raw samples is enabled", "duration", retentionByResolution[compact.ResolutionLevelRaw])
+	}
+	if retentionByResolution[compact.ResolutionLevel5m].Seconds() != 0 {
+		level.Info(logger).Log("msg", "retention policy of 5 min aggregated samples is enabled", "duration", retentionByResolution[compact.ResolutionLevel5m])
+	}
+	if retentionByResolution[compact.ResolutionLevel1h].Seconds() != 0 {
+		level.Info(logger).Log("msg", "retention policy of 1 hour aggregated samples is enabled", "duration", retentionByResolution[compact.ResolutionLevel1h])
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -161,12 +174,9 @@ func runCompact(
 			level.Warn(logger).Log("msg", "downsampling was explicitly disabled")
 		}
 
-		if retention.Seconds() != 0 {
-			if err := compact.ApplyDefaultRetentionPolicy(ctx, logger, bkt, retention); err != nil {
-				return errors.Wrap(err, "retention failed")
-			}
+		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, retentionByResolution); err != nil {
+			return errors.Wrap(err, fmt.Sprintf("retention failed"))
 		}
-
 		return nil
 	}
 

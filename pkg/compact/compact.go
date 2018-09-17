@@ -23,6 +23,14 @@ import (
 	"github.com/prometheus/tsdb/labels"
 )
 
+type ResolutionLevel int64
+
+const (
+	ResolutionLevelRaw = ResolutionLevel(downsample.ResLevel0)
+	ResolutionLevel5m  = ResolutionLevel(downsample.ResLevel1)
+	ResolutionLevel1h  = ResolutionLevel(downsample.ResLevel2)
+)
+
 // Syncer syncronizes block metas from a bucket into a local directory.
 // It sorts them into compaction groups based on equal label sets.
 type Syncer struct {
