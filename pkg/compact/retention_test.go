@@ -25,63 +25,60 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 		maxTime    time.Time
 		resolution compact.ResolutionLevel
 	}
-	type args struct {
+
+	logger := log.NewNopLogger()
+	ctx := context.TODO()
+
+	for _, tt := range []struct {
+		name                  string
 		blocks                []testBlock
 		retentionByResolution map[compact.ResolutionLevel]time.Duration
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    []string
-		wantErr bool
+		want                  []string
+		wantErr               bool
 	}{
 		{
 			"empty bucket",
-			args{
-				blocks: []testBlock{},
-				retentionByResolution: map[compact.ResolutionLevel]time.Duration{
-					compact.ResolutionLevelRaw: 24 * time.Hour,
-					compact.ResolutionLevel5m:  7 * 24 * time.Hour,
-					compact.ResolutionLevel1h:  14 * 24 * time.Hour,
-				},
+			[]testBlock{},
+			map[compact.ResolutionLevel]time.Duration{
+				compact.ResolutionLevelRaw: 24 * time.Hour,
+				compact.ResolutionLevel5m:  7 * 24 * time.Hour,
+				compact.ResolutionLevel1h:  14 * 24 * time.Hour,
 			},
 			[]string{},
 			false,
 		},
 		{
 			"only raw retention",
-			args{
-				blocks: []testBlock{
-					{
-						"01CPHBEX20729MJQZXE3W0BW48",
-						time.Now().Add(-3 * 24 * time.Hour),
-						time.Now().Add(-2 * 24 * time.Hour),
-						compact.ResolutionLevelRaw,
-					},
-					{
-						"01CPHBEX20729MJQZXE3W0BW49",
-						time.Now().Add(-2 * 24 * time.Hour),
-						time.Now().Add(-24 * time.Hour),
-						compact.ResolutionLevel5m,
-					},
-					{
-						"01CPHBEX20729MJQZXE3W0BW50",
-						time.Now().Add(-24 * time.Hour),
-						time.Now().Add(-23 * time.Hour),
-						compact.ResolutionLevel1h,
-					},
-					{
-						"01CPHBEX20729MJQZXE3W0BW51",
-						time.Now().Add(-23 * time.Hour),
-						time.Now().Add(-6 * time.Hour),
-						compact.ResolutionLevelRaw,
-					},
+			[]testBlock{
+				{
+					"01CPHBEX20729MJQZXE3W0BW48",
+					time.Now().Add(-3 * 24 * time.Hour),
+					time.Now().Add(-2 * 24 * time.Hour),
+					compact.ResolutionLevelRaw,
 				},
-				retentionByResolution: map[compact.ResolutionLevel]time.Duration{
-					compact.ResolutionLevelRaw: 24 * time.Hour,
-					compact.ResolutionLevel5m:  0,
-					compact.ResolutionLevel1h:  0,
+				{
+					"01CPHBEX20729MJQZXE3W0BW49",
+					time.Now().Add(-2 * 24 * time.Hour),
+					time.Now().Add(-24 * time.Hour),
+					compact.ResolutionLevel5m,
 				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW50",
+					time.Now().Add(-24 * time.Hour),
+					time.Now().Add(-23 * time.Hour),
+					compact.ResolutionLevel1h,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW51",
+					time.Now().Add(-23 * time.Hour),
+					time.Now().Add(-6 * time.Hour),
+					compact.ResolutionLevelRaw,
+				},
+			},
+			map[compact.ResolutionLevel]time.Duration{
+				compact.ResolutionLevelRaw: 24 * time.Hour,
+				compact.ResolutionLevel5m:  0,
+				compact.ResolutionLevel1h:  0,
 			},
 			[]string{
 				"01CPHBEX20729MJQZXE3W0BW49/",
@@ -92,38 +89,36 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 		},
 		{
 			"no retention",
-			args{
-				blocks: []testBlock{
-					{
-						"01CPHBEX20729MJQZXE3W0BW48",
-						time.Now().Add(-3 * 24 * time.Hour),
-						time.Now().Add(-2 * 24 * time.Hour),
-						compact.ResolutionLevelRaw,
-					},
-					{
-						"01CPHBEX20729MJQZXE3W0BW49",
-						time.Now().Add(-2 * 24 * time.Hour),
-						time.Now().Add(-24 * time.Hour),
-						compact.ResolutionLevel5m,
-					},
-					{
-						"01CPHBEX20729MJQZXE3W0BW50",
-						time.Now().Add(-24 * time.Hour),
-						time.Now().Add(-23 * time.Hour),
-						compact.ResolutionLevel1h,
-					},
-					{
-						"01CPHBEX20729MJQZXE3W0BW51",
-						time.Now().Add(-23 * time.Hour),
-						time.Now().Add(-6 * time.Hour),
-						compact.ResolutionLevelRaw,
-					},
+			[]testBlock{
+				{
+					"01CPHBEX20729MJQZXE3W0BW48",
+					time.Now().Add(-3 * 24 * time.Hour),
+					time.Now().Add(-2 * 24 * time.Hour),
+					compact.ResolutionLevelRaw,
 				},
-				retentionByResolution: map[compact.ResolutionLevel]time.Duration{
-					compact.ResolutionLevelRaw: 0,
-					compact.ResolutionLevel5m:  0,
-					compact.ResolutionLevel1h:  0,
+				{
+					"01CPHBEX20729MJQZXE3W0BW49",
+					time.Now().Add(-2 * 24 * time.Hour),
+					time.Now().Add(-24 * time.Hour),
+					compact.ResolutionLevel5m,
 				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW50",
+					time.Now().Add(-24 * time.Hour),
+					time.Now().Add(-23 * time.Hour),
+					compact.ResolutionLevel1h,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW51",
+					time.Now().Add(-23 * time.Hour),
+					time.Now().Add(-6 * time.Hour),
+					compact.ResolutionLevelRaw,
+				},
+			},
+			map[compact.ResolutionLevel]time.Duration{
+				compact.ResolutionLevelRaw: 0,
+				compact.ResolutionLevel5m:  0,
+				compact.ResolutionLevel1h:  0,
 			},
 			[]string{
 				"01CPHBEX20729MJQZXE3W0BW48/",
@@ -135,32 +130,30 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 		},
 		{
 			"no retention 1900",
-			args{
-				blocks: []testBlock{
-					{
-						"01CPHBEX20729MJQZXE3W0BW48",
-						time.Date(1900, 1, 1, 1, 0, 0, 0, time.Local),
-						time.Date(1900, 1, 1, 2, 0, 0, 0, time.Local),
-						compact.ResolutionLevelRaw,
-					},
-					{
-						"01CPHBEX20729MJQZXE3W0BW49",
-						time.Date(1900, 1, 1, 1, 0, 0, 0, time.Local),
-						time.Date(1900, 1, 1, 2, 0, 0, 0, time.Local),
-						compact.ResolutionLevel5m,
-					},
-					{
-						"01CPHBEX20729MJQZXE3W0BW50",
-						time.Date(1900, 1, 1, 1, 0, 0, 0, time.Local),
-						time.Date(1900, 1, 1, 2, 0, 0, 0, time.Local),
-						compact.ResolutionLevel1h,
-					},
+			[]testBlock{
+				{
+					"01CPHBEX20729MJQZXE3W0BW48",
+					time.Date(1900, 1, 1, 1, 0, 0, 0, time.Local),
+					time.Date(1900, 1, 1, 2, 0, 0, 0, time.Local),
+					compact.ResolutionLevelRaw,
 				},
-				retentionByResolution: map[compact.ResolutionLevel]time.Duration{
-					compact.ResolutionLevelRaw: 0,
-					compact.ResolutionLevel5m:  0,
-					compact.ResolutionLevel1h:  0,
+				{
+					"01CPHBEX20729MJQZXE3W0BW49",
+					time.Date(1900, 1, 1, 1, 0, 0, 0, time.Local),
+					time.Date(1900, 1, 1, 2, 0, 0, 0, time.Local),
+					compact.ResolutionLevel5m,
 				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW50",
+					time.Date(1900, 1, 1, 1, 0, 0, 0, time.Local),
+					time.Date(1900, 1, 1, 2, 0, 0, 0, time.Local),
+					compact.ResolutionLevel1h,
+				},
+			},
+			map[compact.ResolutionLevel]time.Duration{
+				compact.ResolutionLevelRaw: 0,
+				compact.ResolutionLevel5m:  0,
+				compact.ResolutionLevel1h:  0,
 			},
 			[]string{
 				"01CPHBEX20729MJQZXE3W0BW48/",
@@ -171,17 +164,15 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 		},
 		{
 			"unknown resolution",
-			args{
-				blocks: []testBlock{
-					{
-						"01CPHBEX20729MJQZXE3W0BW48",
-						time.Now().Add(-3 * 24 * time.Hour),
-						time.Now().Add(-2 * 24 * time.Hour),
-						compact.ResolutionLevel(1),
-					},
+			[]testBlock{
+				{
+					"01CPHBEX20729MJQZXE3W0BW48",
+					time.Now().Add(-3 * 24 * time.Hour),
+					time.Now().Add(-2 * 24 * time.Hour),
+					compact.ResolutionLevel(1),
 				},
-				retentionByResolution: map[compact.ResolutionLevel]time.Duration{},
 			},
+			map[compact.ResolutionLevel]time.Duration{},
 			[]string{
 				"01CPHBEX20729MJQZXE3W0BW48/",
 			},
@@ -189,50 +180,48 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 		},
 		{
 			"every retention deletes",
-			args{
-				blocks: []testBlock{
-					{
-						"01CPHBEX20729MJQZXE3W0BW40",
-						time.Now().Add(-1 * 24 * time.Hour),
-						time.Now().Add(-0 * 24 * time.Hour),
-						compact.ResolutionLevelRaw,
-					},
-					{
-						"01CPHBEX20729MJQZXE3W0BW41",
-						time.Now().Add(-2 * 24 * time.Hour),
-						time.Now().Add(-1 * 24 * time.Hour),
-						compact.ResolutionLevelRaw,
-					},
-					{
-						"01CPHBEX20729MJQZXE3W0BW42",
-						time.Now().Add(-7 * 24 * time.Hour),
-						time.Now().Add(-6 * 24 * time.Hour),
-						compact.ResolutionLevel5m,
-					},
-					{
-						"01CPHBEX20729MJQZXE3W0BW43",
-						time.Now().Add(-8 * 24 * time.Hour),
-						time.Now().Add(-7 * 24 * time.Hour),
-						compact.ResolutionLevel5m,
-					},
-					{
-						"01CPHBEX20729MJQZXE3W0BW44",
-						time.Now().Add(-14 * 24 * time.Hour),
-						time.Now().Add(-13 * 24 * time.Hour),
-						compact.ResolutionLevel1h,
-					},
-					{
-						"01CPHBEX20729MJQZXE3W0BW45",
-						time.Now().Add(-15 * 24 * time.Hour),
-						time.Now().Add(-14 * 24 * time.Hour),
-						compact.ResolutionLevel1h,
-					},
+			[]testBlock{
+				{
+					"01CPHBEX20729MJQZXE3W0BW40",
+					time.Now().Add(-1 * 24 * time.Hour),
+					time.Now().Add(-0 * 24 * time.Hour),
+					compact.ResolutionLevelRaw,
 				},
-				retentionByResolution: map[compact.ResolutionLevel]time.Duration{
-					compact.ResolutionLevelRaw: 24 * time.Hour,
-					compact.ResolutionLevel5m:  7 * 24 * time.Hour,
-					compact.ResolutionLevel1h:  14 * 24 * time.Hour,
+				{
+					"01CPHBEX20729MJQZXE3W0BW41",
+					time.Now().Add(-2 * 24 * time.Hour),
+					time.Now().Add(-1 * 24 * time.Hour),
+					compact.ResolutionLevelRaw,
 				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW42",
+					time.Now().Add(-7 * 24 * time.Hour),
+					time.Now().Add(-6 * 24 * time.Hour),
+					compact.ResolutionLevel5m,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW43",
+					time.Now().Add(-8 * 24 * time.Hour),
+					time.Now().Add(-7 * 24 * time.Hour),
+					compact.ResolutionLevel5m,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW44",
+					time.Now().Add(-14 * 24 * time.Hour),
+					time.Now().Add(-13 * 24 * time.Hour),
+					compact.ResolutionLevel1h,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW45",
+					time.Now().Add(-15 * 24 * time.Hour),
+					time.Now().Add(-14 * 24 * time.Hour),
+					compact.ResolutionLevel1h,
+				},
+			},
+			map[compact.ResolutionLevel]time.Duration{
+				compact.ResolutionLevelRaw: 24 * time.Hour,
+				compact.ResolutionLevel5m:  7 * 24 * time.Hour,
+				compact.ResolutionLevel1h:  14 * 24 * time.Hour,
 			},
 			[]string{
 				"01CPHBEX20729MJQZXE3W0BW40/",
@@ -241,18 +230,13 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 			},
 			false,
 		},
-	}
-
-	logger := log.NewNopLogger()
-	ctx := context.TODO()
-
-	for _, tt := range tests {
+	} {
 		t.Run(tt.name, func(t *testing.T) {
 			bkt := inmem.NewBucket()
-			for _, b := range tt.args.blocks {
+			for _, b := range tt.blocks {
 				uploadMockBlock(t, bkt, b.id, b.minTime, b.maxTime, int64(b.resolution))
 			}
-			if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, tt.args.retentionByResolution); (err != nil) != tt.wantErr {
+			if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, tt.retentionByResolution); (err != nil) != tt.wantErr {
 				t.Errorf("ApplyRetentionPolicyByResolution() error = %v, wantErr %v", err, tt.wantErr)
 			}
 

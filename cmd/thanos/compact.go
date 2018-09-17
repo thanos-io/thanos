@@ -177,7 +177,6 @@ func runCompact(
 		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, retentionByResolution); err != nil {
 			return errors.Wrap(err, fmt.Sprintf("retention failed"))
 		}
-		level.Info(logger).Log("msg", "retention iterations done")
 		return nil
 	}
 
