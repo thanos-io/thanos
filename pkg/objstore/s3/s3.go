@@ -46,7 +46,7 @@ type s3Config struct {
 	Insecure      bool   `yaml:"insecure"`
 	SignatureV2   bool   `yaml:"signature-version2"`
 	SSEEncryption bool   `yaml:"encrypt-sse"`
-	secretKey     string
+	SecretKey     string `yaml:"secret-key"`
 }
 
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
@@ -65,7 +65,6 @@ func NewBucket(logger log.Logger, conf []byte, reg prometheus.Registerer, compon
 	if err := yaml.Unmarshal(conf, &config); err != nil {
 		return nil, err
 	}
-	config.secretKey = os.Getenv("S3_SECRET_KEY")
 	if err := Validate(config); err != nil {
 		return nil, err
 	}
@@ -78,7 +77,7 @@ func NewBucket(logger log.Logger, conf []byte, reg prometheus.Registerer, compon
 		chain = []credentials.Provider{&credentials.Static{
 			Value: credentials.Value{
 				AccessKeyID:     config.AccessKey,
-				SecretAccessKey: config.secretKey,
+				SecretAccessKey: config.SecretKey,
 				SignerType:      signature,
 			},
 		}}
@@ -153,8 +152,8 @@ func (b *Bucket) Name() string {
 // Validate checks to see the config options are set.
 func Validate(conf s3Config) error {
 	if conf.Endpoint == "" ||
-		(conf.AccessKey == "" && conf.secretKey != "") ||
-		(conf.AccessKey != "" && conf.secretKey == "") {
+		(conf.AccessKey == "" && conf.SecretKey != "") ||
+		(conf.AccessKey != "" && conf.SecretKey == "") {
 		return errors.New("insufficient s3 test configuration information")
 	}
 	return nil
@@ -164,7 +163,7 @@ func Validate(conf s3Config) error {
 func ValidateForTests(conf s3Config) error {
 	if conf.Endpoint == "" ||
 		conf.AccessKey == "" ||
-		conf.secretKey == "" {
+		conf.SecretKey == "" {
 		return errors.New("insufficient s3 test configuration information")
 	}
 	return nil
@@ -275,7 +274,7 @@ func configFromEnv() s3Config {
 		Bucket:    os.Getenv("S3_BUCKET"),
 		Endpoint:  os.Getenv("S3_ENDPOINT"),
 		AccessKey: os.Getenv("S3_ACCESS_KEY"),
-		secretKey: os.Getenv("S3_SECRET_KEY"),
+		SecretKey: os.Getenv("S3_SECRET_KEY"),
 	}
 
 	insecure, err := strconv.ParseBool(os.Getenv("S3_INSECURE"))
