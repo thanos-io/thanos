@@ -48,7 +48,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 		Short('w').Bool()
 
 	// TODO(bplotka): Remove this flag once https://github.com/improbable-eng/thanos/issues/297 is fixed.
-	disableDownsampling := cmd.Flag("debug.disable-downsampling", "Disables downsampling. This is not recommended " +
+	disableDownsampling := cmd.Flag("debug.disable-downsampling", "Disables downsampling. This is not recommended "+
 		"as querying long time ranges without non-downsampled data is not efficient and not useful (is not possible to render all for human eye).").
 		Hidden().Default("false").Bool()
 
