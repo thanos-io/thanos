@@ -30,7 +30,7 @@ ignored = ["github.com/improbable-eng/thanos/benchmark/*"]
 
 [[constraint]]
   name = "github.com/prometheus/client_golang"
-  version = "0.8.0"
+  revision = "e637cec7d9c8990247098639ebc6d43dd34ddd49"
 
 [[constraint]]
   branch = "master"
