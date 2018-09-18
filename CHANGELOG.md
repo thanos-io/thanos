@@ -8,12 +8,6 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 ## Unreleased
 
-- Add Thanos Rule UI
-- Add Thanos Rule reload via HTTP POST to /-/reload
-- Add Thanos compact --retention.default flag, for configuring storage bucket retention period.
-- Removes support for multiple units in duration. For example: 1m0s won't work, while 1m will work.
-- Adds support for y,w,d time units 
-- Add Thanos bucket ls -o wide, which provides more detailed information about blocks stored in the bucket.
 - Remove support of those flags for bucket
     - --gcs-bucket=\<bucket\>
     - --s3.bucket=\<bucket\>
