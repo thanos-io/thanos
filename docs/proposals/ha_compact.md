@@ -1,6 +1,6 @@
 # Thanos Compact - High Availability
 
-Status: **draft** | in-review | rejected | accepted | complete
+Status: draft | in-review | rejected | **accepted** | complete
 
 Implementation Owner: [@domgreen](https://github.com/domgreen)
 
