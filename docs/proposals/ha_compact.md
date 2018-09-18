@@ -19,7 +19,7 @@ If a `thanos compact` instance dies we would like another to take over compactio
 
 ## Proposal
 
-An initial proposal of adding ETCD into `thanos compact` so that we can run master election against multiple components.
+An initial proposal of adding ETCD via a interface over the existing [concurrency](https://github.com/etcd-io/etcd/blob/master/clientv3/concurrency/election.go#L44) package into `thanos compact` so that we can run master election against multiple components.
 
 
 ``` 
