@@ -39,7 +39,7 @@ config:
     secret-key: <secret-key>
 ```
 
-Set the flags `--objstore.config.file` to reference to the configuration file.
+Set the flags `--objstore.config-file` to reference to the configuration file.
 
 AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region)
 
@@ -134,7 +134,7 @@ config:
     bucket: <bucket>
 ```
 
-Set the flags `--objstore.config.file` to reference to the configuration file.
+Set the flags `--objstore.config-file` to reference to the configuration file.
 
 Application credentials are configured via JSON file, the client looks for:
 

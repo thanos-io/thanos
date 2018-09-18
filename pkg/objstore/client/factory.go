@@ -53,7 +53,7 @@ func NewBucket(logger log.Logger, confFile string, reg *prometheus.Registry, com
 
 	bucketConf, err := loadFile(confFile)
 	if err != nil {
-		return nil, errors.Wrap(err, "parsing objstore.config.file")
+		return nil, errors.Wrap(err, "parsing objstore.config-file")
 	}
 
 	config, err := yaml.Marshal(bucketConf.Config)

@@ -31,7 +31,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process compactions.").
 		Default("./data").String()
 
-	bucketConfFile := cmd.Flag("objstore.config.file", "The object store configuration file path.").
+	bucketConfFile := cmd.Flag("objstore.config-file", "The object store configuration file path.").
 		PlaceHolder("<bucket.config.path>").Required().String()
 
 	syncDelay := modelDuration(cmd.Flag("sync-delay", "Minimum age of fresh (non-compacted) blocks before they are being processed.").

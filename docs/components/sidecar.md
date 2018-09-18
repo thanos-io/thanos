@@ -16,7 +16,7 @@ $ thanos sidecar \
     --tsdb.path        "/path/to/prometheus/data/dir" \
     --prometheus.url   "http://localhost:9090" \
     --cluster.peers    "thanos-cluster.example.org" \
-    --objstore.config.file  "bucket.yml"
+    --objstore.config-file  "bucket.yml"
 ```
 
 The content of `bucket.yml`:
@@ -107,7 +107,7 @@ Flags:
       --reloader.rule-dir=RELOADER.RULE-DIR ...  
                                  Rule directories for the reloader to refresh
                                  (repeated field).
-      --objstore.config.file=<bucket.config.path>  
+      --objstore.config-file=<bucket.config.path>  
                                  The object store configuration file path.
 
 ```

@@ -41,7 +41,7 @@ var (
 func registerBucket(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "inspect metric data in an object storage bucket")
 
-	bucketConfFile := cmd.Flag("objstore.config.file", "The object store configuration file path.").
+	bucketConfFile := cmd.Flag("objstore.config-file", "The object store configuration file path.").
 		PlaceHolder("<bucket.config.path>").Required().String()
 
 	// Verify command.

@@ -73,7 +73,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	alertQueryURL := cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field").String()
 
-	bucketConfFile := cmd.Flag("objstore.config.file", "The object store configuration file path.").
+	bucketConfFile := cmd.Flag("objstore.config-file", "The object store configuration file path.").
 		PlaceHolder("<bucket.config.path>").String()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {

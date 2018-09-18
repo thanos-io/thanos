@@ -6,7 +6,7 @@ It is normally run as a stand alone command to aid with troubleshooting.
 Example:
 
 ```
-$ thanos bucket verify --objstore.config.file=bucket.yml
+$ thanos bucket verify --objstore.config-file=bucket.yml
 ```
 
 The content of `bucket.yml`:
@@ -26,7 +26,7 @@ by adding a new command within `/cmd/thanos/bucket.go`
 
 [embedmd]:# (flags/bucket.txt $)
 ```$
-usage: thanos bucket --objstore.config.file=<bucket.config.path> <command> [<args> ...]
+usage: thanos bucket --objstore.config-file=<bucket.config.path> <command> [<args> ...]
 
 inspect metric data in an object storage bucket
 
@@ -42,7 +42,7 @@ Flags:
                         How often we send traces (1/<sample-factor>). If 0 no
                         trace will be sent periodically, unless forced by
                         baggage item. See `pkg/tracing/tracing.go` for details.
-      --objstore.config.file=<bucket.config.path>  
+      --objstore.config-file=<bucket.config.path>  
                         The object store configuration file path.
 
 Subcommands:
@@ -83,7 +83,7 @@ Flags:
                         How often we send traces (1/<sample-factor>). If 0 no
                         trace will be sent periodically, unless forced by
                         baggage item. See `pkg/tracing/tracing.go` for details.
-      --objstore.config.file=<bucket.config.path>  
+      --objstore.config-file=<bucket.config.path>  
                         The object store configuration file path.
   -r, --repair          attempt to repair blocks for which issues were detected
       --objstore-backup.config=<bucket-backup.config.yaml>  
@@ -127,7 +127,7 @@ Flags:
                         How often we send traces (1/<sample-factor>). If 0 no
                         trace will be sent periodically, unless forced by
                         baggage item. See `pkg/tracing/tracing.go` for details.
-      --objstore.config.file=<bucket.config.path>  
+      --objstore.config-file=<bucket.config.path>  
                         The object store configuration file path.
   -o, --output=""       Format in which to print each block's information. May
                         be 'json' or custom template.

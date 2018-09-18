@@ -30,7 +30,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache remote blocks.").
 		Default("./data").String()
 
-	bucketConfFile := cmd.Flag("objstore.config.file", "The object store configuration file path.").
+	bucketConfFile := cmd.Flag("objstore.config-file", "The object store configuration file path.").
 		PlaceHolder("<bucket.config.path>").Required().String()
 
 	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the index cache.").
