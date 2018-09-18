@@ -67,6 +67,7 @@ jobs:
       - run: echo 'export PATH=${HOME}/bin:${PATH}' >> ${BASH_ENV}
       - attach_workspace:
           at: .
+      - run: make crossbuild
       - run: make tarballs-release
       - store_artifacts:
           path: .tarballs
