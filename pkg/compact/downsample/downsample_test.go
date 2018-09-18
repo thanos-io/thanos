@@ -5,19 +5,19 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
-
-	"github.com/prometheus/prometheus/pkg/value"
-
-	"github.com/prometheus/tsdb/chunks"
-
 	"time"
 
 	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/testutil"
+	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/value"
+	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/tsdb/chunks"
 	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
 )
@@ -69,30 +69,30 @@ func TestDownsampleAggr(t *testing.T) {
 		{
 			lset: labels.FromStrings("__name__", "a"),
 			inAggr: map[AggrType][]sample{
-				AggrCount: []sample{
+				AggrCount: {
 					{199, 5}, {299, 1}, {399, 10}, {400, 3}, {499, 10}, {699, 0}, {999, 100},
 				},
-				AggrSum: []sample{
+				AggrSum: {
 					{199, 5}, {299, 1}, {399, 10}, {400, 3}, {499, 10}, {699, 0}, {999, 100},
 				},
-				AggrMin: []sample{
+				AggrMin: {
 					{199, 5}, {299, 1}, {399, 10}, {400, -3}, {499, 10}, {699, 0}, {999, 100},
 				},
-				AggrMax: []sample{
+				AggrMax: {
 					{199, 5}, {299, 1}, {399, 10}, {400, -3}, {499, 10}, {699, 0}, {999, 100},
 				},
-				AggrCounter: []sample{
+				AggrCounter: {
 					{99, 100}, {299, 150}, {499, 210}, {499, 10}, // chunk 1
 					{599, 20}, {799, 50}, {999, 120}, {999, 50}, // chunk 2, no reset
 					{1099, 40}, {1199, 80}, {1299, 110}, // chunk 3, reset
 				},
 			},
 			output: map[AggrType][]sample{
-				AggrCount:   []sample{{499, 29}, {999, 100}},
-				AggrSum:     []sample{{499, 29}, {999, 100}},
-				AggrMin:     []sample{{499, -3}, {999, 0}},
-				AggrMax:     []sample{{499, 10}, {999, 100}},
-				AggrCounter: []sample{{499, 210}, {999, 320}, {1299, 430}, {1299, 110}},
+				AggrCount:   {{499, 29}, {999, 100}},
+				AggrSum:     {{499, 29}, {999, 100}},
+				AggrMin:     {{499, -3}, {999, 0}},
+				AggrMax:     {{499, 10}, {999, 100}},
+				AggrCounter: {{499, 210}, {999, 320}, {1299, 430}, {1299, 110}},
 			},
 		},
 	}
@@ -157,7 +157,6 @@ func testDownsample(t *testing.T, data []*downsampleTestSet, meta *block.Meta, r
 		}
 		mb.addSeries(ser)
 	}
-
 	id, err := Downsample(log.NewNopLogger(), meta, mb, dir, resolution)
 	testutil.Ok(t, err)
 
@@ -374,4 +373,95 @@ func (it *sampleIterator) Seek(int64) bool {
 
 func (it *sampleIterator) At() (t int64, v float64) {
 	return it.l[it.i].t, it.l[it.i].v
+}
+
+// memBlock is an in-memory block that implements a subset of the tsdb.BlockReader interface
+// to allow tsdb.instantWriter to persist the data as a block.
+type memBlock struct {
+	// Dummies to implement unused methods.
+	tsdb.IndexReader
+
+	symbols  map[string]struct{}
+	postings []uint64
+	series   []*series
+	chunks   []chunkenc.Chunk
+
+	numberOfChunks uint64
+}
+
+func newMemBlock() *memBlock {
+	return &memBlock{symbols: map[string]struct{}{}}
+}
+
+func (b *memBlock) addSeries(s *series) {
+	sid := uint64(len(b.series))
+	b.postings = append(b.postings, sid)
+	b.series = append(b.series, s)
+
+	for _, l := range s.lset {
+		b.symbols[l.Name] = struct{}{}
+		b.symbols[l.Value] = struct{}{}
+	}
+
+	for i, cm := range s.chunks {
+		s.chunks[i].Ref = b.numberOfChunks
+		b.chunks = append(b.chunks, cm.Chunk)
+		b.numberOfChunks++
+	}
+}
+
+func (b *memBlock) Postings(name, val string) (index.Postings, error) {
+	allName, allVal := index.AllPostingsKey()
+
+	if name != allName || val != allVal {
+		return nil, errors.New("unsupported call to Postings()")
+	}
+	sort.Slice(b.postings, func(i, j int) bool {
+		return labels.Compare(b.series[b.postings[i]].lset, b.series[b.postings[j]].lset) < 0
+	})
+	return index.NewListPostings(b.postings), nil
+}
+
+func (b *memBlock) Series(id uint64, lset *labels.Labels, chks *[]chunks.Meta) error {
+	if id >= uint64(len(b.series)) {
+		return errors.Wrapf(tsdb.ErrNotFound, "series with ID %d does not exist", id)
+	}
+	s := b.series[id]
+
+	*lset = append((*lset)[:0], s.lset...)
+	*chks = append((*chks)[:0], s.chunks...)
+
+	return nil
+}
+
+func (b *memBlock) Chunk(id uint64) (chunkenc.Chunk, error) {
+	if id >= uint64(b.numberOfChunks) {
+		return nil, errors.Wrapf(tsdb.ErrNotFound, "chunk with ID %d does not exist", id)
+	}
+
+	return b.chunks[id], nil
+}
+
+func (b *memBlock) Symbols() (map[string]struct{}, error) {
+	return b.symbols, nil
+}
+
+func (b *memBlock) SortedPostings(p index.Postings) index.Postings {
+	return p
+}
+
+func (b *memBlock) Index() (tsdb.IndexReader, error) {
+	return b, nil
+}
+
+func (b *memBlock) Chunks() (tsdb.ChunkReader, error) {
+	return b, nil
+}
+
+func (b *memBlock) Tombstones() (tsdb.TombstoneReader, error) {
+	return tsdb.EmptyTombstoneReader(), nil
+}
+
+func (b *memBlock) Close() error {
+	return nil
 }
