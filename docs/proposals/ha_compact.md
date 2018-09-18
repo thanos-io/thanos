@@ -22,16 +22,19 @@ If a `thanos compact` instance dies we would like another to take over compactio
 An initial proposal of adding ETCD via a interface over the existing [concurrency](https://github.com/etcd-io/etcd/blob/master/clientv3/concurrency/election.go#L44) package into `thanos compact` so that we can run master election against multiple components.
 
 
-``` 
-      ┌─────────────────────────────┐    ┌─────────────────────────────┐
-      │        Thanos Compact A     │    │        Thanos Compact B     │
-      └──────────────┬──────────────┘    └──────────────┬──────────────┘
-                     │                                  │                   
-                 Check Lock                         Check Lock        
-                     │                                  │                   
-                     v                                  v                  
+```
+
+                 EU Cluster            │            US Cluster 
+                                       │
+      ┌─────────────────────────────┐  │  ┌─────────────────────────────┐
+      │        Thanos Compact A     │  │  │        Thanos Compact B     │
+      └──────────────┬──────────────┘  │  └──────────────┬──────────────┘
+                     │                 │                 │                   
+                 Check Lock            │             Check Lock        
+                     │                 │                 │                   
+                     v                 │                 v                  
                 ┌────────────────────────────────────────────┐
-                │                    ETCD                    │
+                │                Global ETCD                 │
                 └────────────────────────────────────────────┘
 ```
 
@@ -40,12 +43,15 @@ An initial proposal of adding ETCD via a interface over the existing [concurrenc
 
 ### Use Cases
 
-- User wishes to run `thanos compact` in HA mode.
+- User wishes to run `thanos compact` in HA mode across multiple clusters.
 
 ### Example Use Case
 
 A user would like to ensure more than one instance of `thanos compact` is running so that given one fails
 another will take over.
+In a multi-cluster setup we may want the `thanos compact` component in the second cluster to take over the work if the
+original cluster fails or needs to be drained.
+In a single cluster mode this could be achieved simply with kubernetes setting the number of replicas to 1 for the job.
 
 ## Implementation
 
@@ -63,6 +69,9 @@ $ thanos compact \
 
 The `etcd.url` flag will be where we attempt to access ETCD if it is not present we assume no master election is being done
 for the component and this instance will start compacting the bucket.
+
+As this is an advanced use case for global multi-cluster compaction of data this would **not** be enabled by default and 
+should be documented as such.
 
 ### Why only ETCD
 
