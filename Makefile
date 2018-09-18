@@ -31,7 +31,7 @@ ALERTMANAGER_VERSION    ?=v0.15.2
 # $(1): Install path. (e.g github.com/golang/dep/cmd/dep)
 # $(2): Tag or revision for checkout.
 define fetch_go_bin_version
-	mkdir -p $(BIN_DIR)
+	@mkdir -p $(BIN_DIR)
 
 	@echo ">> fetching $(1)@$(2) revision/version"
 	@if [ ! -d "$(TMP_GOPATH)/src/$(1)" ]; then \
