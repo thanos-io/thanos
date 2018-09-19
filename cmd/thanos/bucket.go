@@ -48,8 +48,8 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	verify := cmd.Command("verify", "verify all blocks in the bucket against specified issues")
 	verifyRepair := verify.Flag("repair", "attempt to repair blocks for which issues were detected").
 		Short('r').Default("false").Bool()
-	backupBucketConfFile := verify.Flag("objstore-backup.config", "The backup object store configuration in yaml format.").
-		PlaceHolder("<bucket-backup.config.yaml>").String()
+	backupBucketConfFile := verify.Flag("objstore-backup.config-file", "The backup object store configuration file path.").
+		PlaceHolder("<bucket-backup.config.path>").String()
 	verifyIssues := verify.Flag("issues", fmt.Sprintf("Issues to verify (and optionally repair). Possible values: %v", allIssues())).
 		Short('i').Default(verifier.IndexIssueID, verifier.OverlappedBlocksIssueID).Strings()
 	verifyIDWhitelist := verify.Flag("id-whitelist", "Block IDs to verify (and optionally repair) only. "+

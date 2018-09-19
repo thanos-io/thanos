@@ -86,8 +86,8 @@ Flags:
       --objstore.config-file=<bucket.config.path>  
                         The object store configuration file path.
   -r, --repair          attempt to repair blocks for which issues were detected
-      --objstore-backup.config=<bucket-backup.config.yaml>  
-                        The backup object store configuration in yaml format.
+      --objstore-backup.config-file=<bucket-backup.config.path>  
+                        The backup object store configuration file path.
   -i, --issues=index_issue... ...  
                         Issues to verify (and optionally repair). Possible
                         values: [duplicated_compaction index_issue
