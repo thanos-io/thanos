@@ -15,8 +15,16 @@ The retention is recommended to not be lower than three times the block duration
 $ thanos sidecar \
     --tsdb.path        "/path/to/prometheus/data/dir" \
     --prometheus.url   "http://localhost:9090" \
-    --gcs.bucket       "example-bucket" \
     --cluster.peers    "thanos-cluster.example.org" \
+    --objstore.config-file  "bucket.yml"
+```
+
+The content of `bucket.yml`:
+
+```yaml
+type: GCS
+config:
+  bucket: example-bucket
 ```
 
 ## Deployment
@@ -92,18 +100,6 @@ Flags:
                                  URL at which to reach Prometheus's API. For
                                  better performance use local network.
       --tsdb.path="./data"       Data directory of TSDB.
-      --gcs.bucket=<bucket>      Google Cloud Storage bucket name for stored
-                                 blocks. If empty, sidecar won't store any block
-                                 inside Google Cloud Storage.
-      --s3.bucket=<bucket>       S3-Compatible API bucket name for stored
-                                 blocks.
-      --s3.endpoint=<api-url>    S3-Compatible API endpoint for stored blocks.
-      --s3.access-key=<key>      Access key for an S3-Compatible API.
-      --s3.insecure              Whether to use an insecure connection with an
-                                 S3-Compatible API.
-      --s3.signature-version2    Whether to use S3 Signature Version 2;
-                                 otherwise Signature Version 4 will be used.
-      --s3.encrypt-sse           Whether to use Server Side Encryption
       --reloader.config-file=""  Config file watched by the reloader.
       --reloader.config-envsubst-file=""  
                                  Output file for environment variable
@@ -111,6 +107,8 @@ Flags:
       --reloader.rule-dir=RELOADER.RULE-DIR ...  
                                  Rule directories for the reloader to refresh
                                  (repeated field).
+      --objstore.config-file=<bucket.config.path>  
+                                 The object store configuration file path.
 
 ```
 

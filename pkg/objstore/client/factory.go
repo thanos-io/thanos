@@ -3,39 +3,75 @@ package client
 import (
 	"context"
 	"fmt"
-	"runtime"
+	"io/ioutil"
 
-	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/version"
-	"google.golang.org/api/option"
+	yaml "gopkg.in/yaml.v2"
 )
 
-var ErrNotFound = errors.New("no valid GCS or S3 configuration supplied")
+type objProvider string
+
+const (
+	GCS objProvider = "GCS"
+	S3  objProvider = "S3"
+)
+
+type BucketConfig struct {
+	Type   objProvider `yaml:"type"`
+	Config interface{} `yaml:"config"`
+}
+
+var ErrNotFound = errors.New("not found bucket")
+
+func loadFile(confFile string) (*BucketConfig, error) {
+	content, err := ioutil.ReadFile(confFile)
+	if err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("loading YAML file %s", confFile))
+	}
+
+	bucketConf := &BucketConfig{}
+	if err := yaml.UnmarshalStrict(content, bucketConf); err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("parsing YAML file %s", confFile))
+	}
+	return bucketConf, nil
+}
 
 // NewBucket initializes and returns new object storage clients.
-func NewBucket(logger log.Logger, gcsBucket *string, s3Config s3.Config, reg *prometheus.Registry, component string) (objstore.Bucket, error) {
-	if *gcsBucket != "" {
-		gcsOptions := option.WithUserAgent(fmt.Sprintf("thanos-%s/%s (%s)", component, version.Version, runtime.Version()))
-		gcsClient, err := storage.NewClient(context.Background(), gcsOptions)
-		if err != nil {
-			return nil, errors.Wrap(err, "create GCS client")
-		}
-		return objstore.BucketWithMetrics(*gcsBucket, gcs.NewBucket(*gcsBucket, gcsClient, reg), reg), nil
+func NewBucket(logger log.Logger, confFile string, reg *prometheus.Registry, component string) (objstore.Bucket, error) {
+	level.Info(logger).Log("msg", "loading bucket configuration file", "filename", confFile)
+
+	var err error
+	if confFile == "" {
+		return nil, ErrNotFound
 	}
 
-	if s3Config.Validate() == nil {
-		b, err := s3.NewBucket(logger, &s3Config, reg, component)
-		if err != nil {
-			return nil, errors.Wrap(err, "create s3 client")
-		}
-		return objstore.BucketWithMetrics(s3Config.Bucket, b, reg), nil
+	bucketConf, err := loadFile(confFile)
+	if err != nil {
+		return nil, errors.Wrap(err, "parsing objstore.config-file")
 	}
 
-	return nil, ErrNotFound
+	config, err := yaml.Marshal(bucketConf.Config)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal content of bucket configuration")
+	}
+
+	var bucket objstore.Bucket
+	switch bucketConf.Type {
+	case GCS:
+		bucket, err = gcs.NewBucket(context.Background(), logger, config, reg, component)
+	case S3:
+		bucket, err = s3.NewBucket(logger, config, reg, component)
+	default:
+		return nil, errors.Errorf("bucket with type %s is not supported", bucketConf.Type)
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("create %s client", bucketConf.Type))
+	}
+	return objstore.BucketWithMetrics(bucket.Name(), bucket, reg), nil
 }

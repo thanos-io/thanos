@@ -14,9 +14,17 @@ $ thanos rule \
     --eval-interval     "30s" \
     --rule-file         "/path/to/rules/*.rules.yaml" \
     --alert.query-url   "http://0.0.0.0:9090" \
-    --alertmanagers.url "alert.thanos.io"
-    --gcs.bucket        "example-bucket" \
-    --cluster.peers     "thanos-cluster.example.org"
+    --alertmanagers.url "alert.thanos.io" \
+    --cluster.peers     "thanos-cluster.example.org" \
+    --objstore.config-file "bucket.yml"
+```
+
+The content of `bucket.yml`:
+
+```yaml
+type: GCS
+config:
+  bucket: example-bucket
 ```
 
 As rule nodes outsource query processing to query nodes, they should generally experience little load. If necessary, functional sharding can be applied by splitting up the sets of rules between HA pairs.
@@ -108,19 +116,10 @@ Flags:
                                 DNS lookups. The port defaults to 9093 or the
                                 SRV record's value. The URL path is used as a
                                 prefix for the regular Alertmanager API path.
-      --gcs.bucket=<bucket>     Google Cloud Storage bucket name for stored
-                                blocks. If empty, ruler won't store any block
-                                inside Google Cloud Storage.
       --alert.query-url=ALERT.QUERY-URL  
                                 The external Thanos Query URL that would be set
                                 in all alerts 'Source' field
-      --s3.bucket=<bucket>      S3-Compatible API bucket name for stored blocks.
-      --s3.endpoint=<api-url>   S3-Compatible API endpoint for stored blocks.
-      --s3.access-key=<key>     Access key for an S3-Compatible API.
-      --s3.insecure             Whether to use an insecure connection with an
-                                S3-Compatible API.
-      --s3.signature-version2   Whether to use S3 Signature Version 2; otherwise
-                                Signature Version 4 will be used.
-      --s3.encrypt-sse          Whether to use Server Side Encryption
+      --objstore.config-file=<bucket.config.path>  
+                                The object store configuration file path.
 
 ```

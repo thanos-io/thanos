@@ -5,9 +5,17 @@ It keeps a small amount of information about all remote blocks on local disk and
 
 ```
 $ thanos store \
-    --data-dir         "/local/state/data/dir" \
-    --gcs.bucket       "example-bucket" \
-    --cluster.peers    "thanos-cluster.example.org"
+    --data-dir        "/local/state/data/dir" \
+    --cluster.peers    "thanos-cluster.example.org" \
+    --objstore.config-file "bucket.yml"
+```
+
+The content of `bucket.yml`:
+
+```yaml
+type: GCS
+config:
+  bucket: example-bucket
 ```
 
 In general about 1MB of local disk space is required per TSDB block stored in the object storage bucket.
@@ -17,9 +25,9 @@ In general about 1MB of local disk space is required per TSDB block stored in th
 
 [embedmd]:# (flags/store.txt $)
 ```$
-usage: thanos store [<flags>]
+usage: thanos store --objstore.config-file=<bucket.config.path> [<flags>]
 
-store node giving access to blocks in a GCS bucket
+store node giving access to blocks in a bucket provider. Now supported GCS / S3.
 
 Flags:
   -h, --help                    Show context-sensitive help (also try
@@ -81,17 +89,8 @@ Flags:
                                 accounting the latency differences between
                                 network types: local, lan, wan.
       --data-dir="./data"       Data directory in which to cache remote blocks.
-      --gcs.bucket=<bucket>     Google Cloud Storage bucket name for stored
-                                blocks. If empty sidecar won't store any block
-                                inside Google Cloud Storage.
-      --s3.bucket=<bucket>      S3-Compatible API bucket name for stored blocks.
-      --s3.endpoint=<api-url>   S3-Compatible API endpoint for stored blocks.
-      --s3.access-key=<key>     Access key for an S3-Compatible API.
-      --s3.insecure             Whether to use an insecure connection with an
-                                S3-Compatible API.
-      --s3.signature-version2   Whether to use S3 Signature Version 2; otherwise
-                                Signature Version 4 will be used.
-      --s3.encrypt-sse          Whether to use Server Side Encryption
+      --objstore.config-file=<bucket.config.path>  
+                                The object store configuration file path.
       --index-cache-size=250MB  Maximum size of items held in the index cache.
       --chunk-pool-size=2GB     Maximum size of concurrently allocatable bytes
                                 for chunks.

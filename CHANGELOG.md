@@ -8,6 +8,25 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 ## Unreleased
 
+- Remove support of those flags for bucket
+    - --gcs-bucket=\<bucket\>
+    - --s3.bucket=\<bucket\>
+    - --s3.endpoint=\<api-url\>
+    - --s3.access-key=\<key\>
+    - --s3.insecure
+    - --s3.signature-version2
+    - --s3.encrypt-sse
+    - --gcs-backup-bucket=\<bucket\>
+    - --s3-backup-bucket=\<bucket\>
+- Remove support of those environment variables for bucket
+    * S3_BUCKET
+    * S3_ENDPOINT
+    * S3_ACCESS_KEY
+    * S3_INSECURE
+    * S3_SIGNATURE_VERSION2
+    * S3_SECRET_KEY
+- Add flag `--objstore.config-file` to reference to the bucket configuration file in yaml format. Note that detailed information in document [storage](docs/storage.md).
+
 ## [v0.1.0](https://github.com/improbable-eng/thanos/releases/tag/v0.1.0) - 2018.09.14
 
 Initial version to have a stable reference before [gossip protocol removal](https://github.com/improbable-eng/thanos/blob/master/docs/proposals/gossip-removal.md).

@@ -24,7 +24,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/version"
-	"gopkg.in/alecthomas/kingpin.v2"
+	yaml "gopkg.in/yaml.v2"
 )
 
 const (
@@ -38,87 +38,46 @@ const (
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const DirDelim = "/"
 
+// s3Config stores the configuration for s3 bucket.
+type s3Config struct {
+	Bucket        string `yaml:"bucket"`
+	Endpoint      string `yaml:"endpoint"`
+	AccessKey     string `yaml:"access-key"`
+	Insecure      bool   `yaml:"insecure"`
+	SignatureV2   bool   `yaml:"signature-version2"`
+	SSEEncryption bool   `yaml:"encrypt-sse"`
+	SecretKey     string `yaml:"secret-key"`
+}
+
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
 type Bucket struct {
 	logger   log.Logger
-	bucket   string
+	name     string
 	client   *minio.Client
 	sse      encrypt.ServerSide
 	opsTotal *prometheus.CounterVec
 }
 
-// Config encapsulates the necessary config values to instantiate an s3 client.
-type Config struct {
-	Bucket        string
-	Endpoint      string
-	AccessKey     string
-	secretKey     string
-	Insecure      bool
-	SignatureV2   bool
-	SSEEncryption bool
-}
-
-// RegisterS3Params registers the s3 flags and returns an initialized Config struct.
-func RegisterS3Params(cmd *kingpin.CmdClause) *Config {
-	var s3config Config
-
-	cmd.Flag("s3.bucket", "S3-Compatible API bucket name for stored blocks.").
-		PlaceHolder("<bucket>").Envar("S3_BUCKET").StringVar(&s3config.Bucket)
-
-	cmd.Flag("s3.endpoint", "S3-Compatible API endpoint for stored blocks.").
-		PlaceHolder("<api-url>").Envar("S3_ENDPOINT").StringVar(&s3config.Endpoint)
-
-	cmd.Flag("s3.access-key", "Access key for an S3-Compatible API.").
-		PlaceHolder("<key>").Envar("S3_ACCESS_KEY").StringVar(&s3config.AccessKey)
-
-	s3config.secretKey = os.Getenv("S3_SECRET_KEY")
-
-	cmd.Flag("s3.insecure", "Whether to use an insecure connection with an S3-Compatible API.").
-		Default("false").Envar("S3_INSECURE").BoolVar(&s3config.Insecure)
-
-	cmd.Flag("s3.signature-version2", "Whether to use S3 Signature Version 2; otherwise Signature Version 4 will be used.").
-		Default("false").Envar("S3_SIGNATURE_VERSION2").BoolVar(&s3config.SignatureV2)
-
-	cmd.Flag("s3.encrypt-sse", "Whether to use Server Side Encryption").
-		Default("false").Envar("S3_SSE_ENCRYPTION").BoolVar(&s3config.SSEEncryption)
-
-	return &s3config
-}
-
-// Validate checks to see if mandatory s3 config options are set.
-func (conf *Config) Validate() error {
-	if conf.Bucket == "" ||
-		conf.Endpoint == "" ||
-		(conf.AccessKey == "" && conf.secretKey != "") ||
-		(conf.AccessKey != "" && conf.secretKey == "") {
-		return errors.New("insufficient s3 configuration information")
-	}
-	return nil
-}
-
-// ValidateForTests checks to see if mandatory s3 config options for tests are set.
-func (conf *Config) ValidateForTests() error {
-	if conf.Endpoint == "" ||
-		conf.AccessKey == "" ||
-		conf.secretKey == "" {
-		return errors.New("insufficient s3 test configuration information")
-	}
-	return nil
-}
-
 // NewBucket returns a new Bucket using the provided s3 config values.
-func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, component string) (*Bucket, error) {
+func NewBucket(logger log.Logger, conf []byte, reg prometheus.Registerer, component string) (*Bucket, error) {
 	var chain []credentials.Provider
-	if conf.AccessKey != "" {
+	var config s3Config
+	if err := yaml.Unmarshal(conf, &config); err != nil {
+		return nil, err
+	}
+	if err := Validate(config); err != nil {
+		return nil, err
+	}
+	if config.AccessKey != "" {
 		signature := credentials.SignatureV4
-		if conf.SignatureV2 {
+		if config.SignatureV2 {
 			signature = credentials.SignatureV2
 		}
 
 		chain = []credentials.Provider{&credentials.Static{
 			Value: credentials.Value{
-				AccessKeyID:     conf.AccessKey,
-				SecretAccessKey: conf.secretKey,
+				AccessKeyID:     config.AccessKey,
+				SecretAccessKey: config.SecretKey,
 				SignerType:      signature,
 			},
 		}}
@@ -134,7 +93,7 @@ func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, compo
 		}
 	}
 
-	client, err := minio.NewWithCredentials(conf.Endpoint, credentials.NewChainCredentials(chain), !conf.Insecure, "")
+	client, err := minio.NewWithCredentials(config.Endpoint, credentials.NewChainCredentials(chain), !config.Insecure, "")
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize s3 client")
 	}
@@ -164,25 +123,50 @@ func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, compo
 	})
 
 	var sse encrypt.ServerSide
-	if conf.SSEEncryption {
+	if config.SSEEncryption {
 		sse = encrypt.NewSSE()
 	}
 
 	bkt := &Bucket{
 		logger: logger,
-		bucket: conf.Bucket,
+		name:   config.Bucket,
 		client: client,
 		sse:    sse,
 		opsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name:        "thanos_objstore_s3_bucket_operations_total",
 			Help:        "Total number of operations that were executed against an s3 bucket.",
-			ConstLabels: prometheus.Labels{"bucket": conf.Bucket},
+			ConstLabels: prometheus.Labels{"bucket": config.Bucket},
 		}, []string{"operation"}),
 	}
 	if reg != nil {
 		reg.MustRegister(bkt.opsTotal)
 	}
 	return bkt, nil
+}
+
+// Name returns the bucket name for s3.
+func (b *Bucket) Name() string {
+	return b.name
+}
+
+// Validate checks to see the config options are set.
+func Validate(conf s3Config) error {
+	if conf.Endpoint == "" ||
+		(conf.AccessKey == "" && conf.SecretKey != "") ||
+		(conf.AccessKey != "" && conf.SecretKey == "") {
+		return errors.New("insufficient s3 test configuration information")
+	}
+	return nil
+}
+
+// ValidateForTests checks to see the config options for tests are set.
+func ValidateForTests(conf s3Config) error {
+	if conf.Endpoint == "" ||
+		conf.AccessKey == "" ||
+		conf.SecretKey == "" {
+		return errors.New("insufficient s3 test configuration information")
+	}
+	return nil
 }
 
 // Iter calls f for each entry in the given directory. The argument to f is the full
@@ -195,7 +179,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		dir = strings.TrimSuffix(dir, DirDelim) + DirDelim
 	}
 
-	for object := range b.client.ListObjects(b.bucket, dir, false, ctx.Done()) {
+	for object := range b.client.ListObjects(b.name, dir, false, ctx.Done()) {
 		// Catch the error when failed to list objects.
 		if object.Err != nil {
 			return object.Err
@@ -220,7 +204,7 @@ func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (
 			return nil, err
 		}
 	}
-	r, err := b.client.GetObjectWithContext(ctx, b.bucket, name, *opts)
+	r, err := b.client.GetObjectWithContext(ctx, b.name, name, *opts)
 	if err != nil {
 		return nil, err
 	}
@@ -250,7 +234,7 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 // Exists checks if the given object exists.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 	b.opsTotal.WithLabelValues(opObjectHead).Inc()
-	_, err := b.client.StatObject(b.bucket, name, minio.StatObjectOptions{})
+	_, err := b.client.StatObject(b.name, name, minio.StatObjectOptions{})
 	if err != nil {
 		if b.IsObjNotFoundErr(err) {
 			return false, nil
@@ -265,7 +249,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	b.opsTotal.WithLabelValues(opObjectInsert).Inc()
 
-	_, err := b.client.PutObjectWithContext(ctx, b.bucket, name, r, -1,
+	_, err := b.client.PutObjectWithContext(ctx, b.name, name, r, -1,
 		minio.PutObjectOptions{ServerSideEncryption: b.sse},
 	)
 
@@ -275,7 +259,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
 	b.opsTotal.WithLabelValues(opObjectDelete).Inc()
-	return b.client.RemoveObject(b.bucket, name)
+	return b.client.RemoveObject(b.name, name)
 }
 
 // IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
@@ -285,12 +269,12 @@ func (b *Bucket) IsObjNotFoundErr(err error) bool {
 
 func (b *Bucket) Close() error { return nil }
 
-func configFromEnv() *Config {
-	c := &Config{
+func configFromEnv() s3Config {
+	c := s3Config{
 		Bucket:    os.Getenv("S3_BUCKET"),
 		Endpoint:  os.Getenv("S3_ENDPOINT"),
 		AccessKey: os.Getenv("S3_ACCESS_KEY"),
-		secretKey: os.Getenv("S3_SECRET_KEY"),
+		SecretKey: os.Getenv("S3_SECRET_KEY"),
 	}
 
 	insecure, err := strconv.ParseBool(os.Getenv("S3_INSECURE"))
@@ -308,11 +292,14 @@ func configFromEnv() *Config {
 // In a close function it empties and deletes the bucket.
 func NewTestBucket(t testing.TB, location string) (objstore.Bucket, func(), error) {
 	c := configFromEnv()
-	if err := c.ValidateForTests(); err != nil {
+	if err := ValidateForTests(c); err != nil {
 		return nil, nil, err
 	}
-
-	b, err := NewBucket(log.NewNopLogger(), c, nil, "thanos-e2e-test")
+	bc, err := yaml.Marshal(c)
+	if err != nil {
+		return nil, nil, err
+	}
+	b, err := NewBucket(log.NewNopLogger(), bc, nil, "thanos-e2e-test")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -346,7 +333,7 @@ func NewTestBucket(t testing.TB, location string) (objstore.Bucket, func(), erro
 	if err := b.client.MakeBucket(tmpBucketName, location); err != nil {
 		return nil, nil, err
 	}
-	b.bucket = tmpBucketName
+	b.name = tmpBucketName
 	t.Log("created temporary AWS bucket for AWS tests with name", tmpBucketName, "in", location)
 
 	return b, func() {

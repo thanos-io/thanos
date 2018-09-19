@@ -26,23 +26,26 @@ At that point, anyone can use your provider!
 
 Thanos uses minio client to upload Prometheus data into AWS s3.
 
-To configure S3 bucket as an object store you need to set these mandatory S3 flags:
-- --s3.endpoint
-- --s3.bucket
+To configure S3 bucket as an object store you need to set these mandatory S3 variables in yaml format stored in a file:
+```
+type: S3
+config:
+    bucket: <bucket>
+    endpoint: <endpoint>
+    access-key: <access-key>
+    insecure: <true|false>
+    signature-version2: <true|false>
+    encrypt-sse: <true|false>
+    secret-key: <secret-key>
+```
 
-Instead of using flags you can pass all the configuration via environment variables:
-- `S3_BUCKET`
-- `S3_ENDPOINT`
-- `S3_ACCESS_KEY`
-- `S3_SECRET_KEY`
-- `S3_INSECURE`
-- `S3_SIGNATURE_VERSION2`
+Set the flags `--objstore.config-file` to reference to the configuration file.
 
 AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region)
 
-Make sure you use a correct signature version with `--s3.signature-version2`, otherwise, you will get Access Denied error.
+Make sure you use a correct signature version to set `signature-version2: true`, otherwise, you will get Access Denied error.
 
-For debug purposes you can `--s3.insecure` to switch to plain insecure HTTP instead of HTTPS
+For debug purposes you can set `insecure: true` to switch to plain insecure HTTP instead of HTTPS
 
 ### Credentials
 Credentials will by default try to retrieve from the following sources:
@@ -122,7 +125,16 @@ Details about AWS policies: https://docs.aws.amazon.com/AmazonS3/latest/dev/usin
 
 ## GCP Configuration 
 
-To configure Google Cloud Storage bucket as an object store you need to set `--gcs.bucket` with GCS bucket name and configure Google Application credentials.
+To configure Google Cloud Storage bucket as an object store you need to set `bucket` with GCS bucket name and configure Google Application credentials.
+
+For example:
+```
+type: GCS
+config:
+    bucket: <bucket>
+```
+
+Set the flags `--objstore.config-file` to reference to the configuration file.
 
 Application credentials are configured via JSON file, the client looks for:
 

@@ -10,7 +10,6 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
-	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
@@ -24,17 +23,15 @@ import (
 
 // registerStore registers a store command.
 func registerStore(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "store node giving access to blocks in a GCS bucket")
+	cmd := app.Command(name, "store node giving access to blocks in a bucket provider. Now supported GCS / S3.")
 
 	grpcBindAddr, httpBindAddr, newPeerFn := regCommonServerFlags(cmd)
 
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache remote blocks.").
 		Default("./data").String()
 
-	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage.").
-		PlaceHolder("<bucket>").String()
-
-	s3Config := s3.RegisterS3Params(cmd)
+	bucketConfFile := cmd.Flag("objstore.config-file", "The object store configuration file path.").
+		PlaceHolder("<bucket.config.path>").Required().String()
 
 	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the index cache.").
 		Default("250MB").Bytes()
@@ -51,8 +48,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			logger,
 			reg,
 			tracer,
-			*gcsBucket,
-			s3Config,
+			*bucketConfFile,
 			*dataDir,
 			*grpcBindAddr,
 			*httpBindAddr,
@@ -71,8 +67,7 @@ func runStore(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	gcsBucket string,
-	s3Config *s3.Config,
+	bucketConfFile string,
 	dataDir string,
 	grpcBindAddr string,
 	httpBindAddr string,
@@ -83,9 +78,9 @@ func runStore(
 	verbose bool,
 ) error {
 	{
-		bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, reg, component)
+		bkt, err := client.NewBucket(logger, bucketConfFile, reg, component)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "create bucket client")
 		}
 
 		// Ensure we close up everything properly.

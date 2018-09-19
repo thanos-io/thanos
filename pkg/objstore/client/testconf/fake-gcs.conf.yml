@@ -1,0 +1,3 @@
+type: FAKE-GCS
+config:
+  bucket: test-bucket
