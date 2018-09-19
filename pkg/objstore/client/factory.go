@@ -32,12 +32,12 @@ var ErrNotFound = errors.New("not found bucket")
 func loadFile(confFile string) (*BucketConfig, error) {
 	content, err := ioutil.ReadFile(confFile)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, fmt.Sprintf("loading YAML file %s", confFile))
 	}
 
 	bucketConf := &BucketConfig{}
 	if err := yaml.UnmarshalStrict(content, bucketConf); err != nil {
-		return nil, fmt.Errorf("parsing YAML file %s: %v", confFile, err)
+		return nil, errors.Wrap(err, fmt.Sprintf("parsing YAML file %s", confFile))
 	}
 	return bucketConf, nil
 }
