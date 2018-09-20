@@ -58,12 +58,14 @@ Flags:
                                  Explicit (external) host:port address to
                                  advertise for gRPC StoreAPI in gossip cluster.
                                  If empty, 'grpc-address' will be used.
-      --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
-                                 disable TLS
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
+      --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
+                                 disable TLS
       --grpc-server-tls-client-ca=""  
-                                 TLS CA to verify clients against
+                                 TLS CA to verify clients against. If no client
+                                 CA is specified, there is no client
+                                 verification on server side. (tls.NoClientCert)
       --http-address="0.0.0.0:10902"  
                                  Listen host:port for HTTP endpoints.
       --cluster.address="0.0.0.0:10900"  

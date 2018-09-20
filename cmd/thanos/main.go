@@ -232,12 +232,22 @@ func defaultGRPCServerOpts(logger log.Logger, reg *prometheus.Registry, tracer o
 		),
 	}
 
-	if key == "" || cert == "" {
+	if key == "" && cert == "" {
+		if clientCA != "" {
+			return nil, errors.New("when a client CA is used a server key and certificate must also be provided")
+		}
+
 		level.Info(logger).Log("msg", "disabled TLS, key and cert must be set to enable")
 		return opts, nil
 	}
 
-	tlsCfg := &tls.Config{}
+	if key == "" || cert == "" {
+		return nil, errors.New("both server key and certificate must be provided")
+	}
+
+	tlsCfg := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
 
 	tlsCert, err := tls.LoadX509KeyPair(cert, key)
 	if err != nil {
@@ -264,10 +274,7 @@ func defaultGRPCServerOpts(logger log.Logger, reg *prometheus.Registry, tracer o
 		level.Info(logger).Log("msg", "gRPC server TLS client verification enabled")
 	}
 
-	creds := credentials.NewTLS(tlsCfg)
-	opts = append(opts, grpc.Creds(creds))
-
-	return opts, nil
+	return append(opts, grpc.Creds(credentials.NewTLS(tlsCfg))), nil
 }
 
 // metricHTTPListenGroup is a run.Group that servers HTTP endpoint with only Prometheus metrics.

@@ -143,8 +143,7 @@ func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer ope
 	}
 
 	if !secure {
-		dialOpts = append(dialOpts, grpc.WithInsecure())
-		return dialOpts, nil
+		return append(dialOpts, grpc.WithInsecure()), nil
 	}
 
 	level.Info(logger).Log("msg", "Enabling client to server TLS")
@@ -185,9 +184,8 @@ func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer ope
 	}
 
 	creds := credentials.NewTLS(tlsCfg)
-	dialOpts = append(dialOpts, grpc.WithTransportCredentials(creds))
 
-	return dialOpts, nil
+	return append(dialOpts, grpc.WithTransportCredentials(creds)), nil
 }
 
 // runQuery starts a server that exposes PromQL Query API. It is responsible for querying configured
