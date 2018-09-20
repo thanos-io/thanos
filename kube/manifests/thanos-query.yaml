@@ -23,7 +23,7 @@ spec:
       containers:
       - name: thanos-query
         # Always use explicit image tags (release or master-<date>-sha) instead of ambigous `latest` or `master`.
-        image: improbable/thanos:v0.1.0-rc.2
+        image: improbable/thanos:v0.1.0
         args:
         - "query"
         - "--log.level=debug"

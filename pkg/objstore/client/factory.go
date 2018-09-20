@@ -3,8 +3,10 @@ package client
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/azure"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
@@ -30,15 +32,31 @@ type BucketConfig struct {
 
 var ErrNotFound = errors.New("not found bucket")
 
+func loadFile(confFile string) (*BucketConfig, error) {
+	content, err := ioutil.ReadFile(confFile)
+	if err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("loading YAML file %s", confFile))
+	}
+
+	bucketConf := &BucketConfig{}
+	if err := yaml.UnmarshalStrict(content, bucketConf); err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("parsing YAML file %s", confFile))
+	}
+	return bucketConf, nil
+}
+
 // NewBucket initializes and returns new object storage clients.
-func NewBucket(logger log.Logger, conf string, reg *prometheus.Registry, component string) (objstore.Bucket, error) {
+func NewBucket(logger log.Logger, confFile string, reg *prometheus.Registry, component string) (objstore.Bucket, error) {
+	level.Info(logger).Log("msg", "loading bucket configuration file", "filename", confFile)
+
 	var err error
-	var bucketConf BucketConfig
-	if conf == "" {
+	if confFile == "" {
 		return nil, ErrNotFound
 	}
-	if err := yaml.Unmarshal([]byte(conf), &bucketConf); err != nil {
-		return nil, errors.Wrap(err, "unmarshal objstore.config")
+
+	bucketConf, err := loadFile(confFile)
+	if err != nil {
+		return nil, errors.Wrap(err, "parsing objstore.config-file")
 	}
 
 	config, err := yaml.Marshal(bucketConf.Config)

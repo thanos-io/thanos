@@ -50,8 +50,8 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	reloaderRuleDirs := cmd.Flag("reloader.rule-dir", "Rule directories for the reloader to refresh (repeated field).").Strings()
 
-	bucketConf := cmd.Flag("objstore.config", "The object store configuration in yaml format.").
-		PlaceHolder("<bucket.config.yaml>").String()
+	bucketConfFile := cmd.Flag("objstore.config-file", "The object store configuration file path.").
+		PlaceHolder("<bucket.config.path>").String()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		rl := reloader.New(
@@ -74,7 +74,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			*httpBindAddr,
 			*promURL,
 			*dataDir,
-			*bucketConf,
+			*bucketConfFile,
 			peer,
 			rl,
 			name,
@@ -91,7 +91,7 @@ func runSidecar(
 	httpBindAddr string,
 	promURL *url.URL,
 	dataDir string,
-	bucketConf string,
+	bucketConfFile string,
 	peer *cluster.Peer,
 	reloader *reloader.Reloader,
 	component string,
@@ -219,7 +219,7 @@ func runSidecar(
 
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, err := client.NewBucket(logger, bucketConf, reg, component)
+	bkt, err := client.NewBucket(logger, bucketConfFile, reg, component)
 	if err != nil && err != client.ErrNotFound {
 		return err
 	}

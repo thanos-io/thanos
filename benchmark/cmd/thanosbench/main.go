@@ -28,7 +28,7 @@ func main() {
 	opts := &opts{
 		cluster:               app.Flag("cluster", "The kubernetes cluster to run the loadtest in.").Required().String(),
 		kubeConfig:            app.Flag("kube-config", "Path to kube config file.").Default(clientcmd.RecommendedHomeFile).String(),
-		thanosImage:           app.Flag("thanos-image", "Image to use when running Thanos components.").Default("improbable/thanos:v0.1.0-rc.2").String(),
+		thanosImage:           app.Flag("thanos-image", "Image to use when running Thanos components.").Default("improbable/thanos:v0.1.0").String(),
 		queryRangeOffsetStart: app.Flag("query-range-offset-start", "The offset to the start of the range to use in queries.").Default("1h").Duration(),
 		queryRangeOffsetEnd:   app.Flag("query-range-offset-end", "The offset to the end of the range to use in queries.").Default("0").Duration(),
 		queries:               app.Flag("queries", "Queries to run.").Strings(),

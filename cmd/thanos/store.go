@@ -30,8 +30,8 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache remote blocks.").
 		Default("./data").String()
 
-	bucketConf := cmd.Flag("objstore.config", "The object store configuration in yaml format.").
-		PlaceHolder("<bucket.config.yaml>").Required().String()
+	bucketConfFile := cmd.Flag("objstore.config-file", "The object store configuration file path.").
+		PlaceHolder("<bucket.config.path>").Required().String()
 
 	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the index cache.").
 		Default("250MB").Bytes()
@@ -48,7 +48,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			logger,
 			reg,
 			tracer,
-			*bucketConf,
+			*bucketConfFile,
 			*dataDir,
 			*grpcBindAddr,
 			*httpBindAddr,
@@ -67,7 +67,7 @@ func runStore(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	bucketConf string,
+	bucketConfFile string,
 	dataDir string,
 	grpcBindAddr string,
 	httpBindAddr string,
@@ -78,7 +78,7 @@ func runStore(
 	verbose bool,
 ) error {
 	{
-		bkt, err := client.NewBucket(logger, bucketConf, reg, component)
+		bkt, err := client.NewBucket(logger, bucketConfFile, reg, component)
 		if err != nil {
 			return errors.Wrap(err, "create bucket client")
 		}
