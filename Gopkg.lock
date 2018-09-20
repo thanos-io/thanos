@@ -2,7 +2,7 @@
 
 
 [[projects]]
-  digest = "1:b24249f5a5e6fbe1eddc94b25973172339ccabeadef4779274f3ed0167c18812"
+  digest = "1:dba68f7bbe24869618a68a59d21e8df281430aa38aaf6179aca3ae33e46ff328"
   name = "cloud.google.com/go"
   packages = [
     "compute/metadata",
@@ -51,7 +51,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:a74730e052a45a3fab1d310fdef2ec17ae3d6af16228421e238320846f2aaec8"
+  digest = "1:1399282ad03ac819f0e8a747c888407c5c98bb497d33821a7047c7bae667ede0"
   name = "github.com/alecthomas/template"
   packages = [
     ".",
@@ -120,7 +120,7 @@
   version = "v1.2.0"
 
 [[projects]]
-  digest = "1:eb53021a8aa3f599d29c7102e65026242bdedce998a54837dc67f14b6a97c5fd"
+  digest = "1:b2106f1668ea5efc1ecc480f7e922a093adb9563fd9ce58585292871f0d0f229"
   name = "github.com/fsnotify/fsnotify"
   packages = ["."]
   pruneopts = ""
@@ -136,7 +136,7 @@
   version = "v1.38.2"
 
 [[projects]]
-  digest = "1:44ec1082ba97d89ce860abcc6ee3f0cf24e658d3efb8531b0f0a52f0781e4243"
+  digest = "1:8bde347c11c0df9cb474b5927a7cdab415adb841247e5e8404adbd12249efb22"
   name = "github.com/go-kit/kit"
   packages = [
     "log",
@@ -272,7 +272,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:6396690228a7560bf9247cb90e5ae9c797bd630b01e7d2acab430bbca9a1ecb3"
+  digest = "1:6a611e691e739173805cb54019b5c39bb9d46455526dff31e0e6fe3aaca52776"
   name = "github.com/hashicorp/go-msgpack"
   packages = ["codec"]
   pruneopts = ""
@@ -303,7 +303,7 @@
   version = "v0.5.0"
 
 [[projects]]
-  digest = "1:d2c45a353b65012162c7ca22c39b1b0bd06d39362fb375cf42b4e48e1104bfc6"
+  digest = "1:d7ce65372f495908f80fc1f80f4dab5d763d9a1de544abd95aa719e4262d0dd5"
   name = "github.com/hashicorp/memberlist"
   packages = ["."]
   pruneopts = ""
@@ -374,7 +374,7 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:8cd00178a68718d7be5fe464284e380223c08990b117523a39fa65b2e65c4aa0"
+  digest = "1:b8a148e875d0eeca76b5fd812c6d9ec3cff2b21bcc0ecc8488bc2cbb187e9671"
   name = "github.com/mozillazg/go-cos"
   packages = ["."]
   pruneopts = ""
@@ -414,7 +414,7 @@
   version = "v0.3.0"
 
 [[projects]]
-  digest = "1:401f4865a509980af0cc40716e6592b3a616b9a6fa52aab282bb963e6d3fac06"
+  digest = "1:171ac7b583c9e4f28dfd3c310fdef0802a9db6afa066ab71e2134ff2cfb646d7"
   name = "github.com/opentracing/basictracer-go"
   packages = [
     ".",
@@ -425,7 +425,7 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:78fb99d6011c2ae6c72f3293a83951311147b12b06a5ffa43abf750c4fab6ac5"
+  digest = "1:bba12aa4747b212f75db3e7fee73fe1b66d303cb3ff0c1984b7f2ad20e8bd2bc"
   name = "github.com/opentracing/opentracing-go"
   packages = [
     ".",
@@ -515,7 +515,7 @@
   version = "v2.3.2"
 
 [[projects]]
-  digest = "1:baccfad2a001820617e141f836390a28a7940e1d8b1d2391eca8a58e07133853"
+  digest = "1:216dcf26fbfb3f36f286ca3306882a157c51648e4b5d4f3a9e9c719faea6ea58"
   name = "github.com/prometheus/tsdb"
   packages = [
     ".",
@@ -754,7 +754,7 @@
   version = "v1.14.0"
 
 [[projects]]
-  digest = "1:15d017551627c8bb091bde628215b2861bed128855343fdd570c62d08871f6e1"
+  digest = "1:2840683aa0e9980689f85bf48b2a56ec7a108fd089f12af8ea7d98c172819589"
   name = "gopkg.in/alecthomas/kingpin.v2"
   packages = ["."]
   pruneopts = ""

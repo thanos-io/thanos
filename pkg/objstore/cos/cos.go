@@ -18,7 +18,7 @@ import (
 	"github.com/mozillazg/go-cos"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"gopkg.in/alecthomas/kingpin.v2"
+	yaml "gopkg.in/yaml.v2"
 )
 
 const (
@@ -30,45 +30,27 @@ const (
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
-const DirDelim = "/"
+const dirDelim = "/"
 
 // Bucket implements the store.Bucket interface against cos-compatible(Tencent Object Storage) APIs.
 type Bucket struct {
 	logger   log.Logger
 	client   *cos.Client
 	opsTotal *prometheus.CounterVec
+	name     string
 }
 
-// Config encapsulates the necessary config values to instantiate an cos client.
-type Config struct {
-	Bucket    string
-	AppId     string
-	Region    string
-	SecretId  string
-	SecretKey string
-}
-
-// RegisterCosParams registers the cos flags and returns an initialized Config struct.
-func RegisterCosParams(cmd *kingpin.CmdClause) *Config {
-	var cosConfig Config
-
-	cmd.Flag("cos.bucket", "Cos-Compatible API bucket name for stored blocks.").
-		PlaceHolder("<bucket>").Envar("COS_BUCKET").StringVar(&cosConfig.Bucket)
-
-	cmd.Flag("cos.appid", "Cos-Compatible API endpoint for stored blocks.").
-		PlaceHolder("<appid>").Envar("COS_APPID").StringVar(&cosConfig.AppId)
-
-	cmd.Flag("cos.region", "Cos-Compatible API region for stored blocks.").
-		PlaceHolder("<region>").Envar("COS_REGION").StringVar(&cosConfig.Region)
-
-	cosConfig.SecretKey = os.Getenv("COS_SECRET_KEY")
-	cosConfig.SecretId = os.Getenv("COS_SECRET_ID")
-
-	return &cosConfig
+// cosConfig encapsulates the necessary config values to instantiate an cos client.
+type cosConfig struct {
+	Bucket    string `yaml:"bucket"`
+	Region    string `yaml:"region"`
+	AppId     string `yaml:"appid"`
+	SecretKey string `yaml:"secret-key"`
+	SecretId  string `yaml:"secret-id"`
 }
 
 // Validate checks to see if mandatory cos config options are set.
-func (conf *Config) Validate() error {
+func Validate(conf cosConfig) error {
 	if conf.Bucket == "" ||
 		conf.AppId == "" ||
 		conf.Region == "" ||
@@ -79,12 +61,20 @@ func (conf *Config) Validate() error {
 	return nil
 }
 
-func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, component string) (*Bucket, error) {
+func NewBucket(logger log.Logger, conf []byte, reg prometheus.Registerer, component string) (*Bucket, error) {
 	if nil == logger {
 		logger = log.NewNopLogger()
 	}
 
-	bucketUrl := cos.NewBucketURL(conf.Bucket, conf.AppId, conf.Region, true)
+	var config cosConfig
+	if err := yaml.Unmarshal(conf, &config); err != nil {
+		return nil, err
+	}
+	if err := Validate(config); err != nil {
+		return nil, err
+	}
+
+	bucketUrl := cos.NewBucketURL(config.Bucket, config.AppId, config.Region, true)
 
 	b, err := cos.NewBaseURL(bucketUrl.String())
 	if nil != err {
@@ -93,8 +83,8 @@ func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, compo
 
 	client := cos.NewClient(b, &http.Client{
 		Transport: &cos.AuthorizationTransport{
-			SecretID:  conf.SecretId,
-			SecretKey: conf.SecretKey,
+			SecretID:  config.SecretId,
+			SecretKey: config.SecretKey,
 		},
 	})
 
@@ -104,13 +94,19 @@ func NewBucket(logger log.Logger, conf *Config, reg prometheus.Registerer, compo
 		opsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name:        "thanos_objstore_cos_bucket_operations_total",
 			Help:        "Total number of operations that were executed against an cos bucket.",
-			ConstLabels: prometheus.Labels{"bucket": conf.Bucket},
+			ConstLabels: prometheus.Labels{"bucket": config.Bucket},
 		}, []string{"operation"}),
+		name: config.Bucket,
 	}
 	if reg != nil {
 		reg.MustRegister(bkt.opsTotal)
 	}
 	return bkt, nil
+}
+
+// Name returns the bucket name for s3.
+func (b *Bucket) Name() string {
+	return b.name
 }
 
 // Upload the contents of the reader as an object into the bucket.
@@ -150,7 +146,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 	b.opsTotal.WithLabelValues(opObjectsList).Inc()
 
 	if dir != "" {
-		dir = strings.TrimSuffix(dir, DirDelim) + DirDelim
+		dir = strings.TrimSuffix(dir, dirDelim) + dirDelim
 	}
 
 	for object := range b.ListObjects(ctx, dir, false) {
@@ -349,8 +345,8 @@ func toBuffer(src io.Reader) (*bytes.Buffer, error) {
 	return buffer, nil
 }
 
-func configFromEnv() *Config {
-	c := &Config{
+func configFromEnv() cosConfig {
+	c := cosConfig{
 		Bucket:    os.Getenv("COS_BUCKET"),
 		AppId:     os.Getenv("COS_APPID"),
 		Region:    os.Getenv("COS_REGION"),
@@ -365,6 +361,9 @@ func configFromEnv() *Config {
 // In a close function it empties and deletes the bucket.
 func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 	c := configFromEnv()
+	if err := Validate(c); err != nil {
+		return nil, nil, err
+	}
 
 	if c.Bucket != "" {
 		if os.Getenv("THANOS_ALLOW_EXISTING_BUCKET_USE") == "" {
@@ -375,7 +374,12 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 				"to safety (accidentally pointing prod bucket for test) as well as aws s3 not being fully strong consistent.")
 		}
 
-		b, err := NewBucket(log.NewNopLogger(), c, nil, "thanos-e2e-test")
+		bc, err := yaml.Marshal(c)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		b, err := NewBucket(log.NewNopLogger(), bc, nil, "thanos-e2e-test")
 		if err != nil {
 			return nil, nil, err
 		}
@@ -397,7 +401,13 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 		tmpBucketName = tmpBucketName[:31]
 	}
 	c.Bucket = tmpBucketName
-	b, err := NewBucket(log.NewNopLogger(), c, nil, "thanos-e2e-test")
+
+	bc, err := yaml.Marshal(c)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	b, err := NewBucket(log.NewNopLogger(), bc, nil, "thanos-e2e-test")
 	if err != nil {
 		return nil, nil, err
 	}
