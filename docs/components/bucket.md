@@ -35,14 +35,14 @@ Flags:
                         --help-man).
       --version         Show application version.
       --log.level=info  Log filtering level.
-      --gcloudtrace.project=GCLOUDTRACE.PROJECT
+      --gcloudtrace.project=GCLOUDTRACE.PROJECT  
                         GCP project to send Google Cloud Trace tracings to. If
                         empty, tracing will be disabled.
-      --gcloudtrace.sample-factor=1
+      --gcloudtrace.sample-factor=1  
                         How often we send traces (1/<sample-factor>). If 0 no
                         trace will be sent periodically, unless forced by
                         baggage item. See `pkg/tracing/tracing.go` for details.
-      --objstore.config-file=<bucket.config.path>
+      --objstore.config-file=<bucket.config.path>  
                         The object store configuration file path.
 
 Subcommands:
@@ -76,23 +76,23 @@ Flags:
                         --help-man).
       --version         Show application version.
       --log.level=info  Log filtering level.
-      --gcloudtrace.project=GCLOUDTRACE.PROJECT
+      --gcloudtrace.project=GCLOUDTRACE.PROJECT  
                         GCP project to send Google Cloud Trace tracings to. If
                         empty, tracing will be disabled.
-      --gcloudtrace.sample-factor=1
+      --gcloudtrace.sample-factor=1  
                         How often we send traces (1/<sample-factor>). If 0 no
                         trace will be sent periodically, unless forced by
                         baggage item. See `pkg/tracing/tracing.go` for details.
-      --objstore.config-file=<bucket.config.path>
+      --objstore.config-file=<bucket.config.path>  
                         The object store configuration file path.
   -r, --repair          attempt to repair blocks for which issues were detected
-      --objstore-backup.config-file=<bucket-backup.config.path>
+      --objstore-backup.config-file=<bucket-backup.config.path>  
                         The backup object store configuration file path.
-  -i, --issues=index_issue... ...
+  -i, --issues=index_issue... ...  
                         Issues to verify (and optionally repair). Possible
                         values: [duplicated_compaction index_issue
                         overlapped_blocks]
-      --id-whitelist=ID-WHITELIST ...
+      --id-whitelist=ID-WHITELIST ...  
                         Block IDs to verify (and optionally repair) only. If
                         none is specified, all blocks will be verified. Repeated
                         field
@@ -120,14 +120,14 @@ Flags:
                         --help-man).
       --version         Show application version.
       --log.level=info  Log filtering level.
-      --gcloudtrace.project=GCLOUDTRACE.PROJECT
+      --gcloudtrace.project=GCLOUDTRACE.PROJECT  
                         GCP project to send Google Cloud Trace tracings to. If
                         empty, tracing will be disabled.
-      --gcloudtrace.sample-factor=1
+      --gcloudtrace.sample-factor=1  
                         How often we send traces (1/<sample-factor>). If 0 no
                         trace will be sent periodically, unless forced by
                         baggage item. See `pkg/tracing/tracing.go` for details.
-      --objstore.config-file=<bucket.config.path>
+      --objstore.config-file=<bucket.config.path>  
                         The object store configuration file path.
   -o, --output=""       Format in which to print each block's information. May
                         be 'json' or custom template.
