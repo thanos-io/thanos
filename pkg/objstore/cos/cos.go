@@ -62,22 +62,22 @@ func Validate(conf cosConfig) error {
 }
 
 func NewBucket(logger log.Logger, conf []byte, reg prometheus.Registerer, component string) (*Bucket, error) {
-	if nil == logger {
+	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 
 	var config cosConfig
 	if err := yaml.Unmarshal(conf, &config); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "parsing cos configuration")
 	}
 	if err := Validate(config); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "validate cos configuration")
 	}
 
 	bucketUrl := cos.NewBucketURL(config.Bucket, config.AppId, config.Region, true)
 
 	b, err := cos.NewBaseURL(bucketUrl.String())
-	if nil != err {
+	if err != nil {
 		return nil, errors.Wrap(err, "initialize cos base url")
 	}
 
@@ -114,7 +114,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	b.opsTotal.WithLabelValues(opObjectInsert).Inc()
 
 	reader, length, err := objectLength(r)
-	if nil != err {
+	if err != nil {
 		return errors.Wrap(err, "length of cos object")
 	}
 	opt := &cos.ObjectPutOptions{
@@ -123,8 +123,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 		},
 	}
 
-	_, err = b.client.Object.Put(ctx, name, reader, opt)
-	if nil != err {
+	if _, err = b.client.Object.Put(ctx, name, reader, opt); err != nil {
 		return errors.Wrap(err, "upload cos object")
 	}
 	return nil
@@ -133,8 +132,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
 	b.opsTotal.WithLabelValues(opObjectDelete).Inc()
-	_, err := b.client.Object.Delete(ctx, name)
-	if nil != err {
+	if _, err := b.client.Object.Delete(ctx, name); err != nil {
 		return errors.Wrap(err, "delete cos object")
 	}
 	return nil
@@ -200,8 +198,7 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 // Exists checks if the given object exists in the bucket.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 	b.opsTotal.WithLabelValues(opObjectHead).Inc()
-	_, err := b.client.Object.Head(ctx, name, nil)
-	if err != nil {
+	if _, err := b.client.Object.Head(ctx, name, nil); err != nil {
 		if b.IsObjNotFoundErr(err) {
 			return false, nil
 		}
@@ -217,7 +214,7 @@ func (b *Bucket) IsObjNotFoundErr(err error) bool {
 	if tmpErr.Code == "NoSuchKey" {
 		return true
 	}
-	if nil != tmpErr.Response && tmpErr.Response.StatusCode == http.StatusNotFound {
+	if tmpErr.Response != nil && tmpErr.Response.StatusCode == http.StatusNotFound {
 		return true
 	}
 	return false
@@ -251,7 +248,8 @@ func (b *Bucket) ListObjects(ctx context.Context, objectPrefix string, recursive
 		var marker string
 		for {
 			opt := &cos.BucketGetOptions{
-				Prefix:    objectPrefix,
+				Prefix: objectPrefix,
+				// TODO(jojohappy) Set this option as prosperity for cos configuration
 				MaxKeys:   1000,
 				Marker:    marker,
 				Delimiter: delimiter,
@@ -304,14 +302,13 @@ func (b *Bucket) ListObjects(ctx context.Context, objectPrefix string, recursive
 }
 
 func setRange(opts *cos.ObjectGetOptions, start, end int64) error {
-	switch {
-	case start == 0 && end < 0:
+	if start == 0 && end < 0 {
 		opts.Range = fmt.Sprintf("bytes=%d", end)
-	case 0 < start && end == 0:
+	} else if 0 < start && end == 0 {
 		opts.Range = fmt.Sprintf("bytes=%d-", start)
-	case 0 <= start && start <= end:
+	} else if 0 <= start && start <= end {
 		opts.Range = fmt.Sprintf("bytes=%d-%d", start, end)
-	default:
+	} else {
 		return errors.Errorf("Invalid range specified: start=%d end=%d", start, end)
 	}
 	return nil
