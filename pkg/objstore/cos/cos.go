@@ -25,7 +25,7 @@ const (
 	opObjectsList  = "ListBucket"
 	opObjectInsert = "PutObject"
 	opObjectGet    = "GetObject"
-	opObjectHead   = "HEADObject"
+	opObjectHead   = "HeadObject"
 	opObjectDelete = "DeleteObject"
 )
 
