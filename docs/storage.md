@@ -14,6 +14,7 @@ Current object storage client implementations:
 | AWS S3               | Beta  (working PoCs, testing usage)               | no        | @bwplotka          |
 | Azure Storage Account | Alpha   | yes       | @vglafirov   |
 | OpenStack Swift      | Beta  (working PoCs, testing usage)               | no        | @sudhi-vm   |
+| Tencent COS          | Beta  (testing usage)                   | no        | @jojohappy          |
 
 NOTE: Currently Thanos requires strong consistency (write-read) for object store implementation.
 
@@ -207,3 +208,19 @@ config:
 
 Minio client used for AWS S3 can be potentially configured against other S3-compatible object storages.
 
+## Tencent COS Configuration
+
+To use Tencent COS as storage store, you should apply a Tencent Account to create an object storage bucket at first. Note that detailed from Tencent Cloud Documents: [https://cloud.tencent.com/document/product/436](https://cloud.tencent.com/document/product/436)
+
+To configure Tencent Account to use COS as storage store you need to set these parameters in yaml format stored in a file:
+```yaml
+type: COS
+config:
+    bucket: <name of bucket>
+    region: <the region information in domain name>
+    appid: <unique resource ID in user dimension owned by a developer>
+    secret-key: <the project identity key owned by a developer>
+    secret-id: <the project identity ID owned by a developer>
+```
+
+Set the flags `--objstore.config-file` to reference to the configuration file.
