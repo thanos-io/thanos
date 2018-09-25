@@ -1,16 +1,16 @@
 package discovery
 
 import (
-	"testing"
-	"path/filepath"
-	"time"
 	"context"
-	"os"
 	"io"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
 )
 
 const (
-	testDir = "fixtures"
+	testDir      = "fixtures"
 	fileContent1 = "localhost:9090"
 	fileContent2 = "example.org:443"
 )
@@ -34,8 +34,8 @@ func testFileSD(t *testing.T, prefix, ext string, expect bool) {
 	conf.RefreshInterval = time.Duration(1 * time.Hour)
 
 	var (
-		discoverer = NewFileDiscoverer(&conf, nil)
-		ch = make(chan *Discoverable)
+		discoverer  = NewFileDiscoverer(&conf, nil)
+		ch          = make(chan *Discoverable)
 		ctx, cancel = context.WithCancel(context.Background())
 	)
 	go discoverer.Run(ctx, ch)
@@ -104,7 +104,7 @@ retry:
 			}
 
 			discovered := discoverable.Services[0]
-			if  discovered != fileContent1 {
+			if discovered != fileContent1 {
 				t.Fatalf("Unexpected file content. Got %v, but expected %v", discovered, fileContent1)
 			}
 
