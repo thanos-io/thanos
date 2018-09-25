@@ -38,6 +38,10 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
+const (
+	DefaultStorageSyncInterval = 5 * time.Second
+)
+
 // registerQuery registers a query command.
 func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
@@ -300,7 +304,7 @@ func runQuery(
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
+			return runutil.Repeat(DefaultStorageSyncInterval, ctx.Done(), func() error {
 				stores.Update(ctx)
 				return nil
 			})

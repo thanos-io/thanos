@@ -61,6 +61,11 @@ func (cs compactionSet) maxLevel() int {
 	return len(cs) - 1
 }
 
+const (
+	// DefaultRepeatInterval is a interval to wait before next data sync
+	DefaultRepeatInterval = 5 * time.Minute
+)
+
 func registerCompact(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "continuously compacts blocks in an object store bucket")
 
@@ -240,7 +245,7 @@ func runCompact(
 		}
 
 		// --wait=true is specified.
-		return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
+		return runutil.Repeat(DefaultRepeatInterval, ctx.Done(), func() error {
 			err := f()
 			if err == nil {
 				return nil

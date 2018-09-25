@@ -1627,3 +1627,25 @@ func (s queryStats) merge(o *queryStats) *queryStats {
 
 	return &s
 }
+
+// GetMetas gets all bucket metas
+func GetMetas(ctx context.Context, logger log.Logger, bkt objstore.Bucket) ([]*block.Meta, error) {
+	var metas []*block.Meta
+
+	err := bkt.Iter(ctx, "", func(name string) error {
+		id, ok := block.IsBlockDir(name)
+		if !ok {
+			return nil
+		}
+
+		m, err := block.GetMeta(ctx, logger, bkt, id)
+		if err != nil {
+			return errors.Wrap(err, "decode meta")
+		}
+
+		metas = append(metas, &m)
+		return nil
+	})
+
+	return metas, err
+}

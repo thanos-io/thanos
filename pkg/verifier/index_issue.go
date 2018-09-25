@@ -50,7 +50,7 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 			return errors.Wrapf(err, "download index file %s", path.Join(id.String(), block.IndexFilename))
 		}
 
-		meta, err := block.DownloadMeta(ctx, logger, bkt, id)
+		meta, err := block.GetMeta(ctx, logger, bkt, id)
 		if err != nil {
 			return errors.Wrapf(err, "download meta file %s", id)
 		}

@@ -88,6 +88,14 @@
   revision = "3a771d992973f24aa725d07868b467d1ddfceafb"
 
 [[projects]]
+  digest = "1:f619cb9b07aebe5416262cdd8b86082e8d5bdc5264cb3b615ff858df0b645f97"
+  name = "github.com/cenkalti/backoff"
+  packages = ["."]
+  pruneopts = ""
+  revision = "2ea60e5f094469f9e65adb9cd103795b73ae743e"
+  version = "v2.0.0"
+
+[[projects]]
   digest = "1:1660bb2e30cca08494f29b5593e387c6090fbe8936970ba947185b0ca000aec0"
   name = "github.com/cespare/xxhash"
   packages = ["."]
@@ -755,6 +763,7 @@
     "github.com/NYTimes/gziphandler",
     "github.com/armon/go-metrics",
     "github.com/armon/go-metrics/prometheus",
+    "github.com/cenkalti/backoff",
     "github.com/fortytw2/leaktest",
     "github.com/fsnotify/fsnotify",
     "github.com/go-kit/kit/log",

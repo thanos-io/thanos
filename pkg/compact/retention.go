@@ -20,7 +20,7 @@ func ApplyRetentionPolicyByResolution(ctx context.Context, logger log.Logger, bk
 		if !ok {
 			return nil
 		}
-		m, err := block.DownloadMeta(ctx, logger, bkt, id)
+		m, err := block.GetMeta(ctx, logger, bkt, id)
 		if err != nil {
 			return errors.Wrap(err, "download metadata")
 		}

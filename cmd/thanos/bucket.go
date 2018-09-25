@@ -160,7 +160,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 			}
 		case "wide":
 			printBlock = func(id ulid.ULID) error {
-				m, err := block.DownloadMeta(ctx, logger, bkt, id)
+				m, err := block.GetMeta(ctx, logger, bkt, id)
 				if err != nil {
 					return err
 				}
@@ -180,7 +180,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 			enc.SetIndent("", "\t")
 
 			printBlock = func(id ulid.ULID) error {
-				m, err := block.DownloadMeta(ctx, logger, bkt, id)
+				m, err := block.GetMeta(ctx, logger, bkt, id)
 				if err != nil {
 					return err
 				}
@@ -192,7 +192,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 				return errors.Wrap(err, "invalid template")
 			}
 			printBlock = func(id ulid.ULID) error {
-				m, err := block.DownloadMeta(ctx, logger, bkt, id)
+				m, err := block.GetMeta(ctx, logger, bkt, id)
 				if err != nil {
 					return err
 				}

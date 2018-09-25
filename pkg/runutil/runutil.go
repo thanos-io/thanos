@@ -1,12 +1,10 @@
 package runutil
 
 import (
+	"fmt"
+	"io"
 	"os"
 	"time"
-
-	"io"
-
-	"fmt"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -14,7 +12,7 @@ import (
 )
 
 // Repeat executes f every interval seconds until stopc is closed.
-// It executes f once right after being called.
+// It executes f right after being called.
 func Repeat(interval time.Duration, stopc <-chan struct{}, f func() error) error {
 	tick := time.NewTicker(interval)
 	defer tick.Stop()

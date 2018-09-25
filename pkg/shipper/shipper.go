@@ -190,7 +190,7 @@ func (s *Shipper) sync(ctx context.Context, meta *block.Meta) (err error) {
 	}
 
 	// Check against bucket if the meta file for this block exists.
-	ok, err := s.bucket.Exists(ctx, path.Join(meta.ULID.String(), block.MetaFilename))
+	ok, err := objstore.Exists(ctx, s.logger, s.bucket, path.Join(meta.ULID.String(), block.MetaFilename))
 	if err != nil {
 		return errors.Wrap(err, "check exists")
 	}

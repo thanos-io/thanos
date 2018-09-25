@@ -5,13 +5,13 @@ package block
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
 
-	"fmt"
-
+	"github.com/cenkalti/backoff"
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -71,8 +71,8 @@ type ThanosDownsampleMeta struct {
 // WriteMetaFile writes the given meta into <dir>/meta.json.
 func WriteMetaFile(logger log.Logger, dir string, meta *Meta) error {
 	// Make any changes to the file appear atomic.
-	path := filepath.Join(dir, MetaFilename)
-	tmp := path + ".tmp"
+	pathMetaFilename := filepath.Join(dir, MetaFilename)
+	tmp := pathMetaFilename + ".tmp"
 
 	f, err := os.Create(tmp)
 	if err != nil {
@@ -89,7 +89,7 @@ func WriteMetaFile(logger log.Logger, dir string, meta *Meta) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	return renameFile(logger, tmp, path)
+	return renameFile(logger, tmp, pathMetaFilename)
 }
 
 // ReadMetaFile reads the given meta from <dir>/meta.json.
@@ -209,23 +209,30 @@ func cleanUp(bkt objstore.Bucket, id ulid.ULID, err error) error {
 	return err
 }
 
-// Delete removes directory that is mean to be block directory.
+// Delete removes directory that means to be block directory.
 // NOTE: Prefer this method instead of objstore.Delete to avoid deleting empty dir (whole bucket) by mistake.
 func Delete(ctx context.Context, bucket objstore.Bucket, id ulid.ULID) error {
+	// Delete directory.
+	del := func() error {
+		return objstore.DeleteDir(ctx, bucket, id.String())
+	}
+	// Retry uploading operations on the network failures, see closer to default backoff configs.
+	if err := backoff.Retry(del, backoff.WithContext(backoff.NewExponentialBackOff(), ctx)); err != nil {
+		return errors.Wrapf(err, "delete block dir %s", id.String())
+	}
 	return objstore.DeleteDir(ctx, bucket, id.String())
 }
 
-// DownloadMeta downloads only meta file from bucket by block ID.
-func DownloadMeta(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID) (Meta, error) {
-	rc, err := bkt.Get(ctx, path.Join(id.String(), MetaFilename))
-	if err != nil {
-		return Meta{}, errors.Wrapf(err, "meta.json bkt get for %s", id.String())
-	}
-	defer runutil.CloseWithLogOnErr(logger, rc, "download meta bucket client")
-
+// GetMeta downloads only meta file from bucket by block ID.
+func GetMeta(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id ulid.ULID) (Meta, error) {
 	var m Meta
-	if err := json.NewDecoder(rc).Decode(&m); err != nil {
-		return Meta{}, errors.Wrapf(err, "decode meta.json for block %s", id.String())
+	data, err := objstore.GetFile(ctx, logger, bucket, path.Join(id.String(), MetaFilename))
+	if err != nil {
+		return m, errors.Wrapf(err, "get meta for block %s", id)
+	}
+
+	if err := json.Unmarshal(data, &m); err != nil {
+		return m, errors.Wrapf(err, "decode meta.json for block %s", id.String())
 	}
 	return m, nil
 }

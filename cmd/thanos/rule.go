@@ -50,6 +50,11 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
+const (
+	AlertManagerUpdateInterval = 30 * time.Second
+	RuleSyncInterval           = 30 * time.Second
+)
+
 // registerRule registers a rule command.
 func registerRule(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "ruler evaluating Prometheus rules against given Query nodes, exposing Store API and storing old blocks in bucket")
@@ -354,7 +359,7 @@ func runRule(
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+			return runutil.Repeat(AlertManagerUpdateInterval, ctx.Done(), func() error {
 				if err := alertmgrs.update(ctx); err != nil {
 					level.Warn(logger).Log("msg", "refreshing Alertmanagers failed", "err", err)
 				}
@@ -544,7 +549,7 @@ func runRule(
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
-			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+			return runutil.Repeat(RuleSyncInterval, ctx.Done(), func() error {
 				s.Sync(ctx)
 
 				minTime, _, err := s.Timestamps()

@@ -28,7 +28,13 @@ import (
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
 	"gopkg.in/alecthomas/kingpin.v2"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
+)
+
+const (
+	PrometheusReloadInterval      = 30 * time.Second
+	PrometheusHealthCheckInterval = 2 * time.Second
+	ShipperSyncInterval           = 30 * time.Second
 )
 
 func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name string) {
@@ -126,7 +132,7 @@ func runSidecar(
 		g.Add(func() error {
 			// Blocking query of external labels before joining as a Source Peer into gossip.
 			// We retry infinitely until we reach and fetch labels from our Prometheus.
-			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
+			err := runutil.Retry(PrometheusHealthCheckInterval, ctx.Done(), func() error {
 				if err := metadata.UpdateLabels(ctx, logger); err != nil {
 					level.Warn(logger).Log(
 						"msg", "failed to fetch initial external labels. Is Prometheus running? Retrying",
@@ -160,7 +166,7 @@ func runSidecar(
 
 			// Periodically query the Prometheus config. We use this as a heartbeat as well as for updating
 			// the external labels we apply.
-			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+			return runutil.Repeat(PrometheusReloadInterval, ctx.Done(), func() error {
 				iterCtx, iterCancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer iterCancel()
 
@@ -200,10 +206,10 @@ func runSidecar(
 		}
 		logger := log.With(logger, "component", "sidecar")
 
-		var client http.Client
+		var c http.Client
 
 		promStore, err := store.NewPrometheusStore(
-			logger, &client, promURL, metadata.Labels, metadata.Timestamps)
+			logger, &c, promURL, metadata.Labels, metadata.Timestamps)
 		if err != nil {
 			return errors.Wrap(err, "create Prometheus store")
 		}
@@ -232,7 +238,7 @@ func runSidecar(
 	}
 
 	// The background shipper continuously scans the data directory and uploads
-	// new blocks to Google Cloud Storage or an S3-compatible storage service.
+	// new blocks to object storage service.
 	bkt, err := client.NewBucket(logger, bucketConfig, reg, component)
 	if err != nil && err != client.ErrNotFound {
 		return err
@@ -257,7 +263,7 @@ func runSidecar(
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
-			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+			return runutil.Repeat(ShipperSyncInterval, ctx.Done(), func() error {
 				s.Sync(ctx)
 
 				minTime, _, err := s.Timestamps()

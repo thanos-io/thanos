@@ -2,12 +2,11 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"os"
-	"path"
 	"path/filepath"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/prometheus/tsdb/chunkenc"
 
 	"github.com/go-kit/kit/log"
@@ -105,28 +104,8 @@ func downsampleBucket(
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return errors.Wrap(err, "create dir")
 	}
-	var metas []*block.Meta
 
-	err := bkt.Iter(ctx, "", func(name string) error {
-		id, ok := block.IsBlockDir(name)
-		if !ok {
-			return nil
-		}
-
-		rc, err := bkt.Get(ctx, path.Join(id.String(), block.MetaFilename))
-		if err != nil {
-			return errors.Wrapf(err, "get meta for block %s", id)
-		}
-		defer runutil.CloseWithLogOnErr(logger, rc, "block reader")
-
-		var m block.Meta
-		if err := json.NewDecoder(rc).Decode(&m); err != nil {
-			return errors.Wrap(err, "decode meta")
-		}
-		metas = append(metas, &m)
-
-		return nil
-	})
+	metas, err := store.GetMetas(ctx, logger, bkt)
 	if err != nil {
 		return errors.Wrap(err, "retrieve bucket block metas")
 	}

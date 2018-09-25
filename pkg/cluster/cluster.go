@@ -45,6 +45,7 @@ type Peer struct {
 
 const (
 	DefaultRefreshInterval = model.Duration(60 * time.Second)
+	PeerSyncInterval       = 2 * time.Second
 
 	// Peer's network types. These are used as a predefined peer configurations for a specified network type.
 	LocalNetworkPeerType = "local"
@@ -462,7 +463,7 @@ func resolvePeers(ctx context.Context, peers []string, myAddress string, res net
 			retryCtx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
-			err := runutil.Retry(2*time.Second, retryCtx.Done(), func() error {
+			err := runutil.Retry(PeerSyncInterval, retryCtx.Done(), func() error {
 				if lookupErrSpotted {
 					// We need to invoke cancel in next run of retry when lookupErrSpotted to preserve LookupIPAddr error.
 					cancel()

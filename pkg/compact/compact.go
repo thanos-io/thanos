@@ -173,7 +173,7 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 
 		level.Debug(c.logger).Log("msg", "download meta", "block", id)
 
-		meta, err := block.DownloadMeta(ctx, c.logger, c.bkt, id)
+		meta, err := block.GetMeta(ctx, c.logger, c.bkt, id)
 		if err != nil {
 			return errors.Wrapf(err, "downloading meta.json for %s", id)
 		}

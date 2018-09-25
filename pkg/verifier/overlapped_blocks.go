@@ -52,7 +52,7 @@ func fetchOverlaps(ctx context.Context, logger log.Logger, bkt objstore.Bucket) 
 			return nil
 		}
 
-		m, err := block.DownloadMeta(ctx, logger, bkt, id)
+		m, err := block.GetMeta(ctx, logger, bkt, id)
 		if err != nil {
 			return err
 		}
