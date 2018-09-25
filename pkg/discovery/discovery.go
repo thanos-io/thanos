@@ -2,18 +2,18 @@ package discovery
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-kit/kit/log"
-	"time"
 	"github.com/go-kit/kit/log/level"
-	"fmt"
+	"gopkg.in/yaml.v2"
+	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
-	"os"
-	"io/ioutil"
-	"encoding/json"
-	"gopkg.in/yaml.v2"
-	"errors"
+	"time"
 )
 
 type Discoverer interface {
@@ -33,7 +33,7 @@ type Discoverable struct {
 
 // SDConfig is the configuration for file based service discovery
 type SDConfig struct {
-	Files []string
+	Files           []string
 	RefreshInterval time.Duration
 }
 
@@ -41,8 +41,8 @@ type SDConfig struct {
 // on files that contain target groups in JSON or YAML format. Refreshing
 // happens using file watches and periodic refreshes.
 type FileDiscoverer struct {
-	paths []string
-	watcher *fsnotify.Watcher
+	paths    []string
+	watcher  *fsnotify.Watcher
 	interval time.Duration
 	//TODO(ivan): add timestamp metrics like in prometheus
 
@@ -59,9 +59,9 @@ func NewFileDiscoverer(conf *SDConfig, logger log.Logger) *FileDiscoverer {
 	}
 
 	return &FileDiscoverer{
-		paths: conf.Files,
+		paths:    conf.Files,
 		interval: conf.RefreshInterval,
-		logger: logger,
+		logger:   logger,
 	}
 }
 
@@ -172,7 +172,7 @@ func (d *FileDiscoverer) refresh(ctx context.Context, ch chan<- *Discoverable) {
 		if !ok {
 			level.Debug(d.logger).Log("msg", "file_sd refresh found file that should be removed", "file", f)
 			select {
-			case ch <- &Discoverable{Source:f}:
+			case ch <- &Discoverable{Source: f}:
 			case <-ctx.Done():
 				return
 			}
@@ -224,8 +224,8 @@ func (d *FileDiscoverer) readFile(filename string) (*Discoverable, error) {
 		return nil, err
 	}
 
-	discoverable := &Discoverable {
-		Source: filename,
+	discoverable := &Discoverable{
+		Source:   filename,
 		Services: []string{},
 	}
 
@@ -241,7 +241,6 @@ func (d *FileDiscoverer) readFile(filename string) (*Discoverable, error) {
 	default:
 		panic(fmt.Errorf("discovery.File.readFile: unhandled file extension %q", ext))
 	}
-
 
 	if discoverable.Services == nil {
 		return nil, errors.New(fmt.Sprintf("nil services find in file %v", filename))
