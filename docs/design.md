@@ -175,7 +175,7 @@ The cost for this amount of metric data would cost approximately $2400/month on 
 In return, being able to reduce the retention time of Prometheus instances from weeks to hours will provide cost savings for local SSD or network block storage (typically $0.17/GB) and reduce memory consumption.
 This calculation does not yet account for shorter retention spans of low-priority data and downsampling.
 
-[tsdb-format]: https://github.com/prometheus/tsdb/tree/master/Documentation/format
+[tsdb-format]: https://github.com/prometheus/tsdb/tree/master/docs/format
 [tsdb-talk]: https://www.slideshare.net/FabianReinartz/storing-16-bytes-at-scale-81282712
 [tsdb-lib]: https://godoc.org/github.com/prometheus/tsdb
 [promql-lib]: https://godoc.org/github.com/prometheus/prometheus/promql

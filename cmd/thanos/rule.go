@@ -51,7 +51,7 @@ import (
 func registerRule(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "ruler evaluating Prometheus rules against given Query nodes, exposing Store API and storing old blocks in bucket")
 
-	grpcBindAddr, httpBindAddr, newPeerFn := regCommonServerFlags(cmd)
+	grpcBindAddr, httpBindAddr, cert, key, clientCA, newPeerFn := regCommonServerFlags(cmd)
 
 	labelStrs := cmd.Flag("label", "Labels to be applied to all generated metrics (repeated).").
 		PlaceHolder("<name>=\"<value>\"").Strings()
@@ -104,6 +104,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			lset,
 			*alertmgrs,
 			*grpcBindAddr,
+			*cert,
+			*key,
+			*clientCA,
 			*httpBindAddr,
 			time.Duration(*evalInterval),
 			*dataDir,
@@ -127,6 +130,9 @@ func runRule(
 	lset labels.Labels,
 	alertmgrURLs []string,
 	grpcBindAddr string,
+	cert string,
+	key string,
+	clientCA string,
 	httpBindAddr string,
 	evalInterval time.Duration,
 	dataDir string,
@@ -369,7 +375,11 @@ func runRule(
 
 		store := store.NewTSDBStore(logger, reg, db, lset)
 
-		s := grpc.NewServer(defaultGRPCServerOpts(logger, reg, tracer)...)
+		opts, err := defaultGRPCServerOpts(logger, reg, tracer, cert, key, clientCA)
+		if err != nil {
+			return errors.Wrap(err, "setup gRPC options")
+		}
+		s := grpc.NewServer(opts...)
 		storepb.RegisterStoreServer(s, store)
 
 		g.Add(func() error {

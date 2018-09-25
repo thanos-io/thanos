@@ -42,84 +42,92 @@ ruler evaluating Prometheus rules against given Query nodes, exposing Store API
 and storing old blocks in bucket
 
 Flags:
-  -h, --help                    Show context-sensitive help (also try
-                                --help-long and --help-man).
-      --version                 Show application version.
-      --log.level=info          Log filtering level.
+  -h, --help                     Show context-sensitive help (also try
+                                 --help-long and --help-man).
+      --version                  Show application version.
+      --log.level=info           Log filtering level.
       --gcloudtrace.project=GCLOUDTRACE.PROJECT  
-                                GCP project to send Google Cloud Trace tracings
-                                to. If empty, tracing will be disabled.
+                                 GCP project to send Google Cloud Trace tracings
+                                 to. If empty, tracing will be disabled.
       --gcloudtrace.sample-factor=1  
-                                How often we send traces (1/<sample-factor>). If
-                                0 no trace will be sent periodically, unless
-                                forced by baggage item. See
-                                `pkg/tracing/tracing.go` for details.
+                                 How often we send traces (1/<sample-factor>).
+                                 If 0 no trace will be sent periodically, unless
+                                 forced by baggage item. See
+                                 `pkg/tracing/tracing.go` for details.
       --grpc-address="0.0.0.0:10901"  
-                                Listen ip:port address for gRPC endpoints
-                                (StoreAPI). Make sure this address is routable
-                                from other components if you use gossip,
-                                'grpc-advertise-address' is empty and you
-                                require cross-node connection.
+                                 Listen ip:port address for gRPC endpoints
+                                 (StoreAPI). Make sure this address is routable
+                                 from other components if you use gossip,
+                                 'grpc-advertise-address' is empty and you
+                                 require cross-node connection.
       --grpc-advertise-address=GRPC-ADVERTISE-ADDRESS  
-                                Explicit (external) host:port address to
-                                advertise for gRPC StoreAPI in gossip cluster.
-                                If empty, 'grpc-address' will be used.
+                                 Explicit (external) host:port address to
+                                 advertise for gRPC StoreAPI in gossip cluster.
+                                 If empty, 'grpc-address' will be used.
+      --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
+                                 disable TLS
+      --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
+                                 disable TLS
+      --grpc-server-tls-client-ca=""  
+                                 TLS CA to verify clients against. If no client
+                                 CA is specified, there is no client
+                                 verification on server side. (tls.NoClientCert)
       --http-address="0.0.0.0:10902"  
-                                Listen host:port for HTTP endpoints.
+                                 Listen host:port for HTTP endpoints.
       --cluster.address="0.0.0.0:10900"  
-                                Listen ip:port address for gossip cluster.
+                                 Listen ip:port address for gossip cluster.
       --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS  
-                                Explicit (external) ip:port address to advertise
-                                for gossip in gossip cluster. Used internally
-                                for membership only.
+                                 Explicit (external) ip:port address to
+                                 advertise for gossip in gossip cluster. Used
+                                 internally for membership only.
       --cluster.peers=CLUSTER.PEERS ...  
-                                Initial peers to join the cluster. It can be
-                                either <ip:port>, or <domain:port>. A lookup
-                                resolution is done only at the startup.
+                                 Initial peers to join the cluster. It can be
+                                 either <ip:port>, or <domain:port>. A lookup
+                                 resolution is done only at the startup.
       --cluster.gossip-interval=<gossip interval>  
-                                Interval between sending gossip messages. By
-                                lowering this value (more frequent) gossip
-                                messages are propagated across the cluster more
-                                quickly at the expense of increased bandwidth.
-                                Default is used from a specified network-type.
+                                 Interval between sending gossip messages. By
+                                 lowering this value (more frequent) gossip
+                                 messages are propagated across the cluster more
+                                 quickly at the expense of increased bandwidth.
+                                 Default is used from a specified network-type.
       --cluster.pushpull-interval=<push-pull interval>  
-                                Interval for gossip state syncs. Setting this
-                                interval lower (more frequent) will increase
-                                convergence speeds across larger clusters at the
-                                expense of increased bandwidth usage. Default is
-                                used from a specified network-type.
+                                 Interval for gossip state syncs. Setting this
+                                 interval lower (more frequent) will increase
+                                 convergence speeds across larger clusters at
+                                 the expense of increased bandwidth usage.
+                                 Default is used from a specified network-type.
       --cluster.refresh-interval=1m  
-                                Interval for membership to refresh cluster.peers
-                                state, 0 disables refresh.
+                                 Interval for membership to refresh
+                                 cluster.peers state, 0 disables refresh.
       --cluster.secret-key=CLUSTER.SECRET-KEY  
-                                Initial secret key to encrypt cluster gossip.
-                                Can be one of AES-128, AES-192, or AES-256 in
-                                hexadecimal format.
+                                 Initial secret key to encrypt cluster gossip.
+                                 Can be one of AES-128, AES-192, or AES-256 in
+                                 hexadecimal format.
       --cluster.network-type=lan  
-                                Network type with predefined peers
-                                configurations. Sets of configurations
-                                accounting the latency differences between
-                                network types: local, lan, wan.
+                                 Network type with predefined peers
+                                 configurations. Sets of configurations
+                                 accounting the latency differences between
+                                 network types: local, lan, wan.
       --label=<name>="<value>" ...  
-                                Labels to be applied to all generated metrics
-                                (repeated).
-      --data-dir="data/"        data directory
-      --rule-file=rules/ ...    Rule files that should be used by rule manager.
-                                Can be in glob format (repeated).
-      --eval-interval=30s       The default evaluation interval to use.
-      --tsdb.block-duration=2h  Block duration for TSDB block.
-      --tsdb.retention=48h      Block retention time on local disk.
+                                 Labels to be applied to all generated metrics
+                                 (repeated).
+      --data-dir="data/"         data directory
+      --rule-file=rules/ ...     Rule files that should be used by rule manager.
+                                 Can be in glob format (repeated).
+      --eval-interval=30s        The default evaluation interval to use.
+      --tsdb.block-duration=2h   Block duration for TSDB block.
+      --tsdb.retention=48h       Block retention time on local disk.
       --alertmanagers.url=ALERTMANAGERS.URL ...  
-                                Alertmanager URLs to push firing alerts to. The
-                                scheme may be prefixed with 'dns+' or 'dnssrv+'
-                                to detect Alertmanager IPs through respective
-                                DNS lookups. The port defaults to 9093 or the
-                                SRV record's value. The URL path is used as a
-                                prefix for the regular Alertmanager API path.
+                                 Alertmanager URLs to push firing alerts to. The
+                                 scheme may be prefixed with 'dns+' or 'dnssrv+'
+                                 to detect Alertmanager IPs through respective
+                                 DNS lookups. The port defaults to 9093 or the
+                                 SRV record's value. The URL path is used as a
+                                 prefix for the regular Alertmanager API path.
       --alert.query-url=ALERT.QUERY-URL  
-                                The external Thanos Query URL that would be set
-                                in all alerts 'Source' field
+                                 The external Thanos Query URL that would be set
+                                 in all alerts 'Source' field
       --objstore.config-file=<bucket.config.path>  
-                                The object store configuration file path.
+                                 The object store configuration file path.
 
 ```

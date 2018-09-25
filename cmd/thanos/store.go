@@ -25,7 +25,7 @@ import (
 func registerStore(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "store node giving access to blocks in a bucket provider. Now supported GCS, S3 and Azure.")
 
-	grpcBindAddr, httpBindAddr, newPeerFn := regCommonServerFlags(cmd)
+	grpcBindAddr, httpBindAddr, cert, key, clientCA, newPeerFn := regCommonServerFlags(cmd)
 
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache remote blocks.").
 		Default("./data").String()
@@ -51,6 +51,9 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			*bucketConfFile,
 			*dataDir,
 			*grpcBindAddr,
+			*cert,
+			*key,
+			*clientCA,
 			*httpBindAddr,
 			peer,
 			uint64(*indexCacheSize),
@@ -70,6 +73,9 @@ func runStore(
 	bucketConfFile string,
 	dataDir string,
 	grpcBindAddr string,
+	cert string,
+	key string,
+	clientCA string,
 	httpBindAddr string,
 	peer *cluster.Peer,
 	indexCacheSizeBytes uint64,
@@ -133,7 +139,12 @@ func runStore(
 			return errors.Wrap(err, "listen API address")
 		}
 
-		s := grpc.NewServer(defaultGRPCServerOpts(logger, reg, tracer)...)
+		opts, err := defaultGRPCServerOpts(logger, reg, tracer, cert, key, clientCA)
+		if err != nil {
+			return errors.Wrap(err, "grpc server options")
+		}
+
+		s := grpc.NewServer(opts...)
 		storepb.RegisterStoreServer(s, bs)
 
 		g.Add(func() error {
