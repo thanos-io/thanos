@@ -33,6 +33,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"gopkg.in/alecthomas/kingpin.v2"
+	"github.com/improbable-eng/thanos/pkg/discovery"
+	"sync"
 )
 
 // registerQuery registers a query command.
@@ -65,6 +67,9 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	stores := cmd.Flag("store", "Addresses of statically configured store API servers (repeatable).").
 		PlaceHolder("<store>").Strings()
 
+	filesToWatch := cmd.Flag("filesd", "Path to file that contain addresses of store API servers (repeatable).").
+		PlaceHolder("<path>").Strings()
+
 	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified. ").
 		Default("false").Bool()
 
@@ -85,6 +90,15 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			}
 
 			lookupStores[s] = struct{}{}
+		}
+
+		var filesd *discovery.FileDiscoverer
+		if len(*filesToWatch) > 0 {
+			conf := &discovery.SDConfig{
+				Files: *filesToWatch,
+				RefreshInterval: 5 * time.Second,
+			}
+			filesd = discovery.NewFileDiscoverer(conf, logger)
 		}
 
 		return runQuery(
@@ -109,6 +123,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			selectorLset,
 			*stores,
 			*enableAutodownsampling,
+			filesd,
 		)
 	}
 }
@@ -218,6 +233,7 @@ func runQuery(
 	selectorLset labels.Labels,
 	storeAddrs []string,
 	enableAutodownsampling bool,
+	fileSD *discovery.FileDiscoverer,
 ) error {
 	var staticSpecs []query.StoreSpec
 	for _, addr := range storeAddrs {
@@ -233,13 +249,14 @@ func runQuery(
 		return errors.Wrap(err, "building gRPC client")
 	}
 
+	addrFromFileSD := newFileSDAddrs()
+
 	var (
 		stores = query.NewStoreSet(
 			logger,
 			reg,
 			func() (specs []query.StoreSpec) {
 				specs = append(staticSpecs)
-
 				for id, ps := range peer.PeerStates(cluster.PeerTypesStoreAPIs()...) {
 					if ps.StoreAPIAddr == "" {
 						level.Error(logger).Log("msg", "Gossip found peer that propagates empty address, ignoring.", "lset", fmt.Sprintf("%v", ps.Metadata.Labels))
@@ -248,6 +265,15 @@ func runQuery(
 
 					specs = append(specs, &gossipSpec{id: id, addr: ps.StoreAPIAddr, peer: peer})
 				}
+
+				addrFromFileSD.mtx.Lock()
+				defer addrFromFileSD.mtx.Unlock()
+				for _, addresses := range addrFromFileSD.addrs {
+					for _, addr := range addresses {
+						specs = append(specs, query.NewGRPCStoreSpec(addr))
+					}
+				}
+
 				return specs
 			},
 			dialOpts,
@@ -270,6 +296,48 @@ func runQuery(
 			cancel()
 			stores.Close()
 		})
+	}
+	// Run File Service Discovery and update the store set when the files are modified
+	{
+		if fileSD != nil {
+			var fileSDUpdates chan *discovery.Discoverable
+			ctx, cancel := context.WithCancel(context.Background())
+
+			fileSDUpdates = make(chan *discovery.Discoverable)
+
+			g.Add(func() error {
+				fileSD.Run(ctx, fileSDUpdates)
+				return nil
+			}, func(error) {
+				cancel()
+			})
+
+			g.Add(func() error {
+				for {
+					select {
+					case update, ok := <-fileSDUpdates:
+						// Handle the case that a discoverer exits and closes the channel
+						// before the context is done.
+						if !ok {
+							return nil
+						}
+						// Discoverers sometimes send nil updates so need to check for it to avoid panics
+						if update == nil {
+							continue
+						}
+						// TODO(ivan): resolve dns here maybe?
+						addrFromFileSD.update(update.Source, update.Services)
+						stores.Update(ctx)
+					case <-ctx.Done():
+						return nil
+					}
+				}
+			}, func(error) {
+				cancel()
+				stores.Close()
+				close(fileSDUpdates)
+			})
+		}
 	}
 	{
 		ctx, cancel := context.WithCancel(context.Background())
@@ -345,6 +413,23 @@ type gossipSpec struct {
 	addr string
 
 	peer *cluster.Peer
+}
+
+type fileSDAddrs struct {
+	addrs map[string][]string
+	mtx sync.Mutex
+}
+
+func newFileSDAddrs() *fileSDAddrs {
+	return &fileSDAddrs{
+		addrs: make(map[string][]string),
+	}
+}
+
+func (f *fileSDAddrs) update(source string, addrs []string) {
+	f.mtx.Lock()
+	defer f.mtx.Unlock()
+	f.addrs[source] = addrs
 }
 
 func (s *gossipSpec) Addr() string {
