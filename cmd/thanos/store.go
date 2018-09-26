@@ -109,16 +109,20 @@ func runStore(
 			return errors.Wrap(err, "create object storage store")
 		}
 
-		begin := time.Now()
-		level.Debug(logger).Log("msg", "initializing bucket store")
-		if err := bs.InitialSync(context.Background()); err != nil {
-			return errors.Wrap(err, "bucket store initial sync")
-		}
-		level.Debug(logger).Log("msg", "bucket store ready", "init_duration", time.Since(begin).String())
-
 		ctx, cancel := context.WithCancel(context.Background())
+		readyToServe := make(chan struct{}, 1)
+
 		g.Add(func() error {
+			begin := time.Now()
+			level.Debug(logger).Log("msg", "initializing bucket store")
+			if err := bs.InitialSync(context.Background()); err != nil {
+				return errors.Wrap(err, "bucket store initial sync")
+			}
+			level.Debug(logger).Log("msg", "bucket store readyToServe", "init_duration", time.Since(begin).String())
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+
+			// Ready to start Grpc server.
+			readyToServe <- struct{}{}
 
 			err := runutil.Repeat(3*time.Minute, ctx.Done(), func() error {
 				if err := bs.SyncBlocks(ctx); err != nil {
@@ -148,6 +152,7 @@ func runStore(
 		storepb.RegisterStoreServer(s, bs)
 
 		g.Add(func() error {
+			<-readyToServe
 			level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
