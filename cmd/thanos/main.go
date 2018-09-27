@@ -134,6 +134,11 @@ func main() {
 		var closeFn func() error
 		tracer, closeFn = tracing.NewOptionalGCloudTracer(ctx, logger, *gcloudTraceProject, *gcloudTraceSampleFactor, *debugName)
 
+		// This is bad, but Prometheus does not support any other tracer injections than just global one.
+		// TODO(bplotka): Work with basictracer to handle gracefully tracker mismatches, and also with Prometheus to allow
+		// tracer injection.
+		opentracing.SetGlobalTracer(tracer)
+
 		ctx, cancel := context.WithCancel(ctx)
 		g.Add(func() error {
 			<-ctx.Done()
