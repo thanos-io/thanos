@@ -13,7 +13,10 @@ At the moment, Thanos is able to use [GCS and S3 as storage providers](storage.m
 
 ## Get Thanos!
 
-Thanos has no official releases yet. With a working installation of the Go [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`), Thanos can be downloaded and built by running:
+You can find the latest Thanos release [here](https://github.com/improbable-eng/thanos/releases).
+
+If you want to build Thanos from source -
+with a working installation of the Go [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`), Thanos can be downloaded and built by running:
 
 ```
 go get -d github.com/improbable-eng/thanos/...
