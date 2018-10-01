@@ -22,7 +22,7 @@ const (
 	opObjectsList  = "ListBucket"
 	opObjectInsert = "PutObject"
 	opObjectGet    = "GetObject"
-	opObjectHead   = "HEADObject"
+	opObjectHead   = "HeadObject"
 	opObjectDelete = "DeleteObject"
 )
 
@@ -106,23 +106,18 @@ func NewBucket(logger log.Logger, azureConfig []byte, reg prometheus.Registerer,
 // Iter calls f for each entry in the given directory. The argument to f is the full
 // object name including the prefix of the inspected directory.
 func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) error {
-	level.Debug(b.logger).Log("msg", "Iterating through the dir", "dir", dir)
 	b.opsTotal.WithLabelValues(opObjectsList).Inc()
-	var prefix string
-	if dir == "" {
-		prefix = ""
-	} else if !strings.HasSuffix(dir, DirDelim) {
-		prefix = dir + DirDelim
-	} else {
-		prefix = dir
+
+	prefix := dir
+	if prefix != "" && !strings.HasSuffix(prefix, DirDelim) {
+		prefix += DirDelim
 	}
 
 	list, err := b.containerURL.ListBlobsHierarchySegment(ctx, blob.Marker{}, DirDelim, blob.ListBlobsSegmentOptions{
 		Prefix: prefix,
 	})
 	if err != nil {
-		level.Error(b.logger).Log("msg", "Cannot list blogs in directory %s", dir)
-		return err
+		return errors.Wrapf(err, "msg", "Cannot list blobs in directory %s", dir)
 	}
 	var listNames []string
 
@@ -172,8 +167,7 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 
 	props, err := blobURL.GetProperties(ctx, blob.BlobAccessConditions{})
 	if err != nil {
-		level.Error(b.logger).Log("msg", "Cannot get properties for container", "address", name)
-		return nil, err
+		return nil, errors.Wrapf(err, "msg", "Cannot get properties for container", "address", name)
 	}
 
 	var size int64
@@ -236,8 +230,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 			MaxBuffers: 4,
 		})
 	if err != nil {
-		level.Error(b.logger).Log("msg", "Cannot upload Azure blob", "address", name, "error", err)
-		return err
+		return errors.Wrapf(err, "msg", "Cannot upload Azure blob", "address", name)
 	}
 	return nil
 }
@@ -249,8 +242,7 @@ func (b *Bucket) Delete(ctx context.Context, name string) error {
 	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
 	_, err := blobURL.Delete(ctx, blob.DeleteSnapshotsOptionInclude, blob.BlobAccessConditions{})
 	if err != nil {
-		level.Error(b.logger).Log("msg", "Error deleting blob", "address", name)
-		return err
+		return errors.Wrapf(err, "msg", "Error deleting blob", "address", name)
 	}
 	return nil
 }
