@@ -8,6 +8,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"os"
@@ -212,12 +213,11 @@ func (d *FileDiscoverer) stop() {
 // readFile reads a JSON or YAML list of discoverables from the file, depending on its
 // file extension.
 func (d *FileDiscoverer) readFile(filename string) (*Discoverable, error) {
-	fmt.Printf("reading file %v \n", filename)
 	fd, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
-	defer fd.Close()
+	defer runutil.CloseWithLogOnErr(d.logger, fd, "file read close")
 
 	content, err := ioutil.ReadAll(fd)
 	if err != nil {

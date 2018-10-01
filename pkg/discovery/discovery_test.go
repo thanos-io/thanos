@@ -2,6 +2,11 @@ package discovery
 
 import (
 	"context"
+	"fmt"
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/runutil"
+	"github.com/pkg/errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -16,10 +21,11 @@ const (
 )
 
 func TestFileSD(t *testing.T) {
-	defer os.Remove(filepath.Join(testDir, "_test_valid.yml"))
-	defer os.Remove(filepath.Join(testDir, "_test_valid.json"))
-	defer os.Remove(filepath.Join(testDir, "_test_invalid_nil.json"))
-	defer os.Remove(filepath.Join(testDir, "_test_invalid_nil.yml"))
+	logger := log.NewLogfmtLogger(os.Stderr)
+	defer removeWithLogOnErr(logger, filepath.Join(testDir, "_test_valid.yml"))
+	defer removeWithLogOnErr(logger, filepath.Join(testDir, "_test_valid.json"))
+	defer removeWithLogOnErr(logger, filepath.Join(testDir, "_test_invalid_nil.json"))
+	defer removeWithLogOnErr(logger, filepath.Join(testDir, "_test_invalid_nil.yml"))
 	testFileSD(t, "valid", ".yml", true)
 	testFileSD(t, "valid", ".json", true)
 	testFileSD(t, "invalid_nil", ".json", false)
@@ -37,6 +43,7 @@ func testFileSD(t *testing.T, prefix, ext string, expect bool) {
 		discoverer  = NewFileDiscoverer(&conf, nil)
 		ch          = make(chan *Discoverable)
 		ctx, cancel = context.WithCancel(context.Background())
+		logger      = log.NewLogfmtLogger(os.Stderr)
 	)
 	go discoverer.Run(ctx, ch)
 
@@ -66,13 +73,13 @@ func testFileSD(t *testing.T, prefix, ext string, expect bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer newf.Close()
+	defer runutil.CloseWithLogOnErr(logger, newf, "test file sd")
 
 	f, err := os.Open(filepath.Join(testDir, prefix+ext))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer runutil.CloseWithLogOnErr(logger, f, "file sd")
 	_, err = io.Copy(newf, f)
 	if err != nil {
 		t.Fatal(err)
@@ -82,7 +89,10 @@ func testFileSD(t *testing.T, prefix, ext string, expect bool) {
 	// It contains two target groups.
 	close(fileReady)
 	<-drainReady
-	newf.WriteString(" ") // One last meaningless write to trigger fsnotify and a new loop of the discovery service.
+	_, err = newf.WriteString(" ") // One last meaningless write to trigger fsnotify and a new loop of the discovery service.
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	timeout := time.After(15 * time.Second)
 retry:
@@ -142,15 +152,23 @@ retry:
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(newf.Name())
+	defer removeWithLogOnErr(logger, newf.Name())
 
 	if _, err := newf.Write([]byte("]gibberish\n][")); err != nil {
 		t.Fatal(err)
 	}
-	newf.Close()
+	runutil.CloseWithLogOnErr(logger, newf, "test file sd")
 
-	os.Rename(newf.Name(), filepath.Join(testDir, "_test_"+prefix+ext))
+	if err := os.Rename(newf.Name(), filepath.Join(testDir, "_test_"+prefix+ext)); err != nil {
+		t.Fatal(err)
+	}
 
 	cancel()
 	<-drained
+}
+
+func removeWithLogOnErr(logger log.Logger, name string) {
+	if err := os.Remove(name); err != nil {
+		level.Warn(logger).Log("msg", "detected remove error", "err", errors.Wrap(err, fmt.Sprintf("failed removing %v", name)))
+	}
 }
