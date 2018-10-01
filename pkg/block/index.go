@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
@@ -282,7 +283,9 @@ func GatherIndexIssueStats(logger log.Logger, fn string, minTime int64, maxTime 
 		}
 		l0 := lset[0]
 		for _, l := range lset[1:] {
-			if l.Name <= l0.Name {
+			if l.Name == l0.Name {
+				level.Error(logger).Log("msg", "duplicate labels in label set", "lset", lset, "series", id)
+			} else if l.Name < l0.Name {
 				return stats, errors.Errorf("out-of-order label set %s for series %d", lset, id)
 			}
 			l0 = l
