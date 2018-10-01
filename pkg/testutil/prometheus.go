@@ -42,7 +42,7 @@ func PrometheusBinary() string {
 func AlertmanagerBinary() string {
 	b := os.Getenv(alertmanagerBinEnvVar)
 	if b == "" {
-		return fmt.Sprintf("prometheus-%s", defaultAlertmanagerVersion)
+		return fmt.Sprintf("alertmanager-%s", defaultAlertmanagerVersion)
 	}
 	return b
 }

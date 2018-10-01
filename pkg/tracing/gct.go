@@ -38,6 +38,7 @@ func NewOptionalGCloudTracer(ctx context.Context, logger log.Logger, gcloudTrace
 		return &opentracing.NoopTracer{}, func() error { return nil }
 	}
 
+	level.Info(logger).Log("msg", "initiated Google Cloud Tracer. Tracing will be enabled", "err", err)
 	return tracer, closeFn
 }
 
