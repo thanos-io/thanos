@@ -128,8 +128,6 @@ Details about AWS policies: https://docs.aws.amazon.com/AmazonS3/latest/dev/usin
 
 To configure Google Cloud Storage bucket as an object store you need to set `bucket` with GCS bucket name and configure Google Application credentials.
 
-To configure Google Cloud Storage bucket as an object store you need to set `bucket` with GCS bucket name and configure Google Application credentials.
-
 For example:
 ```
 type: GCS

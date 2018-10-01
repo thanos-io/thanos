@@ -15,7 +15,6 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -27,7 +26,7 @@ const (
 	opObjectDelete = "DeleteObject"
 )
 
-// Config Azure storage configuration
+// Config Azure storage configuration.
 type Config struct {
 	StorageAccountName string `yaml:"storage-account"`
 	StorageAccountKey  string `yaml:"storage-account-key"`
@@ -41,19 +40,6 @@ type Bucket struct {
 	config       *Config
 	opsTotal     *prometheus.CounterVec
 	closer       blobReadCloser
-}
-
-// RegisterAzureParams registers the Azure flags and returns an initialized Config struct.
-func RegisterAzureParams(cmd *kingpin.CmdClause) *Config {
-	var azureConfig Config
-
-	cmd.Flag("azure.storage", "Azure storage account name.").
-		PlaceHolder("<sa>").Envar("AZURE_STORAGE_ACCOUNT").StringVar(&azureConfig.StorageAccountName)
-
-	cmd.Flag("azure.access-key", "Azure storage account access key.").
-		PlaceHolder("<key>").Envar("AZURE_STORAGE_ACCESS_KEY").StringVar(&azureConfig.StorageAccountKey)
-
-	return &azureConfig
 }
 
 // Validate checks to see if any of the s3 config options are set.
@@ -85,19 +71,19 @@ func NewBucket(logger log.Logger, azureConfig []byte, reg prometheus.Registerer,
 	container, err := createContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, conf.ContainerName)
 	if err != nil {
 		if err.(blob.StorageError).ServiceCode() == "ContainerAlreadyExists" {
-			level.Debug(logger).Log("msg", "Using existing container", "address", container)
-			level.Debug(logger).Log("msg", "Getting connection to existing container", "container", conf.ContainerName)
+			level.Debug(logger).Log("msg", "Using existing Azure blob container", "address", container)
+			level.Debug(logger).Log("msg", "Getting connection to existing Azure blob container", "container", conf.ContainerName)
 			container, err = getContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, conf.ContainerName)
 			if err != nil {
-				level.Error(logger).Log("msg", "Cannot get existing container", "address", container)
+				level.Error(logger).Log("msg", "Cannot get existing Azure blob container", "address", container)
 				return nil, err
 			}
 		} else {
-			level.Error(logger).Log("msg", "Error creating container", "address", container)
+			level.Error(logger).Log("msg", "Error creating Azure blob container", "address", container)
 			return nil, err
 		}
 	} else {
-		level.Info(logger).Log("msg", "Container successfully created", "address", container)
+		level.Info(logger).Log("msg", "Azure blob container successfully created", "address", container)
 	}
 
 	bkt := &Bucket{
@@ -158,7 +144,6 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 
 // IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
 func (b *Bucket) IsObjNotFoundErr(err error) bool {
-	level.Debug(b.logger).Log("msg", "Check if err it's NotFoundError", "err", err)
 	if err == nil {
 		return false
 	}
@@ -247,14 +232,11 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
 	_, err := blob.UploadStreamToBlockBlob(ctx, r, blobURL,
 		blob.UploadStreamToBlockBlobOptions{
-			BufferSize:       128,
-			MaxBuffers:       1024,
-			BlobHTTPHeaders:  blob.BlobHTTPHeaders{ContentType: "text/plain"},
-			Metadata:         blob.Metadata{},
-			AccessConditions: blob.BlobAccessConditions{},
+			BufferSize: 3 * 1024 * 1024,
+			MaxBuffers: 4,
 		})
 	if err != nil {
-		level.Error(b.logger).Log("msg", "Cannot upload blob", "address", name)
+		level.Error(b.logger).Log("msg", "Cannot upload Azure blob", "address", name, "error", err)
 		return err
 	}
 	return nil

@@ -39,13 +39,14 @@ func getContainerURL(ctx context.Context, accountName, accountKey, containerName
 		return blob.ContainerURL{}
 	}
 	service := blob.NewServiceURL(*u, p)
-	container := service.NewContainerURL(containerName)
-	return container
+
+	return service.NewContainerURL(containerName)
 }
 
 func getContainer(ctx context.Context, accountName, accountKey, containerName string) (blob.ContainerURL, error) {
 	c := getContainerURL(ctx, accountName, accountKey, containerName)
 
+	// Getting container properties to check if it exists or not. Returns error which will be parsed further
 	_, err := c.GetProperties(ctx, blob.LeaseAccessConditions{})
 	return c, err
 }
@@ -61,11 +62,9 @@ func createContainer(ctx context.Context, accountName, accountKey, containerName
 }
 
 func getBlobURL(ctx context.Context, accountName, accountKey, containerName, blobName string) blob.BlockBlobURL {
-	container := getContainerURL(ctx, accountName, accountKey, containerName)
-	return container.NewBlockBlobURL(blobName)
+	return getContainerURL(ctx, accountName, accountKey, containerName).NewBlockBlobURL(blobName)
 }
 
 func parseError(errorCode string) string {
-	ret := strings.Split(strings.SplitAfter(strings.SplitAfter(strings.SplitAfter(errorCode, "X-Ms-Error-Code")[1], ":")[1], "[")[1], "]")[0]
-	return ret
+	return strings.Split(strings.SplitAfter(strings.SplitAfter(strings.SplitAfter(errorCode, "X-Ms-Error-Code")[1], ":")[1], "[")[1], "]")[0]
 }
