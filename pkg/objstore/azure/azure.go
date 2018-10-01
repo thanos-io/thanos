@@ -75,12 +75,10 @@ func NewBucket(logger log.Logger, azureConfig []byte, reg prometheus.Registerer,
 			level.Debug(logger).Log("msg", "Getting connection to existing Azure blob container", "container", conf.ContainerName)
 			container, err = getContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, conf.ContainerName)
 			if err != nil {
-				level.Error(logger).Log("msg", "Cannot get existing Azure blob container", "address", container)
-				return nil, err
+				return nil, errors.Wrapf(err, "msg", "Cannot get existing Azure blob container", "address", container)
 			}
 		} else {
-			level.Error(logger).Log("msg", "Error creating Azure blob container", "address", container)
-			return nil, err
+			return nil, errors.Wrapf(err, "msg", "Error creating Azure blob container", "address", container)
 		}
 	} else {
 		level.Info(logger).Log("msg", "Azure blob container successfully created", "address", container)
