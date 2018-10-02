@@ -71,14 +71,13 @@ func NewBucket(logger log.Logger, azureConfig []byte, reg prometheus.Registerer,
 	container, err := createContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, conf.ContainerName)
 	if err != nil {
 		if err.(blob.StorageError).ServiceCode() == "ContainerAlreadyExists" {
-			level.Debug(logger).Log("msg", "Using existing Azure blob container", "address", container)
 			level.Debug(logger).Log("msg", "Getting connection to existing Azure blob container", "container", conf.ContainerName)
 			container, err = getContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, conf.ContainerName)
 			if err != nil {
-				return nil, errors.Wrapf(err, "msg", "Cannot get existing Azure blob container", "address", container)
+				return nil, errors.Wrapf(err, "msg", "cannot get existing Azure blob container: %s", container)
 			}
 		} else {
-			return nil, errors.Wrapf(err, "msg", "Error creating Azure blob container", "address", container)
+			return nil, errors.Wrapf(err, "msg", "error creating Azure blob container: %s", container)
 		}
 	} else {
 		level.Info(logger).Log("msg", "Azure blob container successfully created", "address", container)
@@ -115,7 +114,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		Prefix: prefix,
 	})
 	if err != nil {
-		return errors.Wrapf(err, "msg", "Cannot list blobs in directory %s", dir)
+		return errors.Wrapf(err, "msg", "cannot list blobs in directory %s", dir)
 	}
 	var listNames []string
 
@@ -156,7 +155,7 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 	}
 	exists, err := b.Exists(ctx, name)
 	if err != nil {
-		return nil, errors.Wrapf(err, "msg", "Cannot get blob reader", "address", name)
+		return nil, errors.Wrapf(err, "msg", "cannot get blob reader: %s", name)
 	}
 
 	if !exists {
@@ -167,7 +166,7 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 
 	props, err := blobURL.GetProperties(ctx, blob.BlobAccessConditions{})
 	if err != nil {
-		return nil, errors.Wrapf(err, "msg", "Cannot get properties for container", "address", name)
+		return nil, errors.Wrapf(err, "msg", "cannot get properties for container: %s", name)
 	}
 
 	var size int64
@@ -177,9 +176,7 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 		size = props.ContentLength() - offset
 	}
 
-	var destBuffer []byte
-
-	destBuffer = make([]byte, size)
+	destBuffer := make([]byte, size)
 
 	err = blob.DownloadBlobToBuffer(context.Background(), blobURL.BlobURL, offset, length,
 		blob.BlobAccessConditions{}, destBuffer, blob.DownloadFromBlobOptions{
@@ -188,13 +185,13 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 			Progress:    nil,
 		})
 
-	reader := bytes.NewReader(destBuffer)
-
-	readerCloser := &blobReadCloser{
-		Reader: reader,
+	if err != nil {
+		return nil, errors.Wrapf(err, "msg", "cannot download blob", "address", blobURL.BlobURL)
 	}
 
-	return readerCloser, err
+	return &blobReadCloser{
+		Reader: bytes.NewReader(destBuffer),
+	}, nil
 }
 
 // Get returns a reader for the given object name.
@@ -213,8 +210,12 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 	b.opsTotal.WithLabelValues(opObjectHead).Inc()
 	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
 	_, err := blobURL.GetProperties(ctx, blob.BlobAccessConditions{})
-	if b.IsObjNotFoundErr(err) {
-		return false, nil
+	if err != nil {
+		if b.IsObjNotFoundErr(err) {
+			return false, nil
+		} else {
+			return false, errors.Wrapf(err, "msg", "cannot get blob URL: %s", name)
+		}
 	}
 	return true, nil
 }
@@ -230,7 +231,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 			MaxBuffers: 4,
 		})
 	if err != nil {
-		return errors.Wrapf(err, "msg", "Cannot upload Azure blob", "address", name)
+		return errors.Wrapf(err, "msg", "cannot upload Azure blob", "address", name)
 	}
 	return nil
 }
@@ -242,12 +243,12 @@ func (b *Bucket) Delete(ctx context.Context, name string) error {
 	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
 	_, err := blobURL.Delete(ctx, blob.DeleteSnapshotsOptionInclude, blob.BlobAccessConditions{})
 	if err != nil {
-		return errors.Wrapf(err, "msg", "Error deleting blob", "address", name)
+		return errors.Wrapf(err, "msg", "error deleting blob", "address", name)
 	}
 	return nil
 }
 
-// Name returns the bucket name for gcs.
+// Name returns Azure container name.
 func (b *Bucket) Name() string {
 	return b.config.ContainerName
 }
@@ -286,7 +287,7 @@ func NewTestBucket(t testing.TB, component string) (objstore.Bucket, func(), err
 	}, nil
 }
 
-// Close bucket
+// Close bucket.
 func (b *Bucket) Close() error {
 	return b.closer.Close()
 }
