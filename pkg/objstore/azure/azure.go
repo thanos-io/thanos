@@ -140,14 +140,13 @@ func (b *Bucket) IsObjNotFoundErr(err error) bool {
 	if err == nil {
 		return false
 	}
-	switch errorCode := parseError(err.Error()); errorCode {
-	case "InvalidUri":
+
+	errorCode := parseError(err.Error())
+	if errorCode == "InvalidUri" || errorCode == "BlobNotFound" {
 		return true
-	case "BlobNotFound":
-		return true
-	default:
-		return false
 	}
+
+	return false
 }
 
 func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length int64) (io.ReadCloser, error) {
