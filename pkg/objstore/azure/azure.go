@@ -155,6 +155,9 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 		return nil, errors.New("X-Ms-Error-Code: [EmptyContainerName]")
 	}
 	exists, err := b.Exists(ctx, name)
+	if err != nil {
+		return nil, errors.Wrapf(err, "msg", "Cannot get blob reader", "address", name)
+	}
 
 	if !exists {
 		return nil, errors.New("X-Ms-Error-Code: [BlobNotFound]")
