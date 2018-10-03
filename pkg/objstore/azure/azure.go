@@ -61,8 +61,7 @@ func NewBucket(logger log.Logger, azureConfig []byte, reg prometheus.Registerer,
 		return nil, err
 	}
 
-	err := conf.Validate()
-	if err != nil {
+	if err := conf.Validate(); err != nil {
 		return nil, err
 	}
 
@@ -178,15 +177,13 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 
 	destBuffer := make([]byte, size)
 
-	err = blob.DownloadBlobToBuffer(context.Background(), blobURL.BlobURL, offset, length,
+	if err := blob.DownloadBlobToBuffer(context.Background(), blobURL.BlobURL, offset, length,
 		blob.BlobAccessConditions{}, destBuffer, blob.DownloadFromBlobOptions{
 			BlockSize:   blob.BlobDefaultDownloadBlockSize,
 			Parallelism: uint16(3),
 			Progress:    nil,
-		})
-
-	if err != nil {
-		return nil, errors.Wrapf(err, "msg", "cannot download blob", "address", blobURL.BlobURL)
+		}); err != nil {
+		return nil, errors.Wrapf(err, "msg", "cannot download blob, address: %s", blobURL.BlobURL)
 	}
 
 	return &blobReadCloser{
@@ -209,14 +206,15 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 	level.Debug(b.logger).Log("msg", "Check if blob exists", "blob", name)
 	b.opsTotal.WithLabelValues(opObjectHead).Inc()
 	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
-	_, err := blobURL.GetProperties(ctx, blob.BlobAccessConditions{})
-	if err != nil {
+
+	if _, err := blobURL.GetProperties(ctx, blob.BlobAccessConditions{}); err != nil {
 		if b.IsObjNotFoundErr(err) {
 			return false, nil
 		} else {
 			return false, errors.Wrapf(err, "msg", "cannot get blob URL: %s", name)
 		}
 	}
+
 	return true, nil
 }
 
@@ -225,13 +223,13 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	level.Debug(b.logger).Log("msg", "Uploading blob", "blob", name)
 	b.opsTotal.WithLabelValues(opObjectHead).Inc()
 	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
-	_, err := blob.UploadStreamToBlockBlob(ctx, r, blobURL,
+
+	if _, err := blob.UploadStreamToBlockBlob(ctx, r, blobURL,
 		blob.UploadStreamToBlockBlobOptions{
 			BufferSize: 3 * 1024 * 1024,
 			MaxBuffers: 4,
-		})
-	if err != nil {
-		return errors.Wrapf(err, "msg", "cannot upload Azure blob", "address", name)
+		}); err != nil {
+		return errors.Wrapf(err, "msg", "cannot upload Azure blob, address: %s", name)
 	}
 	return nil
 }
@@ -241,9 +239,9 @@ func (b *Bucket) Delete(ctx context.Context, name string) error {
 	level.Debug(b.logger).Log("msg", "Deleting blob", "blob", name)
 	b.opsTotal.WithLabelValues(opObjectHead).Inc()
 	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
-	_, err := blobURL.Delete(ctx, blob.DeleteSnapshotsOptionInclude, blob.BlobAccessConditions{})
-	if err != nil {
-		return errors.Wrapf(err, "msg", "error deleting blob", "address", name)
+
+	if _, err := blobURL.Delete(ctx, blob.DeleteSnapshotsOptionInclude, blob.BlobAccessConditions{}); err != nil {
+		return errors.Wrapf(err, "msg", "error deleting blob, address: %s", name)
 	}
 	return nil
 }

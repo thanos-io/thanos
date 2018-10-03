@@ -69,7 +69,7 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 		t.Log("THANOS_SKIP_S3_AWS_TESTS envvar present. Skipping test against S3 AWS.")
 	}
 
-	// Optional Azure
+	// Optional Azure.
 	if _, ok := os.LookupEnv("THANOS_SKIP_AZURE_TESTS"); !ok {
 		bkt, closeFn, err := azure.NewTestBucket(t, "e2e-tests")
 		testutil.Ok(t, err)
