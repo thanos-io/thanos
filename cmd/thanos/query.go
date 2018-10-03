@@ -48,6 +48,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	cert := cmd.Flag("grpc-client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").String()
 	key := cmd.Flag("grpc-client-tls-key", "TLS Key for the client's certificate").Default("").String()
 	caCert := cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").Default("").String()
+	serverName := cmd.Flag("grpc-client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").String()
 
 	queryTimeout := modelDuration(cmd.Flag("query.timeout", "Maximum time to process query by query node.").
 		Default("2m"))
@@ -99,6 +100,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*cert,
 			*key,
 			*caCert,
+			*serverName,
 			*httpBindAddr,
 			*maxConcurrentQueries,
 			time.Duration(*queryTimeout),
@@ -111,7 +113,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	}
 }
 
-func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, secure bool, cert, key, caCert string) ([]grpc.DialOption, error) {
+func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, secure bool, cert, key, caCert string, serverName string) ([]grpc.DialOption, error) {
 	grpcMets := grpc_prometheus.NewClientMetrics()
 	grpcMets.EnableClientHandlingTimeHistogram(
 		grpc_prometheus.WithHistogramBuckets([]float64{
@@ -174,6 +176,10 @@ func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer ope
 		RootCAs: certPool,
 	}
 
+	if serverName != "" {
+		tlsCfg.ServerName = serverName
+	}
+
 	if cert != "" {
 		cert, err := tls.LoadX509KeyPair(cert, key)
 		if err != nil {
@@ -203,6 +209,7 @@ func runQuery(
 	cert string,
 	key string,
 	caCert string,
+	serverName string,
 	httpBindAddr string,
 	maxConcurrentQueries int,
 	queryTimeout time.Duration,
@@ -221,7 +228,7 @@ func runQuery(
 		staticSpecs = append(staticSpecs, query.NewGRPCStoreSpec(addr))
 	}
 
-	dialOpts, err := storeClientGRPCOpts(logger, reg, tracer, secure, cert, key, caCert)
+	dialOpts, err := storeClientGRPCOpts(logger, reg, tracer, secure, cert, key, caCert, serverName)
 	if err != nil {
 		return errors.Wrap(err, "building gRPC client")
 	}
