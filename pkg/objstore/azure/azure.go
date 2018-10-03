@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
@@ -39,7 +40,6 @@ type Bucket struct {
 	containerURL blob.ContainerURL
 	config       *Config
 	opsTotal     *prometheus.CounterVec
-	closer       blobReadCloser
 }
 
 // Validate checks to see if any of the s3 config options are set.
@@ -186,9 +186,10 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 		return nil, errors.Wrapf(err, "msg", "cannot download blob, address: %s", blobURL.BlobURL)
 	}
 
-	return &blobReadCloser{
-		Reader: bytes.NewReader(destBuffer),
-	}, nil
+	//	return &blobReadCloser{
+	//		Reader: bytes.NewReader(destBuffer),
+	//	}, nil
+	return ioutil.NopCloser(bytes.NewReader(destBuffer)), nil
 }
 
 // Get returns a reader for the given object name.
@@ -210,9 +211,8 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 	if _, err := blobURL.GetProperties(ctx, blob.BlobAccessConditions{}); err != nil {
 		if b.IsObjNotFoundErr(err) {
 			return false, nil
-		} else {
-			return false, errors.Wrapf(err, "msg", "cannot get blob URL: %s", name)
 		}
+		return false, errors.Wrapf(err, "msg", "cannot get blob URL: %s", name)
 	}
 
 	return true, nil
@@ -287,5 +287,5 @@ func NewTestBucket(t testing.TB, component string) (objstore.Bucket, func(), err
 
 // Close bucket.
 func (b *Bucket) Close() error {
-	return b.closer.Close()
+	return nil
 }
