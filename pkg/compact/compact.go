@@ -706,7 +706,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		}
 
 		if err := stats.CriticalErr(); err != nil {
-			return compID, halt(errors.Wrapf(err, "invalid plan id %s", pdir))
+			return compID, halt(errors.Wrapf(err, "block with not healthy index found %s; Compaction level %v; Labels: %v", pdir, meta.Compaction.Level, meta.Thanos.Labels))
 		}
 
 		if err := stats.Issue347OutsideChunksErr(); err != nil {

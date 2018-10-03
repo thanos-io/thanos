@@ -48,7 +48,7 @@ define fetch_go_bin_version
 endef
 
 .PHONY: all
-all: deps format errcheck build
+all: deps format build
 
 # assets repacks all statis assets into go file for easier deploy.
 .PHONY: assets
