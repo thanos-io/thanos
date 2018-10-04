@@ -15,14 +15,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 )
 
-// TestRuleComponent tests the basic interaction between the rule component
-// and the querying layer.
-// Rules are evaluated against the query layer and the query layer in return
-// can access data written by the rules.
-func TestRuleComponent(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-
-	const alwaysFireRule = `
+const alwaysFireRule = `
 groups:
 - name: example
   rules:
@@ -33,6 +26,54 @@ groups:
     annotations:
       summary: "I always complain"
 `
+
+var (
+	ruleGossipSuite = newSpinupSuite().
+			Add(querier(1, "")).
+			Add(ruler(1, alwaysFireRule)).
+			Add(ruler(2, alwaysFireRule)).
+			Add(alertManager(1))
+
+	ruleStaticFlagsSuite = newSpinupSuite().
+				Add(querierWithStoreFlags(1, "", rulerGRPC(1), rulerGRPC(2))).
+				Add(rulerWithQueryFlags(1, alwaysFireRule, queryHTTP(1))).
+				Add(rulerWithQueryFlags(2, alwaysFireRule, queryHTTP(1))).
+				Add(alertManager(1))
+
+	ruleFileSDSuite = newSpinupSuite().
+			Add(querierWithFileSD(1, "", rulerGRPC(1), rulerGRPC(2))).
+			Add(rulerWithFileSD(1, alwaysFireRule, queryHTTP(1))).
+			Add(rulerWithFileSD(2, alwaysFireRule, queryHTTP(1))).
+			Add(alertManager(1))
+)
+
+func TestRule(t *testing.T) {
+	for _, tt := range []testConfig{
+		{
+			"gossip",
+			ruleGossipSuite,
+		},
+		{
+			"staticFlag",
+			ruleStaticFlagsSuite,
+		},
+		{
+			"fileSD",
+			ruleFileSDSuite,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			testRuleComponent(t, tt)
+		})
+	}
+}
+
+// TestRuleComponent tests the basic interaction between the rule component
+// and the querying layer.
+// Rules are evaluated against the query layer and the query layer in return
+// can access data written by the rules.
+func testRuleComponent(t *testing.T, conf testConfig) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 
 	exit, err := newSpinupSuite().
 		Add(querier(1, "")).
