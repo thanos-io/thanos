@@ -28,7 +28,8 @@ At that point, anyone can use your provider!
 Thanos uses minio client to upload Prometheus data into AWS s3.
 
 To configure S3 bucket as an object store you need to set these mandatory S3 variables in yaml format stored in a file:
-```
+
+```yaml
 type: S3
 config:
     bucket: <bucket>
@@ -49,6 +50,7 @@ Make sure you use a correct signature version to set `signature-version2: true`,
 For debug purposes you can set `insecure: true` to switch to plain insecure HTTP instead of HTTPS
 
 ### Credentials
+
 Credentials will by default try to retrieve from the following sources:
 
 1. IAM credentials retrieved from an instance profile
@@ -84,6 +86,7 @@ Example working AWS IAM policy for user:
     ]
 }
 ```
+
 (No bucket policy)
 
 To test the policy, set env vars for S3 access for *empty, not used* bucket as well as:
@@ -129,7 +132,8 @@ Details about AWS policies: https://docs.aws.amazon.com/AmazonS3/latest/dev/usin
 To configure Google Cloud Storage bucket as an object store you need to set `bucket` with GCS bucket name and configure Google Application credentials.
 
 For example:
-```
+
+```yaml
 type: GCS
 config:
     bucket: <bucket>
@@ -161,7 +165,6 @@ For testing:
 
 `Storage Object Admin` for ability to create and delete temporary buckets.
 
-
 ## Other minio supported S3 object storages
 
 Minio client used for AWS S3 can be potentially configured against other S3-compatible object storages.
@@ -175,6 +178,7 @@ To use Azure Storage as Thanos object store, you need to precreate storage accou
 To configure Azure Storage account as an object store you need to provide a path to Azure storage config file in flag `--objstore.config-file`.
 
 Config file format is the following:
+
 ```yaml
 type: AZURE
 config:
