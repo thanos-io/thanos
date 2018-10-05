@@ -30,14 +30,13 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache remote blocks.").
 		Default("./data").String()
 
-	bucketConfFile := cmd.Flag("objstore.config-file", "The object store configuration file path.").
-		PlaceHolder("<bucket.config.path>").Required().String()
-
 	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the index cache.").
 		Default("250MB").Bytes()
 
 	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes for chunks.").
 		Default("2GB").Bytes()
+
+	objStoreConfig := regCommonObjStoreFlags(cmd, "")
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
 		peer, err := newPeerFn(logger, reg, false, "", false)
@@ -48,7 +47,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			logger,
 			reg,
 			tracer,
-			*bucketConfFile,
+			objStoreConfig,
 			*dataDir,
 			*grpcBindAddr,
 			*cert,
@@ -70,7 +69,7 @@ func runStore(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	bucketConfFile string,
+	objStoreConfig *pathOrContent,
 	dataDir string,
 	grpcBindAddr string,
 	cert string,
@@ -84,7 +83,12 @@ func runStore(
 	verbose bool,
 ) error {
 	{
-		bkt, err := client.NewBucket(logger, bucketConfFile, reg, component)
+		bucketConfig, err := objStoreConfig.Content()
+		if err != nil {
+			return err
+		}
+
+		bkt, err := client.NewBucket(logger, bucketConfig, reg, component)
 		if err != nil {
 			return errors.Wrap(err, "create bucket client")
 		}

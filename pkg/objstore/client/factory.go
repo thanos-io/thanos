@@ -3,7 +3,6 @@ package client
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -12,7 +11,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 type objProvider string
@@ -29,31 +28,17 @@ type BucketConfig struct {
 
 var ErrNotFound = errors.New("not found bucket")
 
-func loadFile(confFile string) (*BucketConfig, error) {
-	content, err := ioutil.ReadFile(confFile)
-	if err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("loading YAML file %s", confFile))
-	}
-
-	bucketConf := &BucketConfig{}
-	if err := yaml.UnmarshalStrict(content, bucketConf); err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("parsing YAML file %s", confFile))
-	}
-	return bucketConf, nil
-}
-
 // NewBucket initializes and returns new object storage clients.
-func NewBucket(logger log.Logger, confFile string, reg *prometheus.Registry, component string) (objstore.Bucket, error) {
-	level.Info(logger).Log("msg", "loading bucket configuration file", "filename", confFile)
-
-	var err error
-	if confFile == "" {
+// NOTE: confContentYaml can contain secrets.
+func NewBucket(logger log.Logger, confContentYaml []byte, reg *prometheus.Registry, component string) (objstore.Bucket, error) {
+	level.Info(logger).Log("msg", "loading bucket configuration")
+	if len(confContentYaml) == 0 {
 		return nil, ErrNotFound
 	}
 
-	bucketConf, err := loadFile(confFile)
-	if err != nil {
-		return nil, errors.Wrap(err, "parsing objstore.config-file")
+	bucketConf := &BucketConfig{}
+	if err := yaml.UnmarshalStrict(confContentYaml, bucketConf); err != nil {
+		return nil, errors.Wrap(err, "parsing config YAML file")
 	}
 
 	config, err := yaml.Marshal(bucketConf.Config)

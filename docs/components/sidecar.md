@@ -115,8 +115,12 @@ Flags:
       --reloader.rule-dir=RELOADER.RULE-DIR ...  
                                  Rule directories for the reloader to refresh
                                  (repeated field).
-      --objstore.config-file=<bucket.config.path>  
-                                 The object store configuration file path.
+      --objstore.config-file=<bucket.config-yaml-path>  
+                                 Path to YAML file that contains object store
+                                 configuration.
+      --objstore.config=<bucket.config-yaml>  
+                                 Alternative to 'objstore.config-file' flag.
+                                 Object store configuration in YAML.
 
 ```
 
