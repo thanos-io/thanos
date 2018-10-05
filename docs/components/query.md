@@ -112,6 +112,10 @@ Flags:
       --grpc-client-tls-key=""   TLS Key for the client's certificate
       --grpc-client-tls-ca=""    TLS CA Certificates to use to verify gRPC
                                  servers
+      --grpc-client-server-name=""  
+                                 Server name to verify the hostname on the
+                                 returned gRPC certificates. See
+                                 https://tools.ietf.org/html/rfc4366#section-3.1
       --query.timeout=2m         Maximum time to process query by query node.
       --query.max-concurrent=20  Maximum number of queries processed
                                  concurrently by query node.
