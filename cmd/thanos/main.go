@@ -118,8 +118,9 @@ func main() {
 		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command failed", cmd))
 		os.Exit(1)
 	}
-	_, err = gmetrics.NewGlobal(gmetrics.DefaultConfig(cmd), sink)
-	if err != nil {
+	gmetricsConfig := gmetrics.DefaultConfig("thanos_" + cmd)
+	gmetricsConfig.EnableRuntimeMetrics = false
+	if _, err = gmetrics.NewGlobal(gmetricsConfig, sink); err != nil {
 		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command failed", cmd))
 		os.Exit(1)
 	}

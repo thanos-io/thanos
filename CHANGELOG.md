@@ -26,6 +26,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
     * S3_SIGNATURE_VERSION2
     * S3_SECRET_KEY
 - Add flag `--objstore.config-file` to reference to the bucket configuration file in yaml format. Note that detailed information in document [storage](docs/storage.md).
+- Add `thanos_` to member list metrics. Some metrics have been renamed, make sure to update your dashboards and rules.
 
 ## [v0.1.0](https://github.com/improbable-eng/thanos/releases/tag/v0.1.0) - 2018.09.14
 
