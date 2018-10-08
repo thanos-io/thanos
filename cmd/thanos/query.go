@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"time"
 
+	"sync"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/grpc-ecosystem/go-grpc-middleware"
@@ -27,14 +29,15 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/discovery/file"
+	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"gopkg.in/alecthomas/kingpin.v2"
-	"github.com/improbable-eng/thanos/pkg/discovery"
-	"sync"
 )
 
 // registerQuery registers a query command.
@@ -92,13 +95,13 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			lookupStores[s] = struct{}{}
 		}
 
-		var filesd *discovery.FileDiscoverer
+		var filesd *file.Discovery
 		if len(*filesToWatch) > 0 {
-			conf := &discovery.SDConfig{
-				Files: *filesToWatch,
-				RefreshInterval: 5 * time.Second,
+			conf := &file.SDConfig{
+				Files:           *filesToWatch,
+				RefreshInterval: model.Duration(5 * time.Second),
 			}
-			filesd = discovery.NewFileDiscoverer(conf, logger)
+			filesd = file.NewDiscovery(conf, logger)
 		}
 
 		return runQuery(
@@ -233,7 +236,7 @@ func runQuery(
 	selectorLset labels.Labels,
 	storeAddrs []string,
 	enableAutodownsampling bool,
-	fileSD *discovery.FileDiscoverer,
+	fileSD *file.Discovery,
 ) error {
 	var staticSpecs []query.StoreSpec
 	for _, addr := range storeAddrs {
@@ -249,7 +252,7 @@ func runQuery(
 		return errors.Wrap(err, "building gRPC client")
 	}
 
-	addrFromFileSD := newFileSDAddrs()
+	fileSDProvider := newFileSDProvider()
 
 	var (
 		stores = query.NewStoreSet(
@@ -266,12 +269,8 @@ func runQuery(
 					specs = append(specs, &gossipSpec{id: id, addr: ps.StoreAPIAddr, peer: peer})
 				}
 
-				addrFromFileSD.mtx.Lock()
-				defer addrFromFileSD.mtx.Unlock()
-				for _, addresses := range addrFromFileSD.addrs {
-					for _, addr := range addresses {
-						specs = append(specs, query.NewGRPCStoreSpec(addr))
-					}
+				for _, addr := range fileSDProvider.addresses() {
+					specs = append(specs, query.NewGRPCStoreSpec(addr))
 				}
 
 				return specs
@@ -300,10 +299,10 @@ func runQuery(
 	// Run File Service Discovery and update the store set when the files are modified
 	{
 		if fileSD != nil {
-			var fileSDUpdates chan *discovery.Discoverable
+			var fileSDUpdates chan []*targetgroup.Group
 			ctx, cancel := context.WithCancel(context.Background())
 
-			fileSDUpdates = make(chan *discovery.Discoverable)
+			fileSDUpdates = make(chan []*targetgroup.Group)
 
 			g.Add(func() error {
 				fileSD.Run(ctx, fileSDUpdates)
@@ -326,7 +325,7 @@ func runQuery(
 							continue
 						}
 						// TODO(ivan): resolve dns here maybe?
-						addrFromFileSD.update(update.Source, update.Services)
+						fileSDProvider.update(update)
 						stores.Update(ctx)
 					case <-ctx.Done():
 						return nil
@@ -334,7 +333,6 @@ func runQuery(
 				}
 			}, func(error) {
 				cancel()
-				stores.Close()
 				close(fileSDUpdates)
 			})
 		}
@@ -415,21 +413,38 @@ type gossipSpec struct {
 	peer *cluster.Peer
 }
 
-type fileSDAddrs struct {
-	addrs map[string][]string
-	mtx sync.Mutex
+type fileSDProvider struct {
+	tgs map[string]*targetgroup.Group
+	sync.Mutex
 }
 
-func newFileSDAddrs() *fileSDAddrs {
-	return &fileSDAddrs{
-		addrs: make(map[string][]string),
+func newFileSDProvider() *fileSDProvider {
+	return &fileSDProvider{
+		tgs: make(map[string]*targetgroup.Group),
 	}
 }
 
-func (f *fileSDAddrs) update(source string, addrs []string) {
-	f.mtx.Lock()
-	defer f.mtx.Unlock()
-	f.addrs[source] = addrs
+func (f *fileSDProvider) update(tgs []*targetgroup.Group) {
+	f.Lock()
+	defer f.Unlock()
+	for _, tg := range tgs {
+		// Some Discoverers send nil target group so need to check for it to avoid panics.
+		if tg != nil {
+			f.tgs[tg.Source] = tg
+		}
+	}
+}
+
+func (f *fileSDProvider) addresses() []string {
+	f.Lock()
+	defer f.Unlock()
+	var addresses []string
+	for _, group := range f.tgs {
+		for _, target := range group.Targets {
+			addresses = append(addresses, string(target[model.AddressLabel]))
+		}
+	}
+	return addresses
 }
 
 func (s *gossipSpec) Addr() string {
