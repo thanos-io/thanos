@@ -62,8 +62,8 @@ scrape_configs:
   - targets:
     - "localhost:%s"
 `, firstPromPort))).
-		Add(querier(1, "replica")).
-		Add(querier(2, "replica")).
+		Add(querier(1, "replica"), queryCluster(1)).
+		Add(querier(2, "replica"), queryCluster(2)).
 		Exec(t, ctx, "test_query_simple")
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)
@@ -76,16 +76,13 @@ scrape_configs:
 		<-exit
 	}()
 
-	var (
-		res         model.Vector
-		criticalErr error
-	)
+	var res model.Vector
 
 	// Try query without deduplication.
-	err = runutil.Retry(time.Second, ctx.Done(), func() error {
+	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
 		select {
-		case criticalErr = <-exit:
-			t.Errorf("Some process exited unexpectedly: %v", err)
+		case <-exit:
+			cancel()
 			return nil
 		default:
 		}
@@ -99,9 +96,7 @@ scrape_configs:
 			return errors.Errorf("unexpected result size %d", len(res))
 		}
 		return nil
-	})
-	testutil.Ok(t, err)
-	testutil.Ok(t, criticalErr)
+	}))
 
 	// In our model result are always sorted.
 	testutil.Equals(t, model.Metric{
@@ -127,10 +122,10 @@ scrape_configs:
 	}, res[2].Metric)
 
 	// Try query with deduplication.
-	err = runutil.Retry(time.Second, ctx.Done(), func() error {
+	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
 		select {
-		case criticalErr = <-exit:
-			t.Errorf("Some process exited unexpectedly: %v", err)
+		case <-exit:
+			cancel()
 			return nil
 		default:
 		}
@@ -145,9 +140,7 @@ scrape_configs:
 		}
 
 		return nil
-	})
-	testutil.Ok(t, err)
-	testutil.Ok(t, criticalErr)
+	}))
 
 	testutil.Equals(t, model.Metric{
 		"__name__":   "up",

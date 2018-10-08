@@ -35,10 +35,10 @@ groups:
 `
 
 	exit, err := newSpinupSuite().
-		Add(querier(1, "")).
+		Add(querier(1, ""), queryCluster(1)).
 		Add(ruler(1, alwaysFireRule)).
 		Add(ruler(2, alwaysFireRule)).
-		Add(alertManager(1)).Exec(t, ctx, "test_rule_component")
+		Add(alertManager(1), "").Exec(t, ctx, "test_rule_component")
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)
 		cancel()
@@ -78,10 +78,11 @@ groups:
 			"replica":   "2",
 		},
 	}
-	err = runutil.Retry(5*time.Second, ctx.Done(), func() error {
+
+	testutil.Ok(t, runutil.Retry(5*time.Second, ctx.Done(), func() error {
 		select {
-		case err := <-exit:
-			t.Errorf("Some process exited unexpectedly: %v", err)
+		case <-exit:
+			cancel()
 			return nil
 		default:
 		}
@@ -121,8 +122,7 @@ groups:
 			}
 		}
 		return nil
-	})
-	testutil.Ok(t, err)
+	}))
 }
 
 func queryAlertmanagerAlerts(ctx context.Context, url string) ([]*model.Alert, error) {

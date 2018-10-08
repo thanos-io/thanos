@@ -10,6 +10,10 @@ import (
 	"path"
 	"syscall"
 	"testing"
+	"time"
+
+	"github.com/improbable-eng/thanos/pkg/objstore/s3"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 
 	"github.com/improbable-eng/thanos/pkg/testutil"
 
@@ -34,6 +38,11 @@ var (
 	rulerGRPC    = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19790+i) }
 	rulerHTTP    = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19890+i) }
 	rulerCluster = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19990+i) }
+
+	storeGatewayGRPC = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 20090+i) }
+	storeGatewayHTTP = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 20190+i) }
+
+	minioHTTP = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 20290+i) }
 )
 
 type cmdScheduleFunc func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error)
@@ -41,6 +50,9 @@ type cmdScheduleFunc func(workDir string, clusterPeerFlags []string) ([]*exec.Cm
 type spinupSuite struct {
 	cmdScheduleFuncs []cmdScheduleFunc
 	clusterPeerFlags []string
+
+	minioConfig         s3.Config
+	withPreStartedMinio bool
 }
 
 func newSpinupSuite() *spinupSuite { return &spinupSuite{} }
@@ -92,8 +104,16 @@ func scraper(i int, config string) (cmdScheduleFunc, string) {
 	}, sidecarCluster(i)
 }
 
-func querier(i int, replicaLabel string) (cmdScheduleFunc, string) {
+func querier(i int, replicaLabel string, staticStores ...string) cmdScheduleFunc {
 	return func(_ string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+		var extraFlags []string
+
+		extraFlags = append(extraFlags, clusterPeerFlags...)
+
+		for _, s := range staticStores {
+			extraFlags = append(extraFlags, "--store", s)
+		}
+
 		return []*exec.Cmd{exec.Command("thanos",
 			append([]string{"query",
 				"--debug.name", fmt.Sprintf("querier-%d", i),
@@ -106,9 +126,58 @@ func querier(i int, replicaLabel string) (cmdScheduleFunc, string) {
 				"--log.level", "debug",
 				"--query.replica-label", replicaLabel,
 			},
-				clusterPeerFlags...)...,
+				extraFlags...)...,
 		)}, nil
-	}, queryCluster(i)
+	}
+}
+
+func storeGateway(i int, bucketConfig []byte) cmdScheduleFunc {
+	return func(workDir string, _ []string) ([]*exec.Cmd, error) {
+		dbDir := fmt.Sprintf("%s/data/store-gateway%d", workDir, i)
+
+		if err := os.MkdirAll(dbDir, 0777); err != nil {
+			return nil, errors.Wrap(err, "creating store gateway dir failed")
+		}
+
+		return []*exec.Cmd{exec.Command("thanos",
+			"store",
+			"--debug.name", fmt.Sprintf("store-%d", i),
+			"--data-dir", dbDir,
+			"--grpc-address", storeGatewayGRPC(i),
+			"--http-address", storeGatewayHTTP(i),
+			"--log.level", "debug",
+			"--objstore.config", string(bucketConfig),
+			// Accelerated sync time for quicker test (3m by default)
+			"--sync-block-duration", "5s",
+		)}, nil
+	}
+}
+
+func alertManager(i int) cmdScheduleFunc {
+	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+		dir := fmt.Sprintf("%s/data/alertmanager%d", workDir, i)
+
+		if err := os.MkdirAll(dir, 0777); err != nil {
+			return nil, errors.Wrap(err, "creating alertmanager dir failed")
+		}
+		config := `
+route:
+  group_by: ['alertname']
+  group_wait: 1s
+  group_interval: 1s
+  receiver: 'null'
+receivers:
+- name: 'null'
+`
+		if err := ioutil.WriteFile(dir+"/config.yaml", []byte(config), 0666); err != nil {
+			return nil, errors.Wrap(err, "creating alertmanager config file failed")
+		}
+		return []*exec.Cmd{exec.Command(testutil.AlertmanagerBinary(),
+			"--config.file", dir+"/config.yaml",
+			"--web.listen-address", "127.0.0.1:29093",
+			"--log.level", "debug",
+		)}, nil
+	}
 }
 
 func ruler(i int, rules string) (cmdScheduleFunc, string) {
@@ -144,39 +213,79 @@ func ruler(i int, rules string) (cmdScheduleFunc, string) {
 	}, rulerCluster(i)
 }
 
-func alertManager(i int) (cmdScheduleFunc, string) {
+func minio(accessKey string, secretKey string) cmdScheduleFunc {
 	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
-		dir := fmt.Sprintf("%s/data/alertmanager%d", workDir, i)
+		dbDir := fmt.Sprintf("%s/data/minio", workDir)
 
-		if err := os.MkdirAll(dir, 0777); err != nil {
-			return nil, errors.Wrap(err, "creating alertmanager dir failed")
+		if err := os.MkdirAll(dbDir, 0777); err != nil {
+			return nil, errors.Wrap(err, "creating minio dir failed")
 		}
-		config := `
-route:
-  group_by: ['alertname']
-  group_wait: 1s
-  group_interval: 1s
-  receiver: 'null'
-receivers:
-- name: 'null'
-`
-		if err := ioutil.WriteFile(dir+"/config.yaml", []byte(config), 0666); err != nil {
-			return nil, errors.Wrap(err, "creating alertmanager config file failed")
-		}
-		return []*exec.Cmd{exec.Command(testutil.AlertmanagerBinary(),
-			"--config.file", dir+"/config.yaml",
-			"--web.listen-address", "127.0.0.1:29093",
-			"--log.level", "debug",
-		)}, nil
-	}, ""
+
+		cmd := exec.Command(testutil.MinioBinary(),
+			"server",
+			"--address", minioHTTP(1),
+			dbDir,
+		)
+		cmd.Env = append(os.Environ(),
+			fmt.Sprintf("MINIO_ACCESS_KEY=%s", accessKey),
+			fmt.Sprintf("MINIO_SECRET_KEY=%s", secretKey))
+
+		return []*exec.Cmd{cmd}, nil
+	}
+}
+
+func (s *spinupSuite) WithPreStartedMinio(config s3.Config) *spinupSuite {
+	s.minioConfig = config
+	s.withPreStartedMinio = true
+	return s
 }
 
 // NOTE: It is important to install Thanos before using this function to compile latest changes.
 // This means that export GOCACHE=/unique/path is must have to avoid having this test cached.
-func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (chan error, error) {
+func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (exit chan struct{}, err error) {
 	dir, err := ioutil.TempDir("", testName)
 	if err != nil {
 		return nil, err
+	}
+
+	defer func() {
+		if err != nil {
+			if rerr := os.RemoveAll(dir); rerr != nil {
+				t.Log(rerr)
+			}
+		}
+	}()
+
+	minioExit := make(chan struct{})
+	if s.withPreStartedMinio {
+		// Start minio before anything else.
+		// NewTestBucketFromConfig is responsible for healthchecking by creating a requested bucket in retry loop.
+
+		minioExit, err = newSpinupSuite().
+			Add(minio(s.minioConfig.AccessKey, s.minioConfig.SecretKey), "").
+			Exec(t, ctx, testName+"_minio")
+		if err != nil {
+			return nil, errors.Wrap(err, "start minio")
+		}
+
+		ctx, cancel := context.WithCancel(ctx)
+		if err := runutil.Retry(time.Second, ctx.Done(), func() error {
+			select {
+			case <-minioExit:
+				cancel()
+				return nil
+			default:
+			}
+
+			bkt, _, err := s3.NewTestBucketFromConfig(t, "eu-west1", s.minioConfig, false)
+			if err != nil {
+				return errors.Wrap(err, "create bkt client for minio healthcheck")
+			}
+
+			return bkt.Close()
+		}); err != nil {
+			return nil, errors.Wrap(err, "minio not ready in time")
+		}
 	}
 
 	var g run.Group
@@ -185,11 +294,19 @@ func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (
 	{
 		ctx, cancel := context.WithCancel(ctx)
 		g.Add(func() error {
-			<-ctx.Done()
+			if s.withPreStartedMinio {
+				select {
+				case <-ctx.Done():
+				case <-minioExit:
+				}
+			} else {
+				<-ctx.Done()
+			}
 
 			// This go routine will return only when:
 			// 1) Any other process from group exited unexpectedly
 			// 2) Global context will be cancelled.
+			// 3) Minio (if started) exited unexpectedly.
 			return nil
 		}, func(error) {
 			cancel()
@@ -204,9 +321,6 @@ func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (
 	for _, cmdFunc := range s.cmdScheduleFuncs {
 		cmds, err := cmdFunc(dir, s.clusterPeerFlags)
 		if err != nil {
-			if err := os.RemoveAll(dir); err != nil {
-				t.Log(err)
-			}
 			return nil, err
 		}
 
@@ -223,33 +337,33 @@ func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (
 		if err != nil {
 			// Let already started commands finish.
 			go func() { _ = g.Run() }()
-
-			if err := os.RemoveAll(dir); err != nil {
-				t.Log(err)
-			}
 			return nil, errors.Wrap(err, "failed to start")
 		}
 
 		cmd := c
 		g.Add(func() error {
+			id := fmt.Sprintf("%s %s", cmd.Path, cmd.Args[1])
+
 			err := cmd.Wait()
 
 			if stderr.Len() > 0 {
-				t.Logf("%s STDERR\n %s", cmd.Path, stderr.String())
+				t.Logf("%s STDERR\n %s", id, stderr.String())
 			}
 			if stdout.Len() > 0 {
-				t.Logf("%s STDOUT\n %s", cmd.Path, stdout.String())
+				t.Logf("%s STDOUT\n %s", id, stdout.String())
 			}
 
-			return err
+			return errors.Wrap(err, id)
 		}, func(error) {
 			_ = cmd.Process.Signal(syscall.SIGTERM)
 		})
 	}
 
-	var exit = make(chan error, 1)
+	exit = make(chan struct{})
 	go func(g run.Group) {
-		exit <- g.Run()
+		if err := g.Run(); err != nil && ctx.Err() == nil {
+			t.Errorf("Some process exited unexpectedly: %v", err)
+		}
 		close(exit)
 	}(g)
 

@@ -25,6 +25,7 @@ DEP_VERSION             ?=45be32ba4708aad5e2aa8c86f9432c4c4c1f8da2
 # TODO(bplotka): Add more recent version after https://github.com/prometheus/prometheus/issues/4551 is fixed.
 SUPPORTED_PROM_VERSIONS ?=v2.0.0 v2.2.1
 ALERTMANAGER_VERSION    ?=v0.15.2
+MINIO_SERVER_VERSION    ?=RELEASE.2018-10-06T00-15-16Z
 
 # fetch_go_bin_version downloads (go gets) the binary from specific version and installs it in $(BIN_DIR)/<bin>-<version>
 # arguments:
@@ -151,6 +152,7 @@ test-deps: deps
 	@go install github.com/improbable-eng/thanos/cmd/thanos
 	$(foreach ver,$(SUPPORTED_PROM_VERSIONS),$(call fetch_go_bin_version,github.com/prometheus/prometheus/cmd/prometheus,$(ver)))
 	$(call fetch_go_bin_version,github.com/prometheus/alertmanager/cmd/alertmanager,$(ALERTMANAGER_VERSION))
+	$(call fetch_go_bin_version,github.com/minio/minio,$(MINIO_SERVER_VERSION))
 
 # vet vets the code.
 .PHONY: vet

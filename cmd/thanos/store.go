@@ -38,6 +38,9 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "")
 
+	syncInterval := cmd.Flag("sync-block-duration", "Repeat interval for syncing the blocks between local and remote view.").
+		Default("3m").Duration()
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
 		peer, err := newPeerFn(logger, reg, false, "", false)
 		if err != nil {
@@ -59,6 +62,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			uint64(*chunkPoolSize),
 			name,
 			debugLogging,
+			*syncInterval,
 		)
 	}
 }
@@ -81,6 +85,7 @@ func runStore(
 	chunkPoolSizeBytes uint64,
 	component string,
 	verbose bool,
+	syncInterval time.Duration,
 ) error {
 	{
 		bucketConfig, err := objStoreConfig.Content()
@@ -124,7 +129,7 @@ func runStore(
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
-			err := runutil.Repeat(3*time.Minute, ctx.Done(), func() error {
+			err := runutil.Repeat(syncInterval, ctx.Done(), func() error {
 				if err := bs.SyncBlocks(ctx); err != nil {
 					level.Warn(logger).Log("msg", "syncing blocks failed", "err", err)
 				}

@@ -106,5 +106,7 @@ Flags:
       --objstore.config=<bucket.config-yaml>  
                                  Alternative to 'objstore.config-file' flag.
                                  Object store configuration in YAML.
+      --sync-block-duration=3m   Repeat interval for syncing the blocks between
+                                 local and remote view.
 
 ```
