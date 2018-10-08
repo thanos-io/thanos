@@ -4,10 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
 	"testing"
 	"time"
 
@@ -20,17 +18,13 @@ import (
 // TestQuerySimple runs a setup of Prometheus servers, sidecars, and query nodes and verifies that
 // queries return data merged from all Prometheus servers. Additionally it verifies if deduplication works for query.
 func TestQuerySimple(t *testing.T) {
-	dir, err := ioutil.TempDir("", "test_query_simple")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
-
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 
 	firstPromPort := promHTTPPort(1)
-	exit, err := spinup(t, ctx, config{
-		promConfigs: []string{
-			// Self scraping config with unique external label.
-			fmt.Sprintf(`
+
+	exit, err := newSpinupSuite().
+		Add(scraper(1, fmt.Sprintf(`
+# Self scraping config with unique external label.
 global:
   external_labels:
     prometheus: prom-%s
@@ -41,9 +35,9 @@ scrape_configs:
   static_configs:
   - targets:
     - "localhost:%s"
-`, firstPromPort, firstPromPort),
-			// Config for first of two HA replica Prometheus.
-			fmt.Sprintf(`
+`, firstPromPort, firstPromPort))).
+		Add(scraper(2, fmt.Sprintf(`
+# Config for first of two HA replica Prometheus.
 global:
   external_labels:
     prometheus: prom-ha
@@ -54,9 +48,9 @@ scrape_configs:
   static_configs:
   - targets:
     - "localhost:%s"
-`, firstPromPort),
-			// Config for second of two HA replica Prometheus.
-			fmt.Sprintf(`
+`, firstPromPort))).
+		Add(scraper(3, fmt.Sprintf(`
+# Config for second of two HA replica Prometheus.
 global:
   external_labels:
     prometheus: prom-ha
@@ -67,12 +61,10 @@ scrape_configs:
   static_configs:
   - targets:
     - "localhost:%s"
-`, firstPromPort),
-		},
-		workDir:             dir,
-		numQueries:          2,
-		queriesReplicaLabel: "replica",
-	})
+`, firstPromPort))).
+		Add(querier(1, "replica")).
+		Add(querier(2, "replica")).
+		Exec(t, ctx, "test_query_simple")
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)
 		cancel()
