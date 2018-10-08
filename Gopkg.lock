@@ -428,6 +428,8 @@
   digest = "1:b5ff9852eabe841003da4b0a4b742a2878c722dda6481003432344f633a814fc"
   name = "github.com/prometheus/prometheus"
   packages = [
+    "discovery/file",
+    "discovery/targetgroup",
     "pkg/labels",
     "pkg/rulefmt",
     "pkg/textparse",
@@ -694,6 +696,14 @@
   version = "v2.2.6"
 
 [[projects]]
+  digest = "1:b2106f1668ea5efc1ecc480f7e922a093adb9563fd9ce58585292871f0d0f229"
+  name = "gopkg.in/fsnotify/fsnotify.v1"
+  packages = ["."]
+  pruneopts = ""
+  revision = "c2828203cd70a50dcccfb2761f8b1f8ceef9a8e9"
+  version = "v1.4.7"
+
+[[projects]]
   branch = "v2"
   digest = "1:f0620375dd1f6251d9973b5f2596228cc8042e887cd7f827e4220bc1ce8c30e2"
   name = "gopkg.in/yaml.v2"
@@ -739,6 +749,8 @@
     "github.com/prometheus/common/model",
     "github.com/prometheus/common/route",
     "github.com/prometheus/common/version",
+    "github.com/prometheus/prometheus/discovery/file",
+    "github.com/prometheus/prometheus/discovery/targetgroup",
     "github.com/prometheus/prometheus/pkg/labels",
     "github.com/prometheus/prometheus/pkg/timestamp",
     "github.com/prometheus/prometheus/pkg/value",

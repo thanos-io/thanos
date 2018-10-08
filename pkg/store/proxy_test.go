@@ -238,7 +238,6 @@ func TestQueryStore_Series_FillResponseChannel(t *testing.T) {
 	testutil.Equals(t, 0, len(s1.Warnings))
 }
 
-
 type rawSeries struct {
 	lset    []storepb.Label
 	samples []sample
