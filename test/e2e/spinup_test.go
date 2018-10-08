@@ -10,7 +10,6 @@ import (
 	"path"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/improbable-eng/thanos/pkg/testutil"
 
@@ -20,6 +19,7 @@ import (
 
 var (
 	promHTTPPort = func(i int) string { return fmt.Sprintf("%d", 9090+i) }
+
 	// We keep this one with localhost, to have perfect match with what Prometheus will expose in up metric.
 	promHTTP = func(i int) string { return fmt.Sprintf("localhost:%s", promHTTPPort(i)) }
 
@@ -36,58 +36,42 @@ var (
 	rulerCluster = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19990+i) }
 )
 
-type config struct {
-	// Each config is for each Prometheus.
-	promConfigs []string
-	rules       string
-	workDir     string
+type cmdScheduleFunc func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error)
 
-	numQueries          int
-	queriesReplicaLabel string
-	numRules            int
-	numAlertmanagers    int
+type spinupSuite struct {
+	cmdScheduleFuncs []cmdScheduleFunc
+	clusterPeerFlags []string
 }
 
-func evalClusterPeersFlags(cfg config) []string {
-	var flags []string
-	for i := 1; i <= len(cfg.promConfigs); i++ {
-		flags = append(flags, "--cluster.peers", sidecarCluster(i))
+func newSpinupSuite() *spinupSuite { return &spinupSuite{} }
+
+func (s *spinupSuite) Add(cmdSchedule cmdScheduleFunc, gossipAddress string) *spinupSuite {
+	s.cmdScheduleFuncs = append(s.cmdScheduleFuncs, cmdSchedule)
+	if gossipAddress != "" {
+		s.clusterPeerFlags = append(s.clusterPeerFlags, fmt.Sprintf("--cluster.peers"), gossipAddress)
 	}
-	for i := 1; i <= cfg.numQueries; i++ {
-		flags = append(flags, "--cluster.peers", queryCluster(i))
-	}
-	for i := 1; i <= cfg.numRules; i++ {
-		flags = append(flags, "--cluster.peers", rulerCluster(i))
-	}
-	return flags
+	return s
 }
 
-// NOTE: It is important to install Thanos before using this function to compile latest changes.
-func spinup(t testing.TB, ctx context.Context, cfg config) (chan error, error) {
-	var (
-		commands     []*exec.Cmd
-		clusterPeers = evalClusterPeersFlags(cfg)
-	)
-
-	for k, promConfig := range cfg.promConfigs {
-		i := k + 1
-		promDir := fmt.Sprintf("%s/data/prom%d", cfg.workDir, i)
-
+func scraper(i int, config string) (cmdScheduleFunc, string) {
+	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+		promDir := fmt.Sprintf("%s/data/prom%d", workDir, i)
 		if err := os.MkdirAll(promDir, 0777); err != nil {
 			return nil, errors.Wrap(err, "create prom dir failed")
 		}
-		err := ioutil.WriteFile(promDir+"/prometheus.yml", []byte(promConfig), 0666)
-		if err != nil {
+
+		if err := ioutil.WriteFile(promDir+"/prometheus.yml", []byte(config), 0666); err != nil {
 			return nil, errors.Wrap(err, "creating prom config failed")
 		}
 
-		commands = append(commands, exec.Command(testutil.PrometheusBinary(),
+		var cmds []*exec.Cmd
+		cmds = append(cmds, exec.Command(testutil.PrometheusBinary(),
 			"--config.file", promDir+"/prometheus.yml",
 			"--storage.tsdb.path", promDir,
 			"--log.level", "info",
 			"--web.listen-address", promHTTP(i),
 		))
-		commands = append(commands, exec.Command("thanos",
+		cmds = append(cmds, exec.Command("thanos",
 			append([]string{
 				"sidecar",
 				"--debug.name", fmt.Sprintf("sidecar-%d", i),
@@ -101,16 +85,18 @@ func spinup(t testing.TB, ctx context.Context, cfg config) (chan error, error) {
 				"--cluster.pushpull-interval", "200ms",
 				"--log.level", "debug",
 			},
-				clusterPeers...)...,
+				clusterPeerFlags...)...,
 		))
 
-		time.Sleep(200 * time.Millisecond)
-	}
+		return cmds, nil
+	}, sidecarCluster(i)
+}
 
-	for i := 1; i <= cfg.numQueries; i++ {
-		commands = append(commands, exec.Command("thanos",
+func querier(i int, replicaLabel string) (cmdScheduleFunc, string) {
+	return func(_ string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+		return []*exec.Cmd{exec.Command("thanos",
 			append([]string{"query",
-				"--debug.name", fmt.Sprintf("query-%d", i),
+				"--debug.name", fmt.Sprintf("querier-%d", i),
 				"--grpc-address", queryGRPC(i),
 				"--http-address", queryHTTP(i),
 				"--cluster.address", queryCluster(i),
@@ -118,25 +104,26 @@ func spinup(t testing.TB, ctx context.Context, cfg config) (chan error, error) {
 				"--cluster.gossip-interval", "200ms",
 				"--cluster.pushpull-interval", "200ms",
 				"--log.level", "debug",
-				"--query.replica-label", cfg.queriesReplicaLabel,
+				"--query.replica-label", replicaLabel,
 			},
-				clusterPeers...)...,
-		))
-		time.Sleep(200 * time.Millisecond)
-	}
+				clusterPeerFlags...)...,
+		)}, nil
+	}, queryCluster(i)
+}
 
-	for i := 1; i <= cfg.numRules; i++ {
-		dbDir := fmt.Sprintf("%s/data/rule%d", cfg.workDir, i)
+func ruler(i int, rules string) (cmdScheduleFunc, string) {
+	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+		dbDir := fmt.Sprintf("%s/data/rule%d", workDir, i)
 
 		if err := os.MkdirAll(dbDir, 0777); err != nil {
 			return nil, errors.Wrap(err, "creating ruler dir failed")
 		}
-		err := ioutil.WriteFile(dbDir+"/rules.yaml", []byte(cfg.rules), 0666)
+		err := ioutil.WriteFile(dbDir+"/rules.yaml", []byte(rules), 0666)
 		if err != nil {
 			return nil, errors.Wrap(err, "creating ruler file failed")
 		}
 
-		commands = append(commands, exec.Command("thanos",
+		return []*exec.Cmd{exec.Command("thanos",
 			append([]string{"rule",
 				"--debug.name", fmt.Sprintf("rule-%d", i),
 				"--label", fmt.Sprintf(`replica="%d"`, i),
@@ -152,13 +139,14 @@ func spinup(t testing.TB, ctx context.Context, cfg config) (chan error, error) {
 				"--cluster.pushpull-interval", "200ms",
 				"--log.level", "debug",
 			},
-				clusterPeers...)...,
-		))
-		time.Sleep(200 * time.Millisecond)
-	}
+				clusterPeerFlags...)...,
+		)}, nil
+	}, rulerCluster(i)
+}
 
-	for i := 1; i <= cfg.numAlertmanagers; i++ {
-		dir := fmt.Sprintf("%s/data/alertmanager%d", cfg.workDir, i)
+func alertManager(i int) (cmdScheduleFunc, string) {
+	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+		dir := fmt.Sprintf("%s/data/alertmanager%d", workDir, i)
 
 		if err := os.MkdirAll(dir, 0777); err != nil {
 			return nil, errors.Wrap(err, "creating alertmanager dir failed")
@@ -172,15 +160,23 @@ route:
 receivers:
 - name: 'null'
 `
-		err := ioutil.WriteFile(dir+"/config.yaml", []byte(config), 0666)
-		if err != nil {
+		if err := ioutil.WriteFile(dir+"/config.yaml", []byte(config), 0666); err != nil {
 			return nil, errors.Wrap(err, "creating alertmanager config file failed")
 		}
-		commands = append(commands, exec.Command(testutil.AlertmanagerBinary(),
+		return []*exec.Cmd{exec.Command(testutil.AlertmanagerBinary(),
 			"--config.file", dir+"/config.yaml",
 			"--web.listen-address", "127.0.0.1:29093",
 			"--log.level", "debug",
-		))
+		)}, nil
+	}, ""
+}
+
+// NOTE: It is important to install Thanos before using this function to compile latest changes.
+// This means that export GOCACHE=/unique/path is must have to avoid having this test cached.
+func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (chan error, error) {
+	dir, err := ioutil.TempDir("", testName)
+	if err != nil {
+		return nil, err
 	}
 
 	var g run.Group
@@ -197,7 +193,24 @@ receivers:
 			return nil
 		}, func(error) {
 			cancel()
+			if err := os.RemoveAll(dir); err != nil {
+				t.Log(err)
+			}
 		})
+	}
+
+	var commands []*exec.Cmd
+
+	for _, cmdFunc := range s.cmdScheduleFuncs {
+		cmds, err := cmdFunc(dir, s.clusterPeerFlags)
+		if err != nil {
+			if err := os.RemoveAll(dir); err != nil {
+				t.Log(err)
+			}
+			return nil, err
+		}
+
+		commands = append(commands, cmds...)
 	}
 
 	// Run go routine for each command.
@@ -210,6 +223,10 @@ receivers:
 		if err != nil {
 			// Let already started commands finish.
 			go func() { _ = g.Run() }()
+
+			if err := os.RemoveAll(dir); err != nil {
+				t.Log(err)
+			}
 			return nil, errors.Wrap(err, "failed to start")
 		}
 

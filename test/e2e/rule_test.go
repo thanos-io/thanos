@@ -3,9 +3,7 @@ package e2e_test
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
-	"os"
 	"sort"
 	"testing"
 	"time"
@@ -22,9 +20,7 @@ import (
 // Rules are evaluated against the query layer and the query layer in return
 // can access data written by the rules.
 func TestRuleComponent(t *testing.T) {
-	dir, err := ioutil.TempDir("", "test_rule")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 
 	const alwaysFireRule = `
 groups:
@@ -38,15 +34,11 @@ groups:
       summary: "I always complain"
 `
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-
-	exit, err := spinup(t, ctx, config{
-		workDir:          dir,
-		numQueries:       1,
-		numRules:         2,
-		numAlertmanagers: 1,
-		rules:            alwaysFireRule,
-	})
+	exit, err := newSpinupSuite().
+		Add(querier(1, "")).
+		Add(ruler(1, alwaysFireRule)).
+		Add(ruler(2, alwaysFireRule)).
+		Add(alertManager(1)).Exec(t, ctx, "test_rule_component")
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)
 		cancel()
