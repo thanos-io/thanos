@@ -24,7 +24,7 @@ var (
 	firstPromPort = promHTTPPort(1)
 
 	gossipSuite = newSpinupSuite().
-		Add(scraper(1, fmt.Sprintf(`
+			Add(scraper(1, fmt.Sprintf(`
 # Self scraping config with unique external label.
 global:
   external_labels:
@@ -36,7 +36,7 @@ scrape_configs:
   static_configs:
   - targets:
     - "localhost:%s"
-`, firstPromPort, firstPromPort))).
+`, firstPromPort, firstPromPort), true)).
 		Add(scraper(2, fmt.Sprintf(`
 # Config for first of two HA replica Prometheus.
 global:
@@ -49,7 +49,7 @@ scrape_configs:
   static_configs:
   - targets:
     - "localhost:%s"
-`, firstPromPort))).
+`, firstPromPort), true)).
 		Add(scraper(3, fmt.Sprintf(`
 # Config for second of two HA replica Prometheus.
 global:
@@ -62,7 +62,7 @@ scrape_configs:
   static_configs:
   - targets:
     - "localhost:%s"
-`, firstPromPort))).
+`, firstPromPort), true)).
 		Add(querier(1, "replica")).
 		Add(querier(2, "replica"))
 
@@ -70,64 +70,58 @@ scrape_configs:
 		Add(scraper(1, fmt.Sprintf(`
 # Self scraping config with unique external label.
 global:
- external_labels:
-   prometheus: prom-%s
-   replica: 0
+  external_labels:
+    prometheus: prom-%s
+    replica: 0
 scrape_configs:
 - job_name: prometheus
- scrape_interval: 1s
- static_configs:
- - targets:
-   - "localhost:%s"
-`, firstPromPort, firstPromPort))).
+  scrape_interval: 1s
+  static_configs:
+  - targets:
+    - "localhost:%s"
+`, firstPromPort, firstPromPort), false)).
 		Add(scraper(2, fmt.Sprintf(`
 # Config for first of two HA replica Prometheus.
 global:
- external_labels:
-   prometheus: prom-ha
-   replica: 0
+  external_labels:
+    prometheus: prom-ha
+    replica: 0
 scrape_configs:
 - job_name: prometheus
- scrape_interval: 1s
- static_configs:
- - targets:
-   - "localhost:%s"
-`, firstPromPort))).
+  scrape_interval: 1s
+  static_configs:
+  - targets:
+    - "localhost:%s"
+`, firstPromPort), false)).
 		Add(scraper(3, fmt.Sprintf(`
 # Config for second of two HA replica Prometheus.
 global:
- external_labels:
-   prometheus: prom-ha
-   replica: 1
+  external_labels:
+    prometheus: prom-ha
+    replica: 1
 scrape_configs:
 - job_name: prometheus
- scrape_interval: 1s
- static_configs:
- - targets:
-   - "localhost:%s"
-`, firstPromPort))).
-		Add(querierWithStoreFlags(1,"replica", []string{sidecarGRPC(1),sidecarGRPC(2),sidecarGRPC(3)})).
-		Add(querierWithStoreFlags(2,"replica", []string{sidecarGRPC(1),sidecarGRPC(2),sidecarGRPC(3)}))
+  scrape_interval: 1s
+  static_configs:
+  - targets:
+    - "localhost:%s"
+`, firstPromPort), false)).
+		Add(querierWithStoreFlags(1, "replica", []string{sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3)})).
+		Add(querierWithStoreFlags(2, "replica", []string{sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3)}))
 )
-
-
-
-
-
-
 
 func TestQuery(t *testing.T) {
 
-	for _, tt := range []testConfig {
-		{
-			"gossip",
-			gossipSuite,
-		},
+	for _, tt := range []testConfig{
 		//{
-		//	"staticFlag",
-		//	staticFlagsSuite,
+		//	"gossip",
+		//	gossipSuite,
 		//},
-	}{
+		{
+			"staticFlag",
+			staticFlagsSuite,
+		},
+	} {
 		t.Run(tt.name, func(t *testing.T) {
 			testQuerySimple(t, tt)
 		})
@@ -158,11 +152,9 @@ func testQuerySimple(t *testing.T, conf testConfig) {
 
 	// Try query without deduplication.
 	err = runutil.Retry(time.Second, ctx.Done(), func() error {
-		fmt.Printf("inside the func in retry that queries\n")
 		select {
 		case criticalErr = <-exit:
 			t.Errorf("Some process exited unexpectedly: %v", err)
-			fmt.Printf("critical err\n")
 			return nil
 		default:
 		}
@@ -175,11 +167,6 @@ func testQuerySimple(t *testing.T, conf testConfig) {
 		if len(res) != 3 {
 			return errors.Errorf("unexpected result size %d", len(res))
 		}
-		//TODO(ivan) delete this:
-		for i, r := range res {
-			fmt.Printf("res[%v]=%v\n", i, r.Value.String())
-		}
-		fmt.Printf("len(res):%v\n", len(res))
 		return nil
 	})
 	testutil.Ok(t, err)

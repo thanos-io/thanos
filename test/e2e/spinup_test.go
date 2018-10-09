@@ -54,7 +54,12 @@ func (s *spinupSuite) Add(cmdSchedule cmdScheduleFunc, gossipAddress string) *sp
 	return s
 }
 
-func scraper(i int, config string) (cmdScheduleFunc, string) {
+func scraper(i int, config string, gossip bool) (cmdScheduleFunc, string) {
+	gossipAddress := ""
+	if gossip {
+		gossipAddress = sidecarCluster(i)
+	}
+
 	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
 		promDir := fmt.Sprintf("%s/data/prom%d", workDir, i)
 		if err := os.MkdirAll(promDir, 0777); err != nil {
@@ -72,26 +77,32 @@ func scraper(i int, config string) (cmdScheduleFunc, string) {
 			"--log.level", "info",
 			"--web.listen-address", promHTTP(i),
 		))
-		cmds = append(cmds, exec.Command("thanos",
-			append([]string{
-				"sidecar",
-				"--debug.name", fmt.Sprintf("sidecar-%d", i),
-				"--grpc-address", sidecarGRPC(i),
-				"--http-address", sidecarHTTP(i),
-				"--prometheus.url", fmt.Sprintf("http://%s", promHTTP(i)),
-				"--tsdb.path", promDir,
-				"--cluster.address", sidecarCluster(i),
+		args := []string{
+			"sidecar",
+			"--debug.name", fmt.Sprintf("sidecar-%d", i),
+			"--grpc-address", sidecarGRPC(i),
+			"--http-address", sidecarHTTP(i),
+			"--prometheus.url", fmt.Sprintf("http://%s", promHTTP(i)),
+			"--tsdb.path", promDir,
+			"--cluster.address", sidecarCluster(i),
+
+			"--log.level", "debug",
+		}
+
+		if gossip {
+			args = append(args, []string{
 				"--cluster.advertise-address", sidecarCluster(i),
 				"--cluster.gossip-interval", "200ms",
 				"--cluster.pushpull-interval", "200ms",
-				"--log.level", "debug",
-			},
-				clusterPeerFlags...)...,
-		))
+			}...)
+			args = append(args,	clusterPeerFlags...)
+		}
+		cmds = append(cmds, exec.Command("thanos", args...))
 
 		return cmds, nil
-	}, sidecarCluster(i)
+	}, gossipAddress
 }
+
 
 func querier(i int, replicaLabel string) (cmdScheduleFunc, string) {
 	return func(_ string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
@@ -110,6 +121,25 @@ func querier(i int, replicaLabel string) (cmdScheduleFunc, string) {
 				clusterPeerFlags...)...,
 		)}, nil
 	}, queryCluster(i)
+}
+
+func querierWithStoreFlags(i int, replicaLabel string, storesAddresses []string) (cmdScheduleFunc, string) {
+	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+		args := []string{"query",
+			"--debug.name", fmt.Sprintf("querier-%d", i),
+			"--grpc-address", queryGRPC(i),
+			"--http-address", queryHTTP(i),
+			"--log.level", "debug",
+			"--query.replica-label", replicaLabel,
+			"--cluster.address", queryCluster(i),
+		}
+
+		for _, store := range storesAddresses {
+			args = append(args, "--store", store)
+		}
+
+		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
+	}, ""
 }
 
 func querierWithFileSD(i int, replicaLabel string, storesAddresses []string) (cmdScheduleFunc, string) {
@@ -146,24 +176,6 @@ func querierWithFileSD(i int, replicaLabel string, storesAddresses []string) (cm
 				"--filesd", path.Join(queryFileSDDir, "filesd.json"),
 			}...,
 		)}, nil
-	}, queryCluster(i)
-}
-
-func querierWithStoreFlags(i int, replicaLabel string, storesAddresses []string) (cmdScheduleFunc, string) {
-	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
-		args := []string{"query",
-			"--debug.name", fmt.Sprintf("querier-%d", i),
-			"--grpc-address", queryGRPC(i),
-			"--http-address", queryHTTP(i),
-			"--log.level", "debug",
-			"--query.replica-label", replicaLabel,
-		}
-
-		for _, store := range storesAddresses {
-			args = append(args, "--store", store)
-		}
-
-		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
 	}, queryCluster(i)
 }
 
@@ -271,6 +283,7 @@ func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (
 
 	// Run go routine for each command.
 	for _, c := range commands {
+		t.Logf("Executing: %v\n", c.Args)
 		var stderr, stdout bytes.Buffer
 		c.Stderr = &stderr
 		c.Stdout = &stdout
