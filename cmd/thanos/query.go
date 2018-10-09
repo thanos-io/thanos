@@ -70,7 +70,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	stores := cmd.Flag("store", "Addresses of statically configured store API servers (repeatable).").
 		PlaceHolder("<store>").Strings()
 
-	filesToWatch := cmd.Flag("filesd", "Path to file that contain addresses of store API servers (repeatable).").
+	filesToWatch := cmd.Flag("store-sd-file", "Path to files that contain addresses of store API servers. The path can be a glob pattern (repeatable).").
 		PlaceHolder("<path>").Strings()
 
 	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified. ").
@@ -252,14 +252,17 @@ func runQuery(
 		return errors.Wrap(err, "building gRPC client")
 	}
 
-	fileSDProvider := newFileSDProvider()
+	fileSDCache := newFileSDCache()
 
 	var (
 		stores = query.NewStoreSet(
 			logger,
 			reg,
 			func() (specs []query.StoreSpec) {
+				// Add store specs from static flags.
 				specs = append(staticSpecs)
+
+				// Add store specs from gossip.
 				for id, ps := range peer.PeerStates(cluster.PeerTypesStoreAPIs()...) {
 					if ps.StoreAPIAddr == "" {
 						level.Error(logger).Log("msg", "Gossip found peer that propagates empty address, ignoring.", "lset", fmt.Sprintf("%v", ps.Metadata.Labels))
@@ -269,9 +272,12 @@ func runQuery(
 					specs = append(specs, &gossipSpec{id: id, addr: ps.StoreAPIAddr, peer: peer})
 				}
 
-				for _, addr := range fileSDProvider.addresses() {
+				// Add store specs from file sd.
+				for _, addr := range fileSDCache.addresses() {
 					specs = append(specs, query.NewGRPCStoreSpec(addr))
 				}
+
+				specs = removeDuplicates(specs)
 
 				return specs
 			},
@@ -296,46 +302,45 @@ func runQuery(
 			stores.Close()
 		})
 	}
-	// Run File Service Discovery and update the store set when the files are modified
-	{
-		if fileSD != nil {
-			var fileSDUpdates chan []*targetgroup.Group
-			ctx, cancel := context.WithCancel(context.Background())
+	// Run File Service Discovery and update the store set when the files are modified.
+	if fileSD != nil {
+		var fileSDUpdates chan []*targetgroup.Group
+		ctxRun, cancelRun := context.WithCancel(context.Background())
 
-			fileSDUpdates = make(chan []*targetgroup.Group)
+		fileSDUpdates = make(chan []*targetgroup.Group)
 
-			g.Add(func() error {
-				fileSD.Run(ctx, fileSDUpdates)
-				return nil
-			}, func(error) {
-				cancel()
-			})
+		g.Add(func() error {
+			fileSD.Run(ctxRun, fileSDUpdates)
+			return nil
+		}, func(error) {
+			cancelRun()
+		})
 
-			g.Add(func() error {
-				for {
-					select {
-					case update, ok := <-fileSDUpdates:
-						// Handle the case that a discoverer exits and closes the channel
-						// before the context is done.
-						if !ok {
-							return nil
-						}
-						// Discoverers sometimes send nil updates so need to check for it to avoid panics
-						if update == nil {
-							continue
-						}
-						// TODO(ivan): resolve dns here maybe?
-						fileSDProvider.update(update)
-						stores.Update(ctx)
-					case <-ctx.Done():
+		ctxUpdate, cancelUpdate := context.WithCancel(context.Background())
+		g.Add(func() error {
+			for {
+				select {
+				case update, ok := <-fileSDUpdates:
+					// Handle the case that a discoverer exits and closes the channel
+					// before the context is done.
+					if !ok {
 						return nil
 					}
+					// Discoverers sometimes send nil updates so need to check for it to avoid panics.
+					if update == nil {
+						continue
+					}
+					// TODO(ivan): resolve dns here maybe?
+					fileSDCache.update(update)
+					stores.Update(ctxUpdate)
+				case <-ctxUpdate.Done():
+					return nil
 				}
-			}, func(error) {
-				cancel()
-				close(fileSDUpdates)
-			})
-		}
+			}
+		}, func(error) {
+			cancelUpdate()
+			close(fileSDUpdates)
+		})
 	}
 	{
 		ctx, cancel := context.WithCancel(context.Background())
@@ -405,6 +410,17 @@ func runQuery(
 	level.Info(logger).Log("msg", "starting query node")
 	return nil
 }
+func removeDuplicates(specs []query.StoreSpec) []query.StoreSpec {
+	set := make(map[string]query.StoreSpec)
+	for _, spec := range specs {
+		set[spec.Addr()] = spec
+	}
+	deduplicated := make([]query.StoreSpec, 0, len(set))
+	for _, value := range set {
+		deduplicated = append(deduplicated, value)
+	}
+	return deduplicated
+}
 
 type gossipSpec struct {
 	id   string
@@ -413,18 +429,18 @@ type gossipSpec struct {
 	peer *cluster.Peer
 }
 
-type fileSDProvider struct {
+type fileSDCache struct {
 	tgs map[string]*targetgroup.Group
 	sync.Mutex
 }
 
-func newFileSDProvider() *fileSDProvider {
-	return &fileSDProvider{
+func newFileSDCache() *fileSDCache {
+	return &fileSDCache{
 		tgs: make(map[string]*targetgroup.Group),
 	}
 }
 
-func (f *fileSDProvider) update(tgs []*targetgroup.Group) {
+func (f *fileSDCache) update(tgs []*targetgroup.Group) {
 	f.Lock()
 	defer f.Unlock()
 	for _, tg := range tgs {
@@ -435,7 +451,7 @@ func (f *fileSDProvider) update(tgs []*targetgroup.Group) {
 	}
 }
 
-func (f *fileSDProvider) addresses() []string {
+func (f *fileSDCache) addresses() []string {
 	f.Lock()
 	defer f.Unlock()
 	var addresses []string

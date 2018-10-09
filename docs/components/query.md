@@ -129,6 +129,10 @@ Flags:
                                  info endpoint (repeated).
       --store=<store> ...        Addresses of statically configured store API
                                  servers (repeatable).
+      --store-sd-file=<path> ...  
+                                 Path to files that contain addresses of store
+                                 API servers. The path can be a glob pattern
+                                 (repeatable).
       --query.auto-downsampling  Enable automatic adjustment (step / 5) to what
                                  source of data should be used in store gateways
                                  if no max_source_resolution param is specified.
