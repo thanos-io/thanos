@@ -104,6 +104,8 @@ Flags:
                                  configurations. Sets of configurations
                                  accounting the latency differences between
                                  network types: local, lan, wan.
+      --no-gossip                Don't use gossip for service discovery.
+                                 Defaults to false.
       --prometheus.url=http://localhost:9090  
                                  URL at which to reach Prometheus's API. For
                                  better performance use local network.

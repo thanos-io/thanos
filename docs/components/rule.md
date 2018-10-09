@@ -108,6 +108,8 @@ Flags:
                                  configurations. Sets of configurations
                                  accounting the latency differences between
                                  network types: local, lan, wan.
+      --no-gossip                Don't use gossip for service discovery.
+                                 Defaults to false.
       --label=<name>="<value>" ...  
                                  Labels to be applied to all generated metrics
                                  (repeated).

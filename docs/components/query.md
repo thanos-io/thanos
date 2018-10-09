@@ -102,6 +102,8 @@ Flags:
                                  configurations. Sets of configurations
                                  accounting the latency differences between
                                  network types: local, lan, wan.
+      --no-gossip                Don't use gossip for service discovery.
+                                 Defaults to false.
       --http-advertise-address=HTTP-ADVERTISE-ADDRESS  
                                  Explicit (external) host:port address to
                                  advertise for HTTP QueryAPI in gossip cluster.

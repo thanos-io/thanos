@@ -10,7 +10,7 @@ import (
 	"path"
 	"syscall"
 	"testing"
-
+	"encoding/json"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 
 	"github.com/oklog/run"
@@ -108,6 +108,61 @@ func querier(i int, replicaLabel string) (cmdScheduleFunc, string) {
 			},
 				clusterPeerFlags...)...,
 		)}, nil
+	}, queryCluster(i)
+}
+
+func querierWithFileSD(i int, replicaLabel string, storesAddresses []string) (cmdScheduleFunc, string) {
+	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+		queryFileSDDir := fmt.Sprintf("%s/data/queryFIleSd%d", workDir, i)
+		if err := os.MkdirAll(queryFileSDDir, 0777); err != nil {
+			return nil, errors.Wrap(err, "create prom dir failed")
+		}
+
+		conf := "[ { \"targets\": ["
+		for index, stores := range storesAddresses {
+			conf += fmt.Sprintf("\"%s\"", stores)
+			if index + 1 < len(storesAddresses) {
+				conf += ","
+			}
+		}
+		conf += "] } ]"
+
+		json, err := json.Marshal(conf)
+		if err != nil {
+			return nil, errors.Wrap(err, "encoding filesd failed")
+		}
+
+		if err := ioutil.WriteFile(queryFileSDDir+"/filesd.json", json, 0666); err != nil {
+			return nil, errors.Wrap(err, "creating prom config failed")
+		}
+		return []*exec.Cmd{exec.Command("thanos",
+			[]string{"query",
+				"--debug.name", fmt.Sprintf("querier-%d", i),
+				"--grpc-address", queryGRPC(i),
+				"--http-address", queryHTTP(i),
+				"--log.level", "debug",
+				"--query.replica-label", replicaLabel,
+				"--filesd", path.Join(queryFileSDDir, "filesd.json"),
+			}...,
+		)}, nil
+	}, queryCluster(i)
+}
+
+func querierWithStoreFlags(i int, replicaLabel string, storesAddresses []string) (cmdScheduleFunc, string) {
+	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+		args := []string{"query",
+			"--debug.name", fmt.Sprintf("querier-%d", i),
+			"--grpc-address", queryGRPC(i),
+			"--http-address", queryHTTP(i),
+			"--log.level", "debug",
+			"--query.replica-label", replicaLabel,
+		}
+
+		for _, store := range storesAddresses {
+			args = append(args, "--store", store)
+		}
+
+		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
 	}, queryCluster(i)
 }
 
@@ -215,6 +270,7 @@ func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (
 
 	// Run go routine for each command.
 	for _, c := range commands {
+		fmt.Printf("\nExecuting command:\n%v\n", c.Args)
 		var stderr, stdout bytes.Buffer
 		c.Stderr = &stderr
 		c.Stdout = &stdout
@@ -240,6 +296,8 @@ func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (
 			if stdout.Len() > 0 {
 				t.Logf("%s STDOUT\n %s", cmd.Path, stdout.String())
 			}
+
+			fmt.Printf("err from cmd.wait = %v",err)
 
 			return err
 		}, func(error) {

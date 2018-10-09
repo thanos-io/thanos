@@ -22,6 +22,7 @@ func regCommonServerFlags(cmd *kingpin.CmdClause) (
 	grpcTLSSrvCert *string,
 	grpcTLSSrvKey *string,
 	grpcTLSSrvClientCA *string,
+	disableGossip *bool,
 	peerFunc func(log.Logger, *prometheus.Registry, bool, string, bool) (*cluster.Peer, error)) {
 
 	grpcBindAddr = cmd.Flag("grpc-address", "Listen ip:port address for gRPC endpoints (StoreAPI). Make sure this address is routable from other components if you use gossip, 'grpc-advertise-address' is empty and you require cross-node connection.").
@@ -62,12 +63,14 @@ func regCommonServerFlags(cmd *kingpin.CmdClause) (
 		Default(cluster.LanNetworkPeerType).
 		Enum(cluster.NetworkPeerTypes...)
 
-	return grpcBindAddr,
-		httpBindAddr,
-		grpcTLSSrvCert,
-		grpcTLSSrvKey,
-		grpcTLSSrvClientCA,
-		func(logger log.Logger, reg *prometheus.Registry, waitIfEmpty bool, httpAdvertiseAddr string, queryAPIEnabled bool) (*cluster.Peer, error) {
+	disableGossip = cmd.Flag("no-gossip", "Don't use gossip for service discovery. Defaults to false.").Default("false").Bool()
+
+	if *disableGossip {
+		peerFunc = func(logger log.Logger, reg *prometheus.Registry, waitIfEmpty bool, httpAdvertiseAddr string, queryAPIEnabled bool) (*cluster.Peer, error) {
+			return nil, nil
+		}
+	} else {
+		peerFunc = func(logger log.Logger, reg *prometheus.Registry, waitIfEmpty bool, httpAdvertiseAddr string, queryAPIEnabled bool) (*cluster.Peer, error) {
 			host, port, err := cluster.CalculateAdvertiseAddress(*grpcBindAddr, *grpcAdvertiseAddr)
 			if err != nil {
 				return nil, errors.Wrapf(err, "calculate advertise StoreAPI addr for gossip based on bindAddr: %s and advAddr: %s", *grpcBindAddr, *grpcAdvertiseAddr)
@@ -112,6 +115,15 @@ func regCommonServerFlags(cmd *kingpin.CmdClause) (
 				*networkType,
 			)
 		}
+	}
+
+	return grpcBindAddr,
+		httpBindAddr,
+		grpcTLSSrvCert,
+		grpcTLSSrvKey,
+		grpcTLSSrvClientCA,
+		disableGossip,
+		peerFunc
 }
 
 func regHTTPAddrFlag(cmd *kingpin.CmdClause) *string {

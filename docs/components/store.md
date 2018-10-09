@@ -96,6 +96,8 @@ Flags:
                                  configurations. Sets of configurations
                                  accounting the latency differences between
                                  network types: local, lan, wan.
+      --no-gossip                Don't use gossip for service discovery.
+                                 Defaults to false.
       --data-dir="./data"        Data directory in which to cache remote blocks.
       --objstore.config-file=<bucket.config.path>  
                                  The object store configuration file path.
