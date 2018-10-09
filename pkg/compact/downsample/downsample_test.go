@@ -376,7 +376,7 @@ func (it *sampleIterator) At() (t int64, v float64) {
 }
 
 // memBlock is an in-memory block that implements a subset of the tsdb.BlockReader interface
-// to allow tsdb.instantWriter to persist the data as a block.
+// to allow tsdb.StreamedBlockWriter to persist the data as a block.
 type memBlock struct {
 	// Dummies to implement unused methods.
 	tsdb.IndexReader

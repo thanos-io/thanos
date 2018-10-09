@@ -48,16 +48,13 @@ func Downsample(
 	}
 	defer runutil.CloseWithErrCapture(logger, &err, chunkr, "downsample chunk reader")
 
-	// NewWriter downsampled data and puts chunks immediately into files, allow save lot of memory of aggregated data.
+	// Writes downsampled chunks right into the files, avoiding excess memory allocation.
 	// Flushes index and meta data afterwards aggregations.
-	// This is necessary since we need to inject special values at the end of chunks for
-	// some aggregations.
-	writer, err := NewWriter(dir, logger, *origMeta, resolution)
-	defer runutil.CloseWithErrCapture(logger, &err, writer, "downsample instant writer")
-
+	streamedBlockWriter, err := NewWriter(dir, logger, *origMeta, resolution)
 	if err != nil {
-		return id, errors.Wrap(err, "get instantWriter")
+		return id, errors.Wrap(err, "get streamed block writer")
 	}
+	defer runutil.CloseWithErrCapture(logger, &err, streamedBlockWriter, "close stream block writer")
 
 	pall, err := indexr.Postings(index.AllPostingsKey())
 	if err != nil {
@@ -96,7 +93,7 @@ func Downsample(
 					return id, errors.Wrapf(err, "expand chunk %d, series %d", c.Ref, pall.At())
 				}
 			}
-			if err := writer.AddSeries(&series{lset: lset, chunks: downsampleRaw(all, resolution)}); err != nil {
+			if err := streamedBlockWriter.AddSeries(&series{lset: lset, chunks: downsampleRaw(all, resolution)}); err != nil {
 				return id, errors.Wrapf(err, "downsample raw data, series: %d", pall.At())
 			}
 			continue
@@ -117,7 +114,7 @@ func Downsample(
 		if err != nil {
 			return id, errors.Wrapf(err, "downsample aggregate block, series: %d", pall.At())
 		}
-		if err := writer.AddSeries(&series{lset: lset, chunks: res}); err != nil {
+		if err := streamedBlockWriter.AddSeries(&series{lset: lset, chunks: res}); err != nil {
 			return id, errors.Wrapf(err, "downsample aggregated block, series: %d", pall.At())
 		}
 	}
@@ -125,7 +122,7 @@ func Downsample(
 		return id, errors.Wrap(pall.Err(), "iterate series set")
 	}
 
-	id, err = writer.Flush()
+	id, err = streamedBlockWriter.Flush()
 	if err != nil {
 		return id, errors.Wrap(err, "compact head")
 	}
