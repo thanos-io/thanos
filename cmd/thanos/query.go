@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"time"
 
+	"sync"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/grpc-ecosystem/go-grpc-middleware"
@@ -27,7 +29,10 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/discovery/file"
+	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
@@ -65,6 +70,9 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	stores := cmd.Flag("store", "Addresses of statically configured store API servers (repeatable).").
 		PlaceHolder("<store>").Strings()
 
+	filesToWatch := cmd.Flag("filesd", "Path to file that contain addresses of store API servers (repeatable).").
+		PlaceHolder("<path>").Strings()
+
 	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified. ").
 		Default("false").Bool()
 
@@ -85,6 +93,17 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			}
 
 			lookupStores[s] = struct{}{}
+		}
+
+		var filesd *file.Discovery
+		fmt.Printf("ivan: checking if filesd flag is set:\n")
+		if len(*filesToWatch) > 0 {
+			fmt.Printf("ivan:flagsd flag is set\n")
+			conf := &file.SDConfig{
+				Files:           *filesToWatch,
+				RefreshInterval: model.Duration(5 * time.Second),
+			}
+			filesd = file.NewDiscovery(conf, logger)
 		}
 
 		return runQuery(
@@ -109,6 +128,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			selectorLset,
 			*stores,
 			*enableAutodownsampling,
+			filesd,
 		)
 	}
 }
@@ -218,6 +238,7 @@ func runQuery(
 	selectorLset labels.Labels,
 	storeAddrs []string,
 	enableAutodownsampling bool,
+	fileSD *file.Discovery,
 ) error {
 	var staticSpecs []query.StoreSpec
 	for _, addr := range storeAddrs {
@@ -233,13 +254,14 @@ func runQuery(
 		return errors.Wrap(err, "building gRPC client")
 	}
 
+	fileSDProvider := newFileSDProvider()
+
 	var (
 		stores = query.NewStoreSet(
 			logger,
 			reg,
 			func() (specs []query.StoreSpec) {
 				specs = append(staticSpecs)
-
 				for id, ps := range peer.PeerStates(cluster.PeerTypesStoreAPIs()...) {
 					if ps.StoreAPIAddr == "" {
 						level.Error(logger).Log("msg", "Gossip found peer that propagates empty address, ignoring.", "lset", fmt.Sprintf("%v", ps.Metadata.Labels))
@@ -248,6 +270,15 @@ func runQuery(
 
 					specs = append(specs, &gossipSpec{id: id, addr: ps.StoreAPIAddr, peer: peer})
 				}
+
+				for _, addr := range fileSDProvider.addresses() {
+					specs = append(specs, query.NewGRPCStoreSpec(addr))
+				}
+
+				for i, sp := range specs {
+					fmt.Printf("----IVAN: specs[%v]: %v\n", i, sp.Addr())
+				}
+
 				return specs
 			},
 			dialOpts,
@@ -269,6 +300,49 @@ func runQuery(
 		}, func(error) {
 			cancel()
 			stores.Close()
+		})
+	}
+	// Run File Service Discovery and update the store set when the files are modified
+	if fileSD != nil {
+		var fileSDUpdates chan []*targetgroup.Group
+		ctx, cancel := context.WithCancel(context.Background())
+
+		fileSDUpdates = make(chan []*targetgroup.Group)
+
+		g.Add(func() error {
+			fmt.Printf("ivan: running filesd\n")
+			fileSD.Run(ctx, fileSDUpdates)
+			return nil
+		}, func(error) {
+			cancel()
+		})
+		//TODO(ivan): put in separate block:
+		ctx2, cancel2 := context.WithCancel(context.Background())
+		g.Add(func() error {
+			for {
+				select {
+				case update, ok := <-fileSDUpdates:
+					fmt.Printf("ivan:received update from filesd: number of target groups: %v\n", len(update))
+					// Handle the case that a discoverer exits and closes the channel
+					// before the context is done.
+					if !ok {
+						return nil
+					}
+					// Discoverers sometimes send nil updates so need to check for it to avoid panics
+					if update == nil {
+						continue
+					}
+					// TODO(ivan): resolve dns here maybe?
+					fileSDProvider.update(update)
+					stores.Update(ctx2)
+				case <-ctx2.Done():
+					fmt.Printf("ivan:filesdprovider ctx is done\n")
+					return nil
+				}
+			}
+		}, func(error) {
+			cancel2()
+			close(fileSDUpdates)
 		})
 	}
 	{
@@ -345,6 +419,40 @@ type gossipSpec struct {
 	addr string
 
 	peer *cluster.Peer
+}
+
+type fileSDProvider struct {
+	tgs map[string]*targetgroup.Group
+	sync.Mutex
+}
+
+func newFileSDProvider() *fileSDProvider {
+	return &fileSDProvider{
+		tgs: make(map[string]*targetgroup.Group),
+	}
+}
+
+func (f *fileSDProvider) update(tgs []*targetgroup.Group) {
+	f.Lock()
+	defer f.Unlock()
+	for _, tg := range tgs {
+		// Some Discoverers send nil target group so need to check for it to avoid panics.
+		if tg != nil {
+			f.tgs[tg.Source] = tg
+		}
+	}
+}
+
+func (f *fileSDProvider) addresses() []string {
+	f.Lock()
+	defer f.Unlock()
+	var addresses []string
+	for _, group := range f.tgs {
+		for _, target := range group.Targets {
+			addresses = append(addresses, string(target[model.AddressLabel]))
+		}
+	}
+	return addresses
 }
 
 func (s *gossipSpec) Addr() string {
