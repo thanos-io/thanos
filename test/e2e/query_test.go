@@ -67,7 +67,7 @@ scrape_configs:
 		Add(querier(2, "replica"))
 
 	staticFlagsSuite = newSpinupSuite().
-		Add(scraper(1, fmt.Sprintf(`
+				Add(scraper(1, fmt.Sprintf(`
 # Self scraping config with unique external label.
 global:
   external_labels:
@@ -108,6 +108,49 @@ scrape_configs:
 `, firstPromPort), false)).
 		Add(querierWithStoreFlags(1, "replica", []string{sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3)})).
 		Add(querierWithStoreFlags(2, "replica", []string{sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3)}))
+
+	fileSDSuite = newSpinupSuite().
+			Add(scraper(1, fmt.Sprintf(`
+# Self scraping config with unique external label.
+global:
+  external_labels:
+    prometheus: prom-%s
+    replica: 0
+scrape_configs:
+- job_name: prometheus
+  scrape_interval: 1s
+  static_configs:
+  - targets:
+    - "localhost:%s"
+`, firstPromPort, firstPromPort), false)).
+		Add(scraper(2, fmt.Sprintf(`
+# Config for first of two HA replica Prometheus.
+global:
+  external_labels:
+    prometheus: prom-ha
+    replica: 0
+scrape_configs:
+- job_name: prometheus
+  scrape_interval: 1s
+  static_configs:
+  - targets:
+    - "localhost:%s"
+`, firstPromPort), false)).
+		Add(scraper(3, fmt.Sprintf(`
+# Config for second of two HA replica Prometheus.
+global:
+  external_labels:
+    prometheus: prom-ha
+    replica: 1
+scrape_configs:
+- job_name: prometheus
+  scrape_interval: 1s
+  static_configs:
+  - targets:
+    - "localhost:%s"
+`, firstPromPort), false)).
+		Add(querierWithFileSD(1, "replica", []string{sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3)})).
+		Add(querierWithFileSD(2, "replica", []string{sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3)}))
 )
 
 func TestQuery(t *testing.T) {
@@ -117,9 +160,13 @@ func TestQuery(t *testing.T) {
 		//	"gossip",
 		//	gossipSuite,
 		//},
+		//{
+		//	"staticFlag",
+		//	staticFlagsSuite,
+		//},
 		{
-			"staticFlag",
-			staticFlagsSuite,
+			"fileSD",
+			fileSDSuite,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

@@ -41,8 +41,6 @@ func RetryWithLog(logger log.Logger, interval time.Duration, stopc <-chan struct
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
 
-	fmt.Printf("ratry with log\n")
-
 	var err error
 	for {
 		if err = f(); err == nil {

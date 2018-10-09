@@ -3,7 +3,6 @@ package e2e_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -95,14 +94,13 @@ func scraper(i int, config string, gossip bool) (cmdScheduleFunc, string) {
 				"--cluster.gossip-interval", "200ms",
 				"--cluster.pushpull-interval", "200ms",
 			}...)
-			args = append(args,	clusterPeerFlags...)
+			args = append(args, clusterPeerFlags...)
 		}
 		cmds = append(cmds, exec.Command("thanos", args...))
 
 		return cmds, nil
 	}, gossipAddress
 }
-
 
 func querier(i int, replicaLabel string) (cmdScheduleFunc, string) {
 	return func(_ string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
@@ -144,11 +142,12 @@ func querierWithStoreFlags(i int, replicaLabel string, storesAddresses []string)
 
 func querierWithFileSD(i int, replicaLabel string, storesAddresses []string) (cmdScheduleFunc, string) {
 	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
-		queryFileSDDir := fmt.Sprintf("%s/data/queryFIleSd%d", workDir, i)
+		queryFileSDDir := fmt.Sprintf("%s/data/queryFileSd%d", workDir, i)
 		if err := os.MkdirAll(queryFileSDDir, 0777); err != nil {
 			return nil, errors.Wrap(err, "create prom dir failed")
 		}
 
+		//TODO(ivan): use sprintf
 		conf := "[ { \"targets\": ["
 		for index, stores := range storesAddresses {
 			conf += fmt.Sprintf("\"%s\"", stores)
@@ -158,25 +157,22 @@ func querierWithFileSD(i int, replicaLabel string, storesAddresses []string) (cm
 		}
 		conf += "] } ]"
 
-		json, err := json.Marshal(conf)
-		if err != nil {
-			return nil, errors.Wrap(err, "encoding filesd failed")
-		}
+		fmt.Printf("ivan: filesd file is looking like: %v", conf)
 
-		if err := ioutil.WriteFile(queryFileSDDir+"/filesd.json", json, 0666); err != nil {
+		if err := ioutil.WriteFile(queryFileSDDir+"/filesd.json", []byte(conf), 0666); err != nil {
 			return nil, errors.Wrap(err, "creating prom config failed")
 		}
 		return []*exec.Cmd{exec.Command("thanos",
-			[]string{"query",
+			"query",
 				"--debug.name", fmt.Sprintf("querier-%d", i),
 				"--grpc-address", queryGRPC(i),
 				"--http-address", queryHTTP(i),
 				"--log.level", "debug",
 				"--query.replica-label", replicaLabel,
+				"--cluster.address", queryCluster(i),
 				"--filesd", path.Join(queryFileSDDir, "filesd.json"),
-			}...,
 		)}, nil
-	}, queryCluster(i)
+	}, ""
 }
 
 func ruler(i int, rules string) (cmdScheduleFunc, string) {

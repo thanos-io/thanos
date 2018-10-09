@@ -96,7 +96,9 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 		}
 
 		var filesd *file.Discovery
+		fmt.Printf("ivan: checking if filesd flag is set:\n")
 		if len(*filesToWatch) > 0 {
+			fmt.Printf("ivan:flagsd flag is set\n")
 			conf := &file.SDConfig{
 				Files:           *filesToWatch,
 				RefreshInterval: model.Duration(5 * time.Second),
@@ -273,6 +275,10 @@ func runQuery(
 					specs = append(specs, query.NewGRPCStoreSpec(addr))
 				}
 
+				for i, sp := range specs {
+					fmt.Printf("----IVAN: specs[%v]: %v\n", i, sp.Addr())
+				}
+
 				return specs
 			},
 			dialOpts,
@@ -297,45 +303,47 @@ func runQuery(
 		})
 	}
 	// Run File Service Discovery and update the store set when the files are modified
-	{
-		if fileSD != nil {
-			var fileSDUpdates chan []*targetgroup.Group
-			ctx, cancel := context.WithCancel(context.Background())
+	if fileSD != nil {
+		var fileSDUpdates chan []*targetgroup.Group
+		ctx, cancel := context.WithCancel(context.Background())
 
-			fileSDUpdates = make(chan []*targetgroup.Group)
+		fileSDUpdates = make(chan []*targetgroup.Group)
 
-			g.Add(func() error {
-				fileSD.Run(ctx, fileSDUpdates)
-				return nil
-			}, func(error) {
-				cancel()
-			})
-
-			g.Add(func() error {
-				for {
-					select {
-					case update, ok := <-fileSDUpdates:
-						// Handle the case that a discoverer exits and closes the channel
-						// before the context is done.
-						if !ok {
-							return nil
-						}
-						// Discoverers sometimes send nil updates so need to check for it to avoid panics
-						if update == nil {
-							continue
-						}
-						// TODO(ivan): resolve dns here maybe?
-						fileSDProvider.update(update)
-						stores.Update(ctx)
-					case <-ctx.Done():
+		g.Add(func() error {
+			fmt.Printf("ivan: running filesd\n")
+			fileSD.Run(ctx, fileSDUpdates)
+			return nil
+		}, func(error) {
+			cancel()
+		})
+		//TODO(ivan): put in separate block:
+		ctx2, cancel2 := context.WithCancel(context.Background())
+		g.Add(func() error {
+			for {
+				select {
+				case update, ok := <-fileSDUpdates:
+					fmt.Printf("ivan:received update from filesd: number of target groups: %v\n", len(update))
+					// Handle the case that a discoverer exits and closes the channel
+					// before the context is done.
+					if !ok {
 						return nil
 					}
+					// Discoverers sometimes send nil updates so need to check for it to avoid panics
+					if update == nil {
+						continue
+					}
+					// TODO(ivan): resolve dns here maybe?
+					fileSDProvider.update(update)
+					stores.Update(ctx2)
+				case <-ctx2.Done():
+					fmt.Printf("ivan:filesdprovider ctx is done\n")
+					return nil
 				}
-			}, func(error) {
-				cancel()
-				close(fileSDUpdates)
-			})
-		}
+			}
+		}, func(error) {
+			cancel2()
+			close(fileSDUpdates)
+		})
 	}
 	{
 		ctx, cancel := context.WithCancel(context.Background())
