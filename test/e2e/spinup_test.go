@@ -147,7 +147,6 @@ func querierWithFileSD(i int, replicaLabel string, storesAddresses []string) (cm
 			return nil, errors.Wrap(err, "create prom dir failed")
 		}
 
-		//TODO(ivan): use sprintf
 		conf := "[ { \"targets\": ["
 		for index, stores := range storesAddresses {
 			conf += fmt.Sprintf("\"%s\"", stores)
@@ -157,20 +156,18 @@ func querierWithFileSD(i int, replicaLabel string, storesAddresses []string) (cm
 		}
 		conf += "] } ]"
 
-		fmt.Printf("ivan: filesd file is looking like: %v", conf)
-
 		if err := ioutil.WriteFile(queryFileSDDir+"/filesd.json", []byte(conf), 0666); err != nil {
 			return nil, errors.Wrap(err, "creating prom config failed")
 		}
 		return []*exec.Cmd{exec.Command("thanos",
 			"query",
-				"--debug.name", fmt.Sprintf("querier-%d", i),
-				"--grpc-address", queryGRPC(i),
-				"--http-address", queryHTTP(i),
-				"--log.level", "debug",
-				"--query.replica-label", replicaLabel,
-				"--cluster.address", queryCluster(i),
-				"--filesd", path.Join(queryFileSDDir, "filesd.json"),
+			"--debug.name", fmt.Sprintf("querier-%d", i),
+			"--grpc-address", queryGRPC(i),
+			"--http-address", queryHTTP(i),
+			"--log.level", "debug",
+			"--query.replica-label", replicaLabel,
+			"--cluster.address", queryCluster(i),
+			"--store-sd-file", path.Join(queryFileSDDir, "filesd.json"),
 		)}, nil
 	}, ""
 }
