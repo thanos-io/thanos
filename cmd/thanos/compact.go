@@ -31,8 +31,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process compactions.").
 		Default("./data").String()
 
-	bucketConfFile := cmd.Flag("objstore.config-file", "The object store configuration file path.").
-		PlaceHolder("<bucket.config.path>").Required().String()
+	objStoreConfig := regCommonObjStoreFlags(cmd, "")
 
 	syncDelay := modelDuration(cmd.Flag("sync-delay", "Minimum age of fresh (non-compacted) blocks before they are being processed.").
 		Default("30m"))
@@ -53,7 +52,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 		return runCompact(g, logger, reg,
 			*httpAddr,
 			*dataDir,
-			*bucketConfFile,
+			objStoreConfig,
 			time.Duration(*syncDelay),
 			*haltOnError,
 			*wait,
@@ -74,7 +73,7 @@ func runCompact(
 	reg *prometheus.Registry,
 	httpBindAddr string,
 	dataDir string,
-	bucketConfFile string,
+	objStoreConfig *pathOrContent,
 	syncDelay time.Duration,
 	haltOnError bool,
 	wait bool,
@@ -94,7 +93,12 @@ func runCompact(
 
 	reg.MustRegister(halted)
 
-	bkt, err := client.NewBucket(logger, bucketConfFile, reg, component)
+	bucketConfig, err := objStoreConfig.Content()
+	if err != nil {
+		return err
+	}
+
+	bkt, err := client.NewBucket(logger, bucketConfig, reg, component)
 	if err != nil {
 		return err
 	}

@@ -127,7 +127,11 @@ Flags:
       --alert.query-url=ALERT.QUERY-URL  
                                  The external Thanos Query URL that would be set
                                  in all alerts 'Source' field
-      --objstore.config-file=<bucket.config.path>  
-                                 The object store configuration file path.
+      --objstore.config-file=<bucket.config-yaml-path>  
+                                 Path to YAML file that contains object store
+                                 configuration.
+      --objstore.config=<bucket.config-yaml>  
+                                 Alternative to 'objstore.config-file' flag.
+                                 Object store configuration in YAML.
 
 ```
