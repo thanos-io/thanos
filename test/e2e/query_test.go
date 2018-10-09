@@ -22,161 +22,8 @@ type testConfig struct {
 
 var (
 	firstPromPort = promHTTPPort(1)
-)
 
-//	gossipSuite = newSpinupSuite().
-//		Add(scraper(1, fmt.Sprintf(`
-//# Self scraping config with unique external label.
-//global:
-//  external_labels:
-//    prometheus: prom-%s
-//    replica: 0
-//scrape_configs:
-//- job_name: prometheus
-//  scrape_interval: 1s
-//  static_configs:
-//  - targets:
-//    - "localhost:%s"
-//`, firstPromPort, firstPromPort))).
-//		Add(scraper(2, fmt.Sprintf(`
-//# Config for first of two HA replica Prometheus.
-//global:
-//  external_labels:
-//    prometheus: prom-ha
-//    replica: 0
-//scrape_configs:
-//- job_name: prometheus
-//  scrape_interval: 1s
-//  static_configs:
-//  - targets:
-//    - "localhost:%s"
-//`, firstPromPort))).
-//		Add(scraper(3, fmt.Sprintf(`
-//# Config for second of two HA replica Prometheus.
-//global:
-//  external_labels:
-//    prometheus: prom-ha
-//    replica: 1
-//scrape_configs:
-//- job_name: prometheus
-//  scrape_interval: 1s
-//  static_configs:
-//  - targets:
-//    - "localhost:%s"
-//`, firstPromPort))).
-//		Add(querier(1, "replica")).
-//		Add(querier(2, "replica"))
-//
-//	staticFlagsSuite = newSpinupSuite().
-//		Add(scraper(1, fmt.Sprintf(`
-//# Self scraping config with unique external label.
-//global:
-//  external_labels:
-//    prometheus: prom-%s
-//    replica: 0
-//scrape_configs:
-//- job_name: prometheus
-//  scrape_interval: 1s
-//  static_configs:
-//  - targets:
-//    - "localhost:%s"
-//`, firstPromPort, firstPromPort))).
-//		Add(scraper(2, fmt.Sprintf(`
-//# Config for first of two HA replica Prometheus.
-//global:
-//  external_labels:
-//    prometheus: prom-ha
-//    replica: 0
-//scrape_configs:
-//- job_name: prometheus
-//  scrape_interval: 1s
-//  static_configs:
-//  - targets:
-//    - "localhost:%s"
-//`, firstPromPort))).
-//		Add(scraper(3, fmt.Sprintf(`
-//# Config for second of two HA replica Prometheus.
-//global:
-//  external_labels:
-//    prometheus: prom-ha
-//    replica: 1
-//scrape_configs:
-//- job_name: prometheus
-//  scrape_interval: 1s
-//  static_configs:
-//  - targets:
-//    - "localhost:%s"
-//`, firstPromPort))).
-//		Add(querierWithStoreFlags(1,"replica", []string{sidecarGRPC(1),sidecarGRPC(2),sidecarGRPC(3)})).
-//		Add(querierWithStoreFlags(2,"replica", []string{sidecarGRPC(1),sidecarGRPC(2),sidecarGRPC(3)}))
-//)
-//
-//
-//func TestQuery(t *testing.T) {
-//
-//	for _, tt := range []testConfig {
-//		{
-//			"gossip",
-//			newSpinupSuite().
-//				Add(scraper(1, fmt.Sprintf(`
-//# Self scraping config with unique external label.
-//global:
-//  external_labels:
-//    prometheus: prom-%s
-//    replica: 0
-//scrape_configs:
-//- job_name: prometheus
-//  scrape_interval: 1s
-//  static_configs:
-//  - targets:
-//    - "localhost:%s"
-//`, firstPromPort, firstPromPort))).
-//				Add(scraper(2, fmt.Sprintf(`
-//# Config for first of two HA replica Prometheus.
-//global:
-//  external_labels:
-//    prometheus: prom-ha
-//    replica: 0
-//scrape_configs:
-//- job_name: prometheus
-//  scrape_interval: 1s
-//  static_configs:
-//  - targets:
-//    - "localhost:%s"
-//`, firstPromPort))).
-//				Add(scraper(3, fmt.Sprintf(`
-//# Config for second of two HA replica Prometheus.
-//global:
-//  external_labels:
-//    prometheus: prom-ha
-//    replica: 1
-//scrape_configs:
-//- job_name: prometheus
-//  scrape_interval: 1s
-//  static_configs:
-//  - targets:
-//    - "localhost:%s"
-//`, firstPromPort))).
-//				Add(querier(1, "replica")).
-//				Add(querier(2, "replica")),
-//		},
-//		//{
-//		//	"staticFlag",
-//		//	staticFlagsSuite,
-//		//},
-//	}{
-//		//t.Run(tt.name, func(t *testing.T) {
-//			testQuerySimple(t, tt)
-//		//})
-//	}
-//}
-
-// TestQuerySimple runs a setup of Prometheus servers, sidecars, and query nodes and verifies that
-// queries return data merged from all Prometheus servers. Additionally it verifies if deduplication works for query.
-func TestQuerySimple(t *testing.T) { //, conf testConfig) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-
-	exit, err := newSpinupSuite().
+	gossipSuite = newSpinupSuite().
 		Add(scraper(1, fmt.Sprintf(`
 # Self scraping config with unique external label.
 global:
@@ -217,7 +64,82 @@ scrape_configs:
     - "localhost:%s"
 `, firstPromPort))).
 		Add(querier(1, "replica")).
-		Add(querier(2, "replica")).Exec(t, ctx, "conf.name")
+		Add(querier(2, "replica"))
+
+	staticFlagsSuite = newSpinupSuite().
+		Add(scraper(1, fmt.Sprintf(`
+# Self scraping config with unique external label.
+global:
+ external_labels:
+   prometheus: prom-%s
+   replica: 0
+scrape_configs:
+- job_name: prometheus
+ scrape_interval: 1s
+ static_configs:
+ - targets:
+   - "localhost:%s"
+`, firstPromPort, firstPromPort))).
+		Add(scraper(2, fmt.Sprintf(`
+# Config for first of two HA replica Prometheus.
+global:
+ external_labels:
+   prometheus: prom-ha
+   replica: 0
+scrape_configs:
+- job_name: prometheus
+ scrape_interval: 1s
+ static_configs:
+ - targets:
+   - "localhost:%s"
+`, firstPromPort))).
+		Add(scraper(3, fmt.Sprintf(`
+# Config for second of two HA replica Prometheus.
+global:
+ external_labels:
+   prometheus: prom-ha
+   replica: 1
+scrape_configs:
+- job_name: prometheus
+ scrape_interval: 1s
+ static_configs:
+ - targets:
+   - "localhost:%s"
+`, firstPromPort))).
+		Add(querierWithStoreFlags(1,"replica", []string{sidecarGRPC(1),sidecarGRPC(2),sidecarGRPC(3)})).
+		Add(querierWithStoreFlags(2,"replica", []string{sidecarGRPC(1),sidecarGRPC(2),sidecarGRPC(3)}))
+)
+
+
+
+
+
+
+
+func TestQuery(t *testing.T) {
+
+	for _, tt := range []testConfig {
+		{
+			"gossip",
+			gossipSuite,
+		},
+		//{
+		//	"staticFlag",
+		//	staticFlagsSuite,
+		//},
+	}{
+		t.Run(tt.name, func(t *testing.T) {
+			testQuerySimple(t, tt)
+		})
+	}
+}
+
+// TestQuerySimple runs a setup of Prometheus servers, sidecars, and query nodes and verifies that
+// queries return data merged from all Prometheus servers. Additionally it verifies if deduplication works for query.
+func testQuerySimple(t *testing.T, conf testConfig) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+
+	exit, err := conf.suite.Exec(t, ctx, conf.name)
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)
 		cancel()

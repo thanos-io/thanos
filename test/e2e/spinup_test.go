@@ -271,7 +271,6 @@ func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (
 
 	// Run go routine for each command.
 	for _, c := range commands {
-		fmt.Printf("\nExecuting command:\n%v\n", c.Args)
 		var stderr, stdout bytes.Buffer
 		c.Stderr = &stderr
 		c.Stdout = &stdout
@@ -297,8 +296,6 @@ func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (
 			if stdout.Len() > 0 {
 				t.Logf("%s STDOUT\n %s", cmd.Path, stdout.String())
 			}
-
-			fmt.Printf("err from cmd.wait = %v", err)
 
 			return err
 		}, func(error) {
