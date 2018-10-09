@@ -3,6 +3,7 @@ package e2e_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -10,7 +11,7 @@ import (
 	"path"
 	"syscall"
 	"testing"
-	"encoding/json"
+
 	"github.com/improbable-eng/thanos/pkg/testutil"
 
 	"github.com/oklog/run"
@@ -121,7 +122,7 @@ func querierWithFileSD(i int, replicaLabel string, storesAddresses []string) (cm
 		conf := "[ { \"targets\": ["
 		for index, stores := range storesAddresses {
 			conf += fmt.Sprintf("\"%s\"", stores)
-			if index + 1 < len(storesAddresses) {
+			if index+1 < len(storesAddresses) {
 				conf += ","
 			}
 		}
@@ -297,7 +298,7 @@ func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (
 				t.Logf("%s STDOUT\n %s", cmd.Path, stdout.String())
 			}
 
-			fmt.Printf("err from cmd.wait = %v",err)
+			fmt.Printf("err from cmd.wait = %v", err)
 
 			return err
 		}, func(error) {

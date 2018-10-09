@@ -3,15 +3,16 @@ package discovery
 import (
 	"context"
 	"fmt"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/pkg/errors"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/runutil"
+	"github.com/pkg/errors"
 )
 
 const (
