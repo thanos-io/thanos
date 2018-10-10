@@ -47,9 +47,7 @@ func TestQueryStore_Series(t *testing.T) {
 		&testClient{
 			StoreClient: &storeClient{
 				RespSet: []*storepb.SeriesResponse{
-					storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-					storepb.NewWarnSeriesResponse(errors.New("partial error")),
-					storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{2, 2}, {3, 3}, {4, 4}}),
+
 				},
 			},
 			minTime: 1,
@@ -200,6 +198,45 @@ func TestQueryStore_Series_SameExtSet(t *testing.T) {
 	testutil.Equals(t, 0, len(s1.Warnings))
 }
 
+func TestQueryStore_Series_FillResponseChannel(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	var cls []Client
+	for i := 0; i < 10; i++ {
+		cls = append(cls, &testClient{
+			StoreClient: &storeClient{
+				RespSet: []*storepb.SeriesResponse{
+					storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
+				},
+				RespError: errors.New("test error"),
+			},
+			minTime: 1,
+			maxTime: 300,
+		})
+	}
+
+	q := NewProxyStore(nil,
+		func(context.Context) ([]Client, error) { return cls, nil },
+		tlabels.FromStrings("fed", "a"),
+	)
+
+	ctx := context.Background()
+	s1 := newStoreSeriesServer(ctx)
+
+	// This should return empty response, since there is external label mismatch.
+	err := q.Series(
+		&storepb.SeriesRequest{
+			MinTime:  1,
+			MaxTime:  300,
+			Matchers: []storepb.LabelMatcher{{Name: "fed", Value: "a", Type: storepb.LabelMatcher_EQ}},
+		}, s1,
+	)
+	testutil.Ok(t, err)
+	testutil.Equals(t, 0, len(s1.SeriesSet))
+	testutil.Equals(t, 0, len(s1.Warnings))
+}
+
+
 type rawSeries struct {
 	lset    []storepb.Label
 	samples []sample
@@ -342,7 +379,8 @@ func (s *storeSeriesServer) Context() context.Context {
 type storeClient struct {
 	Values map[string][]string
 
-	RespSet []*storepb.SeriesResponse
+	RespSet   []*storepb.SeriesResponse
+	RespError error
 }
 
 func (s *storeClient) Info(ctx context.Context, req *storepb.InfoRequest, _ ...grpc.CallOption) (*storepb.InfoResponse, error) {
@@ -350,7 +388,7 @@ func (s *storeClient) Info(ctx context.Context, req *storepb.InfoRequest, _ ...g
 }
 
 func (s *storeClient) Series(ctx context.Context, req *storepb.SeriesRequest, _ ...grpc.CallOption) (storepb.Store_SeriesClient, error) {
-	return &StoreSeriesClient{ctx: ctx, respSet: s.RespSet}, nil
+	return &StoreSeriesClient{ctx: ctx, respSet: s.RespSet}, s.RespError
 }
 
 func (s *storeClient) LabelNames(ctx context.Context, req *storepb.LabelNamesRequest, _ ...grpc.CallOption) (*storepb.LabelNamesResponse, error) {
