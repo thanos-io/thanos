@@ -47,7 +47,9 @@ func TestQueryStore_Series(t *testing.T) {
 		&testClient{
 			StoreClient: &storeClient{
 				RespSet: []*storepb.SeriesResponse{
-
+					storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+					storepb.NewWarnSeriesResponse(errors.New("partial error")),
+					storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{2, 2}, {3, 3}, {4, 4}}),
 				},
 			},
 			minTime: 1,
