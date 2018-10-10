@@ -83,13 +83,13 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		return nil
 	}
 
+	stores, err := s.stores(srv.Context())
 	var (
-		respCh    = make(chan *storepb.SeriesResponse, 10)
 		seriesSet []storepb.SeriesSet
+		respCh = make(chan *storepb.SeriesResponse, len(stores) + 1)
 		g         errgroup.Group
 	)
 
-	stores, err := s.stores(srv.Context())
 	if err != nil {
 		level.Error(s.logger).Log("err", err)
 		return status.Errorf(codes.Unknown, err.Error())
