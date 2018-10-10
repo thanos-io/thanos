@@ -156,24 +156,13 @@ func ruler(i int, rules string) (cmdScheduleFunc, string) {
 			return nil, errors.Wrap(err, "creating ruler file failed")
 		}
 
-		return []*exec.Cmd{exec.Command("thanos",
-			append([]string{"rule",
-				"--debug.name", fmt.Sprintf("rule-%d", i),
-				"--label", fmt.Sprintf(`replica="%d"`, i),
-				"--data-dir", dbDir,
-				"--rule-file", path.Join(dbDir, "*.yaml"),
-				"--eval-interval", "1s",
-				"--alertmanagers.url", "http://127.0.0.1:29093",
-				"--grpc-address", rulerGRPC(i),
-				"--http-address", rulerHTTP(i),
-				"--cluster.address", rulerCluster(i),
-				"--cluster.advertise-address", rulerCluster(i),
-				"--cluster.gossip-interval", "200ms",
-				"--cluster.pushpull-interval", "200ms",
-				"--log.level", "debug",
-			},
-				clusterPeerFlags...)...,
-		)}, nil
+		args := append(defaultRulerFlags(i, dbDir),
+			"--cluster.advertise-address", rulerCluster(i),
+			"--cluster.gossip-interval", "200ms",
+			"--cluster.pushpull-interval", "200ms")
+		args = append(args, clusterPeerFlags...)
+
+		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
 	}, rulerCluster(i)
 }
 
@@ -189,18 +178,7 @@ func rulerWithQueryFlags(i int, rules string, queryAddresses ...string) (cmdSche
 			return nil, errors.Wrap(err, "creating ruler file failed")
 		}
 
-		args := []string{"rule",
-			"--debug.name", fmt.Sprintf("rule-%d", i),
-			"--label", fmt.Sprintf(`replica="%d"`, i),
-			"--data-dir", dbDir,
-			"--rule-file", path.Join(dbDir, "*.yaml"),
-			"--eval-interval", "1s",
-			"--alertmanagers.url", "http://127.0.0.1:29093",
-			"--grpc-address", rulerGRPC(i),
-			"--http-address", rulerHTTP(i),
-			"--cluster.address", rulerCluster(i),
-			"--log.level", "debug",
-		}
+		args := defaultRulerFlags(i, dbDir)
 
 		for _, addr := range queryAddresses {
 			args = append(args, "--query", addr)
@@ -227,32 +205,14 @@ func rulerWithFileSD(i int, rules string, queryAddresses ...string) (cmdSchedule
 			return nil, errors.Wrap(err, "create ruler filesd dir failed")
 		}
 
-		conf := "[ { \"targets\": ["
-		for index, addr := range queryAddresses {
-			conf += fmt.Sprintf("\"%s\"", addr)
-			if index+1 < len(queryAddresses) {
-				conf += ","
-			}
-		}
-		conf += "] } ]"
-
-		if err := ioutil.WriteFile(ruleFileSDDir+"/filesd.json", []byte(conf), 0666); err != nil {
+		if err := ioutil.WriteFile(ruleFileSDDir+"/filesd.json", []byte(generateFileSD(queryAddresses)), 0666); err != nil {
 			return nil, errors.Wrap(err, "creating ruler filesd config failed")
 		}
 
-		return []*exec.Cmd{exec.Command("thanos", "rule",
-			"--debug.name", fmt.Sprintf("rule-%d", i),
-			"--label", fmt.Sprintf(`replica="%d"`, i),
-			"--data-dir", dbDir,
-			"--rule-file", path.Join(dbDir, "*.yaml"),
-			"--eval-interval", "1s",
-			"--alertmanagers.url", "http://127.0.0.1:29093",
-			"--grpc-address", rulerGRPC(i),
-			"--http-address", rulerHTTP(i),
-			"--cluster.address", rulerCluster(i),
-			"--log.level", "debug",
-			"--query-sd-file", path.Join(ruleFileSDDir, "filesd.json"),
-		)}, nil
+		args := append(defaultRulerFlags(i, dbDir),
+			"--query-sd-file", path.Join(ruleFileSDDir, "filesd.json"))
+
+		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
 	}, ""
 }
 
@@ -390,5 +350,20 @@ func defaultQuerierFlags(i int, replicaLabel string) []string {
 		"--log.level", "debug",
 		"--query.replica-label", replicaLabel,
 		"--cluster.address", queryCluster(i),
+	}
+}
+
+func defaultRulerFlags(i int, dbDir string) []string {
+	return []string{"rule",
+		"--debug.name", fmt.Sprintf("rule-%d", i),
+		"--label", fmt.Sprintf(`replica="%d"`, i),
+		"--data-dir", dbDir,
+		"--rule-file", path.Join(dbDir, "*.yaml"),
+		"--eval-interval", "1s",
+		"--alertmanagers.url", "http://127.0.0.1:29093",
+		"--grpc-address", rulerGRPC(i),
+		"--http-address", rulerHTTP(i),
+		"--cluster.address", rulerCluster(i),
+		"--log.level", "debug",
 	}
 }

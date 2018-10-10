@@ -68,7 +68,7 @@ func TestRule(t *testing.T) {
 	}
 }
 
-// TestRuleComponent tests the basic interaction between the rule component
+// testRuleComponent tests the basic interaction between the rule component
 // and the querying layer.
 // Rules are evaluated against the query layer and the query layer in return
 // can access data written by the rules.
