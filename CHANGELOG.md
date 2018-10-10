@@ -8,6 +8,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 ## Unreleased
 
+### Deprecated
 - Remove support of those flags for bucket
     - --gcs-bucket=\<bucket\>
     - --s3.bucket=\<bucket\>
@@ -25,7 +26,13 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
     * S3_INSECURE
     * S3_SIGNATURE_VERSION2
     * S3_SECRET_KEY
+
+### Added
 - Add flag `--objstore.config-file` to reference to the bucket configuration file in yaml format. Note that detailed information in document [storage](docs/storage.md).
+
+### Fixed
+- [#566](https://github.com/improbable-eng/thanos/issues/566) - Fixed issue whereby the Proxy Store could end up in a deadlock if there were more than 9 stores being queried and all returned an error.
+
 
 ## [v0.1.0](https://github.com/improbable-eng/thanos/releases/tag/v0.1.0) - 2018.09.14
 
