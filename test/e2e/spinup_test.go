@@ -104,36 +104,21 @@ func scraper(i int, config string, gossip bool) (cmdScheduleFunc, string) {
 
 func querier(i int, replicaLabel string) (cmdScheduleFunc, string) {
 	return func(_ string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
-		return []*exec.Cmd{exec.Command("thanos",
-			append([]string{"query",
-				"--debug.name", fmt.Sprintf("querier-%d", i),
-				"--grpc-address", queryGRPC(i),
-				"--http-address", queryHTTP(i),
-				"--cluster.address", queryCluster(i),
-				"--cluster.advertise-address", queryCluster(i),
-				"--cluster.gossip-interval", "200ms",
-				"--cluster.pushpull-interval", "200ms",
-				"--log.level", "debug",
-				"--query.replica-label", replicaLabel,
-			},
-				clusterPeerFlags...)...,
-		)}, nil
+		args := append(defaultQuerierFlags(i, replicaLabel),
+			"--cluster.advertise-address", queryCluster(i),
+			"--cluster.gossip-interval", "200ms",
+			"--cluster.pushpull-interval", "200ms")
+		args = append(args, clusterPeerFlags...)
+		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
 	}, queryCluster(i)
 }
 
 func querierWithStoreFlags(i int, replicaLabel string, storesAddresses []string) (cmdScheduleFunc, string) {
 	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
-		args := []string{"query",
-			"--debug.name", fmt.Sprintf("querier-%d", i),
-			"--grpc-address", queryGRPC(i),
-			"--http-address", queryHTTP(i),
-			"--log.level", "debug",
-			"--query.replica-label", replicaLabel,
-			"--cluster.address", queryCluster(i),
-		}
+		args := defaultQuerierFlags(i, replicaLabel)
 
-		for _, store := range storesAddresses {
-			args = append(args, "--store", store)
+		for _, addr := range storesAddresses {
+			args = append(args, "--store", addr)
 		}
 
 		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
@@ -147,28 +132,14 @@ func querierWithFileSD(i int, replicaLabel string, storesAddresses []string) (cm
 			return nil, errors.Wrap(err, "create prom dir failed")
 		}
 
-		conf := "[ { \"targets\": ["
-		for index, stores := range storesAddresses {
-			conf += fmt.Sprintf("\"%s\"", stores)
-			if index+1 < len(storesAddresses) {
-				conf += ","
-			}
-		}
-		conf += "] } ]"
-
-		if err := ioutil.WriteFile(queryFileSDDir+"/filesd.json", []byte(conf), 0666); err != nil {
+		if err := ioutil.WriteFile(queryFileSDDir+"/filesd.json", []byte(generateFileSD(storesAddresses)), 0666); err != nil {
 			return nil, errors.Wrap(err, "creating prom config failed")
 		}
-		return []*exec.Cmd{exec.Command("thanos",
-			"query",
-			"--debug.name", fmt.Sprintf("querier-%d", i),
-			"--grpc-address", queryGRPC(i),
-			"--http-address", queryHTTP(i),
-			"--log.level", "debug",
-			"--query.replica-label", replicaLabel,
-			"--cluster.address", queryCluster(i),
-			"--store-sd-file", path.Join(queryFileSDDir, "filesd.json"),
-		)}, nil
+
+		args := append(defaultQuerierFlags(i, replicaLabel),
+			"--store-sd-file", path.Join(queryFileSDDir, "filesd.json"))
+
+		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
 	}, ""
 }
 
@@ -316,4 +287,28 @@ func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (
 	}(g)
 
 	return exit, nil
+}
+
+func generateFileSD(addresses []string) string {
+	conf := "[ { \"targets\": ["
+	for index, addr := range addresses {
+		conf += fmt.Sprintf("\"%s\"", addr)
+		if index+1 < len(addresses) {
+			conf += ","
+		}
+	}
+	conf += "] } ]"
+	return conf
+}
+
+func defaultQuerierFlags(i int, replicaLabel string) []string {
+	return []string{
+		"query",
+		"--debug.name", fmt.Sprintf("querier-%d", i),
+		"--grpc-address", queryGRPC(i),
+		"--http-address", queryHTTP(i),
+		"--log.level", "debug",
+		"--query.replica-label", replicaLabel,
+		"--cluster.address", queryCluster(i),
+	}
 }
