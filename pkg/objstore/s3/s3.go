@@ -38,8 +38,8 @@ const (
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const DirDelim = "/"
 
-// s3Config stores the configuration for s3 bucket.
-type s3Config struct {
+// Config stores the configuration for s3 bucket.
+type Config struct {
 	Bucket        string `yaml:"bucket"`
 	Endpoint      string `yaml:"endpoint"`
 	AccessKey     string `yaml:"access-key"`
@@ -60,11 +60,18 @@ type Bucket struct {
 
 // NewBucket returns a new Bucket using the provided s3 config values.
 func NewBucket(logger log.Logger, conf []byte, reg prometheus.Registerer, component string) (*Bucket, error) {
-	var chain []credentials.Provider
-	var config s3Config
+	var config Config
 	if err := yaml.Unmarshal(conf, &config); err != nil {
 		return nil, err
 	}
+
+	return NewBucketWithConfig(logger, config, reg, component)
+}
+
+// NewBucket returns a new Bucket using the provided s3 config values.
+func NewBucketWithConfig(logger log.Logger, config Config, reg prometheus.Registerer, component string) (*Bucket, error) {
+	var chain []credentials.Provider
+
 	if err := Validate(config); err != nil {
 		return nil, err
 	}
@@ -150,7 +157,7 @@ func (b *Bucket) Name() string {
 }
 
 // Validate checks to see the config options are set.
-func Validate(conf s3Config) error {
+func Validate(conf Config) error {
 	if conf.Endpoint == "" ||
 		(conf.AccessKey == "" && conf.SecretKey != "") ||
 		(conf.AccessKey != "" && conf.SecretKey == "") {
@@ -160,7 +167,7 @@ func Validate(conf s3Config) error {
 }
 
 // ValidateForTests checks to see the config options for tests are set.
-func ValidateForTests(conf s3Config) error {
+func ValidateForTests(conf Config) error {
 	if conf.Endpoint == "" ||
 		conf.AccessKey == "" ||
 		conf.SecretKey == "" {
@@ -269,22 +276,16 @@ func (b *Bucket) IsObjNotFoundErr(err error) bool {
 
 func (b *Bucket) Close() error { return nil }
 
-func configFromEnv() s3Config {
-	c := s3Config{
+func configFromEnv() Config {
+	c := Config{
 		Bucket:    os.Getenv("S3_BUCKET"),
 		Endpoint:  os.Getenv("S3_ENDPOINT"),
 		AccessKey: os.Getenv("S3_ACCESS_KEY"),
 		SecretKey: os.Getenv("S3_SECRET_KEY"),
 	}
 
-	insecure, err := strconv.ParseBool(os.Getenv("S3_INSECURE"))
-	if err != nil {
-		c.Insecure = insecure
-	}
-	signV2, err := strconv.ParseBool(os.Getenv("S3_SIGNATURE_VERSION2"))
-	if err != nil {
-		c.SignatureV2 = signV2
-	}
+	c.Insecure, _ = strconv.ParseBool(os.Getenv("S3_INSECURE"))
+	c.SignatureV2, _ = strconv.ParseBool(os.Getenv("S3_SIGNATURE_VERSION2"))
 	return c
 }
 
@@ -295,6 +296,19 @@ func NewTestBucket(t testing.TB, location string) (objstore.Bucket, func(), erro
 	if err := ValidateForTests(c); err != nil {
 		return nil, nil, err
 	}
+
+	if c.Bucket != "" && os.Getenv("THANOS_ALLOW_EXISTING_BUCKET_USE") == "" {
+		return nil, nil, errors.New("S3_BUCKET is defined. Normally this tests will create temporary bucket " +
+			"and delete it after test. Unset S3_BUCKET env variable to use default logic. If you really want to run " +
+			"tests against provided (NOT USED!) bucket, set THANOS_ALLOW_EXISTING_BUCKET_USE=true. WARNING: That bucket " +
+			"needs to be manually cleared. This means that it is only useful to run one test in a time. This is due " +
+			"to safety (accidentally pointing prod bucket for test) as well as aws s3 not being fully strong consistent.")
+	}
+
+	return NewTestBucketFromConfig(t, location, c, true)
+}
+
+func NewTestBucketFromConfig(t testing.TB, location string, c Config, reuseBucket bool) (objstore.Bucket, func(), error) {
 	bc, err := yaml.Marshal(c)
 	if err != nil {
 		return nil, nil, err
@@ -304,15 +318,8 @@ func NewTestBucket(t testing.TB, location string) (objstore.Bucket, func(), erro
 		return nil, nil, err
 	}
 
-	if c.Bucket != "" {
-		if os.Getenv("THANOS_ALLOW_EXISTING_BUCKET_USE") == "" {
-			return nil, nil, errors.New("S3_BUCKET is defined. Normally this tests will create temporary bucket " +
-				"and delete it after test. Unset S3_BUCKET env variable to use default logic. If you really want to run " +
-				"tests against provided (NOT USED!) bucket, set THANOS_ALLOW_EXISTING_BUCKET_USE=true. WARNING: That bucket " +
-				"needs to be manually cleared. This means that it is only useful to run one test in a time. This is due " +
-				"to safety (accidentally pointing prod bucket for test) as well as aws s3 not being fully strong consistent.")
-		}
-
+	bktToCreate := c.Bucket
+	if c.Bucket != "" && reuseBucket {
 		if err := b.Iter(context.Background(), "", func(f string) error {
 			return errors.Errorf("bucket %s is not empty", c.Bucket)
 		}); err != nil {
@@ -323,23 +330,26 @@ func NewTestBucket(t testing.TB, location string) (objstore.Bucket, func(), erro
 		return b, func() {}, nil
 	}
 
-	src := rand.NewSource(time.Now().UnixNano())
+	if c.Bucket == "" {
+		src := rand.NewSource(time.Now().UnixNano())
 
-	// Bucket name need to conform: https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-s3-bucket-naming-requirements.html
-	tmpBucketName := strings.Replace(fmt.Sprintf("test_%s_%x", strings.ToLower(t.Name()), src.Int63()), "_", "-", -1)
-	if len(tmpBucketName) >= 63 {
-		tmpBucketName = tmpBucketName[:63]
+		// Bucket name need to conform: https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-s3-bucket-naming-requirements.html
+		bktToCreate = strings.Replace(fmt.Sprintf("test_%s_%x", strings.ToLower(t.Name()), src.Int63()), "_", "-", -1)
+		if len(bktToCreate) >= 63 {
+			bktToCreate = bktToCreate[:63]
+		}
 	}
-	if err := b.client.MakeBucket(tmpBucketName, location); err != nil {
+
+	if err := b.client.MakeBucket(bktToCreate, location); err != nil {
 		return nil, nil, err
 	}
-	b.name = tmpBucketName
-	t.Log("created temporary AWS bucket for AWS tests with name", tmpBucketName, "in", location)
+	b.name = bktToCreate
+	t.Log("created temporary AWS bucket for AWS tests with name", bktToCreate, "in", location)
 
 	return b, func() {
 		objstore.EmptyBucket(t, context.Background(), b)
-		if err := b.client.RemoveBucket(tmpBucketName); err != nil {
-			t.Logf("deleting bucket %s failed: %s", tmpBucketName, err)
+		if err := b.client.RemoveBucket(bktToCreate); err != nil {
+			t.Logf("deleting bucket %s failed: %s", bktToCreate, err)
 		}
 	}, nil
 }

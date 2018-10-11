@@ -23,12 +23,14 @@ import (
 )
 
 const (
-	// TODO(bplotka): Change default version to something more recent after https://github.com/prometheus/prometheus/issues/4551 is fixed.
+	// TODO(bwplotka): Change default version to something more recent after https://github.com/prometheus/prometheus/issues/4551 is fixed.
 	defaultPrometheusVersion   = "v2.2.1"
 	defaultAlertmanagerVersion = "v0.15.2"
+	defaultMinioVersion        = "RELEASE.2018-10-06T00-15-16Z"
 
 	promBinEnvVar         = "THANOS_TEST_PROMETHEUS_PATH"
 	alertmanagerBinEnvVar = "THANOS_TEST_ALERTMANAGER_PATH"
+	minioBinEnvVar        = "THANOS_TEST_MINIO_PATH"
 )
 
 func PrometheusBinary() string {
@@ -43,6 +45,14 @@ func AlertmanagerBinary() string {
 	b := os.Getenv(alertmanagerBinEnvVar)
 	if b == "" {
 		return fmt.Sprintf("alertmanager-%s", defaultAlertmanagerVersion)
+	}
+	return b
+}
+
+func MinioBinary() string {
+	b := os.Getenv(minioBinEnvVar)
+	if b == "" {
+		return fmt.Sprintf("minio-%s", defaultMinioVersion)
 	}
 	return b
 }

@@ -58,7 +58,7 @@ type bucketStoreMetrics struct {
 	chunkSizeBytes        prometheus.Histogram
 }
 
-func newBucketStoreMetrics(reg prometheus.Registerer, s *BucketStore) *bucketStoreMetrics {
+func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	var m bucketStoreMetrics
 
 	m.blockLoads = prometheus.NewCounter(prometheus.CounterOpts{
@@ -203,7 +203,7 @@ func NewBucketStore(
 		blockSets:    map[uint64]*bucketBlockSet{},
 		debugLogging: debugLogging,
 	}
-	s.metrics = newBucketStoreMetrics(reg, s)
+	s.metrics = newBucketStoreMetrics(reg)
 
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return nil, errors.Wrap(err, "create dir")
