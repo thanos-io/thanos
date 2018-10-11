@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"path"
 	"time"
 
@@ -147,6 +148,14 @@ func runCompact(
 
 	ctx, cancel := context.WithCancel(context.Background())
 	f := func() error {
+		// Clean up the compactor temporary directory before beginning.
+		if err := os.RemoveAll(compactDir); err != nil {
+			return errors.Wrap(err, "clean compactor temporary directory")
+		}
+		if err := os.MkdirAll(compactDir, 0777); err != nil {
+			return errors.Wrap(err, "create compactor temporary directory")
+		}
+
 		if err := compactor.Compact(ctx); err != nil {
 			return errors.Wrap(err, "compaction failed")
 		}
