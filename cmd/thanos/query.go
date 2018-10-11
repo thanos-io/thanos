@@ -17,6 +17,7 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/discovery/cache"
+	"github.com/improbable-eng/thanos/pkg/dns"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/query/api"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -260,16 +261,15 @@ func runQuery(
 	}
 
 	fileSDCache := cache.New()
+	// DNS discoverer with default resolver
+	dnsDiscoverer := dns.NewServiceDiscoverer(nil)
 
 	var (
 		stores = query.NewStoreSet(
 			logger,
 			reg,
 			func() (specs []query.StoreSpec) {
-				// Add store specs from static flags.
-				specs = append(staticSpecs)
-
-				// Add store specs from gossip.
+				// Add store specs from gossip. No need to resolve DNS for them
 				for id, ps := range peer.PeerStates(cluster.PeerTypesStoreAPIs()...) {
 					if ps.StoreAPIAddr == "" {
 						level.Error(logger).Log("msg", "Gossip found peer that propagates empty address, ignoring.", "lset", fmt.Sprintf("%v", ps.Metadata.Labels))
@@ -279,9 +279,28 @@ func runQuery(
 					specs = append(specs, &gossipSpec{id: id, addr: ps.StoreAPIAddr, peer: peer})
 				}
 
-				// Add store specs from file SD.
+				// Get addr from static flags and file SD and DNS resolve them.
+				rawAddrs := storeAddrs
 				for _, addr := range fileSDCache.Addresses() {
-					specs = append(specs, query.NewGRPCStoreSpec(addr))
+					rawAddrs = append(rawAddrs, addr)
+				}
+				//TODO(ivan) check what the default port should be
+				resolved, err := dnsDiscoverer.Resolve(context.Background(), rawAddrs, 9090)
+				if err != nil {
+					// TODO(ivan) What to do here?
+					// Option 1: make the func return err as well and propagate it several layers up...
+					// Option 2: log error and
+					//          2.1: don't append any of the addresses from static flags and file SD.
+					//          2.2: append the raw addresses without dns resolving them. (Implemented here)
+					level.Warn(logger).Log("msg", "failed dns lookup for store addresses in query")
+					for _, addr := range rawAddrs {
+						specs = append(specs, query.NewGRPCStoreSpec(addr))
+					}
+				} else {
+					// Create GrpcSpecs from the static flag and file SD addresses
+					for _, addr := range resolved {
+						specs = append(specs, query.NewGRPCStoreSpec(addr.Host))
+					}
 				}
 
 				specs = removeDuplicateStoreSpecs(logger, duplicatedStores, specs)
