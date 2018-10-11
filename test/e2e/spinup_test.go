@@ -256,11 +256,10 @@ func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (
 		}
 	}()
 
-	minioExit := make(chan struct{})
+	var minioExit chan struct{}
 	if s.withPreStartedMinio {
 		// Start minio before anything else.
 		// NewTestBucketFromConfig is responsible for healthchecking by creating a requested bucket in retry loop.
-
 		minioExit, err = newSpinupSuite().
 			Add(minio(s.minioConfig.AccessKey, s.minioConfig.SecretKey), "").
 			Exec(t, ctx, testName+"_minio")
@@ -355,7 +354,8 @@ func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (
 
 			return errors.Wrap(err, id)
 		}, func(error) {
-			_ = cmd.Process.Signal(syscall.SIGTERM)
+			// This's accepted scenario to kill a process immediately for sure and run tests as fast as possible.
+			_ = cmd.Process.Signal(syscall.SIGKILL)
 		})
 	}
 
@@ -363,6 +363,9 @@ func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (
 	go func(g run.Group) {
 		if err := g.Run(); err != nil && ctx.Err() == nil {
 			t.Errorf("Some process exited unexpectedly: %v", err)
+		}
+		if minioExit != nil {
+			<-minioExit
 		}
 		close(exit)
 	}(g)
