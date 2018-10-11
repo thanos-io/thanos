@@ -15,10 +15,16 @@ import (
 // A value of 0 disables the retention for its resolution.
 func ApplyRetentionPolicyByResolution(ctx context.Context, logger log.Logger, bkt objstore.Bucket, retentionByResolution map[ResolutionLevel]time.Duration) error {
 	level.Info(logger).Log("msg", "start optional retention")
-	if err := bkt.Iter(ctx, "", func(name string) error {
+
+	list, err := objstore.GetObjectNameList(ctx, logger, bkt, "")
+	if err != nil {
+		return errors.Wrap(err, "retention")
+	}
+
+	for _, name := range list {
 		id, ok := block.IsBlockDir(name)
 		if !ok {
-			return nil
+			continue
 		}
 		m, err := block.GetMeta(ctx, logger, bkt, id)
 		if err != nil {
@@ -27,7 +33,7 @@ func ApplyRetentionPolicyByResolution(ctx context.Context, logger log.Logger, bk
 
 		retentionDuration := retentionByResolution[ResolutionLevel(m.Thanos.Downsample.Resolution)]
 		if retentionDuration.Seconds() == 0 {
-			return nil
+			continue
 		}
 
 		maxTime := time.Unix(m.MaxTime/1000, 0)
@@ -37,10 +43,6 @@ func ApplyRetentionPolicyByResolution(ctx context.Context, logger log.Logger, bk
 				return errors.Wrap(err, "delete block")
 			}
 		}
-
-		return nil
-	}); err != nil {
-		return errors.Wrap(err, "retention")
 	}
 
 	level.Info(logger).Log("msg", "optional retention apply done")

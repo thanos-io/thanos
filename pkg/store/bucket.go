@@ -247,31 +247,36 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 
 	allIDs := map[ulid.ULID]struct{}{}
 
-	err := s.bucket.Iter(ctx, "", func(name string) error {
+	list, err := objstore.GetObjectNameList(ctx, s.logger, s.bucket, "")
+	if err != nil {
+		return errors.Wrap(err, "iter")
+	}
+
+	for _, name := range list {
 		// Strip trailing slash indicating a directory.
 		id, err := ulid.Parse(name[:len(name)-1])
 		if err != nil {
-			return nil
+			continue
 		}
 		allIDs[id] = struct{}{}
 
 		if b := s.getBlock(id); b != nil {
-			return nil
+			continue
 		}
 		select {
 		case <-ctx.Done():
+			// TODO: should we use ctx for clean up as well?
+			// for the time being if ctx.Dome, the whole cleanup process would be run, see below
+			break
 		case blockc <- id:
 		}
-		return nil
-	})
+	}
 
 	close(blockc)
 	wg.Wait()
 
-	if err != nil {
-		return errors.Wrap(err, "iter")
-	}
 	// Drop all blocks that are no longer present in the bucket.
+	// TODO: should we use ctx for clean up as well? for the time being if ctx.Dome, the whole cleanup process would be run
 	for id := range s.blocks {
 		if _, ok := allIDs[id]; ok {
 			continue
@@ -1035,10 +1040,8 @@ func newBucketBlock(
 		return nil, errors.Wrap(err, "load index cache")
 	}
 	// Get object handles for all chunk files.
-	err = bkt.Iter(ctx, path.Join(id.String(), block.ChunksDirname), func(n string) error {
-		b.chunkObjs = append(b.chunkObjs, n)
-		return nil
-	})
+
+	b.chunkObjs, err = objstore.GetObjectNameList(ctx, logger, bkt, path.Join(id.String(), block.ChunksDirname))
 	if err != nil {
 		return nil, errors.Wrap(err, "list chunk files")
 	}
@@ -1631,21 +1634,24 @@ func (s queryStats) merge(o *queryStats) *queryStats {
 // GetMetas gets all bucket metas
 func GetMetas(ctx context.Context, logger log.Logger, bkt objstore.Bucket) ([]*block.Meta, error) {
 	var metas []*block.Meta
+	list, err := objstore.GetObjectNameList(ctx, logger, bkt, "")
+	if err != nil {
+		return nil, errors.Wrap(err, "get metas")
+	}
 
-	err := bkt.Iter(ctx, "", func(name string) error {
+	for _, name := range list {
 		id, ok := block.IsBlockDir(name)
 		if !ok {
-			return nil
+			continue
 		}
 
 		m, err := block.GetMeta(ctx, logger, bkt, id)
 		if err != nil {
-			return errors.Wrap(err, "decode meta")
+			return nil, errors.Wrap(err, "get metas")
 		}
 
 		metas = append(metas, &m)
-		return nil
-	})
+	}
 
 	return metas, err
 }

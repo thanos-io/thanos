@@ -39,6 +39,10 @@ type BucketReader interface {
 	// object name including the prefix of the inspected directory.
 	Iter(ctx context.Context, dir string, f func(string) error) error
 
+	// GetObjectNameList gets list of all objects names in the given directory. The object list contains the full
+	// object name including the prefix of the inspected directory.
+	GetObjectNameList(ctx context.Context, dir string) (ObjectNameList, error)
+
 	// Get returns a reader for the given object name.
 	Get(ctx context.Context, name string) (io.ReadCloser, error)
 
@@ -52,6 +56,9 @@ type BucketReader interface {
 	// IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
 	IsObjNotFoundErr(err error) bool
 }
+
+// ObjectNameList contains the full object name including the prefix of the inspected directory.
+type ObjectNameList []string
 
 // UploadDir uploads all files in srcdir to the bucket with into a top-level directory
 // named dstdir. It is a caller responsibility to clean partial upload in case of failure.
@@ -233,8 +240,12 @@ func DownloadDir(ctx context.Context, logger log.Logger, bucket BucketReader, sr
 		}
 	}()
 
-	// TODO(xjewer): handle iterations, what's the best effort?
-	err = bucket.Iter(ctx, src, func(name string) error {
+	list, err := GetObjectNameList(ctx, logger, bucket, src)
+	if err != nil {
+		return errors.Wrapf(err, "failed to download dir %s", src)
+	}
+
+	for _, name := range list {
 		if strings.HasSuffix(name, DirDelim) {
 			return DownloadDir(ctx, logger, bucket, name, filepath.Join(dst, filepath.Base(name)))
 		}
@@ -243,10 +254,33 @@ func DownloadDir(ctx context.Context, logger log.Logger, bucket BucketReader, sr
 		}
 
 		downloadedFiles = append(downloadedFiles, dst)
-		return nil
-	})
+	}
 
 	return nil
+}
+
+// GetObjectNameList returns list of object names, each name is a the full object name including the prefix of the
+// inspected directory
+func GetObjectNameList(ctx context.Context, logger log.Logger, bucket BucketReader, src string) (ObjectNameList, error) {
+	var list ObjectNameList
+
+	errorNotifier := func(err error, d time.Duration) {
+		level.Warn(logger).Log("msg", "unsuccessful attempt to get object list", "err", err, "next", d.String())
+	}
+
+	do := func() error {
+		var err error
+		list, err = bucket.GetObjectNameList(ctx, src)
+		if err != nil {
+			return handleErrors(errors.Wrap(err, "get object list"))
+		}
+		return nil
+	}
+
+	if err := backoff.RetryNotify(do, getCustomBackoff(ctx), errorNotifier); err != nil {
+		return list, errors.Wrapf(err, "failed to get object list %s", src)
+	}
+	return list, nil
 }
 
 // Exists checks if file exists with backoff retries.

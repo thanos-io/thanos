@@ -3,13 +3,12 @@ package compact
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
 	"sync"
 	"time"
-
-	"io/ioutil"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -158,24 +157,31 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 	// Read back all block metas so we can detect deleted blocks.
 	remote := map[ulid.ULID]struct{}{}
 
-	err := c.bkt.Iter(ctx, "", func(name string) error {
+	// Get all object names from the bucket.
+	list, err := objstore.GetObjectNameList(ctx, c.logger, c.bkt, "")
+	if err != nil {
+		// TODO: consider, what to do on errors, like: wrong bucket or etc.
+		return retry(errors.Wrap(err, "retrieve bucket block metas"))
+	}
+
+	for _, name := range list {
 		id, ok := block.IsBlockDir(name)
 		if !ok {
-			return nil
+			continue
 		}
 
 		remote[id] = struct{}{}
 
 		// Check if we already have this block cached locally.
 		if _, ok := c.blocks[id]; ok {
-			return nil
+			continue
 		}
 
 		level.Debug(c.logger).Log("msg", "download meta", "block", id)
 
 		meta, err := block.GetMeta(ctx, c.logger, c.bkt, id)
 		if err != nil {
-			return errors.Wrapf(err, "downloading meta.json for %s", id)
+			return retry(errors.Wrapf(err, "downloading meta.json for %s", id))
 		}
 
 		// ULIDs contain a millisecond timestamp. We do not consider blocks that have been created too recently to
@@ -184,22 +190,12 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 		// - compactor created blocks
 		// NOTE: It is not safe to miss "old" block (even that it is newly created) in sync step. Compactor needs to aware of ALL old blocks.
 		// TODO(bplotka): https://github.com/improbable-eng/thanos/issues/377
-		if ulid.Now()-id.Time() < uint64(c.syncDelay/time.Millisecond) &&
-			meta.Thanos.Source != block.BucketRepairSource &&
-			meta.Thanos.Source != block.CompactorSource &&
-			meta.Thanos.Source != block.CompactorRepairSource {
-
+		if block.IsFreshBlock(id, c.syncDelay, meta) {
 			level.Debug(c.logger).Log("msg", "block is too fresh for now", "block", id)
-			return nil
+			continue
 		}
 
-		remote[id] = struct{}{}
 		c.blocks[id] = &meta
-
-		return nil
-	})
-	if err != nil {
-		return retry(errors.Wrap(err, "retrieve bucket block metas"))
 	}
 
 	// Delete all local block dirs that no longer exist in the bucket.

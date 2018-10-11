@@ -184,6 +184,35 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 	return nil
 }
 
+// GetObjectNameList gets list of objects in the given directory. The object list contains the full
+// object name including the prefix of the inspected directory.
+// Keeps all objects in-memory. This is trade-of between allocation all objects at a time vs reloading all objects
+// one by one in case of network failure. See: Iter
+func (b *Bucket) GetObjectNameList(ctx context.Context, dir string) (objstore.ObjectNameList, error) {
+	b.opsTotal.WithLabelValues(opObjectsList).Inc()
+	// Ensure the object name actually ends with a dir suffix. Otherwise we'll just iterate the
+	// object itself as one prefix item.
+	if dir != "" {
+		dir = strings.TrimSuffix(dir, DirDelim) + DirDelim
+	}
+
+	objectList := make(objstore.ObjectNameList, 0)
+	for object := range b.client.ListObjects(b.name, dir, false, ctx.Done()) {
+		// Catch the error when failed to list objects.
+		if object.Err != nil {
+			// Handle this error.
+			return objectList, object.Err
+		}
+		// This sometimes happens with empty buckets.
+		if object.Key == "" {
+			continue
+		}
+		objectList = append(objectList, object.Key)
+	}
+
+	return objectList, nil
+}
+
 func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
 	opts := &minio.GetObjectOptions{ServerSideEncryption: b.sse}
 	if length != -1 {

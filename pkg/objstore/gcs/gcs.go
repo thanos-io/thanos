@@ -97,6 +97,41 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 	}
 }
 
+// GetObjectNameList gets list of objects in the given directory. The object list contains the full
+// object name including the prefix of the inspected directory.
+// Keeps all objects in-memory. This is trade-of between allocation all objects at a time vs reloading all objects
+// one by one in case of network failure. See: Iter
+func (b *Bucket) GetObjectNameList(ctx context.Context, dir string) (objstore.ObjectNameList, error) {
+	b.opsTotal.WithLabelValues(opObjectsList).Inc()
+	// Ensure the object name actually ends with a dir suffix. Otherwise we'll just iterate the
+	// object itself as one prefix item.
+	if dir != "" {
+		dir = strings.TrimSuffix(dir, DirDelim) + DirDelim
+	}
+	it := b.bkt.Objects(ctx, &storage.Query{
+		Prefix:    dir,
+		Delimiter: DirDelim,
+	})
+
+	objectList := make(objstore.ObjectNameList, 0)
+	for {
+		select {
+		case <-ctx.Done():
+			return objectList, ctx.Err()
+		default:
+		}
+		attrs, err := it.Next()
+		if err == iterator.Done {
+			return objectList, nil
+		}
+		if err != nil {
+			return objectList, err
+		}
+
+		objectList = append(objectList, attrs.Prefix+attrs.Name)
+	}
+}
+
 // Get returns a reader for the given object name.
 func (b *Bucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
 	return b.bkt.Object(name).NewReader(ctx)

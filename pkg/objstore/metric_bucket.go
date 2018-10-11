@@ -64,6 +64,18 @@ func (b *metricBucket) Iter(ctx context.Context, dir string, f func(name string)
 	return err
 }
 
+func (b *metricBucket) GetObjectNameList(ctx context.Context, dir string) (ObjectNameList, error) {
+	const op = "get_object_name_list"
+
+	list, err := b.bkt.GetObjectNameList(ctx, dir)
+	if err != nil {
+		b.opsFailures.WithLabelValues(op).Inc()
+	}
+	b.ops.WithLabelValues(op).Inc()
+
+	return list, err
+}
+
 func (b *metricBucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
 	const op = "get"
 	b.ops.WithLabelValues(op).Inc()

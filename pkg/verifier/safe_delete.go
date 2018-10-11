@@ -18,16 +18,12 @@ import (
 // It returns error if block dir already exists in backup bucket (blocks should be immutable) or any
 // of the operation fails.
 func SafeDelete(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, id ulid.ULID) error {
-	foundDir := false
-	err := backupBkt.Iter(ctx, id.String(), func(name string) error {
-		foundDir = true
-		return nil
-	})
+	list, err := objstore.GetObjectNameList(ctx, logger, bkt, id.String())
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "safe delete")
 	}
 
-	if foundDir {
+	if len(list) > 0 {
 		return errors.Errorf("%s dir seems to exists in backup bucket. Remove this block manually if you are sure it is safe to do", id)
 	}
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/verifier"
@@ -205,12 +206,22 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 			}
 		}
 
-		return bkt.Iter(ctx, "", func(name string) error {
+		list, err := objstore.GetObjectNameList(ctx, logger, bkt, "")
+		if err != nil {
+			return errors.Wrap(err, "get bucket info")
+		}
+
+		for _, name := range list {
 			id, ok := block.IsBlockDir(name)
 			if !ok {
-				return nil
+				continue
 			}
-			return printBlock(id)
-		})
+
+			if err := printBlock(id); err != nil {
+				return errors.Wrapf(err, "print block %s", id.String())
+			}
+		}
+
+		return nil
 	}
 }

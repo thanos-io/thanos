@@ -1,12 +1,11 @@
 package inmem
 
 import (
+	"bytes"
 	"context"
 	"io"
-	"sort"
-
-	"bytes"
 	"io/ioutil"
+	"sort"
 	"strings"
 
 	"github.com/improbable-eng/thanos/pkg/objstore"
@@ -35,6 +34,20 @@ func (b *Bucket) Objects() map[string][]byte {
 // Iter calls f for each entry in the given directory. The argument to f is the full
 // object name including the prefix of the inspected directory.
 func (b *Bucket) Iter(_ context.Context, dir string, f func(string) error) error {
+	list, err := b.GetObjectNameList(context.Background(), dir)
+	if err != nil {
+		return err
+	}
+
+	for _, name := range list {
+		if err := f(name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (b *Bucket) GetObjectNameList(ctx context.Context, dir string) (objstore.ObjectNameList, error) {
 	unique := map[string]struct{}{}
 
 	var dirPartsCount int
@@ -72,12 +85,7 @@ func (b *Bucket) Iter(_ context.Context, dir string, f func(string) error) error
 		return strings.Compare(keys[i], keys[j]) < 0
 	})
 
-	for _, k := range keys {
-		if err := f(k); err != nil {
-			return err
-		}
-	}
-	return nil
+	return keys, nil
 }
 
 // Get returns a reader for the given object name.

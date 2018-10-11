@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"time"
 
 	"github.com/cenkalti/backoff"
 	"github.com/go-kit/kit/log"
@@ -232,7 +233,7 @@ func GetMeta(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id 
 	}
 
 	if err := json.Unmarshal(data, &m); err != nil {
-		return m, errors.Wrapf(err, "decode meta.json for block %s", id.String())
+		return m, errors.Wrapf(err, "decode meta.json for block %s", id)
 	}
 	return m, nil
 }
@@ -261,4 +262,18 @@ func InjectThanosMeta(logger log.Logger, bdir string, meta ThanosMeta, downsampl
 	}
 
 	return newMeta, nil
+}
+
+// IsFreshBlock checks if block newer than passed time duration
+func IsFreshBlock(id ulid.ULID, t time.Duration, meta Meta) bool {
+	// ULIDs contain a millisecond timestamp. We do not consider blocks that have been created too recently to
+	// avoid races when a block is only partially uploaded. This relates to all blocks, excluding:
+	// - repair created blocks
+	// - compactor created blocks
+	// NOTE: It is not safe to miss "old" block (even that it is newly created) in sync step. Compactor needs to aware of ALL old blocks.
+	// TODO(bplotka): https://github.com/improbable-eng/thanos/issues/377
+	return ulid.Now()-id.Time() < uint64(t/time.Millisecond) &&
+		meta.Thanos.Source != BucketRepairSource &&
+		meta.Thanos.Source != CompactorSource &&
+		meta.Thanos.Source != CompactorRepairSource
 }
