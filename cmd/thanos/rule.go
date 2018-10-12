@@ -47,6 +47,7 @@ import (
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
 	"gopkg.in/alecthomas/kingpin.v2"
+	"github.com/improbable-eng/thanos/pkg/discovery"
 )
 
 // registerRule registers a rule command.
@@ -77,7 +78,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "")
 
-	filesToWatch := cmd.Flag("query-sd-file", "Path to file that contain addresses of query peers. The path can be a glob pattern (repeatable).").
+	filesToWatch := cmd.Flag("store.file-sd-config", "Path to file that contain addresses of query peers. The path can be a glob pattern (repeatable).").
 		PlaceHolder("<path>").Strings()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
@@ -186,7 +187,7 @@ func runRule(
 	}
 
 	// FileSD query addresses
-	fileSDCache := newFileSDCache()
+	fileSDCache := discovery.NewCache()
 
 	// Hit the HTTP query API of query peers in randomized order until we get a result
 	// back or the context get canceled.
@@ -207,7 +208,7 @@ func runRule(
 		}
 
 		// Add addresses from file sd
-		for _, addr := range fileSDCache.addresses() {
+		for _, addr := range fileSDCache.Addresses() {
 			addrs = append(addrs, addr)
 		}
 
@@ -360,8 +361,7 @@ func runRule(
 					if update == nil {
 						continue
 					}
-					// TODO(ivan): resolve dns here maybe?
-					fileSDCache.update(update)
+					fileSDCache.Update(update)
 				case <-ctxUpdate.Done():
 					return nil
 				}
