@@ -129,7 +129,7 @@ Flags:
                                  info endpoint (repeated).
       --store=<store> ...        Addresses of statically configured store API
                                  servers (repeatable).
-      --store-sd-file=<path> ...  
+      --store.file-sd-config=<path> ...  
                                  Path to files that contain addresses of store
                                  API servers. The path can be a glob pattern
                                  (repeatable).

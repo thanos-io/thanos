@@ -11,13 +11,12 @@ import (
 	"net/http"
 	"time"
 
-	"sync"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/discovery"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/query/api"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -70,7 +69,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	stores := cmd.Flag("store", "Addresses of statically configured store API servers (repeatable).").
 		PlaceHolder("<store>").Strings()
 
-	filesToWatch := cmd.Flag("store-sd-file", "Path to files that contain addresses of store API servers. The path can be a glob pattern (repeatable).").
+	filesToWatch := cmd.Flag("store.file-sd-config", "Path to files that contain addresses of store API servers. The path can be a glob pattern (repeatable).").
 		PlaceHolder("<path>").Strings()
 
 	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified. ").
@@ -95,13 +94,13 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			lookupStores[s] = struct{}{}
 		}
 
-		var filesd *file.Discovery
+		var fileSD *file.Discovery
 		if len(*filesToWatch) > 0 {
 			conf := &file.SDConfig{
 				Files:           *filesToWatch,
 				RefreshInterval: model.Duration(5 * time.Second),
 			}
-			filesd = file.NewDiscovery(conf, logger)
+			fileSD = file.NewDiscovery(conf, logger)
 		}
 
 		return runQuery(
@@ -126,7 +125,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			selectorLset,
 			*stores,
 			*enableAutodownsampling,
-			filesd,
+			fileSD,
 		)
 	}
 }
@@ -252,7 +251,7 @@ func runQuery(
 		return errors.Wrap(err, "building gRPC client")
 	}
 
-	fileSDCache := newFileSDCache()
+	fileSDCache := discovery.NewCache()
 
 	var (
 		stores = query.NewStoreSet(
@@ -272,8 +271,8 @@ func runQuery(
 					specs = append(specs, &gossipSpec{id: id, addr: ps.StoreAPIAddr, peer: peer})
 				}
 
-				// Add store specs from file sd.
-				for _, addr := range fileSDCache.addresses() {
+				// Add store specs from file SD.
+				for _, addr := range fileSDCache.Addresses() {
 					specs = append(specs, query.NewGRPCStoreSpec(addr))
 				}
 
@@ -330,8 +329,7 @@ func runQuery(
 					if update == nil {
 						continue
 					}
-					// TODO(ivan): resolve dns here maybe?
-					fileSDCache.update(update)
+					fileSDCache.Update(update)
 					stores.Update(ctxUpdate)
 				case <-ctxUpdate.Done():
 					return nil
@@ -410,6 +408,7 @@ func runQuery(
 	level.Info(logger).Log("msg", "starting query node")
 	return nil
 }
+
 func removeDuplicates(specs []query.StoreSpec) []query.StoreSpec {
 	set := make(map[string]query.StoreSpec)
 	for _, spec := range specs {
@@ -427,40 +426,6 @@ type gossipSpec struct {
 	addr string
 
 	peer *cluster.Peer
-}
-
-type fileSDCache struct {
-	tgs map[string]*targetgroup.Group
-	sync.Mutex
-}
-
-func newFileSDCache() *fileSDCache {
-	return &fileSDCache{
-		tgs: make(map[string]*targetgroup.Group),
-	}
-}
-
-func (f *fileSDCache) update(tgs []*targetgroup.Group) {
-	f.Lock()
-	defer f.Unlock()
-	for _, tg := range tgs {
-		// Some Discoverers send nil target group so need to check for it to avoid panics.
-		if tg != nil {
-			f.tgs[tg.Source] = tg
-		}
-	}
-}
-
-func (f *fileSDCache) addresses() []string {
-	f.Lock()
-	defer f.Unlock()
-	var addresses []string
-	for _, group := range f.tgs {
-		for _, target := range group.Targets {
-			addresses = append(addresses, string(target[model.AddressLabel]))
-		}
-	}
-	return addresses
 }
 
 func (s *gossipSpec) Addr() string {
