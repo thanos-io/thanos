@@ -24,6 +24,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/alert"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/discovery/cache"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
@@ -47,7 +48,6 @@ import (
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
 	"gopkg.in/alecthomas/kingpin.v2"
-	"github.com/improbable-eng/thanos/pkg/discovery"
 )
 
 // registerRule registers a rule command.
@@ -168,9 +168,13 @@ func runRule(
 		Name: "thanos_config_last_reload_success_timestamp_seconds",
 		Help: "Timestamp of the last successful configuration reload.",
 	})
-
+	duplicatedQuery := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_rule_duplicated_query_address",
+		Help: "The number of times a duplicated query addresses is detected from the different configs in rule",
+	})
 	reg.MustRegister(configSuccess)
 	reg.MustRegister(configSuccessTime)
+	reg.MustRegister(duplicatedQuery)
 
 	db, err := tsdb.Open(dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts)
 	if err != nil {
@@ -187,7 +191,7 @@ func runRule(
 	}
 
 	// FileSD query addresses
-	fileSDCache := discovery.NewCache()
+	fileSDCache := cache.New()
 
 	// Hit the HTTP query API of query peers in randomized order until we get a result
 	// back or the context get canceled.
@@ -211,6 +215,8 @@ func runRule(
 		for _, addr := range fileSDCache.Addresses() {
 			addrs = append(addrs, addr)
 		}
+
+		removeDuplicateQueryAddrs(logger, duplicatedQuery, addrs)
 
 		for _, i := range rand.Perm(len(addrs)) {
 			vec, err := queryPrometheusInstant(ctx, logger, addrs[i], q, t)
@@ -718,4 +724,21 @@ func labelsTSDBToProm(lset labels.Labels) (res promlabels.Labels) {
 		})
 	}
 	return res
+}
+
+func removeDuplicateQueryAddrs(logger log.Logger, duplicatedQueriers prometheus.Counter, addrs []string) []string {
+	set := make(map[string]struct{})
+	for _, addr := range addrs {
+		if _, ok := set[addr]; ok {
+			level.Warn(logger).Log("msg", "Duplicate query address is provided - %v", addr)
+			duplicatedQueriers.Inc()
+		}
+		set[addr] = struct{}{}
+	}
+
+	deduplicated := make([]string, 0, len(set))
+	for key := range set {
+		deduplicated = append(deduplicated, key)
+	}
+	return deduplicated
 }
