@@ -137,7 +137,7 @@ func querierWithFileSD(i int, replicaLabel string, storesAddresses []string) (cm
 		}
 
 		args := append(defaultQuerierFlags(i, replicaLabel),
-			"--store-sd-file", path.Join(queryFileSDDir, "filesd.json"))
+			"--store.file-sd-config", path.Join(queryFileSDDir, "filesd.json"))
 
 		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
 	}, ""
