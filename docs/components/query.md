@@ -2,7 +2,7 @@
 
 The query component implements the Prometheus HTTP v1 API to query data in a Thanos cluster via PromQL.
 
-It gathers the data needed to evaluate the query from underlying StoreAPIs. See [here](/docs/service_discovery.md) 
+It gathers the data needed to evaluate the query from underlying StoreAPIs. See [here](/docs/service_discovery.md)
 on how to connect querier with desired StoreAPIs.
 
 Querier currently is fully stateless and horizontally scalable.
@@ -19,7 +19,7 @@ $ thanos query \
 The query layer can deduplicate series that were collected from high-availability pairs of data sources such as Prometheus.
 A fixed replica label must be chosen for the entire cluster and can then be passed to query nodes on startup.
 
-Two or more series that have that are only distinguished by the given replica label, will be merged into a single time series. 
+Two or more series that have that are only distinguished by the given replica label, will be merged into a single time series.
 This also hides gaps in collection of a single data source. For example:
 
 * Prometheus + sidecar "A": `cluster=1,env=2,replica=A`
@@ -37,15 +37,15 @@ $ thanos query \
 ```
 
 And we query for metric `up{job="prometheus",env="2"}` with this option we will get 2 results:
-  
+
   * `up{job="prometheus",env="2",cluster="1"} 1`
   * `up{job="prometheus",env="2",cluster="2"} 1`
-  
+
 WITHOUT this replica flag (so deduplication turned off), we will get 3 results:
 
   * `up{job="prometheus",env="2",cluster="1",replica="A"} 1`
   * `up{job="prometheus",env="2",cluster="1",replica="B"} 1`
-  * `up{job="prometheus",env="2",cluster="2",replica="A"} 1`  
+  * `up{job="prometheus",env="2",cluster="2",replica="A"} 1`
 
 This logic can also be controlled via parameter on QueryAPI. More details below.
 
@@ -53,7 +53,7 @@ This logic can also be controlled via parameter on QueryAPI. More details below.
 
 Overall QueryAPI exposed by Thanos is guaranteed to be compatible with Prometheus 2.x.
 
-However, for additional Thanos features, Thanos, on top of Prometheus adds several 
+However, for additional Thanos features, Thanos, on top of Prometheus adds several
 additional parameters listed below as well as custom response fields.
 
 ### Deduplication Enabled
@@ -85,13 +85,13 @@ Max source resolution is max resolution in seconds we want to use for data we qu
 |  |  |  |  |
 
 If true, then all storeAPIs that will be unavailable (and thus return no data) will not cause query to fail, but instead
-return warning. 
+return warning.
 
 ### Custom Response Fields
 
 Any additional field does not break compatibility, however there is no guarantee that Grafana or any other client will understand those.
 
-Currently Thanos UI exposed by Thanos  understands 
+Currently Thanos UI exposed by Thanos  understands
 ```go
 type queryData struct {
 	ResultType promql.ValueType `json:"resultType"`
@@ -104,6 +104,25 @@ type queryData struct {
 
 Additional field is `Warnings` that contains every error that occurred that is assumed non critical. `partial_response`
 option controls if storeAPI unavailability is considered critical.
+
+
+## Expose UI on a sub-path
+
+It is possible to expose thanos-query UI and optinally API on a sub-path.
+The sub-path can be defined either statically or dynamically via an HTTP header.
+Static path prefix definition follows the pattern used in Prometheus,
+where `web.route-prefix` option defines HTTP request path prefix (endpoints prefix)
+and `web.external-prefix` prefixes the URLs in HTML code and the HTTP redirect responces.
+
+Additionally, Thanos supports dynamic prefix configuration, which
+[is not yet implemented by Prometheus](https://github.com/prometheus/prometheus/issues/3156).
+Dynamic prefixing simplifies setup when `thanos query` is exposed on a sub-path behind
+a reverse proxy, for example, via a Kubernetes ingress controller
+[Traefik](https://docs.traefik.io/basics/#frontends)
+or [nginx](https://github.com/kubernetes/ingress-nginx/pull/1805).
+If `PathPrefixStrip: /some-path` option or `traefik.frontend.rule.type: PathPrefixStrip`
+Kubernetes Ingress annotation is set, then `Traefik` writes the stripped prefix into X-Forwarded-Prefix header.
+Then, `thanos query --web.prefix-header=X-Forwarded-Prefix` will serve correct HTTP redirects and links prefixed by the stripped path.
 
 
 ## Flags
@@ -199,6 +218,29 @@ Flags:
                                  Server name to verify the hostname on the
                                  returned gRPC certificates. See
                                  https://tools.ietf.org/html/rfc4366#section-3.1
+      --web.route-prefix=""      Prefix for API and UI endpoints. This allows
+                                 thanos UI to be served on a sub-path. This
+                                 option is analogous to --web.route-prefix of
+                                 Promethus.
+      --web.external-prefix=""   Static prefix for all HTML links and redirect
+                                 URLs in the UI query web interface. Actual
+                                 endpoints are still served on / or the
+                                 web.route-prefix. This allows thanos UI to be
+                                 served behind a reverse proxy that strips a URL
+                                 sub-path.
+      --web.prefix-header=""     Name of HTTP request header used for dynamic
+                                 prefixing of UI links and redirects. This
+                                 option is ignored if web.external-prefix
+                                 argument is set. Security risk: enable this
+                                 option only if a reverse proxy in front of
+                                 thanos is resetting the header. The
+                                 --web.prefix-header=X-Forwarded-Prefix option
+                                 can be useful, for example, if Thanos UI is
+                                 served via Traefik reverse proxy with
+                                 PathPrefixStrip option enabled, which sends the
+                                 stripped prefix value in X-Forwarded-Prefix
+                                 header. This allows thanos UI to be served on a
+                                 sub-path.
       --query.timeout=2m         Maximum time to process query by query node.
       --query.max-concurrent=20  Maximum number of queries processed
                                  concurrently by query node.
