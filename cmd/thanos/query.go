@@ -366,6 +366,13 @@ func runQuery(
 		api := v1.NewAPI(logger, reg, engine, queryableCreator, enableAutodownsampling)
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger)
 
+		router.Get("/-/healthy", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			if _, err := fmt.Fprintf(w, "Thanos Querier is Healthy.\n"); err != nil {
+				level.Error(logger).Log("msg", "Could not write health check response.")
+			}
+		})
+
 		mux := http.NewServeMux()
 		registerMetrics(mux, reg)
 		registerProfile(mux)
