@@ -103,13 +103,13 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			WALFlushInterval: 30 * time.Second,
 		}
 
-		var filesd *file.Discovery
+		var fileSD *file.Discovery
 		if len(*filesToWatch) > 0 {
 			conf := &file.SDConfig{
 				Files:           *filesToWatch,
 				RefreshInterval: model.Duration(5 * time.Second),
 			}
-			filesd = file.NewDiscovery(conf, logger)
+			fileSD = file.NewDiscovery(conf, logger)
 		}
 
 		return runRule(g,
@@ -131,7 +131,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			tsdbOpts,
 			name,
 			alertQueryURL,
-			filesd,
+			fileSD,
 		)
 	}
 }
@@ -357,12 +357,7 @@ func runRule(
 		g.Add(func() error {
 			for {
 				select {
-				case update, ok := <-fileSDUpdates:
-					// Handle the case that a discoverer exits and closes the channel
-					// before the context is done.
-					if !ok {
-						return nil
-					}
+				case update := <-fileSDUpdates:
 					// Discoverers sometimes send nil updates so need to check for it to avoid panics
 					if update == nil {
 						continue
