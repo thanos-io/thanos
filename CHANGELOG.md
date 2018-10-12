@@ -29,6 +29,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 ### Added
 - Add flag `--objstore.config-file` to reference to the bucket configuration file in yaml format. Note that detailed information in document [storage](docs/storage.md).
+- Add `thanos_` to member list metrics. Some metrics have been renamed, make sure to update your dashboards and rules.
 
 ### Fixed
 - [#566](https://github.com/improbable-eng/thanos/issues/566) - Fixed issue whereby the Proxy Store could end up in a deadlock if there were more than 9 stores being queried and all returned an error.
