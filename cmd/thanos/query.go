@@ -325,12 +325,7 @@ func runQuery(
 		g.Add(func() error {
 			for {
 				select {
-				case update, ok := <-fileSDUpdates:
-					// Handle the case that a discoverer exits and closes the channel
-					// before the context is done.
-					if !ok {
-						return nil
-					}
+				case update := <-fileSDUpdates:
 					// Discoverers sometimes send nil updates so need to check for it to avoid panics.
 					if update == nil {
 						continue
