@@ -1,4 +1,4 @@
-package discovery
+package cache
 
 import (
 	"sync"
@@ -14,8 +14,8 @@ type Cache struct {
 	sync.Mutex
 }
 
-// NewCache returns a new empty Cache.
-func NewCache() *Cache {
+// New returns a new empty Cache.
+func New() *Cache {
 	return &Cache{
 		tgs: make(map[string]*targetgroup.Group),
 	}

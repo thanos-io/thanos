@@ -16,7 +16,7 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
-	"github.com/improbable-eng/thanos/pkg/discovery"
+	"github.com/improbable-eng/thanos/pkg/discovery/cache"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/query/api"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -237,6 +237,12 @@ func runQuery(
 	enableAutodownsampling bool,
 	fileSD *file.Discovery,
 ) error {
+	duplicatedStores := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_query_duplicated_store_address",
+		Help: "The number of times a duplicated store addresses is detected from the different configs in query",
+	})
+	reg.MustRegister(duplicatedStores)
+
 	var staticSpecs []query.StoreSpec
 	for _, addr := range storeAddrs {
 		if addr == "" {
@@ -251,7 +257,7 @@ func runQuery(
 		return errors.Wrap(err, "building gRPC client")
 	}
 
-	fileSDCache := discovery.NewCache()
+	fileSDCache := cache.New()
 
 	var (
 		stores = query.NewStoreSet(
@@ -276,7 +282,7 @@ func runQuery(
 					specs = append(specs, query.NewGRPCStoreSpec(addr))
 				}
 
-				specs = removeDuplicates(specs)
+				specs = removeDuplicates(logger, duplicatedStores, specs)
 
 				return specs
 			},
@@ -409,10 +415,15 @@ func runQuery(
 	return nil
 }
 
-func removeDuplicates(specs []query.StoreSpec) []query.StoreSpec {
+func removeDuplicates(logger log.Logger, duplicatedStores prometheus.Counter, specs []query.StoreSpec) []query.StoreSpec {
 	set := make(map[string]query.StoreSpec)
 	for _, spec := range specs {
-		set[spec.Addr()] = spec
+		addr := spec.Addr()
+		if _, ok := set[addr]; ok {
+			level.Warn(logger).Log("msg", "Duplicate store address is provided - %v", addr)
+			duplicatedStores.Inc()
+		}
+		set[addr] = spec
 	}
 	deduplicated := make([]query.StoreSpec, 0, len(set))
 	for _, value := range set {
