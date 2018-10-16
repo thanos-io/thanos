@@ -263,6 +263,7 @@ func runQuery(
 	fileSDCache := cache.New()
 	// DNS discoverer with default resolver
 	dnsDiscoverer := dns.NewServiceDiscoverer(nil)
+	dnsProvider := dns.NewProvider(dnsDiscoverer)
 
 	var (
 		stores = query.NewStoreSet(
@@ -279,28 +280,9 @@ func runQuery(
 					specs = append(specs, &gossipSpec{id: id, addr: ps.StoreAPIAddr, peer: peer})
 				}
 
-				// Get addr from static flags and file SD and DNS resolve them.
-				rawAddrs := storeAddrs
-				for _, addr := range fileSDCache.Addresses() {
-					rawAddrs = append(rawAddrs, addr)
-				}
-				//TODO(ivan) check what the default port should be
-				resolved, err := dnsDiscoverer.Resolve(context.Background(), rawAddrs, 9090)
-				if err != nil {
-					// TODO(ivan) What to do here?
-					// Option 1: make the func return err as well and propagate it several layers up...
-					// Option 2: log error and
-					//          2.1: don't append any of the addresses from static flags and file SD.
-					//          2.2: append the raw addresses without dns resolving them. (Implemented here)
-					level.Warn(logger).Log("msg", "failed dns lookup for store addresses in query")
-					for _, addr := range rawAddrs {
-						specs = append(specs, query.NewGRPCStoreSpec(addr))
-					}
-				} else {
-					// Create GrpcSpecs from the static flag and file SD addresses
-					for _, addr := range resolved {
-						specs = append(specs, query.NewGRPCStoreSpec(addr.Host))
-					}
+				// Addresses from flags and fileSD after being resolved
+				for _, addr := range dnsProvider.Addresses() {
+					specs = append(specs, query.NewGRPCStoreSpec(addr))
 				}
 
 				specs = removeDuplicateStoreSpecs(logger, duplicatedStores, specs)
@@ -375,6 +357,24 @@ func runQuery(
 		}, func(error) {
 			cancel()
 			peer.Close(5 * time.Second)
+		})
+	}
+	// Periodically update the addresses from static flags and file SD by resolving them using DNS SD if necessary
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			// TODO(ivan): discuss the repeat time
+			return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
+				addresses := append(fileSDCache.Addresses(), storeAddrs...)
+				// TODO(ivan): default port.....
+				if err := dnsProvider.Resolve(ctx, addresses, 9090); err != nil {
+					//TODO(ivan): what to do? probably shouldn't fail, but log.
+					level.Warn(logger).Log("msg", "failed to resolve addresses in query")
+				}
+				return nil
+			})
+		}, func(error) {
+			cancel()
 		})
 	}
 	// Start query API + UI HTTP server.

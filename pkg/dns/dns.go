@@ -11,6 +11,7 @@ import (
 )
 
 type ServiceDiscoverer interface {
+
 	Resolve(ctx context.Context, addrs []string, defaultPort int) ([]*url.URL, error)
 }
 
@@ -32,7 +33,6 @@ func NewServiceDiscoverer(resolver *net.Resolver) ServiceDiscoverer {
 
 func (s dnsSD) Resolve(ctx context.Context, addrs []string, defaultPort int) ([]*url.URL, error) {
 	var res []*url.URL
-
 	for _, addr := range addrs {
 		// Check if a valid IP. Strip the port for the purpose of the check if it is present.
 		host, port, err := net.SplitHostPort(addr)

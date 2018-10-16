@@ -88,6 +88,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	fileSDInterval := modelDuration(cmd.Flag("query.sd-interval", "Refresh interval to re-read file SD files. (used as a fallback)").
 		Default("5m"))
 
+	dnsSDInterval :=  modelDuration(cmd.Flag("dns-sd-interval", "The default evaluation interval to use.").
+		Default("30s"))
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
@@ -226,6 +229,7 @@ func runRule(
 	fileSDCache := cache.New()
 	// DNS discoverer with default resolver
 	dnsDiscoverer := dns.NewServiceDiscoverer(nil)
+	dnsProvider := dns.NewProvider(dnsDiscoverer)
 
 	// Hit the HTTP query API of query peers in randomized order until we get a result
 	// back or the context get canceled.
@@ -482,7 +486,24 @@ func runRule(
 			close(cancel)
 		})
 	}
-
+	// Periodically update the addresses from static flags and file SD by resolving them using DNS SD if necessary
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			// TODO(ivan): discuss the repeat time
+			return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
+				addresses := append(fileSDCache.Addresses(), queryAddrs...)
+				// TODO(ivan): default port.....
+				if err := dnsProvider.Resolve(ctx, addresses, 9090); err != nil {
+					//TODO(ivan): what to do? probably shouldn't fail, but log.
+					level.Warn(logger).Log("msg", "failed to resolve addresses in query")
+				}
+				return nil
+			})
+		}, func(error) {
+			cancel()
+		})
+	}
 	// Start gRPC server.
 	{
 		l, err := net.Listen("tcp", grpcBindAddr)

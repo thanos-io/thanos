@@ -69,7 +69,7 @@ func TestQuery(t *testing.T) {
 // testQuerySimple runs a setup of Prometheus servers, sidecars, and query nodes and verifies that
 // queries return data merged from all Prometheus servers. Additionally it verifies if deduplication works for query.
 func testQuerySimple(t *testing.T, conf testConfig) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
 	exit, err := conf.suite.Exec(t, ctx, conf.name)
 	if err != nil {
