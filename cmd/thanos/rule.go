@@ -78,8 +78,11 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "")
 
-	filesToWatch := cmd.Flag("store.file-sd-config", "Path to file that contain addresses of query peers. The path can be a glob pattern (repeatable).").
+	fileSDFiles := cmd.Flag("query.file-sd-config.files", "Path to file that contain addresses of query peers. The path can be a glob pattern (repeatable).").
 		PlaceHolder("<path>").Strings()
+
+	fileSDInterval := modelDuration(cmd.Flag("query.file-sd-config.interval", "Refresh interval to re-read file SD files. (used as a fallback)").
+		Default("5s"))
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
@@ -104,10 +107,10 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 		}
 
 		var fileSD *file.Discovery
-		if len(*filesToWatch) > 0 {
+		if len(*fileSDFiles) > 0 {
 			conf := &file.SDConfig{
-				Files:           *filesToWatch,
-				RefreshInterval: model.Duration(5 * time.Second),
+				Files:           *fileSDFiles,
+				RefreshInterval: *fileSDInterval,
 			}
 			fileSD = file.NewDiscovery(conf, logger)
 		}

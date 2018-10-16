@@ -133,9 +133,12 @@ Flags:
       --objstore.config=<bucket.config-yaml>  
                                  Alternative to 'objstore.config-file' flag.
                                  Object store configuration in YAML.
-      --store.file-sd-config=<path> ...  
+      --query.file-sd-config.files=<path> ...  
                                  Path to file that contain addresses of query
                                  peers. The path can be a glob pattern
                                  (repeatable).
+      --query.file-sd-config.interval=5s  
+                                 Refresh interval to re-read file SD files.
+                                 (used as a fallback)
 
 ```
