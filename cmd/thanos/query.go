@@ -28,7 +28,6 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
@@ -69,8 +68,11 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	stores := cmd.Flag("store", "Addresses of statically configured store API servers (repeatable).").
 		PlaceHolder("<store>").Strings()
 
-	filesToWatch := cmd.Flag("store.file-sd-config", "Path to files that contain addresses of store API servers. The path can be a glob pattern (repeatable).").
+	fileSDFiles := cmd.Flag("store.file-sd-config.files", "Path to files that contain addresses of store API servers. The path can be a glob pattern (repeatable).").
 		PlaceHolder("<path>").Strings()
+
+	fileSDInterval := modelDuration(cmd.Flag("store.file-sd-config.interval", "Refresh interval to re-read file SD files. (used as a fallback)").
+		Default("5s"))
 
 	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified. ").
 		Default("false").Bool()
@@ -95,10 +97,10 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 		}
 
 		var fileSD *file.Discovery
-		if len(*filesToWatch) > 0 {
+		if len(*fileSDFiles) > 0 {
 			conf := &file.SDConfig{
-				Files:           *filesToWatch,
-				RefreshInterval: model.Duration(5 * time.Second),
+				Files:           *fileSDFiles,
+				RefreshInterval: *fileSDInterval,
 			}
 			fileSD = file.NewDiscovery(conf, logger)
 		}
