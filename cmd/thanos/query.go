@@ -284,7 +284,7 @@ func runQuery(
 					specs = append(specs, query.NewGRPCStoreSpec(addr))
 				}
 
-				specs = removeDuplicates(logger, duplicatedStores, specs)
+				specs = removeDuplicateStoreSpecs(logger, duplicatedStores, specs)
 
 				return specs
 			},
@@ -412,7 +412,7 @@ func runQuery(
 	return nil
 }
 
-func removeDuplicates(logger log.Logger, duplicatedStores prometheus.Counter, specs []query.StoreSpec) []query.StoreSpec {
+func removeDuplicateStoreSpecs(logger log.Logger, duplicatedStores prometheus.Counter, specs []query.StoreSpec) []query.StoreSpec {
 	set := make(map[string]query.StoreSpec)
 	for _, spec := range specs {
 		addr := spec.Addr()
