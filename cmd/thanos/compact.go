@@ -134,6 +134,10 @@ func runCompact(
 		downsamplingDir = path.Join(dataDir, "downsample")
 	)
 
+	if err := os.RemoveAll(dataDir); err != nil {
+		return errors.Wrap(err, "clean working temporary directory")
+	}
+
 	compactor := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt)
 
 	if retentionByResolution[compact.ResolutionLevelRaw].Seconds() != 0 {
@@ -148,9 +152,6 @@ func runCompact(
 
 	ctx, cancel := context.WithCancel(context.Background())
 	f := func() error {
-		if err := os.RemoveAll(downsamplingDir); err != nil {
-			return errors.Wrap(err, "clean downsampling temporary directory")
-		}
 		if err := compactor.Compact(ctx); err != nil {
 			return errors.Wrap(err, "compaction failed")
 		}
