@@ -72,7 +72,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 		PlaceHolder("<path>").Strings()
 
 	fileSDInterval := modelDuration(cmd.Flag("store.file-sd-config.interval", "Refresh interval to re-read file SD files. (used as a fallback)").
-		Default("5s"))
+		Default("5m"))
 
 	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified. ").
 		Default("false").Bool()
