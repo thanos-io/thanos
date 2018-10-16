@@ -17,6 +17,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	ctxBackOffKey = iota
+)
+
 // Bucket provides read and write access to an object storage bucket.
 // NOTE: We assume strong consistency for write-read flow.
 type Bucket interface {
@@ -104,7 +108,7 @@ func UploadFile(ctx context.Context, logger log.Logger, bkt Bucket, src, dst str
 	}
 
 	// TODO: should we clean an uploaded file before retry?
-	if err := backoff.RetryNotify(do, getCustomBackoff(ctx), errorNotifier); err != nil {
+	if err := backoff.RetryNotify(do, getCustomBackOff(ctx), errorNotifier); err != nil {
 		return errors.Wrapf(err, "upload file %s as %s", src, dst)
 	}
 	return nil
@@ -123,7 +127,7 @@ func DeleteDir(ctx context.Context, bucket Bucket, dir string) error {
 		return nil
 	}
 
-	if err := backoff.Retry(do, getCustomBackoff(ctx)); err != nil {
+	if err := backoff.Retry(do, getCustomBackOff(ctx)); err != nil {
 		return errors.Wrapf(err, "delete block dir %s", dir)
 	}
 	return nil
@@ -145,7 +149,7 @@ func GetFile(ctx context.Context, logger log.Logger, bucket BucketReader, src st
 	buf := bytes.NewBuffer(nil)
 
 	errorNotifier := func(err error, d time.Duration) {
-		level.Warn(logger).Log("msg", "unsuccessful attempt to download", "err", err, "next", d.String())
+		level.Warn(logger).Log("msg", "unsuccessful attempt to download", "src", src, "err", err, "next", d.String())
 	}
 
 	do := func() error {
@@ -162,7 +166,7 @@ func GetFile(ctx context.Context, logger log.Logger, bucket BucketReader, src st
 		return nil
 	}
 
-	if err := backoff.RetryNotify(do, getCustomBackoff(ctx), errorNotifier); err != nil {
+	if err := backoff.RetryNotify(do, getCustomBackOff(ctx), errorNotifier); err != nil {
 		return nil, errors.Wrapf(err, "download file %s", src)
 	}
 
@@ -196,7 +200,7 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 	}()
 
 	errorNotifier := func(err error, d time.Duration) {
-		level.Warn(logger).Log("msg", "unsuccessful attempt to download", "err", err, "next", d.String())
+		level.Warn(logger).Log("msg", "unsuccessful attempt to download", "src", src, "err", err, "next", d.String())
 	}
 
 	do := func() error {
@@ -211,7 +215,7 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 		}
 		return nil
 	}
-	err = backoff.RetryNotify(do, getCustomBackoff(ctx), errorNotifier)
+	err = backoff.RetryNotify(do, getCustomBackOff(ctx), errorNotifier)
 	if err != nil {
 		return errors.Wrapf(err, "failed to download file %s", src)
 	}
@@ -265,7 +269,7 @@ func GetObjectNameList(ctx context.Context, logger log.Logger, bucket BucketRead
 	var list ObjectNameList
 
 	errorNotifier := func(err error, d time.Duration) {
-		level.Warn(logger).Log("msg", "unsuccessful attempt to get object list", "err", err, "next", d.String())
+		level.Warn(logger).Log("msg", "unsuccessful attempt to get object list", "src", src, "err", err, "next", d.String())
 	}
 
 	do := func() error {
@@ -277,7 +281,7 @@ func GetObjectNameList(ctx context.Context, logger log.Logger, bucket BucketRead
 		return nil
 	}
 
-	if err := backoff.RetryNotify(do, getCustomBackoff(ctx), errorNotifier); err != nil {
+	if err := backoff.RetryNotify(do, getCustomBackOff(ctx), errorNotifier); err != nil {
 		return list, errors.Wrapf(err, "failed to get object list %s", src)
 	}
 	return list, nil
@@ -300,12 +304,43 @@ func Exists(ctx context.Context, logger log.Logger, bucket BucketReader, src str
 		return nil
 	}
 
-	err := backoff.RetryNotify(do, getCustomBackoff(ctx), errorNotifier)
+	err := backoff.RetryNotify(do, getCustomBackOff(ctx), errorNotifier)
 	if err != nil {
 		return ok, errors.Wrapf(err, "failed to check file %s", src)
 	}
 
 	return ok, nil
+}
+
+// GetRange returns byte range from the bucket's object with backoff retries.
+// Uses b as an initial bytes slice to fill while reading.
+func GetRange(ctx context.Context, logger log.Logger, bucket BucketReader, name string, off, length int64, b []byte) ([]byte, error) {
+	bytesBuffer := bytes.NewBuffer(b)
+
+	errorNotifier := func(err error, d time.Duration) {
+		level.Warn(logger).Log("msg", "unsuccessful attempt getting the file range", "src", name, "next", d.String())
+	}
+
+	do := func() error {
+		bytesBuffer.Reset()
+		reader, err := bucket.GetRange(ctx, name, off, length)
+		if err != nil {
+			return handleErrors(errors.Wrap(err, "get range"))
+		}
+		defer runutil.CloseWithLogOnErr(logger, reader, "readChunkRange close range reader")
+
+		if _, err = io.Copy(bytesBuffer, reader); err != nil {
+			return handleErrors(errors.Wrap(err, "read range"))
+		}
+		return nil
+	}
+
+	err := backoff.RetryNotify(do, getCustomBackOff(ctx), errorNotifier)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get the file  range %s", name)
+	}
+
+	return bytesBuffer.Bytes(), nil
 }
 
 // handleErrors handles net error and wraps in permanent otherwise.
@@ -317,8 +352,16 @@ func handleErrors(err error) error {
 	return err
 }
 
-// getCustomBackoff returns custom backoff to be used to retry operations.
-func getCustomBackoff(ctx context.Context) backoff.BackOff {
-	// TODO(xjewer): customize backoff with the data from context
-	return backoff.WithContext(backoff.NewExponentialBackOff(), ctx)
+// getCustomBackOff returns custom backoff to be used to retry operations.
+func getCustomBackOff(ctx context.Context) backoff.BackOff {
+	if b, ok := ctx.Value(ctxBackOffKey).(backoff.BackOff); ok {
+		return backoff.WithContext(b, ctx)
+	} else {
+		return backoff.WithContext(backoff.NewExponentialBackOff(), ctx)
+	}
+}
+
+// AddBackOffToContext adds new backoff to the context
+func AddBackOffToContext(ctx context.Context, b backoff.BackOff) context.Context {
+	return context.WithValue(ctx, ctxBackOffKey, b)
 }

@@ -1,12 +1,9 @@
 package store
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"math"
 	"os"
 	"path"
@@ -1110,17 +1107,7 @@ func (b *bucketBlock) loadIndexCache(ctx context.Context) (err error) {
 }
 
 func (b *bucketBlock) readIndexRange(ctx context.Context, off, length int64) ([]byte, error) {
-	r, err := b.bucket.GetRange(ctx, b.indexObj, off, length)
-	if err != nil {
-		return nil, errors.Wrap(err, "get range reader")
-	}
-	defer runutil.CloseWithLogOnErr(b.logger, r, "readIndexRange close range reader")
-
-	c, err := ioutil.ReadAll(r)
-	if err != nil {
-		return nil, errors.Wrap(err, "read range")
-	}
-	return c, nil
+	return objstore.GetRange(ctx, b.logger, b.bucket, b.indexObj, off, length, make([]byte, length))
 }
 
 func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length int64) ([]byte, error) {
@@ -1128,18 +1115,8 @@ func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length i
 	if err != nil {
 		return nil, errors.Wrap(err, "allocate chunk bytes")
 	}
-	buf := bytes.NewBuffer(c)
 
-	r, err := b.bucket.GetRange(ctx, b.chunkObjs[seq], off, length)
-	if err != nil {
-		return nil, errors.Wrap(err, "get range reader")
-	}
-	defer runutil.CloseWithLogOnErr(b.logger, r, "readChunkRange close range reader")
-
-	if _, err = io.Copy(buf, r); err != nil {
-		return nil, errors.Wrap(err, "read range")
-	}
-	return buf.Bytes(), nil
+	return objstore.GetRange(ctx, b.logger, b.bucket, b.chunkObjs[seq], off, length, c)
 }
 
 func (b *bucketBlock) indexReader(ctx context.Context) *bucketIndexReader {
