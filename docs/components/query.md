@@ -133,7 +133,7 @@ Flags:
                                  Path to files that contain addresses of store
                                  API servers. The path can be a glob pattern
                                  (repeatable).
-      --store.file-sd-config.interval=5s  
+      --store.file-sd-config.interval=5m  
                                  Refresh interval to re-read file SD files.
                                  (used as a fallback)
       --query.auto-downsampling  Enable automatic adjustment (step / 5) to what
