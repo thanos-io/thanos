@@ -82,7 +82,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 		PlaceHolder("<path>").Strings()
 
 	fileSDInterval := modelDuration(cmd.Flag("query.file-sd-config.interval", "Refresh interval to re-read file SD files. (used as a fallback)").
-		Default("5s"))
+		Default("5m"))
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)

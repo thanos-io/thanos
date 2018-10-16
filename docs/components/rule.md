@@ -137,7 +137,7 @@ Flags:
                                  Path to file that contain addresses of query
                                  peers. The path can be a glob pattern
                                  (repeatable).
-      --query.file-sd-config.interval=5s  
+      --query.file-sd-config.interval=5m  
                                  Refresh interval to re-read file SD files.
                                  (used as a fallback)
 
