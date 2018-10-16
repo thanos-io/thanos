@@ -211,7 +211,7 @@ func rulerWithFileSD(i int, rules string, queryAddresses ...string) (cmdSchedule
 
 		args := append(defaultRulerFlags(i, dbDir),
 			"--query.file-sd-config.files", path.Join(ruleFileSDDir, "filesd.json"),
-			"--store.file-sd-config.interval", "5s")
+			"--query.file-sd-config.interval", "5s")
 
 		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
 	}, ""
