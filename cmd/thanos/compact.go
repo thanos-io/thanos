@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"path"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -127,7 +129,12 @@ func runCompact(
 		return errors.Wrap(err, "create compactor")
 	}
 
-	compactor := compact.NewBucketCompactor(logger, sy, comp, dataDir, bkt)
+	var (
+		compactDir      = path.Join(dataDir, "compact")
+		downsamplingDir = path.Join(dataDir, "downsample")
+	)
+
+	compactor := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt)
 
 	if retentionByResolution[compact.ResolutionLevelRaw].Seconds() != 0 {
 		level.Info(logger).Log("msg", "retention policy of raw samples is enabled", "duration", retentionByResolution[compact.ResolutionLevelRaw])
@@ -141,6 +148,9 @@ func runCompact(
 
 	ctx, cancel := context.WithCancel(context.Background())
 	f := func() error {
+		if err := os.RemoveAll(downsamplingDir); err != nil {
+			return errors.Wrap(err, "clean downsampling temporary directory")
+		}
 		if err := compactor.Compact(ctx); err != nil {
 			return errors.Wrap(err, "compaction failed")
 		}
@@ -153,13 +163,13 @@ func runCompact(
 			// for 5m downsamplings created in the first run.
 			level.Info(logger).Log("msg", "start first pass of downsampling")
 
-			if err := downsampleBucket(ctx, logger, bkt, dataDir); err != nil {
+			if err := downsampleBucket(ctx, logger, bkt, downsamplingDir); err != nil {
 				return errors.Wrap(err, "first pass of downsampling failed")
 			}
 
 			level.Info(logger).Log("msg", "start second pass of downsampling")
 
-			if err := downsampleBucket(ctx, logger, bkt, dataDir); err != nil {
+			if err := downsampleBucket(ctx, logger, bkt, downsamplingDir); err != nil {
 				return errors.Wrap(err, "second pass of downsampling failed")
 			}
 			level.Info(logger).Log("msg", "downsampling iterations done")

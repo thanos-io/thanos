@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"sync"
@@ -787,21 +786,21 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 
 // BucketCompactor compacts blocks in a bucket.
 type BucketCompactor struct {
-	logger  log.Logger
-	sy      *Syncer
-	comp    tsdb.Compactor
-	dataDir string
-	bkt     objstore.Bucket
+	logger     log.Logger
+	sy         *Syncer
+	comp       tsdb.Compactor
+	compactDir string
+	bkt        objstore.Bucket
 }
 
 // NewBucketCompactor creates a new bucket compactor.
-func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, dataDir string, bkt objstore.Bucket) *BucketCompactor {
+func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, compactDir string, bkt objstore.Bucket) *BucketCompactor {
 	return &BucketCompactor{
-		logger:  logger,
-		sy:      sy,
-		comp:    comp,
-		dataDir: dataDir,
-		bkt:     bkt,
+		logger:     logger,
+		sy:         sy,
+		comp:       comp,
+		compactDir: compactDir,
+		bkt:        bkt,
 	}
 }
 
@@ -810,10 +809,9 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 	// Loop over bucket and compact until there's no work left.
 	for {
 		// Clean up the compaction temporary directory at the beginning of every compaction loop.
-		if err := os.RemoveAll(c.dataDir); err != nil {
+		if err := os.RemoveAll(c.compactDir); err != nil {
 			return errors.Wrap(err, "clean up the compaction temporary directory")
 		}
-		compactDir := path.Join(c.dataDir, "compact")
 
 		level.Info(c.logger).Log("msg", "start sync of metas")
 
@@ -833,7 +831,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 		}
 		done := true
 		for _, g := range groups {
-			id, err := g.Compact(ctx, compactDir, c.comp)
+			id, err := g.Compact(ctx, c.compactDir, c.comp)
 			if err == nil {
 				// If the returned ID has a zero value, the group had no blocks to be compacted.
 				// We keep going through the outer loop until no group has any work left.

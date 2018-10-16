@@ -99,12 +99,10 @@ func downsampleBucket(
 	bkt objstore.Bucket,
 	dir string,
 ) error {
-	downsamplingDir := path.Join(dir, "downsample")
-
-	if err := os.RemoveAll(downsamplingDir); err != nil {
+	if err := os.RemoveAll(dir); err != nil {
 		return errors.Wrap(err, "clean working directory")
 	}
-	if err := os.MkdirAll(downsamplingDir, 0777); err != nil {
+	if err := os.MkdirAll(dir, 0777); err != nil {
 		return errors.Wrap(err, "create dir")
 	}
 	var metas []*block.Meta
@@ -174,7 +172,7 @@ func downsampleBucket(
 			if m.MaxTime-m.MinTime < 40*60*60*1000 {
 				continue
 			}
-			if err := processDownsampling(ctx, logger, bkt, m, downsamplingDir, 5*60*1000); err != nil {
+			if err := processDownsampling(ctx, logger, bkt, m, dir, 5*60*1000); err != nil {
 				return err
 			}
 
@@ -195,7 +193,7 @@ func downsampleBucket(
 			if m.MaxTime-m.MinTime < 10*24*60*60*1000 {
 				continue
 			}
-			if err := processDownsampling(ctx, logger, bkt, m, downsamplingDir, 60*60*1000); err != nil {
+			if err := processDownsampling(ctx, logger, bkt, m, dir, 60*60*1000); err != nil {
 				return err
 			}
 		}
