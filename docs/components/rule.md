@@ -133,6 +133,8 @@ Flags:
       --objstore.config=<bucket.config-yaml>  
                                  Alternative to 'objstore.config-file' flag.
                                  Object store configuration in YAML.
+      --query=<query> ...        Addresses of statically configured query API
+                                 servers (repeatable).
       --query.file-sd-config.files=<path> ...  
                                  Path to file that contain addresses of query
                                  peers. The path can be a glob pattern

@@ -23,41 +23,41 @@ type testConfig struct {
 var (
 	firstPromPort = promHTTPPort(1)
 
-	gossipSuite = newSpinupSuite().
-			Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0), true)).
-			Add(scraper(2, defaultPromConfig("prom-ha", 0), true)).
-			Add(scraper(3, defaultPromConfig("prom-ha", 1), true)).
-			Add(querier(1, "replica")).
-			Add(querier(2, "replica"))
+	queryGossipSuite = newSpinupSuite().
+				Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0), true)).
+				Add(scraper(2, defaultPromConfig("prom-ha", 0), true)).
+				Add(scraper(3, defaultPromConfig("prom-ha", 1), true)).
+				Add(querier(1, "replica")).
+				Add(querier(2, "replica"))
 
-	staticFlagsSuite = newSpinupSuite().
+	queryStaticFlagsSuite = newSpinupSuite().
 				Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0), false)).
 				Add(scraper(2, defaultPromConfig("prom-ha", 0), false)).
 				Add(scraper(3, defaultPromConfig("prom-ha", 1), false)).
-				Add(querierWithStoreFlags(1, "replica", []string{sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3)})).
-				Add(querierWithStoreFlags(2, "replica", []string{sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3)}))
+				Add(querierWithStoreFlags(1, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3))).
+				Add(querierWithStoreFlags(2, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3)))
 
-	fileSDSuite = newSpinupSuite().
-			Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0), false)).
-			Add(scraper(2, defaultPromConfig("prom-ha", 0), false)).
-			Add(scraper(3, defaultPromConfig("prom-ha", 1), false)).
-			Add(querierWithFileSD(1, "replica", []string{sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3)})).
-			Add(querierWithFileSD(2, "replica", []string{sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3)}))
+	queryFileSDSuite = newSpinupSuite().
+				Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0), false)).
+				Add(scraper(2, defaultPromConfig("prom-ha", 0), false)).
+				Add(scraper(3, defaultPromConfig("prom-ha", 1), false)).
+				Add(querierWithFileSD(1, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3))).
+				Add(querierWithFileSD(2, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3)))
 )
 
 func TestQuery(t *testing.T) {
 	for _, tt := range []testConfig{
 		{
 			"gossip",
-			gossipSuite,
+			queryGossipSuite,
 		},
 		{
 			"staticFlag",
-			staticFlagsSuite,
+			queryStaticFlagsSuite,
 		},
 		{
 			"fileSD",
-			fileSDSuite,
+			queryFileSDSuite,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

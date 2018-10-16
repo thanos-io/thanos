@@ -78,6 +78,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "")
 
+	queries := cmd.Flag("query", "Addresses of statically configured query API servers (repeatable).").
+		PlaceHolder("<query>").Strings()
+
 	fileSDFiles := cmd.Flag("query.file-sd-config.files", "Path to file that contain addresses of query peers. The path can be a glob pattern (repeatable).").
 		PlaceHolder("<path>").Strings()
 
@@ -104,6 +107,15 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			Retention:        *tsdbRetention,
 			NoLockfile:       true,
 			WALFlushInterval: 30 * time.Second,
+		}
+
+		lookupQueries := map[string]struct{}{}
+		for _, q := range *queries {
+			if _, ok := lookupQueries[q]; ok {
+				return errors.Errorf("Address %s is duplicated for --query flag.", q)
+			}
+
+			lookupQueries[q] = struct{}{}
 		}
 
 		var fileSD *file.Discovery
@@ -134,6 +146,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			tsdbOpts,
 			name,
 			alertQueryURL,
+			*queries,
 			fileSD,
 		)
 	}
@@ -161,6 +174,7 @@ func runRule(
 	tsdbOpts *tsdb.Options,
 	component string,
 	alertQueryURL *url.URL,
+	queryAddrs []string,
 	fileSD *file.Discovery,
 ) error {
 	configSuccess := prometheus.NewGauge(prometheus.GaugeOpts{
@@ -178,6 +192,12 @@ func runRule(
 	reg.MustRegister(configSuccess)
 	reg.MustRegister(configSuccessTime)
 	reg.MustRegister(duplicatedQuery)
+
+	for _, addr := range queryAddrs {
+		if addr == "" {
+			return errors.New("static querier address cannot be empty")
+		}
+	}
 
 	db, err := tsdb.Open(dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts)
 	if err != nil {
@@ -200,6 +220,8 @@ func runRule(
 	// back or the context get canceled.
 	queryFn := func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {
 		var addrs []string
+		// Add addresses from static flag
+		addrs = append(addrs, queryAddrs...)
 
 		// Add addresses from gossip
 		peers := peer.PeerStates(cluster.PeerTypeQuery)
