@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"path"
 	"time"
 
@@ -132,6 +133,10 @@ func runCompact(
 		compactDir      = path.Join(dataDir, "compact")
 		downsamplingDir = path.Join(dataDir, "downsample")
 	)
+
+	if err := os.RemoveAll(dataDir); err != nil {
+		return errors.Wrap(err, "clean working temporary directory")
+	}
 
 	compactor := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt)
 

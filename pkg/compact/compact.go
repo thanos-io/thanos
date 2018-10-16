@@ -808,6 +808,11 @@ func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, comp
 func (c *BucketCompactor) Compact(ctx context.Context) error {
 	// Loop over bucket and compact until there's no work left.
 	for {
+		// Clean up the compaction temporary directory at the beginning of every compaction loop.
+		if err := os.RemoveAll(c.compactDir); err != nil {
+			return errors.Wrap(err, "clean up the compaction temporary directory")
+		}
+
 		level.Info(c.logger).Log("msg", "start sync of metas")
 
 		if err := c.sy.SyncMetas(ctx); err != nil {
