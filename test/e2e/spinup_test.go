@@ -113,7 +113,7 @@ func querier(i int, replicaLabel string) (cmdScheduleFunc, string) {
 	}, queryCluster(i)
 }
 
-func querierWithStoreFlags(i int, replicaLabel string, storesAddresses []string) (cmdScheduleFunc, string) {
+func querierWithStoreFlags(i int, replicaLabel string, storesAddresses ...string) (cmdScheduleFunc, string) {
 	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
 		args := defaultQuerierFlags(i, replicaLabel)
 
@@ -125,7 +125,7 @@ func querierWithStoreFlags(i int, replicaLabel string, storesAddresses []string)
 	}, ""
 }
 
-func querierWithFileSD(i int, replicaLabel string, storesAddresses []string) (cmdScheduleFunc, string) {
+func querierWithFileSD(i int, replicaLabel string, storesAddresses ...string) (cmdScheduleFunc, string) {
 	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
 		queryFileSDDir := fmt.Sprintf("%s/data/queryFileSd%d", workDir, i)
 		if err := os.MkdirAll(queryFileSDDir, 0777); err != nil {
@@ -156,25 +156,65 @@ func ruler(i int, rules string) (cmdScheduleFunc, string) {
 			return nil, errors.Wrap(err, "creating ruler file failed")
 		}
 
-		return []*exec.Cmd{exec.Command("thanos",
-			append([]string{"rule",
-				"--debug.name", fmt.Sprintf("rule-%d", i),
-				"--label", fmt.Sprintf(`replica="%d"`, i),
-				"--data-dir", dbDir,
-				"--rule-file", path.Join(dbDir, "*.yaml"),
-				"--eval-interval", "1s",
-				"--alertmanagers.url", "http://127.0.0.1:29093",
-				"--grpc-address", rulerGRPC(i),
-				"--http-address", rulerHTTP(i),
-				"--cluster.address", rulerCluster(i),
-				"--cluster.advertise-address", rulerCluster(i),
-				"--cluster.gossip-interval", "200ms",
-				"--cluster.pushpull-interval", "200ms",
-				"--log.level", "debug",
-			},
-				clusterPeerFlags...)...,
-		)}, nil
+		args := append(defaultRulerFlags(i, dbDir),
+			"--cluster.advertise-address", rulerCluster(i),
+			"--cluster.gossip-interval", "200ms",
+			"--cluster.pushpull-interval", "200ms")
+		args = append(args, clusterPeerFlags...)
+
+		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
 	}, rulerCluster(i)
+}
+
+func rulerWithQueryFlags(i int, rules string, queryAddresses ...string) (cmdScheduleFunc, string) {
+	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+		dbDir := fmt.Sprintf("%s/data/rule%d", workDir, i)
+
+		if err := os.MkdirAll(dbDir, 0777); err != nil {
+			return nil, errors.Wrap(err, "creating ruler dir failed")
+		}
+		err := ioutil.WriteFile(dbDir+"/rules.yaml", []byte(rules), 0666)
+		if err != nil {
+			return nil, errors.Wrap(err, "creating ruler file failed")
+		}
+
+		args := defaultRulerFlags(i, dbDir)
+
+		for _, addr := range queryAddresses {
+			args = append(args, "--query", addr)
+		}
+
+		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
+	}, ""
+}
+
+func rulerWithFileSD(i int, rules string, queryAddresses ...string) (cmdScheduleFunc, string) {
+	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+		dbDir := fmt.Sprintf("%s/data/rule%d", workDir, i)
+
+		if err := os.MkdirAll(dbDir, 0777); err != nil {
+			return nil, errors.Wrap(err, "creating ruler dir failed")
+		}
+		err := ioutil.WriteFile(dbDir+"/rules.yaml", []byte(rules), 0666)
+		if err != nil {
+			return nil, errors.Wrap(err, "creating ruler file failed")
+		}
+
+		ruleFileSDDir := fmt.Sprintf("%s/data/ruleFileSd%d", workDir, i)
+		if err := os.MkdirAll(ruleFileSDDir, 0777); err != nil {
+			return nil, errors.Wrap(err, "create ruler filesd dir failed")
+		}
+
+		if err := ioutil.WriteFile(ruleFileSDDir+"/filesd.json", []byte(generateFileSD(queryAddresses)), 0666); err != nil {
+			return nil, errors.Wrap(err, "creating ruler filesd config failed")
+		}
+
+		args := append(defaultRulerFlags(i, dbDir),
+			"--query.file-sd-config.files", path.Join(ruleFileSDDir, "filesd.json"),
+			"--query.file-sd-config.interval", "5s")
+
+		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
+	}, ""
 }
 
 func alertManager(i int) (cmdScheduleFunc, string) {
@@ -311,5 +351,20 @@ func defaultQuerierFlags(i int, replicaLabel string) []string {
 		"--log.level", "debug",
 		"--query.replica-label", replicaLabel,
 		"--cluster.address", queryCluster(i),
+	}
+}
+
+func defaultRulerFlags(i int, dbDir string) []string {
+	return []string{"rule",
+		"--debug.name", fmt.Sprintf("rule-%d", i),
+		"--label", fmt.Sprintf(`replica="%d"`, i),
+		"--data-dir", dbDir,
+		"--rule-file", path.Join(dbDir, "*.yaml"),
+		"--eval-interval", "1s",
+		"--alertmanagers.url", "http://127.0.0.1:29093",
+		"--grpc-address", rulerGRPC(i),
+		"--http-address", rulerHTTP(i),
+		"--cluster.address", rulerCluster(i),
+		"--log.level", "debug",
 	}
 }
