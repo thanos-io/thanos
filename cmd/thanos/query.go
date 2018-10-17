@@ -16,6 +16,7 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/discovery/cache"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/query/api"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -28,6 +29,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/discovery/file"
+	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
@@ -48,6 +51,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	cert := cmd.Flag("grpc-client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").String()
 	key := cmd.Flag("grpc-client-tls-key", "TLS Key for the client's certificate").Default("").String()
 	caCert := cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").Default("").String()
+	serverName := cmd.Flag("grpc-client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").String()
 
 	queryTimeout := modelDuration(cmd.Flag("query.timeout", "Maximum time to process query by query node.").
 		Default("2m"))
@@ -63,6 +67,12 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 
 	stores := cmd.Flag("store", "Addresses of statically configured store API servers (repeatable).").
 		PlaceHolder("<store>").Strings()
+
+	fileSDFiles := cmd.Flag("store.file-sd-config.files", "Path to files that contain addresses of store API servers. The path can be a glob pattern (repeatable).").
+		PlaceHolder("<path>").Strings()
+
+	fileSDInterval := modelDuration(cmd.Flag("store.file-sd-config.interval", "Refresh interval to re-read file SD files. (used as a fallback)").
+		Default("5m"))
 
 	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified. ").
 		Default("false").Bool()
@@ -86,6 +96,15 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			lookupStores[s] = struct{}{}
 		}
 
+		var fileSD *file.Discovery
+		if len(*fileSDFiles) > 0 {
+			conf := &file.SDConfig{
+				Files:           *fileSDFiles,
+				RefreshInterval: *fileSDInterval,
+			}
+			fileSD = file.NewDiscovery(conf, logger)
+		}
+
 		return runQuery(
 			g,
 			logger,
@@ -99,6 +118,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*cert,
 			*key,
 			*caCert,
+			*serverName,
 			*httpBindAddr,
 			*maxConcurrentQueries,
 			time.Duration(*queryTimeout),
@@ -107,11 +127,12 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			selectorLset,
 			*stores,
 			*enableAutodownsampling,
+			fileSD,
 		)
 	}
 }
 
-func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, secure bool, cert, key, caCert string) ([]grpc.DialOption, error) {
+func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, secure bool, cert, key, caCert string, serverName string) ([]grpc.DialOption, error) {
 	grpcMets := grpc_prometheus.NewClientMetrics()
 	grpcMets.EnableClientHandlingTimeHistogram(
 		grpc_prometheus.WithHistogramBuckets([]float64{
@@ -174,6 +195,10 @@ func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer ope
 		RootCAs: certPool,
 	}
 
+	if serverName != "" {
+		tlsCfg.ServerName = serverName
+	}
+
 	if cert != "" {
 		cert, err := tls.LoadX509KeyPair(cert, key)
 		if err != nil {
@@ -203,6 +228,7 @@ func runQuery(
 	cert string,
 	key string,
 	caCert string,
+	serverName string,
 	httpBindAddr string,
 	maxConcurrentQueries int,
 	queryTimeout time.Duration,
@@ -211,7 +237,14 @@ func runQuery(
 	selectorLset labels.Labels,
 	storeAddrs []string,
 	enableAutodownsampling bool,
+	fileSD *file.Discovery,
 ) error {
+	duplicatedStores := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_query_duplicated_store_address",
+		Help: "The number of times a duplicated store addresses is detected from the different configs in query",
+	})
+	reg.MustRegister(duplicatedStores)
+
 	var staticSpecs []query.StoreSpec
 	for _, addr := range storeAddrs {
 		if addr == "" {
@@ -221,18 +254,22 @@ func runQuery(
 		staticSpecs = append(staticSpecs, query.NewGRPCStoreSpec(addr))
 	}
 
-	dialOpts, err := storeClientGRPCOpts(logger, reg, tracer, secure, cert, key, caCert)
+	dialOpts, err := storeClientGRPCOpts(logger, reg, tracer, secure, cert, key, caCert, serverName)
 	if err != nil {
 		return errors.Wrap(err, "building gRPC client")
 	}
+
+	fileSDCache := cache.New()
 
 	var (
 		stores = query.NewStoreSet(
 			logger,
 			reg,
 			func() (specs []query.StoreSpec) {
+				// Add store specs from static flags.
 				specs = append(staticSpecs)
 
+				// Add store specs from gossip.
 				for id, ps := range peer.PeerStates(cluster.PeerTypesStoreAPIs()...) {
 					if ps.StoreAPIAddr == "" {
 						level.Error(logger).Log("msg", "Gossip found peer that propagates empty address, ignoring.", "lset", fmt.Sprintf("%v", ps.Metadata.Labels))
@@ -241,6 +278,14 @@ func runQuery(
 
 					specs = append(specs, &gossipSpec{id: id, addr: ps.StoreAPIAddr, peer: peer})
 				}
+
+				// Add store specs from file SD.
+				for _, addr := range fileSDCache.Addresses() {
+					specs = append(specs, query.NewGRPCStoreSpec(addr))
+				}
+
+				specs = removeDuplicateStoreSpecs(logger, duplicatedStores, specs)
+
 				return specs
 			},
 			dialOpts,
@@ -262,6 +307,40 @@ func runQuery(
 		}, func(error) {
 			cancel()
 			stores.Close()
+		})
+	}
+	// Run File Service Discovery and update the store set when the files are modified.
+	if fileSD != nil {
+		var fileSDUpdates chan []*targetgroup.Group
+		ctxRun, cancelRun := context.WithCancel(context.Background())
+
+		fileSDUpdates = make(chan []*targetgroup.Group)
+
+		g.Add(func() error {
+			fileSD.Run(ctxRun, fileSDUpdates)
+			return nil
+		}, func(error) {
+			cancelRun()
+		})
+
+		ctxUpdate, cancelUpdate := context.WithCancel(context.Background())
+		g.Add(func() error {
+			for {
+				select {
+				case update := <-fileSDUpdates:
+					// Discoverers sometimes send nil updates so need to check for it to avoid panics.
+					if update == nil {
+						continue
+					}
+					fileSDCache.Update(update)
+					stores.Update(ctxUpdate)
+				case <-ctxUpdate.Done():
+					return nil
+				}
+			}
+		}, func(error) {
+			cancelUpdate()
+			close(fileSDUpdates)
 		})
 	}
 	{
@@ -331,6 +410,23 @@ func runQuery(
 
 	level.Info(logger).Log("msg", "starting query node")
 	return nil
+}
+
+func removeDuplicateStoreSpecs(logger log.Logger, duplicatedStores prometheus.Counter, specs []query.StoreSpec) []query.StoreSpec {
+	set := make(map[string]query.StoreSpec)
+	for _, spec := range specs {
+		addr := spec.Addr()
+		if _, ok := set[addr]; ok {
+			level.Warn(logger).Log("msg", "Duplicate store address is provided - %v", addr)
+			duplicatedStores.Inc()
+		}
+		set[addr] = spec
+	}
+	deduplicated := make([]query.StoreSpec, 0, len(set))
+	for _, value := range set {
+		deduplicated = append(deduplicated, value)
+	}
+	return deduplicated
 }
 
 type gossipSpec struct {

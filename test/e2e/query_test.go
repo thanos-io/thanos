@@ -4,10 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
 	"testing"
 	"time"
 
@@ -17,62 +15,63 @@ import (
 	"github.com/prometheus/common/model"
 )
 
-// TestQuerySimple runs a setup of Prometheus servers, sidecars, and query nodes and verifies that
-// queries return data merged from all Prometheus servers. Additionally it verifies if deduplication works for query.
-func TestQuerySimple(t *testing.T) {
-	dir, err := ioutil.TempDir("", "test_query_simple")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+type testConfig struct {
+	name  string
+	suite *spinupSuite
+}
 
+var (
+	firstPromPort = promHTTPPort(1)
+
+	queryGossipSuite = newSpinupSuite().
+				Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0), true)).
+				Add(scraper(2, defaultPromConfig("prom-ha", 0), true)).
+				Add(scraper(3, defaultPromConfig("prom-ha", 1), true)).
+				Add(querier(1, "replica"), queryCluster(1)).
+				Add(querier(2, "replica"), queryCluster(2))
+
+	queryStaticFlagsSuite = newSpinupSuite().
+				Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0), false)).
+				Add(scraper(2, defaultPromConfig("prom-ha", 0), false)).
+				Add(scraper(3, defaultPromConfig("prom-ha", 1), false)).
+				Add(querierWithStoreFlags(1, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3)), "").
+				Add(querierWithStoreFlags(2, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3)), "")
+
+	queryFileSDSuite = newSpinupSuite().
+				Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0), false)).
+				Add(scraper(2, defaultPromConfig("prom-ha", 0), false)).
+				Add(scraper(3, defaultPromConfig("prom-ha", 1), false)).
+				Add(querierWithFileSD(1, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3)), "").
+				Add(querierWithFileSD(2, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3)), "")
+)
+
+func TestQuery(t *testing.T) {
+	for _, tt := range []testConfig{
+		{
+			"gossip",
+			queryGossipSuite,
+		},
+		{
+			"staticFlag",
+			queryStaticFlagsSuite,
+		},
+		{
+			"fileSD",
+			queryFileSDSuite,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			testQuerySimple(t, tt)
+		})
+	}
+}
+
+// testQuerySimple runs a setup of Prometheus servers, sidecars, and query nodes and verifies that
+// queries return data merged from all Prometheus servers. Additionally it verifies if deduplication works for query.
+func testQuerySimple(t *testing.T, conf testConfig) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 
-	firstPromPort := promHTTPPort(1)
-	exit, err := spinup(t, ctx, config{
-		promConfigs: []string{
-			// Self scraping config with unique external label.
-			fmt.Sprintf(`
-global:
-  external_labels:
-    prometheus: prom-%s
-    replica: 0
-scrape_configs:
-- job_name: prometheus
-  scrape_interval: 1s
-  static_configs:
-  - targets:
-    - "localhost:%s"
-`, firstPromPort, firstPromPort),
-			// Config for first of two HA replica Prometheus.
-			fmt.Sprintf(`
-global:
-  external_labels:
-    prometheus: prom-ha
-    replica: 0
-scrape_configs:
-- job_name: prometheus
-  scrape_interval: 1s
-  static_configs:
-  - targets:
-    - "localhost:%s"
-`, firstPromPort),
-			// Config for second of two HA replica Prometheus.
-			fmt.Sprintf(`
-global:
-  external_labels:
-    prometheus: prom-ha
-    replica: 1
-scrape_configs:
-- job_name: prometheus
-  scrape_interval: 1s
-  static_configs:
-  - targets:
-    - "localhost:%s"
-`, firstPromPort),
-		},
-		workDir:             dir,
-		numQueries:          2,
-		queriesReplicaLabel: "replica",
-	})
+	exit, err := conf.suite.Exec(t, ctx, conf.name)
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)
 		cancel()
@@ -84,16 +83,13 @@ scrape_configs:
 		<-exit
 	}()
 
-	var (
-		res         model.Vector
-		criticalErr error
-	)
+	var res model.Vector
 
 	// Try query without deduplication.
-	err = runutil.Retry(time.Second, ctx.Done(), func() error {
+	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
 		select {
-		case criticalErr = <-exit:
-			t.Errorf("Some process exited unexpectedly: %v", err)
+		case <-exit:
+			cancel()
 			return nil
 		default:
 		}
@@ -107,9 +103,7 @@ scrape_configs:
 			return errors.Errorf("unexpected result size %d", len(res))
 		}
 		return nil
-	})
-	testutil.Ok(t, err)
-	testutil.Ok(t, criticalErr)
+	}))
 
 	// In our model result are always sorted.
 	testutil.Equals(t, model.Metric{
@@ -135,10 +129,10 @@ scrape_configs:
 	}, res[2].Metric)
 
 	// Try query with deduplication.
-	err = runutil.Retry(time.Second, ctx.Done(), func() error {
+	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
 		select {
-		case criticalErr = <-exit:
-			t.Errorf("Some process exited unexpectedly: %v", err)
+		case <-exit:
+			cancel()
 			return nil
 		default:
 		}
@@ -153,9 +147,7 @@ scrape_configs:
 		}
 
 		return nil
-	})
-	testutil.Ok(t, err)
-	testutil.Ok(t, criticalErr)
+	}))
 
 	testutil.Equals(t, model.Metric{
 		"__name__":   "up",
@@ -204,4 +196,19 @@ func queryPrometheus(ctx context.Context, ustr string, ts time.Time, q string, d
 		return nil, err
 	}
 	return m.Data.Result, nil
+}
+
+func defaultPromConfig(name string, replicas int) string {
+	return fmt.Sprintf(`
+global:
+  external_labels:
+    prometheus: %s
+    replica: %v
+scrape_configs:
+- job_name: prometheus
+  scrape_interval: 1s
+  static_configs:
+  - targets:
+    - "localhost:%s"
+`, name, replicas, firstPromPort)
 }

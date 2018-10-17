@@ -26,7 +26,7 @@ On-disk data is safe to delete between restarts and should be the first attempt 
 
 [embedmd]:# (flags/compact.txt $)
 ```$
-usage: thanos compact --objstore.config-file=<bucket.config.path> [<flags>]
+usage: thanos compact [<flags>]
 
 continuously compacts blocks in an object store bucket
 
@@ -47,8 +47,12 @@ Flags:
                            Listen host:port for HTTP endpoints.
       --data-dir="./data"  Data directory in which to cache blocks and process
                            compactions.
-      --objstore.config-file=<bucket.config.path>  
-                           The object store configuration file path.
+      --objstore.config-file=<bucket.config-yaml-path>  
+                           Path to YAML file that contains object store
+                           configuration.
+      --objstore.config=<bucket.config-yaml>  
+                           Alternative to 'objstore.config-file' flag. Object
+                           store configuration in YAML.
       --sync-delay=30m     Minimum age of fresh (non-compacted) blocks before
                            they are being processed.
       --retention.resolution-raw=0d  

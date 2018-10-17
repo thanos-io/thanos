@@ -26,7 +26,7 @@ by adding a new command within `/cmd/thanos/bucket.go`
 
 [embedmd]:# (flags/bucket.txt $)
 ```$
-usage: thanos bucket --objstore.config-file=<bucket.config.path> <command> [<args> ...]
+usage: thanos bucket [<flags>] <command> [<args> ...]
 
 inspect metric data in an object storage bucket
 
@@ -42,8 +42,18 @@ Flags:
                         How often we send traces (1/<sample-factor>). If 0 no
                         trace will be sent periodically, unless forced by
                         baggage item. See `pkg/tracing/tracing.go` for details.
-      --objstore.config-file=<bucket.config.path>  
-                        The object store configuration file path.
+      --objstore.config-file=<bucket.config-yaml-path>  
+                        Path to YAML file that contains object store
+                        configuration.
+      --objstore.config=<bucket.config-yaml>  
+                        Alternative to 'objstore.config-file' flag. Object store
+                        configuration in YAML.
+      --objstore-backup.config-file=<bucket.config-yaml-path>  
+                        Path to YAML file that contains object store-backup
+                        configuration.
+      --objstore-backup.config=<bucket.config-yaml>  
+                        Alternative to 'objstore-backup.config-file' flag.
+                        Object store-backup configuration in YAML.
 
 Subcommands:
   bucket verify [<flags>]
@@ -83,11 +93,19 @@ Flags:
                         How often we send traces (1/<sample-factor>). If 0 no
                         trace will be sent periodically, unless forced by
                         baggage item. See `pkg/tracing/tracing.go` for details.
-      --objstore.config-file=<bucket.config.path>  
-                        The object store configuration file path.
+      --objstore.config-file=<bucket.config-yaml-path>  
+                        Path to YAML file that contains object store
+                        configuration.
+      --objstore.config=<bucket.config-yaml>  
+                        Alternative to 'objstore.config-file' flag. Object store
+                        configuration in YAML.
+      --objstore-backup.config-file=<bucket.config-yaml-path>  
+                        Path to YAML file that contains object store-backup
+                        configuration.
+      --objstore-backup.config=<bucket.config-yaml>  
+                        Alternative to 'objstore-backup.config-file' flag.
+                        Object store-backup configuration in YAML.
   -r, --repair          attempt to repair blocks for which issues were detected
-      --objstore-backup.config-file=<bucket-backup.config.path>  
-                        The backup object store configuration file path.
   -i, --issues=index_issue... ...  
                         Issues to verify (and optionally repair). Possible
                         values: [duplicated_compaction index_issue
@@ -127,8 +145,18 @@ Flags:
                         How often we send traces (1/<sample-factor>). If 0 no
                         trace will be sent periodically, unless forced by
                         baggage item. See `pkg/tracing/tracing.go` for details.
-      --objstore.config-file=<bucket.config.path>  
-                        The object store configuration file path.
+      --objstore.config-file=<bucket.config-yaml-path>  
+                        Path to YAML file that contains object store
+                        configuration.
+      --objstore.config=<bucket.config-yaml>  
+                        Alternative to 'objstore.config-file' flag. Object store
+                        configuration in YAML.
+      --objstore-backup.config-file=<bucket.config-yaml-path>  
+                        Path to YAML file that contains object store-backup
+                        configuration.
+      --objstore-backup.config=<bucket.config-yaml>  
+                        Alternative to 'objstore-backup.config-file' flag.
+                        Object store-backup configuration in YAML.
   -o, --output=""       Format in which to print each block's information. May
                         be 'json' or custom template.
 

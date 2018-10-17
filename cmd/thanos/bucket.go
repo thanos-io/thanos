@@ -41,27 +41,35 @@ var (
 func registerBucket(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "inspect metric data in an object storage bucket")
 
-	bucketConfFile := cmd.Flag("objstore.config-file", "The object store configuration file path.").
-		PlaceHolder("<bucket.config.path>").Required().String()
+	objStoreConfig := regCommonObjStoreFlags(cmd, "")
+	objStoreBackupConfig := regCommonObjStoreFlags(cmd, "-backup")
 
 	// Verify command.
 	verify := cmd.Command("verify", "verify all blocks in the bucket against specified issues")
 	verifyRepair := verify.Flag("repair", "attempt to repair blocks for which issues were detected").
 		Short('r').Default("false").Bool()
-	backupBucketConfFile := verify.Flag("objstore-backup.config-file", "The backup object store configuration file path.").
-		PlaceHolder("<bucket-backup.config.path>").String()
 	verifyIssues := verify.Flag("issues", fmt.Sprintf("Issues to verify (and optionally repair). Possible values: %v", allIssues())).
 		Short('i').Default(verifier.IndexIssueID, verifier.OverlappedBlocksIssueID).Strings()
 	verifyIDWhitelist := verify.Flag("id-whitelist", "Block IDs to verify (and optionally repair) only. "+
 		"If none is specified, all blocks will be verified. Repeated field").Strings()
 	m[name+" verify"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
-		bkt, err := client.NewBucket(logger, *bucketConfFile, reg, name)
+		bucketConfig, err := objStoreConfig.Content()
+		if err != nil {
+			return err
+		}
+
+		bkt, err := client.NewBucket(logger, bucketConfig, reg, name)
 		if err != nil {
 			return err
 		}
 		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
-		backupBkt, err := client.NewBucket(logger, *backupBucketConfFile, reg, name)
+		backupBucketConfig, err := objStoreBackupConfig.Content()
+		if err != nil {
+			return err
+		}
+
+		backupBkt, err := client.NewBucket(logger, backupBucketConfig, reg, name)
 		if err == client.ErrNotFound {
 			if *verifyRepair {
 				return errors.Wrap(err, "repair is specified, so backup client is required")
@@ -121,7 +129,12 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	lsOutput := ls.Flag("output", "Format in which to print each block's information. May be 'json' or custom template.").
 		Short('o').Default("").String()
 	m[name+" ls"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
-		bkt, err := client.NewBucket(logger, *bucketConfFile, reg, name)
+		bucketConfig, err := objStoreConfig.Content()
+		if err != nil {
+			return err
+		}
+
+		bkt, err := client.NewBucket(logger, bucketConfig, reg, name)
 		if err != nil {
 			return err
 		}

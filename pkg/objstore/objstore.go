@@ -52,7 +52,7 @@ type BucketReader interface {
 }
 
 // UploadDir uploads all files in srcdir to the bucket with into a top-level directory
-// named dstdir.
+// named dstdir. It is a caller responsibility to clean partial upload in case of failure.
 func UploadDir(ctx context.Context, logger log.Logger, bkt Bucket, srcdir, dstdir string) error {
 	df, err := os.Stat(srcdir)
 	if err != nil {
@@ -75,6 +75,7 @@ func UploadDir(ctx context.Context, logger log.Logger, bkt Bucket, srcdir, dstdi
 }
 
 // UploadFile uploads the file with the given name to the bucket.
+// It is a caller responsibility to clean partial upload in case of failure
 func UploadFile(ctx context.Context, logger log.Logger, bkt Bucket, src, dst string) error {
 	r, err := os.Open(src)
 	if err != nil {

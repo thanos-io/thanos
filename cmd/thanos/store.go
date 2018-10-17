@@ -30,14 +30,16 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache remote blocks.").
 		Default("./data").String()
 
-	bucketConfFile := cmd.Flag("objstore.config-file", "The object store configuration file path.").
-		PlaceHolder("<bucket.config.path>").Required().String()
-
 	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the index cache.").
 		Default("250MB").Bytes()
 
 	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes for chunks.").
 		Default("2GB").Bytes()
+
+	objStoreConfig := regCommonObjStoreFlags(cmd, "")
+
+	syncInterval := cmd.Flag("sync-block-duration", "Repeat interval for syncing the blocks between local and remote view.").
+		Default("3m").Duration()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
 		peer, err := newPeerFn(logger, reg, false, "", false)
@@ -48,7 +50,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			logger,
 			reg,
 			tracer,
-			*bucketConfFile,
+			objStoreConfig,
 			*dataDir,
 			*grpcBindAddr,
 			*cert,
@@ -60,6 +62,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			uint64(*chunkPoolSize),
 			name,
 			debugLogging,
+			*syncInterval,
 		)
 	}
 }
@@ -70,7 +73,7 @@ func runStore(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	bucketConfFile string,
+	objStoreConfig *pathOrContent,
 	dataDir string,
 	grpcBindAddr string,
 	cert string,
@@ -82,9 +85,15 @@ func runStore(
 	chunkPoolSizeBytes uint64,
 	component string,
 	verbose bool,
+	syncInterval time.Duration,
 ) error {
 	{
-		bkt, err := client.NewBucket(logger, bucketConfFile, reg, component)
+		bucketConfig, err := objStoreConfig.Content()
+		if err != nil {
+			return err
+		}
+
+		bkt, err := client.NewBucket(logger, bucketConfig, reg, component)
 		if err != nil {
 			return errors.Wrap(err, "create bucket client")
 		}
@@ -120,7 +129,7 @@ func runStore(
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
-			err := runutil.Repeat(3*time.Minute, ctx.Done(), func() error {
+			err := runutil.Repeat(syncInterval, ctx.Done(), func() error {
 				if err := bs.SyncBlocks(ctx); err != nil {
 					level.Warn(logger).Log("msg", "syncing blocks failed", "err", err)
 				}

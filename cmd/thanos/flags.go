@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net"
 	"strconv"
 	"strings"
@@ -123,4 +124,47 @@ func modelDuration(flags *kingpin.FlagClause) *model.Duration {
 	flags.SetValue(value)
 
 	return value
+}
+
+type pathOrContent struct {
+	name string
+
+	path    *string
+	content *string
+}
+
+func (p *pathOrContent) Content() ([]byte, error) {
+	if len(*p.path) > 0 && len(*p.content) > 0 {
+		return nil, errors.Errorf("Both file and content are set for %s", p.name)
+	}
+
+	if len(*p.path) > 0 {
+		c, err := ioutil.ReadFile(*p.path)
+		if err != nil {
+			return nil, errors.Wrap(err, fmt.Sprintf("loading YAML file %s for %s", *p.path, p.name))
+		}
+		return c, nil
+	}
+
+	if len(*p.content) > 0 {
+		return []byte(*p.content), nil
+	}
+
+	return nil, nil
+}
+
+func regCommonObjStoreFlags(cmd *kingpin.CmdClause, suffix string) *pathOrContent {
+	fileFlagName := fmt.Sprintf("objstore%s.config-file", suffix)
+	bucketConfFile := cmd.Flag(fileFlagName, fmt.Sprintf("Path to YAML file that contains object store%s configuration.", suffix)).
+		PlaceHolder("<bucket.config-yaml-path>").String()
+
+	bucketConf := cmd.Flag(fmt.Sprintf("objstore%s.config", suffix), fmt.Sprintf("Alternative to '%s' flag. Object store%s configuration in YAML.", fileFlagName, suffix)).
+		PlaceHolder("<bucket.config-yaml>").String()
+
+	return &pathOrContent{
+		name: fmt.Sprintf("objstore%s.config", suffix),
+
+		path:    bucketConfFile,
+		content: bucketConf,
+	}
 }

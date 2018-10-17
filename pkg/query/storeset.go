@@ -172,7 +172,8 @@ func (s *storeRef) TimeRange() (int64, int64) {
 }
 
 func (s *storeRef) String() string {
-	return fmt.Sprintf("%s", s.addr)
+	mint, maxt := s.TimeRange()
+	return fmt.Sprintf("Addr: %s Labels: %v Mint: %d Maxt: %d", s.addr, s.Labels(), mint, maxt)
 }
 
 func (s *storeRef) close() {

@@ -24,6 +24,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/alert"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/discovery/cache"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
@@ -37,6 +38,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/discovery/file"
+	"github.com/prometheus/prometheus/discovery/targetgroup"
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
@@ -73,8 +76,16 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	alertQueryURL := cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field").String()
 
-	bucketConfFile := cmd.Flag("objstore.config-file", "The object store configuration file path.").
-		PlaceHolder("<bucket.config.path>").String()
+	objStoreConfig := regCommonObjStoreFlags(cmd, "")
+
+	queries := cmd.Flag("query", "Addresses of statically configured query API servers (repeatable).").
+		PlaceHolder("<query>").Strings()
+
+	fileSDFiles := cmd.Flag("query.file-sd-config.files", "Path to file that contain addresses of query peers. The path can be a glob pattern (repeatable).").
+		PlaceHolder("<path>").Strings()
+
+	fileSDInterval := modelDuration(cmd.Flag("query.file-sd-config.interval", "Refresh interval to re-read file SD files. (used as a fallback)").
+		Default("5m"))
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
@@ -97,6 +108,25 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			NoLockfile:       true,
 			WALFlushInterval: 30 * time.Second,
 		}
+
+		lookupQueries := map[string]struct{}{}
+		for _, q := range *queries {
+			if _, ok := lookupQueries[q]; ok {
+				return errors.Errorf("Address %s is duplicated for --query flag.", q)
+			}
+
+			lookupQueries[q] = struct{}{}
+		}
+
+		var fileSD *file.Discovery
+		if len(*fileSDFiles) > 0 {
+			conf := &file.SDConfig{
+				Files:           *fileSDFiles,
+				RefreshInterval: *fileSDInterval,
+			}
+			fileSD = file.NewDiscovery(conf, logger)
+		}
+
 		return runRule(g,
 			logger,
 			reg,
@@ -112,10 +142,12 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			*dataDir,
 			*ruleFiles,
 			peer,
-			*bucketConfFile,
+			objStoreConfig,
 			tsdbOpts,
 			name,
 			alertQueryURL,
+			*queries,
+			fileSD,
 		)
 	}
 }
@@ -138,10 +170,12 @@ func runRule(
 	dataDir string,
 	ruleFiles []string,
 	peer *cluster.Peer,
-	bucketConfFile string,
+	objStoreConfig *pathOrContent,
 	tsdbOpts *tsdb.Options,
 	component string,
 	alertQueryURL *url.URL,
+	queryAddrs []string,
+	fileSD *file.Discovery,
 ) error {
 	configSuccess := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_config_last_reload_successful",
@@ -151,9 +185,19 @@ func runRule(
 		Name: "thanos_config_last_reload_success_timestamp_seconds",
 		Help: "Timestamp of the last successful configuration reload.",
 	})
-
+	duplicatedQuery := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_rule_duplicated_query_address",
+		Help: "The number of times a duplicated query addresses is detected from the different configs in rule",
+	})
 	reg.MustRegister(configSuccess)
 	reg.MustRegister(configSuccessTime)
+	reg.MustRegister(duplicatedQuery)
+
+	for _, addr := range queryAddrs {
+		if addr == "" {
+			return errors.New("static querier address cannot be empty")
+		}
+	}
 
 	db, err := tsdb.Open(dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts)
 	if err != nil {
@@ -169,9 +213,17 @@ func runRule(
 		})
 	}
 
+	// FileSD query addresses
+	fileSDCache := cache.New()
+
 	// Hit the HTTP query API of query peers in randomized order until we get a result
 	// back or the context get canceled.
 	queryFn := func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {
+		var addrs []string
+		// Add addresses from static flag
+		addrs = append(addrs, queryAddrs...)
+
+		// Add addresses from gossip
 		peers := peer.PeerStates(cluster.PeerTypeQuery)
 		var ids []string
 		for id := range peers {
@@ -180,9 +232,19 @@ func runRule(
 		sort.Slice(ids, func(i int, j int) bool {
 			return strings.Compare(ids[i], ids[j]) < 0
 		})
+		for _, id := range ids {
+			addrs = append(addrs, peers[id].QueryAPIAddr)
+		}
 
-		for _, i := range rand.Perm(len(ids)) {
-			vec, err := queryPrometheusInstant(ctx, logger, peers[ids[i]].QueryAPIAddr, q, t)
+		// Add addresses from file sd
+		for _, addr := range fileSDCache.Addresses() {
+			addrs = append(addrs, addr)
+		}
+
+		removeDuplicateQueryAddrs(logger, duplicatedQuery, addrs)
+
+		for _, i := range rand.Perm(len(addrs)) {
+			vec, err := queryPrometheusInstant(ctx, logger, addrs[i], q, t)
 			if err != nil {
 				return nil, err
 			}
@@ -302,6 +364,39 @@ func runRule(
 			cancel()
 		})
 	}
+	// Run File Service Discovery and update the query addresses when the files are modified
+	if fileSD != nil {
+		var fileSDUpdates chan []*targetgroup.Group
+		ctxRun, cancelRun := context.WithCancel(context.Background())
+
+		fileSDUpdates = make(chan []*targetgroup.Group)
+
+		g.Add(func() error {
+			fileSD.Run(ctxRun, fileSDUpdates)
+			return nil
+		}, func(error) {
+			cancelRun()
+		})
+
+		ctxUpdate, cancelUpdate := context.WithCancel(context.Background())
+		g.Add(func() error {
+			for {
+				select {
+				case update := <-fileSDUpdates:
+					// Discoverers sometimes send nil updates so need to check for it to avoid panics
+					if update == nil {
+						continue
+					}
+					fileSDCache.Update(update)
+				case <-ctxUpdate.Done():
+					return nil
+				}
+			}
+		}, func(error) {
+			cancelUpdate()
+			close(fileSDUpdates)
+		})
+	}
 
 	// Handle reload and termination interrupts.
 	reload := make(chan struct{}, 1)
@@ -418,9 +513,13 @@ func runRule(
 
 	var uploads = true
 
+	bucketConfig, err := objStoreConfig.Content()
+	if err != nil {
+		return err
+	}
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, err := client.NewBucket(logger, bucketConfFile, reg, component)
+	bkt, err := client.NewBucket(logger, bucketConfig, reg, component)
 	if err != nil && err != client.ErrNotFound {
 		return err
 	}
@@ -645,4 +744,21 @@ func labelsTSDBToProm(lset labels.Labels) (res promlabels.Labels) {
 		})
 	}
 	return res
+}
+
+func removeDuplicateQueryAddrs(logger log.Logger, duplicatedQueriers prometheus.Counter, addrs []string) []string {
+	set := make(map[string]struct{})
+	for _, addr := range addrs {
+		if _, ok := set[addr]; ok {
+			level.Warn(logger).Log("msg", "Duplicate query address is provided - %v", addr)
+			duplicatedQueriers.Inc()
+		}
+		set[addr] = struct{}{}
+	}
+
+	deduplicated := make([]string, 0, len(set))
+	for key := range set {
+		deduplicated = append(deduplicated, key)
+	}
+	return deduplicated
 }
