@@ -73,10 +73,10 @@ func NewBucket(logger log.Logger, azureConfig []byte, reg prometheus.Registerer,
 			level.Debug(logger).Log("msg", "Getting connection to existing Azure blob container", "container", conf.ContainerName)
 			container, err = getContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, conf.ContainerName)
 			if err != nil {
-				return nil, errors.Wrapf(err, "msg", "cannot get existing Azure blob container: %s", container)
+				return nil, errors.Wrapf(err, "cannot get existing Azure blob container: %s", container)
 			}
 		} else {
-			return nil, errors.Wrapf(err, "msg", "error creating Azure blob container: %s", container)
+			return nil, errors.Wrapf(err, "error creating Azure blob container: %s", container)
 		}
 	} else {
 		level.Info(logger).Log("msg", "Azure blob container successfully created", "address", container)
@@ -113,7 +113,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		Prefix: prefix,
 	})
 	if err != nil {
-		return errors.Wrapf(err, "msg", "cannot list blobs in directory %s", dir)
+		return errors.Wrapf(err, "cannot list blobs in directory %s", dir)
 	}
 	var listNames []string
 
@@ -154,7 +154,7 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 	}
 	exists, err := b.Exists(ctx, name)
 	if err != nil {
-		return nil, errors.Wrapf(err, "msg", "cannot get blob reader: %s", name)
+		return nil, errors.Wrapf(err, "cannot get blob reader: %s", name)
 	}
 
 	if !exists {
@@ -165,7 +165,7 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 
 	props, err := blobURL.GetProperties(ctx, blob.BlobAccessConditions{})
 	if err != nil {
-		return nil, errors.Wrapf(err, "msg", "cannot get properties for container: %s", name)
+		return nil, errors.Wrapf(err, "cannot get properties for container: %s", name)
 	}
 
 	var size int64
@@ -183,12 +183,9 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 			Parallelism: uint16(3),
 			Progress:    nil,
 		}); err != nil {
-		return nil, errors.Wrapf(err, "msg", "cannot download blob, address: %s", blobURL.BlobURL)
+		return nil, errors.Wrapf(err, "cannot download blob, address: %s", blobURL.BlobURL)
 	}
 
-	//	return &blobReadCloser{
-	//		Reader: bytes.NewReader(destBuffer),
-	//	}, nil
 	return ioutil.NopCloser(bytes.NewReader(destBuffer)), nil
 }
 
@@ -212,7 +209,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 		if b.IsObjNotFoundErr(err) {
 			return false, nil
 		}
-		return false, errors.Wrapf(err, "msg", "cannot get blob URL: %s", name)
+		return false, errors.Wrapf(err, "cannot get blob URL: %s", name)
 	}
 
 	return true, nil
@@ -229,7 +226,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 			BufferSize: 3 * 1024 * 1024,
 			MaxBuffers: 4,
 		}); err != nil {
-		return errors.Wrapf(err, "msg", "cannot upload Azure blob, address: %s", name)
+		return errors.Wrapf(err, "cannot upload Azure blob, address: %s", name)
 	}
 	return nil
 }
@@ -241,7 +238,7 @@ func (b *Bucket) Delete(ctx context.Context, name string) error {
 	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
 
 	if _, err := blobURL.Delete(ctx, blob.DeleteSnapshotsOptionInclude, blob.BlobAccessConditions{}); err != nil {
-		return errors.Wrapf(err, "msg", "error deleting blob, address: %s", name)
+		return errors.Wrapf(err, "error deleting blob, address: %s", name)
 	}
 	return nil
 }
