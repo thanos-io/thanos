@@ -1,9 +1,9 @@
-# Discovering Thanos Components
+# Thanos Service Discovery
 
-Thanos is a set of components. In order to successfully run Thanos these components need to be able to talk to each other. 
-More specifically:
-* `Thanos Query` needs to know about `Thanos Store` API servers in order to query metrics from them.
-* `Thanos Rule` needs to know about `Thanos Query` API servers in order to evaluate recording and alerting rules.
+Service discovery has a vital place in Thanos components that allows them to perform some logic against given set of APIs. 
+Currently there are 2 places like this: 
+* `Thanos Query` needs to know about [StoreAPI](https://github.com/improbable-eng/thanos/blob/d3fb337da94d11c78151504b1fccb1d7e036f394/pkg/store/storepb/rpc.proto#L14) servers in order to query metrics from them.
+* `Thanos Rule` needs to know about `QueryAPI` servers in order to evaluate recording and alerting rules.
 
 Currently there are several ways to configure this and they are described below.
 
@@ -11,10 +11,10 @@ Currently there are several ways to configure this and they are described below.
 The simplest way to tell a component about a peer is to use a static flag.
 
 ### Thanos Query
-The repeatable flag `--store=<store>` can be used to specify a `Thanos Store` that `Thanos Query` should use. 
+The repeatable flag `--store=<store>` can be used to specify a `StoreAPI` that `Thanos Query` should use. 
 
 ### Thanos Rule
-The repeatable flag `--query=<query>` can be used to specify a `Thanos Query` that `Thanos Rule` should use. 
+The repeatable flag `--query=<query>` can be used to specify a `QueryAPI` that `Thanos Rule` should use. 
 
 ## File Service Discovery
 File Service Discovery is another mechanism for configuring components. With File SD, a 
@@ -42,16 +42,16 @@ As a fallback, the file contents are periodically re-read at an interval that ca
 The default value for all File SD re-read intervals is 5 minutes.
 
 ### Thanos Query
-The repeatable flag `--store.file-sd-config.files=<path>` can be used to specify the path to files that contain addresses of `Thanos Stores`.
+The repeatable flag `--store.sd-files=<path>` can be used to specify the path to files that contain addresses of `StoreAPI` servers.
 The `<path>` can be a glob pattern so you can specify several files using a single flag. 
 
-The flag `--store.file-sd-config.interval=<5m>` can be used to change the fallback re-read interval from the default 5 minutes.
+The flag `--store.sd-interval=<5m>` can be used to change the fallback re-read interval from the default 5 minutes.
 
 ### Thanos Rule
-The repeatable flag `--query.file-sd-config.files=<path>` can be used to specify the path to files that contain addresses of `Thanos Queries`.
+The repeatable flag `--query.sd-files=<path>` can be used to specify the path to files that contain addresses of `QueryAPI` servers.
 Again, the `<path>` can be a glob pattern. 
 
-The flag `--query.file-sd-config.interval=<5m>` can be used to change the fallback re-read interval.
+The flag `--query.sd-interval=<5m>` can be used to change the fallback re-read interval.
 
 ## DNS Service Discovery
 Coming soon as part of both File SD and Static Flags. 
