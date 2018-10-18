@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -20,6 +22,44 @@ import (
 	"github.com/prometheus/tsdb"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
+
+var (
+	compactions = compactionSet{
+		1 * time.Hour,
+		2 * time.Hour,
+		8 * time.Hour,
+		2 * 24 * time.Hour,
+		14 * 24 * time.Hour,
+	}
+)
+
+type compactionSet []time.Duration
+
+func (cs compactionSet) String() string {
+	result := make([]string, len(cs))
+	for i, c := range cs {
+		result[i] = fmt.Sprintf("%d=%dh", i, int(c.Hours()))
+	}
+	return strings.Join(result, ", ")
+}
+
+// levels returns set of compaction levels not higher than specified max compaction level
+func (cs compactionSet) levels(maxLevel int) ([]int64, error) {
+	if maxLevel >= len(cs) {
+		return nil, errors.Errorf("level is bigger then default set of %d", len(cs))
+	}
+
+	levels := make([]int64, maxLevel)
+	for i, c := range cs[:maxLevel] {
+		levels[i] = int64(c / time.Millisecond)
+	}
+	return levels, nil
+}
+
+// maxLevel returns max available compaction level
+func (cs compactionSet) maxLevel() int {
+	return len(cs) - 1
+}
 
 func registerCompact(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "continuously compacts blocks in an object store bucket")
@@ -49,6 +89,9 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 		"as querying long time ranges without non-downsampled data is not efficient and not useful (is not possible to render all for human eye).").
 		Hidden().Default("false").Bool()
 
+	maxCompactionLevel := cmd.Flag("debug.max-compaction-level", fmt.Sprintf("Maximum compaction level, default is %d: %s", compactions.maxLevel(), compactions.String())).
+		Hidden().Default(strconv.Itoa(compactions.maxLevel())).Int()
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		return runCompact(g, logger, reg,
 			*httpAddr,
@@ -64,6 +107,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			},
 			name,
 			*disableDownsampling,
+			*maxCompactionLevel,
 		)
 	}
 }
@@ -81,6 +125,7 @@ func runCompact(
 	retentionByResolution map[compact.ResolutionLevel]time.Duration,
 	component string,
 	disableDownsampling bool,
+	maxCompactionLevel int,
 ) error {
 	halted := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compactor_halted",
@@ -116,15 +161,18 @@ func runCompact(
 		return errors.Wrap(err, "create syncer")
 	}
 
+	levels, err := compactions.levels(maxCompactionLevel)
+	if err != nil {
+		return errors.Wrap(err, "get compaction levels")
+	}
+
+	if maxCompactionLevel < compactions.maxLevel() {
+		level.Warn(logger).Log("msg", "Max compaction level is lower than should be", "current", maxCompactionLevel, "default", compactions.maxLevel())
+	}
+
 	// Instantiate the compactor with different time slices. Timestamps in TSDB
 	// are in milliseconds.
-	comp, err := tsdb.NewLeveledCompactor(reg, logger, []int64{
-		int64(1 * time.Hour / time.Millisecond),
-		int64(2 * time.Hour / time.Millisecond),
-		int64(8 * time.Hour / time.Millisecond),
-		int64(2 * 24 * time.Hour / time.Millisecond),  // 2 days
-		int64(14 * 24 * time.Hour / time.Millisecond), // 2 weeks
-	}, downsample.NewPool())
+	comp, err := tsdb.NewLeveledCompactor(reg, logger, levels, downsample.NewPool())
 	if err != nil {
 		return errors.Wrap(err, "create compactor")
 	}
