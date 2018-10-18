@@ -81,10 +81,10 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	queries := cmd.Flag("query", "Addresses of statically configured query API servers (repeatable).").
 		PlaceHolder("<query>").Strings()
 
-	fileSDFiles := cmd.Flag("query.file-sd-config.files", "Path to file that contain addresses of query peers. The path can be a glob pattern (repeatable).").
+	fileSDFiles := cmd.Flag("query.sd-files", "Path to file that contain addresses of query peers. The path can be a glob pattern (repeatable).").
 		PlaceHolder("<path>").Strings()
 
-	fileSDInterval := modelDuration(cmd.Flag("query.file-sd-config.interval", "Refresh interval to re-read file SD files. (used as a fallback)").
+	fileSDInterval := modelDuration(cmd.Flag("query.sd-interval", "Refresh interval to re-read file SD files. (used as a fallback)").
 		Default("5m"))
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {

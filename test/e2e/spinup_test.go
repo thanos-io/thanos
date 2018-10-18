@@ -152,8 +152,8 @@ func querierWithFileSD(i int, replicaLabel string, storesAddresses ...string) cm
 		}
 
 		args := append(defaultQuerierFlags(i, replicaLabel),
-			"--store.file-sd-config.files", path.Join(queryFileSDDir, "filesd.json"),
-			"--store.file-sd-config.interval", "5s")
+			"--store.sd-files", path.Join(queryFileSDDir, "filesd.json"),
+			"--store.sd-interval", "5s")
 
 		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
 	}
@@ -274,8 +274,8 @@ func rulerWithFileSD(i int, rules string, queryAddresses ...string) (cmdSchedule
 		}
 
 		args := append(defaultRulerFlags(i, dbDir),
-			"--query.file-sd-config.files", path.Join(ruleFileSDDir, "filesd.json"),
-			"--query.file-sd-config.interval", "5s")
+			"--query.sd-files", path.Join(ruleFileSDDir, "filesd.json"),
+			"--query.sd-interval", "5s")
 
 		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
 	}, ""
