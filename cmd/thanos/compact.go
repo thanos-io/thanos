@@ -134,8 +134,8 @@ func runCompact(
 		downsamplingDir = path.Join(dataDir, "downsample")
 	)
 
-	if err := os.RemoveAll(dataDir); err != nil {
-		return errors.Wrap(err, "clean working temporary directory")
+	if err := os.RemoveAll(downsamplingDir); err != nil {
+		return errors.Wrap(err, "clean working downsample directory")
 	}
 
 	compactor := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt)
