@@ -53,14 +53,14 @@ func TestRule(t *testing.T) {
 			"gossip",
 			ruleGossipSuite,
 		},
-		{
-			"staticFlag",
-			ruleStaticFlagsSuite,
-		},
-		{
-			"fileSD",
-			ruleFileSDSuite,
-		},
+		//{
+		//	"staticFlag",
+		//	ruleStaticFlagsSuite,
+		//},
+		//{
+		//	"fileSD",
+		//	ruleFileSDSuite,
+		//},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			testRuleComponent(t, tt)
@@ -73,7 +73,7 @@ func TestRule(t *testing.T) {
 // Rules are evaluated against the query layer and the query layer in return
 // can access data written by the rules.
 func testRuleComponent(t *testing.T, conf testConfig) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
 	exit, err := conf.suite.Exec(t, ctx, "test_rule_component")
 	if err != nil {

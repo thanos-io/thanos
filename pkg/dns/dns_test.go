@@ -32,21 +32,21 @@ func (m mockHostnameResolver) LookupSRV(ctx context.Context, service, proto, nam
 }
 
 var (
-	defaultPort          = 9999
-	ip1                  = "192.168.0.1"
-	ip2                  = "192.168.0.2"
-	srvIp                = "192.168.0.3"
-	srvPort1             = 1111
-	srvPort2             = 2222
-	dnsHost1             = "test.mycompany.com"
-	dnsHost2             = "test2.mycompany.com"
-	srvHost              = "_test._tcp.mycompany.com"
-	httpDnsHost1         = "http://" + dnsHost1
-	httpDnsHost2         = "http://" + dnsHost2
-	httpDnsHostPort1     = "http://" + dnsHost2 + strconv.Itoa(defaultPort)
-	httpDnsHostPort2     = "http://" + dnsHost2 + strconv.Itoa(defaultPort)
+	defaultPort      = 9999
+	ip1              = "192.168.0.1"
+	ip2              = "192.168.0.2"
+	srvIp            = "192.168.0.3"
+	srvPort1         = 1111
+	srvPort2         = 2222
+	dnsHost1         = "test.mycompany.com"
+	dnsHost2         = "test2.mycompany.com"
+	srvHost          = "_test._tcp.mycompany.com"
+	httpDnsHost1     = "http://" + dnsHost1
+	httpDnsHost2     = "http://" + dnsHost2
+	httpDnsHostPort1 = "http://" + dnsHost2 + strconv.Itoa(defaultPort)
+	httpDnsHostPort2 = "http://" + dnsHost2 + strconv.Itoa(defaultPort)
 
-	ipsWithPort          = []string{ip1 + ":" + strconv.Itoa(defaultPort), ip2 + ":" + strconv.Itoa(defaultPort)}
+	ipsWithPort = []string{ip1 + ":" + strconv.Itoa(defaultPort), ip2 + ":" + strconv.Itoa(defaultPort)}
 )
 
 func TestDnsSD_Resolve_ShouldReturnAllIPs_WhenGivenPrefixedDomains(t *testing.T) {
@@ -55,7 +55,7 @@ func TestDnsSD_Resolve_ShouldReturnAllIPs_WhenGivenPrefixedDomains(t *testing.T)
 	dnsSD := dnsSD{mockResolver}
 	ctx := context.TODO()
 
-	domainsWithPrefix := []string {
+	domainsWithPrefix := []string{
 		"dns+" + httpDnsHost1, // dns+http://test.mycompany.com
 		"dns+" + dnsHost2,     // dns+test2.mycompany.com.com
 		"dnssrv+" + srvHost,   // dnssrv+_test._tcp.mycompany.com
@@ -76,9 +76,9 @@ func TestDnsSD_Resolve_ShouldReturnOnlyGivenDomains_WhenGivenDomainsWithNoPrefix
 	dnsSD := dnsSD{mockResolver}
 	ctx := context.TODO()
 
-	domainsWithoutPrefix := []string {
+	domainsWithoutPrefix := []string{
 		httpDnsHost1 + ":" + strconv.Itoa(defaultPort), // http://test.mycompany.com:9999
-		dnsHost2,                                       // test2.mycompany.com:9999
+		dnsHost2,                                       // test2.mycompany.com
 		srvHost + ":" + strconv.Itoa(defaultPort),      // _test._tcp.mycompany.com:9999
 	}
 
@@ -97,9 +97,9 @@ func TestDnsSD_Resolve_ShouldReturnTheOriginalIPs_WhenGivenIPs(t *testing.T) {
 	dnsSD := dnsSD{mockResolver}
 	ctx := context.TODO()
 
-	ipsWithPort := []string {
-		ip1 + ":" + strconv.Itoa(defaultPort),
-		ip2 + ":" + strconv.Itoa(defaultPort),
+	ipsWithPort := []string{
+		ip1 + ":" + strconv.Itoa(defaultPort),              // 192.168.0.1:9999
+		"http://" + ip2 + ":" + strconv.Itoa(defaultPort),  // http://192.168.0.1:9999
 	}
 
 	urls, err := dnsSD.Resolve(ctx, ipsWithPort, defaultPort)
@@ -113,7 +113,7 @@ func TestDnsSD_Resolve_ShouldReturnErr_WhenGivenInvalidLookupScheme(t *testing.T
 	mockResolver := setupResolver()
 	dnsSD := dnsSD{mockResolver}
 
-	_, err := dnsSD.Resolve(context.TODO(), []string{"dnstxt+"+srvHost}, defaultPort)
+	_, err := dnsSD.Resolve(context.TODO(), []string{"dnstxt+" + srvHost}, defaultPort)
 	testutil.NotOk(t, err)
 }
 

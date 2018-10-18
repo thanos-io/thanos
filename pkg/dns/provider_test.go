@@ -4,9 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/improbable-eng/thanos/pkg/testutil"
-	"net/url"
 	"errors"
+	"net/url"
+
+	"github.com/improbable-eng/thanos/pkg/testutil"
 )
 
 func TestProvider_ShouldReturnLatestValidAddresses_WhenDiscovererReturnsErrors(t *testing.T) {
@@ -43,7 +44,7 @@ func (d *mockDiscoverer) Resolve(ctx context.Context, addrs []string, defaultPor
 
 	var urls []*url.URL
 	for _, addr := range addrs {
-		urls = append(urls, &url.URL{Host:addr})
+		urls = append(urls, &url.URL{Host: addr})
 	}
 	return urls, nil
 }

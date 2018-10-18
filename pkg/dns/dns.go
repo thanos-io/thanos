@@ -30,7 +30,7 @@ func NewServiceDiscoverer(resolver *net.Resolver) ServiceDiscoverer {
 	return &dnsSD{resolver: resolver}
 }
 
-func (s dnsSD) Resolve(ctx context.Context, addrs []string, defaultPort int) ([]*url.URL, error) {
+func (s *dnsSD) Resolve(ctx context.Context, addrs []string, defaultPort int) ([]*url.URL, error) {
 	var res []*url.URL
 	for _, addr := range addrs {
 		// Check if lookup is needed and strip the prefix if present.
@@ -38,7 +38,7 @@ func (s dnsSD) Resolve(ctx context.Context, addrs []string, defaultPort int) ([]
 		if len(ps) != 2 {
 			// Address does not contain lookup prefix. Don't resolve it and just return it.
 			res = append(res, &url.URL{
-				Host:   addr,
+				Host: addr,
 			})
 			continue
 		}
@@ -63,7 +63,7 @@ func (s dnsSD) Resolve(ctx context.Context, addrs []string, defaultPort int) ([]
 			// The host could be missing a port.
 			host, port = unsplitHost, ""
 		}
-		var hosts  []string
+		var hosts []string
 
 		switch lookup {
 		case "dns":

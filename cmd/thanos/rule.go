@@ -88,8 +88,8 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	fileSDInterval := modelDuration(cmd.Flag("query.sd-interval", "Refresh interval to re-read file SD files. (used as a fallback)").
 		Default("5m"))
 
-	//dnsSDInterval :=  modelDuration(cmd.Flag("dns-sd-interval", "The default evaluation interval to use.").
-	//	Default("30s"))
+	dnsSDInterval := modelDuration(cmd.Flag("query.sd-dns-interval", "Interval between DNS resolutions.").
+		Default("30s"))
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
@@ -152,6 +152,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			alertQueryURL,
 			*queries,
 			fileSD,
+			time.Duration(*dnsSDInterval),
 		)
 	}
 }
@@ -180,6 +181,7 @@ func runRule(
 	alertQueryURL *url.URL,
 	queryAddrs []string,
 	fileSD *file.Discovery,
+	dnsSDInterval time.Duration,
 ) error {
 	configSuccess := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_config_last_reload_successful",
@@ -236,7 +238,7 @@ func runRule(
 	queryFn := func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {
 		var addrs []string
 		// Add addresses from static flag
-		addrs = append(addrs, queryAddrs...)
+		//addrs = append(addrs, queryAddrs...)
 
 		// Add addresses from gossip
 		peers := peer.PeerStates(cluster.PeerTypeQuery)
@@ -252,21 +254,21 @@ func runRule(
 		}
 
 		// Add addresses from file sd
-		for _, addr := range fileSDCache.Addresses() {
-			addrs = append(addrs, addr)
-		}
+		//for _, addr := range fileSDCache.Addresses() {
+		//	addrs = append(addrs, addr)
+		//}
 
 		removeDuplicateQueryAddrs(logger, duplicatedQuery, addrs)
 
-		// Resolve dns in case some of the addresses need to be resolved
-		//TODO(ivan) check what the default port should be
-		urls, err := dnsDiscoverer.Resolve(ctx, addrs, 9090)
-		if err != nil {
-			return nil, errors.Wrap(err, "invalid query addresses provided")
+		// Get DNS resolved addresses from static flags and file SD
+		addrs = append(addrs, dnsProvider.Addresses()...)
+
+		for i, a := range addrs {
+			fmt.Printf(" ivan - addr[%v]=%v\n", i, a)
 		}
 
-		for _, i := range rand.Perm(len(urls)) {
-			vec, err := queryPrometheusInstant(ctx, logger, urls[i].Host, q, t)
+		for _, i := range rand.Perm(len(addrs)) {
+			vec, err := queryPrometheusInstant(ctx, logger, addrs[i], q, t)
 			if err != nil {
 				return nil, err
 			}
@@ -491,7 +493,7 @@ func runRule(
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			// TODO(ivan): discuss the repeat time
-			return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
+			return runutil.Repeat(dnsSDInterval, ctx.Done(), func() error {
 				addresses := append(fileSDCache.Addresses(), queryAddrs...)
 				// TODO(ivan): default port.....
 				if err := dnsProvider.Resolve(ctx, addresses, 9090); err != nil {
@@ -671,30 +673,120 @@ func queryPrometheusInstant(ctx context.Context, logger log.Logger, addr, query 
 
 type alertmanagerSet struct {
 	discoverer dns.ServiceDiscoverer
+	resolver   *net.Resolver
 	addrs      []string
 	mtx        sync.Mutex
 	current    []*url.URL
 }
 
 func newAlertmanagerSet(addrs []string, resolver *net.Resolver) *alertmanagerSet {
+	//return &alertmanagerSet{
+	//	discoverer: dns.NewServiceDiscoverer(resolver),
+	//	addrs:      addrs,
+	//}
+	if resolver == nil {
+		resolver = net.DefaultResolver
+	}
 	return &alertmanagerSet{
-		discoverer: dns.NewServiceDiscoverer(resolver),
-		addrs:      addrs,
+		resolver: resolver,
+		addrs:    addrs,
 	}
 }
 
 func (s *alertmanagerSet) get() []*url.URL {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
+	fmt.Printf("-  ivan: alertmanagers when getting:\n")
+	for i, r := range s.current {
+		fmt.Printf("res[%v].Host=%v\n", i, r.Host)
+	}
 	return s.current
 }
 
 const defaultAlertmanagerPort = 9093
 
 func (s *alertmanagerSet) update(ctx context.Context) error {
-	res, err := s.discoverer.Resolve(ctx, s.addrs, defaultAlertmanagerPort)
-	if err != nil {
-		return err
+	//res, err := s.discoverer.Resolve(ctx, s.addrs, defaultAlertmanagerPort)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//fmt.Printf("-  ivan: alertmanagers when updating:\n")
+	//for i, r := range res {
+	//	fmt.Printf("res[%v].Host=%v\n", i, r.Host)
+	//}
+	//
+	//s.mtx.Lock()
+	//s.current = res
+	//s.mtx.Unlock()
+	//
+	//return nil
+
+	var res []*url.URL
+
+	for _, addr := range s.addrs {
+		u, err := url.Parse(addr)
+		if err != nil {
+			return errors.Wrapf(err, "parse URL %q", addr)
+		}
+		host, port, err := net.SplitHostPort(u.Host)
+		if err != nil {
+			host, port = u.Host, ""
+		}
+		var (
+			hosts  []string
+			proto  = u.Scheme
+			lookup = "none"
+		)
+		if ps := strings.SplitN(u.Scheme, "+", 2); len(ps) == 2 {
+			lookup, proto = ps[0], ps[1]
+		}
+		switch lookup {
+		case "dns":
+			if port == "" {
+				port = strconv.Itoa(defaultAlertmanagerPort)
+			}
+			ips, err := s.resolver.LookupIPAddr(ctx, host)
+			if err != nil {
+				return errors.Wrapf(err, "lookup IP addresses %q", host)
+			}
+			for _, ip := range ips {
+				hosts = append(hosts, net.JoinHostPort(ip.String(), port))
+			}
+		case "dnssrv":
+			_, recs, err := s.resolver.LookupSRV(ctx, "", proto, host)
+			if err != nil {
+				return errors.Wrapf(err, "lookup SRV records %q", host)
+			}
+			for _, rec := range recs {
+				// Only use port from SRV record if no explicit port was specified.
+				if port == "" {
+					port = strconv.Itoa(int(rec.Port))
+				}
+				hosts = append(hosts, net.JoinHostPort(rec.Target, port))
+			}
+		case "none":
+			if port == "" {
+				port = strconv.Itoa(defaultAlertmanagerPort)
+			}
+			hosts = append(hosts, net.JoinHostPort(host, port))
+		default:
+			return errors.Errorf("invalid lookup scheme %q", lookup)
+		}
+
+		for _, h := range hosts {
+			res = append(res, &url.URL{
+				Scheme: proto,
+				Host:   h,
+				Path:   u.Path,
+				User:   u.User,
+			})
+			fmt.Printf("ivan- addr:%v\n", addr)
+			fmt.Printf("ivan- proto:%v\n", proto)
+			fmt.Printf("ivan- host:%v\n", h)
+			fmt.Printf("ivan- path:%v\n", u.Path)
+			fmt.Printf("ivan- user:%v\n", u.User)
+		}
 	}
 
 	s.mtx.Lock()
