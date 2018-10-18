@@ -38,14 +38,14 @@ var (
 	srvIp                = "192.168.0.3"
 	srvPort1             = 1111
 	srvPort2             = 2222
-	ipHost1              = "test.ipv4.mycompany.com"
-	ipHost2              = "test2.ipv4.mycompany.com"
-	srvHost              = "test.srv.mycompany.com"
-	ipDomain1            = "http://" + ipHost1
-	ipDomain2            = "http://" + ipHost2
-	srvDomain            = "http://" + srvHost
-	domainsWithPrefix    = []string{"dns+" + ipDomain1, "dns+" + ipDomain2, "dnssrv+" + srvDomain}
-	domainsWithoutPrefix = []string{ipDomain1, ipDomain2, srvDomain}
+	dnsHost1             = "test.mycompany.com"
+	dnsHost2             = "test2.mycompany.com"
+	srvHost              = "_test._tcp.mycompany.com"
+	httpDnsHost1         = "http://" + dnsHost1
+	httpDnsHost2         = "http://" + dnsHost2
+	httpDnsHostPort1     = "http://" + dnsHost2 + strconv.Itoa(defaultPort)
+	httpDnsHostPort2     = "http://" + dnsHost2 + strconv.Itoa(defaultPort)
+
 	ipsWithPort          = []string{ip1 + ":" + strconv.Itoa(defaultPort), ip2 + ":" + strconv.Itoa(defaultPort)}
 )
 
@@ -55,13 +55,19 @@ func TestDnsSD_Resolve_ShouldReturnAllIPs_WhenGivenPrefixedDomains(t *testing.T)
 	dnsSD := dnsSD{mockResolver}
 	ctx := context.TODO()
 
+	domainsWithPrefix := []string {
+		"dns+" + httpDnsHost1, // dns+http://test.mycompany.com
+		"dns+" + dnsHost2,     // dns+test2.mycompany.com.com
+		"dnssrv+" + srvHost,   // dnssrv+_test._tcp.mycompany.com
+	}
+
 	urls, err := dnsSD.Resolve(ctx, domainsWithPrefix, defaultPort)
 	testutil.Ok(t, err)
 	testutil.Assert(t, len(urls) == 4, "expected 4 urls but got %v", len(urls))
-	containsHostPort(t, urls, ip1, defaultPort)
-	containsHostPort(t, urls, ip2, defaultPort)
-	containsHostPort(t, urls, srvIp, srvPort1)
-	containsHostPort(t, urls, srvIp, srvPort2)
+	containsHostPort(t, urls, ip1, strconv.Itoa(defaultPort))
+	containsHostPort(t, urls, ip2, strconv.Itoa(defaultPort))
+	containsHostPort(t, urls, srvIp, strconv.Itoa(srvPort1))
+	containsHostPort(t, urls, srvIp, strconv.Itoa(srvPort2))
 }
 
 func TestDnsSD_Resolve_ShouldReturnOnlyGivenDomains_WhenGivenDomainsWithNoPrefix(t *testing.T) {
@@ -70,14 +76,20 @@ func TestDnsSD_Resolve_ShouldReturnOnlyGivenDomains_WhenGivenDomainsWithNoPrefix
 	dnsSD := dnsSD{mockResolver}
 	ctx := context.TODO()
 
+	domainsWithoutPrefix := []string {
+		httpDnsHost1 + ":" + strconv.Itoa(defaultPort), // http://test.mycompany.com:9999
+		dnsHost2,                                       // test2.mycompany.com:9999
+		srvHost + ":" + strconv.Itoa(defaultPort),      // _test._tcp.mycompany.com:9999
+	}
+
 	urls, err := dnsSD.Resolve(ctx, domainsWithoutPrefix, defaultPort)
 	testutil.Ok(t, err)
 	testutil.Assert(t, len(urls) == 3, "expected 3 urls but got %v", len(urls))
-	// TODO(ivan): confirm this is a desired behaviour - adding a default port even when no prefix is given.
-	// This is changing the current behaviour which is - don't do anything to the provided addresses if they are not prefixed.
-	containsHostPort(t, urls, ipHost1, defaultPort)
-	containsHostPort(t, urls, ipHost2, defaultPort)
-	containsHostPort(t, urls, srvHost, defaultPort)
+	containsHostPort(t, urls, httpDnsHost1, strconv.Itoa(defaultPort))
+	// TODO(ivan): confirm this is a desired behaviour - no longer adding default port if you don't resolve the address
+	// potential change only to alertmanagers. I don't think we should be adding anything anyway - aka. this is the right behaviour.
+	containsHostPort(t, urls, dnsHost2, "")
+	containsHostPort(t, urls, srvHost, strconv.Itoa(defaultPort))
 }
 
 func TestDnsSD_Resolve_ShouldReturnTheOriginalIPs_WhenGivenIPs(t *testing.T) {
@@ -85,18 +97,31 @@ func TestDnsSD_Resolve_ShouldReturnTheOriginalIPs_WhenGivenIPs(t *testing.T) {
 	dnsSD := dnsSD{mockResolver}
 	ctx := context.TODO()
 
+	ipsWithPort := []string {
+		ip1 + ":" + strconv.Itoa(defaultPort),
+		ip2 + ":" + strconv.Itoa(defaultPort),
+	}
+
 	urls, err := dnsSD.Resolve(ctx, ipsWithPort, defaultPort)
 	testutil.Ok(t, err)
 	testutil.Assert(t, len(urls) == 2, "expected 2 urls but got %v", len(urls))
-	containsHostPort(t, urls, ip1, defaultPort)
-	containsHostPort(t, urls, ip2, defaultPort)
+	containsHostPort(t, urls, ip1, strconv.Itoa(defaultPort))
+	containsHostPort(t, urls, ip2, strconv.Itoa(defaultPort))
+}
+
+func TestDnsSD_Resolve_ShouldReturnErr_WhenGivenInvalidLookupScheme(t *testing.T) {
+	mockResolver := setupResolver()
+	dnsSD := dnsSD{mockResolver}
+
+	_, err := dnsSD.Resolve(context.TODO(), []string{"dnstxt+"+srvHost}, defaultPort)
+	testutil.NotOk(t, err)
 }
 
 func setupResolver() *mockHostnameResolver {
 	return &mockHostnameResolver{
 		resultIPs: map[string][]net.IPAddr{
-			ipHost1: {net.IPAddr{IP: net.ParseIP(ip1)}},
-			ipHost2: {net.IPAddr{IP: net.ParseIP(ip2)}},
+			dnsHost1: {net.IPAddr{IP: net.ParseIP(ip1)}},
+			dnsHost2: {net.IPAddr{IP: net.ParseIP(ip2)}},
 		},
 		resultSRVs: map[string][]*net.SRV{
 			srvHost: {
@@ -108,18 +133,25 @@ func setupResolver() *mockHostnameResolver {
 	}
 }
 
-func containsHostPort(t *testing.T, urls []*url.URL, host string, port int) {
+func containsHostPort(t *testing.T, urls []*url.URL, host string, port string) {
 	contains := false
 	for _, url := range urls {
-		portIndex := strings.Index(url.Host, ":")
-		hostFromUrl := url.Host[:portIndex]
-		portFromUrl := url.Host[portIndex+1:]
-		if hostFromUrl == host && portFromUrl == strconv.Itoa(port) {
+		var hostFromUrl, portFromUrl string
+		portIndex := strings.LastIndex(url.Host, ":")
+		if portIndex < 0 {
+			hostFromUrl = url.Host
+			portFromUrl = ""
+		} else {
+			hostFromUrl = url.Host[:portIndex]
+			portFromUrl = url.Host[portIndex+1:]
+		}
+
+		if hostFromUrl == host && portFromUrl == port {
 			contains = true
 			break
 		}
 	}
 	if !contains {
-		t.Errorf("expected host %v:%v is missing", host, port)
+		t.Fatalf("expected host %v:%v is missing", host, port)
 	}
 }

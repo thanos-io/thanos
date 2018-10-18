@@ -11,7 +11,6 @@ import (
 )
 
 type ServiceDiscoverer interface {
-
 	Resolve(ctx context.Context, addrs []string, defaultPort int) ([]*url.URL, error)
 }
 
@@ -34,40 +33,38 @@ func NewServiceDiscoverer(resolver *net.Resolver) ServiceDiscoverer {
 func (s dnsSD) Resolve(ctx context.Context, addrs []string, defaultPort int) ([]*url.URL, error) {
 	var res []*url.URL
 	for _, addr := range addrs {
-		// Check if a valid IP. Strip the port for the purpose of the check if it is present.
-		host, port, err := net.SplitHostPort(addr)
-		if err != nil {
-			// The provided addr can still be a valid IP, just be missing a port. Add the port and check.
-			host = addr
-			port = strconv.Itoa(defaultPort)
-		}
-		ip := net.ParseIP(host)
-		if ip != nil {
-			// The address is a valid IP, add it to the results and avoid further lookup.
-			// TODO(ivan): confirm if adding a default port is desired
+		// Check if lookup is needed and strip the prefix if present.
+		ps := strings.SplitN(addr, "+", 2)
+		if len(ps) != 2 {
+			// Address does not contain lookup prefix. Don't resolve it and just return it.
 			res = append(res, &url.URL{
-				Host: net.JoinHostPort(host, port),
+				Host:   addr,
 			})
 			continue
 		}
+		// Note: we have no way of telling if the address contains an invalid lookup prefix, or the + is part of the url.
+		// I believe the former is more likely, therefore setting ps[0] as the prefix seems like the better flow, as it
+		// will result in an error returned to the user later on
+		lookup, addrWithoutPrefix := ps[0], ps[1]
 
-		// The addr is not an IP so treat it like a domain name
-		u, err := url.Parse(addr)
+		// Check if valid url.
+		u, err := url.Parse(addrWithoutPrefix)
 		if err != nil {
-			return nil, errors.Wrapf(err, "parse URL %q", addr)
+			return nil, errors.Wrapf(err, "parse URL %q", addrWithoutPrefix)
 		}
-		host, port, err = net.SplitHostPort(u.Host)
+		unsplitHost := u.Host
+		if unsplitHost == "" {
+			// If scheme is not specified in the url, u.Host will be empty. Then use the original address.
+			unsplitHost = addrWithoutPrefix
+		}
+		// Split the host and port if present.
+		host, port, err := net.SplitHostPort(unsplitHost)
 		if err != nil {
-			host, port = u.Host, ""
+			// The host could be missing a port.
+			host, port = unsplitHost, ""
 		}
-		var (
-			hosts  []string
-			proto  = u.Scheme
-			lookup = "none"
-		)
-		if ps := strings.SplitN(u.Scheme, "+", 2); len(ps) == 2 {
-			lookup, proto = ps[0], ps[1]
-		}
+		var hosts  []string
+
 		switch lookup {
 		case "dns":
 			if port == "" {
@@ -81,7 +78,7 @@ func (s dnsSD) Resolve(ctx context.Context, addrs []string, defaultPort int) ([]
 				hosts = append(hosts, net.JoinHostPort(ip.String(), port))
 			}
 		case "dnssrv":
-			_, recs, err := s.resolver.LookupSRV(ctx, "", proto, host)
+			_, recs, err := s.resolver.LookupSRV(ctx, "", "", host)
 			if err != nil {
 				return nil, errors.Wrapf(err, "lookup SRV records %q", host)
 			}
@@ -93,18 +90,13 @@ func (s dnsSD) Resolve(ctx context.Context, addrs []string, defaultPort int) ([]
 				}
 				hosts = append(hosts, net.JoinHostPort(rec.Target, srvPort))
 			}
-		case "none":
-			if port == "" {
-				port = strconv.Itoa(defaultPort)
-			}
-			hosts = append(hosts, net.JoinHostPort(host, port))
 		default:
 			return nil, errors.Errorf("invalid lookup scheme %q", lookup)
 		}
 
 		for _, h := range hosts {
 			res = append(res, &url.URL{
-				Scheme: proto,
+				Scheme: u.Scheme,
 				Host:   h,
 				Path:   u.Path,
 				User:   u.User,

@@ -20,7 +20,7 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string, defaultPort int)
 	defer p.Unlock()
 	urls, err := p.discoverer.Resolve(ctx, addrs, defaultPort)
 	if err != nil {
-		// The DNS resolution failed. Keep the old records and exit.
+		// The DNS resolution failed. Exit without modifying the old records.
 		return err
 	}
 

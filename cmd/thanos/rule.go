@@ -88,8 +88,8 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	fileSDInterval := modelDuration(cmd.Flag("query.sd-interval", "Refresh interval to re-read file SD files. (used as a fallback)").
 		Default("5m"))
 
-	dnsSDInterval :=  modelDuration(cmd.Flag("dns-sd-interval", "The default evaluation interval to use.").
-		Default("30s"))
+	//dnsSDInterval :=  modelDuration(cmd.Flag("dns-sd-interval", "The default evaluation interval to use.").
+	//	Default("30s"))
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
@@ -495,7 +495,7 @@ func runRule(
 				addresses := append(fileSDCache.Addresses(), queryAddrs...)
 				// TODO(ivan): default port.....
 				if err := dnsProvider.Resolve(ctx, addresses, 9090); err != nil {
-					//TODO(ivan): what to do? probably shouldn't fail, but log.
+					// Failure to resolve could be caused by a lookup timeout. We shouldn't propagate the error.
 					level.Warn(logger).Log("msg", "failed to resolve addresses in query")
 				}
 				return nil
