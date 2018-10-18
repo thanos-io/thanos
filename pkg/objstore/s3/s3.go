@@ -23,6 +23,7 @@ import (
 	"github.com/minio/minio-go/pkg/encrypt"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -40,13 +41,20 @@ const DirDelim = "/"
 
 // Config stores the configuration for s3 bucket.
 type Config struct {
-	Bucket        string `yaml:"bucket"`
-	Endpoint      string `yaml:"endpoint"`
-	AccessKey     string `yaml:"access-key"`
-	Insecure      bool   `yaml:"insecure"`
-	SignatureV2   bool   `yaml:"signature-version2"`
-	SSEEncryption bool   `yaml:"encrypt-sse"`
-	SecretKey     string `yaml:"secret-key"`
+	Bucket                string         `yaml:"bucket"`
+	Endpoint              string         `yaml:"endpoint"`
+	AccessKey             string         `yaml:"access-key"`
+	Insecure              bool           `yaml:"insecure"`
+	SignatureV2           bool           `yaml:"signature-version2"`
+	SSEEncryption         bool           `yaml:"encrypt-sse"`
+	SecretKey             string         `yaml:"secret-key"`
+	IdleConnTimeout       model.Duration `yaml:"idle-conn-timeout"`
+	DialerTimeout         model.Duration `yaml:"dialer-timeout"`
+	DialerKeepAlive       model.Duration `yaml:"dialer-keep-alive"`
+	MaxIdleConns          int            `yaml:"max-idle-conns"`
+	TLSHandshakeTimeout   model.Duration `yaml:"tls-handshake-timeout"`
+	ExpectContinueTimeout model.Duration `yaml:"expect-continue-timeout"`
+	ResponseHeaderTimeout model.Duration `yaml:"response-header-timeout"`
 }
 
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
@@ -60,7 +68,16 @@ type Bucket struct {
 
 // NewBucket returns a new Bucket using the provided s3 config values.
 func NewBucket(logger log.Logger, conf []byte, reg prometheus.Registerer, component string) (*Bucket, error) {
-	var config Config
+	defIdleConnTimeout, _ := model.ParseDuration("90s")
+	defDialerTimeout, _ := model.ParseDuration("30s")
+	defDialerKeepAlive, _ := model.ParseDuration("30s")
+	defTLSHandshakeTimeout, _ := model.ParseDuration("10s")
+	defExpectContinueTimeout, _ := model.ParseDuration("1s")
+	defResponseHeaderTimeout, _ := model.ParseDuration("15s")
+	config := Config{IdleConnTimeout: defIdleConnTimeout, DialerTimeout: defDialerTimeout, DialerKeepAlive: defDialerKeepAlive,
+		TLSHandshakeTimeout: defTLSHandshakeTimeout, MaxIdleConns: 100, ExpectContinueTimeout: defExpectContinueTimeout,
+		ResponseHeaderTimeout: defResponseHeaderTimeout}
+
 	if err := yaml.Unmarshal(conf, &config); err != nil {
 		return nil, err
 	}
@@ -108,18 +125,18 @@ func NewBucketWithConfig(logger log.Logger, config Config, reg prometheus.Regist
 	client.SetCustomTransport(&http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
+			Timeout:   time.Duration(config.DialerTimeout),
+			KeepAlive: time.Duration(config.DialerKeepAlive),
 			DualStack: true,
 		}).DialContext,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
+		MaxIdleConns:          config.MaxIdleConns,
+		IdleConnTimeout:       time.Duration(config.IdleConnTimeout),
+		TLSHandshakeTimeout:   time.Duration(config.TLSHandshakeTimeout),
+		ExpectContinueTimeout: time.Duration(config.ExpectContinueTimeout),
 		// The ResponseHeaderTimeout here is the only change from the
 		// default minio transport, it was introduced to cover cases
 		// where the tcp connection works but the server never answers
-		ResponseHeaderTimeout: 15 * time.Second,
+		ResponseHeaderTimeout: time.Duration(config.ResponseHeaderTimeout),
 		// Set this value so that the underlying transport round-tripper
 		// doesn't try to auto decode the body of objects with
 		// content-encoding set to `gzip`.
