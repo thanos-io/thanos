@@ -26,7 +26,7 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string, defaultPort int)
 
 	p.resolved = make([]string, len(urls))
 	for i, url := range urls {
-		p.resolved[i] = url.Host
+		p.resolved[i] = url.String()
 	}
 
 	return nil

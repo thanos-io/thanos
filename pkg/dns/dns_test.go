@@ -119,7 +119,7 @@ func TestDnsSD_Resolve_ShouldReturnErr_WhenGivenInvalidLookupScheme(t *testing.T
 
 func setupResolver() *mockHostnameResolver {
 	return &mockHostnameResolver{
-		resultIPs: map[string][]net.IPAddr{
+		resultIPs: map[string][]net.IPAddr {
 			dnsHost1: {net.IPAddr{IP: net.ParseIP(ip1)}},
 			dnsHost2: {net.IPAddr{IP: net.ParseIP(ip2)}},
 		},
@@ -131,6 +131,11 @@ func setupResolver() *mockHostnameResolver {
 		},
 		err: nil,
 	}
+}
+
+
+func TestASD(t *testing.T) {
+
 }
 
 func containsHostPort(t *testing.T, urls []*url.URL, host string, port string) {
