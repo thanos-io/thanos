@@ -9,10 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	blob "github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-
-	blob "github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -69,7 +68,11 @@ func NewBucket(logger log.Logger, azureConfig []byte, reg prometheus.Registerer,
 
 	container, err := createContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, conf.ContainerName)
 	if err != nil {
-		if err.(blob.StorageError).ServiceCode() == "ContainerAlreadyExists" {
+		ret, ok := err.(blob.StorageError)
+		if !ok {
+			return nil, errors.Wrapf(err, "Azure API return unexpected error: %T\n", err)
+		}
+		if ret.ServiceCode() == "ContainerAlreadyExists" {
 			level.Debug(logger).Log("msg", "Getting connection to existing Azure blob container", "container", conf.ContainerName)
 			container, err = getContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, conf.ContainerName)
 			if err != nil {
@@ -182,7 +185,8 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 			BlockSize:   blob.BlobDefaultDownloadBlockSize,
 			Parallelism: uint16(3),
 			Progress:    nil,
-		}); err != nil {
+		},
+	); err != nil {
 		return nil, errors.Wrapf(err, "cannot download blob, address: %s", blobURL.BlobURL)
 	}
 
@@ -225,7 +229,8 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 		blob.UploadStreamToBlockBlobOptions{
 			BufferSize: 3 * 1024 * 1024,
 			MaxBuffers: 4,
-		}); err != nil {
+		},
+	); err != nil {
 		return errors.Wrapf(err, "cannot upload Azure blob, address: %s", name)
 	}
 	return nil
@@ -251,7 +256,6 @@ func (b *Bucket) Name() string {
 // NewTestBucket creates test bkt client that before returning creates temporary bucket.
 // In a close function it empties and deletes the bucket.
 func NewTestBucket(t testing.TB, component string) (objstore.Bucket, func(), error) {
-
 	t.Log("Using test Azure bucket.")
 
 	conf := &Config{
