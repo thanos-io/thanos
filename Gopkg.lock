@@ -198,6 +198,25 @@
   version = "v2.0.0"
 
 [[projects]]
+  branch = "master"
+  digest = "1:e9aa4d37933cdd1978d83938e8af418c02b4c183e1d6c936efd00ce1628fadb7"
+  name = "github.com/gophercloud/gophercloud"
+  packages = [
+    ".",
+    "openstack",
+    "openstack/identity/v2/tenants",
+    "openstack/identity/v2/tokens",
+    "openstack/identity/v3/tokens",
+    "openstack/objectstorage/v1/accounts",
+    "openstack/objectstorage/v1/containers",
+    "openstack/objectstorage/v1/objects",
+    "openstack/utils",
+    "pagination",
+  ]
+  pruneopts = ""
+  revision = "0719c6b22f30132b0ae6c90b038e0d50992107b0"
+
+[[projects]]
   digest = "1:0bf81a189b23434fc792317c9276abfe7aee4eb3f85d3c3659a2e0f21acafe97"
   name = "github.com/grpc-ecosystem/go-grpc-middleware"
   packages = [
@@ -743,6 +762,11 @@
     "github.com/gogo/protobuf/gogoproto",
     "github.com/gogo/protobuf/proto",
     "github.com/golang/snappy",
+    "github.com/gophercloud/gophercloud",
+    "github.com/gophercloud/gophercloud/openstack",
+    "github.com/gophercloud/gophercloud/openstack/objectstorage/v1/containers",
+    "github.com/gophercloud/gophercloud/openstack/objectstorage/v1/objects",
+    "github.com/gophercloud/gophercloud/pagination",
     "github.com/grpc-ecosystem/go-grpc-middleware",
     "github.com/grpc-ecosystem/go-grpc-middleware/recovery",
     "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing",

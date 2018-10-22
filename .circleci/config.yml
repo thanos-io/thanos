@@ -33,6 +33,8 @@ jobs:
             fi
             export THANOS_SKIP_S3_AWS_TESTS="true"
             echo "Skipping AWS tests."
+            export THANOS_SKIP_SWIFT_TESTS="true"
+            echo "Skipping SWIFT tests."
 
             export THANOS_SKIP_AZURE_TESTS="true"
             echo "Skipping Azure tests."

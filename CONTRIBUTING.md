@@ -36,6 +36,7 @@ $ git push origin <your_branch_for_new_pr>
 - THANOS_SKIP_GCS_TESTS to skip GCS tests.
 - THANOS_SKIP_S3_AWS_TESTS to skip AWS tests.
 - THANOS_SKIP_AZURE_TESTS to skip Azure tests.
+- THANOS_SKIP_SWIFT_TESTS to skip SWIFT tests.
 
 If you skip all of these, the store specific tests will be run against memory object storage only.
 CI runs GCS and inmem tests only for now. Not having these variables will produce auth errors against GCS, AWS or Azure tests.
