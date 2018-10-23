@@ -73,7 +73,7 @@ func TestRule(t *testing.T) {
 // Rules are evaluated against the query layer and the query layer in return
 // can access data written by the rules.
 func testRuleComponent(t *testing.T, conf testConfig) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 
 	exit, err := conf.suite.Exec(t, ctx, "test_rule_component")
 	if err != nil {
