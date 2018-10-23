@@ -9,7 +9,7 @@ import (
 )
 
 type Resolver interface {
-	// Resolve perorms a DNS lookup and returns a list of records.
+	// Resolve performs a DNS lookup and returns a list of records.
 	// name is the domain name to be resolved.
 	// qtype is the query type. Accepted values are `dns` for A/AAAA lookup and `dnssrv` for SRV lookup.
 	// defaultPort is used if no port is provided for a A/AAAA lookup.
