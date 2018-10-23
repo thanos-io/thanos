@@ -237,6 +237,7 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 					level.Warn(s.logger).Log("msg", "loading block failed", "id", id, "err", err)
 					continue
 				}
+				level.Debug(s.logger).Log("msg", "block has been downloaded", "id", id)
 			}
 			wg.Done()
 		}()

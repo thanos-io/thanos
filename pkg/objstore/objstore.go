@@ -15,6 +15,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/pkg/errors"
+	"golang.org/x/net/http2"
 )
 
 const (
@@ -346,9 +347,17 @@ func GetRange(ctx context.Context, logger log.Logger, bucket BucketReader, name 
 // handleErrors handles net error and wraps in permanent otherwise.
 func handleErrors(err error) error {
 	cErr := errors.Cause(err)
-	if _, ok := cErr.(net.Error); !ok {
-		return backoff.Permanent(errors.Wrap(err, "permanent error"))
+
+	switch cErr.(type) {
+	// return the origin error if it's a network one
+	case net.Error:
+	case http2.StreamError:
+	case http2.ConnectionError:
+	case http2.GoAwayError:
+	default:
+		err = backoff.Permanent(errors.Wrapf(err, "permanent error, %T", err))
 	}
+
 	return err
 }
 

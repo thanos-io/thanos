@@ -18,7 +18,7 @@ import (
 	"github.com/prometheus/common/version"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.

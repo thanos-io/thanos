@@ -23,7 +23,8 @@ import (
 	"github.com/minio/minio-go/pkg/encrypt"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/version"
-	yaml "gopkg.in/yaml.v2"
+	"golang.org/x/net/http2"
+	"gopkg.in/yaml.v2"
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
@@ -95,7 +96,8 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		return nil, errors.Wrap(err, "initialize s3 client")
 	}
 	client.SetAppInfo(fmt.Sprintf("thanos-%s", component), fmt.Sprintf("%s (%s)", version.Version, runtime.Version()))
-	client.SetCustomTransport(&http.Transport{
+
+	transport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
 			Timeout:   30 * time.Second,
@@ -117,7 +119,15 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		// Refer:
 		//    https://golang.org/src/net/http/transport.go?h=roundTrip#L1843
 		DisableCompression: true,
-	})
+	}
+
+	// Known issue: Transport ignores net/http.Transport.Proxy once connected https://github.com/golang/go/issues/25793.
+
+	if err := http2.ConfigureTransport(transport); err != nil {
+		return nil, errors.Wrap(err, "configure http2 transport")
+	}
+
+	client.SetCustomTransport(transport)
 
 	var sse encrypt.ServerSide
 	if config.SSEEncryption {
