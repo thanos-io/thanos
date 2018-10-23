@@ -79,7 +79,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "")
 
-	queries := cmd.Flag("query", "Addresses of statically configured query API servers (repeatable).").
+	queries := cmd.Flag("query", "Addresses of statically configured query API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect query API servers through respective DNS lookups.").
 		PlaceHolder("<query>").Strings()
 
 	fileSDFiles := cmd.Flag("query.sd-files", "Path to file that contain addresses of query peers. The path can be a glob pattern (repeatable).").

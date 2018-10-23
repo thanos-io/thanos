@@ -135,7 +135,10 @@ Flags:
                                  Alternative to 'objstore.config-file' flag.
                                  Object store configuration in YAML.
       --query=<query> ...        Addresses of statically configured query API
-                                 servers (repeatable).
+                                 servers (repeatable). The scheme may be
+                                 prefixed with 'dns+' or 'dnssrv+' to detect
+                                 query API servers through respective DNS
+                                 lookups.
       --query.sd-files=<path> ...  
                                  Path to file that contain addresses of query
                                  peers. The path can be a glob pattern

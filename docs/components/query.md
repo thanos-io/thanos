@@ -129,7 +129,10 @@ Flags:
                                  Query selector labels that will be exposed in
                                  info endpoint (repeated).
       --store=<store> ...        Addresses of statically configured store API
-                                 servers (repeatable).
+                                 servers (repeatable). The scheme may be
+                                 prefixed with 'dns+' or 'dnssrv+' to detect
+                                 store API servers through respective DNS
+                                 lookups.
       --store.sd-files=<path> ...  
                                  Path to files that contain addresses of store
                                  API servers. The path can be a glob pattern
