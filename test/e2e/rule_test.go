@@ -49,18 +49,18 @@ var (
 
 func TestRule(t *testing.T) {
 	for _, tt := range []testConfig{
-		{
-			"gossip",
-			ruleGossipSuite,
-		},
+		//{
+		//	"gossip",
+		//	ruleGossipSuite,
+		//},
 		//{
 		//	"staticFlag",
 		//	ruleStaticFlagsSuite,
 		//},
-		//{
-		//	"fileSD",
-		//	ruleFileSDSuite,
-		//},
+		{
+			"fileSD",
+			ruleFileSDSuite,
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			testRuleComponent(t, tt)

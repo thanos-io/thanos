@@ -17,7 +17,7 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/discovery/cache"
-	"github.com/improbable-eng/thanos/pkg/dns"
+	"github.com/improbable-eng/thanos/pkg/discovery/dns"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/query/api"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -262,7 +262,7 @@ func runQuery(
 
 	fileSDCache := cache.New()
 	// DNS discoverer with default resolver
-	dnsDiscoverer := dns.NewServiceDiscoverer(nil)
+	dnsDiscoverer := dns.NewResolver(nil)
 	dnsProvider := dns.NewProvider(dnsDiscoverer)
 
 	var (

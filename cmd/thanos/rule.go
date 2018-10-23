@@ -25,7 +25,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/discovery/cache"
-	"github.com/improbable-eng/thanos/pkg/dns"
+	"github.com/improbable-eng/thanos/pkg/discovery/dns"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
@@ -229,9 +229,8 @@ func runRule(
 
 	// FileSD query addresses
 	fileSDCache := cache.New()
-	// DNS discoverer with default resolver
-	dnsDiscoverer := dns.NewServiceDiscoverer(nil)
-	dnsProvider := dns.NewProvider(dnsDiscoverer)
+	// DNS provider with default resolver
+	dnsProvider := dns.NewProvider(dns.NewResolver(nil))
 
 	// Hit the HTTP query API of query peers in randomized order until we get a result
 	// back or the context get canceled.
@@ -258,14 +257,10 @@ func runRule(
 		//	addrs = append(addrs, addr)
 		//}
 
-		removeDuplicateQueryAddrs(logger, duplicatedQuery, addrs)
-
 		// Get DNS resolved addresses from static flags and file SD
 		addrs = append(addrs, dnsProvider.Addresses()...)
 
-		for i, a := range addrs {
-			fmt.Printf(" ivan - addr[%v]=%v\n", i, a)
-		}
+		removeDuplicateQueryAddrs(logger, duplicatedQuery, addrs)
 
 		for _, i := range rand.Perm(len(addrs)) {
 			vec, err := queryPrometheusInstant(ctx, logger, addrs[i], q, t)
@@ -672,23 +667,15 @@ func queryPrometheusInstant(ctx context.Context, logger log.Logger, addr, query 
 }
 
 type alertmanagerSet struct {
-	discoverer dns.ServiceDiscoverer
-	resolver   *net.Resolver
-	addrs      []string
-	mtx        sync.Mutex
-	current    []*url.URL
+	resolver dns.Resolver
+	addrs    []string
+	mtx      sync.Mutex
+	current  []*url.URL
 }
 
 func newAlertmanagerSet(addrs []string, resolver *net.Resolver) *alertmanagerSet {
-	//return &alertmanagerSet{
-	//	discoverer: dns.NewServiceDiscoverer(resolver),
-	//	addrs:      addrs,
-	//}
-	if resolver == nil {
-		resolver = net.DefaultResolver
-	}
 	return &alertmanagerSet{
-		resolver: resolver,
+		resolver: dns.NewResolver(resolver),
 		addrs:    addrs,
 	}
 }
@@ -696,101 +683,52 @@ func newAlertmanagerSet(addrs []string, resolver *net.Resolver) *alertmanagerSet
 func (s *alertmanagerSet) get() []*url.URL {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
-	fmt.Printf("-  ivan: alertmanagers when getting:\n")
-	for i, r := range s.current {
-		fmt.Printf("res[%v].Host=%v\n", i, r.Host)
-	}
 	return s.current
 }
 
 const defaultAlertmanagerPort = 9093
 
 func (s *alertmanagerSet) update(ctx context.Context) error {
-	//res, err := s.discoverer.Resolve(ctx, s.addrs, defaultAlertmanagerPort)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//fmt.Printf("-  ivan: alertmanagers when updating:\n")
-	//for i, r := range res {
-	//	fmt.Printf("res[%v].Host=%v\n", i, r.Host)
-	//}
-	//
-	//s.mtx.Lock()
-	//s.current = res
-	//s.mtx.Unlock()
-	//
-	//return nil
-
-	var res []*url.URL
-
+	var result []*url.URL
 	for _, addr := range s.addrs {
-		u, err := url.Parse(addr)
-		if err != nil {
-			return errors.Wrapf(err, "parse URL %q", addr)
-		}
-		host, port, err := net.SplitHostPort(u.Host)
-		if err != nil {
-			host, port = u.Host, ""
-		}
 		var (
-			hosts  []string
-			proto  = u.Scheme
-			lookup = "none"
+			name           = addr
+			qtype          string
+			nameQtype      []string
+			resolvedDomain []string
 		)
-		if ps := strings.SplitN(u.Scheme, "+", 2); len(ps) == 2 {
-			lookup, proto = ps[0], ps[1]
-		}
-		switch lookup {
-		case "dns":
-			if port == "" {
-				port = strconv.Itoa(defaultAlertmanagerPort)
-			}
-			ips, err := s.resolver.LookupIPAddr(ctx, host)
-			if err != nil {
-				return errors.Wrapf(err, "lookup IP addresses %q", host)
-			}
-			for _, ip := range ips {
-				hosts = append(hosts, net.JoinHostPort(ip.String(), port))
-			}
-		case "dnssrv":
-			_, recs, err := s.resolver.LookupSRV(ctx, "", proto, host)
-			if err != nil {
-				return errors.Wrapf(err, "lookup SRV records %q", host)
-			}
-			for _, rec := range recs {
-				// Only use port from SRV record if no explicit port was specified.
-				if port == "" {
-					port = strconv.Itoa(int(rec.Port))
-				}
-				hosts = append(hosts, net.JoinHostPort(rec.Target, port))
-			}
-		case "none":
-			if port == "" {
-				port = strconv.Itoa(defaultAlertmanagerPort)
-			}
-			hosts = append(hosts, net.JoinHostPort(host, port))
-		default:
-			return errors.Errorf("invalid lookup scheme %q", lookup)
+
+		if nameQtype = strings.SplitN(addr, "+", 2); len(nameQtype) == 2 {
+			name, qtype = nameQtype[1], nameQtype[0]
 		}
 
-		for _, h := range hosts {
-			res = append(res, &url.URL{
-				Scheme: proto,
-				Host:   h,
+		u, err := url.Parse(name)
+		if err != nil {
+			return errors.Wrapf(err, "parse URL %q", name)
+		}
+		// Get only the host and resolve it if needed
+		host := u.Host
+		if qtype != "" {
+			resolvedDomain, err = s.resolver.Resolve(ctx, host, qtype, defaultAlertmanagerPort)
+			if err != nil {
+				return err
+			}
+		} else {
+			resolvedDomain = []string{host}
+		}
+
+		for _, resolved := range resolvedDomain {
+			result = append(result, &url.URL{
+				Scheme: u.Scheme,
+				Host:   resolved,
 				Path:   u.Path,
 				User:   u.User,
 			})
-			fmt.Printf("ivan- addr:%v\n", addr)
-			fmt.Printf("ivan- proto:%v\n", proto)
-			fmt.Printf("ivan- host:%v\n", h)
-			fmt.Printf("ivan- path:%v\n", u.Path)
-			fmt.Printf("ivan- user:%v\n", u.User)
 		}
 	}
 
 	s.mtx.Lock()
-	s.current = res
+	s.current = result
 	s.mtx.Unlock()
 
 	return nil
