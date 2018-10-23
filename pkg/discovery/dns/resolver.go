@@ -9,6 +9,11 @@ import (
 )
 
 type Resolver interface {
+	// Resolve perorms a DNS lookup and returns a list of records.
+	// name is the domain name to be resolved.
+	// qtype is the query type. Accepted values are `dns` for A/AAAA lookup and `dnssrv` for SRV lookup.
+	// defaultPort is used if no port is provided for a A/AAAA lookup.
+	// TODO(ivan): probably use custom type or an enum for qtype
 	Resolve(ctx context.Context, name string, qtype string, defaultPort int) ([]string, error)
 }
 
@@ -21,6 +26,7 @@ type dnsSD struct {
 	resolver ipSrvResolver
 }
 
+// NewResolver provides a resolver with a specific net.Resolver. If resolver is nil, the default resolver will be used.
 func NewResolver(resolver *net.Resolver) Resolver {
 	if resolver == nil {
 		resolver = net.DefaultResolver
@@ -28,11 +34,6 @@ func NewResolver(resolver *net.Resolver) Resolver {
 	return &dnsSD{resolver: resolver}
 }
 
-// Resolve takes a domain and resolves it returning a list of hosts
-// name is the domain name to be resolved
-// qtype can be `dns` or `dnssrv` for the corresponding dns query type (A/AAAA or SRV)
-// TODO(ivan): probably use custom type or an enum for qtype
-// defaultPort is used for non-SRV records when a port is not supplied
 func (s *dnsSD) Resolve(ctx context.Context, name string, qtype string, defaultPort int) ([]string, error) {
 	var res []string
 	// Split the host and port if present.

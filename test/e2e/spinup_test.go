@@ -461,6 +461,7 @@ func defaultQuerierFlags(i int, replicaLabel string) []string {
 		"--log.level", "debug",
 		"--query.replica-label", replicaLabel,
 		"--cluster.address", queryCluster(i),
+		"--store.sd-dns-interval", "5s",
 	}
 }
 
@@ -476,5 +477,6 @@ func defaultRulerFlags(i int, dbDir string) []string {
 		"--http-address", rulerHTTP(i),
 		"--cluster.address", rulerCluster(i),
 		"--log.level", "debug",
+		"--query.sd-dns-interval", "5s",
 	}
 }

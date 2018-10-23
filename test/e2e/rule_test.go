@@ -49,14 +49,14 @@ var (
 
 func TestRule(t *testing.T) {
 	for _, tt := range []testConfig{
-		//{
-		//	"gossip",
-		//	ruleGossipSuite,
-		//},
-		//{
-		//	"staticFlag",
-		//	ruleStaticFlagsSuite,
-		//},
+		{
+			"gossip",
+			ruleGossipSuite,
+		},
+		{
+			"staticFlag",
+			ruleStaticFlagsSuite,
+		},
 		{
 			"fileSD",
 			ruleFileSDSuite,

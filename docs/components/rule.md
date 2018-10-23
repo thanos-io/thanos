@@ -142,5 +142,7 @@ Flags:
                                  (repeatable).
       --query.sd-interval=5m     Refresh interval to re-read file SD files.
                                  (used as a fallback)
+      --query.sd-dns-interval=30s  
+                                 Interval between DNS resolutions.
 
 ```

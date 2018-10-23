@@ -75,6 +75,9 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	fileSDInterval := modelDuration(cmd.Flag("store.sd-interval", "Refresh interval to re-read file SD files. It is used as a resync fallback.").
 		Default("5m"))
 
+	dnsSDInterval := modelDuration(cmd.Flag("store.sd-dns-interval", "Interval between DNS resolutions.").
+		Default("30s"))
+
 	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified. ").
 		Default("false").Bool()
 
@@ -129,6 +132,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*stores,
 			*enableAutodownsampling,
 			fileSD,
+			time.Duration(*dnsSDInterval),
 		)
 	}
 }
@@ -239,6 +243,7 @@ func runQuery(
 	storeAddrs []string,
 	enableAutodownsampling bool,
 	fileSD *file.Discovery,
+	dnsSDInterval time.Duration,
 ) error {
 	duplicatedStores := prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "thanos_query_duplicated_store_address",
@@ -261,16 +266,15 @@ func runQuery(
 	}
 
 	fileSDCache := cache.New()
-	// DNS discoverer with default resolver
-	dnsDiscoverer := dns.NewResolver(nil)
-	dnsProvider := dns.NewProvider(dnsDiscoverer)
+	// DNS provider with default resolver.
+	dnsProvider := dns.NewProvider(nil)
 
 	var (
 		stores = query.NewStoreSet(
 			logger,
 			reg,
 			func() (specs []query.StoreSpec) {
-				// Add store specs from gossip. No need to resolve DNS for them
+				// Add store specs from gossip.
 				for id, ps := range peer.PeerStates(cluster.PeerTypesStoreAPIs()...) {
 					if ps.StoreAPIAddr == "" {
 						level.Error(logger).Log("msg", "Gossip found peer that propagates empty address, ignoring.", "lset", fmt.Sprintf("%v", ps.Metadata.Labels))
@@ -280,7 +284,7 @@ func runQuery(
 					specs = append(specs, &gossipSpec{id: id, addr: ps.StoreAPIAddr, peer: peer})
 				}
 
-				// Addresses from flags and fileSD after being resolved
+				// Add DNS resolved addresses from static flags and file SD.
 				for _, addr := range dnsProvider.Addresses() {
 					specs = append(specs, query.NewGRPCStoreSpec(addr))
 				}
@@ -359,17 +363,16 @@ func runQuery(
 			peer.Close(5 * time.Second)
 		})
 	}
-	// Periodically update the addresses from static flags and file SD by resolving them using DNS SD if necessary
+	// Periodically update the addresses from static flags and file SD by resolving them using DNS SD if necessary.
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			// TODO(ivan): discuss the repeat time
-			return runutil.Repeat(5*time.Second, ctx.Done(), func() error {
+			return runutil.Repeat(dnsSDInterval, ctx.Done(), func() error {
 				addresses := append(fileSDCache.Addresses(), storeAddrs...)
-				// TODO(ivan): default port.....
+				// TODO(ivan): default port... Use a flag maybe?
 				if err := dnsProvider.Resolve(ctx, addresses, 9090); err != nil {
-					//TODO(ivan): what to do? probably shouldn't fail, but log.
-					level.Warn(logger).Log("msg", "failed to resolve addresses in query")
+					// Failure to resolve could be caused by a lookup timeout. We shouldn't fail because of that, so just log.
+					level.Warn(logger).Log("msg", fmt.Sprintf("failed to resolve addresses in query: %v", err.Error()))
 				}
 				return nil
 			})

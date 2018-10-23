@@ -136,6 +136,8 @@ Flags:
                                  (repeatable).
       --store.sd-interval=5m     Refresh interval to re-read file SD files. It
                                  is used as a resync fallback.
+      --store.sd-dns-interval=30s  
+                                 Interval between DNS resolutions.
       --query.auto-downsampling  Enable automatic adjustment (step / 5) to what
                                  source of data should be used in store gateways
                                  if no max_source_resolution param is specified.

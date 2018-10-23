@@ -227,19 +227,17 @@ func runRule(
 		})
 	}
 
-	// FileSD query addresses
+	// FileSD query addresses.
 	fileSDCache := cache.New()
-	// DNS provider with default resolver
-	dnsProvider := dns.NewProvider(dns.NewResolver(nil))
+	// DNS provider with default resolver.
+	dnsProvider := dns.NewProvider(nil)
 
 	// Hit the HTTP query API of query peers in randomized order until we get a result
 	// back or the context get canceled.
 	queryFn := func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {
 		var addrs []string
-		// Add addresses from static flag
-		//addrs = append(addrs, queryAddrs...)
 
-		// Add addresses from gossip
+		// Add addresses from gossip.
 		peers := peer.PeerStates(cluster.PeerTypeQuery)
 		var ids []string
 		for id := range peers {
@@ -252,12 +250,7 @@ func runRule(
 			addrs = append(addrs, peers[id].QueryAPIAddr)
 		}
 
-		// Add addresses from file sd
-		//for _, addr := range fileSDCache.Addresses() {
-		//	addrs = append(addrs, addr)
-		//}
-
-		// Get DNS resolved addresses from static flags and file SD
+		// Add DNS resolved addresses from static flags and file SD.
 		addrs = append(addrs, dnsProvider.Addresses()...)
 
 		removeDuplicateQueryAddrs(logger, duplicatedQuery, addrs)
@@ -483,17 +476,16 @@ func runRule(
 			close(cancel)
 		})
 	}
-	// Periodically update the addresses from static flags and file SD by resolving them using DNS SD if necessary
+	// Periodically update the addresses from static flags and file SD by resolving them using DNS SD if necessary.
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			// TODO(ivan): discuss the repeat time
 			return runutil.Repeat(dnsSDInterval, ctx.Done(), func() error {
 				addresses := append(fileSDCache.Addresses(), queryAddrs...)
-				// TODO(ivan): default port.....
+				// TODO(ivan): default port... Use a flag maybe?
 				if err := dnsProvider.Resolve(ctx, addresses, 9090); err != nil {
-					// Failure to resolve could be caused by a lookup timeout. We shouldn't propagate the error.
-					level.Warn(logger).Log("msg", "failed to resolve addresses in query")
+					// Failure to resolve could be caused by a lookup timeout. We shouldn't fail because of that, so just log.
+					level.Warn(logger).Log("msg", fmt.Sprintf("failed to resolve addresses in query: %v", err.Error()))
 				}
 				return nil
 			})

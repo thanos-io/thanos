@@ -14,22 +14,26 @@ func TestProvider_ShouldReturnLatestValidAddresses_WhenDiscovererReturnsErrors(t
 	prv := NewProvider(discoverer)
 	ctx := context.TODO()
 
-	addrs := []string{"127.0.0.1:19091", "127.0.0.1:19092", "127.0.0.1:19093"}
+	ip1 := "127.0.0.1:19091"
+	ip2 := "127.0.0.1:19092"
+	ip3 := "127.0.0.1:19093"
+	addrs := []string{"dns+" + ip1, "dns+" + ip2, "dns+" + ip3}
+	resolved := []string{ip1, ip2, ip3}
 
 	testutil.Ok(t, prv.Resolve(ctx, addrs, 0))
 	result := prv.Addresses()
 	testutil.Assert(t, len(result) == 3, "Expected 3 addresses but got %v", len(result))
-	testutil.Assert(t, addrs[0] == result[0], "Expected %v but got %v", addrs[0], result[0])
-	testutil.Assert(t, addrs[1] == result[1], "Expected %v but got %v", addrs[1], result[1])
-	testutil.Assert(t, addrs[2] == result[2], "Expected %v but got %v", addrs[2], result[2])
+	for i, addr := range resolved {
+		testutil.Assert(t, addr == result[i], "Expected %v but got %v", addr, result[i])
+	}
 
 	prv.resolver = &mockDiscoverer{errors.New("failed to resolve urls")}
-	testutil.NotOk(t, prv.Resolve(ctx, []string{"dns+mydomain.com"}, 0))
+	testutil.NotOk(t, prv.Resolve(ctx, addrs, 0))
 	result = prv.Addresses()
 	testutil.Assert(t, len(result) == 3, "Expected 3 addresses but got %v", len(result))
-	testutil.Assert(t, addrs[0] == result[0], "Expected %v but got %v", addrs[0], result[0])
-	testutil.Assert(t, addrs[1] == result[1], "Expected %v but got %v", addrs[1], result[1])
-	testutil.Assert(t, addrs[2] == result[2], "Expected %v but got %v", addrs[2], result[2])
+	for i, addr := range resolved {
+		testutil.Assert(t, addr == result[i], "Expected %v but got %v", addr, result[i])
+	}
 }
 
 type mockDiscoverer struct {
