@@ -691,6 +691,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 			return compID, errors.Errorf("mismatch between meta %s and dir %s", meta.ULID, id)
 		}
 
+		level.Debug(cg.logger).Log("msg", "downloading the block", "id", id.String())
 		if err := block.Download(ctx, cg.logger, cg.bkt, id, pdir); err != nil {
 			return compID, retry(errors.Wrapf(err, "download block %s", id))
 		}

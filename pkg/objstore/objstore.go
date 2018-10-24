@@ -91,17 +91,17 @@ func UploadDir(ctx context.Context, logger log.Logger, bkt Bucket, srcdir, dstdi
 // UploadFile uploads the file with the given name to the bucket.
 // It is a caller responsibility to clean partial upload in case of failure
 func UploadFile(ctx context.Context, logger log.Logger, bkt Bucket, src, dst string) error {
-	r, err := os.Open(src)
-	if err != nil {
-		return errors.Wrapf(err, "open file %s", src)
-	}
-	defer runutil.CloseWithLogOnErr(logger, r, "close file %s", src)
-
 	errorNotifier := func(err error, d time.Duration) {
 		level.Warn(logger).Log("msg", "unsuccessful attempt uploading", "src", src, "dst", dst, "err", err, "next", d.String())
 	}
 
 	do := func() error {
+		r, err := os.Open(src)
+		if err != nil {
+			return errors.Wrapf(err, "open file %s", src)
+		}
+		defer runutil.CloseWithLogOnErr(logger, r, "close file %s", src)
+
 		if err := bkt.Upload(ctx, dst, r); err != nil {
 			return handleErrors(errors.Wrapf(err, "upload file %s", dst))
 		}
@@ -186,37 +186,41 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 		return err
 	}
 
-	f, err := os.Create(dst)
-	if err != nil {
-		return errors.Wrap(err, "create file")
-	}
-	defer runutil.CloseWithLogOnErr(logger, f, "download block's output file")
-
-	defer func() {
-		if err != nil {
-			if rerr := os.Remove(dst); rerr != nil {
-				level.Warn(logger).Log("msg", "failed to remove partially downloaded file", "file", dst, "err", rerr)
-			}
-		}
-	}()
-
 	errorNotifier := func(err error, d time.Duration) {
 		level.Warn(logger).Log("msg", "unsuccessful attempt to download", "src", src, "err", err, "next", d.String())
 	}
 
 	do := func() error {
+		f, err := os.Create(dst)
+		if err != nil {
+			return errors.Wrap(err, "create file")
+		}
+
+		// Close and remove partially downloaded file if error happened.
+		defer func() {
+			runutil.CloseWithLogOnErr(logger, f, "download block's output file")
+
+			if err != nil {
+				level.Debug(logger).Log("msg", "remove partially downloaded file", "file", dst, "err", err)
+				if rerr := os.Remove(dst); rerr != nil {
+					level.Warn(logger).Log("msg", "failed to remove partially downloaded file", "file", dst, "err", rerr)
+				}
+			}
+		}()
+
 		rc, err := bkt.Get(ctx, src)
 		if err != nil {
 			return handleErrors(errors.Wrap(err, "get file"))
 		}
 		defer runutil.CloseWithLogOnErr(logger, rc, "download block's file reader")
 
-		if _, err = io.Copy(f, rc); err != nil {
+		_, err = io.Copy(f, rc)
+		if err != nil {
 			return handleErrors(errors.Wrap(err, "copy object to file"))
 		}
 		return nil
 	}
-	err = backoff.RetryNotify(do, getCustomBackOff(ctx), errorNotifier)
+	err := backoff.RetryNotify(do, getCustomBackOff(ctx), errorNotifier)
 	if err != nil {
 		return errors.Wrapf(err, "failed to download file %s", src)
 	}
