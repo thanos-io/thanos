@@ -129,13 +129,12 @@ Flags:
                                  info endpoint (repeated).
       --store=<store> ...        Addresses of statically configured store API
                                  servers (repeatable).
-      --store.file-sd-config.files=<path> ...  
+      --store.sd-files=<path> ...  
                                  Path to files that contain addresses of store
                                  API servers. The path can be a glob pattern
                                  (repeatable).
-      --store.file-sd-config.interval=5m  
-                                 Refresh interval to re-read file SD files.
-                                 (used as a fallback)
+      --store.sd-interval=5m     Refresh interval to re-read file SD files. It
+                                 is used as a resync fallback.
       --query.auto-downsampling  Enable automatic adjustment (step / 5) to what
                                  source of data should be used in store gateways
                                  if no max_source_resolution param is specified.
