@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"strings"
+	"regexp"
 
 	blob "github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 )
@@ -53,5 +53,6 @@ func getBlobURL(ctx context.Context, accountName, accountKey, containerName, blo
 }
 
 func parseError(errorCode string) string {
-	return strings.Split(strings.SplitAfter(strings.SplitAfter(strings.SplitAfter(errorCode, "X-Ms-Error-Code")[1], ":")[1], "[")[1], "]")[0]
+	re, _ := regexp.Compile(`X-Ms-Error-Code:\D*\[(\w+)\]`)
+	return re.FindStringSubmatch(errorCode)[1]
 }
