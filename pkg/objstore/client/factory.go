@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -50,10 +51,10 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg *prometheus.Regist
 	}
 
 	var bucket objstore.Bucket
-	switch bucketConf.Type {
-	case GCS:
+	switch strings.ToUpper(string(bucketConf.Type)) {
+	case string(GCS):
 		bucket, err = gcs.NewBucket(context.Background(), logger, config, reg, component)
-	case S3:
+	case string(S3):
 		bucket, err = s3.NewBucket(logger, config, reg, component)
 	case AZURE:
 		bucket, err = azure.NewBucket(logger, config, reg, component)
