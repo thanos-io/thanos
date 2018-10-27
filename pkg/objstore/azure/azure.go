@@ -28,8 +28,8 @@ const (
 
 // Config Azure storage configuration.
 type Config struct {
-	StorageAccountName string `yaml:"storage-account"`
-	StorageAccountKey  string `yaml:"storage-account-key"`
+	StorageAccountName string `yaml:"storage_account"`
+	StorageAccountKey  string `yaml:"storage_account_key"`
 	ContainerName      string `yaml:"container"`
 }
 

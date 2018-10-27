@@ -35,9 +35,10 @@ $ git push origin <your_branch_for_new_pr>
 5. If you don't have a live object store ready add these envvars to skip tests for these:
 - THANOS_SKIP_GCS_TESTS to skip GCS tests.
 - THANOS_SKIP_S3_AWS_TESTS to skip AWS tests.
+- THANOS_SKIP_AZURE_TESTS to skip Azure tests.
 
-If you skip both of these, the store specific tests will be run against memory object storage only.
-CI runs GCS and inmem tests only for now. Not having these variables will produce auth errors against GCS or AWS tests.
+If you skip all of these, the store specific tests will be run against memory object storage only.
+CI runs GCS and inmem tests only for now. Not having these variables will produce auth errors against GCS, AWS or Azure tests.
 
 6. If your change affects users (adds or removes feature) consider adding the item to [CHANGELOG](CHANGELOG.md)
 7. You may merge the Pull Request in once you have the sign-off of at least one developers with write access, or if you

@@ -182,7 +182,7 @@ Config file format is the following:
 ```yaml
 type: AZURE
 config:
-    storage-account: <Name of Azure Storage Account>
-    storage-account-key: <Storage Account key>
+    storage_account: <Name of Azure Storage Account>
+    storage_account_key: <Storage Account key>
     container: <Blob container>
 ```
