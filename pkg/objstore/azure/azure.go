@@ -33,7 +33,7 @@ type Config struct {
 	ContainerName      string `yaml:"container"`
 }
 
-// Bucket implements the store.Bucket interface against s3-compatible APIs.
+// Bucket implements the store.Bucket interface against Azure APIs.
 type Bucket struct {
 	logger       log.Logger
 	containerURL blob.ContainerURL
@@ -41,8 +41,8 @@ type Bucket struct {
 	opsTotal     *prometheus.CounterVec
 }
 
-// Validate checks to see if any of the s3 config options are set.
-func (conf *Config) Validate() error {
+// Validate checks to see if any of the config options are set.
+func (conf *Config) validate() error {
 	if conf.StorageAccountName == "" ||
 		conf.StorageAccountKey == "" {
 		return errors.New("invalid Azure storage configuration")
@@ -52,20 +52,18 @@ func (conf *Config) Validate() error {
 
 // NewBucket returns a new Bucket using the provided Azure config.
 func NewBucket(logger log.Logger, azureConfig []byte, reg prometheus.Registerer, component string) (*Bucket, error) {
-
-	level.Debug(logger).Log("msg", "Creating new Azure bucket connection", "component", component)
+	level.Debug(logger).Log("msg", "creating new Azure bucket connection", "component", component)
 
 	var conf Config
 	if err := yaml.Unmarshal(azureConfig, &conf); err != nil {
 		return nil, err
 	}
 
-	if err := conf.Validate(); err != nil {
+	if err := conf.validate(); err != nil {
 		return nil, err
 	}
 
 	ctx := context.Background()
-
 	container, err := createContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, conf.ContainerName)
 	if err != nil {
 		ret, ok := err.(blob.StorageError)
@@ -151,7 +149,7 @@ func (b *Bucket) IsObjNotFoundErr(err error) bool {
 }
 
 func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length int64) (io.ReadCloser, error) {
-	level.Debug(b.logger).Log("msg", "Getting blob", "blob", name, "offset", offset, "length", length)
+	level.Debug(b.logger).Log("msg", "getting blob", "blob", name, "offset", offset, "length", length)
 	if len(name) == 0 {
 		return nil, errors.New("X-Ms-Error-Code: [EmptyContainerName]")
 	}
@@ -205,7 +203,7 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 
 // Exists checks if the given object exists.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
-	level.Debug(b.logger).Log("msg", "Check if blob exists", "blob", name)
+	level.Debug(b.logger).Log("msg", "check if blob exists", "blob", name)
 	b.opsTotal.WithLabelValues(opObjectHead).Inc()
 	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
 
