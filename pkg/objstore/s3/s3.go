@@ -42,11 +42,11 @@ const DirDelim = "/"
 type Config struct {
 	Bucket        string `yaml:"bucket"`
 	Endpoint      string `yaml:"endpoint"`
-	AccessKey     string `yaml:"access-key"`
+	AccessKey     string `yaml:"access_key"`
 	Insecure      bool   `yaml:"insecure"`
-	SignatureV2   bool   `yaml:"signature-version2"`
-	SSEEncryption bool   `yaml:"encrypt-sse"`
-	SecretKey     string `yaml:"secret-key"`
+	SignatureV2   bool   `yaml:"signature_version2"`
+	SSEEncryption bool   `yaml:"encrypt_sse"`
+	SecretKey     string `yaml:"secret_key"`
 }
 
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
