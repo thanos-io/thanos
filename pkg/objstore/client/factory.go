@@ -11,7 +11,6 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore/azure"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
-
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/yaml.v2"
@@ -56,7 +55,7 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg *prometheus.Regist
 		bucket, err = gcs.NewBucket(context.Background(), logger, config, reg, component)
 	case string(S3):
 		bucket, err = s3.NewBucket(logger, config, reg, component)
-	case AZURE:
+	case string(AZURE):
 		bucket, err = azure.NewBucket(logger, config, reg, component)
 	default:
 		return nil, errors.Errorf("bucket with type %s is not supported", bucketConf.Type)
