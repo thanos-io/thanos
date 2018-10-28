@@ -45,8 +45,8 @@ type cosConfig struct {
 	Bucket    string `yaml:"bucket"`
 	Region    string `yaml:"region"`
 	AppId     string `yaml:"appid"`
-	SecretKey string `yaml:"secret-key"`
-	SecretId  string `yaml:"secret-id"`
+	SecretKey string `yaml:"secret_key"`
+	SecretId  string `yaml:"secret_id"`
 }
 
 // Validate checks to see if mandatory cos config options are set.
@@ -148,11 +148,13 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 	}
 
 	for object := range b.ListObjects(ctx, dir, false) {
-		// this sometimes happens with empty buckets
-		if object.Key == "" {
+		if object.err != nil {
+			return object.err
+		}
+		if object.key == "" {
 			continue
 		}
-		if err := f(object.Key); err != nil {
+		if err := f(object.key); err != nil {
 			return err
 		}
 	}
@@ -231,33 +233,31 @@ func toErrorResponse(err error) *cos.ErrorResponse {
 
 func (b *Bucket) Close() error { return nil }
 
-type ObjectInfo struct {
-	cos.Object
-	Err error
+type objectInfo struct {
+	key string
+	err error
 }
 
-func (b *Bucket) ListObjects(ctx context.Context, objectPrefix string, recursive bool) <-chan ObjectInfo {
-	objectsCh := make(chan ObjectInfo, 1)
+func (b *Bucket) ListObjects(ctx context.Context, objectPrefix string, recursive bool) <-chan objectInfo {
+	objectsCh := make(chan objectInfo, 1)
 	delimiter := "/"
 	if recursive {
 		delimiter = ""
 	}
 
-	go func(objectsCh chan<- ObjectInfo) {
+	go func(objectsCh chan<- objectInfo) {
 		defer close(objectsCh)
 		var marker string
 		for {
-			opt := &cos.BucketGetOptions{
-				Prefix: objectPrefix,
-				// TODO(jojohappy) Set this option as prosperity for cos configuration
+			result, _, err := b.client.Bucket.Get(ctx, &cos.BucketGetOptions{
+				Prefix:    objectPrefix,
 				MaxKeys:   1000,
 				Marker:    marker,
 				Delimiter: delimiter,
-			}
-			result, _, err := b.client.Bucket.Get(ctx, opt)
+			})
 			if err != nil {
-				objectsCh <- ObjectInfo{
-					Err: err,
+				objectsCh <- objectInfo{
+					err: err,
 				}
 				return
 			}
@@ -265,9 +265,9 @@ func (b *Bucket) ListObjects(ctx context.Context, objectPrefix string, recursive
 			for _, object := range result.Contents {
 				marker = object.Key
 				select {
-				case objectsCh <- ObjectInfo{
-					Object: object,
-					Err:    nil,
+				case objectsCh <- objectInfo{
+					key: object.Key,
+					err: nil,
 				}:
 				case <-ctx.Done():
 					return
@@ -279,10 +279,9 @@ func (b *Bucket) ListObjects(ctx context.Context, objectPrefix string, recursive
 				object.Key = obj
 				object.Size = 0
 				select {
-				// Send object prefixes.
-				case objectsCh <- ObjectInfo{
-					Object: object,
-					Err:    nil,
+				case objectsCh <- objectInfo{
+					key: object.Key,
+					err: nil,
 				}:
 				case <-ctx.Done():
 					return

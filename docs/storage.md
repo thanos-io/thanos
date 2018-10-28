@@ -219,8 +219,8 @@ config:
     bucket: <name of bucket>
     region: <the region information in domain name>
     appid: <unique resource ID in user dimension owned by a developer>
-    secret-key: <the project identity key owned by a developer>
-    secret-id: <the project identity ID owned by a developer>
+    secret_key: <the project identity key owned by a developer>
+    secret_id: <the project identity ID owned by a developer>
 ```
 
 Set the flags `--objstore.config-file` to reference to the configuration file.
