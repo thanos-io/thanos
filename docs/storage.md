@@ -25,7 +25,7 @@ At that point, anyone can use your provider!
 
 ## AWS S3 configuration
 
-Thanos uses minio client to upload Prometheus data into AWS s3.
+Thanos uses minio client to upload Prometheus data into AWS S3.
 
 To configure S3 bucket as an object store you need to set these mandatory S3 variables in yaml format stored in a file:
 
@@ -34,11 +34,11 @@ type: S3
 config:
     bucket: <bucket>
     endpoint: <endpoint>
-    access-key: <access-key>
+    access_key: <access_key>
     insecure: <true|false>
-    signature-version2: <true|false>
-    encrypt-sse: <true|false>
-    secret-key: <secret-key>
+    signature_version2: <true|false>
+    encrypt_sse: <true|false>
+    secret_key: <secret_key>
 ```
 
 Set the flags `--objstore.config-file` to reference to the configuration file.
@@ -50,8 +50,7 @@ Make sure you use a correct signature version to set `signature-version2: true`,
 For debug purposes you can set `insecure: true` to switch to plain insecure HTTP instead of HTTPS
 
 ### Credentials
-
-Credentials will by default try to retrieve from the following sources:
+By default Thanos will try to retrieve credentials from the following sources:
 
 1. IAM credentials retrieved from an instance profile
 1. From `~/.aws/credentials`
