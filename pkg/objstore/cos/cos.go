@@ -34,10 +34,9 @@ const dirDelim = "/"
 
 // Bucket implements the store.Bucket interface against cos-compatible(Tencent Object Storage) APIs.
 type Bucket struct {
-	logger   log.Logger
-	client   *cos.Client
-	opsTotal *prometheus.CounterVec
-	name     string
+	logger log.Logger
+	client *cos.Client
+	name   string
 }
 
 // cosConfig encapsulates the necessary config values to instantiate an cos client.
@@ -61,7 +60,7 @@ func Validate(conf cosConfig) error {
 	return nil
 }
 
-func NewBucket(logger log.Logger, conf []byte, reg prometheus.Registerer, component string) (*Bucket, error) {
+func NewBucket(logger log.Logger, conf []byte, _ prometheus.Registerer, component string) (*Bucket, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -91,15 +90,7 @@ func NewBucket(logger log.Logger, conf []byte, reg prometheus.Registerer, compon
 	bkt := &Bucket{
 		logger: logger,
 		client: client,
-		opsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name:        "thanos_objstore_cos_bucket_operations_total",
-			Help:        "Total number of operations that were executed against an cos bucket.",
-			ConstLabels: prometheus.Labels{"bucket": config.Bucket},
-		}, []string{"operation"}),
-		name: config.Bucket,
-	}
-	if reg != nil {
-		reg.MustRegister(bkt.opsTotal)
+		name:   config.Bucket,
 	}
 	return bkt, nil
 }
@@ -111,8 +102,6 @@ func (b *Bucket) Name() string {
 
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
-	b.opsTotal.WithLabelValues(opObjectInsert).Inc()
-
 	reader, length, err := objectLength(r)
 	if err != nil {
 		return errors.Wrap(err, "length of cos object")
@@ -131,7 +120,6 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
-	b.opsTotal.WithLabelValues(opObjectDelete).Inc()
 	if _, err := b.client.Object.Delete(ctx, name); err != nil {
 		return errors.Wrap(err, "delete cos object")
 	}
@@ -141,8 +129,6 @@ func (b *Bucket) Delete(ctx context.Context, name string) error {
 // Iter calls f for each entry in the given directory (not recursive.). The argument to f is the full
 // object name including the prefix of the inspected directory.
 func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) error {
-	b.opsTotal.WithLabelValues(opObjectsList).Inc()
-
 	if dir != "" {
 		dir = strings.TrimSuffix(dir, dirDelim) + dirDelim
 	}
@@ -163,7 +149,6 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 }
 
 func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
-	b.opsTotal.WithLabelValues(opObjectGet).Inc()
 	if len(name) == 0 {
 		return nil, errors.Errorf("given object name should not empty")
 	}
@@ -199,7 +184,6 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 
 // Exists checks if the given object exists in the bucket.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
-	b.opsTotal.WithLabelValues(opObjectHead).Inc()
 	if _, err := b.client.Object.Head(ctx, name, nil); err != nil {
 		if b.IsObjNotFoundErr(err) {
 			return false, nil
@@ -275,12 +259,9 @@ func (b *Bucket) ListObjects(ctx context.Context, objectPrefix string, recursive
 			}
 
 			for _, obj := range result.CommonPrefixes {
-				object := cos.Object{}
-				object.Key = obj
-				object.Size = 0
 				select {
 				case objectsCh <- objectInfo{
-					key: object.Key,
+					key: obj,
 					err: nil,
 				}:
 				case <-ctx.Done():
