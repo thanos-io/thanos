@@ -14,7 +14,6 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -38,7 +37,6 @@ type Bucket struct {
 	logger       log.Logger
 	containerURL blob.ContainerURL
 	config       *Config
-	opsTotal     *prometheus.CounterVec
 }
 
 // Validate checks to see if any of the config options are set.
@@ -51,7 +49,7 @@ func (conf *Config) validate() error {
 }
 
 // NewBucket returns a new Bucket using the provided Azure config.
-func NewBucket(logger log.Logger, azureConfig []byte, reg prometheus.Registerer, component string) (*Bucket, error) {
+func NewBucket(logger log.Logger, azureConfig []byte, component string) (*Bucket, error) {
 	level.Debug(logger).Log("msg", "creating new Azure bucket connection", "component", component)
 
 	var conf Config
@@ -87,15 +85,6 @@ func NewBucket(logger log.Logger, azureConfig []byte, reg prometheus.Registerer,
 		logger:       logger,
 		containerURL: container,
 		config:       &conf,
-		opsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name:        "thanos_objstore_azure_storage_operations_total",
-			Help:        "Total number of operations that were executed against an Azure storage account.",
-			ConstLabels: prometheus.Labels{"storage_account": conf.StorageAccountName},
-		}, []string{"operation"}),
-	}
-
-	if reg != nil {
-		reg.MustRegister(bkt.opsTotal)
 	}
 	return bkt, nil
 }
@@ -103,7 +92,6 @@ func NewBucket(logger log.Logger, azureConfig []byte, reg prometheus.Registerer,
 // Iter calls f for each entry in the given directory. The argument to f is the full
 // object name including the prefix of the inspected directory.
 func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) error {
-	b.opsTotal.WithLabelValues(opObjectsList).Inc()
 
 	prefix := dir
 	if prefix != "" && !strings.HasSuffix(prefix, DirDelim) {
@@ -204,7 +192,6 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 // Exists checks if the given object exists.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 	level.Debug(b.logger).Log("msg", "check if blob exists", "blob", name)
-	b.opsTotal.WithLabelValues(opObjectHead).Inc()
 	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
 
 	if _, err := blobURL.GetProperties(ctx, blob.BlobAccessConditions{}); err != nil {
@@ -220,7 +207,6 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	level.Debug(b.logger).Log("msg", "Uploading blob", "blob", name)
-	b.opsTotal.WithLabelValues(opObjectHead).Inc()
 	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
 
 	if _, err := blob.UploadStreamToBlockBlob(ctx, r, blobURL,
@@ -237,7 +223,6 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
 	level.Debug(b.logger).Log("msg", "Deleting blob", "blob", name)
-	b.opsTotal.WithLabelValues(opObjectHead).Inc()
 	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
 
 	if _, err := blobURL.Delete(ctx, blob.DeleteSnapshotsOptionInclude, blob.BlobAccessConditions{}); err != nil {
@@ -269,7 +254,7 @@ func NewTestBucket(t testing.TB, component string) (objstore.Bucket, func(), err
 
 	ctx := context.Background()
 
-	bkt, err := NewBucket(log.NewNopLogger(), bc, nil, component)
+	bkt, err := NewBucket(log.NewNopLogger(), bc, component)
 	if err != nil {
 		t.Errorf("Cannot create Azure storage container:")
 		return nil, nil, err
