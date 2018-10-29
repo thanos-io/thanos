@@ -3,7 +3,7 @@ package objtesting
 import (
 	"context"
 	"io/ioutil"
-	"strings"
+	"os"
 	"testing"
 
 	"github.com/improbable-eng/thanos/pkg/objstore"
@@ -16,7 +16,12 @@ import (
 // used object store is strongly consistent.
 func TestObjStore_AcceptanceTest_e2e(t *testing.T) {
 	ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
-		_, err := bkt.Get(context.Background(), "")
+		// Create temporary dir.
+		dir, err := ioutil.TempDir("", "test_bucket_e2e_local")
+		testutil.Ok(t, err)
+		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+
+		_, err = bkt.Get(context.Background(), "")
 		testutil.NotOk(t, err)
 		testutil.Assert(t, !bkt.IsObjNotFoundErr(err), "expected user error got not found %s", err)
 
@@ -28,8 +33,12 @@ func TestObjStore_AcceptanceTest_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Assert(t, !ok, "expected not exits")
 
+		obj1, err := createTempObject(dir, "obj_1.some", "@test-data@")
+		testutil.Ok(t, err)
+		defer func() { testutil.Ok(t, obj1.Close()) }()
+
 		// Upload first object.
-		testutil.Ok(t, bkt.Upload(context.Background(), "id1/obj_1.some", strings.NewReader("@test-data@")))
+		testutil.Ok(t, bkt.Upload(context.Background(), "id1/obj_1.some", obj1))
 
 		// Double check we can immediately read it.
 		rc1, err := bkt.Get(context.Background(), "id1/obj_1.some")
@@ -51,10 +60,25 @@ func TestObjStore_AcceptanceTest_e2e(t *testing.T) {
 		testutil.Assert(t, ok, "expected exits")
 
 		// Upload other objects.
-		testutil.Ok(t, bkt.Upload(context.Background(), "id1/obj_2.some", strings.NewReader("@test-data2@")))
-		testutil.Ok(t, bkt.Upload(context.Background(), "id1/obj_3.some", strings.NewReader("@test-data3@")))
-		testutil.Ok(t, bkt.Upload(context.Background(), "id2/obj_4.some", strings.NewReader("@test-data4@")))
-		testutil.Ok(t, bkt.Upload(context.Background(), "obj_5.some", strings.NewReader("@test-data5@")))
+		obj2, err := createTempObject(dir, "obj_2.some", "@test-data2@")
+		testutil.Ok(t, err)
+		defer func() { testutil.Ok(t, obj2.Close()) }()
+		testutil.Ok(t, bkt.Upload(context.Background(), "id1/obj_2.some", obj2))
+
+		obj3, err := createTempObject(dir, "obj_3.some", "@test-data3@")
+		testutil.Ok(t, err)
+		defer func() { testutil.Ok(t, obj3.Close()) }()
+		testutil.Ok(t, bkt.Upload(context.Background(), "id1/obj_3.some", obj3))
+
+		obj4, err := createTempObject(dir, "obj_4.some", "@test-data4@")
+		testutil.Ok(t, err)
+		defer func() { testutil.Ok(t, obj4.Close()) }()
+		testutil.Ok(t, bkt.Upload(context.Background(), "id2/obj_4.some", obj4))
+
+		obj5, err := createTempObject(dir, "obj_5.some", "@test-data5@")
+		testutil.Ok(t, err)
+		defer func() { testutil.Ok(t, obj5.Close()) }()
+		testutil.Ok(t, bkt.Upload(context.Background(), "obj_5.some", obj5))
 
 		// Can we iter over items from top dir?
 		var seen []string
@@ -106,4 +130,21 @@ func TestObjStore_AcceptanceTest_e2e(t *testing.T) {
 			return nil
 		}))
 	})
+}
+
+func createTempObject(dir, name, content string) (*os.File, error) {
+	tmpfile, err := ioutil.TempFile(dir, name)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := tmpfile.WriteString(content); err != nil {
+		return nil, err
+	}
+
+	// To set the offset to the origin of the temporary file.
+	if _, err := tmpfile.Seek(0, 0); err != nil {
+		return nil, err
+	}
+	return tmpfile, nil
 }
