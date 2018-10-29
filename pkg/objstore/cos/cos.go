@@ -1,7 +1,6 @@
 package cos
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -295,31 +294,16 @@ func setRange(opts *cos.ObjectGetOptions, start, end int64) error {
 }
 
 func objectLength(src io.Reader) (io.Reader, int, error) {
-	switch o := src.(type) {
-	case *os.File:
-		fi, err := o.Stat()
-		if err != nil {
-			return nil, -1, err
-		}
-
-		return src, int(fi.Size()), nil
-	default:
-		buf, err := toBuffer(o)
-		if err != nil {
-			return nil, -1, err
-		}
-		return buf, buf.Len(), nil
+	o, ok := src.(*os.File)
+	if !ok {
+		return nil, -1, errors.Errorf("Failed to convert source reader to file descriptor")
 	}
-}
-
-func toBuffer(src io.Reader) (*bytes.Buffer, error) {
-	buffer := bytes.NewBuffer(make([]byte, 0))
-	_, err := io.Copy(buffer, src)
+	fi, err := o.Stat()
 	if err != nil {
-		return nil, err
+		return nil, -1, err
 	}
 
-	return buffer, nil
+	return src, int(fi.Size()), nil
 }
 
 func configFromEnv() cosConfig {
@@ -338,7 +322,7 @@ func configFromEnv() cosConfig {
 // In a close function it empties and deletes the bucket.
 func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 	c := configFromEnv()
-	if err := Validate(c); err != nil {
+	if err := validateForTest(c); err != nil {
 		return nil, nil, err
 	}
 
@@ -400,4 +384,14 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 			t.Logf("deleting bucket %s failed: %s", tmpBucketName, err)
 		}
 	}, nil
+}
+
+func validateForTest(conf cosConfig) error {
+	if conf.AppId == "" ||
+		conf.Region == "" ||
+		conf.SecretId == "" ||
+		conf.SecretKey == "" {
+		return errors.New("insufficient cos configuration information")
+	}
+	return nil
 }
