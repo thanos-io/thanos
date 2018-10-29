@@ -60,7 +60,7 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg *prometheus.Regist
 	case string(AZURE):
 		bucket, err = azure.NewBucket(logger, config, component)
 	case string(SWIFT):
-		bucket, err = swift.NewContainer(logger, config, reg)
+		bucket, err = swift.NewContainer(logger, config)
 	default:
 		return nil, errors.Errorf("bucket with type %s is not supported", bucketConf.Type)
 	}

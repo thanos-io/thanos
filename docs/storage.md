@@ -195,12 +195,12 @@ Below is an example configuration file for thanos to use OpenStack swift contain
 ```yaml
 type: SWIFT
 config:
-    authUrl: <identity endpoint aka auth URL>
+    auth_url: <identity endpoint aka auth URL>
     username: <username>
     password: <password>
-    tenantName: <tenantName>
-    regionName: <region>
-    containerName: <container>
+    tenant_name: <tenant name>
+    region_name: <region>
+    container_name: <container>
 ```
 
 Set the flags `--objstore.config-file` to reference to the configuration file.

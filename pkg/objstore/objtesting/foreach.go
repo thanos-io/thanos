@@ -85,14 +85,12 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 		t.Log("THANOS_SKIP_AZURE_TESTS envvar present. Skipping test against Azure.")
 	}
 
-
 	// Optional SWIFT.
 	if _, ok := os.LookupEnv("THANOS_SKIP_SWIFT_TESTS"); !ok {
 		container, closeFn, err := swift.NewTestContainer(t)
 		testutil.Ok(t, err)
 
 		ok := t.Run("swift", func(t *testing.T) {
-			// TODO(bplotka): Add leaktest when https://github.com/GoogleCloudPlatform/google-cloud-go/issues/1025 is resolved.
 			testFn(t, container)
 		})
 		closeFn()
