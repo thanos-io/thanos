@@ -22,17 +22,8 @@ import (
 	"github.com/minio/minio-go/pkg/credentials"
 	"github.com/minio/minio-go/pkg/encrypt"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/version"
 	yaml "gopkg.in/yaml.v2"
-)
-
-const (
-	opObjectsList  = "ListBucket"
-	opObjectInsert = "PutObject"
-	opObjectGet    = "GetObject"
-	opObjectHead   = "HEADObject"
-	opObjectDelete = "DeleteObject"
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
@@ -51,25 +42,24 @@ type Config struct {
 
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
 type Bucket struct {
-	logger   log.Logger
-	name     string
-	client   *minio.Client
-	sse      encrypt.ServerSide
-	opsTotal *prometheus.CounterVec
+	logger log.Logger
+	name   string
+	client *minio.Client
+	sse    encrypt.ServerSide
 }
 
 // NewBucket returns a new Bucket using the provided s3 config values.
-func NewBucket(logger log.Logger, conf []byte, reg prometheus.Registerer, component string) (*Bucket, error) {
+func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
 	var config Config
 	if err := yaml.Unmarshal(conf, &config); err != nil {
 		return nil, err
 	}
 
-	return NewBucketWithConfig(logger, config, reg, component)
+	return NewBucketWithConfig(logger, config, component)
 }
 
 // NewBucket returns a new Bucket using the provided s3 config values.
-func NewBucketWithConfig(logger log.Logger, config Config, reg prometheus.Registerer, component string) (*Bucket, error) {
+func NewBucketWithConfig(logger log.Logger, config Config, component string) (*Bucket, error) {
 	var chain []credentials.Provider
 
 	if err := Validate(config); err != nil {
@@ -139,14 +129,6 @@ func NewBucketWithConfig(logger log.Logger, config Config, reg prometheus.Regist
 		name:   config.Bucket,
 		client: client,
 		sse:    sse,
-		opsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name:        "thanos_objstore_s3_bucket_operations_total",
-			Help:        "Total number of operations that were executed against an s3 bucket.",
-			ConstLabels: prometheus.Labels{"bucket": config.Bucket},
-		}, []string{"operation"}),
-	}
-	if reg != nil {
-		reg.MustRegister(bkt.opsTotal)
 	}
 	return bkt, nil
 }
@@ -179,7 +161,6 @@ func ValidateForTests(conf Config) error {
 // Iter calls f for each entry in the given directory. The argument to f is the full
 // object name including the prefix of the inspected directory.
 func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) error {
-	b.opsTotal.WithLabelValues(opObjectsList).Inc()
 	// Ensure the object name actually ends with a dir suffix. Otherwise we'll just iterate the
 	// object itself as one prefix item.
 	if dir != "" {
@@ -204,7 +185,6 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 }
 
 func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
-	b.opsTotal.WithLabelValues(opObjectGet).Inc()
 	opts := &minio.GetObjectOptions{ServerSideEncryption: b.sse}
 	if length != -1 {
 		if err := opts.SetRange(off, off+length-1); err != nil {
@@ -240,7 +220,6 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 
 // Exists checks if the given object exists.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
-	b.opsTotal.WithLabelValues(opObjectHead).Inc()
 	_, err := b.client.StatObject(b.name, name, minio.StatObjectOptions{})
 	if err != nil {
 		if b.IsObjNotFoundErr(err) {
@@ -254,8 +233,6 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
-	b.opsTotal.WithLabelValues(opObjectInsert).Inc()
-
 	_, err := b.client.PutObjectWithContext(ctx, b.name, name, r, -1,
 		minio.PutObjectOptions{ServerSideEncryption: b.sse},
 	)
@@ -265,7 +242,6 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
-	b.opsTotal.WithLabelValues(opObjectDelete).Inc()
 	return b.client.RemoveObject(b.name, name)
 }
 
@@ -313,7 +289,7 @@ func NewTestBucketFromConfig(t testing.TB, location string, c Config, reuseBucke
 	if err != nil {
 		return nil, nil, err
 	}
-	b, err := NewBucket(log.NewNopLogger(), bc, nil, "thanos-e2e-test")
+	b, err := NewBucket(log.NewNopLogger(), bc, "thanos-e2e-test")
 	if err != nil {
 		return nil, nil, err
 	}

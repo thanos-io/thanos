@@ -50,9 +50,9 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg *prometheus.Regist
 	var bucket objstore.Bucket
 	switch strings.ToUpper(string(bucketConf.Type)) {
 	case string(GCS):
-		bucket, err = gcs.NewBucket(context.Background(), logger, config, reg, component)
+		bucket, err = gcs.NewBucket(context.Background(), logger, config, component)
 	case string(S3):
-		bucket, err = s3.NewBucket(logger, config, reg, component)
+		bucket, err = s3.NewBucket(logger, config, component)
 	default:
 		return nil, errors.Errorf("bucket with type %s is not supported", bucketConf.Type)
 	}
