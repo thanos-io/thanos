@@ -46,7 +46,7 @@ type Config struct {
 type HTTPConfig struct {
 	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
 	DialerTimeout         model.Duration `yaml:"dialer_timeout"`
-	DialerKeepAlive       model.Duration `yaml:"dialer_keep-alive"`
+	DialerKeepAlive       model.Duration `yaml:"dialer_keep_alive"`
 	MaxIdleConns          int            `yaml:"max_idle_conns"`
 	TLSHandshakeTimeout   model.Duration `yaml:"tls_handshake_timeout"`
 	ExpectContinueTimeout model.Duration `yaml:"expect_continue_timeout"`
