@@ -6,12 +6,10 @@ import (
 )
 
 func TestParseConfig(t *testing.T) {
-	inputConfig := []byte(`
-	bucket: abcd
-	http_config:
-		idle_conn_timeout: 50s
-		max_idle_conns: 123
-	`)
+	inputConfig := []byte(`bucket: abcd
+http_config:
+  idle_conn_timeout: 50s
+  max_idle_conns: 123`)
 	cfg, err := ParseConfig(inputConfig)
 	if err != nil {
 		t.Errorf("failed to parse config: %s", err)
