@@ -49,8 +49,8 @@ func (cs compactionSet) levels(maxLevel int) ([]int64, error) {
 		return nil, errors.Errorf("level is bigger then default set of %d", len(cs))
 	}
 
-	levels := make([]int64, maxLevel)
-	for i, c := range cs[:maxLevel] {
+	levels := make([]int64, maxLevel+1)
+	for i, c := range cs[:maxLevel+1] {
 		levels[i] = int64(c / time.Millisecond)
 	}
 	return levels, nil

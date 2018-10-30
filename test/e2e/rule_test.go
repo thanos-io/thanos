@@ -75,11 +75,7 @@ func TestRule(t *testing.T) {
 func testRuleComponent(t *testing.T, conf testConfig) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 
-	exit, err := newSpinupSuite().
-		Add(querier(1, ""), queryCluster(1)).
-		Add(ruler(1, alwaysFireRule)).
-		Add(ruler(2, alwaysFireRule)).
-		Add(alertManager(1), "").Exec(t, ctx, "test_rule_component")
+	exit, err := conf.suite.Exec(t, ctx, "test_rule_component")
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)
 		cancel()

@@ -77,7 +77,7 @@ func TestStoreGatewayQuery(t *testing.T) {
 
 	l := log.NewLogfmtLogger(os.Stdout)
 
-	bkt, err := s3.NewBucketWithConfig(l, s3Config, nil, "test-feed")
+	bkt, err := s3.NewBucketWithConfig(l, s3Config, "test-feed")
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id1.String()), id1.String()))

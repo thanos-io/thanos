@@ -34,6 +34,9 @@ jobs:
             export THANOS_SKIP_S3_AWS_TESTS="true"
             echo "Skipping AWS tests."
 
+            export THANOS_SKIP_AZURE_TESTS="true"
+            echo "Skipping Azure tests."
+
             make test
 
   # Cross build is needed for publish_release but needs to be done outside of docker.
