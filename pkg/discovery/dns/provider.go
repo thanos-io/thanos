@@ -24,7 +24,7 @@ func NewProvider(resolver Resolver) *Provider {
 // Resolve stores a list of provided addresses or their DNS records if requested.
 // Addresses prefixed with `dns+` or `dnssrv+` will be resolved through respective DNS lookup (A/AAAA or SRV).
 // defaultPort is used for non-SRV records when a port is not supplied.
-func (p *Provider) Resolve(ctx context.Context, addrs []string, defaultPort int) error {
+func (p *Provider) Resolve(ctx context.Context, addrs []string) error {
 	p.Lock()
 	defer p.Unlock()
 
@@ -42,7 +42,7 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string, defaultPort int)
 			continue
 		}
 		name, qtype = nameQtype[1], nameQtype[0]
-		resolvedHosts, err := p.resolver.Resolve(ctx, name, qtype, defaultPort)
+		resolvedHosts, err := p.resolver.Resolve(ctx, name, qtype)
 		if err != nil {
 			// The DNS resolution failed. Exit without modifying the old records.
 			return err

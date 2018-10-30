@@ -34,7 +34,6 @@ type DNSSDTest struct {
 	testName       string
 	addr           string
 	qtype          string
-	defaultPort    int
 	expectedResult []string
 	expectedErr    error
 	resolver       *mockHostnameResolver
@@ -69,7 +68,6 @@ var (
 			"single ip from dns lookup of host:port",
 			dnsHostNoPort + ":" + strconv.Itoa(port),
 			"dns",
-			defaultPort,
 			[]string{ip + ":" + strconv.Itoa(port)},
 			nil,
 			&mockHostnameResolver{
@@ -82,7 +80,6 @@ var (
 			"multiple srv records from srv lookup",
 			srvHost,
 			"dnssrv",
-			defaultPort,
 			[]string{ip + ":" + strconv.Itoa(port), ip2 + ":" + strconv.Itoa(port)},
 			nil,
 			&mockHostnameResolver{
@@ -95,23 +92,17 @@ var (
 			},
 		},
 		{
-			"default port added to ips with dns lookup when none specified in name",
+			"error on dns lookup when no port is specified",
 			dnsHostNoPort,
 			"dns",
-			defaultPort,
-			[]string{ip + ":" + strconv.Itoa(defaultPort)},
 			nil,
-			&mockHostnameResolver{
-				resultIPs: map[string][]net.IPAddr{
-					dnsHostNoPort: {net.IPAddr{IP: net.ParseIP(ip)}},
-				},
-			},
+			errors.Errorf("missing port in address given for dns lookup: %v", dnsHostNoPort),
+			&mockHostnameResolver{},
 		},
 		{
 			"error on bad qtype",
 			dnsHostNoPort,
 			invalidQtype,
-			defaultPort,
 			nil,
 			errors.Errorf("invalid lookup scheme %q", invalidQtype),
 			&mockHostnameResolver{},
@@ -120,7 +111,6 @@ var (
 			"error from resolver",
 			srvHost,
 			"dnssrv",
-			defaultPort,
 			nil,
 			errors.Wrapf(errorFromResolver, "lookup SRV records %q", srvHost),
 			&mockHostnameResolver{err: errorFromResolver},
@@ -140,7 +130,7 @@ func testDnsSd(t *testing.T, tt DNSSDTest) {
 	ctx := context.TODO()
 	dnsSD := dnsSD{tt.resolver}
 
-	result, err := dnsSD.Resolve(ctx, tt.addr, tt.qtype, tt.defaultPort)
+	result, err := dnsSD.Resolve(ctx, tt.addr, tt.qtype)
 	if tt.expectedErr != nil {
 		testutil.Assert(t, err != nil, "expected error but none was returned")
 		testutil.Assert(t, tt.expectedErr.Error() == err.Error(), "expected error '%v', but got '%v'", tt.expectedErr.Error(), err.Error())

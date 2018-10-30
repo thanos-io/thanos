@@ -249,16 +249,12 @@ func runQuery(
 		Name: "thanos_query_duplicated_store_address",
 		Help: "The number of times a duplicated store addresses is detected from the different configs in query",
 	})
+	storeAddrResolutionErrors := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_query_store_address_resolution_errors",
+		Help: "The number of times resolving an address of a store API has failed inside Thanos Query",
+	})
 	reg.MustRegister(duplicatedStores)
-
-	var staticSpecs []query.StoreSpec
-	for _, addr := range storeAddrs {
-		if addr == "" {
-			return errors.New("static store address cannot be empty")
-		}
-
-		staticSpecs = append(staticSpecs, query.NewGRPCStoreSpec(addr))
-	}
+	reg.MustRegister(storeAddrResolutionErrors)
 
 	dialOpts, err := storeClientGRPCOpts(logger, reg, tracer, secure, cert, key, caCert, serverName)
 	if err != nil {
@@ -369,10 +365,10 @@ func runQuery(
 		g.Add(func() error {
 			return runutil.Repeat(dnsSDInterval, ctx.Done(), func() error {
 				addresses := append(fileSDCache.Addresses(), storeAddrs...)
-				// TODO(ivan): default port... Use a flag maybe?
-				if err := dnsProvider.Resolve(ctx, addresses, 9090); err != nil {
+				if err := dnsProvider.Resolve(ctx, addresses); err != nil {
 					// Failure to resolve could be caused by a lookup timeout. We shouldn't fail because of that, so just log.
-					level.Warn(logger).Log("msg", fmt.Sprintf("failed to resolve addresses in query: %v", err.Error()))
+					level.Error(logger).Log("msg", fmt.Sprintf("failed to resolve addresses in query: %v", err.Error()))
+					storeAddrResolutionErrors.Inc()
 				}
 				return nil
 			})

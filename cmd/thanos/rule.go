@@ -195,6 +195,14 @@ func runRule(
 		Name: "thanos_rule_duplicated_query_address",
 		Help: "The number of times a duplicated query addresses is detected from the different configs in rule",
 	})
+	queryAddrResolutionErrors := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_rule_query_address_resolution_errors",
+		Help: "The number of times resolving an address of a query API has failed inside Thanos Rule",
+	})
+	alertMngrAddrResolutionErrors := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_rule_alertmanager_address_resolution_errors",
+		Help: "The number of times resolving an address of an alertmanager has failed inside Thanos Rule",
+	})
 	rulesLoaded := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "thanos_rule_loaded_rules",
@@ -205,6 +213,8 @@ func runRule(
 	reg.MustRegister(configSuccess)
 	reg.MustRegister(configSuccessTime)
 	reg.MustRegister(duplicatedQuery)
+	reg.MustRegister(queryAddrResolutionErrors)
+	reg.MustRegister(alertMngrAddrResolutionErrors)
 	reg.MustRegister(rulesLoaded)
 
 	for _, addr := range queryAddrs {
@@ -368,7 +378,8 @@ func runRule(
 		g.Add(func() error {
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				if err := alertmgrs.update(ctx); err != nil {
-					level.Warn(logger).Log("msg", "refreshing Alertmanagers failed", "err", err)
+					level.Error(logger).Log("msg", "refreshing Alertmanagers failed", "err", err)
+					alertMngrAddrResolutionErrors.Inc()
 				}
 				return nil
 			})
@@ -482,10 +493,10 @@ func runRule(
 		g.Add(func() error {
 			return runutil.Repeat(dnsSDInterval, ctx.Done(), func() error {
 				addresses := append(fileSDCache.Addresses(), queryAddrs...)
-				// TODO(ivan): default port... Use a flag maybe?
-				if err := dnsProvider.Resolve(ctx, addresses, 9090); err != nil {
+				if err := dnsProvider.Resolve(ctx, addresses); err != nil {
 					// Failure to resolve could be caused by a lookup timeout. We shouldn't fail because of that, so just log.
-					level.Warn(logger).Log("msg", fmt.Sprintf("failed to resolve addresses in query: %v", err.Error()))
+					level.Error(logger).Log("msg", fmt.Sprintf("failed to resolve addresses in query: %v", err.Error()))
+					queryAddrResolutionErrors.Inc()
 				}
 				return nil
 			})
@@ -698,10 +709,17 @@ func (s *alertmanagerSet) update(ctx context.Context) error {
 		if err != nil {
 			return errors.Wrapf(err, "parse URL %q", name)
 		}
-		// Get only the host and resolve it if needed
+		// Get only the host and resolve it if needed.
 		host := u.Host
 		if qtype != "" {
-			resolvedDomain, err = s.resolver.Resolve(ctx, host, qtype, defaultAlertmanagerPort)
+			if qtype == "dns" {
+				_, _, err = net.SplitHostPort(name)
+				if err != nil {
+					// The host could be missing a port. Append the defaultAlertmanagerPort.
+					host = host + ":" + strconv.Itoa(defaultAlertmanagerPort)
+				}
+			}
+			resolvedDomain, err = s.resolver.Resolve(ctx, host, qtype)
 			if err != nil {
 				return err
 			}
