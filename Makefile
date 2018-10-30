@@ -49,7 +49,7 @@ define fetch_go_bin_version
 endef
 
 .PHONY: all
-all: deps format build
+all: format build
 
 # assets repacks all statis assets into go file for easier deploy.
 .PHONY: assets
@@ -64,19 +64,16 @@ assets:
 
 # build builds Thanos binary using `promu`.
 .PHONY: build
-build: deps $(PROMU)
+build:  $(PROMU)
 	@echo ">> building binaries"
 	@$(PROMU) build --prefix $(PREFIX)
 
 # crossbuild builds all binaries for all platforms.
 .PHONY: crossbuild
-crossbuild: deps $(PROMU)
+crossbuild:  $(PROMU)
 	@echo ">> crossbuilding all binaries"
 	$(PROMU) crossbuild -v
 
-# deps fetches all necessary golang dependencies, since they are not checked into repository.
-.PHONY: deps
-deps: vendor
 
 # docker builds docker with no tag.
 .PHONY: docker
@@ -103,13 +100,11 @@ check-docs: $(EMBEDMD) build
 
 # errcheck performs static analysis and returns error if any of the errors is not checked.
 .PHONY: errcheck
-errcheck: $(ERRCHECK) deps
+errcheck: $(ERRCHECK) 
 	@echo ">> errchecking the code"
 	$(ERRCHECK) -verbose -exclude .errcheck_excludes.txt ./cmd/... ./pkg/... ./test/...
 
 # format formats the code (including imports format).
-# NOTE: format requires deps to not remove imports that are used, just not resolved.
-# This is not encoded, because it is often used in IDE onSave logic.
 .PHONY: format
 format: $(GOIMPORTS)
 	@echo ">> formatting code"
@@ -148,7 +143,7 @@ test: test-deps
 # test-deps installs dependency for e2e tets.
 # It installs current Thanos, supported versions of Prometheus and alertmanager to test against in e2e.
 .PHONY: test-deps
-test-deps: deps
+test-deps: 
 	@go install github.com/improbable-eng/thanos/cmd/thanos
 	$(foreach ver,$(SUPPORTED_PROM_VERSIONS),$(call fetch_go_bin_version,github.com/prometheus/prometheus/cmd/prometheus,$(ver)))
 	$(call fetch_go_bin_version,github.com/prometheus/alertmanager/cmd/alertmanager,$(ALERTMANAGER_VERSION))
@@ -161,10 +156,6 @@ vet:
 	@go vet ./...
 
 # non-phony targets
-
-vendor: Gopkg.toml Gopkg.lock $(DEP_FINISHED) | $(DEP)
-	@echo ">> dep ensure"
-	@$(DEP) ensure $(DEPARGS) || rm $(DEP_FINISHED)
 
 $(GOIMPORTS):
 	@echo ">> fetching goimports"
