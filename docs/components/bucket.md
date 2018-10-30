@@ -1,7 +1,7 @@
 # Bucket
 
 The bucket component of Thanos is a set of commands to inspect data in object storage buckets.
-It is normally run as a stand alone command to aid with troubleshooting. 
+It is normally run as a stand alone command to aid with troubleshooting.
 
 Example:
 
@@ -73,7 +73,7 @@ Example:
 
 ```
 $ thanos bucket verify --gcs.bucket example-bucket
-``` 
+```
 
 [embedmd]:# (flags/bucket_verify.txt)
 ```txt
@@ -125,7 +125,7 @@ Example:
 
 ```
 $ thanos bucket ls -o json --gcs.bucket example-bucket
-``` 
+```
 
 [embedmd]:# (flags/bucket_ls.txt)
 ```txt

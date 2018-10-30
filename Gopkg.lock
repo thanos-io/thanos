@@ -26,6 +26,21 @@
   version = "v0.6.0"
 
 [[projects]]
+  digest = "1:6f302284bb48712a01cdcd3216e8bbb293d1edb618f55b5fe7f92521cce930c7"
+  name = "github.com/Azure/azure-pipeline-go"
+  packages = ["pipeline"]
+  pruneopts = ""
+  revision = "7571e8eb0876932ab505918ff7ed5107773e5ee2"
+  version = "0.1.7"
+
+[[projects]]
+  digest = "1:9267d48ec1ac29ae66cb064f2217ec5f0a2b8e22904dd018eba54a6140f82fd5"
+  name = "github.com/Azure/azure-storage-blob-go"
+  packages = ["2018-03-28/azblob"]
+  pruneopts = ""
+  revision = "197d1c0aea1b9eedbbaee0a1a32bf81e879bde80"
+
+[[projects]]
   digest = "1:b0fe84bcee1d0c3579d855029ccd3a76deea187412da2976985e4946289dbb2c"
   name = "github.com/NYTimes/gziphandler"
   packages = ["."]
@@ -502,7 +517,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:3a2cd3e4815469d0a8fad881966023406563b791d9807709de28d04f9d5ed40f"
+  digest = "1:16db3d6f4f8bbe4b7b42cb8808e68457fea4bd7aea410b77c8c9a6dc26253a60"
   name = "golang.org/x/crypto"
   packages = [
     "argon2",
@@ -512,7 +527,7 @@
     "ssh/terminal",
   ]
   pruneopts = ""
-  revision = "182538f80094b6a8efaade63a8fd8e0d9d5843dd"
+  revision = "0709b304e793a5edb4a2c0145f281ecdc20838a4"
 
 [[projects]]
   branch = "master"
@@ -563,7 +578,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:649f2e24b22ef65ea110a3ce82f327019aec48f625586ea9716e53152e013a88"
+  digest = "1:54bad0d07b2d834122adaf5ecc35e4df006a4e0bb6114f2466b73e2cc6f03583"
   name = "golang.org/x/sys"
   packages = [
     "cpu",
@@ -571,7 +586,7 @@
     "windows",
   ]
   pruneopts = ""
-  revision = "fa5fdf94c78965f1aa8423f0cc50b8b8d728b05a"
+  revision = "ebe1bf3edb3325c393447059974de898d5133eb8"
 
 [[projects]]
   digest = "1:af9bfca4298ef7502c52b1459df274eed401a4f5498b900e9a92d28d3d87ac5a"
@@ -598,7 +613,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:4c11fda7ef44f31a6cb30fc84d186dcf6a3a7c320f61980bb90ccefa92f02216"
+  digest = "1:7e248912e9ce5218a30a9fa1b4ed575e474430e178a24af34ecb2373dbb93752"
   name = "google.golang.org/api"
   packages = [
     "gensupport",
@@ -615,7 +630,7 @@
     "transport/http",
   ]
   pruneopts = ""
-  revision = "b810576d88a056b90ef18a0b5328544c9c074c68"
+  revision = "0ad5a633fea1d4b64bf5e6a01e30d1fc466038e5"
 
 [[projects]]
   digest = "1:eede11c81b63c8f6fd06ef24ba0a640dc077196ec9b7a58ecde03c82eee2f151"
@@ -640,7 +655,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:c8aa249fb74a455a901ef97b28dd8225a3f65a5af0b2127d7ac3f54924866086"
+  digest = "1:7040eaf95eb09f6f69e1415074049a9a66236d59d8767f2d17b759b916f79fb1"
   name = "google.golang.org/genproto"
   packages = [
     "googleapis/api/annotations",
@@ -649,7 +664,7 @@
     "googleapis/rpc/status",
   ]
   pruneopts = ""
-  revision = "c66870c02cf823ceb633bcd05be3c7cda29976f4"
+  revision = "11092d34479b07829b72e10713b159248caf5dad"
 
 [[projects]]
   digest = "1:cb1330030248de97a11d9f9664f3944fce0df947e5ed94dbbd9cb6e77068bd46"
@@ -717,6 +732,7 @@
   input-imports = [
     "cloud.google.com/go/storage",
     "cloud.google.com/go/trace/apiv1",
+    "github.com/Azure/azure-storage-blob-go/2018-03-28/azblob",
     "github.com/NYTimes/gziphandler",
     "github.com/armon/go-metrics",
     "github.com/armon/go-metrics/prometheus",

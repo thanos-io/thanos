@@ -140,7 +140,7 @@ tarballs-release: $(PROMU)
 # test runs all Thanos golang tests against each supported version of Prometheus.
 .PHONY: test
 test: test-deps
-	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS='true' or/and  export THANOS_SKIP_S3_AWS_TESTS='true' if you want to skip e2e tests against real store buckets"
+	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS='true' or/and  export THANOS_SKIP_S3_AWS_TESTS='true' or/and THANOS_SKIP_AZURE_TESTS='true' if you want to skip e2e tests against real store buckets"
 	@for ver in $(SUPPORTED_PROM_VERSIONS); do \
 		THANOS_TEST_PROMETHEUS_PATH="prometheus-$$ver" THANOS_TEST_ALERTMANAGER_PATH="alertmanager-$(ALERTMANAGER_VERSION)" go test $(shell go list ./... | grep -v /vendor/ | grep -v /benchmark/); \
 	done
