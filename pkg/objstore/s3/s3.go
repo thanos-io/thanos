@@ -22,7 +22,6 @@ import (
 	"github.com/minio/minio-go/pkg/credentials"
 	"github.com/minio/minio-go/pkg/encrypt"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
 	yaml "gopkg.in/yaml.v2"
@@ -59,15 +58,10 @@ type Bucket struct {
 
 // NewBucket returns a new Bucket using the provided s3 config values.
 func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
-	defIdleConnTimeout, _ := model.ParseDuration("90s")
-	defDialerTimeout, _ := model.ParseDuration("30s")
-	defDialerKeepAlive, _ := model.ParseDuration("30s")
-	defTLSHandshakeTimeout, _ := model.ParseDuration("10s")
-	defExpectContinueTimeout, _ := model.ParseDuration("1s")
-	defResponseHeaderTimeout, _ := model.ParseDuration("15s")
-	config := Config{IdleConnTimeout: defIdleConnTimeout, DialerTimeout: defDialerTimeout, DialerKeepAlive: defDialerKeepAlive,
-		TLSHandshakeTimeout: defTLSHandshakeTimeout, MaxIdleConns: 100, ExpectContinueTimeout: defExpectContinueTimeout,
-		ResponseHeaderTimeout: defResponseHeaderTimeout}
+	config := Config{IdleConnTimeout: model.Duration(90 * time.Second), DialerTimeout: model.Duration(30 * time.Second),
+		DialerKeepAlive: model.Duration(30 * time.Second), TLSHandshakeTimeout: model.Duration(10 * time.Second),
+		MaxIdleConns: 100, ExpectContinueTimeout: model.Duration(1 * time.Second),
+		ResponseHeaderTimeout: model.Duration(15 * time.Second)}
 
 	if err := yaml.Unmarshal(conf, &config); err != nil {
 		return nil, err
