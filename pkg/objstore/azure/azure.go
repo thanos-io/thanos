@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	blob "github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	blob "github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/objstore"
@@ -167,7 +167,7 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 	destBuffer := make([]byte, size)
 
 	if err := blob.DownloadBlobToBuffer(context.Background(), blobURL.BlobURL, offset, length,
-		blob.BlobAccessConditions{}, destBuffer, blob.DownloadFromBlobOptions{
+		destBuffer, blob.DownloadFromBlobOptions{
 			BlockSize:   blob.BlobDefaultDownloadBlockSize,
 			Parallelism: uint16(3),
 			Progress:    nil,

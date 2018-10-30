@@ -5,6 +5,7 @@ require (
 	contrib.go.opencensus.io/exporter/ocagent v0.0.1 // indirect
 	contrib.go.opencensus.io/exporter/stackdriver v0.6.0 // indirect
 	git.apache.org/thrift.git v0.0.0-20180902110319-2566ecd5d999 // indirect
+	github.com/Azure/azure-storage-blob-go v0.0.0-20181023070848-cf01652132cc
 	github.com/Azure/go-autorest v11.2.6+incompatible // indirect
 	github.com/DataDog/datadog-go v0.0.0-20180822151419-281ae9f2d895 // indirect
 	github.com/NYTimes/gziphandler v1.0.1
