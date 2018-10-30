@@ -32,13 +32,18 @@ const DirDelim = "/"
 
 // Config stores the configuration for s3 bucket.
 type Config struct {
-	Bucket                string         `yaml:"bucket"`
-	Endpoint              string         `yaml:"endpoint"`
-	AccessKey             string         `yaml:"access_key"`
-	Insecure              bool           `yaml:"insecure"`
-	SignatureV2           bool           `yaml:"signature_version2"`
-	SSEEncryption         bool           `yaml:"encrypt_sse"`
-	SecretKey             string         `yaml:"secret_key"`
+	Bucket        string     `yaml:"bucket"`
+	Endpoint      string     `yaml:"endpoint"`
+	AccessKey     string     `yaml:"access_key"`
+	Insecure      bool       `yaml:"insecure"`
+	SignatureV2   bool       `yaml:"signature_version2"`
+	SSEEncryption bool       `yaml:"encrypt_sse"`
+	SecretKey     string     `yaml:"secret_key"`
+	HTTPConfig    HTTPConfig `yaml:"http_config"`
+}
+
+// HTTPConfig stores the http.Transport configuration for the s3 minio client
+type HTTPConfig struct {
 	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
 	DialerTimeout         model.Duration `yaml:"dialer_timeout"`
 	DialerKeepAlive       model.Duration `yaml:"dialer_keep-alive"`
@@ -56,14 +61,24 @@ type Bucket struct {
 	sse    encrypt.ServerSide
 }
 
-// NewBucket returns a new Bucket using the provided s3 config values.
-func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
-	config := Config{IdleConnTimeout: model.Duration(90 * time.Second), DialerTimeout: model.Duration(30 * time.Second),
+// ParseConfig unmarshals a buffer into a Config with default HTTPConfig values
+func ParseConfig(conf []byte) (Config, error) {
+	defaultHTTPConfig := HTTPConfig{IdleConnTimeout: model.Duration(90 * time.Second),
+		DialerTimeout:   model.Duration(30 * time.Second),
 		DialerKeepAlive: model.Duration(30 * time.Second), TLSHandshakeTimeout: model.Duration(10 * time.Second),
 		MaxIdleConns: 100, ExpectContinueTimeout: model.Duration(1 * time.Second),
 		ResponseHeaderTimeout: model.Duration(15 * time.Second)}
-
+	config := Config{HTTPConfig: defaultHTTPConfig}
 	if err := yaml.Unmarshal(conf, &config); err != nil {
+		return Config{}, err
+	}
+	return config, nil
+}
+
+// NewBucket returns a new Bucket using the provided s3 config values.
+func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
+	config, err := ParseConfig(conf)
+	if err != nil {
 		return nil, err
 	}
 
@@ -110,18 +125,18 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 	client.SetCustomTransport(&http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
-			Timeout:   time.Duration(config.DialerTimeout),
-			KeepAlive: time.Duration(config.DialerKeepAlive),
+			Timeout:   time.Duration(config.HTTPConfig.DialerTimeout),
+			KeepAlive: time.Duration(config.HTTPConfig.DialerKeepAlive),
 			DualStack: true,
 		}).DialContext,
-		MaxIdleConns:          config.MaxIdleConns,
-		IdleConnTimeout:       time.Duration(config.IdleConnTimeout),
-		TLSHandshakeTimeout:   time.Duration(config.TLSHandshakeTimeout),
-		ExpectContinueTimeout: time.Duration(config.ExpectContinueTimeout),
+		MaxIdleConns:          config.HTTPConfig.MaxIdleConns,
+		IdleConnTimeout:       time.Duration(config.HTTPConfig.IdleConnTimeout),
+		TLSHandshakeTimeout:   time.Duration(config.HTTPConfig.TLSHandshakeTimeout),
+		ExpectContinueTimeout: time.Duration(config.HTTPConfig.ExpectContinueTimeout),
 		// The ResponseHeaderTimeout here is the only change from the
 		// default minio transport, it was introduced to cover cases
 		// where the tcp connection works but the server never answers
-		ResponseHeaderTimeout: time.Duration(config.ResponseHeaderTimeout),
+		ResponseHeaderTimeout: time.Duration(config.HTTPConfig.ResponseHeaderTimeout),
 		// Set this value so that the underlying transport round-tripper
 		// doesn't try to auto decode the body of objects with
 		// content-encoding set to `gzip`.
