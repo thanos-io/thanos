@@ -16,16 +16,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/mozillazg/go-cos"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
 	yaml "gopkg.in/yaml.v2"
-)
-
-const (
-	opObjectsList  = "ListBucket"
-	opObjectInsert = "PutObject"
-	opObjectGet    = "GetObject"
-	opObjectHead   = "HeadObject"
-	opObjectDelete = "DeleteObject"
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
@@ -59,7 +50,7 @@ func Validate(conf cosConfig) error {
 	return nil
 }
 
-func NewBucket(logger log.Logger, conf []byte, _ prometheus.Registerer, component string) (*Bucket, error) {
+func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -340,7 +331,7 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 			return nil, nil, err
 		}
 
-		b, err := NewBucket(log.NewNopLogger(), bc, nil, "thanos-e2e-test")
+		b, err := NewBucket(log.NewNopLogger(), bc, "thanos-e2e-test")
 		if err != nil {
 			return nil, nil, err
 		}
@@ -368,7 +359,7 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 		return nil, nil, err
 	}
 
-	b, err := NewBucket(log.NewNopLogger(), bc, nil, "thanos-e2e-test")
+	b, err := NewBucket(log.NewNopLogger(), bc, "thanos-e2e-test")
 	if err != nil {
 		return nil, nil, err
 	}
