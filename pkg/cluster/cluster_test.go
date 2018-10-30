@@ -12,7 +12,7 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
-	"github.com/hashicorp/go-sockaddr"
+	sockaddr "github.com/hashicorp/go-sockaddr"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"

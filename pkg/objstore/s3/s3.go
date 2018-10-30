@@ -18,7 +18,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/minio/minio-go"
+	minio "github.com/minio/minio-go"
 	"github.com/minio/minio-go/pkg/credentials"
 	"github.com/minio/minio-go/pkg/encrypt"
 	"github.com/pkg/errors"

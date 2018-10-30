@@ -32,7 +32,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
@@ -141,7 +141,7 @@ func NewAPI(
 		instantQueryDuration:   instantQueryDuration,
 		rangeQueryDuration:     rangeQueryDuration,
 		enableAutodownsampling: enableAutodownsampling,
-		now:                    time.Now,
+		now: time.Now,
 	}
 }
 
