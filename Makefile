@@ -19,9 +19,6 @@ DEP_FINISHED      ?= .dep-finished
 ERRCHECK          ?= $(BIN_DIR)/errcheck
 EMBEDMD           ?= $(BIN_DIR)/embedmd
 
-DEP               ?= $(BIN_DIR)/dep-$(DEP_VERSION)
-
-DEP_VERSION             ?=45be32ba4708aad5e2aa8c86f9432c4c4c1f8da2
 # TODO(bplotka): Add more recent version after https://github.com/prometheus/prometheus/issues/4551 is fixed.
 SUPPORTED_PROM_VERSIONS ?=v2.0.0 v2.2.1
 ALERTMANAGER_VERSION    ?=v0.15.2
