@@ -15,7 +15,6 @@ TMP_GOPATH        ?= /tmp/thanos-go
 BIN_DIR           ?= $(FIRST_GOPATH)/bin
 GOIMPORTS         ?= $(BIN_DIR)/goimports
 PROMU             ?= $(BIN_DIR)/promu
-DEP_FINISHED      ?= .dep-finished
 ERRCHECK          ?= $(BIN_DIR)/errcheck
 EMBEDMD           ?= $(BIN_DIR)/embedmd
 
@@ -161,12 +160,6 @@ $(GOIMPORTS):
 $(PROMU):
 	@echo ">> fetching promu"
 	GOOS= GOARCH= go get -u github.com/prometheus/promu
-
-$(DEP):
-	$(call fetch_go_bin_version,github.com/golang/dep/cmd/dep,$(DEP_VERSION))
-
-$(DEP_FINISHED):
-	@touch $(DEP_FINISHED)
 
 $(ERRCHECK):
 	@echo ">> fetching errcheck"
