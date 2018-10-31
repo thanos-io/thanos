@@ -33,13 +33,13 @@ type Bucket struct {
 type cosConfig struct {
 	Bucket    string `yaml:"bucket"`
 	Region    string `yaml:"region"`
-	AppId     string `yaml:"appid"`
+	AppId     string `yaml:"app_id"`
 	SecretKey string `yaml:"secret_key"`
 	SecretId  string `yaml:"secret_id"`
 }
 
 // Validate checks to see if mandatory cos config options are set.
-func Validate(conf cosConfig) error {
+func (conf *cosConfig) validate() error {
 	if conf.Bucket == "" ||
 		conf.AppId == "" ||
 		conf.Region == "" ||
@@ -59,7 +59,7 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 	if err := yaml.Unmarshal(conf, &config); err != nil {
 		return nil, errors.Wrap(err, "parsing cos configuration")
 	}
-	if err := Validate(config); err != nil {
+	if err := config.validate(); err != nil {
 		return nil, errors.Wrap(err, "validate cos configuration")
 	}
 
@@ -300,7 +300,7 @@ func objectLength(src io.Reader) (io.Reader, int, error) {
 func configFromEnv() cosConfig {
 	c := cosConfig{
 		Bucket:    os.Getenv("COS_BUCKET"),
-		AppId:     os.Getenv("COS_APPID"),
+		AppId:     os.Getenv("COS_APP_ID"),
 		Region:    os.Getenv("COS_REGION"),
 		SecretId:  os.Getenv("COS_SECRET_ID"),
 		SecretKey: os.Getenv("COS_SECRET_KEY"),

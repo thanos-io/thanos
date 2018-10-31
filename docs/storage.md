@@ -218,7 +218,7 @@ type: COS
 config:
     bucket: <name of bucket>
     region: <the region information in domain name>
-    appid: <unique resource ID in user dimension owned by a developer>
+    app_id: <unique resource ID in user dimension owned by a developer>
     secret_key: <the project identity key owned by a developer>
     secret_id: <the project identity ID owned by a developer>
 ```
