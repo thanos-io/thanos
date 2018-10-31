@@ -300,6 +300,14 @@
   version = "v0.3.0"
 
 [[projects]]
+  digest = "0:"
+  name = "github.com/mattn/go-runewidth"
+  packages = ["."]
+  pruneopts = ""
+  revision = "ce7b0b5c7b45a81508558cd1dba6bb1e4ddb51bb"
+  version = "v0.0.3"
+
+[[projects]]
   digest = "1:49a8b01a6cd6558d504b65608214ca40a78000e1b343ed0da5c6a9ccd83d6d30"
   name = "github.com/matttproud/golang_protobuf_extensions"
   packages = ["pbutil"]
@@ -361,6 +369,14 @@
   pruneopts = ""
   revision = "d311cb43c92434ec4072dfbbda3400741d0a6337"
   version = "v0.3.0"
+
+[[projects]]
+  digest = "0:"
+  name = "github.com/olekukonko/tablewriter"
+  packages = ["."]
+  pruneopts = ""
+  revision = "e6d60cf7ba1f42d86d54cdf5508611c4aafb3970"
+  version = "v0.0.1"
 
 [[projects]]
   digest = "1:171ac7b583c9e4f28dfd3c310fdef0802a9db6afa066ab71e2134ff2cfb646d7"
@@ -478,6 +494,14 @@
   revision = "bd832fc8274e8fe63999ac749daaaff9d881241f"
 
 [[projects]]
+  digest = "0:"
+  name = "github.com/sbueringer/thanos-inspect"
+  packages = ["pkg/table"]
+  pruneopts = ""
+  revision = "f0fe6b03c1b12880122bf8bb45e722cd6961e1b2"
+  version = "v0.0.4"
+
+[[projects]]
   branch = "master"
   digest = "1:6ee36f2cea425916d81fdaaf983469fc18f91b3cf090cfe90fa0a9d85b8bfab7"
   name = "github.com/sean-/seed"
@@ -589,17 +613,25 @@
   revision = "ebe1bf3edb3325c393447059974de898d5133eb8"
 
 [[projects]]
-  digest = "1:af9bfca4298ef7502c52b1459df274eed401a4f5498b900e9a92d28d3d87ac5a"
+  digest = "0:"
   name = "golang.org/x/text"
   packages = [
     "collate",
     "collate/build",
+    "feature/plural",
+    "internal",
+    "internal/catmsg",
     "internal/colltab",
+    "internal/format",
     "internal/gen",
+    "internal/number",
+    "internal/stringset",
     "internal/tag",
     "internal/triegen",
     "internal/ucd",
     "language",
+    "message",
+    "message/catalog",
     "secure/bidirule",
     "transform",
     "unicode/bidi",
@@ -781,8 +813,11 @@
     "github.com/prometheus/tsdb/fileutil",
     "github.com/prometheus/tsdb/index",
     "github.com/prometheus/tsdb/labels",
+    "github.com/sbueringer/thanos-inspect/pkg/table",
     "golang.org/x/net/context",
     "golang.org/x/sync/errgroup",
+    "golang.org/x/text/language",
+    "golang.org/x/text/message",
     "google.golang.org/api/iterator",
     "google.golang.org/api/option",
     "google.golang.org/grpc",

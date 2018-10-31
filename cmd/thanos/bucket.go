@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"text/template"
 	"time"
 
@@ -19,7 +20,10 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"gopkg.in/alecthomas/kingpin.v2"
+	"github.com/sbueringer/thanos-inspect/pkg/table"
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 var (
@@ -213,4 +217,118 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 			return printBlock(id)
 		})
 	}
+
+	inspect := cmd.Command("inspect", "inspect all blocks in the bucket")
+	replica := inspect.Flag("replica ", "Filter by replica.").
+		Default("").String()
+	sortBy := inspect.Flag("sort-by", "Sort by columns.").
+		Default("FROM,UNTIL").String()
+
+	m[name+" inspect"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
+		bucketConfig, err := objStoreConfig.Content()
+		if err != nil {
+			return err
+		}
+
+		bkt, err := client.NewBucket(logger, bucketConfig, reg, name)
+		if err != nil {
+			return err
+		}
+
+		// Dummy actor to immediately kill the group after the run function returns.
+		g.Add(func() error { return nil }, func(error) {})
+
+		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		// Getting Metas
+		var blockMetas []*block.Meta
+		err = bkt.Iter(ctx, "", func(name string) error {
+			id, ok := block.IsBlockDir(name)
+			if !ok {
+				return nil
+			}
+
+			m, err := block.DownloadMeta(ctx, logger, bkt, id)
+			if err != nil {
+				return err
+			}
+
+			blockMetas = append(blockMetas, &m)
+
+			return nil
+		})
+
+		if err != nil {
+			return err
+		}
+
+		return printTable(blockMetas, replica, sortBy)
+	}
+}
+
+func printTable(blockMetas []*block.Meta, replica *string, sortBy *string) error {
+	header := []string{"ULID", "FROM", "UNTIL", "RANGE", "UNTIL-COMP", "~SIZE", "#SERIES", "#SAMPLES", "#CHUNKS", "COMP-LEVEL", "COMP-FAILED", "REPLICA", "RESOLUTION", "SOURCE"}
+
+	var lines [][]string
+	p := message.NewPrinter(language.English)
+
+	for _, blockMeta := range blockMetas {
+		if *replica != "" && *replica != blockMeta.Thanos.Labels["replica"] {
+			continue
+		}
+
+		var line []string
+		line = append(line, blockMeta.ULID.String())
+		line = append(line, time.Unix(blockMeta.MinTime/1000, 0).Format("02-01-2006 15:04:05"))
+		line = append(line, time.Unix(blockMeta.MaxTime/1000, 0).Format("02-01-2006 15:04:05"))
+		timeRange := time.Duration((blockMeta.MaxTime - blockMeta.MinTime) * 1000 * 1000)
+		line = append(line, timeRange.String())
+		untilComp := "-"
+		if blockMeta.Thanos.Downsample.Resolution == 0 { // data currently raw, downsample if range >= 40 hours
+			untilComp = (time.Duration(40*60*60*1000*time.Millisecond) - timeRange).String()
+		}
+		if blockMeta.Thanos.Downsample.Resolution == 5*60*1000 { // data currently 5m resolution, downsample if range >= 10 days
+			untilComp = (time.Duration(10*24*60*60*1000*time.Millisecond) - timeRange).String()
+		}
+		line = append(line, untilComp)
+		line = append(line, p.Sprintf("%0.2fMiB", (float64(blockMeta.Stats.NumSamples)*1.07)/(1024*1024)))
+		line = append(line, p.Sprintf("%d", blockMeta.Stats.NumSeries))
+		line = append(line, p.Sprintf("%d", blockMeta.Stats.NumSamples))
+		line = append(line, p.Sprintf("%d", blockMeta.Stats.NumChunks))
+		line = append(line, p.Sprintf("%d", blockMeta.Compaction.Level))
+		line = append(line, p.Sprintf("%t", blockMeta.Compaction.Failed))
+		line = append(line, blockMeta.Thanos.Labels["replica"])
+		line = append(line, time.Duration(blockMeta.Thanos.Downsample.Resolution*1000000).String())
+		line = append(line, string(blockMeta.Thanos.Source))
+
+		lines = append(lines, line)
+	}
+
+	var sortByColNum []int
+	for _, col := range strings.Split(*sortBy, ",") {
+		index := getIndex(header, col)
+		if index == -1 {
+			return fmt.Errorf("column %s not found", col)
+		}
+		sortByColNum = append(sortByColNum, index)
+	}
+
+	output, err := table.ConvertToTable(table.Table{Header: header, Lines: lines, SortIndices: sortByColNum, Output: "markdown"})
+	if err != nil {
+		return err
+	}
+	fmt.Printf(output)
+	return nil
+}
+
+func getIndex(cols []string, s string) int {
+	for i, col := range cols {
+		if col == s {
+			return i
+		}
+	}
+	return -1
 }
