@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
@@ -102,7 +103,9 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 		},
 	}
 
-	if _, err = b.client.Object.Put(ctx, name, reader, opt); err != nil {
+	// The reason wrapping the reader as a nop closer is to avoid to close it after uploading in COS client.
+	// We should handle and close it ourselves.
+	if _, err = b.client.Object.Put(ctx, name, ioutil.NopCloser(reader), opt); err != nil {
 		return errors.Wrap(err, "upload cos object")
 	}
 	return nil
