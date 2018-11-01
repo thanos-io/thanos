@@ -367,7 +367,7 @@ func runQuery(
 				addresses := append(fileSDCache.Addresses(), storeAddrs...)
 				if err := dnsProvider.Resolve(ctx, addresses); err != nil {
 					// Failure to resolve could be caused by a lookup timeout. We shouldn't fail because of that, so just log.
-					level.Error(logger).Log("msg", fmt.Sprintf("failed to resolve addresses in query: %v", err.Error()))
+					level.Error(logger).Log("msg", "failed to resolve addresses for storeAPIs", "err", err)
 					storeAddrResolutionErrors.Inc()
 				}
 				return nil

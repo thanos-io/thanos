@@ -30,18 +30,14 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string) error {
 
 	var result []string
 	for _, addr := range addrs {
-		var (
-			name          string
-			qtype         string
-			nameQtype     []string
-			resolvedHosts []string
-		)
-		if nameQtype = strings.SplitN(addr, "+", 2); len(nameQtype) != 2 {
+		var resolvedHosts []string
+		qtypeAndName := strings.SplitN(addr, "+", 2)
+		if len(qtypeAndName) != 2 {
 			// No lookup specified. Add to results and continue to the next address.
 			result = append(result, addr)
 			continue
 		}
-		name, qtype = nameQtype[1], nameQtype[0]
+		qtype, name := qtypeAndName[0], qtypeAndName[1]
 		resolvedHosts, err := p.resolver.Resolve(ctx, name, qtype)
 		if err != nil {
 			// The DNS resolution failed. Exit without modifying the old records.

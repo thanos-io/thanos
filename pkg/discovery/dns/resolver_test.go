@@ -65,10 +65,22 @@ var (
 
 	dnsSDTests = []DNSSDTest{
 		{
-			"single ip from dns lookup of host:port",
+			"single ip from dns lookup of host port",
 			dnsHostNoPort + ":" + strconv.Itoa(port),
 			"dns",
 			[]string{ip + ":" + strconv.Itoa(port)},
+			nil,
+			&mockHostnameResolver{
+				resultIPs: map[string][]net.IPAddr{
+					dnsHostNoPort: {net.IPAddr{IP: net.ParseIP(ip)}},
+				},
+			},
+		},
+		{
+			"single ip from dns lookup of host port with scheme",
+			"http://" + dnsHostNoPort + ":" + strconv.Itoa(port),
+			"dns",
+			[]string{"http://" + ip + ":" + strconv.Itoa(port)},
 			nil,
 			&mockHostnameResolver{
 				resultIPs: map[string][]net.IPAddr{

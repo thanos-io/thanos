@@ -5,6 +5,8 @@ import (
 	"net"
 	"strconv"
 
+	"net/url"
+
 	"github.com/pkg/errors"
 )
 
@@ -35,12 +37,25 @@ func NewResolver(resolver *net.Resolver) Resolver {
 }
 
 func (s *dnsSD) Resolve(ctx context.Context, name string, qtype string) ([]string, error) {
-	var res []string
+	var (
+		res      []string
+		scheme   string
+		hostPort = name
+	)
+
+	u, err := url.Parse(name)
+	// If hostname is provided without a scheme or a // prefix, url.Parse assumes the hostname is the scheme and leaves
+	// the Host field empty.
+	if u.Host != "" {
+		hostPort = u.Host
+		scheme = u.Scheme
+	}
+
 	// Split the host and port if present.
-	host, port, err := net.SplitHostPort(name)
+	host, port, err := net.SplitHostPort(hostPort)
 	if err != nil {
 		// The host could be missing a port.
-		host, port = name, ""
+		host, port = hostPort, ""
 	}
 
 	switch qtype {
@@ -53,7 +68,7 @@ func (s *dnsSD) Resolve(ctx context.Context, name string, qtype string) ([]strin
 			return nil, errors.Wrapf(err, "lookup IP addresses %q", host)
 		}
 		for _, ip := range ips {
-			res = append(res, net.JoinHostPort(ip.String(), port))
+			res = append(res, appendScheme(scheme, net.JoinHostPort(ip.String(), port)))
 		}
 	case "dnssrv":
 		_, recs, err := s.resolver.LookupSRV(ctx, "", "", host)
@@ -65,11 +80,18 @@ func (s *dnsSD) Resolve(ctx context.Context, name string, qtype string) ([]strin
 			if port == "" {
 				port = strconv.Itoa(int(rec.Port))
 			}
-			res = append(res, net.JoinHostPort(rec.Target, port))
+			res = append(res, appendScheme(scheme, net.JoinHostPort(rec.Target, port)))
 		}
 	default:
 		return nil, errors.Errorf("invalid lookup scheme %q", qtype)
 	}
 
 	return res, nil
+}
+
+func appendScheme(scheme, host string) string {
+	if scheme == "" {
+		return host
+	}
+	return scheme + "://" + host
 }
