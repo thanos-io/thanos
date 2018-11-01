@@ -22,11 +22,47 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	// TODO(bwplotka): Change default version to something more recent after https://github.com/prometheus/prometheus/issues/4551 is fixed.
+	defaultPrometheusVersion   = "v2.2.1"
+	defaultAlertmanagerVersion = "v0.15.2"
+	defaultMinioVersion        = "RELEASE.2018-10-06T00-15-16Z"
+
+	promBinEnvVar         = "THANOS_TEST_PROMETHEUS_PATH"
+	alertmanagerBinEnvVar = "THANOS_TEST_ALERTMANAGER_PATH"
+	minioBinEnvVar        = "THANOS_TEST_MINIO_PATH"
+)
+
+func PrometheusBinary() string {
+	b := os.Getenv(promBinEnvVar)
+	if b == "" {
+		return fmt.Sprintf("prometheus-%s", defaultPrometheusVersion)
+	}
+	return b
+}
+
+func AlertmanagerBinary() string {
+	b := os.Getenv(alertmanagerBinEnvVar)
+	if b == "" {
+		return fmt.Sprintf("alertmanager-%s", defaultAlertmanagerVersion)
+	}
+	return b
+}
+
+func MinioBinary() string {
+	b := os.Getenv(minioBinEnvVar)
+	if b == "" {
+		return fmt.Sprintf("minio-%s", defaultMinioVersion)
+	}
+	return b
+}
+
 // Prometheus represents a test instance for integration testing.
 // It can be populated with data before being started.
 type Prometheus struct {
-	dir string
-	db  *tsdb.DB
+	dir    string
+	db     *tsdb.DB
+	prefix string
 
 	running bool
 	cmd     *exec.Cmd
@@ -44,8 +80,13 @@ func NewTSDB() (*tsdb.DB, error) {
 	})
 }
 
-// NewPrometheus creates a new test Prometheus instance that will listen on address.
+// NewPrometheus creates a new test Prometheus instance that will listen on local address.
 func NewPrometheus() (*Prometheus, error) {
+	return NewPrometheusOnPath("")
+}
+
+// NewPrometheus creates a new test Prometheus instance that will listen on local address and given prefix path.
+func NewPrometheusOnPath(prefix string) (*Prometheus, error) {
 	db, err := NewTSDB()
 	if err != nil {
 		return nil, err
@@ -58,9 +99,10 @@ func NewPrometheus() (*Prometheus, error) {
 	}
 
 	return &Prometheus{
-		dir:  db.Dir(),
-		db:   db,
-		addr: "<prometheus-not-started>",
+		dir:    db.Dir(),
+		db:     db,
+		prefix: prefix,
+		addr:   "<prometheus-not-started>",
 	}, nil
 }
 
@@ -79,9 +121,10 @@ func (p *Prometheus) Start() error {
 
 	p.addr = fmt.Sprintf("localhost:%d", port)
 	p.cmd = exec.Command(
-		"prometheus",
+		PrometheusBinary(),
 		"--storage.tsdb.path="+p.db.Dir(),
 		"--web.listen-address="+p.addr,
+		"--web.route-prefix="+p.prefix,
 		"--config.file="+filepath.Join(p.db.Dir(), "prometheus.yml"),
 	)
 	go func() {
@@ -97,7 +140,7 @@ func (p *Prometheus) Start() error {
 
 // Addr gets correct address after Start method.
 func (p *Prometheus) Addr() string {
-	return p.addr
+	return p.addr + p.prefix
 }
 
 // SetConfig updates the contents of the config file.

@@ -24,18 +24,22 @@ import (
 	"github.com/improbable-eng/thanos/pkg/alert"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/discovery/cache"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
-	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/tracing"
+	"github.com/improbable-eng/thanos/pkg/ui"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/discovery/file"
+	"github.com/prometheus/prometheus/discovery/targetgroup"
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
@@ -50,7 +54,7 @@ import (
 func registerRule(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "ruler evaluating Prometheus rules against given Query nodes, exposing Store API and storing old blocks in bucket")
 
-	grpcBindAddr, httpBindAddr, newPeerFn := regCommonServerFlags(cmd)
+	grpcBindAddr, httpBindAddr, cert, key, clientCA, newPeerFn := regCommonServerFlags(cmd)
 
 	labelStrs := cmd.Flag("label", "Labels to be applied to all generated metrics (repeated).").
 		PlaceHolder("<name>=\"<value>\"").Strings()
@@ -60,22 +64,28 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	ruleFiles := cmd.Flag("rule-file", "Rule files that should be used by rule manager. Can be in glob format (repeated).").
 		Default("rules/").Strings()
 
-	evalInterval := cmd.Flag("eval-interval", "The default evaluation interval to use.").
-		Default("30s").Duration()
-	tsdbBlockDuration := cmd.Flag("tsdb.block-duration", "Block duration for TSDB block.").
-		Default("2h").Duration()
-	tsdbRetention := cmd.Flag("tsdb.retention", "Block retention time on local disk.").
-		Default("48h").Duration()
+	evalInterval := modelDuration(cmd.Flag("eval-interval", "The default evaluation interval to use.").
+		Default("30s"))
+	tsdbBlockDuration := modelDuration(cmd.Flag("tsdb.block-duration", "Block duration for TSDB block.").
+		Default("2h"))
+	tsdbRetention := modelDuration(cmd.Flag("tsdb.retention", "Block retention time on local disk.").
+		Default("48h"))
 
 	alertmgrs := cmd.Flag("alertmanagers.url", "Alertmanager URLs to push firing alerts to. The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Alertmanager IPs through respective DNS lookups. The port defaults to 9093 or the SRV record's value. The URL path is used as a prefix for the regular Alertmanager API path.").
 		Strings()
 
-	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty, ruler won't store any block inside Google Cloud Storage.").
-		PlaceHolder("<bucket>").String()
-
 	alertQueryURL := cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field").String()
 
-	s3Config := s3.RegisterS3Params(cmd)
+	objStoreConfig := regCommonObjStoreFlags(cmd, "")
+
+	queries := cmd.Flag("query", "Addresses of statically configured query API servers (repeatable).").
+		PlaceHolder("<query>").Strings()
+
+	fileSDFiles := cmd.Flag("query.sd-files", "Path to file that contain addresses of query peers. The path can be a glob pattern (repeatable).").
+		PlaceHolder("<path>").Strings()
+
+	fileSDInterval := modelDuration(cmd.Flag("query.sd-interval", "Refresh interval to re-read file SD files. (used as a fallback)").
+		Default("5m"))
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
@@ -92,13 +102,53 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 		}
 
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration: model.Duration(*tsdbBlockDuration),
-			MaxBlockDuration: model.Duration(*tsdbBlockDuration),
-			Retention:        model.Duration(*tsdbRetention),
+			MinBlockDuration: *tsdbBlockDuration,
+			MaxBlockDuration: *tsdbBlockDuration,
+			Retention:        *tsdbRetention,
 			NoLockfile:       true,
 			WALFlushInterval: 30 * time.Second,
 		}
-		return runRule(g, logger, reg, tracer, lset, *alertmgrs, *grpcBindAddr, *httpBindAddr, *evalInterval, *dataDir, *ruleFiles, peer, *gcsBucket, s3Config, tsdbOpts, name, alertQueryURL)
+
+		lookupQueries := map[string]struct{}{}
+		for _, q := range *queries {
+			if _, ok := lookupQueries[q]; ok {
+				return errors.Errorf("Address %s is duplicated for --query flag.", q)
+			}
+
+			lookupQueries[q] = struct{}{}
+		}
+
+		var fileSD *file.Discovery
+		if len(*fileSDFiles) > 0 {
+			conf := &file.SDConfig{
+				Files:           *fileSDFiles,
+				RefreshInterval: *fileSDInterval,
+			}
+			fileSD = file.NewDiscovery(conf, logger)
+		}
+
+		return runRule(g,
+			logger,
+			reg,
+			tracer,
+			lset,
+			*alertmgrs,
+			*grpcBindAddr,
+			*cert,
+			*key,
+			*clientCA,
+			*httpBindAddr,
+			time.Duration(*evalInterval),
+			*dataDir,
+			*ruleFiles,
+			peer,
+			objStoreConfig,
+			tsdbOpts,
+			name,
+			alertQueryURL,
+			*queries,
+			fileSD,
+		)
 	}
 }
 
@@ -112,17 +162,43 @@ func runRule(
 	lset labels.Labels,
 	alertmgrURLs []string,
 	grpcBindAddr string,
+	cert string,
+	key string,
+	clientCA string,
 	httpBindAddr string,
 	evalInterval time.Duration,
 	dataDir string,
 	ruleFiles []string,
 	peer *cluster.Peer,
-	gcsBucket string,
-	s3Config *s3.Config,
+	objStoreConfig *pathOrContent,
 	tsdbOpts *tsdb.Options,
 	component string,
 	alertQueryURL *url.URL,
+	queryAddrs []string,
+	fileSD *file.Discovery,
 ) error {
+	configSuccess := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_config_last_reload_successful",
+		Help: "Whether the last configuration reload attempt was successful.",
+	})
+	configSuccessTime := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_config_last_reload_success_timestamp_seconds",
+		Help: "Timestamp of the last successful configuration reload.",
+	})
+	duplicatedQuery := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_rule_duplicated_query_address",
+		Help: "The number of times a duplicated query addresses is detected from the different configs in rule",
+	})
+	reg.MustRegister(configSuccess)
+	reg.MustRegister(configSuccessTime)
+	reg.MustRegister(duplicatedQuery)
+
+	for _, addr := range queryAddrs {
+		if addr == "" {
+			return errors.New("static querier address cannot be empty")
+		}
+	}
+
 	db, err := tsdb.Open(dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts)
 	if err != nil {
 		return errors.Wrap(err, "open TSDB")
@@ -137,9 +213,17 @@ func runRule(
 		})
 	}
 
+	// FileSD query addresses
+	fileSDCache := cache.New()
+
 	// Hit the HTTP query API of query peers in randomized order until we get a result
 	// back or the context get canceled.
 	queryFn := func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {
+		var addrs []string
+		// Add addresses from static flag
+		addrs = append(addrs, queryAddrs...)
+
+		// Add addresses from gossip
 		peers := peer.PeerStates(cluster.PeerTypeQuery)
 		var ids []string
 		for id := range peers {
@@ -148,9 +232,19 @@ func runRule(
 		sort.Slice(ids, func(i int, j int) bool {
 			return strings.Compare(ids[i], ids[j]) < 0
 		})
+		for _, id := range ids {
+			addrs = append(addrs, peers[id].QueryAPIAddr)
+		}
 
-		for _, i := range rand.Perm(len(ids)) {
-			vec, err := queryPrometheusInstant(ctx, logger, peers[ids[i]].QueryAPIAddr, q, t)
+		// Add addresses from file sd
+		for _, addr := range fileSDCache.Addresses() {
+			addrs = append(addrs, addr)
+		}
+
+		removeDuplicateQueryAddrs(logger, duplicatedQuery, addrs)
+
+		for _, i := range rand.Perm(len(addrs)) {
+			vec, err := queryPrometheusInstant(ctx, logger, addrs[i], q, t)
 			if err != nil {
 				return nil, err
 			}
@@ -197,6 +291,7 @@ func runRule(
 			NotifyFunc:  notify,
 			Logger:      log.With(logger, "component", "rules"),
 			Appendable:  tsdb.Adapter(db, 0),
+			Registerer:  reg,
 			ExternalURL: nil,
 		})
 		g.Add(func() error {
@@ -269,6 +364,39 @@ func runRule(
 			cancel()
 		})
 	}
+	// Run File Service Discovery and update the query addresses when the files are modified
+	if fileSD != nil {
+		var fileSDUpdates chan []*targetgroup.Group
+		ctxRun, cancelRun := context.WithCancel(context.Background())
+
+		fileSDUpdates = make(chan []*targetgroup.Group)
+
+		g.Add(func() error {
+			fileSD.Run(ctxRun, fileSDUpdates)
+			return nil
+		}, func(error) {
+			cancelRun()
+		})
+
+		ctxUpdate, cancelUpdate := context.WithCancel(context.Background())
+		g.Add(func() error {
+			for {
+				select {
+				case update := <-fileSDUpdates:
+					// Discoverers sometimes send nil updates so need to check for it to avoid panics
+					if update == nil {
+						continue
+					}
+					fileSDCache.Update(update)
+				case <-ctxUpdate.Done():
+					return nil
+				}
+			}
+		}, func(error) {
+			cancelUpdate()
+			close(fileSDUpdates)
+		})
+	}
 
 	// Handle reload and termination interrupts.
 	reload := make(chan struct{}, 1)
@@ -298,8 +426,13 @@ func runRule(
 
 				level.Info(logger).Log("msg", "reload rule files", "numFiles", len(files))
 				if err := mgr.Update(evalInterval, files); err != nil {
+					configSuccess.Set(0)
 					level.Error(logger).Log("msg", "reloading rules failed", "err", err)
+					continue
 				}
+
+				configSuccess.Set(1)
+				configSuccessTime.Set(float64(time.Now().UnixNano()) / 1e9)
 			}
 		}, func(error) {
 			close(cancel)
@@ -327,7 +460,7 @@ func runRule(
 		})
 	}
 
-	// Start HTTP and gRPC servers.
+	// Start gRPC server.
 	{
 		l, err := net.Listen("tcp", grpcBindAddr)
 		if err != nil {
@@ -337,7 +470,11 @@ func runRule(
 
 		store := store.NewTSDBStore(logger, reg, db, lset)
 
-		s := grpc.NewServer(defaultGRPCServerOpts(logger, reg, tracer)...)
+		opts, err := defaultGRPCServerOpts(logger, reg, tracer, cert, key, clientCA)
+		if err != nil {
+			return errors.Wrap(err, "setup gRPC options")
+		}
+		s := grpc.NewServer(opts...)
 		storepb.RegisterStoreServer(s, store)
 
 		g.Add(func() error {
@@ -347,21 +484,48 @@ func runRule(
 			runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
 		})
 	}
-	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
-		return err
+	// Start UI & metrics HTTP server.
+	{
+		router := route.New()
+		router.Post("/-/reload", func(w http.ResponseWriter, r *http.Request) {
+			reload <- struct{}{}
+		})
+
+		ui.NewRuleUI(logger, mgr, alertQueryURL.String()).Register(router)
+
+		mux := http.NewServeMux()
+		registerMetrics(mux, reg)
+		registerProfile(mux)
+		mux.Handle("/", router)
+
+		l, err := net.Listen("tcp", httpBindAddr)
+		if err != nil {
+			return errors.Wrapf(err, "listen HTTP on address %s", httpBindAddr)
+		}
+
+		g.Add(func() error {
+			level.Info(logger).Log("msg", "Listening for ui requests", "address", httpBindAddr)
+			return errors.Wrap(http.Serve(l, mux), "serve query")
+		}, func(error) {
+			runutil.CloseWithLogOnErr(logger, l, "query and metric listener")
+		})
 	}
 
 	var uploads = true
 
+	bucketConfig, err := objStoreConfig.Content()
+	if err != nil {
+		return err
+	}
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, reg, component)
+	bkt, err := client.NewBucket(logger, bucketConfig, reg, component)
 	if err != nil && err != client.ErrNotFound {
 		return err
 	}
 
 	if err == client.ErrNotFound {
-		level.Info(logger).Log("msg", "No GCS or S3 bucket was configured, uploads will be disabled")
+		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
 		uploads = false
 	}
 
@@ -580,4 +744,21 @@ func labelsTSDBToProm(lset labels.Labels) (res promlabels.Labels) {
 		})
 	}
 	return res
+}
+
+func removeDuplicateQueryAddrs(logger log.Logger, duplicatedQueriers prometheus.Counter, addrs []string) []string {
+	set := make(map[string]struct{})
+	for _, addr := range addrs {
+		if _, ok := set[addr]; ok {
+			level.Warn(logger).Log("msg", "Duplicate query address is provided - %v", addr)
+			duplicatedQueriers.Inc()
+		}
+		set[addr] = struct{}{}
+	}
+
+	deduplicated := make([]string, 0, len(set))
+	for key := range set {
+		deduplicated = append(deduplicated, key)
+	}
+	return deduplicated
 }

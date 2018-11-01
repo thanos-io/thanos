@@ -10,7 +10,6 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
-	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
@@ -24,23 +23,23 @@ import (
 
 // registerStore registers a store command.
 func registerStore(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "store node giving access to blocks in a GCS bucket")
+	cmd := app.Command(name, "store node giving access to blocks in a bucket provider. Now supported GCS, S3 and Azure.")
 
-	grpcBindAddr, httpBindAddr, newPeerFn := regCommonServerFlags(cmd)
+	grpcBindAddr, httpBindAddr, cert, key, clientCA, newPeerFn := regCommonServerFlags(cmd)
 
-	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").
+	dataDir := cmd.Flag("data-dir", "Data directory in which to cache remote blocks.").
 		Default("./data").String()
-
-	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty sidecar won't store any block inside Google Cloud Storage.").
-		PlaceHolder("<bucket>").String()
-
-	s3Config := s3.RegisterS3Params(cmd)
 
 	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the index cache.").
 		Default("250MB").Bytes()
 
 	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes for chunks.").
 		Default("2GB").Bytes()
+
+	objStoreConfig := regCommonObjStoreFlags(cmd, "")
+
+	syncInterval := cmd.Flag("sync-block-duration", "Repeat interval for syncing the blocks between local and remote view.").
+		Default("3m").Duration()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
 		peer, err := newPeerFn(logger, reg, false, "", false)
@@ -51,16 +50,19 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			logger,
 			reg,
 			tracer,
-			*gcsBucket,
-			s3Config,
+			objStoreConfig,
 			*dataDir,
 			*grpcBindAddr,
+			*cert,
+			*key,
+			*clientCA,
 			*httpBindAddr,
 			peer,
 			uint64(*indexCacheSize),
 			uint64(*chunkPoolSize),
 			name,
 			debugLogging,
+			*syncInterval,
 		)
 	}
 }
@@ -71,21 +73,29 @@ func runStore(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	gcsBucket string,
-	s3Config *s3.Config,
+	objStoreConfig *pathOrContent,
 	dataDir string,
 	grpcBindAddr string,
+	cert string,
+	key string,
+	clientCA string,
 	httpBindAddr string,
 	peer *cluster.Peer,
 	indexCacheSizeBytes uint64,
 	chunkPoolSizeBytes uint64,
 	component string,
 	verbose bool,
+	syncInterval time.Duration,
 ) error {
 	{
-		bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, reg, component)
+		bucketConfig, err := objStoreConfig.Content()
 		if err != nil {
 			return err
+		}
+
+		bkt, err := client.NewBucket(logger, bucketConfig, reg, component)
+		if err != nil {
+			return errors.Wrap(err, "create bucket client")
 		}
 
 		// Ensure we close up everything properly.
@@ -119,7 +129,7 @@ func runStore(
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
-			err := runutil.Repeat(3*time.Minute, ctx.Done(), func() error {
+			err := runutil.Repeat(syncInterval, ctx.Done(), func() error {
 				if err := bs.SyncBlocks(ctx); err != nil {
 					level.Warn(logger).Log("msg", "syncing blocks failed", "err", err)
 				}
@@ -138,7 +148,12 @@ func runStore(
 			return errors.Wrap(err, "listen API address")
 		}
 
-		s := grpc.NewServer(defaultGRPCServerOpts(logger, reg, tracer)...)
+		opts, err := defaultGRPCServerOpts(logger, reg, tracer, cert, key, clientCA)
+		if err != nil {
+			return errors.Wrap(err, "grpc server options")
+		}
+
+		s := grpc.NewServer(opts...)
 		storepb.RegisterStoreServer(s, bs)
 
 		g.Add(func() error {

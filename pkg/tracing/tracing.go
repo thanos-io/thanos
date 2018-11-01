@@ -34,8 +34,8 @@ func tracerFromContext(ctx context.Context) opentracing.Tracer {
 func StartSpan(ctx context.Context, operationName string, opts ...opentracing.StartSpanOption) (opentracing.Span, context.Context) {
 	tracer := tracerFromContext(ctx)
 	if tracer == nil {
-		// No tracing found, use noop one.
-		tracer = &opentracing.NoopTracer{}
+		// No tracing found, return noop span.
+		return opentracing.NoopTracer{}.StartSpan(operationName), ctx
 	}
 
 	var span opentracing.Span

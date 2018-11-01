@@ -18,6 +18,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 )
 
 // Peer is a single peer in a gossip cluster.
@@ -43,7 +44,7 @@ type Peer struct {
 }
 
 const (
-	DefaultRefreshInterval = 60 * time.Second
+	DefaultRefreshInterval = model.Duration(60 * time.Second)
 
 	// Peer's network types. These are used as a predefined peer configurations for a specified network type.
 	LocalNetworkPeerType = "local"

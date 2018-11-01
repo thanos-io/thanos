@@ -30,14 +30,14 @@ ignored = ["github.com/improbable-eng/thanos/benchmark/*"]
 
 [[constraint]]
   name = "github.com/prometheus/client_golang"
-  version = "0.8.0"
+  revision = "e637cec7d9c8990247098639ebc6d43dd34ddd49"
 
 [[constraint]]
   branch = "master"
   name = "github.com/prometheus/common"
 
 [[constraint]]
-  branch = "master"
+  version = "v2.3.2"
   name = "github.com/prometheus/prometheus"
 
 [[override]]
@@ -76,3 +76,6 @@ ignored = ["github.com/improbable-eng/thanos/benchmark/*"]
   name = "github.com/minio/minio-go"
   version = "6.0.1"
 
+[[constraint]]
+  name = "github.com/Azure/azure-storage-blob-go"
+  revision = "197d1c0aea1b9eedbbaee0a1a32bf81e879bde80"

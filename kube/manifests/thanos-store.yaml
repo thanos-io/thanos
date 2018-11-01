@@ -21,14 +21,14 @@ spec:
       containers:
       - name: thanos-store
         # Always use explicit image tags (release or master-<date>-sha) instead of ambigous `latest` or `master`.
-        image: improbable/thanos:v0.1.0-rc.2
+        image: improbable/thanos:v0.1.0
         env:
         - name: GOOGLE_APPLICATION_CREDENTIALS
           value: /creds/gcs-credentials.json
         args:
         - "store"
         - "--log.level=debug"
-        - "--tsdb.path=/var/thanos/store"
+        - "--data-dir=/var/thanos/store"
         - "--cluster.peers=thanos-peers.default.svc.cluster.local:10900"
         # NOTE: This is required to be added in GCS prior startup of this.
         - "--gcs.bucket=<bucket-name>"

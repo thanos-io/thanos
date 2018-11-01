@@ -12,7 +12,6 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
-	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/verifier"
 	"github.com/oklog/run"
@@ -42,34 +41,35 @@ var (
 func registerBucket(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "inspect metric data in an object storage bucket")
 
-	gcsBucket := cmd.Flag("gcs-bucket", "Google Cloud Storage bucket name for stored blocks.").
-		PlaceHolder("<bucket>").String()
-
-	s3Config := s3.RegisterS3Params(cmd)
+	objStoreConfig := regCommonObjStoreFlags(cmd, "")
+	objStoreBackupConfig := regCommonObjStoreFlags(cmd, "-backup")
 
 	// Verify command.
 	verify := cmd.Command("verify", "verify all blocks in the bucket against specified issues")
 	verifyRepair := verify.Flag("repair", "attempt to repair blocks for which issues were detected").
 		Short('r').Default("false").Bool()
-	// NOTE(bplotka): Currently we support backup buckets only in the same project.
-	verifyBackupGCSBucket := cmd.Flag("gcs-backup-bucket", "Google Cloud Storage bucket name to backup blocks on repair operations.").
-		PlaceHolder("<bucket>").String()
-	verifyBackupS3Bucket := cmd.Flag("s3-backup-bucket", "S3 bucket name to backup blocks on repair operations.").
-		PlaceHolder("<bucket>").String()
 	verifyIssues := verify.Flag("issues", fmt.Sprintf("Issues to verify (and optionally repair). Possible values: %v", allIssues())).
 		Short('i').Default(verifier.IndexIssueID, verifier.OverlappedBlocksIssueID).Strings()
 	verifyIDWhitelist := verify.Flag("id-whitelist", "Block IDs to verify (and optionally repair) only. "+
 		"If none is specified, all blocks will be verified. Repeated field").Strings()
 	m[name+" verify"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
-		bkt, err := client.NewBucket(logger, gcsBucket, *s3Config, reg, name)
+		bucketConfig, err := objStoreConfig.Content()
+		if err != nil {
+			return err
+		}
+
+		bkt, err := client.NewBucket(logger, bucketConfig, reg, name)
 		if err != nil {
 			return err
 		}
 		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
-		backupS3Config := *s3Config
-		backupS3Config.Bucket = *verifyBackupS3Bucket
-		backupBkt, err := client.NewBucket(logger, verifyBackupGCSBucket, backupS3Config, reg, name)
+		backupBucketConfig, err := objStoreBackupConfig.Content()
+		if err != nil {
+			return err
+		}
+
+		backupBkt, err := client.NewBucket(logger, backupBucketConfig, reg, name)
 		if err == client.ErrNotFound {
 			if *verifyRepair {
 				return errors.Wrap(err, "repair is specified, so backup client is required")
@@ -129,7 +129,12 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	lsOutput := ls.Flag("output", "Format in which to print each block's information. May be 'json' or custom template.").
 		Short('o').Default("").String()
 	m[name+" ls"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
-		bkt, err := client.NewBucket(logger, gcsBucket, *s3Config, reg, name)
+		bucketConfig, err := objStoreConfig.Content()
+		if err != nil {
+			return err
+		}
+
+		bkt, err := client.NewBucket(logger, bucketConfig, reg, name)
 		if err != nil {
 			return err
 		}
@@ -151,6 +156,23 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 		case "":
 			printBlock = func(id ulid.ULID) error {
 				fmt.Fprintln(os.Stdout, id.String())
+				return nil
+			}
+		case "wide":
+			printBlock = func(id ulid.ULID) error {
+				m, err := block.DownloadMeta(ctx, logger, bkt, id)
+				if err != nil {
+					return err
+				}
+
+				minTime := time.Unix(m.MinTime/1000, 0)
+				maxTime := time.Unix(m.MaxTime/1000, 0)
+
+				if _, err = fmt.Fprintf(os.Stdout, "%s -- %s - %s Diff: %s, Compaction: %d, Downsample: %d, Source: %s\n",
+					m.ULID, minTime.Format("2006-01-02 15:04"), maxTime.Format("2006-01-02 15:04"), maxTime.Sub(minTime),
+					m.Compaction.Level, m.Thanos.Downsample.Resolution, m.Thanos.Source); err != nil {
+					return err
+				}
 				return nil
 			}
 		case "json":

@@ -3,64 +3,72 @@ package gcs
 
 import (
 	"context"
-	"io"
-	"strings"
-
 	"fmt"
+	"io"
 	"math/rand"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/prometheus/client_golang/prometheus"
+	"github.com/pkg/errors"
+	"github.com/prometheus/common/version"
 	"google.golang.org/api/iterator"
-)
-
-const (
-	// Class A operations.
-	opObjectsList  = "objects.list"
-	opObjectInsert = "object.insert"
-
-	// Class B operation.
-	opObjectGet = "object.get"
-
-	// Free operations.
-	opObjectDelete = "object.delete"
+	"google.golang.org/api/option"
+	yaml "gopkg.in/yaml.v2"
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const DirDelim = "/"
 
+// gcsConfig stores the configuration for gcs bucket.
+type gcsConfig struct {
+	Bucket string `yaml:"bucket"`
+}
+
 // Bucket implements the store.Bucket and shipper.Bucket interfaces against GCS.
 type Bucket struct {
-	bkt      *storage.BucketHandle
-	opsTotal *prometheus.CounterVec
+	logger log.Logger
+	bkt    *storage.BucketHandle
+	name   string
 
 	closer io.Closer
 }
 
 // NewBucket returns a new Bucket against the given bucket handle.
-func NewBucket(name string, cl *storage.Client, reg prometheus.Registerer) *Bucket {
+func NewBucket(ctx context.Context, logger log.Logger, conf []byte, component string) (*Bucket, error) {
+	var gc gcsConfig
+	if err := yaml.Unmarshal(conf, &gc); err != nil {
+		return nil, err
+	}
+	if gc.Bucket == "" {
+		return nil, errors.New("missing Google Cloud Storage bucket name for stored blocks")
+	}
+	gcsOptions := option.WithUserAgent(fmt.Sprintf("thanos-%s/%s (%s)", component, version.Version, runtime.Version()))
+	gcsClient, err := storage.NewClient(ctx, gcsOptions)
+	if err != nil {
+		return nil, err
+	}
 	bkt := &Bucket{
-		bkt: cl.Bucket(name),
-		opsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name:        "thanos_objstore_gcs_bucket_operations_total",
-			Help:        "Total number of operations that were executed against a Google Compute Storage bucket.",
-			ConstLabels: prometheus.Labels{"bucket": name},
-		}, []string{"operation"}),
-		closer: cl,
+		logger: logger,
+		bkt:    gcsClient.Bucket(gc.Bucket),
+		closer: gcsClient,
+		name:   gc.Bucket,
 	}
-	if reg != nil {
-		reg.MustRegister()
-	}
-	return bkt
+	return bkt, nil
+}
+
+// Name returns the bucket name for gcs.
+func (b *Bucket) Name() string {
+	return b.name
 }
 
 // Iter calls f for each entry in the given directory. The argument to f is the full
 // object name including the prefix of the inspected directory.
 func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) error {
-	b.opsTotal.WithLabelValues(opObjectsList).Inc()
 	// Ensure the object name actually ends with a dir suffix. Otherwise we'll just iterate the
 	// object itself as one prefix item.
 	if dir != "" {
@@ -91,13 +99,11 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 
 // Get returns a reader for the given object name.
 func (b *Bucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
-	b.opsTotal.WithLabelValues(opObjectGet).Inc()
 	return b.bkt.Object(name).NewReader(ctx)
 }
 
 // GetRange returns a new range reader for the given object name and range.
 func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
-	b.opsTotal.WithLabelValues(opObjectGet).Inc()
 	return b.bkt.Object(name).NewRangeReader(ctx, off, length)
 }
 
@@ -109,8 +115,6 @@ func (b *Bucket) Handle() *storage.BucketHandle {
 
 // Exists checks if the given object exists.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
-	b.opsTotal.WithLabelValues(opObjectGet).Inc()
-
 	if _, err := b.bkt.Object(name).Attrs(ctx); err == nil {
 		return true, nil
 	} else if err != storage.ErrObjectNotExist {
@@ -121,8 +125,6 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 
 // Upload writes the file specified in src to remote GCS location specified as target.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
-	b.opsTotal.WithLabelValues(opObjectInsert).Inc()
-
 	w := b.bkt.Object(name).NewWriter(ctx)
 
 	if _, err := io.Copy(w, r); err != nil {
@@ -133,8 +135,6 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
-	b.opsTotal.WithLabelValues(opObjectDelete).Inc()
-
 	return b.bkt.Object(name).Delete(ctx)
 }
 
@@ -151,27 +151,32 @@ func (b *Bucket) Close() error {
 // In a close function it empties and deletes the bucket.
 func NewTestBucket(t testing.TB, project string) (objstore.Bucket, func(), error) {
 	ctx, cancel := context.WithCancel(context.Background())
-	gcsClient, err := storage.NewClient(ctx)
+	src := rand.NewSource(time.Now().UnixNano())
+	gTestConfig := gcsConfig{
+		Bucket: fmt.Sprintf("test_%s_%x", strings.ToLower(t.Name()), src.Int63()),
+	}
+
+	bc, err := yaml.Marshal(gTestConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	b, err := NewBucket(ctx, log.NewNopLogger(), bc, "thanos-e2e-test")
 	if err != nil {
 		cancel()
 		return nil, nil, err
 	}
-	src := rand.NewSource(time.Now().UnixNano())
-	name := fmt.Sprintf("test_%s_%x", strings.ToLower(t.Name()), src.Int63())
 
-	bkt := gcsClient.Bucket(name)
-	if err = bkt.Create(ctx, project, nil); err != nil {
+	if err = b.bkt.Create(ctx, project, nil); err != nil {
 		cancel()
-		_ = gcsClient.Close()
+		_ = b.Close()
 		return nil, nil, err
 	}
 
-	b := NewBucket(name, gcsClient, nil)
-
-	t.Log("created temporary GCS bucket for GCS tests with name", name, "in project", project)
+	t.Log("created temporary GCS bucket for GCS tests with name", b.name, "in project", project)
 	return b, func() {
 		objstore.EmptyBucket(t, ctx, b)
-		if err := bkt.Delete(ctx); err != nil {
+		if err := b.bkt.Delete(ctx); err != nil {
 			t.Logf("deleting bucket failed: %s", err)
 		}
 		cancel()

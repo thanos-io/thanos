@@ -171,7 +171,7 @@ type Stats struct {
 
 	// OutOfOrderChunks represents number of chunks that are out of order (older time range is after younger one)
 	OutOfOrderChunks int
-	// DuplicatedChunks represents number of exactly the same chunks within same series.
+	// DuplicatedChunks represents number of chunks with same time ranges within same series, potential duplicates.
 	DuplicatedChunks int
 	// OutsideChunks represents number of all chunks that are before or after time range specified in block meta.
 	OutsideChunks int
@@ -294,6 +294,7 @@ func GatherIndexIssueStats(logger log.Logger, fn string, minTime int64, maxTime 
 		ooo := 0
 		// Per chunk in series.
 		for i, c := range chks {
+			// Chunk vs the block ranges.
 			if c.MinTime < minTime || c.MaxTime > maxTime {
 				stats.OutsideChunks++
 				if c.MinTime > maxTime || c.MaxTime < minTime {
@@ -308,20 +309,21 @@ func GatherIndexIssueStats(logger log.Logger, fn string, minTime int64, maxTime 
 			}
 
 			c0 := chks[i-1]
+
+			// Chunk order within block.
 			if c.MinTime > c0.MaxTime {
 				continue
 			}
 
-			// Chunks overlaps or duplicates.
 			if c.MinTime == c0.MinTime && c.MaxTime == c0.MaxTime {
-				ca := crc32.Checksum(c0.Chunk.Bytes(), castagnoli)
-				cb := crc32.Checksum(c.Chunk.Bytes(), castagnoli)
-				if ca == cb {
-					// Duplicate.
-					stats.DuplicatedChunks++
-				}
-				ooo++
+				// TODO(bplotka): Calc and check checksum from chunks itself.
+				// The chunks can overlap 1:1 in time, but does not have same data.
+				// We assume same data for simplicity, but it can be a symptom of error.
+				stats.DuplicatedChunks++
+				continue
 			}
+			// Chunks partly overlaps or out of order.
+			ooo++
 		}
 		if ooo > 0 {
 			stats.OutOfOrderSeries++

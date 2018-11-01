@@ -82,8 +82,8 @@ func newIndexCache(reg prometheus.Registerer, maxBytes uint64) (*indexCache, err
 	}, []string{"item_type"})
 
 	// Initialize eviction metric with 0.
-	evicted.WithLabelValues(cacheTypePostings).Set(0)
-	evicted.WithLabelValues(cacheTypeSeries).Set(0)
+	evicted.WithLabelValues(cacheTypePostings)
+	evicted.WithLabelValues(cacheTypeSeries)
 
 	// Initialize LRU cache with a high size limit since we will manage evictions ourselves
 	// based on stored size.

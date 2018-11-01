@@ -19,9 +19,9 @@ Two or more series that have that are only distinguished by the given replica la
 
 ```
 $ thanos query \
-    --http-address     "0.0.0.0:9090" \
-    --replica-label    "replica" \
-    --cluster.peers    "thanos-cluster.example.org" \
+    --http-address        "0.0.0.0:9090" \
+    --query.replica-label "replica" \
+    --cluster.peers       "thanos-cluster.example.org" \
 ```
 
 ## Deployment
@@ -58,6 +58,14 @@ Flags:
                                  Explicit (external) host:port address to
                                  advertise for gRPC StoreAPI in gossip cluster.
                                  If empty, 'grpc-address' will be used.
+      --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
+                                 disable TLS
+      --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
+                                 disable TLS
+      --grpc-server-tls-client-ca=""  
+                                 TLS CA to verify clients against. If no client
+                                 CA is specified, there is no client
+                                 verification on server side. (tls.NoClientCert)
       --http-address="0.0.0.0:10902"  
                                  Listen host:port for HTTP endpoints.
       --cluster.address="0.0.0.0:10900"  
@@ -82,7 +90,7 @@ Flags:
                                  convergence speeds across larger clusters at
                                  the expense of increased bandwidth usage.
                                  Default is used from a specified network-type.
-      --cluster.refresh-interval=1m0s  
+      --cluster.refresh-interval=1m  
                                  Interval for membership to refresh
                                  cluster.peers state, 0 disables refresh.
       --cluster.secret-key=CLUSTER.SECRET-KEY  
@@ -98,6 +106,16 @@ Flags:
                                  Explicit (external) host:port address to
                                  advertise for HTTP QueryAPI in gossip cluster.
                                  If empty, 'http-address' will be used.
+      --grpc-client-tls-secure   Use TLS when talking to the gRPC server
+      --grpc-client-tls-cert=""  TLS Certificates to use to identify this client
+                                 to the server
+      --grpc-client-tls-key=""   TLS Key for the client's certificate
+      --grpc-client-tls-ca=""    TLS CA Certificates to use to verify gRPC
+                                 servers
+      --grpc-client-server-name=""  
+                                 Server name to verify the hostname on the
+                                 returned gRPC certificates. See
+                                 https://tools.ietf.org/html/rfc4366#section-3.1
       --query.timeout=2m         Maximum time to process query by query node.
       --query.max-concurrent=20  Maximum number of queries processed
                                  concurrently by query node.
@@ -111,6 +129,12 @@ Flags:
                                  info endpoint (repeated).
       --store=<store> ...        Addresses of statically configured store API
                                  servers (repeatable).
+      --store.sd-files=<path> ...  
+                                 Path to files that contain addresses of store
+                                 API servers. The path can be a glob pattern
+                                 (repeatable).
+      --store.sd-interval=5m     Refresh interval to re-read file SD files. It
+                                 is used as a resync fallback.
       --query.auto-downsampling  Enable automatic adjustment (step / 5) to what
                                  source of data should be used in store gateways
                                  if no max_source_resolution param is specified.

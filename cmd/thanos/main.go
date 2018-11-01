@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"net"
 	"net/http"
@@ -32,6 +35,7 @@ import (
 	"github.com/prometheus/common/version"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
@@ -104,6 +108,7 @@ func main() {
 	metrics.MustRegister(
 		version.NewCollector("thanos"),
 		prometheus.NewGoCollector(),
+		prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}),
 	)
 
 	prometheus.DefaultRegisterer = metrics
@@ -113,8 +118,9 @@ func main() {
 		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command failed", cmd))
 		os.Exit(1)
 	}
-	_, err = gmetrics.NewGlobal(gmetrics.DefaultConfig(cmd), sink)
-	if err != nil {
+	gmetricsConfig := gmetrics.DefaultConfig("thanos_" + cmd)
+	gmetricsConfig.EnableRuntimeMetrics = false
+	if _, err = gmetrics.NewGlobal(gmetricsConfig, sink); err != nil {
 		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command failed", cmd))
 		os.Exit(1)
 	}
@@ -128,6 +134,11 @@ func main() {
 
 		var closeFn func() error
 		tracer, closeFn = tracing.NewOptionalGCloudTracer(ctx, logger, *gcloudTraceProject, *gcloudTraceSampleFactor, *debugName)
+
+		// This is bad, but Prometheus does not support any other tracer injections than just global one.
+		// TODO(bplotka): Work with basictracer to handle gracefully tracker mismatches, and also with Prometheus to allow
+		// tracer injection.
+		opentracing.SetGlobalTracer(tracer)
 
 		ctx, cancel := context.WithCancel(ctx)
 		g.Add(func() error {
@@ -195,7 +206,7 @@ func registerMetrics(mux *http.ServeMux, g prometheus.Gatherer) {
 // - request histogram
 // - tracing
 // - panic recovery with panic counter
-func defaultGRPCServerOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer) []grpc.ServerOption {
+func defaultGRPCServerOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, cert, key, clientCA string) ([]grpc.ServerOption, error) {
 	met := grpc_prometheus.NewServerMetrics()
 	met.EnableHandlingTimeHistogram(
 		grpc_prometheus.WithHistogramBuckets([]float64{
@@ -213,7 +224,7 @@ func defaultGRPCServerOpts(logger log.Logger, reg *prometheus.Registry, tracer o
 		return status.Errorf(codes.Internal, "%s", p)
 	}
 	reg.MustRegister(met, panicsTotal)
-	return []grpc.ServerOption{
+	opts := []grpc.ServerOption{
 		grpc.MaxSendMsgSize(math.MaxInt32),
 		grpc_middleware.WithUnaryServerChain(
 			met.UnaryServerInterceptor(),
@@ -226,6 +237,50 @@ func defaultGRPCServerOpts(logger log.Logger, reg *prometheus.Registry, tracer o
 			grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 		),
 	}
+
+	if key == "" && cert == "" {
+		if clientCA != "" {
+			return nil, errors.New("when a client CA is used a server key and certificate must also be provided")
+		}
+
+		level.Info(logger).Log("msg", "disabled TLS, key and cert must be set to enable")
+		return opts, nil
+	}
+
+	if key == "" || cert == "" {
+		return nil, errors.New("both server key and certificate must be provided")
+	}
+
+	tlsCfg := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
+
+	tlsCert, err := tls.LoadX509KeyPair(cert, key)
+	if err != nil {
+		return nil, errors.Wrap(err, "server credentials")
+	}
+
+	level.Info(logger).Log("msg", "enabled gRPC server side TLS")
+
+	tlsCfg.Certificates = []tls.Certificate{tlsCert}
+
+	if clientCA != "" {
+		caPEM, err := ioutil.ReadFile(clientCA)
+		if err != nil {
+			return nil, errors.Wrap(err, "reading client CA")
+		}
+
+		certPool := x509.NewCertPool()
+		if !certPool.AppendCertsFromPEM(caPEM) {
+			return nil, errors.Wrap(err, "building client CA")
+		}
+		tlsCfg.ClientCAs = certPool
+		tlsCfg.ClientAuth = tls.RequireAndVerifyClientCert
+
+		level.Info(logger).Log("msg", "gRPC server TLS client verification enabled")
+	}
+
+	return append(opts, grpc.Creds(credentials.NewTLS(tlsCfg))), nil
 }
 
 // metricHTTPListenGroup is a run.Group that servers HTTP endpoint with only Prometheus metrics.

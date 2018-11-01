@@ -186,7 +186,7 @@ func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prom
 	}
 
 	u := *p.base
-	u.Path = "/api/v1/read"
+	u.Path = path.Join(u.Path, "api/v1/read")
 
 	preq, err := http.NewRequest("POST", u.String(), bytes.NewReader(snappy.Encode(nil, reqb)))
 	if err != nil {

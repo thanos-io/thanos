@@ -15,8 +15,16 @@ The retention is recommended to not be lower than three times the block duration
 $ thanos sidecar \
     --tsdb.path        "/path/to/prometheus/data/dir" \
     --prometheus.url   "http://localhost:9090" \
-    --gcs.bucket       "example-bucket" \
     --cluster.peers    "thanos-cluster.example.org" \
+    --objstore.config-file  "bucket.yml"
+```
+
+The content of `bucket.yml`:
+
+```yaml
+type: GCS
+config:
+  bucket: example-bucket
 ```
 
 ## Deployment
@@ -52,6 +60,14 @@ Flags:
                                  Explicit (external) host:port address to
                                  advertise for gRPC StoreAPI in gossip cluster.
                                  If empty, 'grpc-address' will be used.
+      --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
+                                 disable TLS
+      --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
+                                 disable TLS
+      --grpc-server-tls-client-ca=""  
+                                 TLS CA to verify clients against. If no client
+                                 CA is specified, there is no client
+                                 verification on server side. (tls.NoClientCert)
       --http-address="0.0.0.0:10902"  
                                  Listen host:port for HTTP endpoints.
       --cluster.address="0.0.0.0:10900"  
@@ -76,7 +92,7 @@ Flags:
                                  convergence speeds across larger clusters at
                                  the expense of increased bandwidth usage.
                                  Default is used from a specified network-type.
-      --cluster.refresh-interval=1m0s  
+      --cluster.refresh-interval=1m  
                                  Interval for membership to refresh
                                  cluster.peers state, 0 disables refresh.
       --cluster.secret-key=CLUSTER.SECRET-KEY  
@@ -89,26 +105,22 @@ Flags:
                                  accounting the latency differences between
                                  network types: local, lan, wan.
       --prometheus.url=http://localhost:9090  
-                                 URL at which to reach Prometheus's API.
+                                 URL at which to reach Prometheus's API. For
+                                 better performance use local network.
       --tsdb.path="./data"       Data directory of TSDB.
-      --gcs.bucket=<bucket>      Google Cloud Storage bucket name for stored
-                                 blocks. If empty, sidecar won't store any block
-                                 inside Google Cloud Storage.
-      --s3.bucket=<bucket>       S3-Compatible API bucket name for stored
-                                 blocks.
-      --s3.endpoint=<api-url>    S3-Compatible API endpoint for stored blocks.
-      --s3.access-key=<key>      Access key for an S3-Compatible API.
-      --s3.insecure              Whether to use an insecure connection with an
-                                 S3-Compatible API.
-      --s3.signature-version2    Whether to use S3 Signature Version 2;
-                                 otherwise Signature Version 4 will be used.
-      --s3.encrypt-sse           Whether to use Server Side Encryption
       --reloader.config-file=""  Config file watched by the reloader.
       --reloader.config-envsubst-file=""  
                                  Output file for environment variable
                                  substituted config file.
-      --reloader.rule-dir=RELOADER.RULE-DIR  
-                                 Rule directory for the reloader to refresh.
+      --reloader.rule-dir=RELOADER.RULE-DIR ...  
+                                 Rule directories for the reloader to refresh
+                                 (repeated field).
+      --objstore.config-file=<bucket.config-yaml-path>  
+                                 Path to YAML file that contains object store
+                                 configuration.
+      --objstore.config=<bucket.config-yaml>  
+                                 Alternative to 'objstore.config-file' flag.
+                                 Object store configuration in YAML.
 
 ```
 

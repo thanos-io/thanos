@@ -16,7 +16,6 @@ import (
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
-	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/reloader"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
@@ -35,18 +34,13 @@ import (
 func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "sidecar for Prometheus server")
 
-	grpcBindAddr, httpBindAddr, newPeerFn := regCommonServerFlags(cmd)
+	grpcBindAddr, httpBindAddr, cert, key, clientCA, newPeerFn := regCommonServerFlags(cmd)
 
-	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API.").
+	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API. For better performance use local network.").
 		Default("http://localhost:9090").URL()
 
 	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").
 		Default("./data").String()
-
-	gcsBucket := cmd.Flag("gcs.bucket", "Google Cloud Storage bucket name for stored blocks. If empty, sidecar won't store any block inside Google Cloud Storage.").
-		PlaceHolder("<bucket>").String()
-
-	s3Config := s3.RegisterS3Params(cmd)
 
 	reloaderCfgFile := cmd.Flag("reloader.config-file", "Config file watched by the reloader.").
 		Default("").String()
@@ -54,7 +48,9 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 	reloaderCfgSubstFile := cmd.Flag("reloader.config-envsubst-file", "Output file for environment variable substituted config file.").
 		Default("").String()
 
-	reloaderRuleDir := cmd.Flag("reloader.rule-dir", "Rule directory for the reloader to refresh.").String()
+	reloaderRuleDirs := cmd.Flag("reloader.rule-dir", "Rule directories for the reloader to refresh (repeated field).").Strings()
+
+	objStoreConfig := regCommonObjStoreFlags(cmd, "")
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		rl := reloader.New(
@@ -62,7 +58,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			reloader.ReloadURLFromBase(*promURL),
 			*reloaderCfgFile,
 			*reloaderCfgSubstFile,
-			*reloaderRuleDir,
+			*reloaderRuleDirs,
 		)
 		peer, err := newPeerFn(logger, reg, false, "", false)
 		if err != nil {
@@ -74,11 +70,13 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			reg,
 			tracer,
 			*grpcBindAddr,
+			*cert,
+			*key,
+			*clientCA,
 			*httpBindAddr,
 			*promURL,
 			*dataDir,
-			*gcsBucket,
-			s3Config,
+			objStoreConfig,
 			peer,
 			rl,
 			name,
@@ -92,11 +90,13 @@ func runSidecar(
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	grpcBindAddr string,
+	cert string,
+	key string,
+	clientCA string,
 	httpBindAddr string,
 	promURL *url.URL,
 	dataDir string,
-	gcsBucket string,
-	s3Config *s3.Config,
+	objStoreConfig *pathOrContent,
 	peer *cluster.Peer,
 	reloader *reloader.Reloader,
 	component string,
@@ -208,7 +208,11 @@ func runSidecar(
 			return errors.Wrap(err, "create Prometheus store")
 		}
 
-		s := grpc.NewServer(defaultGRPCServerOpts(logger, reg, tracer)...)
+		opts, err := defaultGRPCServerOpts(logger, reg, tracer, cert, key, clientCA)
+		if err != nil {
+			return errors.Wrap(err, "setup gRPC server")
+		}
+		s := grpc.NewServer(opts...)
 		storepb.RegisterStoreServer(s, promStore)
 
 		g.Add(func() error {
@@ -222,15 +226,20 @@ func runSidecar(
 
 	var uploads = true
 
+	bucketConfig, err := objStoreConfig.Content()
+	if err != nil {
+		return err
+	}
+
 	// The background shipper continuously scans the data directory and uploads
 	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, err := client.NewBucket(logger, &gcsBucket, *s3Config, reg, component)
+	bkt, err := client.NewBucket(logger, bucketConfig, reg, component)
 	if err != nil && err != client.ErrNotFound {
 		return err
 	}
 
 	if err == client.ErrNotFound {
-		level.Info(logger).Log("msg", "No GCS or S3 bucket was configured, uploads will be disabled")
+		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
 		uploads = false
 	}
 

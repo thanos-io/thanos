@@ -23,6 +23,14 @@ import (
 	"github.com/prometheus/tsdb/labels"
 )
 
+type ResolutionLevel int64
+
+const (
+	ResolutionLevelRaw = ResolutionLevel(downsample.ResLevel0)
+	ResolutionLevel5m  = ResolutionLevel(downsample.ResLevel1)
+	ResolutionLevel1h  = ResolutionLevel(downsample.ResLevel2)
+)
+
 // Syncer syncronizes block metas from a bucket into a local directory.
 // It sorts them into compaction groups based on equal label sets.
 type Syncer struct {
@@ -698,7 +706,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		}
 
 		if err := stats.CriticalErr(); err != nil {
-			return compID, halt(errors.Wrapf(err, "invalid plan id %s", pdir))
+			return compID, halt(errors.Wrapf(err, "block with not healthy index found %s; Compaction level %v; Labels: %v", pdir, meta.Compaction.Level, meta.Thanos.Labels))
 		}
 
 		if err := stats.Issue347OutsideChunksErr(); err != nil {
@@ -774,4 +782,76 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	}
 
 	return compID, nil
+}
+
+// BucketCompactor compacts blocks in a bucket.
+type BucketCompactor struct {
+	logger     log.Logger
+	sy         *Syncer
+	comp       tsdb.Compactor
+	compactDir string
+	bkt        objstore.Bucket
+}
+
+// NewBucketCompactor creates a new bucket compactor.
+func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, compactDir string, bkt objstore.Bucket) *BucketCompactor {
+	return &BucketCompactor{
+		logger:     logger,
+		sy:         sy,
+		comp:       comp,
+		compactDir: compactDir,
+		bkt:        bkt,
+	}
+}
+
+// Compact runs compaction over bucket.
+func (c *BucketCompactor) Compact(ctx context.Context) error {
+	// Loop over bucket and compact until there's no work left.
+	for {
+		// Clean up the compaction temporary directory at the beginning of every compaction loop.
+		if err := os.RemoveAll(c.compactDir); err != nil {
+			return errors.Wrap(err, "clean up the compaction temporary directory")
+		}
+
+		level.Info(c.logger).Log("msg", "start sync of metas")
+
+		if err := c.sy.SyncMetas(ctx); err != nil {
+			return errors.Wrap(err, "sync")
+		}
+
+		level.Info(c.logger).Log("msg", "start of GC")
+
+		if err := c.sy.GarbageCollect(ctx); err != nil {
+			return errors.Wrap(err, "garbage")
+		}
+
+		groups, err := c.sy.Groups()
+		if err != nil {
+			return errors.Wrap(err, "build compaction groups")
+		}
+		done := true
+		for _, g := range groups {
+			id, err := g.Compact(ctx, c.compactDir, c.comp)
+			if err == nil {
+				// If the returned ID has a zero value, the group had no blocks to be compacted.
+				// We keep going through the outer loop until no group has any work left.
+				if id != (ulid.ULID{}) {
+					done = false
+				}
+				continue
+			}
+
+			if IsIssue347Error(err) {
+				if err := RepairIssue347(ctx, c.logger, c.bkt, err); err == nil {
+					done = false
+					continue
+				}
+			}
+			return errors.Wrap(err, "compaction")
+		}
+		if done {
+			break
+		}
+	}
+	return nil
 }

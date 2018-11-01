@@ -20,9 +20,9 @@ jobs:
               echo "Awesome! GCS integration tests are enabled."
             fi
       - run: make deps DEPARGS="-v"
-      - run: make format
       - run: make errcheck
       - run: make check-docs
+      - run: make format
       - run:
           name: "Run all tests"
           # TODO(bplotka): Setup some S3 tests for CI.
@@ -34,7 +34,22 @@ jobs:
             export THANOS_SKIP_S3_AWS_TESTS="true"
             echo "Skipping AWS tests."
 
+            export THANOS_SKIP_AZURE_TESTS="true"
+            echo "Skipping Azure tests."
+
             make test
+
+  # Cross build is needed for publish_release but needs to be done outside of docker.
+  cross_build:
+    machine: true
+    working_directory: /home/circleci/.go_workspace/src/github.com/improbable-eng/thanos
+    steps:
+    - checkout
+    - run: make crossbuild
+    - persist_to_workspace:
+        root: .
+        paths:
+        - .build
 
   publish_master:
     docker:
@@ -91,9 +106,18 @@ workflows:
         filters:
           branches:
             only: master
+    - cross_build:
+        requires:
+        - test
+        filters:
+          tags:
+            only: /^v[0-9]+(\.[0-9]+){2}(-.+|[^-.]*)$/
+          branches:
+            ignore: /.*/
     - publish_release:
         requires:
         - test
+        - cross_build
         filters:
           tags:
             only: /^v[0-9]+(\.[0-9]+){2}(-.+|[^-.]*)$/

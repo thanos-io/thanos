@@ -26,6 +26,9 @@ type Bucket interface {
 
 	// Delete removes the object with the given name.
 	Delete(ctx context.Context, name string) error
+
+	// Name returns the bucket name for the provider.
+	Name() string
 }
 
 // BucketReader provides read access to an object storage bucket.
@@ -49,7 +52,7 @@ type BucketReader interface {
 }
 
 // UploadDir uploads all files in srcdir to the bucket with into a top-level directory
-// named dstdir.
+// named dstdir. It is a caller responsibility to clean partial upload in case of failure.
 func UploadDir(ctx context.Context, logger log.Logger, bkt Bucket, srcdir, dstdir string) error {
 	df, err := os.Stat(srcdir)
 	if err != nil {
@@ -72,6 +75,7 @@ func UploadDir(ctx context.Context, logger log.Logger, bkt Bucket, srcdir, dstdi
 }
 
 // UploadFile uploads the file with the given name to the bucket.
+// It is a caller responsibility to clean partial upload in case of failure
 func UploadFile(ctx context.Context, logger log.Logger, bkt Bucket, src, dst string) error {
 	r, err := os.Open(src)
 	if err != nil {
@@ -231,8 +235,12 @@ func (b *metricBucket) Get(ctx context.Context, name string) (io.ReadCloser, err
 		b.opsFailures.WithLabelValues(op).Inc()
 		return nil, err
 	}
-	rc = newTimingReadCloser(rc,
-		b.opsDuration.WithLabelValues(op), b.opsFailures.WithLabelValues(op))
+	rc = newTimingReadCloser(
+		rc,
+		op,
+		b.opsDuration,
+		b.opsFailures,
+	)
 
 	return rc, nil
 }
@@ -246,8 +254,12 @@ func (b *metricBucket) GetRange(ctx context.Context, name string, off, length in
 		b.opsFailures.WithLabelValues(op).Inc()
 		return nil, err
 	}
-	rc = newTimingReadCloser(rc,
-		b.opsDuration.WithLabelValues(op), b.opsFailures.WithLabelValues(op))
+	rc = newTimingReadCloser(
+		rc,
+		op,
+		b.opsDuration,
+		b.opsFailures,
+	)
 
 	return rc, nil
 }
@@ -305,20 +317,29 @@ func (b *metricBucket) Close() error {
 	return b.bkt.Close()
 }
 
+func (b *metricBucket) Name() string {
+	return b.bkt.Name()
+}
+
 type timingReadCloser struct {
 	io.ReadCloser
 
 	ok       bool
 	start    time.Time
-	duration prometheus.Histogram
-	failed   prometheus.Counter
+	op       string
+	duration *prometheus.HistogramVec
+	failed   *prometheus.CounterVec
 }
 
-func newTimingReadCloser(rc io.ReadCloser, dur prometheus.Histogram, failed prometheus.Counter) *timingReadCloser {
+func newTimingReadCloser(rc io.ReadCloser, op string, dur *prometheus.HistogramVec, failed *prometheus.CounterVec) *timingReadCloser {
+	// Initialize the metrics with 0.
+	dur.WithLabelValues(op)
+	failed.WithLabelValues(op)
 	return &timingReadCloser{
 		ReadCloser: rc,
 		ok:         true,
 		start:      time.Now(),
+		op:         op,
 		duration:   dur,
 		failed:     failed,
 	}
@@ -326,9 +347,9 @@ func newTimingReadCloser(rc io.ReadCloser, dur prometheus.Histogram, failed prom
 
 func (rc *timingReadCloser) Close() error {
 	err := rc.ReadCloser.Close()
-	rc.duration.Observe(time.Since(rc.start).Seconds())
+	rc.duration.WithLabelValues(rc.op).Observe(time.Since(rc.start).Seconds())
 	if rc.ok && err != nil {
-		rc.failed.Inc()
+		rc.failed.WithLabelValues(rc.op).Inc()
 		rc.ok = false
 	}
 	return err
@@ -337,7 +358,7 @@ func (rc *timingReadCloser) Close() error {
 func (rc *timingReadCloser) Read(b []byte) (n int, err error) {
 	n, err = rc.ReadCloser.Read(b)
 	if rc.ok && err != nil && err != io.EOF {
-		rc.failed.Inc()
+		rc.failed.WithLabelValues(rc.op).Inc()
 		rc.ok = false
 	}
 	return n, err

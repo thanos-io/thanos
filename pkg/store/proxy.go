@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"math"
+	"strings"
 	"sync"
 
 	"fmt"
@@ -29,6 +30,8 @@ type Client interface {
 
 	// Minimum and maximum time range of data in the store.
 	TimeRange() (mint int64, maxt int64)
+
+	String() string
 }
 
 // ProxyStore implements the store API that proxies request to all given underlying stores.
@@ -83,24 +86,31 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		return nil
 	}
 
-	var (
-		respCh    = make(chan *storepb.SeriesResponse, 10)
-		seriesSet []storepb.SeriesSet
-		g         errgroup.Group
-	)
-
 	stores, err := s.stores(srv.Context())
 	if err != nil {
+		err = errors.Wrap(err, "failed to get store APIs")
 		level.Error(s.logger).Log("err", err)
 		return status.Errorf(codes.Unknown, err.Error())
 	}
+
+	var (
+		seriesSet []storepb.SeriesSet
+		respCh    = make(chan *storepb.SeriesResponse, len(stores)+1)
+		g         errgroup.Group
+	)
+
+	var storeDebugMsgs []string
+
 	for _, st := range stores {
 		// We might be able to skip the store if its meta information indicates
 		// it cannot have series matching our query.
 		// NOTE: all matchers are validated in labelsMatches method so we explicitly ignore error.
 		if ok, _ := storeMatches(st, r.MinTime, r.MaxTime, newMatchers...); !ok {
+			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s filtered out", st))
 			continue
 		}
+		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
+
 		sc, err := st.Series(srv.Context(), &storepb.SeriesRequest{
 			MinTime:             r.MinTime,
 			MaxTime:             r.MaxTime,
@@ -123,10 +133,12 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 	}
 	if len(seriesSet) == 0 {
 		err := errors.New("No store matched for this query")
-		level.Warn(s.logger).Log("err", err)
+		level.Warn(s.logger).Log("err", err, "stores", strings.Join(storeDebugMsgs, ";"))
 		respCh <- storepb.NewWarnSeriesResponse(err)
 		return nil
 	}
+
+	level.Debug(s.logger).Log("msg", strings.Join(storeDebugMsgs, ";"))
 
 	g.Go(func() error {
 		defer close(respCh)
