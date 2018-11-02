@@ -170,7 +170,9 @@ func (r *Reloader) apply(ctx context.Context) error {
 			return errors.Wrap(err, "build hash")
 		}
 	}
-	ruleHash = h.Sum(nil)
+	if len(r.ruleDirs) > 0 {
+		ruleHash = h.Sum(nil)
+	}
 
 	if bytes.Equal(r.lastCfgHash, cfgHash) && bytes.Equal(r.lastRuleHash, ruleHash) {
 		// Nothing to do.
