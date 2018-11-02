@@ -564,6 +564,34 @@ func runRule(
 	return nil
 }
 
+// Scalar response consists of array with mixed types so it needs to be
+// unmarshaled separatelly.
+func convertScalarJSONToVector(scalarJSONResult json.RawMessage) (model.Vector, error) {
+	var (
+		// Do not specify exact length of the expected slice since JSON unmarshaling
+		// would make the leght fit the size and we won't be able to check the length afterwards.
+		resultPointSlice []json.RawMessage
+		resultTime       model.Time
+		resultValue      model.SampleValue
+	)
+	if err := json.Unmarshal(scalarJSONResult, &resultPointSlice); err != nil {
+		return nil, err
+	}
+	if len(resultPointSlice) != 2 {
+		return nil, errors.Errorf("invalid scalar result format %v, expected timestamp -> value tuple", resultPointSlice)
+	}
+	if err := json.Unmarshal(resultPointSlice[0], &resultTime); err != nil {
+		return nil, errors.Wrapf(err, "unmarshaling scalar time from %v", resultPointSlice)
+	}
+	if err := json.Unmarshal(resultPointSlice[1], &resultValue); err != nil {
+		return nil, errors.Wrapf(err, "unmarshaling scalar value from %v", resultPointSlice)
+	}
+	return model.Vector{&model.Sample{
+		Metric:    model.Metric{},
+		Value:     resultValue,
+		Timestamp: resultTime}}, nil
+}
+
 func queryPrometheusInstant(ctx context.Context, logger log.Logger, addr, query string, t time.Time) (promql.Vector, error) {
 	u, err := url.Parse(fmt.Sprintf("http://%s/api/v1/query", addr))
 	if err != nil {
@@ -594,19 +622,40 @@ func queryPrometheusInstant(ctx context.Context, logger log.Logger, addr, query 
 	}
 	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
 
-	// Always try to decode a vector. Scalar rules won't work for now and arguably
-	// have no relevant use case.
+	// Decode only ResultType and load Result only as RawJson since we don't know
+	// structure of the Result yet.
 	var m struct {
 		Data struct {
-			Result model.Vector `json:"result"`
+			ResultType string          `json:"resultType"`
+			Result     json.RawMessage `json:"result"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+
+	if err = json.NewDecoder(resp.Body).Decode(&m); err != nil {
 		return nil, err
 	}
-	vec := make(promql.Vector, 0, len(m.Data.Result))
 
-	for _, e := range m.Data.Result {
+	var vectorResult model.Vector
+
+	// Decode the Result depending on the ResultType
+	// Currently only `vector` and `scalar` types are supported
+	switch m.Data.ResultType {
+	case promql.ValueTypeVector:
+		if err = json.Unmarshal(m.Data.Result, &vectorResult); err != nil {
+			return nil, err
+		}
+	case promql.ValueTypeScalar:
+		vectorResult, err = convertScalarJSONToVector(m.Data.Result)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, errors.Errorf("unknown response type: '%q'", m.Data.ResultType)
+	}
+
+	vec := make(promql.Vector, 0, len(vectorResult))
+
+	for _, e := range vectorResult {
 		lset := make(promlabels.Labels, 0, len(e.Metric))
 
 		for k, v := range e.Metric {
@@ -622,6 +671,7 @@ func queryPrometheusInstant(ctx context.Context, logger log.Logger, addr, query 
 			Point:  promql.Point{T: int64(e.Timestamp), V: float64(e.Value)},
 		})
 	}
+
 	return vec, nil
 }
 

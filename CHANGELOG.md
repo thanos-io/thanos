@@ -37,6 +37,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 ### Fixed
 - [#566](https://github.com/improbable-eng/thanos/issues/566) - Fixed issue whereby the Proxy Store could end up in a deadlock if there were more than 9 stores being queried and all returned an error.
+- [#598](https://github.com/improbable-eng/thanos/issues/598) - Fixed handling of scalar result in rule node evaluating rules.
 
 
 ## [v0.1.0](https://github.com/improbable-eng/thanos/releases/tag/v0.1.0) - 2018.09.14
@@ -68,4 +69,3 @@ Initial version to have a stable reference before [gossip protocol removal](http
 - Bucket commands.
 - Downsampling support for UI.
 - Grafana dashboards for Thanos components.
-
