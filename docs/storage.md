@@ -9,6 +9,7 @@ Current object storage client implementations:
 | Google Cloud Storage | Stable  (production usage)             | yes       | @bplotka   |
 | AWS S3               | Beta  (working PoCs, testing usage)               | no        | ?          |
 | Azure Storage Account | Alpha   | yes       | @vglafirov   |
+| OpenStack Swift      | Beta  (working PoCs, testing usage)               | no        | @sudhi-vm   |
 
 NOTE: Currently Thanos requires strong consistency (write-read) for object store implementation.
 
@@ -185,3 +186,21 @@ config:
     storage_account_key: <Storage Account key>
     container: <Blob container>
 ```
+
+### OpenStack Swift Configuration
+Thanos uses [gophercloud](http://gophercloud.io/) client to upload Prometheus data into [OpenStack Swift](https://docs.openstack.org/swift/latest/).
+
+Below is an example configuration file for thanos to use OpenStack swift container as an object store. 
+
+```yaml
+type: SWIFT
+config:
+    auth_url: <identity endpoint aka auth URL>
+    username: <username>
+    password: <password>
+    tenant_name: <tenant name>
+    region_name: <region>
+    container_name: <container>
+```
+
+Set the flags `--objstore.config-file` to reference to the configuration file.

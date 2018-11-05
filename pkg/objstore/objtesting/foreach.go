@@ -11,6 +11,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/objstore/inmem"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
+	"github.com/improbable-eng/thanos/pkg/objstore/swift"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 )
 
@@ -84,4 +85,19 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 		t.Log("THANOS_SKIP_AZURE_TESTS envvar present. Skipping test against Azure.")
 	}
 
+	// Optional SWIFT.
+	if _, ok := os.LookupEnv("THANOS_SKIP_SWIFT_TESTS"); !ok {
+		container, closeFn, err := swift.NewTestContainer(t)
+		testutil.Ok(t, err)
+
+		ok := t.Run("swift", func(t *testing.T) {
+			testFn(t, container)
+		})
+		closeFn()
+		if !ok {
+			return
+		}
+	} else {
+		t.Log("THANOS_SKIP_SWIFT_TESTS envvar present. Skipping test against swift.")
+	}
 }

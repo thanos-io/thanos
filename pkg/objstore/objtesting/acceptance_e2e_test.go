@@ -3,6 +3,7 @@ package objtesting
 import (
 	"context"
 	"io/ioutil"
+	"sort"
 	"strings"
 	"testing"
 
@@ -62,7 +63,10 @@ func TestObjStore_AcceptanceTest_e2e(t *testing.T) {
 			seen = append(seen, fn)
 			return nil
 		}))
-		testutil.Equals(t, []string{"obj_5.some", "id1/", "id2/"}, seen)
+		expected := []string{"obj_5.some", "id1/", "id2/"}
+		sort.Strings(expected)
+		sort.Strings(seen)
+		testutil.Equals(t, expected, seen)
 
 		// Can we iter over items from id1/ dir?
 		seen = []string{}

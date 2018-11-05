@@ -27,8 +27,8 @@ In general about 1MB of local disk space is required per TSDB block stored in th
 ```$
 usage: thanos store [<flags>]
 
-store node giving access to blocks in a bucket provider. Now supported GCS, S3
-and Azure.
+store node giving access to blocks in a bucket provider. Now supported GCS, S3,
+Azure and Swift.
 
 Flags:
   -h, --help                     Show context-sensitive help (also try
