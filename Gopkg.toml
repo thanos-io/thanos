@@ -81,5 +81,5 @@ ignored = ["github.com/improbable-eng/thanos/benchmark/*"]
   revision = "197d1c0aea1b9eedbbaee0a1a32bf81e879bde80"
 
 [[constraint]]
-  name = "github.com/rackspace/gophercloud"
-  version = "1.0.0"
+  name = "github.com/gophercloud/gophercloud"
+  revision = "0719c6b22f30132b0ae6c90b038e0d50992107b0"

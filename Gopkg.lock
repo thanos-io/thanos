@@ -198,7 +198,6 @@
   version = "v2.0.0"
 
 [[projects]]
-  branch = "master"
   digest = "1:e9aa4d37933cdd1978d83938e8af418c02b4c183e1d6c936efd00ce1628fadb7"
   name = "github.com/gophercloud/gophercloud"
   packages = [
