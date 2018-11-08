@@ -15,6 +15,7 @@ require (
 	github.com/armon/go-metrics v0.0.0-20180713145231-3c58d8115a78
 	github.com/aws/aws-sdk-go v1.15.64 // indirect
 	github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973 // indirect
+	github.com/campoy/embedmd v0.0.0-20171205015432-c59ce00e0296 // indirect
 	github.com/census-instrumentation/opencensus-proto v0.0.2-0.20180913191712-f303ae3f8d6a // indirect
 	github.com/cespare/xxhash v1.0.0 // indirect
 	github.com/circonus-labs/circonus-gometrics v2.2.4+incompatible // indirect
