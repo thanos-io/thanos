@@ -512,9 +512,10 @@ func createPrometheusQuerier(opts *opts, name string, endpoint string, queries s
 			Spec: v1.PodSpec{
 				Containers: []v1.Container{{
 					Name:  "querier",
+					//TODO(domgreen): move this to the same repository as Thanos
 					Image: "eu.gcr.io/io-crafty-shelter/thanos-querier:latest",
 					Args: []string{
-						"--endpoint=" + endpoint,
+						"--host=" + endpoint,
 						"--queries=" + queries,
 						"--range-offset-start=" + opts.queryRangeOffsetStart.String(),
 						"--range-offset-end=" + opts.queryRangeOffsetEnd.String(),
