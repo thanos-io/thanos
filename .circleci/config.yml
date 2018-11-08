@@ -7,7 +7,7 @@ jobs:
       - image: circleci/golang:1.11.2
     working_directory: /go/src/github.com/improbable-eng/thanos
     environment:
-      GO111MODULE: on
+      GO111MODULE: 'on'
     steps:
       - checkout
       - setup_remote_docker:
