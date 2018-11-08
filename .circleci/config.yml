@@ -6,11 +6,12 @@ jobs:
       # Available from https://hub.docker.com/r/circleci/golang/
       - image: circleci/golang:1.11.2
     working_directory: /go/src/github.com/improbable-eng/thanos
+    environment:
+      GO111MODULE: on
     steps:
       - checkout
       - setup_remote_docker:
             version: 17.07.0-ce
-      - run: export GO111MODULE="on"
       - run:
           name: Create Secret if PR is not forked
           # GCS integration tests are run only for author's PR that have write access, because these tests
