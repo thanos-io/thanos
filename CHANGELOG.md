@@ -34,6 +34,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 - `thanos rule` now supports file based discovery of query nodes using `--query.file-sd-config.files`
 - `thanos query` now supports file based discovery of store nodes using `--store.file-sd-config.files`
 - Add `/-/healthy` endpoint to Querier.
+- Add DNS service discovery to static and file based configurations using the `dns+` and `dnssrv+` prefixes for the respective lookup.
 
 ### Fixed
 - [#566](https://github.com/improbable-eng/thanos/issues/566) - Fixed issue whereby the Proxy Store could end up in a deadlock if there were more than 9 stores being queried and all returned an error.
