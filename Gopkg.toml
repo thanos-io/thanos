@@ -77,8 +77,8 @@ ignored = ["github.com/improbable-eng/thanos/benchmark/*"]
   version = "6.0.1"
 
 [[constraint]]
+  version = "0.3.0"
   name = "github.com/Azure/azure-storage-blob-go"
-  revision = "197d1c0aea1b9eedbbaee0a1a32bf81e879bde80"
 
 [[constraint]]
   name = "github.com/gophercloud/gophercloud"

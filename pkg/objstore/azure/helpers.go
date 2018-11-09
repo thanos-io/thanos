@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"regexp"
 
-	blob "github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	blob "github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 var (
@@ -17,7 +17,7 @@ var (
 const DirDelim = "/"
 
 func getContainerURL(ctx context.Context, accountName, accountKey, containerName string) blob.ContainerURL {
-	c := blob.NewSharedKeyCredential(accountName, accountKey)
+	c, _ := blob.NewSharedKeyCredential(accountName, accountKey)
 	p := blob.NewPipeline(c, blob.PipelineOptions{
 		Telemetry: blob.TelemetryOptions{Value: "Thanos"},
 	})
