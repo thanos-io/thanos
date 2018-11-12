@@ -150,9 +150,12 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 		return nil, errors.New("X-Ms-Error-Code: [BlobNotFound]")
 	}
 
-	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
-
-	props, err := blobURL.GetProperties(ctx, blob.BlobAccessConditions{})
+	blobURL, err := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
+	if err != nil {
+		return nil, errors.Wrapf(err, "cannot get Azure blob URL, address: %s", name)
+	}
+	var props *blob.BlobGetPropertiesResponse
+	props, err = blobURL.GetProperties(ctx, blob.BlobAccessConditions{})
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot get properties for container: %s", name)
 	}
@@ -192,13 +195,16 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 // Exists checks if the given object exists.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 	level.Debug(b.logger).Log("msg", "check if blob exists", "blob", name)
-	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
+	blobURL, err := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
+	if err != nil {
+		return false, errors.Wrapf(err, "cannot get Azure blob URL, address: %s", name)
+	}
 
-	if _, err := blobURL.GetProperties(ctx, blob.BlobAccessConditions{}); err != nil {
+	if _, err = blobURL.GetProperties(ctx, blob.BlobAccessConditions{}); err != nil {
 		if b.IsObjNotFoundErr(err) {
 			return false, nil
 		}
-		return false, errors.Wrapf(err, "cannot get blob URL: %s", name)
+		return false, errors.Wrapf(err, "cannot get Azure blob URL, address: %s", name)
 	}
 
 	return true, nil
@@ -207,9 +213,11 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	level.Debug(b.logger).Log("msg", "Uploading blob", "blob", name)
-	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
-
-	if _, err := blob.UploadStreamToBlockBlob(ctx, r, blobURL,
+	blobURL, err := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
+	if err != nil {
+		return errors.Wrapf(err, "cannot get Azure blob URL, address: %s", name)
+	}
+	if _, err = blob.UploadStreamToBlockBlob(ctx, r, blobURL,
 		blob.UploadStreamToBlockBlobOptions{
 			BufferSize: 3 * 1024 * 1024,
 			MaxBuffers: 4,
@@ -223,9 +231,12 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
 	level.Debug(b.logger).Log("msg", "Deleting blob", "blob", name)
-	blobURL := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
+	blobURL, err := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
+	if err != nil {
+		return errors.Wrapf(err, "cannot get Azure blob URL, address: %s", name)
+	}
 
-	if _, err := blobURL.Delete(ctx, blob.DeleteSnapshotsOptionInclude, blob.BlobAccessConditions{}); err != nil {
+	if _, err = blobURL.Delete(ctx, blob.DeleteSnapshotsOptionInclude, blob.BlobAccessConditions{}); err != nil {
 		return errors.Wrapf(err, "error deleting blob, address: %s", name)
 	}
 	return nil
