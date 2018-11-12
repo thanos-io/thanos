@@ -34,11 +34,12 @@
   version = "0.1.7"
 
 [[projects]]
-  digest = "1:9267d48ec1ac29ae66cb064f2217ec5f0a2b8e22904dd018eba54a6140f82fd5"
+  digest = "1:5da4d3b3b9949b9043d2fd36c4ff9b208f72ad5260a3dcb6f94267a769ee1899"
   name = "github.com/Azure/azure-storage-blob-go"
-  packages = ["2018-03-28/azblob"]
+  packages = ["azblob"]
   pruneopts = ""
-  revision = "197d1c0aea1b9eedbbaee0a1a32bf81e879bde80"
+  revision = "5152f14ace1c6db66bd9cb57840703a8358fa7bc"
+  version = "0.3.0"
 
 [[projects]]
   digest = "1:b0fe84bcee1d0c3579d855029ccd3a76deea187412da2976985e4946289dbb2c"
@@ -750,7 +751,7 @@
   input-imports = [
     "cloud.google.com/go/storage",
     "cloud.google.com/go/trace/apiv1",
-    "github.com/Azure/azure-storage-blob-go/2018-03-28/azblob",
+    "github.com/Azure/azure-storage-blob-go/azblob",
     "github.com/NYTimes/gziphandler",
     "github.com/armon/go-metrics",
     "github.com/armon/go-metrics/prometheus",

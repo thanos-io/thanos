@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"regexp"
 
-	blob "github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	blob "github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 var (
@@ -16,40 +16,51 @@ var (
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const DirDelim = "/"
 
-func getContainerURL(ctx context.Context, accountName, accountKey, containerName string) blob.ContainerURL {
-	c := blob.NewSharedKeyCredential(accountName, accountKey)
+func getContainerURL(ctx context.Context, accountName, accountKey, containerName string) (blob.ContainerURL, error) {
+	c, err := blob.NewSharedKeyCredential(accountName, accountKey)
+	if err != nil {
+		return blob.ContainerURL{}, err
+	}
 	p := blob.NewPipeline(c, blob.PipelineOptions{
 		Telemetry: blob.TelemetryOptions{Value: "Thanos"},
 	})
 	u, err := url.Parse(fmt.Sprintf(blobFormatString, accountName))
 	if err != nil {
-		return blob.ContainerURL{}
+		return blob.ContainerURL{}, err
 	}
 	service := blob.NewServiceURL(*u, p)
 
-	return service.NewContainerURL(containerName)
+	return service.NewContainerURL(containerName), nil
 }
 
 func getContainer(ctx context.Context, accountName, accountKey, containerName string) (blob.ContainerURL, error) {
-	c := getContainerURL(ctx, accountName, accountKey, containerName)
-
+	c, err := getContainerURL(ctx, accountName, accountKey, containerName)
+	if err != nil {
+		return blob.ContainerURL{}, err
+	}
 	// Getting container properties to check if it exists or not. Returns error which will be parsed further
-	_, err := c.GetProperties(ctx, blob.LeaseAccessConditions{})
+	_, err = c.GetProperties(ctx, blob.LeaseAccessConditions{})
 	return c, err
 }
 
 func createContainer(ctx context.Context, accountName, accountKey, containerName string) (blob.ContainerURL, error) {
-	c := getContainerURL(ctx, accountName, accountKey, containerName)
-
-	_, err := c.Create(
+	c, err := getContainerURL(ctx, accountName, accountKey, containerName)
+	if err != nil {
+		return blob.ContainerURL{}, err
+	}
+	_, err = c.Create(
 		context.Background(),
 		blob.Metadata{},
 		blob.PublicAccessNone)
 	return c, err
 }
 
-func getBlobURL(ctx context.Context, accountName, accountKey, containerName, blobName string) blob.BlockBlobURL {
-	return getContainerURL(ctx, accountName, accountKey, containerName).NewBlockBlobURL(blobName)
+func getBlobURL(ctx context.Context, accountName, accountKey, containerName, blobName string) (blob.BlockBlobURL, error) {
+	c, err := getContainerURL(ctx, accountName, accountKey, containerName)
+	if err != nil {
+		return blob.BlockBlobURL{}, err
+	}
+	return c.NewBlockBlobURL(blobName), nil
 }
 
 func parseError(errorCode string) string {
