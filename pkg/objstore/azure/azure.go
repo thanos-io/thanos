@@ -204,7 +204,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 		if b.IsObjNotFoundErr(err) {
 			return false, nil
 		}
-		return false, errors.Wrapf(err, "cannot get Azure blob URL, address: %s", name)
+		return false, errors.Wrapf(err, "cannot get properties for Azure blob, address: %s", name)
 	}
 
 	return true, nil
