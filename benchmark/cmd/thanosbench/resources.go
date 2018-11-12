@@ -520,6 +520,7 @@ func createPrometheusQuerier(opts *opts, name string, endpoint string, queries s
 						"--range-offset-start=" + opts.queryRangeOffsetStart.String(),
 						"--range-offset-end=" + opts.queryRangeOffsetEnd.String(),
 						"--query-time=" + opts.queryTime.String(),
+						"--server=true",
 					},
 				}},
 			},
