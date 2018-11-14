@@ -89,6 +89,32 @@ func (c *Container) Name() string {
 	return c.name
 }
 
+// GetObjectNameList gets list of objects in the given directory. The object list contains the full
+// object name including the prefix of the inspected directory.
+// Keeps all objects in-memory. This is trade-of between allocation all objects at a time vs reloading all objects
+// one by one in case of network failure. See: Iter
+func (c *Container) GetObjectNameList(ctx context.Context, dir string) (objstore.ObjectNameList, error) {
+	// Ensure the object name actually ends with a dir suffix. Otherwise we'll just iterate the
+	// object itself as one prefix item.
+	if dir != "" {
+		dir = strings.TrimSuffix(dir, DirDelim) + DirDelim
+	}
+
+	objectList := make(objstore.ObjectNameList, 0)
+	options := &objects.ListOpts{Full: false, Prefix: dir, Delimiter: DirDelim}
+	err := objects.List(c.client, c.name, options).EachPage(func(page pagination.Page) (bool, error) {
+		objectNames, err := objects.ExtractNames(page)
+		if err != nil {
+			return false, err
+		}
+
+		objectList = append(objectList, objectNames...)
+		return true, nil
+	})
+
+	return objectList, err
+}
+
 // Iter calls f for each entry in the given directory. The argument to f is the full
 // object name including the prefix of the inspected directory.
 func (c *Container) Iter(ctx context.Context, dir string, f func(string) error) error {

@@ -199,7 +199,6 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 // Keeps all objects in-memory. This is trade-of between allocation all objects at a time vs reloading all objects
 // one by one in case of network failure. See: Iter
 func (b *Bucket) GetObjectNameList(ctx context.Context, dir string) (objstore.ObjectNameList, error) {
-	b.opsTotal.WithLabelValues(opObjectsList).Inc()
 	// Ensure the object name actually ends with a dir suffix. Otherwise we'll just iterate the
 	// object itself as one prefix item.
 	if dir != "" {

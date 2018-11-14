@@ -17,14 +17,6 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
-const (
-	opObjectsList  = "ListBucket"
-	opObjectInsert = "PutObject"
-	opObjectGet    = "GetObject"
-	opObjectHead   = "HeadObject"
-	opObjectDelete = "DeleteObject"
-)
-
 // Config Azure storage configuration.
 type Config struct {
 	StorageAccountName string `yaml:"storage_account"`
@@ -87,6 +79,35 @@ func NewBucket(logger log.Logger, azureConfig []byte, component string) (*Bucket
 		config:       &conf,
 	}
 	return bkt, nil
+}
+
+// GetObjectNameList gets list of objects in the given directory. The object list contains the full
+// object name including the prefix of the inspected directory.
+// Keeps all objects in-memory. This is trade-of between allocation all objects at a time vs reloading all objects
+// one by one in case of network failure. See: Iter
+func (b *Bucket) GetObjectNameList(ctx context.Context, dir string) (objstore.ObjectNameList, error) {
+	prefix := dir
+	if prefix != "" && !strings.HasSuffix(prefix, DirDelim) {
+		prefix += DirDelim
+	}
+
+	list, err := b.containerURL.ListBlobsHierarchySegment(ctx, blob.Marker{}, DirDelim, blob.ListBlobsSegmentOptions{
+		Prefix: prefix,
+	})
+	if err != nil {
+		return nil, errors.Wrapf(err, "cannot list blobs in directory %s", dir)
+	}
+
+	objectList := make(objstore.ObjectNameList, 0)
+	for _, blob := range list.Segment.BlobItems {
+		objectList = append(objectList, blob.Name)
+	}
+
+	for _, blobPrefix := range list.Segment.BlobPrefixes {
+		objectList = append(objectList, blobPrefix.Name)
+	}
+
+	return objectList, nil
 }
 
 // Iter calls f for each entry in the given directory. The argument to f is the full
