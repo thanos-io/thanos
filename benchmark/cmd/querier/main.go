@@ -6,16 +6,15 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
-	"time"
-
-	"math/rand"
-	"strconv"
 	"text/tabwriter"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -25,8 +24,9 @@ import (
 // statistics about its performance.
 
 var (
-	fHost               = flag.String("host", "localhost", "The Prometheus host to query.")
+	fHost               = flag.String("host", "localhost:9090", "The Prometheus host or host:port to query.")
 	fPath               = flag.String("path", "/api/v1/query_range", "Path to append to host.")
+	fHTTPScheme         = flag.String("scheme", "http", "Scheme to use for calling into Prometheus.")
 	fUsername           = flag.String("username", "", "Username for basic auth (if needed).")
 	fPassword           = flag.String("password", "", "Password for basic auth (if needed).")
 	fQueries            = flag.String("queries", "", "A semicolon separated list of queries to use.")
@@ -46,8 +46,8 @@ type totals struct {
 	TotalDuration    time.Duration `json:"total_duration"`
 	QueriesPerSecond float64       `json:"queries_per_second"`
 
-	lock    sync.Mutex
-	results []*queryResult
+	lock      sync.Mutex
+	queryPool []*queryResult
 }
 
 func (t *totals) getErrors() int {
@@ -117,7 +117,7 @@ func main() {
 
 	if *fQueries == "" {
 		level.Error(logger).Log("msg", "No Queries supplied.")
-		return
+		os.Exit(1)
 	}
 
 	queries := strings.Split(*fQueries, ";")
@@ -127,12 +127,12 @@ func main() {
 	step := int(end.Sub(start).Seconds() / 250)
 
 	t := &totals{
-		results: []*queryResult{},
+		queryPool: []*queryResult{},
 	}
 
 	for _, query := range queries {
 		queryURL := url.URL{
-			Scheme: "https",
+			Scheme: *fHTTPScheme,
 			Host:   *fHost,
 			Path:   *fPath,
 		}
@@ -147,7 +147,7 @@ func main() {
 			queryURL.User = url.UserPassword(*fUsername, *fPassword)
 		}
 
-		t.results = append(t.results, &queryResult{
+		t.queryPool = append(t.queryPool, &queryResult{
 			Query:       query,
 			queryURL:    queryURL,
 			MinDuration: math.MaxInt64,
@@ -163,30 +163,34 @@ func main() {
 	wg.Wait()
 	t.TotalDuration = time.Since(summaryStart)
 
-	// launch server if needed
-	if *fServer {
-		resultsBytes, err := json.Marshal(t.results)
-		if err != nil {
-			level.Error(logger).Log("err", err)
-			return
-		}
-
-		http.HandleFunc("/results", func(w http.ResponseWriter, req *http.Request) {
-			if _, err := w.Write(resultsBytes); err != nil {
-				level.Error(logger).Log("err", err)
-				w.WriteHeader(http.StatusInternalServerError)
-			}
-		})
-
-		level.Info(logger).Log("msg", "Serving results")
-		if err := http.ListenAndServe(":8080", nil); err != nil {
-			level.Error(logger).Log("msg", "could not start http server")
-		}
+	if err := printResults(t); err != nil {
+		level.Error(logger).Log("err", err)
+		os.Exit(1)
 	}
 
-	err := printResults(t)
+	// If no server needs to be run return early.
+	if !*fServer {
+		return
+	}
+
+	// Launch server to display queryPool if needed.
+	resultsBytes, err := json.Marshal(t.queryPool)
 	if err != nil {
 		level.Error(logger).Log("err", err)
+		os.Exit(1)
+	}
+
+	http.HandleFunc("/queryPool", func(w http.ResponseWriter, req *http.Request) {
+		if _, err := w.Write(resultsBytes); err != nil {
+			level.Error(logger).Log("err", err)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	})
+
+	level.Info(logger).Log("msg", "Serving queryPool")
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		level.Error(logger).Log("msg", "could not start http server")
+		os.Exit(1)
 	}
 }
 
@@ -204,35 +208,36 @@ func performQuery(logger log.Logger, totals *totals, timeout time.Duration, wg *
 		default:
 		}
 
-		n := r.Intn(len(totals.results))
-		resultStorage := totals.results[n]
+		n := r.Intn(len(totals.queryPool))
+		resultStorage := totals.queryPool[n]
+
 		// Drop out if we have too many errors.
 		if totals.getErrors() >= *fErrorThreshold {
-			level.Info(logger).Log("msg", fmt.Sprintf("too many errors, skipping the remainder %s", resultStorage.Query))
+			level.Error(logger).Log("msg", fmt.Sprintf("too many errors, skipping the remainder %s", resultStorage.Query))
+			return
 		}
 
 		queryStart := time.Now()
 		resp, err := http.Get(resultStorage.queryURL.String())
 		duration := time.Since(queryStart)
 
-		if err != nil || resp.StatusCode != 200 {
+		if err != nil {
 			totals.addError()
-
-			if resp != nil {
-				level.Error(logger).Log("msg", "query failed with %d", resp.StatusCode)
-			} else {
-				level.Error(logger).Log("msg", "query failed")
-			}
-
+			level.Info(logger).Log("msg", "query failed")
 			continue
 		}
 
 		// Check prometheus response success code.
 		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
+		if err != nil || resp.StatusCode != 200 {
 			totals.addError()
 			resultStorage.addError()
-			level.Error(logger).Log("err", err)
+
+			if resp != nil {
+				level.Info(logger).Log("msg", "query failed with %d", resp.StatusCode)
+			} else {
+				level.Info(logger).Log("err", err)
+			}
 			continue
 		}
 
@@ -240,14 +245,14 @@ func performQuery(logger log.Logger, totals *totals, timeout time.Duration, wg *
 		if err := json.Unmarshal(body, &promResult); err != nil {
 			totals.addError()
 			resultStorage.addError()
-			level.Error(logger).Log("err", err)
+			level.Info(logger).Log("err", err)
 			continue
 		}
 
 		if promResult.Status != "success" {
 			totals.addError()
 			resultStorage.addError()
-			level.Error(logger).Log("err", fmt.Sprintf("prometheus query reported failure: %s", resp.Body))
+			level.Info(logger).Log("err", fmt.Sprintf("prometheus query reported failure: %s", resp.Body))
 			continue
 		}
 
@@ -267,10 +272,10 @@ func performQuery(logger log.Logger, totals *totals, timeout time.Duration, wg *
 	}
 }
 
-// printResults will calculate totals and print results for individual queries and for the run overall.
+// printResults will calculate totals and print queryPool for individual queries and for the run overall.
 func printResults(totals *totals) error {
 	var totalTime time.Duration
-	for _, resultStorage := range totals.results {
+	for _, resultStorage := range totals.queryPool {
 		if resultStorage.Successes > 0 {
 			totalTime += resultStorage.TotalDuration
 			resultStorage.AverageDuration = resultStorage.TotalDuration.Seconds() / float64(resultStorage.Successes)
@@ -290,7 +295,7 @@ func printResults(totals *totals) error {
 		totals.Errors,
 	)
 
-	for _, result := range totals.results {
+	for _, result := range totals.queryPool {
 		fmt.Fprintf(table, tableFormat,
 			result.Query,
 			result.AverageDuration,
