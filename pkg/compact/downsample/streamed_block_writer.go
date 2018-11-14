@@ -228,7 +228,7 @@ func (w *StreamedBlockWriter) populateBlock(indexWriter tsdb.IndexWriter) error 
 
 	all := index.NewListPostings(w.postings)
 	for all.Next() {
-		s := w.series[i]
+		s := w.series[all.At()]
 		// Skip the series with all deleted chunks.
 		if len(s.chunks) == 0 {
 			level.Info(w.logger).Log("empty chunks", i, s.lset)
