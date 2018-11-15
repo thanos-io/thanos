@@ -59,6 +59,25 @@ func TestProvider_ShouldNotReturnOldAddresses_WhenNotRequestedAnymore(t *testing
 	testutil.Assert(t, contains(result, ip2), "Expected %v but it was missing", ip2)
 }
 
+func TestProvider_ShouldKeepRecords_WhenDNSHasSucceededBeforeAndFailsNow(t *testing.T) {
+	prv := NewProviderWithResolver(log.NewNopLogger())
+	ctx := context.TODO()
+
+	nonExistentDomain := "dns+asdasasdNonExistent1236.org:8080"
+	ip := "127.0.0.1:19091"
+
+	prv.resolved[nonExistentDomain] = []string{ip}
+
+	result := prv.Addresses()
+	testutil.Assert(t, len(result) == 1, "Expected 1 address but got %v", len(result))
+	testutil.Assert(t, contains(result, ip), "Expected %v but it was missing", ip)
+
+	testutil.Ok(t, prv.Resolve(ctx, []string{nonExistentDomain}))
+	result = prv.Addresses()
+	testutil.Assert(t, len(result) == 1, "Expected 1 address but got %v", len(result))
+	testutil.Assert(t, contains(result, ip), "Expected %v but it was missing", ip)
+}
+
 type mockDiscoverer struct {
 	err error
 }

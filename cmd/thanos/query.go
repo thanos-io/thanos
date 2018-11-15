@@ -263,7 +263,7 @@ func runQuery(
 
 	fileSDCache := cache.New()
 	// DNS provider with default resolver.
-	dnsProvider := dns.NewProviderWithResolver()
+	dnsProvider := dns.NewProviderWithResolver(logger)
 
 	var (
 		stores = query.NewStoreSet(
