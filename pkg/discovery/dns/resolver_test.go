@@ -65,36 +65,36 @@ var (
 
 	dnsSDTests = []DNSSDTest{
 		{
-			"single ip from dns lookup of host port",
-			dnsHostNoPort + ":" + strconv.Itoa(port),
-			"dns",
-			[]string{ip + ":" + strconv.Itoa(port)},
-			nil,
-			&mockHostnameResolver{
+			testName:       "single ip from dns lookup of host port",
+			addr:           dnsHostNoPort + ":" + strconv.Itoa(port),
+			qtype:          "dns",
+			expectedResult: []string{ip + ":" + strconv.Itoa(port)},
+			expectedErr:    nil,
+			resolver: &mockHostnameResolver{
 				resultIPs: map[string][]net.IPAddr{
 					dnsHostNoPort: {net.IPAddr{IP: net.ParseIP(ip)}},
 				},
 			},
 		},
 		{
-			"single ip from dns lookup of host port with scheme",
-			"http://" + dnsHostNoPort + ":" + strconv.Itoa(port),
-			"dns",
-			[]string{"http://" + ip + ":" + strconv.Itoa(port)},
-			nil,
-			&mockHostnameResolver{
+			testName:       "single ip from dns lookup of host port with scheme",
+			addr:           "http://" + dnsHostNoPort + ":" + strconv.Itoa(port),
+			qtype:          "dns",
+			expectedResult: []string{"http://" + ip + ":" + strconv.Itoa(port)},
+			expectedErr:    nil,
+			resolver: &mockHostnameResolver{
 				resultIPs: map[string][]net.IPAddr{
 					dnsHostNoPort: {net.IPAddr{IP: net.ParseIP(ip)}},
 				},
 			},
 		},
 		{
-			"multiple srv records from srv lookup",
-			srvHost,
-			"dnssrv",
-			[]string{ip + ":" + strconv.Itoa(port), ip2 + ":" + strconv.Itoa(port)},
-			nil,
-			&mockHostnameResolver{
+			testName:       "multiple srv records from srv lookup",
+			addr:           srvHost,
+			qtype:          "dnssrv",
+			expectedResult: []string{ip + ":" + strconv.Itoa(port), ip2 + ":" + strconv.Itoa(port)},
+			expectedErr:    nil,
+			resolver: &mockHostnameResolver{
 				resultSRVs: map[string][]*net.SRV{
 					srvHost: {
 						&net.SRV{Target: ip, Port: uint16(port)},
@@ -104,28 +104,28 @@ var (
 			},
 		},
 		{
-			"error on dns lookup when no port is specified",
-			dnsHostNoPort,
-			"dns",
-			nil,
-			errors.Errorf("missing port in address given for dns lookup: %v", dnsHostNoPort),
-			&mockHostnameResolver{},
+			testName:       "error on dns lookup when no port is specified",
+			addr:           dnsHostNoPort,
+			qtype:          "dns",
+			expectedResult: nil,
+			expectedErr:    errors.Errorf("missing port in address given for dns lookup: %v", dnsHostNoPort),
+			resolver:       &mockHostnameResolver{},
 		},
 		{
-			"error on bad qtype",
-			dnsHostNoPort,
-			invalidQtype,
-			nil,
-			errors.Errorf("invalid lookup scheme %q", invalidQtype),
-			&mockHostnameResolver{},
+			testName:       "error on bad qtype",
+			addr:           dnsHostNoPort,
+			qtype:          invalidQtype,
+			expectedResult: nil,
+			expectedErr:    errors.Errorf("invalid lookup scheme %q", invalidQtype),
+			resolver:       &mockHostnameResolver{},
 		},
 		{
-			"error from resolver",
-			srvHost,
-			"dnssrv",
-			nil,
-			errors.Wrapf(errorFromResolver, "lookup SRV records %q", srvHost),
-			&mockHostnameResolver{err: errorFromResolver},
+			testName:       "error from resolver",
+			addr:           srvHost,
+			qtype:          "dnssrv",
+			expectedResult: nil,
+			expectedErr:    errors.Wrapf(errorFromResolver, "lookup SRV records %q", srvHost),
+			resolver:       &mockHostnameResolver{err: errorFromResolver},
 		},
 	}
 )

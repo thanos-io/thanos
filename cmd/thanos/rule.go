@@ -240,7 +240,7 @@ func runRule(
 	// FileSD query addresses.
 	fileSDCache := cache.New()
 	// DNS provider with default resolver.
-	dnsProvider := dns.NewProvider(nil)
+	dnsProvider := dns.NewProviderWithResolver(logger)
 
 	// Hit the HTTP query API of query peers in randomized order until we get a result
 	// back or the context get canceled.
@@ -378,7 +378,7 @@ func runRule(
 		g.Add(func() error {
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				if err := alertmgrs.update(ctx); err != nil {
-					level.Error(logger).Log("msg", "refreshing Alertmanagers failed", "err", err)
+					level.Error(logger).Log("msg", "refreshing alertmanagers failed", "err", err)
 					alertMngrAddrResolutionErrors.Inc()
 				}
 				return nil
