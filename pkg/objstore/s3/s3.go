@@ -22,6 +22,7 @@ import (
 	"github.com/minio/minio-go/pkg/credentials"
 	"github.com/minio/minio-go/pkg/encrypt"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -31,13 +32,19 @@ const DirDelim = "/"
 
 // Config stores the configuration for s3 bucket.
 type Config struct {
-	Bucket        string `yaml:"bucket"`
-	Endpoint      string `yaml:"endpoint"`
-	AccessKey     string `yaml:"access_key"`
-	Insecure      bool   `yaml:"insecure"`
-	SignatureV2   bool   `yaml:"signature_version2"`
-	SSEEncryption bool   `yaml:"encrypt_sse"`
-	SecretKey     string `yaml:"secret_key"`
+	Bucket        string     `yaml:"bucket"`
+	Endpoint      string     `yaml:"endpoint"`
+	AccessKey     string     `yaml:"access_key"`
+	Insecure      bool       `yaml:"insecure"`
+	SignatureV2   bool       `yaml:"signature_version2"`
+	SSEEncryption bool       `yaml:"encrypt_sse"`
+	SecretKey     string     `yaml:"secret_key"`
+	HTTPConfig    HTTPConfig `yaml:"http_config"`
+}
+
+// HTTPConfig stores the http.Transport configuration for the s3 minio client.
+type HTTPConfig struct {
+	IdleConnTimeout model.Duration `yaml:"idle_conn_timeout"`
 }
 
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
@@ -48,10 +55,20 @@ type Bucket struct {
 	sse    encrypt.ServerSide
 }
 
+// ParseConfig unmarshals a buffer into a Config with default HTTPConfig values.
+func ParseConfig(conf []byte) (Config, error) {
+	defaultHTTPConfig := HTTPConfig{IdleConnTimeout: model.Duration(90 * time.Second)}
+	config := Config{HTTPConfig: defaultHTTPConfig}
+	if err := yaml.Unmarshal(conf, &config); err != nil {
+		return Config{}, err
+	}
+	return config, nil
+}
+
 // NewBucket returns a new Bucket using the provided s3 config values.
 func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
-	var config Config
-	if err := yaml.Unmarshal(conf, &config); err != nil {
+	config, err := ParseConfig(conf)
+	if err != nil {
 		return nil, err
 	}
 
@@ -103,7 +120,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 			DualStack: true,
 		}).DialContext,
 		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
+		IdleConnTimeout:       time.Duration(config.HTTPConfig.IdleConnTimeout),
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 		// The ResponseHeaderTimeout here is the only change from the
