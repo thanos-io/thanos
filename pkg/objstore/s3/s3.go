@@ -234,7 +234,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	_, err := b.client.PutObjectWithContext(ctx, b.name, name, r, -1,
-		minio.PutObjectOptions{ServerSideEncryption: b.sse},
+		minio.PutObjectOptions{ServerSideEncryption: b.sse, UserMetadata: map[string]string{"X-Amz-Acl": "bucket-owner-full-control"}},
 	)
 
 	return errors.Wrap(err, "upload s3 object")
