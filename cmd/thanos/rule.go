@@ -189,9 +189,17 @@ func runRule(
 		Name: "thanos_rule_duplicated_query_address",
 		Help: "The number of times a duplicated query addresses is detected from the different configs in rule",
 	})
+	rulesLoaded := prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "thanos_rule_loaded_rules",
+			Help: "Loaded rules partitioned by file and group",
+		},
+		[]string{"file", "group"},
+	)
 	reg.MustRegister(configSuccess)
 	reg.MustRegister(configSuccessTime)
 	reg.MustRegister(duplicatedQuery)
+	reg.MustRegister(rulesLoaded)
 
 	for _, addr := range queryAddrs {
 		if addr == "" {
@@ -433,6 +441,11 @@ func runRule(
 
 				configSuccess.Set(1)
 				configSuccessTime.Set(float64(time.Now().UnixNano()) / 1e9)
+
+				rulesLoaded.Reset()
+				for _, group := range mgr.RuleGroups() {
+					rulesLoaded.WithLabelValues(group.File(), group.Name()).Set(float64(len(group.Rules())))
+				}
 			}
 		}, func(error) {
 			close(cancel)
