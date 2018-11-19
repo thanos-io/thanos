@@ -15,7 +15,7 @@ import (
 type Provider struct {
 	sync.Mutex
 	resolver Resolver
-	addrs    []string
+	// A map from domain name to a slice of resolved targets.
 	resolved map[string][]string
 	logger   log.Logger
 }

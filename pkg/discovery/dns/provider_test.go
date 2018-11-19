@@ -63,7 +63,7 @@ func TestProvider_ShouldKeepRecords_WhenDNSHasSucceededBeforeAndFailsNow(t *test
 	prv := NewProviderWithResolver(log.NewNopLogger())
 	ctx := context.TODO()
 
-	nonExistentDomain := "dns+asdasasdNonExistent1236.org:8080"
+	nonExistentDomain := "dns+aNonExistent1236123.org:8080"
 	ip := "127.0.0.1:19091"
 
 	prv.resolved[nonExistentDomain] = []string{ip}
