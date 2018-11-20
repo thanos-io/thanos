@@ -40,6 +40,11 @@ import (
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
+const (
+	logFormatLogfmt = "logfmt"
+	logFormatJson   = "json"
+)
+
 type setupFunc func(*run.Group, log.Logger, *prometheus.Registry, opentracing.Tracer, bool) error
 
 func main() {
@@ -57,6 +62,8 @@ func main() {
 
 	logLevel := app.Flag("log.level", "Log filtering level.").
 		Default("info").Enum("error", "warn", "info", "debug")
+	logFormat := app.Flag("log.format", "Log format to use.").
+		Default(logFormatLogfmt).Enum(logFormatLogfmt, logFormatJson)
 
 	gcloudTraceProject := app.Flag("gcloudtrace.project", "GCP project to send Google Cloud Trace tracings to. If empty, tracing will be disabled.").
 		String()
@@ -95,6 +102,9 @@ func main() {
 			panic("unexpected log level")
 		}
 		logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
+		if *logFormat == logFormatJson {
+			logger = log.NewJSONLogger(log.NewSyncWriter(os.Stderr))
+		}
 		logger = level.NewFilter(logger, lvl)
 
 		if *debugName != "" {
