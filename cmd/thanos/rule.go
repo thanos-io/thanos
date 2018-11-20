@@ -271,7 +271,7 @@ func runRule(
 		ctx, cancel := context.WithCancel(context.Background())
 		ctx = tracing.ContextWithTracer(ctx, tracer)
 
-		notify := func(ctx context.Context, expr string, alerts ...*rules.Alert) error {
+		notify := func(ctx context.Context, expr string, alerts ...*rules.Alert) {
 			res := make([]*alert.Alert, 0, len(alerts))
 			for _, alrt := range alerts {
 				// Only send actually firing alerts.
@@ -290,8 +290,6 @@ func runRule(
 				res = append(res, a)
 			}
 			alertQ.Push(res)
-
-			return nil
 		}
 		mgr = rules.NewManager(&rules.ManagerOptions{
 			Context:     ctx,
