@@ -35,6 +35,7 @@ Flags:
                                  --help-long and --help-man).
       --version                  Show application version.
       --log.level=info           Log filtering level.
+      --log.format=logfmt        Log format to use.
       --gcloudtrace.project=GCLOUDTRACE.PROJECT  
                                  GCP project to send Google Cloud Trace tracings
                                  to. If empty, tracing will be disabled.
