@@ -9,6 +9,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/azure"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
+	"github.com/improbable-eng/thanos/pkg/objstore/hdfs"
 	"github.com/improbable-eng/thanos/pkg/objstore/inmem"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/objstore/swift"
@@ -99,5 +100,28 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 		}
 	} else {
 		t.Log("THANOS_SKIP_SWIFT_TESTS envvar present. Skipping test against swift.")
+	}
+
+	// Optional HDFS.
+	if _, ok := os.LookupEnv("THANOS_SKIP_HDFS_TESTS"); !ok {
+		config := &hdfs.Config{
+			NameNodeAddresses:    []string{"localhost:8020"},
+			UseDataNodeHostnames: false,
+			UserName:             "root",
+			BucketPath:           "/tmp/thanos-e2e-tests/test-buckets/" + t.Name(),
+		}
+
+		bkt, closeFn, err := hdfs.NewTestBucket(t, config)
+		testutil.Ok(t, err)
+
+		ok = t.Run("hdfs", func(t *testing.T) {
+			testFn(t, bkt)
+		})
+		closeFn()
+		if !ok {
+			return
+		}
+	} else {
+		t.Log("THANOS_SKIP_HDFS_TESTS envvar present. Skipping test against HDFS.")
 	}
 }

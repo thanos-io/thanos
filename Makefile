@@ -26,6 +26,8 @@ SUPPORTED_PROM_VERSIONS ?=v2.0.0 v2.2.1 v2.3.2 v2.4.3
 ALERTMANAGER_VERSION    ?=v0.15.2
 MINIO_SERVER_VERSION    ?=RELEASE.2018-10-06T00-15-16Z
 
+GOHDFS_VERSION = 6f7e441ec688730014b4ca08657db358d7a45b87
+
 # fetch_go_bin_version downloads (go gets) the binary from specific version and installs it in $(BIN_DIR)/<bin>-<version>
 # arguments:
 # $(1): Install path. (e.g github.com/golang/dep/cmd/dep)
@@ -136,10 +138,13 @@ tarballs-release: $(PROMU)
 	$(PROMU) checksum .tarballs
 	$(PROMU) release .tarballs
 
+.PHONY: package-hdfs
+package-hdfs: .hdfs.$(GOHDFS_VERSION).tar.gz
+
 # test runs all Thanos golang tests against each supported version of Prometheus.
 .PHONY: test
 test: test-deps
-	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS='true' or/and  export THANOS_SKIP_S3_AWS_TESTS='true' or/and export THANOS_SKIP_AZURE_TESTS='true' if you want to skip e2e tests against real store buckets"
+	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS='true' or/and export THANOS_SKIP_S3_AWS_TESTS='true' or/and export THANOS_SKIP_AZURE_TESTS='true' or/and export THANOS_SKIP_SWIFT_TESTS='true' or/and export THANOS_SKIP_HDFS_TESTS='true' if you want to skip e2e tests against real store buckets"
 	@for ver in $(SUPPORTED_PROM_VERSIONS); do \
 		THANOS_TEST_PROMETHEUS_PATH="prometheus-$$ver" THANOS_TEST_ALERTMANAGER_PATH="alertmanager-$(ALERTMANAGER_VERSION)" go test $(shell go list ./... | grep -v /vendor/ | grep -v /benchmark/); \
 	done
@@ -161,9 +166,19 @@ vet:
 
 # non-phony targets
 
-vendor: Gopkg.toml Gopkg.lock $(DEP_FINISHED) | $(DEP)
-	@echo ">> dep ensure"
-	@$(DEP) ensure $(DEPARGS) || rm $(DEP_FINISHED)
+vendor: Gopkg.toml Gopkg.lock .hdfs.$(GOHDFS_VERSION).tar.gz $(DEP_FINISHED) | $(DEP)
+	@{ \
+	  echo ">> dep ensure" && \
+	  $(DEP) ensure $(DEPARGS) && \
+	  echo ">> HDFS vendor hack" && \
+	  mkdir -p vendor/github.com/colinmarc/hdfs/v2 && \
+	  tar xkf ".hdfs.$(GOHDFS_VERSION).tar.gz" -C vendor/github.com/colinmarc/hdfs/v2 --exclude ./vendor && \
+	  tar xkf ".hdfs.$(GOHDFS_VERSION).tar.gz" --exclude ./vendor/golang.org/x/crypto --exclude ./vendor/github.com/golang/protobuf ./vendor; \
+	 } || rm $(DEP_FINISHED)
+
+.hdfs.$(GOHDFS_VERSION).tar.gz:
+	@echo ">> packaging HDFS library"
+	@hack/package-hdfs.sh "$(GOHDFS_VERSION)" .hdfs.$(GOHDFS_VERSION).tar.gz
 
 $(GOIMPORTS):
 	@echo ">> fetching goimports"

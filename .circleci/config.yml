@@ -1,15 +1,36 @@
 # NOTE: Current plan gives 1500 build minutes per month.
 version: 2
 jobs:
+  package-hdfs:
+    docker:
+      - image: circleci/golang:1.11
+    working_directory: /go/src/github.com/improbable-eng/thanos
+    steps:
+      - checkout
+      - run: make package-hdfs
+      - persist_to_workspace:
+          root: .
+          paths:
+          - .hdfs.*.tar.gz
+
   test:
     docker:
       # Available from https://hub.docker.com/r/circleci/golang/
       - image: circleci/golang:1.10
+      - image: uhopper/hadoop-namenode:2.8.1
+        environment:
+          CLUSTER_NAME: thanos
+          CORE_CONF_fs_defaultFS: hdfs://localhost:8020
+      - image: uhopper/hadoop-datanode:2.8.1
+        environment:
+          CORE_CONF_fs_defaultFS: hdfs://localhost:8020
     working_directory: /go/src/github.com/improbable-eng/thanos
     steps:
       - checkout
       - setup_remote_docker:
             version: 17.07.0-ce
+      - attach_workspace:
+          at: .
       - run:
           name: Create Secret if PR is not forked
           # GCS integration tests are run only for author's PR that have write access, because these tests
@@ -46,6 +67,8 @@ jobs:
     working_directory: /home/circleci/.go_workspace/src/github.com/improbable-eng/thanos
     steps:
     - checkout
+    - attach_workspace:
+        at: .
     - run: make crossbuild
     - persist_to_workspace:
         root: .
@@ -97,7 +120,13 @@ workflows:
   version: 2
   thanos:
     jobs:
+    - package-hdfs:
+        filters:
+          tags:
+            only: /.*/
     - test:
+        requires:
+        - package-hdfs
         filters:
           tags:
             only: /.*/

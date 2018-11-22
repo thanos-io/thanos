@@ -104,6 +104,13 @@
   revision = "9f541cc9db5d55bce703bd99987c9d5cb8eea45e"
 
 [[projects]]
+  digest = "1:dfce66afa58b8dca3c176c2ff132a1d2ecb8008ee43b7bdb969513441a8f37e1"
+  name = "github.com/fharding1/limit"
+  packages = ["."]
+  pruneopts = ""
+  revision = "25d8d1dc2d1f95a37b6c0eb4378a7e0717f6f4e1"
+
+[[projects]]
   digest = "1:e5c807ac3b60699ccec9263f6eec756251b17e78582eb149f90ac345d9e58327"
   name = "github.com/fortytw2/leaktest"
   packages = ["."]
@@ -755,6 +762,7 @@
     "github.com/NYTimes/gziphandler",
     "github.com/armon/go-metrics",
     "github.com/armon/go-metrics/prometheus",
+    "github.com/fharding1/limit",
     "github.com/fortytw2/leaktest",
     "github.com/fsnotify/fsnotify",
     "github.com/go-kit/kit/log",

@@ -1,4 +1,4 @@
-ignored = ["github.com/improbable-eng/thanos/benchmark/*"]
+ignored = ["github.com/improbable-eng/thanos/benchmark/*", "github.com/colinmarc/hdfs/*"]
 
 [[constraint]]
   name = "cloud.google.com/go"
@@ -83,3 +83,7 @@ ignored = ["github.com/improbable-eng/thanos/benchmark/*"]
 [[constraint]]
   name = "github.com/gophercloud/gophercloud"
   revision = "0719c6b22f30132b0ae6c90b038e0d50992107b0"
+
+[[constraint]]
+  name = "github.com/fharding1/limit"
+  revision = "25d8d1dc2d1f95a37b6c0eb4378a7e0717f6f4e1"
