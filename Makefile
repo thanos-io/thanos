@@ -34,16 +34,16 @@ define fetch_go_bin_version
 	@mkdir -p $(BIN_DIR)
 
 	@echo ">> fetching $(1)@$(2) revision/version"
-	@if [ ! -d "$(TMP_GOPATH)/src/$(1)" ]; then \
-    	GOPATH=$(TMP_GOPATH) go get -d -u $(1); \
-    else \
-    	git fetch; \
-    fi
-    @cd $(TMP_GOPATH)/src/$(1) && git checkout -f -q $(2)
-    @echo ">> installing $(1)@$(2)"
-    @GOBIN=$(TMP_GOPATH)/bin GOPATH=$(TMP_GOPATH) go install $(1)
-    @mv $(TMP_GOPATH)/bin/$(shell basename $(1)) $(BIN_DIR)/$(shell basename $(1))-$(2)
-    @echo ">> produced $(BIN_DIR)/$(shell basename $(1))-$(2)"
+	@if [ ! -d '$(TMP_GOPATH)/src/$(1)' ]; then \
+    GOPATH='$(TMP_GOPATH)' go get -d -u '$(1)'; \
+  else \
+    CDPATH='' cd -- '$(TMP_GOPATH)/src/$(1)' && git fetch; \
+  fi
+	@CDPATH='' cd -- '$(TMP_GOPATH)/src/$(1)' && git checkout -f -q '$(2)'
+	@echo ">> installing $(1)@$(2)"
+	@GOBIN='$(TMP_GOPATH)/bin' GOPATH='$(TMP_GOPATH)' go install '$(1)'
+	@mv -- '$(TMP_GOPATH)/bin/$(shell basename $(1))' '$(BIN_DIR)/$(shell basename $(1))-$(2)'
+	@echo ">> produced $(BIN_DIR)/$(shell basename $(1))-$(2)"
 
 endef
 
