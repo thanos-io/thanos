@@ -4,16 +4,17 @@ Thanos supports any object stores that can be implemented against Thanos [objsto
 
 Current object storage client implementations:
 
-| Provider             | Maturity | Auto-tested on CI | Maintainers |
-|----------------------|-------------------|-----------|---------------|
-| Google Cloud Storage | Stable  (production usage)             | yes       | @bplotka   |
-| AWS S3               | Beta  (working PoCs, testing usage)               | no        | ?          |
-| Azure Storage Account | Alpha   | yes       | @vglafirov   |
-| OpenStack Swift      | Beta  (working PoCs, testing usage)               | no        | @sudhi-vm   |
+| Provider              | Maturity                            | Auto-tested on CI | Maintainers |
+|-----------------------|-------------------------------------|-------------------|-------------|
+| Google Cloud Storage  | Stable  (production usage)          | yes               | @bplotka    |
+| AWS S3                | Beta  (working PoCs, testing usage) | no                | ?           |
+| Azure Storage Account | Alpha                               | yes               | @vglafirov  |
+| OpenStack Swift       | Beta  (working PoCs, testing usage) | no                | @sudhi-vm   |
+| Apache Hadoop HDFS    | Alpha                               | yes               | @twz123     |
 
 NOTE: Currently Thanos requires strong consistency (write-read) for object store implementation.
 
-## How to add a new client?
+## How to add a new client
 
 1. Create new directory under `pkg/objstore/<provider>`
 2. Implement [objstore.Bucket inteface](/pkg/objstore/objstore.go)
@@ -51,6 +52,7 @@ Make sure you use a correct signature version to set `signature-version2: true`,
 For debug purposes you can set `insecure: true` to switch to plain insecure HTTP instead of HTTPS
 
 ### Credentials
+
 By default Thanos will try to retrieve credentials from the following sources:
 
 1. IAM credentials retrieved from an instance profile
@@ -159,7 +161,7 @@ You can read more on how to get application credential json file in [https://clo
 
 For deployment:
 
-`Storage Object Creator` and ` Storage Object Viewer`
+`Storage Object Creator` and `Storage Object Viewer`
 
 For testing:
 
@@ -188,9 +190,10 @@ config:
 ```
 
 ### OpenStack Swift Configuration
+
 Thanos uses [gophercloud](http://gophercloud.io/) client to upload Prometheus data into [OpenStack Swift](https://docs.openstack.org/swift/latest/).
 
-Below is an example configuration file for thanos to use OpenStack swift container as an object store. 
+Below is an example configuration file for Thanos to use OpenStack swift container as an object store.
 
 ```yaml
 type: SWIFT
@@ -202,5 +205,25 @@ config:
     region_name: <region>
     container_name: <container>
 ```
+
+### Apache Hadoop HDFS
+
+Thanos uses the [colinmarc/hdfs][go-hdfs] client to upload Prometheus data into
+[HDFS][hdfs]. Below is an example configuration file for Thanos to use HDFS as
+an object store.
+
+```yaml
+type: HDFS
+config:
+    namenode_addresses:                   # specify the namenode(s) to connect to.
+    - primary-namenode.example.com:8020
+    - secondary-namenode.example.com:8020
+    username: thanos                      # specifies which HDFS user the client will act as
+    use_datanode_hostnames: false         # whether to connect to the datanodes via hostname or IP address
+    bucket_path: /path/to/bucket/on/hdfs  # absolute path of this bucket within HDFS
+```
+
+[go-hdfs]: https://github.com/colinmarc/hdfs
+[hdfs]: https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-hdfs/HdfsDesign.html
 
 Set the flags `--objstore.config-file` to reference to the configuration file.

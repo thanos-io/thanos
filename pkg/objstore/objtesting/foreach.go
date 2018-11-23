@@ -105,9 +105,9 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 	// Optional HDFS.
 	if _, ok := os.LookupEnv("THANOS_SKIP_HDFS_TESTS"); !ok {
 		config := &hdfs.Config{
-			NameNodeAddresses:    []string{"localhost:8020"},
-			UseDataNodeHostnames: false,
-			UserName:             "root",
+			NamenodeAddresses:    []string{"localhost:8020"},
+			UseDatanodeHostnames: false,
+			Username:             "root",
 			BucketPath:           "/tmp/thanos-e2e-tests/test-buckets/" + t.Name(),
 		}
 

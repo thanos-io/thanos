@@ -18,6 +18,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/pkg/errors"
+	"gopkg.in/yaml.v2"
 )
 
 // FIXME: Pass on context to HDFS lib somehow (https://medium.com/@zombiezen/canceling-i-o-in-go-capn-proto-5ae8c09c5b29)
@@ -38,8 +39,13 @@ type hdfsBucket struct {
 	client     *hdfs.Client
 }
 
-func NewBucket(logger log.Logger, config *Config) (objstore.Bucket, error) {
-	return newBucket(logger, config)
+func NewBucket(logger log.Logger, config []byte) (objstore.Bucket, error) {
+	var conf Config
+	if err := yaml.Unmarshal(config, &conf); err != nil {
+		return nil, err
+	}
+
+	return newBucket(logger, &conf)
 }
 
 func NewTestBucket(t *testing.T, config *Config) (objstore.Bucket, func(), error) {
@@ -61,14 +67,14 @@ func NewTestBucket(t *testing.T, config *Config) (objstore.Bucket, func(), error
 }
 
 func newBucket(logger log.Logger, config *Config) (*hdfsBucket, error) {
-	bucketPath, err := buildPath(config.BucketPath)
+	bucketPath, err := config.validate()
 	if err != nil {
-		return nil, errors.Wrapf(err, "invalid HDFS bucket path: %q", config.BucketPath)
+		return nil, err
 	}
 
 	dialFunc := (&net.Dialer{
 		Timeout:   5 * time.Second,
-		KeepAlive: 5 * time.Second,
+		KeepAlive: 30 * time.Second,
 		DualStack: true,
 	}).DialContext
 
@@ -78,9 +84,9 @@ func newBucket(logger log.Logger, config *Config) (*hdfsBucket, error) {
 	}
 
 	opts := hdfs.ClientOptions{
-		Addresses:           config.NameNodeAddresses,
-		User:                config.UserName,
-		UseDatanodeHostname: config.UseDataNodeHostnames,
+		Addresses:           config.NamenodeAddresses,
+		User:                config.Username,
+		UseDatanodeHostname: config.UseDatanodeHostnames,
 		NamenodeDialFunc:    ctxDialFunc,
 		DatanodeDialFunc:    ctxDialFunc,
 	}

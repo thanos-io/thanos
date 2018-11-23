@@ -10,6 +10,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/azure"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
+	"github.com/improbable-eng/thanos/pkg/objstore/hdfs"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/objstore/swift"
 	"github.com/pkg/errors"
@@ -20,9 +21,10 @@ import (
 type objProvider string
 
 const (
-	GCS   objProvider = "GCS"
-	S3    objProvider = "S3"
 	AZURE objProvider = "AZURE"
+	GCS   objProvider = "GCS"
+	HDFS  objProvider = "HDFS"
+	S3    objProvider = "S3"
 	SWIFT objProvider = "SWIFT"
 )
 
@@ -53,12 +55,14 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg *prometheus.Regist
 
 	var bucket objstore.Bucket
 	switch strings.ToUpper(string(bucketConf.Type)) {
-	case string(GCS):
-		bucket, err = gcs.NewBucket(context.Background(), logger, config, component)
-	case string(S3):
-		bucket, err = s3.NewBucket(logger, config, component)
 	case string(AZURE):
 		bucket, err = azure.NewBucket(logger, config, component)
+	case string(GCS):
+		bucket, err = gcs.NewBucket(context.Background(), logger, config, component)
+	case string(HDFS):
+		bucket, err = hdfs.NewBucket(logger, config)
+	case string(S3):
+		bucket, err = s3.NewBucket(logger, config, component)
 	case string(SWIFT):
 		bucket, err = swift.NewContainer(logger, config)
 	default:
