@@ -116,7 +116,7 @@ func main() {
 	logger = level.NewFilter(logger, lvl)
 
 	if *fQueries == "" {
-		level.Error(logger).Log("msg", "No Queries supplied.")
+		level.Error(logger).Log("msg", "no Queries supplied")
 		os.Exit(1)
 	}
 
@@ -187,7 +187,7 @@ func main() {
 		}
 	})
 
-	level.Info(logger).Log("msg", "Serving queryPool")
+	level.Info(logger).Log("msg", "serving results")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		level.Error(logger).Log("msg", "could not start http server")
 		os.Exit(1)
@@ -220,7 +220,6 @@ func performQuery(logger log.Logger, totals *totals, timeout time.Duration, wg *
 		queryStart := time.Now()
 		resp, err := http.Get(resultStorage.queryURL.String())
 		duration := time.Since(queryStart)
-
 		if err != nil {
 			totals.addError()
 			level.Info(logger).Log("msg", "query failed")
@@ -229,6 +228,7 @@ func performQuery(logger log.Logger, totals *totals, timeout time.Duration, wg *
 
 		// Check prometheus response success code.
 		body, err := ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
 		if err != nil || resp.StatusCode != 200 {
 			totals.addError()
 			resultStorage.addError()
