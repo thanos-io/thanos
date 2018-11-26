@@ -16,11 +16,6 @@ var validParts = []string{
 	"a..", "a..b",
 }
 
-func TestDoo(t *testing.T) {
-	var foo []string
-	testutil.Equals(t, true, foo == nil)
-}
-
 func TestBuildHdfsPath(t *testing.T) {
 	test := func(expected string, parts ...string) {
 		t.Run(fmt.Sprintf("buildPath(%q)", parts), func(t *testing.T) {

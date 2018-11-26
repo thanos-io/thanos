@@ -203,7 +203,15 @@ func (h *hdfsBucket) Upload(ctx context.Context, name string, r io.Reader) error
 		return &os.PathError{Op: "create", Path: name, Err: err}
 	}
 
-	partialsPath, err := h.bucketPath.join(partialsDir, base64.URLEncoding.EncodeToString([]byte(name)))
+	// Upload the data to a protected path inside the bucket first. HDFS behaves
+	// like a real file system, so files are actually visible to other clients
+	// directly after their creation. In order to not disturb other Thanos
+	// clients, use the partials directory for uploads and do a rename after the
+	// upload completed.
+
+	// Encode the object's name to "flatten" deep directory structures
+	partialsName := base64.URLEncoding.EncodeToString([]byte(name))
+	partialsPath, err := h.bucketPath.join(partialsDir, partialsName)
 	if err != nil {
 		return &os.PathError{Op: "create", Path: name, Err: err}
 	}
@@ -213,11 +221,7 @@ func (h *hdfsBucket) Upload(ctx context.Context, name string, r io.Reader) error
 	}
 
 	if err := h.rename(partialsPath, path); err != nil {
-		if delErr := h.delete(partialsPath); delErr != nil {
-			return moreErrors([]error{err, delErr})
-		}
-
-		return err
+		return allErrors(err, h.prune(partialsPath))
 	}
 
 	return nil
@@ -230,7 +234,28 @@ func (h *hdfsBucket) Delete(ctx context.Context, name string) error {
 		return &os.PathError{Op: "remove", Path: name, Err: err}
 	}
 
-	return h.delete(path)
+	// Capture the case when trying to delete a directory. Directories should
+	// never be empty, due to pruning, so calls to h.client.Remove(path) should
+	// return ENOTEMPTY, but it feels better to proactively check for that case.
+	stat, err := h.client.Stat(string(path))
+	if h.IsObjNotFoundErr(err) {
+		return &os.PathError{Op: "remove", Path: string(path), Err: os.ErrNotExist}
+	}
+	if err != nil {
+		return err
+	}
+	if stat.IsDir() {
+		// TODO: Return os.ErrNotExist here? Strictly speaking, this object doesn't
+		// exist, but its name is obstructed by a directory.
+		return &os.PathError{Op: "remove", Path: string(path), Err: syscall.EISDIR}
+	}
+
+	// Okay, path exists and is not a directory: prune it!
+	if err := h.prune(path); err != nil {
+		return &os.PathError{Op: "remove", Path: string(path), Err: err}
+	}
+
+	return nil
 }
 
 func isPartials(name string) bool {
@@ -262,10 +287,10 @@ func (h *hdfsBucket) open(ctx context.Context, name string) (*hdfs.FileReader, h
 func (h *hdfsBucket) openFile(ctx context.Context, name string) (*hdfs.FileReader, error) {
 	reader, path, err := h.open(ctx, name)
 	if err == nil && reader.Stat().IsDir() {
-		if err := reader.Close(); err != nil {
-			return nil, err
-		}
-		return nil, pathError("open", path, syscall.EISDIR)
+		return nil, allErrors(
+			&os.PathError{Op: "open", Path: string(path), Err: syscall.EISDIR},
+			reader.Close(),
+		)
 	}
 
 	return reader, err
@@ -291,6 +316,8 @@ func iter(reader *hdfs.FileReader, prefix string, callback func(string) error) e
 
 	for _, info := range content {
 		name := prefix + info.Name()
+
+		// Hide the internal stuff
 		if isPartials(name) {
 			continue
 		}
@@ -308,7 +335,7 @@ func iter(reader *hdfs.FileReader, prefix string, callback func(string) error) e
 }
 
 func (h *hdfsBucket) upload(path hdfsPath, r io.Reader) error {
-	writer, pruneFn, err := h.create(path)
+	writer, err := h.create(path)
 	if err != nil {
 		return err
 	}
@@ -318,7 +345,7 @@ func (h *hdfsBucket) upload(path hdfsPath, r io.Reader) error {
 	written, err := io.Copy(writer, r)
 	err = allErrors(err, writer.Close())
 	if err != nil {
-		return allErrors(err, pruneFn())
+		return allErrors(err, h.prune(path))
 	}
 
 	level.Debug(h.logger).Log("msg", "upload complete", "path", path, "written", written)
@@ -333,30 +360,28 @@ func mkdirAll(c *hdfs.Client, path hdfsPath) error {
 	return nil
 }
 
-var noop = func() error { return nil }
-
-func (h *hdfsBucket) create(path hdfsPath) (*hdfs.FileWriter, func() error, error) {
-	writer, pruneFn, err := h.doOnPath(path, func() (io.Closer, error) {
+func (h *hdfsBucket) create(path hdfsPath) (*hdfs.FileWriter, error) {
+	writer, err := h.doOnPath(path, func() (io.Closer, error) {
 		return h.client.Create(string(path))
 	})
 
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if writer, ok := writer.(*hdfs.FileWriter); ok {
-		return writer, pruneFn, nil
+		return writer, nil
 	}
 
-	return nil, nil, allErrors(
+	return nil, allErrors(
 		errors.New("internal error"),
 		writer.Close(),
-		pruneFn(),
+		h.prune(path),
 	)
 }
 
 func (h *hdfsBucket) rename(from, to hdfsPath) error {
-	_, _, err := h.doOnPath(to, func() (io.Closer, error) {
+	_, err := h.doOnPath(to, func() (io.Closer, error) {
 		err := h.client.Rename(string(from), string(to))
 		return nil, err
 	})
@@ -367,86 +392,67 @@ func (h *hdfsBucket) rename(from, to hdfsPath) error {
 	return err
 }
 
-func (h *hdfsBucket) delete(path hdfsPath) error {
-	err := h.client.Remove(string(path))
-	if err != nil {
-		return err
-	}
-
-	if parent, ok := path.parent(); ok {
-		if err := h.prune(parent); err != nil {
-			return pathError("remove", path, err)
-		}
-	} else {
-		return pathError("remove", path, errors.New("failed to determine parent directory"))
-	}
-
-	return nil
-}
-
-func (h *hdfsBucket) doOnPath(path hdfsPath, fn func() (io.Closer, error)) (io.Closer, func() error, error) {
-	writer, err := fn()
+func (h *hdfsBucket) doOnPath(path hdfsPath, fn func() (io.Closer, error)) (io.Closer, error) {
+	closer, err := fn()
 	if err == nil {
-		return writer, noop, nil
+		return closer, nil
 	}
 
 	if !h.IsObjNotFoundErr(err) {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// try to create parent dir
 	parent, ok := path.parent()
 	if !ok || !h.bucketPath.isParentOf(parent) {
-		return nil, nil, errors.Errorf("refusing to create parent directory for %q", path)
+		return nil, errors.Errorf("refusing to create parent directory for %q", path)
 	}
 
 	if err := mkdirAll(h.client, parent); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	pruneFn := func() error {
-		return h.prune(path)
-	}
-
-	writer, err = fn()
+	closer, err = fn()
 	if err != nil {
-		return nil, nil, allErrors(err, pruneFn())
+		return nil, allErrors(err, h.prune(path))
 	}
 
-	return writer, pruneFn, nil
+	return closer, nil
 }
 
-func (h *hdfsBucket) prune(path hdfsPath) error {
-	for h.bucketPath.isParentOf(path) {
-		if err := h.client.Remove(string(path)); err != nil {
+func (h *hdfsBucket) prune(leafPath hdfsPath) error {
+	currentPath := leafPath
+
+	for h.bucketPath.isParentOf(currentPath) {
+		if err := h.client.Remove(string(currentPath)); err != nil {
 			if h.IsObjNotFoundErr(err) {
-				return nil
-			}
+				// Not found should only happen at the leaf path. Don't exit yet, but
+				// try to delete it's parent, if it is empty.
+				if currentPath != leafPath {
+					return err
+				}
+			} else {
+				if pathErr, ok := err.(*os.PathError); ok && pathErr.Err == syscall.ENOTEMPTY {
+					return nil // ok, found a non-empty parent path, all good!
+				}
 
-			if pathErr, ok := err.(*os.PathError); ok && pathErr.Err == syscall.ENOTEMPTY {
-				return nil // ok, found a non-empty parent, all good!
+				return err
 			}
-
-			return err
 		}
 
-		parent, ok := path.parent()
+		parentPath, ok := currentPath.parent()
 		if !ok {
-			return errors.Errorf("failed to determine parent directory of %q", path)
+			return errors.Errorf("failed to determine parent directory of %q", currentPath)
 		}
 
-		path = parent
+		currentPath = parentPath
 	}
 
-	if path == h.bucketPath {
+	if currentPath == h.bucketPath {
 		return nil // reached the bucket's root
 	}
 
-	return errors.Errorf("refusing to prune %q", path)
-}
-
-func pathError(op string, path hdfsPath, err error) error {
-	return &os.PathError{Op: op, Path: string(path), Err: err}
+	return errors.Errorf("refusing to prune %q", currentPath)
 }
 
 type moreErrors []error
