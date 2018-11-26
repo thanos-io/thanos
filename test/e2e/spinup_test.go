@@ -96,7 +96,6 @@ func scraper(i int, config string, gossip bool) (cmdScheduleFunc, string) {
 			"--prometheus.url", fmt.Sprintf("http://%s", promHTTP(i)),
 			"--tsdb.path", promDir,
 			"--cluster.address", sidecarCluster(i),
-
 			"--log.level", "debug",
 		}
 
