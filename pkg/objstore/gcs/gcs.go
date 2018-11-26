@@ -24,8 +24,8 @@ import (
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const DirDelim = "/"
 
-// gcsConfig stores the configuration for gcs bucket.
-type gcsConfig struct {
+// Config stores the configuration for gcs bucket.
+type Config struct {
 	Bucket string `yaml:"bucket"`
 }
 
@@ -40,7 +40,7 @@ type Bucket struct {
 
 // NewBucket returns a new Bucket against the given bucket handle.
 func NewBucket(ctx context.Context, logger log.Logger, conf []byte, component string) (*Bucket, error) {
-	var gc gcsConfig
+	var gc Config
 	if err := yaml.Unmarshal(conf, &gc); err != nil {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func (b *Bucket) Close() error {
 func NewTestBucket(t testing.TB, project string) (objstore.Bucket, func(), error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	src := rand.NewSource(time.Now().UnixNano())
-	gTestConfig := gcsConfig{
+	gTestConfig := Config{
 		Bucket: fmt.Sprintf("test_%s_%x", strings.ToLower(t.Name()), src.Int63()),
 	}
 

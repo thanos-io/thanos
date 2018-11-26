@@ -17,17 +17,17 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-type objProvider string
+type ObjProvider string
 
 const (
-	GCS   objProvider = "GCS"
-	S3    objProvider = "S3"
-	AZURE objProvider = "AZURE"
-	SWIFT objProvider = "SWIFT"
+	GCS   ObjProvider = "GCS"
+	S3    ObjProvider = "S3"
+	AZURE ObjProvider = "AZURE"
+	SWIFT ObjProvider = "SWIFT"
 )
 
 type BucketConfig struct {
-	Type   objProvider `yaml:"type"`
+	Type   ObjProvider `yaml:"type"`
 	Config interface{} `yaml:"config"`
 }
 
