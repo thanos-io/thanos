@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io/ioutil"
 	"math"
 	"net"
 	"net/http"
@@ -28,7 +29,7 @@ import (
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
 	"gopkg.in/alecthomas/kingpin.v2"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name string) {
@@ -352,13 +353,22 @@ func queryExternalLabels(ctx context.Context, logger log.Logger, base *url.URL) 
 	}
 	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
 
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Errorf("failed to read body")
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, errors.Errorf("got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
+	}
+
 	var d struct {
 		Data struct {
 			YAML string `json:"yaml"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
-		return nil, errors.Wrap(err, "decode response")
+	if err := json.Unmarshal(b, &d); err != nil {
+		return nil, errors.Wrapf(err, "unmarshal response: %v", string(b))
 	}
 	var cfg struct {
 		Global struct {
@@ -366,7 +376,7 @@ func queryExternalLabels(ctx context.Context, logger log.Logger, base *url.URL) 
 		} `yaml:"global"`
 	}
 	if err := yaml.Unmarshal([]byte(d.Data.YAML), &cfg); err != nil {
-		return nil, errors.Wrap(err, "parse Prometheus config")
+		return nil, errors.Wrapf(err, "parse Prometheus config: %v", d.Data.YAML)
 	}
 	return labels.FromMap(cfg.Global.ExternalLabels), nil
 }
