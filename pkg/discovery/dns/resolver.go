@@ -15,7 +15,7 @@ type Resolver interface {
 	// name is the domain name to be resolved.
 	// qtype is the query type. Accepted values are `dns` for A/AAAA lookup and `dnssrv` for SRV lookup.
 	// If qtype is `dns`, the domain name to be resolved requires a port or an error will be returned.
-	// TODO(ivan): probably use custom type or an enum for qtype
+	// TODO(ivan): probably use custom type or an enum for qtype.
 	Resolve(ctx context.Context, name string, qtype string) ([]string, error)
 }
 
@@ -44,6 +44,9 @@ func (s *dnsSD) Resolve(ctx context.Context, name string, qtype string) ([]strin
 	)
 
 	u, err := url.Parse(name)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed parsing host %v", name)
+	}
 	// If hostname is provided without a scheme or a // prefix, url.Parse assumes the hostname is the scheme and leaves
 	// the Host field empty.
 	if u.Host != "" {

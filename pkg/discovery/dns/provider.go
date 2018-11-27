@@ -81,7 +81,7 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string) error {
 		p.resolved[addr] = resolvedHosts
 	}
 
-	// Remove stored addresses that are no longer requested
+	// Remove stored addresses that are no longer requested.
 	var entriesToDelete []string
 	for existingAddr := range p.resolved {
 		if !contains(addrs, existingAddr) {
