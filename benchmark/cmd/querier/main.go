@@ -163,6 +163,10 @@ func main() {
 	wg.Wait()
 	t.TotalDuration = time.Since(summaryStart)
 
+	if t.getErrors() >= *fErrorThreshold {
+		level.Error(logger).Log("msg", "too many errors, exiting early")
+	}
+
 	if err := printResults(t); err != nil {
 		level.Error(logger).Log("err", err)
 		os.Exit(1)
@@ -213,7 +217,6 @@ func performQuery(logger log.Logger, totals *totals, timeout time.Duration, wg *
 
 		// Drop out if we have too many errors.
 		if totals.getErrors() >= *fErrorThreshold {
-			level.Error(logger).Log("msg", fmt.Sprintf("too many errors, skipping the remainder %s", resultStorage.Query))
 			return
 		}
 
