@@ -46,7 +46,8 @@ Set the flags `--objstore.config-file` to reference to the configuration file.
 
 AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region)
 
-Make sure you use a correct signature version to set `signature-version2: true`, otherwise, you will get Access Denied error.
+Make sure you use a correct signature version.
+Currently AWS require signature v4, so it needs `signature-version2: false`, otherwise, you will get Access Denied error, but several other S3 compatible use `signature-version2: true`
 
 For debug purposes you can set `insecure: true` to switch to plain insecure HTTP instead of HTTPS
 

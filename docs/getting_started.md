@@ -38,13 +38,13 @@ The following configures the Sidecar to only backup Prometheus data into a Googl
 
 ```
 thanos sidecar \
-    --tsdb.path         /var/prometheus \           # Data directory of Prometheus
-    --gcs.bucket        example-bucket \            # Bucket to upload data to
+    --tsdb.path                /var/prometheus \           # Data directory of Prometheus
+    --objstore.config-file     "bucket.yml"    \           # Bucket config file to send data to
 ```
 
 Rolling this out has little to zero impact on the running Prometheus instance. It is a good start to ensure you are backing up your data while figuring out the other pieces of Thanos.
 
-If you are not interested in backing up any data, the `--gcs.bucket` flag can simply be omitted.
+If you are not interested in backing up any data, the `--objstore.config-file` flag can simply be omitted.
 
 * _[Example Kubernetes manifest](../kube/manifests/prometheus.yaml)_
 * _[Example Kubernetes manifest with GCS upload](../kube/manifests/prometheus-gcs.yaml)_
@@ -59,7 +59,7 @@ Let's extend the Sidecar in the previous section to connect to a Prometheus serv
 ```
 thanos sidecar \
     --tsdb.path                 /var/prometheus \
-    --gcs.bucket                example-bucket \
+    --objstore.config-file     "bucket.yml"    \           # Bucket config file to send data to
     --prometheus.url            http://localhost:9090 \    # Location of the Prometheus HTTP server
     --http-address              0.0.0.0:19191 \            # HTTP endpoint for collecting metrics on the Sidecar
     --cluster.peers             127.0.0.1:19391 \          # Static list of peers where the node will get info about the cluster
@@ -146,7 +146,7 @@ Given a sidecar we can have it join a gossip cluster by advertising itself to ot
 thanos sidecar \
     --prometheus.url            http://localhost:9090 \
     --tsdb.path                 /var/prometheus \
-    --gcs.bucket                example-bucket \
+    --objstore.config-file     "bucket.yml"    \           # Bucket config file to send data to
     --grpc-address              0.0.0.0:19091 \            # gRPC endpoint for Store API (will be used to perform PromQL queries)
     --http-address              0.0.0.0:19191 \            # HTTP endpoint for collecting metrics on Thanos sidecar
     --cluster.address           0.0.0.0:19391 \            # Endpoint used to meta data about the current node
@@ -212,7 +212,7 @@ Just like sidecars and query nodes, the store gateway joins the gossip cluster a
 ```
 thanos store \
     --data-dir                  /var/thanos/store \     # Disk space for local caches
-    --gcs.bucket                example-bucket \        # Bucket to fetch data from
+    --objstore.config-file     "bucket.yml"    \        # Bucket config file to fetch data from
     --cluster.address           0.0.0.0:19891 \
     --cluster.advertise-address 127.0.0.1:19891 \
     --cluster.peers             127.0.0.1:19391 \
@@ -230,8 +230,8 @@ The compactor component simple scans the object storage and processes compaction
 
 ```
 thanos compact \
-    --data-dir /var/thanos/compact \  # Temporary workspace for data processing
-    --gcs-bucket example-bucket
+    --data-dir                 /var/thanos/compact \  # Temporary workspace for data processing
+    --objstore.config-file     "bucket.yml"    \      # Bucket config file to send data to
 ```
 
 The compactor is not in the critical path of querying or data backup. It can either be run as a periodic batch job or be left running to always compact data as soon as possible. It is recommended to provide 100-300GB of local disk space for data processing.

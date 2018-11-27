@@ -12,7 +12,7 @@ Here are some example alerts configured for Kubernetes environment.
     team: TEAM
   annotations:
     summary: Thanos compaction has failed to run and now is halted
-    impact: Long term storage queries will be slower 
+    impact: Long term storage queries will be slower
     action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
     dashboard: COMPACTION_URL
 - alert: ThanosCompactCompactionsFailed
@@ -21,7 +21,7 @@ Here are some example alerts configured for Kubernetes environment.
     team: TEAM
   annotations:
     summary: Thanos Compact is failing compaction
-    impact: Long term storage queries will be slower 
+    impact: Long term storage queries will be slower
     action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
     dashboard: COMPACTION_URL
 - alert: ThanosCompactBucketOperationsFailed
@@ -30,7 +30,7 @@ Here are some example alerts configured for Kubernetes environment.
     team: TEAM
   annotations:
     summary: Thanos Compact bucket operations are failing
-    impact: Long term storage queries will be slower 
+    impact: Long term storage queries will be slower
     action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
     dashboard: COMPACTION_URL
 - alert: ThanosCompactNotRunIn24Hours
@@ -39,7 +39,7 @@ Here are some example alerts configured for Kubernetes environment.
     team: TEAM
   annotations:
     summary: Thanos Compaction has not been run in 24 hours
-    impact: Long term storage queries will be slower 
+    impact: Long term storage queries will be slower
     action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
     dashboard: COMPACTION_URL
 - alert: ThanosComactionIsNotRunning
@@ -49,7 +49,7 @@ Here are some example alerts configured for Kubernetes environment.
     team: TEAM
   annotations:
     summary: Thanos Compaction is not running
-    impact: Long term storage queries will be slower 
+    impact: Long term storage queries will be slower
     action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
     dashboard: COMPACTION_URL
 - alert: ThanosComactionMultipleCompactionsAreRunning
@@ -111,7 +111,7 @@ For Thanos ruler we run some alerts in local Prometheus, to make sure that Thano
   labels:
     team: TEAM
   annotations:
-    summary: Thanos Store is returning Internal/Unavailable errors 
+    summary: Thanos Store is returning Internal/Unavailable errors
     impact: Long Term Storage Prometheus queries are failing
     action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
     dashboard: GATEWAY_URL
@@ -156,7 +156,7 @@ For Thanos ruler we run some alerts in local Prometheus, to make sure that Thano
   labels:
     team: TEAM
   annotations:
-    summary: Thanos Sidecar is returning Internal/Unavailable errors 
+    summary: Thanos Sidecar is returning Internal/Unavailable errors
     impact: Prometheus queries are failing
     action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
     dashboard: SIDECAR_URL
@@ -171,7 +171,7 @@ For Thanos ruler we run some alerts in local Prometheus, to make sure that Thano
   labels:
     team: TEAM
   annotations:
-    summary: Thanos Query is returning Internal/Unavailable errors 
+    summary: Thanos Query is returning Internal/Unavailable errors
     impact: Grafana is not showing metrics
     action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
     dashboard: QUERY_URL
