@@ -37,7 +37,7 @@ config:
   bucket: $S3_BUCKET
   endpoint: $S3_ENDPOINT
   insecure: $S3_INSECURE
-  signature_version2: $S3_V2_SIGANTURE
+  signature_version2: $S3_V2_SIGNATURE
   access_key: $S3_ACCESS_KEY
   secret_key: $S3_SECRET_KEY
 EOF
