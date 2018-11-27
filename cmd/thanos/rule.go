@@ -25,6 +25,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/discovery/cache"
+	"github.com/improbable-eng/thanos/pkg/discovery/dns"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
@@ -78,7 +79,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "")
 
-	queries := cmd.Flag("query", "Addresses of statically configured query API servers (repeatable).").
+	queries := cmd.Flag("query", "Addresses of statically configured query API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect query API servers through respective DNS lookups.").
 		PlaceHolder("<query>").Strings()
 
 	fileSDFiles := cmd.Flag("query.sd-files", "Path to file that contain addresses of query peers. The path can be a glob pattern (repeatable).").
@@ -86,6 +87,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	fileSDInterval := modelDuration(cmd.Flag("query.sd-interval", "Refresh interval to re-read file SD files. (used as a fallback)").
 		Default("5m"))
+
+	dnsSDInterval := modelDuration(cmd.Flag("query.sd-dns-interval", "Interval between DNS resolutions.").
+		Default("30s"))
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
@@ -148,6 +152,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			alertQueryURL,
 			*queries,
 			fileSD,
+			time.Duration(*dnsSDInterval),
 		)
 	}
 }
@@ -176,6 +181,7 @@ func runRule(
 	alertQueryURL *url.URL,
 	queryAddrs []string,
 	fileSD *file.Discovery,
+	dnsSDInterval time.Duration,
 ) error {
 	configSuccess := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_config_last_reload_successful",
@@ -189,6 +195,14 @@ func runRule(
 		Name: "thanos_rule_duplicated_query_address",
 		Help: "The number of times a duplicated query addresses is detected from the different configs in rule",
 	})
+	queryAddrResolutionErrors := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_rule_query_address_resolution_errors",
+		Help: "The number of times resolving an address of a query API has failed inside Thanos Rule",
+	})
+	alertMngrAddrResolutionErrors := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_rule_alertmanager_address_resolution_errors",
+		Help: "The number of times resolving an address of an alertmanager has failed inside Thanos Rule",
+	})
 	rulesLoaded := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "thanos_rule_loaded_rules",
@@ -199,6 +213,8 @@ func runRule(
 	reg.MustRegister(configSuccess)
 	reg.MustRegister(configSuccessTime)
 	reg.MustRegister(duplicatedQuery)
+	reg.MustRegister(queryAddrResolutionErrors)
+	reg.MustRegister(alertMngrAddrResolutionErrors)
 	reg.MustRegister(rulesLoaded)
 
 	for _, addr := range queryAddrs {
@@ -221,17 +237,17 @@ func runRule(
 		})
 	}
 
-	// FileSD query addresses
+	// FileSD query addresses.
 	fileSDCache := cache.New()
+	// DNS provider with default resolver.
+	dnsProvider := dns.NewProviderWithResolver(logger)
 
 	// Hit the HTTP query API of query peers in randomized order until we get a result
 	// back or the context get canceled.
 	queryFn := func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {
 		var addrs []string
-		// Add addresses from static flag
-		addrs = append(addrs, queryAddrs...)
 
-		// Add addresses from gossip
+		// Add addresses from gossip.
 		peers := peer.PeerStates(cluster.PeerTypeQuery)
 		var ids []string
 		for id := range peers {
@@ -244,10 +260,8 @@ func runRule(
 			addrs = append(addrs, peers[id].QueryAPIAddr)
 		}
 
-		// Add addresses from file sd
-		for _, addr := range fileSDCache.Addresses() {
-			addrs = append(addrs, addr)
-		}
+		// Add DNS resolved addresses from static flags and file SD.
+		addrs = append(addrs, dnsProvider.Addresses()...)
 
 		removeDuplicateQueryAddrs(logger, duplicatedQuery, addrs)
 
@@ -364,7 +378,8 @@ func runRule(
 		g.Add(func() error {
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				if err := alertmgrs.update(ctx); err != nil {
-					level.Warn(logger).Log("msg", "refreshing Alertmanagers failed", "err", err)
+					level.Error(logger).Log("msg", "refreshing alertmanagers failed", "err", err)
+					alertMngrAddrResolutionErrors.Inc()
 				}
 				return nil
 			})
@@ -472,7 +487,23 @@ func runRule(
 			close(cancel)
 		})
 	}
-
+	// Periodically update the addresses from static flags and file SD by resolving them using DNS SD if necessary.
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			return runutil.Repeat(dnsSDInterval, ctx.Done(), func() error {
+				addresses := append(fileSDCache.Addresses(), queryAddrs...)
+				if err := dnsProvider.Resolve(ctx, addresses); err != nil {
+					// Failure to resolve could be caused by a lookup timeout. We shouldn't fail because of that, so just log.
+					level.Error(logger).Log("msg", "failed to resolve addresses for queryAPIs", "err", err)
+					queryAddrResolutionErrors.Inc()
+				}
+				return nil
+			})
+		}, func(error) {
+			cancel()
+		})
+	}
 	// Start gRPC server.
 	{
 		l, err := net.Listen("tcp", grpcBindAddr)
@@ -639,18 +670,15 @@ func queryPrometheusInstant(ctx context.Context, logger log.Logger, addr, query 
 }
 
 type alertmanagerSet struct {
-	resolver *net.Resolver
+	resolver dns.Resolver
 	addrs    []string
 	mtx      sync.Mutex
 	current  []*url.URL
 }
 
 func newAlertmanagerSet(addrs []string, resolver *net.Resolver) *alertmanagerSet {
-	if resolver == nil {
-		resolver = net.DefaultResolver
-	}
 	return &alertmanagerSet{
-		resolver: resolver,
+		resolver: dns.NewResolver(resolver),
 		addrs:    addrs,
 	}
 }
@@ -664,62 +692,45 @@ func (s *alertmanagerSet) get() []*url.URL {
 const defaultAlertmanagerPort = 9093
 
 func (s *alertmanagerSet) update(ctx context.Context) error {
-	var res []*url.URL
-
+	var result []*url.URL
 	for _, addr := range s.addrs {
-		u, err := url.Parse(addr)
-		if err != nil {
-			return errors.Wrapf(err, "parse URL %q", addr)
-		}
-		host, port, err := net.SplitHostPort(u.Host)
-		if err != nil {
-			host, port = u.Host, ""
-		}
 		var (
-			hosts  []string
-			proto  = u.Scheme
-			lookup = "none"
+			name           = addr
+			qtype          string
+			nameQtype      []string
+			resolvedDomain []string
 		)
-		if ps := strings.SplitN(u.Scheme, "+", 2); len(ps) == 2 {
-			lookup, proto = ps[0], ps[1]
-		}
-		switch lookup {
-		case "dns":
-			if port == "" {
-				port = strconv.Itoa(defaultAlertmanagerPort)
-			}
-			ips, err := s.resolver.LookupIPAddr(ctx, host)
-			if err != nil {
-				return errors.Wrapf(err, "lookup IP addresses %q", host)
-			}
-			for _, ip := range ips {
-				hosts = append(hosts, net.JoinHostPort(ip.String(), port))
-			}
-		case "dnssrv":
-			_, recs, err := s.resolver.LookupSRV(ctx, "", proto, host)
-			if err != nil {
-				return errors.Wrapf(err, "lookup SRV records %q", host)
-			}
-			for _, rec := range recs {
-				// Only use port from SRV record if no explicit port was specified.
-				if port == "" {
-					port = strconv.Itoa(int(rec.Port))
-				}
-				hosts = append(hosts, net.JoinHostPort(rec.Target, port))
-			}
-		case "none":
-			if port == "" {
-				port = strconv.Itoa(defaultAlertmanagerPort)
-			}
-			hosts = append(hosts, net.JoinHostPort(host, port))
-		default:
-			return errors.Errorf("invalid lookup scheme %q", lookup)
+
+		if nameQtype = strings.SplitN(addr, "+", 2); len(nameQtype) == 2 {
+			name, qtype = nameQtype[1], nameQtype[0]
 		}
 
-		for _, h := range hosts {
-			res = append(res, &url.URL{
-				Scheme: proto,
-				Host:   h,
+		u, err := url.Parse(name)
+		if err != nil {
+			return errors.Wrapf(err, "parse URL %q", name)
+		}
+		// Get only the host and resolve it if needed.
+		host := u.Host
+		if qtype != "" {
+			if qtype == "dns" {
+				_, _, err = net.SplitHostPort(name)
+				if err != nil {
+					// The host could be missing a port. Append the defaultAlertmanagerPort.
+					host = host + ":" + strconv.Itoa(defaultAlertmanagerPort)
+				}
+			}
+			resolvedDomain, err = s.resolver.Resolve(ctx, host, qtype)
+			if err != nil {
+				return err
+			}
+		} else {
+			resolvedDomain = []string{host}
+		}
+
+		for _, resolved := range resolvedDomain {
+			result = append(result, &url.URL{
+				Scheme: u.Scheme,
+				Host:   resolved,
 				Path:   u.Path,
 				User:   u.User,
 			})
@@ -727,7 +738,7 @@ func (s *alertmanagerSet) update(ctx context.Context) error {
 	}
 
 	s.mtx.Lock()
-	s.current = res
+	s.current = result
 	s.mtx.Unlock()
 
 	return nil

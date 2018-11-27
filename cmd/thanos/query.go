@@ -17,6 +17,7 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/discovery/cache"
+	"github.com/improbable-eng/thanos/pkg/discovery/dns"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/query/api"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -65,7 +66,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	selectorLabels := cmd.Flag("selector-label", "Query selector labels that will be exposed in info endpoint (repeated).").
 		PlaceHolder("<name>=\"<value>\"").Strings()
 
-	stores := cmd.Flag("store", "Addresses of statically configured store API servers (repeatable).").
+	stores := cmd.Flag("store", "Addresses of statically configured store API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect store API servers through respective DNS lookups.").
 		PlaceHolder("<store>").Strings()
 
 	fileSDFiles := cmd.Flag("store.sd-files", "Path to files that contain addresses of store API servers. The path can be a glob pattern (repeatable).").
@@ -73,6 +74,9 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 
 	fileSDInterval := modelDuration(cmd.Flag("store.sd-interval", "Refresh interval to re-read file SD files. It is used as a resync fallback.").
 		Default("5m"))
+
+	dnsSDInterval := modelDuration(cmd.Flag("store.sd-dns-interval", "Interval between DNS resolutions.").
+		Default("30s"))
 
 	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified. ").
 		Default("false").Bool()
@@ -128,6 +132,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*stores,
 			*enableAutodownsampling,
 			fileSD,
+			time.Duration(*dnsSDInterval),
 		)
 	}
 }
@@ -238,21 +243,18 @@ func runQuery(
 	storeAddrs []string,
 	enableAutodownsampling bool,
 	fileSD *file.Discovery,
+	dnsSDInterval time.Duration,
 ) error {
 	duplicatedStores := prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "thanos_query_duplicated_store_address",
 		Help: "The number of times a duplicated store addresses is detected from the different configs in query",
 	})
+	storeAddrResolutionErrors := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_query_store_address_resolution_errors",
+		Help: "The number of times resolving an address of a store API has failed inside Thanos Query",
+	})
 	reg.MustRegister(duplicatedStores)
-
-	var staticSpecs []query.StoreSpec
-	for _, addr := range storeAddrs {
-		if addr == "" {
-			return errors.New("static store address cannot be empty")
-		}
-
-		staticSpecs = append(staticSpecs, query.NewGRPCStoreSpec(addr))
-	}
+	reg.MustRegister(storeAddrResolutionErrors)
 
 	dialOpts, err := storeClientGRPCOpts(logger, reg, tracer, secure, cert, key, caCert, serverName)
 	if err != nil {
@@ -260,15 +262,14 @@ func runQuery(
 	}
 
 	fileSDCache := cache.New()
+	// DNS provider with default resolver.
+	dnsProvider := dns.NewProviderWithResolver(logger)
 
 	var (
 		stores = query.NewStoreSet(
 			logger,
 			reg,
 			func() (specs []query.StoreSpec) {
-				// Add store specs from static flags.
-				specs = append(staticSpecs)
-
 				// Add store specs from gossip.
 				for id, ps := range peer.PeerStates(cluster.PeerTypesStoreAPIs()...) {
 					if ps.StoreAPIAddr == "" {
@@ -279,8 +280,8 @@ func runQuery(
 					specs = append(specs, &gossipSpec{id: id, addr: ps.StoreAPIAddr, peer: peer})
 				}
 
-				// Add store specs from file SD.
-				for _, addr := range fileSDCache.Addresses() {
+				// Add DNS resolved addresses from static flags and file SD.
+				for _, addr := range dnsProvider.Addresses() {
 					specs = append(specs, query.NewGRPCStoreSpec(addr))
 				}
 
@@ -356,6 +357,23 @@ func runQuery(
 		}, func(error) {
 			cancel()
 			peer.Close(5 * time.Second)
+		})
+	}
+	// Periodically update the addresses from static flags and file SD by resolving them using DNS SD if necessary.
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			return runutil.Repeat(dnsSDInterval, ctx.Done(), func() error {
+				addresses := append(fileSDCache.Addresses(), storeAddrs...)
+				if err := dnsProvider.Resolve(ctx, addresses); err != nil {
+					// Failure to resolve could be caused by a lookup timeout. We shouldn't fail because of that, so just log.
+					level.Error(logger).Log("msg", "failed to resolve addresses for storeAPIs", "err", err)
+					storeAddrResolutionErrors.Inc()
+				}
+				return nil
+			})
+		}, func(error) {
+			cancel()
 		})
 	}
 	// Start query API + UI HTTP server.

@@ -129,13 +129,18 @@ Flags:
                                  Query selector labels that will be exposed in
                                  info endpoint (repeated).
       --store=<store> ...        Addresses of statically configured store API
-                                 servers (repeatable).
+                                 servers (repeatable). The scheme may be
+                                 prefixed with 'dns+' or 'dnssrv+' to detect
+                                 store API servers through respective DNS
+                                 lookups.
       --store.sd-files=<path> ...  
                                  Path to files that contain addresses of store
                                  API servers. The path can be a glob pattern
                                  (repeatable).
       --store.sd-interval=5m     Refresh interval to re-read file SD files. It
                                  is used as a resync fallback.
+      --store.sd-dns-interval=30s  
+                                 Interval between DNS resolutions.
       --query.auto-downsampling  Enable automatic adjustment (step / 5) to what
                                  source of data should be used in store gateways
                                  if no max_source_resolution param is specified.
