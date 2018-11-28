@@ -30,8 +30,8 @@ type Bucket struct {
 	name   string
 }
 
-// cosConfig encapsulates the necessary config values to instantiate an cos client.
-type cosConfig struct {
+// Config encapsulates the necessary config values to instantiate an cos client.
+type Config struct {
 	Bucket    string `yaml:"bucket"`
 	Region    string `yaml:"region"`
 	AppId     string `yaml:"app_id"`
@@ -40,7 +40,7 @@ type cosConfig struct {
 }
 
 // Validate checks to see if mandatory cos config options are set.
-func (conf *cosConfig) validate() error {
+func (conf *Config) validate() error {
 	if conf.Bucket == "" ||
 		conf.AppId == "" ||
 		conf.Region == "" ||
@@ -56,7 +56,7 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 		logger = log.NewNopLogger()
 	}
 
-	var config cosConfig
+	var config Config
 	if err := yaml.Unmarshal(conf, &config); err != nil {
 		return nil, errors.Wrap(err, "parsing cos configuration")
 	}
@@ -300,8 +300,8 @@ func objectLength(src io.Reader) (io.Reader, int, error) {
 	return src, int(fi.Size()), nil
 }
 
-func configFromEnv() cosConfig {
-	c := cosConfig{
+func configFromEnv() Config {
+	c := Config{
 		Bucket:    os.Getenv("COS_BUCKET"),
 		AppId:     os.Getenv("COS_APP_ID"),
 		Region:    os.Getenv("COS_REGION"),
@@ -380,7 +380,7 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 	}, nil
 }
 
-func validateForTest(conf cosConfig) error {
+func validateForTest(conf Config) error {
 	if conf.AppId == "" ||
 		conf.Region == "" ||
 		conf.SecretId == "" ||
