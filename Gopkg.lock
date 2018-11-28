@@ -34,11 +34,11 @@
   version = "0.1.7"
 
 [[projects]]
-  digest = "1:5da4d3b3b9949b9043d2fd36c4ff9b208f72ad5260a3dcb6f94267a769ee1899"
+  digest = "0:"
   name = "github.com/Azure/azure-storage-blob-go"
   packages = ["azblob"]
   pruneopts = ""
-  revision = "5152f14ace1c6db66bd9cb57840703a8358fa7bc"
+  revision = ""
   version = "0.3.0"
 
 [[projects]]
@@ -102,6 +102,14 @@
   packages = ["."]
   pruneopts = ""
   revision = "9f541cc9db5d55bce703bd99987c9d5cb8eea45e"
+
+[[projects]]
+  digest = "1:f7ad09e1bd153d7de18080ccd5e7bef5ebdba9403aa3cde487f0daf7ef67820d"
+  name = "github.com/fatih/structtag"
+  packages = ["."]
+  pruneopts = ""
+  revision = "76ae1d6d2117609598c7d4e8f3e938145f204e8f"
+  version = "v1.0.0"
 
 [[projects]]
   digest = "1:e5c807ac3b60699ccec9263f6eec756251b17e78582eb149f90ac345d9e58327"
@@ -755,6 +763,7 @@
     "github.com/NYTimes/gziphandler",
     "github.com/armon/go-metrics",
     "github.com/armon/go-metrics/prometheus",
+    "github.com/fatih/structtag",
     "github.com/fortytw2/leaktest",
     "github.com/fsnotify/fsnotify",
     "github.com/go-kit/kit/log",

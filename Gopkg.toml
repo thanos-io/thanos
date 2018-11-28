@@ -83,3 +83,7 @@ ignored = ["github.com/improbable-eng/thanos/benchmark/*"]
 [[constraint]]
   name = "github.com/gophercloud/gophercloud"
   revision = "0719c6b22f30132b0ae6c90b038e0d50992107b0"
+
+[[constraint]]
+  name = "github.com/fatih/structtag"
+  version = "v1.0.0"
