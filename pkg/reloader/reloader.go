@@ -239,7 +239,7 @@ func (r *Reloader) triggerReload(ctx context.Context) error {
 	defer runutil.CloseWithLogOnErr(r.logger, resp.Body, "trigger reload resp body")
 
 	if resp.StatusCode != 200 {
-		return errors.Errorf("received non-200 response: %s", resp.Status)
+		return errors.Errorf("received non-200 response: %s; have you set `--web.enable-lifecycle` Prometheus flag?", resp.Status)
 	}
 	return nil
 }

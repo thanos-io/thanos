@@ -138,6 +138,7 @@ func runCompact(
 	halted.Set(0)
 
 	reg.MustRegister(halted)
+	reg.MustRegister(retried)
 
 	bucketConfig, err := objStoreConfig.Content()
 	if err != nil {
