@@ -98,7 +98,7 @@ func runSidecar(
 	promURL *url.URL,
 	dataDir string,
 	objStoreConfig *pathOrContent,
-	peer *cluster.Peer,
+	peer cluster.Peer,
 	reloader *reloader.Reloader,
 	component string,
 ) error {

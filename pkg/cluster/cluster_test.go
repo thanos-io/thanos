@@ -21,7 +21,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 )
 
-func joinPeer(num int, knownPeers []string) (peerAddr string, peer *Peer, err error) {
+func joinPeer(num int, knownPeers []string) (peerAddr string, peer *peer, err error) {
 	port, err := testutil.FreePort()
 	if err != nil {
 		return "", nil, err
