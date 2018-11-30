@@ -53,7 +53,7 @@ All data is uploaded as it is created by the Prometheus server/storage engine. T
                   │                                │           │
                 Blocks                           Blocks      Blocks
                   │                                │           │
-                  v                                v           v 
+                  v                                v           v
               ┌──────────────────────────────────────────────────┐
               │                   Object Storage                 │
               └──────────────────────────────────────────────────┘
