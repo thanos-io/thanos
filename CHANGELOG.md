@@ -11,6 +11,10 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+### Fixed
+
+- [#649](https://github.com/improbable-eng/thanos/issues/649) - Fixed store label values api to add also external label values.
+
 ## [v0.2.1](https://github.com/improbable-eng/thanos/releases/tag/v0.2.1) - 2018.12.27
 
 ### Added
@@ -30,7 +34,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ## [v0.2.0](https://github.com/improbable-eng/thanos/releases/tag/v0.2.0) - 2018.12.10
 
 Next Thanos release adding support to new discovery method, gRPC mTLS and two new object store providers (Swift and Azure).
- 
+
 Note lots of necessary breaking changes in flags that relates to bucket configuration.
 
 ### Deprecated
@@ -56,7 +60,7 @@ Note lots of necessary breaking changes in flags that relates to bucket configur
 ### Changed
 
 - *breaking*: Added `thanos_` prefix to memberlist (gossip) metrics. Make sure to update your dashboards and rules.
-- S3 provider: 
+- S3 provider:
   - Set `"X-Amz-Acl": "bucket-owner-full-control"` metadata for s3 upload operation.
 
 ### Added
@@ -70,7 +74,7 @@ Note lots of necessary breaking changes in flags that relates to bucket configur
 - In `thanos query`, file based discovery of store nodes using `--store.file-sd-config.files`
 - `/-/healthy` endpoint to Querier.
 - DNS service discovery to static and file based configurations using the `dns+` and `dnssrv+` prefixes for the respective lookup. Details [here](/docs/service_discovery.md)
-- `--cluster.disable` flag to disable gossip functionality completely. 
+- `--cluster.disable` flag to disable gossip functionality completely.
 - Hidden flag to configure max compaction level.
 - Azure Storage.
 - OpenStack Swift support.

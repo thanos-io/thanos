@@ -312,6 +312,35 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesR
 	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
+func deduplicateAndSortStringSlice(srtings []string) []string {
+	sort.Strings(srtings)
+	j := 0
+	for i := 1; i < len(srtings); i++ {
+		if srtings[j] == srtings[i] {
+			continue
+		}
+		j++
+		srtings[i], srtings[j] = srtings[j], srtings[i]
+	}
+	return srtings[:j+1]
+}
+
+// extendSortAndDeduplicateLabelValues adds values of matching label name from external labels.
+func (p *PrometheusStore) extendSortAndDeduplicateLabelValues(labelName string, labelValues []string) []string {
+	externalLabels := p.externalLabels()
+	finalLabels := make([]string, 0, len(labelValues)+len(externalLabels))
+	for _, l := range labelValues {
+		finalLabels = append(finalLabels, l)
+	}
+	for _, l := range externalLabels {
+		if l.Name == labelName {
+			finalLabels = append(finalLabels, l.Value)
+		}
+	}
+	// Additional external labels values can be duplicit so we need to deduplicate them.
+	return deduplicateAndSortStringSlice(finalLabels)
+}
+
 // LabelValues returns all known label values for a given label name.
 func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequest) (
 	*storepb.LabelValuesResponse, error,
@@ -339,7 +368,9 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
 		return nil, status.Error(codes.Unknown, err.Error())
 	}
-	sort.Strings(m.Data)
 
-	return &storepb.LabelValuesResponse{Values: m.Data}, nil
+	// We need to add also possible matching external labels.
+	extendedLabels := p.extendSortAndDeduplicateLabelValues(r.Label, m.Data)
+
+	return &storepb.LabelValuesResponse{Values: extendedLabels}, nil
 }
