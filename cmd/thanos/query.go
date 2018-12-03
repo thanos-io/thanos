@@ -238,7 +238,7 @@ func runQuery(
 	maxConcurrentQueries int,
 	queryTimeout time.Duration,
 	replicaLabel string,
-	peer *cluster.Peer,
+	peer cluster.Peer,
 	selectorLset labels.Labels,
 	storeAddrs []string,
 	enableAutodownsampling bool,
@@ -277,7 +277,7 @@ func runQuery(
 						continue
 					}
 
-					specs = append(specs, &gossipSpec{id: id, addr: ps.StoreAPIAddr, peer: peer})
+					specs = append(specs, &gossipSpec{id: id, addr: ps.StoreAPIAddr, stateFetcher: peer})
 				}
 
 				// Add DNS resolved addresses from static flags and file SD.
@@ -458,7 +458,7 @@ type gossipSpec struct {
 	id   string
 	addr string
 
-	peer *cluster.Peer
+	stateFetcher cluster.PeerStateFetcher
 }
 
 func (s *gossipSpec) Addr() string {
@@ -467,7 +467,7 @@ func (s *gossipSpec) Addr() string {
 
 // Metadata method for gossip store tries get current peer state.
 func (s *gossipSpec) Metadata(_ context.Context, _ storepb.StoreClient) (labels []storepb.Label, mint int64, maxt int64, err error) {
-	state, ok := s.peer.PeerState(s.id)
+	state, ok := s.stateFetcher.PeerState(s.id)
 	if !ok {
 		return nil, 0, 0, errors.Errorf("peer %s is no longer in gossip cluster", s.id)
 	}

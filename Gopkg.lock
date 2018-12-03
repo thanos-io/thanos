@@ -34,7 +34,7 @@
   version = "0.1.7"
 
 [[projects]]
-  digest = "0:"
+  digest = "1:5da4d3b3b9949b9043d2fd36c4ff9b208f72ad5260a3dcb6f94267a769ee1899"
   name = "github.com/Azure/azure-storage-blob-go"
   packages = ["azblob"]
   pruneopts = ""

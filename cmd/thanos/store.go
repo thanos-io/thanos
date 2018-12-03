@@ -80,7 +80,7 @@ func runStore(
 	key string,
 	clientCA string,
 	httpBindAddr string,
-	peer *cluster.Peer,
+	peer cluster.Peer,
 	indexCacheSizeBytes uint64,
 	chunkPoolSizeBytes uint64,
 	component string,

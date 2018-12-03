@@ -103,6 +103,8 @@ Flags:
                                  configurations. Sets of configurations
                                  accounting the latency differences between
                                  network types: local, lan, wan.
+      --cluster.disable          If true gossip will be disabled and no cluster
+                                 related server will be started.
       --http-advertise-address=HTTP-ADVERTISE-ADDRESS  
                                  Explicit (external) host:port address to
                                  advertise for HTTP QueryAPI in gossip cluster.

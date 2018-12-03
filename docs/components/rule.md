@@ -109,6 +109,8 @@ Flags:
                                  configurations. Sets of configurations
                                  accounting the latency differences between
                                  network types: local, lan, wan.
+      --cluster.disable          If true gossip will be disabled and no cluster
+                                 related server will be started.
       --label=<name>="<value>" ...  
                                  Labels to be applied to all generated metrics
                                  (repeated).

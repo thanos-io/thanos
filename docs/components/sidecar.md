@@ -106,6 +106,8 @@ Flags:
                                  configurations. Sets of configurations
                                  accounting the latency differences between
                                  network types: local, lan, wan.
+      --cluster.disable          If true gossip will be disabled and no cluster
+                                 related server will be started.
       --prometheus.url=http://localhost:9090  
                                  URL at which to reach Prometheus's API. For
                                  better performance use local network.

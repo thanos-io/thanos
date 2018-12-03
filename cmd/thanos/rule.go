@@ -174,7 +174,7 @@ func runRule(
 	evalInterval time.Duration,
 	dataDir string,
 	ruleFiles []string,
-	peer *cluster.Peer,
+	peer cluster.Peer,
 	objStoreConfig *pathOrContent,
 	tsdbOpts *tsdb.Options,
 	component string,
