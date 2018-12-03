@@ -14,7 +14,7 @@ Thanos is a clustered system of components with distinct and decoupled purposes.
 
 ### Metric Sources
 
-A data source is a very generlized definition of a component that produces or collects metric data. Source advertise this data in the cluster to potential clients. Metric data can be retrieved via a well-known gRPC service.
+A data source is a very generalized definition of a component that produces or collects metric data. Source advertise this data in the cluster to potential clients. Metric data can be retrieved via a well-known gRPC service.
 
 Thanos provides two components that act as data sources: the Prometheus sidecar and rule nodes.
 
@@ -75,7 +75,7 @@ Currently only index data is cached. Chunk data could be cached but is orders of
 Since store nodes and data sources expose the same gRPC Store API, clients can largely treat them as equivalent and don't have to concern with which specific component they are querying.
 Each implementer of the Store API advertise meta information about the data they provide. This allows clients to minimize the set of nodes they have to fan out to, to satisfy a particular data query.
 
-In it's essence the Store API allows to look up data by a set of label matchers (as known from PromQL), and a time range. It returns compressed chunks of samples as they are found in the block data. It is purely a data retrieval API and does _not_ provice complex query execution.
+In it's essence the Store API allows to look up data by a set of label matchers (as known from PromQL), and a time range. It returns compressed chunks of samples as they are found in the block data. It is purely a data retrieval API and does _not_ provide complex query execution.
 
 ```
 ┌──────────────────────┐  ┌────────────┬─────────┐   ┌────────────┐
