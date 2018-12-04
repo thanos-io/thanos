@@ -266,9 +266,7 @@ func (b *Bucket) ListObjects(ctx context.Context, objectPrefix string, recursive
 				return
 			}
 
-			if result.NextMarker != "" {
-				marker = result.NextMarker
-			}
+			marker = result.NextMarker
 		}
 	}(objectsCh)
 	return objectsCh
