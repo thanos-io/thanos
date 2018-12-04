@@ -106,6 +106,8 @@ func scraper(i int, config string, gossip bool) (cmdScheduleFunc, string) {
 				"--cluster.pushpull-interval", "200ms",
 			}...)
 			args = append(args, clusterPeerFlags...)
+		} else {
+			args = append(args, "--cluster.disable")
 		}
 		cmds = append(cmds, exec.Command("thanos", args...))
 
@@ -128,19 +130,20 @@ func querier(i int, replicaLabel string, staticStores ...string) cmdScheduleFunc
 }
 
 func querierWithStoreFlags(i int, replicaLabel string, storesAddresses ...string) cmdScheduleFunc {
-	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+	return func(_ string, _ []string) ([]*exec.Cmd, error) {
 		args := defaultQuerierFlags(i, replicaLabel)
 
 		for _, addr := range storesAddresses {
 			args = append(args, "--store", addr)
 		}
+		args = append(args, "--cluster.disable")
 
 		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
 	}
 }
 
 func querierWithFileSD(i int, replicaLabel string, storesAddresses ...string) cmdScheduleFunc {
-	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+	return func(workDir string, _ []string) ([]*exec.Cmd, error) {
 		queryFileSDDir := fmt.Sprintf("%s/data/queryFileSd%d", workDir, i)
 		if err := os.MkdirAll(queryFileSDDir, 0777); err != nil {
 			return nil, errors.Wrap(err, "create prom dir failed")
@@ -153,6 +156,8 @@ func querierWithFileSD(i int, replicaLabel string, storesAddresses ...string) cm
 		args := append(defaultQuerierFlags(i, replicaLabel),
 			"--store.sd-files", path.Join(queryFileSDDir, "filesd.json"),
 			"--store.sd-interval", "5s")
+
+		args = append(args, "--cluster.disable")
 
 		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
 	}
@@ -246,6 +251,7 @@ func rulerWithQueryFlags(i int, rules string, queryAddresses ...string) (cmdSche
 		for _, addr := range queryAddresses {
 			args = append(args, "--query", addr)
 		}
+		args = append(args, "--cluster.disable")
 
 		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
 	}, ""
@@ -275,6 +281,7 @@ func rulerWithFileSD(i int, rules string, queryAddresses ...string) (cmdSchedule
 		args := append(defaultRulerFlags(i, dbDir),
 			"--query.sd-files", path.Join(ruleFileSDDir, "filesd.json"),
 			"--query.sd-interval", "5s")
+		args = append(args, "--cluster.disable")
 
 		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
 	}, ""
