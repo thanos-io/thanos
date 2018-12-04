@@ -89,5 +89,5 @@ ignored = ["github.com/improbable-eng/thanos/benchmark/*"]
   version = "v1.0.0"
 
 [[constraint]]
-  version = "v0.9.0"
+  version = "v0.10.0"
   name = "github.com/mozillazg/go-cos"

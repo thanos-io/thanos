@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
@@ -95,7 +94,7 @@ func (b *Bucket) Name() string {
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	reader, length, err := objectLength(r)
 	if err != nil {
-		return errors.Wrap(err, "length of cos object")
+		return errors.Wrap(err, "length of COS object")
 	}
 	opt := &cos.ObjectPutOptions{
 		ObjectPutHeaderOptions: &cos.ObjectPutHeaderOptions{
@@ -103,9 +102,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 		},
 	}
 
-	// The reason wrapping the reader as a nop closer is to avoid to close it after uploading in COS client.
-	// We should handle and close it ourselves.
-	if _, err = b.client.Object.Put(ctx, name, ioutil.NopCloser(reader), opt); err != nil {
+	if _, err = b.client.Object.Put(ctx, name, reader, opt); err != nil {
 		return errors.Wrap(err, "upload cos object")
 	}
 	return nil
@@ -217,7 +214,7 @@ type objectInfo struct {
 
 func (b *Bucket) ListObjects(ctx context.Context, objectPrefix string, recursive bool) <-chan objectInfo {
 	objectsCh := make(chan objectInfo, 1)
-	delimiter := "/"
+	delimiter := dirDelim
 	if recursive {
 		delimiter = ""
 	}
@@ -233,8 +230,11 @@ func (b *Bucket) ListObjects(ctx context.Context, objectPrefix string, recursive
 				Delimiter: delimiter,
 			})
 			if err != nil {
-				objectsCh <- objectInfo{
+				select {
+				case objectsCh <- objectInfo{
 					err: err,
+				}:
+				case <-ctx.Done():
 				}
 				return
 			}
@@ -262,12 +262,12 @@ func (b *Bucket) ListObjects(ctx context.Context, objectPrefix string, recursive
 				}
 			}
 
-			if result.NextMarker != "" {
-				marker = result.NextMarker
-			}
-
 			if !result.IsTruncated {
 				return
+			}
+
+			if result.NextMarker != "" {
+				marker = result.NextMarker
 			}
 		}
 	}(objectsCh)
