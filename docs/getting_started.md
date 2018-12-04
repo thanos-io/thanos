@@ -151,7 +151,7 @@ This is especially useful for the Query node to know all endpoints to query, tim
 
 Given a sidecar we can have it join a gossip cluster by advertising itself to other peers within the network.
 
-NOTE: Gossip will be removed. See [here](/docs/proposals/approved/201809_gossip-removal.md) why. New FileSD with DNS support is enabled and described [here](/docs/thanos_service_discovery.md)
+NOTE: Gossip will be removed. See [here](/docs/proposals/approved/201809_gossip-removal.md) why. New FileSD with DNS support is enabled and described [here](/docs/service_discovery.md)
 
 ```
 thanos sidecar \

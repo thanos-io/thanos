@@ -10,9 +10,8 @@ import (
 	"net/url"
 	"path"
 	"sync"
+	"sync/atomic"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -197,6 +196,7 @@ func (q *Queue) Push(alerts []*Alert) {
 	if len(alerts) == 0 {
 		return
 	}
+
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
 
@@ -253,9 +253,11 @@ type Sender struct {
 	logger        log.Logger
 	alertmanagers func() []*url.URL
 	doReq         func(req *http.Request) (*http.Response, error)
+	timeout       time.Duration
 
 	sent    *prometheus.CounterVec
-	dropped *prometheus.CounterVec
+	errs    *prometheus.CounterVec
+	dropped prometheus.Counter
 	latency *prometheus.HistogramVec
 }
 
@@ -266,6 +268,7 @@ func NewSender(
 	reg prometheus.Registerer,
 	alertmanagers func() []*url.URL,
 	doReq func(req *http.Request) (*http.Response, error),
+	timeout time.Duration,
 ) *Sender {
 	if doReq == nil {
 		doReq = http.DefaultClient.Do
@@ -277,16 +280,22 @@ func NewSender(
 		logger:        logger,
 		alertmanagers: alertmanagers,
 		doReq:         doReq,
+		timeout:       timeout,
 
 		sent: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_alert_sender_alerts_sent_total",
 			Help: "Total number of alerts sent by alertmanager.",
 		}, []string{"alertmanager"}),
 
-		dropped: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "thanos_alert_sender_alerts_dropped_total",
-			Help: "Total number of alerts dropped by alertmanager.",
+		errs: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "thanos_alert_sender_errors_total",
+			Help: "Total number of errors while sending alerts to alertmanager.",
 		}, []string{"alertmanager"}),
+
+		dropped: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "thanos_alert_sender_alerts_dropped_total",
+			Help: "Total number of alerts dropped in case of all sends to alertmanagers failed.",
+		}),
 
 		latency: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name: "thanos_alert_sender_latency_seconds",
@@ -300,22 +309,29 @@ func NewSender(
 }
 
 // Send an alert batch to all given Alertmanager URLs.
-func (s *Sender) Send(ctx context.Context, alerts []*Alert) error {
+// TODO(bwplotka): https://github.com/improbable-eng/thanos/issues/660
+func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 	if len(alerts) == 0 {
-		return nil
+		return
 	}
 	b, err := json.Marshal(alerts)
 	if err != nil {
-		return errors.Wrap(err, "encode alerts")
+		level.Warn(s.logger).Log("msg", "sending alerts failed", "err", err)
+		return
 	}
 
-	var g errgroup.Group
-
-	for _, u := range s.alertmanagers() {
+	var (
+		wg         sync.WaitGroup
+		numSuccess uint64
+	)
+	amrs := s.alertmanagers()
+	for _, u := range amrs {
 		amURL := *u
-		sendCtx, cancel := context.WithCancel(ctx)
+		sendCtx, cancel := context.WithTimeout(ctx, s.timeout)
 
-		g.Go(func() error {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 			defer cancel()
 
 			start := time.Now()
@@ -324,21 +340,27 @@ func (s *Sender) Send(ctx context.Context, alerts []*Alert) error {
 			if err := s.sendOne(sendCtx, amURL.String(), b); err != nil {
 				level.Warn(s.logger).Log(
 					"msg", "sending alerts failed",
-					"alertmanager", u.Host,
-					"numDropped", len(alerts),
+					"alertmanager", amURL.Host,
+					"numAlerts", len(alerts),
 					"err", err)
-				s.dropped.WithLabelValues(u.Host).Add(float64(len(alerts)))
-				return err
+				s.errs.WithLabelValues(amURL.Host).Inc()
+				return
 			}
-			s.sent.WithLabelValues(u.Host).Add(float64(len(alerts)))
-			s.latency.WithLabelValues(u.Host).Observe(time.Since(start).Seconds())
-			return nil
-		})
+			s.latency.WithLabelValues(amURL.Host).Observe(time.Since(start).Seconds())
+			s.sent.WithLabelValues(amURL.Host).Add(float64(len(alerts)))
+
+			atomic.AddUint64(&numSuccess, 1)
+		}()
 	}
-	if err := g.Wait(); err != nil {
-		return errors.Wrap(err, "send alerts")
+	wg.Wait()
+
+	if numSuccess > 0 {
+		return
 	}
-	return nil
+
+	s.dropped.Add(float64(len(alerts)))
+	level.Warn(s.logger).Log("msg", "failed to send alerts to all alertmanagers", "alertmanagers", amrs, "alerts", string(b))
+	return
 }
 
 func (s *Sender) sendOne(ctx context.Context, url string, b []byte) error {

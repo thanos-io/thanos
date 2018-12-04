@@ -123,12 +123,17 @@ Flags:
       --tsdb.block-duration=2h   Block duration for TSDB block.
       --tsdb.retention=48h       Block retention time on local disk.
       --alertmanagers.url=ALERTMANAGERS.URL ...  
-                                 Alertmanager URLs to push firing alerts to. The
-                                 scheme may be prefixed with 'dns+' or 'dnssrv+'
-                                 to detect Alertmanager IPs through respective
-                                 DNS lookups. The port defaults to 9093 or the
-                                 SRV record's value. The URL path is used as a
-                                 prefix for the regular Alertmanager API path.
+                                 Alertmanager replica URLs to push firing
+                                 alerts. Ruler claims success if push to at
+                                 least one alertmanager from discovered
+                                 succeeds. The scheme may be prefixed with
+                                 'dns+' or 'dnssrv+' to detect Alertmanager IPs
+                                 through respective DNS lookups. The port
+                                 defaults to 9093 or the SRV record's value. The
+                                 URL path is used as a prefix for the regular
+                                 Alertmanager API path.
+      --alertmanagers.send-timeout=10s  
+                                 Timeout for sending alerts to alertmanager
       --alert.query-url=ALERT.QUERY-URL  
                                  The external Thanos Query URL that would be set
                                  in all alerts 'Source' field
