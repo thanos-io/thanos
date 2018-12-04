@@ -213,14 +213,16 @@ Minio client used for AWS S3 can be potentially configured against other S3-comp
 To use Tencent COS as storage store, you should apply a Tencent Account to create an object storage bucket at first. Note that detailed from Tencent Cloud Documents: [https://cloud.tencent.com/document/product/436](https://cloud.tencent.com/document/product/436)
 
 To configure Tencent Account to use COS as storage store you need to set these parameters in yaml format stored in a file:
-```yaml
+
+[embedmd]:# (flags/config_cos.txt $)
+```$
 type: COS
 config:
-    bucket: <name of bucket>
-    region: <the region information in domain name>
-    app_id: <unique resource ID in user dimension owned by a developer>
-    secret_key: <the project identity key owned by a developer>
-    secret_id: <the project identity ID owned by a developer>
+  bucket: ""
+  region: ""
+  app_id: ""
+  secret_key: ""
+  secret_id: ""
 ```
 
 Set the flags `--objstore.config-file` to reference to the configuration file.
