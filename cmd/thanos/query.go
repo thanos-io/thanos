@@ -379,7 +379,7 @@ func runQuery(
 	// Start query API + UI HTTP server.
 	{
 		router := route.New()
-		ui.NewQueryUI(logger, nil).Register(router)
+		ui.NewQueryUI(logger, stores, nil).Register(router)
 
 		api := v1.NewAPI(logger, reg, engine, queryableCreator, enableAutodownsampling)
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger)

@@ -25,7 +25,7 @@ type Client interface {
 	// Client to access the store.
 	storepb.StoreClient
 
-	// Labels that apply to all date exposed by the backing store.
+	// Labels that apply to all data exposed by the backing store.
 	Labels() []storepb.Label
 
 	// Minimum and maximum time range of data in the store.

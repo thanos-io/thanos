@@ -1,9 +1,10 @@
 package ui
 
 import (
+	"github.com/improbable-eng/thanos/pkg/query"
 	"html/template"
+	"math"
 	"net/http"
-
 	"time"
 
 	"os"
@@ -19,6 +20,7 @@ var localhostRepresentations = []string{"127.0.0.1", "localhost"}
 
 type Query struct {
 	*BaseUI
+	storeSet *query.StoreSet
 
 	flagsMap map[string]string
 
@@ -36,17 +38,32 @@ type thanosVersion struct {
 	GoVersion string `json:"goVersion"`
 }
 
-func NewQueryUI(logger log.Logger, flagsMap map[string]string) *Query {
+func NewQueryUI(logger log.Logger, storeSet *query.StoreSet, flagsMap map[string]string) *Query {
 	cwd, err := os.Getwd()
 	if err != nil {
 		cwd = "<error retrieving current working directory>"
 	}
 	return &Query{
-		BaseUI:   NewBaseUI(logger, "query_menu.html", template.FuncMap{}),
+		BaseUI:   NewBaseUI(logger, "query_menu.html", queryTmplFuncs()),
+		storeSet: storeSet,
 		flagsMap: flagsMap,
 		cwd:      cwd,
 		birth:    time.Now(),
 		now:      model.Now,
+	}
+}
+
+func queryTmplFuncs() template.FuncMap {
+	return template.FuncMap{
+		"since": func(t time.Time) time.Duration {
+			return time.Since(t) / time.Millisecond * time.Millisecond
+		},
+		"formatTimestamp": func(timestamp int64) string {
+			if timestamp >= math.MaxInt64 || timestamp == -1 {
+				return "n/a"
+			}
+			return time.Unix(timestamp/1000, 0).Format(time.RFC3339)
+		},
 	}
 }
 
@@ -58,6 +75,7 @@ func (q *Query) Register(r *route.Router) {
 	instrf := prometheus.InstrumentHandlerFunc
 
 	r.Get("/graph", instrf("graph", q.graph))
+	r.Get("/stores", instrf("stores", q.stores))
 	r.Get("/status", instrf("status", q.status))
 	r.Get("/flags", instrf("flags", q.flags))
 
@@ -88,6 +106,10 @@ func (q *Query) status(w http.ResponseWriter, r *http.Request) {
 			GoVersion: version.GoVersion,
 		},
 	})
+}
+
+func (q *Query) stores(w http.ResponseWriter, r *http.Request) {
+	q.executeTemplate(w, "stores.html", q.storeSet.GetStoreStatus())
 }
 
 func (q *Query) flags(w http.ResponseWriter, r *http.Request) {

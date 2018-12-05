@@ -1,0 +1,61 @@
+{{define "head"}}
+<link type="text/css" rel="stylesheet" href="{{ pathPrefix }}/static/css/rules.css?v={{ buildVersion }}">
+{{end}}
+
+{{define "content"}}
+<div class="container-fluid">
+    <h2>Stores</h2>
+    <table class="table table-bordered">
+        <thead>
+        <tr>
+            <th>Endpoint</th>
+            <th>Status</th>
+            <th>Announced Labels</th>
+            <th>Min Time</th>
+            <th>Max Time</th>
+            <th>Last Health Check</th>
+            <th>Last Message</th>
+        </tr>
+        </thead>
+        <tbody>
+        {{range $store := .}}
+        <tr>
+            <td>{{$store.Name}}</td>
+            <td class="state">
+                {{if not $store.LastError}}
+                <span class="alert alert-success state_indicator text-uppercase">
+                up
+                </span>
+                {{else}}
+                <span class="alert alert-danger state_indicator text-uppercase">
+                down
+                </span>
+                {{end}}
+            </td>
+            <td>
+            {{range $label := $store.Labels}}
+                <span class="label label-primary">{{$label.Name}}="{{$label.Value}}"</span>
+            {{end}}
+            </td>
+            <td>{{formatTimestamp $store.MinTime}}</td>
+            <td>{{formatTimestamp $store.MaxTime}}</td>
+            <td>{{since $store.LastCheck}} ago</td>
+            <td>
+                {{if $store.LastError}}
+                    <span class="alert alert-danger state_indicator">
+                    {{$store.LastError}}
+                    </span>
+                {{end}}
+            </td>
+        </tr>
+        {{else}}
+        <tr>
+            <td colspan="7">
+                No stores registered
+            </td>
+        </tr>
+        {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}
