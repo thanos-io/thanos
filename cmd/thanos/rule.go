@@ -59,7 +59,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	grpcBindAddr, httpBindAddr, cert, key, clientCA, newPeerFn := regCommonServerFlags(cmd)
 
-	labelStrs := cmd.Flag("label", "Labels to be applied to all generated metrics (repeated).").
+	labelStrs := cmd.Flag("label", "Labels to be applied to all generated metrics (repeated). Similar to external labels for Prometheus, used to identify ruler and its blocks as unique source.").
 		PlaceHolder("<name>=\"<value>\"").Strings()
 
 	dataDir := cmd.Flag("data-dir", "data directory").Default("data/").String()
@@ -78,6 +78,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 		Strings()
 
 	alertQueryURL := cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field").String()
+
+	alertExcludeLabels := cmd.Flag("alert.label-drop", "Labels by name to drop before sending to alertmanager. This allows alert to be deduplicated on replica label (repeated). Similar Prometheus alert relabelling").
+		Strings()
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "")
 
@@ -152,6 +155,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			tsdbOpts,
 			name,
 			alertQueryURL,
+			*alertExcludeLabels,
 			*queries,
 			fileSD,
 			time.Duration(*dnsSDInterval),
@@ -181,6 +185,7 @@ func runRule(
 	tsdbOpts *tsdb.Options,
 	component string,
 	alertQueryURL *url.URL,
+	alertExcludeLabels []string,
 	queryAddrs []string,
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
@@ -274,7 +279,7 @@ func runRule(
 	// Run rule evaluation and alert notifications.
 	var (
 		alertmgrs = newAlertmanagerSet(alertmgrURLs)
-		alertQ    = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(lset))
+		alertQ    = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(lset), alertExcludeLabels)
 		mgr       *rules.Manager
 	)
 	{
