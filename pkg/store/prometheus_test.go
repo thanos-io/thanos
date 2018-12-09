@@ -105,9 +105,8 @@ func expandChunk(cit chunkenc.Iterator) (res []sample) {
 
 func getExternalLabels() labels.Labels {
 	return labels.Labels{
-		{Name: "ext_a", Value: "b"},
 		{Name: "ext_a", Value: "a"},
-		{Name: "ext_b", Value: "b"}}
+		{Name: "ext_b", Value: "a"}}
 }
 
 func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
@@ -144,8 +143,7 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 	testutil.Equals(t, []string{"a", "b", "c"}, resp.Values)
 }
 
-// We are testing addition of matching external label values to label values request,
-// deduplication of resulting values and it's correct order.
+// Test to check external label values retrieve.
 func TestPrometheusStore_ExternalLabelValues_e2e(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
@@ -153,11 +151,9 @@ func TestPrometheusStore_ExternalLabelValues_e2e(t *testing.T) {
 	testutil.Ok(t, err)
 
 	a := p.Appender()
-	_, err = a.Add(labels.FromStrings("ext_a", "c"), 0, 1)
+	_, err = a.Add(labels.FromStrings("ext_a", "b"), 0, 1)
 	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("ext_a", "a"), 0, 1)
-	testutil.Ok(t, err)
-	_, err = a.Add(labels.FromStrings("b", "a"), 0, 1)
+	_, err = a.Add(labels.FromStrings("a", "b"), 0, 1)
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
@@ -178,7 +174,14 @@ func TestPrometheusStore_ExternalLabelValues_e2e(t *testing.T) {
 	})
 	testutil.Ok(t, err)
 
-	testutil.Equals(t, []string{"a", "b", "c"}, resp.Values)
+	testutil.Equals(t, []string{"a"}, resp.Values)
+
+	resp, err = proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
+		Label: "a",
+	})
+	testutil.Ok(t, err)
+
+	testutil.Equals(t, []string{"b"}, resp.Values)
 }
 
 func TestPrometheusStore_Series_MatchExternalLabel_e2e(t *testing.T) {
