@@ -25,7 +25,19 @@ Process of cutting a new *minor* Thanos release:
 1. Double check backward compatibility:
   1. *In case of version after `v1+.y.z`*, double check if none of the changes break API compatibility. This should be done in PR review process, but double check is good to have. 
   1. In case of `v0.y.z`, document all incompatibilities in changelog.
-1. After review, merge the PR and immediately after this create a `<ver>` release on GitHub `release` page. Describe release and post relevant entry from changelog. Click `Save Draft`. This will trigger CircleCI that builds artifacts. Once tarballs are published on release page, you can click `Publish` and release is complete. Announce `#thanos` slack channel.
+1. After review, merge the PR and immediately after this tag a version:
+  
+  ```bash
+  $ tag=$(< VERSION)
+  $ git tag -s "v${tag}" -m "v${tag}"
+  $ git push origin "v${tag}"
+  ```
+ 
+  Signing a tag with a GPG key is appreciated, but in case you can't add a GPG key to your Github account using the following [procedure](https://help.github.com/articles/generating-a-gpg-key/), you can replace the `-s` flag by `-a` flag of the `git tag` command to only annotate the tag without signing.
+  Once a tag is created, the release process through CircleCI will be triggered for this tag.
+  You must create a Github Release using the UI for this tag, as otherwise CircleCI will not be able to upload tarballs for this tag. Also, you must create the Github Release using a Github user that has granted access rights to CircleCI.
+  Go to the releases page of the project, click on the `Draft a new release` button and select the tag you just pushed. Describe release and post relevant entry from changelog. Click `Save draft` rather than `Publish release` at this time. (This will prevent the release being visible before it has got the binaries attached to it.)
+  Once tarballs are published on release page, you can click `Publish` and release is complete. Announce `#thanos` slack channel.
 
 ## Branch management and versioning strategy
 
@@ -41,3 +53,14 @@ The following changes to the above procedures apply:
 * In line with [Semantic Versioning](http://semver.org/), append something like `-rc.0` to the version (with the corresponding changes to the tag name, the release name etc.).
 * Tick the `This is a pre-release` box when drafting the release in the Github UI.
 * Still update `CHANGELOG.md`, but when you cut the final release later, merge all the changes from the pre-releases into the one final update.
+
+
+Tag the new release with a tag named `v<major>.<minor>.<patch>`, e.g. `v2.1.3`. Note the `v` prefix.
+
+You can do the tagging on the commandline:
+
+```bash
+$ tag=$(< VERSION)
+$ git tag -s "v${tag}" -m "v${tag}"
+$ git push --tags
+```

@@ -11,7 +11,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
-## [v0.2.0](https://github.com/improbable-eng/thanos/releases/tag/v0.2.0) - 2018.12.7
+## [v0.2.0](https://github.com/improbable-eng/thanos/releases/tag/v0.2.0) - 2018.12.10
 
 Next Thanos release adding support to new discovery method, gRPC mTLS and two new object store providers (Swift and Azure).
  
