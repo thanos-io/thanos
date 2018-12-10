@@ -4,12 +4,14 @@ Thanos supports any object stores that can be implemented against Thanos [objsto
 
 All clients are configured using `--objstore.config-file` to reference to the configuration file or `--objstore.config` to put yaml config directly.
 
+## Implementations 
+
 Current object storage client implementations:
 
 | Provider             | Maturity | Auto-tested on CI | Maintainers |
 |----------------------|-------------------|-----------|---------------|
-| Google Cloud Storage | Stable  (production usage)             | yes       | @bplotka   |
-| AWS S3               | Beta  (working PoCs, testing usage)               | no        | ?          |
+| Google Cloud Storage | Stable  (production usage)             | yes       | @bwplotka   |
+| AWS S3               | Beta  (working PoCs, testing usage)               | no        | @bwplotka          |
 | Azure Storage Account | Alpha   | yes       | @vglafirov   |
 | OpenStack Swift      | Beta  (working PoCs, testing usage)               | no        | @sudhi-vm   |
 
