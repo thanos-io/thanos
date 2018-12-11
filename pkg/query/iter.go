@@ -3,7 +3,6 @@ package query
 import (
 	"math"
 	"sort"
-	"unsafe"
 
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
@@ -98,8 +97,9 @@ func newChunkSeries(lset []storepb.Label, chunks []storepb.AggrChunk, mint, maxt
 	sort.Slice(chunks, func(i, j int) bool {
 		return chunks[i].MinTime < chunks[j].MinTime
 	})
+
 	return &chunkSeries{
-		lset:   *(*labels.Labels)(unsafe.Pointer(&lset)), // YOLO!
+		lset:   storepb.LabelsToPromLabels(lset),
 		chunks: chunks,
 		mint:   mint,
 		maxt:   maxt,
