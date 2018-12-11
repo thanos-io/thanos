@@ -11,6 +11,10 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+### Fixed
+
+- DNS SD bug when having SRV results with different ports.
+
 ## [v0.2.0](https://github.com/improbable-eng/thanos/releases/tag/v0.2.0) - 2018.12.10
 
 Next Thanos release adding support to new discovery method, gRPC mTLS and two new object store providers (Swift and Azure).
@@ -36,6 +40,7 @@ Note lots of necessary breaking changes in flags that relates to bucket configur
     * S3_INSECURE
     * S3_SIGNATURE_VERSION2
 - *breaking*: Removed provider specific bucket metrics e.g `thanos_objstore_gcs_bucket_operations_total` in favor of of generic bucket operation metrics.
+
 ### Changed
 
 - *breaking*: Added `thanos_` prefix to memberlist (gossip) metrics. Make sure to update your dashboards and rules.
