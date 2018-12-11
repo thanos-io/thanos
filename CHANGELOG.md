@@ -32,7 +32,7 @@ Note lots of necessary breaking changes in flags that relates to bucket configur
     - --s3.signature-version2
     - --s3.encrypt-sse
     - --gcs-backup-bucket=\<bucket\>
-    - --s3-backup-bucket=\<bucket\>
+    - --s3-backup-bucket=\<bucket\> 
 - *breaking*: Removed support of those environment variables for bucket:
     * S3_BUCKET
     * S3_ENDPOINT
