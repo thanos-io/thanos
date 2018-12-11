@@ -2,89 +2,74 @@ package dns
 
 import (
 	"context"
+	"sort"
 	"testing"
 
-	"errors"
+	"github.com/pkg/errors"
 
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 )
 
-func TestProvider_ShouldReturnLatestValidAddresses_WhenDiscovererReturnsErrors(t *testing.T) {
-	discoverer := &mockDiscoverer{nil}
-	prv := NewProvider(discoverer, log.NewNopLogger())
+func TestProvider(t *testing.T) {
+	ips := []string{
+		"127.0.0.1:19091",
+		"127.0.0.2:19092",
+		"127.0.0.3:19093",
+		"127.0.0.4:19094",
+		"127.0.0.5:19095",
+	}
+
+	prv := NewProvider(log.NewNopLogger(), nil)
+	prv.resolver = &mockResolver{
+		res: map[string][]string{
+			"a": ips[:2],
+			"b": ips[2:4],
+			"c": {ips[4]},
+		},
+	}
 	ctx := context.TODO()
 
-	ip1 := "127.0.0.1:19091"
-	ip2 := "127.0.0.1:19092"
-	ip3 := "127.0.0.1:19093"
-	addrs := []string{"dns+" + ip1, "dns+" + ip2, "dns+" + ip3}
-
-	testutil.Ok(t, prv.Resolve(ctx, addrs))
+	prv.Resolve(ctx, []string{"any+x"})
 	result := prv.Addresses()
-	testutil.Assert(t, len(result) == 3, "Expected 3 addresses but got %v", len(result))
-	testutil.Assert(t, contains(result, ip1), "Expected %v but it was missing", ip1)
-	testutil.Assert(t, contains(result, ip2), "Expected %v but it was missing", ip2)
-	testutil.Assert(t, contains(result, ip3), "Expected %v but it was missing", ip3)
+	sort.Strings(result)
+	testutil.Equals(t, []string(nil), result)
 
-	prv.resolver = &mockDiscoverer{errors.New("failed to resolve urls")}
-	testutil.Ok(t, prv.Resolve(ctx, addrs))
+	prv.Resolve(ctx, []string{"any+a", "any+b", "any+c"})
 	result = prv.Addresses()
-	testutil.Assert(t, len(result) == 3, "Expected 3 addresses but got %v", len(result))
-	testutil.Assert(t, contains(result, ip1), "Expected %v but it was missing", ip1)
-	testutil.Assert(t, contains(result, ip2), "Expected %v but it was missing", ip2)
-	testutil.Assert(t, contains(result, ip3), "Expected %v but it was missing", ip3)
+	sort.Strings(result)
+	testutil.Equals(t, ips, result)
+
+	prv.Resolve(ctx, []string{"any+b", "any+c"})
+	result = prv.Addresses()
+	sort.Strings(result)
+	testutil.Equals(t, ips[2:], result)
+
+	prv.Resolve(ctx, []string{"any+x"})
+	result = prv.Addresses()
+	sort.Strings(result)
+	testutil.Equals(t, []string(nil), result)
+
+	prv.Resolve(ctx, []string{"any+a", "any+b", "any+c"})
+	result = prv.Addresses()
+	sort.Strings(result)
+	testutil.Equals(t, ips, result)
+
+	prv.resolver = &mockResolver{err: errors.New("failed to resolve urls")}
+	prv.Resolve(ctx, []string{"any+a", "any+b", "any+c"})
+	result = prv.Addresses()
+	sort.Strings(result)
+	testutil.Equals(t, ips, result)
 }
 
-func TestProvider_ShouldNotReturnOldAddresses_WhenNotRequestedAnymore(t *testing.T) {
-	discoverer := &mockDiscoverer{nil}
-	prv := NewProvider(discoverer, log.NewNopLogger())
-	ctx := context.TODO()
-
-	ip1 := "127.0.0.1:19091"
-	ip2 := "127.0.0.1:19092"
-	ip3 := "127.0.0.1:19093"
-
-	testutil.Ok(t, prv.Resolve(ctx, []string{"dns+" + ip1, "dns+" + ip2, "dns+" + ip3}))
-	result := prv.Addresses()
-	testutil.Assert(t, len(result) == 3, "Expected 3 addresses but got %v", len(result))
-	testutil.Assert(t, contains(result, ip1), "Expected %v but it was missing", ip1)
-	testutil.Assert(t, contains(result, ip2), "Expected %v but it was missing", ip2)
-	testutil.Assert(t, contains(result, ip3), "Expected %v but it was missing", ip3)
-
-	testutil.Ok(t, prv.Resolve(ctx, []string{"dns+" + ip1, "dns+" + ip2}))
-	result = prv.Addresses()
-	testutil.Assert(t, len(result) == 2, "Expected 2 addresses but got %v", len(result))
-	testutil.Assert(t, contains(result, ip1), "Expected %v but it was missing", ip1)
-	testutil.Assert(t, contains(result, ip2), "Expected %v but it was missing", ip2)
-}
-
-func TestProvider_ShouldKeepRecords_WhenDNSHasSucceededBeforeAndFailsNow(t *testing.T) {
-	prv := NewProviderWithResolver(log.NewNopLogger())
-	ctx := context.TODO()
-
-	nonExistentDomain := "dns+aNonExistent1236123.org:8080"
-	ip := "127.0.0.1:19091"
-
-	prv.resolved[nonExistentDomain] = []string{ip}
-
-	result := prv.Addresses()
-	testutil.Assert(t, len(result) == 1, "Expected 1 address but got %v", len(result))
-	testutil.Assert(t, contains(result, ip), "Expected %v but it was missing", ip)
-
-	testutil.Ok(t, prv.Resolve(ctx, []string{nonExistentDomain}))
-	result = prv.Addresses()
-	testutil.Assert(t, len(result) == 1, "Expected 1 address but got %v", len(result))
-	testutil.Assert(t, contains(result, ip), "Expected %v but it was missing", ip)
-}
-
-type mockDiscoverer struct {
+type mockResolver struct {
+	res map[string][]string
 	err error
 }
 
-func (d *mockDiscoverer) Resolve(ctx context.Context, name string, qtype string) ([]string, error) {
+func (d *mockResolver) Resolve(ctx context.Context, name string, qtype QType) ([]string, error) {
 	if d.err != nil {
 		return nil, d.err
 	}
-	return []string{name}, nil
+	return d.res[name], nil
 }

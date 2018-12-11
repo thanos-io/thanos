@@ -19,6 +19,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/extprom"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/alert"
@@ -184,20 +186,16 @@ func runRule(
 	dnsSDInterval time.Duration,
 ) error {
 	configSuccess := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "thanos_config_last_reload_successful",
+		Name: "thanos_rule_config_last_reload_successful",
 		Help: "Whether the last configuration reload attempt was successful.",
 	})
 	configSuccessTime := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "thanos_config_last_reload_success_timestamp_seconds",
+		Name: "thanos_rule_config_last_reload_success_timestamp_seconds",
 		Help: "Timestamp of the last successful configuration reload.",
 	})
 	duplicatedQuery := prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "thanos_rule_duplicated_query_address",
 		Help: "The number of times a duplicated query addresses is detected from the different configs in rule",
-	})
-	queryAddrResolutionErrors := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "thanos_rule_query_address_resolution_errors",
-		Help: "The number of times resolving an address of a query API has failed inside Thanos Rule",
 	})
 	alertMngrAddrResolutionErrors := prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "thanos_rule_alertmanager_address_resolution_errors",
@@ -213,7 +211,6 @@ func runRule(
 	reg.MustRegister(configSuccess)
 	reg.MustRegister(configSuccessTime)
 	reg.MustRegister(duplicatedQuery)
-	reg.MustRegister(queryAddrResolutionErrors)
 	reg.MustRegister(alertMngrAddrResolutionErrors)
 	reg.MustRegister(rulesLoaded)
 
@@ -239,8 +236,7 @@ func runRule(
 
 	// FileSD query addresses.
 	fileSDCache := cache.New()
-	// DNS provider with default resolver.
-	dnsProvider := dns.NewProviderWithResolver(logger)
+	dnsProvider := dns.NewProvider(logger, extprom.NewSubsystem(reg, "rule_query"))
 
 	// Hit the HTTP query API of query peers in randomized order until we get a result
 	// back or the context get canceled.
@@ -277,7 +273,7 @@ func runRule(
 
 	// Run rule evaluation and alert notifications.
 	var (
-		alertmgrs = newAlertmanagerSet(alertmgrURLs, nil)
+		alertmgrs = newAlertmanagerSet(alertmgrURLs)
 		alertQ    = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(lset))
 		mgr       *rules.Manager
 	)
@@ -492,12 +488,7 @@ func runRule(
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			return runutil.Repeat(dnsSDInterval, ctx.Done(), func() error {
-				addresses := append(fileSDCache.Addresses(), queryAddrs...)
-				if err := dnsProvider.Resolve(ctx, addresses); err != nil {
-					// Failure to resolve could be caused by a lookup timeout. We shouldn't fail because of that, so just log.
-					level.Error(logger).Log("msg", "failed to resolve addresses for queryAPIs", "err", err)
-					queryAddrResolutionErrors.Inc()
-				}
+				dnsProvider.Resolve(ctx, append(fileSDCache.Addresses(), queryAddrs...))
 				return nil
 			})
 		}, func(error) {
@@ -726,9 +717,9 @@ type alertmanagerSet struct {
 	current  []*url.URL
 }
 
-func newAlertmanagerSet(addrs []string, resolver *net.Resolver) *alertmanagerSet {
+func newAlertmanagerSet(addrs []string) *alertmanagerSet {
 	return &alertmanagerSet{
-		resolver: dns.NewResolver(resolver),
+		resolver: dns.NewResolver(),
 		addrs:    addrs,
 	}
 }
@@ -746,13 +737,12 @@ func (s *alertmanagerSet) update(ctx context.Context) error {
 	for _, addr := range s.addrs {
 		var (
 			name           = addr
-			qtype          string
-			nameQtype      []string
+			qtype          dns.QType
 			resolvedDomain []string
 		)
 
-		if nameQtype = strings.SplitN(addr, "+", 2); len(nameQtype) == 2 {
-			name, qtype = nameQtype[1], nameQtype[0]
+		if nameQtype := strings.SplitN(addr, "+", 2); len(nameQtype) == 2 {
+			name, qtype = nameQtype[1], dns.QType(nameQtype[0])
 		}
 
 		u, err := url.Parse(name)
@@ -762,7 +752,7 @@ func (s *alertmanagerSet) update(ctx context.Context) error {
 		// Get only the host and resolve it if needed.
 		host := u.Host
 		if qtype != "" {
-			if qtype == "dns" {
+			if qtype == dns.A {
 				_, _, err = net.SplitHostPort(name)
 				if err != nil {
 					// The host could be missing a port. Append the defaultAlertmanagerPort.
@@ -771,7 +761,7 @@ func (s *alertmanagerSet) update(ctx context.Context) error {
 			}
 			resolvedDomain, err = s.resolver.Resolve(ctx, host, qtype)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "alertmanager resolve")
 			}
 		} else {
 			resolvedDomain = []string{host}

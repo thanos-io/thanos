@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/extprom"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/grpc-ecosystem/go-grpc-middleware"
@@ -249,12 +251,7 @@ func runQuery(
 		Name: "thanos_query_duplicated_store_address",
 		Help: "The number of times a duplicated store addresses is detected from the different configs in query",
 	})
-	storeAddrResolutionErrors := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "thanos_query_store_address_resolution_errors",
-		Help: "The number of times resolving an address of a store API has failed inside Thanos Query",
-	})
 	reg.MustRegister(duplicatedStores)
-	reg.MustRegister(storeAddrResolutionErrors)
 
 	dialOpts, err := storeClientGRPCOpts(logger, reg, tracer, secure, cert, key, caCert, serverName)
 	if err != nil {
@@ -262,8 +259,7 @@ func runQuery(
 	}
 
 	fileSDCache := cache.New()
-	// DNS provider with default resolver.
-	dnsProvider := dns.NewProviderWithResolver(logger)
+	dnsProvider := dns.NewProvider(logger, extprom.NewSubsystem(reg, "query_store_api"))
 
 	var (
 		stores = query.NewStoreSet(
@@ -364,12 +360,7 @@ func runQuery(
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			return runutil.Repeat(dnsSDInterval, ctx.Done(), func() error {
-				addresses := append(fileSDCache.Addresses(), storeAddrs...)
-				if err := dnsProvider.Resolve(ctx, addresses); err != nil {
-					// Failure to resolve could be caused by a lookup timeout. We shouldn't fail because of that, so just log.
-					level.Error(logger).Log("msg", "failed to resolve addresses for storeAPIs", "err", err)
-					storeAddrResolutionErrors.Inc()
-				}
+				dnsProvider.Resolve(ctx, append(fileSDCache.Addresses(), storeAddrs...))
 				return nil
 			})
 		}, func(error) {
