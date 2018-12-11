@@ -50,6 +50,7 @@ jobs:
       - run:
           name: Check if CHANGELOG was changed
           command: |
+            echo ${CIRCLE_COMPARE_URL}
             if ! git diff --name-status `echo ${CIRCLE_COMPARE_URL} | cut -d/ -f 7` | grep -q "CHANGELOG.md"; then
                echo "Did you make sure to document your changes in CHANGELOG.md if they are relevant for end user?"
                exit 1
