@@ -40,6 +40,21 @@ jobs:
 
             make test
 
+  # Not required step that notifies about changelog not being updated.
+  "Have you documented user facing changes in CHANGELOG.md?":
+    docker:
+      - image: circleci/golang:1.10
+    working_directory: /go/src/github.com/improbable-eng/thanos
+    steps:
+      - checkout
+      - run:
+          name: Check if CHANGELOG was changed
+          command: |
+            if ! git diff --name-status `echo ${CIRCLE_COMPARE_URL} | cut -d/ -f 7` | grep -q "CHANGELOG.md"; then
+               echo "Did you make sure to document your changes in CHANGELOG.md if they are relevant for end user?"
+               exit 1
+            fi
+
   # Cross build is needed for publish_release but needs to be done outside of docker.
   cross_build:
     machine: true
@@ -98,6 +113,10 @@ workflows:
   thanos:
     jobs:
     - test:
+        filters:
+          tags:
+            only: /.*/
+    - "Have you documented user facing changes in CHANGELOG.md?":
         filters:
           tags:
             only: /.*/
