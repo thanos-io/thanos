@@ -19,14 +19,26 @@ Process of cutting a new *minor* Thanos release:
 1. Add PR on branch `release-<major>.<minor>` that will start minor release branch and prepare changes to cut release. 
 1. Bump [VERSION file](./VERSION)
 1. Update [CHANGELOG file](./CHANGELOG.md)
-  Note that `CHANGELOG.md` should only document changes relevant to users of Prometheus, including external API changes, performance improvements, and new features. Do not document changes of internal interfaces, code refactorings and clean-ups, changes to the build process, etc. People interested in these are asked to refer to the git history. 
+  Note that `CHANGELOG.md` should only document changes relevant to users of Thanos, including external API changes, performance improvements, and new features. Do not document changes of internal interfaces, code refactorings and clean-ups, changes to the build process, etc. People interested in these are asked to refer to the git history. 
   Format is described in `CHANGELOG.md`.
 
 1. Double check backward compatibility:
   1. *In case of version after `v1+.y.z`*, double check if none of the changes break API compatibility. This should be done in PR review process, but double check is good to have. 
   1. In case of `v0.y.z`, document all incompatibilities in changelog.
-1. After review, merge the PR and immediately after this create a `<ver>` release on GitHub `release` page. Describe release and post relevant entry from changelog. Click `Save Draft`. This will trigger CircleCI that builds artifacts. Once tarballs are published on release page, you can click `Publish` and release is complete. Announce `#thanos` slack channel.
-
+1. After review, merge the PR and immediately after this tag a version:
+  
+  ```bash
+  $ tag=$(< VERSION)
+  $ git tag -s "v${tag}" -m "v${tag}"
+  $ git push origin "v${tag}"
+  ```
+ 
+  Signing a tag with a GPG key is appreciated, but in case you can't add a GPG key to your Github account using the following [procedure](https://help.github.com/articles/generating-a-gpg-key/), you can replace the `-s` flag by `-a` flag of the `git tag` command to only annotate the tag without signing.
+  Once a tag is created, the release process through CircleCI will be triggered for this tag.
+  You must create a Github Release using the UI for this tag, as otherwise CircleCI will not be able to upload tarballs for this tag. Also, you must create the Github Release using a Github user that has granted access rights to CircleCI. List of maintainers is available [here](/MAINTAINERS.md)
+  Go to the releases page of the project, click on the `Draft a new release` button and select the tag you just pushed. Describe release and post relevant entry from changelog. Click `Save draft` rather than `Publish release` at this time. (This will prevent the release being visible before it has got the binaries attached to it.)
+  Once tarballs are published on release page, you can click `Publish` and release is complete. Announce `#thanos` slack channel.
+  
 ## Branch management and versioning strategy
 
 We use [Semantic Versioning](http://semver.org/).
