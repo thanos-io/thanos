@@ -3,7 +3,7 @@ package dns
 import (
 	"context"
 	"net"
-	"strconv"
+	"sort"
 	"testing"
 
 	"github.com/improbable-eng/thanos/pkg/testutil"
@@ -33,99 +33,94 @@ func (m mockHostnameResolver) LookupSRV(ctx context.Context, service, proto, nam
 type DNSSDTest struct {
 	testName       string
 	addr           string
-	qtype          string
+	qtype          QType
 	expectedResult []string
 	expectedErr    error
 	resolver       *mockHostnameResolver
 }
 
 var (
-	port            = 8888
-	defaultPort     = 9999
-	dnsHostNoPort   = "test.mycompany.com"
-	dnsHostWithPort = "test.mycompany.com" + strconv.Itoa(port)
-	ip              = "192.168.0.1"
-	ip2             = "192.168.0.2"
-	srvHost         = "_test._tcp.mycompany.com"
-	invalidQtype    = "dnsinvalid"
-	mockResolver    = &mockHostnameResolver{
-		resultIPs: map[string][]net.IPAddr{
-			dnsHostNoPort:   {net.IPAddr{IP: net.ParseIP(ip)}},
-			dnsHostWithPort: {net.IPAddr{IP: net.ParseIP(ip)}},
-		},
-		resultSRVs: map[string][]*net.SRV{
-			srvHost: {
-				&net.SRV{Target: ip, Port: uint16(port)},
-				&net.SRV{Target: ip2, Port: uint16(port)},
-			},
-		},
-		err: nil,
-	}
 	errorFromResolver = errors.New("error from resolver")
 
 	dnsSDTests = []DNSSDTest{
 		{
 			testName:       "single ip from dns lookup of host port",
-			addr:           dnsHostNoPort + ":" + strconv.Itoa(port),
-			qtype:          "dns",
-			expectedResult: []string{ip + ":" + strconv.Itoa(port)},
+			addr:           "test.mycompany.com:8080",
+			qtype:          A,
+			expectedResult: []string{"192.168.0.1:8080"},
 			expectedErr:    nil,
 			resolver: &mockHostnameResolver{
 				resultIPs: map[string][]net.IPAddr{
-					dnsHostNoPort: {net.IPAddr{IP: net.ParseIP(ip)}},
+					"test.mycompany.com": {net.IPAddr{IP: net.ParseIP("192.168.0.1")}},
 				},
 			},
 		},
+		// Scheme is preserved.
 		{
 			testName:       "single ip from dns lookup of host port with scheme",
-			addr:           "http://" + dnsHostNoPort + ":" + strconv.Itoa(port),
-			qtype:          "dns",
-			expectedResult: []string{"http://" + ip + ":" + strconv.Itoa(port)},
+			addr:           "http://test.mycompany.com:8080",
+			qtype:          A,
+			expectedResult: []string{"http://192.168.0.1:8080"},
 			expectedErr:    nil,
 			resolver: &mockHostnameResolver{
 				resultIPs: map[string][]net.IPAddr{
-					dnsHostNoPort: {net.IPAddr{IP: net.ParseIP(ip)}},
-				},
-			},
-		},
-		{
-			testName:       "multiple srv records from srv lookup",
-			addr:           srvHost,
-			qtype:          "dnssrv",
-			expectedResult: []string{ip + ":" + strconv.Itoa(port), ip2 + ":" + strconv.Itoa(port)},
-			expectedErr:    nil,
-			resolver: &mockHostnameResolver{
-				resultSRVs: map[string][]*net.SRV{
-					srvHost: {
-						&net.SRV{Target: ip, Port: uint16(port)},
-						&net.SRV{Target: ip2, Port: uint16(port)},
-					},
+					"test.mycompany.com": {net.IPAddr{IP: net.ParseIP("192.168.0.1")}},
 				},
 			},
 		},
 		{
 			testName:       "error on dns lookup when no port is specified",
-			addr:           dnsHostNoPort,
-			qtype:          "dns",
+			addr:           "test.mycompany.com",
+			qtype:          A,
 			expectedResult: nil,
-			expectedErr:    errors.Errorf("missing port in address given for dns lookup: %v", dnsHostNoPort),
+			expectedErr:    errors.Errorf("missing port in address given for dns lookup: test.mycompany.com"),
 			resolver:       &mockHostnameResolver{},
+		},
+		{
+			testName:       "multiple srv records from srv lookup",
+			addr:           "_test._tcp.mycompany.com",
+			qtype:          SRV,
+			expectedResult: []string{"192.168.0.1:8080", "192.168.0.2:8081"},
+			expectedErr:    nil,
+			resolver: &mockHostnameResolver{
+				resultSRVs: map[string][]*net.SRV{
+					"_test._tcp.mycompany.com": {
+						&net.SRV{Target: "192.168.0.1", Port: 8080},
+						&net.SRV{Target: "192.168.0.2", Port: 8081},
+					},
+				},
+			},
+		},
+		{
+			testName:       "multiple srv records from srv lookup",
+			addr:           "_test._tcp.mycompany.com:8082",
+			qtype:          SRV,
+			expectedResult: []string{"192.168.0.1:8082", "192.168.0.2:8082"},
+			expectedErr:    nil,
+			resolver: &mockHostnameResolver{
+				resultSRVs: map[string][]*net.SRV{
+					"_test._tcp.mycompany.com": {
+						&net.SRV{Target: "192.168.0.1", Port: 8080},
+						&net.SRV{Target: "192.168.0.2", Port: 8081},
+					},
+				},
+			},
+		},
+		{
+			testName:       "error from SRV resolver",
+			addr:           "_test._tcp.mycompany.com",
+			qtype:          SRV,
+			expectedResult: nil,
+			expectedErr:    errors.Wrapf(errorFromResolver, "lookup SRV records \"_test._tcp.mycompany.com\""),
+			resolver:       &mockHostnameResolver{err: errorFromResolver},
 		},
 		{
 			testName:       "error on bad qtype",
-			addr:           dnsHostNoPort,
-			qtype:          invalidQtype,
+			addr:           "test.mycompany.com",
+			qtype:          "invalid",
 			expectedResult: nil,
-			expectedErr:    errors.Errorf("invalid lookup scheme %q", invalidQtype),
+			expectedErr:    errors.Errorf("invalid lookup scheme \"invalid\""),
 			resolver:       &mockHostnameResolver{},
-		},
-		{
-			testName:       "error from resolver",
-			addr:           srvHost,
-			qtype:          "dnssrv",
-			expectedResult: nil,
-			expectedErr:    errors.Wrapf(errorFromResolver, "lookup SRV records %q", srvHost),
-			resolver:       &mockHostnameResolver{err: errorFromResolver},
 		},
 	}
 )
@@ -149,8 +144,6 @@ func testDnsSd(t *testing.T, tt DNSSDTest) {
 	} else {
 		testutil.Assert(t, err == nil, "expected no error but got %v", err)
 	}
-	testutil.Assert(t, len(result) == len(tt.expectedResult), "expected %v hosts, but got %v", len(tt.expectedResult), len(result))
-	for i, host := range result {
-		testutil.Assert(t, tt.expectedResult[i] == host, "expected host %v is missing", tt.expectedResult[i])
-	}
+	sort.Strings(result)
+	testutil.Equals(t, tt.expectedResult, result)
 }
