@@ -482,10 +482,13 @@ func (s *BucketStore) blockSeries(
 	if lazyPostings == index.EmptyPostings() {
 		return storepb.EmptySeriesSet(), stats, nil
 	}
+
 	if err := indexr.preloadPostings(); err != nil {
 		return nil, stats, errors.Wrap(err, "preload postings")
 	}
+
 	// Get result postings list by resolving the postings tree.
+	// TODO(bwplotka): Users are seeing panics here, because of lazyPosting being not loaded by preloadPostings.
 	ps, err := index.ExpandPostings(lazyPostings)
 	if err != nil {
 		return nil, stats, errors.Wrap(err, "expand postings")
@@ -673,6 +676,9 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt int64, lset labels
 }
 
 // Series implements the storepb.StoreServer interface.
+// TODO(bwplotka): It buffers all chunks in memory and only then streams to client.
+// 1. Either count chunk sizes and error out too big query.
+// 2. Stream posting -> series -> chunk all together.
 func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	matchers, err := translateMatchers(req.Matchers)
 	if err != nil {
@@ -1207,14 +1213,35 @@ func (r *bucketIndexReader) preloadPostings() error {
 			}
 		})
 	}
-	return g.Run()
+
+	if err := g.Run(); err != nil {
+		return err
+	}
+
+	// TODO(bwplotka): Users are seeing lazyPostings not fully loaded. Double checking it here and printing more info
+	// on failure case.
+	for _, postings := range ps {
+		if postings.Postings != nil {
+			continue
+		}
+
+		msg := fmt.Sprintf("found parts: %v bases on:", parts)
+		for _, p := range ps {
+			msg += fmt.Sprintf(" [start: %v; end: %v]", p.ptr.Start, p.ptr.End)
+		}
+
+		return errors.Errorf("expected all postings to be loaded but spotted malformed one with key: %v; start: %v; end: %v. Additional info: %s",
+			postings.key, postings.ptr.Start, postings.ptr.End, msg)
+	}
+
+	return nil
 }
 
 // loadPostings loads given postings using given start + length. It is expected to have given postings data within given range.
 func (r *bucketIndexReader) loadPostings(ctx context.Context, postings []*lazyPostings, start, end int64) error {
 	begin := time.Now()
 
-	b, err := r.block.readIndexRange(r.ctx, int64(start), int64(end-start))
+	b, err := r.block.readIndexRange(ctx, int64(start), int64(end-start))
 	if err != nil {
 		return errors.Wrap(err, "read postings range")
 	}
