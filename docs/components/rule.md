@@ -113,7 +113,9 @@ Flags:
                                  related server will be started.
       --label=<name>="<value>" ...  
                                  Labels to be applied to all generated metrics
-                                 (repeated).
+                                 (repeated). Similar to external labels for
+                                 Prometheus, used to identify ruler and its
+                                 blocks as unique source.
       --data-dir="data/"         data directory
       --rule-file=rules/ ...     Rule files that should be used by rule manager.
                                  Can be in glob format (repeated).
@@ -130,6 +132,11 @@ Flags:
       --alert.query-url=ALERT.QUERY-URL  
                                  The external Thanos Query URL that would be set
                                  in all alerts 'Source' field
+      --alert.label-drop=ALERT.LABEL-DROP ...  
+                                 Labels by name to drop before sending to
+                                 alertmanager. This allows alert to be
+                                 deduplicated on replica label (repeated).
+                                 Similar Prometheus alert relabelling
       --objstore.config-file=<bucket.config-yaml-path>  
                                  Path to YAML file that contains object store
                                  configuration.

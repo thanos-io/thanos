@@ -11,6 +11,10 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+### Added
+
+- Relabel drop for Thanos Ruler to enable replica label drop and alert deduplication on AM side.
+
 ### Fixed
 
 - DNS SD bug when having SRV results with different ports.
