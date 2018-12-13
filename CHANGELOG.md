@@ -17,6 +17,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Fixed
 
+- Thanos Rule Alertmanager DNS SD bug
 - DNS SD bug when having SRV results with different ports.
 - Move handling of HA alertmanagers to be the same as Prometheus.
 

@@ -761,7 +761,7 @@ func (s *alertmanagerSet) update(ctx context.Context) error {
 		host := u.Host
 		if qtype != "" {
 			if qtype == dns.A {
-				_, _, err = net.SplitHostPort(name)
+				_, _, err = net.SplitHostPort(host)
 				if err != nil {
 					// The host could be missing a port. Append the defaultAlertmanagerPort.
 					host = host + ":" + strconv.Itoa(defaultAlertmanagerPort)
