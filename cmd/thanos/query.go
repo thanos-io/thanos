@@ -371,6 +371,7 @@ func runQuery(
 	{
 		router := route.New()
 		ui.NewQueryUI(logger, nil).Register(router)
+		ui.NewQueryFederation(logger, nil, queryableCreator).Register(router)
 
 		api := v1.NewAPI(logger, reg, engine, queryableCreator, enableAutodownsampling)
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger)
