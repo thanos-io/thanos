@@ -18,6 +18,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ### Fixed
 
 - DNS SD bug when having SRV results with different ports.
+- Move handling of HA alertmanagers to be the same as Prometheus.
 
 ## [v0.2.0](https://github.com/improbable-eng/thanos/releases/tag/v0.2.0) - 2018.12.10
 
@@ -61,7 +62,7 @@ Note lots of necessary breaking changes in flags that relates to bucket configur
 - In `thanos rule`, file based discovery of query nodes using `--query.file-sd-config.files`
 - In `thanos query`, file based discovery of store nodes using `--store.file-sd-config.files`
 - `/-/healthy` endpoint to Querier.
-- DNS service discovery to static and file based configurations using the `dns+` and `dnssrv+` prefixes for the respective lookup. Details [here](/docs/thanos_service_discovery.md)
+- DNS service discovery to static and file based configurations using the `dns+` and `dnssrv+` prefixes for the respective lookup. Details [here](/docs/service_discovery.md)
 - `--cluster.disable` flag to disable gossip functionality completely. 
 - Hidden flag to configure max compaction level.
 - Azure Storage.
@@ -77,8 +78,6 @@ Note lots of necessary breaking changes in flags that relates to bucket configur
 - Clean up of old compact blocks on compact restart.
 - Sidecar too frequent Prometheus reload.
 - `thanos_compactor_retries_total` metric not being registered.
-- Move handling of HA alertmanagers to be the same as Prometheus.
-
 
 ## [v0.1.0](https://github.com/improbable-eng/thanos/releases/tag/v0.1.0) - 2018.09.14
 

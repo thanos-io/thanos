@@ -1,9 +1,12 @@
 # Thanos Service Discovery
 
-Service discovery has a vital place in Thanos components that allows them to perform some logic against given set of APIs.
-Currently there are 2 places like this:
+Service discovery has a vital place in Thanos components. It allows Thanos to discover different set API targets required to perform certain operations.
+This logic is meant to replace Gossip that [is planned to be removed.](/docs/proposals/approved/201809_gossip-removal.md)
+
+Currently places that uses Thanos SD:
 * `Thanos Query` needs to know about [StoreAPI](https://github.com/improbable-eng/thanos/blob/d3fb337da94d11c78151504b1fccb1d7e036f394/pkg/store/storepb/rpc.proto#L14) servers in order to query metrics from them.
 * `Thanos Rule` needs to know about `QueryAPI` servers in order to evaluate recording and alerting rules.
+* (Only static option with DNS discovery): `Thanos Rule` needs to know about `Alertmanagers` HA replicas in order to send alerts. 
 
 Currently there are several ways to configure this and they are described below.
 
@@ -17,6 +20,8 @@ The repeatable flag `--store=<store>` can be used to specify a `StoreAPI` that `
 ### Thanos Rule
 
 The repeatable flag `--query=<query>` can be used to specify a `QueryAPI` that `Thanos Rule` should use.
+
+The repeatable flag `--alertmanager.url=<alertmanager>` can be used to specify a `Alertmanager API` that `Thanos Rule` should use.
 
 ## File Service Discovery
 

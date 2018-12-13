@@ -74,8 +74,10 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	tsdbRetention := modelDuration(cmd.Flag("tsdb.retention", "Block retention time on local disk.").
 		Default("48h"))
 
-	alertmgrs := cmd.Flag("alertmanagers.url", "Alertmanager URLs to push firing alerts to. The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Alertmanager IPs through respective DNS lookups. The port defaults to 9093 or the SRV record's value. The URL path is used as a prefix for the regular Alertmanager API path.").
+	alertmgrs := cmd.Flag("alertmanagers.url", "Alertmanager replica URLs to push firing alerts. Ruler claims success if push to at least one alertmanager from discovered succeeds. The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Alertmanager IPs through respective DNS lookups. The port defaults to 9093 or the SRV record's value. The URL path is used as a prefix for the regular Alertmanager API path.").
 		Strings()
+
+	alertmgrsTimeout := cmd.Flag("alertmanagers.send-timeout", "Timeout for sending alerts to alertmanager").Default("10s").Duration()
 
 	alertQueryURL := cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field").String()
 
@@ -142,6 +144,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			tracer,
 			lset,
 			*alertmgrs,
+			*alertmgrsTimeout,
 			*grpcBindAddr,
 			*cert,
 			*key,
@@ -172,6 +175,7 @@ func runRule(
 	tracer opentracing.Tracer,
 	lset labels.Labels,
 	alertmgrURLs []string,
+	alertmgrsTimeout time.Duration,
 	grpcBindAddr string,
 	cert string,
 	key string,
@@ -353,15 +357,13 @@ func runRule(
 		})
 	}
 	{
-		sdr := alert.NewSender(logger, reg, alertmgrs.get, nil)
+		// TODO(bwplotka): https://github.com/improbable-eng/thanos/issues/660
+		sdr := alert.NewSender(logger, reg, alertmgrs.get, nil, alertmgrsTimeout)
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
 			for {
-				// TODO(bplotka): Investigate what errors it can return and if just "sdr.Send" retry is enough.
-				if err := sdr.Send(ctx, alertQ.Pop(ctx.Done())); err != nil {
-					level.Warn(logger).Log("msg", "sending alerts failed", "err", err)
-				}
+				sdr.Send(ctx, alertQ.Pop(ctx.Done()))
 
 				select {
 				case <-ctx.Done():
@@ -754,6 +756,7 @@ func (s *alertmanagerSet) update(ctx context.Context) error {
 		if err != nil {
 			return errors.Wrapf(err, "parse URL %q", name)
 		}
+
 		// Get only the host and resolve it if needed.
 		host := u.Host
 		if qtype != "" {
