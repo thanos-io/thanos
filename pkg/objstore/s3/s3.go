@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-kit/kit/log/level"
+
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -250,7 +252,16 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
-	_, err := b.client.PutObjectWithContext(ctx, b.name, name, r, -1,
+	// TODO(PR #617): Consider removing requirement on pre-known length when all providers will support this.
+	fileSize := int64(-1)
+	fileInfo, err := r.(*os.File).Stat()
+	if err != nil {
+		level.Warn(b.logger).Log("msg", "could not guess file size for multipart upload", "name", name)
+	} else {
+		fileSize = fileInfo.Size()
+	}
+
+	_, err = b.client.PutObjectWithContext(ctx, b.name, name, r, fileSize,
 		minio.PutObjectOptions{ServerSideEncryption: b.sse, UserMetadata: map[string]string{"X-Amz-Acl": "bucket-owner-full-control"}},
 	)
 
