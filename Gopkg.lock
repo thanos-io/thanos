@@ -34,7 +34,7 @@
   version = "0.1.7"
 
 [[projects]]
-  digest = "0:"
+  digest = "1:5da4d3b3b9949b9043d2fd36c4ff9b208f72ad5260a3dcb6f94267a769ee1899"
   name = "github.com/Azure/azure-storage-blob-go"
   packages = ["azblob"]
   pruneopts = ""
@@ -374,12 +374,12 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:e0757c7afc486bdb1b704013e2f5ec9e5a33945a56540d2f7d5522469bb399f6"
+  digest = "1:484d7b3ea990153489735f4810f74b50c63ea16ba58e2fc34ac88c2b0d80f584"
   name = "github.com/mozillazg/go-cos"
   packages = ["."]
   pruneopts = ""
-  revision = "0616685fb823c59b9611c5a4cdfc2507b3e92dcd"
-  version = "v0.10.0"
+  revision = "99eb77820590d3f93902fd18244c87d635bfc3e2"
+  version = "v0.11.0"
 
 [[projects]]
   digest = "1:912349f5cf927bf96dca709623631ace7db723f07c70c4d56cfc22d9a667ed16"

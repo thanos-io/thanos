@@ -92,17 +92,7 @@ func (b *Bucket) Name() string {
 
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
-	reader, length, err := objectLength(r)
-	if err != nil {
-		return errors.Wrap(err, "length of COS object")
-	}
-	opt := &cos.ObjectPutOptions{
-		ObjectPutHeaderOptions: &cos.ObjectPutHeaderOptions{
-			ContentLength: length,
-		},
-	}
-
-	if _, err = b.client.Object.Put(ctx, name, reader, opt); err != nil {
+	if _, err := b.client.Object.Put(ctx, name, r, nil); err != nil {
 		return errors.Wrap(err, "upload cos object")
 	}
 	return nil
@@ -283,19 +273,6 @@ func setRange(opts *cos.ObjectGetOptions, start, end int64) error {
 		return errors.Errorf("Invalid range specified: start=%d end=%d", start, end)
 	}
 	return nil
-}
-
-func objectLength(src io.Reader) (io.Reader, int, error) {
-	o, ok := src.(*os.File)
-	if !ok {
-		return nil, -1, errors.Errorf("Failed to convert source reader to file descriptor")
-	}
-	fi, err := o.Stat()
-	if err != nil {
-		return nil, -1, err
-	}
-
-	return src, int(fi.Size()), nil
 }
 
 func configFromEnv() Config {
