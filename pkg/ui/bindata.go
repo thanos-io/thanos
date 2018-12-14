@@ -8,6 +8,7 @@
 // pkg/ui/templates/rule_menu.html
 // pkg/ui/templates/rules.html
 // pkg/ui/templates/status.html
+// pkg/ui/templates/stores.html
 // pkg/ui/static/css/alerts.css
 // pkg/ui/static/css/graph.css
 // pkg/ui/static/css/prometheus.css
@@ -121,7 +122,7 @@ func pkgUiTemplates_baseHtml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/templates/_base.html", size: 1065, mode: os.FileMode(436), modTime: time.Unix(1534429958, 0)}
+	info := bindataFileInfo{name: "pkg/ui/templates/_base.html", size: 1065, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -141,7 +142,7 @@ func pkgUiTemplatesAlertsHtml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/templates/alerts.html", size: 2534, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/templates/alerts.html", size: 2534, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -161,7 +162,7 @@ func pkgUiTemplatesFlagsHtml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/templates/flags.html", size: 433, mode: os.FileMode(436), modTime: time.Unix(1534430603, 0)}
+	info := bindataFileInfo{name: "pkg/ui/templates/flags.html", size: 433, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -181,12 +182,12 @@ func pkgUiTemplatesGraphHtml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/templates/graph.html", size: 2061, mode: os.FileMode(436), modTime: time.Unix(1534430768, 0)}
+	info := bindataFileInfo{name: "pkg/ui/templates/graph.html", size: 2061, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
-var _pkgUiTemplatesQuery_menuHtml = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\xbc\x54\x3d\x8f\x9c\x30\x10\xed\xef\x57\x8c\x7c\x52\x3a\xe2\x3e\x01\x8a\x44\xca\x87\x94\x22\x4a\xae\x8f\x06\x3c\x80\x15\x33\xb6\x6c\x43\xf6\x84\xf8\xef\x11\xb0\x20\x60\x6f\x73\x5d\x2a\xaf\x47\x6f\x66\xde\xbe\xf7\xf0\x30\x28\xaa\x34\x13\x08\xc6\x5e\x8c\xe3\x03\x00\x40\xca\xd8\x43\x69\x30\x84\x6c\x2a\x17\xe8\x61\x39\x12\xcd\x3d\xf9\x40\xeb\xb5\xd2\x17\x52\x49\xb4\x4e\xe4\x73\x23\x40\xaa\xf4\xd6\x5a\x5a\x8e\xa8\x99\x7c\x52\x99\x4e\xab\x0d\x73\x44\x5d\x47\x35\x84\x8a\xfc\x0e\x03\x90\x16\x5d\x8c\x96\x21\x3e\x3b\xca\xc4\x72\x11\xa7\xb6\x68\xeb\xda\x10\x94\xd6\x18\x74\x81\x94\x00\x85\x11\xaf\xe5\x89\xc2\x52\x5f\xcb\xe8\x6b\x8a\x99\x78\x5c\xba\x05\xa0\xd7\x98\xd0\xc5\x21\x2b\x52\x99\xa8\xd0\x4c\xd8\xb9\x3a\xb1\xf7\xd6\x6c\xab\x0e\xd4\x00\xd2\xe0\x90\x57\x32\xc1\x27\x96\xcd\xb3\xc8\x9f\x16\x3a\x8c\xbd\xae\x31\x6a\xcb\xa9\x9c\x70\xff\x68\xd5\xa5\xe5\x64\x1e\xff\xbf\xa0\xa9\x5c\xa4\x3c\xd4\xf0\xa4\x6b\xe1\x91\x95\x80\xc6\x53\x95\x89\x61\x00\x87\xb1\xf9\xee\xa9\xd2\x17\x18\x47\x29\xf2\xa7\x06\xd9\x86\x54\xe2\xce\x54\xa9\x74\x7f\xf2\x58\xab\x4d\xbe\xd3\x82\xd5\x99\xcd\xba\xa3\xf5\x9d\xd9\xe1\xd7\xb8\xed\x7e\x1a\xaa\xe2\xd9\x11\xa3\xf3\x14\xef\x51\xae\x3d\xba\x46\xe4\x9f\xa7\x63\xa2\x9d\x4a\xa3\x6f\xfa\xd7\x9d\xca\x5b\xa7\xec\x1f\x3e\x6d\x98\x75\x5a\xe6\x3f\x8a\x33\xf6\x9a\xb9\x53\x00\xb7\x49\xe0\xad\xd9\xa5\x78\x8e\x58\x83\xc1\x59\xd7\xb9\x4c\x44\xdf\xd1\x9d\x34\xe6\x3f\x23\xc6\x2e\x1c\xfd\x2d\xd1\x53\xdc\xcc\x3d\xd8\x70\x23\xe0\x46\xb0\x25\xee\x6e\xfe\xd1\x6b\xba\x85\x79\xbb\xc8\x7f\x74\x1c\x75\x4b\xf0\x06\x5b\xf7\x1e\x3e\x74\xda\x28\xf8\xca\x95\xf5\xed\x35\xe7\x2f\x49\xfa\xfa\xf8\xca\x60\x1d\x44\xfe\xd1\xb6\x2d\xb2\x4a\xbe\x4d\x4f\xd1\xa7\xa9\x76\x6f\x60\x2a\x3b\x73\xf2\xed\x25\x27\xef\x1a\xd7\xc4\xe8\xc2\x3b\x29\x6b\x1d\x9b\xae\x78\x5b\xda\x56\xea\xd6\x79\x5b\x60\x61\x28\x21\xae\x65\x9c\xa3\x2d\x60\x7d\x2c\x7e\x15\x06\xf9\xb7\xc8\xbf\x90\x71\x37\x4a\x9f\x97\x1f\xe9\x1d\x3e\x89\xdd\x25\x95\x8c\x7d\xfe\x30\x0c\xc4\x6a\x1c\x1f\xfe\x06\x00\x00\xff\xff\x8e\xc5\x0f\x01\x85\x05\x00\x00")
+var _pkgUiTemplatesQuery_menuHtml = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\xbc\x54\x4d\x8f\x9d\x30\x0c\xbc\xef\xaf\xb0\xb2\x52\x6f\x34\xf7\x16\x38\xb4\x52\x3f\xa4\x1e\xaa\xee\xde\x2b\x43\x0c\x44\x0d\x4e\x94\x04\xba\x2b\xc4\x7f\xaf\x80\x07\x02\xde\xbe\xae\x7a\xe9\x29\xc4\x1a\xdb\x83\x67\x9c\x61\x50\x54\x69\x26\x10\x8c\xbd\x18\xc7\x3b\x00\x80\x94\xb1\x87\xd2\x60\x08\xd9\x14\x2e\xd0\xc3\x72\x24\x9a\x7b\xf2\x81\xd6\x6b\xa5\x9f\x48\x25\xd1\x3a\x91\xcf\x89\x00\xa9\xd2\x5b\x6a\x69\x39\xa2\x66\xf2\x49\x65\x3a\xad\x36\xcc\x11\x75\x29\xd5\x10\x2a\xf2\x3b\x0c\x40\x5a\x74\x31\x5a\x86\xf8\xec\x28\x13\xcb\x45\x9c\xd2\xa2\xad\x6b\x43\x50\x5a\x63\xd0\x05\x52\x02\x14\x46\xbc\x84\x27\x0a\x4b\x7c\x0d\xa3\xaf\x29\x66\xe2\x7e\xc9\x16\x80\x5e\x63\x42\x4f\x0e\x59\x91\xca\x44\x85\x66\xc2\xce\xd1\x89\xbd\xb7\x66\x6b\x75\xa0\x06\x90\x06\x87\xbc\x92\x09\x3e\xb1\x6c\x9e\x45\xfe\xb8\xd0\x61\xec\x75\x8d\x51\x5b\x4e\xe5\x84\xfb\x4b\xaa\x2e\x2d\x27\x73\xf9\xff\x05\x4d\xe5\x32\xca\x43\x0c\x4f\x73\x2d\x3c\xb2\x12\xd0\x78\xaa\x32\x31\x0c\xe0\x30\x36\xdf\x3d\x55\xfa\x09\xc6\x51\x8a\xfc\xb1\x41\xb6\x21\x95\xb8\x13\x55\x2a\xdd\x9f\x34\xd6\x6a\x1b\xdf\xa9\xc1\xaa\xcc\x26\xdd\x51\xfa\xce\xec\xf0\xab\xdd\x76\x9f\x86\xaa\x78\x56\xc4\xe8\x3c\xc5\x5b\x94\x6b\x8f\xae\x11\xf9\xe7\xe9\x98\x68\xa7\xd2\xe8\x7f\xc9\x0f\xd1\x7a\x0a\x22\x7f\x98\xcf\x9b\x15\x56\xd6\xca\x5b\xa7\xec\x6f\x3e\x71\x9c\x27\xbd\x74\xb8\x17\x67\xec\xc5\xb5\x27\x0b\x6f\x95\xc0\x5b\xb3\xdb\x83\xd9\xa4\x0d\x06\x67\x5d\xe7\x32\x11\x7d\x47\x37\xfc\x9c\x3f\x44\x8c\x5d\x38\x3a\xa4\x44\x4f\x71\xb3\xc7\x41\xc8\x2b\x09\x36\x82\x2d\x71\x77\xf5\x47\xaf\x4f\x6e\xea\x2e\xf2\x1f\x1d\x47\xdd\x12\xbc\xc1\xd6\xbd\x87\x0f\x9d\x36\x0a\xbe\x72\x65\x7d\x7b\xd9\x94\x97\x46\xfa\x7a\xf9\xca\x60\x1d\x44\xfe\xd1\xb6\x2d\xb2\x4a\xbe\x4d\x8f\xd9\xa7\x29\x76\xab\x60\x2a\x3b\x73\xd2\xed\x45\x2f\xdc\x12\xae\x89\xd1\x85\x77\x52\xd6\x3a\x36\x5d\xf1\xb6\xb4\xad\xd4\xad\xf3\xb6\xc0\xc2\x50\x42\x5c\xcb\x38\x2f\x87\x80\xf5\xb9\xf9\x59\x18\xe4\x5f\x22\xff\x42\xc6\x5d\x4d\xfa\xdc\xfc\x48\xef\xb0\x54\xbb\x4b\x2a\x19\xfb\xfc\x6e\x18\x88\xd5\x38\xde\xfd\x09\x00\x00\xff\xff\xfe\xd0\xfb\x11\xc7\x05\x00\x00")
 
 func pkgUiTemplatesQuery_menuHtmlBytes() ([]byte, error) {
 	return bindataRead(
@@ -201,7 +202,7 @@ func pkgUiTemplatesQuery_menuHtml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/templates/query_menu.html", size: 1413, mode: os.FileMode(436), modTime: time.Unix(1534430788, 0)}
+	info := bindataFileInfo{name: "pkg/ui/templates/query_menu.html", size: 1479, mode: os.FileMode(420), modTime: time.Unix(1544801148, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -221,7 +222,7 @@ func pkgUiTemplatesRule_menuHtml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/templates/rule_menu.html", size: 1021, mode: os.FileMode(436), modTime: time.Unix(1534430711, 0)}
+	info := bindataFileInfo{name: "pkg/ui/templates/rule_menu.html", size: 1021, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -241,7 +242,7 @@ func pkgUiTemplatesRulesHtml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/templates/rules.html", size: 1095, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/templates/rules.html", size: 1095, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -261,7 +262,27 @@ func pkgUiTemplatesStatusHtml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/templates/status.html", size: 1286, mode: os.FileMode(436), modTime: time.Unix(1534430764, 0)}
+	info := bindataFileInfo{name: "pkg/ui/templates/status.html", size: 1286, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var _pkgUiTemplatesStoresHtml = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x9c\x55\x4f\x6b\x1b\x3f\x10\xbd\xfb\x53\x0c\xe2\x77\xb5\x17\x72\xf9\x41\xd9\x75\x29\x25\xd0\x43\x12\x0a\x29\xb9\x16\x59\x1a\x7b\x45\x64\x69\xd1\xcc\xa6\x36\x42\xdf\xbd\x68\xd7\x1b\xdb\xf1\xda\xb1\x7b\x11\x68\xfe\xe8\xbd\x19\x3d\x8d\x62\xd4\xb8\x34\x0e\x41\xd4\x28\xb5\x48\x69\x52\x5a\xe3\x5e\x81\xb7\x0d\x56\x82\x71\xc3\x85\x22\x12\x10\xd0\x56\x82\x78\x6b\x91\x6a\x44\x16\x50\x07\x5c\x56\x22\x46\x68\x24\xd7\x3f\x03\x2e\xcd\x06\x52\x2a\x88\x25\x1b\x95\x73\x8a\xd0\x5a\xa4\x99\x22\xfa\xfa\x56\xc5\x08\x8b\xd6\x58\xfd\x82\x81\x8c\x77\x90\x92\x98\x4f\x62\x44\xa7\x53\x9a\x4c\xf6\x24\x94\x77\x8c\x8e\x3b\x1e\xda\xbc\x81\xb2\x92\xa8\xea\xcc\xd2\x38\x0c\xd3\xa5\x6d\x8d\x16\xf3\x09\x00\x40\x59\xdf\xcd\x9f\xd9\x07\xa4\xb2\xa8\xef\x76\x36\x96\x0b\x8b\x43\x5e\xbf\xe9\xd6\xe9\xc2\x07\x8d\x01\x87\xe4\x3e\x38\x17\x7d\xb8\x0f\xfb\xcd\x2e\x60\x7e\xef\x74\xe3\x8d\xe3\xb2\xe0\xfa\xd4\xfb\xcc\x92\x5b\x1a\xf7\x7d\x73\xce\xb7\x4e\xa1\x86\x07\xb9\x40\x7b\x26\xea\xd1\x38\xf8\x65\xd6\x78\xc6\x2b\x37\x17\xbc\x0f\x92\x18\x7e\xa0\xb4\x5c\xc3\xf7\x1a\xd5\xeb\x85\xb0\x47\x24\x92\xab\x0f\x07\x95\xc5\x61\xc9\xd9\xf7\xa1\x21\x0b\xaf\xb7\xfb\x7d\x8c\x41\xba\x15\xc2\x7f\x94\xdb\x0e\x5f\x2a\x98\xa5\x74\xa9\x7d\x7a\x1e\x63\x1f\x3c\x7b\x92\x6b\x4c\xa9\x2c\x58\x9f\x04\x0d\xd7\x95\xc5\x83\xe2\xd8\xdd\xc3\x9a\x25\x38\xcf\x3b\xdc\x59\xae\xe7\x3e\x04\x1f\x0e\xc0\xdf\x8f\xa3\x46\xba\xe1\x40\x69\x31\x30\x74\xeb\x94\x5a\xa5\x90\x08\x3a\x90\xdf\xc6\x69\xa3\x24\xfb\x00\x59\xe3\xd3\xb6\x69\x30\x28\x49\x63\xe8\x6d\x73\x0a\x52\x64\x94\x31\xa2\x68\x09\x6f\x61\xa5\x73\x3f\xc3\xed\xa4\xb4\xff\xe3\x6e\xa1\xd5\x3d\xb4\xe3\xd8\x91\x8b\x38\x36\xbc\xdf\xb6\xcd\xf2\xcd\xb7\xfd\xde\xff\x2c\xe7\xcf\xca\xec\xb3\xba\x75\xda\x04\xb3\x96\x61\x2b\xb2\x1c\x3a\xcb\x4e\x0e\x79\x82\xec\x0c\x2f\xd2\xb6\x98\x92\x18\x2b\xe2\xfa\x02\x62\x5c\xfa\xb0\x96\x9c\xdf\x0c\xb1\x5c\x37\x03\xe7\x47\xe3\xb2\xed\x8c\x02\x2f\xe4\xc9\xcd\xe5\x3c\x32\x4e\xe1\xa1\x32\xbb\x87\x98\x12\xc8\x95\xbf\xa2\xc9\x30\xe8\xfb\x0a\x6d\x9f\xb4\xf8\x73\x25\x8d\x48\xa7\x47\xbc\x16\xee\x9f\x25\x75\x3c\x5a\x4e\x5e\xc6\xd8\xb0\x00\xe5\x6d\x86\xab\xc4\xff\x23\xbc\x9f\x3c\x74\x9c\x09\x02\xae\x0c\x71\x1e\xe6\xb7\xe0\x1f\xf1\x2d\x8b\x83\xd1\x56\x16\xdd\x17\x31\x9f\x94\x85\x36\x6f\xfb\x8f\xe9\x6f\x00\x00\x00\xff\xff\xdf\xa9\x37\xf4\x1d\x07\x00\x00")
+
+func pkgUiTemplatesStoresHtmlBytes() ([]byte, error) {
+	return bindataRead(
+		_pkgUiTemplatesStoresHtml,
+		"pkg/ui/templates/stores.html",
+	)
+}
+
+func pkgUiTemplatesStoresHtml() (*asset, error) {
+	bytes, err := pkgUiTemplatesStoresHtmlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "pkg/ui/templates/stores.html", size: 1821, mode: os.FileMode(420), modTime: time.Unix(1544801148, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -281,7 +302,7 @@ func pkgUiStaticCssAlertsCss() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/css/alerts.css", size: 383, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/css/alerts.css", size: 383, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -301,7 +322,7 @@ func pkgUiStaticCssGraphCss() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/css/graph.css", size: 3359, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/css/graph.css", size: 3359, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -321,7 +342,7 @@ func pkgUiStaticCssPrometheusCss() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/css/prometheus.css", size: 322, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/css/prometheus.css", size: 322, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -341,7 +362,7 @@ func pkgUiStaticCssRulesCss() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/css/rules.css", size: 190, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/css/rules.css", size: 190, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -361,7 +382,7 @@ func pkgUiStaticImgAjaxLoaderGif() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/img/ajax-loader.gif", size: 847, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/img/ajax-loader.gif", size: 847, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -381,7 +402,7 @@ func pkgUiStaticImgFaviconIco() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/img/favicon.ico", size: 15886, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/img/favicon.ico", size: 15886, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -401,7 +422,7 @@ func pkgUiStaticJsAlertsJs() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/js/alerts.js", size: 1152, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/js/alerts.js", size: 1152, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -421,7 +442,7 @@ func pkgUiStaticJsGraphJs() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/js/graph.js", size: 31377, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/js/graph.js", size: 31377, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -441,7 +462,7 @@ func pkgUiStaticJsGraph_templateHandlebar() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/js/graph_template.handlebar", size: 7342, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/js/graph_template.handlebar", size: 7342, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -461,7 +482,7 @@ func pkgUiStaticVendorBootstrap331CssBootstrapThemeMinCss() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/bootstrap-3.3.1/css/bootstrap-theme.min.css", size: 19835, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/bootstrap-3.3.1/css/bootstrap-theme.min.css", size: 19835, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -481,7 +502,7 @@ func pkgUiStaticVendorBootstrap331CssBootstrapMinCss() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/bootstrap-3.3.1/css/bootstrap.min.css", size: 113498, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/bootstrap-3.3.1/css/bootstrap.min.css", size: 113498, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -501,7 +522,7 @@ func pkgUiStaticVendorBootstrap331FontsGlyphiconsHalflingsRegularEot() (*asset, 
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/bootstrap-3.3.1/fonts/glyphicons-halflings-regular.eot", size: 20335, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/bootstrap-3.3.1/fonts/glyphicons-halflings-regular.eot", size: 20335, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -521,7 +542,7 @@ func pkgUiStaticVendorBootstrap331FontsGlyphiconsHalflingsRegularSvg() (*asset, 
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/bootstrap-3.3.1/fonts/glyphicons-halflings-regular.svg", size: 62926, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/bootstrap-3.3.1/fonts/glyphicons-halflings-regular.svg", size: 62926, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -541,7 +562,7 @@ func pkgUiStaticVendorBootstrap331FontsGlyphiconsHalflingsRegularTtf() (*asset, 
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/bootstrap-3.3.1/fonts/glyphicons-halflings-regular.ttf", size: 41280, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/bootstrap-3.3.1/fonts/glyphicons-halflings-regular.ttf", size: 41280, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -561,7 +582,7 @@ func pkgUiStaticVendorBootstrap331FontsGlyphiconsHalflingsRegularWoff() (*asset,
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/bootstrap-3.3.1/fonts/glyphicons-halflings-regular.woff", size: 23320, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/bootstrap-3.3.1/fonts/glyphicons-halflings-regular.woff", size: 23320, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -581,7 +602,7 @@ func pkgUiStaticVendorBootstrap331JsBootstrapMinJs() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/bootstrap-3.3.1/js/bootstrap.min.js", size: 35601, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/bootstrap-3.3.1/js/bootstrap.min.js", size: 35601, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -601,7 +622,7 @@ func pkgUiStaticVendorBootstrap331JsNpmJs() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/bootstrap-3.3.1/js/npm.js", size: 484, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/bootstrap-3.3.1/js/npm.js", size: 484, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -621,7 +642,7 @@ func pkgUiStaticVendorBootstrap3TypeaheadBootstrap3TypeaheadMinJs() (*asset, err
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/bootstrap3-typeahead/bootstrap3-typeahead.min.js", size: 7856, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/bootstrap3-typeahead/bootstrap3-typeahead.min.js", size: 7856, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -641,7 +662,7 @@ func pkgUiStaticVendorEonasdanBootstrapDatetimepickerBootstrapDatetimepickerMinC
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/eonasdan-bootstrap-datetimepicker/bootstrap-datetimepicker.min.css", size: 7771, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/eonasdan-bootstrap-datetimepicker/bootstrap-datetimepicker.min.css", size: 7771, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -661,7 +682,7 @@ func pkgUiStaticVendorEonasdanBootstrapDatetimepickerBootstrapDatetimepickerMinJ
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/eonasdan-bootstrap-datetimepicker/bootstrap-datetimepicker.min.js", size: 48881, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/eonasdan-bootstrap-datetimepicker/bootstrap-datetimepicker.min.js", size: 48881, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -681,7 +702,7 @@ func pkgUiStaticVendorFuzzyFuzzyJs() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/fuzzy/fuzzy.js", size: 5669, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/fuzzy/fuzzy.js", size: 5669, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -701,7 +722,7 @@ func pkgUiStaticVendorJsJqueryHotkeysJs() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/js/jquery.hotkeys.js", size: 4490, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/js/jquery.hotkeys.js", size: 4490, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -721,7 +742,7 @@ func pkgUiStaticVendorJsJqueryMinJs() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/js/jquery.min.js", size: 86671, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/js/jquery.min.js", size: 86671, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -741,7 +762,7 @@ func pkgUiStaticVendorJsJquerySelectionJs() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/js/jquery.selection.js", size: 12881, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/js/jquery.selection.js", size: 12881, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -761,7 +782,7 @@ func pkgUiStaticVendorMomentMomentTimezoneWithDataMinJs() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/moment/moment-timezone-with-data.min.js", size: 184190, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/moment/moment-timezone-with-data.min.js", size: 184190, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -781,7 +802,7 @@ func pkgUiStaticVendorMomentMomentMinJs() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/moment/moment.min.js", size: 61281, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/moment/moment.min.js", size: 61281, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -801,7 +822,7 @@ func pkgUiStaticVendorMustacheMustacheMinJs() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/mustache/mustache.min.js", size: 9528, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/mustache/mustache.min.js", size: 9528, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -821,7 +842,7 @@ func pkgUiStaticVendorRickshawRickshawMinCss() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/rickshaw/rickshaw.min.css", size: 6102, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/rickshaw/rickshaw.min.css", size: 6102, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -841,7 +862,7 @@ func pkgUiStaticVendorRickshawRickshawMinJs() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/rickshaw/rickshaw.min.js", size: 76322, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/rickshaw/rickshaw.min.js", size: 76322, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -861,7 +882,7 @@ func pkgUiStaticVendorRickshawVendorD3LayoutMinJs() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/rickshaw/vendor/d3.layout.min.js", size: 17514, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/rickshaw/vendor/d3.layout.min.js", size: 17514, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -881,7 +902,7 @@ func pkgUiStaticVendorRickshawVendorD3V3Js() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/static/vendor/rickshaw/vendor/d3.v3.js", size: 144718, mode: os.FileMode(436), modTime: time.Unix(1534422614, 0)}
+	info := bindataFileInfo{name: "pkg/ui/static/vendor/rickshaw/vendor/d3.v3.js", size: 144718, mode: os.FileMode(420), modTime: time.Unix(1535532560, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -946,6 +967,7 @@ var _bindata = map[string]func() (*asset, error){
 	"pkg/ui/templates/rule_menu.html":                                                         pkgUiTemplatesRule_menuHtml,
 	"pkg/ui/templates/rules.html":                                                             pkgUiTemplatesRulesHtml,
 	"pkg/ui/templates/status.html":                                                            pkgUiTemplatesStatusHtml,
+	"pkg/ui/templates/stores.html":                                                            pkgUiTemplatesStoresHtml,
 	"pkg/ui/static/css/alerts.css":                                                            pkgUiStaticCssAlertsCss,
 	"pkg/ui/static/css/graph.css":                                                             pkgUiStaticCssGraphCss,
 	"pkg/ui/static/css/prometheus.css":                                                        pkgUiStaticCssPrometheusCss,
@@ -1096,6 +1118,7 @@ var _bintree = &bintree{nil, map[string]*bintree{
 				"rule_menu.html":  &bintree{pkgUiTemplatesRule_menuHtml, map[string]*bintree{}},
 				"rules.html":      &bintree{pkgUiTemplatesRulesHtml, map[string]*bintree{}},
 				"status.html":     &bintree{pkgUiTemplatesStatusHtml, map[string]*bintree{}},
+				"stores.html":     &bintree{pkgUiTemplatesStoresHtml, map[string]*bintree{}},
 			}},
 		}},
 	}},
