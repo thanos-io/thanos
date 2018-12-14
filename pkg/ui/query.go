@@ -1,11 +1,11 @@
 package ui
 
 import (
-	"github.com/improbable-eng/thanos/pkg/query"
 	"html/template"
-	"math"
 	"net/http"
 	"time"
+
+	"github.com/improbable-eng/thanos/pkg/query"
 
 	"os"
 
@@ -59,9 +59,6 @@ func queryTmplFuncs() template.FuncMap {
 			return time.Since(t) / time.Millisecond * time.Millisecond
 		},
 		"formatTimestamp": func(timestamp int64) string {
-			if timestamp >= math.MaxInt64 || timestamp == -1 {
-				return "n/a"
-			}
 			return time.Unix(timestamp/1000, 0).Format(time.RFC3339)
 		},
 	}

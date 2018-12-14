@@ -202,7 +202,7 @@ func pkgUiTemplatesQuery_menuHtml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/templates/query_menu.html", size: 1479, mode: os.FileMode(420), modTime: time.Unix(1544779372, 0)}
+	info := bindataFileInfo{name: "pkg/ui/templates/query_menu.html", size: 1479, mode: os.FileMode(420), modTime: time.Unix(1544801148, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -282,7 +282,7 @@ func pkgUiTemplatesStoresHtml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "pkg/ui/templates/stores.html", size: 1821, mode: os.FileMode(420), modTime: time.Unix(1544780507, 0)}
+	info := bindataFileInfo{name: "pkg/ui/templates/stores.html", size: 1821, mode: os.FileMode(420), modTime: time.Unix(1544801148, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }

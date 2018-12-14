@@ -320,9 +320,9 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 	return healthyStores
 }
 
-func externalLabelsFromStore(sr *storeRef) string {
+func externalLabelsFromStore(store *storeRef) string {
 	tsdbLabels := labels.Labels{}
-	for _, l := range sr.labels {
+	for _, l := range store.labels {
 		tsdbLabels = append(tsdbLabels, labels.Label{
 			Name:  l.Name,
 			Value: l.Value,
@@ -334,24 +334,17 @@ func externalLabelsFromStore(sr *storeRef) string {
 }
 
 func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
-	now := time.Now()
-
 	s.storesStatusesMtx.Lock()
 	defer s.storesStatusesMtx.Unlock()
 
-	minTime, maxTime := int64(-1), int64(-1)
-	if err == nil {
-		minTime = store.minTime
-		maxTime = store.maxTime
-	}
-
+	now := time.Now()
 	s.storeStatuses[store.addr] = &StoreStatus{
 		Name:      store.addr,
 		Labels:    store.labels,
 		LastError: err,
 		LastCheck: now,
-		MinTime:   minTime,
-		MaxTime:   maxTime,
+		MinTime:   store.minTime,
+		MaxTime:   store.maxTime,
 	}
 }
 
