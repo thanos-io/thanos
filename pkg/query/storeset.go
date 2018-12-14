@@ -21,7 +21,6 @@ import (
 const (
 	unhealthyStoreMessage = "removing store because it's unhealthy or does not exist"
 	droppingStoreMessage  = "dropping store, external labels are not unique"
-	newStoreMessage       = "adding new store to query storeset"
 )
 
 type StoreSpec interface {
@@ -245,7 +244,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 
 		s.stores[addr] = store
 		s.updateStoreStatus(store, nil)
-		level.Info(s.logger).Log("msg", newStoreMessage, "address", addr)
+		level.Info(s.logger).Log("msg", "adding new store to query storeset", "address", addr)
 	}
 	s.externalLabelStores = externalLabelStores
 	s.storeNodeConnections.Set(float64(len(s.stores)))
