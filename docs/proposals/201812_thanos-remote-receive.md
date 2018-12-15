@@ -12,6 +12,10 @@ This document describes the motivation and design of the Thanos receiver compone
 
 The Thanos receiver is the missing piece within Thanos in order to use it to build Prometheus as a Service offering, either as an internal service to the rest of an organization or as an actual pay-as-you-go off the shelf service. It builds on top of existing Prometheus servers and retains their usefulness, while extending their functionality with long-term-storage, horizontal scalability and downsampling. The normal Thanos sidecar is not sufficient for this, as the system would always lack the block length behind (typically 2 hours), which would prevent the most common query pattern of Prometheus: real time queries of very recent data. With the Thanos receiver on the service provider side users can simply deploy vanilla Prometheus servers and configure Prometheus with built-in functionality to send its data to the service provider.
 
+This component is only recommended for uses, where pushing is the only viable solution, for example analytics use cases or cases where the data ingestion must be client initiated, for example a software as a service type environments.
+
+This component is not recommended in order to achieve a global view of data of a single tenant, for those cases the sidecar based approach with layered Thanos queriers is recommended. Also users are asked to note the [various pros and cons of pushing metrics](https://docs.google.com/document/d/1H47v7WfyKkSLMrR8_iku6u9VB73WrVzBHb2SB6dL9_g/edit#heading=h.2v27snv0lsur).
+
 ## Technical summary of Thanos receiver component
 
 To solve the above mentioned problems, a new Thanos component is proposed: the Thanos receiver.
@@ -102,7 +106,7 @@ tenants:
   - soft-tenants-1.metrics.local
 ```
 
-To start, only exact matches of tenant IDs will used to distribute requests to receive nodes. Should it be necessary, more sophisticated mechanisms can be added later. When a request is received, the specified tenant is tested against the configured tenant ID until an exact match is found. If the specified tenant is the empty string, then any tenant is considered a valid match.
+To start, only exact matches of tenant IDs will used to distribute requests to receive nodes. Should it be necessary, more sophisticated mechanisms can be added later. When a request is received, the specified tenant is tested against the configured tenant ID until an exact match is found. If the specified tenant is the empty string, then any tenant is considered a valid match. If no hard tenancy is configured, a tenant will automatically land in a soft tenancy hashring.
 
 ```
                                   Soft tenant hashring
@@ -146,9 +150,13 @@ The intention is that the load balancer can just distribute requests randomly to
 
 ### Rollout/scaling/failure of receiver nodes
 
-As replication is based on the Prometheus write-ahead-log and retries when the remote write backend is not available, intermediate downtime is tolerable and expected for receivers. On rollouts receivers do not need to re-shard data, but instead at shutdown in case of rollout or scaling flush the write-ahead-log to a Prometheus tsdb block and upload it to object storage. Rollouts that include a soft tenant being promoted to a hard tenant, does require all nodes of a hash-ring to upload its content as the hash-ring changes. When the nodes comes back and accepts remote write requests again, the tenant local Prometheus server will continue where it left off. When scaling, all nodes need to perform the above operation as the hashring is resized meaning all nodes will have a new distribution. In the case of a failure, and the hashring is not resized, it will load the write-ahead-log and assume where it left off. Partially succeeding requests return a 503 causing Prometheus to retry the full request. This works as identically existing timestamp-value matches are ignored by tsdb. Prometheus relies on this to de-duplicate federation request results, therefore it is safe to rely on this here as well.
+As replication is based on the Prometheus write-ahead-log and retries when the remote write backend is not available, intermediate downtime is tolerable and expected for receivers. Prometheus remote write treats 503 as temporary failures and continues do retry until the remote write receiving end responds again.
 
-This may produce small, and therefore unoptimized, blocks of TSDB in object storage, however, these are optimized away, by the Thanos compactor by merging the small blocks into bigger blocks. The compaction process is done concurrently in a separate deployment to the receivers.
+On rollouts receivers do not need to re-shard data, but instead at shutdown in case of rollout or scaling flush the write-ahead-log to a Prometheus tsdb block and upload it to object storage. Rollouts that include a soft tenant being promoted to a hard tenant, does require all nodes of a hash-ring to upload its content as the hash-ring changes. When the nodes comes back and accepts remote write requests again, the tenant local Prometheus server will continue where it left off. When scaling, all nodes need to perform the above operation as the hashring is resized meaning all nodes will have a new distribution. In the case of a failure, and the hashring is not resized, it will load the write-ahead-log and assume where it left off. Partially succeeding requests return a 503 causing Prometheus to retry the full request. This works as identically existing timestamp-value matches are ignored by tsdb. Prometheus relies on this to de-duplicate federation request results, therefore it is safe to rely on this here as well.
+
+This may produce small, and therefore unoptimized, blocks of TSDB in object storage, however, these are optimized away, by the Thanos compactor by merging the small blocks into bigger blocks. The compaction process is done concurrently in a separate deployment to the receivers. Timestamps involved are produced by the sending Prometheus, therefore no clock synchronization is necessary.
+
+Changing of a soft to a hard tenant (or vise versa) we need to flush all blocks in all nodes in the effected rings that tenant is present in.
 
 ## Open questions
 
@@ -158,7 +166,7 @@ Decisions of the design have consequences some of which will show themselves in 
   - This could be solved with a combination of rate limiting and back-off on Prometheus’ side, plus alerts if replication lag gets too large due to rate limiting (or other factors).
 * This proposal describes the write-ahead-log based remote write, which is not (yet) merged in Prometheus: https://github.com/prometheus/prometheus/pull/4588. This landing may impact durability characteristics.
   - While there is work left the pull request seems to be close to completion
-* If downtime of ingestion turns out to not be an option, we could attempt to duplicate all write requests to 3 (or configurable amount) replicas, where a write request needs to be accepted by at least 2 replicas, this way we can ensure no downtime of ingestion. This may require additional compaction and deduplication of object storage as well as significantly increase infrastructure cost.
+* If downtime of ingestion, as in the described `503` for intermediate downtime, and Prometheus resuming when the backend becomes healthy again, turns out not to be an option, we could attempt to duplicate all write requests to 3 (or configurable amount) replicas, where a write request needs to be accepted by at least 2 replicas, this way we can ensure no downtime of ingestion. This may require additional compaction and deduplication of object storage as well as significantly increase infrastructure cost.
 * Additional safeguards may need to be put in place to ensure that hashring resizes do not occur on failed nodes, only once they have recovered and have successfully uploaded their blocks.
 
 [xxhash]: http://cyan4973.github.io/xxHash/
