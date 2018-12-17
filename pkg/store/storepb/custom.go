@@ -161,3 +161,11 @@ func LabelsToPromLabels(lset []Label) labels.Labels {
 
 	return ret
 }
+
+func LabelsToString(lset []Label) string {
+	var s []string
+	for _, l := range lset {
+		s = append(s, l.String())
+	}
+	return "[" + strings.Join(s, ",") + "]"
+}

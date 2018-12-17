@@ -1,30 +1,110 @@
 # Query
 
 The query component implements the Prometheus HTTP v1 API to query data in a Thanos cluster via PromQL.
-It joins a Thanos cluster mesh and can access all data exposed by store APIs within it. It is fully stateless and horizontally scalable.
 
-The querier needs to be passed an initial list of peers to through which it can join the Thanos cluster.
-This can either be a repeated list of peer addresses or a DNS name, which it will resolve for peer IP addresses.
+It gathers the data needed to evaluate the query from underlying StoreAPIs. See [here](/docs/service_discovery.md) 
+on how to connect querier with desired StoreAPIs.
+
+Querier currently is fully stateless and horizontally scalable.
 
 ```
 $ thanos query \
     --http-address     "0.0.0.0:9090" \
-    --cluster.peers    "thanos-cluster.example.org" \
+    --store            "<store-api>:<grpc-port>" \
+    --store            "<store-api2>:<grpc-port>" \
 ```
+
+## Deduplication
 
 The query layer can deduplicate series that were collected from high-availability pairs of data sources such as Prometheus.
 A fixed replica label must be chosen for the entire cluster and can then be passed to query nodes on startup.
-Two or more series that have that are only distinguished by the given replica label, will be merged into a single time series. This also hides gaps in collection of a single data source.
 
+Two or more series that have that are only distinguished by the given replica label, will be merged into a single time series. 
+This also hides gaps in collection of a single data source. For example:
+
+* Prometheus + sidecar "A": `cluster=1,env=2,replica=A`
+* Prometheus + sidecar "B": `cluster=1,env=2,replica=B`
+* Prometheus + sidecar "A" in different cluster: `cluster=2,env=2,replica=A`
+
+If we configure Querier like this:
 
 ```
 $ thanos query \
     --http-address        "0.0.0.0:9090" \
     --query.replica-label "replica" \
-    --cluster.peers       "thanos-cluster.example.org" \
+    --store               "<store-api>:<grpc-port>" \
+    --store               "<store-api2>:<grpc-port>" \
 ```
 
-## Deployment
+And we query for metric `up{job="prometheus",env="2"}` with this option we will get 2 results:
+  
+  * `up{job="prometheus",env="2",cluster="1"} 1`
+  * `up{job="prometheus",env="2",cluster="2"} 1`
+  
+WITHOUT this replica flag (so deduplication turned off), we will get 3 results:
+
+  * `up{job="prometheus",env="2",cluster="1",replica="A"} 1`
+  * `up{job="prometheus",env="2",cluster="1",replica="B"} 1`
+  * `up{job="prometheus",env="2",cluster="2",replica="A"} 1`  
+
+This logic can also be controlled via parameter on QueryAPI. More details below.
+
+## Query API
+
+Overall QueryAPI exposed by Thanos is guaranteed to be compatible with Prometheus 2.x.
+
+However, for additional Thanos features, Thanos, on top of Prometheus adds several 
+additional parameters listed below as well as custom response fields.
+
+### Deduplication Enabled
+
+| HTTP URL/FORM parameter | Type | Default | Example |
+|----|----|----|----|
+| `dedup` | `Boolean` | True, but effect depends on `query.replica` configuration flag. | `1, t, T, TRUE, true, True` for "True" |
+|  |  |  |  |
+
+This controls if query should use `replica` label for deduplication or not.
+
+### Auto downsampling
+
+| HTTP URL/FORM parameter | Type | Default | Example |
+|----|----|----|----|
+| `max_source_resolution` | `Float64/time.Duration/model.Duration` | `step / 5` or `0` if `query.auto-downsampling` is false (default: False) | `5m` |
+|  |  |  |  |
+
+Max source resolution is max resolution in seconds we want to use for data we query for. This means that for value:
+* 0 -> we will use only raw data.
+* 5m -> we will use max 5m downsampling.
+* 1h -> we will use max 1h downsampling.
+
+### Partial Response / Error Enabled
+
+| HTTP URL/FORM parameter | Type | Default | Example |
+|----|----|----|----|
+| `partial_response` | `Boolean` | `query.partial-response` flag (default: True) | `1, t, T, TRUE, true, True` for "True" |
+|  |  |  |  |
+
+If true, then all storeAPIs that will be unavailable (and thus return no data) will not cause query to fail, but instead
+return warning. 
+
+### Custom Response Fields
+
+Any additional field does not break compatibility, however there is no guarantee that Grafana or any other client will understand those.
+
+Currently Thanos UI exposed by Thanos  understands 
+```go
+type queryData struct {
+	ResultType promql.ValueType `json:"resultType"`
+	Result     promql.Value     `json:"result"`
+
+	// Additional Thanos Response field.
+	Warnings   []error          `json:"warnings,omitempty"`
+}
+```
+
+Additional field is `Warnings` that contains every error that occurred that is assumed non critical. `partial_response`
+option controls if storeAPI unavailability is considered critical.
+
 
 ## Flags
 
@@ -146,5 +226,7 @@ Flags:
       --query.auto-downsampling  Enable automatic adjustment (step / 5) to what
                                  source of data should be used in store gateways
                                  if no max_source_resolution param is specified.
+      --query.partial-response   Enable partial response for queries if no
+                                 partial_response param is specified.
 
 ```

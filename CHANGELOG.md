@@ -11,6 +11,11 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+### Added
+
+- Partial Response disable option for StoreAPI and QueryAPI.
+- Partial Response disable button on Thanos UI
+
 ### Fixed
 
 - [#649](https://github.com/improbable-eng/thanos/issues/649) - Fixed store label values api to add also external label values.
