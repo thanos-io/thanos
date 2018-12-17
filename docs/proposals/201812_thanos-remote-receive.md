@@ -108,12 +108,12 @@ tenants:
 - match: tenant-a
   nodes:
   - tenant-a-1.metrics.local
-- match: “”
+- hashmod: 0
   nodes:
   - soft-tenants-1.metrics.local
 ```
 
-To start, only exact matches of tenant IDs will used to distribute requests to receive nodes. Should it be necessary, more sophisticated mechanisms can be added later. When a request is received, the specified tenant is tested against the configured tenant ID until an exact match is found. If the specified tenant is the empty string, then any tenant is considered a valid match. If no hard tenancy is configured, a tenant will automatically land in a soft tenancy hashring.
+To start, exact matches of tenant IDs will used to distribute requests to receive nodes. Additionally a sharding mechanism performing `hashmod` on the tenant ID, in order to shard the tenants among pools of receivers. Should it be necessary, more sophisticated mechanisms can be added later. When a request is received, the specified tenant is tested against the configured tenant ID until an exact match is found. If the specified tenant is the empty string, then any tenant is considered a valid match. If no hard tenancy is configured, a tenant will automatically land in a soft tenancy hashring.
 
 ```
                                   Soft tenant hashring
