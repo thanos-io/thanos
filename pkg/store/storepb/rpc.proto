@@ -11,14 +11,24 @@ option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 option (gogoproto.goproto_getters_all) = false;
 
+/// Store reprents API against instance that stores XOR encoded values with label set metadata (e.g Prometheus metrics).
+///
+/// Partial Response is supported unless `partial_response_disabled` is true. When disabled any error that will result
+/// in partial data returned (e.g missing chunk series because of underlying storeAPI is temporarily not available) is
+/// failing the request.
 service Store {
-  /// Info returns meta information about a store e.g labels that makes that store unique.
+  /// Info returns meta information about a store e.g labels that makes that store unique as well as time range that is
+  /// available.
   rpc Info(InfoRequest) returns (InfoResponse);
 
+  /// Series streams each Series (Labels and chunk/downsampling chunk) for given label matchers and time range.
   rpc Series(SeriesRequest) returns (stream SeriesResponse);
 
+  /// LabelNames returns all label names that is available.
+  /// Currently unimplemented in all Thanos implementations, because Query API does not implement this either.
   rpc LabelNames(LabelNamesRequest) returns (LabelNamesResponse);
 
+  /// LabelValues returns all label values for given label name.
   rpc LabelValues(LabelValuesRequest) returns (LabelValuesResponse);
 }
 
@@ -38,6 +48,8 @@ message SeriesRequest {
 
   int64 max_resolution_window = 4;
   repeated Aggr aggregates    = 5;
+
+  bool partial_response_disabled = 6;
 }
 
 enum Aggr {
@@ -52,11 +64,15 @@ enum Aggr {
 message SeriesResponse {
   oneof result {
       Series series = 1;
+
+      /// warning is considered an information piece in place of series for warning purposes.
+      /// It is used to warn query customer about suspicious cases or partial response (if enabled).
       string warning = 2;
   }
 }
 
 message LabelNamesRequest {
+  bool partial_response_disabled = 1;
 }
 
 message LabelNamesResponse {
@@ -66,6 +82,8 @@ message LabelNamesResponse {
 
 message LabelValuesRequest {
   string label = 1;
+
+  bool partial_response_disabled = 2;
 }
 
 message LabelValuesResponse {

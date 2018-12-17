@@ -155,7 +155,7 @@ func TestQueryStore_Series_SameExtSet(t *testing.T) {
 					storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
 				},
 			},
-			labels:  []storepb.Label{{"ext", "1"}},
+			labels:  []storepb.Label{{Name: "ext", Value: "1"}},
 			minTime: 1,
 			maxTime: 300,
 		},
@@ -165,7 +165,7 @@ func TestQueryStore_Series_SameExtSet(t *testing.T) {
 					storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
 				},
 			},
-			labels:  []storepb.Label{{"ext", "1"}},
+			labels:  []storepb.Label{{Name: "ext", Value: "1"}},
 			minTime: 1,
 			maxTime: 300,
 		},
@@ -278,7 +278,7 @@ func TestStoreMatches(t *testing.T) {
 		ok         bool
 	}{
 		{
-			s: &testClient{labels: []storepb.Label{{"a", "b"}}},
+			s: &testClient{labels: []storepb.Label{{Name: "a", Value: "b"}}},
 			ms: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "1"},
 			},
@@ -309,28 +309,28 @@ func TestStoreMatches(t *testing.T) {
 			ok:   true,
 		},
 		{
-			s: &testClient{labels: []storepb.Label{{"a", "b"}}},
+			s: &testClient{labels: []storepb.Label{{Name: "a", Value: "b"}}},
 			ms: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
 			},
 			ok: true,
 		},
 		{
-			s: &testClient{labels: []storepb.Label{{"a", "b"}}},
+			s: &testClient{labels: []storepb.Label{{Name: "a", Value: "b"}}},
 			ms: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "c"},
 			},
 			ok: false,
 		},
 		{
-			s: &testClient{labels: []storepb.Label{{"a", "b"}}},
+			s: &testClient{labels: []storepb.Label{{Name: "a", Value: "b"}}},
 			ms: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "b|c"},
 			},
 			ok: true,
 		},
 		{
-			s: &testClient{labels: []storepb.Label{{"a", "b"}}},
+			s: &testClient{labels: []storepb.Label{{Name: "a", Value: "b"}}},
 			ms: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_NEQ, Name: "a", Value: ""},
 			},

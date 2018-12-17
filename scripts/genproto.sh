@@ -17,9 +17,8 @@ fi
 
 THANOS_ROOT="${GOPATH}/src/github.com/improbable-eng/thanos"
 PROM_PATH="${THANOS_ROOT}/pkg/store/storepb"
-GOGOPROTO_ROOT="${GOPATH}/src/github.com/gogo/protobuf"
+GOGOPROTO_ROOT="${THANOS_ROOT}/vendor/github.com/gogo/protobuf"
 GOGOPROTO_PATH="${GOGOPROTO_ROOT}:${GOGOPROTO_ROOT}/protobuf"
-GRPC_GATEWAY_ROOT="${GOPATH}/src/github.com/grpc-ecosystem/grpc-gateway"
 
 DIRS="pkg/store/storepb pkg/store/prompb"
 
@@ -28,7 +27,6 @@ for dir in ${DIRS}; do
 		protoc --gogofast_out=plugins=grpc:. -I=. \
             -I="${GOGOPROTO_PATH}" \
             -I="${PROM_PATH}" \
-            -I="${GRPC_GATEWAY_ROOT}/third_party/googleapis" \
             *.proto
 
 		sed -i.bak -E 's/import _ \"gogoproto\"//g' *.pb.go

@@ -8,13 +8,18 @@ Currently places that uses Thanos SD:
 * `Thanos Rule` needs to know about `QueryAPI` servers in order to evaluate recording and alerting rules.
 * (Only static option with DNS discovery): `Thanos Rule` needs to know about `Alertmanagers` HA replicas in order to send alerts. 
 
-Currently there are several ways to configure this and they are described below.
+Currently there are several ways to configure this and they are described below in details:
+
+* Static Flags
+* File SD
+* DNS SD 
 
 ## Static Flags
 
 The simplest way to tell a component about a peer is to use a static flag.
 
 ### Thanos Query
+
 The repeatable flag `--store=<store>` can be used to specify a `StoreAPI` that `Thanos Query` should use.
 
 ### Thanos Rule
