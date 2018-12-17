@@ -57,8 +57,8 @@ type Bucket struct {
 	sse    encrypt.ServerSide
 }
 
-// ParseConfig unmarshals a buffer into a Config with default HTTPConfig values.
-func ParseConfig(conf []byte) (Config, error) {
+// parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
+func parseConfig(conf []byte) (Config, error) {
 	defaultHTTPConfig := HTTPConfig{IdleConnTimeout: model.Duration(90 * time.Second)}
 	config := Config{HTTPConfig: defaultHTTPConfig}
 	if err := yaml.Unmarshal(conf, &config); err != nil {
@@ -69,7 +69,7 @@ func ParseConfig(conf []byte) (Config, error) {
 
 // NewBucket returns a new Bucket using the provided s3 config values.
 func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
-	config, err := ParseConfig(conf)
+	config, err := parseConfig(conf)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 func NewBucketWithConfig(logger log.Logger, config Config, component string) (*Bucket, error) {
 	var chain []credentials.Provider
 
-	if err := Validate(config); err != nil {
+	if err := validate(config); err != nil {
 		return nil, err
 	}
 	if config.AccessKey != "" {
@@ -157,12 +157,18 @@ func (b *Bucket) Name() string {
 	return b.name
 }
 
-// Validate checks to see the config options are set.
-func Validate(conf Config) error {
-	if conf.Endpoint == "" ||
-		(conf.AccessKey == "" && conf.SecretKey != "") ||
-		(conf.AccessKey != "" && conf.SecretKey == "") {
-		return errors.New("insufficient s3 test configuration information")
+// validate checks to see the config options are set.
+func validate(conf Config) error {
+	if conf.Endpoint == "" {
+		return errors.New("no s3 endpoint in config file")
+	}
+
+	if conf.AccessKey == "" && conf.SecretKey != "" {
+		return errors.New("no s3 acccess_key specified while secret_key is present in config file; either both should be present in config or envvars/IAM should be used.")
+	}
+
+	if conf.AccessKey != "" && conf.SecretKey == "" {
+		return errors.New("no s3 secret_key specified while access_key is present in config file; either both should be present in config or envvars/IAM should be used.")
 	}
 	return nil
 }
