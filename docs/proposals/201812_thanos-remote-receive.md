@@ -1,6 +1,6 @@
 ## Thanos Remote Write
 
-Status: draft | *in-review* | rejected | accepted | complete
+Status: draft | in-review | rejected | *accepted* | complete
 
 Implementation Owner: @brancz
 
@@ -14,7 +14,7 @@ The Thanos receiver is the missing piece within Thanos in order to use it to bui
 
 This component is only recommended for uses, where pushing is the only viable solution, for example analytics use cases or cases where the data ingestion must be client initiated, for example a software as a service type environments.
 
-This component is not recommended in order to achieve a global view of data of a single tenant, for those cases the sidecar based approach with layered Thanos queriers is recommended. Also users are asked to note the [various pros and cons of pushing metrics](https://docs.google.com/document/d/1H47v7WfyKkSLMrR8_iku6u9VB73WrVzBHb2SB6dL9_g/edit#heading=h.2v27snv0lsur).
+This component is not recommended in order to achieve a global view of data of a single tenant, for those cases the sidecar based approach with layered Thanos queriers is recommended. Also users are asked to note the [various pros and cons of pushing metrics](https://docs.google.com/document/d/1H47v7WfyKkSLMrR8_iku6u9VB73WrVzBHb2SB6dL9_g/edit#heading=h.2v27snv0lsur). Multi tenancy may also be achievable if ingestion is not user controlled, as then enforcing of labels, for example using the [prom-label-proxy](https://github.com/openshift/prom-label-proxy) (please thoroughly understand the mechanism if intending to employ this mechanism, as wrong configuration could leak data).
 
 ## Technical summary of Thanos receiver component
 
@@ -26,7 +26,7 @@ Prometheus has the remote write API to send samples collected by a Prometheus se
 
 The Thanos receiver component seamlessly integrates into the rest of the Thanos components. It acts similarly to what is referred to in Thanos as a "source", in the current set of components, this is typically represented by the Thanos sidecar that is put next to Prometheus to ship tsdb blocks into object storage and reply to store API requests, however in the case of the Thanos receiver, the Thanos sidecar is not necessary anymore, as the data is replicated from the original Prometheus server to the Thanos receiver, and the Thanos receiver participates in the Thanos gossip mesh. The Prometheus server on a tenant’s infrastructure can therefore be completely vanilla and is just configured to replicate its time-series to the Thanos receiver.
 
-Instead of directly scraping metrics, however, the Thanos receiver accepts Prometheus remote write requests, and writes these into a local instance of the Prometheus tsdb, to prevent data leaking at the database level, each tenant has an individual tsdb instance, meaning a single Thanos receiver may manage multiple tsdb instances. When the receiver is queried, the respective tsdb is used to retrieve data. Furthermore, like the Thanos sidecar, the receiver answers Thanos store API requests and uploads built blocks of the Prometheus tsdb. Implementation-wise, this just requires wiring up existing components.
+Instead of directly scraping metrics, however, the Thanos receiver accepts Prometheus remote-write requests, and writes these into a local instance of the Prometheus tsdb. Once successfully committed to the tenant's tsdbs, the requests returns successfully. To prevent data leaking at the database level, each tenant has an individual tsdb instance, meaning a single Thanos receiver may manage multiple tsdb instances. The receiver answers Thanos store API requests and uploads built blocks of the Prometheus tsdb. Implementation-wise, this just requires wiring up existing components. As tenant's data within object storage are separate objects, it may be enough separation to have a single bucket for all tenants, however, this architecture supports any setup of tenant to object storage bucket combination.
 
 In a minimal setup the system would look like the following:
 
@@ -78,9 +78,16 @@ In order to scale beyond a single machine, time-series are distributed among all
 
 As the Thanos receivers route the requests to the responsible node, an edge load balancer is configured to randomly distribute load to all Thanos receivers available.
 
-Time-series hashes are calculated from the entire label set of that time-series. To ensure that potentially large time-series with common labels do not all end up being ingested by the same node, the tenant’s ID should be included in the hash. This will help distribute the load across receivers.
+Time-series hashes are calculated from the entire label set of that time-series. To ensure that potentially large time-series with common labels do not all end up being ingested by the same node, the tenant’s ID should be included in the hash. The tenant's ID is obtained through a set of labels passed to the receiver via an HTTP header. The label keys defining a tenant must be pre-configured. For example, the receiver is configured with the following flag:
 
-The hash is roughly calculated as follows.
+```
+--tenant-labels=tenant
+--tenant-header=X-THANOS-TENANT
+```
+
+And a valid request would have the `X-THANOS-TENANT` header set to `{tenant="A"}`. When a tenant label is configured, it must be included in the header sent.
+
+Using the tenant's ID in the hash will help to distribute the load across receivers. The hash is roughly calculated as follows.
 
 ```
 hash(string(tenant_id) + sort(timeseries.labelset).join())
@@ -166,6 +173,7 @@ Decisions of the design have consequences some of which will show themselves in 
   - This could be solved with a combination of rate limiting and back-off on Prometheus’ side, plus alerts if replication lag gets too large due to rate limiting (or other factors).
 * This proposal describes the write-ahead-log based remote write, which is not (yet) merged in Prometheus: https://github.com/prometheus/prometheus/pull/4588. This landing may impact durability characteristics.
   - While there is work left the pull request seems to be close to completion
+* For compaction to work as described in this proposal, vertical compaction in tsdb needs to be possible. Implemented but not merged yet: https://github.com/prometheus/tsdb/pull/370
 * If downtime of ingestion, as in the described `503` for intermediate downtime, and Prometheus resuming when the backend becomes healthy again, turns out not to be an option, we could attempt to duplicate all write requests to 3 (or configurable amount) replicas, where a write request needs to be accepted by at least 2 replicas, this way we can ensure no downtime of ingestion. This may require additional compaction and deduplication of object storage as well as significantly increase infrastructure cost.
 * Additional safeguards may need to be put in place to ensure that hashring resizes do not occur on failed nodes, only once they have recovered and have successfully uploaded their blocks.
 
