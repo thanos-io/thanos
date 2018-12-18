@@ -95,6 +95,8 @@ hash(string(tenant_id) + sort(timeseries.labelset).join())
 
 The hashing function used is the same one as used by Prometheus’: [xxHash][xxHash]. Sorting of labels is necessary, in order to ensure that a unique time-series always has the same hash.
 
+While the routing functionality could be a separate component, we choose to have it in the receiver to allow for a simpler setup.
+
 ### Ingestion hard tenancy
 
 In attempts to build similar systems a common fallacy has been to distribute all load from all tenants of the system onto a single set of ingestion nodes. This makes reasoning and management rather simple, however, has turned out to have stronger downsides than upsides. Companies using Cortex in production and offering it to clients have setup entirely separate clusters for different customers, because their load has caused incidents affecting other clients. In order to allow customers to send large amounts of data at irregular intervals the ingestion infrastructure needs to scale without impacting durability. Scaling the ingestion infrastructure can cause endpoints to not accept data temporarily, however, the write-ahead-log based replication can cope with this, as it backs off and continues sending its data once the ingestion infrastructure successfully processes those requests again.
