@@ -392,6 +392,11 @@ type memBlock struct {
 	numberOfChunks uint64
 }
 
+type series struct {
+	lset   labels.Labels
+	chunks []chunks.Meta
+}
+
 func newMemBlock() *memBlock {
 	return &memBlock{symbols: map[string]struct{}{}}
 }

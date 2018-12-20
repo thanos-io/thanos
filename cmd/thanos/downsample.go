@@ -173,7 +173,7 @@ func downsampleBucket(
 				continue
 			}
 			if err := processDownsampling(ctx, logger, bkt, m, dir, 5*60*1000); err != nil {
-				return err
+				return errors.Wrap(err, "downsampling to 5 min")
 			}
 
 		case 5 * 60 * 1000:
@@ -194,7 +194,7 @@ func downsampleBucket(
 				continue
 			}
 			if err := processDownsampling(ctx, logger, bkt, m, dir, 60*60*1000); err != nil {
-				return err
+				return errors.Wrap(err, "downsampling to 60 min")
 			}
 		}
 	}

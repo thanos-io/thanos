@@ -51,7 +51,7 @@ func Downsample(
 
 	// Writes downsampled chunks right into the files, avoiding excess memory allocation.
 	// Flushes index and meta data afterwards aggregations.
-	streamedBlockWriter, err := NewWriter(dir, logger, *origMeta, resolution)
+	streamedBlockWriter, err := NewWriter(dir, indexr, logger, *origMeta, resolution)
 	if err != nil {
 		return id, errors.Wrap(err, "get streamed block writer")
 	}
@@ -65,9 +65,10 @@ func Downsample(
 		aggrChunks []*AggrChunk
 		all        []sample
 		chks       []chunks.Meta
+		lset       labels.Labels
 	)
 	for pall.Next() {
-		var lset labels.Labels
+		lset = lset[:0]
 		chks = chks[:0]
 		all = all[:0]
 		aggrChunks = aggrChunks[:0]
@@ -94,30 +95,28 @@ func Downsample(
 					return id, errors.Wrapf(err, "expand chunk %d, series %d", c.Ref, pall.At())
 				}
 			}
-			if err := streamedBlockWriter.AddSeries(&series{lset: lset, chunks: downsampleRaw(all, resolution)}); err != nil {
+			if err := streamedBlockWriter.AddSeries(lset, downsampleRaw(all, resolution)); err != nil {
 				return id, errors.Wrapf(err, "downsample raw data, series: %d", pall.At())
 			}
-			continue
-		}
-
-		// Downsample a block that contains aggregate chunks already.
-		for _, c := range chks {
-			aggrChunks = append(aggrChunks, c.Chunk.(*AggrChunk))
-		}
-		res, err := downsampleAggr(
-			aggrChunks,
-			&all,
-			chks[0].MinTime,
-			chks[len(chks)-1].MaxTime,
-			origMeta.Thanos.Downsample.Resolution,
-			resolution,
-		)
-
-		if err != nil {
-			return id, errors.Wrapf(err, "downsample aggregate block, series: %d", pall.At())
-		}
-		if err := streamedBlockWriter.AddSeries(&series{lset: lset, chunks: res}); err != nil {
-			return id, errors.Wrapf(err, "downsample aggregated block, series: %d", pall.At())
+		} else {
+			// Downsample a block that contains aggregate chunks already.
+			for _, c := range chks {
+				aggrChunks = append(aggrChunks, c.Chunk.(*AggrChunk))
+			}
+			downsampledChunks, err := downsampleAggr(
+				aggrChunks,
+				&all,
+				chks[0].MinTime,
+				chks[len(chks)-1].MaxTime,
+				origMeta.Thanos.Downsample.Resolution,
+				resolution,
+			)
+			if err != nil {
+				return id, errors.Wrapf(err, "downsample aggregate block, series: %d", pall.At())
+			}
+			if err := streamedBlockWriter.AddSeries(lset, downsampledChunks); err != nil {
+				return id, errors.Wrapf(err, "downsample aggregated block, series: %d", pall.At())
+			}
 		}
 	}
 	if pall.Err() != nil {
@@ -126,7 +125,7 @@ func Downsample(
 
 	id, err = streamedBlockWriter.Flush()
 	if err != nil {
-		return id, errors.Wrap(err, "compact head")
+		return id, errors.Wrap(err, "flush data in stream data")
 	}
 
 	return id, nil
@@ -500,11 +499,6 @@ func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (ch
 type sample struct {
 	t int64
 	v float64
-}
-
-type series struct {
-	lset   labels.Labels
-	chunks []chunks.Meta
 }
 
 // CounterSeriesIterator iterates over an ordered sequence of chunks and treats decreasing
