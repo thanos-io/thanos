@@ -4,6 +4,7 @@ package reloader
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"hash"
@@ -36,6 +37,7 @@ type Reloader struct {
 	ruleDirs        []string
 	ruleInterval    time.Duration
 	retryInterval   time.Duration
+	gunzipDir       string
 
 	lastCfgHash  []byte
 	lastRuleHash []byte
@@ -46,7 +48,7 @@ type Reloader struct {
 // If cfgEnvsubstFile is not empty, environment variables in the config file will be
 // substituted and the out put written into the given path. Prometheus should then
 // use cfgEnvsubstFile as its config file path.
-func New(logger log.Logger, reloadURL *url.URL, cfgFile string, cfgEnvsubstFile string, ruleDirs []string) *Reloader {
+func New(logger log.Logger, reloadURL *url.URL, cfgFile string, cfgEnvsubstFile string, ruleDirs []string, gunzipDir string) *Reloader {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -55,6 +57,7 @@ func New(logger log.Logger, reloadURL *url.URL, cfgFile string, cfgEnvsubstFile 
 		reloadURL:       reloadURL,
 		cfgFile:         cfgFile,
 		cfgEnvsubstFile: cfgEnvsubstFile,
+		gunzipDir:       gunzipDir,
 		ruleDirs:        ruleDirs,
 		ruleInterval:    3 * time.Minute,
 		retryInterval:   5 * time.Second,
@@ -125,8 +128,19 @@ func (r *Reloader) apply(ctx context.Context) error {
 			return errors.Wrap(err, "hash file")
 		}
 		cfgHash = h.Sum(nil)
+		if r.gunzipDir != "" {
+			if err := extract(r.cfgFile, r.gunzipDir); err != nil {
+				return errors.Wrap(err, "gunzip file")
+			}
+		}
 		if r.cfgEnvsubstFile != "" {
-			b, err := ioutil.ReadFile(r.cfgFile)
+			inputCfgFile := r.cfgFile
+			// If we're dealing with a compressed cfgFile, read the uncompressed file from gunzipDir
+			if r.gunzipDir != "" {
+				inputCfgFile = path.Join(r.gunzipDir, filepath.Base(strings.TrimRight(r.cfgFile, ".gz")))
+			}
+
+			b, err := ioutil.ReadFile(inputCfgFile)
 			if err != nil {
 				return errors.Wrap(err, "read file")
 			}
@@ -198,6 +212,36 @@ func (r *Reloader) apply(ctx context.Context) error {
 	cancel()
 	if err != nil {
 		level.Error(r.logger).Log("msg", "Failed to trigger reload. Retrying.", "err", err)
+	}
+
+	return nil
+}
+
+// extract gzipped cfgFile to outputDir
+func extract(cfgFile string, outputDir string) error {
+
+	fh, err := os.OpenFile(cfgFile, os.O_RDONLY, 0)
+	if err != nil {
+		return err
+	}
+
+	zr, err := gzip.NewReader(fh)
+	if err != nil {
+		return errors.Wrap(err, "create gzip reader")
+	}
+	defer zr.Close()
+
+	fc, err := ioutil.ReadAll(zr)
+	if err != nil {
+		return errors.Wrap(err, "read compressed config file")
+	}
+
+	fileName := filepath.Base(strings.TrimRight(cfgFile, ".gz"))
+	outputFile := path.Join(outputDir, fileName)
+
+	err = ioutil.WriteFile(outputFile, fc, 0644)
+	if err != nil {
+		return errors.Wrap(err, "write extracted config file")
 	}
 
 	return nil

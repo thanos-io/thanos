@@ -60,6 +60,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			*reloaderCfgFile,
 			*reloaderCfgSubstFile,
 			*reloaderRuleDirs,
+			"",
 		)
 		peer, err := newPeerFn(logger, reg, false, "", false)
 		if err != nil {

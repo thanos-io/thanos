@@ -427,6 +427,7 @@
     "prometheus",
     "prometheus/internal",
     "prometheus/promhttp",
+    "prometheus/testutil",
   ]
   pruneopts = ""
   revision = "e637cec7d9c8990247098639ebc6d43dd34ddd49"
@@ -795,6 +796,7 @@
     "github.com/pkg/errors",
     "github.com/prometheus/client_golang/prometheus",
     "github.com/prometheus/client_golang/prometheus/promhttp",
+    "github.com/prometheus/client_golang/prometheus/testutil",
     "github.com/prometheus/common/model",
     "github.com/prometheus/common/route",
     "github.com/prometheus/common/version",
