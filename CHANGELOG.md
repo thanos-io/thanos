@@ -11,19 +11,21 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+## [v0.2.1](https://github.com/improbable-eng/thanos/releases/tag/v0.2.1) - 2018.12.27
+
 ### Added
 
 - Relabel drop for Thanos Ruler to enable replica label drop and alert deduplication on AM side.
-- Query: Stores UI page available at `/stores`
+- Query: Stores UI page available at `/stores`.
 
 ![](./docs/img/query_ui_stores.png)
 
 ### Fixed
 
-- Thanos Rule Alertmanager DNS SD bug
+- Thanos Rule Alertmanager DNS SD bug.
 - DNS SD bug when having SRV results with different ports.
 - Move handling of HA alertmanagers to be the same as Prometheus.
-- Azure iteration implementation flaw (#695)
+- Azure iteration implementation flaw.
 
 ## [v0.2.0](https://github.com/improbable-eng/thanos/releases/tag/v0.2.0) - 2018.12.10
 

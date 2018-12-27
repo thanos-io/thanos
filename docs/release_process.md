@@ -39,6 +39,8 @@ Process of cutting a new *minor* Thanos release:
   Go to the releases page of the project, click on the `Draft a new release` button and select the tag you just pushed. Describe release and post relevant entry from changelog. Click `Save draft` rather than `Publish release` at this time. (This will prevent the release being visible before it has got the binaries attached to it.)
   Once tarballs are published on release page, you can click `Publish` and release is complete. Announce `#thanos` slack channel.
   
+1. After release on second PR just after, add `-master` [VERSION file](./VERSION) suffix to the end of version. This will ensure master built images will have different version then released one.
+
 ## Branch management and versioning strategy
 
 We use [Semantic Versioning](http://semver.org/).
