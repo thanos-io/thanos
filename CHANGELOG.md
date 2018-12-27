@@ -23,6 +23,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - Thanos Rule Alertmanager DNS SD bug
 - DNS SD bug when having SRV results with different ports.
 - Move handling of HA alertmanagers to be the same as Prometheus.
+- Azure iteration implementation flaw (#695)
 
 ## [v0.2.0](https://github.com/improbable-eng/thanos/releases/tag/v0.2.0) - 2018.12.10
 
