@@ -219,7 +219,6 @@ func (r *Reloader) apply(ctx context.Context) error {
 
 // extract gzipped cfgFile to outputDir
 func extract(cfgFile string, outputDir string) error {
-
 	fh, err := os.OpenFile(cfgFile, os.O_RDONLY, 0)
 	if err != nil {
 		return err
@@ -239,8 +238,7 @@ func extract(cfgFile string, outputDir string) error {
 	fileName := filepath.Base(strings.TrimRight(cfgFile, ".gz"))
 	outputFile := path.Join(outputDir, fileName)
 
-	err = ioutil.WriteFile(outputFile, fc, 0644)
-	if err != nil {
+	if err := ioutil.WriteFile(outputFile, fc, 0644); err != nil {
 		return errors.Wrap(err, "write extracted config file")
 	}
 

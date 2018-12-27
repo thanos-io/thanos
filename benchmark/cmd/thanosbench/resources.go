@@ -12,7 +12,6 @@ import (
 	prom "github.com/prometheus/prometheus/config"
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -208,7 +207,7 @@ func createPrometheus(opts *opts, name string, bucket string) *appsv1.StatefulSe
 		Name:      name,
 		Namespace: promNamespace,
 		Labels: map[string]string{
-			"app": name,
+			"app":                  name,
 			"thanos-gossip-member": "true",
 		},
 	}
@@ -371,7 +370,7 @@ func createThanosQuery(opts *opts) (*v1.Service, *v1.Pod) {
 		Name:      "thanos-query",
 		Namespace: thanosNamespace,
 		Labels: map[string]string{
-			"app": "thanos-query",
+			"app":                  "thanos-query",
 			"thanos-gossip-member": "true",
 		},
 	}
