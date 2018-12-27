@@ -100,13 +100,13 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 
 	marker := blob.Marker{}
 
-	for {
+	for i := 1; ; i++ {
 		list, err := b.containerURL.ListBlobsHierarchySegment(ctx, marker, DirDelim, blob.ListBlobsSegmentOptions{
 			Prefix: prefix,
 		})
 
 		if err != nil {
-			return errors.Wrapf(err, "cannot list blobs in directory %s", dir)
+			return errors.Wrapf(err, "cannot list blobs in directory %s (iteration #%d)", dir, i)
 		}
 
 		marker = list.NextMarker
