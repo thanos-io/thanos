@@ -132,7 +132,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 			break
 		}
 
-		level.Debug(b.logger).Log("msg", "continuing iteration")
+		level.Debug(b.logger).Log("msg", "requesting next iteration of listing blobs", "last_entries", len(listNames), "iteration", i)
 	}
 
 	return nil
