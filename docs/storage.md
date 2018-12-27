@@ -35,8 +35,8 @@ Thanos uses minio client to upload Prometheus data into AWS S3.
 
 To configure S3 bucket as an object store you need to set these mandatory S3 variables in yaml format stored in a file:
 
-[embedmd]:# (flags/config_s3.txt $)
-```$
+[embedmd]:# (flags/config_s3.txt yaml)
+```yaml
 type: S3
 config:
   bucket: ""
@@ -141,8 +141,8 @@ To configure Google Cloud Storage bucket as an object store you need to set `buc
 
 For example:
 
-[embedmd]:# (flags/config_gcs.txt $)
-```$
+[embedmd]:# (flags/config_gcs.txt yaml)
+```yaml
 type: GCS
 config:
   bucket: ""
@@ -180,8 +180,8 @@ To configure Azure Storage account as an object store you need to provide a path
 
 Config file format is the following:
 
-[embedmd]:# (flags/config_azure.txt $)
-```$
+[embedmd]:# (flags/config_azure.txt yaml)
+```yaml
 type: AZURE
 config:
   storage_account: ""
@@ -194,8 +194,8 @@ Thanos uses [gophercloud](http://gophercloud.io/) client to upload Prometheus da
 
 Below is an example configuration file for thanos to use OpenStack swift container as an object store. 
 
-[embedmd]:# (flags/config_swift.txt $)
-```$
+[embedmd]:# (flags/config_swift.txt yaml)
+```yaml
 type: SWIFT
 config:
   storage_account: ""
