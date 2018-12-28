@@ -46,7 +46,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 	reloaderCfgFile := cmd.Flag("reloader.config-file", "Config file watched by the reloader.").
 		Default("").String()
 
-	reloaderCfgSubstFile := cmd.Flag("reloader.config-envsubst-file", "Output file for environment variable substituted config file.").
+	reloaderCfgOutputFile := cmd.Flag("reloader.config-envsubst-file", "Output file for environment variable substituted config file.").
 		Default("").String()
 
 	reloaderRuleDirs := cmd.Flag("reloader.rule-dir", "Rule directories for the reloader to refresh (repeated field).").Strings()
@@ -58,7 +58,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			log.With(logger, "component", "reloader"),
 			reloader.ReloadURLFromBase(*promURL),
 			*reloaderCfgFile,
-			*reloaderCfgSubstFile,
+			*reloaderCfgOutputFile,
 			*reloaderRuleDirs,
 		)
 		peer, err := newPeerFn(logger, reg, false, "", false)
