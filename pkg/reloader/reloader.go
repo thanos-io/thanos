@@ -42,13 +42,13 @@ type Reloader struct {
 	lastRuleHash []byte
 }
 
-var magicGzip = []byte{0x1f, 0x8b, 0x08}
+var firstGzipBytes = []byte{0x1f, 0x8b, 0x08}
 
 // New creates a new reloader that watches the given config file and rule directory
 // and triggers a Prometheus reload upon changes.
-// If cfgOutputFile is not empty, environment variables in the config file will be
-// substituted and the out put written into the given path. Prometheus should then
-// use cfgOutputFile as its config file path.
+// If cfgOutputFile is not empty the config file will be decompressed if needed, environment variables
+// will be substituted and the output written into the given path. Prometheus should then use
+// cfgOutputFile as its config file path.
 func New(logger log.Logger, reloadURL *url.URL, cfgFile string, cfgOutputFile string, ruleDirs []string) *Reloader {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -134,8 +134,27 @@ func (r *Reloader) apply(ctx context.Context) error {
 				return errors.Wrap(err, "read file")
 			}
 
-			if err := r.writeOutputFile(b); err != nil {
-				return errors.Wrap(err, "write output file")
+			// detect and extract gzipped file
+			if bytes.Equal(b[0:3], firstGzipBytes) {
+				zr, err := gzip.NewReader(bytes.NewReader(b))
+				if err != nil {
+					return errors.Wrap(err, "create gzip reader")
+				}
+				defer runutil.CloseWithLogOnErr(r.logger, zr, "gzip reader close")
+
+				b, err = ioutil.ReadAll(zr)
+				if err != nil {
+					return errors.Wrap(err, "read compressed config file")
+				}
+			}
+
+			b, err = expandEnv(b)
+			if err != nil {
+				return errors.Wrap(err, "expand environment variables")
+			}
+
+			if err := ioutil.WriteFile(r.cfgOutputFile, b, 0666); err != nil {
+				return errors.Wrap(err, "write file")
 			}
 		}
 	}
@@ -201,29 +220,8 @@ func (r *Reloader) apply(ctx context.Context) error {
 	return nil
 }
 
-// write output file, extracting if necessary
+// write output file with env vars expansion. Extracting if file is gzipped.
 func (r *Reloader) writeOutputFile(b []byte) error {
-	if bytes.Equal(b[0:3], magicGzip) {
-		zr, err := gzip.NewReader(bytes.NewReader(b))
-		if err != nil {
-			return errors.Wrap(err, "create gzip reader")
-		}
-		defer runutil.CloseWithLogOnErr(r.logger, zr, "gzip reader close")
-
-		b, err = ioutil.ReadAll(zr)
-		if err != nil {
-			return errors.Wrap(err, "read compressed config file")
-		}
-	}
-
-	b, err := expandEnv(b)
-	if err != nil {
-		return errors.Wrap(err, "expand environment variables")
-	}
-
-	if err := ioutil.WriteFile(r.cfgOutputFile, b, 0666); err != nil {
-		return errors.Wrap(err, "write file")
-	}
 
 	return nil
 }
