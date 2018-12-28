@@ -2,7 +2,7 @@
 
 
 [[projects]]
-  digest = "1:dba68f7bbe24869618a68a59d21e8df281430aa38aaf6179aca3ae33e46ff328"
+  digest = "1:5da4d3b3b9949b9043d2fd36c4ff9b208f72ad5260a3dcb6f94267a769ee1899"
   name = "cloud.google.com/go"
   packages = [
     "compute/metadata",
@@ -427,7 +427,6 @@
     "prometheus",
     "prometheus/internal",
     "prometheus/promhttp",
-    "prometheus/testutil",
   ]
   pruneopts = ""
   revision = "e637cec7d9c8990247098639ebc6d43dd34ddd49"
@@ -796,7 +795,6 @@
     "github.com/pkg/errors",
     "github.com/prometheus/client_golang/prometheus",
     "github.com/prometheus/client_golang/prometheus/promhttp",
-    "github.com/prometheus/client_golang/prometheus/testutil",
     "github.com/prometheus/common/model",
     "github.com/prometheus/common/route",
     "github.com/prometheus/common/version",
