@@ -135,7 +135,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 			}
 
 			if err := r.writeOutputFile(b); err != nil {
-				return errors.Wrap(err, "gunzip file")
+				return errors.Wrap(err, "write output file")
 			}
 		}
 	}
