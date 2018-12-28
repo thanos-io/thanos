@@ -220,12 +220,6 @@ func (r *Reloader) apply(ctx context.Context) error {
 	return nil
 }
 
-// write output file with env vars expansion. Extracting if file is gzipped.
-func (r *Reloader) writeOutputFile(b []byte) error {
-
-	return nil
-}
-
 func hashFile(h hash.Hash, fn string) error {
 	f, err := os.Open(fn)
 	if err != nil {
