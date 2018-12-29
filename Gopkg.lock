@@ -327,6 +327,14 @@
   version = "v0.3.0"
 
 [[projects]]
+  digest = "1:82b912465c1da0668582a7d1117339c278e786c2536b3c3623029a0c7141c2d0"
+  name = "github.com/mattn/go-runewidth"
+  packages = ["."]
+  pruneopts = ""
+  revision = "ce7b0b5c7b45a81508558cd1dba6bb1e4ddb51bb"
+  version = "v0.0.3"
+
+[[projects]]
   digest = "1:49a8b01a6cd6558d504b65608214ca40a78000e1b343ed0da5c6a9ccd83d6d30"
   name = "github.com/matttproud/golang_protobuf_extensions"
   packages = ["pbutil"]
@@ -390,6 +398,14 @@
   version = "v0.3.0"
 
 [[projects]]
+  digest = "1:4e46a239a25ae3c430d31cb18479ecd0c964f02c96310003668c6a828f6e34b8"
+  name = "github.com/olekukonko/tablewriter"
+  packages = ["."]
+  pruneopts = ""
+  revision = "e6d60cf7ba1f42d86d54cdf5508611c4aafb3970"
+  version = "v0.0.1"
+
+[[projects]]
   digest = "1:171ac7b583c9e4f28dfd3c310fdef0802a9db6afa066ab71e2134ff2cfb646d7"
   name = "github.com/opentracing/basictracer-go"
   packages = [
@@ -427,6 +443,7 @@
     "prometheus",
     "prometheus/internal",
     "prometheus/promhttp",
+    "prometheus/testutil",
   ]
   pruneopts = ""
   revision = "e637cec7d9c8990247098639ebc6d43dd34ddd49"
@@ -621,12 +638,20 @@
   packages = [
     "collate",
     "collate/build",
+    "feature/plural",
+    "internal",
+    "internal/catmsg",
     "internal/colltab",
+    "internal/format",
     "internal/gen",
+    "internal/number",
+    "internal/stringset",
     "internal/tag",
     "internal/triegen",
     "internal/ucd",
     "language",
+    "message",
+    "message/catalog",
     "secure/bidirule",
     "transform",
     "unicode/bidi",
@@ -789,12 +814,14 @@
     "github.com/minio/minio-go/pkg/encrypt",
     "github.com/oklog/run",
     "github.com/oklog/ulid",
+    "github.com/olekukonko/tablewriter",
     "github.com/opentracing/basictracer-go",
     "github.com/opentracing/opentracing-go",
     "github.com/opentracing/opentracing-go/ext",
     "github.com/pkg/errors",
     "github.com/prometheus/client_golang/prometheus",
     "github.com/prometheus/client_golang/prometheus/promhttp",
+    "github.com/prometheus/client_golang/prometheus/testutil",
     "github.com/prometheus/common/model",
     "github.com/prometheus/common/route",
     "github.com/prometheus/common/version",
@@ -816,6 +843,8 @@
     "github.com/prometheus/tsdb/labels",
     "golang.org/x/net/context",
     "golang.org/x/sync/errgroup",
+    "golang.org/x/text/language",
+    "golang.org/x/text/message",
     "google.golang.org/api/iterator",
     "google.golang.org/api/option",
     "google.golang.org/grpc",
