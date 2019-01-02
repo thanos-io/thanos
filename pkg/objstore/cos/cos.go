@@ -85,7 +85,7 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 	return bkt, nil
 }
 
-// Name returns the bucket name for s3.
+// Name returns the bucket name for COS.
 func (b *Bucket) Name() string {
 	return b.name
 }
@@ -113,7 +113,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		dir = strings.TrimSuffix(dir, dirDelim) + dirDelim
 	}
 
-	for object := range b.listObjects(ctx, dir, false) {
+	for object := range b.listObjects(ctx, dir) {
 		if object.err != nil {
 			return object.err
 		}
@@ -195,12 +195,8 @@ type objectInfo struct {
 	err error
 }
 
-func (b *Bucket) listObjects(ctx context.Context, objectPrefix string, recursive bool) <-chan objectInfo {
+func (b *Bucket) listObjects(ctx context.Context, objectPrefix string) <-chan objectInfo {
 	objectsCh := make(chan objectInfo, 1)
-	delimiter := dirDelim
-	if recursive {
-		delimiter = ""
-	}
 
 	go func(objectsCh chan<- objectInfo) {
 		defer close(objectsCh)
@@ -210,7 +206,7 @@ func (b *Bucket) listObjects(ctx context.Context, objectPrefix string, recursive
 				Prefix:    objectPrefix,
 				MaxKeys:   1000,
 				Marker:    marker,
-				Delimiter: delimiter,
+				Delimiter: dirDelim,
 			})
 			if err != nil {
 				select {
@@ -223,7 +219,6 @@ func (b *Bucket) listObjects(ctx context.Context, objectPrefix string, recursive
 			}
 
 			for _, object := range result.Contents {
-				marker = object.Key
 				select {
 				case objectsCh <- objectInfo{
 					key: object.Key,
@@ -294,7 +289,7 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 				"and delete it after test. Unset COS_BUCKET env variable to use default logic. If you really want to run " +
 				"tests against provided (NOT USED!) bucket, set THANOS_ALLOW_EXISTING_BUCKET_USE=true. WARNING: That bucket " +
 				"needs to be manually cleared. This means that it is only useful to run one test in a time. This is due " +
-				"to safety (accidentally pointing prod bucket for test) as well as aws s3 not being fully strong consistent.")
+				"to safety (accidentally pointing prod bucket for test) as well as COS not being fully strong consistent.")
 		}
 
 		bc, err := yaml.Marshal(c)
