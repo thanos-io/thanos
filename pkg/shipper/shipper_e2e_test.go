@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/objtesting"
 	"github.com/improbable-eng/thanos/pkg/testutil"
@@ -32,7 +33,7 @@ func TestShipper_UploadBlocks_e2e(t *testing.T) {
 		}()
 
 		extLset := labels.FromStrings("prometheus", "prom-1")
-		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, block.TestSource)
+		shipper := New(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -54,7 +55,7 @@ func TestShipper_UploadBlocks_e2e(t *testing.T) {
 
 			testutil.Ok(t, os.Mkdir(tmp, 0777))
 
-			meta := block.Meta{
+			meta := metadata.Meta{
 				BlockMeta: tsdb.BlockMeta{
 					MinTime: timestamp.FromTime(now.Add(time.Duration(i) * time.Hour)),
 					MaxTime: timestamp.FromTime(now.Add((time.Duration(i) * time.Hour) + 1)),
@@ -62,7 +63,7 @@ func TestShipper_UploadBlocks_e2e(t *testing.T) {
 			}
 			meta.Version = 1
 			meta.ULID = id
-			meta.Thanos.Source = block.TestSource
+			meta.Thanos.Source = metadata.TestSource
 
 			metab, err := json.Marshal(&meta)
 			testutil.Ok(t, err)

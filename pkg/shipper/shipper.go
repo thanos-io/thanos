@@ -11,6 +11,8 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
@@ -69,7 +71,7 @@ type Shipper struct {
 	metrics *metrics
 	bucket  objstore.Bucket
 	labels  func() labels.Labels
-	source  block.SourceType
+	source  metadata.SourceType
 }
 
 // New creates a new shipper that detects new TSDB blocks in dir and uploads them
@@ -80,7 +82,7 @@ func New(
 	dir string,
 	bucket objstore.Bucket,
 	lbls func() labels.Labels,
-	source block.SourceType,
+	source metadata.SourceType,
 ) *Shipper {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -114,7 +116,7 @@ func (s *Shipper) Timestamps() (minTime, maxSyncTime int64, err error) {
 	minTime = math.MaxInt64
 	maxSyncTime = math.MinInt64
 
-	if err := s.iterBlockMetas(func(m *block.Meta) error {
+	if err := s.iterBlockMetas(func(m *metadata.Meta) error {
 		if m.MinTime < minTime {
 			minTime = m.MinTime
 		}
@@ -158,7 +160,7 @@ func (s *Shipper) Sync(ctx context.Context) {
 
 	// TODO(bplotka): If there are no blocks in the system check for WAL dir to ensure we have actually
 	// access to real TSDB dir (!).
-	if err = s.iterBlockMetas(func(m *block.Meta) error {
+	if err = s.iterBlockMetas(func(m *metadata.Meta) error {
 		// Do not sync a block if we already uploaded it. If it is no longer found in the bucket,
 		// it was generally removed by the compaction process.
 		if _, ok := hasUploaded[m.ULID]; !ok {
@@ -180,7 +182,7 @@ func (s *Shipper) Sync(ctx context.Context) {
 	}
 }
 
-func (s *Shipper) sync(ctx context.Context, meta *block.Meta) (err error) {
+func (s *Shipper) sync(ctx context.Context, meta *metadata.Meta) (err error) {
 	dir := filepath.Join(s.dir, meta.ULID.String())
 
 	// We only ship of the first compacted block level.
@@ -225,7 +227,7 @@ func (s *Shipper) sync(ctx context.Context, meta *block.Meta) (err error) {
 		meta.Thanos.Labels = lset.Map()
 	}
 	meta.Thanos.Source = s.source
-	if err := block.WriteMetaFile(s.logger, updir, meta); err != nil {
+	if err := metadata.Write(s.logger, updir, meta); err != nil {
 		return errors.Wrap(err, "write meta file")
 	}
 	return block.Upload(ctx, s.logger, s.bucket, updir)
@@ -234,7 +236,7 @@ func (s *Shipper) sync(ctx context.Context, meta *block.Meta) (err error) {
 // iterBlockMetas calls f with the block meta for each block found in dir. It logs
 // an error and continues if it cannot access a meta.json file.
 // If f returns an error, the function returns with the same error.
-func (s *Shipper) iterBlockMetas(f func(m *block.Meta) error) error {
+func (s *Shipper) iterBlockMetas(f func(m *metadata.Meta) error) error {
 	names, err := fileutil.ReadDir(s.dir)
 	if err != nil {
 		return errors.Wrap(err, "read dir")
@@ -253,7 +255,7 @@ func (s *Shipper) iterBlockMetas(f func(m *block.Meta) error) error {
 		if !fi.IsDir() {
 			continue
 		}
-		m, err := block.ReadMetaFile(dir)
+		m, err := metadata.Read(dir)
 		if err != nil {
 			level.Warn(s.logger).Log("msg", "reading meta file failed", "err", err)
 			continue

@@ -5,7 +5,8 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
+
 	"github.com/prometheus/prometheus/pkg/value"
 	"github.com/prometheus/tsdb/chunkenc"
 
@@ -31,7 +32,7 @@ const (
 // Downsample downsamples the given block. It writes a new block into dir and returns its ID.
 func Downsample(
 	logger log.Logger,
-	origMeta *block.Meta,
+	origMeta *metadata.Meta,
 	b tsdb.BlockReader,
 	dir string,
 	resolution int64,
@@ -113,6 +114,7 @@ func Downsample(
 			origMeta.Thanos.Downsample.Resolution,
 			resolution,
 		)
+
 		if err != nil {
 			return id, errors.Wrap(err, "downsample aggregate block")
 		}
@@ -125,18 +127,18 @@ func Downsample(
 	if err != nil {
 		return id, errors.Wrap(err, "create compactor")
 	}
-	id, err = comp.Write(dir, newb, origMeta.MinTime, origMeta.MaxTime)
+	id, err = comp.Write(dir, newb, origMeta.MinTime, origMeta.MaxTime, &origMeta.BlockMeta)
 	if err != nil {
 		return id, errors.Wrap(err, "compact head")
 	}
 	bdir := filepath.Join(dir, id.String())
 
-	var tmeta block.ThanosMeta
+	var tmeta metadata.Thanos
 	tmeta = origMeta.Thanos
-	tmeta.Source = block.CompactorSource
+	tmeta.Source = metadata.CompactorSource
 	tmeta.Downsample.Resolution = resolution
 
-	_, err = block.InjectThanosMeta(logger, bdir, tmeta, &origMeta.BlockMeta)
+	_, err = metadata.InjectThanos(logger, bdir, tmeta, &origMeta.BlockMeta)
 	if err != nil {
 		return id, errors.Wrapf(err, "failed to finalize the block %s", bdir)
 	}
@@ -228,12 +230,19 @@ func (b *memBlock) Chunks() (tsdb.ChunkReader, error) {
 }
 
 func (b *memBlock) Tombstones() (tsdb.TombstoneReader, error) {
-	return tsdb.EmptyTombstoneReader(), nil
+	return emptyTombstoneReader{}, nil
 }
 
 func (b *memBlock) Close() error {
 	return nil
 }
+
+type emptyTombstoneReader struct{}
+
+func (emptyTombstoneReader) Get(ref uint64) (tsdb.Intervals, error)        { return nil, nil }
+func (emptyTombstoneReader) Iter(func(uint64, tsdb.Intervals) error) error { return nil }
+func (emptyTombstoneReader) Total() uint64                                 { return 0 }
+func (emptyTombstoneReader) Close() error                                  { return nil }
 
 // currentWindow returns the end timestamp of the window that t falls into.
 func currentWindow(t, r int64) int64 {
@@ -412,6 +421,7 @@ func downsampleRaw(data []sample, resolution int64) []chunks.Meta {
 
 		chks = append(chks, ab.encode())
 	}
+
 	return chks
 }
 

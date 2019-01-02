@@ -36,7 +36,7 @@ func TestQuerier_Series(t *testing.T) {
 	q := newQuerier(context.Background(), nil, 1, 300, "", testProxy, false, 0, true, nil)
 	defer func() { testutil.Ok(t, q.Close()) }()
 
-	res, err := q.Select(&storage.SelectParams{})
+	res, _, err := q.Select(&storage.SelectParams{})
 	testutil.Ok(t, err)
 
 	expected := []struct {

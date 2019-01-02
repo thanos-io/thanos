@@ -1,11 +1,14 @@
 package downsample
 
 import (
+	"github.com/prometheus/tsdb"
 	"io/ioutil"
 	"math"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
 
 	"github.com/prometheus/prometheus/pkg/value"
 
@@ -59,7 +62,7 @@ func TestDownsampleRaw(t *testing.T) {
 			},
 		},
 	}
-	testDownsample(t, input, &block.Meta{}, 100)
+	testDownsample(t, input, &metadata.Meta{BlockMeta: tsdb.BlockMeta{MinTime: 0, MaxTime: 250}}, 100)
 }
 
 func TestDownsampleAggr(t *testing.T) {
@@ -96,8 +99,9 @@ func TestDownsampleAggr(t *testing.T) {
 			},
 		},
 	}
-	var meta block.Meta
+	var meta metadata.Meta
 	meta.Thanos.Downsample.Resolution = 10
+	meta.BlockMeta = tsdb.BlockMeta{MinTime: 99, MaxTime: 1300}
 
 	testDownsample(t, input, &meta, 500)
 }
@@ -123,7 +127,7 @@ type downsampleTestSet struct {
 
 // testDownsample inserts the input into a block and invokes the downsampler with the given resolution.
 // The chunk ranges within the input block are aligned at 500 time units.
-func testDownsample(t *testing.T, data []*downsampleTestSet, meta *block.Meta, resolution int64) {
+func testDownsample(t *testing.T, data []*downsampleTestSet, meta *metadata.Meta, resolution int64) {
 	t.Helper()
 
 	dir, err := ioutil.TempDir("", "downsample-raw")
