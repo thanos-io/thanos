@@ -199,6 +199,14 @@
   revision = "2e65f85255dbc3072edf28d6b5b8efc472979f5a"
 
 [[projects]]
+  branch = "master"
+  digest = "1:9abc49f39e3e23e262594bb4fb70abf74c0c99e94f99153f43b143805e850719"
+  name = "github.com/google/go-querystring"
+  packages = ["query"]
+  pruneopts = ""
+  revision = "53e6ce116135b80d037921a7fdd5138cf32d7a8a"
+
+[[projects]]
   digest = "1:e097a364f4e8d8d91b9b9eeafb992d3796a41fde3eb548c1a87eb9d9f60725cf"
   name = "github.com/googleapis/gax-go"
   packages = ["."]
@@ -372,6 +380,22 @@
   pruneopts = ""
   revision = "ae18d6b8b3205b561c79e8e5f69bff09736185f4"
   version = "v1.0.0"
+
+[[projects]]
+  digest = "1:484d7b3ea990153489735f4810f74b50c63ea16ba58e2fc34ac88c2b0d80f584"
+  name = "github.com/mozillazg/go-cos"
+  packages = ["."]
+  pruneopts = ""
+  revision = "99eb77820590d3f93902fd18244c87d635bfc3e2"
+  version = "v0.11.0"
+
+[[projects]]
+  digest = "1:912349f5cf927bf96dca709623631ace7db723f07c70c4d56cfc22d9a667ed16"
+  name = "github.com/mozillazg/go-httpheader"
+  packages = ["."]
+  pruneopts = ""
+  revision = "4e5d6424981844faafc4b0649036b2e0395bdf99"
+  version = "v0.2.0"
 
 [[projects]]
   branch = "master"
@@ -812,6 +836,7 @@
     "github.com/minio/minio-go",
     "github.com/minio/minio-go/pkg/credentials",
     "github.com/minio/minio-go/pkg/encrypt",
+    "github.com/mozillazg/go-cos",
     "github.com/oklog/run",
     "github.com/oklog/ulid",
     "github.com/olekukonko/tablewriter",

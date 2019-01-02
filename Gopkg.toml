@@ -87,3 +87,7 @@ ignored = ["github.com/improbable-eng/thanos/benchmark/*"]
 [[constraint]]
   name = "github.com/fatih/structtag"
   version = "v1.0.0"
+
+[[constraint]]
+  version = "v0.11.0"
+  name = "github.com/mozillazg/go-cos"
