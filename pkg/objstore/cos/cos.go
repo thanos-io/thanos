@@ -113,7 +113,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		dir = strings.TrimSuffix(dir, dirDelim) + dirDelim
 	}
 
-	for object := range b.ListObjects(ctx, dir, false) {
+	for object := range b.listObjects(ctx, dir, false) {
 		if object.err != nil {
 			return object.err
 		}
@@ -176,22 +176,15 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 
 // IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
 func (b *Bucket) IsObjNotFoundErr(err error) bool {
-	tmpErr := toErrorResponse(err)
-	if tmpErr.Code == "NoSuchKey" {
-		return true
-	}
-	if tmpErr.Response != nil && tmpErr.Response.StatusCode == http.StatusNotFound {
-		return true
-	}
-	return false
-}
-
-func toErrorResponse(err error) *cos.ErrorResponse {
-	switch err := err.(type) {
+	switch tmpErr := err.(type) {
 	case *cos.ErrorResponse:
-		return err
+		if tmpErr.Code == "NoSuchKey" ||
+			(tmpErr.Response != nil && tmpErr.Response.StatusCode == http.StatusNotFound) {
+			return true
+		}
+		return false
 	default:
-		return &cos.ErrorResponse{}
+		return false
 	}
 }
 
@@ -202,7 +195,7 @@ type objectInfo struct {
 	err error
 }
 
-func (b *Bucket) ListObjects(ctx context.Context, objectPrefix string, recursive bool) <-chan objectInfo {
+func (b *Bucket) listObjects(ctx context.Context, objectPrefix string, recursive bool) <-chan objectInfo {
 	objectsCh := make(chan objectInfo, 1)
 	delimiter := dirDelim
 	if recursive {
@@ -234,18 +227,18 @@ func (b *Bucket) ListObjects(ctx context.Context, objectPrefix string, recursive
 				select {
 				case objectsCh <- objectInfo{
 					key: object.Key,
-					err: nil,
 				}:
 				case <-ctx.Done():
 					return
 				}
 			}
 
+			// The result of CommonPrefixes contains the objects
+			// that have the same keys between Prefix and the key specified by delimiter.
 			for _, obj := range result.CommonPrefixes {
 				select {
 				case objectsCh <- objectInfo{
 					key: obj,
-					err: nil,
 				}:
 				case <-ctx.Done():
 					return
