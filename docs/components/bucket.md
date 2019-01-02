@@ -28,7 +28,7 @@ by adding a new command within `/cmd/thanos/bucket.go`
 ```$
 usage: thanos bucket [<flags>] <command> [<args> ...]
 
-inspect metric data in an object storage bucket
+Inspect metric data in an object storage bucket
 
 Flags:
   -h, --help               Show context-sensitive help (also try --help-long and
@@ -59,10 +59,13 @@ Flags:
 
 Subcommands:
   bucket verify [<flags>]
-    verify all blocks in the bucket against specified issues
+    Verify all blocks in the bucket against specified issues
 
   bucket ls [<flags>]
-    list all blocks in the bucket
+    List all blocks in the bucket
+
+  bucket inspect [<flags>]
+    Inspect all blocks in the bucket
 
 
 ```
@@ -81,7 +84,7 @@ $ thanos bucket verify --gcs.bucket example-bucket
 ```txt
 usage: thanos bucket verify [<flags>]
 
-verify all blocks in the bucket against specified issues
+Verify all blocks in the bucket against specified issues
 
 Flags:
   -h, --help               Show context-sensitive help (also try --help-long and
@@ -109,7 +112,7 @@ Flags:
       --objstore-backup.config=<bucket.config-yaml>  
                            Alternative to 'objstore-backup.config-file' flag.
                            Object store-backup configuration in YAML.
-  -r, --repair             attempt to repair blocks for which issues were
+  -r, --repair             Attempt to repair blocks for which issues were
                            detected
   -i, --issues=index_issue... ...  
                            Issues to verify (and optionally repair). Possible
@@ -136,7 +139,7 @@ $ thanos bucket ls -o json --gcs.bucket example-bucket
 ```txt
 usage: thanos bucket ls [<flags>]
 
-list all blocks in the bucket
+List all blocks in the bucket
 
 Flags:
   -h, --help               Show context-sensitive help (also try --help-long and
