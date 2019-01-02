@@ -14,7 +14,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/reloader"
@@ -102,7 +102,7 @@ func runSidecar(
 	reloader *reloader.Reloader,
 	component string,
 ) error {
-	var metadata = &metadata{
+	var m = &promMetadata{
 		promURL: promURL,
 
 		// Start out with the full time range. The shipper will constrain it later.
@@ -128,7 +128,7 @@ func runSidecar(
 			// Blocking query of external labels before joining as a Source Peer into gossip.
 			// We retry infinitely until we reach and fetch labels from our Prometheus.
 			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
-				if err := metadata.UpdateLabels(ctx, logger); err != nil {
+				if err := m.UpdateLabels(ctx, logger); err != nil {
 					level.Warn(logger).Log(
 						"msg", "failed to fetch initial external labels. Is Prometheus running? Retrying",
 						"err", err,
@@ -145,14 +145,14 @@ func runSidecar(
 				return errors.Wrap(err, "initial external labels query")
 			}
 
-			if len(metadata.Labels()) == 0 {
+			if len(m.Labels()) == 0 {
 				return errors.New("no external labels configured on Prometheus server, uniquely identifying external labels must be configured")
 			}
 
 			// New gossip cluster.
-			mint, maxt := metadata.Timestamps()
+			mint, maxt := m.Timestamps()
 			if err = peer.Join(cluster.PeerTypeSource, cluster.PeerMetadata{
-				Labels:  metadata.LabelsPB(),
+				Labels:  m.LabelsPB(),
 				MinTime: mint,
 				MaxTime: maxt,
 			}); err != nil {
@@ -165,12 +165,12 @@ func runSidecar(
 				iterCtx, iterCancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer iterCancel()
 
-				if err := metadata.UpdateLabels(iterCtx, logger); err != nil {
+				if err := m.UpdateLabels(iterCtx, logger); err != nil {
 					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
 					promUp.Set(0)
 				} else {
 					// Update gossip.
-					peer.SetLabels(metadata.LabelsPB())
+					peer.SetLabels(m.LabelsPB())
 
 					promUp.Set(1)
 					lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
@@ -204,7 +204,7 @@ func runSidecar(
 		var client http.Client
 
 		promStore, err := store.NewPrometheusStore(
-			logger, &client, promURL, metadata.Labels, metadata.Timestamps)
+			logger, &client, promURL, m.Labels, m.Timestamps)
 		if err != nil {
 			return errors.Wrap(err, "create Prometheus store")
 		}
@@ -252,7 +252,7 @@ func runSidecar(
 			}
 		}()
 
-		s := shipper.New(logger, nil, dataDir, bkt, metadata.Labels, block.SidecarSource)
+		s := shipper.New(logger, nil, dataDir, bkt, m.Labels, metadata.SidecarSource)
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
@@ -265,9 +265,9 @@ func runSidecar(
 				if err != nil {
 					level.Warn(logger).Log("msg", "reading timestamps failed", "err", err)
 				} else {
-					metadata.UpdateTimestamps(minTime, math.MaxInt64)
+					m.UpdateTimestamps(minTime, math.MaxInt64)
 
-					mint, maxt := metadata.Timestamps()
+					mint, maxt := m.Timestamps()
 					peer.SetTimestamps(mint, maxt)
 				}
 				return nil
@@ -281,7 +281,7 @@ func runSidecar(
 	return nil
 }
 
-type metadata struct {
+type promMetadata struct {
 	promURL *url.URL
 
 	mtx    sync.Mutex
@@ -290,7 +290,7 @@ type metadata struct {
 	labels labels.Labels
 }
 
-func (s *metadata) UpdateLabels(ctx context.Context, logger log.Logger) error {
+func (s *promMetadata) UpdateLabels(ctx context.Context, logger log.Logger) error {
 	elset, err := queryExternalLabels(ctx, logger, s.promURL)
 	if err != nil {
 		return err
@@ -303,7 +303,7 @@ func (s *metadata) UpdateLabels(ctx context.Context, logger log.Logger) error {
 	return nil
 }
 
-func (s *metadata) UpdateTimestamps(mint int64, maxt int64) {
+func (s *promMetadata) UpdateTimestamps(mint int64, maxt int64) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -311,14 +311,14 @@ func (s *metadata) UpdateTimestamps(mint int64, maxt int64) {
 	s.maxt = maxt
 }
 
-func (s *metadata) Labels() labels.Labels {
+func (s *promMetadata) Labels() labels.Labels {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
 	return s.labels
 }
 
-func (s *metadata) LabelsPB() []storepb.Label {
+func (s *promMetadata) LabelsPB() []storepb.Label {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -332,7 +332,7 @@ func (s *metadata) LabelsPB() []storepb.Label {
 	return lset
 }
 
-func (s *metadata) Timestamps() (mint int64, maxt int64) {
+func (s *promMetadata) Timestamps() (mint int64, maxt int64) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 

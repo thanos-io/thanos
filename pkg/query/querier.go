@@ -169,13 +169,13 @@ func aggrsFromFunc(f string) ([]storepb.Aggr, resAggr) {
 	return []storepb.Aggr{storepb.Aggr_COUNT, storepb.Aggr_SUM}, resAggrAvg
 }
 
-func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (storage.SeriesSet, error) {
+func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (storage.SeriesSet, storage.Warnings, error) {
 	span, ctx := tracing.StartSpan(q.ctx, "querier_select")
 	defer span.Finish()
 
 	sms, err := translateMatchers(ms...)
 	if err != nil {
-		return nil, errors.Wrap(err, "convert matchers")
+		return nil, nil, errors.Wrap(err, "convert matchers")
 	}
 
 	queryAggrs, resAggr := aggrsFromFunc(params.Func)
@@ -189,10 +189,12 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 		Aggregates:              queryAggrs,
 		PartialResponseDisabled: !q.partialResponse,
 	}, resp); err != nil {
-		return nil, errors.Wrap(err, "proxy Series()")
+		return nil, nil, errors.Wrap(err, "proxy Series()")
 	}
 
 	for _, w := range resp.warnings {
+		// NOTE(bwplotka): We could use warnings return arguments here, however need reporter anyway for LabelValues and LabelNames method,
+		// so we choose to be consistent and keep reporter.
 		q.warningReporter(errors.New(w))
 	}
 
@@ -203,7 +205,7 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 			maxt: q.maxt,
 			set:  newStoreSeriesSet(resp.seriesSet),
 			aggr: resAggr,
-		}, nil
+		}, nil, nil
 	}
 
 	// TODO(fabxc): this could potentially pushed further down into the store API
@@ -220,7 +222,7 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 	// The merged series set assembles all potentially-overlapping time ranges
 	// of the same series into a single one. The series are ordered so that equal series
 	// from different replicas are sequential. We can now deduplicate those.
-	return newDedupSeriesSet(set, q.replicaLabel), nil
+	return newDedupSeriesSet(set, q.replicaLabel), nil, nil
 }
 
 // sortDedupLabels resorts the set so that the same series with different replica
@@ -245,6 +247,7 @@ func sortDedupLabels(set []storepb.Series, replicaLabel string) {
 	})
 }
 
+// LabelValues returns all potential values for a label name.
 func (q *querier) LabelValues(name string) ([]string, error) {
 	span, ctx := tracing.StartSpan(q.ctx, "querier_label_values")
 	defer span.Finish()
@@ -259,6 +262,12 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 	}
 
 	return resp.Values, nil
+}
+
+// LabelNames returns all the unique label names present in the block in sorted order.
+// TODO(bwplotka): Consider adding labelNames to thanos Query API https://github.com/improbable-eng/thanos/issues/702.
+func (q *querier) LabelNames() ([]string, error) {
+	return nil, errors.New("not implemented")
 }
 
 func (q *querier) Close() error {

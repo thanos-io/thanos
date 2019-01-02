@@ -4,13 +4,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/oklog/ulid"
-
-	"github.com/improbable-eng/thanos/pkg/compact/downsample"
-
 	"github.com/fortytw2/leaktest"
-	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
+	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/improbable-eng/thanos/pkg/testutil"
+	"github.com/oklog/ulid"
 	"github.com/prometheus/tsdb/labels"
 )
 
@@ -41,7 +39,7 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 	}
 
 	for _, in := range input {
-		var m block.Meta
+		var m metadata.Meta
 		m.Thanos.Downsample.Resolution = in.window
 		m.MinTime = in.mint
 		m.MaxTime = in.maxt
@@ -102,7 +100,7 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 
 		var exp []*bucketBlock
 		for _, b := range c.res {
-			var m block.Meta
+			var m metadata.Meta
 			m.Thanos.Downsample.Resolution = b.window
 			m.MinTime = b.mint
 			m.MaxTime = b.maxt
@@ -129,7 +127,7 @@ func TestBucketBlockSet_remove(t *testing.T) {
 	}
 
 	for _, in := range input {
-		var m block.Meta
+		var m metadata.Meta
 		m.ULID = in.id
 		m.MinTime = in.mint
 		m.MaxTime = in.maxt

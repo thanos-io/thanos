@@ -10,10 +10,9 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/prometheus/tsdb/labels"
-
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/verifier"
@@ -23,6 +22,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/tsdb/labels"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -254,7 +254,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 		defer cancel()
 
 		// Getting Metas.
-		var blockMetas []*block.Meta
+		var blockMetas []*metadata.Meta
 		if err = bkt.Iter(ctx, "", func(name string) error {
 			id, ok := block.IsBlockDir(name)
 			if !ok {
@@ -277,7 +277,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	}
 }
 
-func printTable(blockMetas []*block.Meta, selectorLabels labels.Labels, sortBy []string) error {
+func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortBy []string) error {
 	header := inspectColumns
 
 	var lines [][]string
@@ -355,7 +355,7 @@ func getKeysAlphabetically(labels map[string]string) []string {
 
 // matchesSelector checks if blockMeta contains every label from
 // the selector with the correct value
-func matchesSelector(blockMeta *block.Meta, selectorLabels labels.Labels) bool {
+func matchesSelector(blockMeta *metadata.Meta, selectorLabels labels.Labels) bool {
 	for _, l := range selectorLabels {
 		if v, ok := blockMeta.Thanos.Labels[l.Name]; !ok || v != l.Value {
 			return false

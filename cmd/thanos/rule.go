@@ -19,15 +19,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/extprom"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/alert"
-	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/discovery/cache"
 	"github.com/improbable-eng/thanos/pkg/discovery/dns"
+	"github.com/improbable-eng/thanos/pkg/extprom"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
@@ -117,7 +116,6 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			MaxBlockDuration: *tsdbBlockDuration,
 			Retention:        *tsdbRetention,
 			NoLockfile:       true,
-			WALFlushInterval: 30 * time.Second,
 		}
 
 		lookupQueries := map[string]struct{}{}
@@ -290,7 +288,7 @@ func runRule(
 		ctx, cancel := context.WithCancel(context.Background())
 		ctx = tracing.ContextWithTracer(ctx, tracer)
 
-		notify := func(ctx context.Context, expr string, alerts ...*rules.Alert) error {
+		notify := func(ctx context.Context, expr string, alerts ...*rules.Alert) {
 			res := make([]*alert.Alert, 0, len(alerts))
 			for _, alrt := range alerts {
 				// Only send actually firing alerts.
@@ -309,17 +307,18 @@ func runRule(
 				res = append(res, a)
 			}
 			alertQ.Push(res)
-
-			return nil
 		}
+
+		st := tsdb.Adapter(db, 0)
 		mgr = rules.NewManager(&rules.ManagerOptions{
 			Context:     ctx,
 			QueryFunc:   queryFn,
 			NotifyFunc:  notify,
 			Logger:      log.With(logger, "component", "rules"),
-			Appendable:  tsdb.Adapter(db, 0),
+			Appendable:  st,
 			Registerer:  reg,
 			ExternalURL: nil,
+			TSDB:        st,
 		})
 		g.Add(func() error {
 			mgr.Run()
@@ -579,7 +578,7 @@ func runRule(
 			}
 		}()
 
-		s := shipper.New(logger, nil, dataDir, bkt, func() labels.Labels { return lset }, block.RulerSource)
+		s := shipper.New(logger, nil, dataDir, bkt, func() labels.Labels { return lset }, metadata.RulerSource)
 
 		ctx, cancel := context.WithCancel(context.Background())
 

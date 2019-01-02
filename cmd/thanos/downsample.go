@@ -8,11 +8,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/prometheus/tsdb/chunkenc"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
@@ -23,6 +22,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/tsdb"
+	"github.com/prometheus/tsdb/chunkenc"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -105,7 +105,7 @@ func downsampleBucket(
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return errors.Wrap(err, "create dir")
 	}
-	var metas []*block.Meta
+	var metas []*metadata.Meta
 
 	err := bkt.Iter(ctx, "", func(name string) error {
 		id, ok := block.IsBlockDir(name)
@@ -119,7 +119,7 @@ func downsampleBucket(
 		}
 		defer runutil.CloseWithLogOnErr(logger, rc, "block reader")
 
-		var m block.Meta
+		var m metadata.Meta
 		if err := json.NewDecoder(rc).Decode(&m); err != nil {
 			return errors.Wrap(err, "decode meta")
 		}
@@ -201,7 +201,7 @@ func downsampleBucket(
 	return nil
 }
 
-func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bucket, m *block.Meta, dir string, resolution int64) error {
+func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bucket, m *metadata.Meta, dir string, resolution int64) error {
 	begin := time.Now()
 	bdir := filepath.Join(dir, m.ULID.String())
 
@@ -224,7 +224,7 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 		pool = downsample.NewPool()
 	}
 
-	b, err := tsdb.OpenBlock(bdir, pool)
+	b, err := tsdb.OpenBlock(logger, bdir, pool)
 	if err != nil {
 		return errors.Wrapf(err, "open block %s", m.ULID)
 	}

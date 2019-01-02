@@ -296,7 +296,16 @@ func runQuery(
 			return stores.Get(), nil
 		}, selectorLset)
 		queryableCreator = query.NewQueryableCreator(logger, proxy, replicaLabel)
-		engine           = promql.NewEngine(logger, reg, maxConcurrentQueries, queryTimeout)
+		engine           = promql.NewEngine(
+			promql.EngineOpts{
+				Logger:        logger,
+				Reg:           reg,
+				MaxConcurrent: maxConcurrentQueries,
+				// TODO(bwplotka): Expose this as a flag: https://github.com/improbable-eng/thanos/issues/703
+				MaxSamples: math.MaxInt32,
+				Timeout:    queryTimeout,
+			},
+		)
 	)
 	// Periodically update the store set with the addresses we see in our cluster.
 	{

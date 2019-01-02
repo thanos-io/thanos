@@ -199,12 +199,12 @@
   revision = "2e65f85255dbc3072edf28d6b5b8efc472979f5a"
 
 [[projects]]
-  branch = "master"
-  digest = "1:9abc49f39e3e23e262594bb4fb70abf74c0c99e94f99153f43b143805e850719"
+  digest = "1:cea4aa2038169ee558bf507d5ea02c94ca85bcca28a4c7bb99fd59b31e43a686"
   name = "github.com/google/go-querystring"
   packages = ["query"]
   pruneopts = ""
-  revision = "53e6ce116135b80d037921a7fdd5138cf32d7a8a"
+  revision = "44c6ddd0a2342c386950e880b658017258da92fc"
+  version = "v1.0.0"
 
 [[projects]]
   digest = "1:e097a364f4e8d8d91b9b9eeafb992d3796a41fde3eb548c1a87eb9d9f60725cf"
@@ -335,12 +335,12 @@
   version = "v0.3.0"
 
 [[projects]]
-  digest = "1:82b912465c1da0668582a7d1117339c278e786c2536b3c3623029a0c7141c2d0"
+  digest = "1:84c28d9899cc4e00c38042d345cea8819275a5a62403a58530cac67022894776"
   name = "github.com/mattn/go-runewidth"
   packages = ["."]
   pruneopts = ""
-  revision = "ce7b0b5c7b45a81508558cd1dba6bb1e4ddb51bb"
-  version = "v0.0.3"
+  revision = "3ee7d812e62a0804a7d0a324e0249ca2db3476d3"
+  version = "v0.0.4"
 
 [[projects]]
   digest = "1:49a8b01a6cd6558d504b65608214ca40a78000e1b343ed0da5c6a9ccd83d6d30"
@@ -390,20 +390,12 @@
   version = "v0.11.0"
 
 [[projects]]
-  digest = "1:912349f5cf927bf96dca709623631ace7db723f07c70c4d56cfc22d9a667ed16"
+  digest = "1:b09858acd58e0873236c7b96903e3ec4e238d5de644c08bd8e712fa2d3d51ad2"
   name = "github.com/mozillazg/go-httpheader"
   packages = ["."]
   pruneopts = ""
-  revision = "4e5d6424981844faafc4b0649036b2e0395bdf99"
-  version = "v0.2.0"
-
-[[projects]]
-  branch = "master"
-  digest = "1:3adc46876d4d0e4d5bbcfcc44c2116b95d7a5c966e2ee92a219488547fd453f2"
-  name = "github.com/nightlyone/lockfile"
-  packages = ["."]
-  pruneopts = ""
-  revision = "0ad87eef1443f64d3d8c50da647e2b1552851124"
+  revision = "61f2392c3317b60616c9dcb10d0a4cfef131fe62"
+  version = "v0.2.1"
 
 [[projects]]
   digest = "1:94e9081cc450d2cdf4e6886fc2c06c07272f86477df2d74ee5931951fa3d2577"
@@ -508,11 +500,12 @@
   revision = "05ee40e3a273f7245e8777337fc7b46e533a9a92"
 
 [[projects]]
-  digest = "1:b5ff9852eabe841003da4b0a4b742a2878c722dda6481003432344f633a814fc"
+  digest = "1:43ad0a170d6f826f8dd63244960384eb205e75423a444f7afbf145425f287227"
   name = "github.com/prometheus/prometheus"
   packages = [
     "discovery/file",
     "discovery/targetgroup",
+    "pkg/gate",
     "pkg/labels",
     "pkg/rulefmt",
     "pkg/textparse",
@@ -528,11 +521,10 @@
     "util/testutil",
   ]
   pruneopts = ""
-  revision = "71af5e29e815795e9dd14742ee7725682fa14b7b"
-  version = "v2.3.2"
+  revision = "3bd41cc92c7800cc6072171bd4237406126fa169"
 
 [[projects]]
-  digest = "1:216dcf26fbfb3f36f286ca3306882a157c51648e4b5d4f3a9e9c719faea6ea58"
+  digest = "1:00780e2d7a870f4de3da0d854cc419170c81cf82e6f2e802a3543fcf54c1867d"
   name = "github.com/prometheus/tsdb"
   packages = [
     ".",
@@ -541,9 +533,11 @@
     "fileutil",
     "index",
     "labels",
+    "wal",
   ]
   pruneopts = ""
-  revision = "bd832fc8274e8fe63999ac749daaaff9d881241f"
+  revision = "10ba228e6baa4811818e04b1ab9b48110bb43d7b"
+  version = "v0.4.0"
 
 [[projects]]
   branch = "master"
