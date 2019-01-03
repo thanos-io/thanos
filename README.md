@@ -19,6 +19,7 @@ data from Prometheus HA pairs on the fly.
 * [Prom Meetup Slides](https://www.slideshare.net/BartomiejPotka/thanos-global-durable-prometheus-monitoring)
 * [Introduction blog post](https://improbable.io/games/blog/thanos-prometheus-at-scale)
 * [Benchmarks](https://github.com/improbable-eng/thanos/tree/master/benchmark)
+* [Proposals](docs/proposals)
 
 ## Features
 
@@ -42,5 +43,4 @@ Thanos is an open source project and we welcome new contributers and members
 of the community. Here are ways to get in touch with the community:
 
 * Slack: [#thanos](https://join.slack.com/t/improbable-eng/shared_invite/enQtMzQ1ODcyMzQ5MjM4LWY5ZWZmNGM2ODc5MmViNmQ3ZTA3ZTY3NzQwOTBlMTkzZmIxZTIxODk0OWU3YjZhNWVlNDU3MDlkZGViZjhkMjc)
-* Twitter: [@improbableio](https://twitter.com/Improbableio)
 * Issue Tracker: [GitHub Issues](https://github.com/improbable-eng/thanos/issues)

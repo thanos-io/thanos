@@ -2,7 +2,7 @@
 
 Status: draft | in-review | rejected | **accepted** | complete
 
-Implementation Owner: [@bplotka](https://github.com/Bplotka)
+Implementation Owner: [@bplotka](https://github.com/bwplotka)
 
 Ticket: https://github.com/improbable-eng/thanos/issues/484
 
