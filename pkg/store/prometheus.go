@@ -313,9 +313,14 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesR
 }
 
 // LabelValues returns all known label values for a given label name.
-func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequest) (
-	*storepb.LabelValuesResponse, error,
-) {
+func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequest) (*storepb.LabelValuesResponse, error) {
+	externalLset := p.externalLabels()
+
+	// First check for matching external label which has priority.
+	if l := externalLset.Get(r.Label); l != "" {
+		return &storepb.LabelValuesResponse{Values: []string{l}}, nil
+	}
+
 	u := *p.base
 	u.Path = path.Join(u.Path, "/api/v1/label/", r.Label, "/values")
 
