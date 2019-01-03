@@ -47,6 +47,7 @@ config:
   signature_version2: false
   encrypt_sse: false
   secret_key: ""
+  put_user_metadata: {}
   http_config:
     idle_conn_timeout: 0s
 ```

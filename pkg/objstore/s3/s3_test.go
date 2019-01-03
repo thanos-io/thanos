@@ -41,6 +41,23 @@ http_config:
   idle_conn_timeout: 0s`)
 	cfg, err := parseConfig(input)
 	testutil.Ok(t, err)
-
 	testutil.Ok(t, validate(cfg))
+	testutil.Assert(t, cfg.PutUserMetadata != nil, "map should not be nil")
+
+	input2 := []byte(`bucket: "bucket-name"
+endpoint: "s3-endpoint"
+access_key: "access_key"
+insecure: false
+signature_version2: false
+encrypt_sse: false
+secret_key: "secret_key"
+put_user_metadata: 
+  "X-Amz-Acl": "bucket-owner-full-control"
+http_config:
+  idle_conn_timeout: 0s`)
+	cfg2, err := parseConfig(input2)
+	testutil.Ok(t, err)
+	testutil.Ok(t, validate(cfg2))
+
+	testutil.Equals(t, "bucket-owner-full-control", cfg2.PutUserMetadata["X-Amz-Acl"])
 }
