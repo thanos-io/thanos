@@ -1,12 +1,11 @@
+// Package runutil provides helpers to advanced function scheduling control like repeat or retry.
 package runutil
 
 import (
+	"fmt"
+	"io"
 	"os"
 	"time"
-
-	"io"
-
-	"fmt"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
