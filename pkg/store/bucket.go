@@ -825,7 +825,7 @@ func (s *BucketStore) LabelNames(context.Context, *storepb.LabelNamesRequest) (*
 
 // LabelValues implements the storepb.StoreServer interface.
 func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesRequest) (*storepb.LabelValuesResponse, error) {
-	var g errgroup.Group
+	g, gctx := errgroup.WithContext(ctx)
 
 	s.mtx.RLock()
 
@@ -833,7 +833,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 	var sets [][]string
 
 	for _, b := range s.blocks {
-		indexr := b.indexReader(ctx)
+		indexr := b.indexReader(gctx)
 		// TODO(fabxc): only aggregate chunk metas first and add a subsequent fetch stage
 		// where we consolidate requests.
 		g.Go(func() error {

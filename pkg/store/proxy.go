@@ -96,7 +96,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 	var (
 		seriesSet []storepb.SeriesSet
 		respCh    = make(chan *storepb.SeriesResponse, len(stores)+1)
-		g         errgroup.Group
+		g, gctx   = errgroup.WithContext(srv.Context())
 	)
 
 	var storeDebugMsgs []string
@@ -111,37 +111,42 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		}
 		storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
 
-		sc, err := st.Series(srv.Context(), &storepb.SeriesRequest{
-			MinTime:             r.MinTime,
-			MaxTime:             r.MaxTime,
-			Matchers:            newMatchers,
-			Aggregates:          r.Aggregates,
-			MaxResolutionWindow: r.MaxResolutionWindow,
+		sc, err := st.Series(gctx, &storepb.SeriesRequest{
+			MinTime:                 r.MinTime,
+			MaxTime:                 r.MaxTime,
+			Matchers:                newMatchers,
+			Aggregates:              r.Aggregates,
+			MaxResolutionWindow:     r.MaxResolutionWindow,
+			PartialResponseDisabled: r.PartialResponseDisabled,
 		})
 		if err != nil {
-			storeID := fmt.Sprintf("%v", st.Labels())
+			storeID := fmt.Sprintf("%v", storepb.LabelsToString(st.Labels()))
 			if storeID == "" {
 				storeID = "Store Gateway"
 			}
-			err = errors.Wrapf(err, "fetch series for %s", storeID)
-			level.Error(s.logger).Log("err", err)
+			err = errors.Wrapf(err, "fetch series for %s %s", storeID, st)
+			if r.PartialResponseDisabled {
+				level.Error(s.logger).Log("err", err, "msg", "partial response disabled; aborting request")
+				return err
+			}
 			respCh <- storepb.NewWarnSeriesResponse(err)
 			continue
 		}
 
 		seriesSet = append(seriesSet, startStreamSeriesSet(sc, respCh, 10))
 	}
-	if len(seriesSet) == 0 {
-		err := errors.New("No store matched for this query")
-		level.Warn(s.logger).Log("err", err, "stores", strings.Join(storeDebugMsgs, ";"))
-		respCh <- storepb.NewWarnSeriesResponse(err)
-		return nil
-	}
 
 	level.Debug(s.logger).Log("msg", strings.Join(storeDebugMsgs, ";"))
-
 	g.Go(func() error {
 		defer close(respCh)
+
+		if len(seriesSet) == 0 {
+			// This is indicates that configured StoreAPIs are not the ones end user expects
+			err := errors.New("No store matched for this query")
+			level.Warn(s.logger).Log("err", err, "stores", strings.Join(storeDebugMsgs, ";"))
+			respCh <- storepb.NewWarnSeriesResponse(err)
+			return nil
+		}
 
 		mergedSet := storepb.MergeSeriesSets(seriesSet...)
 		for mergedSet.Next() {
@@ -266,24 +271,30 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		warnings []string
 		all      [][]string
 		mtx      sync.Mutex
-		wg       sync.WaitGroup
+		g, gctx  = errgroup.WithContext(ctx)
 	)
+
 	stores, err := s.stores(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Unknown, err.Error())
 	}
 	for _, st := range stores {
-		wg.Add(1)
-		go func(s Client) {
-			defer wg.Done()
-			resp, err := s.LabelValues(ctx, &storepb.LabelValuesRequest{
+		store := st
+		g.Go(func() error {
+			resp, err := store.LabelValues(gctx, &storepb.LabelValuesRequest{
 				Label: r.Label,
+				PartialResponseDisabled: r.PartialResponseDisabled,
 			})
 			if err != nil {
+				err = errors.Wrapf(err, "fetch label values from store %s", store)
+				if r.PartialResponseDisabled {
+					return err
+				}
+
 				mtx.Lock()
 				warnings = append(warnings, errors.Wrap(err, "fetch label values").Error())
 				mtx.Unlock()
-				return
+				return nil
 			}
 
 			mtx.Lock()
@@ -291,11 +302,14 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 			all = append(all, resp.Values)
 			mtx.Unlock()
 
-			return
-		}(st)
+			return nil
+		})
 	}
 
-	wg.Wait()
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
 	return &storepb.LabelValuesResponse{
 		Values:   strutil.MergeUnsortedSlices(all...),
 		Warnings: warnings,

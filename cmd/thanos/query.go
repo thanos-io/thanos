@@ -83,6 +83,9 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified. ").
 		Default("false").Bool()
 
+	enablePartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified.").
+		Default("true").Bool()
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		peer, err := newPeerFn(logger, reg, true, *httpAdvertiseAddr, true)
 		if err != nil {
@@ -133,6 +136,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			selectorLset,
 			*stores,
 			*enableAutodownsampling,
+			*enablePartialResponse,
 			fileSD,
 			time.Duration(*dnsSDInterval),
 		)
@@ -244,6 +248,7 @@ func runQuery(
 	selectorLset labels.Labels,
 	storeAddrs []string,
 	enableAutodownsampling bool,
+	enablePartialResponse bool,
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
 ) error {
@@ -372,7 +377,7 @@ func runQuery(
 		router := route.New()
 		ui.NewQueryUI(logger, stores, nil).Register(router)
 
-		api := v1.NewAPI(logger, reg, engine, queryableCreator, enableAutodownsampling)
+		api := v1.NewAPI(logger, reg, engine, queryableCreator, enableAutodownsampling, enablePartialResponse)
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger)
 
 		router.Get("/-/healthy", func(w http.ResponseWriter, r *http.Request) {

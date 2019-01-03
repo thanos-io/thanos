@@ -104,6 +104,7 @@ type API struct {
 	instantQueryDuration   prometheus.Histogram
 	rangeQueryDuration     prometheus.Histogram
 	enableAutodownsampling bool
+	enablePartialResponse  bool
 	now                    func() time.Time
 }
 
@@ -114,6 +115,7 @@ func NewAPI(
 	qe *promql.Engine,
 	c query.QueryableCreator,
 	enableAutodownsampling bool,
+	enablePartialResponse bool,
 ) *API {
 	instantQueryDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name: "thanos_query_api_instant_query_duration_seconds",
@@ -141,6 +143,8 @@ func NewAPI(
 		instantQueryDuration:   instantQueryDuration,
 		rangeQueryDuration:     rangeQueryDuration,
 		enableAutodownsampling: enableAutodownsampling,
+		enablePartialResponse:  enablePartialResponse,
+
 		now: time.Now,
 	}
 }
@@ -174,7 +178,60 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 type queryData struct {
 	ResultType promql.ValueType `json:"resultType"`
 	Result     promql.Value     `json:"result"`
-	Warnings   []error          `json:"warnings,omitempty"`
+
+	// Additional Thanos Response field.
+	Warnings []error `json:"warnings,omitempty"`
+}
+
+func (api *API) parseEnableDedupParam(r *http.Request) (enableDeduplication bool, _ *apiError) {
+	const dedupParam = "dedup"
+	enableDeduplication = true
+
+	if val := r.FormValue(dedupParam); val != "" {
+		var err error
+		enableDeduplication, err = strconv.ParseBool(val)
+		if err != nil {
+			return false, &apiError{errorBadData, errors.Wrapf(err, "'%s' parameter", dedupParam)}
+		}
+	}
+	return enableDeduplication, nil
+}
+
+func (api *API) parseDownsamplingParam(r *http.Request, step time.Duration) (maxSourceResolution time.Duration, _ *apiError) {
+	const maxSourceResolutionParam = "max_source_resolution"
+	maxSourceResolution = 0 * time.Second
+
+	if api.enableAutodownsampling {
+		// If no max_source_resolution is specified fit at least 5 samples between steps.
+		maxSourceResolution = step / 5
+	}
+	if val := r.FormValue(maxSourceResolutionParam); val != "" {
+		var err error
+		maxSourceResolution, err = parseDuration(val)
+		if err != nil {
+			return 0, &apiError{errorBadData, errors.Wrapf(err, "'%s' parameter", maxSourceResolutionParam)}
+		}
+	}
+
+	if maxSourceResolution < 0 {
+		return 0, &apiError{errorBadData, errors.Errorf("negative '%s' is not accepted. Try a positive integer", maxSourceResolutionParam)}
+	}
+
+	return maxSourceResolution, nil
+}
+
+func (api *API) parsePartialResponseParam(r *http.Request) (enablePartialResponse bool, _ *apiError) {
+	const partialResponseParam = "partial_response"
+	enablePartialResponse = api.enablePartialResponse
+
+	if val := r.FormValue(partialResponseParam); val != "" {
+		var err error
+		enablePartialResponse, err = strconv.ParseBool(val)
+		if err != nil {
+			return false, &apiError{errorBadData, errors.Wrapf(err, "'%s' parameter", partialResponseParam)}
+		}
+	}
+	return enablePartialResponse, nil
 }
 
 func (api *API) options(r *http.Request) (interface{}, []error, *apiError) {
@@ -205,24 +262,24 @@ func (api *API) query(r *http.Request) (interface{}, []error, *apiError) {
 		defer cancel()
 	}
 
+	enableDedup, apiErr := api.parseEnableDedupParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
+	enablePartialResponse, apiErr := api.parsePartialResponseParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
 	var (
-		warnmtx             sync.Mutex
-		warnings            []error
-		enableDeduplication = true
+		warnmtx  sync.Mutex
+		warnings []error
 	)
-	partialErrReporter := func(err error) {
+	warningReporter := func(err error) {
 		warnmtx.Lock()
 		warnings = append(warnings, err)
 		warnmtx.Unlock()
-	}
-
-	// Allow disabling deduplication on demand.
-	if dedup := r.FormValue("dedup"); dedup != "" {
-		var err error
-		enableDeduplication, err = strconv.ParseBool(dedup)
-		if err != nil {
-			return nil, nil, &apiError{errorBadData, errors.Wrap(err, "'dedup' parameter")}
-		}
 	}
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
@@ -230,7 +287,7 @@ func (api *API) query(r *http.Request) (interface{}, []error, *apiError) {
 	defer span.Finish()
 
 	begin := api.now()
-	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDeduplication, 0, partialErrReporter), r.FormValue("query"), ts)
+	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDedup, 0, enablePartialResponse, warningReporter), r.FormValue("query"), ts)
 	if err != nil {
 		return nil, nil, &apiError{errorBadData, err}
 	}
@@ -279,29 +336,13 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *apiError) {
 		return nil, nil, &apiError{errorBadData, err}
 	}
 
-	maxSourceResolution := 0 * time.Second
-	if api.enableAutodownsampling {
-		// If no max_source_resolution is specified fit at least 5 samples between steps.
-		maxSourceResolution = step / 5
-	}
-	if val := r.FormValue("max_source_resolution"); val != "" {
-		maxSourceResolution, err = parseDuration(val)
-		if err != nil {
-			return nil, nil, &apiError{errorBadData, errors.Wrap(err, "param max_source_resolution")}
-		}
-	}
-
-	if maxSourceResolution < 0 {
-		err := errors.New("negative query max source resolution is not accepted. Try a positive integer")
-		return nil, nil, &apiError{errorBadData, err}
-	}
-
 	// For safety, limit the number of returned points per timeseries.
 	// This is sufficient for 60s resolution for a week or 1h resolution for a year.
 	if end.Sub(start)/step > 11000 {
-		err := errors.New("exceeded maximum resolution of 11,000 points per timeseries. Try decreasing the query resolution (?step=XX)")
+		err := errors.Errorf("exceeded maximum resolution of 11,000 points per timeseries. Try decreasing the query resolution (?step=XX)")
 		return nil, nil, &apiError{errorBadData, err}
 	}
+
 	ctx := r.Context()
 	if to := r.FormValue("timeout"); to != "" {
 		var cancel context.CancelFunc
@@ -314,24 +355,29 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *apiError) {
 		defer cancel()
 	}
 
+	enableDedup, apiErr := api.parseEnableDedupParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
+	maxSourceResolution, apiErr := api.parseDownsamplingParam(r, step)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
+	enablePartialResponse, apiErr := api.parsePartialResponseParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
 	var (
-		warnmtx             sync.Mutex
-		warnings            []error
-		enableDeduplication = true
+		warnmtx  sync.Mutex
+		warnings []error
 	)
-	partialErrReporter := func(err error) {
+	warningReporter := func(err error) {
 		warnmtx.Lock()
 		warnings = append(warnings, err)
 		warnmtx.Unlock()
-	}
-
-	// Allow disabling deduplication on demand.
-	if dedup := r.FormValue("dedup"); dedup != "" {
-		var err error
-		enableDeduplication, err = strconv.ParseBool(dedup)
-		if err != nil {
-			return nil, nil, &apiError{errorBadData, errors.Wrap(err, "'dedup' parameter")}
-		}
 	}
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
@@ -340,7 +386,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *apiError) {
 
 	begin := api.now()
 	qry, err := api.queryEngine.NewRangeQuery(
-		api.queryableCreate(enableDeduplication, maxSourceResolution, partialErrReporter),
+		api.queryableCreate(enableDedup, maxSourceResolution, enablePartialResponse, warningReporter),
 		r.FormValue("query"),
 		start,
 		end,
@@ -376,17 +422,22 @@ func (api *API) labelValues(r *http.Request) (interface{}, []error, *apiError) {
 		return nil, nil, &apiError{errorBadData, fmt.Errorf("invalid label name: %q", name)}
 	}
 
+	enablePartialResponse, apiErr := api.parsePartialResponseParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
 	var (
 		warnmtx  sync.Mutex
 		warnings []error
 	)
-	partialErrReporter := func(err error) {
+	warningReporter := func(err error) {
 		warnmtx.Lock()
 		warnings = append(warnings, err)
 		warnmtx.Unlock()
 	}
 
-	q, err := api.queryableCreate(true, 0, partialErrReporter).Querier(ctx, math.MinInt64, math.MaxInt64)
+	q, err := api.queryableCreate(true, 0, enablePartialResponse, warningReporter).Querier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, nil, &apiError{errorExec, err}
 	}
@@ -447,27 +498,28 @@ func (api *API) series(r *http.Request) (interface{}, []error, *apiError) {
 		matcherSets = append(matcherSets, matchers)
 	}
 
+	enableDedup, apiErr := api.parseEnableDedupParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
+	enablePartialResponse, apiErr := api.parsePartialResponseParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
 	var (
-		warnmtx             sync.Mutex
-		warnings            []error
-		enableDeduplication = true
+		warnmtx  sync.Mutex
+		warnings []error
 	)
-	partialErrReporter := func(err error) {
+	warningReporter := func(err error) {
 		warnmtx.Lock()
 		warnings = append(warnings, err)
 		warnmtx.Unlock()
 	}
 
-	// Allow disabling deduplication on demand.
-	if dedup := r.FormValue("dedup"); dedup != "" {
-		var err error
-		enableDeduplication, err = strconv.ParseBool(dedup)
-		if err != nil {
-			return nil, nil, &apiError{errorBadData, errors.Wrap(err, "'dedup' parameter")}
-		}
-	}
-
-	q, err := api.queryableCreate(enableDeduplication, 0, partialErrReporter).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
+	// TODO(bwplotka): Support downsampling?
+	q, err := api.queryableCreate(enableDedup, 0, enablePartialResponse, warningReporter).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &apiError{errorExec, err}
 	}

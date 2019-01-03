@@ -144,8 +144,8 @@ input[name="end_input"], input[name="range_input"] {
   border-radius: 0;
 }
 
-.dedup_btn {
-  margin-left: 8px;
+.graph_opt_btn {
+  margin-left: 7px;
 }
 
 .prometheus_input_group {
