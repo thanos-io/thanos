@@ -21,7 +21,7 @@ spec:
       containers:
       - name: thanos-store
         # Always use explicit image tags (release or master-<date>-sha) instead of ambigous `latest` or `master`.
-        image: improbable/thanos:v0.1.0
+        image: improbable/thanos:v0.2.1
         env:
         - name: GOOGLE_APPLICATION_CREDENTIALS
           value: /creds/gcs-credentials.json
