@@ -9,6 +9,8 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/improbable-eng/thanos/pkg/extprom"
@@ -64,6 +66,9 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 
 	replicaLabel := cmd.Flag("query.replica-label", "Label to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter.").
 		String()
+
+	replicaPriority := cmd.Flag("query.replica-priority", "Replica label value and priority pairs for finer control over deduplication (repeated). Ignored if deduplication is disable or query.replica-label is omitted.").
+		PlaceHolder("<value>,<priority>").Strings()
 
 	selectorLabels := cmd.Flag("selector-label", "Query selector labels that will be exposed in info endpoint (repeated).").
 		PlaceHolder("<name>=\"<value>\"").Strings()
@@ -132,6 +137,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*maxConcurrentQueries,
 			time.Duration(*queryTimeout),
 			*replicaLabel,
+			*replicaPriority,
 			peer,
 			selectorLset,
 			*stores,
@@ -244,6 +250,7 @@ func runQuery(
 	maxConcurrentQueries int,
 	queryTimeout time.Duration,
 	replicaLabel string,
+	replicaPriority []string,
 	peer cluster.Peer,
 	selectorLset labels.Labels,
 	storeAddrs []string,
@@ -265,6 +272,19 @@ func runQuery(
 
 	fileSDCache := cache.New()
 	dnsProvider := dns.NewProvider(logger, extprom.NewSubsystem(reg, "query_store_api"))
+
+	replicaPriorities := map[string]int{}
+	for _, priority := range replicaPriority {
+		parts := strings.Split(priority, ",")
+		if len(parts) != 2 {
+			return fmt.Errorf("malformed query.replica-priority parameter: %s", priority)
+		}
+		intPriority, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return errors.Wrap(err, fmt.Sprintf("malformed query.replica-priority parameter: %s", priority))
+		}
+		replicaPriorities[parts[0]] = intPriority
+	}
 
 	var (
 		stores = query.NewStoreSet(
@@ -295,7 +315,7 @@ func runQuery(
 		proxy = store.NewProxyStore(logger, func(context.Context) ([]store.Client, error) {
 			return stores.Get(), nil
 		}, selectorLset)
-		queryableCreator = query.NewQueryableCreator(logger, proxy, replicaLabel)
+		queryableCreator = query.NewQueryableCreator(logger, proxy, replicaLabel, replicaPriorities)
 		engine           = promql.NewEngine(logger, reg, maxConcurrentQueries, queryTimeout)
 	)
 	// Periodically update the store set with the addresses we see in our cluster.

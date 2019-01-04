@@ -33,7 +33,7 @@ func TestQuerier_Series(t *testing.T) {
 
 	// Querier clamps the range to [1,300], which should drop some samples of the result above.
 	// The store API allows endpoints to send more data then initially requested.
-	q := newQuerier(context.Background(), nil, 1, 300, "", testProxy, false, 0, true, nil)
+	q := newQuerier(context.Background(), nil, 1, 300, "", nil, testProxy, false, 0, true, nil)
 	defer func() { testutil.Ok(t, q.Close()) }()
 
 	res, err := q.Select(&storage.SelectParams{})
@@ -77,56 +77,128 @@ func TestQuerier_Series(t *testing.T) {
 func TestSortReplicaLabel(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
-	set := []storepb.Series{
-		{Labels: []storepb.Label{
-			{Name: "a", Value: "1"},
-			{Name: "b", Value: "replica-1"},
-			{Name: "c", Value: "3"},
-		}},
-		{Labels: []storepb.Label{
-			{Name: "a", Value: "1"},
-			{Name: "b", Value: "replica-1"},
-			{Name: "c", Value: "3"},
-			{Name: "d", Value: "4"},
-		}},
-		{Labels: []storepb.Label{
-			{Name: "a", Value: "1"},
-			{Name: "b", Value: "replica-1"},
-			{Name: "c", Value: "4"},
-		}},
-		{Labels: []storepb.Label{
-			{Name: "a", Value: "1"},
-			{Name: "b", Value: "replica-2"},
-			{Name: "c", Value: "3"},
-		}},
+	input := []struct {
+		replicaLabel string
+		priorities   map[string]int
+		exp          []storepb.Series
+	}{
+		{
+			replicaLabel: "b",
+			priorities:   nil,
+			exp: []storepb.Series{
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "3"},
+					{Name: "b", Value: "replica-1"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "3"},
+					{Name: "b", Value: "replica-2"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "3"},
+					{Name: "b", Value: "replica-3"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "3"},
+					{Name: "d", Value: "4"},
+					{Name: "b", Value: "replica-1"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "4"},
+					{Name: "b", Value: "replica-1"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "4"},
+					{Name: "b", Value: "replica-3"},
+				}},
+			},
+		},
+		{
+			replicaLabel: "b",
+			priorities: map[string]int{
+				"replica-1": 100,
+				"replica-2": 50,
+				"replica-3": 150,
+			},
+			exp: []storepb.Series{
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "3"},
+					{Name: "b", Value: "replica-3"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "3"},
+					{Name: "b", Value: "replica-1"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "3"},
+					{Name: "b", Value: "replica-2"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "3"},
+					{Name: "d", Value: "4"},
+					{Name: "b", Value: "replica-1"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "4"},
+					{Name: "b", Value: "replica-3"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "4"},
+					{Name: "b", Value: "replica-1"},
+				}},
+			},
+		},
 	}
 
-	sortDedupLabels(set, "b")
-
-	exp := []storepb.Series{
-		{Labels: []storepb.Label{
-			{Name: "a", Value: "1"},
-			{Name: "c", Value: "3"},
-			{Name: "b", Value: "replica-1"},
-		}},
-		{Labels: []storepb.Label{
-			{Name: "a", Value: "1"},
-			{Name: "c", Value: "3"},
-			{Name: "b", Value: "replica-2"},
-		}},
-		{Labels: []storepb.Label{
-			{Name: "a", Value: "1"},
-			{Name: "c", Value: "3"},
-			{Name: "d", Value: "4"},
-			{Name: "b", Value: "replica-1"},
-		}},
-		{Labels: []storepb.Label{
-			{Name: "a", Value: "1"},
-			{Name: "c", Value: "4"},
-			{Name: "b", Value: "replica-1"},
-		}},
+	for _, c := range input {
+		set := []storepb.Series{
+			{Labels: []storepb.Label{
+				{Name: "a", Value: "1"},
+				{Name: "b", Value: "replica-1"},
+				{Name: "c", Value: "3"},
+			}},
+			{Labels: []storepb.Label{
+				{Name: "a", Value: "1"},
+				{Name: "b", Value: "replica-1"},
+				{Name: "c", Value: "3"},
+				{Name: "d", Value: "4"},
+			}},
+			{Labels: []storepb.Label{
+				{Name: "a", Value: "1"},
+				{Name: "b", Value: "replica-3"},
+				{Name: "c", Value: "4"},
+			}},
+			{Labels: []storepb.Label{
+				{Name: "a", Value: "1"},
+				{Name: "b", Value: "replica-1"},
+				{Name: "c", Value: "4"},
+			}},
+			{Labels: []storepb.Label{
+				{Name: "b", Value: "replica-3"},
+				{Name: "a", Value: "1"},
+				{Name: "c", Value: "3"},
+			}},
+			{Labels: []storepb.Label{
+				{Name: "a", Value: "1"},
+				{Name: "b", Value: "replica-2"},
+				{Name: "c", Value: "3"},
+			}},
+		}
+		sortDedupLabels(set, c.replicaLabel, c.priorities)
+		testutil.Equals(t, c.exp, set)
 	}
-	testutil.Equals(t, exp, set)
 }
 
 func expandSeries(t testing.TB, it storage.SeriesIterator) (res []sample) {
@@ -215,7 +287,7 @@ func TestDedupSeriesSet(t *testing.T) {
 		maxt: math.MaxInt64,
 		set:  newStoreSeriesSet(series),
 	}
-	dedupSet := newDedupSeriesSet(set, "replica")
+	dedupSet := newDedupSeriesSet(set, "replica", nil)
 
 	i := 0
 	for dedupSet.Next() {
@@ -235,7 +307,8 @@ func TestDedupSeriesIterator(t *testing.T) {
 	// by the initial penalty of 5000, that will cause the second iterator to seek
 	// ahead this far at least once.
 	cases := []struct {
-		a, b, exp []sample
+		a, b, exp            []sample
+		aPriority, bPriority int
 	}{
 		{ // Generally prefer the first series.
 			a:   []sample{{10000, 10}, {20000, 11}, {30000, 12}, {40000, 13}},
@@ -262,12 +335,29 @@ func TestDedupSeriesIterator(t *testing.T) {
 			b:   []sample{{10100, 2}, {20100, 2}, {30100, 2}, {40100, 2}, {50100, 2}, {60100, 2}},
 			exp: []sample{{10000, 1}, {20000, 1}, {30000, 1}, {50100, 2}, {60100, 2}},
 		},
+		{ // Prefer the second series if its priority is higher
+			a:         []sample{{10000, 10}, {20000, 11}, {30000, 12}, {40000, 13}},
+			b:         []sample{{10000, 20}, {20000, 21}, {30000, 22}, {40000, 23}},
+			exp:       []sample{{10000, 20}, {20000, 21}, {30000, 22}, {40000, 23}},
+			aPriority: 0,
+			bPriority: 1,
+		},
+		{
+			// Prefer the higher priority series, falling back to the lower priority when there's
+			// gaps and then reverting back to the higher priority again once it returns.
+			a:         []sample{{10000, 1}, {20000, 1}, {30000, 1}, {60000, 1}, {70000, 1}},
+			b:         []sample{{10100, 2}, {20100, 2}, {30100, 2}, {40100, 2}, {50100, 2}, {60100, 2}},
+			exp:       []sample{{10000, 1}, {20000, 1}, {30000, 1}, {40100, 2}, {60000, 1}, {70000, 1}},
+			aPriority: 10,
+			bPriority: 5,
+		},
 	}
 	for i, c := range cases {
 		t.Logf("case %d:", i)
 		it := newDedupSeriesIterator(
 			&SampleIterator{l: c.a, i: -1},
 			&SampleIterator{l: c.b, i: -1},
+			c.aPriority, c.bPriority,
 		)
 		res := expandSeries(t, it)
 		testutil.Equals(t, c.exp, res)
@@ -279,6 +369,7 @@ func BenchmarkDedupSeriesIterator(b *testing.B) {
 		it := newDedupSeriesIterator(
 			&SampleIterator{l: s1, i: -1},
 			&SampleIterator{l: s2, i: -1},
+			MinInt, MinInt,
 		)
 		b.ResetTimer()
 		var total int64

@@ -12,6 +12,11 @@ import (
 	"github.com/prometheus/tsdb/chunkenc"
 )
 
+// Minimum two's complement int
+// ^uint(0) >> 1 gives all 1s except the sign bit (ie: maximum two's complement int),
+// then convert to int, negate, and sub 1 to get the minimum signed int val for this machine.
+const MinInt = -int(^uint(0)>>1) - 1
+
 // promSeriesSet implements the SeriesSet interface of the Prometheus storage
 // package on top of our storepb SeriesSet.
 type promSeriesSet struct {
@@ -292,17 +297,18 @@ func (it *chunkSeriesIterator) Err() error {
 }
 
 type dedupSeriesSet struct {
-	set          storage.SeriesSet
-	replicaLabel string
+	set               storage.SeriesSet
+	replicaLabel      string
+	replicaPriorities map[string]int
 
-	replicas []storage.Series
+	replicas []seriesWithPriority
 	lset     labels.Labels
 	peek     storage.Series
 	ok       bool
 }
 
-func newDedupSeriesSet(set storage.SeriesSet, replicaLabel string) storage.SeriesSet {
-	s := &dedupSeriesSet{set: set, replicaLabel: replicaLabel}
+func newDedupSeriesSet(set storage.SeriesSet, replicaLabel string, replicaPriorities map[string]int) storage.SeriesSet {
+	s := &dedupSeriesSet{set: set, replicaLabel: replicaLabel, replicaPriorities: replicaPriorities}
 	s.ok = s.set.Next()
 	if s.ok {
 		s.peek = s.set.At()
@@ -317,7 +323,11 @@ func (s *dedupSeriesSet) Next() bool {
 	// Set the label set we are currently gathering to the peek element
 	// without the replica label if it exists.
 	s.lset = s.peekLset()
-	s.replicas = append(s.replicas[:0], s.peek)
+
+	s.replicas = append(s.replicas[:0], seriesWithPriority{
+		Series:   s.peek,
+		priority: getPriority(s.replicaPriorities, s.peekReplicaLabel()),
+	})
 	return s.next()
 }
 
@@ -329,6 +339,15 @@ func (s *dedupSeriesSet) peekLset() labels.Labels {
 		return lset
 	}
 	return lset[:len(lset)-1]
+}
+
+// peekReplicaLabel returns the replica label if it exists, else nil.
+func (s *dedupSeriesSet) peekReplicaLabel() *labels.Label {
+	lset := s.peek.Labels()
+	if lset[len(lset)-1].Name != s.replicaLabel {
+		return nil
+	}
+	return &lset[len(lset)-1]
 }
 
 func (s *dedupSeriesSet) next() bool {
@@ -346,7 +365,10 @@ func (s *dedupSeriesSet) next() bool {
 	if !labels.Equal(s.lset, nextLset) {
 		return true
 	}
-	s.replicas = append(s.replicas, s.peek)
+	s.replicas = append(s.replicas, seriesWithPriority{
+		Series:   s.peek,
+		priority: getPriority(s.replicaPriorities, s.peekReplicaLabel()),
+	})
 	return s.next()
 }
 
@@ -356,13 +378,18 @@ func (s *dedupSeriesSet) At() storage.Series {
 	}
 	// Clients may store the series, so we must make a copy of the slice
 	// before advancing.
-	repl := make([]storage.Series, len(s.replicas))
+	repl := make([]seriesWithPriority, len(s.replicas))
 	copy(repl, s.replicas)
 	return newDedupSeries(s.lset, repl...)
 }
 
 func (s *dedupSeriesSet) Err() error {
 	return s.set.Err()
+}
+
+type seriesWithPriority struct {
+	storage.Series
+	priority int
 }
 
 type seriesWithLabels struct {
@@ -374,10 +401,10 @@ func (s seriesWithLabels) Labels() labels.Labels { return s.lset }
 
 type dedupSeries struct {
 	lset     labels.Labels
-	replicas []storage.Series
+	replicas []seriesWithPriority
 }
 
-func newDedupSeries(lset labels.Labels, replicas ...storage.Series) *dedupSeries {
+func newDedupSeries(lset labels.Labels, replicas ...seriesWithPriority) *dedupSeries {
 	return &dedupSeries{lset: lset, replicas: replicas}
 }
 
@@ -387,45 +414,60 @@ func (s *dedupSeries) Labels() labels.Labels {
 
 func (s *dedupSeries) Iterator() (it storage.SeriesIterator) {
 	it = s.replicas[0].Iterator()
+	itPriority := s.replicas[0].priority
 	for _, o := range s.replicas[1:] {
-		it = newDedupSeriesIterator(it, o.Iterator())
+		it = newDedupSeriesIterator(it, o.Iterator(), itPriority, o.priority)
+		itPriority = o.priority
 	}
 	return it
 }
 
 type dedupSeriesIterator struct {
-	a, b storage.SeriesIterator
-	i    int
+	a, b                 storage.SeriesIterator
+	aPriority, bPriority int
+	i                    int
 
-	aok, bok   bool
-	lastT      int64
-	penA, penB int64
-	useA       bool
+	aok, bok       bool
+	lastT          int64
+	lastAT, lastBT int64
+	penA, penB     int64
+	useA           bool
 }
 
-func newDedupSeriesIterator(a, b storage.SeriesIterator) *dedupSeriesIterator {
+func newDedupSeriesIterator(a, b storage.SeriesIterator, aPriority, bPriority int) *dedupSeriesIterator {
 	return &dedupSeriesIterator{
-		a:     a,
-		b:     b,
-		lastT: math.MinInt64,
-		aok:   true,
-		bok:   true,
+		a:         a,
+		b:         b,
+		aPriority: aPriority,
+		bPriority: bPriority,
+		lastT:     math.MinInt64,
+		lastAT:    math.MinInt64,
+		lastBT:    math.MinInt64,
+		aok:       true,
+		bok:       true,
 	}
 }
 
 func (it *dedupSeriesIterator) Next() bool {
 	// Advance both iterators to at least the next highest timestamp plus the potential penalty.
+	// Avoid seeking if we're working with priorities and the data is still within an acceptable
+	// time range.
 	if it.aok {
-		it.aok = it.a.Seek(it.lastT + 1 + it.penA)
+		if it.aPriority == it.bPriority || it.lastAT == math.MinInt64 || it.lastAT-it.penA/2 <= it.lastT {
+			it.aok = it.a.Seek(it.lastT + 1 + it.penA)
+		}
 	}
 	if it.bok {
-		it.bok = it.b.Seek(it.lastT + 1 + it.penB)
+		if it.aPriority == it.bPriority || it.lastBT == math.MinInt64 || it.lastBT-it.penB/2 <= it.lastT {
+			it.bok = it.b.Seek(it.lastT + 1 + it.penB)
+		}
 	}
 	// Handle basic cases where one iterator is exhausted before the other.
 	if !it.aok {
 		it.useA = false
 		if it.bok {
 			it.lastT, _ = it.b.At()
+			it.lastBT = it.lastT
 			it.penB = 0
 		}
 		return it.bok
@@ -433,26 +475,45 @@ func (it *dedupSeriesIterator) Next() bool {
 	if !it.bok {
 		it.useA = true
 		it.lastT, _ = it.a.At()
+		it.lastAT = it.lastT
 		it.penA = 0
 		return true
 	}
-	// General case where both iterators still have data. We pick the one
-	// with the smaller timestamp.
+
+	// General case where both iterators still have data.
 	// The applied penalty potentially already skipped potential samples already
 	// that would have resulted in exaggerated sampling frequency.
+	// We first check timestamps to see which series has the freshest data.
+	// If both series have fresh data, prefer the higher priority.
+	// If one series has fresh data and the other doesn't, fallback to the lower priority until
+	// the higher priority is considered fresh again. The penalty is used to determine freshness.
 	ta, _ := it.a.At()
 	tb, _ := it.b.At()
 
-	it.useA = ta <= tb
+	// If we don't know a delta yet, we pick 5000 as a constant, which is based on the knowledge
+	// that timestamps are in milliseconds and sampling frequencies typically multiple seconds long.
+	const initialPenality = 5000
+
+	abDelta := int64(math.Abs(float64(ta - tb)))
+	penaltySum := it.penA + it.penB
+	if penaltySum == 0 {
+		penaltySum = initialPenality
+	}
+	if it.aPriority != it.bPriority && abDelta <= penaltySum/2 {
+		it.useA = it.aPriority > it.bPriority
+	} else {
+		it.useA = ta <= tb
+	}
+
+	// Update the last timestamps for each series
+	it.lastAT = ta
+	it.lastBT = tb
 
 	// For the series we didn't pick, add a penalty twice as high as the delta of the last two
 	// samples to the next seek against it.
 	// This ensures that we don't pick a sample too close, which would increase the overall
 	// sample frequency. It also guards against clock drift and inaccuracies during
 	// timestamp assignment.
-	// If we don't know a delta yet, we pick 5000 as a constant, which is based on the knowledge
-	// that timestamps are in milliseconds and sampling frequencies typically multiple seconds long.
-	const initialPenality = 5000
 
 	if it.useA {
 		if it.lastT != math.MinInt64 {
@@ -498,4 +559,20 @@ func (it *dedupSeriesIterator) Err() error {
 		return it.a.Err()
 	}
 	return it.b.Err()
+}
+
+func getPriority(priorities map[string]int, label *labels.Label) int {
+	var priority int
+	var ok bool
+
+	if label == nil {
+		return MinInt
+	}
+
+	priority, ok = priorities[label.Value]
+	if !ok {
+		// Ensure that this replica has the lowest possible priority since none was provided.
+		priority = MinInt
+	}
+	return priority
 }

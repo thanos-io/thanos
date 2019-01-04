@@ -29,11 +29,12 @@ type WarningReporter func(error)
 type QueryableCreator func(deduplicate bool, maxSourceResolution time.Duration, partialResponse bool, r WarningReporter) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
-func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLabel string) QueryableCreator {
+func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLabel string, replicaPriorities map[string]int) QueryableCreator {
 	return func(deduplicate bool, maxSourceResolution time.Duration, partialResponse bool, r WarningReporter) storage.Queryable {
 		return &queryable{
 			logger:              logger,
 			replicaLabel:        replicaLabel,
+			replicaPriorities:   replicaPriorities,
 			proxy:               proxy,
 			deduplicate:         deduplicate,
 			maxSourceResolution: maxSourceResolution,
@@ -46,6 +47,7 @@ func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLa
 type queryable struct {
 	logger              log.Logger
 	replicaLabel        string
+	replicaPriorities   map[string]int
 	proxy               storepb.StoreServer
 	deduplicate         bool
 	maxSourceResolution time.Duration
@@ -55,7 +57,7 @@ type queryable struct {
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabel, q.proxy, q.deduplicate, int64(q.maxSourceResolution/time.Millisecond), q.partialResponse, q.warningReporter), nil
+	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabel, q.replicaPriorities, q.proxy, q.deduplicate, int64(q.maxSourceResolution/time.Millisecond), q.partialResponse, q.warningReporter), nil
 }
 
 type querier struct {
@@ -64,6 +66,7 @@ type querier struct {
 	cancel              func()
 	mint, maxt          int64
 	replicaLabel        string
+	replicaPriorities   map[string]int
 	proxy               storepb.StoreServer
 	deduplicate         bool
 	maxSourceResolution int64
@@ -78,6 +81,7 @@ func newQuerier(
 	logger log.Logger,
 	mint, maxt int64,
 	replicaLabel string,
+	replicaPriorities map[string]int,
 	proxy storepb.StoreServer,
 	deduplicate bool,
 	maxSourceResolution int64,
@@ -98,6 +102,7 @@ func newQuerier(
 		mint:                mint,
 		maxt:                maxt,
 		replicaLabel:        replicaLabel,
+		replicaPriorities:   replicaPriorities,
 		proxy:               proxy,
 		deduplicate:         deduplicate,
 		maxSourceResolution: maxSourceResolution,
@@ -208,7 +213,7 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 
 	// TODO(fabxc): this could potentially pushed further down into the store API
 	// to make true streaming possible.
-	sortDedupLabels(resp.seriesSet, q.replicaLabel)
+	sortDedupLabels(resp.seriesSet, q.replicaLabel, q.replicaPriorities)
 
 	set := promSeriesSet{
 		mint: q.mint,
@@ -219,15 +224,15 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 
 	// The merged series set assembles all potentially-overlapping time ranges
 	// of the same series into a single one. The series are ordered so that equal series
-	// from different replicas are sequential. We can now deduplicate those.
-	return newDedupSeriesSet(set, q.replicaLabel), nil
+	// from different replicas are sequential and ordered by priority. We can now deduplicate those.
+	return newDedupSeriesSet(set, q.replicaLabel, q.replicaPriorities), nil
 }
 
 // sortDedupLabels resorts the set so that the same series with different replica
 // labels are coming right after each other.
-func sortDedupLabels(set []storepb.Series, replicaLabel string) {
+func sortDedupLabels(set []storepb.Series, replicaLabel string, replicaPriorities map[string]int) {
+	// Move the replica label to the very end so we can reliably operate on it.
 	for _, s := range set {
-		// Move the replica label to the very end.
 		sort.Slice(s.Labels, func(i, j int) bool {
 			if s.Labels[i].Name == replicaLabel {
 				return false
@@ -238,10 +243,61 @@ func sortDedupLabels(set []storepb.Series, replicaLabel string) {
 			return s.Labels[i].Name < s.Labels[j].Name
 		})
 	}
-	// With the re-ordered label sets, re-sorting all series aligns the same series
-	// from different replicas sequentially.
+
+	// Sort by labels (including replica label) first.
+	// This correctly sorts the set for the base case (where there are no priorities).
+	// If there are no priorities for anything, then the remaining sort.SliceStable calls after this
+	// will make no swaps and consequently run in O(n) anyway, so the performance impact of
+	// these extra sorts is minimal.
 	sort.Slice(set, func(i, j int) bool {
 		return storepb.CompareLabels(set[i].Labels, set[j].Labels) < 0
+	})
+
+	// Sort the set by priority first
+	sort.SliceStable(set, func(i, j int) bool {
+		if len(set[i].Labels) < 1 || len(set[j].Labels) < 1 {
+			return false
+		}
+
+		// Apply priorities if they exist, otherwise push the item to the end of the slice.
+		// The iterator starts with the last pair of replicas in the list, and slowly filters down
+		// through them, so if we order replicas in ascending priority then the existing iterator
+		// will handle priorities with minimal modification.
+		iReplicaLabel, jReplicaLabel := set[i].Labels[len(set[i].Labels)-1], set[j].Labels[len(set[j].Labels)-1]
+		if iReplicaLabel.Name == replicaLabel && jReplicaLabel.Name == replicaLabel {
+			if iPriority, ok := replicaPriorities[iReplicaLabel.Value]; ok {
+				if jPriority, ok := replicaPriorities[jReplicaLabel.Value]; ok {
+					return iPriority > jPriority
+				}
+				// i has a priority but j doesn't, so i should go first anyway
+				return true
+			}
+		}
+		// Either i doesn't have a priority and shouldn't go first, or both i and j have priorities
+		// and j is lower. Either way, false is return value for all cases not handled above.
+		return false
+	})
+
+	// Everything is currently sorted by priority and then label values.
+	// Series with the same priorities will therefore be adjacent and sorted by label values within
+	// those priority buckets. Stable sorting by label value again but excluding replica labels will
+	// result in the set being ordered by labelset then priority.
+	sort.SliceStable(set, func(i, j int) bool {
+		// No labels, default to the existing sort order
+		if len(set[i].Labels) < 1 && len(set[i].Labels) < 1 {
+			return false
+		}
+
+		// Strip the replica label if present
+		iLabels, jLabels := set[i].Labels[:], set[j].Labels[:]
+		if iLabels[len(iLabels)-1].Name == replicaLabel {
+			iLabels = iLabels[:len(iLabels)-1]
+		}
+		if jLabels[len(jLabels)-1].Name == replicaLabel {
+			jLabels = jLabels[:len(jLabels)-1]
+		}
+
+		return storepb.CompareLabels(iLabels, jLabels) < 0
 	})
 }
 
