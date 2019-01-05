@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: thanos-compactor
+spec:
+  serviceName: "thanos-compactor"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: thanos-compactor
+  template:
+    metadata:
+      labels:
+        app: thanos-compactor
+    spec:
+      containers:
+      - name: thanos-compactor
+        # Always use explicit image tags (release or master-<date>-sha) instead of ambigous `latest` or `master`.
+        image: improbable/thanos:v0.2.1
+        args:
+        - "store"
+        - "--log.level=debug"
+        - "--data-dir=/tmp/thanos-compact"
+        - "--objstore.config-file=/creds/swift_access_information.yaml"
+        volumeMounts:
+        - name: swiftconfig
+          mountPath: /creds
+        - name: data
+          mountPath: /tmp/thanos-compact
+      volumes:
+      - name: data
+        emptyDir: {}
+      - name: swiftconfig
+        configMap:
+          name: swiftinfo
