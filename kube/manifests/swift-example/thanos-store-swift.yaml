@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: thanos-store
+spec:
+  serviceName: "thanos-store"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: thanos
+      thanos-peer: "true"
+  template:
+    metadata:
+      labels:
+        app: thanos
+        thanos-peer: "true"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "10902"
+    spec:
+      containers:
+      - name: thanos-store
+        # Always use explicit image tags (release or master-<date>-sha) instead of ambigous `latest` or `master`.
+        image: improbable/thanos:v0.2.1
+        args:
+        - "store"
+        - "--log.level=debug"
+        - "--data-dir=/var/thanos/store"
+        - "--cluster.peers=thanos-peers.default.svc.cluster.local:10900"
+        - "--objstore.config-file=/creds/swift_access_information.yaml"
+        ports:
+        - name: http
+          containerPort: 10902
+        - name: grpc
+          containerPort: 10901
+        - name: cluster
+          containerPort: 10900
+        volumeMounts:
+        - name: swiftconfig
+          mountPath: /creds
+        - name: data
+          mountPath: /var/thanos/store
+      volumes:
+      - name: data
+        emptyDir: {}
+        # configmap is not recommended for production use. It's used only for example.
+      - name: swiftconfig
+        configMap:
+          name: swiftinfo
