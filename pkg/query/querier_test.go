@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"math"
 	"math/rand"
+	"regexp"
 	"testing"
 
 	"time"
@@ -79,7 +80,7 @@ func TestSortReplicaLabel(t *testing.T) {
 
 	input := []struct {
 		replicaLabel string
-		priorities   map[string]int
+		priorities   []replicaPriority
 		exp          []storepb.Series
 	}{
 		{
@@ -121,10 +122,19 @@ func TestSortReplicaLabel(t *testing.T) {
 		},
 		{
 			replicaLabel: "b",
-			priorities: map[string]int{
-				"replica-1": 100,
-				"replica-2": 50,
-				"replica-3": 150,
+			priorities: []replicaPriority{
+				{
+					pattern:  regexp.MustCompile("replica-1"),
+					priority: 100,
+				},
+				{
+					pattern:  regexp.MustCompile("replica-2"),
+					priority: 50,
+				},
+				{
+					pattern:  regexp.MustCompile("replica-3"),
+					priority: 150,
+				},
 			},
 			exp: []storepb.Series{
 				{Labels: []storepb.Label{
@@ -141,6 +151,57 @@ func TestSortReplicaLabel(t *testing.T) {
 					{Name: "a", Value: "1"},
 					{Name: "c", Value: "3"},
 					{Name: "b", Value: "replica-2"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "3"},
+					{Name: "d", Value: "4"},
+					{Name: "b", Value: "replica-1"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "4"},
+					{Name: "b", Value: "replica-3"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "4"},
+					{Name: "b", Value: "replica-1"},
+				}},
+			},
+		},
+		{
+			replicaLabel: "b",
+			priorities: []replicaPriority{
+				{
+					pattern:  regexp.MustCompile("replica-1"),
+					priority: 100,
+				},
+				{
+					pattern:  regexp.MustCompile("replica-(2|3)"),
+					priority: 150,
+				},
+				{
+					// Should be unused, because the above will match all this would
+					pattern:  regexp.MustCompile("replica-2"),
+					priority: 50,
+				},
+			},
+			exp: []storepb.Series{
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "3"},
+					{Name: "b", Value: "replica-2"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "3"},
+					{Name: "b", Value: "replica-3"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "3"},
+					{Name: "b", Value: "replica-1"},
 				}},
 				{Labels: []storepb.Label{
 					{Name: "a", Value: "1"},

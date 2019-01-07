@@ -2,6 +2,7 @@ package query
 
 import (
 	"context"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -30,11 +31,23 @@ type QueryableCreator func(deduplicate bool, maxSourceResolution time.Duration, 
 
 // NewQueryableCreator creates QueryableCreator.
 func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLabel string, replicaPriorities map[string]int) QueryableCreator {
+	priorities := make([]replicaPriority, 0, len(replicaPriorities))
+	for k, v := range replicaPriorities {
+		priorities = append(priorities, replicaPriority{
+			pattern:           regexp.MustCompile(k),
+			uncompiledPattern: k,
+			priority:          v,
+		})
+	}
+	sort.Slice(priorities, func(i, j int) bool {
+		return strings.Compare(priorities[i].uncompiledPattern, priorities[j].uncompiledPattern) < 0
+	})
+
 	return func(deduplicate bool, maxSourceResolution time.Duration, partialResponse bool, r WarningReporter) storage.Queryable {
 		return &queryable{
 			logger:              logger,
 			replicaLabel:        replicaLabel,
-			replicaPriorities:   replicaPriorities,
+			replicaPriorities:   priorities,
 			proxy:               proxy,
 			deduplicate:         deduplicate,
 			maxSourceResolution: maxSourceResolution,
@@ -47,7 +60,7 @@ func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLa
 type queryable struct {
 	logger              log.Logger
 	replicaLabel        string
-	replicaPriorities   map[string]int
+	replicaPriorities   []replicaPriority
 	proxy               storepb.StoreServer
 	deduplicate         bool
 	maxSourceResolution time.Duration
@@ -66,7 +79,7 @@ type querier struct {
 	cancel              func()
 	mint, maxt          int64
 	replicaLabel        string
-	replicaPriorities   map[string]int
+	replicaPriorities   []replicaPriority
 	proxy               storepb.StoreServer
 	deduplicate         bool
 	maxSourceResolution int64
@@ -81,7 +94,7 @@ func newQuerier(
 	logger log.Logger,
 	mint, maxt int64,
 	replicaLabel string,
-	replicaPriorities map[string]int,
+	replicaPriorities []replicaPriority,
 	proxy storepb.StoreServer,
 	deduplicate bool,
 	maxSourceResolution int64,
@@ -229,8 +242,10 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 }
 
 // sortDedupLabels resorts the set so that the same series with different replica
-// labels are coming right after each other.
-func sortDedupLabels(set []storepb.Series, replicaLabel string, replicaPriorities map[string]int) {
+// labels are coming right after each other. It also applies replica priorities if they
+// are configured.
+func sortDedupLabels(set []storepb.Series, replicaLabel string, replicaPriorities []replicaPriority) {
+	priorities := map[string]int{}
 	// Move the replica label to the very end so we can reliably operate on it.
 	for _, s := range set {
 		sort.Slice(s.Labels, func(i, j int) bool {
@@ -242,6 +257,23 @@ func sortDedupLabels(set []storepb.Series, replicaLabel string, replicaPrioritie
 			}
 			return s.Labels[i].Name < s.Labels[j].Name
 		})
+
+		// Update priorities map
+		if len(s.Labels) < 1 || s.Labels[len(s.Labels)-1].Name != replicaLabel {
+			continue
+		}
+		currentReplica := s.Labels[len(s.Labels)-1].Value
+		if _, ok := priorities[currentReplica]; ok {
+			continue
+		}
+		for _, priority := range replicaPriorities {
+			if priority.pattern.MatchString(currentReplica) {
+				priorities[currentReplica] = priority.priority
+				goto found
+			}
+		}
+		priorities[currentReplica] = MinInt
+	found:
 	}
 
 	// Sort by labels (including replica label) first.
@@ -265,8 +297,8 @@ func sortDedupLabels(set []storepb.Series, replicaLabel string, replicaPrioritie
 		// will handle priorities with minimal modification.
 		iReplicaLabel, jReplicaLabel := set[i].Labels[len(set[i].Labels)-1], set[j].Labels[len(set[j].Labels)-1]
 		if iReplicaLabel.Name == replicaLabel && jReplicaLabel.Name == replicaLabel {
-			if iPriority, ok := replicaPriorities[iReplicaLabel.Value]; ok {
-				if jPriority, ok := replicaPriorities[jReplicaLabel.Value]; ok {
+			if iPriority, ok := priorities[iReplicaLabel.Value]; ok {
+				if jPriority, ok := priorities[jReplicaLabel.Value]; ok {
 					return iPriority > jPriority
 				}
 				// i has a priority but j doesn't, so i should go first anyway

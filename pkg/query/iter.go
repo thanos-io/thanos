@@ -2,6 +2,7 @@ package query
 
 import (
 	"math"
+	"regexp"
 	"sort"
 
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
@@ -299,7 +300,7 @@ func (it *chunkSeriesIterator) Err() error {
 type dedupSeriesSet struct {
 	set               storage.SeriesSet
 	replicaLabel      string
-	replicaPriorities map[string]int
+	replicaPriorities []replicaPriority
 
 	replicas []seriesWithPriority
 	lset     labels.Labels
@@ -307,7 +308,7 @@ type dedupSeriesSet struct {
 	ok       bool
 }
 
-func newDedupSeriesSet(set storage.SeriesSet, replicaLabel string, replicaPriorities map[string]int) storage.SeriesSet {
+func newDedupSeriesSet(set storage.SeriesSet, replicaLabel string, replicaPriorities []replicaPriority) storage.SeriesSet {
 	s := &dedupSeriesSet{set: set, replicaLabel: replicaLabel, replicaPriorities: replicaPriorities}
 	s.ok = s.set.Next()
 	if s.ok {
@@ -385,6 +386,12 @@ func (s *dedupSeriesSet) At() storage.Series {
 
 func (s *dedupSeriesSet) Err() error {
 	return s.set.Err()
+}
+
+type replicaPriority struct {
+	pattern           *regexp.Regexp
+	uncompiledPattern string
+	priority          int
 }
 
 type seriesWithPriority struct {
@@ -561,18 +568,18 @@ func (it *dedupSeriesIterator) Err() error {
 	return it.b.Err()
 }
 
-func getPriority(priorities map[string]int, label *labels.Label) int {
-	var priority int
-	var ok bool
-
+func getPriority(priorities []replicaPriority, label *labels.Label) int {
 	if label == nil {
-		return MinInt
+		goto default_priority
 	}
 
-	priority, ok = priorities[label.Value]
-	if !ok {
-		// Ensure that this replica has the lowest possible priority since none was provided.
-		priority = MinInt
+	for _, rp := range priorities {
+		if rp.pattern.MatchString(label.Value) {
+			return rp.priority
+		}
 	}
-	return priority
+
+default_priority:
+	// No priority provided, return the lowest possible
+	return MinInt
 }
