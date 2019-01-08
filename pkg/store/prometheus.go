@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"path"
@@ -155,25 +156,47 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 			continue
 		}
 
-		// We generally expect all samples of the requested range to be traversed
-		// so we just encode all samples into one big chunk regardless of size.
-		enc, cb, err := p.encodeChunk(e.Samples)
-		if err != nil {
-			return status.Error(codes.Unknown, err.Error())
+		sampleChunks := chunkSamples(e)
+
+		var aggregatedChunks []storepb.AggrChunk
+		for _, sampleChunk := range sampleChunks {
+			enc, cb, err := p.encodeChunk(sampleChunk)
+			if err != nil {
+				return status.Error(codes.Unknown, err.Error())
+			}
+			aggregatedChunks = append(aggregatedChunks, storepb.AggrChunk{
+				MinTime: int64(sampleChunk[0].Timestamp),
+				MaxTime: int64(sampleChunk[len(sampleChunk)-1].Timestamp),
+				Raw:     &storepb.Chunk{Type: enc, Data: cb},
+			})
 		}
+
 		resp := storepb.NewSeriesResponse(&storepb.Series{
 			Labels: lset,
-			Chunks: []storepb.AggrChunk{{
-				MinTime: int64(e.Samples[0].Timestamp),
-				MaxTime: int64(e.Samples[len(e.Samples)-1].Timestamp),
-				Raw:     &storepb.Chunk{Type: enc, Data: cb},
-			}},
+			Chunks: aggregatedChunks,
 		})
 		if err := s.Send(resp); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// XoR encoding supports a max size of 2^16 - 1 samples, so we need
+// to chunk all samples into groups of no more than 2^16 - 1
+func chunkSamples(series prompb.TimeSeries) [][]prompb.Sample {
+	var sampleChunks [][]prompb.Sample
+	var currentSampleChunk []prompb.Sample
+	for i, sample := range series.Samples {
+		if i%math.MaxUint16 == 0 && i != 0 {
+			sampleChunks = append(sampleChunks, currentSampleChunk)
+			currentSampleChunk = []prompb.Sample{sample}
+		} else {
+			currentSampleChunk = append(currentSampleChunk, sample)
+		}
+	}
+	sampleChunks = append(sampleChunks, currentSampleChunk)
+	return sampleChunks
 }
 
 func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prompb.ReadResponse, error) {
