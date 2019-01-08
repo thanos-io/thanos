@@ -273,13 +273,13 @@ func runQuery(
 	fileSDCache := cache.New()
 	dnsProvider := dns.NewProvider(logger, extprom.NewSubsystem(reg, "query_store_api"))
 
-	replicaPriorities := map[string]int{}
+	replicaPriorities := map[string]int64{}
 	for _, priority := range replicaPriority {
 		parts := strings.Split(priority, ",")
 		if len(parts) != 2 {
 			return fmt.Errorf("malformed query.replica-priority parameter: %s", priority)
 		}
-		intPriority, err := strconv.Atoi(parts[1])
+		intPriority, err := strconv.ParseInt(parts[1], 10, 64)
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("malformed query.replica-priority parameter: %s", priority))
 		}

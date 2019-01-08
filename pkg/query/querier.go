@@ -2,6 +2,7 @@ package query
 
 import (
 	"context"
+	"math"
 	"regexp"
 	"sort"
 	"strings"
@@ -30,7 +31,7 @@ type WarningReporter func(error)
 type QueryableCreator func(deduplicate bool, maxSourceResolution time.Duration, partialResponse bool, r WarningReporter) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
-func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLabel string, replicaPriorities map[string]int) QueryableCreator {
+func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLabel string, replicaPriorities map[string]int64) QueryableCreator {
 	priorities := make([]replicaPriority, 0, len(replicaPriorities))
 	for k, v := range replicaPriorities {
 		priorities = append(priorities, replicaPriority{
@@ -245,7 +246,7 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 // labels are coming right after each other. It also applies replica priorities if they
 // are configured.
 func sortDedupLabels(set []storepb.Series, replicaLabel string, replicaPriorities []replicaPriority) {
-	priorities := map[string]int{}
+	priorities := map[string]int64{}
 	// Move the replica label to the very end so we can reliably operate on it.
 	for _, s := range set {
 		sort.Slice(s.Labels, func(i, j int) bool {
@@ -272,7 +273,7 @@ func sortDedupLabels(set []storepb.Series, replicaLabel string, replicaPrioritie
 				goto found
 			}
 		}
-		priorities[currentReplica] = MinInt
+		priorities[currentReplica] = math.MinInt64
 	found:
 	}
 

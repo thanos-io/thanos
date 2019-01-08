@@ -369,7 +369,7 @@ func TestDedupSeriesIterator(t *testing.T) {
 	// ahead this far at least once.
 	cases := []struct {
 		a, b, exp            []sample
-		aPriority, bPriority int
+		aPriority, bPriority int64
 	}{
 		{ // Generally prefer the first series.
 			a:   []sample{{10000, 10}, {20000, 11}, {30000, 12}, {40000, 13}},
@@ -430,7 +430,7 @@ func BenchmarkDedupSeriesIterator(b *testing.B) {
 		it := newDedupSeriesIterator(
 			&SampleIterator{l: s1, i: -1},
 			&SampleIterator{l: s2, i: -1},
-			MinInt, MinInt,
+			math.MinInt64, math.MinInt64,
 		)
 		b.ResetTimer()
 		var total int64

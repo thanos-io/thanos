@@ -13,11 +13,6 @@ import (
 	"github.com/prometheus/tsdb/chunkenc"
 )
 
-// Minimum two's complement int
-// ^uint(0) >> 1 gives all 1s except the sign bit (ie: maximum two's complement int),
-// then convert to int, negate, and sub 1 to get the minimum signed int val for this machine.
-const MinInt = -int(^uint(0)>>1) - 1
-
 // promSeriesSet implements the SeriesSet interface of the Prometheus storage
 // package on top of our storepb SeriesSet.
 type promSeriesSet struct {
@@ -391,12 +386,12 @@ func (s *dedupSeriesSet) Err() error {
 type replicaPriority struct {
 	pattern           *regexp.Regexp
 	uncompiledPattern string
-	priority          int
+	priority          int64
 }
 
 type seriesWithPriority struct {
 	storage.Series
-	priority int
+	priority int64
 }
 
 type seriesWithLabels struct {
@@ -431,7 +426,7 @@ func (s *dedupSeries) Iterator() (it storage.SeriesIterator) {
 
 type dedupSeriesIterator struct {
 	a, b                 storage.SeriesIterator
-	aPriority, bPriority int
+	aPriority, bPriority int64
 	i                    int
 
 	aok, bok       bool
@@ -441,7 +436,7 @@ type dedupSeriesIterator struct {
 	useA           bool
 }
 
-func newDedupSeriesIterator(a, b storage.SeriesIterator, aPriority, bPriority int) *dedupSeriesIterator {
+func newDedupSeriesIterator(a, b storage.SeriesIterator, aPriority, bPriority int64) *dedupSeriesIterator {
 	return &dedupSeriesIterator{
 		a:         a,
 		b:         b,
@@ -502,7 +497,7 @@ func (it *dedupSeriesIterator) Next() bool {
 	const initialPenality = 5000
 
 	abDelta := int64(math.Abs(float64(ta - tb)))
-	penaltySum := it.penA + it.penB
+	penaltySum := int64(it.penA + it.penB)
 	if penaltySum == 0 {
 		penaltySum = initialPenality
 	}
@@ -568,7 +563,7 @@ func (it *dedupSeriesIterator) Err() error {
 	return it.b.Err()
 }
 
-func getPriority(priorities []replicaPriority, label *labels.Label) int {
+func getPriority(priorities []replicaPriority, label *labels.Label) int64 {
 	if label == nil {
 		goto default_priority
 	}
@@ -581,5 +576,5 @@ func getPriority(priorities []replicaPriority, label *labels.Label) int {
 
 default_priority:
 	// No priority provided, return the lowest possible
-	return MinInt
+	return math.MinInt64
 }
