@@ -478,7 +478,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(prometheus_engine_queries{$labelselector=\"$labelvalue\",kubernetes_pod_name=~\"$pod\"}[$interval])",
+          "expr": "prometheus_engine_queries{$labelselector=\"$labelvalue\",kubernetes_pod_name=~\"$pod\"}",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
