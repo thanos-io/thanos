@@ -156,19 +156,11 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 			continue
 		}
 
-		sampleChunks := chunkSamples(e)
-
-		var aggregatedChunks []storepb.AggrChunk
-		for _, sampleChunk := range sampleChunks {
-			enc, cb, err := p.encodeChunk(sampleChunk)
-			if err != nil {
-				return status.Error(codes.Unknown, err.Error())
-			}
-			aggregatedChunks = append(aggregatedChunks, storepb.AggrChunk{
-				MinTime: int64(sampleChunk[0].Timestamp),
-				MaxTime: int64(sampleChunk[len(sampleChunk)-1].Timestamp),
-				Raw:     &storepb.Chunk{Type: enc, Data: cb},
-			})
+		// XoR encoding supports a max size of 2^16 - 1 samples, so we need
+		// to chunk all samples into groups of no more than 2^16 - 1
+		aggregatedChunks, err := p.chunkSamples(e, math.MaxUint16)
+		if err != nil {
+			return err
 		}
 
 		resp := storepb.NewSeriesResponse(&storepb.Series{
@@ -182,21 +174,31 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	return nil
 }
 
-// XoR encoding supports a max size of 2^16 - 1 samples, so we need
-// to chunk all samples into groups of no more than 2^16 - 1
-func chunkSamples(series prompb.TimeSeries) [][]prompb.Sample {
-	var sampleChunks [][]prompb.Sample
-	var currentSampleChunk []prompb.Sample
-	for i, sample := range series.Samples {
-		if i%math.MaxUint16 == 0 && i != 0 {
-			sampleChunks = append(sampleChunks, currentSampleChunk)
-			currentSampleChunk = []prompb.Sample{sample}
-		} else {
-			currentSampleChunk = append(currentSampleChunk, sample)
+func(p *PrometheusStore) chunkSamples(series prompb.TimeSeries, samplesPerChunk int) ([]storepb.AggrChunk, error) {
+	var aggregatedChunks []storepb.AggrChunk
+	samples := series.Samples
+
+	for len(samples) > 0 {
+		chunkSize := len(samples)
+		if chunkSize > samplesPerChunk  {
+			chunkSize = samplesPerChunk
 		}
+
+		enc, cb, err := p.encodeChunk(samples[:chunkSize])
+		if err != nil {
+			return nil, status.Error(codes.Unknown, err.Error())
+		}
+
+		aggregatedChunks = append(aggregatedChunks, storepb.AggrChunk{
+			MinTime: int64(samples[0].Timestamp),
+			MaxTime: int64(samples[chunkSize-1].Timestamp),
+			Raw:     &storepb.Chunk{Type: enc, Data: cb},
+		})
+
+		samples = samples[chunkSize:]
 	}
-	sampleChunks = append(sampleChunks, currentSampleChunk)
-	return sampleChunks
+
+	return aggregatedChunks, nil
 }
 
 func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prompb.ReadResponse, error) {
