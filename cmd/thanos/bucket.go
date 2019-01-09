@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,10 +12,12 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/runutil"
+	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/verifier"
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
@@ -49,11 +52,79 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	cmd := app.Command(name, "Bucket utility commands")
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
-
+	registerBucketSync(m, cmd, name, objStoreConfig)
 	registerBucketVerify(m, cmd, name, objStoreConfig)
 	registerBucketLs(m, cmd, name, objStoreConfig)
 	registerBucketInspect(m, cmd, name, objStoreConfig)
 	return
+}
+
+func registerBucketSync(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
+	cmd := root.Command("sync",
+		`Synchronise all blocks with remote bucket. NOTE: Currently NO compactor must be running in the same time.
+
+
+`)
+	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API to get external labels from and snapshot blocks from if Prometheus has `--web.enable-admin-api` flag. For better performance use local network.").
+		Default("http://localhost:9090").URL()
+	labelStrs := cmd.Flag("label", "Optional external labels that will be used for synced blocks. If no label is specified, prometheus.url flag will be used to fetch labels from running Prometheus. (repeated). Similar to external labels for Prometheus, used to identify ruler and its blocks as unique source.").
+		PlaceHolder("<name>=\"<value>\"").Strings()
+	dataDir := cmd.Flag("data-dir", "Data to sync local blocks from. Usually directory of Prometheus TSDB. If empty, snapshotted blocks from Prometheus will be used. (recommended if Prometheus is up)").
+		String()
+	workDir := cmd.Flag("work-dir", "Work dir for temporary files (hard links) created by sync command. Useful when data-dir has no more space.").
+		Default("./").String()
+
+	m[name+" sync"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
+		ctx := context.Background()
+		lset, err := parseFlagLabels(*labelStrs)
+		if err != nil {
+			return errors.Wrap(err, "parse labels")
+		}
+
+		bucketConfig, err := objStoreConfig.Content()
+		if err != nil {
+			return err
+		}
+
+		bkt, err := client.NewBucket(logger, bucketConfig, reg, name)
+		if err != nil {
+			return err
+		}
+
+		if len(lset) == 0 {
+			level.Info(logger).Log("msg", "--labels are not specified; querying Prometheus config API to get external labels.", "addr", *promURL)
+			lset, err = queryExternalLabels(ctx, logger, *promURL)
+			if err != nil {
+				return errors.Wrapf(err, "get external labels from Prometheus on %s", *promURL)
+			}
+		}
+
+		if len(lset) == 0 {
+			level.Error(logger).Log("msg", "syncing blocks without external labels is not allowed. Set unique external labels in your Prometheus config or pass explicit external labels via --labels flag.")
+		}
+
+		level.Info(logger).Log("msg", "starting syncing blocks", "prometheus.url", *promURL, "dataDir", *dataDir, "workDir", *workDir, "extLset", lset)
+		if *dataDir != "" {
+			level.Warn(logger).Log("msg", "is Prometheus operating on specified data dir? If yes, turn it's local compaction or leave dataDir empty to safely snapshot data to avoid races.")
+		}
+		level.Warn(logger).Log("msg", "have you turned off compactor? Currently it is unsafe to run compactor in the same time as this command! (y/N)")
+		reader := bufio.NewReader(os.Stdin)
+		text, _ := reader.ReadString('\n')
+		if text != "y\n" {
+			return errors.New("aborting")
+		}
+
+		lsetFn := func() labels.Labels { return lset }
+		uploaded, err := shipper.SyncAll(ctx, logger, *dataDir, bkt, lsetFn, block.BucketSyncSource)
+		if err != nil {
+			if uploaded > 0 {
+				level.Warn(logger).Log("msg", "synced only some blocks", "uploaded", uploaded)
+			}
+			return err
+		}
+		level.Info(logger).Log("msg", "synced all blocks", "uploaded", uploaded)
+		return nil
+	}
 }
 
 func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {

@@ -264,7 +264,9 @@ func runSidecar(
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
-				s.Sync(ctx)
+				if _, err := s.SyncNonCompacted(ctx); err != nil {
+					level.Warn(logger).Log("err", err)
+				}
 
 				minTime, _, err := s.Timestamps()
 				if err != nil {

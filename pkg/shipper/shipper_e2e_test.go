@@ -71,7 +71,9 @@ func TestShipper_UploadBlocks_e2e(t *testing.T) {
 			testutil.Ok(t, ioutil.WriteFile(tmp+"/index", []byte("indexcontents"), 0666))
 
 			// Running shipper while a block is being written to temp dir should not trigger uploads.
-			shipper.Sync(ctx)
+			b, err := shipper.SyncNonCompacted(ctx)
+			testutil.Ok(t, err)
+			testutil.Equals(t, 0, b)
 
 			shipMeta, err := ReadMetaFile(dir)
 			testutil.Ok(t, err)
@@ -87,7 +89,9 @@ func TestShipper_UploadBlocks_e2e(t *testing.T) {
 			testutil.Ok(t, os.Rename(tmp, bdir))
 
 			// After rename sync should upload the block.
-			shipper.Sync(ctx)
+			b, err = shipper.SyncNonCompacted(ctx)
+			testutil.Ok(t, err)
+			testutil.Equals(t, 1, b)
 
 			// The external labels must be attached to the meta file on upload.
 			meta.Thanos.Labels = extLset.Map()

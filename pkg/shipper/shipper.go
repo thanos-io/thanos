@@ -11,6 +11,8 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/prometheus/tsdb"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
@@ -66,6 +68,7 @@ func newMetrics(r prometheus.Registerer) *metrics {
 type Shipper struct {
 	logger  log.Logger
 	dir     string
+	workDir string
 	metrics *metrics
 	bucket  objstore.Bucket
 	labels  func() labels.Labels
@@ -88,6 +91,7 @@ func New(
 	if lbls == nil {
 		lbls = func() labels.Labels { return nil }
 	}
+
 	return &Shipper{
 		logger:  logger,
 		dir:     dir,
@@ -134,70 +138,183 @@ func (s *Shipper) Timestamps() (minTime, maxSyncTime int64, err error) {
 	return minTime, maxSyncTime, nil
 }
 
-// Sync performs a single synchronization, which ensures all local blocks have been uploaded
+// SyncNonCompacted performs a single synchronization, which ensures all non-compacted local blocks have been uploaded
 // to the object bucket once.
-// It is not concurrency-safe.
-func (s *Shipper) Sync(ctx context.Context) {
+//
+// It is not concurrency-safe, however it is compactor-safe.
+func (s *Shipper) SyncNonCompacted(ctx context.Context) (uploaded int, err error) {
 	meta, err := ReadMetaFile(s.dir)
 	if err != nil {
 		// If we encounter any error, proceed with an empty meta file and overwrite it later.
 		// The meta file is only used to deduplicate uploads, which are properly handled
 		// by the system if their occur anyway.
 		if !os.IsNotExist(err) {
-			level.Warn(s.logger).Log("msg", "reading meta file failed, removing it", "err", err)
+			level.Warn(s.logger).Log("msg", "reading meta file failed, will override it", "err", err)
 		}
 		meta = &Meta{Version: 1}
 	}
+
 	// Build a map of blocks we already uploaded.
 	hasUploaded := make(map[ulid.ULID]struct{}, len(meta.Uploaded))
 	for _, id := range meta.Uploaded {
 		hasUploaded[id] = struct{}{}
 	}
+
 	// Reset the uploaded slice so we can rebuild it only with blocks that still exist locally.
 	meta.Uploaded = nil
 
-	// TODO(bplotka): If there are no blocks in the system check for WAL dir to ensure we have actually
-	// access to real TSDB dir (!).
-	if err = s.iterBlockMetas(func(m *block.Meta) error {
-		// Do not sync a block if we already uploaded it. If it is no longer found in the bucket,
+	var uploadErrs int
+	// Sync non compacted blocks first.
+	if err := s.iterBlockMetas(func(m *block.Meta) error {
+		// Do not sync a block if we already uploaded or ignored it. If it is no longer found in the bucket,
 		// it was generally removed by the compaction process.
-		if _, ok := hasUploaded[m.ULID]; !ok {
-			if err := s.sync(ctx, m); err != nil {
-				level.Error(s.logger).Log("msg", "shipping failed", "block", m.ULID, "err", err)
-				// No error returned, just log line. This is because we want other blocks to be uploaded even
-				// though this one failed. It will be retried on second Sync iteration.
-				return nil
-			}
+		if _, uploaded := hasUploaded[m.ULID]; uploaded {
+			meta.Uploaded = append(meta.Uploaded, m.ULID)
+			return nil
+		}
+
+		// We only ship of the first compacted block level. See https://github.com/improbable-eng/thanos/issues/206
+		// for details. This is however not needed for continous Thanos performance. See standalone `sync` command
+		// on how to upload old, locally compacted blocks manually.
+		if m.Compaction.Level > 1 {
+			return nil
+		}
+
+		// Check against bucket if the meta file for this block exists.
+		ok, err := s.bucket.Exists(ctx, path.Join(m.ULID.String(), block.MetaFilename))
+		if err != nil {
+			return errors.Wrap(err, "check exists")
+		}
+		if ok {
+			return nil
+		}
+
+		if err := s.upload(ctx, m); err != nil {
+			level.Error(s.logger).Log("msg", "shipping failed", "block", m.ULID, "err", err)
+			// No error returned, just log line. This is because we want other blocks to be uploaded even
+			// though this one failed. It will be retried on second Sync iteration.
+			s.metrics.uploadFailures.Inc()
+			uploadErrs++
+			return nil
 		}
 		meta.Uploaded = append(meta.Uploaded, m.ULID)
+
+		uploaded++
+		s.metrics.uploads.Inc()
 		return nil
 	}); err != nil {
-		level.Error(s.logger).Log("msg", "iter block metas failed", "err", err)
-		return
+		s.metrics.dirSyncFailures.Inc()
+		return uploaded, errors.Wrap(err, "iter local block metas")
 	}
+
 	if err := WriteMetaFile(s.logger, s.dir, meta); err != nil {
 		level.Warn(s.logger).Log("msg", "updating meta file failed", "err", err)
 	}
+
+	s.metrics.dirSyncs.Inc()
+
+	if uploadErrs > 0 {
+		return uploaded, errors.Errorf("failed to sync %v blocks", uploadErrs)
+
+	}
+	return uploaded, nil
 }
 
-func (s *Shipper) sync(ctx context.Context, meta *block.Meta) (err error) {
-	dir := filepath.Join(s.dir, meta.ULID.String())
+// SyncAll performs a single synchronization for all compacted and non-compacted blocks. This ensures all compacted local blocks
+// that *can be* uploaded have been uploaded to the object bucket once. This function is *not* designed to be run
+// periodically. It should be used as a manual command to export old compacted blocks for migration purposes.
+//
+// NOTE: It is currently required to turn off compactor first to use this command safely. Otherwise non-fixable overlaps might happen.
+//
+// It is not concurrency-safe, however it is safe to run it with `shipper.Sync` in different binary.
+func SyncAll(
+	ctx context.Context,
+	logger log.Logger,
+	dir string,
+	bucket objstore.Bucket,
+	lbls func() labels.Labels,
+	source block.SourceType,
+) (uploaded int, err error) {
+	s := New(logger, nil, dir, bucket, lbls, source)
 
-	// We only ship of the first compacted block level.
-	// TODO(bplotka): https://github.com/improbable-eng/thanos/issues/206
-	if meta.Compaction.Level > 1 {
-		return nil
-	}
-
-	// Check against bucket if the meta file for this block exists.
-	ok, err := s.bucket.Exists(ctx, path.Join(meta.ULID.String(), block.MetaFilename))
+	var merr tsdb.MultiError
+	u1, err := s.syncCompacted(ctx)
 	if err != nil {
-		return errors.Wrap(err, "check exists")
+		merr.Add(err)
 	}
-	if ok {
-		return nil
+	u2, err := s.SyncNonCompacted(ctx)
+	if err != nil {
+		merr.Add(err)
 	}
 
+	return u1 + u2, merr.Err()
+}
+
+func (s *Shipper) syncCompacted(ctx context.Context) (uploaded int, err error) {
+	var (
+		metas       []tsdb.BlockMeta
+		lookupMetas = map[ulid.ULID]struct{}{}
+	)
+
+	level.Info(s.logger).Log("msg", "gathering all existing blocks from the remote bucket")
+	if err := s.bucket.Iter(ctx, "", func(path string) error {
+		id, ok := block.IsBlockDir(path)
+		if !ok {
+			return nil
+		}
+
+		m, err := block.DownloadMeta(ctx, s.logger, s.bucket, id)
+		if err != nil {
+			return err
+		}
+
+		if !labels.FromMap(m.Thanos.Labels).Equals(s.labels()) {
+			return nil
+		}
+
+		metas = append(metas, m.BlockMeta)
+		lookupMetas[m.ULID] = struct{}{}
+		return nil
+	}); err != nil {
+		return 0, errors.Wrap(err, "get all block meta.")
+	}
+
+	var errs int
+	if err := s.iterBlockMetas(func(m *block.Meta) error {
+		if m.Compaction.Level < 2 {
+			return nil
+		}
+
+		if _, exists := lookupMetas[m.ULID]; exists {
+			return nil
+		}
+
+		if o := tsdb.OverlappingBlocks(append([]tsdb.BlockMeta{m.BlockMeta}, metas...)); len(o) > 0 {
+			// TODO(bwplotka): Consider checking if overlaps relates to block in concern?
+			level.Error(s.logger).Log("msg", "shipping compacted block blocked; overlap spotted.", "overlap", o.String(), "block", m.ULID)
+			errs++
+			return nil
+		}
+
+		if err := s.upload(ctx, m); err != nil {
+			level.Error(s.logger).Log("msg", "shipping compacted block failed", "block", m.ULID, "err", err)
+			errs++
+			return nil
+		}
+		uploaded++
+		return nil
+	}); err != nil {
+		return uploaded, errors.Wrap(err, "iter block metas failed")
+	}
+
+	if errs > 0 {
+		return uploaded, errors.Errorf("failed to sync %v compacted blocks", errs)
+	}
+	return uploaded, nil
+}
+
+// sync uploads the block if not exists in remote storage.
+func (s *Shipper) upload(ctx context.Context, meta *block.Meta) error {
 	level.Info(s.logger).Log("msg", "upload new block", "id", meta.ULID)
 
 	// We hard-link the files into a temporary upload directory so we are not affected
@@ -217,6 +334,7 @@ func (s *Shipper) sync(ctx context.Context, meta *block.Meta) (err error) {
 		}
 	}()
 
+	dir := filepath.Join(s.dir, meta.ULID.String())
 	if err := hardlinkBlock(dir, updir); err != nil {
 		return errors.Wrap(err, "hard link block")
 	}
@@ -293,6 +411,7 @@ func hardlinkBlock(src, dst string) error {
 type Meta struct {
 	Version  int         `json:"version"`
 	Uploaded []ulid.ULID `json:"uploaded"`
+	Ignored  []ulid.ULID `json:"ignored"`
 }
 
 // MetaFilename is the known JSON filename for meta information.
