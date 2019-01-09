@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"path"
@@ -155,25 +156,49 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 			continue
 		}
 
-		// We generally expect all samples of the requested range to be traversed
-		// so we just encode all samples into one big chunk regardless of size.
-		enc, cb, err := p.encodeChunk(e.Samples)
+		// XOR encoding supports a max size of 2^16 - 1 samples, so we need
+		// to chunk all samples into groups of no more than 2^16 - 1
+		aggregatedChunks, err := p.chunkSamples(e, math.MaxUint16)
 		if err != nil {
-			return status.Error(codes.Unknown, err.Error())
+			return err
 		}
+
 		resp := storepb.NewSeriesResponse(&storepb.Series{
 			Labels: lset,
-			Chunks: []storepb.AggrChunk{{
-				MinTime: int64(e.Samples[0].Timestamp),
-				MaxTime: int64(e.Samples[len(e.Samples)-1].Timestamp),
-				Raw:     &storepb.Chunk{Type: enc, Data: cb},
-			}},
+			Chunks: aggregatedChunks,
 		})
 		if err := s.Send(resp); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func(p *PrometheusStore) chunkSamples(series prompb.TimeSeries, samplesPerChunk int) ([]storepb.AggrChunk, error) {
+	var aggregatedChunks []storepb.AggrChunk
+	samples := series.Samples
+
+	for len(samples) > 0 {
+		chunkSize := len(samples)
+		if chunkSize > samplesPerChunk  {
+			chunkSize = samplesPerChunk
+		}
+
+		enc, cb, err := p.encodeChunk(samples[:chunkSize])
+		if err != nil {
+			return nil, status.Error(codes.Unknown, err.Error())
+		}
+
+		aggregatedChunks = append(aggregatedChunks, storepb.AggrChunk{
+			MinTime: int64(samples[0].Timestamp),
+			MaxTime: int64(samples[chunkSize-1].Timestamp),
+			Raw:     &storepb.Chunk{Type: enc, Data: cb},
+		})
+
+		samples = samples[chunkSize:]
+	}
+
+	return aggregatedChunks, nil
 }
 
 func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prompb.ReadResponse, error) {
