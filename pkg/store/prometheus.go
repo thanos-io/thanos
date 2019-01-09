@@ -156,7 +156,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 			continue
 		}
 
-		// XoR encoding supports a max size of 2^16 - 1 samples, so we need
+		// XOR encoding supports a max size of 2^16 - 1 samples, so we need
 		// to chunk all samples into groups of no more than 2^16 - 1
 		aggregatedChunks, err := p.chunkSamples(e, math.MaxUint16)
 		if err != nil {

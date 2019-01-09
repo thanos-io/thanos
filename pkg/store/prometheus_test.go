@@ -285,9 +285,9 @@ func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t 
 
 	a := p.Appender()
 
-	offset := int64(math.MaxUint16 + 5)
+	offset := int64(2*math.MaxUint16 + 5)
 	for i := int64(0); i < offset; i++ {
-		_, err = a.Add(labels.FromStrings("a", "b"), baseT + i, 1)
+		_, err = a.Add(labels.FromStrings("a", "b"), baseT+i, 1)
 		testutil.Ok(t, err)
 	}
 
@@ -309,15 +309,14 @@ func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t 
 	testutil.Ok(t, err)
 	srv := newStoreSeriesServer(ctx)
 
-	err = proxy.Series(&storepb.SeriesRequest{
+	testutil.Ok(t, proxy.Series(&storepb.SeriesRequest{
 		MinTime: baseT,
 		MaxTime: baseT + offset,
 		Matchers: []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
 			{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"},
 		},
-	}, srv)
-	testutil.Ok(t, err)
+	}, srv))
 
 	testutil.Equals(t, 1, len(srv.SeriesSet))
 
@@ -328,13 +327,17 @@ func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t 
 		{Name: "region", Value: "eu-west"},
 	}, firstSeries.Labels)
 
-	testutil.Equals(t, 2, len(firstSeries.Chunks))
+	testutil.Equals(t, 3, len(firstSeries.Chunks))
 
 	chunk, err := chunkenc.FromData(chunkenc.EncXOR, firstSeries.Chunks[0].Raw.Data)
 	testutil.Ok(t, err)
 	testutil.Equals(t, math.MaxUint16, chunk.NumSamples())
 
 	chunk, err = chunkenc.FromData(chunkenc.EncXOR, firstSeries.Chunks[1].Raw.Data)
+	testutil.Ok(t, err)
+	testutil.Equals(t, math.MaxUint16, chunk.NumSamples())
+
+	chunk, err = chunkenc.FromData(chunkenc.EncXOR, firstSeries.Chunks[2].Raw.Data)
 	testutil.Ok(t, err)
 	testutil.Equals(t, 5, chunk.NumSamples())
 }
