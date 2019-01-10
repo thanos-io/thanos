@@ -10,6 +10,7 @@ import (
 func TestParseConfig_DefaultHTTPOpts(t *testing.T) {
 	input := []byte(`bucket: abcd
 insecure: false
+insecure_skip_verify: false
 http_config:
   idle_conn_timeout: 50s`)
 	cfg, err := parseConfig(input)
@@ -26,7 +27,9 @@ http_config:
 	if cfg.Insecure != false {
 		t.Errorf("parsing of insecure failed: got %v, expected %v", cfg.Insecure, false)
 	}
-
+	if cfg.InsecureSkipVerify != false {
+		t.Errorf("parsing of insecure_skip_verify failed: got %v, expected %v", cfg.InsecureSkipVerify, false)
+	}
 }
 
 func TestValidate_OK(t *testing.T) {
@@ -34,6 +37,7 @@ func TestValidate_OK(t *testing.T) {
 endpoint: "s3-endpoint"
 access_key: "access_key"
 insecure: false
+insecure_skip_verify: false
 signature_version2: false
 encrypt_sse: false
 secret_key: "secret_key"
@@ -48,6 +52,7 @@ http_config:
 endpoint: "s3-endpoint"
 access_key: "access_key"
 insecure: false
+insecure_skip_verify: false
 signature_version2: false
 encrypt_sse: false
 secret_key: "secret_key"

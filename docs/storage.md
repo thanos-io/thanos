@@ -44,6 +44,7 @@ config:
   endpoint: ""
   access_key: ""
   insecure: false
+  insecure_skip_verify: false
   signature_version2: false
   encrypt_sse: false
   secret_key: ""
@@ -57,7 +58,10 @@ AWS region to endpoint mapping can be found in this [link](https://docs.aws.amaz
 Make sure you use a correct signature version.
 Currently AWS require signature v4, so it needs `signature-version2: false`, otherwise, you will get Access Denied error, but several other S3 compatible use `signature-version2: true`
 
-For debug purposes you can set `insecure: true` to switch to plain insecure HTTP instead of HTTPS
+For debug and testing purposes you can set
+
+* `insecure: true` to switch to plain insecure HTTP instead of HTTPS
+* `insecure_skip_verify: true` to disable TLS certificate verification (if your S3 based storage is using a self-signed certificate, for example)
 
 ### Credentials
 By default Thanos will try to retrieve credentials from the following sources:
