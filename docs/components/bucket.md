@@ -28,7 +28,7 @@ by adding a new command within `/cmd/thanos/bucket.go`
 ```$
 usage: thanos bucket [<flags>] <command> [<args> ...]
 
-Inspect metric data in an object storage bucket
+Bucket utility commands
 
 Flags:
   -h, --help               Show context-sensitive help (also try --help-long and
@@ -50,12 +50,6 @@ Flags:
       --objstore.config=<bucket.config-yaml>  
                            Alternative to 'objstore.config-file' flag. Object
                            store configuration in YAML.
-      --objstore-backup.config-file=<bucket.config-yaml-path>  
-                           Path to YAML file that contains object store-backup
-                           configuration.
-      --objstore-backup.config=<bucket.config-yaml>  
-                           Alternative to 'objstore-backup.config-file' flag.
-                           Object store-backup configuration in YAML.
 
 Subcommands:
   bucket verify [<flags>]
@@ -65,7 +59,7 @@ Subcommands:
     List all blocks in the bucket
 
   bucket inspect [<flags>]
-    Inspect all blocks in the bucket
+    Inspect all blocks in the bucket in detailed, table-like way
 
 
 ```
@@ -108,10 +102,12 @@ Flags:
                            store configuration in YAML.
       --objstore-backup.config-file=<bucket.config-yaml-path>  
                            Path to YAML file that contains object store-backup
-                           configuration.
+                           configuration. Used for repair logic to backup blocks
+                           before removal.
       --objstore-backup.config=<bucket.config-yaml>  
                            Alternative to 'objstore-backup.config-file' flag.
-                           Object store-backup configuration in YAML.
+                           Object store-backup configuration in YAML. Used for
+                           repair logic to backup blocks before removal.
   -r, --repair             Attempt to repair blocks for which issues were
                            detected
   -i, --issues=index_issue... ...  
@@ -161,14 +157,9 @@ Flags:
       --objstore.config=<bucket.config-yaml>  
                            Alternative to 'objstore.config-file' flag. Object
                            store configuration in YAML.
-      --objstore-backup.config-file=<bucket.config-yaml-path>  
-                           Path to YAML file that contains object store-backup
-                           configuration.
-      --objstore-backup.config=<bucket.config-yaml>  
-                           Alternative to 'objstore-backup.config-file' flag.
-                           Object store-backup configuration in YAML.
-  -o, --output=""          Format in which to print each block's information.
-                           May be 'json' or custom template.
+  -o, --output=""          Optional format in which to print each block's
+                           information. Options are 'json', 'wide' or a custom
+                           template.
 
 ```
 

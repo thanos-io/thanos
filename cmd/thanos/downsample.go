@@ -32,7 +32,7 @@ func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name s
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
 		Default("./data").String()
 
-	objStoreConfig := regCommonObjStoreFlags(cmd, "")
+	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		return runDownsample(g, logger, reg, *dataDir, objStoreConfig, name)
@@ -47,12 +47,12 @@ func runDownsample(
 	objStoreConfig *pathOrContent,
 	component string,
 ) error {
-	bucketConfig, err := objStoreConfig.Content()
+	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
 		return err
 	}
 
-	bkt, err := client.NewBucket(logger, bucketConfig, reg, component)
+	bkt, err := client.NewBucket(logger, confContentYaml, reg, component)
 	if err != nil {
 		return err
 	}
