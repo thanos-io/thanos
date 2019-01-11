@@ -33,16 +33,10 @@ type BucketConfig struct {
 	Config interface{} `yaml:"config"`
 }
 
-var ErrNotFound = errors.New("not found bucket")
-
 // NewBucket initializes and returns new object storage clients.
 // NOTE: confContentYaml can contain secrets.
 func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registerer, component string) (objstore.Bucket, error) {
 	level.Info(logger).Log("msg", "loading bucket configuration")
-	if len(confContentYaml) == 0 {
-		return nil, ErrNotFound
-	}
-
 	bucketConf := &BucketConfig{}
 	if err := yaml.UnmarshalStrict(confContentYaml, bucketConf); err != nil {
 		return nil, errors.Wrap(err, "parsing config YAML file")

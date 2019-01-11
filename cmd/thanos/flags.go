@@ -134,21 +134,23 @@ func modelDuration(flags *kingpin.FlagClause) *model.Duration {
 }
 
 type pathOrContent struct {
-	name string
+	fileFlagName    string
+	contentFlagName string
 
-	path    *string
-	content *string
+	required bool
+	path     *string
+	content  *string
 }
 
 func (p *pathOrContent) Content() ([]byte, error) {
 	if len(*p.path) > 0 && len(*p.content) > 0 {
-		return nil, errors.Errorf("Both file and content are set for %s", p.name)
+		return nil, errors.Errorf("Both %s and %s flags set.", p.fileFlagName, p.contentFlagName)
 	}
 
 	if len(*p.path) > 0 {
 		c, err := ioutil.ReadFile(*p.path)
 		if err != nil {
-			return nil, errors.Wrap(err, fmt.Sprintf("loading YAML file %s for %s", *p.path, p.name))
+			return nil, errors.Wrapf(err, "loading YAML file %s for %s", *p.path, p.fileFlagName)
 		}
 		return c, nil
 	}
@@ -157,19 +159,27 @@ func (p *pathOrContent) Content() ([]byte, error) {
 		return []byte(*p.content), nil
 	}
 
+	if p.required {
+		return nil, errors.Errorf("flag %s or %s is required for running this command", p.fileFlagName, p.contentFlagName)
+	}
+
 	return nil, nil
 }
 
-func regCommonObjStoreFlags(cmd *kingpin.CmdClause, suffix string) *pathOrContent {
+func regCommonObjStoreFlags(cmd *kingpin.CmdClause, suffix string, required bool) *pathOrContent {
 	fileFlagName := fmt.Sprintf("objstore%s.config-file", suffix)
+	contentFlagName := fmt.Sprintf("objstore%s.config", suffix)
+
 	bucketConfFile := cmd.Flag(fileFlagName, fmt.Sprintf("Path to YAML file that contains object store%s configuration.", suffix)).
 		PlaceHolder("<bucket.config-yaml-path>").String()
 
-	bucketConf := cmd.Flag(fmt.Sprintf("objstore%s.config", suffix), fmt.Sprintf("Alternative to '%s' flag. Object store%s configuration in YAML.", fileFlagName, suffix)).
+	bucketConf := cmd.Flag(contentFlagName, fmt.Sprintf("Alternative to '%s' flag. Object store%s configuration in YAML.", fileFlagName, suffix)).
 		PlaceHolder("<bucket.config-yaml>").String()
 
 	return &pathOrContent{
-		name: fmt.Sprintf("objstore%s.config", suffix),
+		fileFlagName:    fileFlagName,
+		contentFlagName: contentFlagName,
+		required:        required,
 
 		path:    bucketConfFile,
 		content: bucketConf,

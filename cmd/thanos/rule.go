@@ -84,7 +84,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	alertExcludeLabels := cmd.Flag("alert.label-drop", "Labels by name to drop before sending to alertmanager. This allows alert to be deduplicated on replica label (repeated). Similar Prometheus alert relabelling").
 		Strings()
 
-	objStoreConfig := regCommonObjStoreFlags(cmd, "")
+	objStoreConfig := regCommonObjStoreFlags(cmd, "", false)
 
 	queries := cmd.Flag("query", "Addresses of statically configured query API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect query API servers through respective DNS lookups.").
 		PlaceHolder("<query>").Strings()
@@ -553,25 +553,25 @@ func runRule(
 		})
 	}
 
-	var uploads = true
-
 	bucketConfig, err := objStoreConfig.Content()
 	if err != nil {
 		return err
 	}
-	// The background shipper continuously scans the data directory and uploads
-	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, err := client.NewBucket(logger, bucketConfig, reg, component)
-	if err != nil && err != client.ErrNotFound {
-		return err
-	}
 
-	if err == client.ErrNotFound {
+	var uploads = true
+	if len(bucketConfig) == 0 {
 		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
 		uploads = false
 	}
 
 	if uploads {
+		// The background shipper continuously scans the data directory and uploads
+		// new blocks to Google Cloud Storage or an S3-compatible storage service.
+		bkt, err := client.NewBucket(logger, bucketConfig, reg, component)
+		if err != nil {
+			return err
+		}
+
 		// Ensure we close up everything properly.
 		defer func() {
 			if err != nil {

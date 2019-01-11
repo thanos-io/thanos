@@ -72,7 +72,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process compactions.").
 		Default("./data").String()
 
-	objStoreConfig := regCommonObjStoreFlags(cmd, "")
+	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
 
 	syncDelay := modelDuration(cmd.Flag("sync-delay", "Minimum age of fresh (non-compacted) blocks before they are being processed.").
 		Default("30m"))

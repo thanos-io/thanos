@@ -42,6 +42,7 @@ const (
 	CompactorRepairSource SourceType = "compactor.repair"
 	RulerSource           SourceType = "ruler"
 	BucketRepairSource    SourceType = "bucket.repair"
+	BucketSyncSource      SourceType = "bucket.sync"
 	TestSource            SourceType = "test"
 )
 

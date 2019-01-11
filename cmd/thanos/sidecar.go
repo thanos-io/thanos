@@ -8,7 +8,9 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -51,7 +53,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	reloaderRuleDirs := cmd.Flag("reloader.rule-dir", "Rule directories for the reloader to refresh (repeated field).").Strings()
 
-	objStoreConfig := regCommonObjStoreFlags(cmd, "")
+	objStoreConfig := regCommonObjStoreFlags(cmd, "", false)
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		rl := reloader.New(
@@ -225,32 +227,35 @@ func runSidecar(
 		})
 	}
 
-	var uploads = true
-
 	bucketConfig, err := objStoreConfig.Content()
 	if err != nil {
 		return err
 	}
 
-	// The background shipper continuously scans the data directory and uploads
-	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, err := client.NewBucket(logger, bucketConfig, reg, component)
-	if err != nil && err != client.ErrNotFound {
-		return err
-	}
-
-	if err == client.ErrNotFound {
+	var uploads = true
+	if len(bucketConfig) == 0 {
 		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
 		uploads = false
 	}
 
 	if uploads {
+		// The background shipper continuously scans the data directory and uploads
+		// new blocks to Google Cloud Storage or an S3-compatible storage service.
+		bkt, err := client.NewBucket(logger, bucketConfig, reg, component)
+		if err != nil {
+			return err
+		}
+
 		// Ensure we close up everything properly.
 		defer func() {
 			if err != nil {
 				runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 			}
 		}()
+
+		if err := isPrometheusDirAccesible(dataDir); err != nil {
+			level.Error(logger).Log("err", err)
+		}
 
 		s := shipper.New(logger, nil, dataDir, bkt, metadata.Labels, block.SidecarSource)
 		ctx, cancel := context.WithCancel(context.Background())
@@ -278,6 +283,20 @@ func runSidecar(
 	}
 
 	level.Info(logger).Log("msg", "starting sidecar", "peer", peer.Name())
+	return nil
+}
+
+func isPrometheusDirAccesible(dir string) error {
+	const errMsg = "WAL file is not accessible. Does block shipper dir is a TSDB directory? If yes it is shared with TSDB?"
+	f, err := os.Stat(filepath.Join(dir, "WAL"))
+	if err != nil {
+		return errors.Wrap(err, errMsg)
+	}
+
+	if f.IsDir() {
+		return errors.New(errMsg)
+	}
+
 	return nil
 }
 
