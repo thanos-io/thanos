@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/promclient"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/pkg/errors"
@@ -127,7 +128,7 @@ func testRuleComponent(t *testing.T, conf testConfig) {
 		qtime := time.Now()
 
 		// The time series written for the firing alerting rule must be queryable.
-		res, err := queryPrometheus(ctx, "http://"+queryHTTP(1), time.Now(), "ALERTS", false)
+		res, err := promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "ALERTS", time.Now(), false)
 		if err != nil {
 			return err
 		}
@@ -162,6 +163,7 @@ func testRuleComponent(t *testing.T, conf testConfig) {
 	}))
 }
 
+// TODO(bwplotka): Move to promclient.
 func queryAlertmanagerAlerts(ctx context.Context, url string) ([]*model.Alert, error) {
 	req, err := http.NewRequest("GET", url+"/api/v1/alerts", nil)
 	if err != nil {
