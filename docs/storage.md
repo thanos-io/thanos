@@ -1,6 +1,6 @@
 # Object Storage
 
-Thanos supports any object stores that can be implemented against Thanos [objstore.Bucket inteface](/pkg/objstore/objstore.go)
+Thanos supports any object stores that can be implemented against Thanos [objstore.Bucket interface](/pkg/objstore/objstore.go)
 
 All clients are configured using `--objstore.config-file` to reference to the configuration file or `--objstore.config` to put yaml config directly.
 
@@ -21,7 +21,7 @@ NOTE: Currently Thanos requires strong consistency (write-read) for object store
 ## How to add a new client?
 
 1. Create new directory under `pkg/objstore/<provider>`
-2. Implement [objstore.Bucket inteface](/pkg/objstore/objstore.go)
+2. Implement [objstore.Bucket interface](/pkg/objstore/objstore.go)
 3. Add `NewTestBucket` constructor for testing purposes, that creates and deletes temporary bucket.
 4. Use created `NewTestBucket` in [ForeachStore method](/pkg/objstore/objtesting/foreach.go) to ensure we can run tests against new provider. (In PR)
 5. RUN the [TestObjStoreAcceptanceTest](/pkg/objstore/objtesting/acceptance_e2e_test.go) against your provider to ensure it fits. Fix any found error until test passes. (In PR)
