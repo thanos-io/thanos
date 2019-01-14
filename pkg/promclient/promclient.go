@@ -13,16 +13,17 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
-
-	"github.com/improbable-eng/thanos/pkg/tracing"
-	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/promql"
 
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/runutil"
+	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/model"
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/tsdb/labels"
 	"gopkg.in/yaml.v2"
 )
@@ -56,7 +57,7 @@ func ExternalLabels(ctx context.Context, logger log.Logger, base *url.URL) (labe
 	}
 	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, errors.Wrapf(err, "request config against %s", u.String())
+		return nil, errors.Wrapf(err, "request flags against %s", u.String())
 	}
 	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
 
@@ -86,6 +87,159 @@ func ExternalLabels(ctx context.Context, logger log.Logger, base *url.URL) (labe
 		return nil, errors.Wrapf(err, "parse Prometheus config: %v", d.Data.YAML)
 	}
 	return labels.FromMap(cfg.Global.ExternalLabels), nil
+}
+
+type Flags struct {
+	TSDBPath           string         `json:"storage.tsdb.path"`
+	TSDBRetention      model.Duration `json:"storage.tsdb.retention"`
+	TSDBMinTime        model.Duration `json:"storage.tsdb.min-block-duration"`
+	TSDBMaxTime        model.Duration `json:"storage.tsdb.max-block-duration"`
+	WebEnableAdminAPI  bool           `json:"web.enable-admin-api"`
+	WebEnableLifecycle bool           `json:"web.enable-lifecycle"`
+}
+
+// UnmarshalJSON implements the json.Unmarshaler interface.
+func (f *Flags) UnmarshalJSON(b []byte) error {
+	// TODO(bwplotka): Avoid this custom unmarshal by:
+	// - prometheus/common: adding unmarshalJSON to modelDuration
+	// - prometheus/prometheus: flags should return proper JSON. (not bool in string)
+	parsableFlags := struct {
+		TSDBPath           string        `json:"storage.tsdb.path"`
+		TSDBRetention      modelDuration `json:"storage.tsdb.retention"`
+		TSDBMinTime        modelDuration `json:"storage.tsdb.min-block-duration"`
+		TSDBMaxTime        modelDuration `json:"storage.tsdb.max-block-duration"`
+		WebEnableAdminAPI  modelBool     `json:"web.enable-admin-api"`
+		WebEnableLifecycle modelBool     `json:"web.enable-lifecycle"`
+	}{}
+
+	if err := json.Unmarshal(b, &parsableFlags); err != nil {
+		return err
+	}
+
+	*f = Flags{
+		TSDBPath:           parsableFlags.TSDBPath,
+		TSDBRetention:      model.Duration(parsableFlags.TSDBRetention),
+		TSDBMinTime:        model.Duration(parsableFlags.TSDBMinTime),
+		TSDBMaxTime:        model.Duration(parsableFlags.TSDBMaxTime),
+		WebEnableAdminAPI:  bool(parsableFlags.WebEnableAdminAPI),
+		WebEnableLifecycle: bool(parsableFlags.WebEnableLifecycle),
+	}
+	return nil
+}
+
+type modelDuration model.Duration
+
+// UnmarshalJSON implements the json.Unmarshaler interface.
+func (d *modelDuration) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+
+	dur, err := model.ParseDuration(s)
+	if err != nil {
+		return err
+	}
+	*d = modelDuration(dur)
+	return nil
+}
+
+type modelBool bool
+
+// UnmarshalJSON implements the json.Unmarshaler interface.
+func (m *modelBool) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+
+	boolean, err := strconv.ParseBool(s)
+	if err != nil {
+		return err
+	}
+	*m = modelBool(boolean)
+	return nil
+}
+
+// ConfiguredFlags some configured flags from /api/v1/status/flags Prometheus endpoint.
+// Added to Prometheus from v2.2.
+func ConfiguredFlags(ctx context.Context, logger log.Logger, base *url.URL) (Flags, error) {
+	u := *base
+	u.Path = path.Join(u.Path, "/api/v1/status/flags")
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return Flags{}, errors.Wrap(err, "create request")
+	}
+	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return Flags{}, errors.Wrapf(err, "request config against %s", u.String())
+	}
+	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
+
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return Flags{}, errors.Errorf("failed to read body")
+	}
+
+	if resp.StatusCode != 200 {
+		return Flags{}, errors.Errorf("got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
+	}
+
+	var d struct {
+		Data Flags `json:"data"`
+	}
+	if err := json.Unmarshal(b, &d); err != nil {
+		return Flags{}, errors.Wrapf(err, "unmarshal response: %v", string(b))
+	}
+
+	return d.Data, nil
+}
+
+// Snapshot will request Prometheus to perform snapshot in directory returned by this function.
+// Returned directory is relative to Prometheus data-dir.
+// NOTE: `--web.enable-admin-api` flag has to be set on Prometheus.
+// Added to Prometheus from v2.1.
+// TODO(bwplotka): Add metrics.
+func Snapshot(ctx context.Context, logger log.Logger, base *url.URL, skipHead bool) (string, error) {
+	u := *base
+	u.Path = path.Join(u.Path, "/api/v1/admin/tsdb/snapshot")
+
+	req, err := http.NewRequest(
+		http.MethodPost,
+		u.String(),
+		strings.NewReader(url.Values{"skip_head": []string{strconv.FormatBool(skipHead)}}.Encode()),
+	)
+	if err != nil {
+		return "", errors.Wrap(err, "create request")
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
+	if err != nil {
+		return "", errors.Wrapf(err, "request snapshot against %s", u.String())
+	}
+	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
+
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", errors.Errorf("failed to read body")
+	}
+
+	if resp.StatusCode != 200 {
+		return "", errors.Errorf("got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
+	}
+
+	var d struct {
+		Data struct {
+			Name string `json:"name"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(b, &d); err != nil {
+		return "", errors.Wrapf(err, "unmarshal response: %v", string(b))
+	}
+
+	return path.Join("snapshots", d.Data.Name), nil
 }
 
 // QueryInstant performs instant query and returns results in model.Vector type.

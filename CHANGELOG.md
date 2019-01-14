@@ -28,7 +28,11 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - S3 provider:
   - Added `put_user_metadata` option to config.
   - Added `insecure_skip_verify` option to config.
-
+  
+### Deprecated
+  
+- Tests against Prometheus below v2.2.1. This does not mean *lack* of support for those. Only that we don't tests the compatibility anymore. See [#758](https://github.com/improbable-eng/thanos/issues/758) for details.
+  
 ## [v0.2.1](https://github.com/improbable-eng/thanos/releases/tag/v0.2.1) - 2018.12.27
 
 ### Added
