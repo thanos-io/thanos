@@ -105,13 +105,13 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		}}
 	} else {
 		chain = []credentials.Provider{
+			&credentials.EnvAWS{},
+			&credentials.FileAWSCredentials{},			
 			&credentials.IAM{
 				Client: &http.Client{
 					Transport: http.DefaultTransport,
 				},
 			},
-			&credentials.FileAWSCredentials{},
-			&credentials.EnvAWS{},
 		}
 	}
 
