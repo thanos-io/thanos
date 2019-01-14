@@ -21,16 +21,18 @@ DEP_VERSION       ?= 45be32ba4708aad5e2aa8c86f9432c4c4c1f8da2
 EMBEDMD           ?= $(BIN_DIR)/embedmd-$(EMBEDMD_VERSION)
 # v2.0.0
 EMBEDMD_VERSION   ?= 97c13d6e41602fc6e397eb51c45f38069371a969
-ERRCHECK          ?= $(BIN_DIR)/errcheck-$(ERRCHECK_VERSION)
-# v1.2.0
-ERRCHECK_VERSION  ?= e14f8d59a22d460d56c5ee92507cd94c78fbf274
 LICHE             ?= $(BIN_DIR)/liche-$(LICHE_VERSION)
 LICHE_VERSION     ?= 2a2e6e56f6c615c17b2e116669c4cdb31b5453f3
-GOIMPORTS         ?= $(BIN_DIR)/goimports-$(GOIMPORTS_VERSION)
-GOIMPORTS_VERSION ?= 1c3d964395ce8f04f3b03b30aaed0b096c08c3c6
 PROMU             ?= $(BIN_DIR)/promu-$(PROMU_VERSION)
 # v0.2.0
 PROMU_VERSION     ?= 264dc36af9ea3103255063497636bd5713e3e9c1
+
+# Go linting tools
+GOMETALINTER_INSTALL_SCRIPT ?= https://raw.githubusercontent.com/alecthomas/gometalinter/master/scripts/install.sh
+GOMETALINTER_VERSION        ?= 2.0.12
+GOMETALINTER                ?= $(TMP_GOPATH)/bin/gometalinter
+ERRCHECK                    ?= $(TMP_GOPATH)/bin/errcheck
+GOIMPORTS                   ?= $(TMP_GOPATH)/bin/goimports
 
 # E2e test deps.
 SUPPORTED_PROM_VERSIONS ?=v2.0.0 v2.2.1 v2.3.2 v2.4.3 v2.5.0
@@ -57,6 +59,23 @@ define fetch_go_bin_version
 	@echo ">> produced $(BIN_DIR)/$(shell basename $(1))-$(2)"
 
 endef
+
+# fetch_gometalinter_version downloads binaries of linting tools from specified gometalinter version
+# and stores them to $(TMP_GOPATH)/bin/<tool>
+# arguments:
+# $(1): Version of gometalinter to download (if invalid latest is used)
+define fetch_gometalinter_version
+	@mkdir -p $(TMP_GOPATH)
+	# Check if correct version of gometalinter is not already installed
+	@test -x $(GOMETALINTER) && $(GOMETALINTER) --version | grep "version $(GOMETALINTER_VERSION)" || rm -f $(GOMETALINTER)
+	# Download expected gometalinter version release
+	@if [ ! -x '$(GOMETALINTER)' ]; then \
+		echo ">> downloading gometalinter version $(1)"; \
+		curl -sL $(GOMETALINTER_INSTALL_SCRIPT) -o $(TMP_GOPATH)/gometalinter_install.sh && chmod +x $(TMP_GOPATH)/gometalinter_install.sh; \
+		$(TMP_GOPATH)/gometalinter_install.sh -b $(TMP_GOPATH)/bin v$(GOMETALINTER_VERSION); \
+	fi
+endef
+
 
 .PHONY: all
 all: deps format build
@@ -88,6 +107,12 @@ crossbuild: deps $(PROMU)
 .PHONY: deps
 deps: vendor
 
+# lint-tools checks if linting tools are installed in the correct version.
+.PHONY: lint-tools
+lint-tools:
+	@$(call fetch_gometalinter_version,$(GOMETALINTER_VERSION))
+
+
 # docker builds docker with no tag.
 .PHONY: docker
 docker: build
@@ -114,7 +139,7 @@ check-docs: $(EMBEDMD) $(LICHE) build
 
 # errcheck performs static analysis and returns error if any of the errors is not checked.
 .PHONY: errcheck
-errcheck: $(ERRCHECK) deps
+errcheck: lint-tools deps
 	@echo ">> errchecking the code"
 	$(ERRCHECK) -verbose -exclude .errcheck_excludes.txt ./cmd/... ./pkg/... ./test/...
 
@@ -122,7 +147,7 @@ errcheck: $(ERRCHECK) deps
 # NOTE: format requires deps to not remove imports that are used, just not resolved.
 # This is not encoded, because it is often used in IDE onSave logic.
 .PHONY: format
-format: $(GOIMPORTS)
+format: lint-tools
 	@echo ">> formatting code"
 	@$(GOIMPORTS) -w $(FILES)
 
@@ -171,6 +196,11 @@ vet:
 	@echo ">> vetting code"
 	@go vet ./...
 
+# clean cleans up all generated files
+.PHONY: clean
+clean:
+	rm -rf $(TMP_GOPATH)
+
 # non-phony targets
 
 vendor: Gopkg.toml Gopkg.lock $(DEP_FINISHED) | $(DEP)
@@ -187,12 +217,6 @@ $(DEP):
 
 $(EMBEDMD):
 	$(call fetch_go_bin_version,github.com/campoy/embedmd,$(EMBEDMD_VERSION))
-
-$(ERRCHECK):
-	$(call fetch_go_bin_version,github.com/kisielk/errcheck,$(ERRCHECK_VERSION))
-
-$(GOIMPORTS):
-	$(call fetch_go_bin_version,golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VERSION))
 
 $(LICHE):
 	$(call fetch_go_bin_version,github.com/raviqqe/liche,$(LICHE_VERSION))

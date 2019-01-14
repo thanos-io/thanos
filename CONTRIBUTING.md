@@ -30,6 +30,7 @@ $ git merge upstream/master
 $ git checkout -b <your_branch_for_new_pr>
 $ make build
 $ <Iterate your development>
+$ make format
 $ git push origin <your_branch_for_new_pr>
 ```
 5. If you don't have a live object store ready add these envvars to skip tests for these:
