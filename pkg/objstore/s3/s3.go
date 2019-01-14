@@ -90,12 +90,13 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 	if err := validate(config); err != nil {
 		return nil, err
 	}
-	if config.AccessKey != "" {
-		signature := credentials.SignatureV4
-		if config.SignatureV2 {
-			signature = credentials.SignatureV2
-		}
 
+	signature := credentials.SignatureV4
+	if config.SignatureV2 {
+		signature = credentials.SignatureV2
+	}
+
+	if config.AccessKey != "" {
 		chain = []credentials.Provider{&credentials.Static{
 			Value: credentials.Value{
 				AccessKeyID:     config.AccessKey,
@@ -106,7 +107,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 	} else {
 		chain = []credentials.Provider{
 			&credentials.EnvAWS{},
-			&credentials.FileAWSCredentials{},			
+			&credentials.FileAWSCredentials{},
 			&credentials.IAM{
 				Client: &http.Client{
 					Transport: http.DefaultTransport,
