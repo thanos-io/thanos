@@ -63,9 +63,9 @@ For debug purposes you can set `insecure: true` to switch to plain insecure HTTP
 By default Thanos will try to retrieve credentials from the following sources:
 
 1. From config file if BOTH `access_key` and `secret_key` are present.
-1. IAM credentials retrieved from an instance profile.
-1. From `~/.aws/credentials`
 1. From the standard AWS environment variable - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+1. From `~/.aws/credentials`
+1. IAM credentials retrieved from an instance profile.
 
 NOTE: Getting access key from config file and secret key from other method (and vice versa) is not supported. 
 
