@@ -4,11 +4,13 @@
 set -e
 set -u
 
+EMBEDMD_BIN=${EMBEDMD_BIN:-embedmd}
+
 function docs {
 # if check arg was passed, instead of the docs generation verifies if docs coincide with the codebase
 if [[ "${CHECK}" == "check" ]]; then
     set +e
-    DIFF=$(embedmd -d *.md)
+    DIFF=$(${EMBEDMD_BIN} -d *.md)
     RESULT=$?
     if [[ "$RESULT" != "0" ]]; then
         cat << EOF
@@ -19,7 +21,7 @@ EOF
         exit 2
     fi
 else
-    embedmd -w *.md
+    ${EMBEDMD_BIN} -w *.md
 fi
 
 }
