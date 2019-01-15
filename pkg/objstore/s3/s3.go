@@ -35,21 +35,21 @@ const DirDelim = "/"
 
 // Config stores the configuration for s3 bucket.
 type Config struct {
-	Bucket             string            `yaml:"bucket"`
-	Endpoint           string            `yaml:"endpoint"`
-	AccessKey          string            `yaml:"access_key"`
-	Insecure           bool              `yaml:"insecure"`
-	InsecureSkipVerify bool              `yaml:"insecure_skip_verify"`
-	SignatureV2        bool              `yaml:"signature_version2"`
-	SSEEncryption      bool              `yaml:"encrypt_sse"`
-	SecretKey          string            `yaml:"secret_key"`
-	PutUserMetadata    map[string]string `yaml:"put_user_metadata"`
-	HTTPConfig         HTTPConfig        `yaml:"http_config"`
+	Bucket          string            `yaml:"bucket"`
+	Endpoint        string            `yaml:"endpoint"`
+	AccessKey       string            `yaml:"access_key"`
+	Insecure        bool              `yaml:"insecure"`
+	SignatureV2     bool              `yaml:"signature_version2"`
+	SSEEncryption   bool              `yaml:"encrypt_sse"`
+	SecretKey       string            `yaml:"secret_key"`
+	PutUserMetadata map[string]string `yaml:"put_user_metadata"`
+	HTTPConfig      HTTPConfig        `yaml:"http_config"`
 }
 
 // HTTPConfig stores the http.Transport configuration for the s3 minio client.
 type HTTPConfig struct {
-	IdleConnTimeout model.Duration `yaml:"idle_conn_timeout"`
+	IdleConnTimeout    model.Duration `yaml:"idle_conn_timeout"`
+	InsecureSkipVerify bool           `yaml:"insecure_skip_verify"`
 }
 
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
@@ -144,7 +144,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		// Refer:
 		//    https://golang.org/src/net/http/transport.go?h=roundTrip#L1843
 		DisableCompression: true,
-		TLSClientConfig:    &tls.Config{InsecureSkipVerify: config.InsecureSkipVerify},
+		TLSClientConfig:    &tls.Config{InsecureSkipVerify: config.HTTPConfig.InsecureSkipVerify},
 	})
 
 	var sse encrypt.ServerSide
@@ -323,7 +323,7 @@ func configFromEnv() Config {
 	}
 
 	c.Insecure, _ = strconv.ParseBool(os.Getenv("S3_INSECURE"))
-	c.InsecureSkipVerify, _ = strconv.ParseBool(os.Getenv("S3_INSECURE_SKIP_VERIFY"))
+	c.HTTPConfig.InsecureSkipVerify, _ = strconv.ParseBool(os.Getenv("S3_INSECURE_SKIP_VERIFY"))
 	c.SignatureV2, _ = strconv.ParseBool(os.Getenv("S3_SIGNATURE_VERSION2"))
 	return c
 }

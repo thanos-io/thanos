@@ -51,6 +51,7 @@ config:
   put_user_metadata: {}
   http_config:
     idle_conn_timeout: 0s
+    insecure_skip_verify: false
 ```
 
 AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region)
@@ -61,7 +62,7 @@ Currently AWS require signature v4, so it needs `signature-version2: false`, oth
 For debug and testing purposes you can set
 
 * `insecure: true` to switch to plain insecure HTTP instead of HTTPS
-* `insecure_skip_verify: true` to disable TLS certificate verification (if your S3 based storage is using a self-signed certificate, for example)
+* `http_config.insecure_skip_verify: true` to disable TLS certificate verification (if your S3 based storage is using a self-signed certificate, for example)
 
 ### Credentials
 By default Thanos will try to retrieve credentials from the following sources:

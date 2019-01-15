@@ -10,8 +10,8 @@ import (
 func TestParseConfig_DefaultHTTPOpts(t *testing.T) {
 	input := []byte(`bucket: abcd
 insecure: false
-insecure_skip_verify: false
 http_config:
+  insecure_skip_verify: true
   idle_conn_timeout: 50s`)
 	cfg, err := parseConfig(input)
 	testutil.Ok(t, err)
@@ -27,8 +27,8 @@ http_config:
 	if cfg.Insecure != false {
 		t.Errorf("parsing of insecure failed: got %v, expected %v", cfg.Insecure, false)
 	}
-	if cfg.InsecureSkipVerify != false {
-		t.Errorf("parsing of insecure_skip_verify failed: got %v, expected %v", cfg.InsecureSkipVerify, false)
+	if cfg.HTTPConfig.InsecureSkipVerify != true {
+		t.Errorf("parsing of insecure_skip_verify failed: got %v, expected %v", cfg.HTTPConfig.InsecureSkipVerify, false)
 	}
 }
 
@@ -42,7 +42,8 @@ signature_version2: false
 encrypt_sse: false
 secret_key: "secret_key"
 http_config:
-  idle_conn_timeout: 0s`)
+  insecure_skip_verify: false
+  idle_conn_timeout: 50s`)
 	cfg, err := parseConfig(input)
 	testutil.Ok(t, err)
 	testutil.Ok(t, validate(cfg))
@@ -56,9 +57,10 @@ insecure_skip_verify: false
 signature_version2: false
 encrypt_sse: false
 secret_key: "secret_key"
-put_user_metadata: 
+put_user_metadata:
   "X-Amz-Acl": "bucket-owner-full-control"
 http_config:
+  insecure_skip_verify: false
   idle_conn_timeout: 0s`)
 	cfg2, err := parseConfig(input2)
 	testutil.Ok(t, err)
