@@ -1,4 +1,42 @@
 // Package runutil provides helpers to advanced function scheduling control like repeat or retry.
+//
+// While meeting a scenario to do something every fixed intervals or be retried automatically,
+// it's a common thinking to use time.Ticker or for-loop. Here we provide easy ways to implement those by closure function.
+//
+// For repeat executes, use Repeat:
+//
+// 	err := runutil.Repeat(10*time.Second, stopc, func() error {
+// 		// ...
+// 	})
+//
+// Retry starts executing closure function f until no error is returned from f:
+//
+// 	err := runutil.Retry(10*time.Second, stopc, func() error {
+// 		// ...
+// 	})
+//
+// For logging an error on each f error, use RetryWithLog:
+//
+// 	err := runutil.RetryWithLog(logger, 10*time.Second, stopc, func() error {
+// 		// ...
+// 	})
+//
+// As we all know, we should close all implements of io.Closer in Golang, such as *os.File. Commonly we will use:
+//
+// 	defer closer.Close()
+//
+// The Close() will return error if it has been already closed, sometimes we will ignore it. Thanos provides utility functions to log every error like those:
+//
+// 	defer runutil.CloseWithLogOnErr(logger, closer, "log format message")
+//
+// For capturing error, use CloseWithErrCapture:
+//
+// 	var err error
+// 	defer runutil.CloseWithErrCapture(logger, &err, closer, "log format message")
+//
+// 	// ...
+//
+// If Close() returns error, err will capture it and return by argument.
 package runutil
 
 import (

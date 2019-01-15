@@ -1,5 +1,56 @@
 // Package reloader contains helpers to trigger reloads of Prometheus instances
 // on configuration changes and to substitute environment variables in config files.
+//
+// While you want to watch change event of the specified config files
+// and trigger reloads by reload url,
+// the way to use the feature in Thanos is simply by importing this package.
+// The main features are:
+//
+// 	* The given config files or directories can be watched and trigger reloads upon changes.
+// 	* The given config files or directories will be checked as scheduled, it also will trigger reloads if changed.
+// 	* It can substitute environment variables in the given config file and write into the specified path.
+// 	* Retry trigger reloads until it succeeded or next tick is near.
+//
+// Here we can create a new reloader to ready for watching:
+//
+// 	u, _ := url.Parse("http://localhost:9090")
+// 	rl := reloader.New(
+// 		nil,
+// 		reloader.ReloadURLFromBase(u),
+// 		"/path/to/cfg",
+// 		"/path/to/cfg.out",
+// 		[]string{"/path/to/dirs"},
+// 	)
+//
+// If "/path/to/cfg.out" is not empty the config file will be decompressed if needed,
+// environment variables will be substituted and the output written into the given path.
+// The environment variables must be of the form "$(var)".
+//
+// The url of reloads can be generated with function ReloadURLFromBase().
+// It will append the default path of reload into the given url:
+//
+// 	u, _ := url.Parse("http://localhost:9090")
+// 	reloader.ReloadURLFromBase(u) // It will return "http://localhost:9090/-/reload"
+//
+// Start watching changes and stopped until the context gets canceled:
+//
+// 	ctx, cancel := context.WithCancel(context.Background())
+// 	go func() {
+// 		if err := rl.Watch(ctx); err != nil {
+// 			log.Fatal(err)
+// 		}
+// 	}()
+// 	// ...
+// 	cancel()
+//
+// By default, reloader will make a schedule to check the given config files and dirs of sum of hash with the last result,
+// even if it is no changes.
+//
+// A basic example of configuration template with environment variables:
+//
+//   global:
+//     external_labels:
+//       replica: '$(HOSTNAME)'
 package reloader
 
 import (
