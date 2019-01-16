@@ -21,16 +21,18 @@ Concretely the aims of the project are:
 1. unlimited retention of metrics
 1. high availability of components, including Prometheus
 
+## Architecture Overview
+
+![architecture_overview](docs/img/arch.jpg)
+
+## Getting Started
+
 * **[Getting Started](docs/getting_started.md)**
 * [Design](docs/design.md)
 * [Prom Meetup Slides](https://www.slideshare.net/BartomiejPotka/thanos-global-durable-prometheus-monitoring)
 * [Introduction blog post](https://improbable.io/games/blog/thanos-prometheus-at-scale)
 * [Benchmarks](https://github.com/improbable-eng/thanos/tree/master/benchmark)
 * [Proposals](docs/proposals)
-
-## Architecture Overview
-
-![architecture_overview](docs/img/arch.jpg)
 
 ## Features
 
