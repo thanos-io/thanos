@@ -6,13 +6,20 @@
 
 ## Overview
 
-Thanos is a set of components that can be composed into a highly available
-metric system with unlimited storage capacity. It can be added seamlessly on
-top of existing Prometheus deployments and leverages the Prometheus 2.0
-storage format to cost-efficiently store historical metric data in any object
-storage while retaining fast query latencies. Additionally, it provides
-a global query view across all Prometheus installations and can merge
-data from Prometheus HA pairs on the fly.
+Thanos is a set of components that can be composed into a highly available metric 
+system with unlimited storage capacity, which can be added seamlessly on top of existing 
+Prometheus deployments. 
+
+Thanos leverages the Prometheus 2.0 storage format to cost-efficiently store historical metric 
+data in any object storage while retaining fast query latencies. Additionally, it provides
+a global query view across all Prometheus installations and can merge data from Prometheus 
+HA pairs on the fly.
+
+Concretely the aims of the project are:
+
+1. global query view of metrics
+1. unlimited retention of metrics
+1. high availability of components, including Prometheus
 
 * **[Getting Started](docs/getting_started.md)**
 * [Design](docs/design.md)
@@ -20,6 +27,10 @@ data from Prometheus HA pairs on the fly.
 * [Introduction blog post](https://improbable.io/games/blog/thanos-prometheus-at-scale)
 * [Benchmarks](https://github.com/improbable-eng/thanos/tree/master/benchmark)
 * [Proposals](docs/proposals)
+
+## Architecture Overview
+
+![architecture_overview](docs/img/arch.jpg)
 
 ## Features
 
@@ -33,9 +44,20 @@ data from Prometheus HA pairs on the fly.
 * Simple gRPC "Store API" for unified data access across all metric data
 * Easy integration points for custom metric providers
 
+## Thanos Philosophy
+
+The philosophy of Thanos and our community is borrowing much from UNIX philosophy and the go programming language.
+
+* Each sub command should do one thing and do it well
+  * eg. thanos query proxies incoming calls to known store API endpoints merging the result
+* Write components that work together
+  * e.g. blocks should be stored in native prometheus format
+* Make it easy to read, write, and, run components
+  * e.g. reduce complexity in system design and implementation
+
 ## Contributing
 
-Contributions are very welcome!
+Contributions are very welcome! See our [CONTRIBUTING.md](CONTRIBUTING.md) for more information.
 
 ## Community
 

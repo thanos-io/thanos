@@ -6,6 +6,21 @@ method with the owners of this repository before making a change.
 
 Please follow the [code of conduct](CODE_OF_CONDUCT.md) in all your interactions with the project.
 
+## Thanos Philosophy
+
+The philosophy of Thanos and our community is borrowing much from UNIX philosophy and the go programming language.
+
+* Each sub command should do one thing and do it well
+  * eg. thanos query proxies incoming calls to known store API endpoints merging the result
+* Write components that work together
+  * e.g. blocks should be stored in native prometheus format
+* Make it easy to read, write, and, run components
+  * e.g. reduce complexity in system design and implementation  
+
+## Adding New Features / Components
+
+Adding large new features and components to Thanos should be done by first creating a [proposal](docs/proposals) document outlining the design decisions of the change, motivations for the change, and any alternatives that might have been considered.
+
 ## Pull Request Process
 
 1. Read [getting started docs](docs/getting_started.md) and prepare Thanos.
