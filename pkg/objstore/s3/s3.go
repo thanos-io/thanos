@@ -3,6 +3,7 @@ package s3
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"math/rand"
@@ -47,7 +48,8 @@ type Config struct {
 
 // HTTPConfig stores the http.Transport configuration for the s3 minio client.
 type HTTPConfig struct {
-	IdleConnTimeout model.Duration `yaml:"idle_conn_timeout"`
+	IdleConnTimeout    model.Duration `yaml:"idle_conn_timeout"`
+	InsecureSkipVerify bool           `yaml:"insecure_skip_verify"`
 }
 
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
@@ -142,6 +144,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		// Refer:
 		//    https://golang.org/src/net/http/transport.go?h=roundTrip#L1843
 		DisableCompression: true,
+		TLSClientConfig:    &tls.Config{InsecureSkipVerify: config.HTTPConfig.InsecureSkipVerify},
 	})
 
 	var sse encrypt.ServerSide
@@ -320,6 +323,7 @@ func configFromEnv() Config {
 	}
 
 	c.Insecure, _ = strconv.ParseBool(os.Getenv("S3_INSECURE"))
+	c.HTTPConfig.InsecureSkipVerify, _ = strconv.ParseBool(os.Getenv("S3_INSECURE_SKIP_VERIFY"))
 	c.SignatureV2, _ = strconv.ParseBool(os.Getenv("S3_SIGNATURE_VERSION2"))
 	return c
 }
