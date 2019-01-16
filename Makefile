@@ -13,15 +13,26 @@ DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(she
 FIRST_GOPATH      ?= $(firstword $(subst :, ,$(shell go env GOPATH)))
 TMP_GOPATH        ?= /tmp/thanos-go
 BIN_DIR           ?= $(FIRST_GOPATH)/bin
-GOIMPORTS         ?= $(BIN_DIR)/goimports
-PROMU             ?= $(BIN_DIR)/promu
 DEP_FINISHED      ?= .dep-finished
-ERRCHECK          ?= $(BIN_DIR)/errcheck
-EMBEDMD           ?= $(BIN_DIR)/embedmd
 
+# Tools.
 DEP               ?= $(BIN_DIR)/dep-$(DEP_VERSION)
+DEP_VERSION       ?= 45be32ba4708aad5e2aa8c86f9432c4c4c1f8da2
+EMBEDMD           ?= $(BIN_DIR)/embedmd-$(EMBEDMD_VERSION)
+# v2.0.0
+EMBEDMD_VERSION   ?= 97c13d6e41602fc6e397eb51c45f38069371a969
+ERRCHECK          ?= $(BIN_DIR)/errcheck-$(ERRCHECK_VERSION)
+# v1.2.0
+ERRCHECK_VERSION  ?= e14f8d59a22d460d56c5ee92507cd94c78fbf274
+LICHE             ?= $(BIN_DIR)/liche-$(LICHE_VERSION)
+LICHE_VERSION     ?= 2a2e6e56f6c615c17b2e116669c4cdb31b5453f3
+GOIMPORTS         ?= $(BIN_DIR)/goimports-$(GOIMPORTS_VERSION)
+GOIMPORTS_VERSION ?= 1c3d964395ce8f04f3b03b30aaed0b096c08c3c6
+PROMU             ?= $(BIN_DIR)/promu-$(PROMU_VERSION)
+# v0.2.0
+PROMU_VERSION     ?= 264dc36af9ea3103255063497636bd5713e3e9c1
 
-DEP_VERSION             ?=45be32ba4708aad5e2aa8c86f9432c4c4c1f8da2
+# E2e test deps.
 SUPPORTED_PROM_VERSIONS ?=v2.0.0 v2.2.1 v2.3.2 v2.4.3 v2.5.0
 ALERTMANAGER_VERSION    ?=v0.15.2
 MINIO_SERVER_VERSION    ?=RELEASE.2018-10-06T00-15-16Z
@@ -93,12 +104,13 @@ docker-push:
 # docs regenerates flags in docs for all thanos commands.
 .PHONY: docs
 docs: $(EMBEDMD) build
-	@scripts/genflagdocs.sh
+	@EMBEDMD_BIN="$(EMBEDMD)" scripts/genflagdocs.sh
 
-# check-docs checks if documentation have discrepancy with flags
+# check-docs checks if documentation have discrepancy with flags and if the links are valid.
 .PHONY: check-docs
-check-docs: $(EMBEDMD) build
-	@scripts/genflagdocs.sh check
+check-docs: $(EMBEDMD) $(LICHE) build
+	@EMBEDMD_BIN="$(EMBEDMD)" scripts/genflagdocs.sh check
+	@$(LICHE) --recursive docs --document-root .
 
 # errcheck performs static analysis and returns error if any of the errors is not checked.
 .PHONY: errcheck
@@ -165,24 +177,25 @@ vendor: Gopkg.toml Gopkg.lock $(DEP_FINISHED) | $(DEP)
 	@echo ">> dep ensure"
 	@$(DEP) ensure $(DEPARGS) || rm $(DEP_FINISHED)
 
-$(GOIMPORTS):
-	@echo ">> fetching goimports"
-	@go get -u golang.org/x/tools/cmd/goimports
+$(DEP_FINISHED):
+	@touch $(DEP_FINISHED)
 
-$(PROMU):
-	@echo ">> fetching promu"
-	GOOS= GOARCH= go get -u github.com/prometheus/promu
+# tooling deps. TODO(bwplotka): Pin them all to certain version!
 
 $(DEP):
 	$(call fetch_go_bin_version,github.com/golang/dep/cmd/dep,$(DEP_VERSION))
 
-$(DEP_FINISHED):
-	@touch $(DEP_FINISHED)
+$(EMBEDMD):
+	$(call fetch_go_bin_version,github.com/campoy/embedmd,$(EMBEDMD_VERSION))
 
 $(ERRCHECK):
-	@echo ">> fetching errcheck"
-	@go get -u github.com/kisielk/errcheck
+	$(call fetch_go_bin_version,github.com/kisielk/errcheck,$(ERRCHECK_VERSION))
 
-$(EMBEDMD):
-	@echo ">> install campoy/embedmd"
-	@go get -u github.com/campoy/embedmd
+$(GOIMPORTS):
+	$(call fetch_go_bin_version,golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VERSION))
+
+$(LICHE):
+	$(call fetch_go_bin_version,github.com/raviqqe/liche,$(LICHE_VERSION))
+
+$(PROMU):
+	$(call fetch_go_bin_version,github.com/prometheus/promu,$(PROMU_VERSION))

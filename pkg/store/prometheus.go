@@ -174,13 +174,13 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	return nil
 }
 
-func(p *PrometheusStore) chunkSamples(series prompb.TimeSeries, samplesPerChunk int) ([]storepb.AggrChunk, error) {
+func (p *PrometheusStore) chunkSamples(series prompb.TimeSeries, samplesPerChunk int) ([]storepb.AggrChunk, error) {
 	var aggregatedChunks []storepb.AggrChunk
 	samples := series.Samples
 
 	for len(samples) > 0 {
 		chunkSize := len(samples)
-		if chunkSize > samplesPerChunk  {
+		if chunkSize > samplesPerChunk {
 			chunkSize = samplesPerChunk
 		}
 
