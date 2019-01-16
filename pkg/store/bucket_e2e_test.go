@@ -90,15 +90,14 @@ func TestBucketStore_e2e(t *testing.T) {
 			}
 		}()
 
-		ctx, _ = context.WithTimeout(ctx, 30*time.Second)
-
-		err = runutil.Retry(100*time.Millisecond, ctx.Done(), func() error {
+		rctx, rcancel := context.WithTimeout(ctx, 30*time.Second)
+		defer rcancel()
+		testutil.Ok(t, runutil.Retry(100*time.Millisecond, rctx.Done(), func() error {
 			if store.numBlocks() < 6 {
 				return errors.New("not all blocks loaded")
 			}
 			return nil
-		})
-		testutil.Ok(t, err)
+		}))
 
 		mint, maxt := store.TimeRange()
 		testutil.Equals(t, minTime, mint)
@@ -120,14 +119,13 @@ func TestBucketStore_e2e(t *testing.T) {
 		}
 		srv := newStoreSeriesServer(ctx)
 
-		err = store.Series(&storepb.SeriesRequest{
+		testutil.Ok(t, store.Series(&storepb.SeriesRequest{
 			Matchers: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|2"},
 			},
 			MinTime: timestamp.FromTime(start),
 			MaxTime: timestamp.FromTime(now),
-		}, srv)
-		testutil.Ok(t, err)
+		}, srv))
 		testutil.Equals(t, len(pbseries), len(srv.SeriesSet))
 
 		for i, s := range srv.SeriesSet {
@@ -141,14 +139,13 @@ func TestBucketStore_e2e(t *testing.T) {
 		}
 		srv = newStoreSeriesServer(ctx)
 
-		err = store.Series(&storepb.SeriesRequest{
+		testutil.Ok(t, store.Series(&storepb.SeriesRequest{
 			Matchers: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "2"},
 			},
 			MinTime: timestamp.FromTime(start),
 			MaxTime: timestamp.FromTime(now),
-		}, srv)
-		testutil.Ok(t, err)
+		}, srv))
 		testutil.Equals(t, len(pbseries), len(srv.SeriesSet))
 
 		for i, s := range srv.SeriesSet {
@@ -163,15 +160,14 @@ func TestBucketStore_e2e(t *testing.T) {
 		}
 		srv = newStoreSeriesServer(ctx)
 
-		err = store.Series(&storepb.SeriesRequest{
+		testutil.Ok(t, store.Series(&storepb.SeriesRequest{
 			Matchers: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 				{Type: storepb.LabelMatcher_EQ, Name: "ext2", Value: "value2"},
 			},
 			MinTime: timestamp.FromTime(start),
 			MaxTime: timestamp.FromTime(now),
-		}, srv)
-		testutil.Ok(t, err)
+		}, srv))
 		testutil.Equals(t, len(pbseries), len(srv.SeriesSet))
 
 		for i, s := range srv.SeriesSet {
@@ -180,15 +176,14 @@ func TestBucketStore_e2e(t *testing.T) {
 		}
 
 		srv = newStoreSeriesServer(ctx)
-		err = store.Series(&storepb.SeriesRequest{
+		testutil.Ok(t, store.Series(&storepb.SeriesRequest{
 			Matchers: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 				{Type: storepb.LabelMatcher_EQ, Name: "ext2", Value: "wrong-value"},
 			},
 			MinTime: timestamp.FromTime(start),
 			MaxTime: timestamp.FromTime(now),
-		}, srv)
-		testutil.Ok(t, err)
+		}, srv))
 		testutil.Equals(t, 0, len(srv.SeriesSet))
 	})
 
