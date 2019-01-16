@@ -200,9 +200,16 @@ Below is an example configuration file for thanos to use OpenStack swift contain
 ```yaml
 type: SWIFT
 config:
-  storage_account: ""
-  storage_account_key: ""
-  container: ""
+  auth_url: ""
+  username: ""
+  user_id: ""
+  password: ""
+  domain_id: ""
+  domain_name: ""
+  tenant_id: ""
+  tenant_name: ""
+  region_name: ""
+  container_name: ""
 ```
 
 ## Other minio supported S3 object storages

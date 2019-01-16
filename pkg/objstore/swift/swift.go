@@ -26,16 +26,16 @@ import (
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const DirDelim = "/"
 
-type swiftConfig struct {
+type SwiftConfig struct {
 	AuthUrl       string `yaml:"auth_url"`
-	Username      string `yaml:"username,omitempty"`
-	UserId        string `yaml:"user_id,omitempty"`
+	Username      string `yaml:"username"`
+	UserId        string `yaml:"user_id"`
 	Password      string `yaml:"password"`
-	DomainId      string `yaml:"domain_id,omitempty"`
-	DomainName    string `yaml:"domain_name,omitempty"`
-	TenantID      string `yaml:"tenant_id,omitempty"`
-	TenantName    string `yaml:"tenant_name,omitempty"`
-	RegionName    string `yaml:"region_name,omitempty"`
+	DomainId      string `yaml:"domain_id"`
+	DomainName    string `yaml:"domain_name"`
+	TenantID      string `yaml:"tenant_id"`
+	TenantName    string `yaml:"tenant_name"`
+	RegionName    string `yaml:"region_name"`
 	ContainerName string `yaml:"container_name"`
 }
 
@@ -46,7 +46,7 @@ type Container struct {
 }
 
 func NewContainer(logger log.Logger, conf []byte) (*Container, error) {
-	var sc swiftConfig
+	var sc SwiftConfig
 	if err := yaml.Unmarshal(conf, &sc); err != nil {
 		return nil, err
 	}
@@ -178,8 +178,8 @@ func (c *Container) deleteContainer(name string) error {
 	return containers.Delete(c.client, name).Err
 }
 
-func configFromEnv() swiftConfig {
-	c := swiftConfig{
+func configFromEnv() SwiftConfig {
+	c := SwiftConfig{
 		AuthUrl:       os.Getenv("OS_AUTH_URL"),
 		Username:      os.Getenv("OS_USERNAME"),
 		Password:      os.Getenv("OS_PASSWORD"),
@@ -193,7 +193,7 @@ func configFromEnv() swiftConfig {
 }
 
 // validateForTests checks to see the config options for tests are set.
-func validateForTests(conf swiftConfig) error {
+func validateForTests(conf SwiftConfig) error {
 	if conf.AuthUrl == "" ||
 		conf.Username == "" ||
 		conf.Password == "" ||
