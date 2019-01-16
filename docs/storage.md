@@ -44,7 +44,6 @@ config:
   endpoint: ""
   access_key: ""
   insecure: false
-  insecure_skip_verify: false
   signature_version2: false
   encrypt_sse: false
   secret_key: ""
