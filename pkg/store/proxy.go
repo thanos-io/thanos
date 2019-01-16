@@ -94,9 +94,10 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 	}
 
 	var (
-		seriesSet []storepb.SeriesSet
-		respCh    = make(chan *storepb.SeriesResponse, len(stores)+1)
-		g, gctx   = errgroup.WithContext(srv.Context())
+		seriesSet    []storepb.SeriesSet
+		seriesClient []storepb.Store_SeriesClient
+		respCh       = make(chan *storepb.SeriesResponse, len(stores)+1)
+		g, gctx      = errgroup.WithContext(srv.Context())
 	)
 
 	var storeDebugMsgs []string
@@ -132,7 +133,10 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			respCh <- storepb.NewWarnSeriesResponse(err)
 			continue
 		}
+		seriesClient = append(seriesClient, sc)
+	}
 
+	for _, sc := range seriesClient {
 		seriesSet = append(seriesSet, startStreamSeriesSet(sc, respCh, 10))
 	}
 
@@ -282,7 +286,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		store := st
 		g.Go(func() error {
 			resp, err := store.LabelValues(gctx, &storepb.LabelValuesRequest{
-				Label: r.Label,
+				Label:                   r.Label,
 				PartialResponseDisabled: r.PartialResponseDisabled,
 			})
 			if err != nil {
