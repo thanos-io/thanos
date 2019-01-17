@@ -33,6 +33,7 @@ PROMU             ?= $(BIN_DIR)/promu-$(PROMU_VERSION)
 PROMU_VERSION     ?= 264dc36af9ea3103255063497636bd5713e3e9c1
 
 # E2e test deps.
+# Referenced by github.com/improbable-eng/thanos/blob/master/docs/getting_started.md#prometheus
 SUPPORTED_PROM_VERSIONS ?=v2.0.0 v2.2.1 v2.3.2 v2.4.3 v2.5.0
 ALERTMANAGER_VERSION    ?=v0.15.2
 MINIO_SERVER_VERSION    ?=RELEASE.2018-10-06T00-15-16Z
