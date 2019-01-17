@@ -1,7 +1,8 @@
 // Package runutil provides helpers to advanced function scheduling control like repeat or retry.
 //
-// While meeting a scenario to do something every fixed intervals or be retried automatically,
-// it's a common thinking to use time.Ticker or for-loop. Here we provide easy ways to implement those by closure function.
+// It's very often the case when you need to excutes some code every fixed intervals or have it retried automatically.
+// To make it reliably with proper timeout, you need to carefully arrange some boilerplate for this.
+// Below function does it for you.
 //
 // For repeat executes, use Repeat:
 //
@@ -21,11 +22,11 @@
 // 		// ...
 // 	})
 //
-// As we all know, we should close all implements of io.Closer in Golang, such as *os.File. Commonly we will use:
+// Another use case for runutil package is when you want to close a `Closer` interface. As we all know, we should close all implements of `Closer`, such as *os.File. Commonly we will use:
 //
 // 	defer closer.Close()
 //
-// The Close() will return error if it has been already closed, sometimes we will ignore it. Thanos provides utility functions to log every error like those:
+// The problem is that Close() usually can return important error e.g for os.File the actual file flush might happen (and fail) on `Close` method. It's important to *always* check error. Thanos provides utility functions to log every error like those, allowing to put them in convenient `defer`:
 //
 // 	defer runutil.CloseWithLogOnErr(logger, closer, "log format message")
 //

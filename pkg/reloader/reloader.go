@@ -1,17 +1,16 @@
 // Package reloader contains helpers to trigger reloads of Prometheus instances
 // on configuration changes and to substitute environment variables in config files.
 //
-// While you want to watch change event of the specified config files
-// and trigger reloads by reload url,
-// the way to use the feature in Thanos is simply by importing this package.
-// The main features are:
+// Reloader type is useful when you want to:
 //
-// 	* The given config files or directories can be watched and trigger reloads upon changes.
-// 	* The given config files or directories will be checked as scheduled, it also will trigger reloads if changed.
-// 	* It can substitute environment variables in the given config file and write into the specified path.
-// 	* Retry trigger reloads until it succeeded or next tick is near.
+// 	* Watch on changes against certain file e.g (`cfgFile`) .
+// 	* Optionally, specify different different output file for watched `cfgFile` (`cfgOutputFile`).
+// 	This will also try decompress the `cfgFile` if needed and substitute ALL the envvars using Kubernetes substitution format: (`$(var)`)
+// 	* Watch on changes against certain directories (`ruleDires`).
 //
-// Here we can create a new reloader to ready for watching:
+// Once any of those two changes Prometheus on given `reloadURL` will be notified, causing Prometheus to reload configuration and rules.
+//
+// This and below for reloader:
 //
 // 	u, _ := url.Parse("http://localhost:9090")
 // 	rl := reloader.New(
@@ -21,10 +20,6 @@
 // 		"/path/to/cfg.out",
 // 		[]string{"/path/to/dirs"},
 // 	)
-//
-// If "/path/to/cfg.out" is not empty the config file will be decompressed if needed,
-// environment variables will be substituted and the output written into the given path.
-// The environment variables must be of the form "$(var)".
 //
 // The url of reloads can be generated with function ReloadURLFromBase().
 // It will append the default path of reload into the given url:
