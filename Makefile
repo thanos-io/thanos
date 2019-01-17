@@ -134,7 +134,8 @@ format: $(GOIMPORTS)
 # proto generates golang files from Thanos proto files.
 .PHONY: proto
 proto: deps $(GOIMPORTS) $(PROTOC)
-	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" ./scripts/genproto.sh
+	@go install ./vendor/github.com/gogo/protobuf/protoc-gen-gogofast
+	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" scripts/genproto.sh
 
 .PHONY: promu
 promu: $(PROMU)
@@ -213,4 +214,3 @@ $(PROTOC):
 	@echo ">> installing protoc@${PROTOC_VERSION}"
 	@mv -- "$(TMP_GOPATH)/bin/protoc" "$(BIN_DIR)/protoc-$(PROTOC_VERSION)"
 	@echo ">> produced $(BIN_DIR)/protoc-$(PROTOC_VERSION)"
-	@go install ./vendor/github.com/gogo/protobuf/protoc-gen-gogofast
