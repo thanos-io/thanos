@@ -16,21 +16,25 @@ BIN_DIR           ?= $(FIRST_GOPATH)/bin
 DEP_FINISHED      ?= .dep-finished
 
 # Tools.
-DEP               ?= $(BIN_DIR)/dep-$(DEP_VERSION)
-DEP_VERSION       ?= 45be32ba4708aad5e2aa8c86f9432c4c4c1f8da2
-EMBEDMD           ?= $(BIN_DIR)/embedmd-$(EMBEDMD_VERSION)
+DEP                 ?= $(BIN_DIR)/dep-$(DEP_VERSION)
+DEP_VERSION         ?= 45be32ba4708aad5e2aa8c86f9432c4c4c1f8da2
+EMBEDMD             ?= $(BIN_DIR)/embedmd-$(EMBEDMD_VERSION)
 # v2.0.0
-EMBEDMD_VERSION   ?= 97c13d6e41602fc6e397eb51c45f38069371a969
-ERRCHECK          ?= $(BIN_DIR)/errcheck-$(ERRCHECK_VERSION)
+EMBEDMD_VERSION     ?= 97c13d6e41602fc6e397eb51c45f38069371a969
+ERRCHECK            ?= $(BIN_DIR)/errcheck-$(ERRCHECK_VERSION)
 # v1.2.0
-ERRCHECK_VERSION  ?= e14f8d59a22d460d56c5ee92507cd94c78fbf274
-LICHE             ?= $(BIN_DIR)/liche-$(LICHE_VERSION)
-LICHE_VERSION     ?= 2a2e6e56f6c615c17b2e116669c4cdb31b5453f3
-GOIMPORTS         ?= $(BIN_DIR)/goimports-$(GOIMPORTS_VERSION)
-GOIMPORTS_VERSION ?= 1c3d964395ce8f04f3b03b30aaed0b096c08c3c6
-PROMU             ?= $(BIN_DIR)/promu-$(PROMU_VERSION)
+ERRCHECK_VERSION    ?= e14f8d59a22d460d56c5ee92507cd94c78fbf274
+LICHE               ?= $(BIN_DIR)/liche-$(LICHE_VERSION)
+LICHE_VERSION       ?= 2a2e6e56f6c615c17b2e116669c4cdb31b5453f3
+GOIMPORTS           ?= $(BIN_DIR)/goimports-$(GOIMPORTS_VERSION)
+GOIMPORTS_VERSION   ?= 1c3d964395ce8f04f3b03b30aaed0b096c08c3c6
+PROMU               ?= $(BIN_DIR)/promu-$(PROMU_VERSION)
 # v0.2.0
-PROMU_VERSION     ?= 264dc36af9ea3103255063497636bd5713e3e9c1
+PROMU_VERSION       ?= 264dc36af9ea3103255063497636bd5713e3e9c1
+PROTOC              ?= $(BIN_DIR)/protoc-$(PROTOC_VERSION)
+PROTOC_VERSION      ?= 3.4.0
+PROTOC_PACKAGE      ?= protoc-$(PROTOC_VERSION)-linux-x86_64.zip
+PROTOC_DOWNLOAD_URL ?= https://github.com/protocolbuffers/protobuf/releases/download/v$(PROTOC_VERSION)/$(PROTOC_PACKAGE)
 
 # E2e test deps.
 # Referenced by github.com/improbable-eng/thanos/blob/master/docs/getting_started.md#prometheus
@@ -129,9 +133,8 @@ format: $(GOIMPORTS)
 
 # proto generates golang files from Thanos proto files.
 .PHONY: proto
-proto: deps
-	@go install ./vendor/github.com/gogo/protobuf/protoc-gen-gogofast
-	@./scripts/genproto.sh
+proto: deps $(GOIMPORTS) $(PROTOC)
+	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" ./scripts/genproto.sh
 
 .PHONY: promu
 promu: $(PROMU)
@@ -200,3 +203,14 @@ $(LICHE):
 
 $(PROMU):
 	$(call fetch_go_bin_version,github.com/prometheus/promu,$(PROMU_VERSION))
+
+$(PROTOC):
+	@echo ">> fetching protoc@${PROTOC_VERSION}"
+	@if [ ! -x '$(TMP_GOPATH)/bin/protoc' ]; then \
+		cd -- $(TMP_GOPATH) && curl -OLSs $(PROTOC_DOWNLOAD_URL); \
+		unzip -qq $(PROTOC_PACKAGE); \
+	fi
+	@echo ">> installing protoc@${PROTOC_VERSION}"
+	@mv -- "$(TMP_GOPATH)/bin/protoc" "$(BIN_DIR)/protoc-$(PROTOC_VERSION)"
+	@echo ">> produced $(BIN_DIR)/protoc-$(PROTOC_VERSION)"
+	@go install ./vendor/github.com/gogo/protobuf/protoc-gen-gogofast
