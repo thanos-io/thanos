@@ -8,7 +8,7 @@ Please follow the [code of conduct](CODE_OF_CONDUCT.md) in all your interactions
 
 ## Thanos Philosophy
 
-The philosophy of Thanos and our community is borrowing much from UNIX philosophy and the go programming language.
+The philosophy of Thanos and our community is borrowing much from UNIX philosophy and the golang programming language.
 
 * Each sub command should do one thing and do it well
   * eg. thanos query proxies incoming calls to known store API endpoints merging the result

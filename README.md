@@ -17,9 +17,9 @@ HA pairs on the fly.
 
 Concretely the aims of the project are:
 
-1. global query view of metrics
-1. unlimited retention of metrics
-1. high availability of components, including Prometheus
+1. Global query view of metrics.
+1. Unlimited retention of metrics.
+1. High availability of components, including Prometheus.
 
 ## Architecture Overview
 
@@ -48,7 +48,7 @@ Concretely the aims of the project are:
 
 ## Thanos Philosophy
 
-The philosophy of Thanos and our community is borrowing much from UNIX philosophy and the go programming language.
+The philosophy of Thanos and our community is borrowing much from UNIX philosophy and the golang programming language.
 
 * Each sub command should do one thing and do it well
   * eg. thanos query proxies incoming calls to known store API endpoints merging the result
