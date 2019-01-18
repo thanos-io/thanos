@@ -206,6 +206,7 @@ $(PROMU):
 	$(call fetch_go_bin_version,github.com/prometheus/promu,$(PROMU_VERSION))
 
 $(PROTOC):
+	@mkdir -p $(TMP_GOPATH)
 	@echo ">> fetching protoc@${PROTOC_VERSION}"
 	@curl -LSs $(PROTOC_DOWNLOAD_URL) -o $(TMP_GOPATH)/$(PROTOC_PACKAGE)
 	@unzip -qqj $(TMP_GOPATH)/$(PROTOC_PACKAGE) "bin/protoc" -d "$(TMP_GOPATH)/bin/"
