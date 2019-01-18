@@ -207,10 +207,10 @@ $(PROMU):
 
 $(PROTOC):
 	@echo ">> fetching protoc@${PROTOC_VERSION}"
-	@if [ ! -x '$(TMP_GOPATH)/bin/protoc' ]; then \
-		cd -- $(TMP_GOPATH) && curl -OLSs $(PROTOC_DOWNLOAD_URL); \
-		unzip -qq $(PROTOC_PACKAGE); \
+	@if [ ! -x '$(BIN_DIR)/protoc' ]; then \
+		curl -LSs $(PROTOC_DOWNLOAD_URL) -o $(BIN_DIR)/$(PROTOC_PACKAGE); \
+		unzip -qqj $(BIN_DIR)/$(PROTOC_PACKAGE) "bin/protoc" -d "$(BIN_DIR)"; \
 	fi
 	@echo ">> installing protoc@${PROTOC_VERSION}"
-	@mv -- "$(TMP_GOPATH)/bin/protoc" "$(BIN_DIR)/protoc-$(PROTOC_VERSION)"
+	@mv -- "$(BIN_DIR)/protoc" "$(BIN_DIR)/protoc-$(PROTOC_VERSION)"
 	@echo ">> produced $(BIN_DIR)/protoc-$(PROTOC_VERSION)"
