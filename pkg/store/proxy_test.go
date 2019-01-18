@@ -3,11 +3,13 @@ package store
 import (
 	"context"
 	"io"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/fortytw2/leaktest"
 	"github.com/gogo/protobuf/proto"
+	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/pkg/errors"
@@ -45,6 +47,7 @@ func TestProxyStore_Series_StoresFetchFail(t *testing.T) {
 
 	q := NewProxyStore(nil,
 		func(_ context.Context) ([]Client, error) { return nil, errors.New("Fail") },
+		component.Query,
 		nil,
 	)
 
@@ -54,6 +57,26 @@ func TestProxyStore_Series_StoresFetchFail(t *testing.T) {
 		MaxTime:  300,
 		Matchers: []storepb.LabelMatcher{{Name: "a", Value: "a", Type: storepb.LabelMatcher_EQ}},
 	}, s))
+}
+
+func TestProxyStore_Info(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	q := NewProxyStore(nil,
+		func(context.Context) ([]Client, error) { return nil, nil },
+		component.Query,
+		nil,
+	)
+
+	resp, err := q.Info(ctx, &storepb.InfoRequest{})
+	testutil.Ok(t, err)
+	testutil.Equals(t, []storepb.Label{}, resp.Labels)
+	testutil.Equals(t, storepb.StoreType_QUERY, resp.StoreType)
+	testutil.Equals(t, int64(0), resp.MinTime)
+	testutil.Equals(t, int64(math.MaxInt64), resp.MaxTime)
 }
 
 func TestProxyStore_Series(t *testing.T) {
@@ -397,6 +420,7 @@ func TestProxyStore_Series(t *testing.T) {
 		if ok := t.Run(tc.title, func(t *testing.T) {
 			q := NewProxyStore(nil,
 				func(_ context.Context) ([]Client, error) { return tc.storeAPIs, nil }, // what if err?
+				component.Query,
 				tc.selectorLabels,
 			)
 
@@ -437,6 +461,7 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 	}
 	q := NewProxyStore(nil,
 		func(context.Context) ([]Client, error) { return cls, nil },
+		component.Query,
 		nil,
 	)
 
@@ -494,6 +519,7 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 
 	q := NewProxyStore(nil,
 		func(context.Context) ([]Client, error) { return cls, nil },
+		component.Query,
 		tlabels.FromStrings("fed", "a"),
 	)
 
@@ -530,6 +556,7 @@ func TestProxyStore_LabelValues(t *testing.T) {
 	}
 	q := NewProxyStore(nil,
 		func(context.Context) ([]Client, error) { return cls, nil },
+		component.Query,
 		nil,
 	)
 

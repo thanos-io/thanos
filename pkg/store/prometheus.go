@@ -17,6 +17,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
+	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store/prompb"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
@@ -34,6 +35,7 @@ type PrometheusStore struct {
 	base           *url.URL
 	client         *http.Client
 	buffers        sync.Pool
+	component      component.StoreAPI
 	externalLabels func() labels.Labels
 	timestamps     func() (mint int64, maxt int64)
 }
@@ -45,6 +47,7 @@ func NewPrometheusStore(
 	logger log.Logger,
 	client *http.Client,
 	baseURL *url.URL,
+	component component.StoreAPI,
 	externalLabels func() labels.Labels,
 	timestamps func() (mint int64, maxt int64),
 ) (*PrometheusStore, error) {
@@ -60,6 +63,7 @@ func NewPrometheusStore(
 		logger:         logger,
 		base:           baseURL,
 		client:         client,
+		component:      component,
 		externalLabels: externalLabels,
 		timestamps:     timestamps,
 	}
@@ -74,9 +78,10 @@ func (p *PrometheusStore) Info(ctx context.Context, r *storepb.InfoRequest) (*st
 	mint, maxt := p.timestamps()
 
 	res := &storepb.InfoResponse{
-		MinTime: mint,
-		MaxTime: maxt,
-		Labels:  make([]storepb.Label, 0, len(lset)),
+		Labels:    make([]storepb.Label, 0, len(lset)),
+		StoreType: p.component.ToProto(),
+		MinTime:   mint,
+		MaxTime:   maxt,
 	}
 	for _, l := range lset {
 		res.Labels = append(res.Labels, storepb.Label{

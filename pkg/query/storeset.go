@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
@@ -26,7 +27,7 @@ const (
 type StoreSpec interface {
 	// Addr returns StoreAPI Address for the store spec. It is used as ID for store.
 	Addr() string
-	// Metadata returns current labels and min, max ranges for store.
+	// Metadata returns current labels, store type and min, max ranges for store.
 	// It can change for every call for this method.
 	// If metadata call fails we assume that store is no longer accessible and we should not use it.
 	// NOTE: It is implementation responsibility to retry until context timeout, but a caller responsibility to manage
@@ -38,9 +39,10 @@ type StoreStatus struct {
 	Name      string
 	LastCheck time.Time
 	LastError error
+	Labels    []storepb.Label
+	StoreType component.StoreAPI
 	MinTime   int64
 	MaxTime   int64
-	Labels    []storepb.Label
 }
 
 type grpcStoreSpec struct {
@@ -159,9 +161,10 @@ type storeRef struct {
 	addr string
 
 	// Meta (can change during runtime).
-	labels  []storepb.Label
-	minTime int64
-	maxTime int64
+	labels    []storepb.Label
+	storeType component.StoreAPI
+	minTime   int64
+	maxTime   int64
 
 	logger log.Logger
 }
@@ -305,6 +308,7 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "initial store client info fetch"), "address", addr)
 					return
 				}
+				store.storeType = component.FromProto(resp.StoreType)
 				store.Update(resp.Labels, resp.MinTime, resp.MaxTime)
 			}
 
@@ -340,9 +344,10 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 	now := time.Now()
 	s.storeStatuses[store.addr] = &StoreStatus{
 		Name:      store.addr,
-		Labels:    store.labels,
 		LastError: err,
 		LastCheck: now,
+		Labels:    store.labels,
+		StoreType: store.storeType,
 		MinTime:   store.minTime,
 		MaxTime:   store.maxTime,
 	}

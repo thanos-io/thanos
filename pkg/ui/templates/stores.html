@@ -4,7 +4,12 @@
 
 {{define "content"}}
 <div class="container-fluid">
-    <h2>Stores</h2>
+    {{range $storeType, $stores := .}}
+    {{if $storeType}}
+    <h2>{{$storeType.String}}</h2>
+    {{else}}
+    <h2>Unknown Type</h2>
+    {{end}}
     <table class="table table-bordered">
         <thead>
         <tr>
@@ -18,7 +23,7 @@
         </tr>
         </thead>
         <tbody>
-        {{range $store := .}}
+        {{range $store := $stores}}
         <tr>
             <td>{{$store.Name}}</td>
             <td class="state">
@@ -57,5 +62,9 @@
         {{end}}
         </tbody>
     </table>
+    {{else}}
+        <br>
+        <div class="alert alert-warning">No stores registered</div>
+    {{end}}
 </div>
 {{end}}

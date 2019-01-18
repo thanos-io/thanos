@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/fortytw2/leaktest"
+	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/prometheus/prometheus/pkg/timestamp"
@@ -53,7 +54,7 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, u,
+	proxy, err := NewPrometheusStore(nil, nil, u, component.Sidecar,
 		func() labels.Labels {
 			return labels.FromStrings("region", "eu-west")
 		}, nil)
@@ -134,7 +135,7 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, u, getExternalLabels, nil)
+	proxy, err := NewPrometheusStore(nil, nil, u, component.Sidecar, getExternalLabels, nil)
 	testutil.Ok(t, err)
 
 	resp, err := proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
@@ -168,7 +169,7 @@ func TestPrometheusStore_ExternalLabelValues_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, u, getExternalLabels, nil)
+	proxy, err := NewPrometheusStore(nil, nil, u, component.Sidecar, getExternalLabels, nil)
 	testutil.Ok(t, err)
 
 	resp, err := proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
@@ -212,7 +213,7 @@ func TestPrometheusStore_Series_MatchExternalLabel_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, u,
+	proxy, err := NewPrometheusStore(nil, nil, u, component.Sidecar,
 		func() labels.Labels {
 			return labels.FromStrings("region", "eu-west")
 		}, nil)
@@ -258,7 +259,7 @@ func TestPrometheusStore_Info(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	proxy, err := NewPrometheusStore(nil, nil, nil,
+	proxy, err := NewPrometheusStore(nil, nil, nil, component.Sidecar,
 		func() labels.Labels {
 			return labels.FromStrings("region", "eu-west")
 		},
@@ -271,6 +272,7 @@ func TestPrometheusStore_Info(t *testing.T) {
 	testutil.Ok(t, err)
 
 	testutil.Equals(t, []storepb.Label{{Name: "region", Value: "eu-west"}}, resp.Labels)
+	testutil.Equals(t, storepb.StoreType_SIDECAR, resp.StoreType)
 	testutil.Equals(t, int64(123), resp.MinTime)
 	testutil.Equals(t, int64(456), resp.MaxTime)
 }
@@ -303,7 +305,7 @@ func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, u,
+	proxy, err := NewPrometheusStore(nil, nil, u, component.Sidecar,
 		func() labels.Labels {
 			return labels.FromStrings("region", "eu-west")
 		}, nil)

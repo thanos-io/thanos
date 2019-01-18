@@ -21,6 +21,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
+	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/pool"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -423,8 +424,9 @@ func (s *BucketStore) Info(context.Context, *storepb.InfoRequest) (*storepb.Info
 	mint, maxt := s.TimeRange()
 	// Store nodes hold global data and thus have no labels.
 	return &storepb.InfoResponse{
-		MinTime: mint,
-		MaxTime: maxt,
+		StoreType: component.Store.ToProto(),
+		MinTime:   mint,
+		MaxTime:   maxt,
 	}, nil
 }
 
