@@ -536,7 +536,7 @@ func TestProxyStore_LabelValues(t *testing.T) {
 
 	ctx := context.Background()
 	req := &storepb.LabelValuesRequest{
-		Label: "a",
+		Label:                   "a",
 		PartialResponseDisabled: true,
 	}
 	resp, err := q.LabelValues(ctx, req)
