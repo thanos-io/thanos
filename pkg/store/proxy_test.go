@@ -500,14 +500,13 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 	ctx := context.Background()
 	s := newStoreSeriesServer(ctx)
 
-	err := q.Series(
+	testutil.Ok(t, q.Series(
 		&storepb.SeriesRequest{
 			MinTime:  1,
 			MaxTime:  300,
 			Matchers: []storepb.LabelMatcher{{Name: "fed", Value: "a", Type: storepb.LabelMatcher_EQ}},
 		}, s,
-	)
-	testutil.Ok(t, err)
+	))
 	testutil.Equals(t, 0, len(s.SeriesSet))
 	testutil.Equals(t, 110, len(s.Warnings))
 }
@@ -658,6 +657,7 @@ func TestStoreMatches(t *testing.T) {
 type storeSeriesServer struct {
 	// This field just exist to pseudo-implement the unused methods of the interface.
 	storepb.Store_SeriesServer
+
 	ctx context.Context
 
 	SeriesSet []storepb.Series
