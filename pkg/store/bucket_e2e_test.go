@@ -20,6 +20,80 @@ import (
 	"github.com/prometheus/tsdb/labels"
 )
 
+func prepareStoreWithTestBlocks(t testing.TB, ctx context.Context, dir string, bkt objstore.Bucket) (store *BucketStore, minTime, maxTime int64) {
+	series := []labels.Labels{
+		labels.FromStrings("a", "1", "b", "1"),
+		labels.FromStrings("a", "1", "b", "2"),
+		labels.FromStrings("a", "2", "b", "1"),
+		labels.FromStrings("a", "2", "b", "2"),
+		labels.FromStrings("a", "1", "c", "1"),
+		labels.FromStrings("a", "1", "c", "2"),
+		labels.FromStrings("a", "2", "c", "1"),
+		labels.FromStrings("a", "2", "c", "2"),
+	}
+	extLset := labels.FromStrings("ext1", "value1")
+
+	start := time.Now()
+	now := start
+
+	minTime = int64(0)
+	maxTime = int64(0)
+	for i := 0; i < 3; i++ {
+		mint := timestamp.FromTime(now)
+		now = now.Add(2 * time.Hour)
+		maxt := timestamp.FromTime(now)
+
+		if minTime == 0 {
+			minTime = mint
+		}
+		maxTime = maxt
+
+		// Create two blocks per time slot. Only add 10 samples each so only one chunk
+		// gets created each. This way we can easily verify we got 10 chunks per series below.
+		id1, err := testutil.CreateBlock(dir, series[:4], 10, mint, maxt, extLset, 0)
+		testutil.Ok(t, err)
+		id2, err := testutil.CreateBlock(dir, series[4:], 10, mint, maxt, extLset, 0)
+		testutil.Ok(t, err)
+
+		dir1, dir2 := filepath.Join(dir, id1.String()), filepath.Join(dir, id2.String())
+
+		// Add labels to the meta of the second block.
+		meta, err := block.ReadMetaFile(dir2)
+		testutil.Ok(t, err)
+		meta.Thanos.Labels = map[string]string{"ext2": "value2"}
+		testutil.Ok(t, block.WriteMetaFile(log.NewNopLogger(), dir2, meta))
+
+		testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, dir1))
+		testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, dir2))
+
+		testutil.Ok(t, os.RemoveAll(dir1))
+		testutil.Ok(t, os.RemoveAll(dir2))
+	}
+
+	store, err := NewBucketStore(nil, nil, bkt, dir, 100, 0, false)
+	testutil.Ok(t, err)
+
+	go func() {
+		if err := runutil.Repeat(100*time.Millisecond, ctx.Done(), func() error {
+			return store.SyncBlocks(ctx)
+		}); err != nil && errors.Cause(err) != context.Canceled {
+			t.Error(err)
+			t.FailNow()
+		}
+	}()
+
+	rctx, rcancel := context.WithTimeout(ctx, 30*time.Second)
+	defer rcancel()
+	testutil.Ok(t, runutil.Retry(100*time.Millisecond, rctx.Done(), func() error {
+		if store.numBlocks() < 6 {
+			return errors.New("not all blocks loaded")
+		}
+		return nil
+	}))
+
+	return store, minTime, maxTime
+}
+
 func TestBucketStore_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -29,75 +103,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-		series := []labels.Labels{
-			labels.FromStrings("a", "1", "b", "1"),
-			labels.FromStrings("a", "1", "b", "2"),
-			labels.FromStrings("a", "2", "b", "1"),
-			labels.FromStrings("a", "2", "b", "2"),
-			labels.FromStrings("a", "1", "c", "1"),
-			labels.FromStrings("a", "1", "c", "2"),
-			labels.FromStrings("a", "2", "c", "1"),
-			labels.FromStrings("a", "2", "c", "2"),
-		}
-		extLset := labels.FromStrings("ext1", "value1")
-
-		start := time.Now()
-		now := start
-
-		minTime := int64(0)
-		maxTime := int64(0)
-		for i := 0; i < 3; i++ {
-			mint := timestamp.FromTime(now)
-			now = now.Add(2 * time.Hour)
-			maxt := timestamp.FromTime(now)
-
-			if minTime == 0 {
-				minTime = mint
-			}
-			maxTime = maxt
-
-			// Create two blocks per time slot. Only add 10 samples each so only one chunk
-			// gets created each. This way we can easily verify we got 10 chunks per series below.
-			id1, err := testutil.CreateBlock(dir, series[:4], 10, mint, maxt, extLset, 0)
-			testutil.Ok(t, err)
-			id2, err := testutil.CreateBlock(dir, series[4:], 10, mint, maxt, extLset, 0)
-			testutil.Ok(t, err)
-
-			dir1, dir2 := filepath.Join(dir, id1.String()), filepath.Join(dir, id2.String())
-
-			// Add labels to the meta of the second block.
-			meta, err := block.ReadMetaFile(dir2)
-			testutil.Ok(t, err)
-			meta.Thanos.Labels = map[string]string{"ext2": "value2"}
-			testutil.Ok(t, block.WriteMetaFile(log.NewNopLogger(), dir2, meta))
-
-			testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, dir1))
-			testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, dir2))
-
-			testutil.Ok(t, os.RemoveAll(dir1))
-			testutil.Ok(t, os.RemoveAll(dir2))
-		}
-
-		store, err := NewBucketStore(nil, nil, bkt, dir, 100, 0, false)
-		testutil.Ok(t, err)
-
-		go func() {
-			if err := runutil.Repeat(100*time.Millisecond, ctx.Done(), func() error {
-				return store.SyncBlocks(ctx)
-			}); err != nil && errors.Cause(err) != context.Canceled {
-				t.Error(err)
-				t.FailNow()
-			}
-		}()
-
-		rctx, rcancel := context.WithTimeout(ctx, 30*time.Second)
-		defer rcancel()
-		testutil.Ok(t, runutil.Retry(100*time.Millisecond, rctx.Done(), func() error {
-			if store.numBlocks() < 6 {
-				return errors.New("not all blocks loaded")
-			}
-			return nil
-		}))
+		store, minTime, maxTime := prepareStoreWithTestBlocks(t, ctx, dir, bkt)
 
 		mint, maxt := store.TimeRange()
 		testutil.Equals(t, minTime, mint)
@@ -123,8 +129,8 @@ func TestBucketStore_e2e(t *testing.T) {
 			Matchers: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|2"},
 			},
-			MinTime: timestamp.FromTime(start),
-			MaxTime: timestamp.FromTime(now),
+			MinTime: mint,
+			MaxTime: maxt,
 		}, srv))
 		testutil.Equals(t, len(pbseries), len(srv.SeriesSet))
 
@@ -143,8 +149,8 @@ func TestBucketStore_e2e(t *testing.T) {
 			Matchers: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "2"},
 			},
-			MinTime: timestamp.FromTime(start),
-			MaxTime: timestamp.FromTime(now),
+			MinTime: mint,
+			MaxTime: maxt,
 		}, srv))
 		testutil.Equals(t, len(pbseries), len(srv.SeriesSet))
 
@@ -165,8 +171,8 @@ func TestBucketStore_e2e(t *testing.T) {
 				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 				{Type: storepb.LabelMatcher_EQ, Name: "ext2", Value: "value2"},
 			},
-			MinTime: timestamp.FromTime(start),
-			MaxTime: timestamp.FromTime(now),
+			MinTime: mint,
+			MaxTime: maxt,
 		}, srv))
 		testutil.Equals(t, len(pbseries), len(srv.SeriesSet))
 
@@ -181,8 +187,8 @@ func TestBucketStore_e2e(t *testing.T) {
 				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 				{Type: storepb.LabelMatcher_EQ, Name: "ext2", Value: "wrong-value"},
 			},
-			MinTime: timestamp.FromTime(start),
-			MaxTime: timestamp.FromTime(now),
+			MinTime: mint,
+			MaxTime: maxt,
 		}, srv))
 		testutil.Equals(t, 0, len(srv.SeriesSet))
 	})
