@@ -183,6 +183,27 @@ func TestBucketBlockSet_labelMatchers(t *testing.T) {
 			},
 			match: true,
 		},
+		// Those are matchers mentioned here: https://github.com/prometheus/prometheus/pull/3578#issuecomment-351653555
+		// We want to provide explicit tests that says when Thanos supports its and when not. We don't support it here in
+		// external labelset level.
+		{
+			in: []labels.Matcher{
+				labels.Not(labels.NewEqualMatcher("", "x")),
+			},
+			res: []labels.Matcher{
+				labels.Not(labels.NewEqualMatcher("", "x")),
+			},
+			match: true,
+		},
+		{
+			in: []labels.Matcher{
+				labels.Not(labels.NewEqualMatcher("", "d")),
+			},
+			res: []labels.Matcher{
+				labels.Not(labels.NewEqualMatcher("", "d")),
+			},
+			match: true,
+		},
 	}
 	for _, c := range cases {
 		res, ok := set.labelMatchers(c.in...)
@@ -198,15 +219,15 @@ func TestPartitionRanges(t *testing.T) {
 
 	for _, c := range []struct {
 		input    [][2]int
-		expected [][2]int
+		expected []part
 	}{
 		{
 			input:    [][2]int{{1, 10}},
-			expected: [][2]int{{0, 1}},
+			expected: []part{{start: 1, end: 10, elemRng: [2]int{0, 1}}},
 		},
 		{
 			input:    [][2]int{{1, 2}, {3, 5}, {7, 10}},
-			expected: [][2]int{{0, 3}},
+			expected: []part{{start: 1, end: 10, elemRng: [2]int{0, 3}}},
 		},
 		{
 			input: [][2]int{
@@ -215,18 +236,33 @@ func TestPartitionRanges(t *testing.T) {
 				{20, 30},
 				{maxGapSize + 31, maxGapSize + 32},
 			},
-			expected: [][2]int{{0, 3}, {3, 4}},
+			expected: []part{
+				{start: 1, end: 30, elemRng: [2]int{0, 3}},
+				{start: maxGapSize + 31, end: maxGapSize + 32, elemRng: [2]int{3, 4}},
+			},
 		},
 		// Overlapping ranges.
 		{
 			input: [][2]int{
 				{1, 30},
-				{3, 28},
 				{1, 4},
+				{3, 28},
 				{maxGapSize + 31, maxGapSize + 32},
 				{maxGapSize + 31, maxGapSize + 40},
 			},
-			expected: [][2]int{{0, 3}, {3, 5}},
+			expected: []part{
+				{start: 1, end: 30, elemRng: [2]int{0, 3}},
+				{start: maxGapSize + 31, end: maxGapSize + 40, elemRng: [2]int{3, 5}},
+			},
+		},
+		{
+			input: [][2]int{
+				// Mimick AllPostingsKey, where range specified whole range.
+				{1, 15},
+				{1, maxGapSize + 100},
+				{maxGapSize + 31, maxGapSize + 40},
+			},
+			expected: []part{{start: 1, end: maxGapSize + 100, elemRng: [2]int{0, 3}}},
 		},
 	} {
 		res := partitionRanges(len(c.input), func(i int) (uint64, uint64) {
