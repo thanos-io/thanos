@@ -31,6 +31,8 @@ GOIMPORTS_VERSION ?= 1c3d964395ce8f04f3b03b30aaed0b096c08c3c6
 PROMU             ?= $(BIN_DIR)/promu-$(PROMU_VERSION)
 # v0.2.0
 PROMU_VERSION     ?= 264dc36af9ea3103255063497636bd5713e3e9c1
+PROTOC            ?= $(BIN_DIR)/protoc-$(PROTOC_VERSION)
+PROTOC_VERSION    ?= 3.4.0
 
 # E2e test deps.
 # Referenced by github.com/improbable-eng/thanos/blob/master/docs/getting_started.md#prometheus
@@ -129,9 +131,9 @@ format: $(GOIMPORTS)
 
 # proto generates golang files from Thanos proto files.
 .PHONY: proto
-proto: deps
+proto: deps $(GOIMPORTS) $(PROTOC)
 	@go install ./vendor/github.com/gogo/protobuf/protoc-gen-gogofast
-	@./scripts/genproto.sh
+	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" scripts/genproto.sh
 
 .PHONY: promu
 promu: $(PROMU)
@@ -200,3 +202,11 @@ $(LICHE):
 
 $(PROMU):
 	$(call fetch_go_bin_version,github.com/prometheus/promu,$(PROMU_VERSION))
+
+$(PROTOC):
+	@mkdir -p $(TMP_GOPATH)
+	@echo ">> fetching protoc@${PROTOC_VERSION}"
+	@PROTOC_VERSION="$(PROTOC_VERSION)" TMP_GOPATH="$(TMP_GOPATH)" scripts/installprotoc.sh
+	@echo ">> installing protoc@${PROTOC_VERSION}"
+	@mv -- "$(TMP_GOPATH)/bin/protoc" "$(BIN_DIR)/protoc-$(PROTOC_VERSION)"
+	@echo ">> produced $(BIN_DIR)/protoc-$(PROTOC_VERSION)"

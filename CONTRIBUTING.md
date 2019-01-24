@@ -21,10 +21,14 @@ The philosophy of Thanos and our community is borrowing much from UNIX philosoph
 
 Adding large new features and components to Thanos should be done by first creating a [proposal](docs/proposals) document outlining the design decisions of the change, motivations for the change, and any alternatives that might have been considered.
 
+## Prerequisites
+
+* It is strongly recommended that you use OSX or popular Linux distributions systems e.g. Ubuntu, Redhat, or OpenSUSE for development.
+
 ## Pull Request Process
 
 1. Read [getting started docs](docs/getting_started.md) and prepare Thanos.
-2. Familarize yourself with [Makefile](Makefile) commands like `format`, `build`, `proto` and `test`.
+2. Familiarize yourself with [Makefile](Makefile) commands like `format`, `build`, `proto` and `test`.
 3. Fork improbable-eng/thanos.git and start development from your own fork. Here are sample steps to setup your development environment:
 ```console
 $ mkdir -p $GOPATH/src/github.com/improbable-eng
