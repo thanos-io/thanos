@@ -8,6 +8,8 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
@@ -94,7 +96,7 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 			logger,
 			tmpdir,
 			id,
-			block.BucketRepairSource,
+			metadata.BucketRepairSource,
 			block.IgnoreCompleteOutsideChunk,
 			block.IgnoreDuplicateOutsideChunk,
 			block.IgnoreIssue347OutsideChunk,

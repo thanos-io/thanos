@@ -19,6 +19,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/pool"
@@ -960,7 +961,7 @@ func (s *bucketBlockSet) labelMatchers(matchers ...labels.Matcher) ([]labels.Mat
 type bucketBlock struct {
 	logger     log.Logger
 	bucket     objstore.BucketReader
-	meta       *block.Meta
+	meta       *metadata.Meta
 	dir        string
 	indexCache *indexCache
 	chunkPool  *pool.BytesPool
@@ -1024,7 +1025,7 @@ func (b *bucketBlock) loadMeta(ctx context.Context, id ulid.ULID) error {
 	} else if err != nil {
 		return err
 	}
-	meta, err := block.ReadMetaFile(b.dir)
+	meta, err := metadata.Read(b.dir)
 	if err != nil {
 		return errors.Wrap(err, "read meta.json")
 	}
@@ -1054,13 +1055,7 @@ func (b *bucketBlock) loadIndexCache(ctx context.Context) (err error) {
 		}
 	}()
 
-	indexr, err := index.NewFileReader(fn)
-	if err != nil {
-		return errors.Wrap(err, "open index reader")
-	}
-	defer runutil.CloseWithLogOnErr(b.logger, indexr, "load index cache reader")
-
-	if err := block.WriteIndexCache(b.logger, cachefn, indexr); err != nil {
+	if err := block.WriteIndexCache(b.logger, fn, cachefn); err != nil {
 		return errors.Wrap(err, "write index cache")
 	}
 
@@ -1144,7 +1139,7 @@ func newBucketIndexReader(ctx context.Context, logger log.Logger, block *bucketB
 		cache:        cache,
 		loadedSeries: map[uint64][]byte{},
 	}
-	r.dec.SetSymbolTable(r.block.symbols)
+	r.dec.LookupSymbol = r.lookupSymbol
 	return r
 }
 

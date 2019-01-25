@@ -2,15 +2,13 @@ package shipper
 
 import (
 	"io/ioutil"
+	"math"
 	"os"
+	"path"
 	"testing"
 
-	"math"
-
-	"path"
-
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/tsdb"
@@ -23,7 +21,7 @@ func TestShipperTimestamps(t *testing.T) {
 		testutil.Ok(t, os.RemoveAll(dir))
 	}()
 
-	s := New(nil, nil, dir, nil, nil, block.TestSource)
+	s := New(nil, nil, dir, nil, nil, metadata.TestSource)
 
 	// Missing thanos meta file.
 	_, _, err = s.Timestamps()
@@ -41,7 +39,7 @@ func TestShipperTimestamps(t *testing.T) {
 
 	id1 := ulid.MustNew(1, nil)
 	testutil.Ok(t, os.Mkdir(path.Join(dir, id1.String()), os.ModePerm))
-	testutil.Ok(t, block.WriteMetaFile(log.NewNopLogger(), path.Join(dir, id1.String()), &block.Meta{
+	testutil.Ok(t, metadata.Write(log.NewNopLogger(), path.Join(dir, id1.String()), &metadata.Meta{
 		Version: 1,
 		BlockMeta: tsdb.BlockMeta{
 			ULID:    id1,
@@ -56,7 +54,7 @@ func TestShipperTimestamps(t *testing.T) {
 
 	id2 := ulid.MustNew(2, nil)
 	testutil.Ok(t, os.Mkdir(path.Join(dir, id2.String()), os.ModePerm))
-	testutil.Ok(t, block.WriteMetaFile(log.NewNopLogger(), path.Join(dir, id2.String()), &block.Meta{
+	testutil.Ok(t, metadata.Write(log.NewNopLogger(), path.Join(dir, id2.String()), &metadata.Meta{
 		Version: 1,
 		BlockMeta: tsdb.BlockMeta{
 			ULID:    id2,

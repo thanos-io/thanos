@@ -122,6 +122,7 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 	_, err = a.Add(labels.FromStrings("a", "c"), 0, 1)
 	testutil.Ok(t, err)
 	_, err = a.Add(labels.FromStrings("a", "a"), 0, 1)
+	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
 	ctx, cancel := context.WithCancel(context.Background())

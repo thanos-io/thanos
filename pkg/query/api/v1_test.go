@@ -333,7 +333,7 @@ func TestEndpoints(t *testing.T) {
 				"start":   []string{"-2"},
 				"end":     []string{"-1"},
 			},
-			response: []labels.Labels{},
+			response: []labels.Labels(nil),
 		},
 		// Start and end after series ends.
 		{
@@ -343,7 +343,7 @@ func TestEndpoints(t *testing.T) {
 				"start":   []string{"100000"},
 				"end":     []string{"100001"},
 			},
-			response: []labels.Labels{},
+			response: []labels.Labels(nil),
 		},
 		// Start before series starts, end after series ends.
 		{
@@ -409,33 +409,38 @@ func TestEndpoints(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		// Build a context with the correct request params.
-		ctx := context.Background()
-		for p, v := range test.params {
-			ctx = route.WithParam(ctx, p, v)
-		}
-		t.Logf("run query %q", test.query.Encode())
+		if ok := t.Run(test.query.Encode(), func(t *testing.T) {
+			// Build a context with the correct request params.
+			ctx := context.Background()
+			for p, v := range test.params {
+				ctx = route.WithParam(ctx, p, v)
+			}
 
-		req, err := http.NewRequest("ANY", fmt.Sprintf("http://example.com?%s", test.query.Encode()), nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		resp, _, apiErr := test.endpoint(req.WithContext(ctx))
-		if apiErr != nil {
-			if test.errType == errorNone {
-				t.Fatalf("Unexpected error: %s", apiErr)
+			req, err := http.NewRequest("ANY", fmt.Sprintf("http://example.com?%s", test.query.Encode()), nil)
+			if err != nil {
+				t.Fatal(err)
 			}
-			if test.errType != apiErr.typ {
-				t.Fatalf("Expected error of type %q but got type %q", test.errType, apiErr.typ)
+			resp, _, apiErr := test.endpoint(req.WithContext(ctx))
+			if apiErr != nil {
+				if test.errType == errorNone {
+					t.Fatalf("Unexpected error: %s", apiErr)
+				}
+				if test.errType != apiErr.typ {
+					t.Fatalf("Expected error of type %q but got type %q", test.errType, apiErr.typ)
+				}
+				return
 			}
-			continue
+			if apiErr == nil && test.errType != errorNone {
+				t.Fatalf("Expected error of type %q but got none", test.errType)
+			}
+
+			if !reflect.DeepEqual(resp, test.response) {
+				t.Fatalf("Response does not match, expected:\n%+v\ngot:\n%+v", test.response, resp)
+			}
+		}); !ok {
+			return
 		}
-		if apiErr == nil && test.errType != errorNone {
-			t.Fatalf("Expected error of type %q but got none", test.errType)
-		}
-		if !reflect.DeepEqual(resp, test.response) {
-			t.Fatalf("Response does not match, expected:\n%+v\ngot:\n%+v", test.response, resp)
-		}
+
 	}
 }
 
