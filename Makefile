@@ -61,7 +61,6 @@ assets:
 	@go-bindata $(bindata_flags) -pkg ui -o pkg/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  pkg/ui/templates/... pkg/ui/static/...
 	@go fmt ./pkg/ui
 
-
 # build builds Thanos binary using `promu`.
 .PHONY: build
 build: deps $(PROMU)
@@ -88,8 +87,8 @@ docker: build
 .PHONY: docker-push
 docker-push:
 	@echo ">> pushing image"
-	@docker tag "${DOCKER_IMAGE_NAME}" improbable/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
-	@docker push improbable/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
+	@docker tag "${DOCKER_IMAGE_NAME}" quay.io/utilitywarehouse/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
+	@docker push quay.io/utilitywarehouse/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
 
 # docs regenerates flags in docs for all thanos commands.
 .PHONY: docs
@@ -140,7 +139,7 @@ tarballs-release: $(PROMU)
 # test runs all Thanos golang tests against each supported version of Prometheus.
 .PHONY: test
 test: test-deps
-	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS='true' or/and  export THANOS_SKIP_S3_AWS_TESTS='true' or/and THANOS_SKIP_AZURE_TESTS='true' if you want to skip e2e tests against real store buckets"
+	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS='true' or/and  export THANOS_SKIP_S3_AWS_TESTS='true' if you want to skip e2e tests against real store buckets"
 	@for ver in $(SUPPORTED_PROM_VERSIONS); do \
 		THANOS_TEST_PROMETHEUS_PATH="prometheus-$$ver" THANOS_TEST_ALERTMANAGER_PATH="alertmanager-$(ALERTMANAGER_VERSION)" go test $(shell go list ./... | grep -v /vendor/ | grep -v /benchmark/); \
 	done
