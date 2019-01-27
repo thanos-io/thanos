@@ -83,14 +83,11 @@ data:
         cluster: "1" # It does not make much sense.. but how to substitute from envvar this without Thanos or magic bash?
 
     alerting:
-      #alertmanagers:
-      #- static_configs:
-      #  - targets:
-      #    - alerts-beta.service.improbable.io
-      #  basic_auth:
-      #    username: prometheus
-      #    password: PUGxFdQ2hlIHgY5sqZxl03trolzJmK
-      #  scheme: https
+      alertmanagers:
+      - static_configs:
+        - targets:
+          - %%ALERTMANAGER_URL%%
+
     rule_files:
     - /etc/prometheus/rules/*rules.yaml
 
@@ -168,6 +165,7 @@ apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRole
 metadata:
   name: prometheus
+  namespace: default
 rules:
 - apiGroups: [""]
   resources:
@@ -195,3 +193,4 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: prometheus
+  namespace: default
