@@ -13,39 +13,39 @@ data:
           sum(rate(container_cpu_usage_seconds_total{job="kubelet", image!="", container_name!=""}[5m])) by (namespace)
         record: namespace:container_cpu_usage_seconds_total:sum_rate
       - expr: |
-          sum by (namespace, pod_name, container_name) (
+          sum by (namespace, pod, container_name) (
             rate(container_cpu_usage_seconds_total{job="kubelet", image!="", container_name!=""}[5m])
           )
-        record: namespace_pod_name_container_name:container_cpu_usage_seconds_total:sum_rate
+        record: namespace_pod_container_name:container_cpu_usage_seconds_total:sum_rate
       - expr: |
           sum(container_memory_usage_bytes{job="kubelet", image!="", container_name!=""}) by (namespace)
         record: namespace:container_memory_usage_bytes:sum
       - expr: |
           sum by (namespace, label_name) (
-             sum(rate(container_cpu_usage_seconds_total{job="kubelet", image!="", container_name!=""}[5m])) by (namespace, pod_name)
-           * on (namespace, pod_name) group_left(label_name)
-             label_replace(kube_pod_labels{job="kube-state-metrics"}, "pod_name", "$1", "pod", "(.*)")
+             sum(rate(container_cpu_usage_seconds_total{job="kubelet", image!="", container_name!=""}[5m])) by (namespace, pod")
+           * on (namespace, pod") group_left(label_name)
+             label_replace(kube_pod_labels{job="kube-state-metrics"}, "pod", "$1", "pod", "(.*)")
           )
         record: namespace_name:container_cpu_usage_seconds_total:sum_rate
       - expr: |
           sum by (namespace, label_name) (
-            sum(container_memory_usage_bytes{job="kubelet",image!="", container_name!=""}) by (pod_name, namespace)
-          * on (namespace, pod_name) group_left(label_name)
-            label_replace(kube_pod_labels{job="kube-state-metrics"}, "pod_name", "$1", "pod", "(.*)")
+            sum(container_memory_usage_bytes{job="kubelet",image!="", container_name!=""}) by (pod, namespace)
+          * on (namespace, pod") group_left(label_name)
+            label_replace(kube_pod_labels{job="kube-state-metrics"}, "pod", "$1", "pod", "(.*)")
           )
         record: namespace_name:container_memory_usage_bytes:sum
       - expr: |
           sum by (namespace, label_name) (
             sum(kube_pod_container_resource_requests_memory_bytes{job="kube-state-metrics"}) by (namespace, pod)
           * on (namespace, pod) group_left(label_name)
-            label_replace(kube_pod_labels{job="kube-state-metrics"}, "pod_name", "$1", "pod", "(.*)")
+            label_replace(kube_pod_labels{job="kube-state-metrics"}, "pod", "$1", "pod", "(.*)")
           )
         record: namespace_name:kube_pod_container_resource_requests_memory_bytes:sum
       - expr: |
           sum by (namespace, label_name) (
             sum(kube_pod_container_resource_requests_cpu_cores{job="kube-state-metrics"} and on(pod) kube_pod_status_scheduled{condition="true"}) by (namespace, pod)
           * on (namespace, pod) group_left(label_name)
-            label_replace(kube_pod_labels{job="kube-state-metrics"}, "pod_name", "$1", "pod", "(.*)")
+            label_replace(kube_pod_labels{job="kube-state-metrics"}, "pod", "$1", "pod", "(.*)")
           )
         record: namespace_name:kube_pod_container_resource_requests_cpu_cores:sum
   kube-scheduler.rules.yaml: |-
@@ -603,12 +603,12 @@ data:
       - alert: CPUThrottlingHigh
         annotations:
           message: '{{ printf "%0.0f" $value }}% throttling of CPU in namespace {{ $labels.namespace
-            }} for container {{ $labels.container_name }} in pod {{ $labels.pod_name
+            }} for container {{ $labels.container_name }} in pod {{ $labels.pod
             }}.'
           runbook_url: https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-cputhrottlinghigh
         expr: "100 * sum(increase(container_cpu_cfs_throttled_periods_total{container_name!=\"\",
-          }[5m])) by (container_name, pod_name, namespace)\n  /\nsum(increase(container_cpu_cfs_periods_total{}[5m]))
-          by (container_name, pod_name, namespace)\n  > 25 \n"
+          }[5m])) by (container_name, pod, namespace)\n  /\nsum(increase(container_cpu_cfs_periods_total{}[5m]))
+          by (container_name, pod, namespace)\n  > 25 \n"
         for: 15m
         labels:
           severity: warning

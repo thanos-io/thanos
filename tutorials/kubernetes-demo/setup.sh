@@ -21,13 +21,16 @@ kubectl apply -f manifests/alertmanager.yaml
 
 sleep 1s
 
-sed 's/%%ALERTMANAGER_URL%%/$(minikube -p eu1 service alertmanager --url)/g' manifests/prometheus.yaml | kubectl apply -f -
+ALERTMANAGER_URL=$(minikube -p eu1 service alertmanager --url)
+
+sed "s/%%ALERTMANAGER_URL%%/${ALERTMANAGER_URL}/g" manifests/prometheus.yaml | kubectl apply -f -
 kubectl apply -f manifests/prometheus-rules.yaml
 kubectl apply -f manifests/kube-state-metrics.yaml
+# Adjust data sources.
 kubectl apply -f manifests/grafana.yaml
 
 kubectl config use-context us1
-sed 's/%%ALERTMANAGER_URL%%/$(minikube -p eu1 service alertmanager --url)/g' manifests/prometheus.yaml | kubectl apply -f -
+sed "s/%%ALERTMANAGER_URL%%/${ALERTMANAGER_URL}/g" manifests/prometheus.yaml | kubectl apply -f -
 kubectl apply -f manifests/prometheus-rules.yaml
 kubectl apply -f manifests/kube-state-metrics.yaml
 
