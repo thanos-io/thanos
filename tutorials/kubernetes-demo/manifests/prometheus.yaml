@@ -1,4 +1,183 @@
 apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: prometheus
+  name: prometheus
+spec:
+  ports:
+    - port: 9090
+      protocol: TCP
+      targetPort: http-prometheus
+      name: http-prometheus
+  selector:
+    app: prometheus
+  type: NodePort
+---
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+spec:
+  serviceName: "prometheus"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      containers:
+      - name: prometheus
+        image: quay.io/prometheus/prometheus:v2.6.1
+        args:
+          - --storage.tsdb.retention=2w
+          - --config.file=/etc/prometheus/prometheus.yaml
+          - --storage.tsdb.path=/var/prometheus
+        ports:
+          - name: http-prometheus
+            containerPort: 9090
+        volumeMounts:
+          - name: config
+            mountPath: /etc/prometheus
+          - name: rules
+            mountPath: /etc/prometheus/rules
+          - name: prometheus
+            mountPath: /var/prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus
+        - name: rules
+          configMap:
+            name: prometheus-rules
+  volumeClaimTemplates:
+  - metadata:
+      labels:
+        app: prometheus
+      name: prometheus
+      namespace: default
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          # Normally, probably 15x more (:
+          storage: 4Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus
+data:
+  prometheus.yaml: |-
+    # Inspired by https://github.com/prometheus/prometheus/blob/master/documentation/examples/prometheus-kubernetes.yml
+    global:
+      scrape_interval: 15s
+      scrape_timeout: 10s
+      external_labels:
+        cluster: "1" # It does not make much sense.. but how to substitute from envvar this without Thanos or magic bash?
+
+    alerting:
+      #alertmanagers:
+      #- static_configs:
+      #  - targets:
+      #    - alerts-beta.service.improbable.io
+      #  basic_auth:
+      #    username: prometheus
+      #    password: PUGxFdQ2hlIHgY5sqZxl03trolzJmK
+      #  scheme: https
+    rule_files:
+    - /etc/prometheus/rules/*rules.yaml
+
+    scrape_configs:
+    - job_name: kube-apiserver
+      scheme: https
+      kubernetes_sd_configs:
+      - role: endpoints
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+        regex: default;kubernetes;https
+        action: keep
+
+    - job_name: kube-nodes
+      scheme: https
+      kubernetes_sd_configs:
+      - role: node
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      relabel_configs:
+      - target_label: __address__
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/${1}/proxy/metrics
+
+    - job_name: kube-cadvisor
+      scheme: https
+      kubernetes_sd_configs:
+      - role: node
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      relabel_configs:
+      - target_label: __address__
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+
+
+    - job_name: kube-pods
+      kubernetes_sd_configs:
+      - role: pod
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_container_port_name]
+        regex: ^(http|http-.+)$
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        target_label: job
+      - source_labels: [job, __meta_kubernetes_pod_container_port_name]
+        regex: ^(.*):;http-(.+)$
+        target_label: job
+      - source_labels: [__meta_kubernetes_pod_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+
+    - job_name: https-kube-pods
+      scheme: https
+      kubernetes_sd_configs:
+      - role: pod
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_container_port_name]
+        regex: ^(https|https-.+)$
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        target_label: job
+      - source_labels: [job, __meta_kubernetes_pod_container_port_name]
+        regex: ^(.*):;http-(.+)$
+        target_label: job
+      - source_labels: [__meta_kubernetes_pod_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+---
+apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: prometheus
@@ -11,6 +190,7 @@ rules:
 - apiGroups: [""]
   resources:
   - nodes
+  - nodes/proxy
   - services
   - endpoints
   - pods
@@ -34,192 +214,3 @@ subjects:
 - kind: ServiceAccount
   name: prometheus
   namespace: default
----
-apiVersion: apps/v1beta1
-kind: StatefulSet
-metadata:
-  name: prometheus
-  labels:
-    app: prometheus
-    thanos-peer: "true"
-spec:
-  serviceName: "prometheus"
-  replicas: 2
-  selector:
-    matchLabels:
-      app: prometheus
-      thanos-peer: "true"
-  template:
-    metadata:
-      labels:
-        app: prometheus
-        thanos-peer: "true"
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "10902"
-    spec:
-      serviceAccountName: prometheus
-## Commented out because Minikube has only one node, should be commented in for any production setup
-#      affinity:
-#        podAntiAffinity:
-#          requiredDuringSchedulingIgnoredDuringExecution:
-#          - labelSelector:
-#              matchExpressions:
-#              - key: app
-#                operator: In
-#                values:
-#                - prometheus
-#            topologyKey: kubernetes.io/hostname
-      containers:
-      - name: prometheus
-        image: quay.io/prometheus/prometheus:v2.0.0
-        args:
-        - "--storage.tsdb.retention=24h"
-        - "--config.file=/etc/prometheus-shared/prometheus.yml"
-        - "--storage.tsdb.path=/var/prometheus"
-        - "--storage.tsdb.min-block-duration=2h"
-        - "--storage.tsdb.max-block-duration=2h"
-        - "--web.enable-lifecycle"
-        ports:
-        - name: prom-http
-          containerPort: 9090
-        volumeMounts:
-        - name: config-shared
-          mountPath: /etc/prometheus-shared
-        - name: data
-          mountPath: /var/prometheus
-      - name: thanos-sidecar
-        # Always use explicit image tags (release or master-<date>-sha) instead of ambigous `latest` or `master`.
-        image: improbable/thanos:v0.2.1
-        args:
-        - "sidecar"
-        - "--log.level=debug"
-        - "--tsdb.path=/var/prometheus"
-        - "--prometheus.url=http://127.0.0.1:9090"
-        - "--cluster.peers=thanos-peers.default.svc.cluster.local:10900"
-        - "--reloader.config-file=/etc/prometheus/prometheus.yml.tmpl"
-        - "--reloader.config-envsubst-file=/etc/prometheus-shared/prometheus.yml"
-        ports:
-        - name: sidecar-http
-          containerPort: 10902
-        - name: grpc
-          containerPort: 10901
-        - name: cluster
-          containerPort: 10900
-        volumeMounts:
-        - name: data
-          mountPath: /var/prometheus
-        - name: config-shared
-          mountPath: /etc/prometheus-shared
-        - name: config
-          mountPath: /etc/prometheus
-      volumes:
-      - name: config
-        configMap:
-          name: prometheus-config
-      - name: config-shared
-        emptyDir: {}
-      - name: data
-        emptyDir: {}
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: prometheus-config
-data:
-  prometheus.yml.tmpl: |-
-    global:
-      external_labels:
-        monitor: prometheus
-        replica: '$(HOSTNAME)'
-
-    scrape_configs:
-    - job_name: prometheus
-      static_configs:
-        - targets:
-          - "127.0.0.1:9090"
-
-    - job_name: kubelets
-      kubernetes_sd_configs:
-      - role: node
-
-    - job_name: kube_pods
-      kubernetes_sd_configs:
-      - role: pod
-      relabel_configs:
-      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
-        action: replace
-        target_label: __metrics_path__
-        regex: (.+)
-      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scheme]
-        action: replace
-        target_label: __scheme__
-        regex: (https?)
-      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
-        action: replace
-        regex: (.+?)(?::\d+)?;(\d+)
-        replacement: ${1}:${2}
-        target_label: __address__
-      - action: labelmap
-        regex: __meta_kubernetes_pod_label_(.+)
-      - source_labels: [__meta_kubernetes_pod_namespace]
-        action: replace
-        target_label: kubernetes_namespace
-      - source_labels: [__meta_kubernetes_pod_name]
-        action: replace
-        target_label: kubernetes_pod_name
-
-    # Scrapes the endpoint lists for the main Prometheus endpoints
-    - job_name: kube_endpoints
-      kubernetes_sd_configs:
-      - role: endpoints
-      relabel_configs:
-      - action: keep
-        source_labels: [__meta_kubernetes_service_label_app]
-        regex: prometheus
-      - action: replace
-        source_labels: [__meta_kubernetes_service_label_app]
-        target_label: job
-      - action: replace
-        target_label: prometheus
-        source_labels: [__meta_kubernetes_service_label_prometheus]
----
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app: prometheus
-  name: prometheus
-spec:
-  externalTrafficPolicy: Cluster
-  ports:
-  - port: 9090
-    protocol: TCP
-    targetPort: prom-http
-    name: http-prometheus
-  - port: 10902
-    protocol: TCP
-    targetPort: sidecar-http
-    name: http-sidecar-metrics
-  selector:
-    app: prometheus
-  sessionAffinity: None
-  type: NodePort
-status:
-  loadBalancer: {}
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: thanos-peers
-spec:
-  type: ClusterIP
-  clusterIP: None
-  ports:
-  - name: cluster
-    port: 10900
-    targetPort: cluster
-  selector:
-    # Useful endpoint for gathering all thanos components for common gossip cluster.
-    thanos-peer: "true"

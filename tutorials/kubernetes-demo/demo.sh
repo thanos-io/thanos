@@ -5,8 +5,9 @@
 ########################
 . demo-magic.sh
 
-# hide the evidence
 clear
+
+# We assume ./setup.sh was successfully ran.
 
 pe "ls -l"
 

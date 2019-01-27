@@ -17,6 +17,13 @@ minikube start --cache-images --vm-driver=kvm2 -p eu1 --kubernetes-version="v1.1
     --extra-config=controller-manager.address=0.0.0.0
 
 kubectl config use-context eu1
+kubectl apply -f manifests/prometheus.yaml
+kubectl apply -f manifests/prometheus-rules.yaml
 
 
 
+# Issues.
+# - not synced time on minikube?
+# - loadbalancer type not possible. It works with minikube tunnel, but it works only for single cluster.
+#  NodePort needs to be used.
+# - mounting config at prometheus.yml does not work - default one overwrites.
