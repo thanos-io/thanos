@@ -16,10 +16,17 @@ minikube start --cache-images --vm-driver=kvm2 -p eu1 --kubernetes-version="v1.1
     --extra-config=scheduler.address=0.0.0.0 \
     --extra-config=controller-manager.address=0.0.0.0
 
+kubectl config use-context us1
+kubectl apply -f manifests/prometheus.yaml
+kubectl apply -f manifests/prometheus-rules.yaml
+kubectl apply -f manifests/kube-state-metrics.yaml
+
 kubectl config use-context eu1
 kubectl apply -f manifests/prometheus.yaml
 kubectl apply -f manifests/prometheus-rules.yaml
 kubectl apply -f manifests/kube-state-metrics.yaml
+kubectl apply -f manifests/grafana.yaml
+kubectl apply -f manifests/alertmanager.yaml
 
 
 # Issues.

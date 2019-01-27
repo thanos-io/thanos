@@ -61,7 +61,6 @@ spec:
       labels:
         app: prometheus
       name: prometheus
-      namespace: default
     spec:
       accessModes:
         - ReadWriteOnce
@@ -196,4 +195,3 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: prometheus
-  namespace: default
