@@ -3,26 +3,31 @@
 set -e
 export HISTFILE="/home/bartek/.zsh_history_demo_thanos_2019"
 
-#minikube start --cache-images --vm-driver=kvm2 -p us1 --kubernetes-version="v1.13.2" \
-#    --memory=4096 \
-#    --extra-config=kubelet.authentication-token-webhook=true \
-#    --extra-config=kubelet.authorization-mode=Webhook \
-#    --extra-config=scheduler.address=0.0.0.0 \
-#    --extra-config=controller-manager.address=0.0.0.0
-#
-#minikube start --cache-images --vm-driver=kvm2 -p eu1 --kubernetes-version="v1.13.2" \
-#    --memory=4096 \
-#    --extra-config=kubelet.authentication-token-webhook=true \
-#    --extra-config=kubelet.authorization-mode=Webhook \
-#    --extra-config=scheduler.address=0.0.0.0 \
-#    --extra-config=controller-manager.address=0.0.0.0
-#
-#kubectl config use-context eu1
-#kubectl apply -f manifests/alertmanager.yaml
+minikube start --cache-images --vm-driver=kvm2 -p us1 --kubernetes-version="v1.13.2" \
+    --memory=4096 \
+    --extra-config=kubelet.authentication-token-webhook=true \
+    --extra-config=kubelet.authorization-mode=Webhook \
+    --extra-config=scheduler.address=0.0.0.0 \
+    --extra-config=controller-manager.address=0.0.0.0
 
-sleep 1s
+minikube start --cache-images --vm-driver=kvm2 -p eu1 --kubernetes-version="v1.13.2" \
+    --memory=4096 \
+    --extra-config=kubelet.authentication-token-webhook=true \
+    --extra-config=kubelet.authorization-mode=Webhook \
+    --extra-config=scheduler.address=0.0.0.0 \
+    --extra-config=controller-manager.address=0.0.0.0
+
+kubectl config use-context eu1
+kubectl apply -f manifests/alertmanager.yaml
+
+sleep 2s
 
 ALERTMANAGER_URL=$(minikube -p eu1 service alertmanager --format="{{.IP}}:{{.Port}}")
+echo "ALERTMANAGER_URL=${ALERTMANAGER_URL}"
+if [[ -z "${ALERTMANAGER_URL}" ]]; then
+    echo "minikube returns empty result for ALERTMANAGER_URL"
+    exit 1
+fi
 
 cat manifests/prometheus.yaml | sed "s#%%ALERTMANAGER_URL%%#${ALERTMANAGER_URL}#g" | sed "s#%%CLUSTER%%#eu1#g" | kubectl apply -f -
 kubectl apply -f manifests/prometheus-rules.yaml
@@ -37,6 +42,7 @@ sleep 1s
 
 kubectl config use-context eu1
 PROM_US1_URL=$(minikube -p us1 service prometheus --url)
+echo "PROM_US1_URL=${PROM_US1_URL}"
 sed "s#%%PROM_US1_URL%%#${PROM_US1_URL}#g" manifests/grafana.yaml | kubectl apply -f -
 
 # Issues.
@@ -82,3 +88,4 @@ sed "s#%%PROM_US1_URL%%#${PROM_US1_URL}#g" manifests/grafana.yaml | kubectl appl
 #      port: 10252
 #      targetPort: 10252
 #      protocol: TCP
+# - alertmanager URL service is not ready?

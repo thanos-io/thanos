@@ -32,21 +32,21 @@ data:
           sum by (namespace, label_name) (
             sum(container_memory_usage_bytes{job="kubelet",image!="", container_name!=""}) by (pod, namespace)
           * on (namespace, pod) group_left(label_name)
-            label_replace(kube_pod_labels{job="kube-state-metrics"}, "pod", "$1", "pod", "(.*)")
+            kube_pod_labels{job="kube-state-metrics"}
           )
         record: namespace_name:container_memory_usage_bytes:sum
       - expr: |
           sum by (namespace, label_name) (
             sum(kube_pod_container_resource_requests_memory_bytes{job="kube-state-metrics"}) by (namespace, pod)
           * on (namespace, pod) group_left(label_name)
-            label_replace(kube_pod_labels{job="kube-state-metrics"}, "pod", "$1", "pod", "(.*)")
+            kube_pod_labels{job="kube-state-metrics"}
           )
         record: namespace_name:kube_pod_container_resource_requests_memory_bytes:sum
       - expr: |
           sum by (namespace, label_name) (
             sum(kube_pod_container_resource_requests_cpu_cores{job="kube-state-metrics"} and on(pod) kube_pod_status_scheduled{condition="true"}) by (namespace, pod)
           * on (namespace, pod) group_left(label_name)
-            label_replace(kube_pod_labels{job="kube-state-metrics"}, "pod", "$1", "pod", "(.*)")
+            kube_pod_labels{job="kube-state-metrics"}
           )
         record: namespace_name:kube_pod_container_resource_requests_cpu_cores:sum
   kube-scheduler.rules.yaml: |-
