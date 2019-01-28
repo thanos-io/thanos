@@ -82,6 +82,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	alertExcludeLabels := cmd.Flag("alert.label-drop", "Labels by name to drop before sending to alertmanager. This allows alert to be deduplicated on replica label (repeated). Similar Prometheus alert relabelling").
 		Strings()
+	webRoutePrefix := cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. This option is analogous to --web.route-prefix of Promethus.").Default("").String()
+	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
+	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "")
 
@@ -148,6 +151,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			*key,
 			*clientCA,
 			*httpBindAddr,
+			*webRoutePrefix,
+			*webExternalPrefix,
+			*webPrefixHeaderName,
 			time.Duration(*evalInterval),
 			*dataDir,
 			*ruleFiles,
@@ -179,6 +185,9 @@ func runRule(
 	key string,
 	clientCA string,
 	httpBindAddr string,
+	webRoutePrefix string,
+	webExternalPrefix string,
+	webPrefixHeaderName string,
 	evalInterval time.Duration,
 	dataDir string,
 	ruleFiles []string,
@@ -528,11 +537,25 @@ func runRule(
 	// Start UI & metrics HTTP server.
 	{
 		router := route.New()
-		router.Post("/-/reload", func(w http.ResponseWriter, r *http.Request) {
+
+		// redirect from / to /webRoutePrefix
+		if webRoutePrefix != "" {
+			router.Get("/", func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, webRoutePrefix, http.StatusFound)
+			})
+		}
+
+		router.WithPrefix(webRoutePrefix).Post("/-/reload", func(w http.ResponseWriter, r *http.Request) {
 			reload <- struct{}{}
 		})
 
-		ui.NewRuleUI(logger, mgr, alertQueryURL.String()).Register(router)
+		flagsMap := map[string]string{
+			// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
+			"web.external-prefix": webExternalPrefix,
+			"web.prefix-header":   webPrefixHeaderName,
+		}
+
+		ui.NewRuleUI(logger, mgr, alertQueryURL.String(), flagsMap).Register(router.WithPrefix(webRoutePrefix))
 
 		mux := http.NewServeMux()
 		registerMetrics(mux, reg)
