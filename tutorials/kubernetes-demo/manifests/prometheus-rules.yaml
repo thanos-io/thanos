@@ -1,5 +1,6 @@
 # Copied from awesome kube-prometheus project (but moved to native configmap):
 # https://github.com/coreos/prometheus-operator/blob/master/contrib/kube-prometheus/manifests/prometheus-rules.yaml
+# For demo purposes simplification those are adjusted.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -22,15 +23,15 @@ data:
         record: namespace:container_memory_usage_bytes:sum
       - expr: |
           sum by (namespace, label_name) (
-             sum(rate(container_cpu_usage_seconds_total{job="kubelet", image!="", container_name!=""}[5m])) by (namespace, pod")
-           * on (namespace, pod") group_left(label_name)
+             sum(rate(container_cpu_usage_seconds_total{job="kubelet", image!="", container_name!=""}[5m])) by (namespace, pod)
+           * on (namespace, pod) group_left(label_name)
              label_replace(kube_pod_labels{job="kube-state-metrics"}, "pod", "$1", "pod", "(.*)")
           )
         record: namespace_name:container_cpu_usage_seconds_total:sum_rate
       - expr: |
           sum by (namespace, label_name) (
             sum(container_memory_usage_bytes{job="kubelet",image!="", container_name!=""}) by (pod, namespace)
-          * on (namespace, pod") group_left(label_name)
+          * on (namespace, pod) group_left(label_name)
             label_replace(kube_pod_labels{job="kube-state-metrics"}, "pod", "$1", "pod", "(.*)")
           )
         record: namespace_name:container_memory_usage_bytes:sum
@@ -323,7 +324,7 @@ data:
           message: Alertmanager has disappeared from Prometheus target discovery.
           runbook_url: https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-alertmanagerdown
         expr: |
-          absent(up{job="alertmanager-main"} == 1)
+          absent(up{job="alertmanager-main"} == 1) and up{job="prometheus", cluster="eu1"} > -1
         for: 15m
         labels:
           severity: critical
@@ -852,7 +853,7 @@ data:
           description: Reloading Prometheus' configuration has failed for {{$labels.namespace}}/{{$labels.pod}}
           summary: Reloading Prometheus' configuration failed
         expr: |
-          prometheus_config_last_reload_successful{job="prometheus-k8s"} == 0
+          prometheus_config_last_reload_successful{job="prometheus"} == 0
         for: 10m
         labels:
           severity: warning
@@ -862,7 +863,7 @@ data:
             $labels.pod}}
           summary: Prometheus' alert notification queue is running full
         expr: |
-          predict_linear(prometheus_notifications_queue_length{job="prometheus-k8s"}[5m], 60 * 30) > prometheus_notifications_queue_capacity{job="prometheus-k8s"}
+          predict_linear(prometheus_notifications_queue_length{job="prometheus"}[5m], 60 * 30) > prometheus_notifications_queue_capacity{job="prometheus"}
         for: 10m
         labels:
           severity: warning
@@ -872,7 +873,7 @@ data:
             $labels.pod}} to Alertmanager {{$labels.Alertmanager}}
           summary: Errors while sending alert from Prometheus
         expr: |
-          rate(prometheus_notifications_errors_total{job="prometheus-k8s"}[5m]) / rate(prometheus_notifications_sent_total{job="prometheus-k8s"}[5m]) > 0.01
+          rate(prometheus_notifications_errors_total{job="prometheus"}[5m]) / rate(prometheus_notifications_sent_total{job="prometheus"}[5m]) > 0.01
         for: 10m
         labels:
           severity: warning
@@ -882,7 +883,7 @@ data:
             $labels.pod}} to Alertmanager {{$labels.Alertmanager}}
           summary: Errors while sending alerts from Prometheus
         expr: |
-          rate(prometheus_notifications_errors_total{job="prometheus-k8s"}[5m]) / rate(prometheus_notifications_sent_total{job="prometheus-k8s"}[5m]) > 0.03
+          rate(prometheus_notifications_errors_total{job="prometheus"}[5m]) / rate(prometheus_notifications_sent_total{job="prometheus"}[5m]) > 0.03
         for: 10m
         labels:
           severity: critical
@@ -892,7 +893,7 @@ data:
             to any Alertmanagers
           summary: Prometheus is not connected to any Alertmanagers
         expr: |
-          prometheus_notifications_alertmanagers_discovered{job="prometheus-k8s"} < 1
+          prometheus_notifications_alertmanagers_discovered{job="prometheus"} < 1
         for: 10m
         labels:
           severity: warning
@@ -902,7 +903,7 @@ data:
             reload failures over the last four hours.'
           summary: Prometheus has issues reloading data blocks from disk
         expr: |
-          increase(prometheus_tsdb_reloads_failures_total{job="prometheus-k8s"}[2h]) > 0
+          increase(prometheus_tsdb_reloads_failures_total{job="prometheus"}[2h]) > 0
         for: 12h
         labels:
           severity: warning
@@ -912,7 +913,7 @@ data:
             compaction failures over the last four hours.'
           summary: Prometheus has issues compacting sample blocks
         expr: |
-          increase(prometheus_tsdb_compactions_failed_total{job="prometheus-k8s"}[2h]) > 0
+          increase(prometheus_tsdb_compactions_failed_total{job="prometheus"}[2h]) > 0
         for: 12h
         labels:
           severity: warning
@@ -922,7 +923,7 @@ data:
             log (WAL).'
           summary: Prometheus write-ahead log is corrupted
         expr: |
-          tsdb_wal_corruptions_total{job="prometheus-k8s"} > 0
+          tsdb_wal_corruptions_total{job="prometheus"} > 0
         for: 4h
         labels:
           severity: warning
@@ -932,7 +933,7 @@ data:
             samples.
           summary: Prometheus isn't ingesting samples
         expr: |
-          rate(prometheus_tsdb_head_samples_appended_total{job="prometheus-k8s"}[5m]) <= 0
+          rate(prometheus_tsdb_head_samples_appended_total{job="prometheus"}[5m]) <= 0
         for: 10m
         labels:
           severity: warning
@@ -942,7 +943,7 @@ data:
             due to duplicate timestamps but different values'
           summary: Prometheus has many samples rejected
         expr: |
-          increase(prometheus_target_scrapes_sample_duplicate_timestamp_total{job="prometheus-k8s"}[5m]) > 0
+          increase(prometheus_target_scrapes_sample_duplicate_timestamp_total{job="prometheus"}[5m]) > 0
         for: 10m
         labels:
           severity: warning

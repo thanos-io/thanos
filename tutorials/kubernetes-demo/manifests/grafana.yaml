@@ -105,12 +105,21 @@ data:
         "apiVersion": 1,
         "datasources": [
             {
+                 "access": "proxy",
+                 "editable": false,
+                 "name": "eu1",
+                 "orgId": 1,
+                 "type": "prometheus",
+                 "url": "http://prometheus.default.svc:9090",
+                 "version": 1
+            },
+            {
                 "access": "proxy",
                 "editable": false,
-                "name": "prometheus",
+                "name": "us1",
                 "orgId": 1,
                 "type": "prometheus",
-                "url": "http://prometheus.default.svc:9090",
+                "url": "%%PROM_US1_URL%%",
                 "version": 1
             }
         ]

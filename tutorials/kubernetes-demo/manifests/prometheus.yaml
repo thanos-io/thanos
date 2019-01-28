@@ -80,7 +80,7 @@ data:
       scrape_interval: 15s
       scrape_timeout: 10s
       external_labels:
-        cluster: "1" # It does not make much sense.. but how to substitute from envvar this without Thanos or magic bash?
+        cluster: "%%CLUSTER%%"
 
     alerting:
       alertmanagers:
@@ -155,6 +155,8 @@ data:
         target_label: namespace
       - source_labels: [__meta_kubernetes_pod_name]
         target_label: pod
+      - target_label: cluster
+        replacement: %%CLUSTER%%
 ---
 apiVersion: v1
 kind: ServiceAccount
