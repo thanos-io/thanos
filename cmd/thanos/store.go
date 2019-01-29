@@ -41,6 +41,9 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	syncInterval := cmd.Flag("sync-block-duration", "Repeat interval for syncing the blocks between local and remote view.").
 		Default("3m").Duration()
 
+	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing blocks from object storage.").
+		Default("20").Int()
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
 		peer, err := newPeerFn(logger, reg, false, "", false)
 		if err != nil {
@@ -63,6 +66,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			name,
 			debugLogging,
 			*syncInterval,
+			*blockSyncConcurrency,
 		)
 	}
 }
@@ -86,6 +90,7 @@ func runStore(
 	component string,
 	verbose bool,
 	syncInterval time.Duration,
+	blockSyncConcurrency int,
 ) error {
 	{
 		bucketConfig, err := objStoreConfig.Content()
@@ -113,6 +118,7 @@ func runStore(
 			indexCacheSizeBytes,
 			chunkPoolSizeBytes,
 			verbose,
+			blockSyncConcurrency,
 		)
 		if err != nil {
 			return errors.Wrap(err, "create object storage store")

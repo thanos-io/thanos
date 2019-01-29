@@ -169,6 +169,8 @@ type BucketStore struct {
 
 	// Verbose enabled additional logging.
 	debugLogging bool
+	// Number of goroutines to use when syncing blocks from object storage
+	blockSyncConcurrency int
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -181,6 +183,7 @@ func NewBucketStore(
 	indexCacheSizeBytes uint64,
 	maxChunkPoolBytes uint64,
 	debugLogging bool,
+	blockSyncConcurrency int,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -194,14 +197,15 @@ func NewBucketStore(
 		return nil, errors.Wrap(err, "create chunk pool")
 	}
 	s := &BucketStore{
-		logger:       logger,
-		bucket:       bucket,
-		dir:          dir,
-		indexCache:   indexCache,
-		chunkPool:    chunkPool,
-		blocks:       map[ulid.ULID]*bucketBlock{},
-		blockSets:    map[uint64]*bucketBlockSet{},
-		debugLogging: debugLogging,
+		logger:               logger,
+		bucket:               bucket,
+		dir:                  dir,
+		indexCache:           indexCache,
+		chunkPool:            chunkPool,
+		blocks:               map[ulid.ULID]*bucketBlock{},
+		blockSets:            map[uint64]*bucketBlockSet{},
+		debugLogging:         debugLogging,
+		blockSyncConcurrency: blockSyncConcurrency,
 	}
 	s.metrics = newBucketStoreMetrics(reg)
 
@@ -232,7 +236,7 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 	var wg sync.WaitGroup
 	blockc := make(chan ulid.ULID)
 
-	for i := 0; i < 20; i++ {
+	for i := 0; i < s.blockSyncConcurrency; i++ {
 		wg.Add(1)
 		go func() {
 			for id := range blockc {
