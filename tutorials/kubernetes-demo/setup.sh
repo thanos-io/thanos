@@ -3,19 +3,23 @@
 set -e
 export HISTFILE="/home/bartek/.zsh_history_demo_thanos_2019"
 
-minikube start --cache-images --vm-driver=kvm2 -p us1 --kubernetes-version="v1.13.2" \
-    --memory=4096 \
-    --extra-config=kubelet.authentication-token-webhook=true \
-    --extra-config=kubelet.authorization-mode=Webhook \
-    --extra-config=scheduler.address=0.0.0.0 \
-    --extra-config=controller-manager.address=0.0.0.0
+MINIKUBE_RESTART=${1:true}
 
-minikube start --cache-images --vm-driver=kvm2 -p eu1 --kubernetes-version="v1.13.2" \
-    --memory=4096 \
-    --extra-config=kubelet.authentication-token-webhook=true \
-    --extra-config=kubelet.authorization-mode=Webhook \
-    --extra-config=scheduler.address=0.0.0.0 \
-    --extra-config=controller-manager.address=0.0.0.0
+if ${MINIKUBE_RESTART}; then
+    minikube start --cache-images --vm-driver=kvm2 -p us1 --kubernetes-version="v1.13.2" \
+        --memory=4096 \
+        --extra-config=kubelet.authentication-token-webhook=true \
+        --extra-config=kubelet.authorization-mode=Webhook \
+        --extra-config=scheduler.address=0.0.0.0 \
+        --extra-config=controller-manager.address=0.0.0.0
+
+    minikube start --cache-images --vm-driver=kvm2 -p eu1 --kubernetes-version="v1.13.2" \
+        --memory=4096 \
+        --extra-config=kubelet.authentication-token-webhook=true \
+        --extra-config=kubelet.authorization-mode=Webhook \
+        --extra-config=scheduler.address=0.0.0.0 \
+        --extra-config=controller-manager.address=0.0.0.0
+fi
 
 kubectl config use-context eu1
 kubectl apply -f manifests/alertmanager.yaml
@@ -29,13 +33,13 @@ if [[ -z "${ALERTMANAGER_URL}" ]]; then
     exit 1
 fi
 
-cat manifests/prometheus.yaml | sed "s#%%ALERTMANAGER_URL%%#${ALERTMANAGER_URL}#g" | sed "s#%%CLUSTER%%#eu1#g" | kubectl apply -f -
 kubectl apply -f manifests/prometheus-rules.yaml
+cat manifests/prometheus.yaml | sed "s#%%ALERTMANAGER_URL%%#${ALERTMANAGER_URL}#g" | sed "s#%%CLUSTER%%#eu1#g" | kubectl apply -f -
 kubectl apply -f manifests/kube-state-metrics.yaml
 
 kubectl config use-context us1
-cat manifests/prometheus.yaml | sed "s#%%ALERTMANAGER_URL%%#${ALERTMANAGER_URL}#g" | sed "s#%%CLUSTER%%#us1#g" | kubectl apply -f -
 kubectl apply -f manifests/prometheus-rules.yaml
+cat manifests/prometheus.yaml | sed "s#%%ALERTMANAGER_URL%%#${ALERTMANAGER_URL}#g" | sed "s#%%CLUSTER%%#us1#g" | kubectl apply -f -
 kubectl apply -f manifests/kube-state-metrics.yaml
 
 sleep 1s

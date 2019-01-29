@@ -104,24 +104,7 @@ data:
         regex: default;kubernetes;https
         action: keep
 
-    - job_name: kube-nodes
-      scheme: https
-      kubernetes_sd_configs:
-      - role: node
-      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-      tls_config:
-        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-      relabel_configs:
-      - target_label: job
-        replacement: kubelet
-      - target_label: __address__
-        replacement: kubernetes.default.svc:443
-      - source_labels: [__meta_kubernetes_node_name]
-        regex: (.+)
-        target_label: __metrics_path__
-        replacement: /api/v1/nodes/${1}/proxy/metrics
-
-    - job_name: kube-cadvisor
+    - job_name: kubelet
       scheme: https
       kubernetes_sd_configs:
       - role: node
@@ -135,8 +118,19 @@ data:
         regex: (.+)
         target_label: __metrics_path__
         replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+      metric_relabel_configs:
+      - source_labels: [pod_name]
+        regex: ^(.+)$
+        target_label: pod
+      - regex: id
+        action: labeldrop
+      - regex: name
+        action: labeldrop
+      - regex: pod_name
+        action: labeldrop
 
     - job_name: kube-pods
+      honor_labels: true
       kubernetes_sd_configs:
       - role: pod
       relabel_configs:
@@ -157,6 +151,13 @@ data:
         target_label: pod
       - target_label: cluster
         replacement: %%CLUSTER%%
+      metric_relabel_configs:
+      - source_labels: [pod_name]
+        regex: ^(.+)$
+        target_label: pod
+      - regex: pod_name
+        action: labeldrop
+
 ---
 apiVersion: v1
 kind: ServiceAccount
