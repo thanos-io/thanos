@@ -89,3 +89,5 @@ sed "s#%%PROM_US1_URL%%#${PROM_US1_URL}#g" manifests/grafana.yaml | kubectl appl
 #      targetPort: 10252
 #      protocol: TCP
 # - alertmanager URL service is not ready?
+# -  E0129 12:41:52.352178    6295 start.go:243] Error parsing version semver:  Version string empty
+#

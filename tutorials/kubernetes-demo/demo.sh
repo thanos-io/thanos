@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
 
-########################
-# include the magic
-########################
-. demo-magic.sh
+. demo-lib.sh
 
 clear
 
 # We assume ./setup.sh was successfully ran.
 
-pe "ls -l"
+# Double Esc or Ctrl+Q to close it.
+function open() {
+    # Image viewer on fullscreen.
+    eog -wgf "$@"
+}
 
-p "echo 'x'"
 
-echo "lol"
+rc "open slides/1-title.svg"
+r "ls -l"
+# Need ctrl+w to close and fullscreen beforehand.
+rc "google-chrome --app=`minikube -p eu1 service prometheus --url` # Prometheus eu1"
+r "kubectl --context=us1 -n=kube-system get po"
+rc "open slides/10-the-end.svg"
 
-# US, EU, ASIA
-pe "kubectl --context=leaf1 -n=kube-system get po"
-
+navigate
