@@ -12,12 +12,18 @@ function open() {
     eog -wgf "$@"
 }
 
+rc "open slides/1-title.svg" # Slide to 4) init setup.
+r "kubectl --context=eu1 get po"
+r "kubectl --context=us1 get po"
 
-rc "open slides/1-title.svg"
-r "ls -l"
 # Need ctrl+w to close and fullscreen beforehand.
-rc "google-chrome --app=`minikube -p eu1 service prometheus --url` # Prometheus eu1"
-r "kubectl --context=us1 -n=kube-system get po"
+ro "open \$(minikube -p eu1 service prometheus --url)/targets" "google-chrome --app=`minikube -p eu1 service prometheus --url`/targets > /dev/null"
+ro "open \$(minikube -p us1 service prometheus --url)/targets" "google-chrome --app=`minikube -p us1 service prometheus --url`/targets > /dev/null"
+ro "open \$(minikube -p eu1 service alertmanager --url)" "google-chrome --app=`minikube -p eu1 service alertmanager --url` > /dev/null"
+ro "open \$(minikube -p eu1 service grafana --url)" "google-chrome --app=`minikube -p eu1 service grafana --url` > /dev/null"
+rc "open slides/4-initial-setup.svg"
+
+
 rc "open slides/10-the-end.svg"
 
 navigate

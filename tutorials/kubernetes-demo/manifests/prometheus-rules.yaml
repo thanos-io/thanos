@@ -815,9 +815,9 @@ data:
         for: 10m
         labels:
           severity: warning
-      - alert: DeadMansSwitch
+      - alert: AlertPropagationTest
         annotations:
-          message: This is a DeadMansSwitch meant to ensure that the entire alerting
+          message: This is an AlertPropagationTest meant to ensure that the entire alerting
             pipeline is functional.
         expr: vector(1)
         labels:

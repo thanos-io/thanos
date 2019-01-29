@@ -50,6 +50,7 @@ function check_pv() {
   }
 }
 
+PRINT=()
 CMDS=()
 CLEAN_AFTER=()
 
@@ -62,22 +63,40 @@ CLEAN_AFTER=()
 #
 ##
 function r() {
+  PRINT+=("$@")
   CMDS+=("$@")
+
   CLEAN_AFTER+=(false)
 }
 
 ##
 # Registers a command for navigate mode.
-# It registers it with clean_after attribute which will not show it after evaluation.
 #
 # takes 1 parameter - the string command to run
 #
-# usage: rc "ls -l"
+# usage: r "ls -l"
 #
 ##
 function rc() {
+  PRINT+=("$@")
   CMDS+=("$@")
+
   CLEAN_AFTER+=(true)
+}
+
+##
+# Registers a command for navigate mode, but ran different one without printing it.
+#
+# takes 2 parameter - the string command to be printed and string command to be run.
+#
+# usage: r "ls -l" "echo 'broken'"
+#
+##
+function ro() {
+  PRINT+=("$1")
+  CMDS+=("$2")
+
+  CLEAN_AFTER+=(false)
 }
 
 ##
@@ -98,14 +117,17 @@ function navigate() {
       curr=${#CMDS[@]}-1
     fi
 
-    cmd=${CMDS[${curr}]}
+    print=${PRINT[${curr}]}
+    if [[ ${print} == "" ]]; then
+        print=${CMDS[${curr}]}
+    fi
 
     # Make sure input will not break the print.
     stty -echo
     if [[ -z $TYPE_SPEED ]]; then
-      echo -en "${YELLOW}$cmd${COLOR_RESET}"
+      echo -en "${YELLOW}$print${COLOR_RESET}"
     else
-      echo -en "${YELLOW}$cmd${COLOR_RESET}" | pv -qL $[$TYPE_SPEED+(-2 + RANDOM%5)];
+      echo -en "${YELLOW}$print${COLOR_RESET}" | pv -qL $[$TYPE_SPEED+(-2 + RANDOM%5)];
     fi
     stty echo
 
@@ -137,11 +159,12 @@ function navigate() {
       else
         echo ""
       fi
+      eval "${CMDS[${curr}]}"
       ((curr++))
-      out=$(eval ${cmd})
-      if [[ ${CLEAN_AFTER[${curr}]} == false ]]; then
-        echo ${out}
-      fi
+
+      # Wait for enter at the end.
+      read -rst 0.3 -n 10000 discard
+      read -rs -n1 input
       ;;
     '71'|'1B') # q or escape - exit.
       echo ""
