@@ -91,7 +91,7 @@ return warning.
 
 Any additional field does not break compatibility, however there is no guarantee that Grafana or any other client will understand those.
 
-Currently Thanos UI exposed by Thanos  understands
+Currently Thanos UI exposed by Thanos understands
 ```go
 type queryData struct {
 	ResultType promql.ValueType `json:"resultType"`
@@ -108,7 +108,7 @@ option controls if storeAPI unavailability is considered critical.
 
 ## Expose UI on a sub-path
 
-It is possible to expose thanos-query UI and optinally API on a sub-path.
+It is possible to expose thanos-query UI and optionally API on a sub-path.
 The sub-path can be defined either statically or dynamically via an HTTP header.
 Static path prefix definition follows the pattern used in Prometheus,
 where `web.route-prefix` option defines HTTP request path prefix (endpoints prefix)
