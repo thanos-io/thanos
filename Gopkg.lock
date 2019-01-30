@@ -2,21 +2,20 @@
 
 
 [[projects]]
-  digest = "1:7131fa3a68e56764067bb569886cc7b03de5523fe5e81cbe0c70368932a1c622"
+  digest = "1:b24249f5a5e6fbe1eddc94b25973172339ccabeadef4779274f3ed0167c18812"
   name = "cloud.google.com/go"
   packages = [
     "compute/metadata",
     "iam",
     "internal",
     "internal/optional",
-    "internal/trace",
     "internal/version",
     "storage",
     "trace/apiv1",
   ]
   pruneopts = ""
-  revision = "28a4bc8c44b3acbcc482cff0cdf7de29a4688b61"
-  version = "v0.35.1"
+  revision = "2d3a6656c17a60b0815b7e06ab0be04eacb6e613"
+  version = "v0.16.0"
 
 [[projects]]
   digest = "1:5f61d4466cef935862c262f6bc00e24beb5b39b551e906f3cfb180dfac096d57"
@@ -402,14 +401,6 @@
   version = "v0.2.0"
 
 [[projects]]
-  branch = "master"
-  digest = "1:3adc46876d4d0e4d5bbcfcc44c2116b95d7a5c966e2ee92a219488547fd453f2"
-  name = "github.com/nightlyone/lockfile"
-  packages = ["."]
-  pruneopts = ""
-  revision = "0ad87eef1443f64d3d8c50da647e2b1552851124"
-
-[[projects]]
   digest = "1:94e9081cc450d2cdf4e6886fc2c06c07272f86477df2d74ee5931951fa3d2577"
   name = "github.com/oklog/run"
   packages = ["."]
@@ -512,11 +503,12 @@
   revision = "05ee40e3a273f7245e8777337fc7b46e533a9a92"
 
 [[projects]]
-  digest = "1:2f2138db39ee627b66623fbc8aaa508383f8dc14bb1d6739cba62cc205f02fdd"
+  digest = "1:aa61ae66e6babdb57e110a2e528235c1b05818ac7bf8e6a8de41d60a2e02d635"
   name = "github.com/prometheus/prometheus"
   packages = [
     "discovery/file",
     "discovery/targetgroup",
+    "pkg/gate",
     "pkg/labels",
     "pkg/rulefmt",
     "pkg/textparse",
@@ -532,11 +524,11 @@
     "util/testutil",
   ]
   pruneopts = ""
-  revision = "71af5e29e815795e9dd14742ee7725682fa14b7b"
-  version = "v2.3.2"
+  revision = "410ee9e04acb8f59f400858752ca82b4ef88035e"
+  version = "v2.7.0"
 
 [[projects]]
-  digest = "1:baccfad2a001820617e141f836390a28a7940e1d8b1d2391eca8a58e07133853"
+  digest = "1:b7ffd9413e1a0f664257748d0d9c9b4662e0a70db9e87fac86b01437c803d08d"
   name = "github.com/prometheus/tsdb"
   packages = [
     ".",
@@ -545,9 +537,11 @@
     "fileutil",
     "index",
     "labels",
+    "wal",
   ]
   pruneopts = ""
-  revision = "bd832fc8274e8fe63999ac749daaaff9d881241f"
+  revision = "10ba228e6baa4811818e04b1ab9b48110bb43d7b"
+  version = "v0.4.0"
 
 [[projects]]
   branch = "master"
@@ -741,7 +735,6 @@
     "googleapis/api/annotations",
     "googleapis/devtools/cloudtrace/v1",
     "googleapis/iam/v1",
-    "googleapis/rpc/code",
     "googleapis/rpc/status",
   ]
   pruneopts = ""
