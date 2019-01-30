@@ -7,15 +7,16 @@ function generatePvWithMetrics() {
     replica=$2
 
     # Add volume and generated metrics inside it.
-    kubectl apply -f manifests/prometheus-pv-${replica}.yaml
+    kubectl apply --context=${cluster} -f manifests/prometheus-pv-${replica}.yaml
 
     rm -rf -- /tmp/prom-out
     mkdir /tmp/prom-out
     go run ./blockgen/main.go --input=./blockgen/container_metrics.json --output-dir=/tmp/prom-out --retention=336h # 2w
     chmod -R 775 /tmp/prom-out
     # Fun with permissions because Prometheus process is run a "noone" in a pod... ):
-    minikube -p ${cluster} ssh "sudo chown -R docker /data && rm -rf /data/pv-prometheus-${replica} && mkdir /data/pv-prometheus-${replica} && chmod -R 775 /data/pv-prometheus-${replica}"
+    minikube -p ${cluster} ssh "sudo chown -R docker /data && rm -rf /data/pv-prometheus-${replica} && mkdir /data/pv-prometheus-${replica}"
     scp -r -i $(minikube -p ${cluster} ssh-key) /tmp/prom-out/* docker@$(minikube -p ${cluster} ip):/data/pv-prometheus-${replica}
+    minikube -p ${cluster} ssh "chmod -R 777 /data/pv-prometheus-${replica}"
 }
 
 export HISTFILE="/home/bartek/.zsh_history_demo_thanos_2019"

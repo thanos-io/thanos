@@ -22,6 +22,7 @@ import (
 
 // Allow for more realistic output.
 type series struct {
+	// Counter?????
 	Jitter float64
 	Max    float64
 	Min    float64
@@ -71,6 +72,15 @@ func main() {
 		}
 	}
 
+	if len(rngs) == 0 {
+		rngs = append(rngs, int64(time.Duration(2*time.Hour).Seconds()*1000))
+	}
+
+	if err := os.RemoveAll(*outputDir); err != nil {
+		level.Error(logger).Log("msg", "remove output dir", "err", err)
+		os.Exit(1)
+	}
+
 	db, err := tsdb.Open(*outputDir, nil, nil, &tsdb.Options{
 		BlockRanges:       rngs,
 		RetentionDuration: uint64(retention.Seconds() * 1000),
@@ -87,17 +97,21 @@ func main() {
 	maxTime := timestamp.FromTime(n)
 	minTime := timestamp.FromTime(n.Add(-*retention))
 
-	a := db.Appender()
+	var g []gen
 	for _, in := range s {
 		lset := labels.New()
+		// Well.. we need all.
 		for n, v := range in.Result.Result[0].Metric {
 			lset = append(lset, labels.Label{Name: string(n), Value: string(v)})
 		}
-		level.Info(logger).Log("msg", "generating series", "lset", lset, "minTime", minTime, "maxTime", maxTime)
-		if err := generateSeries(a, lset, minTime, maxTime, *scrapeInterval, &basicGen{min: in.Min, max: in.Max, jitter: in.Jitter}); err != nil {
-			level.Error(logger).Log("err", err)
-			os.Exit(1)
-		}
+		level.Info(logger).Log("msg", "scheduled generation of series", "lset", lset, "minTime", minTime, "maxTime", maxTime)
+		g = append(g, &basicGen{lset: lset, min: in.Min, max: in.Max, jitter: in.Jitter})
+	}
+
+	a := db.Appender()
+	if err := generateSeries(a, minTime, maxTime, *scrapeInterval, g); err != nil {
+		level.Error(logger).Log("err", err)
+		os.Exit(1)
 	}
 
 	if err := a.Commit(); err != nil {
@@ -116,49 +130,44 @@ func main() {
 }
 
 type basicGen struct {
+	lset             labels.Labels
 	min, max, jitter float64
 
 	v float64
 	i int64
 }
 
+func (b *basicGen) Lset() labels.Labels {
+	return b.lset
+}
+
 func (b *basicGen) NextValue() float64 {
 	defer func() { b.i++ }()
 
 	if b.i == 0 {
-		b.v = rand.Float64() * (b.max - b.min)
+		b.v = b.min + rand.Float64() * ((b.max - b.min) + 1)
 	}
 
 	var mod float64
 	if b.jitter > 0 {
 		mod = (rand.Float64() - 0.5) * b.jitter
 	}
-
 	return b.v + mod
 }
 
 type gen interface {
+	Lset() labels.Labels
 	NextValue() float64
 }
 
-func generateSeries(a tsdb.Appender, labels labels.Labels, minTime, maxTime int64, interval time.Duration, g gen) error {
-	r, err := a.Add(labels, minTime, g.NextValue())
-	if err != nil {
-		if err == tsdb.ErrOutOfBounds {
-			err = errors.Wrap(err, "have you removed old blocks and wal?")
-		}
-		return errors.Wrap(err, "add")
-	}
-
-	minTime += int64(interval.Seconds() * 1000)
+func generateSeries(a tsdb.Appender, minTime, maxTime int64, interval time.Duration, gens []gen) error {
 	for minTime <= maxTime {
-		if err := a.AddFast(r, minTime, g.NextValue()); err != nil {
-			r, err = a.Add(labels, minTime, g.NextValue())
-			if err != nil {
-				return errors.Wrap(err, "add+1")
+		for _, g := range gens {
+			// Cache reference and use AddFast if we are too slow.
+			if _, err := a.Add(g.Lset(), minTime, g.NextValue()); err != nil {
+				return errors.Wrap(err, "add (have you removed old blocks and wal?)")
 			}
 		}
-
 		minTime += int64(interval.Seconds() * 1000)
 	}
 
