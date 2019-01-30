@@ -2,13 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"github.com/prometheus/prometheus/promql"
 	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
-
-	"github.com/pkg/errors"
 
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/timestamp"
@@ -22,7 +22,7 @@ import (
 
 // Allow for more realistic output.
 type series struct {
-	// Counter?????
+	Type   string // gauge, counter (if conunter we treat below as rate aim)
 	Jitter float64
 	Max    float64
 	Min    float64
@@ -97,21 +97,53 @@ func main() {
 	maxTime := timestamp.FromTime(n)
 	minTime := timestamp.FromTime(n.Add(-*retention))
 
-	var g []gen
+	generators := make(map[string]gen)
 	for _, in := range s {
-		lset := labels.New()
-		// Well.. we need all.
-		for n, v := range in.Result.Result[0].Metric {
-			lset = append(lset, labels.Label{Name: string(n), Value: string(v)})
+		for _, r := range in.Result.Result {
+			lset := labels.New()
+			for n, v := range r.Metric {
+				lset = append(lset, labels.Label{Name: string(n), Value: string(v)})
+			}
+			level.Debug(logger).Log("msg", "scheduled generation of series", "lset", lset)
+
+			switch strings.ToLower(in.Type) {
+			case "counter":
+				generators[lset.String()] = &counterGen{
+					interval: *scrapeInterval,
+					maxTime:  maxTime,
+					minTime:  minTime,
+					lset:     lset,
+					min:      in.Min,
+					max:      in.Max,
+					jitter:   in.Jitter,
+					rateInterval: 5 * time.Minute,
+				}
+			case "gauge":
+				generators[lset.String()] = &gaugeGen{
+					interval: *scrapeInterval,
+					maxTime:  maxTime,
+					minTime:  minTime,
+					lset:     lset,
+					min:      in.Min,
+					max:      in.Max,
+					jitter:   in.Jitter,
+				}
+			default:
+				level.Error(logger).Log("msg", "unknown metric type", "type", in.Type)
+				os.Exit(1)
+			}
 		}
-		level.Info(logger).Log("msg", "scheduled generation of series", "lset", lset, "minTime", minTime, "maxTime", maxTime)
-		g = append(g, &basicGen{lset: lset, min: in.Min, max: in.Max, jitter: in.Jitter})
 	}
 
 	a := db.Appender()
-	if err := generateSeries(a, minTime, maxTime, *scrapeInterval, g); err != nil {
-		level.Error(logger).Log("err", err)
-		os.Exit(1)
+	for _, generator := range generators {
+		for generator.Next() {
+			// Cache reference and use AddFast if we are too slow.
+			if _, err := a.Add(generator.Lset(), generator.Ts(), generator.Value()); err != nil {
+				level.Error(logger).Log("msg", "add", "err", err)
+				os.Exit(1)
+			}
+		}
 	}
 
 	if err := a.Commit(); err != nil {
@@ -129,47 +161,109 @@ func main() {
 	level.Info(logger).Log("msg", "done")
 }
 
-type basicGen struct {
+type gaugeGen struct {
+	interval         time.Duration
+	maxTime, minTime int64
+
 	lset             labels.Labels
 	min, max, jitter float64
 
-	v float64
-	i int64
+	v    float64
+	mod  float64
+	init bool
 }
 
-func (b *basicGen) Lset() labels.Labels {
-	return b.lset
+func (g *gaugeGen) Lset() labels.Labels {
+	return g.lset
 }
 
-func (b *basicGen) NextValue() float64 {
-	defer func() { b.i++ }()
+func (g *gaugeGen) Next() bool {
+	if g.minTime > g.maxTime {
+		return false
+	}
+	defer func() { g.minTime += int64(g.interval.Seconds() * 1000) }()
 
-	if b.i == 0 {
-		b.v = b.min + rand.Float64() * ((b.max - b.min) + 1)
+	if !g.init {
+		g.v = g.min + rand.Float64()*((g.max-g.min)+1)
+		g.init = true
+	}
+
+	// Technically only mod changes.
+	if g.jitter > 0 {
+		g.mod = (rand.Float64() - 0.5) * g.jitter
+	}
+
+	return true
+}
+
+func (g *gaugeGen) Ts() int64      { return g.minTime }
+func (g *gaugeGen) Value() float64 { return g.v + g.mod }
+
+type counterGen struct {
+	interval         time.Duration
+	maxTime, minTime int64
+
+	lset             labels.Labels
+	min, max, jitter float64
+	rateInterval time.Duration
+
+	v    float64
+	init bool
+	buff []promql.Point
+
+	lastVal float64
+}
+
+func (g *counterGen) Lset() labels.Labels {
+	return g.lset
+}
+
+func (g *counterGen) Next() bool {
+	if g.minTime > g.maxTime && len(g.buff) == 0 {
+		return false
+	}
+
+	if len(g.buff) > 0 {
+		// Pop front.
+		g.buff = g.buff[1:]
+		return true
+	}
+
+	if !g.init {
+		g.v = g.min + rand.Float64()*((g.max-g.min)+1)
+		g.init = true
 	}
 
 	var mod float64
-	if b.jitter > 0 {
-		mod = (rand.Float64() - 0.5) * b.jitter
+	if g.jitter > 0 {
+		mod = (rand.Float64() - 0.5) * g.jitter
 	}
-	return b.v + mod
+
+	// That's the goal for our rate.
+	goalV := g.v + mod
+
+	// Distribute goalV into multiple rateInterval/ interval increments.
+	left := int64(g.rateInterval / g.interval)
+	for g.minTime <= g.maxTime && left > 0 {
+		equal := goalV / float64(left)
+
+		g.buff = append(g.buff, promql.Point{T: g.minTime, V: rand.Float64() * goalV})
+		g.minTime += int64(g.interval.Seconds() * 1000)
+
+		}
+	}
+
+
+
+	return true
 }
+
+func (g *counterGen) Ts() int64      { return g.buff[0].T }
+func (g *counterGen) Value() float64 { return g.buff[0].V }
 
 type gen interface {
 	Lset() labels.Labels
-	NextValue() float64
-}
-
-func generateSeries(a tsdb.Appender, minTime, maxTime int64, interval time.Duration, gens []gen) error {
-	for minTime <= maxTime {
-		for _, g := range gens {
-			// Cache reference and use AddFast if we are too slow.
-			if _, err := a.Add(g.Lset(), minTime, g.NextValue()); err != nil {
-				return errors.Wrap(err, "add (have you removed old blocks and wal?)")
-			}
-		}
-		minTime += int64(interval.Seconds() * 1000)
-	}
-
-	return nil
+	Next() bool
+	Ts() int64
+	Value() float64
 }
