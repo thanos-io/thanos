@@ -163,3 +163,48 @@ Flags:
 
 ```
 
+### inspect
+
+`bucket inspect` is used to inspect buckets in a detailed way.
+
+Example:
+```
+$ thanos bucket inspect -l environment=\"prod\"
+```
+
+[embedmd]:# (flags/bucket_inspect.txt)
+```txt
+usage: thanos bucket inspect [<flags>]
+
+Inspect all blocks in the bucket in detailed, table-like way
+
+Flags:
+  -h, --help                 Show context-sensitive help (also try --help-long
+                             and --help-man).
+      --version              Show application version.
+      --log.level=info       Log filtering level.
+      --log.format=logfmt    Log format to use.
+      --gcloudtrace.project=GCLOUDTRACE.PROJECT  
+                             GCP project to send Google Cloud Trace tracings to.
+                             If empty, tracing will be disabled.
+      --gcloudtrace.sample-factor=1  
+                             How often we send traces (1/<sample-factor>). If 0
+                             no trace will be sent periodically, unless forced
+                             by baggage item. See `pkg/tracing/tracing.go` for
+                             details.
+      --objstore.config-file=<bucket.config-yaml-path>  
+                             Path to YAML file that contains object store
+                             configuration.
+      --objstore.config=<bucket.config-yaml>  
+                             Alternative to 'objstore.config-file' flag. Object
+                             store configuration in YAML.
+  -l, --selector=<name>="<value>" ...  
+                             Selects blocks based on label, e.g. '-l
+                             key1="value1" -l key2="value2"'. All key value
+                             pairs must match.
+      --sort-by=FROM... ...  Sort by columns. It's also possible to sort by
+                             multiple columns, e.g. '--sort-by FROM --sort-by
+                             UNTIL'. I.e., if the 'FROM' value is equal the rows
+                             are then further sorted by the 'UNTIL' value.
+
+```
