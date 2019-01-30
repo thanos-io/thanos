@@ -31,6 +31,10 @@ spec:
       labels:
         app: prometheus
     spec:
+      securityContext:
+        runAsUser: 1000
+        fsGroup: 2000
+        runAsNonRoot: true
       serviceAccountName: prometheus
       containers:
       - name: prometheus
@@ -62,6 +66,7 @@ spec:
         app: prometheus
       name: prometheus
     spec:
+      storageClassName: prom-manual
       accessModes:
         - ReadWriteOnce
       resources:
@@ -157,7 +162,6 @@ data:
         target_label: pod
       - regex: pod_name
         action: labeldrop
-
 ---
 apiVersion: v1
 kind: ServiceAccount

@@ -1,29 +1,31 @@
 #!/usr/bin/env bash
 
 set -e
+
+function generatePvWithMetrics() {
+    cluster=$1
+    replica=$2
+
+    # Add volume and generated metrics inside it.
+    kubectl apply -f manifests/prometheus-pv-${replica}.yaml
+
+    rm -rf /tmp/prom-out
+    mkdir /tmp/prom-out
+    go run ./blockgen/main.go --input=./blockgen/container_metrics.json --output-dir=/tmp/prom-out --retention=336h # 2w
+    minikube -p ${cluster} ssh "sudo chown -R docker /data && rm -rf /data/pv-prometheus-${replica} && mkdir /data/pv-prometheus-${replica}"
+    scp -r -i $(minikube -p ${cluster} ssh-key) /tmp/prom-out/* docker@$(minikube -p ${cluster} ip):/data/pv-prometheus-${replica}
+}
+
 export HISTFILE="/home/bartek/.zsh_history_demo_thanos_2019"
 
 MINIKUBE_RESTART=${1:true}
 
 if ${MINIKUBE_RESTART}; then
-    minikube start --cache-images --vm-driver=kvm2 -p us1 --kubernetes-version="v1.13.2" \
-        --memory=4096 \
-        --extra-config=kubelet.authentication-token-webhook=true \
-        --extra-config=kubelet.authorization-mode=Webhook \
-        --extra-config=scheduler.address=0.0.0.0 \
-        --extra-config=controller-manager.address=0.0.0.0
-
-    minikube start --cache-images --vm-driver=kvm2 -p eu1 --kubernetes-version="v1.13.2" \
-        --memory=4096 \
-        --extra-config=kubelet.authentication-token-webhook=true \
-        --extra-config=kubelet.authorization-mode=Webhook \
-        --extra-config=scheduler.address=0.0.0.0 \
-        --extra-config=controller-manager.address=0.0.0.0
+    ./cluster-up.sh
 fi
 
 kubectl config use-context eu1
 kubectl apply -f manifests/alertmanager.yaml
-
 sleep 2s
 
 ALERTMANAGER_URL=$(minikube -p eu1 service alertmanager --format="{{.IP}}:{{.Port}}")
@@ -33,11 +35,13 @@ if [[ -z "${ALERTMANAGER_URL}" ]]; then
     exit 1
 fi
 
+generatePvWithMetrics eu1 0
 kubectl apply -f manifests/prometheus-rules.yaml
 cat manifests/prometheus.yaml | sed "s#%%ALERTMANAGER_URL%%#${ALERTMANAGER_URL}#g" | sed "s#%%CLUSTER%%#eu1#g" | kubectl apply -f -
 kubectl apply -f manifests/kube-state-metrics.yaml
 
 kubectl config use-context us1
+generatePvWithMetrics eu1 1
 kubectl apply -f manifests/prometheus-rules.yaml
 cat manifests/prometheus.yaml | sed "s#%%ALERTMANAGER_URL%%#${ALERTMANAGER_URL}#g" | sed "s#%%CLUSTER%%#us1#g" | kubectl apply -f -
 kubectl apply -f manifests/kube-state-metrics.yaml
