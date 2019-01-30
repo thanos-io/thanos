@@ -116,6 +116,9 @@ func newIndexCache(reg prometheus.Registerer, maxBytes uint64) (*indexCache, err
 }
 
 func (c *indexCache) ensureFits(b []byte) {
+	if uint64(len(b)) > c.maxSize {
+		return
+	}
 	for c.curSize+uint64(len(b)) > c.maxSize {
 		c.lru.RemoveOldest()
 	}
