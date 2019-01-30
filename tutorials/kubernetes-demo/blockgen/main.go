@@ -2,12 +2,13 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/pkg/errors"
 	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/timestamp"
@@ -61,7 +62,7 @@ func main() {
 	}
 
 	// Same code as Prometheus for compaction levels and max block.
-	rngs := tsdb.ExponentialBlockRanges(int64(time.Duration(2* time.Hour).Seconds()*1000), 10, 3)
+	rngs := tsdb.ExponentialBlockRanges(int64(time.Duration(2*time.Hour).Seconds()*1000), 10, 3)
 	maxBlockDuration := *retention / 10
 	for i, v := range rngs {
 		if v > int64(maxBlockDuration.Seconds()*1000) {
@@ -71,8 +72,9 @@ func main() {
 	}
 
 	db, err := tsdb.Open(*outputDir, nil, nil, &tsdb.Options{
-		BlockRanges: rngs,
+		BlockRanges:       rngs,
 		RetentionDuration: uint64(retention.Seconds() * 1000),
+		NoLockfile:        true,
 	})
 	if err != nil {
 		level.Error(logger).Log("err", err)

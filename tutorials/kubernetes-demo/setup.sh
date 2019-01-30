@@ -9,10 +9,12 @@ function generatePvWithMetrics() {
     # Add volume and generated metrics inside it.
     kubectl apply -f manifests/prometheus-pv-${replica}.yaml
 
-    rm -rf /tmp/prom-out
+    rm -rf -- /tmp/prom-out
     mkdir /tmp/prom-out
     go run ./blockgen/main.go --input=./blockgen/container_metrics.json --output-dir=/tmp/prom-out --retention=336h # 2w
-    minikube -p ${cluster} ssh "sudo chown -R docker /data && rm -rf /data/pv-prometheus-${replica} && mkdir /data/pv-prometheus-${replica}"
+    chmod -R 775 /tmp/prom-out
+    # Fun with permissions because Prometheus process is run a "noone" in a pod... ):
+    minikube -p ${cluster} ssh "sudo chown -R docker /data && rm -rf /data/pv-prometheus-${replica} && mkdir /data/pv-prometheus-${replica} && chmod -R 775 /data/pv-prometheus-${replica}"
     scp -r -i $(minikube -p ${cluster} ssh-key) /tmp/prom-out/* docker@$(minikube -p ${cluster} ip):/data/pv-prometheus-${replica}
 }
 
@@ -41,7 +43,7 @@ cat manifests/prometheus.yaml | sed "s#%%ALERTMANAGER_URL%%#${ALERTMANAGER_URL}#
 kubectl apply -f manifests/kube-state-metrics.yaml
 
 kubectl config use-context us1
-generatePvWithMetrics eu1 1
+generatePvWithMetrics us1 0
 kubectl apply -f manifests/prometheus-rules.yaml
 cat manifests/prometheus.yaml | sed "s#%%ALERTMANAGER_URL%%#${ALERTMANAGER_URL}#g" | sed "s#%%CLUSTER%%#us1#g" | kubectl apply -f -
 kubectl apply -f manifests/kube-state-metrics.yaml
