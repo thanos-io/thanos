@@ -22,9 +22,10 @@ spec:
         - --log.level=debug
         - --query.replica-label=replica
         - --cluster.disable
-        - --store=prometheus.default.svc:10901
-        - --store=prometheus-1.default.svc:10901
-        - --store=%%PROM_US1_URL%%:10901
+        - --store=sidecar.default.svc:10901
+        - --store=sidecar-1.default.svc:10901
+        - --store=%%SIDECAR_US1_0_URL%%
+        - --store=%%SIDECAR_US1_1_URL%%
         ports:
         - name: http
           containerPort: 10902

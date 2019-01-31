@@ -10,10 +10,6 @@ spec:
       protocol: TCP
       targetPort: http-prometheus
       name: http-prometheus
-    - port: 10901
-      protocol: TCP
-      targetPort: grpc
-      name: grpc
   selector:
     statefulset.kubernetes.io/pod-name: prometheus-0
   type: NodePort
@@ -30,6 +26,34 @@ spec:
       protocol: TCP
       targetPort: http-prometheus
       name: http-prometheus
+  selector:
+    statefulset.kubernetes.io/pod-name: prometheus-1
+  type: NodePort
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: prometheus
+  name: sidecar
+spec:
+  ports:
+    - port: 10901
+      protocol: TCP
+      targetPort: grpc
+      name: grpc
+  selector:
+    statefulset.kubernetes.io/pod-name: prometheus-0
+  type: NodePort
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: prometheus
+  name: sidecar-1
+spec:
+  ports:
     - port: 10901
       protocol: TCP
       targetPort: grpc
@@ -86,8 +110,8 @@ spec:
           - --tsdb.path=/var/prometheus
           - --prometheus.url=http://localhost:9090
           - --cluster.disable
-          - --reloader.config-file=/etc/prometheus/prometheus.yml.tmpl
-          - --reloader.config-envsubst-file=/etc/prometheus-shared/prometheus.yml
+          - --reloader.config-file=/etc/prometheus/prometheus.yaml.tmpl
+          - --reloader.config-envsubst-file=/etc/prometheus-shared/prometheus.yaml
         env:
         - name: HOSTNAME
           valueFrom:
