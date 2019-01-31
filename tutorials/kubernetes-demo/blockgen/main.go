@@ -2,13 +2,14 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/prometheus/prometheus/promql"
 	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/prometheus/prometheus/promql"
 
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/timestamp"
@@ -109,13 +110,13 @@ func main() {
 			switch strings.ToLower(in.Type) {
 			case "counter":
 				generators[lset.String()] = &counterGen{
-					interval: *scrapeInterval,
-					maxTime:  maxTime,
-					minTime:  minTime,
-					lset:     lset,
-					min:      in.Min,
-					max:      in.Max,
-					jitter:   in.Jitter,
+					interval:     *scrapeInterval,
+					maxTime:      maxTime,
+					minTime:      minTime,
+					lset:         lset,
+					min:          in.Min,
+					max:          in.Max,
+					jitter:       in.Jitter,
 					rateInterval: 5 * time.Minute,
 				}
 			case "gauge":
@@ -205,7 +206,7 @@ type counterGen struct {
 
 	lset             labels.Labels
 	min, max, jitter float64
-	rateInterval time.Duration
+	rateInterval     time.Duration
 
 	v    float64
 	init bool
@@ -219,11 +220,11 @@ func (g *counterGen) Lset() labels.Labels {
 }
 
 func (g *counterGen) Next() bool {
-	if g.minTime > g.maxTime && len(g.buff) == 0 {
+	if g.init && len(g.buff) <= 1 {
 		return false
 	}
 
-	if len(g.buff) > 0 {
+	if len(g.buff) > 1 {
 		// Pop front.
 		g.buff = g.buff[1:]
 		return true
@@ -239,23 +240,25 @@ func (g *counterGen) Next() bool {
 		mod = (rand.Float64() - 0.5) * g.jitter
 	}
 
-	// That's the goal for our rate.
-	goalV := g.v + mod
-
-	// Distribute goalV into multiple rateInterval/ interval increments.
-	left := int64(g.rateInterval / g.interval)
-	for g.minTime <= g.maxTime && left > 0 {
-		equal := goalV / float64(left)
-
-		g.buff = append(g.buff, promql.Point{T: g.minTime, V: rand.Float64() * goalV})
-		g.minTime += int64(g.interval.Seconds() * 1000)
-
-		}
+	// Distribute goalV into multiple rateInterval/interval increments.
+	comps := make([]float64, int64(g.rateInterval/g.interval))
+	var sum float64
+	for i := range comps {
+		comps[i] = rand.Float64()
+		sum += comps[i]
 	}
 
+	// That's the goal for our rate.
+	x := g.v + mod/sum
+	for g.minTime <= g.maxTime && len(comps) > 0 {
+		g.lastVal += x * comps[0]
+		comps = comps[1:]
 
+		g.minTime += int64(g.interval.Seconds() * 1000)
+		g.buff = append(g.buff, promql.Point{T: g.minTime, V: g.lastVal})
+	}
 
-	return true
+	return len(g.buff) > 0
 }
 
 func (g *counterGen) Ts() int64      { return g.buff[0].T }
