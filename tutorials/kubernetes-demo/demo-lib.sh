@@ -174,14 +174,14 @@ function navigate() {
           ((curr--))
           echo -en "\033[2K\r"
           ;;
-        '71'|'1B') # q or escape - exit.
+        '71') # q
           echo ""
           echo "Bye!"
           exit 0
           ;;
         esac
       ;;
-    '71'|'1B') # q or escape - exit.
+    '71') # q
       echo ""
       echo "Bye!"
       exit 0

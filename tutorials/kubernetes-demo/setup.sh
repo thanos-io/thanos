@@ -58,7 +58,7 @@ sleep 1s
 kubectl config use-context eu1
 PROM_US1_URL=$(minikube -p us1 service prometheus --url)
 echo "PROM_US1_URL=${PROM_US1_URL}"
-sed "s#%%PROM_US1_URL%%#${PROM_US1_URL}#g" manifests/grafana-dashboards.yaml | kubectl apply -f -
+sed "s#%%PROM_US1_URL%%#${PROM_US1_URL}#g" manifests/grafana-datasources.yaml | kubectl apply -f -
 kubectl apply -f manifests/grafana.yaml
 
 # Issues.
