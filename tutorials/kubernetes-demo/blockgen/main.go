@@ -25,7 +25,7 @@ import (
 type series struct {
 	Type           string // gauge, counter (if conunter we treat below as rate aim)
 	Jitter         float64
-	ChangeInterval time.Duration
+	ChangeInterval string
 	Max            float64
 	Min            float64
 	Result         queryData
@@ -108,8 +108,18 @@ func main() {
 			}
 			level.Debug(logger).Log("msg", "scheduled generation of series", "lset", lset)
 
+			var chInterval time.Duration
+			if in.ChangeInterval != "" {
+				chInterval, err = time.ParseDuration(in.ChangeInterval)
+				if err != nil {
+					level.Error(logger).Log("err", err)
+					os.Exit(1)
+				}
+			}
+
 			switch strings.ToLower(in.Type) {
 			case "counter":
+				// Does not work well (: Too naive.
 				generators[lset.String()] = &counterGen{
 					interval:       *scrapeInterval,
 					maxTime:        maxTime,
@@ -119,7 +129,7 @@ func main() {
 					max:            in.Max,
 					jitter:         in.Jitter,
 					rateInterval:   5 * time.Minute,
-					changeInterval: in.ChangeInterval,
+					changeInterval: chInterval,
 				}
 			case "gauge":
 				generators[lset.String()] = &gaugeGen{
@@ -130,7 +140,7 @@ func main() {
 					min:            in.Min,
 					max:            in.Max,
 					jitter:         in.Jitter,
-					changeInterval: in.ChangeInterval,
+					changeInterval: chInterval,
 				}
 			default:
 				level.Error(logger).Log("msg", "unknown metric type", "type", in.Type)
@@ -236,8 +246,6 @@ func (g *counterGen) Next() bool {
 	if g.init && len(g.buff) == 0 {
 		return false
 	}
-
-
 
 	if len(g.buff) > 0 {
 		// Pop front.
