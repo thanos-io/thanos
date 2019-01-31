@@ -106,7 +106,7 @@ func main() {
 			for n, v := range r.Metric {
 				lset = append(lset, labels.Label{Name: string(n), Value: string(v)})
 			}
-			level.Debug(logger).Log("msg", "scheduled generation of series", "lset", lset)
+			//level.Debug(logger).Log("msg", "scheduled generation of series", "lset", lset)
 
 			var chInterval time.Duration
 			if in.ChangeInterval != "" {

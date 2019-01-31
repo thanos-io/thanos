@@ -165,6 +165,21 @@ function navigate() {
       # Wait for enter at the end.
       read -rst 0.3 -n 10000 discard
       read -rs -n1 input
+        case $(printf "%X" \'${input}) in
+        '6E') # n - skip this command and move to next.
+          ((curr++))
+          echo -en "\033[2K\r"
+          ;;
+        '70') # p - skip this command and move to previous.
+          ((curr--))
+          echo -en "\033[2K\r"
+          ;;
+        '71'|'1B') # q or escape - exit.
+          echo ""
+          echo "Bye!"
+          exit 0
+          ;;
+        esac
       ;;
     '71'|'1B') # q or escape - exit.
       echo ""
