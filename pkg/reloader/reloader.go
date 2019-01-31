@@ -122,15 +122,14 @@ func (r *Reloader) Watch(ctx context.Context) error {
 
 	if r.cfgFile != "" {
 		if err := configWatcher.Add(r.cfgFile); err != nil {
-			return errors.Wrap(err, "add config file watch")
+			return errors.Wrapf(err, "add config file watch for %s", r.cfgFile)
 		}
 		level.Info(r.logger).Log(
 			"msg", "started watching config file for changes",
 			"in", r.cfgFile,
 			"out", r.cfgOutputFile)
 
-		err := r.apply(ctx)
-		if err != nil {
+		if r.apply(ctx) != nil {
 			return err
 		}
 	}
