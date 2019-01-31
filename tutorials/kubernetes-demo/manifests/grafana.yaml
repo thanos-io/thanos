@@ -288,7 +288,7 @@ items:
                 "multi": false,
                 "name": "namespace",
                 "options": [],
-                "query": "label_values(kube_pod_container_resource_requests_memory_bytes, namespace)",
+                "query": "label_values(container_memory_usage_bytes, namespace)",
                 "refresh": 2,
                 "regex": "",
                 "sort": 0,
@@ -310,7 +310,7 @@ items:
                 "multi": false,
                 "name": "pod",
                 "options": [],
-                "query": "label_values(kube_pod_container_resource_requests_memory_bytes{namespace=~\"$namespace\"}, pod)",
+                "query": "label_values(container_memory_usage_bytes{namespace=~\"$namespace\"}, pod)",
                 "refresh": 2,
                 "regex": "",
                 "sort": 0,
@@ -332,7 +332,7 @@ items:
                 "multi": false,
                 "name": "container",
                 "options": [],
-                "query": "label_values(kube_pod_container_resource_requests_memory_bytes{namespace=\"$namespace\", pod=\"$pod\"}, container)",
+                "query": "label_values(container_memory_usage_bytes{namespace=\"$namespace\", pod=\"$pod\", container_name!=\"POD\"}, container_name)",
                 "refresh": 2,
                 "regex": "",
                 "sort": 0,
@@ -345,8 +345,8 @@ items:
             ]
           },
           "time": {
-            "from": "1h-1d",
-            "to": "1h"
+            "from": "now-1d",
+            "to": "now-1h"
           },
           "timepicker": {
             "refresh_intervals": [

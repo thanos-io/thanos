@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-function generatePvWithMetrics() {
+function applyPersistentVolumeWithGeneratedMetrics() {
     cluster=$1
     replica=$2
 
@@ -42,13 +42,13 @@ if [[ -z "${ALERTMANAGER_URL}" ]]; then
     exit 1
 fi
 
-generatePvWithMetrics eu1 0
+applyPersistentVolumeWithGeneratedMetrics eu1 0
 kubectl apply -f manifests/prometheus-rules.yaml
 cat manifests/prometheus.yaml | sed "s#%%ALERTMANAGER_URL%%#${ALERTMANAGER_URL}#g" | sed "s#%%CLUSTER%%#eu1#g" | kubectl apply -f -
 kubectl apply -f manifests/kube-state-metrics.yaml
 
 kubectl config use-context us1
-generatePvWithMetrics us1 0
+applyPersistentVolumeWithGeneratedMetrics us1 0
 kubectl apply -f manifests/prometheus-rules.yaml
 cat manifests/prometheus.yaml | sed "s#%%ALERTMANAGER_URL%%#${ALERTMANAGER_URL}#g" | sed "s#%%CLUSTER%%#us1#g" | kubectl apply -f -
 kubectl apply -f manifests/kube-state-metrics.yaml

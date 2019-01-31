@@ -172,7 +172,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	level.Info(logger).Log("msg", "done")
+	level.Info(logger).Log("msg", "generated artificial metrics", "series", len(generators))
 }
 
 type gaugeGen struct {

@@ -18,7 +18,7 @@
 # navigate
 
 # the speed to "type" the text
-TYPE_SPEED=40
+#TYPE_SPEED=40
 
 # handy color vars for pretty prompts
 BLACK="\033[0;30m"

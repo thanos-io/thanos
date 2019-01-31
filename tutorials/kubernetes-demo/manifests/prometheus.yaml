@@ -14,7 +14,6 @@ spec:
     statefulset.kubernetes.io/pod-name: prometheus-0
   type: NodePort
 ---
----
 apiVersion: apps/v1beta1
 kind: StatefulSet
 metadata:
