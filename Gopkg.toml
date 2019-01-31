@@ -26,7 +26,7 @@ ignored = ["github.com/improbable-eng/thanos/benchmark/*"]
 
 [[constraint]]
   name = "github.com/pkg/errors"
-  version = "0.8.0"
+  version = "0.8.1"
 
 [[constraint]]
   name = "github.com/prometheus/client_golang"
