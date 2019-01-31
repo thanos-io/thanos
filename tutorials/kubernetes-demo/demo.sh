@@ -33,14 +33,9 @@ ro "kubectl --context=eu1 apply -f manifests/prometheus-ha.yaml" "cat manifests/
 r "kubectl --context=eu1 get po"
 ro "open \$(minikube -p eu1 service prometheus-1 --url)/graph" "google-chrome --app=\"\$(minikube -p eu1 service prometheus-1 --url)/graph?g0.range_input=1d&g0.expr=container_memory_usage_bytes&g0.tab=0\" > /dev/null"
 
+# FIRST STEP: Sidecar.
 
-#r "colordiff -y manifests/grafana-datasources.yaml manifests/grafana-datasources-ha.yaml | less"
-#ro "kubectl --context=eu1 apply -f manifests/grafana-datasources-ha.yaml" "sed \"s#%%PROM_US1_URL%%#$(minikube -p us1 service prometheus --url)#g\" manifests/grafana-datasources-ha.yaml | kubectl apply -f -"
-#r "kubectl --context=eu1 delete po \$(kubectl --context=eu1 get po -l app=grafana -o jsonpath={.items..metadata.name})"
-#r "kubectl --context=us1 get po"
-#ro "open \$(minikube -p eu1 service grafana --url)" "google-chrome --app=\"`minikube -p eu1 service grafana --url`/d/pods_memory/pods-memory?orgId=1\" > /dev/null"
 
-# FIRST STEP. Sidecar.
 
 
 rc "open slides/10-the-end.svg"
