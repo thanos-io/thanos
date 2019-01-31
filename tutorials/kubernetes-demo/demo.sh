@@ -45,14 +45,14 @@ ro "kubectl --context=us1 apply -f manifests/prometheus-ha-sidecar.yaml" "cat ma
 r "kubectl --context=eu1 get po"
 r "kubectl --context=us1 get po"
 
-# Second step: querier
+# SECOND step: querier
 r "cat manifests/thanos-querier.yaml | less"
 ro "kubectl --context=eu1 apply -f manifests/thanos-querier.yaml" "cat manifests/thanos-querier.yaml | sed \"s#%%SIDECAR_US1_0_URL%%#\$(minikube -p us1 service sidecar --format=\"{{.IP}}:{{.Port}}\")#g\" |  sed \"s#%%SIDECAR_US1_1_URL%%#\$(minikube -p us1 service sidecar-1 --format=\"{{.IP}}:{{.Port}}\")#g\" | kubectl --context=eu1 apply -f -"
 r "kubectl --context=eu1 get po"
 # Show on artifical data!
 ro "open \$(minikube -p eu1 service thanos-querier --url)/graph" "google-chrome --app=\"\$(minikube -p eu1 service thanos-querier --url)/graph?g0.range_input=2h&g0.expr=avg(container_memory_usage_bytes)%20by%20(cluster,replica)&g0.tab=0\" > /dev/null"
 
-# Third: Connect grafana to querier
+# THIRD: Connect grafana to querier
 r "colordiff -y manifests/grafana-datasources.yaml manifests/grafana-datasources-querier.yaml | less"
 r "kubectl --context=eu1 apply -f manifests/grafana-datasources-querier.yaml"
 r "kubectl --context=eu1 delete po \$(kubectl --context=eu1 get po -l app=grafana -o jsonpath={.items..metadata.name})"
@@ -65,7 +65,30 @@ rc "open slides/4-initial-setup.svg"
 # Put yolo object storage.
 r "kubectl --context=eu1 apply -f manifests/minio.yaml"
 r "kubectl --context=eu1 get po"
-r "mc config host add minio \$(minikube -p eu1 service minio --url) smth Need8Chars --api S3v4 && mc mb demo-bucket"
+r "mc config host add minio \$(minikube -p eu1 service minio --url) smth Need8Chars --api S3v4 && mc mb minio/demo-bucket"
+
+# FOURTH STEP: Sidecar upload.
+r "colordiff -y manifests/prometheus-ha-sidecar.yaml manifests/prometheus-ha-sidecar-pre-sync-lts.yaml | less"
+ro "kubectl --context=eu1 apply -f manifests/prometheus-ha-sidecar-pre-sync-lts.yaml" "cat manifests/prometheus-ha-sidecar-pre-sync-lts.yaml | sed \"s#%%ALERTMANAGER_URL%%#`minikube -p eu1 service alertmanager --format=\"{{.IP}}:{{.Port}}\"`#g\" | sed \"s#%%CLUSTER%%#eu1#g\" | sed \"s#%%S3_ENDPOINT%%#\$(minikube -p eu1 service minio --format=\"{{.IP}}:{{.Port}}\")#g\" | kubectl --context=eu1 apply -f -"
+ro "kubectl --context=us1 apply -f manifests/prometheus-ha-sidecar-pre-sync-lts.yaml" "cat manifests/prometheus-ha-sidecar-pre-sync-lts.yaml | sed \"s#%%ALERTMANAGER_URL%%#`minikube -p eu1 service alertmanager --format=\"{{.IP}}:{{.Port}}\"`#g\" | sed \"s#%%CLUSTER%%#us1#g\" | sed \"s#%%S3_ENDPOINT%%#\$(minikube -p eu1 service minio --format=\"{{.IP}}:{{.Port}}\")#g\" | kubectl --context=us1 apply -f -"
+r "kubectl --context=eu1 get po"
+r "kubectl --context=us1 get po"
+r "mc ls minio/demo-bucket"
+r "mc ls minio/demo-bucket/\$(mc ls minio/demo-bucket/ | sed '1q' | cut -d ' ' -f 9)"
+
+# Retention!
+r "colordiff -y manifests/prometheus-ha-sidecar-pre-sync-lts.yaml manifests/prometheus-ha-sidecar-lts.yaml | less"
+ro "kubectl --context=eu1 apply -f manifests/prometheus-ha-sidecar-lts.yaml" "cat manifests/prometheus-ha-sidecar-lts.yaml | sed \"s#%%ALERTMANAGER_URL%%#`minikube -p eu1 service alertmanager --format=\"{{.IP}}:{{.Port}}\"`#g\" | sed \"s#%%CLUSTER%%#eu1#g\" | sed \"s#%%S3_ENDPOINT%%#\$(minikube -p eu1 service minio --format=\"{{.IP}}:{{.Port}}\")#g\" | kubectl --context=eu1 apply -f -"
+ro "kubectl --context=us1 apply -f manifests/prometheus-ha-sidecar-lts.yaml" "cat manifests/prometheus-ha-sidecar-lts.yaml | sed \"s#%%ALERTMANAGER_URL%%#`minikube -p eu1 service alertmanager --format=\"{{.IP}}:{{.Port}}\"`#g\" | sed \"s#%%CLUSTER%%#us1#g\" | sed \"s#%%S3_ENDPOINT%%#\$(minikube -p eu1 service minio --format=\"{{.IP}}:{{.Port}}\")#g\" | kubectl --context=us1 apply -f -"
+r "kubectl --context=eu1 get po"
+r "kubectl --context=us1 get po"
+
+# FIFTH: gateway
+r "cat manifests/thanos-gateway.yaml | less"
+ro "kubectl --context=eu1 apply -f manifests/thanos-gateway.yaml" "cat manifests/thanos-gateway.yaml | sed \"s#%%S3_ENDPOINT%%#\$(minikube -p eu1 service minio --format=\"{{.IP}}:{{.Port}}\")#g\" | kubectl --context=eu1 apply -f -"
+r "kubectl --context=eu1 get po"
+ro "open \$(minikube -p eu1 service thanos-querier --url)/graph" "google-chrome --app=\"\$(minikube -p eu1 service thanos-querier --url)/graph?g0.range_input=2h&g0.expr=avg(container_memory_usage_bytes)%20by%20(cluster,replica)&g0.tab=0\" > /dev/null"
+
 
 rc "open slides/10-the-end.svg"
 

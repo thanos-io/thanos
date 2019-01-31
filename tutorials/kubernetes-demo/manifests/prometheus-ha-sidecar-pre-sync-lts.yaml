@@ -89,8 +89,7 @@ spec:
       - name: prometheus
         image: quay.io/prometheus/prometheus:v2.6.1
         args:
-          # Finally less SDD and memory to consume!
-          - --storage.tsdb.retention=12h
+          - --storage.tsdb.retention=2w
           - --config.file=/etc/prometheus-shared/prometheus.yaml
           - --storage.tsdb.path=/var/prometheus
           - --web.enable-lifecycle

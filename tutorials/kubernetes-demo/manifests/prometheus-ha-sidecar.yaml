@@ -78,6 +78,7 @@ spec:
     metadata:
       labels:
         app: prometheus
+        thanos-store-api: "true"
     spec:
       securityContext:
         runAsUser: 1000
