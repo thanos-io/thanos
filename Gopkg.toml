@@ -38,8 +38,8 @@ ignored = ["github.com/improbable-eng/thanos/benchmark/*"]
 
 [[constraint]]
   # TODO(bwplotka): Move to released version once our recent fixes will be released (v2.7.0)
-  revision = "3bd41cc92c7800cc6072171bd4237406126fa169"
   name = "github.com/prometheus/prometheus"
+  version = "^2.7.1"
 
 [[override]]
   branch = "master"
