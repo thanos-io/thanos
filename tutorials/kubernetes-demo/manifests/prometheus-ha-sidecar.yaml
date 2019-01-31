@@ -169,6 +169,10 @@ data:
         replica: $(HOSTNAME)
 
     alerting:
+      alert_relabel_configs:
+      - regex: replica
+        action: labeldrop
+
       alertmanagers:
       - static_configs:
         - targets:
