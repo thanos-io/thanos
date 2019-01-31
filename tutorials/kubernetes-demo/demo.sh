@@ -13,6 +13,10 @@ function open() {
     eog -wgf "$@"
 }
 
+MINIO_ACCESS_KEY="smth"
+MINIO_SECRET_KEY="Need8Chars"
+HOST_IP=
+
 rc "open slides/1-title.svg" # Slide to 4) init setup.
 r "kubectl --context=eu1 get po"
 r "kubectl --context=us1 get po"
@@ -58,6 +62,10 @@ ro "open \$(minikube -p eu1 service grafana --url)" "google-chrome --app=\"`mini
 # Show result
 rc "open slides/4-initial-setup.svg"
 
+# Put yolo object storage.
+r "kubectl --context=eu1 apply -f manifests/minio.yaml"
+r "kubectl --context=eu1 get po"
+r "mc config host add minio \$(minikube -p eu1 service minio --url) smth Need8Chars --api S3v4 && mc mb demo-bucket"
 
 rc "open slides/10-the-end.svg"
 
