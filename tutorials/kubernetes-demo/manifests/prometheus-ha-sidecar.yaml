@@ -10,6 +10,10 @@ spec:
       protocol: TCP
       targetPort: http-prometheus
       name: http-prometheus
+    - port: 10901
+      protocol: TCP
+      targetPort: grpc
+      name: grpc
   selector:
     statefulset.kubernetes.io/pod-name: prometheus-0
   type: NodePort
@@ -26,6 +30,10 @@ spec:
       protocol: TCP
       targetPort: http-prometheus
       name: http-prometheus
+    - port: 10901
+      protocol: TCP
+      targetPort: grpc
+      name: grpc
   selector:
     statefulset.kubernetes.io/pod-name: prometheus-1
   type: NodePort
@@ -57,18 +65,46 @@ spec:
         image: quay.io/prometheus/prometheus:v2.6.1
         args:
           - --storage.tsdb.retention=2w
-          - --config.file=/etc/prometheus/prometheus.yaml
+          - --config.file=/etc/prometheus-shared/prometheus.yaml
           - --storage.tsdb.path=/var/prometheus
+          - --web.enable-lifecycle
         ports:
           - name: http-prometheus
             containerPort: 9090
         volumeMounts:
-          - name: config
-            mountPath: /etc/prometheus
+          - name: config-shared
+            mountPath: /etc/prometheus-shared
           - name: rules
             mountPath: /etc/prometheus/rules
           - name: prometheus
             mountPath: /var/prometheus
+      - name: thanos
+        image: improbable/thanos:master-2019-01-31-827e968
+        args:
+          - sidecar
+          - --log.level=debug
+          - --tsdb.path=/var/prometheus
+          - --prometheus.url=http://localhost:9090
+          - --cluster.disable
+          - --reloader.config-file=/etc/prometheus/prometheus.yml.tmpl
+          - --reloader.config-envsubst-file=/etc/prometheus-shared/prometheus.yml
+        env:
+        - name: HOSTNAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        ports:
+          - name: http-sidecar
+            containerPort: 10902
+          - name: grpc
+            containerPort: 10901
+        volumeMounts:
+          - name: prometheus
+            mountPath: /var/prometheus
+          - name: config-shared
+            mountPath: /etc/prometheus-shared
+          - name: config
+            mountPath: /etc/prometheus
       volumes:
         - name: config
           configMap:
@@ -76,6 +112,10 @@ spec:
         - name: rules
           configMap:
             name: prometheus-rules
+        - name: config-shared
+          emptyDir: {}
+  updateStrategy:
+    type: RollingUpdate
   volumeClaimTemplates:
   - metadata:
       labels:
@@ -95,13 +135,14 @@ kind: ConfigMap
 metadata:
   name: prometheus
 data:
-  prometheus.yaml: |-
+  prometheus.yaml.tmpl: |-
     # Inspired by https://github.com/prometheus/prometheus/blob/master/documentation/examples/prometheus-kubernetes.yml
     global:
       scrape_interval: 15s
       scrape_timeout: 10s
       external_labels:
         cluster: "%%CLUSTER%%"
+        replica: $(HOSTNAME)
 
     alerting:
       alertmanagers:

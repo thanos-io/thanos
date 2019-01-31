@@ -34,7 +34,19 @@ r "kubectl --context=eu1 get po"
 ro "open \$(minikube -p eu1 service prometheus-1 --url)/graph" "google-chrome --app=\"\$(minikube -p eu1 service prometheus-1 --url)/graph?g0.range_input=1d&g0.expr=container_memory_usage_bytes&g0.tab=0\" > /dev/null"
 
 # FIRST STEP: Sidecar.
+r "colordiff -y manifests/prometheus-ha.yaml manifests/prometheus-ha-sidecar.yaml | less"
+ro "kubectl --context=eu1 apply -f manifests/prometheus-ha-sidecar.yaml" "cat manifests/prometheus-ha-sidecar.yaml | sed \"s#%%ALERTMANAGER_URL%%#`minikube -p eu1 service alertmanager --format=\"{{.IP}}:{{.Port}}\"`#g\" | sed \"s#%%CLUSTER%%#eu1#g\" | kubectl --context=eu1 apply -f -"
+r "kubectl --context=eu1 get po"
+r "applyPersistentVolumeWithGeneratedMetrics us1 1" # We need second replica on us1 as well.
+ro "kubectl --context=us1 apply -f manifests/prometheus-ha-sidecar.yaml" "cat manifests/prometheus-ha-sidecar.yaml | sed \"s#%%ALERTMANAGER_URL%%#`minikube -p eu1 service alertmanager --format=\"{{.IP}}:{{.Port}}\"`#g\" | sed \"s#%%CLUSTER%%#us1#g\" | kubectl --context=us1 apply -f -"
+r "kubectl --context=eu1 get po"
+r "kubectl --context=us1 get po"
 
+# Second step: Query
+r "cat manifests/thanos-query.yaml"
+ro "kubectl --context=eu1 apply -f manifests/thanos-query.yaml" "cat manifests/thanos-query.yaml | sed \"s#%%PROM_US1_URL%%#`minikube -p us1 service prometheus --format=\"{{.IP}}:{{.Port}}\"`#g\" | kubectl --context=eu1 apply -f -"
+r "kubectl --context=eu1 get po"
+ro "open \$(minikube -p eu1 service thanos-query --url)/graph" "google-chrome --app=\"\$(minikube -p eu1 service thanos-query --url)/graph?g0.range_input=1d&g0.expr=container_memory_usage_bytes&g0.tab=0\" > /dev/null"
 
 
 

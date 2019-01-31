@@ -59,6 +59,7 @@ spec:
           - --storage.tsdb.retention=2w
           - --config.file=/etc/prometheus/prometheus.yaml
           - --storage.tsdb.path=/var/prometheus
+          - --web.enable-lifecycle
         ports:
           - name: http-prometheus
             containerPort: 9090
