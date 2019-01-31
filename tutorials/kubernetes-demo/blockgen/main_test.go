@@ -22,7 +22,9 @@ func TestCounterGen(t *testing.T) {
 	lastT := int64(0)
 
 	init := false
+	samples := int64(0)
 	for g.Next() {
+		samples++
 		if init {
 			testutil.Assert(t, lastV <= g.Value(), "")
 			testutil.Assert(t, lastT <= g.Ts(), "")
@@ -31,5 +33,5 @@ func TestCounterGen(t *testing.T) {
 		lastV = g.Value()
 		lastT = g.Ts()
 	}
-
+	testutil.Equals(t, int64((24 * time.Hour)/(15 * time.Second)), samples)
 }

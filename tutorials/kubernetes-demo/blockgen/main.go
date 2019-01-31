@@ -23,11 +23,12 @@ import (
 
 // Allow for more realistic output.
 type series struct {
-	Type   string // gauge, counter (if conunter we treat below as rate aim)
-	Jitter float64
-	Max    float64
-	Min    float64
-	Result queryData
+	Type           string // gauge, counter (if conunter we treat below as rate aim)
+	Jitter         float64
+	ChangeInterval time.Duration
+	Max            float64
+	Min            float64
+	Result         queryData
 }
 
 type queryData struct {
@@ -110,24 +111,26 @@ func main() {
 			switch strings.ToLower(in.Type) {
 			case "counter":
 				generators[lset.String()] = &counterGen{
-					interval:     *scrapeInterval,
-					maxTime:      maxTime,
-					minTime:      minTime,
-					lset:         lset,
-					min:          in.Min,
-					max:          in.Max,
-					jitter:       in.Jitter,
-					rateInterval: 5 * time.Minute,
+					interval:       *scrapeInterval,
+					maxTime:        maxTime,
+					minTime:        minTime,
+					lset:           lset,
+					min:            in.Min,
+					max:            in.Max,
+					jitter:         in.Jitter,
+					rateInterval:   5 * time.Minute,
+					changeInterval: in.ChangeInterval,
 				}
 			case "gauge":
 				generators[lset.String()] = &gaugeGen{
-					interval: *scrapeInterval,
-					maxTime:  maxTime,
-					minTime:  minTime,
-					lset:     lset,
-					min:      in.Min,
-					max:      in.Max,
-					jitter:   in.Jitter,
+					interval:       *scrapeInterval,
+					maxTime:        maxTime,
+					minTime:        minTime,
+					lset:           lset,
+					min:            in.Min,
+					max:            in.Max,
+					jitter:         in.Jitter,
+					changeInterval: in.ChangeInterval,
 				}
 			default:
 				level.Error(logger).Log("msg", "unknown metric type", "type", in.Type)
@@ -163,15 +166,17 @@ func main() {
 }
 
 type gaugeGen struct {
+	changeInterval   time.Duration
 	interval         time.Duration
 	maxTime, minTime int64
 
 	lset             labels.Labels
 	min, max, jitter float64
 
-	v    float64
-	mod  float64
-	init bool
+	v       float64
+	mod     float64
+	init    bool
+	elapsed int64
 }
 
 func (g *gaugeGen) Lset() labels.Labels {
@@ -182,7 +187,10 @@ func (g *gaugeGen) Next() bool {
 	if g.minTime > g.maxTime {
 		return false
 	}
-	defer func() { g.minTime += int64(g.interval.Seconds() * 1000) }()
+	defer func() {
+		g.minTime += int64(g.interval.Seconds() * 1000)
+		g.elapsed += int64(g.interval.Seconds() * 1000)
+	}()
 
 	if !g.init {
 		g.v = g.min + rand.Float64()*((g.max-g.min)+1)
@@ -190,8 +198,9 @@ func (g *gaugeGen) Next() bool {
 	}
 
 	// Technically only mod changes.
-	if g.jitter > 0 {
+	if g.jitter > 0 && g.elapsed >= int64(g.changeInterval.Seconds()*1000) {
 		g.mod = (rand.Float64() - 0.5) * g.jitter
+		g.elapsed = 0
 	}
 
 	return true
@@ -201,11 +210,12 @@ func (g *gaugeGen) Ts() int64      { return g.minTime }
 func (g *gaugeGen) Value() float64 { return g.v + g.mod }
 
 type counterGen struct {
-	interval         time.Duration
 	maxTime, minTime int64
 
 	lset             labels.Labels
 	min, max, jitter float64
+	interval         time.Duration
+	changeInterval   time.Duration
 	rateInterval     time.Duration
 
 	v    float64
@@ -213,6 +223,7 @@ type counterGen struct {
 	buff []promql.Point
 
 	lastVal float64
+	elapsed int64
 }
 
 func (g *counterGen) Lset() labels.Labels {
@@ -220,14 +231,21 @@ func (g *counterGen) Lset() labels.Labels {
 }
 
 func (g *counterGen) Next() bool {
-	if g.init && len(g.buff) <= 1 {
+	defer func() { g.elapsed += int64(g.interval.Seconds() * 1000) }()
+
+	if g.init && len(g.buff) == 0 {
 		return false
 	}
 
-	if len(g.buff) > 1 {
+
+
+	if len(g.buff) > 0 {
 		// Pop front.
 		g.buff = g.buff[1:]
-		return true
+
+		if len(g.buff) > 0 {
+			return true
+		}
 	}
 
 	if !g.init {
@@ -236,8 +254,14 @@ func (g *counterGen) Next() bool {
 	}
 
 	var mod float64
-	if g.jitter > 0 {
+	if g.jitter > 0 && g.elapsed >= int64(g.changeInterval.Seconds()*1000) {
 		mod = (rand.Float64() - 0.5) * g.jitter
+
+		if mod > g.v {
+			mod = g.v
+		}
+
+		g.elapsed = 0
 	}
 
 	// Distribute goalV into multiple rateInterval/interval increments.

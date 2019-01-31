@@ -1,3 +1,18 @@
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: pv-alertmanager-0
+  labels:
+    type: local
+spec:
+  storageClassName: alert-manual
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/pv-alertmanager-0"
+---
 apiVersion: apps/v1beta1
 kind: StatefulSet
 metadata:
@@ -70,6 +85,7 @@ spec:
         app: alertmanager
       name: alertmanager
     spec:
+      storageClassName: alert-manual
       accessModes:
         - ReadWriteOnce
       resources:

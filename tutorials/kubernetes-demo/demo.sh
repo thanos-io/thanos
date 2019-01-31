@@ -17,8 +17,8 @@ r "kubectl --context=eu1 get po"
 r "kubectl --context=us1 get po"
 
 # Need ctrl+w to close and fullscreen beforehand.
-ro "open \$(minikube -p eu1 service prometheus --url)/targets" "google-chrome --app=`minikube -p eu1 service prometheus --url`/targets > /dev/null"
-ro "open \$(minikube -p us1 service prometheus --url)/targets" "google-chrome --app=`minikube -p us1 service prometheus --url`/targets > /dev/null"
+ro "open \$(minikube -p eu1 service prometheus --url)/graph" "targetsgoogle-chrome --app=\"`minikube -p eu1 service prometheus --url`/graph?g0.range_input=1d&g0.expr=container_cpu_user_seconds_total&g0.tab=0\" > /dev/null"
+ro "open \$(minikube -p us1 service prometheus --url)/graph" "google-chrome --app=\"`minikube -p us1 service prometheus --url`/graph?g0.range_input=1d&g0.expr=container_cpu_user_seconds_total&g0.tab=0\" > /dev/null"
 ro "open \$(minikube -p eu1 service alertmanager --url)" "google-chrome --app=`minikube -p eu1 service alertmanager --url` > /dev/null"
 ro "open \$(minikube -p eu1 service grafana --url)" "google-chrome --app=`minikube -p eu1 service grafana --url` > /dev/null"
 rc "open slides/4-initial-setup.svg"
