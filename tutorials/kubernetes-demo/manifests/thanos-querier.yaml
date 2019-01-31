@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: thanos-query
+  name: thanos-querier
   labels:
-    app: thanos-query
+    app: thanos-querier
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: thanos-query
+      app: thanos-querier
   template:
     metadata:
       labels:
-        app: thanos-query
+        app: thanos-querier
     spec:
       containers:
-      - name: thanos-query
+      - name: thanos
         image: improbable/thanos:master-2019-01-31-827e968
         args:
         - query
@@ -40,8 +40,8 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app: thanos-query
-  name: thanos-query
+    app: thanos-querier
+  name: thanos-querier
 spec:
   ports:
   - port: 9090
@@ -49,5 +49,5 @@ spec:
     targetPort: http
     name: http
   selector:
-    app: thanos-query
+    app: thanos-querier
   type: NodePort

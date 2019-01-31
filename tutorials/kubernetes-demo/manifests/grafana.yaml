@@ -41,6 +41,9 @@ spec:
               name: grafana-dashboards
             - mountPath: /grafana-dashboard-definitions/0/pods-memory
               name: grafana-pods-memory
+          env:
+          - name: GF_AUTH_ANONYMOUS_ENABLED
+            value: "true"
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
@@ -164,24 +167,24 @@ items:
               "steppedLine": false,
               "targets": [
                 {
-                  "expr": "sum by(container_name) (container_memory_usage_bytes{job=\"kubelet\", namespace=\"$namespace\", pod=\"$pod\", container_name=~\"$container\", container_name!=\"POD\"})",
+                  "expr": "sum by(container_name, cluster) (container_memory_usage_bytes{job=\"kubelet\", namespace=\"$namespace\", pod=\"$pod\", container_name=~\"$container\", container_name!=\"POD\", cluster=~\"$cluster\"})",
                   "format": "time_series",
                   "intervalFactor": 2,
-                  "legendFormat": "Current: {{ container_name }}",
+                  "legendFormat": "Current: {{ container_name }} {{ cluster }}",
                   "refId": "A"
                 },
                 {
-                  "expr": "sum by(container) (kube_pod_container_resource_requests_memory_bytes{job=\"kube-state-metrics\", namespace=\"$namespace\", pod=\"$pod\", container=~\"$container\"})",
+                  "expr": "sum by(container, cluster) (kube_pod_container_resource_requests_memory_bytes{job=\"kube-state-metrics\", namespace=\"$namespace\", pod=\"$pod\", container=~\"$container\", cluster=~\"$cluster\"})",
                   "format": "time_series",
                   "intervalFactor": 2,
-                  "legendFormat": "Requested: {{ container }}",
+                  "legendFormat": "Requested: {{ container }} {{ cluster }}",
                   "refId": "B"
                 },
                 {
-                  "expr": "sum by(container) (kube_pod_container_resource_limits_memory_bytes{job=\"kube-state-metrics\", namespace=\"$namespace\", pod=\"$pod\", container=~\"$container\"})",
+                  "expr": "sum by(container, cluster) (kube_pod_container_resource_limits_memory_bytes{job=\"kube-state-metrics\", namespace=\"$namespace\", pod=\"$pod\", container=~\"$container\", cluster=~\"$cluster\"})",
                   "format": "time_series",
                   "intervalFactor": 2,
-                  "legendFormat": "Limit: {{ container }}",
+                  "legendFormat": "Limit: {{ container }} {{ cluster }}",
                   "refId": "C"
                 }
               ],
@@ -245,6 +248,28 @@ items:
                 "refresh": 1,
                 "regex": "",
                 "type": "datasource"
+              },
+              {
+                "current": {
+                  "text": "eu1",
+                  "value": "eu1"
+                },
+                "datasource": "$datasource",
+                "hide": 0,
+                "includeAll": false,
+                "label": "Cluster",
+                "multi": true,
+                "name": "cluster",
+                "options": [],
+                "query": "label_values(container_memory_usage_bytes, cluster)",
+                "refresh": 2,
+                "regex": "",
+                "sort": 0,
+                "tagValuesQuery": "",
+                "tags": [],
+                "tagsQuery": "",
+                "type": "query",
+                "useTags": false
               },
               {
                 "current": {
