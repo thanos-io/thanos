@@ -140,7 +140,7 @@ func (c *indexCache) setPostings(b ulid.ULID, l labels.Label, v []byte) {
 	defer c.mtx.Unlock()
 
 	if !c.ensureFits(v) {
-		c.overflow.WithLabelValues(cacheTypePostings).Add(1)
+		c.overflow.WithLabelValues(cacheTypePostings).Inc()
 		return
 	}
 
@@ -174,7 +174,7 @@ func (c *indexCache) setSeries(b ulid.ULID, id uint64, v []byte) {
 	defer c.mtx.Unlock()
 
 	if !c.ensureFits(v) {
-		c.overflow.WithLabelValues(cacheTypeSeries).Add(1)
+		c.overflow.WithLabelValues(cacheTypeSeries).Inc()
 		return
 	}
 
