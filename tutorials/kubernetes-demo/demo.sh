@@ -7,10 +7,15 @@ clear
 
 # We assume ./setup.sh was successfully ran.
 
+# Some yolo aliases (without using `alias`)
+
 # Double Esc or Ctrl+Q to close it.
 function open() {
     # Image viewer on fullscreen.
     eog -wgf "$@"
+}
+function cat() {
+    bat -p "$@"
 }
 
 MINIO_ACCESS_KEY="smth"
@@ -40,13 +45,12 @@ ro "open \$(minikube -p eu1 service prometheus-1 --url)/graph" "google-chrome --
 # FIRST STEP: Sidecar.
 r "colordiff -y manifests/prometheus-ha.yaml manifests/prometheus-ha-sidecar.yaml | less"
 ro "kubectl --context=eu1 apply -f manifests/prometheus-ha-sidecar.yaml" "cat manifests/prometheus-ha-sidecar.yaml | sed \"s#%%ALERTMANAGER_URL%%#`minikube -p eu1 service alertmanager --format=\"{{.IP}}:{{.Port}}\"`#g\" | sed \"s#%%CLUSTER%%#eu1#g\" | kubectl --context=eu1 apply -f -"
-r "applyPersistentVolumeWithGeneratedMetrics us1 1 336h" # We need second replica on us1 as well.
-ro "kubectl --context=us1 apply -f manifests/prometheus-ha-sidecar.yaml" "cat manifests/prometheus-ha-sidecar.yaml | sed \"s#%%ALERTMANAGER_URL%%#`minikube -p eu1 service alertmanager --format=\"{{.IP}}:{{.Port}}\"`#g\" | sed \"s#%%CLUSTER%%#us1#g\" | kubectl --context=us1 apply -f -"
+ro "kubectl --context=us1 apply -f manifests/prometheus-ha-sidecar.yaml" "applyPersistentVolumeWithGeneratedMetrics us1 1 336h && cat manifests/prometheus-ha-sidecar.yaml | sed \"s#%%ALERTMANAGER_URL%%#`minikube -p eu1 service alertmanager --format=\"{{.IP}}:{{.Port}}\"`#g\" | sed \"s#%%CLUSTER%%#us1#g\" | kubectl --context=us1 apply -f -"
 r "kubectl --context=eu1 get po"
 r "kubectl --context=us1 get po"
 
 # SECOND step: querier
-r "cat manifests/thanos-querier.yaml | less"
+r "cat manifests/thanos-querier.yaml"
 ro "kubectl --context=eu1 apply -f manifests/thanos-querier.yaml" "cat manifests/thanos-querier.yaml | sed \"s#%%SIDECAR_US1_0_URL%%#\$(minikube -p us1 service sidecar --format=\"{{.IP}}:{{.Port}}\")#g\" |  sed \"s#%%SIDECAR_US1_1_URL%%#\$(minikube -p us1 service sidecar-1 --format=\"{{.IP}}:{{.Port}}\")#g\" | kubectl --context=eu1 apply -f -"
 r "kubectl --context=eu1 get po"
 # Show on artifical data!
@@ -78,12 +82,12 @@ r "mc ls minio/demo-bucket"
 r "mc ls minio/demo-bucket/\$(mc ls minio/demo-bucket/ | sed '1q' | cut -d ' ' -f 9)"
 
 # FIFTH: compactor
-r "cat manifests/thanos-compactor.yaml | less"
+r "cat manifests/thanos-compactor.yaml"
 ro "kubectl --context=eu1 apply -f manifests/thanos-compactor.yaml" "cat manifests/thanos-compactor.yaml | sed \"s#%%S3_ENDPOINT%%#\$(minikube -p eu1 service minio --format=\"{{.IP}}:{{.Port}}\")#g\" | kubectl --context=eu1 apply -f -"
 r "kubectl --context=eu1 get po"
 
 # SIXTH: gateway
-r "cat manifests/thanos-gateway.yaml | less"
+r "cat manifests/thanos-gateway.yaml"
 ro "kubectl --context=eu1 apply -f manifests/thanos-gateway.yaml" "cat manifests/thanos-gateway.yaml | sed \"s#%%S3_ENDPOINT%%#\$(minikube -p eu1 service minio --format=\"{{.IP}}:{{.Port}}\")#g\" | kubectl --context=eu1 apply -f -"
 r "kubectl --context=eu1 get po"
 ro "open \$(minikube -p eu1 service thanos-querier --url)/graph" "google-chrome --app=\"\$(minikube -p eu1 service thanos-querier --url)/graph?g0.range_input=2h&g0.expr=avg(container_memory_usage_bytes)%20by%20(cluster,replica)&g0.tab=0\" > /dev/null"
@@ -97,7 +101,7 @@ r "kubectl --context=eu1 get po"
 ro "open \$(minikube -p eu1 service thanos-querier --url)/graph" "google-chrome --app=\"\$(minikube -p eu1 service thanos-querier --url)/graph?g0.range_input=2h&g0.expr=avg(container_memory_usage_bytes)%20by%20(cluster,replica)&g0.tab=0\" > /dev/null"
 
 # SEVENTH: ruler
-r "cat manifests/thanos-ruler.yaml | less"
+r "cat manifests/thanos-ruler.yaml"
 ro "kubectl --context=eu1 apply -f manifests/thanos-ruler.yaml" "cat manifests/thanos-ruler.yaml | sed \"s#%%ALERTMANAGER_URL%%#`minikube -p eu1 service alertmanager --format=\"{{.IP}}:{{.Port}}\"`#g\" | sed \"s#%%CLUSTER%%#eu1#g\" | sed \"s#%%S3_ENDPOINT%%#\$(minikube -p eu1 service minio --format=\"{{.IP}}:{{.Port}}\")#g\" | kubectl --context=eu1 apply -f -"
 r "kubectl --context=eu1 get po"
 ro "open \$(minikube -p eu1 service thanos-ruler --url)/graph" "google-chrome --app=\"\$(minikube -p eu1 service thanos-ruler --url)\" > /dev/null"

@@ -1,3 +1,5 @@
+# This allow us to do
+# SRV lookup: thanos-store-api.default.svc
 apiVersion: v1
 kind: Service
 metadata:
@@ -10,7 +12,6 @@ spec:
       port: 10901
       targetPort: grpc
   selector:
-    # Useful endpoint for gathering all thanos components for common gossip cluster.
     thanos-store-api: "true"
 ---
 apiVersion: apps/v1

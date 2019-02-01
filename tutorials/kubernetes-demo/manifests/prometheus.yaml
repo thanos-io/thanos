@@ -86,7 +86,7 @@ data:
       scrape_interval: 15s
       scrape_timeout: 10s
       external_labels:
-        cluster: "%%CLUSTER%%"
+        cluster: %%CLUSTER%%
 
     alerting:
       alertmanagers:
@@ -134,10 +134,10 @@ data:
         action: labeldrop
       - regex: pod_name
         action: labeldrop
-
-    - job_name: kube-pods
       - target_label: cluster
         replacement: %%CLUSTER%%
+
+    - job_name: kube-pods
       honor_labels: true
       kubernetes_sd_configs:
       - role: pod

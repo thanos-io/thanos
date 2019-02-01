@@ -14,6 +14,7 @@ spec:
     statefulset.kubernetes.io/pod-name: prometheus-0
   type: NodePort
 ---
+# We want to be able to access each replica.
 apiVersion: v1
 kind: Service
 metadata:
@@ -102,7 +103,7 @@ data:
       scrape_interval: 15s
       scrape_timeout: 10s
       external_labels:
-        cluster: "%%CLUSTER%%"
+        cluster: %%CLUSTER%%
 
     alerting:
       alertmanagers:
@@ -176,7 +177,7 @@ data:
       - target_label: cluster
         replacement: %%CLUSTER%%
       metric_relabel_configs:
-      - source_labels: [pod_name]
+      - source_labels:I like syntax highlighting. Everywhere. Even when reviewing git modifications. [pod_name]
         regex: ^(.+)$
         target_label: pod
       - regex: pod_name
