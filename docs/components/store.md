@@ -112,5 +112,8 @@ Flags:
                                  Object store configuration in YAML.
       --sync-block-duration=3m   Repeat interval for syncing the blocks between
                                  local and remote view.
+      --block-sync-concurrency=20  
+                                 Number of goroutines to use when syncing blocks
+                                 from object storage.
 
 ```
