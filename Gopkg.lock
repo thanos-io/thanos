@@ -537,6 +537,7 @@
     "fileutil",
     "index",
     "labels",
+    "testutil",
     "wal",
   ]
   pruneopts = ""
@@ -853,6 +854,7 @@
     "github.com/prometheus/common/version",
     "github.com/prometheus/prometheus/discovery/file",
     "github.com/prometheus/prometheus/discovery/targetgroup",
+    "github.com/prometheus/prometheus/pkg/gate",
     "github.com/prometheus/prometheus/pkg/labels",
     "github.com/prometheus/prometheus/pkg/timestamp",
     "github.com/prometheus/prometheus/pkg/value",
@@ -867,6 +869,7 @@
     "github.com/prometheus/tsdb/fileutil",
     "github.com/prometheus/tsdb/index",
     "github.com/prometheus/tsdb/labels",
+    "github.com/prometheus/tsdb/testutil",
     "golang.org/x/net/context",
     "golang.org/x/sync/errgroup",
     "golang.org/x/text/language",

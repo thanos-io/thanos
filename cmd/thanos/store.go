@@ -36,6 +36,11 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes for chunks.").
 		Default("2GB").Bytes()
 
+	maxSampleCount := cmd.Flag("grpc-sample-limit", "Maximum amount of samples returned via a single Series call. 0 means no limit.").
+		Default("50000000").Uint()
+
+	maxConcurrent := cmd.Flag("grpc-concurrent-limit", "Maximum number of concurrent Series calls. 0 means no limit.").Default("20").Int()
+
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
 
 	syncInterval := cmd.Flag("sync-block-duration", "Repeat interval for syncing the blocks between local and remote view.").
@@ -63,6 +68,8 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			peer,
 			uint64(*indexCacheSize),
 			uint64(*chunkPoolSize),
+			uint64(*maxSampleCount),
+			int(*maxConcurrent),
 			name,
 			debugLogging,
 			*syncInterval,
@@ -87,6 +94,8 @@ func runStore(
 	peer cluster.Peer,
 	indexCacheSizeBytes uint64,
 	chunkPoolSizeBytes uint64,
+	maxSampleCount uint64,
+	maxConcurrent int,
 	component string,
 	verbose bool,
 	syncInterval time.Duration,
@@ -117,6 +126,8 @@ func runStore(
 			dataDir,
 			indexCacheSizeBytes,
 			chunkPoolSizeBytes,
+			maxSampleCount,
+			maxConcurrent,
 			verbose,
 			blockSyncConcurrency,
 		)

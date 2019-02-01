@@ -35,7 +35,7 @@ func (s *storeSuite) Close() {
 	s.wg.Wait()
 }
 
-func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket) *storeSuite {
+func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, maxSampleCount uint64) *storeSuite {
 	series := []labels.Labels{
 		labels.FromStrings("a", "1", "b", "1"),
 		labels.FromStrings("a", "1", "b", "2"),
@@ -87,7 +87,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket) *
 		testutil.Ok(t, os.RemoveAll(dir2))
 	}
 
-	store, err := NewBucketStore(log.NewLogfmtLogger(os.Stderr), nil, bkt, dir, 100, 0, false, 20)
+	store, err := NewBucketStore(log.NewLogfmtLogger(os.Stderr), nil, bkt, dir, 100, 0, maxSampleCount, 20, false, 20)
 	testutil.Ok(t, err)
 
 	s.store = store
@@ -126,7 +126,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-		s := prepareStoreWithTestBlocks(t, dir, bkt)
+		s := prepareStoreWithTestBlocks(t, dir, bkt, 0)
 		defer s.Close()
 
 		mint, maxt := s.store.TimeRange()
@@ -215,6 +215,31 @@ func TestBucketStore_e2e(t *testing.T) {
 			MaxTime: maxt,
 		}, srv))
 		testutil.Equals(t, 0, len(srv.SeriesSet))
+
+		// Test the samples limit.
+		testutil.Ok(t, os.RemoveAll(dir))
+		s = prepareStoreWithTestBlocks(t, dir, bkt, 10)
+		mint, maxt = s.store.TimeRange()
+		defer s.Close()
+
+		srv = newStoreSeriesServer(ctx)
+
+		testutil.Ok(t, s.store.Series(&storepb.SeriesRequest{
+			Matchers: []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+			},
+			MinTime: mint,
+			MaxTime: maxt,
+		}, srv))
+
+		testutil.NotOk(t, s.store.Series(&storepb.SeriesRequest{
+			Matchers: []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|2"},
+			},
+			MinTime: mint,
+			MaxTime: maxt,
+		}, srv))
+
 	})
 
 }

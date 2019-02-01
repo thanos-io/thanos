@@ -171,6 +171,13 @@ type BucketStore struct {
 	debugLogging bool
 	// Number of goroutines to use when syncing blocks from object storage.
 	blockSyncConcurrency int
+
+	// The maximum of samples Thanos Store could return in one Series() call.
+	// Set to 0 to remove this limit (not recommended).
+	maxSampleCount uint64
+
+	// Query gate which limits the maximum amount of concurrent queries.
+	queryGate *Gate
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -182,6 +189,8 @@ func NewBucketStore(
 	dir string,
 	indexCacheSizeBytes uint64,
 	maxChunkPoolBytes uint64,
+	maxSampleCount uint64,
+	maxConcurrent int,
 	debugLogging bool,
 	blockSyncConcurrency int,
 ) (*BucketStore, error) {
@@ -204,8 +213,10 @@ func NewBucketStore(
 		chunkPool:            chunkPool,
 		blocks:               map[ulid.ULID]*bucketBlock{},
 		blockSets:            map[uint64]*bucketBlockSet{},
+		maxSampleCount:       maxSampleCount,
 		debugLogging:         debugLogging,
 		blockSyncConcurrency: blockSyncConcurrency,
+		queryGate:            NewGate(maxConcurrent, reg),
 	}
 	s.metrics = newBucketStoreMetrics(reg)
 
@@ -463,7 +474,7 @@ func (s *bucketSeriesSet) Err() error {
 	return s.err
 }
 
-func (s *BucketStore) blockSeries(
+func (bs *BucketStore) blockSeries(
 	ctx context.Context,
 	ulid ulid.ULID,
 	extLset map[string]string,
@@ -471,6 +482,8 @@ func (s *BucketStore) blockSeries(
 	chunkr *bucketChunkReader,
 	matchers []labels.Matcher,
 	req *storepb.SeriesRequest,
+	samples *uint64,
+	samplesLock *sync.Mutex,
 ) (storepb.SeriesSet, *queryStats, error) {
 	ps, err := indexr.ExpandedPostings(matchers)
 	if err != nil {
@@ -559,7 +572,7 @@ func (s *BucketStore) blockSeries(
 			if err != nil {
 				return nil, nil, errors.Wrap(err, "get chunk")
 			}
-			if err := populateChunk(&s.chks[i], chk, req.Aggregates); err != nil {
+			if err := bs.populateChunk(&s.chks[i], chk, req.Aggregates, samples, samplesLock); err != nil {
 				return nil, nil, errors.Wrap(err, "populate chunk")
 			}
 		}
@@ -568,7 +581,9 @@ func (s *BucketStore) blockSeries(
 	return newBucketSeriesSet(res), indexr.stats.merge(chunkr.stats), nil
 }
 
-func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr) error {
+func (bs *BucketStore) populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr,
+	samples *uint64, samplesLock *sync.Mutex) error {
+
 	if in.Encoding() == chunkenc.EncXOR {
 		out.Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: in.Bytes()}
 		return nil
@@ -578,6 +593,14 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 	}
 
 	ac := downsample.AggrChunk(in.Bytes())
+
+	samplesLock.Lock()
+	*samples += uint64(ac.NumSamples())
+	if bs.maxSampleCount > 0 && *samples > bs.maxSampleCount {
+		samplesLock.Unlock()
+		return errors.Errorf("sample limit violated (got %v, limit %v)", *samples, bs.maxSampleCount)
+	}
+	samplesLock.Unlock()
 
 	for _, at := range aggrs {
 		switch at {
@@ -652,19 +675,24 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt int64, lset labels
 }
 
 // Series implements the storepb.StoreServer interface.
-// TODO(bwplotka): It buffers all chunks in memory and only then streams to client.
-// 1. Either count chunk sizes and error out too big query.
-// 2. Stream posting -> series -> chunk all together.
 func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+	err := s.queryGate.Start(srv.Context())
+	if err != nil {
+		return errors.Wrapf(err, "gate Start failed")
+	}
+	defer s.queryGate.Done()
+
 	matchers, err := translateMatchers(req.Matchers)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
 	var (
-		stats = &queryStats{}
-		g     run.Group
-		res   []storepb.SeriesSet
-		mtx   sync.Mutex
+		stats       = &queryStats{}
+		g           run.Group
+		res         []storepb.SeriesSet
+		mtx         sync.Mutex
+		samples     uint64
+		samplesLock sync.Mutex
 	)
 	s.mtx.RLock()
 
@@ -701,6 +729,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					chunkr,
 					blockMatchers,
 					req,
+					&samples,
+					&samplesLock,
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)

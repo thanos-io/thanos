@@ -104,6 +104,12 @@ Flags:
       --index-cache-size=250MB   Maximum size of items held in the index cache.
       --chunk-pool-size=2GB      Maximum size of concurrently allocatable bytes
                                  for chunks.
+      --grpc-sample-limit=50000000  
+                                 Maximum amount of samples returned via a single
+                                 Series call. 0 means no limit.
+      --grpc-concurrent-limit=20  
+                                 Maximum number of concurrent Series calls. 0
+                                 means no limit.
       --objstore.config-file=<bucket.config-yaml-path>  
                                  Path to YAML file that contains object store
                                  configuration.

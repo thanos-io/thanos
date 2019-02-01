@@ -1,12 +1,13 @@
 package downsample
 
 import (
-	"github.com/prometheus/tsdb"
 	"io/ioutil"
 	"math"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/prometheus/tsdb"
 
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
 
