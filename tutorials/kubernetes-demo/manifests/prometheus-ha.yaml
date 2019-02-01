@@ -56,10 +56,10 @@ spec:
       - name: prometheus
         image: quay.io/prometheus/prometheus:v2.6.1
         args:
-          - --storage.tsdb.retention=2w
           - --config.file=/etc/prometheus/prometheus.yaml
           - --storage.tsdb.path=/var/prometheus
           - --web.enable-lifecycle
+          - --storage.tsdb.retention=2w
         ports:
           - name: http-prometheus
             containerPort: 9090

@@ -89,15 +89,16 @@ spec:
       - name: prometheus
         image: quay.io/prometheus/prometheus:v2.6.1
         args:
-          - --storage.tsdb.retention=2w
-          - --
           - --config.file=/etc/prometheus-shared/prometheus.yaml
           - --storage.tsdb.path=/var/prometheus
           - --web.enable-lifecycle
+          # TODO: Make retention shorter once all old blocks will be uploaded (!)
+          - --storage.tsdb.retention=2w
           # Disable compaction.
           - --storage.tsdb.min-block-duration=2h
           - --storage.tsdb.max-block-duration=2h
           - --web.enable-admin-api
+          - --shipper.upload-compacted-once
         ports:
           - name: http-prometheus
             containerPort: 9090

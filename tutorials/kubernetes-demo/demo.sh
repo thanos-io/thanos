@@ -26,7 +26,7 @@ ro "open \$(minikube -p eu1 service prometheus --url)/graph" "google-chrome --ap
 ro "open \$(minikube -p eu1 service alertmanager --url)" "google-chrome --app=`minikube -p eu1 service alertmanager --url` > /dev/null"
 ro "open \$(minikube -p eu1 service grafana --url)" "google-chrome --app=\"`minikube -p eu1 service grafana --url`/d/pods_memory/pods-memory?orgId=1\" > /dev/null"
 
-# problems: global view
+# problems shown in grafana: global view
 
 # problems HA - add naive HA
 r "applyPersistentVolumeWithGeneratedMetrics eu1 1 336h"
@@ -34,6 +34,8 @@ r "colordiff -y manifests/prometheus.yaml manifests/prometheus-ha.yaml | less"
 ro "kubectl --context=eu1 apply -f manifests/prometheus-ha.yaml" "cat manifests/prometheus-ha.yaml | sed \"s#%%ALERTMANAGER_URL%%#`minikube -p eu1 service alertmanager --format=\"{{.IP}}:{{.Port}}\"`#g\" | sed \"s#%%CLUSTER%%#eu1#g\" | kubectl --context=eu1 apply -f -"
 r "kubectl --context=eu1 get po"
 ro "open \$(minikube -p eu1 service prometheus-1 --url)/graph" "google-chrome --app=\"\$(minikube -p eu1 service prometheus-1 --url)/graph?g0.range_input=1d&g0.expr=container_memory_usage_bytes&g0.tab=0\" > /dev/null"
+
+# retention problem shown on prom-1 range.
 
 # FIRST STEP: Sidecar.
 r "colordiff -y manifests/prometheus-ha.yaml manifests/prometheus-ha-sidecar.yaml | less"
@@ -57,6 +59,8 @@ r "kubectl --context=eu1 delete po \$(kubectl --context=eu1 get po -l app=grafan
 r "kubectl --context=eu1 get po"
 ro "open \$(minikube -p eu1 service grafana --url)" "google-chrome --app=\"`minikube -p eu1 service grafana --url`/d/pods_memory/pods-memory?orgId=1\" > /dev/null"
 
+# Show removal of cluster label on grafana - GV and HA done.
+
 # Put yolo object storage.
 r "kubectl --context=eu1 apply -f manifests/minio.yaml"
 r "kubectl --context=eu1 get po"
@@ -68,23 +72,37 @@ ro "kubectl --context=eu1 apply -f manifests/prometheus-ha-sidecar-pre-sync-lts.
 ro "kubectl --context=us1 apply -f manifests/prometheus-ha-sidecar-pre-sync-lts.yaml" "cat manifests/prometheus-ha-sidecar-pre-sync-lts.yaml | sed \"s#%%ALERTMANAGER_URL%%#`minikube -p eu1 service alertmanager --format=\"{{.IP}}:{{.Port}}\"`#g\" | sed \"s#%%CLUSTER%%#us1#g\" | sed \"s#%%S3_ENDPOINT%%#\$(minikube -p eu1 service minio --format=\"{{.IP}}:{{.Port}}\")#g\" | kubectl --context=us1 apply -f -"
 r "kubectl --context=eu1 get po"
 r "kubectl --context=us1 get po"
+
+# Show if upload works.
 r "mc ls minio/demo-bucket"
 r "mc ls minio/demo-bucket/\$(mc ls minio/demo-bucket/ | sed '1q' | cut -d ' ' -f 9)"
 
-# Retention!
-r "colordiff -y manifests/prometheus-ha-sidecar-pre-sync-lts.yaml manifests/prometheus-ha-sidecar-lts.yaml | less"
-ro "kubectl --context=eu1 apply -f manifests/prometheus-ha-sidecar-lts.yaml" "cat manifests/prometheus-ha-sidecar-lts.yaml | sed \"s#%%ALERTMANAGER_URL%%#`minikube -p eu1 service alertmanager --format=\"{{.IP}}:{{.Port}}\"`#g\" | sed \"s#%%CLUSTER%%#eu1#g\" | sed \"s#%%S3_ENDPOINT%%#\$(minikube -p eu1 service minio --format=\"{{.IP}}:{{.Port}}\")#g\" | kubectl --context=eu1 apply -f -"
-ro "kubectl --context=us1 apply -f manifests/prometheus-ha-sidecar-lts.yaml" "cat manifests/prometheus-ha-sidecar-lts.yaml | sed \"s#%%ALERTMANAGER_URL%%#`minikube -p eu1 service alertmanager --format=\"{{.IP}}:{{.Port}}\"`#g\" | sed \"s#%%CLUSTER%%#us1#g\" | sed \"s#%%S3_ENDPOINT%%#\$(minikube -p eu1 service minio --format=\"{{.IP}}:{{.Port}}\")#g\" | kubectl --context=us1 apply -f -"
+# FIFTH: compactor
+r "cat manifests/thanos-compactor.yaml | less"
+ro "kubectl --context=eu1 apply -f manifests/thanos-compactor.yaml" "cat manifests/thanos-compactor.yaml | sed \"s#%%S3_ENDPOINT%%#\$(minikube -p eu1 service minio --format=\"{{.IP}}:{{.Port}}\")#g\" | kubectl --context=eu1 apply -f -"
 r "kubectl --context=eu1 get po"
-r "kubectl --context=us1 get po"
 
-# FIFTH: gateway
+# SIXTH: gateway
 r "cat manifests/thanos-gateway.yaml | less"
 ro "kubectl --context=eu1 apply -f manifests/thanos-gateway.yaml" "cat manifests/thanos-gateway.yaml | sed \"s#%%S3_ENDPOINT%%#\$(minikube -p eu1 service minio --format=\"{{.IP}}:{{.Port}}\")#g\" | kubectl --context=eu1 apply -f -"
 r "kubectl --context=eu1 get po"
 ro "open \$(minikube -p eu1 service thanos-querier --url)/graph" "google-chrome --app=\"\$(minikube -p eu1 service thanos-querier --url)/graph?g0.range_input=2h&g0.expr=avg(container_memory_usage_bytes)%20by%20(cluster,replica)&g0.tab=0\" > /dev/null"
 
+# How to make sure we can see store gateway? Simulate outage (no connection?) to us1 cluster
 
-rc "open slides/10-the-end.svg"
+r "colordiff -y manifests/thanos-querier.yaml manifests/thanos-querier-no-us1.yaml | less"
+r "kubectl --context=eu1 apply -f manifests/thanos-querier-no-us1.yaml"
+r "kubectl --context=eu1 get po"
+# We should see only uploaded data from us1, but no straight connection.
+ro "open \$(minikube -p eu1 service thanos-querier --url)/graph" "google-chrome --app=\"\$(minikube -p eu1 service thanos-querier --url)/graph?g0.range_input=2h&g0.expr=avg(container_memory_usage_bytes)%20by%20(cluster,replica)&g0.tab=0\" > /dev/null"
+
+# SEVENTH: ruler
+r "cat manifests/thanos-ruler.yaml | less"
+ro "kubectl --context=eu1 apply -f manifests/thanos-ruler.yaml" "cat manifests/thanos-ruler.yaml | sed \"s#%%ALERTMANAGER_URL%%#`minikube -p eu1 service alertmanager --format=\"{{.IP}}:{{.Port}}\"`#g\" | sed \"s#%%CLUSTER%%#eu1#g\" | sed \"s#%%S3_ENDPOINT%%#\$(minikube -p eu1 service minio --format=\"{{.IP}}:{{.Port}}\")#g\" | kubectl --context=eu1 apply -f -"
+r "kubectl --context=eu1 get po"
+ro "open \$(minikube -p eu1 service thanos-ruler --url)/graph" "google-chrome --app=\"\$(minikube -p eu1 service thanos-ruler --url)\" > /dev/null"
+
+# The end.
+rc "open slides/4-initial-setup.svg"
 
 navigate true

@@ -7,37 +7,15 @@ data:
     groups:
     - name: metamonitoring
       rules:
-      - alert: ExpectedPrometheusDown
+      - alert: PrometheusReplicaDown
         annotations:
-          description: Service {{$labels.job}} is not reachable from monitoring for more
-            than 5 minutes.
-          summary: Job {{$labels.job}} on {{$labels.cluster}} absent for 5m.
-        expr: absent(up{job="thanos-mon", cluster="eu1-testing", env="testing"}) or up{job="thanos-mon",
-          cluster="eu1-testing", env="testing"}==0 or absent(up{job="thanos-mon", cluster="us1-testing",
-          env="testing"}) or up{job="thanos-mon", cluster="us1-testing", env="testing"}==0
-          or absent(up{job="thanos-mon", cluster="h-te1", env="testing"}) or up{job="thanos-mon",
-          cluster="h-te1", env="testing"}==0 or absent(up{job="thanos-mon", cluster="beta-eu-1",
-          env="beta"}) or up{job="thanos-mon", cluster="beta-eu-1", env="beta"}==0
+          message: Prometheus replica in cluster {{$labels.cluster}} has disappeared from Prometheus target discovery.
+          runbook_url: https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-prometheusdown
+        expr: |
+          absent(sum(up{job="prometheus", cluster="eu1"}) by (job, cluster) == 2) or absent(sum(up{job="prometheus", cluster="us1"}) by (job, cluster) == 2)
         for: 5m
         labels:
-          severity: testing
-          team: infra
----
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app: thanos-ruler
-  name: thanos-ruler
-spec:
-  ports:
-    - port: 9090
-      protocol: TCP
-      targetPort: http
-      name: http
-  selector:
-    statefulset.kubernetes.io/pod-name: thanos-ruler-0
-  type: NodePort
+          severity: critical
 ---
 apiVersion: v1
 kind: StatefulSet
@@ -102,3 +80,19 @@ spec:
         - configMap:
             name: thanos-ruler-rules
           name: config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: thanos-ruler
+  name: thanos-ruler
+spec:
+  ports:
+    - port: 9090
+      protocol: TCP
+      targetPort: http
+      name: http
+  selector:
+    statefulset.kubernetes.io/pod-name: thanos-ruler-0
+  type: NodePort
