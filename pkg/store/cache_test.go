@@ -1,4 +1,4 @@
-// Tests out the edge cases of the index cache.
+// Tests out the index cache implementation.
 package store
 
 import (
@@ -8,7 +8,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-func test_index_edge(t *testing.T) {
+// TestIndexCacheEdge tests the index cache edge cases.
+func TestIndexCacheEdge(t *testing.T) {
 	metrics := prometheus.NewRegistry()
 	cache, err := newIndexCache(metrics, 1)
 	testutil.Ok(t, err)
