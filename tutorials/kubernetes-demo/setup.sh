@@ -3,13 +3,14 @@
 function applyPersistentVolumeWithGeneratedMetrics() {
     cluster=$1
     replica=$2
+    retention=$3
 
     # Add volume and generated metrics inside it.
     kubectl apply --context=${cluster} -f manifests/prometheus-pv-${replica}.yaml
 
     rm -rf -- /tmp/prom-out
     mkdir /tmp/prom-out
-    go run ./blockgen/main.go --input=./blockgen/container_mem_metrics.json --output-dir=/tmp/prom-out --retention=336h # 2w
+    go run ./blockgen/main.go --input=./blockgen/container_mem_metrics_${cluster}.json --output-dir=/tmp/prom-out --retention=${retention}
     chmod -R 775 /tmp/prom-out
     # Fun with permissions because Prometheus process is run a "noone" in a pod... ):
     minikube -p ${cluster} ssh "sudo rm -rf /data/pv-prometheus-${replica} && sudo mkdir /data/pv-prometheus-${replica} && sudo chmod -R 777 /data/pv-prometheus-${replica}"
@@ -42,13 +43,13 @@ if [[ -z "${ALERTMANAGER_URL}" ]]; then
     exit 1
 fi
 
-applyPersistentVolumeWithGeneratedMetrics eu1 0
+applyPersistentVolumeWithGeneratedMetrics eu1 0 336h
 kubectl apply -f manifests/prometheus-rules.yaml
 cat manifests/prometheus.yaml | sed "s#%%ALERTMANAGER_URL%%#${ALERTMANAGER_URL}#g" | sed "s#%%CLUSTER%%#eu1#g" | kubectl apply -f -
 kubectl apply -f manifests/kube-state-metrics.yaml
 
 kubectl config use-context us1
-applyPersistentVolumeWithGeneratedMetrics us1 0
+applyPersistentVolumeWithGeneratedMetrics us1 0 336h
 kubectl apply -f manifests/prometheus-rules.yaml
 cat manifests/prometheus.yaml | sed "s#%%ALERTMANAGER_URL%%#${ALERTMANAGER_URL}#g" | sed "s#%%CLUSTER%%#us1#g" | kubectl apply -f -
 kubectl apply -f manifests/kube-state-metrics.yaml

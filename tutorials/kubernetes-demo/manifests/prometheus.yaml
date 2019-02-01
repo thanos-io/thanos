@@ -134,6 +134,8 @@ data:
         action: labeldrop
       - regex: pod_name
         action: labeldrop
+      - target_label: cluster
+        replacement: %%CLUSTER%%
 
     - job_name: kube-pods
       honor_labels: true

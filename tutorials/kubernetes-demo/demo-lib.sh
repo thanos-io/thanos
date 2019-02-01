@@ -105,7 +105,12 @@ function ro() {
 # TODO: Add search (ctlr+r) functionality
 ##
 function navigate() {
+  CONTINUE=${1-false}
+
   curr=0
+  if ${CONTINUE}; then
+    curr=$(< ./.demo-last-step)
+  fi
 
   while true
   do
@@ -190,6 +195,7 @@ function navigate() {
       echo -en "\r"
       ;;
     esac
+    echo ${curr} > ./.demo-last-step
   done
 }
 

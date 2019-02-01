@@ -22,16 +22,14 @@ r "kubectl --context=eu1 get po"
 r "kubectl --context=us1 get po"
 
 # Need ctrl+w to close and fullscreen beforehand.
-ro "open \$(minikube -p eu1 service prometheus --url)/graph" "google-chrome --app=\"`minikube -p eu1 service prometheus --url`/graph?g0.range_input=1d&g0.expr=container_memory_usage_bytes&g0.tab=0\" > /dev/null"
-ro "open \$(minikube -p us1 service prometheus --url)/graph" "google-chrome --app=\"`minikube -p us1 service prometheus --url`/graph?g0.range_input=1d&g0.expr=container_memory_usage_bytes&g0.tab=0\" > /dev/null"
+ro "open \$(minikube -p eu1 service prometheus --url)/graph" "google-chrome --app=\"`minikube -p eu1 service prometheus --url`/graph?g0.range_input=1d&g0.expr=sum(container_memory_usage_bytes)%20by%20(pod%2C%20cluster)&g0.tab=0\" > /dev/null"
 ro "open \$(minikube -p eu1 service alertmanager --url)" "google-chrome --app=`minikube -p eu1 service alertmanager --url` > /dev/null"
 ro "open \$(minikube -p eu1 service grafana --url)" "google-chrome --app=\"`minikube -p eu1 service grafana --url`/d/pods_memory/pods-memory?orgId=1\" > /dev/null"
 
 # problems: global view
 
 # problems HA - add naive HA
-r "applyPersistentVolumeWithGeneratedMetrics eu1 1"
-r "less manifests/prometheus.yaml"
+r "applyPersistentVolumeWithGeneratedMetrics eu1 1 336h"
 r "colordiff -y manifests/prometheus.yaml manifests/prometheus-ha.yaml | less"
 ro "kubectl --context=eu1 apply -f manifests/prometheus-ha.yaml" "cat manifests/prometheus-ha.yaml | sed \"s#%%ALERTMANAGER_URL%%#`minikube -p eu1 service alertmanager --format=\"{{.IP}}:{{.Port}}\"`#g\" | sed \"s#%%CLUSTER%%#eu1#g\" | kubectl --context=eu1 apply -f -"
 r "kubectl --context=eu1 get po"
@@ -40,7 +38,7 @@ ro "open \$(minikube -p eu1 service prometheus-1 --url)/graph" "google-chrome --
 # FIRST STEP: Sidecar.
 r "colordiff -y manifests/prometheus-ha.yaml manifests/prometheus-ha-sidecar.yaml | less"
 ro "kubectl --context=eu1 apply -f manifests/prometheus-ha-sidecar.yaml" "cat manifests/prometheus-ha-sidecar.yaml | sed \"s#%%ALERTMANAGER_URL%%#`minikube -p eu1 service alertmanager --format=\"{{.IP}}:{{.Port}}\"`#g\" | sed \"s#%%CLUSTER%%#eu1#g\" | kubectl --context=eu1 apply -f -"
-r "applyPersistentVolumeWithGeneratedMetrics us1 1" # We need second replica on us1 as well.
+r "applyPersistentVolumeWithGeneratedMetrics us1 1 336h" # We need second replica on us1 as well.
 ro "kubectl --context=us1 apply -f manifests/prometheus-ha-sidecar.yaml" "cat manifests/prometheus-ha-sidecar.yaml | sed \"s#%%ALERTMANAGER_URL%%#`minikube -p eu1 service alertmanager --format=\"{{.IP}}:{{.Port}}\"`#g\" | sed \"s#%%CLUSTER%%#us1#g\" | kubectl --context=us1 apply -f -"
 r "kubectl --context=eu1 get po"
 r "kubectl --context=us1 get po"
@@ -58,9 +56,6 @@ r "kubectl --context=eu1 apply -f manifests/grafana-datasources-querier.yaml"
 r "kubectl --context=eu1 delete po \$(kubectl --context=eu1 get po -l app=grafana -o jsonpath={.items..metadata.name})"
 r "kubectl --context=eu1 get po"
 ro "open \$(minikube -p eu1 service grafana --url)" "google-chrome --app=\"`minikube -p eu1 service grafana --url`/d/pods_memory/pods-memory?orgId=1\" > /dev/null"
-
-# Show result
-rc "open slides/4-initial-setup.svg"
 
 # Put yolo object storage.
 r "kubectl --context=eu1 apply -f manifests/minio.yaml"
@@ -92,4 +87,4 @@ ro "open \$(minikube -p eu1 service thanos-querier --url)/graph" "google-chrome 
 
 rc "open slides/10-the-end.svg"
 
-navigate
+navigate true

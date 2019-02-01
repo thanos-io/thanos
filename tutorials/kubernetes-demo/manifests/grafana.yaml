@@ -44,6 +44,8 @@ spec:
           env:
           - name: GF_AUTH_ANONYMOUS_ENABLED
             value: "true"
+          - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+            value: "Admin"
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
@@ -249,14 +251,12 @@ items:
                 "regex": "",
                 "type": "datasource"
               },
-              {
-                "current": {
-                  "text": "eu1",
-                  "value": "eu1"
-                },
+             {
+                "allValue": ".*",
+                "current": {},
                 "datasource": "$datasource",
                 "hide": 0,
-                "includeAll": false,
+                "includeAll": true,
                 "label": "Cluster",
                 "multi": true,
                 "name": "cluster",
@@ -295,8 +295,8 @@ items:
               },
               {
                 "current": {
-                  "text": "alertmanager-0",
-                  "value": "alertmanager-0"
+                  "text": "prometheus-0",
+                  "value": "prometheus-0"
                 },
                 "datasource": "$datasource",
                 "hide": 0,
@@ -317,8 +317,8 @@ items:
               },
               {
                 "current": {
-                  "text": "alertmananger",
-                  "value": "alertmananger"
+                  "text": "prometheus",
+                  "value": "prometheus"
                 },
                 "datasource": "$datasource",
                 "hide": 0,
