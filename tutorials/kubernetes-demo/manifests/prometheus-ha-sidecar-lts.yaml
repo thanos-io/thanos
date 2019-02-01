@@ -109,7 +109,7 @@ spec:
           - name: prometheus
             mountPath: /var/prometheus
       - name: thanos
-        image: improbable/thanos:master-2019-01-31-827e968
+        image: improbable/thanos:v0.3.0-rc.0
         args:
           - sidecar
           - --log.level=debug
