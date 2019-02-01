@@ -43,6 +43,7 @@ type indexCache struct {
 	added       *prometheus.CounterVec
 	current     *prometheus.GaugeVec
 	currentSize *prometheus.GaugeVec
+	overflow    *prometheus.CounterVec
 }
 
 // newIndexCache creates a new LRU cache for index entries and ensures the total cache
@@ -64,6 +65,11 @@ func newIndexCache(reg prometheus.Registerer, maxBytes uint64) (*indexCache, err
 	c.requests = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_store_index_cache_requests_total",
 		Help: "Total number of requests to the cache.",
+	}, []string{"item_type"})
+
+	c.overflow = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_store_index_cache_items_overflowed_total",
+		Help: "Total number of items that could not be added to the cache due to being too big.",
 	}, []string{"item_type"})
 
 	c.hits = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -115,13 +121,16 @@ func newIndexCache(reg prometheus.Registerer, maxBytes uint64) (*indexCache, err
 	return c, nil
 }
 
-func (c *indexCache) ensureFits(b []byte) {
+// ensureFits tries to make sure that the passed slice will fit into the LRU cache.
+// Returns true if it will fit.
+func (c *indexCache) ensureFits(b []byte) bool {
 	if uint64(len(b)) > c.maxSize {
-		return
+		return false
 	}
 	for c.curSize+uint64(len(b)) > c.maxSize {
 		c.lru.RemoveOldest()
 	}
+	return true
 }
 
 func (c *indexCache) setPostings(b ulid.ULID, l labels.Label, v []byte) {
@@ -130,7 +139,11 @@ func (c *indexCache) setPostings(b ulid.ULID, l labels.Label, v []byte) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
-	c.ensureFits(v)
+	fits := c.ensureFits(v)
+	if !fits {
+		c.overflow.WithLabelValues(cacheTypePostings).Add(1)
+		return
+	}
 
 	// The caller may be passing in a sub-slice of a huge array. Copy the data
 	// to ensure we don't waste huge amounts of space for something small.
@@ -161,7 +174,11 @@ func (c *indexCache) setSeries(b ulid.ULID, id uint64, v []byte) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
-	c.ensureFits(v)
+	fits := c.ensureFits(v)
+	if !fits {
+		c.overflow.WithLabelValues(cacheTypeSeries).Add(1)
+		return
+	}
 
 	// The caller may be passing in a sub-slice of a huge array. Copy the data
 	// to ensure we don't waste huge amounts of space for something small.
