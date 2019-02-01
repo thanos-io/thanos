@@ -1,5 +1,5 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: v1
+kind: Statefulset
 metadata:
   name: thanos-gateway
   labels:
@@ -9,6 +9,7 @@ spec:
   selector:
     matchLabels:
       app: thanos-gateway
+  serviceName: thanos-gateway
   template:
     metadata:
       labels:

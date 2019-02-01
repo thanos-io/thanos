@@ -114,10 +114,10 @@ spec:
           - --reloader.config-file=/etc/prometheus/prometheus.yaml.tmpl
           - --reloader.config-envsubst-file=/etc/prometheus-shared/prometheus.yaml
         env:
-        - name: HOSTNAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
         ports:
           - name: http-sidecar
             containerPort: 10902
@@ -166,8 +166,8 @@ data:
       scrape_interval: 15s
       scrape_timeout: 10s
       external_labels:
-        cluster: "%%CLUSTER%%"
-        replica: $(HOSTNAME)
+        cluster: %%CLUSTER%%
+        replica: $(POD_NAME)
 
     alerting:
       alert_relabel_configs:

@@ -89,8 +89,8 @@ spec:
       - name: prometheus
         image: quay.io/prometheus/prometheus:v2.6.1
         args:
-          # Finally less SDD and memory to consume!
-          - --storage.tsdb.retention=12h
+          - --storage.tsdb.retention=2w
+          - --
           - --config.file=/etc/prometheus-shared/prometheus.yaml
           - --storage.tsdb.path=/var/prometheus
           - --web.enable-lifecycle
@@ -128,10 +128,10 @@ spec:
               endpoint: %%S3_ENDPOINT%%
               insecure: true
         env:
-        - name: HOSTNAME
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.name
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
         ports:
           - name: http-sidecar
             containerPort: 10902
@@ -180,8 +180,8 @@ data:
       scrape_interval: 15s
       scrape_timeout: 10s
       external_labels:
-        cluster: "%%CLUSTER%%"
-        replica: $(HOSTNAME)
+        cluster: %%CLUSTER%%
+        replica: $(POD_NAME)
 
     alerting:
       alert_relabel_configs:

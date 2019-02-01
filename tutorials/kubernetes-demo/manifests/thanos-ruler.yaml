@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: thanos-ruler-rules
+data:
+  alert_down_services.rules.yaml: |
+    groups:
+    - name: metamonitoring
+      rules:
+      - alert: ExpectedPrometheusDown
+        annotations:
+          description: Service {{$labels.job}} is not reachable from monitoring for more
+            than 5 minutes.
+          summary: Job {{$labels.job}} on {{$labels.cluster}} absent for 5m.
+        expr: absent(up{job="thanos-mon", cluster="eu1-testing", env="testing"}) or up{job="thanos-mon",
+          cluster="eu1-testing", env="testing"}==0 or absent(up{job="thanos-mon", cluster="us1-testing",
+          env="testing"}) or up{job="thanos-mon", cluster="us1-testing", env="testing"}==0
+          or absent(up{job="thanos-mon", cluster="h-te1", env="testing"}) or up{job="thanos-mon",
+          cluster="h-te1", env="testing"}==0 or absent(up{job="thanos-mon", cluster="beta-eu-1",
+          env="beta"}) or up{job="thanos-mon", cluster="beta-eu-1", env="beta"}==0
+        for: 5m
+        labels:
+          severity: testing
+          team: infra
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: thanos-ruler
+  name: thanos-ruler
+spec:
+  ports:
+    - port: 9090
+      protocol: TCP
+      targetPort: http
+      name: http
+  selector:
+    statefulset.kubernetes.io/pod-name: thanos-ruler-0
+  type: NodePort
+---
+apiVersion: v1
+kind: StatefulSet
+metadata:
+  labels:
+    app: thanos-ruler
+  name: thanos-ruler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: thanos-ruler
+  serviceName: thanos-ruler
+  template:
+    metadata:
+      labels:
+        app: thanos-ruler
+        thanos-store-api: "true"
+    spec:
+      containers:
+        - name: thanos
+          image: improbable/thanos:v0.3.0-rc.0
+          args:
+            - rule
+            - --log.level=debug
+            - --data-dir=/data
+            - --eval-interval=15s
+            - --cluster.disable
+            - --rule-file=/etc/thanos-ruler/*.rules.yml
+            - --alertmanagers.url=%%ALERTMANAGER_URL%%
+            - |
+              --objstore.config=type: S3
+              config:
+                bucket: demo-bucket
+                access_key: smth
+                secret_key: Need8Chars
+                endpoint: %%S3_ENDPOINT%%
+                insecure: true
+            - --label=cluster="%%CLUSTER%%"
+            - --label=replica="$(POD_NAME)"
+          envs:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          ports:
+            - name: http
+              containerPort: 10902
+            - name: grpc
+              containerPort: 10901
+          resources:
+            limits:
+              cpu: 500m
+              memory: 500Mi
+            requests:
+              cpu: 500m
+              memory: 500Mi
+          volumeMounts:
+            - mountPath: /etc/thanos-ruler
+              name: config
+      volumes:
+        - configMap:
+            name: thanos-ruler-rules
+          name: config
