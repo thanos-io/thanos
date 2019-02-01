@@ -169,7 +169,7 @@ type BucketStore struct {
 
 	// Verbose enabled additional logging.
 	debugLogging bool
-	// Number of goroutines to use when syncing blocks from object storage
+	// Number of goroutines to use when syncing blocks from object storage.
 	blockSyncConcurrency int
 }
 
