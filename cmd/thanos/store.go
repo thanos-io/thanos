@@ -36,7 +36,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes for chunks.").
 		Default("2GB").Bytes()
 
-	objStoreConfig := regCommonObjStoreFlags(cmd, "")
+	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
 
 	syncInterval := cmd.Flag("sync-block-duration", "Repeat interval for syncing the blocks between local and remote view.").
 		Default("3m").Duration()
@@ -93,12 +93,12 @@ func runStore(
 	blockSyncConcurrency int,
 ) error {
 	{
-		bucketConfig, err := objStoreConfig.Content()
+		confContentYaml, err := objStoreConfig.Content()
 		if err != nil {
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, bucketConfig, reg, component)
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component)
 		if err != nil {
 			return errors.Wrap(err, "create bucket client")
 		}

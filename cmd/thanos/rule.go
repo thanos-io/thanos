@@ -86,7 +86,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
 
-	objStoreConfig := regCommonObjStoreFlags(cmd, "")
+	objStoreConfig := regCommonObjStoreFlags(cmd, "", false)
 
 	queries := cmd.Flag("query", "Addresses of statically configured query API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect query API servers through respective DNS lookups.").
 		PlaceHolder("<query>").Strings()
@@ -575,25 +575,25 @@ func runRule(
 		})
 	}
 
-	var uploads = true
-
-	bucketConfig, err := objStoreConfig.Content()
+	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
 		return err
 	}
-	// The background shipper continuously scans the data directory and uploads
-	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, err := client.NewBucket(logger, bucketConfig, reg, component)
-	if err != nil && err != client.ErrNotFound {
-		return err
-	}
 
-	if err == client.ErrNotFound {
+	var uploads = true
+	if len(confContentYaml) == 0 {
 		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
 		uploads = false
 	}
 
 	if uploads {
+		// The background shipper continuously scans the data directory and uploads
+		// new blocks to Google Cloud Storage or an S3-compatible storage service.
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component)
+		if err != nil {
+			return err
+		}
+
 		// Ensure we close up everything properly.
 		defer func() {
 			if err != nil {

@@ -19,6 +19,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ### Fixed
 
 - [#745](https://github.com/improbable-eng/thanos/pull/745) - Fixed race conditions and edge cases for Thanos Querier fanout logic. 
+- [#396](https://github.com/improbable-eng/thanos/issues/396) - Fixed sidecar missing proxying samples if Prometheus result for single series was longer than 2^16
 - [#649](https://github.com/improbable-eng/thanos/issues/649) - Fixed store label values api to add also external label values.
 - [#708](https://github.com/improbable-eng/thanos/issues/708) - `"X-Amz-Acl": "bucket-owner-full-control"` metadata for s3 upload operation is no longer set by default which was breaking some providers handled by minio client.
 
