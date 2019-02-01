@@ -11,20 +11,48 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+## [v0.3.0](https://github.com/improbable-eng/thanos/releases/tag/v0.3.0) - 2019.02.01
+
 ### Added
 
+- Support for gzip compressed configuration files before envvar substitution for reloader package.
+- `bucket inspect` command for better insights on blocks in object storage.
+- Support for [Tencent COS](docs/storage.md#tencent-cos-configuration) object storage.
 - Partial Response disable option for StoreAPI and QueryAPI.
 - Partial Response disable button on Thanos UI
+- We have initial docs for goDoc documentation!
+- Flags for Querier and Ruler UIs: `--web.route-prefix`, `--web.external-prefix`, `--web.prefix-header`. Details [here](docs/components/query.md#expose-ui-on-a-sub-path)
 
 ### Fixed
 
-- [#745](https://github.com/improbable-eng/thanos/pull/745) - Fixed race conditions and edge cases for Thanos Querier fanout logic. 
-- [#396](https://github.com/improbable-eng/thanos/issues/396) - Fixed sidecar missing proxying samples if Prometheus result for single series was longer than 2^16
 - [#649](https://github.com/improbable-eng/thanos/issues/649) - Fixed store label values api to add also external label values.
-- [#708](https://github.com/improbable-eng/thanos/issues/708) - `"X-Amz-Acl": "bucket-owner-full-control"` metadata for s3 upload operation is no longer set by default which was breaking some providers handled by minio client.
+- [#396](https://github.com/improbable-eng/thanos/issues/396) - Fixed sidecar logic for proxying series that has more than 2^16 samples from Prometheus.
+- [#732](https://github.com/improbable-eng/thanos/pull/732) - Fixed S3 authentication sequence. You can see new sequence enumerated [here](https://github.com/improbable-eng/thanos/blob/master/docs/storage.md#aws-s3-configuration)
+- [#745](https://github.com/improbable-eng/thanos/pull/745) - Fixed race conditions and edge cases for Thanos Querier fanout logic. 
+- [#651](https://github.com/improbable-eng/thanos/issues/651) - Fixed index cache when asked buffer size is bigger than cache max size.
 
 ### Changed
 
+- [#529](https://github.com/improbable-eng/thanos/pull/529) Massive improvement for compactor. Downsampling memory consumption was reduce to only store labels and single chunks per each series.
+- Qurerier UI: Store page now shows the store APIs per component type.
+- Prometheus and TSDB deps are now up to date with ~2.7.0 Prometheus version. Lot's of things has changed. See details [here #704](https://github.com/improbable-eng/thanos/pull/704) Known changes that affects us:    
+    - prometheus/prometheus/discovery/file
+      - [ENHANCEMENT] Discovery: Improve performance of previously slow updates of changes of targets. #4526
+      - [BUGFIX] Wait for service discovery to stop before exiting #4508 ??
+    - prometheus/prometheus/promql:
+      - **[ENHANCEMENT] Subqueries support. #4831**
+      - [BUGFIX] PromQL: Fix a goroutine leak in the lexer/parser. #4858
+      - [BUGFIX] Change max/min over_time to handle NaNs properly. #438
+      - [BUGFIX] Check label name for `count_values` PromQL function. #4585
+      - [BUGFIX] Ensure that vectors and matrices do not contain identical label-sets. #4589
+      - [ENHANCEMENT] Optimize PromQL aggregations #4248
+      - [BUGFIX] Only add LookbackDelta to vector selectors #4399
+      - [BUGFIX] Reduce floating point errors in stddev and related functions #4533
+    - prometheus/prometheus/rules:
+      - New metrics exposed! (prometheus evaluation!)
+      - [ENHANCEMENT] Rules: Error out at load time for invalid templates, rather than at evaluation time. #4537
+    - prometheus/tsdb/index: Index reader optimizations.
+- Thanos store gateway flag for sync concurrency (`block-sync-concurrency` with `20` default, so no change by default)
 - S3 provider:
   - Added `put_user_metadata` option to config.
   - Added `insecure_skip_verify` option to config.

@@ -19,12 +19,14 @@ Process of cutting a new *minor* Thanos release:
 1. Add PR on branch `release-<major>.<minor>` that will start minor release branch and prepare changes to cut release. 
 1. Bump [VERSION file](/VERSION)
 1. Update [CHANGELOG file](/CHANGELOG.md)
+
   Note that `CHANGELOG.md` should only document changes relevant to users of Thanos, including external API changes, performance improvements, and new features. Do not document changes of internal interfaces, code refactorings and clean-ups, changes to the build process, etc. People interested in these are asked to refer to the git history. 
   Format is described in `CHANGELOG.md`.
 
 1. Double check backward compatibility:
-  1. *In case of version after `v1+.y.z`*, double check if none of the changes break API compatibility. This should be done in PR review process, but double check is good to have. 
-  1. In case of `v0.y.z`, document all incompatibilities in changelog.
+    1. *In case of version after `v1+.y.z`*, double check if none of the changes break API compatibility. This should be done in PR review process, but double check is good to have. 
+    1. In case of `v0.y.z`, document all incompatibilities in changelog.
+  
 1. After review, merge the PR and immediately after this tag a version:
   
   ```bash
