@@ -104,7 +104,6 @@ spec:
           - --storage.tsdb.min-block-duration=2h
           - --storage.tsdb.max-block-duration=2h
           - --web.enable-admin-api
-          - --shipper.upload-compacted-once
         ports:
           - name: http-prometheus
             containerPort: 9090
@@ -134,6 +133,8 @@ spec:
               secret_key: Need8Chars
               endpoint: %%S3_ENDPOINT%%
               insecure: true
+          # New flag for migrating old blocks.
+          - --shipper.upload-compacted-once
         env:
           - name: POD_NAME
             valueFrom:
