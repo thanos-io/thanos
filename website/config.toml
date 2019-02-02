@@ -1,4 +1,4 @@
-baseURL = "http://example.org/"
+baseURL = "https://adrien-f.github.io/thanos/"
 languageCode = "en-us"
 title = "Thanos - Highly available Prometheus setup with long term storage capabilities"
 
