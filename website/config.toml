@@ -1,0 +1,6 @@
+baseURL = "http://example.org/"
+languageCode = "en-us"
+title = "Thanos - Highly available Prometheus setup with long term storage capabilities"
+
+[permalinks]
+  docs = "/docs/:filename/"

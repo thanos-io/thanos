@@ -1,3 +1,9 @@
+---
+title: Query
+type: docs
+menu: "components"
+---
+
 # Query
 
 The query component implements the Prometheus HTTP v1 API to query data in a Thanos cluster via PromQL.

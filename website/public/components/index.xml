@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Components on Thanos - Highly available Prometheus setup with long term storage capabilities</title>
+    <link>http://example.org/components/</link>
+    <description>Recent content in Components on Thanos - Highly available Prometheus setup with long term storage capabilities</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    
+	<atom:link href="http://example.org/components/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title></title>
+      <link>http://example.org/components/bucket/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>http://example.org/components/bucket/</guid>
+      <description>Bucket The bucket component of Thanos is a set of commands to inspect data in object storage buckets. It is normally run as a stand alone command to aid with troubleshooting.
+Example:
+$ thanos bucket verify --objstore.config-file=bucket.yml  The content of bucket.yml:
+type: GCS config: bucket: example-bucket  Bucket can be extended to add more subcommands that will be helpful when working with object storage buckets by adding a new command within /cmd/thanos/bucket.</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>http://example.org/components/compact/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>http://example.org/components/compact/</guid>
+      <description>Compact The compactor component of Thanos applies the compaction procedure of the Prometheus 2.0 storage engine to block data stored in object storage. It is generally not semantically concurrency safe and must be deployed as a singleton against a bucket.
+Example:
+$ thanos compact --data-dir /tmp/thanos-compact --objstore.config-file=bucket.yml  The content of bucket.yml:
+type: GCS config: bucket: example-bucket  The compactor needs local disk space to store intermediate data for its processing.</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>http://example.org/components/query/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>http://example.org/components/query/</guid>
+      <description>Query The query component implements the Prometheus HTTP v1 API to query data in a Thanos cluster via PromQL.
+It gathers the data needed to evaluate the query from underlying StoreAPIs. See here on how to connect querier with desired StoreAPIs.
+Querier currently is fully stateless and horizontally scalable.
+$ thanos query \ --http-address &amp;quot;0.0.0.0:9090&amp;quot; \ --store &amp;quot;&amp;lt;store-api&amp;gt;:&amp;lt;grpc-port&amp;gt;&amp;quot; \ --store &amp;quot;&amp;lt;store-api2&amp;gt;:&amp;lt;grpc-port&amp;gt;&amp;quot; \  Deduplication The query layer can deduplicate series that were collected from high-availability pairs of data sources such as Prometheus.</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>http://example.org/components/rule/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>http://example.org/components/rule/</guid>
+      <description>Rule NOTE: The rule component is experimental since it has conceptual tradeoffs that might not be favorable for most use cases. It is recommended to keep deploying rules to the relevant Prometheus servers.
+The rule component should in particular not be used to circumvent solving rule deployment properly at the configuration management level.
+The rule component evaluates Prometheus recording and alerting rules against random query nodes in its cluster. Rule results are written back to disk in the Prometheus 2.</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>http://example.org/components/sidecar/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>http://example.org/components/sidecar/</guid>
+      <description>Sidecar The sidecar component of Thanos gets deployed along with a Prometheus instance. It implements Thanos&amp;rsquo; Store API on top of Prometheus&amp;rsquo; remote-read API and advertises itself as a data source to the cluster. Thereby queriers in the cluster can treat Prometheus servers as yet another source of time series data without directly talking to its APIs. Additionally, the sidecar uploads TSDB blocks to an object storage bucket as Prometheus produces them.</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>http://example.org/components/store/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>http://example.org/components/store/</guid>
+      <description>Store The store component of Thanos implements the Store API on top of historical data in an object storage bucket. It acts primarily as an API gateway and therefore does not need significant amounts of local disk space. It joins a Thanos cluster on startup and advertises the data it can access. It keeps a small amount of information about all remote blocks on local disk and keeps it in sync with the bucket.</description>
+    </item>
+    
+  </channel>
+</rss>

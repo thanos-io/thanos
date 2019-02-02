@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Proposals on Thanos - Highly available Prometheus setup with long term storage capabilities</title>
+    <link>http://example.org/proposals/</link>
+    <description>Recent content in Proposals on Thanos - Highly available Prometheus setup with long term storage capabilities</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-us</language>
+    
+	<atom:link href="http://example.org/proposals/index.xml" rel="self" type="application/rss+xml" />
+    
+    
+    <item>
+      <title></title>
+      <link>http://example.org/proposals/approved/201809_gossip-removal/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>http://example.org/proposals/approved/201809_gossip-removal/</guid>
+      <description>Deprecated gossip clustering in favor of File SD Status: draft | in-review | rejected | accepted | complete
+Implementation Owner: @bplotka
+Ticket: https://github.com/improbable-eng/thanos/issues/484
+Summary It is becoming clear that we need to remove gossip protocol as our main way of communication between Thanos Querier and other components. Static configuration seems to be well enough for our simple use cases. To give users more flexibility (similar to gossip auto-join logic), we already wanted to introduce a File SD that allows changing StoreAPIs on-the-fly.</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>http://example.org/proposals/approved/201812_thanos-remote-receive/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>http://example.org/proposals/approved/201812_thanos-remote-receive/</guid>
+      <description>Thanos Remote Write Status: draft | in-review | rejected | accepted | complete
+Implementation Owner: @brancz
+Summary This document describes the motivation and design of the Thanos receiver component, as well as how it fits into the rest of the Thanos ecosystem and components.
+Motivation The Thanos receiver is the missing piece within Thanos in order to use it to build Prometheus as a Service offering, either as an internal service to the rest of an organization or as an actual pay-as-you-go off the shelf service.</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>http://example.org/proposals/approved/201901-read-write-operations-bucket/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>http://example.org/proposals/approved/201901-read-write-operations-bucket/</guid>
+      <description>Read-Write coordination free operational contract for object storage Status: draft | in-review | rejected | accepted | complete
+Implementation Owner: @bwplotka
+Tickets: * https://github.com/improbable-eng/thanos/issues/298 (eventual consistency) * https://github.com/improbable-eng/thanos/issues/377 (eventual consistency &amp;amp; partial upload) * https://github.com/improbable-eng/thanos/issues/564 (retention vs store gateway) * https://github.com/improbable-eng/thanos/issues/271 (adapt for removals faster)
+Summary Our goals here are:
+ A) Define consistent way of having multiple readers and multiple writers (technically multiple appenders and single remover) on shared object storage that can be eventual consistent.</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>http://example.org/proposals/rejected/201807_store_instance_high_availability/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>http://example.org/proposals/rejected/201807_store_instance_high_availability/</guid>
+      <description>High-availability for store instances Status: draft | in-review | rejected | accepted | complete
+Proposal author: @mattbostock Implementation owner: @mattbostock
+Status: Rejected This proposal makes total sense and solves our goals when using gossip. However there exists a very easy solution to this problem in form of using just static entry with any loadbalancer like Kubernetes Service to load balance through different Store Gateways. Those are technically stateless, so request can fetch the data independently.</description>
+    </item>
+    
+    <item>
+      <title></title>
+      <link>http://example.org/proposals/rejected/config/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>http://example.org/proposals/rejected/config/</guid>
+      <description>Thanos Cluster Configuration Status: draft | in-review | rejected | accepted | complete
+Implementation Owner: @domgreen
+Summary The proposal of creating a central configuration component within Thanos has been rejected by the community as the requirements are specific to the use case at Improbable and that adding configuration management into Thanos will result in adding more knowledge to the system about what the scrapers are doing and their targets.</description>
+    </item>
+    
+  </channel>
+</rss>

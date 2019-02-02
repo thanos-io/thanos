@@ -1,0 +1,28 @@
+.bg-purple {
+    background-color: #6D41FF;
+}
+
+.color-purple {
+    color: #6D41FF;
+}
+
+.navbar-brand img {
+    height: 32px;
+    margin-right: 10px;
+    max-width: 100%;
+}
+
+.btn-outline-secondary {
+    color: #6D41FF;
+    border-color: #6D41FF;
+}
+
+.btn-outline-secondary:hover {
+    color: #fff;
+    background-color: #6D41FF;
+    border-color: #6D41FF;
+}
+
+a {
+    color: #6D41FF;
+}

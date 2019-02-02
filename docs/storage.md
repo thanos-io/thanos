@@ -1,3 +1,9 @@
+---
+title: Object Storage
+type: docs
+menu: "thanos"
+---
+
 # Object Storage
 
 Thanos supports any object stores that can be implemented against Thanos [objstore.Bucket interface](/pkg/objstore/objstore.go)

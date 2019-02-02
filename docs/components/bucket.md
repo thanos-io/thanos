@@ -1,3 +1,9 @@
+---
+title: Bucket
+type: docs
+menu: "components"
+---
+
 # Bucket
 
 The bucket component of Thanos is a set of commands to inspect data in object storage buckets.

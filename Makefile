@@ -32,6 +32,9 @@ PROMU             ?= $(BIN_DIR)/promu-$(PROMU_VERSION)
 PROMU_VERSION     ?= 264dc36af9ea3103255063497636bd5713e3e9c1
 PROTOC            ?= $(BIN_DIR)/protoc-$(PROTOC_VERSION)
 PROTOC_VERSION    ?= 3.4.0
+# v0.54.0
+HUGO_VERSION      ?= b1a82c61aba067952fdae2f73b826fe7d0f3fc2f
+HUGO              ?= $(BIN_DIR)/hugo-$(HUGO_VERSION)
 GIT               ?= $(shell which git)
 BZR               ?= $(shell which bzr)
 
@@ -113,6 +116,16 @@ docker-push:
 .PHONY: docs
 docs: $(EMBEDMD) build
 	@EMBEDMD_BIN="$(EMBEDMD)" scripts/genflagdocs.sh
+
+.PHONY: hugo-docs
+hugo-docs: $(HUGO)
+	@echo ">> building documentation website"
+	@cd website && $(HUGO)
+
+.PHONY: hugo-server
+hugo-server: $(HUGO)
+	@echo ">> serving documentation website"
+	@cd website && $(HUGO) server
 
 # check-docs checks if documentation have discrepancy with flags and if the links are valid.
 .PHONY: check-docs
@@ -218,6 +231,9 @@ $(LICHE):
 
 $(PROMU):
 	$(call fetch_go_bin_version,github.com/prometheus/promu,$(PROMU_VERSION))
+
+$(HUGO):
+	$(call fetch_go_bin_version,github.com/gohugoio/hugo,$(HUGO_VERSION))
 
 $(PROTOC):
 	@mkdir -p $(TMP_GOPATH)

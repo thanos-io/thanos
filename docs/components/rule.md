@@ -1,3 +1,9 @@
+---
+title: Rule
+type: docs
+menu: "components"
+---
+
 # Rule
 
 _**NOTE:** The rule component is experimental since it has conceptual tradeoffs that might not be favorable for most use cases. It is recommended to keep deploying rules to the relevant Prometheus servers._
