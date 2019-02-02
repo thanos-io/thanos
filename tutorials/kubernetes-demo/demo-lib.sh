@@ -108,7 +108,7 @@ function navigate() {
   CONTINUE=${1-false}
 
   curr=0
-  if ${CONTINUE}; then
+  if ${CONTINUE} && [[ -f ./.demo-last-step ]]; then
     curr=$(< ./.demo-last-step)
   fi
 
@@ -130,9 +130,9 @@ function navigate() {
     # Make sure input will not break the print.
     stty -echo
     if [[ -z $TYPE_SPEED ]]; then
-      echo -en "${YELLOW}$print${COLOR_RESET}"
+      echo -en "${curr})${YELLOW}$print${COLOR_RESET}"
     else
-      echo -en "${YELLOW}$print${COLOR_RESET}" | pv -qL $[$TYPE_SPEED+(-2 + RANDOM%5)];
+      echo -en "${curr})${YELLOW}$print${COLOR_RESET}" | pv -qL $[$TYPE_SPEED+(-2 + RANDOM%5)];
     fi
     stty echo
 
