@@ -22,7 +22,7 @@ MINIO_ACCESS_KEY="smth"
 MINIO_SECRET_KEY="Need8Chars"
 HOST_IP=
 
-rc "open slides/1-title.svg" # Slide to 4) init setup.
+rc "open slides/1-title.svg" # Slide to 2) improbable
 r "kubectl --context=eu1 get po"
 r "kubectl --context=us1 get po"
 
@@ -43,6 +43,7 @@ r "colordiff -y manifests/prometheus.yaml manifests/prometheus-ha.yaml | less -X
 ro "kubectl --context=eu1 apply -f manifests/prometheus-ha.yaml" "cat manifests/prometheus-ha.yaml | sed \"s#%%ALERTMANAGER_URL%%#`minikube -p eu1 service alertmanager --format=\"{{.IP}}:{{.Port}}\"`#g\" | sed \"s#%%CLUSTER%%#eu1#g\" | kubectl --context=eu1 apply -f -"
 r "kubectl --context=eu1 get po"
 ro "open \$(minikube -p eu1 service prometheus-1 --url)/graph" "google-chrome --app=\"\$(minikube -p eu1 service prometheus-1 --url)/graph?g0.range_input=1d&g0.expr=container_memory_usage_bytes&g0.tab=0\" > /dev/null"
+ro "open \$(minikube -p eu1 service prometheus --url)/graph" "google-chrome --app=\"`minikube -p eu1 service prometheus --url`/graph?g0.range_input=3w&g0.expr=sum(container_memory_usage_bytes)%20by%20(pod%2C%20cluster)&g0.tab=0\" > /dev/null"
 
 # Retention problem shown on prom-1 range.
 
@@ -114,6 +115,6 @@ ro "open \$(minikube -p eu1 service thanos-ruler --url)/graph" "google-chrome --
 ro "open \$(minikube -p eu1 service alertmanager --url)" "google-chrome --app=`minikube -p eu1 service alertmanager --url` > /dev/null"
 
 # The end.
-rc "open slides/4-initial-setup.svg"
+rc "open slides/7-the-end.svg"
 
 navigate true
