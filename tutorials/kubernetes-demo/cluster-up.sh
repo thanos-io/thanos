@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 set -e
-export HISTFILE="/home/bartek/.zsh_history_demo_thanos_2019"
 
 minikube start --cache-images --vm-driver=kvm2 -p us1 --kubernetes-version="v1.13.2" \
     --memory=8192 --cpus=4 \

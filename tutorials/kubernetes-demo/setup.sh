@@ -24,8 +24,6 @@ fi
 
 set -e
 
-export HISTFILE="/home/bartek/.zsh_history_demo_thanos_2019"
-
 MINIKUBE_RESTART=${1:true}
 
 if ${MINIKUBE_RESTART}; then
