@@ -138,6 +138,10 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			fileSD = file.NewDiscovery(conf, logger)
 		}
 
+		if len(*queries) < 1 && peer.Name() == "no gossip" && fileSD == nil {
+			return errors.Errorf("Gossip is disabled and no --query parameter was given.")
+		}
+
 		return runRule(g,
 			logger,
 			reg,
