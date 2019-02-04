@@ -38,6 +38,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
@@ -717,6 +718,9 @@ func parseFlagLabels(s []string) (labels.Labels, error) {
 		parts := strings.SplitN(l, "=", 2)
 		if len(parts) != 2 {
 			return nil, errors.Errorf("unrecognized label %q", l)
+		}
+		if !model.LabelName.IsValid(model.LabelName(string(parts[0]))) {
+			return nil, errors.Errorf("unsupported format for label %s", l)
 		}
 		val, err := strconv.Unquote(parts[1])
 		if err != nil {
