@@ -1390,6 +1390,11 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []uint64, start,
 	r.stats.seriesFetchedSizeSum += int(end - start)
 
 	for _, id := range ids {
+
+		if id-start > uint64(len(b)) {
+			return errors.Errorf("attempted to use a lower bound index that is greater than upper bound of bucketIndex slice. This is likely due to a malformed block")
+		}
+
 		c := b[id-start:]
 
 		l, n := binary.Uvarint(c)
@@ -1564,6 +1569,15 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, offs []uint32, seq i
 	r.stats.chunksFetchedSizeSum += int(end - start)
 
 	for _, o := range offs {
+
+		if b == nil {
+			return errors.Errorf("bucket chunk range is nil")
+		}
+
+		if o-start > uint32(len(b)) {
+			return errors.Errorf("attempted to use a lower bound index that is greater than upper bound of Block slice. This is likely due to a malformed block")
+		}
+
 		cb := b[o-start:]
 
 		l, n := binary.Uvarint(cb)
@@ -1574,6 +1588,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, offs []uint32, seq i
 			return errors.Errorf("preloaded chunk too small, expecting %d", n+int(l)+1)
 		}
 		cid := uint64(seq<<32) | uint64(o)
+
 		r.chunks[cid] = rawChunk(cb[n : n+int(l)+1])
 	}
 	return nil
