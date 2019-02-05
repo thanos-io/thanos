@@ -56,6 +56,7 @@ type bucketStoreMetrics struct {
 	seriesMergeDuration   prometheus.Histogram
 	resultSeriesCount     prometheus.Summary
 	chunkSizeBytes        prometheus.Histogram
+	queriesLimited        prometheus.Counter
 }
 
 func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
@@ -129,6 +130,11 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Buckets: []float64{
 			32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024,
 		},
+	})
+
+	m.queriesLimited = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_queries_limited_total",
+		Help: "Total number of queries that were dropped due to the sample limit.",
 	})
 
 	if reg != nil {
@@ -586,6 +592,7 @@ func (bs *BucketStore) checkSamples(gotSamples uint64, samples *uint64, samplesL
 	*samples += gotSamples
 	if bs.maxSampleCount > 0 && *samples > bs.maxSampleCount {
 		samplesLock.Unlock()
+		bs.metrics.queriesLimited.Inc()
 		return errors.Errorf("sample limit violated (got %v, limit %v)", *samples, bs.maxSampleCount)
 	}
 	samplesLock.Unlock()
