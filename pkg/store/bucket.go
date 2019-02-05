@@ -153,6 +153,7 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 			m.seriesMergeDuration,
 			m.resultSeriesCount,
 			m.chunkSizeBytes,
+			m.queriesLimited,
 		)
 	}
 	return &m
