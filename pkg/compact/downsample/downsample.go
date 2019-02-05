@@ -3,16 +3,14 @@ package downsample
 import (
 	"math"
 
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
-
-	"github.com/prometheus/prometheus/pkg/value"
-	"github.com/prometheus/tsdb/chunkenc"
-
 	"github.com/go-kit/kit/log"
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/value"
 	"github.com/prometheus/tsdb"
+	"github.com/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/tsdb/chunks"
 	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
@@ -57,7 +55,7 @@ func Downsample(
 	}
 	defer runutil.CloseWithErrCapture(logger, &err, streamedBlockWriter, "close stream block writer")
 
-	pall, err := indexr.Postings(index.AllPostingsKey())
+	postings, err := indexr.Postings(index.AllPostingsKey())
 	if err != nil {
 		return id, errors.Wrap(err, "get all postings list")
 	}
@@ -67,7 +65,7 @@ func Downsample(
 		chks       []chunks.Meta
 		lset       labels.Labels
 	)
-	for pall.Next() {
+	for postings.Next() {
 		lset = lset[:0]
 		chks = chks[:0]
 		all = all[:0]
@@ -75,15 +73,15 @@ func Downsample(
 
 		// Get series labels and chunks. Downsampled data is sensitive to chunk boundaries
 		// and we need to preserve them to properly downsample previously downsampled data.
-		if err := indexr.Series(pall.At(), &lset, &chks); err != nil {
-			return id, errors.Wrapf(err, "get series %d", pall.At())
+		if err := indexr.Series(postings.At(), &lset, &chks); err != nil {
+			return id, errors.Wrapf(err, "get series %d", postings.At())
 		}
 		// While #183 exists, we sanitize the chunks we retrieved from the block
 		// before retrieving their samples.
 		for i, c := range chks {
 			chk, err := chunkr.Chunk(c.Ref)
 			if err != nil {
-				return id, errors.Wrapf(err, "get chunk %d, series %d", c.Ref, pall.At())
+				return id, errors.Wrapf(err, "get chunk %d, series %d", c.Ref, postings.At())
 			}
 			chks[i].Chunk = chk
 		}
@@ -92,11 +90,11 @@ func Downsample(
 		if origMeta.Thanos.Downsample.Resolution == 0 {
 			for _, c := range chks {
 				if err := expandChunkIterator(c.Chunk.Iterator(), &all); err != nil {
-					return id, errors.Wrapf(err, "expand chunk %d, series %d", c.Ref, pall.At())
+					return id, errors.Wrapf(err, "expand chunk %d, series %d", c.Ref, postings.At())
 				}
 			}
 			if err := streamedBlockWriter.AddSeries(lset, downsampleRaw(all, resolution)); err != nil {
-				return id, errors.Wrapf(err, "downsample raw data, series: %d", pall.At())
+				return id, errors.Wrapf(err, "downsample raw data, series: %d", postings.At())
 			}
 		} else {
 			// Downsample a block that contains aggregate chunks already.
@@ -112,15 +110,15 @@ func Downsample(
 				resolution,
 			)
 			if err != nil {
-				return id, errors.Wrapf(err, "downsample aggregate block, series: %d", pall.At())
+				return id, errors.Wrapf(err, "downsample aggregate block, series: %d", postings.At())
 			}
 			if err := streamedBlockWriter.AddSeries(lset, downsampledChunks); err != nil {
-				return id, errors.Wrapf(err, "downsample aggregated block, series: %d", pall.At())
+				return id, errors.Wrapf(err, "downsample aggregated block, series: %d", postings.At())
 			}
 		}
 	}
-	if pall.Err() != nil {
-		return id, errors.Wrap(pall.Err(), "iterate series set")
+	if postings.Err() != nil {
+		return id, errors.Wrap(postings.Err(), "iterate series set")
 	}
 
 	id, err = streamedBlockWriter.Flush()

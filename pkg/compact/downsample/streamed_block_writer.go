@@ -11,6 +11,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
@@ -63,7 +64,7 @@ type StreamedBlockWriter struct {
 	indexReader tsdb.IndexReader
 	closers     []io.Closer
 
-	meta         block.Meta
+	meta         metadata.Meta
 	totalChunks  uint64
 	totalSamples uint64
 
@@ -77,9 +78,7 @@ type StreamedBlockWriter struct {
 
 // NewWriter returns StreamedBlockWriter instance.
 // Caller is responsible to finalize the writing with Flush method to write the meta and index file and Close all io.Closers
-func NewWriter(dir string, indexReader tsdb.IndexReader, l log.Logger, originMeta block.Meta, resolution int64) (*StreamedBlockWriter, error) {
-	var err error
-
+func NewWriter(dir string, indexReader tsdb.IndexReader, l log.Logger, originMeta metadata.Meta, resolution int64) (*StreamedBlockWriter, error) {
 	// change downsampling resolution to the new one.
 	originMeta.Thanos.Downsample.Resolution = resolution
 
@@ -129,7 +128,7 @@ func NewWriter(dir string, indexReader tsdb.IndexReader, l log.Logger, originMet
 // labelsValues sets and memPostings to be written on the Flush state in the end of downsampling process.
 func (w *StreamedBlockWriter) AddSeries(lset labels.Labels, chunks []chunks.Meta) error {
 	if w.sealed {
-		panic("Series can't be added, writers has been flushed|closed")
+		return errors.Errorf("Series can't be added, writers has been flushed|closed")
 	}
 
 	if len(chunks) == 0 {
@@ -160,22 +159,21 @@ func (w *StreamedBlockWriter) AddSeries(lset labels.Labels, chunks []chunks.Meta
 // Flush saves prepared index and meta data to corresponding files.
 // Be sure to call this, if all series have to be handled by this moment, you can't call AddSeries afterwards.
 func (w *StreamedBlockWriter) Flush() (ulid.ULID, error) {
-	var err error
 	w.sealed = true
 
-	if err = w.writeLabelSets(); err != nil {
+	if err := w.writeLabelSets(); err != nil {
 		return w.uid, errors.Wrap(err, "write label sets")
 	}
 
-	if err = w.writeMemPostings(); err != nil {
+	if err := w.writeMemPostings(); err != nil {
 		return w.uid, errors.Wrap(err, "write mem postings")
 	}
 
-	if err = w.writeMetaFile(); err != nil {
+	if err := w.writeMetaFile(); err != nil {
 		return w.uid, errors.Wrap(err, "write meta meta")
 	}
 
-	if err = w.finalize(); err != nil {
+	if err := w.finalize(); err != nil {
 		return w.uid, errors.Wrap(err, "sync and rename tmp dir")
 	}
 
@@ -288,7 +286,7 @@ func (w *StreamedBlockWriter) writeMetaFile() error {
 
 	w.meta.ULID = w.uid
 	w.meta.Version = 1
-	w.meta.Thanos.Source = block.CompactorSource
+	w.meta.Thanos.Source = metadata.CompactorSource
 	w.meta.Stats.NumChunks = w.totalChunks
 	w.meta.Stats.NumSamples = w.totalSamples
 	w.meta.Stats.NumSeries = w.postings
