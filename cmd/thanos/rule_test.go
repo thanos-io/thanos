@@ -10,6 +10,46 @@ import (
 	"github.com/pkg/errors"
 )
 
+func Test_parseFlagLabels(t *testing.T) {
+	var tData = []struct {
+		s   []string
+		err error
+	}{
+		{
+			s:   []string{`labelName="LabelVal"`, `_label_Name="LabelVal"`, `label_name="LabelVal"`, `LAb_el_Name="LabelValue"`, `lab3l_Nam3="LabelValue"`}, // Valid
+			err: nil,
+		},
+		{
+			s:   []string{`label-Name="LabelVal"`}, //Unsupported labelname
+			err: errors.New(""),
+		},
+		{
+			s:   []string{`label:Name="LabelVal"`}, //Unsupported labelname
+			err: errors.New(""),
+		},
+		{
+			s:   []string{`1abelName="LabelVal"`}, //Unsupported labelname
+			err: errors.New(""),
+		},
+		{
+			s:   []string{`label_Name"LabelVal"`}, //Missing "=" seprator
+			err: errors.New(""),
+		},
+		{
+			s:   []string{`label_Name= "LabelVal"`}, //whitespace invalid syntax
+			err: errors.New(""),
+		},
+		{
+			s:   []string{`label_name=LabelVal`}, //Missing quotes invalid syntax
+			err: errors.New(""),
+		},
+	}
+	for _, td := range tData {
+		_, err := parseFlagLabels(td.s)
+		testutil.Equals(t, err == nil, td.err == nil)
+	}
+}
+
 func TestRule_AlertmanagerResolveWithoutPort(t *testing.T) {
 	mockResolver := mockResolver{
 		resultIPs: map[string][]string{
