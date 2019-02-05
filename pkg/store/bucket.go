@@ -581,10 +581,29 @@ func (bs *BucketStore) blockSeries(
 	return newBucketSeriesSet(res), indexr.stats.merge(chunkr.stats), nil
 }
 
+func (bs *BucketStore) checkSamples(gotSamples uint64, samples *uint64, samplesLock *sync.Mutex) error {
+	samplesLock.Lock()
+	*samples += gotSamples
+	if bs.maxSampleCount > 0 && *samples > bs.maxSampleCount {
+		samplesLock.Unlock()
+		return errors.Errorf("sample limit violated (got %v, limit %v)", *samples, bs.maxSampleCount)
+	}
+	samplesLock.Unlock()
+	return nil
+}
+
 func (bs *BucketStore) populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr,
 	samples *uint64, samplesLock *sync.Mutex) error {
 
 	if in.Encoding() == chunkenc.EncXOR {
+		ch, err := chunkenc.FromData(in.Encoding(), in.Bytes())
+		if err != nil {
+			return errors.Errorf("failed to create a chunk")
+		}
+		err = bs.checkSamples(uint64(ch.NumSamples()), samples, samplesLock)
+		if err != nil {
+			return errors.Wrapf(err, "check samples")
+		}
 		out.Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: in.Bytes()}
 		return nil
 	}
@@ -593,14 +612,10 @@ func (bs *BucketStore) populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, 
 	}
 
 	ac := downsample.AggrChunk(in.Bytes())
-
-	samplesLock.Lock()
-	*samples += uint64(ac.NumSamples())
-	if bs.maxSampleCount > 0 && *samples > bs.maxSampleCount {
-		samplesLock.Unlock()
-		return errors.Errorf("sample limit violated (got %v, limit %v)", *samples, bs.maxSampleCount)
+	err := bs.checkSamples(uint64(ac.NumSamples()), samples, samplesLock)
+	if err != nil {
+		return errors.Wrapf(err, "check samples")
 	}
-	samplesLock.Unlock()
 
 	for _, at := range aggrs {
 		switch at {
