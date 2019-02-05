@@ -218,7 +218,7 @@ func TestBucketStore_e2e(t *testing.T) {
 
 		// Test the samples limit.
 		testutil.Ok(t, os.RemoveAll(dir))
-		s = prepareStoreWithTestBlocks(t, dir, bkt, 10)
+		s = prepareStoreWithTestBlocks(t, dir, bkt, 30)
 		mint, maxt = s.store.TimeRange()
 		defer s.Close()
 
