@@ -252,11 +252,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:9d155c1c6b496391d43b4f4d17ca0d8d533b2d28e9d7ae3757682d25d30ccfa2"
+  digest = "1:8d90bab8af001cc03bb2aac86126cdb76fe0f86b6edd328d3de84bc429ab6ca7"
   name = "github.com/grpc-ecosystem/go-grpc-prometheus"
   packages = ["."]
   pruneopts = ""
-  revision = "93bf4626fba73b751b0f3cdf2649be4ce0c420cd"
+  revision = "68e3a13e41175110a447e67246a59873d6aca902"
 
 [[projects]]
   digest = "1:8e3bd93036b4a925fe2250d3e4f38f21cadb8ef623561cd80c3c50c114b13201"
