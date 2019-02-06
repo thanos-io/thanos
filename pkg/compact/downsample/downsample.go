@@ -2,6 +2,10 @@ package downsample
 
 import (
 	"math"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
@@ -47,9 +51,33 @@ func Downsample(
 	}
 	defer runutil.CloseWithErrCapture(logger, &err, chunkr, "downsample chunk reader")
 
+	// Generate new block id.
+	uid := ulid.MustNew(ulid.Now(), rand.New(rand.NewSource(time.Now().UnixNano())))
+
+	// Create block directory to populate with chunks, meta and index files into.
+	blockDir := filepath.Join(dir, uid.String())
+	if err := os.MkdirAll(blockDir, 0777); err != nil {
+		return id, errors.Wrap(err, "mkdir block dir")
+	}
+
+	// Remove blockDir in case of errors.
+	defer func() {
+		if err != nil {
+			var merr tsdb.MultiError
+			merr.Add(err)
+			merr.Add(os.RemoveAll(blockDir))
+			err = merr.Err()
+		}
+	}()
+
+	// Copy original meta to the new one. Update downsampling resolution and ULID for a new block.
+	newMeta := *origMeta
+	newMeta.Thanos.Downsample.Resolution = resolution
+	newMeta.ULID = uid
+
 	// Writes downsampled chunks right into the files, avoiding excess memory allocation.
-	// Flushes index and meta data afterwards aggregations.
-	streamedBlockWriter, err := NewWriter(dir, indexr, logger, *origMeta, resolution)
+	// Flushes index and meta data after aggregations.
+	streamedBlockWriter, err := NewStreamedBlockWriter(blockDir, indexr, logger, newMeta)
 	if err != nil {
 		return id, errors.Wrap(err, "get streamed block writer")
 	}
@@ -93,11 +121,11 @@ func Downsample(
 					return id, errors.Wrapf(err, "expand chunk %d, series %d", c.Ref, postings.At())
 				}
 			}
-			if err := streamedBlockWriter.AddSeries(lset, downsampleRaw(all, resolution)); err != nil {
+			if err := streamedBlockWriter.WriteSeries(lset, downsampleRaw(all, resolution)); err != nil {
 				return id, errors.Wrapf(err, "downsample raw data, series: %d", postings.At())
 			}
 		} else {
-			// Downsample a block that contains aggregate chunks already.
+			// Downsample a block that contains aggregated chunks already.
 			for _, c := range chks {
 				aggrChunks = append(aggrChunks, c.Chunk.(*AggrChunk))
 			}
@@ -112,8 +140,8 @@ func Downsample(
 			if err != nil {
 				return id, errors.Wrapf(err, "downsample aggregate block, series: %d", postings.At())
 			}
-			if err := streamedBlockWriter.AddSeries(lset, downsampledChunks); err != nil {
-				return id, errors.Wrapf(err, "downsample aggregated block, series: %d", postings.At())
+			if err := streamedBlockWriter.WriteSeries(lset, downsampledChunks); err != nil {
+				return id, errors.Wrapf(err, "write series: %d", postings.At())
 			}
 		}
 	}
@@ -121,12 +149,8 @@ func Downsample(
 		return id, errors.Wrap(postings.Err(), "iterate series set")
 	}
 
-	id, err = streamedBlockWriter.Flush()
-	if err != nil {
-		return id, errors.Wrap(err, "flush data in stream data")
-	}
-
-	return id, nil
+	id = uid
+	return
 }
 
 // currentWindow returns the end timestamp of the window that t falls into.

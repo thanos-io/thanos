@@ -467,9 +467,16 @@ func (b *memBlock) Chunks() (tsdb.ChunkReader, error) {
 }
 
 func (b *memBlock) Tombstones() (tsdb.TombstoneReader, error) {
-	return tsdb.EmptyTombstoneReader(), nil
+	return emptyTombstoneReader{}, nil
 }
 
 func (b *memBlock) Close() error {
 	return nil
 }
+
+type emptyTombstoneReader struct{}
+
+func (emptyTombstoneReader) Get(ref uint64) (tsdb.Intervals, error)        { return nil, nil }
+func (emptyTombstoneReader) Iter(func(uint64, tsdb.Intervals) error) error { return nil }
+func (emptyTombstoneReader) Total() uint64                                 { return 0 }
+func (emptyTombstoneReader) Close() error                                  { return nil }
