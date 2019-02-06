@@ -1574,10 +1574,6 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, offs []uint32, seq i
 
 	for _, o := range offs {
 
-		if b == nil {
-			return errors.Errorf("bucket chunk range is nil")
-		}
-
 		if o-start > uint32(len(b)) {
 			return errors.Errorf("attempted to use a lower bound index that is greater than upper bound of Block slice. This is likely due to a malformed block")
 		}
