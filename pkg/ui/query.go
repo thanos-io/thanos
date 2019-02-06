@@ -3,14 +3,14 @@ package ui
 import (
 	"html/template"
 	"net/http"
+	"os"
 	"path"
+	"strings"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/query"
-
-	"os"
-
 	"github.com/go-kit/kit/log"
+	"github.com/improbable-eng/thanos/pkg/component"
+	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
@@ -62,6 +62,7 @@ func queryTmplFuncs() template.FuncMap {
 		"formatTimestamp": func(timestamp int64) string {
 			return time.Unix(timestamp/1000, 0).Format(time.RFC3339)
 		},
+		"title": strings.Title,
 	}
 }
 
@@ -117,11 +118,14 @@ func (q *Query) status(w http.ResponseWriter, r *http.Request) {
 
 func (q *Query) stores(w http.ResponseWriter, r *http.Request) {
 	prefix := GetWebPrefix(q.logger, q.flagsMap, r)
-	q.executeTemplate(w, "stores.html", prefix, q.storeSet.GetStoreStatus())
+	statuses := make(map[component.StoreAPI][]query.StoreStatus)
+	for _, status := range q.storeSet.GetStoreStatus() {
+		statuses[status.StoreType] = append(statuses[status.StoreType], status)
+	}
+	q.executeTemplate(w, "stores.html", prefix, statuses)
 }
 
 func (q *Query) flags(w http.ResponseWriter, r *http.Request) {
 	prefix := GetWebPrefix(q.logger, q.flagsMap, r)
-
 	q.executeTemplate(w, "flags.html", prefix, q.flagsMap)
 }

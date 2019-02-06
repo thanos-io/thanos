@@ -23,6 +23,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/alert"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/discovery/cache"
 	"github.com/improbable-eng/thanos/pkg/discovery/dns"
 	"github.com/improbable-eng/thanos/pkg/extprom"
@@ -164,7 +165,6 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			peer,
 			objStoreConfig,
 			tsdbOpts,
-			name,
 			alertQueryURL,
 			*alertExcludeLabels,
 			*queries,
@@ -198,7 +198,6 @@ func runRule(
 	peer cluster.Peer,
 	objStoreConfig *pathOrContent,
 	tsdbOpts *tsdb.Options,
-	component string,
 	alertQueryURL *url.URL,
 	alertExcludeLabels []string,
 	queryAddrs []string,
@@ -525,9 +524,9 @@ func runRule(
 		if err != nil {
 			return errors.Wrap(err, "listen API address")
 		}
-		logger := log.With(logger, "component", "store")
+		logger := log.With(logger, "component", component.Rule.String())
 
-		store := store.NewTSDBStore(logger, reg, db, lset)
+		store := store.NewTSDBStore(logger, reg, db, component.Rule, lset)
 
 		opts, err := defaultGRPCServerOpts(logger, reg, tracer, cert, key, clientCA)
 		if err != nil {
@@ -598,7 +597,7 @@ func runRule(
 	if uploads {
 		// The background shipper continuously scans the data directory and uploads
 		// new blocks to Google Cloud Storage or an S3-compatible storage service.
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component)
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Rule.String())
 		if err != nil {
 			return err
 		}

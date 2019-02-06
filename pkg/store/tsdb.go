@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/go-kit/kit/log"
+	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/pkg/errors"
@@ -21,29 +22,32 @@ import (
 // It attaches the provided external labels to all results. It only responds with raw data
 // and does not support downsampling.
 type TSDBStore struct {
-	logger log.Logger
-	db     *tsdb.DB
-	labels labels.Labels
+	logger    log.Logger
+	db        *tsdb.DB
+	component component.SourceStoreAPI
+	labels    labels.Labels
 }
 
 // NewTSDBStore creates a new TSDBStore.
-func NewTSDBStore(logger log.Logger, reg prometheus.Registerer, db *tsdb.DB, externalLabels labels.Labels) *TSDBStore {
+func NewTSDBStore(logger log.Logger, reg prometheus.Registerer, db *tsdb.DB, component component.SourceStoreAPI, externalLabels labels.Labels) *TSDBStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	return &TSDBStore{
-		logger: logger,
-		db:     db,
-		labels: externalLabels,
+		logger:    logger,
+		db:        db,
+		component: component,
+		labels:    externalLabels,
 	}
 }
 
 // Info returns store information about the Prometheus instance.
 func (s *TSDBStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	res := &storepb.InfoResponse{
-		MinTime: 0,
-		MaxTime: math.MaxInt64,
-		Labels:  make([]storepb.Label, 0, len(s.labels)),
+		Labels:    make([]storepb.Label, 0, len(s.labels)),
+		StoreType: s.component.ToProto(),
+		MinTime:   0,
+		MaxTime:   math.MaxInt64,
 	}
 	if blocks := s.db.Blocks(); len(blocks) > 0 {
 		res.MinTime = blocks[0].Meta().MinTime

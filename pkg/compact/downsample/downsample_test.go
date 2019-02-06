@@ -1,26 +1,22 @@
 package downsample
 
 import (
-	"github.com/prometheus/tsdb"
 	"io/ioutil"
 	"math"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
-
-	"github.com/prometheus/prometheus/pkg/value"
-
-	"github.com/prometheus/tsdb/chunks"
-
 	"time"
 
 	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/testutil"
+	"github.com/prometheus/prometheus/pkg/value"
+	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/tsdb/chunks"
 	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
 )
