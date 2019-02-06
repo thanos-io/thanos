@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
 	"math/rand"
@@ -28,6 +27,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/discovery/dns"
 	"github.com/improbable-eng/thanos/pkg/extprom"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
+	"github.com/improbable-eng/thanos/pkg/promclient"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
@@ -38,7 +38,6 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
@@ -82,8 +81,11 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	alertExcludeLabels := cmd.Flag("alert.label-drop", "Labels by name to drop before sending to alertmanager. This allows alert to be deduplicated on replica label (repeated). Similar Prometheus alert relabelling").
 		Strings()
+	webRoutePrefix := cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. This option is analogous to --web.route-prefix of Promethus.").Default("").String()
+	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
+	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
 
-	objStoreConfig := regCommonObjStoreFlags(cmd, "")
+	objStoreConfig := regCommonObjStoreFlags(cmd, "", false)
 
 	queries := cmd.Flag("query", "Addresses of statically configured query API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect query API servers through respective DNS lookups.").
 		PlaceHolder("<query>").Strings()
@@ -148,6 +150,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			*key,
 			*clientCA,
 			*httpBindAddr,
+			*webRoutePrefix,
+			*webExternalPrefix,
+			*webPrefixHeaderName,
 			time.Duration(*evalInterval),
 			*dataDir,
 			*ruleFiles,
@@ -179,6 +184,9 @@ func runRule(
 	key string,
 	clientCA string,
 	httpBindAddr string,
+	webRoutePrefix string,
+	webExternalPrefix string,
+	webPrefixHeaderName string,
 	evalInterval time.Duration,
 	dataDir string,
 	ruleFiles []string,
@@ -264,16 +272,21 @@ func runRule(
 		}
 
 		// Add DNS resolved addresses from static flags and file SD.
+		// TODO(bwplotka): Consider generating addresses in *url.URL
 		addrs = append(addrs, dnsProvider.Addresses()...)
 
 		removeDuplicateQueryAddrs(logger, duplicatedQuery, addrs)
 
 		for _, i := range rand.Perm(len(addrs)) {
-			vec, err := queryPrometheusInstant(ctx, logger, addrs[i], q, t)
+			u, err := url.Parse(fmt.Sprintf("http://%s", addrs[i]))
 			if err != nil {
-				return nil, err
+				return nil, errors.Wrapf(err, "url parse %s", addrs[i])
 			}
-			return vec, nil
+
+			span, ctx := tracing.StartSpan(ctx, "/rule_instant_query HTTP[client]")
+			v, err := promclient.PromqlQueryInstant(ctx, logger, u, q, t, true)
+			span.Finish()
+			return v, err
 		}
 		return nil, errors.Errorf("no query peer reachable")
 	}
@@ -528,11 +541,25 @@ func runRule(
 	// Start UI & metrics HTTP server.
 	{
 		router := route.New()
-		router.Post("/-/reload", func(w http.ResponseWriter, r *http.Request) {
+
+		// redirect from / to /webRoutePrefix
+		if webRoutePrefix != "" {
+			router.Get("/", func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, webRoutePrefix, http.StatusFound)
+			})
+		}
+
+		router.WithPrefix(webRoutePrefix).Post("/-/reload", func(w http.ResponseWriter, r *http.Request) {
 			reload <- struct{}{}
 		})
 
-		ui.NewRuleUI(logger, mgr, alertQueryURL.String()).Register(router)
+		flagsMap := map[string]string{
+			// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
+			"web.external-prefix": webExternalPrefix,
+			"web.prefix-header":   webPrefixHeaderName,
+		}
+
+		ui.NewRuleUI(logger, mgr, alertQueryURL.String(), flagsMap).Register(router.WithPrefix(webRoutePrefix))
 
 		mux := http.NewServeMux()
 		registerMetrics(mux, reg)
@@ -552,25 +579,25 @@ func runRule(
 		})
 	}
 
-	var uploads = true
-
-	bucketConfig, err := objStoreConfig.Content()
+	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
 		return err
 	}
-	// The background shipper continuously scans the data directory and uploads
-	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, err := client.NewBucket(logger, bucketConfig, reg, component)
-	if err != nil && err != client.ErrNotFound {
-		return err
-	}
 
-	if err == client.ErrNotFound {
+	var uploads = true
+	if len(confContentYaml) == 0 {
 		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
 		uploads = false
 	}
 
 	if uploads {
+		// The background shipper continuously scans the data directory and uploads
+		// new blocks to Google Cloud Storage or an S3-compatible storage service.
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component)
+		if err != nil {
+			return err
+		}
+
 		// Ensure we close up everything properly.
 		defer func() {
 			if err != nil {
@@ -603,117 +630,6 @@ func runRule(
 
 	level.Info(logger).Log("msg", "starting rule node", "peer", peer.Name())
 	return nil
-}
-
-// Scalar response consists of array with mixed types so it needs to be
-// unmarshaled separatelly.
-func convertScalarJSONToVector(scalarJSONResult json.RawMessage) (model.Vector, error) {
-	var (
-		// Do not specify exact length of the expected slice since JSON unmarshaling
-		// would make the leght fit the size and we won't be able to check the length afterwards.
-		resultPointSlice []json.RawMessage
-		resultTime       model.Time
-		resultValue      model.SampleValue
-	)
-	if err := json.Unmarshal(scalarJSONResult, &resultPointSlice); err != nil {
-		return nil, err
-	}
-	if len(resultPointSlice) != 2 {
-		return nil, errors.Errorf("invalid scalar result format %v, expected timestamp -> value tuple", resultPointSlice)
-	}
-	if err := json.Unmarshal(resultPointSlice[0], &resultTime); err != nil {
-		return nil, errors.Wrapf(err, "unmarshaling scalar time from %v", resultPointSlice)
-	}
-	if err := json.Unmarshal(resultPointSlice[1], &resultValue); err != nil {
-		return nil, errors.Wrapf(err, "unmarshaling scalar value from %v", resultPointSlice)
-	}
-	return model.Vector{&model.Sample{
-		Metric:    model.Metric{},
-		Value:     resultValue,
-		Timestamp: resultTime}}, nil
-}
-
-func queryPrometheusInstant(ctx context.Context, logger log.Logger, addr, query string, t time.Time) (promql.Vector, error) {
-	u, err := url.Parse(fmt.Sprintf("http://%s/api/v1/query", addr))
-	if err != nil {
-		return nil, err
-	}
-	params := url.Values{}
-	params.Add("query", query)
-	params.Add("time", t.Format(time.RFC3339Nano))
-	params.Add("dedup", "true")
-	u.RawQuery = params.Encode()
-
-	req, err := http.NewRequest("GET", u.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	span, ctx := tracing.StartSpan(ctx, "/rule_instant_query HTTP[client]")
-	defer span.Finish()
-
-	req = req.WithContext(ctx)
-
-	client := &http.Client{
-		Transport: tracing.HTTPTripperware(logger, http.DefaultTransport),
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
-
-	// Decode only ResultType and load Result only as RawJson since we don't know
-	// structure of the Result yet.
-	var m struct {
-		Data struct {
-			ResultType string          `json:"resultType"`
-			Result     json.RawMessage `json:"result"`
-		} `json:"data"`
-	}
-
-	if err = json.NewDecoder(resp.Body).Decode(&m); err != nil {
-		return nil, err
-	}
-
-	var vectorResult model.Vector
-
-	// Decode the Result depending on the ResultType
-	// Currently only `vector` and `scalar` types are supported
-	switch m.Data.ResultType {
-	case promql.ValueTypeVector:
-		if err = json.Unmarshal(m.Data.Result, &vectorResult); err != nil {
-			return nil, err
-		}
-	case promql.ValueTypeScalar:
-		vectorResult, err = convertScalarJSONToVector(m.Data.Result)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, errors.Errorf("unknown response type: '%q'", m.Data.ResultType)
-	}
-
-	vec := make(promql.Vector, 0, len(vectorResult))
-
-	for _, e := range vectorResult {
-		lset := make(promlabels.Labels, 0, len(e.Metric))
-
-		for k, v := range e.Metric {
-			lset = append(lset, promlabels.Label{
-				Name:  string(k),
-				Value: string(v),
-			})
-		}
-		sort.Sort(lset)
-
-		vec = append(vec, promql.Sample{
-			Metric: lset,
-			Point:  promql.Point{T: int64(e.Timestamp), V: float64(e.Value)},
-		})
-	}
-
-	return vec, nil
 }
 
 type alertmanagerSet struct {

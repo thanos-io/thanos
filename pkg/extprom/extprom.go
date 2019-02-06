@@ -1,3 +1,5 @@
+// Package extprom is covering code that is used for extending native Prometheus packages functionality.
+
 package extprom
 
 import (

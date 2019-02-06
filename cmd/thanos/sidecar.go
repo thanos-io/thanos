@@ -2,13 +2,10 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"io/ioutil"
 	"math"
 	"net"
 	"net/http"
 	"net/url"
-	"path"
 	"sync"
 	"time"
 
@@ -17,6 +14,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
+	"github.com/improbable-eng/thanos/pkg/promclient"
 	"github.com/improbable-eng/thanos/pkg/reloader"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
@@ -29,7 +27,6 @@ import (
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
 	"gopkg.in/alecthomas/kingpin.v2"
-	"gopkg.in/yaml.v2"
 )
 
 func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name string) {
@@ -51,7 +48,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	reloaderRuleDirs := cmd.Flag("reloader.rule-dir", "Rule directories for the reloader to refresh (repeated field).").Strings()
 
-	objStoreConfig := regCommonObjStoreFlags(cmd, "")
+	objStoreConfig := regCommonObjStoreFlags(cmd, "", false)
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		rl := reloader.New(
@@ -225,32 +222,35 @@ func runSidecar(
 		})
 	}
 
-	var uploads = true
-
-	bucketConfig, err := objStoreConfig.Content()
+	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
 		return err
 	}
 
-	// The background shipper continuously scans the data directory and uploads
-	// new blocks to Google Cloud Storage or an S3-compatible storage service.
-	bkt, err := client.NewBucket(logger, bucketConfig, reg, component)
-	if err != nil && err != client.ErrNotFound {
-		return err
-	}
-
-	if err == client.ErrNotFound {
+	var uploads = true
+	if len(confContentYaml) == 0 {
 		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
 		uploads = false
 	}
 
 	if uploads {
+		// The background shipper continuously scans the data directory and uploads
+		// new blocks to Google Cloud Storage or an S3-compatible storage service.
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component)
+		if err != nil {
+			return err
+		}
+
 		// Ensure we close up everything properly.
 		defer func() {
 			if err != nil {
 				runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 			}
 		}()
+
+		if err := promclient.IsWALDirAccesible(dataDir); err != nil {
+			level.Error(logger).Log("err", err)
+		}
 
 		s := shipper.New(logger, nil, dataDir, bkt, m.Labels, metadata.SidecarSource)
 		ctx, cancel := context.WithCancel(context.Background())
@@ -291,7 +291,7 @@ type promMetadata struct {
 }
 
 func (s *promMetadata) UpdateLabels(ctx context.Context, logger log.Logger) error {
-	elset, err := queryExternalLabels(ctx, logger, s.promURL)
+	elset, err := promclient.ExternalLabels(ctx, logger, s.promURL)
 	if err != nil {
 		return err
 	}
@@ -337,46 +337,4 @@ func (s *promMetadata) Timestamps() (mint int64, maxt int64) {
 	defer s.mtx.Unlock()
 
 	return s.mint, s.maxt
-}
-
-func queryExternalLabels(ctx context.Context, logger log.Logger, base *url.URL) (labels.Labels, error) {
-	u := *base
-	u.Path = path.Join(u.Path, "/api/v1/status/config")
-
-	req, err := http.NewRequest("GET", u.String(), nil)
-	if err != nil {
-		return nil, errors.Wrap(err, "create request")
-	}
-	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
-	if err != nil {
-		return nil, errors.Wrapf(err, "request config against %s", u.String())
-	}
-	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
-
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, errors.Errorf("failed to read body")
-	}
-
-	if resp.StatusCode != 200 {
-		return nil, errors.Errorf("got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
-	}
-
-	var d struct {
-		Data struct {
-			YAML string `json:"yaml"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(b, &d); err != nil {
-		return nil, errors.Wrapf(err, "unmarshal response: %v", string(b))
-	}
-	var cfg struct {
-		Global struct {
-			ExternalLabels map[string]string `yaml:"external_labels"`
-		} `yaml:"global"`
-	}
-	if err := yaml.Unmarshal([]byte(d.Data.YAML), &cfg); err != nil {
-		return nil, errors.Wrapf(err, "parse Prometheus config: %v", d.Data.YAML)
-	}
-	return labels.FromMap(cfg.Global.ExternalLabels), nil
 }

@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"math"
 	"net/http"
+	"path"
 	"regexp"
 	"sort"
 
@@ -17,13 +18,16 @@ import (
 type Rule struct {
 	*BaseUI
 
+	flagsMap map[string]string
+
 	ruleManager *rules.Manager
 	queryURL    string
 }
 
-func NewRuleUI(logger log.Logger, ruleManager *rules.Manager, queryURL string) *Rule {
+func NewRuleUI(logger log.Logger, ruleManager *rules.Manager, queryURL string, flagsMap map[string]string) *Rule {
 	return &Rule{
 		BaseUI:      NewBaseUI(logger, "rule_menu.html", ruleTmplFuncs(queryURL)),
+		flagsMap:    flagsMap,
 		ruleManager: ruleManager,
 		queryURL:    queryURL,
 	}
@@ -104,20 +108,29 @@ func (ru *Rule) alerts(w http.ResponseWriter, r *http.Request) {
 			rules.StateFiring:   "danger",
 		},
 	}
-	ru.executeTemplate(w, "alerts.html", alertStatus)
+
+	prefix := GetWebPrefix(ru.logger, ru.flagsMap, r)
+
+	ru.executeTemplate(w, "alerts.html", prefix, alertStatus)
 }
 
 func (ru *Rule) rules(w http.ResponseWriter, r *http.Request) {
-	ru.executeTemplate(w, "rules.html", ru.ruleManager)
+	prefix := GetWebPrefix(ru.logger, ru.flagsMap, r)
+
+	ru.executeTemplate(w, "rules.html", prefix, ru.ruleManager)
+}
+
+// root redirects / requests to /graph, taking into account the path prefix value
+func (ru *Rule) root(w http.ResponseWriter, r *http.Request) {
+	prefix := GetWebPrefix(ru.logger, ru.flagsMap, r)
+
+	http.Redirect(w, r, path.Join(prefix, "/alerts"), http.StatusFound)
 }
 
 func (ru *Rule) Register(r *route.Router) {
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/alerts", http.StatusFound)
-	})
-
 	instrf := prometheus.InstrumentHandlerFunc
 
+	r.Get("/", instrf("root", ru.root))
 	r.Get("/alerts", instrf("alerts", ru.alerts))
 	r.Get("/rules", instrf("rules", ru.rules))
 

@@ -38,7 +38,7 @@ PROTOC_VERSION    ?= 3.4.0
 # Referenced by github.com/improbable-eng/thanos/blob/master/docs/getting_started.md#prometheus
 
 # Limitied prom version, because testing was not possibe. This should fix it: https://github.com/improbable-eng/thanos/issues/758
-SUPPORTED_PROM_VERSIONS ?=v2.4.3 v2.5.0
+PROM_VERSIONS ?=v2.4.3 v2.5.0
 ALERTMANAGER_VERSION    ?=v0.15.2
 MINIO_SERVER_VERSION    ?=RELEASE.2018-10-06T00-15-16Z
 
@@ -157,16 +157,14 @@ tarballs-release: $(PROMU)
 .PHONY: test
 test: test-deps
 	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS='true' or/and THANOS_SKIP_S3_AWS_TESTS='true' or/and THANOS_SKIP_AZURE_TESTS='true' and/or THANOS_SKIP_SWIFT_TESTS='true' and/or THANOS_SKIP_TENCENT_COS_TESTS='true' if you want to skip e2e tests against real store buckets"
-	@for ver in $(SUPPORTED_PROM_VERSIONS); do \
-		THANOS_TEST_PROMETHEUS_PATH="prometheus-$$ver" THANOS_TEST_ALERTMANAGER_PATH="alertmanager-$(ALERTMANAGER_VERSION)" go test $(shell go list ./... | grep -v /vendor/ | grep -v /benchmark/); \
-	done
+	THANOS_TEST_PROMETHEUS_VERSIONS="$(PROM_VERSIONS)" THANOS_TEST_ALERTMANAGER_PATH="alertmanager-$(ALERTMANAGER_VERSION)" go test $(shell go list ./... | grep -v /vendor/ | grep -v /benchmark/);
 
 # test-deps installs dependency for e2e tets.
 # It installs current Thanos, supported versions of Prometheus and alertmanager to test against in e2e.
 .PHONY: test-deps
 test-deps: deps
 	@go install github.com/improbable-eng/thanos/cmd/thanos
-	$(foreach ver,$(SUPPORTED_PROM_VERSIONS),$(call fetch_go_bin_version,github.com/prometheus/prometheus/cmd/prometheus,$(ver)))
+	$(foreach ver,$(PROM_VERSIONS),$(call fetch_go_bin_version,github.com/prometheus/prometheus/cmd/prometheus,$(ver)))
 	$(call fetch_go_bin_version,github.com/prometheus/alertmanager/cmd/alertmanager,$(ALERTMANAGER_VERSION))
 	$(call fetch_go_bin_version,github.com/minio/minio,$(MINIO_SERVER_VERSION))
 

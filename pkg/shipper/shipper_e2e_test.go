@@ -123,7 +123,7 @@ func TestShipper_UploadBlocks_e2e(t *testing.T) {
 		}
 
 		for id := range expBlocks {
-			ok, _ := bkt.Exists(nil, path.Join(id.String(), block.MetaFilename))
+			ok, _ := bkt.Exists(ctx, path.Join(id.String(), block.MetaFilename))
 			testutil.Assert(t, ok, "block %s was not uploaded", id)
 		}
 		for fn, exp := range expFiles {
