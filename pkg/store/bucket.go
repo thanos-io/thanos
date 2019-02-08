@@ -47,7 +47,7 @@ import (
 // where this number comes from. Long story short: TSDB is made in such a way, and it is made in such a way
 // because you barely get any improvements in compression when the number of samples is beyond this.
 // Take a look at Figure 6 in this whitepaper http://www.vldb.org/pvldb/vol8/p1816-teller.pdf.
-const maxSamplesPerSeriesRef uint64 = 120
+const maxSamplesPerChunk uint64 = 120
 
 type bucketStoreMetrics struct {
 	blocksLoaded          prometheus.Gauge
@@ -688,11 +688,15 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt int64, lset labels
 
 // Series implements the storepb.StoreServer interface.
 func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
-	err := s.queryGate.Start(srv.Context())
-	if err != nil {
-		return errors.Wrapf(err, "gate Start failed")
+	{
+		span, _ := tracing.StartSpan(srv.Context(), "bucket_store_gate")
+		err := s.queryGate.IsMyTurn(srv.Context())
+		span.Finish()
+		if err != nil {
+			return errors.Wrapf(err, "failed to wait for turn")
+		}
+		defer s.queryGate.Done()
 	}
-	defer s.queryGate.Done()
 
 	matchers, err := translateMatchers(req.Matchers)
 	if err != nil {
@@ -1562,7 +1566,13 @@ func (r *bucketChunkReader) preload(samplesLimiter *Limiter) error {
 
 	var g run.Group
 
-	numSamples := uint64(len(r.preloads)) * maxSamplesPerSeriesRef
+	numChunks := uint64(0)
+	for _, offsets := range r.preloads {
+		for range offsets {
+			numChunks++
+		}
+	}
+	numSamples := numChunks * maxSamplesPerChunk
 	if err := samplesLimiter.Check(numSamples); err != nil {
 		return err
 	}

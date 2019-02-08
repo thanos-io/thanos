@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/gate"
@@ -11,6 +12,7 @@ import (
 type Gate struct {
 	g              *gate.Gate
 	currentQueries prometheus.Gauge
+	gateTiming     prometheus.Summary
 }
 
 // NewGate returns a new gate.
@@ -22,18 +24,27 @@ func NewGate(maxConcurrent int, reg prometheus.Registerer) *Gate {
 		Name: "thanos_bucket_store_queries_total",
 		Help: "Total number of currently executing queries.",
 	})
+	g.gateTiming = prometheus.NewSummary(prometheus.SummaryOpts{
+		Name: "thanos_bucket_store_gate_seconds",
+		Help: "How many time it took for a query to pass through the gate.",
+	})
 
 	if reg != nil {
-		reg.MustRegister(g.currentQueries)
+		reg.MustRegister(g.currentQueries, g.gateTiming)
 	}
 
 	return g
 }
 
-// Start iniates a new query.
-func (g *Gate) Start(ctx context.Context) error {
+// IsMyTurn iniates a new query and wait untils its our turn to fulfill a query request.
+func (g *Gate) IsMyTurn(ctx context.Context) error {
 	g.currentQueries.Inc()
-	return g.g.Start(ctx)
+	start := time.Now()
+	if err := g.g.Start(ctx); err != nil {
+		return err
+	}
+	g.gateTiming.Observe(float64(time.Now().Sub(start)))
+	return nil
 }
 
 // Done finishes a query.
