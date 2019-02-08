@@ -231,6 +231,7 @@ func NewBucketStore(
 	if err != nil {
 		return nil, errors.Wrap(err, "create chunk pool")
 	}
+	metrics := newBucketStoreMetrics(reg)
 	s := &BucketStore{
 		logger:               logger,
 		bucket:               bucket,
@@ -242,9 +243,9 @@ func NewBucketStore(
 		debugLogging:         debugLogging,
 		blockSyncConcurrency: blockSyncConcurrency,
 		queryGate:            NewGate(maxConcurrent, reg),
-		samplesLimiter:       NewLimiter(maxSampleCount),
+		samplesLimiter:       NewLimiter(maxSampleCount, &metrics.queriesLimited),
 	}
-	s.metrics = newBucketStoreMetrics(reg)
+	s.metrics = metrics
 
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return nil, errors.Wrap(err, "create dir")
