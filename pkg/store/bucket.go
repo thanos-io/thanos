@@ -217,6 +217,11 @@ func NewBucketStore(
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
+
+	if maxConcurrent < 0 {
+		return nil, errors.Errorf("max concurrency value cannot be lower than 0 (got %v)", maxConcurrent)
+	}
+
 	indexCache, err := newIndexCache(reg, indexCacheSizeBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "create index cache")
