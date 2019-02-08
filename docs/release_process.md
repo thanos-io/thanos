@@ -29,19 +29,25 @@ Process of cutting a new *minor* Thanos release:
   
 1. After review, merge the PR and immediately after this tag a version:
   
-  ```bash
-  $ tag=$(< VERSION)
-  $ git tag -s "v${tag}" -m "v${tag}"
-  $ git push origin "v${tag}"
-  ```
+    ```bash
+    $ tag=$(< VERSION)
+    $ git tag -s "v${tag}" -m "v${tag}"
+    $ git push origin "v${tag}"
+    ```
  
-  Signing a tag with a GPG key is appreciated, but in case you can't add a GPG key to your Github account using the following [procedure](https://help.github.com/articles/generating-a-gpg-key/), you can replace the `-s` flag by `-a` flag of the `git tag` command to only annotate the tag without signing.
-  Once a tag is created, the release process through CircleCI will be triggered for this tag.
-  You must create a Github Release using the UI for this tag, as otherwise CircleCI will not be able to upload tarballs for this tag. Also, you must create the Github Release using a Github user that has granted access rights to CircleCI. List of maintainers is available [here](/MAINTAINERS.md)
-  Go to the releases page of the project, click on the `Draft a new release` button and select the tag you just pushed. Describe release and post relevant entry from changelog. Click `Save draft` rather than `Publish release` at this time. (This will prevent the release being visible before it has got the binaries attached to it.)
-  Once tarballs are published on release page, you can click `Publish` and release is complete. Announce `#thanos` slack channel.
+    Signing a tag with a GPG key is appreciated, but in case you can't add a GPG key to your Github account using the following [procedure](https://help.github.com/articles/generating-a-gpg-key/), you can replace the `-s` flag by `-a` flag of the `git tag` command to only annotate the tag without signing.
+ 
+ 1. Once a tag is created, the release process through CircleCI will be triggered for this tag.
   
-1. After release on second PR just after, add `-master` [VERSION file](/VERSION) suffix to the end of version. This will ensure master built images will have different version then released one.
+ 1. You must create a Github Release using the UI for this tag, as otherwise CircleCI will not be able to upload tarballs for this tag. Also, you must create the Github Release using a Github user that has granted access rights to CircleCI. List of maintainers is available [here](/MAINTAINERS.md)
+  
+ 1. Go to the releases page of the project, click on the `Draft a new release` button and select the tag you just pushed. Describe release and post relevant entry from changelog. Click `Save draft` rather than `Publish release` at this time. (This will prevent the release being visible before it has got the binaries attached to it.)
+  
+ 1. Once tarballs are published on release page, you can click `Publish` and release is complete. 
+  
+ 1. Announce `#thanos` slack channel.
+  
+1. After release create a second PR adding `-master` [VERSION file](/VERSION) suffix to the end of version. This will ensure master built images will have different version then released one.
 
 ## Branch management and versioning strategy
 
