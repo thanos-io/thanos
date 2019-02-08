@@ -227,6 +227,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		testutil.Ok(t, s.store.Series(&storepb.SeriesRequest{
 			Matchers: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+				{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "1"},
 			},
 			MinTime: mint,
 			MaxTime: maxt,
