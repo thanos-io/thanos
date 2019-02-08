@@ -50,7 +50,6 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	cmd := app.Command(name, "Bucket utility commands")
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
-
 	registerBucketVerify(m, cmd, name, objStoreConfig)
 	registerBucketLs(m, cmd, name, objStoreConfig)
 	registerBucketInspect(m, cmd, name, objStoreConfig)

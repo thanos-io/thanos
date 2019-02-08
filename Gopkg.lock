@@ -529,6 +529,7 @@
     "fileutil",
     "index",
     "labels",
+    "testutil",
     "wal",
   ]
   pruneopts = ""
@@ -859,6 +860,7 @@
     "github.com/prometheus/tsdb/fileutil",
     "github.com/prometheus/tsdb/index",
     "github.com/prometheus/tsdb/labels",
+    "github.com/prometheus/tsdb/testutil",
     "golang.org/x/net/context",
     "golang.org/x/sync/errgroup",
     "golang.org/x/text/language",
