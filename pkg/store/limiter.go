@@ -18,7 +18,7 @@ func (l *Limiter) Check(num uint64) error {
 		return nil
 	}
 	if num > l.limit {
-		return errors.Errorf("limit %v violated", l.limit)
+		return errors.Errorf("limit %v violated (got %v)", l.limit, num)
 	}
 	return nil
 }
