@@ -26,7 +26,7 @@ func NewGate(maxConcurrent int, reg prometheus.Registerer) *Gate {
 	})
 	g.gateTiming = prometheus.NewSummary(prometheus.SummaryOpts{
 		Name: "thanos_bucket_store_gate_seconds",
-		Help: "How many time it took for a query to pass through the gate.",
+		Help: "How many seconds it took for a query to pass through the gate.",
 	})
 
 	if reg != nil {
