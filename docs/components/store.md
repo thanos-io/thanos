@@ -106,7 +106,9 @@ Flags:
                                  for chunks.
       --grpc-sample-limit=50000000  
                                  Maximum amount of samples returned via a single
-                                 Series call. 0 means no limit.
+                                 Series call. 0 means no limit. NOTE: may
+                                 unlikely underestimate the number of samples
+                                 that would be needed to download.
       --grpc-concurrent-limit=20  
                                  Maximum number of concurrent Series calls. 0
                                  means no limit.
