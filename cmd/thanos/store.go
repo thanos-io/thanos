@@ -36,7 +36,8 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes for chunks.").
 		Default("2GB").Bytes()
 
-	maxSampleCount := cmd.Flag("grpc-sample-limit", "Maximum amount of samples returned via a single Series call. 0 means no limit.").
+	maxSampleCount := cmd.Flag("grpc-sample-limit",
+		"Maximum amount of samples returned via a single Series call. 0 means no limit. NOTE: may unlikely underestimate the number of samples that would be needed to download.").
 		Default("50000000").Uint()
 
 	maxConcurrent := cmd.Flag("grpc-concurrent-limit", "Maximum number of concurrent Series calls. 0 means no limit.").Default("20").Int()
