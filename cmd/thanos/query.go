@@ -12,15 +12,15 @@ import (
 	"path"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/extprom"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/discovery/cache"
 	"github.com/improbable-eng/thanos/pkg/discovery/dns"
+	"github.com/improbable-eng/thanos/pkg/extprom"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/query/api"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -306,7 +306,7 @@ func runQuery(
 		)
 		proxy = store.NewProxyStore(logger, func(context.Context) ([]store.Client, error) {
 			return stores.Get(), nil
-		}, selectorLset)
+		}, component.Query, selectorLset)
 		queryableCreator = query.NewQueryableCreator(logger, proxy, replicaLabel)
 		engine           = promql.NewEngine(
 			promql.EngineOpts{
@@ -446,7 +446,7 @@ func runQuery(
 		if err != nil {
 			return errors.Wrapf(err, "listen gRPC on address")
 		}
-		logger := log.With(logger, "component", "query")
+		logger := log.With(logger, "component", component.Query.String())
 
 		opts, err := defaultGRPCServerOpts(logger, reg, tracer, srvCert, srvKey, srvClientCA)
 		if err != nil {

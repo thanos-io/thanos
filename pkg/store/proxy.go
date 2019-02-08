@@ -2,15 +2,15 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math"
 	"strings"
 	"sync"
 
-	"fmt"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/strutil"
 	"github.com/pkg/errors"
@@ -38,6 +38,7 @@ type Client interface {
 type ProxyStore struct {
 	logger         log.Logger
 	stores         func(context.Context) ([]Client, error)
+	component      component.StoreAPI
 	selectorLabels labels.Labels
 }
 
@@ -46,6 +47,7 @@ type ProxyStore struct {
 func NewProxyStore(
 	logger log.Logger,
 	stores func(context.Context) ([]Client, error),
+	component component.StoreAPI,
 	selectorLabels labels.Labels,
 ) *ProxyStore {
 	if logger == nil {
@@ -54,6 +56,7 @@ func NewProxyStore(
 	s := &ProxyStore{
 		logger:         logger,
 		stores:         stores,
+		component:      component,
 		selectorLabels: selectorLabels,
 	}
 	return s
@@ -62,9 +65,10 @@ func NewProxyStore(
 // Info returns store information about the external labels this store have.
 func (s *ProxyStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	res := &storepb.InfoResponse{
-		MinTime: 0,
-		MaxTime: math.MaxInt64,
-		Labels:  make([]storepb.Label, 0, len(s.selectorLabels)),
+		Labels:    make([]storepb.Label, 0, len(s.selectorLabels)),
+		StoreType: s.component.ToProto(),
+		MinTime:   0,
+		MaxTime:   math.MaxInt64,
 	}
 	for _, l := range s.selectorLabels {
 		res.Labels = append(res.Labels, storepb.Label{

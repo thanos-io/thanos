@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"github.com/improbable-eng/thanos/pkg/component"
 	"os"
 	"path"
 	"path/filepath"
@@ -35,7 +36,7 @@ func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name s
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
-		return runDownsample(g, logger, reg, *dataDir, objStoreConfig, name)
+		return runDownsample(g, logger, reg, *dataDir, objStoreConfig)
 	}
 }
 
@@ -45,14 +46,13 @@ func runDownsample(
 	reg *prometheus.Registry,
 	dataDir string,
 	objStoreConfig *pathOrContent,
-	component string,
 ) error {
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
 		return err
 	}
 
-	bkt, err := client.NewBucket(logger, confContentYaml, reg, component)
+	bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Downsample.String())
 	if err != nil {
 		return err
 	}
@@ -173,7 +173,7 @@ func downsampleBucket(
 				continue
 			}
 			if err := processDownsampling(ctx, logger, bkt, m, dir, 5*60*1000); err != nil {
-				return err
+				return errors.Wrap(err, "downsampling to 5 min")
 			}
 
 		case 5 * 60 * 1000:
@@ -194,7 +194,7 @@ func downsampleBucket(
 				continue
 			}
 			if err := processDownsampling(ctx, logger, bkt, m, dir, 60*60*1000); err != nil {
-				return err
+				return errors.Wrap(err, "downsampling to 60 min")
 			}
 		}
 	}

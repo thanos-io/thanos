@@ -23,6 +23,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/alert"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/discovery/cache"
 	"github.com/improbable-eng/thanos/pkg/discovery/dns"
 	"github.com/improbable-eng/thanos/pkg/extprom"
@@ -38,6 +39,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
@@ -138,6 +140,10 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			fileSD = file.NewDiscovery(conf, logger)
 		}
 
+		if len(*queries) < 1 && peer.Name() == "no gossip" && fileSD == nil {
+			return errors.Errorf("Gossip is disabled and no --query parameter was given.")
+		}
+
 		return runRule(g,
 			logger,
 			reg,
@@ -159,7 +165,6 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			peer,
 			objStoreConfig,
 			tsdbOpts,
-			name,
 			alertQueryURL,
 			*alertExcludeLabels,
 			*queries,
@@ -193,7 +198,6 @@ func runRule(
 	peer cluster.Peer,
 	objStoreConfig *pathOrContent,
 	tsdbOpts *tsdb.Options,
-	component string,
 	alertQueryURL *url.URL,
 	alertExcludeLabels []string,
 	queryAddrs []string,
@@ -520,9 +524,9 @@ func runRule(
 		if err != nil {
 			return errors.Wrap(err, "listen API address")
 		}
-		logger := log.With(logger, "component", "store")
+		logger := log.With(logger, "component", component.Rule.String())
 
-		store := store.NewTSDBStore(logger, reg, db, lset)
+		store := store.NewTSDBStore(logger, reg, db, component.Rule, lset)
 
 		opts, err := defaultGRPCServerOpts(logger, reg, tracer, cert, key, clientCA)
 		if err != nil {
@@ -593,7 +597,7 @@ func runRule(
 	if uploads {
 		// The background shipper continuously scans the data directory and uploads
 		// new blocks to Google Cloud Storage or an S3-compatible storage service.
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component)
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Rule.String())
 		if err != nil {
 			return err
 		}
@@ -713,6 +717,9 @@ func parseFlagLabels(s []string) (labels.Labels, error) {
 		parts := strings.SplitN(l, "=", 2)
 		if len(parts) != 2 {
 			return nil, errors.Errorf("unrecognized label %q", l)
+		}
+		if !model.LabelName.IsValid(model.LabelName(string(parts[0]))) {
+			return nil, errors.Errorf("unsupported format for label %s", l)
 		}
 		val, err := strconv.Unquote(parts[1])
 		if err != nil {

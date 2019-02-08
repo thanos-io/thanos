@@ -13,6 +13,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/promclient"
 	"github.com/improbable-eng/thanos/pkg/reloader"
@@ -77,7 +78,6 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			objStoreConfig,
 			peer,
 			rl,
-			name,
 		)
 	}
 }
@@ -97,7 +97,6 @@ func runSidecar(
 	objStoreConfig *pathOrContent,
 	peer cluster.Peer,
 	reloader *reloader.Reloader,
-	component string,
 ) error {
 	var m = &promMetadata{
 		promURL: promURL,
@@ -196,12 +195,12 @@ func runSidecar(
 		if err != nil {
 			return errors.Wrap(err, "listen API address")
 		}
-		logger := log.With(logger, "component", "sidecar")
+		logger := log.With(logger, "component", component.Sidecar.String())
 
 		var client http.Client
 
 		promStore, err := store.NewPrometheusStore(
-			logger, &client, promURL, m.Labels, m.Timestamps)
+			logger, &client, promURL, component.Sidecar, m.Labels, m.Timestamps)
 		if err != nil {
 			return errors.Wrap(err, "create Prometheus store")
 		}
@@ -236,7 +235,7 @@ func runSidecar(
 	if uploads {
 		// The background shipper continuously scans the data directory and uploads
 		// new blocks to Google Cloud Storage or an S3-compatible storage service.
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component)
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Sidecar.String())
 		if err != nil {
 			return err
 		}

@@ -35,10 +35,19 @@ service Store {
 message InfoRequest {
 }
 
+enum StoreType {
+  UNKNOWN = 0;
+  QUERY = 1;
+  RULE = 2;
+  SIDECAR = 3;
+  STORE = 4;
+}
+
 message InfoResponse {
   repeated Label labels = 1 [(gogoproto.nullable) = false];
   int64 min_time        = 2;
   int64 max_time        = 3;
+  StoreType storeType   = 4;
 }
 
 message SeriesRequest {
