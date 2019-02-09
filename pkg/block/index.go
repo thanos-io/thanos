@@ -345,13 +345,12 @@ func GatherIndexIssueStats(logger log.Logger, fn string, minTime int64, maxTime 
 		if lastLset != nil && labels.Compare(lastLset, lset) >= 0 {
 			return stats, errors.Errorf("series %v out of order; previous %v", lset, lastLset)
 		}
-		l0 := lset[0]
-		for _, l := range lset[1:] {
-			if l.Name <= l0.Name {
-				return stats, errors.Errorf("out-of-order label set %s for series %d", lset, id)
-			}
-			l0 = l
+
+		// Ensure all but the first value (__name__) are sorted
+		if !sort.SliceIsSorted(lset[1:], func(i, j int) bool { return lset[i+1].Name <= lset[j+1].Name }) {
+			return stats, errors.Errorf("out-of-order label set %s for series %d", lset, id)
 		}
+
 		if len(chks) == 0 {
 			return stats, errors.Errorf("empty chunks for series %d", id)
 		}
