@@ -36,7 +36,7 @@ func NewGate(maxConcurrent int, reg prometheus.Registerer) *Gate {
 	return g
 }
 
-// IsMyTurn iniates a new query and wait until it's our turn to fulfill a query request.
+// IsMyTurn iniates a new query and waits until it's our turn to fulfill a query request.
 func (g *Gate) IsMyTurn(ctx context.Context) error {
 	g.currentQueries.Inc()
 	start := time.Now()
