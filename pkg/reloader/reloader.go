@@ -207,20 +207,10 @@ func (r *Reloader) apply(ctx context.Context) error {
 
 	h := sha256.New()
 	for _, ruleDir := range r.ruleDirs {
-		walkDir := ruleDir
-		// check if ruleDir is a symlink
-		ruleDirInfo, err := os.Lstat(ruleDir)
+		walkDir, err := filepath.EvalSymlinks(ruleDir)
 		if err != nil {
-			return errors.Wrap(err, "rules stat")
+			return errors.Wrap(err, "ruleDir symlink eval")
 		}
-		if ruleDirInfo.Mode()&os.ModeSymlink != 0 {
-			// symlink resolution is necessary.
-			walkDir, err = os.Readlink(ruleDir)
-			if err != nil {
-				return errors.Wrap(err, "rules symlink resolution")
-			}
-		}
-
 		err = filepath.Walk(walkDir, func(path string, f os.FileInfo, err error) error {
 			if err != nil {
 				return err
