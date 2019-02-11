@@ -470,7 +470,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:f477ef7b65d94fb17574fc6548cef0c99a69c1634ea3b6da248b63a61ebe0498"
+  digest = "1:d5d5ba67ed9d51b0c567ddd2ce0ba7a173910cfe777705cc6efeb379ca4bac4a"
   name = "github.com/prometheus/common"
   packages = [
     "expfmt",
@@ -480,7 +480,7 @@
     "version",
   ]
   pruneopts = ""
-  revision = "c7de2306084e37d54b8be01f3541a8464345e9a5"
+  revision = "f866ba39776a736ba5d34760f5fae4ad74e63f2e"
 
 [[projects]]
   branch = "master"
