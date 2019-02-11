@@ -129,14 +129,6 @@
   version = "v1.4.7"
 
 [[projects]]
-  digest = "1:cd5bab9c9e23ffa6858eaa79dc827fd84bc24bc00b0cfb0b14036e393da2b1fa"
-  name = "github.com/go-ini/ini"
-  packages = ["."]
-  pruneopts = ""
-  revision = "5cf292cae48347c2490ac1a58fe36735fb78df7e"
-  version = "v1.38.2"
-
-[[projects]]
   digest = "1:48e65aaf8ce34ffb3e8d56daa9417826db162afbc2040705db331e9a2e9eebe3"
   name = "github.com/go-kit/kit"
   packages = [
@@ -355,7 +347,7 @@
   version = "v1.0.8"
 
 [[projects]]
-  digest = "1:619ff8becfc8080f2cc4532ea21437e804038e0431c88e171c381fde96eb06ae"
+  digest = "1:6b05e059f435ef38115ab2a36d0a0b5835e76cd6f28d3155f502b197549585b9"
   name = "github.com/minio/minio-go"
   packages = [
     ".",
@@ -366,8 +358,8 @@
     "pkg/set",
   ]
   pruneopts = ""
-  revision = "70799fe8dae6ecfb6c7d7e9e048fce27f23a1992"
-  version = "v6.0.5"
+  revision = "c8a261de75c1a9a9ece4dcc0c81ff6db525bcf27"
+  version = "v6.0.16"
 
 [[projects]]
   digest = "1:096a8a9182648da3d00ff243b88407838902b6703fc12657f76890e08d1899bf"
@@ -607,6 +599,7 @@
     "internal/timeseries",
     "ipv4",
     "ipv6",
+    "publicsuffix",
     "trace",
   ]
   pruneopts = ""
@@ -787,6 +780,14 @@
   pruneopts = ""
   revision = "c2828203cd70a50dcccfb2761f8b1f8ceef9a8e9"
   version = "v1.4.7"
+
+[[projects]]
+  digest = "1:ed30e45cd59986b6f98b4d191157a54050f5dd550e2cec47ad032b6230e4af08"
+  name = "gopkg.in/ini.v1"
+  packages = ["."]
+  pruneopts = ""
+  revision = "6ed8d5f64cd79a498d1f3fab5880cc376ce41bbe"
+  version = "v1.41.0"
 
 [[projects]]
   branch = "v2"
