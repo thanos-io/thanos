@@ -1369,7 +1369,7 @@ func (r *bucketIndexReader) PreloadSeries(ids []uint64) error {
 		i, j := p.elemRng[0], p.elemRng[1]
 
 		g.Add(func() error {
-			return r.loadSeries(ctx, ids[i:j], p.start, p.end+maxSeriesSize)
+			return r.loadSeries(ctx, ids[i:j], ids[i], ids[j-1]+maxSeriesSize)
 		}, func(err error) {
 			if err != nil {
 				cancel()
@@ -1541,7 +1541,7 @@ func (r *bucketChunkReader) preload() error {
 			m, n := p.elemRng[0], p.elemRng[1]
 
 			g.Add(func() error {
-				return r.loadChunks(ctx, offsets[m:n], seq, uint32(p.start), uint32(p.end)+maxChunkSize)
+				return r.loadChunks(ctx, offsets[m:n], seq, offsets[m], offsets[n-1]+maxChunkSize)
 			}, func(err error) {
 				if err != nil {
 					cancel()
