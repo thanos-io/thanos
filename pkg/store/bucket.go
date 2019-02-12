@@ -1366,10 +1366,11 @@ func (r *bucketIndexReader) PreloadSeries(ids []uint64) error {
 
 	for _, p := range parts {
 		ctx, cancel := context.WithCancel(r.ctx)
+		s, e := p.start, p.end
 		i, j := p.elemRng[0], p.elemRng[1]
 
 		g.Add(func() error {
-			return r.loadSeries(ctx, ids[i:j], p.start, p.end)
+			return r.loadSeries(ctx, ids[i:j], s, e+maxSeriesSize)
 		}, func(err error) {
 			if err != nil {
 				cancel()
@@ -1538,10 +1539,11 @@ func (r *bucketChunkReader) preload() error {
 
 		for _, p := range parts {
 			ctx, cancel := context.WithCancel(r.ctx)
+			s, e := uint32(p.start), uint32(p.end)
 			m, n := p.elemRng[0], p.elemRng[1]
 
 			g.Add(func() error {
-				return r.loadChunks(ctx, offsets[m:n], seq, uint32(p.start), uint32(p.end))
+				return r.loadChunks(ctx, offsets[m:n], seq, s, e+maxChunkSize)
 			}, func(err error) {
 				if err != nil {
 					cancel()
@@ -1559,11 +1561,11 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, offs []uint32, seq i
 	if err != nil {
 		return errors.Wrapf(err, "read range for %d", seq)
 	}
-	r.chunkBytes = append(r.chunkBytes, b)
 
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
 
+	r.chunkBytes = append(r.chunkBytes, b)
 	r.stats.chunksFetchCount++
 	r.stats.chunksFetched += len(offs)
 	r.stats.chunksFetchDurationSum += time.Since(begin)
