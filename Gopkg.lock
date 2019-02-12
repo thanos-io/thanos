@@ -19,14 +19,6 @@
   version = "v0.35.1"
 
 [[projects]]
-  digest = "1:5f61d4466cef935862c262f6bc00e24beb5b39b551e906f3cfb180dfac096d57"
-  name = "contrib.go.opencensus.io/exporter/stackdriver"
-  packages = ["propagation"]
-  pruneopts = ""
-  revision = "2b93072101d466aa4120b3c23c2e1b08af01541c"
-  version = "v0.6.0"
-
-[[projects]]
   digest = "1:6f302284bb48712a01cdcd3216e8bbb293d1edb618f55b5fe7f92521cce930c7"
   name = "github.com/Azure/azure-pipeline-go"
   packages = ["pipeline"]
@@ -675,7 +667,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:b733c0bc39e94f61e47a81faffa8eac9668b161ab97d082d823a79dcc847f88c"
+  digest = "1:5010c29f8a95ed7d2264fad24d988e59a3df6aa1ecc9b669ef19451ff8215bff"
   name = "google.golang.org/api"
   packages = [
     "gensupport",
@@ -690,9 +682,10 @@
     "transport",
     "transport/grpc",
     "transport/http",
+    "transport/http/internal/propagation",
   ]
   pruneopts = ""
-  revision = "0ad5a633fea1d4b64bf5e6a01e30d1fc466038e5"
+  revision = "77d02fa16783d31ba92e59fc0a888a45635f433e"
 
 [[projects]]
   digest = "1:c1771ca6060335f9768dff6558108bc5ef6c58506821ad43377ee23ff059e472"
