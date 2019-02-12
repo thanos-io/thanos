@@ -207,7 +207,11 @@ func (r *Reloader) apply(ctx context.Context) error {
 
 	h := sha256.New()
 	for _, ruleDir := range r.ruleDirs {
-		err := filepath.Walk(ruleDir, func(path string, f os.FileInfo, err error) error {
+		walkDir, err := filepath.EvalSymlinks(ruleDir)
+		if err != nil {
+			return errors.Wrap(err, "ruleDir symlink eval")
+		}
+		err = filepath.Walk(walkDir, func(path string, f os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
