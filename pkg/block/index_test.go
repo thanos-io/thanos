@@ -52,22 +52,20 @@ func TestWriteReadIndexCache(t *testing.T) {
 func TestGatherIndexIssueStats(t *testing.T) {
 	tmpDir, err := ioutil.TempDir("", "test-gather-stats")
 	testutil.Ok(t, err)
-	// Cleans up all temp files
+	// Cleans up all temp files.
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
-	l := log.NewNopLogger()
-
-	// Non existent file
-	_, err = GatherIndexIssueStats(l, "", 0, 0)
+	// Non existent file.
+	_, err = GatherIndexIssueStats(log.NewNopLogger(), "", 0, 0)
 	testutil.NotOk(t, err)
 
-	// Real but empty file
+	// Real but empty file.
 	tmpfile, err := ioutil.TempFile(tmpDir, "empty-file")
 	testutil.Ok(t, err)
-	_, err = GatherIndexIssueStats(l, tmpfile.Name(), 0, 0)
+	_, err = GatherIndexIssueStats(log.NewNopLogger(), tmpfile.Name(), 0, 0)
 	testutil.NotOk(t, err)
 
-	// Working test cases
+	// Working test cases.
 	testCases := []struct {
 		name       string
 		lsets      []labels.Labels
@@ -149,7 +147,7 @@ func TestGatherIndexIssueStats(t *testing.T) {
 
 			testutil.Ok(t, writeTestIndex(tmpfile.Name(), tc.startTime, tc.numSamples, tc.lsets...))
 
-			stats, err := GatherIndexIssueStats(l, tmpfile.Name(), tc.startTime, tc.endTime)
+			stats, err := GatherIndexIssueStats(log.NewNopLogger(), tmpfile.Name(), tc.startTime, tc.endTime)
 
 			testutil.Ok(t, err)
 			// == works for now since the struct is only ints (no pointers or nested values)
@@ -157,7 +155,50 @@ func TestGatherIndexIssueStats(t *testing.T) {
 				"index stats did not have an expected value. \nExpected: %+v \nActual:   %+v", tc.expected, stats)
 		})
 	}
+}
 
+func TestGatherIndexIssueStatsBadLabelSet(t *testing.T) {
+	tmpDir, err := ioutil.TempDir("", "test-gather-stats")
+	testutil.Ok(t, err)
+	// Cleans up all temp files.
+	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
+
+	// All of these label sets should produce an error.
+	testCases := []struct {
+		name  string
+		lsets []labels.Labels
+	}{
+		{
+			name: "no __name__ label",
+			lsets: []labels.Labels{
+				{
+					{Name: "no_name", Value: "we're missing __name__"},
+				},
+			},
+		},
+		{
+			// Should be illegal according to https://github.com/prometheus/tsdb/issues/32#issuecomment-292771463
+			name: "capital letter before name label",
+			lsets: []labels.Labels{
+				{
+					{Name: "ABC", Value: "onetwothree"},
+					{Name: "__name__", Value: "metric_name"},
+				},
+			},
+		},
+	}
+
+	for caseNum, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpfile, err := ioutil.TempFile(tmpDir, fmt.Sprintf("test-case-%d", caseNum))
+			testutil.Ok(t, err)
+
+			testutil.Ok(t, writeTestIndex(tmpfile.Name(), 0, 0, tc.lsets...))
+
+			_, err = GatherIndexIssueStats(log.NewNopLogger(), tmpfile.Name(), 0, 0)
+			testutil.NotOk(t, err)
+		})
+	}
 }
 
 // writeTestIndex is a helper function that creates an index file with dummy data for testing

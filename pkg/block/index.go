@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/common/model"
+
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
 
 	"github.com/prometheus/tsdb/fileutil"
@@ -346,7 +348,12 @@ func GatherIndexIssueStats(logger log.Logger, fn string, minTime int64, maxTime 
 			return stats, errors.Errorf("series %v out of order; previous %v", lset, lastLset)
 		}
 
-		// Ensure all but the first value (__name__) are sorted
+		// Ensure that __name__ comes first.
+		if lset[0].Name != model.MetricNameLabel {
+			return stats, errors.Errorf("label set %s does not start with %s for series %d", lset, model.MetricNameLabel, id)
+		}
+
+		// Ensure all but the first value (__name__) are sorted.
 		if !sort.SliceIsSorted(lset[1:], func(i, j int) bool { return lset[i+1].Name <= lset[j+1].Name }) {
 			return stats, errors.Errorf("out-of-order label set %s for series %d", lset, id)
 		}
