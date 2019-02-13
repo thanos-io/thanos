@@ -1291,7 +1291,7 @@ func (r *bucketIndexReader) fetchPostings(keys labels.Labels) (index.Postings, e
 
 	// TODO(bwplotka): Asses how large in worst case scenario this can be. (e.g fetch for AllPostingsKeys)
 	// Consider sub split if too big.
-	parts := r.block.partitioner.Ranges(len(ptrs), func(i int) (start, end uint64) {
+	parts := r.block.partitioner.Partition(len(ptrs), func(i int) (start, end uint64) {
 		return uint64(ptrs[i].ptr.Start), uint64(ptrs[i].ptr.End)
 	})
 
@@ -1367,7 +1367,7 @@ func (r *bucketIndexReader) PreloadSeries(ids []uint64) error {
 	}
 	ids = newIDs
 
-	parts := r.block.partitioner.Ranges(len(ids), func(i int) (start, end uint64) {
+	parts := r.block.partitioner.Partition(len(ids), func(i int) (start, end uint64) {
 		return ids[i], ids[i] + maxSeriesSize
 	})
 	var g run.Group
@@ -1429,21 +1429,21 @@ type part struct {
 }
 
 type partitioner interface {
-	// Ranges partitions length entries into n <= length ranges that cover all
+	// Partition partitions length entries into n <= length ranges that cover all
 	// input ranges
 	// It supports overlapping ranges.
 	// NOTE: It expects range to be sorted by start time.
-	Ranges(length int, rng func(int) (uint64, uint64)) []part
+	Partition(length int, rng func(int) (uint64, uint64)) []part
 }
 
 type gapBasedPartitioner struct {
 	maxGapSize uint64
 }
 
-// Ranges partitions length entries into n <= length ranges that cover all
+// Partition partitions length entries into n <= length ranges that cover all
 // input ranges by combining entries that are separated by reasonably small gaps.
 // It is used to combine multiple small ranges from object storage into bigger, more efficient/cheaper ones.
-func (g gapBasedPartitioner) Ranges(length int, rng func(int) (uint64, uint64)) (parts []part) {
+func (g gapBasedPartitioner) Partition(length int, rng func(int) (uint64, uint64)) (parts []part) {
 	j := 0
 	k := 0
 	for k < length {
@@ -1547,7 +1547,7 @@ func (r *bucketChunkReader) preload() error {
 		sort.Slice(offsets, func(i, j int) bool {
 			return offsets[i] < offsets[j]
 		})
-		parts := r.block.partitioner.Ranges(len(offsets), func(i int) (start, end uint64) {
+		parts := r.block.partitioner.Partition(len(offsets), func(i int) (start, end uint64) {
 			return uint64(offsets[i]), uint64(offsets[i]) + maxChunkSize
 		})
 
