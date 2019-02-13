@@ -237,7 +237,7 @@ thanos store \
 
 The store gateway occupies small amounts of disk space for caching basic information about data in the object storage. This will rarely exceed more than a few gigabytes and is used to improve restart times. It is not useful but not required to preserve it across restarts.
 
-* _[Example Kubernetes manifest](../tutorials/kubernetes-demo/manifests/thanos-gateway.yaml)_
+* _[Example Kubernetes manifest](../tutorials/kubernetes-demo/manifests/thanos-store-gateway.yaml)_
 
 ## [Compactor](components/compact.md)
 
