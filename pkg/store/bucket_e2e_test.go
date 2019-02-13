@@ -182,7 +182,6 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 			},
 		},
 		{
-			// Matching by external label should work as well.
 			req: &storepb.SeriesRequest{
 				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
