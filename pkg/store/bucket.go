@@ -172,6 +172,8 @@ type BucketStore struct {
 	debugLogging bool
 	// Number of goroutines to use when syncing blocks from object storage.
 	blockSyncConcurrency int
+
+	partitioner partitioner
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -197,6 +199,9 @@ func NewBucketStore(
 	if err != nil {
 		return nil, errors.Wrap(err, "create chunk pool")
 	}
+
+	const maxGapSize = 512 * 1024
+
 	s := &BucketStore{
 		logger:               logger,
 		bucket:               bucket,
@@ -207,6 +212,7 @@ func NewBucketStore(
 		blockSets:            map[uint64]*bucketBlockSet{},
 		debugLogging:         debugLogging,
 		blockSyncConcurrency: blockSyncConcurrency,
+		partitioner:          gapBasedPartitioner{maxGapSize: maxGapSize},
 	}
 	s.metrics = newBucketStoreMetrics(reg)
 
@@ -353,6 +359,7 @@ func (s *BucketStore) addBlock(ctx context.Context, id ulid.ULID) (err error) {
 		dir,
 		s.indexCache,
 		s.chunkPool,
+		s.partitioner,
 	)
 	if err != nil {
 		return errors.Wrap(err, "new bucket block")
@@ -981,6 +988,8 @@ type bucketBlock struct {
 	chunkObjs []string
 
 	pendingReaders sync.WaitGroup
+
+	partitioner partitioner
 }
 
 func newBucketBlock(
@@ -991,14 +1000,16 @@ func newBucketBlock(
 	dir string,
 	indexCache *indexCache,
 	chunkPool *pool.BytesPool,
+	p partitioner,
 ) (b *bucketBlock, err error) {
 	b = &bucketBlock{
-		logger:     logger,
-		bucket:     bkt,
-		indexObj:   path.Join(id.String(), block.IndexFilename),
-		indexCache: indexCache,
-		chunkPool:  chunkPool,
-		dir:        dir,
+		logger:      logger,
+		bucket:      bkt,
+		indexObj:    path.Join(id.String(), block.IndexFilename),
+		indexCache:  indexCache,
+		chunkPool:   chunkPool,
+		dir:         dir,
+		partitioner: p,
 	}
 	if err = b.loadMeta(ctx, id); err != nil {
 		return nil, errors.Wrap(err, "load meta")
@@ -1243,8 +1254,6 @@ type postingPtr struct {
 
 // fetchPostings returns sorted slice of postings that match the selected labels.
 func (r *bucketIndexReader) fetchPostings(keys labels.Labels) (index.Postings, error) {
-	const maxGapSize = 512 * 1024
-
 	var (
 		ptrs     []postingPtr
 		postings = make([]index.Postings, 0, len(keys))
@@ -1282,9 +1291,9 @@ func (r *bucketIndexReader) fetchPostings(keys labels.Labels) (index.Postings, e
 
 	// TODO(bwplotka): Asses how large in worst case scenario this can be. (e.g fetch for AllPostingsKeys)
 	// Consider sub split if too big.
-	parts := partitionRanges(len(ptrs), func(i int) (start, end uint64) {
+	parts := r.block.partitioner.Ranges(len(ptrs), func(i int) (start, end uint64) {
 		return uint64(ptrs[i].ptr.Start), uint64(ptrs[i].ptr.End)
-	}, maxGapSize)
+	})
 
 	var g run.Group
 	for _, p := range parts {
@@ -1346,7 +1355,6 @@ func (r *bucketIndexReader) fetchPostings(keys labels.Labels) (index.Postings, e
 
 func (r *bucketIndexReader) PreloadSeries(ids []uint64) error {
 	const maxSeriesSize = 64 * 1024
-	const maxGapSize = 512 * 1024
 
 	var newIDs []uint64
 
@@ -1359,9 +1367,9 @@ func (r *bucketIndexReader) PreloadSeries(ids []uint64) error {
 	}
 	ids = newIDs
 
-	parts := partitionRanges(len(ids), func(i int) (start, end uint64) {
+	parts := r.block.partitioner.Ranges(len(ids), func(i int) (start, end uint64) {
 		return ids[i], ids[i] + maxSeriesSize
-	}, maxGapSize)
+	})
 	var g run.Group
 
 	for _, p := range parts {
@@ -1420,12 +1428,22 @@ type part struct {
 	elemRng [2]int
 }
 
-// partitionRanges partitions length entries into n <= length ranges that cover all
-// input ranges.
-// It combines entries that are separated by reasonably small gaps.
-// It supports overlapping ranges.
-// NOTE: It expects range to be sorted by start time.
-func partitionRanges(length int, rng func(int) (uint64, uint64), maxGapSize uint64) (parts []part) {
+type partitioner interface {
+	// Ranges partitions length entries into n <= length ranges that cover all
+	// input ranges
+	// It supports overlapping ranges.
+	// NOTE: It expects range to be sorted by start time.
+	Ranges(length int, rng func(int) (uint64, uint64)) []part
+}
+
+type gapBasedPartitioner struct {
+	maxGapSize uint64
+}
+
+// Ranges partitions length entries into n <= length ranges that cover all
+// input ranges by combining entries that are separated by reasonably small gaps.
+// It is used to combine multiple small ranges from object storage into bigger, more efficient/cheaper ones.
+func (g gapBasedPartitioner) Ranges(length int, rng func(int) (uint64, uint64)) (parts []part) {
 	j := 0
 	k := 0
 	for k < length {
@@ -1439,7 +1457,7 @@ func partitionRanges(length int, rng func(int) (uint64, uint64), maxGapSize uint
 		for ; k < length; k++ {
 			s, e := rng(k)
 
-			if p.end+maxGapSize < s {
+			if p.end+g.maxGapSize < s {
 				break
 			}
 
@@ -1522,7 +1540,6 @@ func (r *bucketChunkReader) addPreload(id uint64) error {
 // preload all added chunk IDs. Must be called before the first call to Chunk is made.
 func (r *bucketChunkReader) preload() error {
 	const maxChunkSize = 16000
-	const maxGapSize = 512 * 1024
 
 	var g run.Group
 
@@ -1530,9 +1547,9 @@ func (r *bucketChunkReader) preload() error {
 		sort.Slice(offsets, func(i, j int) bool {
 			return offsets[i] < offsets[j]
 		})
-		parts := partitionRanges(len(offsets), func(i int) (start, end uint64) {
+		parts := r.block.partitioner.Ranges(len(offsets), func(i int) (start, end uint64) {
 			return uint64(offsets[i]), uint64(offsets[i]) + maxChunkSize
-		}, maxGapSize)
+		})
 
 		seq := seq
 		offsets := offsets
