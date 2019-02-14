@@ -1,19 +1,19 @@
 apiVersion: apps/v1beta1
 kind: StatefulSet
 metadata:
-  name: thanos-gateway
+  name: thanos-store-gateway
   labels:
-    app: thanos-gateway
+    app: thanos-store-gateway
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: thanos-gateway
-  serviceName: thanos-gateway
+      app: thanos-store-gateway
+  serviceName: thanos-store-gateway
   template:
     metadata:
       labels:
-        app: thanos-gateway
+        app: thanos-store-gateway
         thanos-store-api: "true"
     spec:
       containers:
@@ -52,8 +52,8 @@ apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app: thanos-gateway
-  name: thanos-gateway
+    app: thanos-store-gateway
+  name: thanos-store-gateway
 spec:
   ports:
   - port: 10901
@@ -61,5 +61,5 @@ spec:
     targetPort: grpc
     name: grpc
   selector:
-    app: thanos-gateway
+    app: thanos-store-gateway
   type: NodePort

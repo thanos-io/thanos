@@ -3,7 +3,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: thanos-store-apis
+  name: thanos-store-gateway
 spec:
   type: ClusterIP
   clusterIP: None
@@ -39,7 +39,7 @@ spec:
         - --query.replica-label=replica
         - --cluster.disable
         # Discover local store APIs using DNS SRV.
-        - --store=dnssrv+thanos-store-apis.default.svc
+        - --store=dnssrv+thanos-store-gateway.default.svc
         # Get remote store APIs by IP:Port.
         - --store=%%SIDECAR_US1_0_URL%%
         - --store=%%SIDECAR_US1_1_URL%%
