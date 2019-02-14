@@ -347,7 +347,7 @@
   version = "v1.0.8"
 
 [[projects]]
-  digest = "1:6b05e059f435ef38115ab2a36d0a0b5835e76cd6f28d3155f502b197549585b9"
+  digest = "1:1975590f32a9726e1cef324e20654ca2066880187e52d90100addeef82bfe5fa"
   name = "github.com/minio/minio-go"
   packages = [
     ".",
@@ -358,8 +358,8 @@
     "pkg/set",
   ]
   pruneopts = ""
-  revision = "c8a261de75c1a9a9ece4dcc0c81ff6db525bcf27"
-  version = "v6.0.16"
+  revision = "34f2b94c43ca6460e42b83624ad10308dbc9fa05"
+  version = "v6.0.17"
 
 [[projects]]
   digest = "1:096a8a9182648da3d00ff243b88407838902b6703fc12657f76890e08d1899bf"
