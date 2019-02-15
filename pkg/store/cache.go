@@ -3,7 +3,7 @@ package store
 import (
 	"sync"
 
-	lru "github.com/hashicorp/golang-lru/simplelru"
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/tsdb/labels"
@@ -34,7 +34,7 @@ type cacheKeySeries uint64
 
 type indexCache struct {
 	mtx     sync.Mutex
-	lru     *lru.LRU
+	lru     *lru.TwoQueueCache
 	maxSize uint64
 	curSize uint64
 
@@ -44,6 +44,7 @@ type indexCache struct {
 	current     *prometheus.GaugeVec
 	currentSize *prometheus.GaugeVec
 	overflow    *prometheus.CounterVec
+	evicted     *prometheus.CounterVec
 }
 
 // newIndexCache creates a new LRU cache for index entries and ensures the total cache
@@ -52,7 +53,7 @@ func newIndexCache(reg prometheus.Registerer, maxBytes uint64) (*indexCache, err
 	c := &indexCache{
 		maxSize: maxBytes,
 	}
-	evicted := prometheus.NewCounterVec(prometheus.CounterOpts{
+	c.evicted = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_store_index_cache_items_evicted_total",
 		Help: "Total number of items that were evicted from the index cache.",
 	}, []string{"item_type"})
@@ -88,22 +89,10 @@ func newIndexCache(reg prometheus.Registerer, maxBytes uint64) (*indexCache, err
 	}, []string{"item_type"})
 
 	// Initialize eviction metric with 0.
-	evicted.WithLabelValues(cacheTypePostings)
-	evicted.WithLabelValues(cacheTypeSeries)
+	c.evicted.WithLabelValues(cacheTypePostings)
+	c.evicted.WithLabelValues(cacheTypeSeries)
 
-	// Initialize LRU cache with a high size limit since we will manage evictions ourselves
-	// based on stored size.
-	onEvict := func(key, val interface{}) {
-		k := key.(cacheItem).keyType()
-		v := val.([]byte)
-
-		evicted.WithLabelValues(k).Inc()
-		c.current.WithLabelValues(k).Dec()
-		c.currentSize.WithLabelValues(k).Sub(float64(len(v)))
-
-		c.curSize -= uint64(len(v))
-	}
-	l, err := lru.NewLRU(1e12, onEvict)
+	l, err := lru.New2Q(1e12)
 	if err != nil {
 		return nil, err
 	}
@@ -116,9 +105,30 @@ func newIndexCache(reg prometheus.Registerer, maxBytes uint64) (*indexCache, err
 		}, func() float64 {
 			return float64(maxBytes)
 		}))
-		reg.MustRegister(c.requests, c.hits, c.added, evicted, c.current, c.currentSize)
+		reg.MustRegister(c.requests, c.hits, c.added, c.evicted, c.current, c.currentSize)
 	}
 	return c, nil
+}
+
+// removeOldest removes the oldest key from the 2Q cache.
+// First it removes the most recently added, and then it prioritises
+// the most frequently used.
+func (c *indexCache) removeOldest() {
+	keys := c.lru.Keys()
+	if len(keys) > 0 {
+		lastKey := keys[len(keys)-1]
+		val, _ := c.lru.Get(lastKey)
+		k := lastKey.(cacheItem).keyType()
+		v := val.([]byte)
+
+		c.lru.Remove(lastKey)
+
+		c.evicted.WithLabelValues(k).Inc()
+		c.current.WithLabelValues(k).Dec()
+		c.currentSize.WithLabelValues(k).Sub(float64(len(v)))
+
+		c.curSize -= uint64(len(v))
+	}
 }
 
 // ensureFits tries to make sure that the passed slice will fit into the LRU cache.
@@ -128,7 +138,7 @@ func (c *indexCache) ensureFits(b []byte) bool {
 		return false
 	}
 	for c.curSize+uint64(len(b)) > c.maxSize {
-		c.lru.RemoveOldest()
+		c.removeOldest()
 	}
 	return true
 }
