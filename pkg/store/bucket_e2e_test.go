@@ -35,7 +35,7 @@ func (s *storeSuite) Close() {
 	s.wg.Wait()
 }
 
-func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, maxSampleCount uint64) *storeSuite {
+func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, manyParts bool, maxSampleCount uint64) *storeSuite {
 	series := []labels.Labels{
 		labels.FromStrings("a", "1", "b", "1"),
 		labels.FromStrings("a", "1", "b", "2"),
@@ -92,6 +92,10 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 
 	s.store = store
 
+	if manyParts {
+		s.store.partitioner = naivePartitioner{}
+	}
+
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -117,6 +121,197 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	return s
 }
 
+func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
+	mint, maxt := s.store.TimeRange()
+	testutil.Equals(t, s.minTime, mint)
+	testutil.Equals(t, s.maxTime, maxt)
+
+	vals, err := s.store.LabelValues(ctx, &storepb.LabelValuesRequest{Label: "a"})
+	testutil.Ok(t, err)
+	testutil.Equals(t, []string{"1", "2"}, vals.Values)
+
+	for i, tcase := range []struct {
+		req      *storepb.SeriesRequest
+		expected [][]storepb.Label
+	}{
+		{
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|2"},
+				},
+				MinTime: mint,
+				MaxTime: maxt,
+			},
+			expected: [][]storepb.Label{
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "2"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+			},
+		},
+		{
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1"},
+				},
+				MinTime: mint,
+				MaxTime: maxt,
+			},
+			expected: [][]storepb.Label{
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+			},
+		},
+		{
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_NRE, Name: "a", Value: "2"},
+				},
+				MinTime: mint,
+				MaxTime: maxt,
+			},
+			expected: [][]storepb.Label{
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+			},
+		},
+		{
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_NRE, Name: "a", Value: "not_existing"},
+				},
+				MinTime: mint,
+				MaxTime: maxt,
+			},
+			expected: [][]storepb.Label{
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "2"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+			},
+		},
+		{
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_NRE, Name: "not_existing", Value: "1"},
+				},
+				MinTime: mint,
+				MaxTime: maxt,
+			},
+			expected: [][]storepb.Label{
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "2"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+			},
+		},
+		{
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "2"},
+				},
+				MinTime: mint,
+				MaxTime: maxt,
+			},
+			expected: [][]storepb.Label{
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+			},
+		},
+		{
+			// Matching by external label should work as well.
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+					{Type: storepb.LabelMatcher_EQ, Name: "ext2", Value: "value2"},
+				},
+				MinTime: mint,
+				MaxTime: maxt,
+			},
+			expected: [][]storepb.Label{
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+			},
+		},
+		{
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+					{Type: storepb.LabelMatcher_EQ, Name: "ext2", Value: "wrong-value"},
+				},
+				MinTime: mint,
+				MaxTime: maxt,
+			},
+		},
+		{
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_NEQ, Name: "a", Value: "2"},
+				},
+				MinTime: mint,
+				MaxTime: maxt,
+			},
+			expected: [][]storepb.Label{
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+			},
+		},
+		{
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_NEQ, Name: "a", Value: "not_existing"},
+				},
+				MinTime: mint,
+				MaxTime: maxt,
+			},
+			expected: [][]storepb.Label{
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "2"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+			},
+		},
+	} {
+		t.Log("Run ", i)
+
+		// Always clean cache before each test.
+		s.store.indexCache, err = newIndexCache(nil, 100)
+		testutil.Ok(t, err)
+
+		srv := newStoreSeriesServer(ctx)
+
+		testutil.Ok(t, s.store.Series(tcase.req, srv))
+		testutil.Equals(t, len(tcase.expected), len(srv.SeriesSet))
+
+		for i, s := range srv.SeriesSet {
+			testutil.Equals(t, tcase.expected[i], s.Labels)
+			testutil.Equals(t, 3, len(s.Chunks))
+		}
+	}
+}
+
 func TestBucketStore_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -126,121 +321,38 @@ func TestBucketStore_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-		s := prepareStoreWithTestBlocks(t, dir, bkt, 0)
+		s := prepareStoreWithTestBlocks(t, dir, bkt, false, 0)
 		defer s.Close()
 
-		mint, maxt := s.store.TimeRange()
-		testutil.Equals(t, s.minTime, mint)
-		testutil.Equals(t, s.maxTime, maxt)
-
-		vals, err := s.store.LabelValues(ctx, &storepb.LabelValuesRequest{Label: "a"})
-		testutil.Ok(t, err)
-		testutil.Equals(t, []string{"1", "2"}, vals.Values)
-
-		pbseries := [][]storepb.Label{
-			{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
-			{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
-			{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
-			{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
-			{{Name: "a", Value: "2"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
-			{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
-			{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
-			{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
-		}
-		srv := newStoreSeriesServer(ctx)
-
-		testutil.Ok(t, s.store.Series(&storepb.SeriesRequest{
-			Matchers: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|2"},
-			},
-			MinTime: mint,
-			MaxTime: maxt,
-		}, srv))
-		testutil.Equals(t, len(pbseries), len(srv.SeriesSet))
-
-		for i, s := range srv.SeriesSet {
-			testutil.Equals(t, pbseries[i], s.Labels)
-			testutil.Equals(t, 3, len(s.Chunks))
-		}
-
-		pbseries = [][]storepb.Label{
-			{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
-			{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
-		}
-		srv = newStoreSeriesServer(ctx)
-
-		testutil.Ok(t, s.store.Series(&storepb.SeriesRequest{
-			Matchers: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "2"},
-			},
-			MinTime: mint,
-			MaxTime: maxt,
-		}, srv))
-		testutil.Equals(t, len(pbseries), len(srv.SeriesSet))
-
-		for i, s := range srv.SeriesSet {
-			testutil.Equals(t, pbseries[i], s.Labels)
-			testutil.Equals(t, 3, len(s.Chunks))
-		}
-
-		// Matching by external label should work as well.
-		pbseries = [][]storepb.Label{
-			{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
-			{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
-		}
-		srv = newStoreSeriesServer(ctx)
-
-		testutil.Ok(t, s.store.Series(&storepb.SeriesRequest{
-			Matchers: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
-				{Type: storepb.LabelMatcher_EQ, Name: "ext2", Value: "value2"},
-			},
-			MinTime: mint,
-			MaxTime: maxt,
-		}, srv))
-		testutil.Equals(t, len(pbseries), len(srv.SeriesSet))
-
-		for i, s := range srv.SeriesSet {
-			testutil.Equals(t, pbseries[i], s.Labels)
-			testutil.Equals(t, 3, len(s.Chunks))
-		}
-
-		srv = newStoreSeriesServer(ctx)
-		testutil.Ok(t, s.store.Series(&storepb.SeriesRequest{
-			Matchers: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
-				{Type: storepb.LabelMatcher_EQ, Name: "ext2", Value: "wrong-value"},
-			},
-			MinTime: mint,
-			MaxTime: maxt,
-		}, srv))
-		testutil.Equals(t, 0, len(srv.SeriesSet))
-
-		// Test the samples limit.
-		testutil.Ok(t, os.RemoveAll(dir))
-		s = prepareStoreWithTestBlocks(t, dir, bkt, 120)
-		mint, maxt = s.store.TimeRange()
-		defer s.Close()
-
-		srv = newStoreSeriesServer(ctx)
-
-		testutil.Ok(t, s.store.Series(&storepb.SeriesRequest{
-			Matchers: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
-				{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "1"},
-			},
-			MinTime: mint,
-			MaxTime: maxt,
-		}, srv))
-
-		testutil.NotOk(t, s.store.Series(&storepb.SeriesRequest{
-			Matchers: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|2"},
-			},
-			MinTime: mint,
-			MaxTime: maxt,
-		}, srv))
-
+		testBucketStore_e2e(t, ctx, s)
 	})
+}
 
+type naivePartitioner struct{}
+
+func (g naivePartitioner) Partition(length int, rng func(int) (uint64, uint64)) (parts []part) {
+	for i := 0; i < length; i++ {
+		s, e := rng(i)
+		parts = append(parts, part{start: s, end: e, elemRng: [2]int{i, i + 1}})
+	}
+	return parts
+}
+
+// Naive partitioner splits the array equally (it does not combine anything).
+// This tests if our, sometimes concurrent, fetches for different parts works.
+// Regression test against: https://github.com/improbable-eng/thanos/issues/829
+func TestBucketStore_ManyParts_e2e(t *testing.T) {
+	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		dir, err := ioutil.TempDir("", "test_bucketstore_e2e")
+		testutil.Ok(t, err)
+		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+
+		s := prepareStoreWithTestBlocks(t, dir, bkt, true, 0)
+		defer s.Close()
+
+		testBucketStore_e2e(t, ctx, s)
+	})
 }

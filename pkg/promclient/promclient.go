@@ -67,7 +67,7 @@ func ExternalLabels(ctx context.Context, logger log.Logger, base *url.URL) (labe
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, errors.Errorf("got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
+		return nil, errors.Errorf("is 'web.enable-admin-api' flag enabled? got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
 	}
 
 	var d struct {
@@ -161,7 +161,7 @@ func (m *modelBool) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// ConfiguredFlags some configured flags from /api/v1/status/flags Prometheus endpoint.
+// ConfiguredFlags returns configured flags from /api/v1/status/flags Prometheus endpoint.
 // Added to Prometheus from v2.2.
 func ConfiguredFlags(ctx context.Context, logger log.Logger, base *url.URL) (Flags, error) {
 	u := *base

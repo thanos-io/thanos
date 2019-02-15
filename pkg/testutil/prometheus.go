@@ -1,10 +1,12 @@
 package testutil
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"math"
 	"math/rand"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -68,9 +70,10 @@ type Prometheus struct {
 	prefix  string
 	version string
 
-	running bool
-	cmd     *exec.Cmd
-	addr    string
+	running            bool
+	cmd                *exec.Cmd
+	disabledCompaction bool
+	addr               string
 }
 
 func NewTSDB() (*tsdb.DB, error) {
@@ -140,25 +143,35 @@ func newPrometheus(version string, prefix string) (*Prometheus, error) {
 
 // Start running the Prometheus instance and return.
 func (p *Prometheus) Start() error {
-	p.running = true
-
-	if err := p.db.Close(); err != nil {
-		return err
+	if !p.running {
+		if err := p.db.Close(); err != nil {
+			return err
+		}
 	}
+	p.running = true
 
 	port, err := FreePort()
 	if err != nil {
 		return err
 	}
 
+	var extra []string
+	if p.disabledCompaction {
+		extra = append(extra,
+			"--storage.tsdb.min-block-duration=2h",
+			"--storage.tsdb.max-block-duration=2h",
+		)
+	}
 	p.addr = fmt.Sprintf("localhost:%d", port)
 	p.cmd = exec.Command(
 		prometheusBin(p.version),
-		"--storage.tsdb.path="+p.db.Dir(),
-		"--web.listen-address="+p.addr,
-		"--web.route-prefix="+p.prefix,
-		"--web.enable-admin-api",
-		"--config.file="+filepath.Join(p.db.Dir(), "prometheus.yml"),
+		append([]string{
+			"--storage.tsdb.path=" + p.db.Dir(),
+			"--web.listen-address=" + p.addr,
+			"--web.route-prefix=" + p.prefix,
+			"--web.enable-admin-api",
+			"--config.file=" + filepath.Join(p.db.Dir(), "prometheus.yml"),
+		}, extra...)...,
 	)
 	go func() {
 		if b, err := p.cmd.CombinedOutput(); err != nil {
@@ -171,6 +184,33 @@ func (p *Prometheus) Start() error {
 	return nil
 }
 
+func (p *Prometheus) WaitPrometheusUp(ctx context.Context) error {
+	if !p.running {
+		return errors.New("method Start was not invoked.")
+	}
+	return runutil.Retry(time.Second, ctx.Done(), func() error {
+		r, err := http.Get(fmt.Sprintf("http://%s/-/ready", p.addr))
+		if err != nil {
+			return err
+		}
+
+		if r.StatusCode != 200 {
+			return errors.Errorf("Got non 200 response: %v", r.StatusCode)
+		}
+		return nil
+	})
+}
+
+func (p *Prometheus) Restart() error {
+	if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		return errors.Wrap(err, "failed to kill Prometheus. Kill it manually")
+	}
+
+	_ = p.cmd.Wait()
+
+	return p.Start()
+}
+
 // Dir returns TSDB dir.
 func (p *Prometheus) Dir() string {
 	return p.dir
@@ -179,6 +219,10 @@ func (p *Prometheus) Dir() string {
 // Addr returns correct address after Start method.
 func (p *Prometheus) Addr() string {
 	return p.addr + p.prefix
+}
+
+func (p *Prometheus) DisableCompaction() {
+	p.disabledCompaction = true
 }
 
 // SetConfig updates the contents of the config file. By default it is empty.
