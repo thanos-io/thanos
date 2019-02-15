@@ -617,7 +617,6 @@ func blockSeries(
 }
 
 func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Aggr) error {
-
 	if in.Encoding() == chunkenc.EncXOR {
 		out.Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: in.Bytes()}
 		return nil
