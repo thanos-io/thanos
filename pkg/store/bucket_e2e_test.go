@@ -156,6 +156,74 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 		{
 			req: &storepb.SeriesRequest{
 				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1"},
+				},
+				MinTime: mint,
+				MaxTime: maxt,
+			},
+			expected: [][]storepb.Label{
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+			},
+		},
+		{
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_NRE, Name: "a", Value: "2"},
+				},
+				MinTime: mint,
+				MaxTime: maxt,
+			},
+			expected: [][]storepb.Label{
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+			},
+		},
+		{
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_NRE, Name: "a", Value: "not_existing"},
+				},
+				MinTime: mint,
+				MaxTime: maxt,
+			},
+			expected: [][]storepb.Label{
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "2"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+			},
+		},
+		{
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_NRE, Name: "not_existing", Value: "1"},
+				},
+				MinTime: mint,
+				MaxTime: maxt,
+			},
+			expected: [][]storepb.Label{
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "2"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+			},
+		},
+		{
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "2"},
 				},
 				MinTime: mint,
@@ -189,6 +257,40 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 				},
 				MinTime: mint,
 				MaxTime: maxt,
+			},
+		},
+		{
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_NEQ, Name: "a", Value: "2"},
+				},
+				MinTime: mint,
+				MaxTime: maxt,
+			},
+			expected: [][]storepb.Label{
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+			},
+		},
+		{
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_NEQ, Name: "a", Value: "not_existing"},
+				},
+				MinTime: mint,
+				MaxTime: maxt,
+			},
+			expected: [][]storepb.Label{
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "2"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
 			},
 		},
 	} {
