@@ -3,11 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"github.com/improbable-eng/thanos/pkg/component"
 	"os"
 	"path"
 	"path/filepath"
 	"time"
+
+	"github.com/improbable-eng/thanos/pkg/component"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"

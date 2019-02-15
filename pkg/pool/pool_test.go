@@ -14,7 +14,7 @@ func TestBytesPool(t *testing.T) {
 	allocs := uint64(0)
 	wrapped := chunkPool.new
 	chunkPool.new = func(sz int) []byte {
-		allocs ++
+		allocs++
 		return wrapped(sz)
 	}
 	testutil.Equals(t, []int{10, 20, 40, 80}, chunkPool.sizes)
