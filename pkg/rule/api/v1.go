@@ -17,15 +17,12 @@ import (
 	"github.com/prometheus/prometheus/rules"
 )
 
-// API can register a set of endpoints in a router and handle
-// them using the provided storage and query engine.
 type API struct {
 	logger         log.Logger
 	now            func() time.Time
 	rulesRetriever rulesRetriever
 }
 
-// NewAPI returns an initialized API type.
 func NewAPI(
 	logger log.Logger,
 	rr rulesRetriever,
@@ -37,7 +34,6 @@ func NewAPI(
 	}
 }
 
-// Register the API's endpoints in the given router.
 func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger) {
 	instr := func(name string, f qapi.ApiFunc) http.HandlerFunc {
 		hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -136,7 +132,6 @@ type AlertDiscovery struct {
 	Alerts []*Alert `json:"alerts"`
 }
 
-// Alert has info for an alert.
 type Alert struct {
 	Labels      labels.Labels `json:"labels"`
 	Annotations labels.Labels `json:"annotations"`
@@ -160,12 +155,10 @@ func rulesAlertsToAPIAlerts(rulesAlerts []*rules.Alert) []*Alert {
 	return apiAlerts
 }
 
-// RuleDiscovery has info for all rules
 type RuleDiscovery struct {
 	RuleGroups []*RuleGroup `json:"groups"`
 }
 
-// RuleGroup has info for rules which are part of a group
 type RuleGroup struct {
 	Name string `json:"name"`
 	File string `json:"file"`
