@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -17,6 +18,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/improbable-eng/thanos2/pkg/query/api"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -564,6 +567,9 @@ func runRule(
 		}
 
 		ui.NewRuleUI(logger, mgr, alertQueryURL.String(), flagsMap).Register(router.WithPrefix(webRoutePrefix))
+
+		api := v1.NewAPI(logger, mgr)
+		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger)
 
 		mux := http.NewServeMux()
 		registerMetrics(mux, reg)
