@@ -19,8 +19,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/improbable-eng/thanos2/pkg/query/api"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/alert"
@@ -32,6 +30,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/extprom"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/promclient"
+	"github.com/improbable-eng/thanos/pkg/rule/api"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
