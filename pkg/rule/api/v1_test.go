@@ -27,7 +27,7 @@ func (m rulesRetrieverMock) RuleGroups() []*rules.Group {
 	var ar rulesRetrieverMock
 	arules := ar.AlertingRules()
 	storage := testutil.NewStorage(m.testing)
-	defer storage.Close()
+	//defer storage.Close()
 
 	engineOpts := promql.EngineOpts{
 		Logger:        nil,
