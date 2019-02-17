@@ -41,6 +41,7 @@ func NewAPI(
 func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger) {
 	instr := func(name string, f qapi.ApiFunc) http.HandlerFunc {
 		hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			qapi.SetCORS(w)
 			if data, warnings, err := f(r); err != nil {
 				qapi.RespondError(w, err, data)
 			} else if data != nil {

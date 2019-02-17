@@ -86,7 +86,7 @@ type response struct {
 }
 
 // Enables cross-site script calls.
-func setCORS(w http.ResponseWriter) {
+func SetCORS(w http.ResponseWriter) {
 	for h, v := range corsHeaders {
 		w.Header().Set(h, v)
 	}
@@ -153,7 +153,7 @@ func NewAPI(
 func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger) {
 	instr := func(name string, f ApiFunc) http.HandlerFunc {
 		hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			setCORS(w)
+			SetCORS(w)
 			if data, warnings, err := f(r); err != nil {
 				RespondError(w, err, data)
 			} else if data != nil {

@@ -4,6 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
+	"reflect"
+	"testing"
+	"time"
+
 	"github.com/go-kit/kit/log"
 	qapi "github.com/improbable-eng/thanos/pkg/query/api"
 	"github.com/prometheus/common/route"
@@ -11,11 +17,6 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/util/testutil"
-	"net/http"
-	"net/url"
-	"reflect"
-	"testing"
-	"time"
 )
 
 type rulesRetrieverMock struct {
@@ -219,16 +220,13 @@ func assertAPIError(t *testing.T, got *qapi.ApiError) {
 }
 
 func assertAPIResponse(t *testing.T, got interface{}, exp interface{}) {
-
-	respJSON, err := json.Marshal(got)
-	expectedRespJSON, err := json.Marshal(exp)
-	fmt.Println(expectedRespJSON)
-	fmt.Println(respJSON)
 	if !reflect.DeepEqual(exp, got) {
+		respJSON, err := json.Marshal(got)
 		if err != nil {
 			t.Fatalf("failed to marshal response as JSON: %v", err.Error())
 		}
 
+		expectedRespJSON, err := json.Marshal(exp)
 		if err != nil {
 			t.Fatalf("failed to marshal expected response as JSON: %v", err.Error())
 		}
