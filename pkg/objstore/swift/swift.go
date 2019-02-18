@@ -43,9 +43,10 @@ type Container struct {
 	logger log.Logger
 	client *gophercloud.ServiceClient
 	name   string
+	debug  bool
 }
 
-func NewContainer(logger log.Logger, conf []byte) (*Container, error) {
+func NewContainer(logger log.Logger, conf []byte, debug bool) (*Container, error) {
 	var sc SwiftConfig
 	if err := yaml.Unmarshal(conf, &sc); err != nil {
 		return nil, err
@@ -81,7 +82,13 @@ func NewContainer(logger log.Logger, conf []byte) (*Container, error) {
 		logger: logger,
 		client: client,
 		name:   sc.ContainerName,
+		debug:  debug,
 	}, nil
+}
+
+// DebugEnabled returns the debug status
+func (c *Container) DebugEnabled() bool {
+	return c.debug
 }
 
 // Name returns the container name for swift.
@@ -216,7 +223,7 @@ func NewTestContainer(t testing.TB) (objstore.Bucket, func(), error) {
 		return nil, nil, err
 	}
 
-	c, err := NewContainer(log.NewNopLogger(), containerConfig)
+	c, err := NewContainer(log.NewNopLogger(), containerConfig, false)
 	if err != nil {
 		return nil, nil, err
 	}

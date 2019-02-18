@@ -59,6 +59,7 @@ type Bucket struct {
 	client          *minio.Client
 	sse             encrypt.ServerSide
 	putUserMetadata map[string]string
+	debug           bool
 }
 
 // parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
@@ -76,17 +77,17 @@ func parseConfig(conf []byte) (Config, error) {
 }
 
 // NewBucket returns a new Bucket using the provided s3 config values.
-func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
+func NewBucket(logger log.Logger, conf []byte, component string, debug bool) (*Bucket, error) {
 	config, err := parseConfig(conf)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewBucketWithConfig(logger, config, component)
+	return NewBucketWithConfig(logger, config, component, debug)
 }
 
 // NewBucket returns a new Bucket using the provided s3 config values.
-func NewBucketWithConfig(logger log.Logger, config Config, component string) (*Bucket, error) {
+func NewBucketWithConfig(logger log.Logger, config Config, component string, debug bool) (*Bucket, error) {
 	var chain []credentials.Provider
 
 	if err := validate(config); err != nil {
@@ -158,8 +159,14 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		client:          client,
 		sse:             sse,
 		putUserMetadata: config.PutUserMetadata,
+		debug:           debug,
 	}
 	return bkt, nil
+}
+
+// DebugEnabled returns the debug status
+func (b *Bucket) DebugEnabled() bool {
+	return b.debug
 }
 
 // Name returns the bucket name for s3.
@@ -352,7 +359,7 @@ func NewTestBucketFromConfig(t testing.TB, location string, c Config, reuseBucke
 	if err != nil {
 		return nil, nil, err
 	}
-	b, err := NewBucket(log.NewNopLogger(), bc, "thanos-e2e-test")
+	b, err := NewBucket(log.NewNopLogger(), bc, "thanos-e2e-test", false)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -81,8 +81,10 @@ func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 		return errors.Errorf("empty external labels are not allowed for Thanos block.")
 	}
 
-	if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, MetaFilename), path.Join(DebugMetas, fmt.Sprintf("%s.json", id))); err != nil {
-		return errors.Wrap(err, "upload meta file to debug dir")
+	if bkt.DebugEnabled() {
+		if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, MetaFilename), path.Join(DebugMetas, fmt.Sprintf("%s.json", id))); err != nil {
+			return errors.Wrap(err, "upload meta file to debug dir")
+		}
 	}
 
 	if err := objstore.UploadDir(ctx, logger, bkt, path.Join(bdir, ChunksDirname), path.Join(id.String(), ChunksDirname)); err != nil {

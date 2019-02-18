@@ -150,3 +150,7 @@ func (b *Bucket) Close() error { return nil }
 func (b *Bucket) Name() string {
 	return "inmem"
 }
+
+func (b *Bucket) DebugEnabled() bool {
+	return false
+}

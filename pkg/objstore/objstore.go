@@ -29,6 +29,9 @@ type Bucket interface {
 
 	// Name returns the bucket name for the provider.
 	Name() string
+
+	// DebugEnabled returns true if debugging is enabled
+	DebugEnabled() bool
 }
 
 // BucketReader provides read access to an object storage bucket.
@@ -319,6 +322,10 @@ func (b *metricBucket) Close() error {
 
 func (b *metricBucket) Name() string {
 	return b.bkt.Name()
+}
+
+func (b *metricBucket) DebugEnabled() bool {
+	return b.bkt.DebugEnabled()
 }
 
 type timingReadCloser struct {

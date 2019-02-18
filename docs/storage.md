@@ -30,6 +30,18 @@ NOTE: Currently Thanos requires strong consistency (write-read) for object store
 
 At that point, anyone can use your provider by spec
 
+## Global parameters
+
+Example:
+
+```yaml
+type: S3
+debug: true
+config: ...
+```
+
+When enabling debug, the object store library will write a copy of the meta.json for each block into `debug/metas`.
+
 ## AWS S3 configuration
 
 Thanos uses minio client to upload Prometheus data into AWS S3.

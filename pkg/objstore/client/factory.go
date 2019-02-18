@@ -31,6 +31,7 @@ const (
 type BucketConfig struct {
 	Type   ObjProvider `yaml:"type"`
 	Config interface{} `yaml:"config"`
+	Debug  bool        `yaml:"debug"`
 }
 
 // NewBucket initializes and returns new object storage clients.
@@ -50,15 +51,15 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 	var bucket objstore.Bucket
 	switch strings.ToUpper(string(bucketConf.Type)) {
 	case string(GCS):
-		bucket, err = gcs.NewBucket(context.Background(), logger, config, component)
+		bucket, err = gcs.NewBucket(context.Background(), logger, config, component, bucketConf.Debug)
 	case string(S3):
-		bucket, err = s3.NewBucket(logger, config, component)
+		bucket, err = s3.NewBucket(logger, config, component, bucketConf.Debug)
 	case string(AZURE):
-		bucket, err = azure.NewBucket(logger, config, component)
+		bucket, err = azure.NewBucket(logger, config, component, bucketConf.Debug)
 	case string(SWIFT):
-		bucket, err = swift.NewContainer(logger, config)
+		bucket, err = swift.NewContainer(logger, config, bucketConf.Debug)
 	case string(COS):
-		bucket, err = cos.NewBucket(logger, config, component)
+		bucket, err = cos.NewBucket(logger, config, component, bucketConf.Debug)
 	default:
 		return nil, errors.Errorf("bucket with type %s is not supported", bucketConf.Type)
 	}

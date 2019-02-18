@@ -34,12 +34,13 @@ type Bucket struct {
 	logger log.Logger
 	bkt    *storage.BucketHandle
 	name   string
+	debug  bool
 
 	closer io.Closer
 }
 
 // NewBucket returns a new Bucket against the given bucket handle.
-func NewBucket(ctx context.Context, logger log.Logger, conf []byte, component string) (*Bucket, error) {
+func NewBucket(ctx context.Context, logger log.Logger, conf []byte, component string, debug bool) (*Bucket, error) {
 	var gc Config
 	if err := yaml.Unmarshal(conf, &gc); err != nil {
 		return nil, err
@@ -57,8 +58,14 @@ func NewBucket(ctx context.Context, logger log.Logger, conf []byte, component st
 		bkt:    gcsClient.Bucket(gc.Bucket),
 		closer: gcsClient,
 		name:   gc.Bucket,
+		debug:  debug,
 	}
 	return bkt, nil
+}
+
+// DebugEnabled returns the debug status
+func (b *Bucket) DebugEnabled() bool {
+	return b.debug
 }
 
 // Name returns the bucket name for gcs.
@@ -161,7 +168,7 @@ func NewTestBucket(t testing.TB, project string) (objstore.Bucket, func(), error
 		return nil, nil, err
 	}
 
-	b, err := NewBucket(ctx, log.NewNopLogger(), bc, "thanos-e2e-test")
+	b, err := NewBucket(ctx, log.NewNopLogger(), bc, "thanos-e2e-test", false)
 	if err != nil {
 		cancel()
 		return nil, nil, err

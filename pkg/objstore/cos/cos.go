@@ -27,6 +27,7 @@ type Bucket struct {
 	logger log.Logger
 	client *cos.Client
 	name   string
+	debug  bool
 }
 
 // Config encapsulates the necessary config values to instantiate an cos client.
@@ -50,7 +51,7 @@ func (conf *Config) validate() error {
 	return nil
 }
 
-func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
+func NewBucket(logger log.Logger, conf []byte, component string, debug bool) (*Bucket, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -81,8 +82,14 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 		logger: logger,
 		client: client,
 		name:   config.Bucket,
+		debug:  debug,
 	}
 	return bkt, nil
+}
+
+// DebugEnabled returns the debug status
+func (b *Bucket) DebugEnabled() bool {
+	return b.debug
 }
 
 // Name returns the bucket name for COS.
@@ -297,7 +304,7 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 			return nil, nil, err
 		}
 
-		b, err := NewBucket(log.NewNopLogger(), bc, "thanos-e2e-test")
+		b, err := NewBucket(log.NewNopLogger(), bc, "thanos-e2e-test", false)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -325,7 +332,7 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 		return nil, nil, err
 	}
 
-	b, err := NewBucket(log.NewNopLogger(), bc, "thanos-e2e-test")
+	b, err := NewBucket(log.NewNopLogger(), bc, "thanos-e2e-test", false)
 	if err != nil {
 		return nil, nil, err
 	}

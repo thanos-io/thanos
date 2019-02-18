@@ -37,6 +37,7 @@ type Bucket struct {
 	logger       log.Logger
 	containerURL blob.ContainerURL
 	config       *Config
+	debug        bool
 }
 
 // Validate checks to see if any of the config options are set.
@@ -49,7 +50,7 @@ func (conf *Config) validate() error {
 }
 
 // NewBucket returns a new Bucket using the provided Azure config.
-func NewBucket(logger log.Logger, azureConfig []byte, component string) (*Bucket, error) {
+func NewBucket(logger log.Logger, azureConfig []byte, component string, debug bool) (*Bucket, error) {
 	level.Debug(logger).Log("msg", "creating new Azure bucket connection", "component", component)
 
 	var conf Config
@@ -85,8 +86,14 @@ func NewBucket(logger log.Logger, azureConfig []byte, component string) (*Bucket
 		logger:       logger,
 		containerURL: container,
 		config:       &conf,
+		debug:        debug,
 	}
 	return bkt, nil
+}
+
+// DebugEnabled returns the debug status
+func (b *Bucket) DebugEnabled() bool {
+	return b.debug
 }
 
 // Iter calls f for each entry in the given directory. The argument to f is the full
@@ -281,7 +288,7 @@ func NewTestBucket(t testing.TB, component string) (objstore.Bucket, func(), err
 
 	ctx := context.Background()
 
-	bkt, err := NewBucket(log.NewNopLogger(), bc, component)
+	bkt, err := NewBucket(log.NewNopLogger(), bc, component, false)
 	if err != nil {
 		t.Errorf("Cannot create Azure storage container:")
 		return nil, nil, err
