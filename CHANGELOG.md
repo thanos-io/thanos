@@ -11,6 +11,13 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+## [v0.3.1](https://github.com/improbable-eng/thanos/releases/tag/v0.3.0) - 2019.02.18
+
+### Fixed
+- [#829](https://github.com/improbable-eng/thanos/issues/829) Store Gateway crashing due to `slice bounds out of range`.
+- [#834](https://github.com/improbable-eng/thanos/issues/834) fixed matcher regression for `<>` `!=`.
+
+
 ## [v0.3.0](https://github.com/improbable-eng/thanos/releases/tag/v0.3.0) - 2019.02.08
 
 ### Added
