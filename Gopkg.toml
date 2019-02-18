@@ -10,7 +10,7 @@ ignored = ["github.com/improbable-eng/thanos/benchmark/*"]
 
 [[constraint]]
   name = "github.com/gogo/protobuf"
-  version = "1.1.0"
+  version = "1.2.1"
 
 [[override]]
   branch = "master"
