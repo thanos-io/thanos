@@ -63,6 +63,7 @@ config:
   http_config:
     idle_conn_timeout: 0s
     insecure_skip_verify: false
+debug: false
 ```
 
 AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region)
@@ -164,6 +165,7 @@ For example:
 type: GCS
 config:
   bucket: ""
+debug: false
 ```
 
 Application credentials are configured via JSON file, the client looks for:
@@ -205,6 +207,7 @@ config:
   storage_account: ""
   storage_account_key: ""
   container: ""
+debug: false
 ```
 
 ### OpenStack Swift Configuration
@@ -226,6 +229,7 @@ config:
   tenant_name: ""
   region_name: ""
   container_name: ""
+debug: false
 ```
 
 ## Other minio supported S3 object storages
@@ -247,6 +251,7 @@ config:
   app_id: ""
   secret_key: ""
   secret_id: ""
+debug: false
 ```
 
 Set the flags `--objstore.config-file` to reference to the configuration file.
