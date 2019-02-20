@@ -1182,13 +1182,8 @@ func (r *bucketIndexReader) ExpandedPostings(ms []labels.Matcher) ([]uint64, err
 
 	// NOTE: Derived from tsdb.PostingsForMatchers.
 	for _, m := range ms {
-		matchingGroup := toPostingGroup(r.LabelValues, m)
-		if matchingGroup == nil {
-			continue
-		}
-
 		// Each group is separate to tell later what postings are intersecting with what.
-		postingGroups = append(postingGroups, matchingGroup)
+		postingGroups = append(postingGroups, toPostingGroup(r.LabelValues, m))
 	}
 
 	if len(postingGroups) == 0 {
@@ -1240,6 +1235,10 @@ func (p *postingGroup) Fill(i int, posting index.Postings) {
 }
 
 func (p *postingGroup) Postings() index.Postings {
+	if len(p.keys) == 0 {
+		return index.EmptyPostings()
+	}
+
 	return p.aggregate(p.postings)
 }
 
@@ -1287,10 +1286,6 @@ func toPostingGroup(lvalsFn func(name string) []string, m labels.Matcher) *posti
 		if m.Matches(val) {
 			matchingLabels = append(matchingLabels, labels.Label{Name: m.Name(), Value: val})
 		}
-	}
-
-	if len(matchingLabels) == 0 {
-		return nil
 	}
 
 	return newPostingGroup(matchingLabels, merge)
