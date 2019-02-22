@@ -32,7 +32,7 @@ spec:
     spec:
       containers:
       - name: thanos
-        image: improbable/thanos:v0.3.0
+        image: improbable/thanos:v0.3.1
         args:
         - query
         - --log.level=debug

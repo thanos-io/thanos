@@ -18,7 +18,8 @@ spec:
     spec:
       containers:
       - name: thanos
-        image: improbable/thanos:v0.3.0
+        # TODO(bwplotka): Move to v0.3.2 once available.
+        image: improbable/thanos:master-2019-02-21-0c730c1
         args:
         - store
         - --log.level=debug
