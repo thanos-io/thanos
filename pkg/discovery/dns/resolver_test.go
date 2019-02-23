@@ -85,14 +85,18 @@ var (
 			resolver: &mockHostnameResolver{
 				resultSRVs: map[string][]*net.SRV{
 					"_test._tcp.mycompany.com": {
-						&net.SRV{Target: "192.168.0.1", Port: 8080},
-						&net.SRV{Target: "192.168.0.2", Port: 8081},
+						&net.SRV{Target: "alt1.mycompany.com.", Port: 8080},
+						&net.SRV{Target: "alt2.mycompany.com.", Port: 8081},
 					},
+				},
+				resultIPs: map[string][]net.IPAddr{
+					"alt1.mycompany.com.": {net.IPAddr{IP: net.ParseIP("192.168.0.1")}},
+					"alt2.mycompany.com.": {net.IPAddr{IP: net.ParseIP("192.168.0.2")}},
 				},
 			},
 		},
 		{
-			testName:       "multiple srv records from srv lookup",
+			testName:       "multiple srv records from srv lookup with specified port",
 			addr:           "_test._tcp.mycompany.com:8082",
 			qtype:          SRV,
 			expectedResult: []string{"192.168.0.1:8082", "192.168.0.2:8082"},
@@ -100,9 +104,13 @@ var (
 			resolver: &mockHostnameResolver{
 				resultSRVs: map[string][]*net.SRV{
 					"_test._tcp.mycompany.com": {
-						&net.SRV{Target: "192.168.0.1", Port: 8080},
-						&net.SRV{Target: "192.168.0.2", Port: 8081},
+						&net.SRV{Target: "alt1.mycompany.com.", Port: 8080},
+						&net.SRV{Target: "alt2.mycompany.com.", Port: 8081},
 					},
+				},
+				resultIPs: map[string][]net.IPAddr{
+					"alt1.mycompany.com.": {net.IPAddr{IP: net.ParseIP("192.168.0.1")}},
+					"alt2.mycompany.com.": {net.IPAddr{IP: net.ParseIP("192.168.0.2")}},
 				},
 			},
 		},

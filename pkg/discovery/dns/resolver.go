@@ -82,7 +82,14 @@ func (s *dnsSD) Resolve(ctx context.Context, name string, qtype QType) ([]string
 			if resPort == "" {
 				resPort = strconv.Itoa(int(rec.Port))
 			}
-			res = append(res, appendScheme(scheme, net.JoinHostPort(rec.Target, resPort)))
+			// Do A lookup for the domain in SRV answer
+			resIPs, err := s.resolver.LookupIPAddr(ctx, rec.Target)
+			if err != nil {
+				return nil, errors.Wrapf(err, "look IP addresses %q", rec.Target)
+			}
+			for _, resIP := range resIPs {
+				res = append(res, appendScheme(scheme, net.JoinHostPort(resIP.String(), resPort)))
+			}
 		}
 	default:
 		return nil, errors.Errorf("invalid lookup scheme %q", qtype)
