@@ -42,8 +42,9 @@ func main() {
 	input := app.Flag("input", "Input file for series config.").Required().String()
 	outputDir := app.Flag("output-dir", "Output directory for generated TSDB data.").Required().String()
 	scrapeInterval := app.Flag("scrape-interval", "Interval for to generate samples with.").Default("15s").Duration()
-
 	retention := app.Flag("retention", "Defines the the max time in relation to current time for generated samples.").Required().Duration()
+	// TODO: Validate?
+	extraLabels := app.Flag("extra-labels", "Extra labels to add (will override existing). Format 'a=b'. Repeated").Strings()
 
 	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
 	_, err := app.Parse(os.Args[1:])
@@ -102,11 +103,16 @@ func main() {
 	generators := make(map[string]gen)
 	for _, in := range s {
 		for _, r := range in.Result.Result {
-			lset := labels.New()
+			lsetMap := map[string]string{}
 			for n, v := range r.Metric {
-				lset = append(lset, labels.Label{Name: string(n), Value: string(v)})
+				lsetMap[string(n)] = string(v)
 			}
-			//level.Debug(logger).Log("msg", "scheduled generation of series", "lset", lset)
+
+			for _, l := range *extraLabels {
+				// TODO: Yolo & unsafe, validate this.
+				s := strings.Split(l, "=")
+				lsetMap[s[0]] = s[1]
+			}
 
 			var chInterval time.Duration
 			if in.ChangeInterval != "" {
@@ -117,6 +123,7 @@ func main() {
 				}
 			}
 
+			lset := labels.FromMap(lsetMap)
 			switch strings.ToLower(in.Type) {
 			case "counter":
 				// Does not work well (: Too naive.

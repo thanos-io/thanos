@@ -21,7 +21,7 @@ data:
             absent(sum(up{job="prometheus", cluster="us1", instance=~".*:9090"}) by (job, cluster) == 2),
             "cluster", "us1", "",""
           )
-        for: 15s # for demo purposes
+        for: 1s # for demo purposes, typically 5m is a fine number.
         labels:
           severity: critical
 ---

@@ -19,7 +19,7 @@ spec:
       containers:
       - name: thanos
         # TODO(bwplotka): Move to v0.3.2 once available.
-        image: improbable/thanos:master-2019-02-21-0c730c1
+        image: improbable/thanos:v0.3.2-rc.0
         args:
         - store
         - --log.level=debug
@@ -47,20 +47,3 @@ spec:
           requests:
             cpu: "1"
             memory: 1Gi
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app: thanos-store-gateway
-  name: thanos-store-gateway
-spec:
-  ports:
-  - port: 10901
-    protocol: TCP
-    targetPort: grpc
-    name: grpc
-  selector:
-    app: thanos-store-gateway
-  type: NodePort

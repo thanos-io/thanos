@@ -815,13 +815,13 @@ data:
         for: 10m
         labels:
           severity: warning
-      - alert: AlertPropagationTest
-        annotations:
-          message: This is an AlertPropagationTest meant to ensure that the entire alerting
-            pipeline is functional.
-        expr: vector(1)
-        labels:
-          severity: none
+#      - alert: AlertPropagationTest
+#        annotations:
+#          message: This is an AlertPropagationTest meant to ensure that the entire alerting
+#            pipeline is functional.
+#        expr: vector(1)
+#        labels:
+#          severity: none
   kube-prometheus-node-alerting.rules.yaml: |-
     groups:
     - name: kube-prometheus-node-alerting

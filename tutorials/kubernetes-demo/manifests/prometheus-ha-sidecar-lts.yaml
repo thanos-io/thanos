@@ -115,7 +115,7 @@ spec:
           - name: prometheus
             mountPath: /var/prometheus
       - name: thanos
-        image: improbable/thanos:v0.3.1
+        image: improbable/thanos:v0.3.2-rc.0
         args:
           - sidecar
           - --log.level=debug
@@ -134,7 +134,7 @@ spec:
               endpoint: %%S3_ENDPOINT%%
               insecure: true
           # New flag for migrating old blocks.
-          - --shipper.upload-compacted-once
+          - --shipper.upload-compacted
         env:
           - name: POD_NAME
             valueFrom:
