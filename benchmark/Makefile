@@ -1,14 +1,14 @@
-GOPATH    ?= $(shell go env GOPATH)
-GOIMPORTS ?= $(GOPATH)/bin/goimports
-DEP       ?= $(GOPATH)/bin/dep
+GOPATH      ?= $(shell go env GOPATH)
+GOIMPORTS   ?= $(GOPATH)/bin/goimports
+GO111MODULE ?= on
 
 .PHONY: all
 all: deps build
 
 .PHONY: deps
-deps: $(DEP)
+deps:
 	@echo ">> fetching dependencies"
-	@$(DEP) ensure
+	@GO111MODULE=$(GO111MODULE) go mod vendor
 
 .PHONY: build
 build:
@@ -18,10 +18,6 @@ build:
 format: $(GOIMPORTS) deps
 	@echo ">> formatting code"
 	@$(GOIMPORTS) -w $(shell find . -type f -name '*.go' -not -path "./vendor/*")
-
-$(DEP):
-	@echo ">> fetching dep"
-	@go get -u github.com/golang/dep/cmd/dep
 
 $(GOIMPORTS): 
 	@echo ">> fetching goimports"

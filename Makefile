@@ -3,7 +3,7 @@ FILES             ?= $(shell find . -type f -name '*.go' -not -path "./vendor/*"
 DOCKER_IMAGE_NAME ?= thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
 # $GOPATH/bin might not be in $PATH, so we can't assume `which` would give use
-# the path of promu, dep et al. As for selecting the first GOPATH, we assume:
+# the path of promu et al. As for selecting the first GOPATH, we assume:
 # - most people only have one GOPATH at a time;
 # - if you don't have one or any of those tools installed, running `go get`
 #   would place them in the first GOPATH.
@@ -13,11 +13,9 @@ DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(she
 FIRST_GOPATH      ?= $(firstword $(subst :, ,$(shell go env GOPATH)))
 TMP_GOPATH        ?= /tmp/thanos-go
 BIN_DIR           ?= $(FIRST_GOPATH)/bin
-DEP_FINISHED      ?= .dep-finished
+GO111MODULE       ?= on
 
 # Tools.
-DEP               ?= $(BIN_DIR)/dep-$(DEP_VERSION)
-DEP_VERSION       ?= 45be32ba4708aad5e2aa8c86f9432c4c4c1f8da2
 EMBEDMD           ?= $(BIN_DIR)/embedmd-$(EMBEDMD_VERSION)
 # v2.0.0
 EMBEDMD_VERSION   ?= 97c13d6e41602fc6e397eb51c45f38069371a969
@@ -38,26 +36,26 @@ PROTOC_VERSION    ?= 3.4.0
 # Referenced by github.com/improbable-eng/thanos/blob/master/docs/getting_started.md#prometheus
 
 # Limitied prom version, because testing was not possibe. This should fix it: https://github.com/improbable-eng/thanos/issues/758
-PROM_VERSIONS ?=v2.4.3 v2.5.0
+PROM_VERSIONS           ?=v2.4.3 v2.5.0
 ALERTMANAGER_VERSION    ?=v0.15.2
 MINIO_SERVER_VERSION    ?=RELEASE.2018-10-06T00-15-16Z
 
 # fetch_go_bin_version downloads (go gets) the binary from specific version and installs it in $(BIN_DIR)/<bin>-<version>
 # arguments:
-# $(1): Install path. (e.g github.com/golang/dep/cmd/dep)
+# $(1): Install path. (e.g github.com/campoy/embedmd)
 # $(2): Tag or revision for checkout.
 define fetch_go_bin_version
 	@mkdir -p $(BIN_DIR)
 
 	@echo ">> fetching $(1)@$(2) revision/version"
 	@if [ ! -d '$(TMP_GOPATH)/src/$(1)' ]; then \
-    GOPATH='$(TMP_GOPATH)' go get -d -u '$(1)'; \
+    GOPATH='$(TMP_GOPATH)' GO111MODULE='off' go get -d -u '$(1)/...'; \
   else \
     CDPATH='' cd -- '$(TMP_GOPATH)/src/$(1)' && git fetch; \
   fi
 	@CDPATH='' cd -- '$(TMP_GOPATH)/src/$(1)' && git checkout -f -q '$(2)'
 	@echo ">> installing $(1)@$(2)"
-	@GOBIN='$(TMP_GOPATH)/bin' GOPATH='$(TMP_GOPATH)' go install '$(1)'
+	@GOBIN='$(TMP_GOPATH)/bin' GOPATH='$(TMP_GOPATH)' GO111MODULE='off' go install '$(1)'
 	@mv -- '$(TMP_GOPATH)/bin/$(shell basename $(1))' '$(BIN_DIR)/$(shell basename $(1))-$(2)'
 	@echo ">> produced $(BIN_DIR)/$(shell basename $(1))-$(2)"
 
@@ -182,17 +180,11 @@ vet:
 
 # non-phony targets
 
-vendor: Gopkg.toml Gopkg.lock $(DEP_FINISHED) | $(DEP)
-	@echo ">> dep ensure"
-	@$(DEP) ensure $(DEPARGS) || rm $(DEP_FINISHED)
-
-$(DEP_FINISHED):
-	@touch $(DEP_FINISHED)
+.PHONY: vendor
+vendor:
+	@GO111MODULE=$(GO111MODULE) go mod vendor
 
 # tooling deps. TODO(bwplotka): Pin them all to certain version!
-
-$(DEP):
-	$(call fetch_go_bin_version,github.com/golang/dep/cmd/dep,$(DEP_VERSION))
 
 $(EMBEDMD):
 	$(call fetch_go_bin_version,github.com/campoy/embedmd,$(EMBEDMD_VERSION))
