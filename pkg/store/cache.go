@@ -151,6 +151,7 @@ func (c *indexCache) setPostings(b ulid.ULID, l labels.Label, v []byte) {
 	c.lru.Add(cacheItem{b, cacheKeyPostings(l)}, cv)
 
 	c.currentSize.WithLabelValues(cacheTypePostings).Add(float64(len(v)))
+	c.current.WithLabelValues(cacheTypePostings).Inc()
 }
 
 func (c *indexCache) postings(b ulid.ULID, l labels.Label) ([]byte, bool) {
@@ -185,6 +186,7 @@ func (c *indexCache) setSeries(b ulid.ULID, id uint64, v []byte) {
 	c.lru.Add(cacheItem{b, cacheKeySeries(id)}, cv)
 
 	c.currentSize.WithLabelValues(cacheTypeSeries).Add(float64(len(v)))
+	c.current.WithLabelValues(cacheTypeSeries).Inc()
 }
 
 func (c *indexCache) series(b ulid.ULID, id uint64) ([]byte, bool) {
