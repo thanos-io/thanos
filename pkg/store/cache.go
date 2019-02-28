@@ -127,7 +127,7 @@ func (c *indexCache) ensureFits(b []byte) bool {
 	if uint64(len(b)) > c.maxSize {
 		return false
 	}
-	for c.curSize+uint64(len(b)) > c.maxSize {
+	for c.curSize > c.maxSize-uint64(len(b)) {
 		if _, val, ok := c.lru.RemoveOldest(); ok {
 			v := val.([]byte)
 			c.curSize -= uint64(len(v))
