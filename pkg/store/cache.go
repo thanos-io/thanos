@@ -128,7 +128,10 @@ func (c *indexCache) ensureFits(b []byte) bool {
 		return false
 	}
 	for c.curSize+uint64(len(b)) > c.maxSize {
-		c.lru.RemoveOldest()
+		if _, val, ok := c.lru.RemoveOldest(); ok {
+			v := val.([]byte)
+			c.curSize -= uint64(len(v))
+		}
 	}
 	return true
 }
@@ -152,6 +155,7 @@ func (c *indexCache) setPostings(b ulid.ULID, l labels.Label, v []byte) {
 
 	c.currentSize.WithLabelValues(cacheTypePostings).Add(float64(len(v)))
 	c.current.WithLabelValues(cacheTypePostings).Inc()
+	c.curSize += uint64(len(v))
 }
 
 func (c *indexCache) postings(b ulid.ULID, l labels.Label) ([]byte, bool) {
@@ -187,6 +191,7 @@ func (c *indexCache) setSeries(b ulid.ULID, id uint64, v []byte) {
 
 	c.currentSize.WithLabelValues(cacheTypeSeries).Add(float64(len(v)))
 	c.current.WithLabelValues(cacheTypeSeries).Inc()
+	c.curSize += uint64(len(v))
 }
 
 func (c *indexCache) series(b ulid.ULID, id uint64) ([]byte, bool) {
