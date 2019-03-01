@@ -145,6 +145,31 @@ func modelDuration(flags *kingpin.FlagClause) *model.Duration {
 	return value
 }
 
+type flagTime struct {
+	time time.Time
+}
+
+func (ft *flagTime) Set(s string) error {
+	var err error
+	ft.time, err = time.Parse(time.RFC3339, s)
+	return err
+}
+
+func (ft flagTime) String() string {
+	return ft.time.String()
+}
+
+func (ft flagTime) Time() time.Time {
+	return ft.time
+}
+
+func timeFlag(flags *kingpin.FlagClause) *flagTime {
+	var value = new(flagTime)
+	flags.SetValue(value)
+
+	return value
+}
+
 type pathOrContent struct {
 	fileFlagName    string
 	contentFlagName string

@@ -173,6 +173,11 @@ type BucketStore struct {
 	// Number of goroutines to use when syncing blocks from object storage.
 	blockSyncConcurrency int
 
+	// Start and end time to serve with this store process.  The meta.json files
+	// loaded will be filtered by these ranges.
+	minTime int64
+	maxTime int64
+
 	partitioner partitioner
 }
 
@@ -187,6 +192,8 @@ func NewBucketStore(
 	maxChunkPoolBytes uint64,
 	debugLogging bool,
 	blockSyncConcurrency int,
+	minTime int64,
+	maxTime int64,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -212,6 +219,8 @@ func NewBucketStore(
 		blockSets:            map[uint64]*bucketBlockSet{},
 		debugLogging:         debugLogging,
 		blockSyncConcurrency: blockSyncConcurrency,
+		minTime:              minTime,
+		maxTime:              maxTime,
 		partitioner:          gapBasedPartitioner{maxGapSize: maxGapSize},
 	}
 	s.metrics = newBucketStoreMetrics(reg)
@@ -359,11 +368,20 @@ func (s *BucketStore) addBlock(ctx context.Context, id ulid.ULID) (err error) {
 		dir,
 		s.indexCache,
 		s.chunkPool,
+		s.minTime,
+		s.maxTime,
 		s.partitioner,
 	)
 	if err != nil {
 		return errors.Wrap(err, "new bucket block")
 	}
+
+	// If newBucketBlock doesn't return a bucket (outside time range?) then skip
+	// the rest of the work.
+	if b == nil {
+		return nil
+	}
+
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -1001,6 +1019,8 @@ func newBucketBlock(
 	dir string,
 	indexCache *indexCache,
 	chunkPool *pool.BytesPool,
+	minTime int64,
+	maxTime int64,
 	p partitioner,
 ) (b *bucketBlock, err error) {
 	b = &bucketBlock{
@@ -1015,6 +1035,17 @@ func newBucketBlock(
 	if err = b.loadMeta(ctx, id); err != nil {
 		return nil, errors.Wrap(err, "load meta")
 	}
+
+	// We want to make sure a single stores owns a block.  In order to do that,
+	// we check if the Mintime is contained within the time frame.  We're more
+	// concerned that we have exactly one owning store per block than perfectly
+	// containing the blocks within the start and end times.  If the MinTime is
+	// outside our time range, then clean up downloaded files and return early.
+	if b.meta.MinTime < minTime || b.meta.MinTime > maxTime {
+		os.RemoveAll(dir)
+		return nil, nil
+	}
+
 	if err = b.loadIndexCache(ctx); err != nil {
 		return nil, errors.Wrap(err, "load index cache")
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/pkg/timestamp"
 	"google.golang.org/grpc"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
@@ -44,6 +45,12 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing blocks from object storage.").
 		Default("20").Int()
 
+	minTime := timeFlag(cmd.Flag("min-time", "Start of time range limit to serve").
+		Default("0000-01-01T00:00:00Z"))
+
+	maxTime := timeFlag(cmd.Flag("max-time", "End of time range limit to serve").
+		Default("9999-12-31T23:59:59Z"))
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
 		peer, err := newPeerFn(logger, reg, false, "", false)
 		if err != nil {
@@ -67,6 +74,8 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			debugLogging,
 			*syncInterval,
 			*blockSyncConcurrency,
+			timestamp.FromTime(minTime.Time()),
+			timestamp.FromTime(maxTime.Time()),
 		)
 	}
 }
@@ -91,6 +100,8 @@ func runStore(
 	verbose bool,
 	syncInterval time.Duration,
 	blockSyncConcurrency int,
+	minTime int64,
+	maxTime int64,
 ) error {
 	{
 		confContentYaml, err := objStoreConfig.Content()
@@ -119,6 +130,8 @@ func runStore(
 			chunkPoolSizeBytes,
 			verbose,
 			blockSyncConcurrency,
+			minTime,
+			maxTime,
 		)
 		if err != nil {
 			return errors.Wrap(err, "create object storage store")
