@@ -4,7 +4,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/improbable-eng/thanos)](https://goreportcard.com/report/github.com/improbable-eng/thanos)
 [![GoDoc](https://godoc.org/github.com/improbable-eng/thanos?status.svg)](https://godoc.org/github.com/improbable-eng/thanos)
 [![Slack](https://img.shields.io/badge/join%20slack-%23thanos-brightgreen.svg)](https://join.slack.com/t/improbable-eng/shared_invite/enQtMzQ1ODcyMzQ5MjM4LWY5ZWZmNGM2ODc5MmViNmQ3ZTA3ZTY3NzQwOTBlMTkzZmIxZTIxODk0OWU3YjZhNWVlNDU3MDlkZGViZjhkMjc)
-[![Docker Pulls](https://img.shields.io/docker/pulls/improbable/thanos.svg?maxAge=604800)]
+[![Docker Pulls](https://img.shields.io/docker/pulls/improbable/thanos.svg?maxAge=604800)](https://hub.docker.com/r/improbable/thanos/)
 
 ## Overview
 
