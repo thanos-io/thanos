@@ -63,7 +63,7 @@ ignored = ["github.com/improbable-eng/thanos/benchmark/*"]
 
 [[constraint]]
   name = "google.golang.org/grpc"
-  version = "1.12.1"
+  version = "1.19.0"
 
 [[constraint]]
   name = "gopkg.in/alecthomas/kingpin.v2"
