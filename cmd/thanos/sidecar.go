@@ -256,18 +256,18 @@ func runSidecar(
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
-		var s *shipper.Shipper
-		if uploadCompacted {
-			s, err = shipper.NewWithCompacted(ctx, logger, reg, dataDir, bkt, m.Labels, metadata.SidecarSource, promURL)
-			if err != nil {
-				return errors.Wrap(err, "create shipper")
-			}
-		} else {
-			s = shipper.New(logger, reg, dataDir, bkt, m.Labels, metadata.SidecarSource)
-		}
-
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+
+			var s *shipper.Shipper
+			if uploadCompacted {
+				s, err = shipper.NewWithCompacted(ctx, logger, reg, dataDir, bkt, m.Labels, metadata.SidecarSource, m.promURL)
+				if err != nil {
+					return errors.Wrap(err, "create shipper")
+				}
+			} else {
+				s = shipper.New(logger, reg, dataDir, bkt, m.Labels, metadata.SidecarSource)
+			}
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				if uploaded, err := s.Sync(ctx); err != nil {
