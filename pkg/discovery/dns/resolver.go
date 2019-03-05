@@ -82,7 +82,7 @@ func (s *dnsSD) Resolve(ctx context.Context, name string, qtype QType) ([]string
 			if resPort == "" {
 				resPort = strconv.Itoa(int(rec.Port))
 			}
-			// Do A lookup for the domain in SRV answer
+			// Do A lookup for the domain in SRV answer.
 			resIPs, err := s.resolver.LookupIPAddr(ctx, rec.Target)
 			if err != nil {
 				return nil, errors.Wrapf(err, "look IP addresses %q", rec.Target)
