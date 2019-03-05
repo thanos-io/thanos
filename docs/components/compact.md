@@ -67,5 +67,8 @@ Flags:
                            in bucket. 0d - disables this retention
   -w, --wait               Do not exit after all compactions have been processed
                            and wait for new work.
+      --block-sync-concurrency=20  
+                           Number of goroutines to use when syncing block
+                           metadata from object storage.
 
 ```
