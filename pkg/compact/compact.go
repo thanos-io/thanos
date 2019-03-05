@@ -33,6 +33,8 @@ const (
 	ResolutionLevel1h  = ResolutionLevel(downsample.ResLevel2)
 )
 
+var blockTooFreshSentinelError = errors.New("Block too fresh")
+
 // Syncer syncronizes block metas from a bucket into a local directory.
 // It sorts them into compaction groups based on equal label sets.
 type Syncer struct {
@@ -183,15 +185,17 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 				}
 
 				meta, err := c.downloadMeta(workCtx, id)
+				if err == blockTooFreshSentinelError {
+					continue
+				}
 				if err != nil {
 					errChan <- err
 					return
 				}
-				if meta != nil {
-					c.blocksMtx.Lock()
-					c.blocks[id] = meta
-					c.blocksMtx.Unlock()
-				}
+
+				c.blocksMtx.Lock()
+				c.blocks[id] = meta
+				c.blocksMtx.Unlock()
 			}
 		}()
 	}
@@ -256,7 +260,7 @@ func (c *Syncer) downloadMeta(ctx context.Context, id ulid.ULID) (*metadata.Meta
 		meta.Thanos.Source != metadata.CompactorRepairSource {
 
 		level.Debug(c.logger).Log("msg", "block is too fresh for now", "block", id)
-		return nil, nil
+		return nil, blockTooFreshSentinelError
 	}
 
 	return &meta, nil
