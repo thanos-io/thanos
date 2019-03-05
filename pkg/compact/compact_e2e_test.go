@@ -180,7 +180,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		extLset := labels.Labels{{Name: "e1", Value: "1"}}
 		b1, err := testutil.CreateBlock(prepareDir, []labels.Labels{
 			{{Name: "a", Value: "1"}},
-			{{Name: "a", Value: "2"}},
+			{{Name: "a", Value: "2"}, {Name: "a", Value: "2"}},
 			{{Name: "a", Value: "3"}},
 			{{Name: "a", Value: "4"}},
 		}, 100, 0, 1000, extLset, 124)

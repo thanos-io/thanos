@@ -347,7 +347,7 @@ func GatherIndexIssueStats(logger log.Logger, fn string, minTime int64, maxTime 
 		}
 		l0 := lset[0]
 		for _, l := range lset[1:] {
-			if l.Name <= l0.Name {
+			if l.Name < l0.Name {
 				return stats, errors.Errorf("out-of-order label set %s for series %d", lset, id)
 			}
 			l0 = l
