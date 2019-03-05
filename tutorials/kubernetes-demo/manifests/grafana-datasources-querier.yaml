@@ -1,0 +1,20 @@
+apiVersion: v1
+data:
+  prometheus.yaml: |-
+    {
+        "apiVersion": 1,
+        "datasources": [
+            {
+                 "access": "proxy",
+                 "editable": false,
+                 "name": "all",
+                 "orgId": 1,
+                 "type": "prometheus",
+                 "url": "http://thanos-querier.default.svc:9090",
+                 "version": 1
+            },
+        ]
+    }
+kind: ConfigMap
+metadata:
+  name: grafana-datasources

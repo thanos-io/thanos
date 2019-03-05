@@ -32,7 +32,7 @@ func TestSyncer_SyncMetas_e2e(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
-		sy, err := NewSyncer(nil, nil, bkt, 0)
+		sy, err := NewSyncer(nil, nil, bkt, 0, 1)
 		testutil.Ok(t, err)
 
 		// Generate 15 blocks. Initially the first 10 are synced into memory and only the last
@@ -134,7 +134,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		}
 
 		// Do one initial synchronization with the bucket.
-		sy, err := NewSyncer(nil, nil, bkt, 0)
+		sy, err := NewSyncer(nil, nil, bkt, 0, 1)
 		testutil.Ok(t, err)
 		testutil.Ok(t, sy.SyncMetas(ctx))
 
@@ -180,7 +180,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		extLset := labels.Labels{{Name: "e1", Value: "1"}}
 		b1, err := testutil.CreateBlock(prepareDir, []labels.Labels{
 			{{Name: "a", Value: "1"}},
-			{{Name: "a", Value: "2"}},
+			{{Name: "a", Value: "2"}, {Name: "a", Value: "2"}},
 			{{Name: "a", Value: "3"}},
 			{{Name: "a", Value: "4"}},
 		}, 100, 0, 1000, extLset, 124)

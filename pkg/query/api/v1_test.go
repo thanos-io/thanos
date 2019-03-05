@@ -77,11 +77,11 @@ func TestEndpoints(t *testing.T) {
 	start := time.Unix(0, 0)
 
 	var tests = []struct {
-		endpoint apiFunc
+		endpoint ApiFunc
 		params   map[string]string
 		query    url.Values
 		response interface{}
-		errType  errorType
+		errType  ErrorType
 	}{
 		{
 			endpoint: api.query,
@@ -425,8 +425,8 @@ func TestEndpoints(t *testing.T) {
 				if test.errType == errorNone {
 					t.Fatalf("Unexpected error: %s", apiErr)
 				}
-				if test.errType != apiErr.typ {
-					t.Fatalf("Expected error of type %q but got type %q", test.errType, apiErr.typ)
+				if test.errType != apiErr.Typ {
+					t.Fatalf("Expected error of type %q but got type %q", test.errType, apiErr.Typ)
 				}
 				return
 			}
@@ -446,7 +446,7 @@ func TestEndpoints(t *testing.T) {
 
 func TestRespondSuccess(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		respond(w, "test", nil)
+		Respond(w, "test", nil)
 	}))
 	defer s.Close()
 
@@ -483,7 +483,7 @@ func TestRespondSuccess(t *testing.T) {
 
 func TestRespondError(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		respondError(w, &apiError{errorTimeout, errors.New("message")}, "test")
+		RespondError(w, &ApiError{errorTimeout, errors.New("message")}, "test")
 	}))
 	defer s.Close()
 

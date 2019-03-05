@@ -1,0 +1,67 @@
+# This allow us to do
+# SRV lookup: thanos-store-api.default.svc
+apiVersion: v1
+kind: Service
+metadata:
+  name: thanos-store-gateway
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: grpc
+      port: 10901
+      targetPort: grpc
+  selector:
+    thanos-store-api: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: thanos-querier
+  labels:
+    app: thanos-querier
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: thanos-querier
+  template:
+    metadata:
+      labels:
+        app: thanos-querier
+    spec:
+      containers:
+      - name: thanos
+        image: improbable/thanos:v0.3.1
+        args:
+        - query
+        - --log.level=debug
+        - --query.replica-label=replica
+        - --cluster.disable
+        # Discover local store APIs using DNS SRV.
+        - --store=dnssrv+thanos-store-gateway.default.svc
+        ports:
+        - name: http
+          containerPort: 10902
+        - name: grpc
+          containerPort: 10901
+        livenessProbe:
+          httpGet:
+            path: /-/healthy
+            port: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: thanos-querier
+  name: thanos-querier
+spec:
+  ports:
+  - port: 9090
+    protocol: TCP
+    targetPort: http
+    name: http
+  selector:
+    app: thanos-querier
+  type: NodePort
