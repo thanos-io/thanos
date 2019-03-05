@@ -36,13 +36,15 @@ const (
 // Syncer syncronizes block metas from a bucket into a local directory.
 // It sorts them into compaction groups based on equal label sets.
 type Syncer struct {
-	logger    log.Logger
-	reg       prometheus.Registerer
-	bkt       objstore.Bucket
-	syncDelay time.Duration
-	mtx       sync.Mutex
-	blocks    map[ulid.ULID]*metadata.Meta
-	metrics   *syncerMetrics
+	logger              log.Logger
+	reg                 prometheus.Registerer
+	bkt                 objstore.Bucket
+	syncDelay           time.Duration
+	mtx                 sync.Mutex
+	blocks              map[ulid.ULID]*metadata.Meta
+	blocksMtx           sync.Mutex
+	metaSyncConcurrency int
+	metrics             *syncerMetrics
 }
 
 type syncerMetrics struct {
@@ -124,17 +126,18 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 
 // NewSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, syncDelay time.Duration) (*Syncer, error) {
+func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, syncDelay time.Duration, metaSyncConcurrency int) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	return &Syncer{
-		logger:    logger,
-		reg:       reg,
-		syncDelay: syncDelay,
-		blocks:    map[ulid.ULID]*metadata.Meta{},
-		bkt:       bkt,
-		metrics:   newSyncerMetrics(reg),
+		logger:              logger,
+		reg:                 reg,
+		syncDelay:           syncDelay,
+		blocks:              map[ulid.ULID]*metadata.Meta{},
+		bkt:                 bkt,
+		metrics:             newSyncerMetrics(reg),
+		metaSyncConcurrency: metaSyncConcurrency,
 	}, nil
 }
 
@@ -157,6 +160,42 @@ func (c *Syncer) SyncMetas(ctx context.Context) error {
 }
 
 func (c *Syncer) syncMetas(ctx context.Context) error {
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
+	metaIDsChan := make(chan ulid.ULID)
+	errChan := make(chan error, c.metaSyncConcurrency)
+
+	workCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	for i := 0; i < c.metaSyncConcurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			for id := range metaIDsChan {
+				// Check if we already have this block cached locally.
+				c.blocksMtx.Lock()
+				_, seen := c.blocks[id]
+				c.blocksMtx.Unlock()
+				if seen {
+					continue
+				}
+
+				meta, err := c.downloadMeta(workCtx, id)
+				if err != nil {
+					errChan <- err
+					return
+				}
+				if meta != nil {
+					c.blocksMtx.Lock()
+					c.blocks[id] = meta
+					c.blocksMtx.Unlock()
+				}
+			}
+		}()
+	}
+
 	// Read back all block metas so we can detect deleted blocks.
 	remote := map[ulid.ULID]struct{}{}
 
@@ -168,40 +207,23 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 
 		remote[id] = struct{}{}
 
-		// Check if we already have this block cached locally.
-		if _, ok := c.blocks[id]; ok {
-			return nil
+		select {
+		case <-ctx.Done():
+		case metaIDsChan <- id:
 		}
-
-		level.Debug(c.logger).Log("msg", "download meta", "block", id)
-
-		meta, err := block.DownloadMeta(ctx, c.logger, c.bkt, id)
-		if err != nil {
-			return errors.Wrapf(err, "downloading meta.json for %s", id)
-		}
-
-		// ULIDs contain a millisecond timestamp. We do not consider blocks that have been created too recently to
-		// avoid races when a block is only partially uploaded. This relates to all blocks, excluding:
-		// - repair created blocks
-		// - compactor created blocks
-		// NOTE: It is not safe to miss "old" block (even that it is newly created) in sync step. Compactor needs to aware of ALL old blocks.
-		// TODO(bplotka): https://github.com/improbable-eng/thanos/issues/377
-		if ulid.Now()-id.Time() < uint64(c.syncDelay/time.Millisecond) &&
-			meta.Thanos.Source != metadata.BucketRepairSource &&
-			meta.Thanos.Source != metadata.CompactorSource &&
-			meta.Thanos.Source != metadata.CompactorRepairSource {
-
-			level.Debug(c.logger).Log("msg", "block is too fresh for now", "block", id)
-			return nil
-		}
-
-		remote[id] = struct{}{}
-		c.blocks[id] = &meta
 
 		return nil
 	})
+	close(metaIDsChan)
 	if err != nil {
 		return retry(errors.Wrap(err, "retrieve bucket block metas"))
+	}
+
+	wg.Wait()
+	close(errChan)
+
+	if err := <-errChan; err != nil {
+		return retry(err)
 	}
 
 	// Delete all local block dirs that no longer exist in the bucket.
@@ -212,6 +234,32 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (c *Syncer) downloadMeta(ctx context.Context, id ulid.ULID) (*metadata.Meta, error) {
+	level.Debug(c.logger).Log("msg", "download meta", "block", id)
+
+	meta, err := block.DownloadMeta(ctx, c.logger, c.bkt, id)
+	if err != nil {
+		return nil, errors.Wrapf(err, "downloading meta.json for %s", id)
+	}
+
+	// ULIDs contain a millisecond timestamp. We do not consider blocks that have been created too recently to
+	// avoid races when a block is only partially uploaded. This relates to all blocks, excluding:
+	// - repair created blocks
+	// - compactor created blocks
+	// NOTE: It is not safe to miss "old" block (even that it is newly created) in sync step. Compactor needs to aware of ALL old blocks.
+	// TODO(bplotka): https://github.com/improbable-eng/thanos/issues/377
+	if ulid.Now()-id.Time() < uint64(c.syncDelay/time.Millisecond) &&
+		meta.Thanos.Source != metadata.BucketRepairSource &&
+		meta.Thanos.Source != metadata.CompactorSource &&
+		meta.Thanos.Source != metadata.CompactorRepairSource {
+
+		level.Debug(c.logger).Log("msg", "block is too fresh for now", "block", id)
+		return nil, nil
+	}
+
+	return &meta, nil
 }
 
 // GroupKey returns a unique identifier for the group the block belongs to. It considers
