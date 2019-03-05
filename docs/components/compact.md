@@ -31,41 +31,44 @@ usage: thanos compact [<flags>]
 continuously compacts blocks in an object store bucket
 
 Flags:
-  -h, --help               Show context-sensitive help (also try --help-long and
-                           --help-man).
-      --version            Show application version.
-      --log.level=info     Log filtering level.
-      --log.format=logfmt  Log format to use.
+  -h, --help                     Show context-sensitive help (also try
+                                 --help-long and --help-man).
+      --version                  Show application version.
+      --log.level=info           Log filtering level.
+      --log.format=logfmt        Log format to use.
       --gcloudtrace.project=GCLOUDTRACE.PROJECT  
-                           GCP project to send Google Cloud Trace tracings to.
-                           If empty, tracing will be disabled.
+                                 GCP project to send Google Cloud Trace tracings
+                                 to. If empty, tracing will be disabled.
       --gcloudtrace.sample-factor=1  
-                           How often we send traces (1/<sample-factor>). If 0 no
-                           trace will be sent periodically, unless forced by
-                           baggage item. See `pkg/tracing/tracing.go` for
-                           details.
+                                 How often we send traces (1/<sample-factor>).
+                                 If 0 no trace will be sent periodically, unless
+                                 forced by baggage item. See
+                                 `pkg/tracing/tracing.go` for details.
       --http-address="0.0.0.0:10902"  
-                           Listen host:port for HTTP endpoints.
-      --data-dir="./data"  Data directory in which to cache blocks and process
-                           compactions.
+                                 Listen host:port for HTTP endpoints.
+      --data-dir="./data"        Data directory in which to cache blocks and
+                                 process compactions.
       --objstore.config-file=<bucket.config-yaml-path>  
-                           Path to YAML file that contains object store
-                           configuration.
+                                 Path to YAML file that contains object store
+                                 configuration.
       --objstore.config=<bucket.config-yaml>  
-                           Alternative to 'objstore.config-file' flag. Object
-                           store configuration in YAML.
-      --sync-delay=30m     Minimum age of fresh (non-compacted) blocks before
-                           they are being processed.
+                                 Alternative to 'objstore.config-file' flag.
+                                 Object store configuration in YAML.
+      --sync-delay=30m           Minimum age of fresh (non-compacted) blocks
+                                 before they are being processed.
       --retention.resolution-raw=0d  
-                           How long to retain raw samples in bucket. 0d -
-                           disables this retention
+                                 How long to retain raw samples in bucket. 0d -
+                                 disables this retention
       --retention.resolution-5m=0d  
-                           How long to retain samples of resolution 1 (5
-                           minutes) in bucket. 0d - disables this retention
+                                 How long to retain samples of resolution 1 (5
+                                 minutes) in bucket. 0d - disables this
+                                 retention
       --retention.resolution-1h=0d  
-                           How long to retain samples of resolution 2 (1 hour)
-                           in bucket. 0d - disables this retention
-  -w, --wait               Do not exit after all compactions have been processed
-                           and wait for new work.
+                                 How long to retain samples of resolution 2 (1
+                                 hour) in bucket. 0d - disables this retention
+  -w, --wait                     Do not exit after all compactions have been
+                                 processed and wait for new work.
+      --meta-sync-concurrency=1  Number of goroutines to use when syncing
+                                 metadata from object storage.
 
 ```
