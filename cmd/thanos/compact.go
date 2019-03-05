@@ -92,8 +92,8 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	maxCompactionLevel := cmd.Flag("debug.max-compaction-level", fmt.Sprintf("Maximum compaction level, default is %d: %s", compactions.maxLevel(), compactions.String())).
 		Hidden().Default(strconv.Itoa(compactions.maxLevel())).Int()
 
-	metaSyncConcurrency := cmd.Flag("meta-sync-concurrency", "Number of goroutines to use when syncing metadata from object storage.").
-		Default("1").Int()
+	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing block metadata from object storage.").
+		Default("20").Int()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		return runCompact(g, logger, reg,
@@ -111,7 +111,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			name,
 			*disableDownsampling,
 			*maxCompactionLevel,
-			*metaSyncConcurrency,
+			*blockSyncConcurrency,
 		)
 	}
 }
@@ -130,7 +130,7 @@ func runCompact(
 	component string,
 	disableDownsampling bool,
 	maxCompactionLevel int,
-	metaSyncConcurrency int,
+	blockSyncConcurrency int,
 ) error {
 	halted := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compactor_halted",
@@ -162,7 +162,7 @@ func runCompact(
 		}
 	}()
 
-	sy, err := compact.NewSyncer(logger, reg, bkt, syncDelay, metaSyncConcurrency)
+	sy, err := compact.NewSyncer(logger, reg, bkt, syncDelay, blockSyncConcurrency)
 	if err != nil {
 		return errors.Wrap(err, "create syncer")
 	}

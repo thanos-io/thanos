@@ -36,15 +36,15 @@ const (
 // Syncer syncronizes block metas from a bucket into a local directory.
 // It sorts them into compaction groups based on equal label sets.
 type Syncer struct {
-	logger              log.Logger
-	reg                 prometheus.Registerer
-	bkt                 objstore.Bucket
-	syncDelay           time.Duration
-	mtx                 sync.Mutex
-	blocks              map[ulid.ULID]*metadata.Meta
-	blocksMtx           sync.Mutex
-	metaSyncConcurrency int
-	metrics             *syncerMetrics
+	logger               log.Logger
+	reg                  prometheus.Registerer
+	bkt                  objstore.Bucket
+	syncDelay            time.Duration
+	mtx                  sync.Mutex
+	blocks               map[ulid.ULID]*metadata.Meta
+	blocksMtx            sync.Mutex
+	blockSyncConcurrency int
+	metrics              *syncerMetrics
 }
 
 type syncerMetrics struct {
@@ -126,18 +126,18 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 
 // NewSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, syncDelay time.Duration, metaSyncConcurrency int) (*Syncer, error) {
+func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, syncDelay time.Duration, blockSyncConcurrency int) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	return &Syncer{
-		logger:              logger,
-		reg:                 reg,
-		syncDelay:           syncDelay,
-		blocks:              map[ulid.ULID]*metadata.Meta{},
-		bkt:                 bkt,
-		metrics:             newSyncerMetrics(reg),
-		metaSyncConcurrency: metaSyncConcurrency,
+		logger:               logger,
+		reg:                  reg,
+		syncDelay:            syncDelay,
+		blocks:               map[ulid.ULID]*metadata.Meta{},
+		bkt:                  bkt,
+		metrics:              newSyncerMetrics(reg),
+		blockSyncConcurrency: blockSyncConcurrency,
 	}, nil
 }
 
@@ -164,11 +164,11 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 	defer wg.Wait()
 
 	metaIDsChan := make(chan ulid.ULID)
-	errChan := make(chan error, c.metaSyncConcurrency)
+	errChan := make(chan error, c.blockSyncConcurrency)
 
 	workCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	for i := 0; i < c.metaSyncConcurrency; i++ {
+	for i := 0; i < c.blockSyncConcurrency; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
