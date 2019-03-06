@@ -249,6 +249,13 @@ Flags:
                                  which data is deduplicated. Still you will be
                                  able to query without deduplication using
                                  'dedup=false' parameter.
+      --store.read-timeout=2m    Maximum time to read response from store.
+                                 If request to one of stores is timed out
+                                 and store.read-timeout < query.timeout
+                                 partial response will be returned.
+                                 If store.read-timeout >= query.timeout
+                                 one of stores is timed out client
+                                 will get no data and timeout error.
       --selector-label=<name>="<value>" ...  
                                  Query selector labels that will be exposed in
                                  info endpoint (repeated).

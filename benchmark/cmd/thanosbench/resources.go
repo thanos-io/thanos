@@ -231,6 +231,7 @@ func createPrometheus(opts *opts, name string, bucket string) *appsv1.StatefulSe
 					"--storage.tsdb.max-block-duration=2h",
 					"--storage.tsdb.retention=2h",
 					"--query.timeout=10m",
+					"--store.read-timeout=10m",
 				},
 				VolumeMounts: []v1.VolumeMount{
 					{
