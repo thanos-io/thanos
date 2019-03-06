@@ -68,7 +68,7 @@ CI runs GCS and inmem tests only for now. Not having these variables will produc
 
 ## Dependency management
 
-The Thanos project uses [Go modules](https://golang.org/cmd/go/#hdr-Modules__module_versions__and_more) to manage dependencies on external packages. This requires a working Go environment with version 1.11 or greater installed.
+The Thanos project uses [Go modules](https://golang.org/cmd/go/#hdr-Modules__module_versions__and_more) to manage dependencies on external packages. This requires a working Go environment with version 1.11 or greater, git and bzr installed.
 
 To add or update a new dependency, use the `go get` command:
 
@@ -83,7 +83,7 @@ go get example.com/some/module/pkg@vX.Y.Z
 Tidy up the `go.mod` and `go.sum` files:
 
 ```bash
-GO111MODULE=on go mod tidy
+make vendor
 ```
 
 You have to commit the changes to `go.mod` and `go.sum` before submitting the pull request.
