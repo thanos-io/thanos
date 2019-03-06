@@ -91,6 +91,9 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	enablePartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified.").
 		Default("true").Bool()
 
+	storeReadTimeout := modelDuration(cmd.Flag("store.read-timeout", "Maximum time to read response from store.").
+		Default("2m"))
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		peer, err := newPeerFn(logger, reg, true, *httpAdvertiseAddr, true)
 		if err != nil {
@@ -119,6 +122,13 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			fileSD = file.NewDiscovery(conf, logger)
 		}
 
+		queryMaxDuration := time.Duration(*queryTimeout)
+		storeReadMaxDuration := time.Duration(*storeReadTimeout)
+
+		if storeReadMaxDuration > queryMaxDuration {
+			storeReadMaxDuration = queryMaxDuration
+		}
+
 		return runQuery(
 			g,
 			logger,
@@ -138,7 +148,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*webExternalPrefix,
 			*webPrefixHeaderName,
 			*maxConcurrentQueries,
-			time.Duration(*queryTimeout),
+			queryMaxDuration,
+			storeReadMaxDuration,
 			*replicaLabel,
 			peer,
 			selectorLset,
@@ -254,6 +265,7 @@ func runQuery(
 	webPrefixHeaderName string,
 	maxConcurrentQueries int,
 	queryTimeout time.Duration,
+	storeReadTimeout time.Duration,
 	replicaLabel string,
 	peer cluster.Peer,
 	selectorLset labels.Labels,
@@ -305,7 +317,7 @@ func runQuery(
 			dialOpts,
 		)
 		proxy            = store.NewProxyStore(logger, stores.Get, component.Query, selectorLset)
-		queryableCreator = query.NewQueryableCreator(logger, proxy, replicaLabel)
+		queryableCreator = query.NewQueryableCreator(logger, proxy, replicaLabel, storeReadTimeout)
 		engine           = promql.NewEngine(
 			promql.EngineOpts{
 				Logger:        logger,

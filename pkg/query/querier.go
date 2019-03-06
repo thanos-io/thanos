@@ -29,7 +29,7 @@ type WarningReporter func(error)
 type QueryableCreator func(deduplicate bool, maxSourceResolution time.Duration, partialResponse bool, r WarningReporter) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
-func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLabel string) QueryableCreator {
+func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLabel string, storeReadTimeout time.Duration) QueryableCreator {
 	return func(deduplicate bool, maxSourceResolution time.Duration, partialResponse bool, r WarningReporter) storage.Queryable {
 		return &queryable{
 			logger:              logger,
@@ -37,6 +37,7 @@ func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLa
 			proxy:               proxy,
 			deduplicate:         deduplicate,
 			maxSourceResolution: maxSourceResolution,
+			storeReadTimeout:    storeReadTimeout,
 			partialResponse:     partialResponse,
 			warningReporter:     r,
 		}
@@ -49,13 +50,14 @@ type queryable struct {
 	proxy               storepb.StoreServer
 	deduplicate         bool
 	maxSourceResolution time.Duration
+	storeReadTimeout    time.Duration
 	partialResponse     bool
 	warningReporter     WarningReporter
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabel, q.proxy, q.deduplicate, int64(q.maxSourceResolution/time.Millisecond), q.partialResponse, q.warningReporter), nil
+	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabel, q.proxy, q.deduplicate, int64(q.maxSourceResolution/time.Millisecond), q.storeReadTimeout, q.partialResponse, q.warningReporter), nil
 }
 
 type querier struct {
@@ -69,6 +71,11 @@ type querier struct {
 	maxSourceResolution int64
 	partialResponse     bool
 	warningReporter     WarningReporter
+
+	// storeReadTimeout is an additional timeout for reading data from stores.
+	// Its separated from ctx because querier.ctx is forwarded from prometheus query executor
+	// and already contains timeout for entire query execution.
+	storeReadTimeout time.Duration
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -81,6 +88,7 @@ func newQuerier(
 	proxy storepb.StoreServer,
 	deduplicate bool,
 	maxSourceResolution int64,
+	storeReadTimeout time.Duration,
 	partialResponse bool,
 	warningReporter WarningReporter,
 ) *querier {
@@ -101,6 +109,7 @@ func newQuerier(
 		proxy:               proxy,
 		deduplicate:         deduplicate,
 		maxSourceResolution: maxSourceResolution,
+		storeReadTimeout:    storeReadTimeout,
 		partialResponse:     partialResponse,
 		warningReporter:     warningReporter,
 	}
@@ -180,7 +189,16 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 
 	queryAggrs, resAggr := aggrsFromFunc(params.Func)
 
-	resp := &seriesServer{ctx: ctx}
+	// We're limiting store read time here.
+	// This limit affects behaviour what result Thanos Query will return to user if one of requested stores timed out.
+	// If query.timeout > store.read-timeout
+	// client will get partial response from stores who responded faster than store.read-timeout
+	// If query.timeout <= store.read-timeout
+	// client will get an error with timeout for whole request even if some of stores responded in time, but one timed out
+	storeReadCtx, storeReadCancelFunc := context.WithTimeout(ctx, q.storeReadTimeout)
+	defer storeReadCancelFunc()
+
+	resp := &seriesServer{ctx: storeReadCtx}
 	if err := q.proxy.Series(&storepb.SeriesRequest{
 		MinTime:                 q.mint,
 		MaxTime:                 q.maxt,
@@ -252,7 +270,10 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 	span, ctx := tracing.StartSpan(q.ctx, "querier_label_values")
 	defer span.Finish()
 
-	resp, err := q.proxy.LabelValues(ctx, &storepb.LabelValuesRequest{Label: name, PartialResponseDisabled: !q.partialResponse})
+	storeReadCtx, storeReadCancelFunc := context.WithTimeout(ctx, q.storeReadTimeout)
+	defer storeReadCancelFunc()
+
+	resp, err := q.proxy.LabelValues(storeReadCtx, &storepb.LabelValuesRequest{Label: name, PartialResponseDisabled: !q.partialResponse})
 	if err != nil {
 		return nil, errors.Wrap(err, "proxy LabelValues()")
 	}
