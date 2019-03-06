@@ -178,11 +178,18 @@ vet:
 	@echo ">> vetting code"
 	@go vet ./...
 
-# non-phony targets
-
+# vendor
 .PHONY: vendor
 vendor:
+	@GO111MODULE=$(GO111MODULE) go mod tidy
 	@GO111MODULE=$(GO111MODULE) go mod vendor
+
+.PHONY: check-vendor
+check-vendor:
+	@GO111MODULE=$(GO111MODULE) go mod tidy
+	@git diff --exit-code go.mod go.sum vendor/
+
+# non-phony targets
 
 # tooling deps. TODO(bwplotka): Pin them all to certain version!
 

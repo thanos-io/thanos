@@ -21,7 +21,8 @@ jobs:
               echo $GOOGLE_APPLICATION_CREDENTIALS_CONTENT > /go/src/github.com/improbable-eng/thanos/circleci-gcs-creds.json
               echo "Awesome! GCS integration tests are enabled."
             fi
-      - run: make deps
+      - run: make vendor
+      - run: make check-vendor
       - run: make errcheck
       - run: make check-docs
       - run: make format
