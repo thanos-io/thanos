@@ -303,13 +303,15 @@ func TestQuerier_StoreReadTimeout(t *testing.T) {
 	queryCtx, _ := context.WithTimeout(context.Background(), queryTimeout)
 
 	q := newQuerier(queryCtx, nil, 1, 300, "", proxy, false, 0, storeReadTimeout, true, nil)
-	defer q.Close()
 
 	storeQueryDone := make(chan struct{})
 
 	go func() {
-		q.Select(&storage.SelectParams{})
+		_, _, err := q.Select(&storage.SelectParams{})
+		testutil.Ok(t, err)
+
 		storeQueryDone <- struct{}{}
+
 	}()
 
 	select {
@@ -319,6 +321,8 @@ func TestQuerier_StoreReadTimeout(t *testing.T) {
 		// Something went wrong - global query context expected to close last
 		testutil.Ok(t, errors.New("query finished first, but expected store query will finish first (storeReadTimeout is smaller that query timeout)"))
 	}
+
+	testutil.Ok(t, q.Close())
 }
 
 func BenchmarkDedupSeriesIterator(b *testing.B) {
