@@ -32,6 +32,8 @@ PROMU             ?= $(BIN_DIR)/promu-$(PROMU_VERSION)
 PROMU_VERSION     ?= 264dc36af9ea3103255063497636bd5713e3e9c1
 PROTOC            ?= $(BIN_DIR)/protoc-$(PROTOC_VERSION)
 PROTOC_VERSION    ?= 3.4.0
+GIT               ?= $(shell which git)
+BZR               ?= $(shell which bzr)
 
 # E2e test deps.
 # Referenced by github.com/improbable-eng/thanos/blob/master/docs/getting_started.md#prometheus
@@ -77,13 +79,13 @@ assets:
 
 
 # build builds Thanos binary using `promu`.
-.PHONY: build
+.PHONY: check-git check-bzr build
 build: $(PROMU)
 	@echo ">> building binaries"
 	@$(PROMU) build --prefix $(PREFIX)
 
 # crossbuild builds all binaries for all platforms.
-.PHONY: crossbuild
+.PHONY: check-git check-bzr crossbuild
 crossbuild: $(PROMU)
 	@echo ">> crossbuilding all binaries"
 	$(PROMU) crossbuild -v
@@ -134,7 +136,7 @@ format: $(GOIMPORTS)
 
 # proto generates golang files from Thanos proto files.
 .PHONY: proto
-proto: $(GOIMPORTS) $(PROTOC)
+proto: check-git check-bzr $(GOIMPORTS) $(PROTOC)
 	@go install ./vendor/github.com/gogo/protobuf/protoc-gen-gogofast
 	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" scripts/genproto.sh
 
@@ -156,7 +158,7 @@ tarballs-release: $(PROMU)
 
 # test runs all Thanos golang tests against each supported version of Prometheus.
 .PHONY: test
-test: test-deps
+test: check-git check-bzr test-deps
 	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS='true' or/and THANOS_SKIP_S3_AWS_TESTS='true' or/and THANOS_SKIP_AZURE_TESTS='true' and/or THANOS_SKIP_SWIFT_TESTS='true' and/or THANOS_SKIP_TENCENT_COS_TESTS='true' if you want to skip e2e tests against real store buckets"
 	THANOS_TEST_PROMETHEUS_VERSIONS="$(PROM_VERSIONS)" THANOS_TEST_ALERTMANAGER_PATH="alertmanager-$(ALERTMANAGER_VERSION)" go test $(shell go list ./... | grep -v /vendor/ | grep -v /benchmark/);
 
@@ -171,20 +173,37 @@ test-deps:
 
 # vet vets the code.
 .PHONY: vet
-vet:
+vet: check-git check-bzr
 	@echo ">> vetting code"
 	@go vet ./...
 
-# check-go-mod
-.PHONY: check-go-mod
-check-go-mod:
+# go mod related
+.PHONY: go-mod-tidy
+go-mod-tidy: check-git check-bzr
 	@go mod tidy
-	@git diff --exit-code go.mod go.sum > /dev/null || echo >&2 "go.mod and/or go.sum are not up to date."
 
-# non-phony targets
+.PHONY: check-go-mod
+check-go-mod: go-mod-tidy
+	@git diff --exit-code go.mod go.sum > /dev/null || echo >&2 "go.mod and/or go.sum have uncommited changes. See CONTRIBUTING.md."
 
 # tooling deps. TODO(bwplotka): Pin them all to certain version!
+.PHONY: check-git
+check-git:
+ifneq ($(GIT),)
+	@test -x $(GIT) || (echo >&2 "No git executable binary found at $(GIT)."; exit 1)
+else
+	@echo >&2 "No git binary found."; exit 1
+endif
 
+.PHONY: check-bzr
+check-bzr:
+ifneq ($(BZR),)
+	@test -x $(BZR) || (echo >&2 "No bzr exectuable binary found at $(BZR)."; exit 1)
+else
+	@echo >&2 "No bzr binary found."; exit 1
+endif
+
+# non-phony targets
 $(EMBEDMD):
 	$(call fetch_go_bin_version,github.com/campoy/embedmd,$(EMBEDMD_VERSION))
 

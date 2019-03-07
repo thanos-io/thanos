@@ -83,7 +83,9 @@ go get example.com/some/module/pkg@vX.Y.Z
 Tidy up the `go.mod` and `go.sum` files:
 
 ```bash
-make vendor
+make go-mod-tidy
+git add go.mod go.sum
+git commit
 ```
 
 You have to commit the changes to `go.mod` and `go.sum` before submitting the pull request.
