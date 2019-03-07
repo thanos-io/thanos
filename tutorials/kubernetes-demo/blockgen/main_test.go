@@ -33,5 +33,5 @@ func TestCounterGen(t *testing.T) {
 		lastV = g.Value()
 		lastT = g.Ts()
 	}
-	testutil.Equals(t, int64((24 * time.Hour)/(15 * time.Second)), samples)
+	testutil.Equals(t, int64((24*time.Hour)/(15*time.Second)), samples)
 }
