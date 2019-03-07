@@ -14,6 +14,7 @@ FIRST_GOPATH      ?= $(firstword $(subst :, ,$(shell go env GOPATH)))
 TMP_GOPATH        ?= /tmp/thanos-go
 BIN_DIR           ?= $(FIRST_GOPATH)/bin
 GO111MODULE       ?= on
+export GO111MODULE
 
 # Tools.
 EMBEDMD           ?= $(BIN_DIR)/embedmd-$(EMBEDMD_VERSION)
@@ -62,7 +63,7 @@ define fetch_go_bin_version
 endef
 
 .PHONY: all
-all: deps format build
+all: format build
 
 # assets repacks all statis assets into go file for easier deploy.
 .PHONY: assets
@@ -77,19 +78,15 @@ assets:
 
 # build builds Thanos binary using `promu`.
 .PHONY: build
-build: deps $(PROMU)
+build: $(PROMU)
 	@echo ">> building binaries"
 	@$(PROMU) build --prefix $(PREFIX)
 
 # crossbuild builds all binaries for all platforms.
 .PHONY: crossbuild
-crossbuild: deps $(PROMU)
+crossbuild: $(PROMU)
 	@echo ">> crossbuilding all binaries"
 	$(PROMU) crossbuild -v
-
-# deps fetches all necessary golang dependencies, since they are not checked into repository.
-.PHONY: deps
-deps: vendor
 
 # docker builds docker with no tag.
 .PHONY: docker
@@ -123,7 +120,7 @@ check-docs: $(EMBEDMD) $(LICHE) build
 
 # errcheck performs static analysis and returns error if any of the errors is not checked.
 .PHONY: errcheck
-errcheck: $(ERRCHECK) deps
+errcheck: $(ERRCHECK)
 	@echo ">> errchecking the code"
 	$(ERRCHECK) -verbose -exclude .errcheck_excludes.txt ./cmd/... ./pkg/... ./test/...
 
@@ -137,7 +134,7 @@ format: $(GOIMPORTS)
 
 # proto generates golang files from Thanos proto files.
 .PHONY: proto
-proto: deps $(GOIMPORTS) $(PROTOC)
+proto: $(GOIMPORTS) $(PROTOC)
 	@go install ./vendor/github.com/gogo/protobuf/protoc-gen-gogofast
 	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" scripts/genproto.sh
 
@@ -166,7 +163,7 @@ test: test-deps
 # test-deps installs dependency for e2e tets.
 # It installs current Thanos, supported versions of Prometheus and alertmanager to test against in e2e.
 .PHONY: test-deps
-test-deps: deps
+test-deps:
 	@go install github.com/improbable-eng/thanos/cmd/thanos
 	$(foreach ver,$(PROM_VERSIONS),$(call fetch_go_bin_version,github.com/prometheus/prometheus/cmd/prometheus,$(ver)))
 	$(call fetch_go_bin_version,github.com/prometheus/alertmanager/cmd/alertmanager,$(ALERTMANAGER_VERSION))
@@ -178,16 +175,11 @@ vet:
 	@echo ">> vetting code"
 	@go vet ./...
 
-# vendor
-.PHONY: vendor
-vendor:
-	@GO111MODULE=$(GO111MODULE) go mod tidy
-	@GO111MODULE=$(GO111MODULE) go mod vendor
-
-.PHONY: check-vendor
-check-vendor:
-	@GO111MODULE=$(GO111MODULE) go mod tidy
-	@git diff --exit-code go.mod go.sum vendor/
+# check-go-mod
+.PHONY: check-go-mod
+check-go-mod:
+	@go mod tidy
+	@git diff --exit-code go.mod go.sum > /dev/null || echo >&2 "go.mod and/or go.sum are not up to date."
 
 # non-phony targets
 
