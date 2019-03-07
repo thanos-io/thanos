@@ -79,14 +79,14 @@ assets:
 
 
 # build builds Thanos binary using `promu`.
-.PHONY: check-git check-bzr build
-build: $(PROMU)
+.PHONY: build
+build: check-git check-bzr go-mod-tidy $(PROMU)
 	@echo ">> building binaries"
 	@$(PROMU) build --prefix $(PREFIX)
 
 # crossbuild builds all binaries for all platforms.
-.PHONY: check-git check-bzr crossbuild
-crossbuild: $(PROMU)
+.PHONY: crossbuild
+crossbuild: check-git check-bzr go-mod-tidy $(PROMU)
 	@echo ">> crossbuilding all binaries"
 	$(PROMU) crossbuild -v
 
