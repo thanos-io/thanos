@@ -10,6 +10,8 @@ import (
 	"net"
 	"net/http"
 	"path"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -55,7 +57,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	cert := cmd.Flag("grpc-client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").String()
 	key := cmd.Flag("grpc-client-tls-key", "TLS Key for the client's certificate").Default("").String()
 	caCert := cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").Default("").String()
-	serverName := cmd.Flag("grpc-client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").String()
+	serverNamesMap := cmd.Flag("grpc-client-server-name-map", "Hostname regex to server name map to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Strings()
 
 	webRoutePrefix := cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. This option is analogous to --web.route-prefix of Promethus.").Default("").String()
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
@@ -132,7 +134,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*cert,
 			*key,
 			*caCert,
-			*serverName,
+			*serverNamesMap,
 			*httpBindAddr,
 			*webRoutePrefix,
 			*webExternalPrefix,
@@ -151,7 +153,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	}
 }
 
-func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, secure bool, cert, key, caCert string, serverName string) ([]grpc.DialOption, error) {
+func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, secure bool, cert, key, caCert string, serverNamesMap []string) ([]grpc.DialOption, error) {
 	grpcMets := grpc_prometheus.NewClientMetrics()
 	grpcMets.EnableClientHandlingTimeHistogram(
 		grpc_prometheus.WithHistogramBuckets([]float64{
@@ -214,10 +216,6 @@ func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer ope
 		RootCAs: certPool,
 	}
 
-	if serverName != "" {
-		tlsCfg.ServerName = serverName
-	}
-
 	if cert != "" {
 		cert, err := tls.LoadX509KeyPair(cert, key)
 		if err != nil {
@@ -229,7 +227,48 @@ func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer ope
 
 	creds := credentials.NewTLS(tlsCfg)
 
+	if len(serverNamesMap) > 0 {
+		regexMap := make(map[*regexp.Regexp]string, len(serverNamesMap))
+		for _, v := range serverNamesMap {
+			serverNameMap := strings.Split(v, "=")
+			if len(serverNameMap) != 2 {
+				return nil, errors.New(fmt.Sprintf("could not parse server map format: %s", v))
+			}
+			r, err := regexp.Compile(serverNameMap[0])
+			if err != nil {
+				return nil, errors.Wrap(err, fmt.Sprintf("could not compile server map regex: %s", serverNameMap[0]))
+			}
+			regexMap[r] = serverNameMap[1]
+		}
+		creds = &multiServerNameTransportCredentials{
+			TransportCredentials: creds,
+			serverNamesMap:       regexMap,
+			logger:               logger,
+		}
+		level.Info(logger).Log("msg", "TLS Client server name verification enabled")
+	}
+
 	return append(dialOpts, grpc.WithTransportCredentials(creds)), nil
+}
+
+type multiServerNameTransportCredentials struct {
+	credentials.TransportCredentials
+	serverNamesMap map[*regexp.Regexp]string
+	logger         log.Logger
+}
+
+func (c *multiServerNameTransportCredentials) ClientHandshake(ctx context.Context, authority string, rawConn net.Conn) (_ net.Conn, _ credentials.AuthInfo, err error) {
+	colonPos := strings.LastIndex(authority, ":")
+	if colonPos == -1 {
+		colonPos = len(authority)
+	}
+	serverName := authority[:colonPos]
+	for rgx, s := range c.serverNamesMap {
+		if rgx.Match([]byte(serverName)) {
+			return c.TransportCredentials.ClientHandshake(ctx, s, rawConn)
+		}
+	}
+	return nil, nil, errors.New(fmt.Sprintf("failed to match server name %s", serverName))
 }
 
 // runQuery starts a server that exposes PromQL Query API. It is responsible for querying configured
@@ -247,7 +286,7 @@ func runQuery(
 	cert string,
 	key string,
 	caCert string,
-	serverName string,
+	serverNamesMap []string,
 	httpBindAddr string,
 	webRoutePrefix string,
 	webExternalPrefix string,
@@ -270,7 +309,7 @@ func runQuery(
 	})
 	reg.MustRegister(duplicatedStores)
 
-	dialOpts, err := storeClientGRPCOpts(logger, reg, tracer, secure, cert, key, caCert, serverName)
+	dialOpts, err := storeClientGRPCOpts(logger, reg, tracer, secure, cert, key, caCert, serverNamesMap)
 	if err != nil {
 		return errors.Wrap(err, "building gRPC client")
 	}
@@ -504,4 +543,20 @@ func (s *gossipSpec) Metadata(_ context.Context, _ storepb.StoreClient) (labels 
 		return nil, 0, 0, errors.Errorf("peer %s is no longer in gossip cluster", s.id)
 	}
 	return state.Metadata.Labels, state.Metadata.MinTime, state.Metadata.MaxTime, nil
+}
+
+func ParseServerNameMaps(serverNames []string) (map[*regexp.Regexp]string, error) {
+	regexMap := make(map[*regexp.Regexp]string, len(serverNames))
+	for _, v := range serverNames {
+		serverNameMap := strings.Split(v, "=")
+		if len(serverNameMap) != 2 {
+			return nil, errors.New(fmt.Sprintf("could not parse server map format: %s", v))
+		}
+		r, err := regexp.Compile(serverNameMap[0])
+		if err != nil {
+			return nil, errors.Wrap(err, fmt.Sprintf("could not compile server map regex: %s", serverNameMap[0]))
+		}
+		regexMap[r] = serverNameMap[1]
+	}
+	return regexMap, nil
 }
