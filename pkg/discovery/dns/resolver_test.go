@@ -77,7 +77,7 @@ var (
 			resolver:       &mockHostnameResolver{},
 		},
 		{
-			testName:       "multiple srv records from srv lookup",
+			testName:       "multiple SRV records from SRV lookup",
 			addr:           "_test._tcp.mycompany.com",
 			qtype:          SRV,
 			expectedResult: []string{"192.168.0.1:8080", "192.168.0.2:8081"},
@@ -96,7 +96,7 @@ var (
 			},
 		},
 		{
-			testName:       "multiple srv records from srv lookup with specified port",
+			testName:       "multiple SRV records from SRV lookup with specified port",
 			addr:           "_test._tcp.mycompany.com:8082",
 			qtype:          SRV,
 			expectedResult: []string{"192.168.0.1:8082", "192.168.0.2:8082"},
@@ -116,6 +116,44 @@ var (
 		},
 		{
 			testName:       "error from SRV resolver",
+			addr:           "_test._tcp.mycompany.com",
+			qtype:          SRV,
+			expectedResult: nil,
+			expectedErr:    errors.Wrapf(errorFromResolver, "lookup SRV records \"_test._tcp.mycompany.com\""),
+			resolver:       &mockHostnameResolver{err: errorFromResolver},
+		},
+		{
+			testName:       "multiple SRV records from SRV no A lookup",
+			addr:           "_test._tcp.mycompany.com",
+			qtype:          SRVNoA,
+			expectedResult: []string{"192.168.0.1:8080", "192.168.0.2:8081"},
+			expectedErr:    nil,
+			resolver: &mockHostnameResolver{
+				resultSRVs: map[string][]*net.SRV{
+					"_test._tcp.mycompany.com": {
+						&net.SRV{Target: "192.168.0.1", Port: 8080},
+						&net.SRV{Target: "192.168.0.2", Port: 8081},
+					},
+				},
+			},
+		},
+		{
+			testName:       "multiple SRV records from SRV no A lookup with specified port",
+			addr:           "_test._tcp.mycompany.com:8082",
+			qtype:          SRVNoA,
+			expectedResult: []string{"192.168.0.1:8082", "192.168.0.2:8082"},
+			expectedErr:    nil,
+			resolver: &mockHostnameResolver{
+				resultSRVs: map[string][]*net.SRV{
+					"_test._tcp.mycompany.com": {
+						&net.SRV{Target: "192.168.0.1", Port: 8080},
+						&net.SRV{Target: "192.168.0.2", Port: 8081},
+					},
+				},
+			},
+		},
+		{
+			testName:       "error from SRV no A lookup",
 			addr:           "_test._tcp.mycompany.com",
 			qtype:          SRV,
 			expectedResult: nil,
