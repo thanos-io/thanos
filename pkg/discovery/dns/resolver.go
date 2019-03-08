@@ -12,8 +12,9 @@ import (
 type QType string
 
 const (
-	A   = QType("dns")
-	SRV = QType("dnssrv")
+	A      = QType("dns")
+	SRV    = QType("dnssrv")
+	SRVNoA = QType("dnssrvnoa")
 )
 
 type Resolver interface {
@@ -72,6 +73,26 @@ func (s *dnsSD) Resolve(ctx context.Context, name string, qtype QType) ([]string
 			res = append(res, appendScheme(scheme, net.JoinHostPort(ip.String(), port)))
 		}
 	case SRV:
+		_, recs, err := s.resolver.LookupSRV(ctx, "", "", host)
+		if err != nil {
+			return nil, errors.Wrapf(err, "lookup SRV records %q", host)
+		}
+		for _, rec := range recs {
+			// Only use port from SRV record if no explicit port was specified.
+			resPort := port
+			if resPort == "" {
+				resPort = strconv.Itoa(int(rec.Port))
+			}
+			// Do A lookup for the domain in SRV answer.
+			resIPs, err := s.resolver.LookupIPAddr(ctx, rec.Target)
+			if err != nil {
+				return nil, errors.Wrapf(err, "look IP addresses %q", rec.Target)
+			}
+			for _, resIP := range resIPs {
+				res = append(res, appendScheme(scheme, net.JoinHostPort(resIP.String(), resPort)))
+			}
+		}
+	case SRVNoA:
 		_, recs, err := s.resolver.LookupSRV(ctx, "", "", host)
 		if err != nil {
 			return nil, errors.Wrapf(err, "lookup SRV records %q", host)
