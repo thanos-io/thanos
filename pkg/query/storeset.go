@@ -85,6 +85,7 @@ type StoreSet struct {
 	storesStatusesMtx    sync.RWMutex
 	stores               map[string]*storeRef
 	storeNodeConnections prometheus.Gauge
+	storeNodeStatus      *prometheus.GaugeVec
 	externalLabelStores  map[string]int
 	storeStatuses        map[string]*StoreStatus
 }
@@ -124,11 +125,17 @@ func NewStoreSet(
 		Help: "Number indicating current number of gRPC connection to store nodes. This indicates also to how many stores query node have access to.",
 	})
 
+	storeNodeStatus := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "thanos_store_up",
+		Help: "Represents the status of each store node.",
+	}, []string{"node"})
+
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	if reg != nil {
 		reg.MustRegister(storeNodeConnections)
+		reg.MustRegister(storeNodeStatus)
 	}
 	if storeSpecs == nil {
 		storeSpecs = func() []StoreSpec { return nil }
@@ -139,6 +146,7 @@ func NewStoreSet(
 		storeSpecs:           storeSpecs,
 		dialOpts:             dialOpts,
 		storeNodeConnections: storeNodeConnections,
+		storeNodeStatus:      storeNodeStatus,
 		gRPCInfoCallTimeout:  10 * time.Second,
 		externalLabelStores:  map[string]int{},
 		stores:               make(map[string]*storeRef),
@@ -350,6 +358,11 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 		StoreType: store.storeType,
 		MinTime:   store.minTime,
 		MaxTime:   store.maxTime,
+	}
+	if err != nil {
+		s.storeNodeStatus.With(prometheus.Labels{"node": store.addr}).Set(0.0)
+	} else {
+		s.storeNodeStatus.With(prometheus.Labels{"node": store.addr}).Set(1.0)
 	}
 }
 

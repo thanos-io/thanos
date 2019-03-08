@@ -10,6 +10,8 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 We use *breaking* word for marking changes that are not backward compatible (relates only to v0.y.z releases.)
 
 ## Unreleased
+### Added
+- [#900](https://github.com/improbable-eng/thanos/pull/900) Query: New `thanos_store_up` metric indicates status for each node configured.
 
 ## [v0.3.2](https://github.com/improbable-eng/thanos/releases/tag/v0.3.2) - 2019.03.04
 
