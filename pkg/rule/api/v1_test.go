@@ -178,6 +178,15 @@ func testEndpoints(t *testing.T, api *API) {
 				},
 			},
 		},
+		{
+			endpoint: api.alerts,
+			response: &AlertDiscovery{Alerts: []*Alert{}},
+		},
+		{
+			endpoint: api.stateAlerts,
+			params: map[string]string{"state": "firing"},
+			response: &AlertDiscovery{Alerts: []*Alert{}},
+		},
 	}
 
 	methods := func(f qapi.ApiFunc) []string {
