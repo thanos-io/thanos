@@ -790,7 +790,9 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 				continue
 			}
 			if meta.Stats.NumSamples == 0 {
-				cg.deleteBlock(block)
+				if err := cg.deleteBlock(block); err != nil {
+					level.Warn(cg.logger).Log("msg", "failed to delete empty block found during compaction", "block", block)
+				}
 			}
 		}
 		return compID, emptyCompactedBlockSentinelError
