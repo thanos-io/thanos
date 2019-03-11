@@ -779,6 +779,11 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	if err != nil {
 		return compID, halt(errors.Wrapf(err, "compact blocks %v", plan))
 	}
+	if compID == (ulid.ULID{}) {
+		// Prometheus compactor found that the compacted block would have no samples.
+		level.Info(cg.logger).Log("msg", "skipping compaction as compacted block would have no samples", "blocks", fmt.Sprintf("%v", plan))
+		return compID, nil
+	}
 	level.Debug(cg.logger).Log("msg", "compacted blocks",
 		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin))
 
