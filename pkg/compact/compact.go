@@ -794,7 +794,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 				}
 			}
 		}
-		// Return a dummy ULID since the bucket compactor takes this as a signal to continue
+		// Return a dummy ULID since the bucket compactor takes this as a signal to continue.
 		return ulid.New(123, nil)
 	}
 	level.Debug(cg.logger).Log("msg", "compacted blocks",
