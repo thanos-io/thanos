@@ -34,7 +34,7 @@ const (
 )
 
 var blockTooFreshSentinelError = errors.New("Block too fresh")
-var emptyCompactedBlockSentinelError = errors.New("Compaction would have created empty block")
+var emptyBlockSentinelULID = ulid.MustNew(123, nil)
 
 // Syncer syncronizes block metas from a bucket into a local directory.
 // It sorts them into compaction groups based on equal label sets.
@@ -795,7 +795,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 				}
 			}
 		}
-		return compID, emptyCompactedBlockSentinelError
+		return emptyBlockSentinelULID, nil
 	}
 	level.Debug(cg.logger).Log("msg", "compacted blocks",
 		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin))
@@ -921,10 +921,6 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 				if id != (ulid.ULID{}) {
 					done = false
 				}
-				continue
-			}
-
-			if err == emptyCompactedBlockSentinelError {
 				continue
 			}
 
