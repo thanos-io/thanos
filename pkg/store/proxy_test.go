@@ -687,6 +687,45 @@ func TestProxyStore_LabelValues(t *testing.T) {
 	testutil.Equals(t, 1, len(resp.Warnings))
 }
 
+func TestProxyStore_LabelNames(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	m1 := &mockedStoreAPI{
+		RespLabelNames: &storepb.LabelNamesResponse{
+			Names:    []string{"a", "b"},
+			Warnings: []string{"warning"},
+		},
+	}
+
+	m2 := &mockedStoreAPI{
+		RespLabelNames: &storepb.LabelNamesResponse{
+			Names: []string{"a", "c", "d"},
+		},
+	}
+
+	cls := []Client{
+		&testClient{StoreClient: m1},
+		&testClient{StoreClient: m2},
+	}
+
+	q := NewProxyStore(nil,
+		func(context.Context) ([]Client, error) { return cls, nil },
+		component.Query,
+		nil,
+	)
+
+	ctx := context.Background()
+	req := &storepb.LabelNamesRequest{
+		PartialResponseDisabled: true,
+	}
+	resp, err := q.LabelNames(ctx, req)
+	testutil.Ok(t, err)
+	testutil.Assert(t, proto.Equal(req, m1.LastLabelNamesReq), "request was not proxied properly to underlying storeAPI: %s vs %s", req, m1.LastLabelNamesReq)
+
+	testutil.Equals(t, []string{"a", "b", "c", "d"}, resp.Names)
+	testutil.Equals(t, 1, len(resp.Warnings))
+}
+
 type rawSeries struct {
 	lset    []storepb.Label
 	samples []sample
@@ -830,11 +869,13 @@ func (s *storeSeriesServer) Context() context.Context {
 type mockedStoreAPI struct {
 	RespSeries      []*storepb.SeriesResponse
 	RespLabelValues *storepb.LabelValuesResponse
+	RespLabelNames  *storepb.LabelNamesResponse
 	RespError       error
 	RespDuration    time.Duration
 
 	LastSeriesReq      *storepb.SeriesRequest
 	LastLabelValuesReq *storepb.LabelValuesRequest
+	LastLabelNamesReq  *storepb.LabelNamesRequest
 }
 
 func (s *mockedStoreAPI) Info(ctx context.Context, req *storepb.InfoRequest, _ ...grpc.CallOption) (*storepb.InfoResponse, error) {
@@ -848,7 +889,9 @@ func (s *mockedStoreAPI) Series(ctx context.Context, req *storepb.SeriesRequest,
 }
 
 func (s *mockedStoreAPI) LabelNames(ctx context.Context, req *storepb.LabelNamesRequest, _ ...grpc.CallOption) (*storepb.LabelNamesResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+	s.LastLabelNamesReq = req
+
+	return s.RespLabelNames, s.RespError
 }
 
 func (s *mockedStoreAPI) LabelValues(ctx context.Context, req *storepb.LabelValuesRequest, _ ...grpc.CallOption) (*storepb.LabelValuesResponse, error) {

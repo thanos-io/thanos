@@ -265,9 +265,20 @@ func (q *querier) LabelValues(name string) ([]string, error) {
 }
 
 // LabelNames returns all the unique label names present in the block in sorted order.
-// TODO(bwplotka): Consider adding labelNames to thanos Query API https://github.com/improbable-eng/thanos/issues/702.
 func (q *querier) LabelNames() ([]string, error) {
-	return nil, errors.New("not implemented")
+	span, ctx := tracing.StartSpan(q.ctx, "querier_label_names")
+	defer span.Finish()
+
+	resp, err := q.proxy.LabelNames(ctx, &storepb.LabelNamesRequest{PartialResponseDisabled: !q.partialResponse})
+	if err != nil {
+		return nil, errors.Wrap(err, "proxy LabelNames()")
+	}
+
+	for _, w := range resp.Warnings {
+		q.warningReporter(errors.New(w))
+	}
+
+	return resp.Names, nil
 }
 
 func (q *querier) Close() error {

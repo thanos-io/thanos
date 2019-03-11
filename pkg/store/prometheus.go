@@ -339,7 +339,32 @@ func extendLset(lset []storepb.Label, extend labels.Labels) []storepb.Label {
 func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
 	*storepb.LabelNamesResponse, error,
 ) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+	u := *p.base
+	u.Path = path.Join(u.Path, "/api/v1/labels")
+
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, status.Error(codes.Unknown, err.Error())
+	}
+
+	span, ctx := tracing.StartSpan(ctx, "/prom_label_names HTTP[client]")
+	defer span.Finish()
+
+	resp, err := p.client.Do(req.WithContext(ctx))
+	if err != nil {
+		return nil, status.Error(codes.Unknown, err.Error())
+	}
+	defer runutil.CloseWithLogOnErr(p.logger, resp.Body, "label names request body")
+
+	var m struct {
+		Data []string `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+		return nil, status.Error(codes.Unknown, err.Error())
+	}
+	sort.Strings(m.Data)
+
+	return &storepb.LabelNamesResponse{Names: m.Data}, nil
 }
 
 // LabelValues returns all known label values for a given label name.
