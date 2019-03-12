@@ -255,7 +255,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 
 		shouldRerun, id, err := g.Compact(ctx, dir, comp)
 		testutil.Ok(t, err)
-		testutil.Assert(t, shouldRerun, "group should be empty, but compactor did a compaction and told us to rerun")
+		testutil.Assert(t, !shouldRerun, "group should be empty, but compactor did a compaction and told us to rerun")
 
 		// Add all metas that would be gathered by syncMetas.
 		for _, m := range metas {
@@ -264,7 +264,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 
 		shouldRerun, id, err = g.Compact(ctx, dir, comp)
 		testutil.Ok(t, err)
-		testutil.Assert(t, !shouldRerun, "there should be compactible data, but the compactor reported there was not")
+		testutil.Assert(t, shouldRerun, "there should be compactible data, but the compactor reported there was not")
 
 		resDir := filepath.Join(dir, id.String())
 		testutil.Ok(t, block.Download(ctx, log.NewNopLogger(), bkt, id, resDir))
