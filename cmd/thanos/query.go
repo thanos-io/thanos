@@ -91,7 +91,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	enablePartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified.").
 		Default("true").Bool()
 
-	storeReadTimeout := modelDuration(cmd.Flag("store.read-timeout", "Maximum time to read response from store. If request to one of stores is timed out and store.read-timeout < query.timeout partial response will be returned. If store.read-timeout >= query.timeout one of stores is timed out clien will get no data and timeout error.").
+	storeReadTimeout := modelDuration(cmd.Flag("store.read-timeout", "Maximum time to read response from store. If request to one of stores is timed out and store.read-timeout < query.timeout partial response will be returned. If store.read-timeout >= query.timeout one of stores is timed out the client will get no data and timeout error.").
 		Default("2m"))
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
