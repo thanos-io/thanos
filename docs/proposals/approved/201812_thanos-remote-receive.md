@@ -1,6 +1,6 @@
 ## Thanos Remote Write
 
-Status: draft | in-review | rejected | *accepted* | complete
+Status: draft | in-review | rejected | accepted | **complete**
 
 Implementation Owner: @brancz
 
