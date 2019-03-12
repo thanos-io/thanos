@@ -25,7 +25,8 @@ var (
 	promHTTPPort = func(i int) string { return fmt.Sprintf("%d", 9090+i) }
 
 	// We keep this one with localhost, to have perfect match with what Prometheus will expose in up metric.
-	promHTTP = func(i int) string { return fmt.Sprintf("localhost:%s", promHTTPPort(i)) }
+	promHTTP            = func(i int) string { return fmt.Sprintf("localhost:%s", promHTTPPort(i)) }
+	promRemoteWriteHTTP = func(i int) string { return fmt.Sprintf("localhost:%s", promHTTPPort(100+i)) }
 
 	sidecarGRPC    = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19090+i) }
 	sidecarHTTP    = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19190+i) }
@@ -38,6 +39,10 @@ var (
 	rulerGRPC    = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19790+i) }
 	rulerHTTP    = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19890+i) }
 	rulerCluster = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19990+i) }
+
+	remoteWriteReceiveHTTP       = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 18690+i) }
+	remoteWriteReceiveGRPC       = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 18790+i) }
+	remoteWriteReceiveMetricHTTP = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 18890+i) }
 
 	storeGatewayGRPC = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 20090+i) }
 	storeGatewayHTTP = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 20190+i) }
@@ -113,6 +118,40 @@ func scraper(i int, config string, gossip bool) (cmdScheduleFunc, string) {
 
 		return cmds, nil
 	}, gossipAddress
+}
+
+func receiver(i int, config string) cmdScheduleFunc {
+	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+		promDir := fmt.Sprintf("%s/data/remote-write-prom%d", workDir, i)
+		if err := os.MkdirAll(promDir, 0777); err != nil {
+			return nil, errors.Wrap(err, "create prom dir failed")
+		}
+
+		if err := ioutil.WriteFile(promDir+"/prometheus.yml", []byte(config), 0666); err != nil {
+			return nil, errors.Wrap(err, "creating prom config failed")
+		}
+
+		var cmds []*exec.Cmd
+		cmds = append(cmds, exec.Command(testutil.PrometheusBinary(),
+			"--config.file", promDir+"/prometheus.yml",
+			"--storage.tsdb.path", promDir,
+			"--log.level", "info",
+			"--web.listen-address", promRemoteWriteHTTP(i),
+		))
+		args := []string{
+			"receive",
+			"--debug.name", fmt.Sprintf("remote-write-receive-%d", i),
+			"--grpc-address", remoteWriteReceiveGRPC(i),
+			"--http-address", remoteWriteReceiveMetricHTTP(i),
+			"--remote-write.address", remoteWriteReceiveHTTP(i),
+			"--tsdb.path", promDir,
+			"--log.level", "debug",
+		}
+
+		cmds = append(cmds, exec.Command("thanos", args...))
+
+		return cmds, nil
+	}
 }
 
 func querier(i int, replicaLabel string, staticStores ...string) cmdScheduleFunc {

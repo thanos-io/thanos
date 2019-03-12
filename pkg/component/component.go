@@ -71,6 +71,8 @@ func FromProto(storeType storepb.StoreType) StoreAPI {
 		return Sidecar
 	case storepb.StoreType_STORE:
 		return Store
+	case storepb.StoreType_RECEIVE:
+		return Receive
 	default:
 		return nil
 	}
@@ -84,4 +86,5 @@ var (
 	Rule       = sourceStoreAPI{component: component{name: "rule"}}
 	Sidecar    = sourceStoreAPI{component: component{name: "sidecar"}}
 	Store      = sourceStoreAPI{component: component{name: "store"}}
+	Receive    = sourceStoreAPI{component: component{name: "receive"}}
 )

@@ -78,6 +78,7 @@ func main() {
 	registerCompact(cmds, app, "compact")
 	registerBucket(cmds, app, "bucket")
 	registerDownsample(cmds, app, "downsample")
+	registerReceive(cmds, app, "receive")
 
 	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {

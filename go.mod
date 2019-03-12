@@ -24,9 +24,11 @@ require (
 	github.com/miekg/dns v1.0.8 // indirect
 	github.com/minio/minio-go v0.0.0-20190131015406-c8a261de75c1
 	github.com/mozillazg/go-cos v0.11.0
+	github.com/mwitkow/go-conntrack v0.0.0-20161129095857-cc309e4a2223
 	github.com/oklog/run v1.0.0
 	github.com/oklog/ulid v1.3.1
 	github.com/olekukonko/tablewriter v0.0.1
+	github.com/opentracing-contrib/go-stdlib v0.0.0-20170113013457-1de4cc2120e7
 	github.com/opentracing/basictracer-go v1.0.0
 	github.com/opentracing/opentracing-go v1.0.2
 	github.com/pkg/errors v0.8.1

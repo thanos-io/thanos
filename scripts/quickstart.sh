@@ -43,6 +43,8 @@ config:
 EOF
 fi
 
+STORES=""
+
 # Start three Prometheus servers monitoring themselves.
 for i in `seq 1 3`
 do
@@ -89,6 +91,12 @@ done
 
 sleep 0.5
 
+OBJSTORECFG=""
+if [ -n "${MINIO_ENABLED}" ]
+then
+OBJSTORECFG="--objstore.config-file      data/bucket.yml"
+fi
+
 # Start one sidecar for each Prometheus server.
 for i in `seq 1 3`
 do
@@ -98,10 +106,10 @@ do
     --http-address              0.0.0.0:1919${i} \
     --prometheus.url            http://localhost:909${i} \
     --tsdb.path                 data/prom${i} \
-    --objstore.config-file      data/bucket.yml \
-    --cluster.address           0.0.0.0:1939${i} \
-    --cluster.advertise-address 127.0.0.1:1939${i} \
-    --cluster.peers             127.0.0.1:19391 &
+    ${OBJSTORECFG} \
+    --cluster.disable &
+
+  STORES="${STORES} --store 127.0.0.1:1909${i}"
 
   sleep 0.25
 done
@@ -116,10 +124,41 @@ then
     --grpc-address              0.0.0.0:19691 \
     --http-address              0.0.0.0:19791 \
     --data-dir                  data/store \
-    --objstore.config-file      data/bucket.yml \
-    --cluster.address           0.0.0.0:19891 \
-    --cluster.advertise-address 127.0.0.1:19891 \
-    --cluster.peers             127.0.0.1:19391 &
+    ${OBJSTORECFG} \
+    --cluster.disable &
+
+  STORES="${STORES} --store 127.0.0.1:19691"
+fi
+
+sleep 0.5
+
+if [ -n "${REMOTE_WRITE_ENABLED}" ]
+then
+  ./thanos receive \
+    --debug.name                receive \
+    --log.level                 debug \
+    --tsdb.path                 "./data/remote-write-receive-data" \
+    --grpc-address              0.0.0.0:19891 \
+    --http-address              0.0.0.0:19691 \
+    --remote-write.address      0.0.0.0:19291 &
+
+  mkdir -p "data/local-prometheus-data/"
+  cat <<EOF > data/local-prometheus-data/prometheus.yml
+# When the Thanos remote-write-receive component is started,
+# this is an example configuration of a Prometheus server that
+# would scrape a local node-exporter and replicate its data to
+# the remote write endpoint.
+scrape_configs:
+  - job_name: node
+    scrape_interval: 1s
+    static_configs:
+    - targets: ['localhost:9100']
+remote_write:
+- url: http://localhost:19291/api/v1/receive
+EOF
+  ./prometheus --config.file data/local-prometheus-data/prometheus.yml --storage.tsdb.path "data/local-prometheus-data/" &
+
+  STORES="${STORES} --store 127.0.0.1:19891"
 fi
 
 sleep 0.5
@@ -131,9 +170,8 @@ do
     --debug.name                query-${i} \
     --grpc-address              0.0.0.0:1999${i} \
     --http-address              0.0.0.0:1949${i} \
-    --cluster.address           0.0.0.0:1959${i} \
-    --cluster.advertise-address 127.0.0.1:1959${i} \
-    --cluster.peers             127.0.0.1:19391 &
+    ${STORES} \
+    --cluster.disable &
 done
 
 wait
