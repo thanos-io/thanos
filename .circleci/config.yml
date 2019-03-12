@@ -59,7 +59,7 @@ jobs:
   publish_master:
     docker:
       # Available from https://hub.docker.com/r/circleci/golang/
-      - image: circleci/golang:1.10
+      - image: circleci/golang:1.12
     working_directory: /go/src/github.com/improbable-eng/thanos
     steps:
       - checkout
@@ -76,7 +76,7 @@ jobs:
   publish_release:
     docker:
       # Available from https://hub.docker.com/r/circleci/golang/
-      - image: circleci/golang:1.10
+      - image: circleci/golang:1.12
     working_directory: /go/src/github.com/improbable-eng/thanos
     steps:
       - checkout
