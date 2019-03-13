@@ -130,7 +130,7 @@ func runStore(
 
 		begin := time.Now()
 		if autoCreateBucket {
-			err := bs.EnsureBucketExists()
+			err := bs.bkt.EnsureBucketExists()
 			if err != nil {
 				return errors.Wrap(err, "bucket ensuring")
 			}
