@@ -69,7 +69,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			debugLogging,
 			*syncInterval,
 			*blockSyncConcurrency,
-			autoCreateBucket,
+			*autoCreateBucket,
 		)
 	}
 }
