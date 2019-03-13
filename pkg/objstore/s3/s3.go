@@ -183,7 +183,7 @@ func (b *Bucket) EnsureBucketExists() error {
 		return rerors.Wrap(err, "S3 bucket exist probe") 
 	}
 	if !exists {
-		return b.client.MakeBucket(b.Name(), b.Location())
+		return b.client.MakeBucket(b.Name(), b.bucketLocation())
 	}
 }
 
