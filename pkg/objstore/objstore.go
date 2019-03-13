@@ -29,6 +29,9 @@ type Bucket interface {
 
 	// Name returns the bucket name for the provider.
 	Name() string
+
+	// EnsureBucketExists creates the bucket if it doesn't exist
+	EnsureBucketExists() error
 }
 
 // BucketReader provides read access to an object storage bucket.

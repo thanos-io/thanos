@@ -90,6 +90,12 @@ func (b *Bucket) Name() string {
 	return b.name
 }
 
+// Ensure that the bucket actually exists, if it doesn't it is created.
+// Currently not implemented.
+func (b *Bucket) EnsureBucketExists error {
+	return errors.New("Unimplemented")
+}
+
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	if _, err := b.client.Object.Put(ctx, name, r, nil); err != nil {

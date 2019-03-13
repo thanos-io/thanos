@@ -32,6 +32,11 @@ func (b *Bucket) Objects() map[string][]byte {
 	return b.objects
 }
 
+// Ensure that the bucket actually exists, if it doesn't it is created.
+// For inmem buckets, this is a no-op.
+func (b *Bucket) EnsureBucketExists error {
+	return nil
+}
 // Iter calls f for each entry in the given directory. The argument to f is the full
 // object name including the prefix of the inspected directory.
 func (b *Bucket) Iter(_ context.Context, dir string, f func(string) error) error {

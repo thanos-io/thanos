@@ -167,6 +167,23 @@ func (b *Bucket) Name() string {
 	return b.name
 }
 
+// Return S3 location string for a bucket, this is picked from the putUserMetadata's "location" key and defaults to ""
+func (b *Bucket) bucketLocation() string {
+	location, ok := b.putUserMetadata["location"]
+	if !ok {
+		return ""
+	}
+	return location
+}
+
+// Ensure that the bucket actually exists, if it doesn't it is created.
+func (b *Bucket) EnsureBucketExists() error {
+	exists, err := b.client.BucketExists(b.Name())
+	if !exists {
+		return b.client.MakeBucket(b.Name(), b.Location())
+	}
+}
+
 // validate checks to see the config options are set.
 func validate(conf Config) error {
 	if conf.Endpoint == "" {

@@ -89,6 +89,12 @@ func NewBucket(logger log.Logger, azureConfig []byte, component string) (*Bucket
 	return bkt, nil
 }
 
+// Ensure that the bucket actually exists, if it doesn't it is created.
+// Currently not implemented.
+func (b *Bucket) EnsureBucketExists error {
+	return errors.New("Unimplemented")
+}
+
 // Iter calls f for each entry in the given directory. The argument to f is the full
 // object name including the prefix of the inspected directory.
 func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) error {
