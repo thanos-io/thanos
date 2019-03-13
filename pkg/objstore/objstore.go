@@ -218,7 +218,7 @@ type metricBucket struct {
 }
 
 // Ensure that the bucket actually exists, if it doesn't it is created.
-func (b *metricBucket) EnsureBucketExists error {
+func (b *metricBucket) EnsureBucketExists() error {
 	return nil
 }
 
