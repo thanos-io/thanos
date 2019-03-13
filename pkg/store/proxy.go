@@ -7,6 +7,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -40,6 +41,11 @@ type ProxyStore struct {
 	stores         func() []Client
 	component      component.StoreAPI
 	selectorLabels labels.Labels
+
+	// storeReadTimeout is an additional timeout for reading data from stores.
+	// Its separated from ctx because querier.ctx is forwarded from prometheus query executor
+	// and already contains timeout for entire query execution.
+	storeReadTimeout time.Duration
 }
 
 // NewProxyStore returns a new ProxyStore that uses the given clients that implements storeAPI to fan-in all series to the client.
@@ -49,15 +55,17 @@ func NewProxyStore(
 	stores func() []Client,
 	component component.StoreAPI,
 	selectorLabels labels.Labels,
+	storeReadTimeout time.Duration,
 ) *ProxyStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	s := &ProxyStore{
-		logger:         logger,
-		stores:         stores,
-		component:      component,
-		selectorLabels: selectorLabels,
+		logger:           logger,
+		stores:           stores,
+		component:        component,
+		selectorLabels:   selectorLabels,
+		storeReadTimeout: storeReadTimeout,
 	}
 	return s
 }
@@ -108,9 +116,11 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 	if !match {
 		return nil
 	}
+	ctx, cancel := context.WithTimeout(srv.Context(), s.storeReadTimeout)
+	defer cancel()
 
 	var (
-		g, gctx = errgroup.WithContext(srv.Context())
+		g, gctx = errgroup.WithContext(ctx)
 
 		// Allow to buffer max 10 series response.
 		// Each might be quite large (multi chunk long series given by sidecar).
@@ -196,7 +206,6 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		return err
 	}
 	return nil
-
 }
 
 type warnSender interface {
@@ -323,6 +332,9 @@ func (s *ProxyStore) LabelNames(ctx context.Context, r *storepb.LabelNamesReques
 func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequest) (
 	*storepb.LabelValuesResponse, error,
 ) {
+	ctx, cancel := context.WithTimeout(ctx, s.storeReadTimeout)
+	defer cancel()
+
 	var (
 		warnings []string
 		all      [][]string

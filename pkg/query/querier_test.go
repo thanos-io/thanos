@@ -36,7 +36,7 @@ func TestQuerier_Series(t *testing.T) {
 
 	// Querier clamps the range to [1,300], which should drop some samples of the result above.
 	// The store API allows endpoints to send more data then initially requested.
-	q := newQuerier(context.Background(), nil, 1, 300, "", testProxy, false, 0, time.Minute, true, nil)
+	q := newQuerier(context.Background(), nil, 1, 300, "", testProxy, false, 0, true, nil)
 	defer func() { testutil.Ok(t, q.Close()) }()
 
 	res, _, err := q.Select(&storage.SelectParams{})
@@ -290,19 +290,19 @@ func TestQuerier_StoreReadTimeout(t *testing.T) {
 		LabelsCallback:    func() []storepb.Label { return nil },
 	}
 
+	storeReadTimeout := 1 * time.Millisecond
+	queryTimeout := 1 * time.Second
+
 	proxy := store.NewProxyStore(
 		nil,
-		func(context.Context) ([]store.Client, error) { return []store.Client{storeClient}, nil },
+		func() []store.Client { return []store.Client{storeClient} },
 		component.Query,
-		nil,
+		nil, storeReadTimeout,
 	)
-
-	queryTimeout := 1 * time.Second
-	storeReadTimeout := 1 * time.Millisecond
 
 	queryCtx, _ := context.WithTimeout(context.Background(), queryTimeout)
 
-	q := newQuerier(queryCtx, nil, 1, 300, "", proxy, false, 0, storeReadTimeout, true, nil)
+	q := newQuerier(queryCtx, nil, 1, 300, "", proxy, false, 0, true, nil)
 
 	storeQueryDone := make(chan struct{})
 

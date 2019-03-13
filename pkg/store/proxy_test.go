@@ -51,7 +51,7 @@ func TestProxyStore_Info(t *testing.T) {
 	q := NewProxyStore(nil,
 		func() []Client { return nil },
 		component.Query,
-		nil,
+		nil, 100*time.Second,
 	)
 
 	resp, err := q.Info(ctx, &storepb.InfoRequest{})
@@ -405,6 +405,7 @@ func TestProxyStore_Series(t *testing.T) {
 				func() []Client { return tc.storeAPIs },
 				component.Query,
 				tc.selectorLabels,
+				100*time.Second,
 			)
 
 			s := newStoreSeriesServer(context.Background())
@@ -446,6 +447,7 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 		func() []Client { return cls },
 		component.Query,
 		nil,
+		100*time.Second,
 	)
 
 	ctx := context.Background()
@@ -504,6 +506,7 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 		func() []Client { return cls },
 		component.Query,
 		tlabels.FromStrings("fed", "a"),
+		100*time.Second,
 	)
 
 	ctx := context.Background()
@@ -541,6 +544,7 @@ func TestProxyStore_LabelValues(t *testing.T) {
 		func() []Client { return cls },
 		component.Query,
 		nil,
+		100*time.Second,
 	)
 
 	ctx := context.Background()
