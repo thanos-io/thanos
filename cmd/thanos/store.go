@@ -44,7 +44,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing blocks from object storage.").
 		Default("20").Int()
 
-	createBucket := cmd.Flag("create-bucket", "Auto-create non-existing bucket.").Default("false").Bool()
+	autoCreateBucket := cmd.Flag("create-bucket", "Auto-create non-existing bucket.").Default("false").Bool()
 	
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
 		peer, err := newPeerFn(logger, reg, false, "", false)
