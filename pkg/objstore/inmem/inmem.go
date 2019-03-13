@@ -34,7 +34,7 @@ func (b *Bucket) Objects() map[string][]byte {
 
 // Ensure that the bucket actually exists, if it doesn't it is created.
 // For inmem buckets, this is a no-op.
-func (b *Bucket) EnsureBucketExists error {
+func (b *Bucket) EnsureBucketExists() error {
 	return nil
 }
 // Iter calls f for each entry in the given directory. The argument to f is the full

@@ -68,7 +68,7 @@ func (b *Bucket) Name() string {
 
 // Ensure that the bucket actually exists, if it doesn't it is created.
 // Currently not implemented.
-func (b *Bucket) EnsureBucketExists error {
+func (b *Bucket) EnsureBucketExists() error {
 	return errors.New("Unimplemented")
 }
 

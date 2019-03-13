@@ -91,7 +91,7 @@ func (c *Container) Name() string {
 
 // Ensure that the bucket actually exists, if it doesn't it is created.
 // Currently not implemented.
-func (c *Container) EnsureBucketExists error {
+func (c *Container) EnsureBucketExists() error {
 	return errors.New("Unimplemented")
 }
 
