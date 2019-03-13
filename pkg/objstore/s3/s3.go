@@ -179,6 +179,9 @@ func (b *Bucket) bucketLocation() string {
 // Ensure that the bucket actually exists, if it doesn't it is created.
 func (b *Bucket) EnsureBucketExists() error {
 	exists, err := b.client.BucketExists(b.Name())
+	if err != nil {
+		return rerors.Wrap(err, "S3 bucket exist probe") 
+	}
 	if !exists {
 		return b.client.MakeBucket(b.Name(), b.Location())
 	}
