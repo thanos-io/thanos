@@ -180,11 +180,12 @@ func (b *Bucket) bucketLocation() string {
 func (b *Bucket) EnsureBucketExists() error {
 	exists, err := b.client.BucketExists(b.Name())
 	if err != nil {
-		return rerors.Wrap(err, "S3 bucket exist probe") 
+		return errors.Wrap(err, "S3 bucket exist probe") 
 	}
 	if !exists {
 		return b.client.MakeBucket(b.Name(), b.bucketLocation())
 	}
+	return nil
 }
 
 // validate checks to see the config options are set.
