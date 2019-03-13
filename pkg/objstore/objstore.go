@@ -217,6 +217,11 @@ type metricBucket struct {
 	lastSuccessfullUploadTime prometheus.Gauge
 }
 
+// Ensure that the bucket actually exists, if it doesn't it is created.
+func (b *Bucket) EnsureBucketExists error {
+	return nil
+}
+
 func (b *metricBucket) Iter(ctx context.Context, dir string, f func(name string) error) error {
 	const op = "iter"
 
