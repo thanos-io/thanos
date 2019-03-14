@@ -132,6 +132,7 @@ Flags:
       --objstore.config=<bucket.config-yaml>  
                                  Alternative to 'objstore.config-file' flag.
                                  Object store configuration in YAML.
+      --create-bucket            Auto-create non-existing bucket.
 
 ```
 
