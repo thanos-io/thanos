@@ -33,7 +33,7 @@ func NewGate(maxConcurrent int, reg prometheus.Registerer) *Gate {
 	})
 
 	if reg != nil {
-		reg.MustRegister(g.currentQueries, g.gateTiming)
+		reg.MustRegister(g.inflightQueries, g.gateTiming)
 	}
 
 	return g
