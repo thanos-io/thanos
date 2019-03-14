@@ -26,7 +26,7 @@ func NewGate(maxConcurrent int, reg prometheus.Registerer) *Gate {
 	})
 	g.gateTiming = prometheus.NewSummary(prometheus.SummaryOpts{
 		Name: "thanos_bucket_store_gate_seconds",
-		Help: "How many seconds it took for a query to pass through the gate.",
+		Help: "How many seconds it took for a query to wait at the gate.",
 	})
 
 	if reg != nil {
@@ -38,12 +38,16 @@ func NewGate(maxConcurrent int, reg prometheus.Registerer) *Gate {
 
 // IsMyTurn iniates a new query and waits until it's our turn to fulfill a query request.
 func (g *Gate) IsMyTurn(ctx context.Context) error {
-	g.currentQueries.Inc()
 	start := time.Now()
+	defer func() {
+		g.gateTiming.Observe(float64(time.Now().Sub(start)))
+	}()
+
 	if err := g.g.Start(ctx); err != nil {
 		return err
 	}
-	g.gateTiming.Observe(float64(time.Now().Sub(start)))
+
+	g.currentQueries.Inc()
 	return nil
 }
 
