@@ -913,22 +913,33 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 			return errors.Wrap(err, "build compaction groups")
 		}
 		finishedAllGroups := true
+		var wg sync.WaitGroup
+		errChan := make(chan error, len(groups))
 		for _, g := range groups {
-			shouldRerunGroup, _, err := g.Compact(ctx, c.compactDir, c.comp)
-			if err == nil {
-				if shouldRerunGroup {
-					finishedAllGroups = false
+			wg.Add(1)
+			go func(g *Group) {
+				defer wg.Done()
+				shouldRerunGroup, _, err := g.Compact(ctx, c.compactDir, c.comp)
+				if err == nil {
+					if shouldRerunGroup {
+						finishedAllGroups = false
+					}
+					return
 				}
-				continue
-			}
 
-			if IsIssue347Error(err) {
-				if err := RepairIssue347(ctx, c.logger, c.bkt, err); err == nil {
-					finishedAllGroups = false
-					continue
+				if IsIssue347Error(err) {
+					if err := RepairIssue347(ctx, c.logger, c.bkt, err); err == nil {
+						finishedAllGroups = false
+						return
+					}
 				}
-			}
-			return errors.Wrap(err, "compaction")
+				errChan <- errors.Wrap(err, "compaction")
+			}(g)
+		}
+		wg.Wait()
+		close(errChan)
+		if err := <-errChan; err != nil {
+			return err
 		}
 		if finishedAllGroups {
 			break
