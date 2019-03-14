@@ -1,0 +1,15 @@
+# Prepare 2 volumes for replicas. It is required only for demo purposes as we artifically generate metrics.
+kind: PersistentVolume
+apiVersion: v1
+metadata:
+  name: pv-prometheus-0
+  labels:
+    type: local
+spec:
+  storageClassName: prom-manual
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/pv-prometheus-0"

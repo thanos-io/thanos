@@ -77,9 +77,55 @@ var (
 			resolver:       &mockHostnameResolver{},
 		},
 		{
-			testName:       "multiple srv records from srv lookup",
+			testName:       "multiple SRV records from SRV lookup",
 			addr:           "_test._tcp.mycompany.com",
 			qtype:          SRV,
+			expectedResult: []string{"192.168.0.1:8080", "192.168.0.2:8081"},
+			expectedErr:    nil,
+			resolver: &mockHostnameResolver{
+				resultSRVs: map[string][]*net.SRV{
+					"_test._tcp.mycompany.com": {
+						&net.SRV{Target: "alt1.mycompany.com.", Port: 8080},
+						&net.SRV{Target: "alt2.mycompany.com.", Port: 8081},
+					},
+				},
+				resultIPs: map[string][]net.IPAddr{
+					"alt1.mycompany.com.": {net.IPAddr{IP: net.ParseIP("192.168.0.1")}},
+					"alt2.mycompany.com.": {net.IPAddr{IP: net.ParseIP("192.168.0.2")}},
+				},
+			},
+		},
+		{
+			testName:       "multiple SRV records from SRV lookup with specified port",
+			addr:           "_test._tcp.mycompany.com:8082",
+			qtype:          SRV,
+			expectedResult: []string{"192.168.0.1:8082", "192.168.0.2:8082"},
+			expectedErr:    nil,
+			resolver: &mockHostnameResolver{
+				resultSRVs: map[string][]*net.SRV{
+					"_test._tcp.mycompany.com": {
+						&net.SRV{Target: "alt1.mycompany.com.", Port: 8080},
+						&net.SRV{Target: "alt2.mycompany.com.", Port: 8081},
+					},
+				},
+				resultIPs: map[string][]net.IPAddr{
+					"alt1.mycompany.com.": {net.IPAddr{IP: net.ParseIP("192.168.0.1")}},
+					"alt2.mycompany.com.": {net.IPAddr{IP: net.ParseIP("192.168.0.2")}},
+				},
+			},
+		},
+		{
+			testName:       "error from SRV resolver",
+			addr:           "_test._tcp.mycompany.com",
+			qtype:          SRV,
+			expectedResult: nil,
+			expectedErr:    errors.Wrapf(errorFromResolver, "lookup SRV records \"_test._tcp.mycompany.com\""),
+			resolver:       &mockHostnameResolver{err: errorFromResolver},
+		},
+		{
+			testName:       "multiple SRV records from SRV no A lookup",
+			addr:           "_test._tcp.mycompany.com",
+			qtype:          SRVNoA,
 			expectedResult: []string{"192.168.0.1:8080", "192.168.0.2:8081"},
 			expectedErr:    nil,
 			resolver: &mockHostnameResolver{
@@ -92,9 +138,9 @@ var (
 			},
 		},
 		{
-			testName:       "multiple srv records from srv lookup",
+			testName:       "multiple SRV records from SRV no A lookup with specified port",
 			addr:           "_test._tcp.mycompany.com:8082",
-			qtype:          SRV,
+			qtype:          SRVNoA,
 			expectedResult: []string{"192.168.0.1:8082", "192.168.0.2:8082"},
 			expectedErr:    nil,
 			resolver: &mockHostnameResolver{
@@ -107,7 +153,7 @@ var (
 			},
 		},
 		{
-			testName:       "error from SRV resolver",
+			testName:       "error from SRV no A lookup",
 			addr:           "_test._tcp.mycompany.com",
 			qtype:          SRV,
 			expectedResult: nil,

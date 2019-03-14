@@ -1,27 +1,19 @@
-GOPATH    ?= $(shell go env GOPATH)
-GOIMPORTS ?= $(GOPATH)/bin/goimports
-DEP       ?= $(GOPATH)/bin/dep
+GOPATH      ?= $(shell go env GOPATH)
+GOIMPORTS   ?= $(GOPATH)/bin/goimports
+GO111MODULE ?= on
+export GO111MODULE
 
 .PHONY: all
-all: deps build
-
-.PHONY: deps
-deps: $(DEP)
-	@echo ">> fetching dependencies"
-	@$(DEP) ensure
+all: build
 
 .PHONY: build
 build:
 	@echo ">> building thanosbench"
 	@go install github.com/improbable-eng/thanos/benchmark/cmd/thanosbench
 
-format: $(GOIMPORTS) deps
+format: $(GOIMPORTS)
 	@echo ">> formatting code"
 	@$(GOIMPORTS) -w $(shell find . -type f -name '*.go' -not -path "./vendor/*")
-
-$(DEP):
-	@echo ">> fetching dep"
-	@go get -u github.com/golang/dep/cmd/dep
 
 $(GOIMPORTS): 
 	@echo ">> fetching goimports"

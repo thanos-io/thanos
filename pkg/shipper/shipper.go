@@ -136,9 +136,18 @@ func NewWithCompacted(
 		lbls = func() labels.Labels { return nil }
 	}
 
-	flags, err := promclient.ConfiguredFlags(ctx, logger, prometheusURL)
-	if err != nil {
-		return nil, errors.Wrap(err, "configured flags; failed to check if compaction is disabled")
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	var flags promclient.Flags
+	if err := runutil.Retry(1*time.Second, ctx.Done(), func() (err error) {
+		flags, err = promclient.ConfiguredFlags(ctx, logger, prometheusURL)
+		if err != nil {
+			return errors.Wrap(err, "configured flags; failed to check if compaction is disabled")
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
 	if flags.TSDBMinTime != model.Duration(2*time.Hour) || flags.TSDBMaxTime != model.Duration(2*time.Hour) {

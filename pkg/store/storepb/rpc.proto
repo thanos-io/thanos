@@ -41,6 +41,7 @@ enum StoreType {
   RULE = 2;
   SIDECAR = 3;
   STORE = 4;
+  RECEIVE = 5;
 }
 
 message InfoResponse {

@@ -130,6 +130,7 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 	testutil.Ok(t, err)
 	testutil.Equals(t, []string{"1", "2"}, vals.Values)
 
+	// TODO(bwplotka): Add those test cases to TSDB querier_test.go as well, there are no tests for matching.
 	for i, tcase := range []struct {
 		req      *storepb.SeriesRequest
 		expected [][]storepb.Label
@@ -291,6 +292,18 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 				{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "2"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
 				{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+			},
+		},
+		// Regression https://github.com/improbable-eng/thanos/issues/833.
+		// Problem: Matcher that was selecting NO series, was ignored instead of passed as emptyPosting to Intersect.
+		{
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+					{Type: storepb.LabelMatcher_RE, Name: "non_existing", Value: "something"},
+				},
+				MinTime: mint,
+				MaxTime: maxt,
 			},
 		},
 	} {

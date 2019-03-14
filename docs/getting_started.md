@@ -59,8 +59,8 @@ Rolling this out has little to zero impact on the running Prometheus instance. I
 
 If you are not interested in backing up any data, the `--objstore.config-file` flag can simply be omitted.
 
-* _[Example Kubernetes manifest](../kube/manifests/prometheus.yaml)_
-* _[Example Kubernetes manifest with GCS upload](../kube/manifests/prometheus-gcs.yaml)_
+* _[Example Kubernetes manifest](../tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar.yaml)_
+* _[Example Kubernetes manifest with Minio upload](../tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar-lts.yaml)_
 * _[Details & Config for other object stores](./storage.md)_
 
 ### [Store API](/pkg/store/storepb/rpc.proto#L19)
@@ -78,8 +78,8 @@ thanos sidecar \
     --grpc-address              0.0.0.0:19090              # GRPC endpoint for StoreAPI
 ```
 
-* _[Example Kubernetes manifest](../kube/manifests/prometheus.yaml)_
-* _[Example Kubernetes manifest with GCS upload](../kube/manifests/prometheus-gcs.yaml)_
+* _[Example Kubernetes manifest](../tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar.yaml)_
+* _[Example Kubernetes manifest with GCS upload](../tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar-lts.yaml)_
 
 ### External Labels
 
@@ -142,7 +142,7 @@ thanos query \
 
 Go to the configured HTTP address, and you should now be able to query across all Prometheus instances and receive de-duplicated data.
 
-* _[Example Kubernetes manifest](../kube/manifests/thanos-query.yaml)_
+* _[Example Kubernetes manifest](../tutorials/kubernetes-demo/manifests/thanos-querier.yaml)_
 
 ## Communication Between Components
 
@@ -218,8 +218,8 @@ When to use gossip vs store flags?
 Configuration of initial peers is flexible and the argument can be repeated for Thanos to try different approaches.
 Additional flags for cluster configuration exist but are typically not needed. Check the `--help` output for further information.
 
-* _[Example Kubernetes manifest](../kube/manifests/prometheus.yaml)_
-* _[Example Kubernetes manifest with GCS upload](../kube/manifests/prometheus-gcs.yaml)_
+* _[Example Kubernetes manifest](../tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar.yaml)_
+* _[Example Kubernetes manifest with GCS upload](../tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar-lts.yaml)_
 
 ## [Store Gateway](components/store.md)
 
@@ -237,7 +237,7 @@ thanos store \
 
 The store gateway occupies small amounts of disk space for caching basic information about data in the object storage. This will rarely exceed more than a few gigabytes and is used to improve restart times. It is not useful but not required to preserve it across restarts.
 
-* _[Example Kubernetes manifest](../kube/manifests/thanos-store.yaml)_
+* _[Example Kubernetes manifest](../tutorials/kubernetes-demo/manifests/thanos-store-gateway.yaml)_
 
 ## [Compactor](components/compact.md)
 
@@ -263,7 +263,7 @@ which does rule and alert evaluation on top of given Thanos Querier.
 
 # All-in-one example
 
-You can find one-box example with minikube [here](../kube/README.md).
+You can find kubernetes manifests [here](../tutorials/kubernetes-demo/manifests).
 
 # Dashboards
 

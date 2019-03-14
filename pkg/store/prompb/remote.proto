@@ -28,6 +28,10 @@ option (gogoproto.goproto_getters_all) = false;
 
 option go_package = "prompb";
 
+message WriteRequest {
+  repeated prometheus.TimeSeries timeseries = 1 [(gogoproto.nullable) = false];
+}
+
 message ReadRequest {
   repeated Query queries = 1 [(gogoproto.nullable) = false];
 }
@@ -41,6 +45,7 @@ message Query {
   int64 start_timestamp_ms = 1;
   int64 end_timestamp_ms = 2;
   repeated LabelMatcher matchers = 3 [(gogoproto.nullable) = false];
+  prometheus.ReadHints hints = 4;
 }
 
 message QueryResult {
@@ -73,4 +78,11 @@ message LabelMatcher {
   Type type    = 1;
   string name  = 2;
   string value = 3;
+}
+
+message ReadHints {
+  int64 step_ms = 1;  // Query step size in milliseconds.
+  string func = 2;    // String representation of surrounding function or aggregation.
+  int64 start_ms = 3; // Start time in milliseconds.
+  int64 end_ms = 4;   // End time in milliseconds.
 }
