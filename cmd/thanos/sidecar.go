@@ -53,6 +53,8 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	uploadCompacted := cmd.Flag("shipper.upload-compacted", "[Experimental] If true sidecar will try to upload compacted blocks as well. Useful for migration purposes. Works only if compaction is disabled on Prometheus.").Default("false").Hidden().Bool()
 
+	autoCreateBucket := cmd.Flag("create-bucket", "Auto-create non-existing bucket.").Default("false").Bool()
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		rl := reloader.New(
 			log.With(logger, "component", "reloader"),
@@ -81,6 +83,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			peer,
 			rl,
 			*uploadCompacted,
+			autoCreateBucket,
 		)
 	}
 }
@@ -101,6 +104,7 @@ func runSidecar(
 	peer cluster.Peer,
 	reloader *reloader.Reloader,
 	uploadCompacted bool,
+	autoCreateBucket bool,
 ) error {
 	var m = &promMetadata{
 		promURL: promURL,
@@ -242,6 +246,13 @@ func runSidecar(
 		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Sidecar.String())
 		if err != nil {
 			return err
+		}
+
+		if autoCreateBucket {
+			err := bkt.EnsureBucketExists()
+			if err != nil {
+				return errors.Wrap(err, "bucket ensuring")
+			}
 		}
 
 		// Ensure we close up everything properly.
