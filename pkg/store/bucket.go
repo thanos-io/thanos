@@ -1643,8 +1643,7 @@ func (r *bucketChunkReader) preload(samplesLimiter *Limiter) error {
 			numChunks++
 		}
 	}
-	numSamples := numChunks * maxSamplesPerChunk
-	if err := samplesLimiter.Check(numSamples); err != nil {
+	if err := samplesLimiter.Check(numChunks * maxSamplesPerChunk); err != nil {
 		return errors.Wrapf(err, "exceeded samples limit")
 	}
 
