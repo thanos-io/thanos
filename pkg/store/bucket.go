@@ -65,7 +65,7 @@ type bucketStoreMetrics struct {
 	seriesMergeDuration   prometheus.Histogram
 	resultSeriesCount     prometheus.Summary
 	chunkSizeBytes        prometheus.Histogram
-	queriesLimited        prometheus.Counter
+	queriesDropped        prometheus.Counter
 	queriesLimit          prometheus.Gauge
 }
 
@@ -142,8 +142,8 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		},
 	})
 
-	m.queriesLimited = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "thanos_bucket_store_queries_limited",
+	m.queriesDropped = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_queries_dropped",
 		Help: "Number of queries that were dropped due to the sample limit.",
 	})
 	m.queriesLimit = prometheus.NewGauge(prometheus.GaugeOpts{
@@ -167,7 +167,7 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 			m.seriesMergeDuration,
 			m.resultSeriesCount,
 			m.chunkSizeBytes,
-			m.queriesLimited,
+			m.queriesDropped,
 			m.queriesLimit,
 		)
 	}
@@ -247,7 +247,7 @@ func NewBucketStore(
 		debugLogging:         debugLogging,
 		blockSyncConcurrency: blockSyncConcurrency,
 		queryGate:            NewGate(maxConcurrent, reg),
-		samplesLimiter:       NewLimiter(maxSampleCount, &metrics.queriesLimited),
+		samplesLimiter:       NewLimiter(maxSampleCount, &metrics.queriesDropped),
 		partitioner:          gapBasedPartitioner{maxGapSize: maxGapSize},
 	}
 	s.metrics = metrics
