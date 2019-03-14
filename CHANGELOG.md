@@ -13,6 +13,24 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Added
 - [#811](https://github.com/improbable-eng/thanos/pull/811) Remote write receiver
+- [#798](https://github.com/improbable-eng/thanos/pull/798) Ability to limit the maximum concurrent about of Series() calls in Thanos Store and the maximum amount of samples.
+
+New options:
+
+* `--grpc-sample-limit` limits the amount of samples that might be retrieved on a single Series() call. By default it is 5e7. Consider increasing this limit if you run a huge deployment. Helps a lot to capacity plan your Thanos Store instance if you are running on a virtual machine, for example;
+* `--grpc-concurrent-limit` limits the number of concurrent Series() calls in Thanos Store. By default it is 20. Consider increasing this limit if needed.
+
+New metrics:
+* `thanos_bucket_store_queries_dropped` shows how many queries were dropped due to the samples limit;
+* `thanos_bucket_store_queries_limit` is a constant metric which shows how many concurrent queries can come into Thanos Store;
+* `thanos_bucket_store_queries_in_flight` shows how many queries are currently "in flight" i.e. they are being executed;
+* `thanos_bucket_store_gate_seconds` shows how many seconds it took for queries to pass through the gate in both cases - when that fails and when it does not.
+
+New tracing span:
+* `store_query_gate_ismyturn` shows how long it took for a query to pass (or not) through the gate
+
+:warning: **WARNING** :warning: #798 adds some new default limits. Consider increasing them if you have a very huge deployment.
+
 
 ### Fixed
 - [#921](https://github.com/improbable-eng/thanos/pull/921) `thanos_objstore_bucket_last_successful_upload_time` now does not appear when no blocks have been uploaded so far
