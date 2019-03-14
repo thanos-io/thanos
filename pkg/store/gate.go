@@ -10,9 +10,9 @@ import (
 
 // Gate wraps the Prometheus gate with extra metrics.
 type Gate struct {
-	g              *gate.Gate
-	currentQueries prometheus.Gauge
-	gateTiming     prometheus.Histogram
+	g               *gate.Gate
+	inflightQueries prometheus.Gauge
+	gateTiming      prometheus.Histogram
 }
 
 // NewGate returns a new gate.
@@ -20,9 +20,9 @@ func NewGate(maxConcurrent int, reg prometheus.Registerer) *Gate {
 	g := &Gate{
 		g: gate.New(maxConcurrent),
 	}
-	g.currentQueries = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "thanos_bucket_store_queries_total",
-		Help: "Total number of currently executing queries.",
+	g.inflightQueries = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_bucket_store_queries_in_flight",
+		Help: "Total number of queries that are currently in flight.",
 	})
 	g.gateTiming = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name: "thanos_bucket_store_gate_seconds",
@@ -50,12 +50,12 @@ func (g *Gate) IsMyTurn(ctx context.Context) error {
 		return err
 	}
 
-	g.currentQueries.Inc()
+	g.inflightQueries.Inc()
 	return nil
 }
 
 // Done finishes a query.
 func (g *Gate) Done() {
-	g.currentQueries.Dec()
+	g.inflightQueries.Dec()
 	g.g.Done()
 }
