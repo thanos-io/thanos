@@ -14,6 +14,9 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ### Added
 - [#811](https://github.com/improbable-eng/thanos/pull/811) Remote write receiver
 
+### Fixed
+- [#921](https://github.com/improbable-eng/thanos/pull/921) `thanos_objstore_bucket_last_successful_upload_time` now does not appear when no blocks have been uploaded so far
+
 ## [v0.3.2](https://github.com/improbable-eng/thanos/releases/tag/v0.3.2) - 2019.03.04
 
 ### Added
