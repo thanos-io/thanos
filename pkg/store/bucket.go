@@ -48,7 +48,7 @@ import (
 // where this number comes from. Long story short: TSDB is made in such a way, and it is made in such a way
 // because you barely get any improvements in compression when the number of samples is beyond this.
 // Take a look at Figure 6 in this whitepaper http://www.vldb.org/pvldb/vol8/p1816-teller.pdf.
-const maxSamplesPerChunk uint64 = 120
+const maxSamplesPerChunk = 120
 
 type bucketStoreMetrics struct {
 	blocksLoaded          prometheus.Gauge
