@@ -42,7 +42,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// Approximately this is the max number of samples that we may have in any given chunk. This is needed
+// maxSamplesPerChunk is approximately the max number of samples that we may have in any given chunk. This is needed
 // for precalculating the number of samples that we may have to retrieve and decode for any given query
 // without downloading them. Please take a look at https://github.com/prometheus/tsdb/pull/397 to know
 // where this number comes from. Long story short: TSDB is made in such a way, and it is made in such a way
