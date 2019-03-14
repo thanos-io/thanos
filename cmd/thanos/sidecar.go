@@ -83,7 +83,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			peer,
 			rl,
 			*uploadCompacted,
-			autoCreateBucket,
+			*autoCreateBucket,
 		)
 	}
 }
