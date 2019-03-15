@@ -115,6 +115,5 @@ Flags:
       --block-sync-concurrency=20  
                                  Number of goroutines to use when syncing blocks
                                  from object storage.
-      --create-bucket            Auto-create non-existing bucket.
 
 ```

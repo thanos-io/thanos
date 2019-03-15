@@ -70,5 +70,6 @@ Flags:
       --block-sync-concurrency=20  
                            Number of goroutines to use when syncing block
                            metadata from object storage.
+      --create-bucket      Auto-create non-existing bucket.
 
 ```
