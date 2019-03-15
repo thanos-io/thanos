@@ -43,7 +43,8 @@ A blocks top-level directory is a ULID (like UUID but lexicographically sortable
 
 
 Those block files can be backed up to an object storage and later be queried by another component (see below).
-All data is uploaded as it is created by the Prometheus server/storage engine. The `meta.json` file may be extended by a `thanos` section, to which Thanos-specific metadata can be added. Currently this is limited to the "external labels" the producer of the block has assigned. This later helps in filtering blocks for querying without accessing their data files.
+All data is uploaded as it is created by the Prometheus server/storage engine. The `meta.json` file may be extended by a `thanos` section, to which Thanos-specific metadata can be added. Currently this it includes the "external labels" the producer of the block has assigned. This later helps in filtering blocks for querying without accessing their data files.
+The meta.json is updated during upload time on sidecars.
 
 
 ```
