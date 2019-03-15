@@ -304,9 +304,7 @@ func runQuery(
 			},
 			dialOpts,
 		)
-		proxy = store.NewProxyStore(logger, func(context.Context) ([]store.Client, error) {
-			return stores.Get(), nil
-		}, component.Query, selectorLset)
+		proxy            = store.NewProxyStore(logger, stores.Get, component.Query, selectorLset)
 		queryableCreator = query.NewQueryableCreator(logger, proxy, replicaLabel)
 		engine           = promql.NewEngine(
 			promql.EngineOpts{
