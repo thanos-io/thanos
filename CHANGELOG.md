@@ -10,7 +10,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 We use *breaking* word for marking changes that are not backward compatible (relates only to v0.y.z releases.)
 
 ## Unreleased
-
+- [#920](https://github.com/improbable-eng/thanos/pull/920) Add Thanos store.read-timeout. Maximum time to read response from store, which defaults to 2 minutes. If request to one of stores is timed out and store.read-timeout < query.timeout partial response will be returned. If store.read-timeout >= query.timeout one of stores is timed out the client will get no data and timeout error.
 ### Added
 - [#811](https://github.com/improbable-eng/thanos/pull/811) Remote write receiver
 
