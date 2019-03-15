@@ -174,6 +174,7 @@ type BucketStore struct {
 	blockSyncConcurrency int
 
 	partitioner partitioner
+	skipWindow  *time.Duration
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -187,6 +188,7 @@ func NewBucketStore(
 	maxChunkPoolBytes uint64,
 	debugLogging bool,
 	blockSyncConcurrency int,
+	skipWindow *time.Duration,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -429,6 +431,14 @@ func (s *BucketStore) TimeRange() (mint, maxt int64) {
 // Info implements the storepb.StoreServer interface.
 func (s *BucketStore) Info(context.Context, *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	mint, maxt := s.TimeRange()
+
+	if s.skipWindow != nil {
+		//TODO: is TimeRange really a Unix timestamp?
+		newt := time.Now().Add(-*s.skipWindow).Unix()
+		if maxt > newt {
+			maxt = newt
+		}
+	}
 	// Store nodes hold global data and thus have no labels.
 	return &storepb.InfoResponse{
 		StoreType: component.Store.ToProto(),
