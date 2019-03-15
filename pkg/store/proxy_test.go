@@ -750,7 +750,7 @@ func TestProxyStore_ReadTimeoutWithPartialResponse(t *testing.T) {
 			// This case is quite strange,
 			// because newMergedSeriesSet calls Next() and
 			// blocks reading from all stores if one of them works slowly
-			queryTimeout:     10 * time.Millisecond,
+			queryTimeout:     1 * time.Millisecond,
 			storeReadTimeout: 1 * time.Minute,
 			partialResponse:  true,
 
