@@ -27,9 +27,9 @@ New metrics:
 * `thanos_bucket_store_gate_seconds` shows how many seconds it took for queries to pass through the gate in both cases - when that fails and when it does not.
 
 New tracing span:
-* `store_query_gate_ismyturn` shows how long it took for a query to pass (or not) through the gate
+* `store_query_gate_ismyturn` shows how long it took for a query to pass (or not) through the gate.
 
-:warning: **WARNING** :warning: #798 adds some new default limits. Consider increasing them if you have a very huge deployment.
+:warning: **WARNING** :warning: #798 adds new default limits for max samples per one Series() gRPC method call and the maximum number of concurrent Series() gRPC method calls. Consider increasing them if you have a very huge deployment.
 
 
 ### Fixed
