@@ -28,7 +28,7 @@ func NewGate(maxConcurrent int, reg prometheus.Registerer) *Gate {
 		Name: "thanos_bucket_store_gate_seconds",
 		Help: "How many seconds it took for a query to wait at the gate.",
 		Buckets: []float64{
-			0.01, 0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 30, 60, 120,
+			0.01, 0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 10,
 		},
 	})
 
