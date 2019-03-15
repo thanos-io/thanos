@@ -143,7 +143,7 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	})
 
 	m.queriesDropped = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "thanos_bucket_store_queries_dropped",
+		Name: "thanos_bucket_store_queries_dropped_total",
 		Help: "Number of queries that were dropped due to the sample limit.",
 	})
 	m.queriesLimit = prometheus.NewGauge(prometheus.GaugeOpts{

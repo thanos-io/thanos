@@ -21,7 +21,7 @@ New options:
 * `--grpc-concurrent-limit` limits the number of concurrent Series() calls in Thanos Store. By default it is 20. Consider increasing this limit if needed.
 
 New metrics:
-* `thanos_bucket_store_queries_dropped` shows how many queries were dropped due to the samples limit;
+* `thanos_bucket_store_queries_dropped_total` shows how many queries were dropped due to the samples limit;
 * `thanos_bucket_store_queries_limit` is a constant metric which shows how many concurrent queries can come into Thanos Store;
 * `thanos_bucket_store_queries_in_flight` shows how many queries are currently "in flight" i.e. they are being executed;
 * `thanos_bucket_store_gate_seconds` shows how many seconds it took for queries to pass through the gate in both cases - when that fails and when it does not.
