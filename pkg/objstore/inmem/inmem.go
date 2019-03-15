@@ -32,8 +32,8 @@ func (b *Bucket) Objects() map[string][]byte {
 	return b.objects
 }
 
-// Ensure that the bucket actually exists, if it doesn't it is created.
-// For inmem buckets, this is a no-op.
+// EnsureBucketExists ensures that the bucket actually exists,
+// creating it if it doesn't.
 func (b *Bucket) EnsureBucketExists() error {
 	return nil
 }

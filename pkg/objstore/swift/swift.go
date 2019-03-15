@@ -89,7 +89,8 @@ func (c *Container) Name() string {
 	return c.name
 }
 
-// Ensure that the bucket actually exists, if it doesn't it is created.
+// EnsureBucketExists ensures that the bucket actually exists,
+// creating it if it doesn't.
 // Currently not implemented.
 func (c *Container) EnsureBucketExists() error {
 	return objstore.ErrNotImplemented

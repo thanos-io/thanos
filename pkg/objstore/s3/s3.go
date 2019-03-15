@@ -176,7 +176,8 @@ func (b *Bucket) bucketLocation() string {
 	return location
 }
 
-// Ensure that the bucket actually exists, if it doesn't it is created.
+// EnsureBucketExists ensures that the bucket actually exists,
+// creating it if it doesn't.
 func (b *Bucket) EnsureBucketExists() error {
 	exists, err := b.client.BucketExists(b.Name())
 	if err != nil {
