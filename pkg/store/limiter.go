@@ -14,6 +14,7 @@ type Limiter struct {
 }
 
 // NewLimiter returns a new limiter with a specified limit. 0 disables the limit.
+// Caller *must* ensure that ctr is non-nil.
 func NewLimiter(limit uint64, ctr *prometheus.Counter) *Limiter {
 	return &Limiter{limit: limit, failedCounter: ctr}
 }
@@ -24,9 +25,7 @@ func (l *Limiter) Check(num uint64) error {
 		return nil
 	}
 	if num > l.limit {
-		if l.failedCounter != nil {
-			(*l.failedCounter).Inc()
-		}
+		(*l.failedCounter).Inc()
 		return errors.Errorf("limit %v violated (got %v)", l.limit, num)
 	}
 	return nil
