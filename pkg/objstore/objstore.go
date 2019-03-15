@@ -54,6 +54,7 @@ type BucketReader interface {
 	IsObjNotFoundErr(err error) bool
 }
 
+var ErrNotImplemented = errors.New("Unimplemented")
 // UploadDir uploads all files in srcdir to the bucket with into a top-level directory
 // named dstdir. It is a caller responsibility to clean partial upload in case of failure.
 func UploadDir(ctx context.Context, logger log.Logger, bkt Bucket, srcdir, dstdir string) error {

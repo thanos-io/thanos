@@ -69,7 +69,7 @@ func (b *Bucket) Name() string {
 // Ensure that the bucket actually exists, if it doesn't it is created.
 // Currently not implemented.
 func (b *Bucket) EnsureBucketExists() error {
-	return errors.New("Unimplemented")
+	return objstore.ErrNotImplemented
 }
 
 // Iter calls f for each entry in the given directory. The argument to f is the full
