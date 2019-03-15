@@ -7,6 +7,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -36,10 +37,11 @@ type Client interface {
 
 // ProxyStore implements the store API that proxies request to all given underlying stores.
 type ProxyStore struct {
-	logger         log.Logger
-	stores         func() []Client
-	component      component.StoreAPI
-	selectorLabels labels.Labels
+	logger           log.Logger
+	stores           func() []Client
+	component        component.StoreAPI
+	selectorLabels   labels.Labels
+	storeReadTimeout time.Duration
 }
 
 // NewProxyStore returns a new ProxyStore that uses the given clients that implements storeAPI to fan-in all series to the client.
@@ -49,15 +51,17 @@ func NewProxyStore(
 	stores func() []Client,
 	component component.StoreAPI,
 	selectorLabels labels.Labels,
+	storeReadTimeout time.Duration,
 ) *ProxyStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	s := &ProxyStore{
-		logger:         logger,
-		stores:         stores,
-		component:      component,
-		selectorLabels: selectorLabels,
+		logger:           logger,
+		stores:           stores,
+		component:        component,
+		selectorLabels:   selectorLabels,
+		storeReadTimeout: storeReadTimeout,
 	}
 	return s
 }
@@ -89,13 +93,15 @@ func newRespCh(ctx context.Context, buffer int) (*ctxRespSender, <-chan *storepb
 	return &ctxRespSender{ctx: ctx, ch: respCh}, respCh, func() { close(respCh) }
 }
 
+// send writes response to sender channel
+// or just returns if sender context was timed out
 func (s ctxRespSender) send(r *storepb.SeriesResponse) {
-	select {
-	case <-s.ctx.Done():
-		return
-	case s.ch <- r:
+	// If context closed or deadline exceeded - just skip sending and return
+	if s.ctx.Err() != nil {
 		return
 	}
+
+	s.ch <- r
 }
 
 // Series returns all series for a requested time range and label matcher. Requested series are taken from other
@@ -116,6 +122,15 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		// Each might be quite large (multi chunk long series given by sidecar).
 		respSender, respRecv, closeFn = newRespCh(gctx, 10)
 	)
+
+	// We're limiting store read time here.
+	// This limit affects behaviour what result Thanos Query will return to user if one of requested stores timed out.
+	// If query.timeout > store.read-timeout
+	// client will get partial response from stores who responded faster than store.read-timeout
+	// If query.timeout <= store.read-timeout
+	// client will get an error with timeout for whole request even if some of stores responded in time, but one timed out
+	storeReadCtx, storeReadCancelFunc := context.WithTimeout(gctx, s.storeReadTimeout)
+	defer storeReadCancelFunc()
 
 	g.Go(func() error {
 		var (
@@ -147,7 +162,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			}
 			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
 
-			sc, err := st.Series(gctx, r)
+			sc, err := st.Series(storeReadCtx, r)
 			if err != nil {
 				storeID := fmt.Sprintf("%v", storepb.LabelsToString(st.Labels()))
 				if storeID == "" {
@@ -162,8 +177,8 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 				continue
 			}
 
-			// Schedule streamSeriesSet that translates gRPC streamed response into seriesSet (if series) or respCh if warnings.
-			seriesSet = append(seriesSet, startStreamSeriesSet(gctx, wg, sc, respSender, st.String(), !r.PartialResponseDisabled))
+			// Schedule streamSeriesSet that translates gRPC streamed response into seriesSet (if series) or respCh (if warnings).
+			seriesSet = append(seriesSet, startStreamSeriesSet(storeReadCtx, wg, sc, respSender, st.String(), !r.PartialResponseDisabled))
 		}
 
 		level.Debug(s.logger).Log("msg", strings.Join(storeDebugMsgs, ";"))
@@ -244,18 +259,12 @@ func startStreamSeriesSet(
 			}
 
 			if ctx.Err() != nil {
+				s.writeWarningOrErrorResponse(partialResponse, ctx.Err())
 				return
 			}
 
 			if err != nil {
-				if partialResponse {
-					s.warnCh.send(storepb.NewWarnSeriesResponse(errors.Wrap(err, "receive series")))
-					return
-				}
-
-				s.errMtx.Lock()
-				defer s.errMtx.Unlock()
-				s.err = err
+				s.writeWarningOrErrorResponse(partialResponse, err)
 				return
 			}
 
@@ -273,6 +282,25 @@ func startStreamSeriesSet(
 func (s *streamSeriesSet) Next() (ok bool) {
 	s.currSeries, ok = <-s.recvCh
 	return ok
+}
+
+// writeWarningOrErrorResponse sends warning if partial response enabled or sets error otherwise
+func (s *streamSeriesSet) writeWarningOrErrorResponse(partialResponse bool, err error) {
+	if partialResponse {
+		s.warnCh.send(storepb.NewWarnSeriesResponse(errors.Wrap(err, "receive series")))
+		return
+	}
+
+	s.setError(err)
+	return
+}
+
+// setError sets error (thread-safe)
+func (s *streamSeriesSet) setError(err error) {
+	s.errMtx.Lock()
+	defer s.errMtx.Unlock()
+
+	s.err = err
 }
 
 func (s *streamSeriesSet) At() ([]storepb.Label, []storepb.AggrChunk) {
@@ -330,10 +358,13 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		g, gctx  = errgroup.WithContext(ctx)
 	)
 
+	storeReadCtx, storeReadCancelFunc := context.WithTimeout(gctx, s.storeReadTimeout)
+	defer storeReadCancelFunc()
+
 	for _, st := range s.stores() {
 		store := st
 		g.Go(func() error {
-			resp, err := store.LabelValues(gctx, &storepb.LabelValuesRequest{
+			resp, err := store.LabelValues(storeReadCtx, &storepb.LabelValuesRequest{
 				Label:                   r.Label,
 				PartialResponseDisabled: r.PartialResponseDisabled,
 			})

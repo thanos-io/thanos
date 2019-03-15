@@ -7,19 +7,15 @@ import (
 	"math"
 	"math/rand"
 	"testing"
-
 	"time"
 
 	"github.com/fortytw2/leaktest"
-	"github.com/improbable-eng/thanos/pkg/component"
-	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/tsdb/chunkenc"
-	"google.golang.org/grpc"
 )
 
 func TestQuerier_Series(t *testing.T) {
@@ -36,7 +32,7 @@ func TestQuerier_Series(t *testing.T) {
 
 	// Querier clamps the range to [1,300], which should drop some samples of the result above.
 	// The store API allows endpoints to send more data then initially requested.
-	q := newQuerier(context.Background(), nil, 1, 300, "", testProxy, false, 0, time.Minute, true, nil)
+	q := newQuerier(context.Background(), nil, 1, 300, "", testProxy, false, 0, true, nil)
 	defer func() { testutil.Ok(t, q.Close()) }()
 
 	res, _, err := q.Select(&storage.SelectParams{})
@@ -275,54 +271,6 @@ func TestDedupSeriesIterator(t *testing.T) {
 		res := expandSeries(t, it)
 		testutil.Equals(t, c.exp, res)
 	}
-}
-
-func TestQuerier_StoreReadTimeout(t *testing.T) {
-	storeClient := &store.ClientMock{
-		StoreClientMock: &storepb.StoreClientMock{
-			SeriesCallback: func(ctx context.Context, in *storepb.SeriesRequest, opts ...grpc.CallOption) (storepb.Store_SeriesClient, error) {
-				// Just wait for ctx.Done() as it works internally in GRPC StoreClient
-				<-ctx.Done()
-				return nil, ctx.Err()
-			},
-		},
-		TimeRangeCallback: func() (mint int64, maxt int64) { return 1, 1 },
-		LabelsCallback:    func() []storepb.Label { return nil },
-	}
-
-	proxy := store.NewProxyStore(
-		nil,
-		func(context.Context) ([]store.Client, error) { return []store.Client{storeClient}, nil },
-		component.Query,
-		nil,
-	)
-
-	queryTimeout := 1 * time.Second
-	storeReadTimeout := 1 * time.Millisecond
-
-	queryCtx, _ := context.WithTimeout(context.Background(), queryTimeout)
-
-	q := newQuerier(queryCtx, nil, 1, 300, "", proxy, false, 0, storeReadTimeout, true, nil)
-
-	storeQueryDone := make(chan struct{})
-
-	go func() {
-		_, _, err := q.Select(&storage.SelectParams{})
-		testutil.Ok(t, err)
-
-		storeQueryDone <- struct{}{}
-
-	}()
-
-	select {
-	case <-storeQueryDone:
-		// Do nothing - storeQuery expected to finish first
-	case <-queryCtx.Done():
-		// Something went wrong - global query context expected to close last
-		testutil.Ok(t, errors.New("query finished first, but expected store query will finish first (storeReadTimeout is smaller that query timeout)"))
-	}
-
-	testutil.Ok(t, q.Close())
 }
 
 func BenchmarkDedupSeriesIterator(b *testing.B) {
