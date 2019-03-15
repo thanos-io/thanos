@@ -708,8 +708,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		if err != nil {
 			return errors.Wrapf(err, "failed to wait for turn")
 		}
-		defer s.queryGate.Done()
 	}
+	defer s.queryGate.Done()
 
 	matchers, err := translateMatchers(req.Matchers)
 	if err != nil {
