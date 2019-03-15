@@ -22,6 +22,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/improbable-eng/thanos/pkg/component"
+	"github.com/improbable-eng/thanos/pkg/extprom"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/pool"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -246,7 +247,7 @@ func NewBucketStore(
 		blockSets:            map[uint64]*bucketBlockSet{},
 		debugLogging:         debugLogging,
 		blockSyncConcurrency: blockSyncConcurrency,
-		queryGate:            NewGate(maxConcurrent, reg),
+		queryGate:            NewGate(maxConcurrent, extprom.NewSubsystem(reg, "thanos_bucket_store")),
 		samplesLimiter:       NewLimiter(maxSampleCount, &metrics.queriesDropped),
 		partitioner:          gapBasedPartitioner{maxGapSize: maxGapSize},
 	}

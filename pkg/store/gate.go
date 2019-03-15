@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/extprom"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/gate"
 )
@@ -15,25 +16,27 @@ type Gate struct {
 	gateTiming      prometheus.Histogram
 }
 
-// NewGate returns a new gate.
-func NewGate(maxConcurrent int, reg prometheus.Registerer) *Gate {
+// NewGate returns a new query gate.
+func NewGate(maxConcurrent int, reg *extprom.SubsystemRegisterer) *Gate {
 	g := &Gate{
 		g: gate.New(maxConcurrent),
 	}
 	g.inflightQueries = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "thanos_bucket_store_queries_in_flight",
-		Help: "Total number of queries that are currently in flight.",
+		Name:      "queries_in_flight",
+		Help:      "Total number of queries that are currently in flight.",
+		Subsystem: reg.Subsystem(),
 	})
 	g.gateTiming = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name: "thanos_bucket_store_gate_seconds",
-		Help: "How many seconds it took for a query to wait at the gate.",
+		Name: "gate_seconds",
+		Help: "How many seconds it took for queries to wait at the gate.",
 		Buckets: []float64{
 			0.01, 0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 10,
 		},
+		Subsystem: reg.Subsystem(),
 	})
 
-	if reg != nil {
-		reg.MustRegister(g.inflightQueries, g.gateTiming)
+	if r := reg.Registerer(); r != nil {
+		r.MustRegister(g.inflightQueries, g.gateTiming)
 	}
 
 	return g
