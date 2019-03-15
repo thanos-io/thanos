@@ -275,7 +275,7 @@ Flags:
                                  store.read-timeout < query.timeout partial
                                  response will be returned. If
                                  store.read-timeout >= query.timeout one of
-                                 stores is timed out clien will get no data and
-                                 timeout error.
+                                 stores is timed out the client will get no data
+                                 and timeout error.
 
 ```
