@@ -9,13 +9,13 @@ import (
 type Limiter struct {
 	limit uint64
 
-	// A ptr to a counter metric which we will increase if Check() fails.
-	failedCounter *prometheus.Counter
+	// Counter metric which we will increase if Check() fails.
+	failedCounter prometheus.Counter
 }
 
 // NewLimiter returns a new limiter with a specified limit. 0 disables the limit.
 // Caller *must* ensure that ctr is non-nil.
-func NewLimiter(limit uint64, ctr *prometheus.Counter) *Limiter {
+func NewLimiter(limit uint64, ctr prometheus.Counter) *Limiter {
 	return &Limiter{limit: limit, failedCounter: ctr}
 }
 
@@ -25,7 +25,7 @@ func (l *Limiter) Check(num uint64) error {
 		return nil
 	}
 	if num > l.limit {
-		(*l.failedCounter).Inc()
+		l.failedCounter.Inc()
 		return errors.Errorf("limit %v violated (got %v)", l.limit, num)
 	}
 	return nil

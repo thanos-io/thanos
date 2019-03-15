@@ -248,7 +248,7 @@ func NewBucketStore(
 		debugLogging:         debugLogging,
 		blockSyncConcurrency: blockSyncConcurrency,
 		queryGate:            NewGate(maxConcurrent, extprom.NewSubsystem(reg, "thanos_bucket_store")),
-		samplesLimiter:       NewLimiter(maxSampleCount, &metrics.queriesDropped),
+		samplesLimiter:       NewLimiter(maxSampleCount, metrics.queriesDropped),
 		partitioner:          gapBasedPartitioner{maxGapSize: maxGapSize},
 	}
 	s.metrics = metrics
