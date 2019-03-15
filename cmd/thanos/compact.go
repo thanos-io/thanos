@@ -95,6 +95,8 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing block metadata from object storage.").
 		Default("20").Int()
 
+	autoCreateBucket := cmd.Flag("create-bucket", "Auto-create non-existing bucket.").Default("false").Bool()
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		return runCompact(g, logger, reg,
 			*httpAddr,
@@ -112,6 +114,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			*disableDownsampling,
 			*maxCompactionLevel,
 			*blockSyncConcurrency,
+			*autoCreateBucket,
 		)
 	}
 }
@@ -131,6 +134,7 @@ func runCompact(
 	disableDownsampling bool,
 	maxCompactionLevel int,
 	blockSyncConcurrency int,
+	autoCreateBucket bool,
 ) error {
 	halted := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compactor_halted",
@@ -155,6 +159,12 @@ func runCompact(
 		return err
 	}
 
+	if autoCreateBucket {
+		err := bkt.EnsureBucketExists()
+		if err != nil {
+			return errors.Wrap(err, "ensure bucket")
+		}
+	}
 	// Ensure we close up everything properly.
 	defer func() {
 		if err != nil {

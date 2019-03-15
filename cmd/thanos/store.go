@@ -44,8 +44,6 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing blocks from object storage.").
 		Default("20").Int()
 
-	autoCreateBucket := cmd.Flag("create-bucket", "Auto-create non-existing bucket.").Default("false").Bool()
-	
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
 		peer, err := newPeerFn(logger, reg, false, "", false)
 		if err != nil {
@@ -69,7 +67,6 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			debugLogging,
 			*syncInterval,
 			*blockSyncConcurrency,
-			*autoCreateBucket,
 		)
 	}
 }
@@ -94,7 +91,6 @@ func runStore(
 	verbose bool,
 	syncInterval time.Duration,
 	blockSyncConcurrency int,
-	autoCreateBucket bool,
 ) error {
 	{
 		confContentYaml, err := objStoreConfig.Content()
@@ -129,12 +125,7 @@ func runStore(
 		}
 
 		begin := time.Now()
-		if autoCreateBucket {
-			err := bkt.EnsureBucketExists()
-			if err != nil {
-				return errors.Wrap(err, "ensure bucket")
-			}
-		}
+
 		level.Debug(logger).Log("msg", "initializing bucket store")
 		if err := bs.InitialSync(context.Background()); err != nil {
 			return errors.Wrap(err, "bucket store initial sync")
