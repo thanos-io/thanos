@@ -7,6 +7,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -40,6 +41,8 @@ type ProxyStore struct {
 	stores         func() []Client
 	component      component.StoreAPI
 	selectorLabels labels.Labels
+
+	receiveTimeout time.Duration
 }
 
 // NewProxyStore returns a new ProxyStore that uses the given clients that implements storeAPI to fan-in all series to the client.
@@ -49,6 +52,7 @@ func NewProxyStore(
 	stores func() []Client,
 	component component.StoreAPI,
 	selectorLabels labels.Labels,
+	receiveTimeout time.Duration,
 ) *ProxyStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -58,6 +62,7 @@ func NewProxyStore(
 		stores:         stores,
 		component:      component,
 		selectorLabels: selectorLabels,
+		receiveTimeout: receiveTimeout,
 	}
 	return s
 }
@@ -147,7 +152,11 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			}
 			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
 
-			sc, err := st.Series(gctx, r)
+			//This is used to cancel this stream when one operations takes too long
+			seriesCtx, closeSeries := context.WithCancel(gctx)
+			defer closeSeries()
+
+			sc, err := st.Series(seriesCtx, r)
 			if err != nil {
 				storeID := fmt.Sprintf("%v", storepb.LabelsToString(st.Labels()))
 				if storeID == "" {
@@ -159,15 +168,15 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 					return err
 				}
 				respSender.send(storepb.NewWarnSeriesResponse(err))
+
 				continue
 			}
 
 			// Schedule streamSeriesSet that translates gRPC streamed response into seriesSet (if series) or respCh if warnings.
-			seriesSet = append(seriesSet, startStreamSeriesSet(gctx, wg, sc, respSender, st.String(), !r.PartialResponseDisabled))
+			seriesSet = append(seriesSet, startStreamSeriesSet(seriesCtx, closeSeries, wg, sc, respSender, st.String(), !r.PartialResponseDisabled, s.receiveTimeout))
 		}
 
 		level.Debug(s.logger).Log("msg", strings.Join(storeDebugMsgs, ";"))
-
 		if len(seriesSet) == 0 {
 			// This is indicates that configured StoreAPIs are not the ones end user expects
 			err := errors.New("No store matched for this query")
@@ -177,17 +186,37 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		}
 
 		mergedSet := storepb.MergeSeriesSets(seriesSet...)
+
 		for mergedSet.Next() {
 			var series storepb.Series
+
 			series.Labels, series.Chunks = mergedSet.At()
+
 			respSender.send(storepb.NewSeriesResponse(&series))
 		}
 		return mergedSet.Err()
 	})
 
-	for resp := range respRecv {
-		if err := srv.Send(resp); err != nil {
-			return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+	//Cancel the sending, if context is canceled.
+forLoop:
+	for {
+		select {
+		case resp, ok := <-respRecv:
+			if !ok {
+				break forLoop
+			}
+			if err := srv.Send(resp); err != nil {
+				return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+			}
+			level.Info(s.logger).Log("msg", "sending series done")
+		case <-gctx.Done():
+			err := errors.Wrap(gctx.Err(), "sending series")
+			level.Info(s.logger).Log("msg", "sending series context timed out", "err", err)
+			if r.PartialResponseDisabled {
+				return err
+			}
+			//TODO(povilasv): check if actually sent smth, if response is 0 then err for partialResponse case.
+			break forLoop
 		}
 	}
 
@@ -196,7 +225,6 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		return err
 	}
 	return nil
-
 }
 
 type warnSender interface {
@@ -206,6 +234,8 @@ type warnSender interface {
 // streamSeriesSet iterates over incoming stream of series.
 // All errors are sent out of band via warning channel.
 type streamSeriesSet struct {
+	ctx context.Context
+
 	stream storepb.Store_SeriesClient
 	warnCh warnSender
 
@@ -215,28 +245,39 @@ type streamSeriesSet struct {
 	errMtx sync.Mutex
 	err    error
 
-	name string
+	name            string
+	partialResponse bool
+
+	receiveTimeout time.Duration
+	closeSeries    context.CancelFunc
 }
 
 func startStreamSeriesSet(
 	ctx context.Context,
+	closeSeries context.CancelFunc,
 	wg *sync.WaitGroup,
 	stream storepb.Store_SeriesClient,
 	warnCh warnSender,
 	name string,
 	partialResponse bool,
+	receiveTimeout time.Duration,
 ) *streamSeriesSet {
 	s := &streamSeriesSet{
-		stream: stream,
-		warnCh: warnCh,
-		recvCh: make(chan *storepb.Series, 10),
-		name:   name,
+		ctx:             ctx,
+		closeSeries:     closeSeries,
+		stream:          stream,
+		warnCh:          warnCh,
+		recvCh:          make(chan *storepb.Series, 10),
+		name:            name,
+		partialResponse: partialResponse,
+		receiveTimeout:  receiveTimeout,
 	}
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		defer close(s.recvCh)
+
 		for {
 			r, err := s.stream.Recv()
 			if err == io.EOF {
@@ -249,13 +290,13 @@ func startStreamSeriesSet(
 
 			if err != nil {
 				if partialResponse {
-					s.warnCh.send(storepb.NewWarnSeriesResponse(errors.Wrap(err, "receive series")))
+					s.warnCh.send(storepb.NewWarnSeriesResponse(errors.Wrapf(err, "receive series from %s:", s.name)))
 					return
 				}
 
 				s.errMtx.Lock()
-				defer s.errMtx.Unlock()
 				s.err = err
+				s.errMtx.Unlock()
 				return
 			}
 
@@ -269,10 +310,40 @@ func startStreamSeriesSet(
 	return s
 }
 
-// Next blocks until new message is received or stream is closed.
+// Next blocks until new message is received or stream is closed or operation is timed out.
 func (s *streamSeriesSet) Next() (ok bool) {
-	s.currSeries, ok = <-s.recvCh
-	return ok
+	//Some times GRPC streams get stuck and don't send any data for long periods of time
+	//E.G. Simple GRPC Store API, which just sleeps.
+	//
+	//Right now the only option to time them out in GRPC is to set context.WithTimeout()
+	// The issue is that it is a global timeout,
+	// if we set it to 10s, we won't ever get results from Thanos Store (backed by object store)
+	// if we set it to 120s, we will always be waiting 120s for the HTTP queries to finish, which is :/
+	// As we will be waiting for the slowest one to finish
+
+	// This fix adds a timeout per single operation
+	// This way we identifies stuck connection meaning it will only timeout a GRPC store,
+	// which hasn't put data into recvCh in X seconds
+	ctx, done := context.WithTimeout(s.ctx, s.receiveTimeout)
+	defer done()
+	select {
+	case s.currSeries, ok = <-s.recvCh:
+		return ok
+	case <-ctx.Done():
+		//shutdown a goroutine in startStreamSeriesSet
+		s.closeSeries()
+
+		err := errors.Wrapf(ctx.Err(), "failed to receive any data in %s from %s:", s.receiveTimeout.String(), s.name)
+		if s.partialResponse {
+			s.warnCh.send(storepb.NewWarnSeriesResponse(err))
+			return false
+		}
+		s.errMtx.Lock()
+		s.err = err
+		s.errMtx.Unlock()
+
+		return false
+	}
 }
 
 func (s *streamSeriesSet) At() ([]storepb.Label, []storepb.AggrChunk) {

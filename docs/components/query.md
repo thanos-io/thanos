@@ -270,5 +270,10 @@ Flags:
                                  if no max_source_resolution param is specified.
       --query.partial-response   Enable partial response for queries if no
                                  partial_response param is specified.
+      --store.receive-timeout=200ms  
+                                 Maximum time to wait for any data from store.
+                                 If Store doesn't send any data any
+                                 storeReceiveTimeout the Store will be igored
+                                 and partial data will be returned.
 
 ```
