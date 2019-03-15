@@ -132,7 +132,7 @@ func runStore(
 		if autoCreateBucket {
 			err := bkt.EnsureBucketExists()
 			if err != nil {
-				return errors.Wrap(err, "bucket ensuring")
+				return errors.Wrap(err, "ensure bucket")
 			}
 		}
 		level.Debug(logger).Log("msg", "initializing bucket store")

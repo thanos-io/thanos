@@ -251,7 +251,7 @@ func runSidecar(
 		if autoCreateBucket {
 			err := bkt.EnsureBucketExists()
 			if err != nil {
-				return errors.Wrap(err, "bucket ensuring")
+				return errors.Wrap(err, "ensure bucket")
 			}
 		}
 
