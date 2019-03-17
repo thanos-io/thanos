@@ -8,8 +8,14 @@
         crossorigin="anonymous">
     <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.1/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr"
         crossorigin="anonymous">
-    <link rel="stylesheet" href="{{ "/main.css" | relURL }}">
+    <link rel="stylesheet" href="{{ "/main.css" | relURL }}" />
+    <link rel="stylesheet" href="{{ "/syntax.css" | relURL }}" />
+    <link rel="icon" href="{{ "/icon-light.png" | relURL }}" />
     <title>{{ block "title" . }}{{ .Site.Title }}{{ end }}</title>
+    <meta property="og:image" content="{{ "/icon-light.png" | relURL }}" />
+    <meta property="og:type" content="object" />
+    <meta property="og:title" content="Thanos" />
+    <meta property="og:description" content="{{ .Site.Title }}" />
 </head>
 
 <body>
@@ -22,13 +28,13 @@
         <div class="collapse navbar-collapse" id="navbarSupportedContent">
             <ul class="navbar-nav ml-auto">
                 <li class="nav-item">
-                    <a class="nav-link" href="{{ "/docs/getting-started" | relURL }}">Docs</a>
+                    <a class="nav-link" href="{{ "/docs/getting-started" | relURL }}">Documentation</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="#">Download</a>
+                    <a class="nav-link" href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}/releases">Download</a>
                 </li>
                 <li class="nav-item">
-                    <a href="#" class="nav-link"><i class="fab fa-github"></i> GitHub</a>
+                    <a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}" class="nav-link"><i class="fab fa-fw fa-github"></i> GitHub</a>
                 </li>
             </ul>
         </div>
@@ -38,26 +44,12 @@
         <div class="container">
             <div class="row py-5">
                 <div class="col">
-                    <h6 class="font-weight-bold">Documentation</h6>
+                    <h6 class="font-weight-bold">Thanos</h6>
                     <ul class="list-unstyled">
-                        <li><a href="#" class="text-reset">Lorem ipsum dolor sit amet</a></li>
-                        <li><a href="#" class="text-reset">Consectetur adipiscing elit</a></li>
-                    </ul>
-                </div>
-                <div class="col">
-                    <h6 class="font-weight-bold">Community</h6>
-                    <ul class="list-unstyled">
-                        <li><a href="#" class="text-reset">Slack</a></li>
-                        <li><a href="#" class="text-reset">GitHub</a></li>
-                        <li><a href="#" class="text-reset">User Showcase</a></li>
-                    </ul>
-                </div>
-                <div class="col">
-                    <h6 class="font-weight-bold">More</h6>
-                    <ul class="list-unstyled">
-                        <li><a href="#" class="text-reset">Slack</a></li>
-                        <li><a href="#" class="text-reset">Github</a></li>
-                        <li><a href="#" class="text-reset">User Showcase</a></li>
+                        <li><a href="{{ "/docs/getting-started" | relURL }}" class="text-reset">Documentation</a></li>
+                        <li><a href="{{ .Site.Params.SlackInvite }}" class="text-reset">Slack</a></li>
+                        <li><a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}" class="text-reset">GitHub</a></li>
+                        <li><a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}/issues" class="text-reset">Issues</a></li>
                     </ul>
                 </div>
             </div>
@@ -70,5 +62,4 @@
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.2.1/js/bootstrap.min.js" integrity="sha384-B0UglyR+jN6CkvvICOB2joaf5I4l3gm9GU6Hc1og6Ls7i6U/mkkaduKaBhlAXv9k"
         crossorigin="anonymous"></script>
 </body>
-
 </html>

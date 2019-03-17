@@ -2,6 +2,7 @@
 title: Object Storage
 type: docs
 menu: "thanos"
+markup: mmark
 ---
 
 # Object Storage
@@ -14,6 +15,7 @@ All clients are configured using `--objstore.config-file` to reference to the co
 
 Current object storage client implementations:
 
+{.table .table-striped}
 | Provider             | Maturity | Auto-tested on CI | Maintainers |
 |----------------------|-------------------|-----------|---------------|
 | Google Cloud Storage | Stable  (production usage)             | yes       | @bwplotka   |

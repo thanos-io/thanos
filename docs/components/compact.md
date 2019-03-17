@@ -11,7 +11,7 @@ It is generally not semantically concurrency safe and must be deployed as a sing
 
 Example:
 
-```
+```bash
 $ thanos compact --data-dir /tmp/thanos-compact --objstore.config-file=bucket.yml
 ```
 

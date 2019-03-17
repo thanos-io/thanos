@@ -13,7 +13,7 @@ on how to connect querier with desired StoreAPIs.
 
 Querier currently is fully stateless and horizontally scalable.
 
-```
+```bash
 $ thanos query \
     --http-address     "0.0.0.0:9090" \
     --store            "<store-api>:<grpc-port>" \

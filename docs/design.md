@@ -30,7 +30,7 @@ The sidecar implements the gRPC service on top of Prometheus' [HTTP and remote-r
 
 Data sources that persist their data for long-term storage do so via the Prometheus 2.0 storage engine. The storage engine periodically produces immutable blocks of data for a fixed time range. A block is a directory with a handful of larger files containing all sample data and peristed indices that are required to retrieve the data:
 
-```
+```bash
 01BX6V6TY06G5MFQ0GPH7EMXRH
 ├── chunks
 │   ├── 000001

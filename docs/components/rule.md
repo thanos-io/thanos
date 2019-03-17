@@ -14,7 +14,7 @@ The rule component evaluates Prometheus recording and alerting rules against ran
 
 The data of each rule node can be labeled to satisfy the clusters labeling scheme. High-availability pairs can be run in parallel and should be distinguished by the designated replica label, just like regular Prometheus servers.
 
-```
+```bash
 $ thanos rule \
     --data-dir          "/path/to/data" \
     --eval-interval     "30s" \

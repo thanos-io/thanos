@@ -2,6 +2,7 @@
 title: Getting Started
 type: docs
 menu: "thanos"
+weight: 1
 ---
 
 # Getting started
@@ -10,6 +11,10 @@ Thanos provides a global query view, data backup, and historical data access as 
 
 In this quick-start guide, we will configure Thanos and all components mentioned to work against a Google Cloud Storage bucket. 
 At the moment, Thanos is able to use [different storage providers](storage.md), with the ability to add more providers as necessary.
+
+## Architecture Overview
+
+![architecture_overview](../img/arch.jpg)
 
 ## Requirements
 
@@ -24,7 +29,7 @@ You can find the latest Thanos release [here](https://github.com/improbable-eng/
 If you want to build Thanos from source -
 with a working installation of the Go [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`), Thanos can be downloaded and built by running:
 
-```
+```bash
 go get -d github.com/improbable-eng/thanos/...
 cd ${GOPATH}/src/github.com/improbable-eng/thanos
 make
@@ -52,7 +57,7 @@ NOTE: If you want to use `reload.*` flags for sidecar, make sure you enable `rel
 
 The following configures the sidecar to only backup Prometheus data into a chosen object storage:
 
-```
+```bash
 thanos sidecar \
     --tsdb.path            /var/prometheus \               # TSDB data directory of Prometheus
     --prometheus.url       "http://localhost:9090" \
@@ -75,7 +80,7 @@ The Sidecar component implements and exposes gRPC _[Store API](/pkg/store/storep
 
 Let's extend the Sidecar in the previous section to connect to a Prometheus server, and expose the Store API.
 
-```
+```bash
 thanos sidecar \
     --tsdb.path                 /var/prometheus \
     --objstore.config-file      bucket_config.yaml \       # Bucket config file to send data to
@@ -93,7 +98,7 @@ Prometheus allows the configuration of "external labels" of a given Prometheus i
 
 Every Prometheus instance must have a globally unique set of identifying labels. For example, in Prometheus's configuration file:
 
-```
+```yaml
 global:
   external_labels:
     region: eu-west
@@ -112,7 +117,7 @@ Query also implements Prometheus's offical HTTP API and can thus be used with ex
 
 Below, we will set up a Query to connect to our Sidecars, and expose its HTTP UI. 
 
-```
+```bash
 thanos query \
     --http-address              0.0.0.0:19192 \         # HTTP Endpoint for Query UI
     --store                     1.2.3.4:19090 \         # Static gRPC Store API Address for the query node to query
@@ -127,7 +132,7 @@ The Query component is also capable of deduplicating data collected from Prometh
 
 A typical choice is simply the label name "replica" while letting the value be whatever you wish. For example, you might set up the following in Prometheus's configuration file:
 
-```
+```yaml
 global:
   external_labels:
     region: eu-west
@@ -138,7 +143,7 @@ global:
 
 Reload your Prometheus instances, and then, in Query, we will enable `replica` as the label we want to enable deduplication to occur on:
 
-```
+```bash
 thanos query \
     --http-address              0.0.0.0:19192 \
     --store                     1.2.3.4:19090 \
@@ -158,7 +163,7 @@ The metadata includes the information about time windows and external labels for
 There are various ways to tell query component about the StoreAPIs it should query data from. The simplest way is to use a static list of well known addresses to query. 
 These are repeatable so can add as many endpoint as needed. You can put DNS domain prefixed by `dns://` or `dns+srv://` to have Thanos Query do an `A` or `SRV` lookup to get all required IPs to communicate with.
 
-```
+```bash
 thanos query \
     --http-address              0.0.0.0:19192 \                     # Endpoint for Query UI
     --grpc-address              0.0.0.0:19092 \                     # gRPC endpoint for Store API
@@ -175,7 +180,7 @@ Given a sidecar we can have it join a gossip cluster by advertising itself to ot
 
 NOTE: Gossip will be removed. See [here](/docs/proposals/approved/201809_gossip-removal.md) why. New FileSD with DNS support is enabled and described [here](/docs/service_discovery.md)
 
-```
+```bash
 thanos sidecar \
     --prometheus.url            http://localhost:9090 \
     --tsdb.path                 /var/prometheus \
@@ -193,7 +198,7 @@ When a peer advertises itself / joins a gossip cluster it sends information abou
 
 Once the Peer joins the cluster it will periodically update the information it sends out with new / updated information about other peers and the time windows for the metrics that it can access.
 
-```
+```bash
 thanos query \
     --http-address              0.0.0.0:19192 \         # Endpoint for Query UI
     --grpc-address              0.0.0.0:19092 \         # gRPC endpoint for Store API
@@ -204,7 +209,7 @@ thanos query \
 
 You can mix both static `store` and `cluster` based approaches:
 
-```
+```bash
 thanos query \
     --http-address              0.0.0.0:19192 \                     # Endpoint for Query UI
     --grpc-address              0.0.0.0:19092 \                     # gRPC endpoint for Store API
@@ -233,7 +238,7 @@ As the sidecar backs up data into the object storage of your choice, you can dec
 The store gateway does just that by implementing the same gRPC data API as the sidecars but backing it with data it can find in your object storage bucket.
 Just like sidecars and query nodes, the store gateway exposes StoreAPI and needs to be discovered by Thanos Querier.
 
-```
+```bash
 thanos store \
     --data-dir                  /var/thanos/store \     # Disk space for local caches
     --objstore.config-file      bucket_config.yaml \    # Bucket to fetch data from
@@ -251,7 +256,7 @@ A local Prometheus installation periodically compacts older data to improve quer
 
 The compactor component simple scans the object storage and processes compaction where required. At the same time it is responsible for creating downsampled copies of data to speed up queries.
 
-```
+```bash
 thanos compact \
     --data-dir             /var/thanos/compact \  # Temporary workspace for data processing
     --objstore.config-file bucket_config.yaml \   # Bucket where to apply the compacting

@@ -1,38 +1,51 @@
 {{ define "main" }}
 <div class="container-fluid">
-    <div class="row py-5">
+    <div class="row py-3 py-lg-5">
+        <div class="col col-sm-1 col-md-6 offset-md-3 col-lg-4 offset-lg-4 text-center">
+            <img class="img-fluid" style="max-width: 60%" src="Thanos-logo_full.svg" alt="Thanos Logo"/>
+        </div>
+    </div>
+    <div class="row py-3 pb-lg-5">
         <div class="col text-center">
-            <img style="width: 20%" class="img-fluid mb-3" src="Thanos-logo_full.svg" alt="Thanos Big Logo" />
-            <h3 class="mb-5">Highly available Prometheus setup with long term storage capabilities.</h3>
-            <ul class="list-inline">
-                <li class="list-inline-item"><a href="{{ "/docs/getting-started" | relURL }}" class="btn btn-outline-secondary"><i class="fas fa-book"></i>
-                        Getting Started</a></li>
-                <li class="list-inline-item"><a href="#" class="btn btn-outline-secondary"><i class="fas fa-download"></i>
-                        Download</a></li>
-                <li class="list-inline-item"><a href="#" class="btn btn-outline-secondary"><i class="fab fa-github"></i>
-                        Github</a></li>
+            <h3 class="mb-3">Highly available Prometheus setup with long term storage capabilities.</h3>
+            <ul class="list-inline mb-0">
+                <li class="list-inline-item my-3">
+                    <a href="{{ "/docs/getting-started" | relURL }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-fw fa-book"></i> Getting Started
+                    </a>
+                </li>
+                <li class="list-inline-item my-3">
+                    <a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}/releases" class="btn btn-outline-secondary">
+                        <i class="fas fa-fw fa-download"></i> Download
+                    </a>
+                </li>
+                <li class="list-inline-item my-3">
+                    <a href="#" class="btn btn-outline-secondary">
+                        <i class="fab fa-fw fa-github"></i> Github
+                    </a>
+                </li>
             </ul>
         </div>
     </div>
 </div>
 <div class="container-fluid bg-light">
-    <div class="row py-5">
-        <div class="col text-center">
+    <div class="row">
+        <div class="col-12 col-md-6 col-lg text-center py-5">
             <i class="fas fa-search fa-5x db mb-3"></i>
             <h4 class="font-weight-bold">Global Query Interface</h4>
             <p>Global querying view across all connected Prometheus servers and multiple clusters</p>
         </div>
-        <div class="col text-center">
+        <div class="col-12 col-md-6 col-lg text-center py-5">
             <i class="fas fa-archive fa-5x db mb-3"></i>
             <h4 class="font-weight-bold">Unlimited Retention</h4>
             <p>Use any object storage as an option. Supports GCP, S3, Azure, Swift and Tencent COS</p>
         </div>
-        <div class="col text-center">
+        <div class="col-12 col-md-6 col-lg text-center py-5">
             <i class="fas fa-plug fa-5x db mb-3"></i>
             <h4 class="font-weight-bold">Prometheus Compatible</h4>
             <p>Use the same tools you love such as Grafana or any other that uses Prometheus' API</p>
         </div>
-        <div class="col text-center">
+        <div class="col-12 col-md-6 col-lg text-center py-5">
             <i class="fas fa-file-download fa-5x db mb-3"></i>
             <h4 class="font-weight-bold">Downsampling & Compaction</h4>
             <p>Downsampling historical data for massive query speedup or configure a retention policy</p>
@@ -46,14 +59,20 @@
             <p>Many people are already using Thanos in production !</p>
             <p class="text-muted">Maybe some companies logo here ?</p>
             <ul class="list-inline">
-                <li class="list-inline-item"><button type="button" class="btn btn-outline-secondary"><i class="fab fa-slack"></i>
-                        Slack</button></li>
-                <li class="list-inline-item"><button type="button" class="btn btn-outline-secondary"><i class="fab fa-github"></i>
-                        Github</button></li>
-                <li class="list-inline-item"><button type="button" class="btn btn-outline-secondary"><i class="fab fa-stack-overflow"></i>
-                        StackOverflow</button></li>
-                <li class="list-inline-item"><button type="button" class="btn btn-outline-secondary"><i class="fa fa-handshake"></i>
-                        Events</button></li>
+                <li class="list-inline-item">
+                    <a href="{{ .Site.Params.SlackInvite }}" class="btn btn-outline-secondary">
+                        <i class="fab fa-fw fa-slack"></i> Slack
+                    </a>
+                </li>
+                <li class="list-inline-item">
+                    <a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}/issues" class="btn btn-outline-secondary">
+                        <i class="fab fa-fw fa-github"></i> Issues</a>
+                </li>
+                <li class="list-inline-item">
+                    <button type="button" class="btn btn-outline-secondary">
+                        <i class="fa fa-fw fa-handshake"></i> Events
+                    </button>
+                </li>
             </ul>
         </div>
     </div>

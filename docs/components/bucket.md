@@ -11,7 +11,7 @@ It is normally run as a stand alone command to aid with troubleshooting.
 
 Example:
 
-```
+```bash
 $ thanos bucket verify --objstore.config-file=bucket.yml
 ```
 
