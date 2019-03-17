@@ -28,6 +28,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/strutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
+	"github.com/improbable-eng/thanos/pkg/util"
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
@@ -702,7 +703,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "series block")
 			defer runutil.CloseWithLogOnErr(s.logger, chunkr, "series block")
 
-			g.Add(func() error {
+			g.Add(util.RecoverGoroutine(s.logger, func() error {
 				part, pstats, err := s.blockSeries(ctx,
 					b.meta.ULID,
 					b.meta.Thanos.Labels,
@@ -721,7 +722,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				mtx.Unlock()
 
 				return nil
-			}, func(err error) {
+			}, req), func(err error) {
 				if err != nil {
 					cancel()
 				}
