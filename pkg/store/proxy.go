@@ -15,6 +15,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/strutil"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/tsdb/labels"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
@@ -33,6 +34,8 @@ type Client interface {
 	TimeRange() (mint int64, maxt int64)
 
 	String() string
+	// Addr address of a Client.
+	Addr() string
 }
 
 // ProxyStore implements the store API that proxies request to all given underlying stores.
@@ -42,27 +45,50 @@ type ProxyStore struct {
 	component      component.StoreAPI
 	selectorLabels labels.Labels
 
-	receiveTimeout time.Duration
+	responseTimeout        time.Duration
+	streamResponseDuration *prometheus.HistogramVec
+	streamDuration         *prometheus.HistogramVec
 }
 
 // NewProxyStore returns a new ProxyStore that uses the given clients that implements storeAPI to fan-in all series to the client.
 // Note that there is no deduplication support. Deduplication should be done on the highest level (just before PromQL)
 func NewProxyStore(
 	logger log.Logger,
+	reg prometheus.Registerer,
 	stores func() []Client,
 	component component.StoreAPI,
 	selectorLabels labels.Labels,
-	receiveTimeout time.Duration,
+	responseTimeout time.Duration,
 ) *ProxyStore {
+	streamResponseDuration := prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name: "thanos_query_stream_read_duration_seconds",
+		Help: "Time it takes to perform a single read from GRPC stream.",
+		Buckets: []float64{
+			0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5,
+		}}, []string{"store"})
+	streamDuration := prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name: "thanos_query_stream_duration_seconds",
+		Help: "Time it takes to consume GRPC stream.",
+		Buckets: []float64{
+			0.01, 0.02, 0.03, 0.04, 0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 20,
+		}}, []string{"store"})
+	reg.MustRegister(
+		streamResponseDuration,
+		streamDuration,
+	)
+
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
+
 	s := &ProxyStore{
-		logger:         logger,
-		stores:         stores,
-		component:      component,
-		selectorLabels: selectorLabels,
-		receiveTimeout: receiveTimeout,
+		logger:                 logger,
+		stores:                 stores,
+		component:              component,
+		selectorLabels:         selectorLabels,
+		responseTimeout:        responseTimeout,
+		streamResponseDuration: streamResponseDuration,
+		streamDuration:         streamDuration,
 	}
 	return s
 }
@@ -168,12 +194,11 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 					return err
 				}
 				respSender.send(storepb.NewWarnSeriesResponse(err))
-
 				continue
 			}
 
 			// Schedule streamSeriesSet that translates gRPC streamed response into seriesSet (if series) or respCh if warnings.
-			seriesSet = append(seriesSet, startStreamSeriesSet(seriesCtx, closeSeries, wg, sc, respSender, st.String(), !r.PartialResponseDisabled, s.receiveTimeout))
+			seriesSet = append(seriesSet, startStreamSeriesSet(seriesCtx, s.logger, closeSeries, wg, sc, respSender, st.String(), !r.PartialResponseDisabled, s.responseTimeout, s.streamResponseDuration.WithLabelValues(st.Addr()), s.streamDuration.WithLabelValues(st.Addr())))
 		}
 
 		level.Debug(s.logger).Log("msg", strings.Join(storeDebugMsgs, ";"))
@@ -186,37 +211,17 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		}
 
 		mergedSet := storepb.MergeSeriesSets(seriesSet...)
-
 		for mergedSet.Next() {
 			var series storepb.Series
-
 			series.Labels, series.Chunks = mergedSet.At()
-
 			respSender.send(storepb.NewSeriesResponse(&series))
 		}
 		return mergedSet.Err()
 	})
 
-	//Cancel the sending, if context is canceled.
-forLoop:
-	for {
-		select {
-		case resp, ok := <-respRecv:
-			if !ok {
-				break forLoop
-			}
-			if err := srv.Send(resp); err != nil {
-				return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
-			}
-			level.Info(s.logger).Log("msg", "sending series done")
-		case <-gctx.Done():
-			err := errors.Wrap(gctx.Err(), "sending series")
-			level.Info(s.logger).Log("msg", "sending series context timed out", "err", err)
-			if r.PartialResponseDisabled {
-				return err
-			}
-			//TODO(povilasv): check if actually sent smth, if response is 0 then err for partialResponse case.
-			break forLoop
+	for resp := range respRecv {
+		if err := srv.Send(resp); err != nil {
+			return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
 		}
 	}
 
@@ -234,7 +239,8 @@ type warnSender interface {
 // streamSeriesSet iterates over incoming stream of series.
 // All errors are sent out of band via warning channel.
 type streamSeriesSet struct {
-	ctx context.Context
+	ctx    context.Context
+	logger log.Logger
 
 	stream storepb.Store_SeriesClient
 	warnCh warnSender
@@ -248,29 +254,37 @@ type streamSeriesSet struct {
 	name            string
 	partialResponse bool
 
-	receiveTimeout time.Duration
-	closeSeries    context.CancelFunc
+	responseTimeout        time.Duration
+	closeSeries            context.CancelFunc
+	streamResponseDuration prometheus.Observer
+	streamDuration         prometheus.Observer
 }
 
 func startStreamSeriesSet(
 	ctx context.Context,
+	logger log.Logger,
 	closeSeries context.CancelFunc,
 	wg *sync.WaitGroup,
 	stream storepb.Store_SeriesClient,
 	warnCh warnSender,
 	name string,
 	partialResponse bool,
-	receiveTimeout time.Duration,
+	responseTimeout time.Duration,
+	streamResponseDuration prometheus.Observer,
+	streamDuration prometheus.Observer,
 ) *streamSeriesSet {
 	s := &streamSeriesSet{
-		ctx:             ctx,
-		closeSeries:     closeSeries,
-		stream:          stream,
-		warnCh:          warnCh,
-		recvCh:          make(chan *storepb.Series, 10),
-		name:            name,
-		partialResponse: partialResponse,
-		receiveTimeout:  receiveTimeout,
+		ctx:                    ctx,
+		logger:                 logger,
+		closeSeries:            closeSeries,
+		stream:                 stream,
+		warnCh:                 warnCh,
+		recvCh:                 make(chan *storepb.Series, 10),
+		name:                   name,
+		partialResponse:        partialResponse,
+		responseTimeout:        responseTimeout,
+		streamResponseDuration: streamResponseDuration,
+		streamDuration:         streamDuration,
 	}
 
 	wg.Add(1)
@@ -278,8 +292,14 @@ func startStreamSeriesSet(
 		defer wg.Done()
 		defer close(s.recvCh)
 
+		timer := prometheus.NewTimer(s.streamDuration)
+		defer timer.ObserveDuration()
+
 		for {
+			timer := prometheus.NewTimer(s.streamResponseDuration)
 			r, err := s.stream.Recv()
+			timer.ObserveDuration()
+
 			if err == io.EOF {
 				return
 			}
@@ -289,13 +309,14 @@ func startStreamSeriesSet(
 			}
 
 			if err != nil {
+				wrapErr := errors.Wrapf(err, "receive series from %s", s.name)
 				if partialResponse {
-					s.warnCh.send(storepb.NewWarnSeriesResponse(errors.Wrapf(err, "receive series from %s:", s.name)))
+					s.warnCh.send(storepb.NewWarnSeriesResponse(wrapErr))
 					return
 				}
 
 				s.errMtx.Lock()
-				s.err = err
+				s.err = wrapErr
 				s.errMtx.Unlock()
 				return
 			}
@@ -312,20 +333,17 @@ func startStreamSeriesSet(
 
 // Next blocks until new message is received or stream is closed or operation is timed out.
 func (s *streamSeriesSet) Next() (ok bool) {
-	//Some times GRPC streams get stuck and don't send any data for long periods of time
-	//E.G. Simple GRPC Store API, which just sleeps.
-	//
-	//Right now the only option to time them out in GRPC is to set context.WithTimeout()
-	// The issue is that it is a global timeout,
-	// if we set it to 10s, we won't ever get results from Thanos Store (backed by object store)
-	// if we set it to 120s, we will always be waiting 120s for the HTTP queries to finish, which is :/
-	// As we will be waiting for the slowest one to finish
+	ctx := s.ctx
+	timeoutMsg := fmt.Sprintf("failed to receive any data from %s", s.name)
 
-	// This fix adds a timeout per single operation
-	// This way we identifies stuck connection meaning it will only timeout a GRPC store,
-	// which hasn't put data into recvCh in X seconds
-	ctx, done := context.WithTimeout(s.ctx, s.receiveTimeout)
-	defer done()
+	if s.responseTimeout != 0 {
+		timeoutMsg = fmt.Sprintf("failed to receive any data in %s from %s", s.responseTimeout.String(), s.name)
+
+		timeoutCtx, done := context.WithTimeout(s.ctx, s.responseTimeout)
+		defer done()
+		ctx = timeoutCtx
+	}
+
 	select {
 	case s.currSeries, ok = <-s.recvCh:
 		return ok
@@ -333,8 +351,9 @@ func (s *streamSeriesSet) Next() (ok bool) {
 		//shutdown a goroutine in startStreamSeriesSet
 		s.closeSeries()
 
-		err := errors.Wrapf(ctx.Err(), "failed to receive any data in %s from %s:", s.receiveTimeout.String(), s.name)
+		err := errors.Wrap(ctx.Err(), timeoutMsg)
 		if s.partialResponse {
+			level.Warn(s.logger).Log("err", err, "msg", "returning partial response")
 			s.warnCh.send(storepb.NewWarnSeriesResponse(err))
 			return false
 		}
@@ -342,6 +361,7 @@ func (s *streamSeriesSet) Next() (ok bool) {
 		s.err = err
 		s.errMtx.Unlock()
 
+		level.Warn(s.logger).Log("err", err, "msg", "partial response disabled; aborting request")
 		return false
 	}
 }
