@@ -87,7 +87,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		testutil.Ok(t, os.RemoveAll(dir2))
 	}
 
-	store, err := NewBucketStore(log.NewLogfmtLogger(os.Stderr), nil, bkt, dir, 100, 0, false, 20, 0, 0)
+	store, err := NewBucketStore(log.NewLogfmtLogger(os.Stderr), nil, bkt, dir, 100, 0, false, 20, 0)
 	testutil.Ok(t, err)
 
 	s.store = store

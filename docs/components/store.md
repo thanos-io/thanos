@@ -115,5 +115,7 @@ Flags:
       --block-sync-concurrency=20  
                                  Number of goroutines to use when syncing blocks
                                  from object storage.
+      --skip-window=0h           Time duration, which won't be reported to
+                                 Thanos Query.
 
 ```
