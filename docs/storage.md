@@ -63,7 +63,7 @@ For debug and testing purposes you can set
 
 * `insecure: true` to switch to plain insecure HTTP instead of HTTPS
 * `http_config.insecure_skip_verify: true` to disable TLS certificate verification (if your S3 based storage is using a self-signed certificate, for example)
-* `traceon: true` to enable the mino client's verbose logging. Each request and response will be logged into the debug logger, so debug level logging must be enabled for this functionality. 
+* `traceon: true` to enable the minio client's verbose logging. Each request and response will be logged into the debug logger, so debug level logging must be enabled for this functionality. 
 
 ### Credentials
 By default Thanos will try to retrieve credentials from the following sources:
