@@ -13,6 +13,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/ulid"
+	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/labels"
 )
 
@@ -292,4 +293,33 @@ func TestBucketStore_Info(t *testing.T) {
 	testutil.Equals(t, storepb.StoreType_STORE, resp.StoreType)
 	testutil.Equals(t, int64(math.MaxInt64), resp.MinTime)
 	testutil.Equals(t, int64(math.MinInt64), resp.MaxTime)
+}
+
+func TestBucketStore_InfoSkipWindow(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	dir, err := ioutil.TempDir("", "prometheus-test")
+	testutil.Ok(t, err)
+
+	bucketStore, err := NewBucketStore(nil, nil, nil, dir, 2e5, 2e5, false, 20, 48*time.Hour)
+	testutil.Ok(t, err)
+
+	bucketStore.blocks = make(map[ulid.ULID]*bucketBlock)
+	bucketStore.blocks[[16]byte{0}] = &bucketBlock{
+		meta: &metadata.Meta{
+			BlockMeta: tsdb.BlockMeta{
+				MinTime: 1552968670000,
+				MaxTime: 1553004605000},
+		},
+	}
+
+	resp, err := bucketStore.Info(ctx, &storepb.InfoRequest{})
+	testutil.Ok(t, err)
+
+	testutil.Equals(t, storepb.StoreType_STORE, resp.StoreType)
+	testutil.Equals(t, int64(1552968670000), resp.MinTime)
+	testutil.Equals(t, time.Now().Add(-48*time.Hour).Truncate(1*time.Hour).Unix()*1000, resp.MaxTime)
 }

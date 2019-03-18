@@ -13,6 +13,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Added
 - [#811](https://github.com/improbable-eng/thanos/pull/811) Remote write receiver
+- [#930](https://github.com/improbable-eng/thanos/pull/930) New Thanos Store --skip-window flag. Time duration, which won't be reported to Thanos Query.
 
 ### Fixed
 - [#921](https://github.com/improbable-eng/thanos/pull/921) `thanos_objstore_bucket_last_successful_upload_time` now does not appear when no blocks have been uploaded so far

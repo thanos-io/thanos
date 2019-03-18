@@ -433,12 +433,9 @@ func (s *BucketStore) TimeRange() (mint, maxt int64) {
 func (s *BucketStore) Info(context.Context, *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	mint, maxt := s.TimeRange()
 
-	if s.skipWindow != 0 {
-		//TODO: is TimeRange really a Unix timestamp?
-		newt := time.Now().Add(-s.skipWindow).Unix()
-		if maxt > newt {
-			maxt = newt
-		}
+	newt := time.Now().Add(-s.skipWindow).Truncate(1*time.Hour).Unix() * 1000
+	if maxt > newt {
+		maxt = newt
 	}
 	// Store nodes hold global data and thus have no labels.
 	return &storepb.InfoResponse{
