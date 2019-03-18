@@ -23,8 +23,8 @@ New options:
 New metrics:
 * `thanos_bucket_store_queries_dropped_total` shows how many queries were dropped due to the samples limit;
 * `thanos_bucket_store_queries_concurrent_max` is a constant metric which shows how many Series() calls can concurrently be executed by Thanos Store;
-* `thanos_bucket_store_queries_in_flight` shows how many queries are currently "in flight" i.e. they are being executed;
-* `thanos_bucket_store_gate_seconds` shows how many seconds it took for queries to pass through the gate in both cases - when that fails and when it does not.
+* `thanos_bucket_store_queries_in_flight_total` shows how many queries are currently "in flight" i.e. they are being executed;
+* `thanos_bucket_store_gate_duration_seconds` shows how many seconds it took for queries to pass through the gate in both cases - when that fails and when it does not.
 
 New tracing span:
 * `store_query_gate_ismyturn` shows how long it took for a query to pass (or not) through the gate.
