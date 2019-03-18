@@ -22,12 +22,12 @@ func NewGate(maxConcurrent int, reg *extprom.SubsystemRegisterer) *Gate {
 		g: gate.New(maxConcurrent),
 	}
 	g.inflightQueries = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name:      "queries_in_flight",
+		Name:      "queries_in_flight_total",
 		Help:      "Total number of queries that are currently in flight.",
 		Subsystem: reg.Subsystem(),
 	})
 	g.gateTiming = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name: "gate_seconds",
+		Name: "gate_duration_seconds",
 		Help: "How many seconds it took for queries to wait at the gate.",
 		Buckets: []float64{
 			0.01, 0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 10,

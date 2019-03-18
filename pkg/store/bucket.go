@@ -198,7 +198,7 @@ type BucketStore struct {
 	// Query gate which limits the maximum amount of concurrent queries.
 	queryGate *Gate
 
-	// Samples limiter which limits the number of samples per each Series() call.
+	// samplesLimiter limits the number of samples per each Series() call.
 	samplesLimiter *Limiter
 	partitioner    partitioner
 }

@@ -17,8 +17,8 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 New options:
 
-* `--grpc-sample-limit` limits the amount of samples that might be retrieved on a single Series() call. By default it is 5e7. Consider increasing this limit if you run a huge deployment. Helps a lot to capacity plan your Thanos Store instance if you are running on a virtual machine, for example;
-* `--grpc-concurrent-limit` limits the number of concurrent Series() calls in Thanos Store. By default it is 20. Consider increasing this limit if needed.
+* `--store.grpc.series-sample-limit` limits the amount of samples that might be retrieved on a single Series() call. By default it is 0. Consider enabling it by setting it to more than 0 if you are running on limited resources.
+* `--store.grpc.max-concurrency` limits the number of concurrent Series() calls in Thanos Store. By default it is 0. Consider enabling it by setting it to more than 0 if needed.
 
 New metrics:
 * `thanos_bucket_store_queries_dropped_total` shows how many queries were dropped due to the samples limit;
@@ -28,9 +28,6 @@ New metrics:
 
 New tracing span:
 * `store_query_gate_ismyturn` shows how long it took for a query to pass (or not) through the gate.
-
-:warning: **WARNING** :warning: #798 adds new default limits for max samples per one Series() gRPC method call and the maximum number of concurrent Series() gRPC method calls. Consider increasing them if you have a very huge deployment.
-
 
 ### Fixed
 - [#921](https://github.com/improbable-eng/thanos/pull/921) `thanos_objstore_bucket_last_successful_upload_time` now does not appear when no blocks have been uploaded so far
