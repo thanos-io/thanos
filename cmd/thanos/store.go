@@ -44,7 +44,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing blocks from object storage.").
 		Default("20").Int()
 
-	skipWindow := modelDuration(cmd.Flag("skip-window", "Time duration, which won't be reported to Thanos Query."))
+	skipWindow := modelDuration(cmd.Flag("skip-window", "Time duration, which won't be reported to Thanos Query.").Default("0h"))
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
 		peer, err := newPeerFn(logger, reg, false, "", false)
@@ -52,11 +52,6 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			return errors.Wrap(err, "new cluster peer")
 		}
 
-		var skipWindowDur *time.Duration
-		if skipWindow != nil {
-			dur := time.Duration(*skipWindow)
-			skipWindowDur = &dur
-		}
 		return runStore(g,
 			logger,
 			reg,
@@ -75,7 +70,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			debugLogging,
 			*syncInterval,
 			*blockSyncConcurrency,
-			skipWindowDur,
+			time.Duration(*skipWindow),
 		)
 	}
 }
@@ -100,7 +95,7 @@ func runStore(
 	verbose bool,
 	syncInterval time.Duration,
 	blockSyncConcurrency int,
-	skipWindow *time.Duration,
+	skipWindow time.Duration,
 ) error {
 	{
 		confContentYaml, err := objStoreConfig.Content()

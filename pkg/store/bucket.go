@@ -174,7 +174,7 @@ type BucketStore struct {
 	blockSyncConcurrency int
 
 	partitioner partitioner
-	skipWindow  *time.Duration
+	skipWindow  time.Duration
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -188,7 +188,7 @@ func NewBucketStore(
 	maxChunkPoolBytes uint64,
 	debugLogging bool,
 	blockSyncConcurrency int,
-	skipWindow *time.Duration,
+	skipWindow time.Duration,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -215,6 +215,7 @@ func NewBucketStore(
 		debugLogging:         debugLogging,
 		blockSyncConcurrency: blockSyncConcurrency,
 		partitioner:          gapBasedPartitioner{maxGapSize: maxGapSize},
+		skipWindow:           skipWindow,
 	}
 	s.metrics = newBucketStoreMetrics(reg)
 
@@ -432,9 +433,9 @@ func (s *BucketStore) TimeRange() (mint, maxt int64) {
 func (s *BucketStore) Info(context.Context, *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	mint, maxt := s.TimeRange()
 
-	if s.skipWindow != nil {
+	if s.skipWindow != 0 {
 		//TODO: is TimeRange really a Unix timestamp?
-		newt := time.Now().Add(-*s.skipWindow).Unix()
+		newt := time.Now().Add(-s.skipWindow).Unix()
 		if maxt > newt {
 			maxt = newt
 		}
