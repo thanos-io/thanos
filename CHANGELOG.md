@@ -18,7 +18,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 New options:
 
 * `--store.grpc.series-sample-limit` limits the amount of samples that might be retrieved on a single Series() call. By default it is 0. Consider enabling it by setting it to more than 0 if you are running on limited resources.
-* `--store.grpc.max-concurrency` limits the number of concurrent Series() calls in Thanos Store. By default it is 0. Consider enabling it by setting it to more than 0 if needed.
+* `--store.grpc.series-max-concurrency` limits the number of concurrent Series() calls in Thanos Store. By default it is 0. Consider enabling it by setting it to more than 0 if needed.
 
 New metrics:
 * `thanos_bucket_store_queries_dropped_total` shows how many queries were dropped due to the samples limit;
