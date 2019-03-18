@@ -37,7 +37,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 		Default("2GB").Bytes()
 
 	maxSampleCount := cmd.Flag("grpc-sample-limit",
-		"Maximum amount of samples returned via a single Series call. 0 means no limit. NOTE: for efficiency we take 120 as number of samples in chunk, so the actual number of samples might be lower, even though maximum could be hit. Cannot be bigger than 120.").
+		"Maximum amount of samples returned via a single Series call. 0 means no limit. NOTE: for efficiency we take 120 as the number of samples in chunk (it cannot be bigger than that), so the actual number of samples might be lower, even though the maximum could be hit.").
 		Default("50000000").Uint()
 
 	maxConcurrent := cmd.Flag("grpc-concurrent-limit", "Maximum number of concurrent Series calls. 0 means no limit.").Default("20").Int()

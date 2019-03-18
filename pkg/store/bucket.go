@@ -148,7 +148,7 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Help: "Number of queries that were dropped due to the sample limit.",
 	})
 	m.queriesLimit = prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "thanos_bucket_store_queries_limit",
+		Name: "thanos_bucket_store_queries_concurrent_max",
 		Help: "Number of maximum concurrent queries.",
 	})
 
