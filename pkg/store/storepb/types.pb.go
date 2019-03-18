@@ -15,6 +15,12 @@ var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
 
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+// A compilation error at this line likely means your copy of the
+// proto package needs to be updated.
+const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
+
 type Chunk_Encoding int32
 
 const (
@@ -31,7 +37,9 @@ var Chunk_Encoding_value = map[string]int32{
 func (x Chunk_Encoding) String() string {
 	return proto.EnumName(Chunk_Encoding_name, int32(x))
 }
-func (Chunk_Encoding) EnumDescriptor() ([]byte, []int) { return fileDescriptorTypes, []int{1, 0} }
+func (Chunk_Encoding) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_types_60e135d4a4f03620, []int{1, 0}
+}
 
 type LabelMatcher_Type int32
 
@@ -58,65 +66,222 @@ var LabelMatcher_Type_value = map[string]int32{
 func (x LabelMatcher_Type) String() string {
 	return proto.EnumName(LabelMatcher_Type_name, int32(x))
 }
-func (LabelMatcher_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorTypes, []int{4, 0} }
+func (LabelMatcher_Type) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_types_60e135d4a4f03620, []int{4, 0}
+}
 
 type Label struct {
-	Name  string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Value string `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	Name                 string   `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Value                string   `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *Label) Reset()                    { *m = Label{} }
-func (m *Label) String() string            { return proto.CompactTextString(m) }
-func (*Label) ProtoMessage()               {}
-func (*Label) Descriptor() ([]byte, []int) { return fileDescriptorTypes, []int{0} }
+func (m *Label) Reset()         { *m = Label{} }
+func (m *Label) String() string { return proto.CompactTextString(m) }
+func (*Label) ProtoMessage()    {}
+func (*Label) Descriptor() ([]byte, []int) {
+	return fileDescriptor_types_60e135d4a4f03620, []int{0}
+}
+func (m *Label) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Label) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_Label.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (dst *Label) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Label.Merge(dst, src)
+}
+func (m *Label) XXX_Size() int {
+	return m.Size()
+}
+func (m *Label) XXX_DiscardUnknown() {
+	xxx_messageInfo_Label.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Label proto.InternalMessageInfo
 
 type Chunk struct {
-	Type Chunk_Encoding `protobuf:"varint,1,opt,name=type,proto3,enum=thanos.Chunk_Encoding" json:"type,omitempty"`
-	Data []byte         `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	Type                 Chunk_Encoding `protobuf:"varint,1,opt,name=type,proto3,enum=thanos.Chunk_Encoding" json:"type,omitempty"`
+	Data                 []byte         `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
+	XXX_unrecognized     []byte         `json:"-"`
+	XXX_sizecache        int32          `json:"-"`
 }
 
-func (m *Chunk) Reset()                    { *m = Chunk{} }
-func (m *Chunk) String() string            { return proto.CompactTextString(m) }
-func (*Chunk) ProtoMessage()               {}
-func (*Chunk) Descriptor() ([]byte, []int) { return fileDescriptorTypes, []int{1} }
+func (m *Chunk) Reset()         { *m = Chunk{} }
+func (m *Chunk) String() string { return proto.CompactTextString(m) }
+func (*Chunk) ProtoMessage()    {}
+func (*Chunk) Descriptor() ([]byte, []int) {
+	return fileDescriptor_types_60e135d4a4f03620, []int{1}
+}
+func (m *Chunk) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Chunk) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_Chunk.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (dst *Chunk) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Chunk.Merge(dst, src)
+}
+func (m *Chunk) XXX_Size() int {
+	return m.Size()
+}
+func (m *Chunk) XXX_DiscardUnknown() {
+	xxx_messageInfo_Chunk.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Chunk proto.InternalMessageInfo
 
 type Series struct {
-	Labels []Label     `protobuf:"bytes,1,rep,name=labels" json:"labels"`
-	Chunks []AggrChunk `protobuf:"bytes,2,rep,name=chunks" json:"chunks"`
+	Labels               []Label     `protobuf:"bytes,1,rep,name=labels" json:"labels"`
+	Chunks               []AggrChunk `protobuf:"bytes,2,rep,name=chunks" json:"chunks"`
+	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
+	XXX_unrecognized     []byte      `json:"-"`
+	XXX_sizecache        int32       `json:"-"`
 }
 
-func (m *Series) Reset()                    { *m = Series{} }
-func (m *Series) String() string            { return proto.CompactTextString(m) }
-func (*Series) ProtoMessage()               {}
-func (*Series) Descriptor() ([]byte, []int) { return fileDescriptorTypes, []int{2} }
+func (m *Series) Reset()         { *m = Series{} }
+func (m *Series) String() string { return proto.CompactTextString(m) }
+func (*Series) ProtoMessage()    {}
+func (*Series) Descriptor() ([]byte, []int) {
+	return fileDescriptor_types_60e135d4a4f03620, []int{2}
+}
+func (m *Series) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Series) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_Series.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (dst *Series) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Series.Merge(dst, src)
+}
+func (m *Series) XXX_Size() int {
+	return m.Size()
+}
+func (m *Series) XXX_DiscardUnknown() {
+	xxx_messageInfo_Series.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Series proto.InternalMessageInfo
 
 type AggrChunk struct {
-	MinTime int64  `protobuf:"varint,1,opt,name=min_time,json=minTime,proto3" json:"min_time,omitempty"`
-	MaxTime int64  `protobuf:"varint,2,opt,name=max_time,json=maxTime,proto3" json:"max_time,omitempty"`
-	Raw     *Chunk `protobuf:"bytes,3,opt,name=raw" json:"raw,omitempty"`
-	Count   *Chunk `protobuf:"bytes,4,opt,name=count" json:"count,omitempty"`
-	Sum     *Chunk `protobuf:"bytes,5,opt,name=sum" json:"sum,omitempty"`
-	Min     *Chunk `protobuf:"bytes,6,opt,name=min" json:"min,omitempty"`
-	Max     *Chunk `protobuf:"bytes,7,opt,name=max" json:"max,omitempty"`
-	Counter *Chunk `protobuf:"bytes,8,opt,name=counter" json:"counter,omitempty"`
+	MinTime              int64    `protobuf:"varint,1,opt,name=min_time,json=minTime,proto3" json:"min_time,omitempty"`
+	MaxTime              int64    `protobuf:"varint,2,opt,name=max_time,json=maxTime,proto3" json:"max_time,omitempty"`
+	Raw                  *Chunk   `protobuf:"bytes,3,opt,name=raw" json:"raw,omitempty"`
+	Count                *Chunk   `protobuf:"bytes,4,opt,name=count" json:"count,omitempty"`
+	Sum                  *Chunk   `protobuf:"bytes,5,opt,name=sum" json:"sum,omitempty"`
+	Min                  *Chunk   `protobuf:"bytes,6,opt,name=min" json:"min,omitempty"`
+	Max                  *Chunk   `protobuf:"bytes,7,opt,name=max" json:"max,omitempty"`
+	Counter              *Chunk   `protobuf:"bytes,8,opt,name=counter" json:"counter,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *AggrChunk) Reset()                    { *m = AggrChunk{} }
-func (m *AggrChunk) String() string            { return proto.CompactTextString(m) }
-func (*AggrChunk) ProtoMessage()               {}
-func (*AggrChunk) Descriptor() ([]byte, []int) { return fileDescriptorTypes, []int{3} }
+func (m *AggrChunk) Reset()         { *m = AggrChunk{} }
+func (m *AggrChunk) String() string { return proto.CompactTextString(m) }
+func (*AggrChunk) ProtoMessage()    {}
+func (*AggrChunk) Descriptor() ([]byte, []int) {
+	return fileDescriptor_types_60e135d4a4f03620, []int{3}
+}
+func (m *AggrChunk) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AggrChunk) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_AggrChunk.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (dst *AggrChunk) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AggrChunk.Merge(dst, src)
+}
+func (m *AggrChunk) XXX_Size() int {
+	return m.Size()
+}
+func (m *AggrChunk) XXX_DiscardUnknown() {
+	xxx_messageInfo_AggrChunk.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AggrChunk proto.InternalMessageInfo
 
 // Matcher specifies a rule, which can match or set of labels or not.
 type LabelMatcher struct {
-	Type  LabelMatcher_Type `protobuf:"varint,1,opt,name=type,proto3,enum=thanos.LabelMatcher_Type" json:"type,omitempty"`
-	Name  string            `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Value string            `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	Type                 LabelMatcher_Type `protobuf:"varint,1,opt,name=type,proto3,enum=thanos.LabelMatcher_Type" json:"type,omitempty"`
+	Name                 string            `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Value                string            `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_unrecognized     []byte            `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
 }
 
-func (m *LabelMatcher) Reset()                    { *m = LabelMatcher{} }
-func (m *LabelMatcher) String() string            { return proto.CompactTextString(m) }
-func (*LabelMatcher) ProtoMessage()               {}
-func (*LabelMatcher) Descriptor() ([]byte, []int) { return fileDescriptorTypes, []int{4} }
+func (m *LabelMatcher) Reset()         { *m = LabelMatcher{} }
+func (m *LabelMatcher) String() string { return proto.CompactTextString(m) }
+func (*LabelMatcher) ProtoMessage()    {}
+func (*LabelMatcher) Descriptor() ([]byte, []int) {
+	return fileDescriptor_types_60e135d4a4f03620, []int{4}
+}
+func (m *LabelMatcher) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *LabelMatcher) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_LabelMatcher.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (dst *LabelMatcher) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LabelMatcher.Merge(dst, src)
+}
+func (m *LabelMatcher) XXX_Size() int {
+	return m.Size()
+}
+func (m *LabelMatcher) XXX_DiscardUnknown() {
+	xxx_messageInfo_LabelMatcher.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_LabelMatcher proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*Label)(nil), "thanos.Label")
@@ -154,6 +319,9 @@ func (m *Label) MarshalTo(dAtA []byte) (int, error) {
 		i = encodeVarintTypes(dAtA, i, uint64(len(m.Value)))
 		i += copy(dAtA[i:], m.Value)
 	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -182,6 +350,9 @@ func (m *Chunk) MarshalTo(dAtA []byte) (int, error) {
 		i++
 		i = encodeVarintTypes(dAtA, i, uint64(len(m.Data)))
 		i += copy(dAtA[i:], m.Data)
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -224,6 +395,9 @@ func (m *Series) MarshalTo(dAtA []byte) (int, error) {
 			}
 			i += n
 		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	return i, nil
 }
@@ -313,6 +487,9 @@ func (m *AggrChunk) MarshalTo(dAtA []byte) (int, error) {
 		}
 		i += n6
 	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -348,6 +525,9 @@ func (m *LabelMatcher) MarshalTo(dAtA []byte) (int, error) {
 		i = encodeVarintTypes(dAtA, i, uint64(len(m.Value)))
 		i += copy(dAtA[i:], m.Value)
 	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
 	return i, nil
 }
 
@@ -371,6 +551,9 @@ func (m *Label) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovTypes(uint64(l))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -383,6 +566,9 @@ func (m *Chunk) Size() (n int) {
 	l = len(m.Data)
 	if l > 0 {
 		n += 1 + l + sovTypes(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -401,6 +587,9 @@ func (m *Series) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovTypes(uint64(l))
 		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -438,6 +627,9 @@ func (m *AggrChunk) Size() (n int) {
 		l = m.Counter.Size()
 		n += 1 + l + sovTypes(uint64(l))
 	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
 	return n
 }
 
@@ -454,6 +646,9 @@ func (m *LabelMatcher) Size() (n int) {
 	l = len(m.Value)
 	if l > 0 {
 		n += 1 + l + sovTypes(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
@@ -570,6 +765,7 @@ func (m *Label) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -670,6 +866,7 @@ func (m *Chunk) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -782,6 +979,7 @@ func (m *Series) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1068,6 +1266,7 @@ func (m *AggrChunk) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1195,6 +1394,7 @@ func (m *LabelMatcher) Unmarshal(dAtA []byte) error {
 			if (iNdEx + skippy) > l {
 				return io.ErrUnexpectedEOF
 			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
 	}
@@ -1309,9 +1509,9 @@ var (
 	ErrIntOverflowTypes   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("types.proto", fileDescriptorTypes) }
+func init() { proto.RegisterFile("types.proto", fileDescriptor_types_60e135d4a4f03620) }
 
-var fileDescriptorTypes = []byte{
+var fileDescriptor_types_60e135d4a4f03620 = []byte{
 	// 432 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x92, 0xdd, 0x6e, 0xd3, 0x30,
 	0x14, 0xc7, 0xeb, 0x7c, 0x76, 0x67, 0x03, 0x05, 0x33, 0x21, 0x97, 0x8b, 0xae, 0x0a, 0x17, 0x54,

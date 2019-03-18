@@ -136,7 +136,7 @@
           "refId": "A"
         },
         {
-          "expr": "sum(rate(thanos_compact_garbage_collections_total{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}[$interval])) by (kubernetes_namespace)",
+          "expr": "sum(rate(thanos_compact_garbage_collection_total{$labelselector=\"$labelvalue\",kubernetes_namespace=~\"$namespace\"}[$interval])) by (kubernetes_namespace)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "gc ops  {{kubernetes_namespace}}",

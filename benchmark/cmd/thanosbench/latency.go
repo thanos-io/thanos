@@ -85,7 +85,7 @@ func getQueryTimes(logger log.Logger, opts *opts, k8sClient *kubernetes.Clientse
 
 	// Deploy querier.
 	level.Info(logger).Log("msg", "Running querier", "name", querierName)
-	pod, service := createPrometheusQuerier(opts, querierName, fmt.Sprintf("http://%s:%d", queryPod.Status.PodIP, port), strings.Join(*opts.queries, ";"))
+	pod, service := createPrometheusQuerier(opts, querierName, fmt.Sprintf("%s:%d", queryPod.Status.PodIP, port), strings.Join(*opts.queries, ";"))
 	if _, err := k8sClient.CoreV1().Pods(thanosNamespace).Create(pod); err != nil {
 		return []byte{}, errors.Wrap(err, "failed to create querier pod")
 	}

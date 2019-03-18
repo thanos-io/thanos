@@ -1,0 +1,206 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: prometheus
+  name: prometheus
+spec:
+  ports:
+    - port: 9090
+      protocol: TCP
+      targetPort: http-prometheus
+      name: http-prometheus
+  selector:
+    statefulset.kubernetes.io/pod-name: prometheus-0
+  type: NodePort
+---
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+spec:
+  serviceName: "prometheus"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      securityContext:
+        runAsUser: 1000
+        fsGroup: 2000
+        runAsNonRoot: true
+      serviceAccountName: prometheus
+      containers:
+      - name: prometheus
+        image: quay.io/prometheus/prometheus:v2.6.1
+        args:
+          - --config.file=/etc/prometheus/prometheus.yaml
+          - --storage.tsdb.path=/var/prometheus
+          - --web.enable-lifecycle
+          - --storage.tsdb.retention=2w
+        ports:
+          - name: http-prometheus
+            containerPort: 9090
+        volumeMounts:
+          - name: config
+            mountPath: /etc/prometheus
+          - name: rules
+            mountPath: /etc/prometheus/rules
+          - name: prometheus
+            mountPath: /var/prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus
+        - name: rules
+          configMap:
+            name: prometheus-rules
+  volumeClaimTemplates:
+  - metadata:
+      labels:
+        app: prometheus
+      name: prometheus
+    spec:
+      storageClassName: prom-manual
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          # Normally, probably 15x more (:
+          storage: 4Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus
+data:
+  prometheus.yaml: |-
+    # Inspired by https://github.com/prometheus/prometheus/blob/master/documentation/examples/prometheus-kubernetes.yml
+    global:
+      scrape_interval: 15s
+      scrape_timeout: 10s
+      external_labels:
+        cluster: %%CLUSTER%%
+
+    alerting:
+      alertmanagers:
+      - static_configs:
+        - targets:
+          - %%ALERTMANAGER_URL%%
+
+    rule_files:
+    - /etc/prometheus/rules/*rules.yaml
+
+    scrape_configs:
+    - job_name: kube-apiserver
+      scheme: https
+      kubernetes_sd_configs:
+      - role: endpoints
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+        regex: default;kubernetes;https
+        action: keep
+
+    - job_name: kubelet
+      scheme: https
+      kubernetes_sd_configs:
+      - role: node
+      bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tls_config:
+        ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+      relabel_configs:
+      - target_label: __address__
+        replacement: kubernetes.default.svc:443
+      - source_labels: [__meta_kubernetes_node_name]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+      metric_relabel_configs:
+      - source_labels: [pod_name]
+        regex: ^(.+)$
+        target_label: pod
+      - regex: id
+        action: labeldrop
+      - regex: name
+        action: labeldrop
+      - regex: pod_name
+        action: labeldrop
+      - target_label: cluster
+        replacement: %%CLUSTER%%
+
+    - job_name: kube-pods
+      honor_labels: true
+      kubernetes_sd_configs:
+      - role: pod
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_container_port_name]
+        regex: ^(http|http-.+|metrics)$
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_label_k8s_app]
+        target_label: job
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        regex: ^(.+)$
+        target_label: job
+      - source_labels: [job, __meta_kubernetes_pod_container_port_name]
+        regex: ^(.*);http-(.+)$
+        target_label: job
+      - source_labels: [__meta_kubernetes_pod_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - target_label: cluster
+        replacement: %%CLUSTER%%
+      metric_relabel_configs:
+      - source_labels: [pod_name]
+        regex: ^(.+)$
+        target_label: pod
+      - regex: pod_name
+        action: labeldrop
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: prometheus
+  namespace: default
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - nodes/proxy
+  - services
+  - endpoints
+  - pods
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources:
+  - configmaps
+  verbs: ["get"]
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: default

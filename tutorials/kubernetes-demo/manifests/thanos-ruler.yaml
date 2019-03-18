@@ -1,0 +1,108 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: thanos-ruler-rules
+data:
+  alert_down_services.rules.yaml: |
+    groups:
+    - name: metamonitoring
+      rules:
+      - alert: PrometheusReplicaDown
+        annotations:
+          message: Prometheus replica in cluster {{$labels.cluster}} has disappeared from Prometheus target discovery.
+          runbook_url: https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-prometheusdown
+        expr: |
+          label_replace(
+            absent(sum(up{job="prometheus", cluster="eu1", instance=~".*:9090"}) by (job, cluster) == 2),
+            "cluster", "eu1", "",""
+          )
+          or
+          label_replace(
+            absent(sum(up{job="prometheus", cluster="us1", instance=~".*:9090"}) by (job, cluster) == 2),
+            "cluster", "us1", "",""
+          )
+        for: 15s # for demo purposes
+        labels:
+          severity: critical
+---
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  labels:
+    app: thanos-ruler
+  name: thanos-ruler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: thanos-ruler
+  serviceName: thanos-ruler
+  template:
+    metadata:
+      labels:
+        app: thanos-ruler
+        thanos-store-api: "true"
+    spec:
+      containers:
+        - name: thanos
+          image: improbable/thanos:v0.3.1
+          args:
+            - rule
+            - --log.level=debug
+            - --data-dir=/data
+            - --eval-interval=15s
+            - --cluster.disable
+            - --rule-file=/etc/thanos-ruler/*.rules.yaml
+            - --alertmanagers.url=http://%%ALERTMANAGER_URL%%
+            - --query=thanos-querier.default.svc:9090
+            - |
+              --objstore.config=type: S3
+              config:
+                bucket: demo-bucket
+                access_key: smth
+                secret_key: Need8Chars
+                endpoint: %%S3_ENDPOINT%%
+                insecure: true
+            # We don't want to override underlying metric's cluster label.
+            - --label=ruler_cluster="%%CLUSTER%%"
+            - --label=replica="$(POD_NAME)"
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          ports:
+            - name: http
+              containerPort: 10902
+            - name: grpc
+              containerPort: 10901
+          resources:
+            limits:
+              cpu: 500m
+              memory: 500Mi
+            requests:
+              cpu: 500m
+              memory: 500Mi
+          volumeMounts:
+            - mountPath: /etc/thanos-ruler
+              name: config
+      volumes:
+        - configMap:
+            name: thanos-ruler-rules
+          name: config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: thanos-ruler
+  name: thanos-ruler
+spec:
+  ports:
+    - port: 9090
+      protocol: TCP
+      targetPort: http
+      name: http
+  selector:
+    statefulset.kubernetes.io/pod-name: thanos-ruler-0
+  type: NodePort

@@ -98,27 +98,43 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		prefix += DirDelim
 	}
 
-	list, err := b.containerURL.ListBlobsHierarchySegment(ctx, blob.Marker{}, DirDelim, blob.ListBlobsSegmentOptions{
-		Prefix: prefix,
-	})
-	if err != nil {
-		return errors.Wrapf(err, "cannot list blobs in directory %s", dir)
-	}
-	var listNames []string
+	marker := blob.Marker{}
 
-	for _, blob := range list.Segment.BlobItems {
-		listNames = append(listNames, blob.Name)
-	}
+	for i := 1; ; i++ {
+		list, err := b.containerURL.ListBlobsHierarchySegment(ctx, marker, DirDelim, blob.ListBlobsSegmentOptions{
+			Prefix: prefix,
+		})
 
-	for _, blobPrefix := range list.Segment.BlobPrefixes {
-		listNames = append(listNames, blobPrefix.Name)
-	}
-
-	for _, name := range listNames {
-		if err := f(name); err != nil {
-			return err
+		if err != nil {
+			return errors.Wrapf(err, "cannot list blobs in directory %s (iteration #%d)", dir, i)
 		}
+
+		marker = list.NextMarker
+
+		var listNames []string
+
+		for _, blob := range list.Segment.BlobItems {
+			listNames = append(listNames, blob.Name)
+		}
+
+		for _, blobPrefix := range list.Segment.BlobPrefixes {
+			listNames = append(listNames, blobPrefix.Name)
+		}
+
+		for _, name := range listNames {
+			if err := f(name); err != nil {
+				return err
+			}
+		}
+
+		// Continue iterating if we are not done.
+		if !marker.NotDone() {
+			break
+		}
+
+		level.Debug(b.logger).Log("msg", "requesting next iteration of listing blobs", "last_entries", len(listNames), "iteration", i)
 	}
+
 	return nil
 }
 

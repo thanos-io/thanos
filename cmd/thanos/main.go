@@ -24,7 +24,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
-	"github.com/grpc-ecosystem/go-grpc-prometheus"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/oklog/run"
@@ -38,6 +38,11 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
+)
+
+const (
+	logFormatLogfmt = "logfmt"
+	logFormatJson   = "json"
 )
 
 type setupFunc func(*run.Group, log.Logger, *prometheus.Registry, opentracing.Tracer, bool) error
@@ -57,6 +62,8 @@ func main() {
 
 	logLevel := app.Flag("log.level", "Log filtering level.").
 		Default("info").Enum("error", "warn", "info", "debug")
+	logFormat := app.Flag("log.format", "Log format to use.").
+		Default(logFormatLogfmt).Enum(logFormatLogfmt, logFormatJson)
 
 	gcloudTraceProject := app.Flag("gcloudtrace.project", "GCP project to send Google Cloud Trace tracings to. If empty, tracing will be disabled.").
 		String()
@@ -71,6 +78,7 @@ func main() {
 	registerCompact(cmds, app, "compact")
 	registerBucket(cmds, app, "bucket")
 	registerDownsample(cmds, app, "downsample")
+	registerReceive(cmds, app, "receive")
 
 	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {
@@ -95,6 +103,9 @@ func main() {
 			panic("unexpected log level")
 		}
 		logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
+		if *logFormat == logFormatJson {
+			logger = log.NewJSONLogger(log.NewSyncWriter(os.Stderr))
+		}
 		logger = level.NewFilter(logger, lvl)
 
 		if *debugName != "" {

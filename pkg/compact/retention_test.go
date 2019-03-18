@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/compact"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/inmem"
@@ -253,15 +253,15 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 
 func uploadMockBlock(t *testing.T, bkt objstore.Bucket, id string, minTime, maxTime time.Time, resolutionLevel int64) {
 	t.Helper()
-	meta1 := block.Meta{
+	meta1 := metadata.Meta{
 		Version: 1,
 		BlockMeta: tsdb.BlockMeta{
 			ULID:    ulid.MustParse(id),
 			MinTime: minTime.Unix() * 1000,
 			MaxTime: maxTime.Unix() * 1000,
 		},
-		Thanos: block.ThanosMeta{
-			Downsample: block.ThanosDownsampleMeta{
+		Thanos: metadata.Thanos{
+			Downsample: metadata.ThanosDownsample{
 				Resolution: resolutionLevel,
 			},
 		},

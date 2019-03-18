@@ -35,6 +35,7 @@ Flags:
                            --help-man).
       --version            Show application version.
       --log.level=info     Log filtering level.
+      --log.format=logfmt  Log format to use.
       --gcloudtrace.project=GCLOUDTRACE.PROJECT  
                            GCP project to send Google Cloud Trace tracings to.
                            If empty, tracing will be disabled.
@@ -66,5 +67,8 @@ Flags:
                            in bucket. 0d - disables this retention
   -w, --wait               Do not exit after all compactions have been processed
                            and wait for new work.
+      --block-sync-concurrency=20  
+                           Number of goroutines to use when syncing block
+                           metadata from object storage.
 
 ```

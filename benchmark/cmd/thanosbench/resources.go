@@ -12,7 +12,7 @@ import (
 	prom "github.com/prometheus/prometheus/config"
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -511,14 +511,16 @@ func createPrometheusQuerier(opts *opts, name string, endpoint string, queries s
 			ObjectMeta: om,
 			Spec: v1.PodSpec{
 				Containers: []v1.Container{{
-					Name:  "querier",
+					Name: "querier",
+					//TODO(domgreen): move this to the same repository as Thanos
 					Image: "eu.gcr.io/io-crafty-shelter/thanos-querier:latest",
 					Args: []string{
-						"--endpoint=" + endpoint,
+						"--host=" + endpoint,
 						"--queries=" + queries,
 						"--range-offset-start=" + opts.queryRangeOffsetStart.String(),
 						"--range-offset-end=" + opts.queryRangeOffsetEnd.String(),
 						"--query-time=" + opts.queryTime.String(),
+						"--server=true",
 					},
 				}},
 			},

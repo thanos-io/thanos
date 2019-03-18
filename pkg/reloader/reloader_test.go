@@ -262,3 +262,185 @@ func TestReloader_RuleApply(t *testing.T) {
 
 	testutil.Equals(t, 3, reloadsFn())
 }
+
+func TestReloader_RuleApplySymlink(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	l, err := net.Listen("tcp", "localhost:0")
+	testutil.Ok(t, err)
+
+	reloads := 0
+	i := 0
+	promHandlerMu := sync.Mutex{}
+	srv := &http.Server{}
+	srv.Handler = http.HandlerFunc(func(resp http.ResponseWriter, r *http.Request) {
+		promHandlerMu.Lock()
+		defer promHandlerMu.Unlock()
+
+		i++
+		if i%2 == 0 {
+			// Every second request, fail to ensure that retry works.
+			resp.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+
+		reloads++
+		resp.WriteHeader(http.StatusOK)
+	})
+	go func() {
+		_ = srv.Serve(l)
+	}()
+	defer func() { testutil.Ok(t, srv.Close()) }()
+
+	reloadURL, err := url.Parse(fmt.Sprintf("http://%s", l.Addr().String()))
+	testutil.Ok(t, err)
+
+	dir, err := ioutil.TempDir("", "reloader-rules-test")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+
+	sourceDir, err := ioutil.TempDir("", "reload-rules-test-source")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(sourceDir)) }()
+
+	reloader := New(nil, reloadURL, "", "", []string{dir})
+	reloader.ruleInterval = 100 * time.Millisecond
+	reloader.retryInterval = 100 * time.Millisecond
+
+	reloadsFn := func() int {
+		promHandlerMu.Lock()
+		promHandlerMu.Unlock()
+		return reloads
+	}
+
+	var (
+		rules1            string = sourceDir + "/rules-v1.yaml"
+		rules2                   = sourceDir + "/rules-v2.yaml"
+		watchedSymlink           = dir + "/rules.yaml"
+		atomicSwapSymlink        = sourceDir + "/atomic"
+	)
+	// write our source configs
+	testutil.Ok(t, ioutil.WriteFile(rules1, []byte("rules"), os.ModePerm))
+	testutil.Ok(t, ioutil.WriteFile(rules2, []byte("rules-modified"), os.ModePerm))
+	// start with v1
+	testutil.Ok(t, os.Symlink(rules1, watchedSymlink))
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+			case <-time.After(300 * time.Millisecond):
+			}
+
+			if ctx.Err() != nil {
+				break
+			}
+
+			if reloadsFn() == 1 { // first load
+				// swap the symlink atomically
+				testutil.Ok(t, os.Symlink(rules2, atomicSwapSymlink))
+				testutil.Ok(t, os.Rename(atomicSwapSymlink, watchedSymlink))
+			}
+
+			if reloadsFn() > 1 {
+				break
+			}
+		}
+	}()
+	err = reloader.Watch(ctx)
+	cancel()
+	testutil.Ok(t, err)
+	testutil.Equals(t, 2, reloadsFn())
+}
+
+func TestReloader_RuleApplySymlinkDirs(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	l, err := net.Listen("tcp", "localhost:0")
+	testutil.Ok(t, err)
+
+	reloads := 0
+	i := 0
+	promHandlerMu := sync.Mutex{}
+	srv := &http.Server{}
+	srv.Handler = http.HandlerFunc(func(resp http.ResponseWriter, r *http.Request) {
+		promHandlerMu.Lock()
+		defer promHandlerMu.Unlock()
+
+		i++
+		if i%2 == 0 {
+			// Every second request, fail to ensure that retry works.
+			resp.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+
+		reloads++
+		resp.WriteHeader(http.StatusOK)
+	})
+	go func() {
+		_ = srv.Serve(l)
+	}()
+	defer func() { testutil.Ok(t, srv.Close()) }()
+
+	reloadURL, err := url.Parse(fmt.Sprintf("http://%s", l.Addr().String()))
+	testutil.Ok(t, err)
+
+	workingDir, err := ioutil.TempDir("", "reloader-rules-test")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(workingDir)) }()
+
+	watchedSymlink := workingDir + "/watched"
+	atomicSwapSymlink := workingDir + "/atomic"
+	sourceDirA := workingDir + "/a"
+	sourceDirB := workingDir + "/b"
+	testutil.Ok(t, os.Mkdir(sourceDirA, os.ModePerm))
+	testutil.Ok(t, os.Mkdir(sourceDirB, os.ModePerm))
+	// write our source configs
+	testutil.Ok(t, ioutil.WriteFile(sourceDirA+"/rules.yaml", []byte("rules"), os.ModePerm))
+	testutil.Ok(t, ioutil.WriteFile(sourceDirB+"/rules.yaml", []byte("rules-modified"), os.ModePerm))
+	// start with v1
+	testutil.Ok(t, os.Symlink(sourceDirA, watchedSymlink))
+	// set up reloader
+	reloader := New(nil, reloadURL, "", "", []string{watchedSymlink})
+	reloader.ruleInterval = 100 * time.Millisecond
+	reloader.retryInterval = 100 * time.Millisecond
+	reloadsFn := func() int {
+		promHandlerMu.Lock()
+		promHandlerMu.Unlock()
+		return reloads
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+			case <-time.After(300 * time.Millisecond):
+			}
+
+			if ctx.Err() != nil {
+				break
+			}
+
+			if reloadsFn() == 1 { // first load
+				// swap the symlink atomically
+				testutil.Ok(t, os.Symlink(sourceDirB, atomicSwapSymlink))
+				testutil.Ok(t, os.Rename(atomicSwapSymlink, watchedSymlink))
+			}
+
+			if reloadsFn() == 2 {
+				// swap the symlink back
+				testutil.Ok(t, os.Symlink(sourceDirA, atomicSwapSymlink))
+				testutil.Ok(t, os.Rename(atomicSwapSymlink, watchedSymlink))
+			}
+
+			if reloadsFn() > 2 {
+				break
+			}
+		}
+	}()
+	err = reloader.Watch(ctx)
+	cancel()
+	testutil.Ok(t, err)
+	testutil.Equals(t, 3, reloadsFn())
+}

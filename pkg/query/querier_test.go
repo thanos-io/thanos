@@ -33,10 +33,10 @@ func TestQuerier_Series(t *testing.T) {
 
 	// Querier clamps the range to [1,300], which should drop some samples of the result above.
 	// The store API allows endpoints to send more data then initially requested.
-	q := newQuerier(context.Background(), nil, 1, 300, "", testProxy, false, 0, nil)
+	q := newQuerier(context.Background(), nil, 1, 300, "", testProxy, false, 0, true, nil)
 	defer func() { testutil.Ok(t, q.Close()) }()
 
-	res, err := q.Select(&storage.SelectParams{})
+	res, _, err := q.Select(&storage.SelectParams{})
 	testutil.Ok(t, err)
 
 	expected := []struct {
@@ -79,25 +79,25 @@ func TestSortReplicaLabel(t *testing.T) {
 
 	set := []storepb.Series{
 		{Labels: []storepb.Label{
-			{"a", "1"},
-			{"b", "replica-1"},
-			{"c", "3"},
+			{Name: "a", Value: "1"},
+			{Name: "b", Value: "replica-1"},
+			{Name: "c", Value: "3"},
 		}},
 		{Labels: []storepb.Label{
-			{"a", "1"},
-			{"b", "replica-1"},
-			{"c", "3"},
-			{"d", "4"},
+			{Name: "a", Value: "1"},
+			{Name: "b", Value: "replica-1"},
+			{Name: "c", Value: "3"},
+			{Name: "d", Value: "4"},
 		}},
 		{Labels: []storepb.Label{
-			{"a", "1"},
-			{"b", "replica-1"},
-			{"c", "4"},
+			{Name: "a", Value: "1"},
+			{Name: "b", Value: "replica-1"},
+			{Name: "c", Value: "4"},
 		}},
 		{Labels: []storepb.Label{
-			{"a", "1"},
-			{"b", "replica-2"},
-			{"c", "3"},
+			{Name: "a", Value: "1"},
+			{Name: "b", Value: "replica-2"},
+			{Name: "c", Value: "3"},
 		}},
 	}
 
@@ -105,25 +105,25 @@ func TestSortReplicaLabel(t *testing.T) {
 
 	exp := []storepb.Series{
 		{Labels: []storepb.Label{
-			{"a", "1"},
-			{"c", "3"},
-			{"b", "replica-1"},
+			{Name: "a", Value: "1"},
+			{Name: "c", Value: "3"},
+			{Name: "b", Value: "replica-1"},
 		}},
 		{Labels: []storepb.Label{
-			{"a", "1"},
-			{"c", "3"},
-			{"b", "replica-2"},
+			{Name: "a", Value: "1"},
+			{Name: "c", Value: "3"},
+			{Name: "b", Value: "replica-2"},
 		}},
 		{Labels: []storepb.Label{
-			{"a", "1"},
-			{"c", "3"},
-			{"d", "4"},
-			{"b", "replica-1"},
+			{Name: "a", Value: "1"},
+			{Name: "c", Value: "3"},
+			{Name: "d", Value: "4"},
+			{Name: "b", Value: "replica-1"},
 		}},
 		{Labels: []storepb.Label{
-			{"a", "1"},
-			{"c", "4"},
-			{"b", "replica-1"},
+			{Name: "a", Value: "1"},
+			{Name: "c", Value: "4"},
+			{Name: "b", Value: "replica-1"},
 		}},
 	}
 	testutil.Equals(t, exp, set)
@@ -146,28 +146,28 @@ func TestDedupSeriesSet(t *testing.T) {
 		vals []sample
 	}{
 		{
-			lset: []storepb.Label{{"a", "1"}, {"c", "3"}, {"replica", "replica-1"}},
+			lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-1"}},
 			vals: []sample{{10000, 1}, {20000, 2}},
 		}, {
-			lset: []storepb.Label{{"a", "1"}, {"c", "3"}, {"replica", "replica-2"}},
+			lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-2"}},
 			vals: []sample{{60000, 3}, {70000, 4}},
 		}, {
-			lset: []storepb.Label{{"a", "1"}, {"c", "3"}, {"replica", "replica-3"}},
+			lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-3"}},
 			vals: []sample{{200000, 5}, {210000, 6}},
 		}, {
-			lset: []storepb.Label{{"a", "1"}, {"c", "3"}, {"d", "4"}},
+			lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
 			vals: []sample{{10000, 1}, {20000, 2}},
 		}, {
-			lset: []storepb.Label{{"a", "1"}, {"c", "3"}},
+			lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
 			vals: []sample{{10000, 1}, {20000, 2}},
 		}, {
-			lset: []storepb.Label{{"a", "1"}, {"c", "4"}, {"replica", "replica-1"}},
+			lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "replica", Value: "replica-1"}},
 			vals: []sample{{10000, 1}, {20000, 2}},
 		}, {
-			lset: []storepb.Label{{"a", "2"}, {"c", "3"}, {"replica", "replica-3"}},
+			lset: []storepb.Label{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-3"}},
 			vals: []sample{{10000, 1}, {20000, 2}},
 		}, {
-			lset: []storepb.Label{{"a", "2"}, {"c", "3"}, {"replica", "replica-3"}},
+			lset: []storepb.Label{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-3"}},
 			vals: []sample{{60000, 3}, {70000, 4}},
 		},
 	}

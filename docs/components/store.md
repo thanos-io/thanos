@@ -28,13 +28,14 @@ In general about 1MB of local disk space is required per TSDB block stored in th
 usage: thanos store [<flags>]
 
 store node giving access to blocks in a bucket provider. Now supported GCS, S3,
-Azure and Swift.
+Azure, Swift and Tencent COS.
 
 Flags:
   -h, --help                     Show context-sensitive help (also try
                                  --help-long and --help-man).
       --version                  Show application version.
       --log.level=info           Log filtering level.
+      --log.format=logfmt        Log format to use.
       --gcloudtrace.project=GCLOUDTRACE.PROJECT  
                                  GCP project to send Google Cloud Trace tracings
                                  to. If empty, tracing will be disabled.
@@ -43,16 +44,14 @@ Flags:
                                  If 0 no trace will be sent periodically, unless
                                  forced by baggage item. See
                                  `pkg/tracing/tracing.go` for details.
+      --http-address="0.0.0.0:10902"  
+                                 Listen host:port for HTTP endpoints.
       --grpc-address="0.0.0.0:10901"  
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
                                  from other components if you use gossip,
                                  'grpc-advertise-address' is empty and you
                                  require cross-node connection.
-      --grpc-advertise-address=GRPC-ADVERTISE-ADDRESS  
-                                 Explicit (external) host:port address to
-                                 advertise for gRPC StoreAPI in gossip cluster.
-                                 If empty, 'grpc-address' will be used.
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
@@ -61,8 +60,10 @@ Flags:
                                  TLS CA to verify clients against. If no client
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --http-address="0.0.0.0:10902"  
-                                 Listen host:port for HTTP endpoints.
+      --grpc-advertise-address=GRPC-ADVERTISE-ADDRESS  
+                                 Explicit (external) host:port address to
+                                 advertise for gRPC StoreAPI in gossip cluster.
+                                 If empty, 'grpc-address' will be used.
       --cluster.address="0.0.0.0:10900"  
                                  Listen ip:port address for gossip cluster.
       --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS  
@@ -97,6 +98,8 @@ Flags:
                                  configurations. Sets of configurations
                                  accounting the latency differences between
                                  network types: local, lan, wan.
+      --cluster.disable          If true gossip will be disabled and no cluster
+                                 related server will be started.
       --data-dir="./data"        Data directory in which to cache remote blocks.
       --index-cache-size=250MB   Maximum size of items held in the index cache.
       --chunk-pool-size=2GB      Maximum size of concurrently allocatable bytes
@@ -109,5 +112,8 @@ Flags:
                                  Object store configuration in YAML.
       --sync-block-duration=3m   Repeat interval for syncing the blocks between
                                  local and remote view.
+      --block-sync-concurrency=20  
+                                 Number of goroutines to use when syncing blocks
+                                 from object storage.
 
 ```

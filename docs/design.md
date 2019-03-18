@@ -14,7 +14,7 @@ Thanos is a clustered system of components with distinct and decoupled purposes.
 
 ### Metric Sources
 
-A data source is a very generlized definition of a component that produces or collects metric data. Source advertise this data in the cluster to potential clients. Metric data can be retrieved via a well-known gRPC service.
+A data source is a very generalized definition of a component that produces or collects metric data. Source advertise this data in the cluster to potential clients. Metric data can be retrieved via a well-known gRPC service.
 
 Thanos provides two components that act as data sources: the Prometheus sidecar and rule nodes.
 
@@ -43,7 +43,8 @@ A blocks top-level directory is a ULID (like UUID but lexicographically sortable
 
 
 Those block files can be backed up to an object storage and later be queried by another component (see below).
-All data is uploaded as it is created by the Prometheus server/storage engine. The `meta.json` file may be extended by a `thanos` section, to which Thanos-specific metadata can be added. Currently this is limited to the "external labels" the producer of the block has assigned. This later helps in filtering blocks for querying without accessing their data files.
+All data is uploaded as it is created by the Prometheus server/storage engine. The `meta.json` file may be extended by a `thanos` section, to which Thanos-specific metadata can be added. Currently this it includes the "external labels" the producer of the block has assigned. This later helps in filtering blocks for querying without accessing their data files.
+The meta.json is updated during upload time on sidecars.
 
 
 ```
@@ -53,7 +54,7 @@ All data is uploaded as it is created by the Prometheus server/storage engine. T
                   │                                │           │
                 Blocks                           Blocks      Blocks
                   │                                │           │
-                  v                                v           v 
+                  v                                v           v
               ┌──────────────────────────────────────────────────┐
               │                   Object Storage                 │
               └──────────────────────────────────────────────────┘
@@ -75,7 +76,7 @@ Currently only index data is cached. Chunk data could be cached but is orders of
 Since store nodes and data sources expose the same gRPC Store API, clients can largely treat them as equivalent and don't have to concern with which specific component they are querying.
 Each implementer of the Store API advertise meta information about the data they provide. This allows clients to minimize the set of nodes they have to fan out to, to satisfy a particular data query.
 
-In it's essence the Store API allows to look up data by a set of label matchers (as known from PromQL), and a time range. It returns compressed chunks of samples as they are found in the block data. It is purely a data retrieval API and does _not_ provice complex query execution.
+In it's essence the Store API allows to look up data by a set of label matchers (as known from PromQL), and a time range. It returns compressed chunks of samples as they are found in the block data. It is purely a data retrieval API and does _not_ provide complex query execution.
 
 ```
 ┌──────────────────────┐  ┌────────────┬─────────┐   ┌────────────┐

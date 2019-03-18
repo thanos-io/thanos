@@ -46,6 +46,7 @@ Flags:
                                  --help-long and --help-man).
       --version                  Show application version.
       --log.level=info           Log filtering level.
+      --log.format=logfmt        Log format to use.
       --gcloudtrace.project=GCLOUDTRACE.PROJECT  
                                  GCP project to send Google Cloud Trace tracings
                                  to. If empty, tracing will be disabled.
@@ -54,16 +55,14 @@ Flags:
                                  If 0 no trace will be sent periodically, unless
                                  forced by baggage item. See
                                  `pkg/tracing/tracing.go` for details.
+      --http-address="0.0.0.0:10902"  
+                                 Listen host:port for HTTP endpoints.
       --grpc-address="0.0.0.0:10901"  
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
                                  from other components if you use gossip,
                                  'grpc-advertise-address' is empty and you
                                  require cross-node connection.
-      --grpc-advertise-address=GRPC-ADVERTISE-ADDRESS  
-                                 Explicit (external) host:port address to
-                                 advertise for gRPC StoreAPI in gossip cluster.
-                                 If empty, 'grpc-address' will be used.
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
@@ -72,8 +71,10 @@ Flags:
                                  TLS CA to verify clients against. If no client
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --http-address="0.0.0.0:10902"  
-                                 Listen host:port for HTTP endpoints.
+      --grpc-advertise-address=GRPC-ADVERTISE-ADDRESS  
+                                 Explicit (external) host:port address to
+                                 advertise for gRPC StoreAPI in gossip cluster.
+                                 If empty, 'grpc-address' will be used.
       --cluster.address="0.0.0.0:10900"  
                                  Listen ip:port address for gossip cluster.
       --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS  
@@ -108,9 +109,13 @@ Flags:
                                  configurations. Sets of configurations
                                  accounting the latency differences between
                                  network types: local, lan, wan.
+      --cluster.disable          If true gossip will be disabled and no cluster
+                                 related server will be started.
       --label=<name>="<value>" ...  
                                  Labels to be applied to all generated metrics
-                                 (repeated).
+                                 (repeated). Similar to external labels for
+                                 Prometheus, used to identify ruler and its
+                                 blocks as unique source.
       --data-dir="data/"         data directory
       --rule-file=rules/ ...     Rule files that should be used by rule manager.
                                  Can be in glob format (repeated).
@@ -118,15 +123,48 @@ Flags:
       --tsdb.block-duration=2h   Block duration for TSDB block.
       --tsdb.retention=48h       Block retention time on local disk.
       --alertmanagers.url=ALERTMANAGERS.URL ...  
-                                 Alertmanager URLs to push firing alerts to. The
-                                 scheme may be prefixed with 'dns+' or 'dnssrv+'
-                                 to detect Alertmanager IPs through respective
-                                 DNS lookups. The port defaults to 9093 or the
-                                 SRV record's value. The URL path is used as a
-                                 prefix for the regular Alertmanager API path.
+                                 Alertmanager replica URLs to push firing
+                                 alerts. Ruler claims success if push to at
+                                 least one alertmanager from discovered
+                                 succeeds. The scheme may be prefixed with
+                                 'dns+' or 'dnssrv+' to detect Alertmanager IPs
+                                 through respective DNS lookups. The port
+                                 defaults to 9093 or the SRV record's value. The
+                                 URL path is used as a prefix for the regular
+                                 Alertmanager API path.
+      --alertmanagers.send-timeout=10s  
+                                 Timeout for sending alerts to alertmanager
       --alert.query-url=ALERT.QUERY-URL  
                                  The external Thanos Query URL that would be set
                                  in all alerts 'Source' field
+      --alert.label-drop=ALERT.LABEL-DROP ...  
+                                 Labels by name to drop before sending to
+                                 alertmanager. This allows alert to be
+                                 deduplicated on replica label (repeated).
+                                 Similar Prometheus alert relabelling
+      --web.route-prefix=""      Prefix for API and UI endpoints. This allows
+                                 thanos UI to be served on a sub-path. This
+                                 option is analogous to --web.route-prefix of
+                                 Promethus.
+      --web.external-prefix=""   Static prefix for all HTML links and redirect
+                                 URLs in the UI query web interface. Actual
+                                 endpoints are still served on / or the
+                                 web.route-prefix. This allows thanos UI to be
+                                 served behind a reverse proxy that strips a URL
+                                 sub-path.
+      --web.prefix-header=""     Name of HTTP request header used for dynamic
+                                 prefixing of UI links and redirects. This
+                                 option is ignored if web.external-prefix
+                                 argument is set. Security risk: enable this
+                                 option only if a reverse proxy in front of
+                                 thanos is resetting the header. The
+                                 --web.prefix-header=X-Forwarded-Prefix option
+                                 can be useful, for example, if Thanos UI is
+                                 served via Traefik reverse proxy with
+                                 PathPrefixStrip option enabled, which sends the
+                                 stripped prefix value in X-Forwarded-Prefix
+                                 header. This allows thanos UI to be served on a
+                                 sub-path.
       --objstore.config-file=<bucket.config-yaml-path>  
                                  Path to YAML file that contains object store
                                  configuration.
@@ -134,12 +172,17 @@ Flags:
                                  Alternative to 'objstore.config-file' flag.
                                  Object store configuration in YAML.
       --query=<query> ...        Addresses of statically configured query API
-                                 servers (repeatable).
+                                 servers (repeatable). The scheme may be
+                                 prefixed with 'dns+' or 'dnssrv+' to detect
+                                 query API servers through respective DNS
+                                 lookups.
       --query.sd-files=<path> ...  
                                  Path to file that contain addresses of query
                                  peers. The path can be a glob pattern
                                  (repeatable).
       --query.sd-interval=5m     Refresh interval to re-read file SD files.
                                  (used as a fallback)
+      --query.sd-dns-interval=30s  
+                                 Interval between DNS resolutions.
 
 ```

@@ -5,6 +5,10 @@ Keep issue title verbose enough and add prefix telling
 about what components it touches e.g "query:" or ".*:"
 -->
 
+<!--
+In case of issues related to exact bucket implementation, please ping corresponded maintainer from list here: https://github.com/improbable-eng/thanos/blob/master/docs/storage.md
+-->
+
 **Thanos, Prometheus and Golang version used**
 
 <!--

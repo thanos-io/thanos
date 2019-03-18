@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"path"
@@ -16,6 +17,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
+	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store/prompb"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
@@ -33,6 +35,7 @@ type PrometheusStore struct {
 	base           *url.URL
 	client         *http.Client
 	buffers        sync.Pool
+	component      component.StoreAPI
 	externalLabels func() labels.Labels
 	timestamps     func() (mint int64, maxt int64)
 }
@@ -44,6 +47,7 @@ func NewPrometheusStore(
 	logger log.Logger,
 	client *http.Client,
 	baseURL *url.URL,
+	component component.StoreAPI,
 	externalLabels func() labels.Labels,
 	timestamps func() (mint int64, maxt int64),
 ) (*PrometheusStore, error) {
@@ -59,6 +63,7 @@ func NewPrometheusStore(
 		logger:         logger,
 		base:           baseURL,
 		client:         client,
+		component:      component,
 		externalLabels: externalLabels,
 		timestamps:     timestamps,
 	}
@@ -73,9 +78,10 @@ func (p *PrometheusStore) Info(ctx context.Context, r *storepb.InfoRequest) (*st
 	mint, maxt := p.timestamps()
 
 	res := &storepb.InfoResponse{
-		MinTime: mint,
-		MaxTime: maxt,
-		Labels:  make([]storepb.Label, 0, len(lset)),
+		Labels:    make([]storepb.Label, 0, len(lset)),
+		StoreType: p.component.ToProto(),
+		MinTime:   mint,
+		MaxTime:   maxt,
 	}
 	for _, l := range lset {
 		res.Labels = append(res.Labels, storepb.Label{
@@ -155,25 +161,49 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 			continue
 		}
 
-		// We generally expect all samples of the requested range to be traversed
-		// so we just encode all samples into one big chunk regardless of size.
-		enc, cb, err := p.encodeChunk(e.Samples)
+		// XOR encoding supports a max size of 2^16 - 1 samples, so we need
+		// to chunk all samples into groups of no more than 2^16 - 1
+		aggregatedChunks, err := p.chunkSamples(e, math.MaxUint16)
 		if err != nil {
-			return status.Error(codes.Unknown, err.Error())
+			return err
 		}
+
 		resp := storepb.NewSeriesResponse(&storepb.Series{
 			Labels: lset,
-			Chunks: []storepb.AggrChunk{{
-				MinTime: int64(e.Samples[0].Timestamp),
-				MaxTime: int64(e.Samples[len(e.Samples)-1].Timestamp),
-				Raw:     &storepb.Chunk{Type: enc, Data: cb},
-			}},
+			Chunks: aggregatedChunks,
 		})
 		if err := s.Send(resp); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (p *PrometheusStore) chunkSamples(series prompb.TimeSeries, samplesPerChunk int) ([]storepb.AggrChunk, error) {
+	var aggregatedChunks []storepb.AggrChunk
+	samples := series.Samples
+
+	for len(samples) > 0 {
+		chunkSize := len(samples)
+		if chunkSize > samplesPerChunk {
+			chunkSize = samplesPerChunk
+		}
+
+		enc, cb, err := p.encodeChunk(samples[:chunkSize])
+		if err != nil {
+			return nil, status.Error(codes.Unknown, err.Error())
+		}
+
+		aggregatedChunks = append(aggregatedChunks, storepb.AggrChunk{
+			MinTime: int64(samples[0].Timestamp),
+			MaxTime: int64(samples[chunkSize-1].Timestamp),
+			Raw:     &storepb.Chunk{Type: enc, Data: cb},
+		})
+
+		samples = samples[chunkSize:]
+	}
+
+	return aggregatedChunks, nil
 }
 
 func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prompb.ReadResponse, error) {
@@ -313,9 +343,14 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesR
 }
 
 // LabelValues returns all known label values for a given label name.
-func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequest) (
-	*storepb.LabelValuesResponse, error,
-) {
+func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequest) (*storepb.LabelValuesResponse, error) {
+	externalLset := p.externalLabels()
+
+	// First check for matching external label which has priority.
+	if l := externalLset.Get(r.Label); l != "" {
+		return &storepb.LabelValuesResponse{Values: []string{l}}, nil
+	}
+
 	u := *p.base
 	u.Path = path.Join(u.Path, "/api/v1/label/", r.Label, "/values")
 

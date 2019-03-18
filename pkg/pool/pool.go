@@ -15,6 +15,8 @@ type BytesPool struct {
 	sizes     []int
 	maxTotal  uint64
 	usedTotal uint64
+
+	new func(s int) []byte
 }
 
 // NewBytesPool returns a new BytesPool with size buckets for minSize to maxSize
@@ -40,6 +42,9 @@ func NewBytesPool(minSize, maxSize int, factor float64, maxTotal uint64) (*Bytes
 		buckets:  make([]sync.Pool, len(sizes)),
 		sizes:    sizes,
 		maxTotal: maxTotal,
+		new: func(sz int) []byte {
+			return make([]byte, 0, sz)
+		},
 	}
 	return p, nil
 }
@@ -60,7 +65,7 @@ func (p *BytesPool) Get(sz int) ([]byte, error) {
 		}
 		b, ok := p.buckets[i].Get().([]byte)
 		if !ok {
-			b = make([]byte, 0, bktSize)
+			b = p.new(bktSize)
 		}
 		atomic.AddUint64(&p.usedTotal, uint64(cap(b)))
 		return b, nil
@@ -68,7 +73,7 @@ func (p *BytesPool) Get(sz int) ([]byte, error) {
 
 	// The requested size exceeds that of our highest bucket, allocate it directly.
 	atomic.AddUint64(&p.usedTotal, uint64(sz))
-	return make([]byte, 0, sz), nil
+	return p.new(sz), nil
 }
 
 // Put returns a byte slice to the right bucket in the pool.
