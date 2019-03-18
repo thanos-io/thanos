@@ -19,6 +19,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/discovery"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/alert"
@@ -103,6 +105,8 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	dnsSDInterval := modelDuration(cmd.Flag("query.sd-dns-interval", "Interval between DNS resolutions.").
 		Default("30s"))
 
+	sdType, sdServers, _, calculateSDAdvStoreAPIAddressFunc := regSDFlags(cmd)
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
@@ -146,6 +150,11 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			return errors.Errorf("Gossip is disabled and no --query parameter was given.")
 		}
 
+		sdAdvStoreAPIAddress, err := calculateSDAdvStoreAPIAddressFunc(grpcBindAddr)
+		if err != nil {
+			return errors.Wrap(err, "calculate sd advertise-address")
+		}
+
 		return runRule(g,
 			logger,
 			reg,
@@ -172,6 +181,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			*queries,
 			fileSD,
 			time.Duration(*dnsSDInterval),
+			*sdServers,
+			*sdType,
+			sdAdvStoreAPIAddress,
 		)
 	}
 }
@@ -205,6 +217,9 @@ func runRule(
 	queryAddrs []string,
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
+	sdAddrs []string,
+	sdType string,
+	sdAdvStoreAPIAddress string,
 ) error {
 	configSuccess := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_rule_config_last_reload_successful",
@@ -441,7 +456,21 @@ func runRule(
 			close(fileSDUpdates)
 		})
 	}
-
+	// Register and keepalive
+	if sdType != "" {
+		ctx, cancel := context.WithCancel(context.Background())
+		client, err := discovery.NewClient(ctx, logger, sdType, sdAddrs)
+		if err != nil {
+			return errors.Wrap(err, "create service discovery")
+		}
+		g.Add(func() error {
+			client.Register(cluster.RoleSource, sdAdvStoreAPIAddress)
+			<-ctx.Done()
+			return nil
+		}, func(error) {
+			cancel()
+		})
+	}
 	// Handle reload and termination interrupts.
 	reload := make(chan struct{}, 1)
 	{

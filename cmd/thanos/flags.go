@@ -17,6 +17,36 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
+func regSDFlags(cmd *kingpin.CmdClause) (
+	sdType *string,
+	sdServers *[]string,
+	sdRefreshInterval *model.Duration,
+	calculateSDAdvStoreAPIAddressFunc func(*string) (string, error),
+) {
+
+	sdType = cmd.Flag("sd.type", "Service Discovery type, currently support etcdv3/etcd/zookeeper").Default("").String()
+
+	sdServers = cmd.Flag("sd.server", "Addresses of sd servers (repeatable). ").
+		PlaceHolder("<url>").Strings()
+
+	sdRefreshInterval = modelDuration(cmd.Flag("sd.refresh-interval", "Interval between SD").
+		Default("30s"))
+
+	sdAdvertiseAddr := cmd.Flag("sd.advertise-address", "Explicit (external) ip:port address to advertise for service discovery. Used internally for membership only.").
+		String()
+
+	calculateSDAdvStoreAPIAddress := func(grpcBindAddr *string) (string, error) {
+		host, port, err := cluster.CalculateAdvertiseAddress(*grpcBindAddr, *sdAdvertiseAddr)
+		if err != nil {
+			return "", err
+		}
+		sdAdvStoreAPIAddress := net.JoinHostPort(host, strconv.Itoa(port))
+		return sdAdvStoreAPIAddress, nil
+	}
+
+	return sdType, sdServers, sdRefreshInterval, calculateSDAdvStoreAPIAddress
+}
+
 func regCommonServerFlags(cmd *kingpin.CmdClause) (
 	grpcBindAddr *string,
 	httpBindAddr *string,

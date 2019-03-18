@@ -12,6 +12,8 @@ import (
 	"path"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/discovery"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -91,6 +93,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	enablePartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified.").
 		Default("true").Bool()
 
+	sdType, sdServers, sdRefreshInterval, calculateSDAdvStoreAPIAddressFunc := regSDFlags(cmd)
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		peer, err := newPeerFn(logger, reg, true, *httpAdvertiseAddr, true)
 		if err != nil {
@@ -117,6 +121,11 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 				RefreshInterval: *fileSDInterval,
 			}
 			fileSD = file.NewDiscovery(conf, logger)
+		}
+
+		sdAdvStoreAPIAddress, err := calculateSDAdvStoreAPIAddressFunc(grpcBindAddr)
+		if err != nil {
+			return errors.Wrap(err, "calculate sd advertise-address")
 		}
 
 		return runQuery(
@@ -147,6 +156,10 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*enablePartialResponse,
 			fileSD,
 			time.Duration(*dnsSDInterval),
+			time.Duration(*sdRefreshInterval),
+			*sdServers,
+			*sdType,
+			sdAdvStoreAPIAddress,
 		)
 	}
 }
@@ -262,6 +275,10 @@ func runQuery(
 	enablePartialResponse bool,
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
+	sdRefreshInterval time.Duration,
+	sdAddrs []string,
+	sdType string,
+	sdAdvStoreAPIAddress string,
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
 	duplicatedStores := prometheus.NewCounter(prometheus.CounterOpts{
@@ -276,6 +293,7 @@ func runQuery(
 	}
 
 	fileSDCache := cache.New()
+	kvStore := cache.NewKVStore()
 	dnsProvider := dns.NewProvider(logger, extprom.NewSubsystem(reg, "query_store_api"))
 
 	var (
@@ -295,6 +313,9 @@ func runQuery(
 
 				// Add DNS resolved addresses from static flags and file SD.
 				for _, addr := range dnsProvider.Addresses() {
+					specs = append(specs, query.NewGRPCStoreSpec(addr))
+				}
+				for _, addr := range kvStore.Addresses() {
 					specs = append(specs, query.NewGRPCStoreSpec(addr))
 				}
 
@@ -379,6 +400,47 @@ func runQuery(
 		}, func(error) {
 			cancel()
 			peer.Close(5 * time.Second)
+		})
+	}
+	// Register and keepalive
+	if sdType != "" {
+		ctx, cancel := context.WithCancel(context.Background())
+		client, err := discovery.NewClient(ctx, logger, sdType, sdAddrs)
+		if err != nil {
+			return errors.Wrap(err, "create service discovery")
+		}
+		g.Add(func() error {
+			client.Register(cluster.RoleQuery, sdAdvStoreAPIAddress)
+			<-ctx.Done()
+			return nil
+		}, func(error) {
+			cancel()
+		})
+	}
+	// Periodically update the addresses from sd into KVStore
+	// TODO: refactor here, change to watch instead of periodically update
+	if sdType != "" {
+		ctx, cancel := context.WithCancel(context.Background())
+		client, err := discovery.NewClient(ctx, logger, sdType, sdAddrs)
+		if err != nil {
+			return errors.Wrap(err, "create service discovery")
+		}
+		g.Add(func() error {
+			return runutil.Repeat(sdRefreshInterval, ctx.Done(), func() error {
+				addresses, err := client.RoleState(cluster.RoleStore, cluster.RoleSource)
+				if err != nil {
+					return err
+				}
+
+				kvStore.Clear()
+				for _, address := range addresses {
+					level.Info(logger).Log("msg", "got source/store address", "address", address)
+					kvStore.Add(address)
+				}
+				return nil
+			})
+		}, func(error) {
+			cancel()
 		})
 	}
 	// Periodically update the addresses from static flags and file SD by resolving them using DNS SD if necessary.

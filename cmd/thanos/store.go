@@ -6,6 +6,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/discovery"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/cluster"
@@ -44,11 +46,19 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing blocks from object storage.").
 		Default("20").Int()
 
+	sdType, sdServers, _, calculateSDAdvStoreAPIAddressFunc := regSDFlags(cmd)
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
 		peer, err := newPeerFn(logger, reg, false, "", false)
 		if err != nil {
 			return errors.Wrap(err, "new cluster peer")
 		}
+
+		sdAdvStoreAPIAddress, err := calculateSDAdvStoreAPIAddressFunc(grpcBindAddr)
+		if err != nil {
+			return errors.Wrap(err, "calculate sd advertise-address")
+		}
+
 		return runStore(g,
 			logger,
 			reg,
@@ -67,6 +77,9 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			debugLogging,
 			*syncInterval,
 			*blockSyncConcurrency,
+			*sdServers,
+			*sdType,
+			sdAdvStoreAPIAddress,
 		)
 	}
 }
@@ -91,6 +104,9 @@ func runStore(
 	verbose bool,
 	syncInterval time.Duration,
 	blockSyncConcurrency int,
+	sdAddrs []string,
+	sdType string,
+	sdAdvStoreAPIAddress string,
 ) error {
 	{
 		confContentYaml, err := objStoreConfig.Content()
@@ -167,6 +183,22 @@ func runStore(
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
+		})
+	}
+	// Register and keepalive
+	if sdType != "" {
+		// TODO: register what address?
+		ctx, cancel := context.WithCancel(context.Background())
+		client, err := discovery.NewClient(ctx, logger, sdType, sdAddrs)
+		if err != nil {
+			return errors.Wrap(err, "create service discovery")
+		}
+		g.Add(func() error {
+			client.Register(cluster.RoleSource, sdAdvStoreAPIAddress)
+			<-ctx.Done()
+			return nil
+		}, func(error) {
+			cancel()
 		})
 	}
 	{

@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/discovery"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
@@ -53,6 +55,8 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	uploadCompacted := cmd.Flag("shipper.upload-compacted", "[Experimental] If true sidecar will try to upload compacted blocks as well. Useful for migration purposes. Works only if compaction is disabled on Prometheus.").Default("false").Hidden().Bool()
 
+	sdType, sdServers, _, calculateSDAdvStoreAPIAddressFunc := regSDFlags(cmd)
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		rl := reloader.New(
 			log.With(logger, "component", "reloader"),
@@ -65,6 +69,12 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 		if err != nil {
 			return errors.Wrap(err, "new cluster peer")
 		}
+
+		sdAdvStoreAPIAddress, err := calculateSDAdvStoreAPIAddressFunc(grpcBindAddr)
+		if err != nil {
+			return errors.Wrap(err, "calculate sd advertise-address")
+		}
+
 		return runSidecar(
 			g,
 			logger,
@@ -81,6 +91,9 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			peer,
 			rl,
 			*uploadCompacted,
+			*sdServers,
+			*sdType,
+			sdAdvStoreAPIAddress,
 		)
 	}
 }
@@ -101,6 +114,9 @@ func runSidecar(
 	peer cluster.Peer,
 	reloader *reloader.Reloader,
 	uploadCompacted bool,
+	sdAddrs []string,
+	sdType string,
+	sdAdvStoreAPIAddress string,
 ) error {
 	var m = &promMetadata{
 		promURL: promURL,
@@ -181,6 +197,22 @@ func runSidecar(
 		}, func(error) {
 			cancel()
 			peer.Close(2 * time.Second)
+		})
+	}
+	// Register and keepalive
+	if sdType != "" {
+		// TODO: register what address?
+		ctx, cancel := context.WithCancel(context.Background())
+		client, err := discovery.NewClient(ctx, logger, sdType, sdAddrs)
+		if err != nil {
+			return errors.Wrap(err, "create service discovery")
+		}
+		g.Add(func() error {
+			client.Register(cluster.RoleSource, sdAdvStoreAPIAddress)
+			<-ctx.Done()
+			return nil
+		}, func(error) {
+			cancel()
 		})
 	}
 	{
