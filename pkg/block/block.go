@@ -118,6 +118,7 @@ func Delete(ctx context.Context, bucket objstore.Bucket, id ulid.ULID) error {
 }
 
 // DownloadMeta downloads only meta file from bucket by block ID.
+// TODO(bwplotka): Differentiate between network error & partial upload.
 func DownloadMeta(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID) (metadata.Meta, error) {
 	rc, err := bkt.Get(ctx, path.Join(id.String(), MetaFilename))
 	if err != nil {
