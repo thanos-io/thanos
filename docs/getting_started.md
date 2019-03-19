@@ -30,7 +30,7 @@ The `thanos` binary should now be in your `$PATH` and is the only thing required
 
 Thanos bases on vanilla Prometheus (v2.2.1+).
 
-For exact Prometheus version list Thanos was tested against you can find [here](../Makefile#L36)
+For exact Prometheus version list Thanos was tested against you can find [here](../Makefile#L42)
 
 ## [Sidecar](components/sidecar.md)
 
