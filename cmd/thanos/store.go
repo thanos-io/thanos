@@ -46,7 +46,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing blocks from object storage.").
 		Default("20").Int()
 
-	sdType, sdServers, _, calculateSDAdvStoreAPIAddressFunc := regSDFlags(cmd)
+	sdType, sdServers, _, buildSDSecureOptions, calculateSDAdvStoreAPIAddressFunc := regSDFlags(cmd)
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
 		peer, err := newPeerFn(logger, reg, false, "", false)
@@ -58,6 +58,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 		if err != nil {
 			return errors.Wrap(err, "calculate sd advertise-address")
 		}
+		sdSecureOptions := buildSDSecureOptions()
 
 		return runStore(g,
 			logger,
@@ -80,6 +81,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			*sdServers,
 			*sdType,
 			sdAdvStoreAPIAddress,
+			sdSecureOptions,
 		)
 	}
 }
@@ -107,6 +109,7 @@ func runStore(
 	sdAddrs []string,
 	sdType string,
 	sdAdvStoreAPIAddress string,
+	sdSecureOptions map[string]string,
 ) error {
 	{
 		confContentYaml, err := objStoreConfig.Content()
@@ -189,12 +192,15 @@ func runStore(
 	if sdType != "" {
 		// TODO: register what address?
 		ctx, cancel := context.WithCancel(context.Background())
-		client, err := discovery.NewClient(ctx, logger, sdType, sdAddrs)
+		client, err := discovery.NewClient(ctx, logger, sdType, sdAddrs, sdSecureOptions)
 		if err != nil {
 			return errors.Wrap(err, "create service discovery")
 		}
 		g.Add(func() error {
-			client.Register(cluster.RoleSource, sdAdvStoreAPIAddress)
+			err := client.Register(cluster.RoleSource, sdAdvStoreAPIAddress)
+			if err != nil {
+				return errors.Wrapf(err, "register to %s", sdType)
+			}
 			<-ctx.Done()
 			return nil
 		}, func(error) {

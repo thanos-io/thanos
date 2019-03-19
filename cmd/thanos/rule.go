@@ -105,7 +105,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	dnsSDInterval := modelDuration(cmd.Flag("query.sd-dns-interval", "Interval between DNS resolutions.").
 		Default("30s"))
 
-	sdType, sdServers, _, calculateSDAdvStoreAPIAddressFunc := regSDFlags(cmd)
+	sdType, sdServers, _, buildSDSecureOptions, calculateSDAdvStoreAPIAddressFunc := regSDFlags(cmd)
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
@@ -155,6 +155,8 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			return errors.Wrap(err, "calculate sd advertise-address")
 		}
 
+		sdSecureOptions := buildSDSecureOptions()
+
 		return runRule(g,
 			logger,
 			reg,
@@ -184,6 +186,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			*sdServers,
 			*sdType,
 			sdAdvStoreAPIAddress,
+			sdSecureOptions,
 		)
 	}
 }
@@ -220,6 +223,7 @@ func runRule(
 	sdAddrs []string,
 	sdType string,
 	sdAdvStoreAPIAddress string,
+	sdSecureOptions map[string]string,
 ) error {
 	configSuccess := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_rule_config_last_reload_successful",
@@ -459,12 +463,15 @@ func runRule(
 	// Register and keepalive
 	if sdType != "" {
 		ctx, cancel := context.WithCancel(context.Background())
-		client, err := discovery.NewClient(ctx, logger, sdType, sdAddrs)
+		client, err := discovery.NewClient(ctx, logger, sdType, sdAddrs, sdSecureOptions)
 		if err != nil {
 			return errors.Wrap(err, "create service discovery")
 		}
 		g.Add(func() error {
-			client.Register(cluster.RoleSource, sdAdvStoreAPIAddress)
+			err := client.Register(cluster.RoleSource, sdAdvStoreAPIAddress)
+			if err != nil {
+				return errors.Wrapf(err, "register to %s", sdType)
+			}
 			<-ctx.Done()
 			return nil
 		}, func(error) {

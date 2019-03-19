@@ -14,14 +14,27 @@ import (
 )
 
 type EtcdV3Client struct {
-	client *etcdv3.Client
+	client etcdv3.Client
 	logger log.Logger
 }
 
-func NewEtcdV3Client(ctx context.Context, logger log.Logger, addrs []string) (*EtcdV3Client, error) {
-	// machines := []string{"http://10.99.242.255:2379"}
-
+func NewEtcdV3Client(ctx context.Context, logger log.Logger, addrs []string, sdSecureOptions map[string]string) (*EtcdV3Client, error) {
 	options := etcdv3.ClientOptions{}
+	if cert, ok := sdSecureOptions["etcd-tls-cert"]; ok {
+		options.Cert = cert
+	}
+	if key, ok := sdSecureOptions["etcd-tls-key"]; ok {
+		options.Key = key
+	}
+	if ca, ok := sdSecureOptions["etcd-tls-ca"]; ok {
+		options.CACert = ca
+	}
+	if username, ok := sdSecureOptions["etcd-username"]; ok {
+		options.Username = username
+	}
+	if password, ok := sdSecureOptions["etcd-password"]; ok {
+		options.Password = password
+	}
 
 	client, err := etcdv3.NewClient(ctx, addrs, options)
 	if err != nil {
@@ -29,19 +42,20 @@ func NewEtcdV3Client(ctx context.Context, logger log.Logger, addrs []string) (*E
 		return nil, err
 	}
 
-	return &EtcdV3Client{client: &client, logger: logger}, nil
+	return &EtcdV3Client{client: client, logger: logger}, nil
 
 }
 
 func (s *EtcdV3Client) Register(roleType cluster.Role, address string) error {
+	key := fmt.Sprintf("%s%s/%s", cluster.RootPath, roleType, address)
 	service := etcdv3.Service{
-		Key:   fmt.Sprintf("%s%s/%s", cluster.RootPath, roleType, address),
+		Key:   key,
 		Value: address,
 	}
 
-	level.Info(s.logger).Log("msg", "register", "key", fmt.Sprintf("%s%s/%s", cluster.RootPath, roleType, address))
+	level.Info(s.logger).Log("msg", "register", "key", key)
 
-	err := (*(s.client)).Register(service)
+	err := s.client.Register(service)
 	return err
 }
 
@@ -49,9 +63,7 @@ func (s *EtcdV3Client) RoleState(types ...cluster.Role) ([]string, error) {
 	addresses := []string{}
 	for _, t := range types {
 		path := fmt.Sprintf("%s%s/", cluster.RootPath, t)
-		fmt.Println(path)
-
-		data, err := (*(s.client)).GetEntries(path)
+		data, err := s.client.GetEntries(path)
 		if err != nil {
 			level.Info(s.logger).Log("msg", "client GetEntires fail", "err", err)
 			continue

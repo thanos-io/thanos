@@ -19,12 +19,12 @@ type Client interface {
 	RoleState(types ...cluster.Role) ([]string, error)
 }
 
-func NewClient(ctx context.Context, logger log.Logger, t string, addrs []string) (Client, error) {
+func NewClient(ctx context.Context, logger log.Logger, t string, addrs []string, sdSecureOptions map[string]string) (Client, error) {
 	switch t {
 	case "etcdv3":
-		return etcd.NewEtcdV3Client(ctx, logger, addrs)
+		return etcd.NewEtcdV3Client(ctx, logger, addrs, sdSecureOptions)
 	case "zookeeper", "zk":
-		return zk.NewZKClient(logger, addrs)
+		return zk.NewZKClient(logger, addrs, sdSecureOptions)
 	}
 	return nil, errors.New("sdType Not Supported")
 }

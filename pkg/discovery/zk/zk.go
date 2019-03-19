@@ -15,15 +15,13 @@ import (
 )
 
 type ZKClient struct {
-	client *zk.Client
+	client zk.Client
 	logger log.Logger
 }
 
-func NewZKClient(logger log.Logger, addrs []string) (*ZKClient, error) {
-
-	// servers := []string{"10.99.242.255:2379"}
+func NewZKClient(logger log.Logger, addrs []string, sdSecureOptions map[string]string) (*ZKClient, error) {
 	handler := zk.EventHandler(func(event zk2.Event) {
-		fmt.Println(event)
+		// fmt.Println(event)
 	})
 
 	client, err := zk.NewClient(addrs, logger, handler)
@@ -32,20 +30,21 @@ func NewZKClient(logger log.Logger, addrs []string) (*ZKClient, error) {
 		return nil, err
 	}
 
-	return &ZKClient{client: &client, logger: logger}, nil
+	return &ZKClient{client: client, logger: logger}, nil
 }
 
 func (s *ZKClient) Register(roleType cluster.Role, address string) error {
+	path := fmt.Sprintf("%s%s/", cluster.RootPath, roleType)
 	service := &zk.Service{
-		Path: fmt.Sprintf("%s%s/", cluster.RootPath, roleType),
+		Path: path,
 		Name: address,
 		Data: []byte(address),
 	}
 	// TODO: createparentNode 会导致 /thanos/query/[address]/ 空, 然后register加入了 /thanos/query/_xxxx/有值是address
 
-	level.Info(s.logger).Log("msg", "register", "key", fmt.Sprintf("%s%s/", cluster.RootPath, roleType))
+	level.Info(s.logger).Log("msg", "register", "key", path)
 
-	err := (*(s.client)).Register(service)
+	err := s.client.Register(service)
 	return err
 }
 
@@ -54,7 +53,7 @@ func (s *ZKClient) RoleState(types ...cluster.Role) ([]string, error) {
 
 	for _, t := range types {
 		path := fmt.Sprintf("%s%s", cluster.RootPath, t)
-		nodes, _, err := (*(s.client)).GetEntries(path)
+		nodes, _, err := s.client.GetEntries(path)
 		if err != nil {
 			level.Info(s.logger).Log("msg", "client GetEntires fail", "path", path, "err", err)
 			continue

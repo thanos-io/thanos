@@ -93,7 +93,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	enablePartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified.").
 		Default("true").Bool()
 
-	sdType, sdServers, sdRefreshInterval, calculateSDAdvStoreAPIAddressFunc := regSDFlags(cmd)
+	sdType, sdServers, sdRefreshInterval, buildSDSecureOptions, calculateSDAdvStoreAPIAddressFunc := regSDFlags(cmd)
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		peer, err := newPeerFn(logger, reg, true, *httpAdvertiseAddr, true)
@@ -128,6 +128,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			return errors.Wrap(err, "calculate sd advertise-address")
 		}
 
+		sdSecureOptions := buildSDSecureOptions()
+
 		return runQuery(
 			g,
 			logger,
@@ -160,6 +162,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*sdServers,
 			*sdType,
 			sdAdvStoreAPIAddress,
+			sdSecureOptions,
 		)
 	}
 }
@@ -279,6 +282,7 @@ func runQuery(
 	sdAddrs []string,
 	sdType string,
 	sdAdvStoreAPIAddress string,
+	sdSecureOptions map[string]string,
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
 	duplicatedStores := prometheus.NewCounter(prometheus.CounterOpts{
@@ -402,15 +406,20 @@ func runQuery(
 			peer.Close(5 * time.Second)
 		})
 	}
+
 	// Register and keepalive
 	if sdType != "" {
+
 		ctx, cancel := context.WithCancel(context.Background())
-		client, err := discovery.NewClient(ctx, logger, sdType, sdAddrs)
+		client, err := discovery.NewClient(ctx, logger, sdType, sdAddrs, sdSecureOptions)
 		if err != nil {
-			return errors.Wrap(err, "create service discovery")
+			return errors.Wrapf(err, "create service discovery %s", sdType)
 		}
 		g.Add(func() error {
-			client.Register(cluster.RoleQuery, sdAdvStoreAPIAddress)
+			err := client.Register(cluster.RoleQuery, sdAdvStoreAPIAddress)
+			if err != nil {
+				return errors.Wrapf(err, "register to %s", sdType)
+			}
 			<-ctx.Done()
 			return nil
 		}, func(error) {
@@ -421,7 +430,8 @@ func runQuery(
 	// TODO: refactor here, change to watch instead of periodically update
 	if sdType != "" {
 		ctx, cancel := context.WithCancel(context.Background())
-		client, err := discovery.NewClient(ctx, logger, sdType, sdAddrs)
+
+		client, err := discovery.NewClient(ctx, logger, sdType, sdAddrs, sdSecureOptions)
 		if err != nil {
 			return errors.Wrap(err, "create service discovery")
 		}
@@ -429,9 +439,8 @@ func runQuery(
 			return runutil.Repeat(sdRefreshInterval, ctx.Done(), func() error {
 				addresses, err := client.RoleState(cluster.RoleStore, cluster.RoleSource)
 				if err != nil {
-					return err
+					return errors.Wrap(err, "sd client get role state list")
 				}
-
 				kvStore.Clear()
 				for _, address := range addresses {
 					level.Info(logger).Log("msg", "got source/store address", "address", address)

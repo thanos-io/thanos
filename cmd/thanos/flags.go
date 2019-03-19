@@ -21,6 +21,7 @@ func regSDFlags(cmd *kingpin.CmdClause) (
 	sdType *string,
 	sdServers *[]string,
 	sdRefreshInterval *model.Duration,
+	buildSDSecureOptionsFunc func() map[string]string,
 	calculateSDAdvStoreAPIAddressFunc func(*string) (string, error),
 ) {
 
@@ -35,6 +36,28 @@ func regSDFlags(cmd *kingpin.CmdClause) (
 	sdAdvertiseAddr := cmd.Flag("sd.advertise-address", "Explicit (external) ip:port address to advertise for service discovery. Used internally for membership only.").
 		String()
 
+	// etcd tls
+	sdEtcdTLSSecure := cmd.Flag("sd.etcd-tls-secure", "Use TLS when talking to the etcd server").Default("false").Bool()
+	sdEtcdTLSCert := cmd.Flag("sd.etcd-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").String()
+	sdEtcdTLSKey := cmd.Flag("sd.etcd-tls-key", "TLS Key for the client's certificate").Default("").String()
+	sdEtcdTLSCaCert := cmd.Flag("sd.etcd-tls-ca", "TLS CA Certificates to use to verify etcd servers").Default("").String()
+	sdEtcdUsername := cmd.Flag("sd.etcd-username", "Etcd username").Default("").String()
+	sdEtcdPassword := cmd.Flag("sd.etcd-password", "Etcd password").Default("").String()
+
+	// TODO: add zookeeper acl options
+
+	buildSDSecureOptions := func() (sdSecureOptions map[string]string) {
+		sdSecureOptions = map[string]string{}
+		if *sdEtcdTLSSecure {
+			sdSecureOptions["etcd-tls-cert"] = *sdEtcdTLSCert
+			sdSecureOptions["etcd-tls-key"] = *sdEtcdTLSKey
+			sdSecureOptions["etcd-tls-ca"] = *sdEtcdTLSCaCert
+			sdSecureOptions["etcd-username"] = *sdEtcdUsername
+			sdSecureOptions["etcd-password"] = *sdEtcdPassword
+		}
+		return
+	}
+
 	calculateSDAdvStoreAPIAddress := func(grpcBindAddr *string) (string, error) {
 		host, port, err := cluster.CalculateAdvertiseAddress(*grpcBindAddr, *sdAdvertiseAddr)
 		if err != nil {
@@ -44,7 +67,7 @@ func regSDFlags(cmd *kingpin.CmdClause) (
 		return sdAdvStoreAPIAddress, nil
 	}
 
-	return sdType, sdServers, sdRefreshInterval, calculateSDAdvStoreAPIAddress
+	return sdType, sdServers, sdRefreshInterval, buildSDSecureOptions, calculateSDAdvStoreAPIAddress
 }
 
 func regCommonServerFlags(cmd *kingpin.CmdClause) (
