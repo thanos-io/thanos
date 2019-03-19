@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/tsdb/fileutil"
 
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
@@ -248,6 +249,20 @@ type Stats struct {
 	// Specifically we mean here chunks with minTime == block.maxTime and maxTime > block.MaxTime. These are
 	// are segregated into separate counters. These chunks are safe to be deleted, since they are duplicated across 2 blocks.
 	Issue347OutsideChunks int
+	// OutOfOrderLabels represents the number of postings that contained out
+	// of order labels, a bug present in Prometheus 2.8.0 and below.
+	OutOfOrderLabels int
+}
+
+// PrometheusIssue5372Err returns an error if statsd indicates postings with out
+// of order labels.  This is introduced by Prometheus Issue #5372 in 2.8.0 and
+// below.
+func (i Stats) PrometheusIssue5372Err() error {
+	if i.OutOfOrderLabels > 0 {
+		return errors.Errorf("index contains %d postings with out of order labels",
+			i.OutOfOrderLabels)
+	}
+	return nil
 }
 
 // Issue347OutsideChunksErr returns error if stats indicates issue347 block issue, that is repaired explicitly before compaction (on plan block).
@@ -301,6 +316,10 @@ func (i Stats) AnyErr() error {
 		errMsg = append(errMsg, err.Error())
 	}
 
+	if err := i.PrometheusIssue5372Err(); err != nil {
+		errMsg = append(errMsg, err.Error())
+	}
+
 	if len(errMsg) > 0 {
 		return errors.New(strings.Join(errMsg, ", "))
 	}
@@ -348,7 +367,12 @@ func GatherIndexIssueStats(logger log.Logger, fn string, minTime int64, maxTime 
 		l0 := lset[0]
 		for _, l := range lset[1:] {
 			if l.Name < l0.Name {
-				return stats, errors.Errorf("out-of-order label set %s for series %d", lset, id)
+				stats.OutOfOrderLabels++
+				level.Warn(logger).Log("msg",
+					"out-of-order label set: known bug in Prometheus 2.8.0 and below",
+					"label set", fmt.Sprintf("%s", lset),
+					"series", fmt.Sprintf("%d", id),
+				)
 			}
 			l0 = l
 		}

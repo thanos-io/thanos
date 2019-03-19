@@ -513,7 +513,7 @@ func (cg *Group) Resolution() int64 {
 
 // Compact plans and runs a single compaction against the group. The compacted result
 // is uploaded into the bucket the blocks were retrieved from.
-func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor) (bool, ulid.ULID, error) {
+func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor, ignoreMalformedIndex bool) (bool, ulid.ULID, error) {
 	subDir := filepath.Join(dir, cg.Key())
 
 	if err := os.RemoveAll(subDir); err != nil {
@@ -523,7 +523,7 @@ func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		return false, ulid.ULID{}, errors.Wrap(err, "create compaction group dir")
 	}
 
-	shouldRerun, compID, err := cg.compact(ctx, subDir, comp)
+	shouldRerun, compID, err := cg.compact(ctx, subDir, comp, ignoreMalformedIndex)
 	if err != nil {
 		cg.compactionFailures.Inc()
 	}
@@ -688,7 +688,7 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	return nil
 }
 
-func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (shouldRerun bool, compID ulid.ULID, err error) {
+func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor, ignoreMalformed bool) (shouldRerun bool, compID ulid.ULID, err error) {
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
 
@@ -768,6 +768,10 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 
 		if err := stats.Issue347OutsideChunksErr(); err != nil {
 			return false, ulid.ULID{}, issue347Error(errors.Wrapf(err, "invalid, but reparable block %s", pdir), meta.ULID)
+		}
+
+		if err := stats.PrometheusIssue5372Err(); !ignoreMalformed && err != nil {
+			return false, ulid.ULID{}, errors.Wrapf(err, "block id %s", id)
 		}
 	}
 	level.Debug(cg.logger).Log("msg", "downloaded and verified blocks",
@@ -886,7 +890,7 @@ func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, comp
 }
 
 // Compact runs compaction over bucket.
-func (c *BucketCompactor) Compact(ctx context.Context) error {
+func (c *BucketCompactor) Compact(ctx context.Context, IgnoreMalformedIndex bool) error {
 	// Loop over bucket and compact until there's no work left.
 	for {
 		// Clean up the compaction temporary directory at the beginning of every compaction loop.
@@ -914,7 +918,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 		}
 		finishedAllGroups := true
 		for _, g := range groups {
-			shouldRerunGroup, _, err := g.Compact(ctx, c.compactDir, c.comp)
+			shouldRerunGroup, _, err := g.Compact(ctx, c.compactDir, c.comp, IgnoreMalformedIndex)
 			if err == nil {
 				if shouldRerunGroup {
 					finishedAllGroups = false
