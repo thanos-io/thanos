@@ -346,6 +346,9 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 			return nil
 		}
 		meta.Uploaded = append(meta.Uploaded, m.ULID)
+		if err := WriteMetaFile(s.logger, s.dir, meta); err != nil {
+			level.Warn(s.logger).Log("msg", "updating meta file failed", "err", err)
+		}
 
 		uploaded++
 		s.metrics.uploads.Inc()
