@@ -48,10 +48,10 @@ config:
   encrypt_sse: false
   secret_key: ""
   put_user_metadata: {}
-  traceon: false
   http_config:
     idle_conn_timeout: 0s
     insecure_skip_verify: false
+  traceon: false
 ```
 
 AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region)
