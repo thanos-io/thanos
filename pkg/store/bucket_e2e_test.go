@@ -36,7 +36,7 @@ func (s *storeSuite) Close() {
 	s.wg.Wait()
 }
 
-func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, manyParts bool) *storeSuite {
+func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, startTime time.Time, manyParts bool) *storeSuite {
 	series := []labels.Labels{
 		labels.FromStrings("a", "1", "b", "1"),
 		labels.FromStrings("a", "1", "b", "2"),
@@ -49,8 +49,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	}
 	extLset := labels.FromStrings("ext1", "value1")
 
-	start := time.Now()
-	now := start
+	now := startTime
 
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &storeSuite{cancel: cancel}
@@ -335,7 +334,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-		s := prepareStoreWithTestBlocks(t, dir, bkt, false)
+		s := prepareStoreWithTestBlocks(t, dir, bkt, time.Now(), false)
 		defer s.Close()
 
 		testBucketStore_e2e(t, ctx, s)
@@ -364,9 +363,35 @@ func TestBucketStore_ManyParts_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-		s := prepareStoreWithTestBlocks(t, dir, bkt, true)
+		s := prepareStoreWithTestBlocks(t, dir, bkt, time.Now(), true)
 		defer s.Close()
 
 		testBucketStore_e2e(t, ctx, s)
+	})
+}
+
+func TestBucketStore_timeRanges(t *testing.T) {
+	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		dir, err := ioutil.TempDir("", "test_bucketstore_e2e")
+		testutil.Ok(t, err)
+		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+
+		startTime := time.Now()
+		s := prepareStoreWithTestBlocks(t, dir, bkt, startTime, false)
+		s.Close()
+
+		// Store is now populated, so create a new bucket store instance with a
+		// time limit and validate that it only returns the two blocks in the first time range.
+		minTimeLimit := timestamp.FromTime(startTime.Add(-time.Minute))
+		maxTimeLimit := timestamp.FromTime(startTime.Add(time.Minute))
+		store, err := NewBucketStore(log.NewLogfmtLogger(os.Stderr), nil, bkt, dir, 100, 0, false, 20, minTimeLimit, maxTimeLimit)
+		testutil.Ok(t, err)
+
+		err = store.SyncBlocks(ctx)
+		testutil.Ok(t, err)
+		testutil.Equals(t, 2, store.numBlocks())
 	})
 }
