@@ -886,7 +886,7 @@ func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, comp
 }
 
 // Compact runs compaction over bucket.
-func (c *BucketCompactor) Compact(ctx context.Context) error {
+func (c *BucketCompactor) Compact(ctx context.Context, groupCompactConcurrency int) error {
 	// Loop over bucket and compact until there's no work left.
 	for {
 		// Clean up the compaction temporary directory at the beginning of every compaction loop.
@@ -915,10 +915,18 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 		finishedAllGroups := true
 		var wg sync.WaitGroup
 		errChan := make(chan error, len(groups))
+		groupChan := make(chan struct{}, groupCompactConcurrency)
+		defer close(groupChan)
+		for i := 0; i < groupCompactConcurrency; i++ {
+			groupChan <- struct{}{}
+		}
 		for _, g := range groups {
-			wg.Add(1)
+			<-groupChan
 			go func(g *Group) {
-				defer wg.Done()
+				defer func() {
+					wg.Done()
+					groupChan <- struct{}{}
+				}()
 				shouldRerunGroup, _, err := g.Compact(ctx, c.compactDir, c.comp)
 				if err == nil {
 					if shouldRerunGroup {
