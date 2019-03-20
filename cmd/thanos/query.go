@@ -355,6 +355,7 @@ func runQuery(
 					}
 					fileSDCache.Update(update)
 					stores.Update(ctxUpdate)
+					dnsProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), storeAddrs...))
 				case <-ctxUpdate.Done():
 					return nil
 				}
