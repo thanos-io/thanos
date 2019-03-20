@@ -370,7 +370,7 @@ func GatherIndexIssueStats(logger log.Logger, fn string, minTime int64, maxTime 
 				stats.OutOfOrderLabels++
 				level.Warn(logger).Log("msg",
 					"out-of-order label set: known bug in Prometheus 2.8.0 and below",
-					"label set", fmt.Sprintf("%s", lset),
+					"labelset", fmt.Sprintf("%s", lset),
 					"series", fmt.Sprintf("%d", id),
 				)
 			}
