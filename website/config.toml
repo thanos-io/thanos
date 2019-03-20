@@ -3,8 +3,10 @@ languageCode = "en-us"
 title = "Thanos - Highly available Prometheus setup with long term storage capabilities"
 pygmentsCodeFences = true
 pygmentsUseClasses = true
+contentDir = "../docs"
 
 [params]
   SlackInvite = "https://join.slack.com/t/improbable-eng/shared_invite/enQtMzQ1ODcyMzQ5MjM4LWY5ZWZmNGM2ODc5MmViNmQ3ZTA3ZTY3NzQwOTBlMTkzZmIxZTIxODk0OWU3YjZhNWVlNDU3MDlkZGViZjhkMjc"
   GithubUser = "improbable-eng"
   GithubProject = "thanos"
+  TwitterHandle = "ThanosMetrics"

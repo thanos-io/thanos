@@ -1,11 +1,12 @@
-# High-availability for store instances
+---
+title: High-availability for store instances
+type: proposal
+menu: proposals
+status: rejected
+owner: mattbostock
+---
 
-Status: draft | in-review | **rejected** | accepted | complete
-
-Proposal author: [@mattbostock](https://github.com/mattbostock)
-Implementation owner: [@mattbostock](https://github.com/mattbostock)
-
-## Status: Rejected
+## Summary
 
 This proposal makes total sense and solves our goals when using gossip. However there exists a very easy solution
 to this problem in form of using just static entry with any loadbalancer like Kubernetes Service to load balance

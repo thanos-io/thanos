@@ -28,13 +28,19 @@
         <div class="collapse navbar-collapse" id="navbarSupportedContent">
             <ul class="navbar-nav ml-auto">
                 <li class="nav-item">
-                    <a class="nav-link" href="{{ "/docs/getting-started" | relURL }}">Documentation</a>
+                    <a class="nav-link" href="{{ "/intro/getting-started" | relURL }}">Documentation</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ "/blog" | relURL }}">Blog</a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}/releases">Download</a>
                 </li>
                 <li class="nav-item">
                     <a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}" class="nav-link"><i class="fab fa-fw fa-github"></i> GitHub</a>
+                </li>
+                <li class="nav-item">
+                    <a href="https://twitter.com/{{ .Site.Params.TwitterHandle }}" class="nav-link"><i class="fab fa-fw fa-twitter"></i> Twitter</a>
                 </li>
             </ul>
         </div>
@@ -46,7 +52,8 @@
                 <div class="col">
                     <h6 class="font-weight-bold">Thanos</h6>
                     <ul class="list-unstyled">
-                        <li><a href="{{ "/docs/getting-started" | relURL }}" class="text-reset">Documentation</a></li>
+                        <li><a href="{{ "/intro/getting-started" | relURL }}" class="text-reset">Documentation</a></li>
+                        <li><a href="{{ "/blog" | relURL }}" class="text-reset">Blog</a></li>
                         <li><a href="{{ .Site.Params.SlackInvite }}" class="text-reset">Slack</a></li>
                         <li><a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}" class="text-reset">GitHub</a></li>
                         <li><a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}/issues" class="text-reset">Issues</a></li>

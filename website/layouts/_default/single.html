@@ -1,9 +1,12 @@
 {{ define "main" }}
-<div class="container">
-    <div class="row py-5">
-        <div class="col">
-            {{ .Content }}
+    <div class="container">
+        <div class="row py-5">
+            <div class="col col-3">
+                {{ template "_default/sidemenu.html" . }}
+            </div>
+            <div class="col col-9">
+                {{ replace .Content "<table>" "<table class='table table-striped'>" | safeHTML }}
+            </div>
         </div>
     </div>
-</div>
 {{ end }}

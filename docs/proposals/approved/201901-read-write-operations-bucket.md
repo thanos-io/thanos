@@ -1,10 +1,13 @@
-# Read-Write coordination free operational contract for object storage
+---
+title: Read-Write coordination free operational contract for object storage
+type: proposal
+menu: proposals
+status: accepted
+owner: bwplotka
+---
 
-Status: draft | in-review | rejected | **accepted** | complete
+**Tickets:**
 
-Implementation Owner: [@bwplotka](https://github.com/bwplotka)
-
-Tickets: 
 * https://github.com/improbable-eng/thanos/issues/298 (eventual consistency)
 * https://github.com/improbable-eng/thanos/issues/377 (eventual consistency & partial upload)
 * https://github.com/improbable-eng/thanos/issues/564 (retention vs store gateway)
