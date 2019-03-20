@@ -105,7 +105,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	dnsSDInterval := modelDuration(cmd.Flag("query.sd-dns-interval", "Interval between DNS resolutions.").
 		Default("30s"))
 
-	sdType, sdServers, _, buildSDSecureOptions, calculateSDAdvStoreAPIAddressFunc := regSDFlags(cmd)
+	sdType, sdServers, _, buildSDSecureOptionsFunc, calculateSDAdvStoreAPIAddressFunc := regSDFlags(cmd)
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
@@ -155,7 +155,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			return errors.Wrap(err, "calculate sd advertise-address")
 		}
 
-		sdSecureOptions := buildSDSecureOptions()
+		sdSecureOptions := buildSDSecureOptionsFunc()
 
 		return runRule(g,
 			logger,

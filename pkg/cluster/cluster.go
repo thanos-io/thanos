@@ -567,3 +567,20 @@ func (n noopPeer) PeerState(id string) (PeerState, bool)                      { 
 func (n noopPeer) Join(peerType PeerType, initialMetadata PeerMetadata) error { return nil }
 func (n noopPeer) PeerStates(types ...PeerType) map[string]PeerState          { return nil }
 func (n noopPeer) Close(timeout time.Duration)                                {}
+
+const RootPath = "/thanos/"
+
+// Role describes a component's role in the cluster.
+type Role string
+
+// Constants holding valid PeerType values.
+const (
+	// RoleStore is for components that implements StoreAPI and are used for browsing historical data.
+	RoleStore = "store"
+	// RoleSource is for components that implements StoreAPI and are used for scraping data. They tend to
+	// have data accessible only for short period.
+	RoleSource = "source"
+
+	// RoleQuery is for components that implements QueryAPI and are used for querying the metrics.
+	RoleQuery = "query"
+)

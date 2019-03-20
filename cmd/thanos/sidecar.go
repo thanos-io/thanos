@@ -55,7 +55,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	uploadCompacted := cmd.Flag("shipper.upload-compacted", "[Experimental] If true sidecar will try to upload compacted blocks as well. Useful for migration purposes. Works only if compaction is disabled on Prometheus.").Default("false").Hidden().Bool()
 
-	sdType, sdServers, _, buildSDSecureOptions, calculateSDAdvStoreAPIAddressFunc := regSDFlags(cmd)
+	sdType, sdServers, _, buildSDSecureOptionsFunc, calculateSDAdvStoreAPIAddressFunc := regSDFlags(cmd)
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		rl := reloader.New(
@@ -74,7 +74,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 		if err != nil {
 			return errors.Wrap(err, "calculate sd advertise-address")
 		}
-		sdSecureOptions := buildSDSecureOptions()
+		sdSecureOptions := buildSDSecureOptionsFunc()
 
 		return runSidecar(
 			g,

@@ -93,7 +93,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	enablePartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified.").
 		Default("true").Bool()
 
-	sdType, sdServers, sdRefreshInterval, buildSDSecureOptions, calculateSDAdvStoreAPIAddressFunc := regSDFlags(cmd)
+	sdType, sdServers, sdRefreshInterval, buildSDSecureOptionsFunc, calculateSDAdvStoreAPIAddressFunc := regSDFlags(cmd)
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		peer, err := newPeerFn(logger, reg, true, *httpAdvertiseAddr, true)
@@ -128,7 +128,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			return errors.Wrap(err, "calculate sd advertise-address")
 		}
 
-		sdSecureOptions := buildSDSecureOptions()
+		sdSecureOptions := buildSDSecureOptionsFunc()
 
 		return runQuery(
 			g,
@@ -297,7 +297,7 @@ func runQuery(
 	}
 
 	fileSDCache := cache.New()
-	kvStore := cache.NewKVStore()
+	nodeSet := cache.NewSet()
 	dnsProvider := dns.NewProvider(logger, extprom.NewSubsystem(reg, "query_store_api"))
 
 	var (
@@ -319,7 +319,8 @@ func runQuery(
 				for _, addr := range dnsProvider.Addresses() {
 					specs = append(specs, query.NewGRPCStoreSpec(addr))
 				}
-				for _, addr := range kvStore.Addresses() {
+				// Add addresses provide by SD like etcdv3/zookeeper
+				for _, addr := range nodeSet.Addresses() {
 					specs = append(specs, query.NewGRPCStoreSpec(addr))
 				}
 
@@ -441,11 +442,10 @@ func runQuery(
 				if err != nil {
 					return errors.Wrap(err, "sd client get role state list")
 				}
-				kvStore.Clear()
-				for _, address := range addresses {
-					level.Info(logger).Log("msg", "got source/store address", "address", address)
-					kvStore.Add(address)
-				}
+
+				// TODO: just test it
+				nodeSet.ReplaceBy(addresses)
+
 				return nil
 			})
 		}, func(error) {

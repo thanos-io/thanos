@@ -46,7 +46,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing blocks from object storage.").
 		Default("20").Int()
 
-	sdType, sdServers, _, buildSDSecureOptions, calculateSDAdvStoreAPIAddressFunc := regSDFlags(cmd)
+	sdType, sdServers, _, buildSDSecureOptionsFunc, calculateSDAdvStoreAPIAddressFunc := regSDFlags(cmd)
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
 		peer, err := newPeerFn(logger, reg, false, "", false)
@@ -58,7 +58,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 		if err != nil {
 			return errors.Wrap(err, "calculate sd advertise-address")
 		}
-		sdSecureOptions := buildSDSecureOptions()
+		sdSecureOptions := buildSDSecureOptionsFunc()
 
 		return runStore(g,
 			logger,
