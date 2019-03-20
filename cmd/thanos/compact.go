@@ -98,6 +98,9 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing block metadata from object storage.").
 		Default("20").Int()
 
+	groupCompactConcurrency := cmd.Flag("group-compact-concurrency", "Number of goroutines to use when compacting group.").
+		Default("1").Int()
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		return runCompact(g, logger, reg,
 			*httpAddr,
@@ -116,6 +119,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			*disableDownsampling,
 			*maxCompactionLevel,
 			*blockSyncConcurrency,
+			*groupCompactConcurrency,
 		)
 	}
 }
@@ -136,6 +140,7 @@ func runCompact(
 	disableDownsampling bool,
 	maxCompactionLevel int,
 	blockSyncConcurrency int,
+	groupCompactConcurrency int,
 ) error {
 	halted := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compactor_halted",
@@ -212,7 +217,7 @@ func runCompact(
 
 	ctx, cancel := context.WithCancel(context.Background())
 	f := func() error {
-		if err := compactor.Compact(ctx); err != nil {
+		if err := compactor.Compact(ctx, groupCompactConcurrency); err != nil {
 			return errors.Wrap(err, "compaction failed")
 		}
 		level.Info(logger).Log("msg", "compaction iterations done")
