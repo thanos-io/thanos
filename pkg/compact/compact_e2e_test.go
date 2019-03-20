@@ -253,7 +253,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		comp, err := tsdb.NewLeveledCompactor(nil, log.NewLogfmtLogger(os.Stderr), []int64{1000, 3000}, nil)
 		testutil.Ok(t, err)
 
-		shouldRerun, id, err := g.Compact(ctx, dir, comp)
+		shouldRerun, id, err := g.Compact(ctx, dir, comp, false)
 		testutil.Ok(t, err)
 		testutil.Assert(t, !shouldRerun, "group should be empty, but compactor did a compaction and told us to rerun")
 
@@ -262,7 +262,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 			testutil.Ok(t, g.Add(m))
 		}
 
-		shouldRerun, id, err = g.Compact(ctx, dir, comp)
+		shouldRerun, id, err = g.Compact(ctx, dir, comp, false)
 		testutil.Ok(t, err)
 		testutil.Assert(t, shouldRerun, "there should be compactible data, but the compactor reported there was not")
 
