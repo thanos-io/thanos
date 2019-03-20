@@ -15,7 +15,7 @@ The philosophy of Thanos and our community is borrowing much from UNIX philosoph
 * Write components that work together
   * e.g. blocks should be stored in native prometheus format
 * Make it easy to read, write, and, run components
-  * e.g. reduce complexity in system design and implementation  
+  * e.g. reduce complexity in system design and implementation
 
 ## Adding New Features / Components
 
