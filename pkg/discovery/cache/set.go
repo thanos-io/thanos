@@ -4,8 +4,7 @@ import (
 	"sync"
 )
 
-// Cache is a store for target groups. It provides thread safe updates and a way for obtaining all addresses from
-// the stored target groups.
+// Cache is a store for address via SD. It provides thread safe updates and a way for obtaining all addresses
 type Set struct {
 	data map[string]bool
 	sync.Mutex
@@ -18,9 +17,6 @@ func NewSet() *Set {
 	}
 }
 
-// Update stores the targets for the given groups.
-// Note: targets for a group are replaced entirely on update. If a group with no target is given this is equivalent to
-// deleting all the targets for this group.
 func (c *Set) Add(address string) {
 	c.Lock()
 	defer c.Unlock()
