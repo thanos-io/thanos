@@ -30,7 +30,7 @@ The `thanos` binary should now be in your `$PATH` and is the only thing required
 
 Thanos bases on vanilla Prometheus (v2.2.1+).
 
-For exact Prometheus version list Thanos was tested against you can find [here](../Makefile#L36)
+For exact Prometheus version list Thanos was tested against you can find [here](../Makefile#L42)
 
 ## [Sidecar](components/sidecar.md)
 
@@ -235,7 +235,7 @@ thanos store \
     --grpc-address              0.0.0.0:19090           # GRPC endpoint for StoreAPI
 ```
 
-The store gateway occupies small amounts of disk space for caching basic information about data in the object storage. This will rarely exceed more than a few gigabytes and is used to improve restart times. It is not useful but not required to preserve it across restarts.
+The store gateway occupies small amounts of disk space for caching basic information about data in the object storage. This will rarely exceed more than a few gigabytes and is used to improve restart times. It is useful but not required to preserve it across restarts.
 
 * _[Example Kubernetes manifest](../tutorials/kubernetes-demo/manifests/thanos-store-gateway.yaml)_
 

@@ -37,7 +37,7 @@ type Client interface {
 // ProxyStore implements the store API that proxies request to all given underlying stores.
 type ProxyStore struct {
 	logger         log.Logger
-	stores         func(context.Context) ([]Client, error)
+	stores         func() []Client
 	component      component.StoreAPI
 	selectorLabels labels.Labels
 }
@@ -46,7 +46,7 @@ type ProxyStore struct {
 // Note that there is no deduplication support. Deduplication should be done on the highest level (just before PromQL)
 func NewProxyStore(
 	logger log.Logger,
-	stores func(context.Context) ([]Client, error),
+	stores func() []Client,
 	component component.StoreAPI,
 	selectorLabels labels.Labels,
 ) *ProxyStore {
@@ -109,13 +109,6 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		return nil
 	}
 
-	stores, err := s.stores(srv.Context())
-	if err != nil {
-		err = errors.Wrap(err, "failed to get store APIs")
-		level.Error(s.logger).Log("err", err)
-		return status.Errorf(codes.Unknown, err.Error())
-	}
-
 	var (
 		g, gctx = errgroup.WithContext(srv.Context())
 
@@ -144,7 +137,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			closeFn()
 		}()
 
-		for _, st := range stores {
+		for _, st := range s.stores() {
 			// We might be able to skip the store if its meta information indicates
 			// it cannot have series matching our query.
 			// NOTE: all matchers are validated in labelsMatches method so we explicitly ignore error.
@@ -337,11 +330,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		g, gctx  = errgroup.WithContext(ctx)
 	)
 
-	stores, err := s.stores(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Unknown, err.Error())
-	}
-	for _, st := range stores {
+	for _, st := range s.stores() {
 		store := st
 		g.Go(func() error {
 			resp, err := store.LabelValues(gctx, &storepb.LabelValuesRequest{

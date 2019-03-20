@@ -12,7 +12,7 @@ Current object storage client implementations:
 |----------------------|-------------------|-----------|---------------|
 | Google Cloud Storage | Stable  (production usage)             | yes       | @bwplotka   |
 | AWS S3               | Stable  (production usage)               | yes        | @bwplotka          |
-| Azure Storage Account | Alpha   | yes       | @vglafirov   |
+| Azure Storage Account | Stable  (production usage) | yes       | @vglafirov   |
 | OpenStack Swift      | Beta  (working PoCs, testing usage)               | no        | @sudhi-vm   |
 | Tencent COS          | Beta  (testing usage)                   | no        | @jojohappy          |
 

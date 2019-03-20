@@ -42,23 +42,6 @@ func (c *testClient) String() string {
 	return "test"
 }
 
-func TestProxyStore_Series_StoresFetchFail(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
-	q := NewProxyStore(nil,
-		func(_ context.Context) ([]Client, error) { return nil, errors.New("Fail") },
-		component.Query,
-		nil,
-	)
-
-	s := newStoreSeriesServer(context.Background())
-	testutil.NotOk(t, q.Series(&storepb.SeriesRequest{
-		MinTime:  1,
-		MaxTime:  300,
-		Matchers: []storepb.LabelMatcher{{Name: "a", Value: "a", Type: storepb.LabelMatcher_EQ}},
-	}, s))
-}
-
 func TestProxyStore_Info(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
@@ -66,7 +49,7 @@ func TestProxyStore_Info(t *testing.T) {
 	defer cancel()
 
 	q := NewProxyStore(nil,
-		func(context.Context) ([]Client, error) { return nil, nil },
+		func() []Client { return nil },
 		component.Query,
 		nil,
 	)
@@ -419,7 +402,7 @@ func TestProxyStore_Series(t *testing.T) {
 	} {
 		if ok := t.Run(tc.title, func(t *testing.T) {
 			q := NewProxyStore(nil,
-				func(_ context.Context) ([]Client, error) { return tc.storeAPIs, nil }, // what if err?
+				func() []Client { return tc.storeAPIs },
 				component.Query,
 				tc.selectorLabels,
 			)
@@ -460,7 +443,7 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 		},
 	}
 	q := NewProxyStore(nil,
-		func(context.Context) ([]Client, error) { return cls, nil },
+		func() []Client { return cls },
 		component.Query,
 		nil,
 	)
@@ -518,7 +501,7 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 	}
 
 	q := NewProxyStore(nil,
-		func(context.Context) ([]Client, error) { return cls, nil },
+		func() []Client { return cls },
 		component.Query,
 		tlabels.FromStrings("fed", "a"),
 	)
@@ -555,7 +538,7 @@ func TestProxyStore_LabelValues(t *testing.T) {
 		}},
 	}
 	q := NewProxyStore(nil,
-		func(context.Context) ([]Client, error) { return cls, nil },
+		func() []Client { return cls },
 		component.Query,
 		nil,
 	)
