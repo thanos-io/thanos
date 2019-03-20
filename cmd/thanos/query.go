@@ -427,7 +427,7 @@ func runQuery(
 			cancel()
 		})
 	}
-	// Periodically update the addresses from sd into KVStore
+	// Periodically update the addresses from sd server into nodeSet
 	// TODO: refactor here, change to watch instead of periodically update
 	if sdType != "" {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -440,12 +440,9 @@ func runQuery(
 			return runutil.Repeat(sdRefreshInterval, ctx.Done(), func() error {
 				addresses, err := client.RoleState(cluster.RoleStore, cluster.RoleSource)
 				if err != nil {
-					return errors.Wrap(err, "sd client get role state list")
+					return errors.Wrapf(err, "%s client get role state list", sdType)
 				}
-
-				// TODO: just test it
 				nodeSet.ReplaceBy(addresses)
-
 				return nil
 			})
 		}, func(error) {

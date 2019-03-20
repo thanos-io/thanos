@@ -204,7 +204,6 @@ func runSidecar(
 	}
 	// Register and keepalive
 	if sdType != "" {
-		// TODO: register what address?
 		ctx, cancel := context.WithCancel(context.Background())
 		client, err := discovery.NewClient(ctx, logger, sdType, sdAddrs, sdSecureOptions)
 		if err != nil {
