@@ -44,7 +44,11 @@ type Config struct {
 	SecretKey       string            `yaml:"secret_key"`
 	PutUserMetadata map[string]string `yaml:"put_user_metadata"`
 	HTTPConfig      HTTPConfig        `yaml:"http_config"`
-	TraceOn         bool              `yaml:"traceon"`
+	TraceConfig     TraceConfig       `yaml:"trace"`
+}
+
+type TraceConfig struct {
+	Enable bool `yaml:"enable"`
 }
 
 // HTTPConfig stores the http.Transport configuration for the s3 minio client.
@@ -153,7 +157,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		sse = encrypt.NewSSE()
 	}
 
-	if config.TraceOn {
+	if config.TraceConfig.Enable {
 		logWriter := log.NewStdlibAdapter(level.Debug(logger), log.MessageKey("s3TraceMsg"))
 		client.TraceOn(logWriter)
 	}
