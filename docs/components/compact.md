@@ -70,5 +70,7 @@ Flags:
       --block-sync-concurrency=20
                            Number of goroutines to use when syncing block
                            metadata from object storage.
+      --group-compact-concurrency=1  
+                           Number of goroutines to use when compacting group.
 
 ```
