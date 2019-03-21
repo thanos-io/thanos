@@ -820,7 +820,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor, i
 	}
 
 	// Ensure the output block is valid.
-	if err := block.VerifyIndex(cg.logger, filepath.Join(bdir, block.IndexFilename), newMeta.MinTime, newMeta.MaxTime); err != nil {
+	if err := block.VerifyIndex(cg.logger, filepath.Join(bdir, block.IndexFilename), newMeta.MinTime, newMeta.MaxTime); !ignoreMalformed && err != nil {
 		return false, ulid.ULID{}, halt(errors.Wrapf(err, "invalid result block %s", bdir))
 	}
 
