@@ -1,8 +1,8 @@
 # Getting started
 
-Thanos provides a global query view, data backup, and historical data access as its core features in a single binary. All three features can be run independently of each other. This allows you to have a subset of Thanos features ready for immediate benefit or testing, while also making it flexible for gradual roll outs in more complex environments. 
+Thanos provides a global query view, data backup, and historical data access as its core features in a single binary. All three features can be run independently of each other. This allows you to have a subset of Thanos features ready for immediate benefit or testing, while also making it flexible for gradual roll outs in more complex environments.
 
-In this quick-start guide, we will configure Thanos and all components mentioned to work against a Google Cloud Storage bucket. 
+In this quick-start guide, we will configure Thanos and all components mentioned to work against a Google Cloud Storage bucket.
 At the moment, Thanos is able to use [different storage providers](storage.md), with the ability to add more providers as necessary.
 
 ## Requirements
@@ -34,13 +34,13 @@ For exact Prometheus version list Thanos was tested against you can find [here](
 
 ## [Sidecar](components/sidecar.md)
 
-Thanos integrates with existing Prometheus servers through a [Sidecar process](https://docs.microsoft.com/en-us/azure/architecture/patterns/sidecar#solution), which runs on the same machine or in the same pod as the Prometheus server. 
+Thanos integrates with existing Prometheus servers through a [Sidecar process](https://docs.microsoft.com/en-us/azure/architecture/patterns/sidecar#solution), which runs on the same machine or in the same pod as the Prometheus server.
 
-The purpose of the Sidecar is to backup Prometheus data into an Object Storage bucket, and giving other Thanos components access to the Prometheus instance the Sidecar is attached to. 
+The purpose of the Sidecar is to backup Prometheus data into an Object Storage bucket, and giving other Thanos components access to the Prometheus instance the Sidecar is attached to.
 
 [More details about the Sidecar's functions are available at the sidecar documentation page](components/sidecar.md).
 
-NOTE: If you want to use `reload.*` flags for sidecar, make sure you enable `reload` Prometheus endpoint with flag `--web.enable-lifecycle` 
+NOTE: If you want to use `reload.*` flags for sidecar, make sure you enable `reload` Prometheus endpoint with flag `--web.enable-lifecycle`
 
 ### Backups
 
@@ -104,7 +104,7 @@ The Query component is stateless and horizontally scalable and can be deployed w
 
 Query also implements Prometheus's offical HTTP API and can thus be used with external tools such as Grafana. It also serves a derivative of Prometheus's UI for ad-hoc querying.
 
-Below, we will set up a Query to connect to our Sidecars, and expose its HTTP UI. 
+Below, we will set up a Query to connect to our Sidecars, and expose its HTTP UI.
 
 ```
 thanos query \
@@ -147,9 +147,9 @@ Go to the configured HTTP address, and you should now be able to query across al
 ## Communication Between Components
 
 The only required communication between nodes is for Thanos Querier to be able to reach gRPC storeAPIs you provide. Thanos Querier periodically calls Info endpoint to collect up-to-date metadata as well as checking the health of given StoreAPI.
-The metadata includes the information about time windows and external labels for each node. 
+The metadata includes the information about time windows and external labels for each node.
 
-There are various ways to tell query component about the StoreAPIs it should query data from. The simplest way is to use a static list of well known addresses to query. 
+There are various ways to tell query component about the StoreAPIs it should query data from. The simplest way is to use a static list of well known addresses to query.
 These are repeatable so can add as many endpoint as needed. You can put DNS domain prefixed by `dns://` or `dns+srv://` to have Thanos Query do an `A` or `SRV` lookup to get all required IPs to communicate with.
 
 ```
@@ -158,7 +158,7 @@ thanos query \
     --grpc-address              0.0.0.0:19092 \                     # gRPC endpoint for Store API
     --store                     1.2.3.4:19090 \                     # Static gRPC Store API Address for the query node to query
     --store                     1.2.3.5:19090 \                     # Also repeatable
-    --store                     dns://rest.thanos.peers:19092       # Use DNS lookup for getting all registered IPs as separate StoreAPIs    
+    --store                     dns://rest.thanos.peers:19092       # Use DNS lookup for getting all registered IPs as separate StoreAPIs
 ```
 
 Read more details [here](/docs/service_discovery.md)
@@ -208,7 +208,7 @@ thanos query \
     --cluster.peers             127.0.0.1:19392 \                   # Another cluster peer (many can be added to discover nodes)
     --store                     1.2.3.4:19090 \                     # Static gRPC Store API Address for the query node to query
     --store                     1.2.3.5:19090 \                     # Also repeatable
-    --store                     dns://rest.thanos.peers:19092       # Use DNS lookup for getting all registered IPs as separate StoreAPIs    
+    --store                     dns://rest.thanos.peers:19092       # Use DNS lookup for getting all registered IPs as separate StoreAPIs
 ```
 
 When to use gossip vs store flags?

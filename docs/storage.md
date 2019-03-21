@@ -4,7 +4,7 @@ Thanos supports any object stores that can be implemented against Thanos [objsto
 
 All clients are configured using `--objstore.config-file` to reference to the configuration file or `--objstore.config` to put yaml config directly.
 
-## Implementations 
+## Implementations
 
 Current object storage client implementations:
 
@@ -71,7 +71,7 @@ By default Thanos will try to retrieve credentials from the following sources:
 1. From `~/.aws/credentials`
 1. IAM credentials retrieved from an instance profile.
 
-NOTE: Getting access key from config file and secret key from other method (and vice versa) is not supported. 
+NOTE: Getting access key from config file and secret key from other method (and vice versa) is not supported.
 
 ### AWS Policies
 
@@ -198,7 +198,7 @@ config:
 ### OpenStack Swift Configuration
 Thanos uses [gophercloud](http://gophercloud.io/) client to upload Prometheus data into [OpenStack Swift](https://docs.openstack.org/swift/latest/).
 
-Below is an example configuration file for thanos to use OpenStack swift container as an object store. 
+Below is an example configuration file for thanos to use OpenStack swift container as an object store.
 
 [embedmd]:# (flags/config_swift.txt yaml)
 ```yaml
