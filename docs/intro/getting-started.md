@@ -10,7 +10,7 @@ weight: 1
 Thanos provides a global query view, data backup, and historical data access as its core features in a single binary. All three features can be run independently of each other. This allows you to have a subset of Thanos features ready for immediate benefit or testing, while also making it flexible for gradual roll outs in more complex environments. 
 
 In this quick-start guide, we will configure Thanos and all components mentioned to work against a Google Cloud Storage bucket. 
-At the moment, Thanos is able to use [different storage providers](storage.md), with the ability to add more providers as necessary.
+At the moment, Thanos is able to use [different storage providers](/thanos/intro/storage), with the ability to add more providers as necessary.
 
 ## Architecture Overview
 

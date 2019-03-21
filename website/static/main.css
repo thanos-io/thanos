@@ -30,3 +30,9 @@ a {
 pre {
     padding: 1rem;
 }
+
+.list-group-item-thanos {
+    color: #6D41FF;
+    border: 0;
+    background-color: transparent;
+}
