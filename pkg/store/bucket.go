@@ -1042,7 +1042,9 @@ func newBucketBlock(
 	// containing the blocks within the start and end times.  If the MinTime is
 	// outside our time range, then clean up downloaded files and return early.
 	if b.meta.MinTime < minTime || b.meta.MinTime > maxTime {
-		os.RemoveAll(dir)
+		if err = os.RemoveAll(dir); err != nil {
+			return nil, err
+		}
 		return nil, nil
 	}
 
