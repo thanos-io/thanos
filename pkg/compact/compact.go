@@ -922,6 +922,7 @@ func (c *BucketCompactor) Compact(ctx context.Context, groupCompactConcurrency i
 		}
 		for _, g := range groups {
 			<-groupChan
+			wg.Add(1)
 			go func(g *Group) {
 				defer func() {
 					wg.Done()
