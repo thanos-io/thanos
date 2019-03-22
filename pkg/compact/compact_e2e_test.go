@@ -62,13 +62,13 @@ func TestSyncer_SyncMetas_e2e(t *testing.T) {
 			testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), metadata.MetaFilename), &buf))
 		}
 
-		groups, err := sy.Groups()
+		groups, err := sy.Groups(false)
 		testutil.Ok(t, err)
 		testutil.Equals(t, ids[:10], groups[0].IDs())
 
 		testutil.Ok(t, sy.SyncMetas(ctx))
 
-		groups, err = sy.Groups()
+		groups, err = sy.Groups(false)
 		testutil.Ok(t, err)
 		testutil.Equals(t, ids[5:], groups[0].IDs())
 	})
@@ -157,7 +157,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		testutil.Ok(t, sy.SyncMetas(ctx))
 
 		// Only the level 3 block, the last source block in both resolutions should be left.
-		groups, err := sy.Groups()
+		groups, err := sy.Groups(false)
 		testutil.Ok(t, err)
 
 		testutil.Equals(t, "0@{}", groups[0].Key())
@@ -244,6 +244,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 			bkt,
 			extLset,
 			124,
+			false,
 			metrics.compactions.WithLabelValues(""),
 			metrics.compactionFailures.WithLabelValues(""),
 			metrics.garbageCollectedBlocks,
@@ -253,7 +254,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		comp, err := tsdb.NewLeveledCompactor(nil, log.NewLogfmtLogger(os.Stderr), []int64{1000, 3000}, nil)
 		testutil.Ok(t, err)
 
-		shouldRerun, id, err := g.Compact(ctx, dir, comp, false)
+		shouldRerun, id, err := g.Compact(ctx, dir, comp)
 		testutil.Ok(t, err)
 		testutil.Assert(t, !shouldRerun, "group should be empty, but compactor did a compaction and told us to rerun")
 
@@ -262,7 +263,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 			testutil.Ok(t, g.Add(m))
 		}
 
-		shouldRerun, id, err = g.Compact(ctx, dir, comp, false)
+		shouldRerun, id, err = g.Compact(ctx, dir, comp)
 		testutil.Ok(t, err)
 		testutil.Assert(t, shouldRerun, "there should be compactible data, but the compactor reported there was not")
 
