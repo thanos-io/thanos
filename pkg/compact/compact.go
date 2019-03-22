@@ -278,7 +278,7 @@ func groupKey(res int64, lbls labels.Labels) string {
 
 // Groups returns the compaction groups for all blocks currently known to the syncer.
 // It creates all groups from the scratch on every call.
-func (c *Syncer) Groups() (res []*Group, err error) {
+func (c *Syncer) Groups(acceptMalformedIndex bool) (res []*Group, err error) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
@@ -291,6 +291,7 @@ func (c *Syncer) Groups() (res []*Group, err error) {
 				c.bkt,
 				labels.FromMap(m.Thanos.Labels),
 				m.Thanos.Downsample.Resolution,
+				acceptMalformedIndex,
 				c.metrics.compactions.WithLabelValues(GroupKey(*m)),
 				c.metrics.compactionFailures.WithLabelValues(GroupKey(*m)),
 				c.metrics.garbageCollectedBlocks,
@@ -436,6 +437,7 @@ type Group struct {
 	resolution                  int64
 	mtx                         sync.Mutex
 	blocks                      map[ulid.ULID]*metadata.Meta
+	acceptMalformedIndex        bool
 	compactions                 prometheus.Counter
 	compactionFailures          prometheus.Counter
 	groupGarbageCollectedBlocks prometheus.Counter
@@ -447,6 +449,7 @@ func newGroup(
 	bkt objstore.Bucket,
 	lset labels.Labels,
 	resolution int64,
+	acceptMalformedIndex bool,
 	compactions prometheus.Counter,
 	compactionFailures prometheus.Counter,
 	groupGarbageCollectedBlocks prometheus.Counter,
@@ -460,6 +463,7 @@ func newGroup(
 		labels:                      lset,
 		resolution:                  resolution,
 		blocks:                      map[ulid.ULID]*metadata.Meta{},
+		acceptMalformedIndex:        acceptMalformedIndex,
 		compactions:                 compactions,
 		compactionFailures:          compactionFailures,
 		groupGarbageCollectedBlocks: groupGarbageCollectedBlocks,
@@ -513,7 +517,7 @@ func (cg *Group) Resolution() int64 {
 
 // Compact plans and runs a single compaction against the group. The compacted result
 // is uploaded into the bucket the blocks were retrieved from.
-func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor, ignoreMalformedIndex bool) (bool, ulid.ULID, error) {
+func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor) (bool, ulid.ULID, error) {
 	subDir := filepath.Join(dir, cg.Key())
 
 	if err := os.RemoveAll(subDir); err != nil {
@@ -523,7 +527,7 @@ func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor, i
 		return false, ulid.ULID{}, errors.Wrap(err, "create compaction group dir")
 	}
 
-	shouldRerun, compID, err := cg.compact(ctx, subDir, comp, ignoreMalformedIndex)
+	shouldRerun, compID, err := cg.compact(ctx, subDir, comp)
 	if err != nil {
 		cg.compactionFailures.Inc()
 	}
@@ -688,7 +692,7 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	return nil
 }
 
-func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor, ignoreMalformed bool) (shouldRerun bool, compID ulid.ULID, err error) {
+func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (shouldRerun bool, compID ulid.ULID, err error) {
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
 
@@ -770,7 +774,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor, i
 			return false, ulid.ULID{}, issue347Error(errors.Wrapf(err, "invalid, but reparable block %s", pdir), meta.ULID)
 		}
 
-		if err := stats.PrometheusIssue5372Err(); !ignoreMalformed && err != nil {
+		if err := stats.PrometheusIssue5372Err(); !cg.acceptMalformedIndex && err != nil {
 			return false, ulid.ULID{}, errors.Wrapf(err, "block id %s", id)
 		}
 	}
@@ -820,7 +824,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor, i
 	}
 
 	// Ensure the output block is valid.
-	if err := block.VerifyIndex(cg.logger, filepath.Join(bdir, block.IndexFilename), newMeta.MinTime, newMeta.MaxTime); !ignoreMalformed && err != nil {
+	if err := block.VerifyIndex(cg.logger, filepath.Join(bdir, block.IndexFilename), newMeta.MinTime, newMeta.MaxTime); !cg.acceptMalformedIndex && err != nil {
 		return false, ulid.ULID{}, halt(errors.Wrapf(err, "invalid result block %s", bdir))
 	}
 
@@ -871,26 +875,28 @@ func (cg *Group) deleteBlock(b string) error {
 
 // BucketCompactor compacts blocks in a bucket.
 type BucketCompactor struct {
-	logger     log.Logger
-	sy         *Syncer
-	comp       tsdb.Compactor
-	compactDir string
-	bkt        objstore.Bucket
+	logger               log.Logger
+	sy                   *Syncer
+	comp                 tsdb.Compactor
+	compactDir           string
+	bkt                  objstore.Bucket
+	acceptMalformedIndex bool
 }
 
 // NewBucketCompactor creates a new bucket compactor.
-func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, compactDir string, bkt objstore.Bucket) *BucketCompactor {
+func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, compactDir string, bkt objstore.Bucket, acceptMalformedIndex bool) *BucketCompactor {
 	return &BucketCompactor{
-		logger:     logger,
-		sy:         sy,
-		comp:       comp,
-		compactDir: compactDir,
-		bkt:        bkt,
+		logger:               logger,
+		sy:                   sy,
+		comp:                 comp,
+		compactDir:           compactDir,
+		bkt:                  bkt,
+		acceptMalformedIndex: acceptMalformedIndex,
 	}
 }
 
 // Compact runs compaction over bucket.
-func (c *BucketCompactor) Compact(ctx context.Context, IgnoreMalformedIndex bool) error {
+func (c *BucketCompactor) Compact(ctx context.Context) error {
 	// Loop over bucket and compact until there's no work left.
 	for {
 		// Clean up the compaction temporary directory at the beginning of every compaction loop.
@@ -912,13 +918,13 @@ func (c *BucketCompactor) Compact(ctx context.Context, IgnoreMalformedIndex bool
 
 		level.Info(c.logger).Log("msg", "start of compaction")
 
-		groups, err := c.sy.Groups()
+		groups, err := c.sy.Groups(c.acceptMalformedIndex)
 		if err != nil {
 			return errors.Wrap(err, "build compaction groups")
 		}
 		finishedAllGroups := true
 		for _, g := range groups {
-			shouldRerunGroup, _, err := g.Compact(ctx, c.compactDir, c.comp, IgnoreMalformedIndex)
+			shouldRerunGroup, _, err := g.Compact(ctx, c.compactDir, c.comp)
 			if err == nil {
 				if shouldRerunGroup {
 					finishedAllGroups = false

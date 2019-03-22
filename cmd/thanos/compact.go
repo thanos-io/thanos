@@ -66,7 +66,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	haltOnError := cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
 		Hidden().Default("true").Bool()
-	acceptMalformed := cmd.Flag("debug.accept-malformed-index",
+	acceptMalformedIndex := cmd.Flag("debug.accept-malformed-index",
 		"Compaction index verification will ignore out of order label names.").
 		Hidden().Default("false").Bool()
 
@@ -105,7 +105,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			objStoreConfig,
 			time.Duration(*syncDelay),
 			*haltOnError,
-			*acceptMalformed,
+			*acceptMalformedIndex,
 			*wait,
 			map[compact.ResolutionLevel]time.Duration{
 				compact.ResolutionLevelRaw: time.Duration(*retentionRaw),
@@ -129,7 +129,7 @@ func runCompact(
 	objStoreConfig *pathOrContent,
 	syncDelay time.Duration,
 	haltOnError bool,
-	acceptMalformed bool,
+	acceptMalformedIndex bool,
 	wait bool,
 	retentionByResolution map[compact.ResolutionLevel]time.Duration,
 	component string,
@@ -197,7 +197,8 @@ func runCompact(
 		return errors.Wrap(err, "clean working downsample directory")
 	}
 
-	compactor := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt)
+	compactor := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt,
+		acceptMalformedIndex)
 
 	if retentionByResolution[compact.ResolutionLevelRaw].Seconds() != 0 {
 		level.Info(logger).Log("msg", "retention policy of raw samples is enabled", "duration", retentionByResolution[compact.ResolutionLevelRaw])
@@ -211,7 +212,7 @@ func runCompact(
 
 	ctx, cancel := context.WithCancel(context.Background())
 	f := func() error {
-		if err := compactor.Compact(ctx, acceptMalformed); err != nil {
+		if err := compactor.Compact(ctx); err != nil {
 			return errors.Wrap(err, "compaction failed")
 		}
 		level.Info(logger).Log("msg", "compaction iterations done")
