@@ -616,6 +616,10 @@ func rewrite(
 		if err := indexr.Series(id, &lset, &chks); err != nil {
 			return err
 		}
+		// Make sure labels are in sorted order
+		sort.Slice(lset, func(i, j int) bool {
+			return lset[i].Name < lset[j].Name
+		})
 		for i, c := range chks {
 			chks[i].Chunk, err = chunkr.Chunk(c.Ref)
 			if err != nil {
