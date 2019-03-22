@@ -47,17 +47,32 @@
     </nav>
     {{ block "main" . }}{{ end }}
     <footer class="bg-dark text-light">
-        <div class="container">
+        <div class="container text-center text-md-left">
             <div class="row py-5">
-                <div class="col">
-                    <h6 class="font-weight-bold">Thanos</h6>
+                <div class="col-12 col-md-6 col-lg mb-3 mb-lg-0">
+                    <img src="{{ "icon-dark.png" | relURL }}" alt="Thanos" width="45%">
+                </div>
+                <div class="col-12 col-md-6 col-lg">
+                    <h6 class="font-weight-bold">Documentation</h6>
                     <ul class="list-unstyled">
-                        <li><a href="{{ "/intro/getting-started" | relURL }}" class="text-reset">Documentation</a></li>
-                        <li><a href="{{ "/blog" | relURL }}" class="text-reset">Blog</a></li>
-                        <li><a href="{{ .Site.Params.SlackInvite }}" class="text-reset">Slack</a></li>
-                        <li><a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}" class="text-reset">GitHub</a></li>
-                        <li><a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}/issues" class="text-reset">Issues</a></li>
+                        <li><a class="text-reset" href="{{ "/intro/getting-started/" | relURL }}">Getting Started</a></li>
+                        <li><a class="text-reset" href="{{ "/intro/design/" | relURL }}">Design</a></li>
+                        <li><a class="text-reset" href="{{ "/intro/storage/" | relURL }}">Storage</a></li>
+                        <li><a class="text-reset" href="{{ "/help/common-issues/" | relURL }}">Help</a></li>
                     </ul>
+                </div>
+                <div class="col-12 col-md-6 col-lg">
+                    <h6 class="font-weight-bold">Community</h6>
+                    <ul class="list-unstyled">
+                        <li><a href="{{ "/blog" | relURL }}" class="text-reset"><i class="fa fa-fw fa-newspaper"></i> Blog</a></li>
+                        <li><a href="{{ .Site.Params.SlackInvite }}" class="text-reset"><i class="fab fa-fw fa-slack"></i> Slack</a></li>
+                        <li><a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}" class="text-reset"><i class="fab fa-fw fa-github"></i> GitHub</a></li>
+                        <li><a href="https://twitter.com/{{ .Site.Params.TwitterHandle }}" class="text-reset"><i class="fab fa-fw fa-twitter"></i> Twitter</a></li>
+                    </ul>
+                </div>
+                <div class="col col-md-6 col-lg">
+                    <h6 class="font-weight-bold">About</h6>
+                    <p>Thanos is an OSS licensed project as Apache License 2.0</p>
                 </div>
             </div>
         </div>

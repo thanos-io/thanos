@@ -12,6 +12,10 @@
     max-width: 100%;
 }
 
+.navbar-dark .navbar-nav .nav-link:hover {
+    color: #ffffff;
+}
+
 .btn-outline-secondary {
     color: #6D41FF;
     border-color: #6D41FF;
@@ -35,4 +39,8 @@ pre {
     color: #6D41FF;
     border: 0;
     background-color: transparent;
+}
+
+.list-group-item-thanos:hover {
+    color: #6D41FF;
 }

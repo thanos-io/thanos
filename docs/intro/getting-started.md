@@ -14,7 +14,7 @@ At the moment, Thanos is able to use [different storage providers](/thanos/intro
 
 ## Architecture Overview
 
-![architecture_overview](../img/arch.jpg)
+<img src="../img/arch.jpg" class="img-fluid" alt="architecture overview" />
 
 ## Requirements
 

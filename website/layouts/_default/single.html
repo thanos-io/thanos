@@ -1,10 +1,10 @@
 {{ define "main" }}
     <div class="container">
-        <div class="row py-5">
-            <div class="col col-3">
+        <div class="row py-3 py-lg-5">
+            <div class="col-12 col-lg-3">
                 {{ template "_default/sidemenu.html" . }}
             </div>
-            <div class="col col-9">
+            <div class="col-12 col-lg-9">
                 {{ replace .Content "<table>" "<table class='table table-striped'>" | safeHTML }}
             </div>
         </div>
