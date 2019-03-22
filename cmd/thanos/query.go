@@ -20,6 +20,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/discovery/cache"
 	"github.com/improbable-eng/thanos/pkg/discovery/dns"
 	"github.com/improbable-eng/thanos/pkg/extprom"
+	"github.com/improbable-eng/thanos/pkg/prober"
 	"github.com/improbable-eng/thanos/pkg/query"
 	v1 "github.com/improbable-eng/thanos/pkg/query/api"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -290,6 +291,8 @@ func runQuery(
 		dns.ResolverType(dnsSDResolver),
 	)
 
+	readinessProber := prober.NewProber(component.Query, logger)
+
 	var (
 		stores = query.NewStoreSet(
 			logger,
@@ -320,6 +323,7 @@ func runQuery(
 			},
 		)
 	)
+
 	// Periodically update the store set with the addresses we see in our cluster.
 	{
 		ctx, cancel := context.WithCancel(context.Background())
@@ -380,6 +384,7 @@ func runQuery(
 			cancel()
 		})
 	}
+
 	// Start query API + UI HTTP server.
 	{
 		router := route.New()
@@ -403,12 +408,7 @@ func runQuery(
 
 		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger)
 
-		router.Get("/-/healthy", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			if _, err := fmt.Fprintf(w, "Thanos Querier is Healthy.\n"); err != nil {
-				level.Error(logger).Log("msg", "Could not write health check response.")
-			}
-		})
+		readinessProber.RegisterInRouter(router)
 
 		mux := http.NewServeMux()
 		registerMetrics(mux, reg)
@@ -422,11 +422,14 @@ func runQuery(
 
 		g.Add(func() error {
 			level.Info(logger).Log("msg", "Listening for query and metrics", "address", httpBindAddr)
+			readinessProber.SetHealthy()
 			return errors.Wrap(http.Serve(l, mux), "serve query")
-		}, func(error) {
+		}, func(err error) {
+			readinessProber.SetNotHealthy(err)
 			runutil.CloseWithLogOnErr(logger, l, "query and metric listener")
 		})
 	}
+
 	// Start query (proxy) gRPC StoreAPI.
 	{
 		l, err := net.Listen("tcp", grpcBindAddr)
@@ -445,8 +448,10 @@ func runQuery(
 
 		g.Add(func() error {
 			level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)
+			readinessProber.SetReady()
 			return errors.Wrap(s.Serve(l), "serve gRPC")
-		}, func(error) {
+		}, func(err error) {
+			readinessProber.SetNotReady(err)
 			s.Stop()
 			runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
 		})

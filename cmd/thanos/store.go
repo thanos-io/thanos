@@ -7,7 +7,9 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
+	"github.com/improbable-eng/thanos/pkg/prober"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
 	storecache "github.com/improbable-eng/thanos/pkg/store/cache"
@@ -65,7 +67,6 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			uint64(*chunkPoolSize),
 			uint64(*maxSampleCount),
 			int(*maxConcurrent),
-			name,
 			debugLogging,
 			*syncInterval,
 			*blockSyncConcurrency,
@@ -90,18 +91,24 @@ func runStore(
 	chunkPoolSizeBytes uint64,
 	maxSampleCount uint64,
 	maxConcurrent int,
-	component string,
 	verbose bool,
 	syncInterval time.Duration,
 	blockSyncConcurrency int,
 ) error {
+
+	readinessProber := prober.NewProber(component.Store, logger)
+	err := metricHTTPListenGroup(g, logger, reg, httpBindAddr, *readinessProber)
+	if err != nil {
+		return errors.Wrap(err, "create readiness prober")
+	}
+
 	{
 		confContentYaml, err := objStoreConfig.Content()
 		if err != nil {
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component)
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Store.String())
 		if err != nil {
 			return errors.Wrap(err, "create bucket client")
 		}
@@ -150,7 +157,6 @@ func runStore(
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
-
 			err := runutil.Repeat(syncInterval, ctx.Done(), func() error {
 				if err := bs.SyncBlocks(ctx); err != nil {
 					level.Warn(logger).Log("msg", "syncing blocks failed", "err", err)
@@ -179,13 +185,12 @@ func runStore(
 
 		g.Add(func() error {
 			level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)
+			readinessProber.SetReady()
 			return errors.Wrap(s.Serve(l), "serve gRPC")
-		}, func(error) {
+		}, func(err error) {
+			readinessProber.SetNotReady(err)
 			runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
 		})
-	}
-	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
-		return err
 	}
 
 	level.Info(logger).Log("msg", "starting store node")

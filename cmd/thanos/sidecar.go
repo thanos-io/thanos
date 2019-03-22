@@ -13,6 +13,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
+	"github.com/improbable-eng/thanos/pkg/prober"
 	"github.com/improbable-eng/thanos/pkg/promclient"
 	"github.com/improbable-eng/thanos/pkg/reloader"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -115,6 +116,12 @@ func runSidecar(
 		uploads = false
 	}
 
+	readinessProber := prober.NewProber(component.Sidecar, logger)
+	err := metricHTTPListenGroup(g, logger, reg, httpBindAddr, *readinessProber)
+	if err != nil {
+		return errors.Wrap(err, "create readiness prober")
+	}
+
 	// Setup all the concurrent groups.
 	{
 		promUp := prometheus.NewGauge(prometheus.GaugeOpts{
@@ -145,8 +152,9 @@ func runSidecar(
 						"msg", "failed to fetch initial external labels. Is Prometheus running? Retrying",
 						"err", err,
 					)
+					readinessProber.SetNotReady(err)
 					promUp.Set(0)
-					return err
+					return errors.Wrap(err, "fetch prometheus external labels")
 				}
 
 				level.Info(logger).Log(
@@ -174,28 +182,31 @@ func runSidecar(
 				if err := m.UpdateLabels(iterCtx, logger); err != nil {
 					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
 					promUp.Set(0)
+					readinessProber.SetNotReady(err)
 				} else {
 					promUp.Set(1)
+					readinessProber.SetReady()
 					lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
 				}
 
 				return nil
 			})
-		}, func(error) {
+		}, func(err error) {
 			cancel()
+			readinessProber.SetNotReady(err)
+			peer.Close(2 * time.Second)
 		})
 	}
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			return reloader.Watch(ctx)
-		}, func(error) {
+		}, func(err error) {
+			readinessProber.SetNotReady(err)
 			cancel()
 		})
 	}
-	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
-		return err
-	}
+
 	{
 		l, err := net.Listen("tcp", grpcBindAddr)
 		if err != nil {
@@ -218,8 +229,10 @@ func runSidecar(
 
 		g.Add(func() error {
 			level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)
+			readinessProber.SetReady()
 			return errors.Wrap(s.Serve(l), "serve gRPC")
-		}, func(error) {
+		}, func(err error) {
+			readinessProber.SetNotReady(err)
 			s.Stop()
 			runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
 		})
@@ -230,7 +243,7 @@ func runSidecar(
 		// new blocks to Google Cloud Storage or an S3-compatible storage service.
 		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Sidecar.String())
 		if err != nil {
-			return err
+			return errors.Wrap(err, "initializing bucket")
 		}
 
 		// Ensure we close up everything properly.

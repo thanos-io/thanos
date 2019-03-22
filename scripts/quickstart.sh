@@ -139,11 +139,10 @@ then
     --log.level                 debug \
     --tsdb.path                 "./data/remote-write-receive-data" \
     --grpc-address              0.0.0.0:19891 \
-    --http-address              0.0.0.0:18091 \
+    --http-address              0.0.0.0:19691 \
     --labels                    "receive=\"true\"" \
     ${OBJSTORECFG} \
     --remote-write.address      0.0.0.0:19291 &
-
   mkdir -p "data/local-prometheus-data/"
   cat <<EOF > data/local-prometheus-data/prometheus.yml
 # When the Thanos remote-write-receive component is started,

@@ -26,6 +26,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/discovery/dns"
 	"github.com/improbable-eng/thanos/pkg/extprom"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
+	"github.com/improbable-eng/thanos/pkg/prober"
 	"github.com/improbable-eng/thanos/pkg/promclient"
 	thanosrule "github.com/improbable-eng/thanos/pkg/rule"
 	v1 "github.com/improbable-eng/thanos/pkg/rule/api"
@@ -241,6 +242,8 @@ func runRule(
 	reg.MustRegister(alertMngrAddrResolutionErrors)
 	reg.MustRegister(rulesLoaded)
 	reg.MustRegister(ruleEvalWarnings)
+
+	readinessProber := prober.NewProber(component.Rule, logger)
 
 	for _, addr := range queryAddrs {
 		if addr == "" {
@@ -482,6 +485,7 @@ func runRule(
 			cancel()
 		})
 	}
+
 	// Start gRPC server.
 	{
 		l, err := net.Listen("tcp", grpcBindAddr)
@@ -500,12 +504,15 @@ func runRule(
 		storepb.RegisterStoreServer(s, store)
 
 		g.Add(func() error {
+			readinessProber.SetReady()
 			return errors.Wrap(s.Serve(l), "serve gRPC")
-		}, func(error) {
+		}, func(err error) {
 			s.Stop()
+			readinessProber.SetNotReady(err)
 			runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
 		})
 	}
+
 	// Start UI & metrics HTTP server.
 	{
 		router := route.New()
@@ -527,6 +534,8 @@ func runRule(
 			"web.prefix-header":   webPrefixHeaderName,
 		}
 
+		readinessProber.RegisterInRouter(router)
+
 		ui.NewRuleUI(logger, ruleMgrs, alertQueryURL.String(), flagsMap).Register(router.WithPrefix(webRoutePrefix))
 
 		api := v1.NewAPI(logger, ruleMgrs)
@@ -544,15 +553,17 @@ func runRule(
 
 		g.Add(func() error {
 			level.Info(logger).Log("msg", "Listening for ui requests", "address", httpBindAddr)
+			readinessProber.SetHealthy()
 			return errors.Wrap(http.Serve(l, mux), "serve query")
-		}, func(error) {
+		}, func(err error) {
+			readinessProber.SetNotHealthy(err)
 			runutil.CloseWithLogOnErr(logger, l, "query and metric listener")
 		})
 	}
 
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "loading flag content")
 	}
 
 	uploads := true
@@ -566,7 +577,7 @@ func runRule(
 		// new blocks to Google Cloud Storage or an S3-compatible storage service.
 		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Rule.String())
 		if err != nil {
-			return err
+			return errors.Wrap(err, "initializing bucket")
 		}
 
 		// Ensure we close up everything properly.

@@ -25,6 +25,8 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/improbable-eng/thanos/pkg/prober"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/improbable-eng/thanos/pkg/tracing/client"
@@ -307,10 +309,11 @@ func defaultGRPCServerOpts(logger log.Logger, reg *prometheus.Registry, tracer o
 }
 
 // metricHTTPListenGroup is a run.Group that servers HTTP endpoint with only Prometheus metrics.
-func metricHTTPListenGroup(g *run.Group, logger log.Logger, reg *prometheus.Registry, httpBindAddr string) error {
+func metricHTTPListenGroup(g *run.Group, logger log.Logger, reg *prometheus.Registry, httpBindAddr string, readinessProber prober.Prober) error {
 	mux := http.NewServeMux()
 	registerMetrics(mux, reg)
 	registerProfile(mux)
+	readinessProber.RegisterInMux(mux)
 
 	l, err := net.Listen("tcp", httpBindAddr)
 	if err != nil {
@@ -319,8 +322,11 @@ func metricHTTPListenGroup(g *run.Group, logger log.Logger, reg *prometheus.Regi
 
 	g.Add(func() error {
 		level.Info(logger).Log("msg", "Listening for metrics", "address", httpBindAddr)
+		readinessProber.SetHealthy()
+		readinessProber.SetReady()
 		return errors.Wrap(http.Serve(l, mux), "serve metrics")
-	}, func(error) {
+	}, func(err error) {
+		readinessProber.SetNotHealthy(err)
 		runutil.CloseWithLogOnErr(logger, l, "metric listener")
 	})
 	return nil

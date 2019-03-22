@@ -39,9 +39,8 @@ var (
 	rulerGRPC = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19790+i) }
 	rulerHTTP = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19890+i) }
 
-	remoteWriteReceiveHTTP       = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 18690+i) }
-	remoteWriteReceiveGRPC       = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 18790+i) }
-	remoteWriteReceiveMetricHTTP = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 18890+i) }
+	remoteWriteReceiveGRPC = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 18790+i) }
+	remoteWriteReceiveHTTP = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 18890+i) }
 
 	storeGatewayGRPC = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 20090+i) }
 	storeGatewayHTTP = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 20190+i) }
@@ -143,8 +142,7 @@ func receiver(i int, config string) cmdScheduleFunc {
 		return append(cmds, newCmdExec(exec.Command("thanos", "receive",
 			"--debug.name", fmt.Sprintf("remote-write-receive-%d", i),
 			"--grpc-address", remoteWriteReceiveGRPC(i),
-			"--http-address", remoteWriteReceiveMetricHTTP(i),
-			"--remote-write.address", remoteWriteReceiveHTTP(i),
+			"--http-address", remoteWriteReceiveHTTP(i),
 			"--labels", "receive=\"true\"",
 			"--tsdb.path", promDir,
 			"--log.level", "debug"))), nil

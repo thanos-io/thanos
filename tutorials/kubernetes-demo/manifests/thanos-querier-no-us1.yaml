@@ -49,6 +49,10 @@ spec:
           httpGet:
             path: /-/healthy
             port: http
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: http
 ---
 apiVersion: v1
 kind: Service

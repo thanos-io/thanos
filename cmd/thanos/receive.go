@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	stdlog "log"
 	"net"
+	"net/http"
 	"sync"
 	"time"
 
@@ -12,12 +14,15 @@ import (
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
+	"github.com/improbable-eng/thanos/pkg/prober"
 	"github.com/improbable-eng/thanos/pkg/receive"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
+	conntrack "github.com/mwitkow/go-conntrack"
 	"github.com/oklog/run"
+	"github.com/opentracing-contrib/go-stdlib/nethttp"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -32,10 +37,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application, name stri
 	cmd := app.Command(name, "Accept Prometheus remote write API requests and write to local tsdb (EXPERIMENTAL, this may change drastically without notice)")
 
 	grpcBindAddr, cert, key, clientCA := regGRPCFlags(cmd)
-	httpMetricsBindAddr := regHTTPAddrFlag(cmd)
-
-	remoteWriteAddress := cmd.Flag("remote-write.address", "Address to listen on for remote write requests.").
-		Default("0.0.0.0:19291").String()
+	httpBindAddr := regHTTPAddrFlag(cmd)
 
 	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").
 		Default("./data").String()
@@ -61,8 +63,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application, name stri
 			*cert,
 			*key,
 			*clientCA,
-			*httpMetricsBindAddr,
-			*remoteWriteAddress,
+			*httpBindAddr,
 			*dataDir,
 			objStoreConfig,
 			lset,
@@ -80,14 +81,13 @@ func runReceive(
 	cert string,
 	key string,
 	clientCA string,
-	httpMetricsBindAddr string,
-	remoteWriteAddress string,
+	httpBindAddr string,
 	dataDir string,
 	objStoreConfig *pathOrContent,
 	lset labels.Labels,
 	retention model.Duration,
 ) error {
-	logger = log.With(logger, "component", "receive")
+	logger = log.With(logger, "component", component.Receive.String())
 	level.Warn(logger).Log("msg", "setting up receive; the Thanos receive component is EXPERIMENTAL, it may break significantly without notice")
 
 	tsdbCfg := &tsdb.Options{
@@ -99,16 +99,18 @@ func runReceive(
 
 	localStorage := &tsdb.ReadyStorage{}
 	receiver := receive.NewWriter(log.With(logger, "component", "receive-writer"), localStorage)
-	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
-		Receiver:      receiver,
-		ListenAddress: remoteWriteAddress,
-		Registry:      reg,
-		ReadyStorage:  localStorage,
-	})
 
 	// Start all components while we wait for TSDB to open but only load
 	// initial config and mark ourselves as ready after it completed.
 	dbOpen := make(chan struct{})
+
+	readinessProber := prober.NewProber(component.Receive, logger)
+	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
+		Receiver:        receiver,
+		ReadinessProber: readinessProber,
+		Registry:        reg,
+		ReadyStorage:    localStorage,
+	})
 
 	// sync.Once is used to make sure we can close the channel at different execution stages(SIGTERM or when the config is loaded).
 	type closeOnce struct {
@@ -142,8 +144,6 @@ func runReceive(
 
 				reloadReady.Close()
 
-				webHandler.Ready()
-				level.Info(logger).Log("msg", "server is ready to receive web requests.")
 				<-cancel
 				return nil
 			},
@@ -186,11 +186,6 @@ func runReceive(
 		)
 	}
 
-	level.Debug(logger).Log("msg", "setting up metric http listen-group")
-	if err := metricHTTPListenGroup(g, logger, reg, httpMetricsBindAddr); err != nil {
-		return err
-	}
-
 	level.Debug(logger).Log("msg", "setting up grpc server")
 	{
 		var (
@@ -220,6 +215,8 @@ func runReceive(
 			storepb.RegisterStoreServer(s, tsdbStore)
 
 			level.Info(logger).Log("msg", "listening for StoreAPI gRPC", "address", grpcBindAddr)
+			webHandler.Ready()
+			level.Info(logger).Log("msg", "server is ready to receive web requests.")
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			if s != nil {
@@ -231,16 +228,41 @@ func runReceive(
 		})
 	}
 
-	level.Debug(logger).Log("msg", "setting up receive http handler")
+	level.Debug(logger).Log("msg", "setting up http handler")
 	{
-		g.Add(
-			func() error {
-				return errors.Wrap(webHandler.Run(), "error starting web server")
-			},
-			func(err error) {
-				webHandler.Close()
-			},
-		)
+
+		mux := http.NewServeMux()
+		registerMetrics(mux, reg)
+		registerProfile(mux)
+		readinessProber.RegisterInMux(mux)
+		webHandler.HandleInMux("/", mux)
+
+		listener, err := net.Listen("tcp", httpBindAddr)
+		if err != nil {
+			return errors.Wrapf(err, "listen HTTP on address %s", httpBindAddr)
+		}
+
+		// Monitor incoming connections with conntrack.
+		listener = conntrack.NewListener(listener,
+			conntrack.TrackWithName("http"),
+			conntrack.TrackWithTracing())
+
+		operationName := nethttp.OperationNameFunc(func(r *http.Request) string {
+			return fmt.Sprintf("%s %s", r.Method, r.URL.Path)
+		})
+
+		httpSrv := &http.Server{
+			Handler:  nethttp.Middleware(opentracing.GlobalTracer(), mux, operationName),
+			ErrorLog: stdlog.New(log.NewStdlibAdapter(level.Error(logger)), "", 0),
+		}
+
+		g.Add(func() error {
+			level.Info(logger).Log("msg", "Listening for query and metrics", "address", httpBindAddr)
+			webHandler.Healthy()
+			return httpSrv.Serve(listener)
+		}, func(err error) {
+			runutil.CloseWithLogOnErr(logger, listener, "receive HTTP listener")
+		})
 	}
 
 	confContentYaml, err := objStoreConfig.Content()

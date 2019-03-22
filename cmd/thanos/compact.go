@@ -18,8 +18,10 @@ import (
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/compact"
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
+	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
+	"github.com/improbable-eng/thanos/pkg/prober"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/run"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -125,7 +127,6 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 				compact.ResolutionLevel5m:  time.Duration(*retention5m),
 				compact.ResolutionLevel1h:  time.Duration(*retention1h),
 			},
-			name,
 			*disableDownsampling,
 			*maxCompactionLevel,
 			*blockSyncConcurrency,
@@ -147,7 +148,6 @@ func runCompact(
 	wait bool,
 	generateMissingIndexCacheFiles bool,
 	retentionByResolution map[compact.ResolutionLevel]time.Duration,
-	component string,
 	disableDownsampling bool,
 	maxCompactionLevel int,
 	blockSyncConcurrency int,
@@ -168,12 +168,12 @@ func runCompact(
 
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "loading flag content")
 	}
 
-	bkt, err := client.NewBucket(logger, confContentYaml, reg, component)
+	bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Compact.String())
 	if err != nil {
-		return err
+		return errors.Wrap(err, "initializing bucket")
 	}
 
 	// Ensure we close up everything properly.
@@ -205,6 +205,12 @@ func runCompact(
 	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool())
 	if err != nil {
 		return errors.Wrap(err, "create compactor")
+	}
+
+	readinessProber := prober.NewProber(component.Compact, logger)
+	err = metricHTTPListenGroup(g, logger, reg, httpBindAddr, *readinessProber)
+	if err != nil {
+		return errors.Wrap(err, "create readiness prober")
 	}
 
 	var (
@@ -309,13 +315,9 @@ func runCompact(
 
 			return errors.Wrap(err, "error executing compaction")
 		})
-	}, func(error) {
+	}, func(err error) {
 		cancel()
 	})
-
-	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
-		return err
-	}
 
 	level.Info(logger).Log("msg", "starting compact node")
 	return nil

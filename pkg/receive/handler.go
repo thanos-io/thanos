@@ -3,16 +3,13 @@ package receive
 import (
 	"fmt"
 	"io/ioutil"
-	stdlog "log"
-	"net"
 	"net/http"
-	"sync/atomic"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
-	"github.com/improbable-eng/thanos/pkg/runutil"
+	"github.com/improbable-eng/thanos/pkg/prober"
 	"github.com/improbable-eng/thanos/pkg/store/prompb"
 	conntrack "github.com/mwitkow/go-conntrack"
 	"github.com/opentracing-contrib/go-stdlib/nethttp"
@@ -45,6 +42,7 @@ var (
 // Options for the web Handler.
 type Options struct {
 	Receiver      *Writer
+	ReadinessProber *prober.Prober
 	ListenAddress string
 	Registry      prometheus.Registerer
 	ReadyStorage  *promtsdb.ReadyStorage
@@ -58,6 +56,7 @@ type Handler struct {
 	router       *route.Router
 	options      *Options
 	listener     net.Listener
+	readinessProber *prober.Prober
 
 	ready uint32 // ready is uint32 rather than boolean to be able to use atomic functions.
 }
@@ -84,39 +83,36 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		readyStorage: o.ReadyStorage,
 		receiver:     o.Receiver,
 		options:      o,
+		readinessProber: o.ReadinessProber,
 	}
 
-	readyf := h.testReady
-	router.Post("/api/v1/receive", readyf(h.receive))
+	router.Post("/api/v1/receive", h.readinessProber.HandleIfReady(h.receive))
+	o.Registry.MustRegister(
+		requestDuration,
+		responseSize,
+	)
 
 	return h
 }
 
+// Ready sets Handler to be healthy.
+func (h *Handler) Healthy() {
+	h.readinessProber.SetHealthy()
+}
+
 // Ready sets Handler to be ready.
 func (h *Handler) Ready() {
-	atomic.StoreUint32(&h.ready, 1)
+	h.readinessProber.SetReady()
 }
 
 // Verifies whether the server is ready or not.
-func (h *Handler) isReady() bool {
-	ready := atomic.LoadUint32(&h.ready)
-	return ready > 0
+func (h *Handler) isReady() error {
+	return h.readinessProber.IsReady()
 }
 
-// Checks if server is ready, calls f if it is, returns 503 if it is not.
-func (h *Handler) testReady(f http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if h.isReady() {
-			f(w, r)
-			return
-		}
-
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_, err := fmt.Fprintf(w, "Service Unavailable")
-		if err != nil {
-			h.logger.Log("msg", "failed to write to response body", "err", err)
-		}
-	}
+// HandleInMux hadles this router in specified mux on given part
+func (h *Handler) HandleInMux(path string, mux *http.ServeMux) {
+	mux.Handle(path, h.router)
 }
 
 // Close stops the Handler.

@@ -50,12 +50,12 @@ func runDownsample(
 ) error {
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "loading flag content")
 	}
 
 	bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Downsample.String())
 	if err != nil {
-		return err
+		return errors.Wrap(err, "initializing bucket")
 	}
 
 	// Ensure we close up everything properly.
