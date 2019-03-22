@@ -167,7 +167,8 @@ func runCompact(
 		}
 	}()
 
-	sy, err := compact.NewSyncer(logger, reg, bkt, syncDelay, blockSyncConcurrency)
+	sy, err := compact.NewSyncer(logger, reg, bkt, syncDelay,
+		blockSyncConcurrency, acceptMalformedIndex)
 	if err != nil {
 		return errors.Wrap(err, "create syncer")
 	}
@@ -197,8 +198,7 @@ func runCompact(
 		return errors.Wrap(err, "clean working downsample directory")
 	}
 
-	compactor := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt,
-		acceptMalformedIndex)
+	compactor := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt)
 
 	if retentionByResolution[compact.ResolutionLevelRaw].Seconds() != 0 {
 		level.Info(logger).Log("msg", "retention policy of raw samples is enabled", "duration", retentionByResolution[compact.ResolutionLevelRaw])

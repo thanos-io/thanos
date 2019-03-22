@@ -32,7 +32,7 @@ func TestSyncer_SyncMetas_e2e(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
-		sy, err := NewSyncer(nil, nil, bkt, 0, 1)
+		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false)
 		testutil.Ok(t, err)
 
 		// Generate 15 blocks. Initially the first 10 are synced into memory and only the last
@@ -62,13 +62,13 @@ func TestSyncer_SyncMetas_e2e(t *testing.T) {
 			testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), metadata.MetaFilename), &buf))
 		}
 
-		groups, err := sy.Groups(false)
+		groups, err := sy.Groups()
 		testutil.Ok(t, err)
 		testutil.Equals(t, ids[:10], groups[0].IDs())
 
 		testutil.Ok(t, sy.SyncMetas(ctx))
 
-		groups, err = sy.Groups(false)
+		groups, err = sy.Groups()
 		testutil.Ok(t, err)
 		testutil.Equals(t, ids[5:], groups[0].IDs())
 	})
@@ -134,7 +134,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		}
 
 		// Do one initial synchronization with the bucket.
-		sy, err := NewSyncer(nil, nil, bkt, 0, 1)
+		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false)
 		testutil.Ok(t, err)
 		testutil.Ok(t, sy.SyncMetas(ctx))
 
@@ -157,7 +157,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		testutil.Ok(t, sy.SyncMetas(ctx))
 
 		// Only the level 3 block, the last source block in both resolutions should be left.
-		groups, err := sy.Groups(false)
+		groups, err := sy.Groups()
 		testutil.Ok(t, err)
 
 		testutil.Equals(t, "0@{}", groups[0].Key())

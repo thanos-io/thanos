@@ -47,6 +47,7 @@ type Syncer struct {
 	blocksMtx            sync.Mutex
 	blockSyncConcurrency int
 	metrics              *syncerMetrics
+	acceptMalformedIndex bool
 }
 
 type syncerMetrics struct {
@@ -128,7 +129,7 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 
 // NewSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, syncDelay time.Duration, blockSyncConcurrency int) (*Syncer, error) {
+func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, syncDelay time.Duration, blockSyncConcurrency int, acceptMalformedIndex bool) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -140,6 +141,7 @@ func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket
 		bkt:                  bkt,
 		metrics:              newSyncerMetrics(reg),
 		blockSyncConcurrency: blockSyncConcurrency,
+		acceptMalformedIndex: acceptMalformedIndex,
 	}, nil
 }
 
@@ -278,7 +280,7 @@ func groupKey(res int64, lbls labels.Labels) string {
 
 // Groups returns the compaction groups for all blocks currently known to the syncer.
 // It creates all groups from the scratch on every call.
-func (c *Syncer) Groups(acceptMalformedIndex bool) (res []*Group, err error) {
+func (c *Syncer) Groups() (res []*Group, err error) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
@@ -291,7 +293,7 @@ func (c *Syncer) Groups(acceptMalformedIndex bool) (res []*Group, err error) {
 				c.bkt,
 				labels.FromMap(m.Thanos.Labels),
 				m.Thanos.Downsample.Resolution,
-				acceptMalformedIndex,
+				c.acceptMalformedIndex,
 				c.metrics.compactions.WithLabelValues(GroupKey(*m)),
 				c.metrics.compactionFailures.WithLabelValues(GroupKey(*m)),
 				c.metrics.garbageCollectedBlocks,
@@ -875,23 +877,21 @@ func (cg *Group) deleteBlock(b string) error {
 
 // BucketCompactor compacts blocks in a bucket.
 type BucketCompactor struct {
-	logger               log.Logger
-	sy                   *Syncer
-	comp                 tsdb.Compactor
-	compactDir           string
-	bkt                  objstore.Bucket
-	acceptMalformedIndex bool
+	logger     log.Logger
+	sy         *Syncer
+	comp       tsdb.Compactor
+	compactDir string
+	bkt        objstore.Bucket
 }
 
 // NewBucketCompactor creates a new bucket compactor.
-func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, compactDir string, bkt objstore.Bucket, acceptMalformedIndex bool) *BucketCompactor {
+func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, compactDir string, bkt objstore.Bucket) *BucketCompactor {
 	return &BucketCompactor{
-		logger:               logger,
-		sy:                   sy,
-		comp:                 comp,
-		compactDir:           compactDir,
-		bkt:                  bkt,
-		acceptMalformedIndex: acceptMalformedIndex,
+		logger:     logger,
+		sy:         sy,
+		comp:       comp,
+		compactDir: compactDir,
+		bkt:        bkt,
 	}
 }
 
@@ -918,7 +918,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 
 		level.Info(c.logger).Log("msg", "start of compaction")
 
-		groups, err := c.sy.Groups(c.acceptMalformedIndex)
+		groups, err := c.sy.Groups()
 		if err != nil {
 			return errors.Wrap(err, "build compaction groups")
 		}
