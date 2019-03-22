@@ -26,6 +26,19 @@ make
 
 The `thanos` binary should now be in your `$PATH` and is the only thing required to deploy any of its components.
 
+If you use `golang` below `1.11.5`, you may meet below error:
+```
+go: verifying github.com/grpc-ecosystem/go-grpc-middleware@v1.0.0: checksum mismatch
+    downloaded: h1:BWIsLfhgKhV5g/oF34aRjniBHLTZe5DNekSjbAjIS6c=
+    go.sum:     h1:Iju5GlWwrvL6UBg4zJJt3btmonfrMlCDdsejg4CZE7c=
+Makefile:183: recipe for target 'go-mod-tidy' failed
+```
+
+You can run following cmd then `make` would pass:
+```
+go clean -modcache
+```
+
 ## [Prometheus](https://prometheus.io/)
 
 Thanos bases on vanilla Prometheus (v2.2.1+).
