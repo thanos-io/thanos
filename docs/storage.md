@@ -51,6 +51,8 @@ config:
   http_config:
     idle_conn_timeout: 0s
     insecure_skip_verify: false
+  trace:
+    enable: false
 ```
 
 AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region)
@@ -62,6 +64,7 @@ For debug and testing purposes you can set
 
 * `insecure: true` to switch to plain insecure HTTP instead of HTTPS
 * `http_config.insecure_skip_verify: true` to disable TLS certificate verification (if your S3 based storage is using a self-signed certificate, for example)
+* `trace.enable: true` to enable the minio client's verbose logging. Each request and response will be logged into the debug logger, so debug level logging must be enabled for this functionality.
 
 ### Credentials
 By default Thanos will try to retrieve credentials from the following sources:
