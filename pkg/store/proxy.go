@@ -34,7 +34,7 @@ type Client interface {
 	TimeRange() (mint int64, maxt int64)
 
 	String() string
-	// Addr address of a Client.
+	// Addr returns address of a Client.
 	Addr() string
 }
 
@@ -348,7 +348,7 @@ func (s *streamSeriesSet) Next() (ok bool) {
 	case s.currSeries, ok = <-s.recvCh:
 		return ok
 	case <-ctx.Done():
-		//shutdown a goroutine in startStreamSeriesSet
+		// closeSeries to shutdown a goroutine in startStreamSeriesSet.
 		s.closeSeries()
 
 		err := errors.Wrap(ctx.Err(), timeoutMsg)
