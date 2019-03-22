@@ -44,6 +44,9 @@ for x in "${bucketCommands[@]}"; do
     ./thanos bucket "${x}" --help &> "docs/components/flags/bucket_${x}.txt"
 done
 
+# remove white noise
+sed -i 's/[ \t]*$//' docs/components/flags/*.txt
+
 go run scripts/bucketcfggen/main.go --output-dir=docs/flags
 
 # Change dir so embedmd understand the local references made in our markdown doc.

@@ -4,7 +4,7 @@
 |-----------------------|------------------------|--------------------------|------------------------------------------------------------|
 | Bartłomiej Płotka     | bwplotka@gmail.com     | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)                   |
 | Dominic Green         | dom@improbable.io      | `@domgreen`              | [@domgreen](https://github.com/domgreen)                   |
-| Frederic Branczyk     | fbranczyk@gmail.com    | `@brancz`                | [@brancz](https://github.com/brancz)                       | 
+| Frederic Branczyk     | fbranczyk@gmail.com    | `@brancz`                | [@brancz](https://github.com/brancz)                       |
 | Giedrius Statkevičius | giedriuswork@gmail.com | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS) |
 
 ## Storage plugins maintainers

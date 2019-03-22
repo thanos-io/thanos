@@ -38,14 +38,14 @@ We started a prometheus instance with thanos sidecar, scraping 50 targets every 
       * 0.022 average query time (min: 0.018s, max: 0.073s)
       * *0.812 queries per second*
 
-This shows an added latency of *85-150%* when using thanos query. This is more or less expected, as network operations will have to be done twice. We took a profile of thanos query while under load, finding that about a third of the time is being spent evaluating the promql queries. We are looking into including newer versions of the prometheus libraries into thanos that include optimisations to this component. 
+This shows an added latency of *85-150%* when using thanos query. This is more or less expected, as network operations will have to be done twice. We took a profile of thanos query while under load, finding that about a third of the time is being spent evaluating the promql queries. We are looking into including newer versions of the prometheus libraries into thanos that include optimisations to this component.
 
 Although we have not tested federated prometheus in the same controlled environment, in theory it should incur a similar overhead, as we will still be performing two network hops.
 
 ### Store performance
 To test the store component, we generated 1 year of simulated metrics (100 timeseries taking random values every 15s, a total of 210 million samples). We were able to run heavy queries to touch all 210 million of these samples, e.g. a sum over 100 timeseries takes about 34.6 seconds. Smaller queries, for example fetching 1 year of samples from a single timeseries, were able to run in about 500 milliseconds.
 
-When enabling downsampling over these timeseries, we were able to reduce query times by over 90%. 
+When enabling downsampling over these timeseries, we were able to reduce query times by over 90%.
 
 ### Ingestion
 To try to find the limits of a single thanos-query service, we spun up a number prometheus instances, each scraping 10 metric-producing endpoints every second. We attached a thanos-query endpoint in front of these scrapers, and ran queries that would touch fetch a most recent metric from each of them. Each metric producing endpoint would serve 100 metrics, taking random values, and the query would fetch the most recent value from each of these metrics:

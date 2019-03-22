@@ -4,7 +4,7 @@ Thanos supports any object stores that can be implemented against Thanos [objsto
 
 All clients are configured using `--objstore.config-file` to reference to the configuration file or `--objstore.config` to put yaml config directly.
 
-## Implementations 
+## Implementations
 
 Current object storage client implementations:
 
@@ -51,6 +51,8 @@ config:
   http_config:
     idle_conn_timeout: 0s
     insecure_skip_verify: false
+  trace:
+    enable: false
 ```
 
 AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region)
@@ -62,6 +64,7 @@ For debug and testing purposes you can set
 
 * `insecure: true` to switch to plain insecure HTTP instead of HTTPS
 * `http_config.insecure_skip_verify: true` to disable TLS certificate verification (if your S3 based storage is using a self-signed certificate, for example)
+* `trace.enable: true` to enable the minio client's verbose logging. Each request and response will be logged into the debug logger, so debug level logging must be enabled for this functionality.
 
 ### Credentials
 By default Thanos will try to retrieve credentials from the following sources:
@@ -71,7 +74,7 @@ By default Thanos will try to retrieve credentials from the following sources:
 1. From `~/.aws/credentials`
 1. IAM credentials retrieved from an instance profile.
 
-NOTE: Getting access key from config file and secret key from other method (and vice versa) is not supported. 
+NOTE: Getting access key from config file and secret key from other method (and vice versa) is not supported.
 
 ### AWS Policies
 
@@ -198,7 +201,7 @@ config:
 ### OpenStack Swift Configuration
 Thanos uses [gophercloud](http://gophercloud.io/) client to upload Prometheus data into [OpenStack Swift](https://docs.openstack.org/swift/latest/).
 
-Below is an example configuration file for thanos to use OpenStack swift container as an object store. 
+Below is an example configuration file for thanos to use OpenStack swift container as an object store.
 
 [embedmd]:# (flags/config_swift.txt yaml)
 ```yaml
