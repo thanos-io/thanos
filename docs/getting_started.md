@@ -15,7 +15,7 @@ At the moment, Thanos is able to use [different storage providers](storage.md), 
 
 You can find the latest Thanos release [here](https://github.com/improbable-eng/thanos/releases).
 
-If you want to build Thanos from source, make sure you have installed `bzr` and `git` (check with `which bzr` and `which git`),
+If you want to build Thanos from source, make sure you have installed `bzr` and `git` (since `go` need `git` to download and `go mod` need `bzr` to do VCS thing, check with `which bzr` and `which git`),
 and that you have a working installation of the Go [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`), Thanos can be downloaded and built by running:
 
 ```
