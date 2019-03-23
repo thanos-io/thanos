@@ -22,6 +22,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/improbable-eng/thanos/pkg/component"
+	"github.com/improbable-eng/thanos/pkg/extprom"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/pool"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -42,6 +43,14 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// maxSamplesPerChunk is approximately the max number of samples that we may have in any given chunk. This is needed
+// for precalculating the number of samples that we may have to retrieve and decode for any given query
+// without downloading them. Please take a look at https://github.com/prometheus/tsdb/pull/397 to know
+// where this number comes from. Long story short: TSDB is made in such a way, and it is made in such a way
+// because you barely get any improvements in compression when the number of samples is beyond this.
+// Take a look at Figure 6 in this whitepaper http://www.vldb.org/pvldb/vol8/p1816-teller.pdf.
+const maxSamplesPerChunk = 120
+
 type bucketStoreMetrics struct {
 	blocksLoaded          prometheus.Gauge
 	blockLoads            prometheus.Counter
@@ -57,6 +66,8 @@ type bucketStoreMetrics struct {
 	seriesMergeDuration   prometheus.Histogram
 	resultSeriesCount     prometheus.Summary
 	chunkSizeBytes        prometheus.Histogram
+	queriesDropped        prometheus.Counter
+	queriesLimit          prometheus.Gauge
 }
 
 func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
@@ -132,6 +143,15 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		},
 	})
 
+	m.queriesDropped = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_queries_dropped_total",
+		Help: "Number of queries that were dropped due to the sample limit.",
+	})
+	m.queriesLimit = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_bucket_store_queries_concurrent_max",
+		Help: "Number of maximum concurrent queries.",
+	})
+
 	if reg != nil {
 		reg.MustRegister(
 			m.blockLoads,
@@ -148,6 +168,8 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 			m.seriesMergeDuration,
 			m.resultSeriesCount,
 			m.chunkSizeBytes,
+			m.queriesDropped,
+			m.queriesLimit,
 		)
 	}
 	return &m
@@ -173,7 +195,12 @@ type BucketStore struct {
 	// Number of goroutines to use when syncing blocks from object storage.
 	blockSyncConcurrency int
 
-	partitioner partitioner
+	// Query gate which limits the maximum amount of concurrent queries.
+	queryGate *Gate
+
+	// samplesLimiter limits the number of samples per each Series() call.
+	samplesLimiter *Limiter
+	partitioner    partitioner
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -185,12 +212,19 @@ func NewBucketStore(
 	dir string,
 	indexCacheSizeBytes uint64,
 	maxChunkPoolBytes uint64,
+	maxSampleCount uint64,
+	maxConcurrent int,
 	debugLogging bool,
 	blockSyncConcurrency int,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
+
+	if maxConcurrent < 0 {
+		return nil, errors.Errorf("max concurrency value cannot be lower than 0 (got %v)", maxConcurrent)
+	}
+
 	indexCache, err := newIndexCache(reg, indexCacheSizeBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "create index cache")
@@ -202,6 +236,7 @@ func NewBucketStore(
 
 	const maxGapSize = 512 * 1024
 
+	metrics := newBucketStoreMetrics(reg)
 	s := &BucketStore{
 		logger:               logger,
 		bucket:               bucket,
@@ -212,13 +247,17 @@ func NewBucketStore(
 		blockSets:            map[uint64]*bucketBlockSet{},
 		debugLogging:         debugLogging,
 		blockSyncConcurrency: blockSyncConcurrency,
+		queryGate:            NewGate(maxConcurrent, extprom.NewSubsystem(reg, "thanos_bucket_store")),
+		samplesLimiter:       NewLimiter(maxSampleCount, metrics.queriesDropped),
 		partitioner:          gapBasedPartitioner{maxGapSize: maxGapSize},
 	}
-	s.metrics = newBucketStoreMetrics(reg)
+	s.metrics = metrics
 
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return nil, errors.Wrap(err, "create dir")
 	}
+
+	s.metrics.queriesLimit.Set(float64(maxConcurrent))
 
 	return s, nil
 }
@@ -472,7 +511,7 @@ func (s *bucketSeriesSet) Err() error {
 	return s.err
 }
 
-func (s *BucketStore) blockSeries(
+func blockSeries(
 	ctx context.Context,
 	ulid ulid.ULID,
 	extLset map[string]string,
@@ -480,6 +519,7 @@ func (s *BucketStore) blockSeries(
 	chunkr *bucketChunkReader,
 	matchers []labels.Matcher,
 	req *storepb.SeriesRequest,
+	samplesLimiter *Limiter,
 ) (storepb.SeriesSet, *queryStats, error) {
 	ps, err := indexr.ExpandedPostings(matchers)
 	if err != nil {
@@ -557,7 +597,7 @@ func (s *BucketStore) blockSeries(
 	}
 
 	// Preload all chunks that were marked in the previous stage.
-	if err := chunkr.preload(); err != nil {
+	if err := chunkr.preload(samplesLimiter); err != nil {
 		return nil, nil, errors.Wrap(err, "preload chunks")
 	}
 
@@ -661,10 +701,17 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt int64, lset labels
 }
 
 // Series implements the storepb.StoreServer interface.
-// TODO(bwplotka): It buffers all chunks in memory and only then streams to client.
-// 1. Either count chunk sizes and error out too big query.
-// 2. Stream posting -> series -> chunk all together.
 func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) (err error) {
+	{
+		span, _ := tracing.StartSpan(srv.Context(), "store_query_gate_ismyturn")
+		err := s.queryGate.IsMyTurn(srv.Context())
+		span.Finish()
+		if err != nil {
+			return errors.Wrapf(err, "failed to wait for turn")
+		}
+	}
+	defer s.queryGate.Done()
+
 	matchers, err := translateMatchers(req.Matchers)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
@@ -703,13 +750,14 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			defer runutil.CloseWithLogOnErr(s.logger, chunkr, "series block")
 
 			g.Add(func() error {
-				part, pstats, err := s.blockSeries(ctx,
+				part, pstats, err := blockSeries(ctx,
 					b.meta.ULID,
 					b.meta.Thanos.Labels,
 					indexr,
 					chunkr,
 					blockMatchers,
 					req,
+					s.samplesLimiter,
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
@@ -1589,10 +1637,20 @@ func (r *bucketChunkReader) addPreload(id uint64) error {
 }
 
 // preload all added chunk IDs. Must be called before the first call to Chunk is made.
-func (r *bucketChunkReader) preload() error {
+func (r *bucketChunkReader) preload(samplesLimiter *Limiter) error {
 	const maxChunkSize = 16000
 
 	var g run.Group
+
+	numChunks := uint64(0)
+	for _, offsets := range r.preloads {
+		for range offsets {
+			numChunks++
+		}
+	}
+	if err := samplesLimiter.Check(numChunks * maxSamplesPerChunk); err != nil {
+		return errors.Wrap(err, "exceeded samples limit")
+	}
 
 	for seq, offsets := range r.preloads {
 		sort.Slice(offsets, func(i, j int) bool {

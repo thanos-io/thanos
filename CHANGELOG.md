@@ -13,6 +13,23 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Added
 - [#811](https://github.com/improbable-eng/thanos/pull/811) Remote write receiver
+- [#798](https://github.com/improbable-eng/thanos/pull/798) Ability to limit the maximum concurrent about of Series() calls in Thanos Store and the maximum amount of samples.
+
+New options:
+
+* `--store.grpc.series-sample-limit` limits the amount of samples that might be retrieved on a single Series() call. By default it is 0. Consider enabling it by setting it to more than 0 if you are running on limited resources.
+* `--store.grpc.series-max-concurrency` limits the number of concurrent Series() calls in Thanos Store. By default it is 20. Considering making it lower or bigger depending on the scale of your deployment.
+
+New metrics:
+* `thanos_bucket_store_queries_dropped_total` shows how many queries were dropped due to the samples limit;
+* `thanos_bucket_store_queries_concurrent_max` is a constant metric which shows how many Series() calls can concurrently be executed by Thanos Store;
+* `thanos_bucket_store_queries_in_flight` shows how many queries are currently "in flight" i.e. they are being executed;
+* `thanos_bucket_store_gate_duration_seconds` shows how many seconds it took for queries to pass through the gate in both cases - when that fails and when it does not.
+
+New tracing span:
+* `store_query_gate_ismyturn` shows how long it took for a query to pass (or not) through the gate.
+
+:warning: **WARNING** :warning: #798 adds a new default limit to Thanos Store: `--store.grpc.series-max-concurrency`. Most likely you will want to make it the same as `--query.max-concurrent` on Thanos Query.
 
 ### Fixed
 - [#921](https://github.com/improbable-eng/thanos/pull/921) `thanos_objstore_bucket_last_successful_upload_time` now does not appear when no blocks have been uploaded so far
@@ -23,7 +40,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#851](https://github.com/improbable-eng/thanos/pull/851) New read API endpoint for api/v1/rules and api/v1/alerts.
 - [#873](https://github.com/improbable-eng/thanos/pull/873) Store: fix set index cache LRU
 
-:warning: **WARING** :warning: #873 fix fixes actual handling of `index-cache-size`. Handling of limit for this cache was
+:warning: **WARNING** :warning: #873 fix fixes actual handling of `index-cache-size`. Handling of limit for this cache was
 broken so it was unbounded all the time. From this release actual value matters and is extremely low by default. To "revert"
 the old behaviour (no boundary), use a large enough value.
 
