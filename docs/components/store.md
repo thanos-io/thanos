@@ -111,9 +111,8 @@ Flags:
                                  in chunk (it cannot be bigger than that), so
                                  the actual number of samples might be lower,
                                  even though the maximum could be hit.
-      --store.grpc.series-max-concurrency=0
-                                 Maximum number of concurrent Series calls. 0
-                                 means no limit.
+      --store.grpc.series-max-concurrency=20
+                                 Maximum number of concurrent Series calls.
       --objstore.config-file=<bucket.config-yaml-path>
                                  Path to YAML file that contains object store
                                  configuration.

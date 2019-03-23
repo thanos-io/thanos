@@ -18,7 +18,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 New options:
 
 * `--store.grpc.series-sample-limit` limits the amount of samples that might be retrieved on a single Series() call. By default it is 0. Consider enabling it by setting it to more than 0 if you are running on limited resources.
-* `--store.grpc.series-max-concurrency` limits the number of concurrent Series() calls in Thanos Store. By default it is 0. Consider enabling it by setting it to more than 0 if you want to limit the maximum of concurrent Series() calls.
+* `--store.grpc.series-max-concurrency` limits the number of concurrent Series() calls in Thanos Store. By default it is 20. Considering making it lower or bigger depending on the scale of your deployment.
 
 New metrics:
 * `thanos_bucket_store_queries_dropped_total` shows how many queries were dropped due to the samples limit;
@@ -38,7 +38,7 @@ New tracing span:
 - [#851](https://github.com/improbable-eng/thanos/pull/851) New read API endpoint for api/v1/rules and api/v1/alerts.
 - [#873](https://github.com/improbable-eng/thanos/pull/873) Store: fix set index cache LRU
 
-:warning: **WARING** :warning: #873 fix fixes actual handling of `index-cache-size`. Handling of limit for this cache was
+:warning: **WARNING** :warning: #873 fix fixes actual handling of `index-cache-size`. Handling of limit for this cache was
 broken so it was unbounded all the time. From this release actual value matters and is extremely low by default. To "revert"
 the old behaviour (no boundary), use a large enough value.
 
