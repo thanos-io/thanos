@@ -40,13 +40,11 @@ Data sources that persist their data for long-term storage do so via the Prometh
 └── meta.json
 ```
 
-
 A blocks top-level directory is a ULID (like UUID but lexicographically sortable and encoding the creation time).
 
 * Chunk files hold a few hundred MB worth of chunks each. Chunks for the same series are sequentially aligned. Series in return are aligned by their metric name. This becomes relevant further down.
 * The index file holds all information needed to lookup specific series by their labels and the positions of their chunks.
 * `meta.json` holds meta information about a block like stats, time range, and compaction level.
-
 
 Those block files can be backed up to an object storage and later be queried by another component (see below).
 All data is uploaded as it is created by the Prometheus server/storage engine. The `meta.json` file may be extended by a `thanos` section, to which Thanos-specific metadata can be added. Currently this it includes the "external labels" the producer of the block has assigned. This later helps in filtering blocks for querying without accessing their data files.

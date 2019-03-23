@@ -41,7 +41,7 @@ BZR               ?= $(shell which bzr)
 # E2e test deps.
 # Referenced by github.com/improbable-eng/thanos/blob/master/docs/getting_started.md#prometheus
 
-# Limitied prom version, because testing was not possibe. This should fix it: https://github.com/improbable-eng/thanos/issues/758
+# Limitied prom version, because testing was not possible. This should fix it: https://github.com/improbable-eng/thanos/issues/758
 PROM_VERSIONS           ?=v2.4.3 v2.5.0
 ALERTMANAGER_VERSION    ?=v0.15.2
 MINIO_SERVER_VERSION    ?=RELEASE.2018-10-06T00-15-16Z
@@ -120,12 +120,12 @@ docs: $(EMBEDMD) build
 .PHONY: hugo-docs
 hugo-docs: $(HUGO)
 	@echo ">> building documentation website"
-	@cd website && $(HUGO)
+	@$(HUGO) --config hugo.toml
 
 .PHONY: hugo-server
 hugo-server: $(HUGO)
 	@echo ">> serving documentation website"
-	@cd website && $(HUGO) server
+	@$(HUGO) --config hugo.toml server
 
 # check-docs checks if documentation have discrepancy with flags and if the links are valid.
 .PHONY: check-docs
