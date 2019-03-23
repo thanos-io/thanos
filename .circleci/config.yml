@@ -107,9 +107,8 @@ jobs:
       - run:
           name: Deploy to GitHub Pages
           command: |
-            cd website
-            hugo -v
-            cd public
+            hugo --config hugo.toml
+            cd website/public
             git init
             git config --global user.email "adrien-f@users.noreply.github.com"
             git config --global user.name "AdrienF"
