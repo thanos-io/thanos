@@ -249,7 +249,7 @@ func NewBucketStore(
 		blockSyncConcurrency: blockSyncConcurrency,
 		queryGate: NewGate(
 			maxConcurrent,
-			extprom.WrapRegistererWithPrefix("thanos_bucket_store_series", reg),
+			extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg),
 		),
 		samplesLimiter: NewLimiter(maxSampleCount, metrics.queriesDropped),
 		partitioner:    gapBasedPartitioner{maxGapSize: maxGapSize},

@@ -10,6 +10,8 @@ import (
 	"sort"
 
 	"github.com/go-kit/kit/log"
+	thanosrule "github.com/improbable-eng/thanos/pkg/rule"
+	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/rules"
@@ -20,16 +22,16 @@ type Rule struct {
 
 	flagsMap map[string]string
 
-	ruleManager *rules.Manager
-	queryURL    string
+	ruleManagers thanosrule.Managers
+	queryURL     string
 }
 
-func NewRuleUI(logger log.Logger, ruleManager *rules.Manager, queryURL string, flagsMap map[string]string) *Rule {
+func NewRuleUI(logger log.Logger, ruleManagers map[storepb.PartialResponseStrategy]*rules.Manager, queryURL string, flagsMap map[string]string) *Rule {
 	return &Rule{
-		BaseUI:      NewBaseUI(logger, "rule_menu.html", ruleTmplFuncs(queryURL)),
-		flagsMap:    flagsMap,
-		ruleManager: ruleManager,
-		queryURL:    queryURL,
+		BaseUI:       NewBaseUI(logger, "rule_menu.html", ruleTmplFuncs(queryURL)),
+		flagsMap:     flagsMap,
+		ruleManagers: ruleManagers,
+		queryURL:     queryURL,
 	}
 }
 
@@ -96,7 +98,7 @@ func ruleTmplFuncs(queryURL string) template.FuncMap {
 }
 
 func (ru *Rule) alerts(w http.ResponseWriter, r *http.Request) {
-	alerts := ru.ruleManager.AlertingRules()
+	alerts := ru.ruleManagers.AlertingRules()
 	alertsSorter := byAlertStateAndNameSorter{alerts: alerts}
 	sort.Sort(alertsSorter)
 
@@ -111,13 +113,15 @@ func (ru *Rule) alerts(w http.ResponseWriter, r *http.Request) {
 
 	prefix := GetWebPrefix(ru.logger, ru.flagsMap, r)
 
+	// TODO(bwplotka): Update HTML to include partial response.
 	ru.executeTemplate(w, "alerts.html", prefix, alertStatus)
 }
 
 func (ru *Rule) rules(w http.ResponseWriter, r *http.Request) {
 	prefix := GetWebPrefix(ru.logger, ru.flagsMap, r)
 
-	ru.executeTemplate(w, "rules.html", prefix, ru.ruleManager)
+	// TODO(bwplotka): Update HTML to include partial response.
+	ru.executeTemplate(w, "rules.html", prefix, ru.ruleManagers)
 }
 
 // root redirects / requests to /graph, taking into account the path prefix value
@@ -139,12 +143,12 @@ func (ru *Rule) Register(r *route.Router) {
 
 // AlertStatus bundles alerting rules and the mapping of alert states to row classes.
 type AlertStatus struct {
-	AlertingRules        []*rules.AlertingRule
+	AlertingRules        []thanosrule.AlertingRule
 	AlertStateToRowClass map[rules.AlertState]string
 }
 
 type byAlertStateAndNameSorter struct {
-	alerts []*rules.AlertingRule
+	alerts []thanosrule.AlertingRule
 }
 
 func (s byAlertStateAndNameSorter) Len() int {
