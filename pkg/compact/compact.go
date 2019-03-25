@@ -777,7 +777,8 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		}
 
 		if err := stats.PrometheusIssue5372Err(); !cg.acceptMalformedIndex && err != nil {
-			return false, ulid.ULID{}, errors.Wrapf(err, "block id %s", id)
+			return false, ulid.ULID{}, errors.Wrapf(err,
+				"block id %s, try running with --debug.accept-malformed-index", id)
 		}
 	}
 	level.Debug(cg.logger).Log("msg", "downloaded and verified blocks",

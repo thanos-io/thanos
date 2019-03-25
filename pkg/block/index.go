@@ -254,9 +254,9 @@ type Stats struct {
 	OutOfOrderLabels int
 }
 
-// PrometheusIssue5372Err returns an error if statsd indicates postings with out
-// of order labels.  This is introduced by Prometheus Issue #5372 in 2.8.0 and
-// below.
+// PrometheusIssue5372Err returns an error if the Stats object indicates
+// postings with out of order labels.  This is corrected by Prometheus Issue
+// #5372 and affects Prometheus versions 2.8.0 and below.
 func (i Stats) PrometheusIssue5372Err() error {
 	if i.OutOfOrderLabels > 0 {
 		return errors.Errorf("index contains %d postings with out of order labels",
