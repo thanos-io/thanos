@@ -14,7 +14,6 @@ import (
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/tsdb/chunkenc"
 	tlabels "github.com/prometheus/tsdb/labels"
@@ -53,7 +52,7 @@ func TestProxyStore_Info(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	q := NewProxyStore(nil, prometheus.NewRegistry(),
+	q := NewProxyStore(nil,
 		func() []Client { return nil },
 		component.Query,
 		nil, 0*time.Second,
@@ -407,7 +406,7 @@ func TestProxyStore_Series(t *testing.T) {
 	} {
 
 		if ok := t.Run(tc.title, func(t *testing.T) {
-			q := NewProxyStore(nil, prometheus.NewRegistry(),
+			q := NewProxyStore(nil,
 				func() []Client { return tc.storeAPIs },
 				component.Query,
 				tc.selectorLabels,
@@ -529,7 +528,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 		},
 	} {
 		if ok := t.Run(tc.title, func(t *testing.T) {
-			q := NewProxyStore(nil, prometheus.NewRegistry(),
+			q := NewProxyStore(nil,
 				func() []Client { return tc.storeAPIs },
 				component.Query,
 				tc.selectorLabels,
@@ -571,7 +570,7 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 			maxTime:     300,
 		},
 	}
-	q := NewProxyStore(nil, prometheus.NewRegistry(),
+	q := NewProxyStore(nil,
 		func() []Client { return cls },
 		component.Query,
 		nil,
@@ -630,7 +629,7 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 
 	}
 
-	q := NewProxyStore(nil, prometheus.NewRegistry(),
+	q := NewProxyStore(nil,
 		func() []Client { return cls },
 		component.Query,
 		tlabels.FromStrings("fed", "a"),
@@ -668,7 +667,7 @@ func TestProxyStore_LabelValues(t *testing.T) {
 			},
 		}},
 	}
-	q := NewProxyStore(nil, prometheus.NewRegistry(),
+	q := NewProxyStore(nil,
 		func() []Client { return cls },
 		component.Query,
 		nil,
