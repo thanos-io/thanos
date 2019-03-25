@@ -578,6 +578,11 @@ OUTER:
 	return repl, nil
 }
 
+type seriesRepair struct {
+	lset labels.Labels
+	chks []chunks.Meta
+}
+
 // rewrite writes all data from the readers back into the writers while cleaning
 // up mis-ordered and duplicated chunks.
 func rewrite(
@@ -605,12 +610,12 @@ func rewrite(
 		postings = index.NewMemPostings()
 		values   = map[string]stringset{}
 		i        = uint64(0)
+		series   = []seriesRepair{}
 	)
 
-	var lset labels.Labels
-	var chks []chunks.Meta
-
 	for all.Next() {
+		var lset labels.Labels
+		var chks []chunks.Meta
 		id := all.At()
 
 		if err := indexr.Series(id, &lset, &chks); err != nil {
@@ -636,21 +641,38 @@ func rewrite(
 			continue
 		}
 
-		if err := chunkw.WriteChunks(chks...); err != nil {
+		series = append(series, seriesRepair{
+			lset: lset,
+			chks: chks,
+		})
+	}
+
+	if all.Err() != nil {
+		return errors.Wrap(all.Err(), "iterate series")
+	}
+
+	// sort the series -- if labels moved around the ordering will be different
+	sort.Slice(series, func(i, j int) bool {
+		return labels.Compare(series[i].lset, series[j].lset) < 0
+	})
+
+	// build new TSDB block
+	for _, s := range series {
+		if err := chunkw.WriteChunks(s.chks...); err != nil {
 			return errors.Wrap(err, "write chunks")
 		}
-		if err := indexw.AddSeries(i, lset, chks...); err != nil {
+		if err := indexw.AddSeries(i, s.lset, s.chks...); err != nil {
 			return errors.Wrap(err, "add series")
 		}
 
-		meta.Stats.NumChunks += uint64(len(chks))
+		meta.Stats.NumChunks += uint64(len(s.chks))
 		meta.Stats.NumSeries++
 
-		for _, chk := range chks {
+		for _, chk := range s.chks {
 			meta.Stats.NumSamples += uint64(chk.Chunk.NumSamples())
 		}
 
-		for _, l := range lset {
+		for _, l := range s.lset {
 			valset, ok := values[l.Name]
 			if !ok {
 				valset = stringset{}
@@ -658,11 +680,8 @@ func rewrite(
 			}
 			valset.set(l.Value)
 		}
-		postings.Add(i, lset)
+		postings.Add(i, s.lset)
 		i++
-	}
-	if all.Err() != nil {
-		return errors.Wrap(all.Err(), "iterate series")
 	}
 
 	s := make([]string, 0, 256)
