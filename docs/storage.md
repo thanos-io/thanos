@@ -155,9 +155,13 @@ For example:
 type: GCS
 config:
   bucket: ""
+  service_account: ""
 ```
 
-Application credentials are configured via JSON file, the client looks for:
+### Using GOOGLE_APPLICATION_CREDENTIALS
+
+Application credentials are configured via JSON file and only the bucket needs to be specified,
+the client looks for:
 
 1. A JSON file whose path is specified by the
    `GOOGLE_APPLICATION_CREDENTIALS` environment variable.
@@ -170,6 +174,30 @@ Application credentials are configured via JSON file, the client looks for:
    (In this final case any provided scopes are ignored.)
 
 You can read more on how to get application credential json file in [https://cloud.google.com/docs/authentication/production](https://cloud.google.com/docs/authentication/production)
+
+### Using inline a Service Account
+
+Another possibility is to inline the ServiceAccount into the Thanos configuration and only maintain one file.
+This feature was added, so that the Prometheus Operator only needs to take care of one secret file.
+
+```yaml
+type: GCS
+config:
+  bucket: "thanos"
+  service_account: |-
+    {
+      "type": "service_account",
+      "project_id": "project",
+      "private_key_id": "abcdefghijklmnopqrstuvwxyz12345678906666",
+      "private_key": "-----BEGIN PRIVATE KEY-----\...\n-----END PRIVATE KEY-----\n",
+      "client_email": "project@thanos.iam.gserviceaccount.com",
+      "client_id": "123456789012345678901",
+      "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+      "token_uri": "https://oauth2.googleapis.com/token",
+      "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+      "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/thanos%40gitpods.iam.gserviceaccount.com"
+    }
+```
 
 ### GCS Policies
 
