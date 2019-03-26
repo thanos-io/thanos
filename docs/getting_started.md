@@ -26,7 +26,7 @@ make
 
 The `thanos` binary should now be in your `$PATH` and is the only thing required to deploy any of its components.
 
-If you use `golang` below `1.11.5`, you may meet below error:
+You may meet below error:
 ```
 go: verifying github.com/grpc-ecosystem/go-grpc-middleware@v1.0.0: checksum mismatch
     downloaded: h1:BWIsLfhgKhV5g/oF34aRjniBHLTZe5DNekSjbAjIS6c=
@@ -34,10 +34,12 @@ go: verifying github.com/grpc-ecosystem/go-grpc-middleware@v1.0.0: checksum mism
 Makefile:183: recipe for target 'go-mod-tidy' failed
 ```
 
-You can run following cmd then `make` would pass:
+If your `golang` version is `1.11.4`, you can run following cmd then `make` would pass:
 ```
 go clean -modcache
 ```
+
+If your `golang` version is below `1.11.4`, highly recommend you upgrade to `1.11.4` or above.
 
 ## [Prometheus](https://prometheus.io/)
 
