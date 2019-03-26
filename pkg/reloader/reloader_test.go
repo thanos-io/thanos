@@ -218,6 +218,7 @@ func TestReloader_RuleApply(t *testing.T) {
 		defer cancel()
 
 		reloadsSeen := 0
+		init := false
 		for {
 			select {
 			case <-ctx.Done():
@@ -226,9 +227,11 @@ func TestReloader_RuleApply(t *testing.T) {
 			}
 
 			rel := reloads.Load().(int)
-			if rel != 0 && rel <= reloadsSeen {
+			if init && rel <= reloadsSeen {
 				continue
 			}
+			init = true
+
 			reloadsSeen = rel
 
 			t.Log("Performing step number", rel)
