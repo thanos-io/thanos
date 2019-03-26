@@ -75,9 +75,25 @@ func (s *ProxyStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb
 	res := &storepb.InfoResponse{
 		Labels:    make([]storepb.Label, 0, len(s.selectorLabels)),
 		StoreType: s.component.ToProto(),
-		MinTime:   0,
-		MaxTime:   math.MaxInt64,
 	}
+
+	MinTime := int64(math.MaxInt64)
+	MaxTime := int64(0)
+
+	stores := s.stores()
+	for _, s := range stores {
+		mint, maxt := s.TimeRange()
+		if mint < MinTime {
+			MinTime = mint
+		}
+		if maxt > MaxTime {
+			MaxTime = maxt
+		}
+	}
+
+	res.MaxTime = MaxTime
+	res.MinTime = MinTime
+
 	for _, l := range s.selectorLabels {
 		res.Labels = append(res.Labels, storepb.Label{
 			Name:  l.Name,
@@ -393,7 +409,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		store := st
 		g.Go(func() error {
 			resp, err := store.LabelValues(gctx, &storepb.LabelValuesRequest{
-				Label:                   r.Label,
+				Label: r.Label,
 				PartialResponseDisabled: r.PartialResponseDisabled,
 			})
 			if err != nil {
