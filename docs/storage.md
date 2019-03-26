@@ -152,9 +152,13 @@ For example:
 type: GCS
 config:
   bucket: ""
+  service_account: ""
 ```
 
-Application credentials are configured via JSON file, the client looks for:
+### Using GOOGLE_APPLICATION_CREDENTIALS
+
+Application credentials are configured via JSON file and only the bucket needs to be specified,
+the client looks for:
 
 1. A JSON file whose path is specified by the
    `GOOGLE_APPLICATION_CREDENTIALS` environment variable.
@@ -168,7 +172,10 @@ Application credentials are configured via JSON file, the client looks for:
 
 You can read more on how to get application credential json file in [https://cloud.google.com/docs/authentication/production](https://cloud.google.com/docs/authentication/production)
 
-Another possibility is to inline the ServiceAccount into the Thanos configuration and only maintain one file:
+### Using inline a Service Account
+
+Another possibility is to inline the ServiceAccount into the Thanos configuration and only maintain one file.
+This feature was added, so that the Prometheus Operator only needs to take care of one secret file.
 
 ```yaml
 type: GCS
