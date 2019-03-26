@@ -155,7 +155,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			}
 			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
 
-			//This is used to cancel this stream when one operations takes too long
+			// This is used to cancel this stream when one operations takes too long.
 			seriesCtx, closeSeries := context.WithCancel(gctx)
 			defer closeSeries()
 
