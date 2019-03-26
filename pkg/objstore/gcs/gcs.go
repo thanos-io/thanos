@@ -52,7 +52,7 @@ func NewBucket(ctx context.Context, logger log.Logger, conf []byte, component st
 
 	var opts []option.ClientOption
 
-	// If ServiceAccount provided inside configuration use it, otherwise fallback to defaults
+	// If ServiceAccount is provided, use them in GCS client, otherwise fallback to Google default logic.
 	if gc.ServiceAccount != "" {
 		credentials, err := google.CredentialsFromJSON(ctx, []byte(gc.ServiceAccount))
 		if err != nil {
