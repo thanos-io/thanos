@@ -692,8 +692,7 @@ func TestProxyStore_LabelNames(t *testing.T) {
 
 	m1 := &mockedStoreAPI{
 		RespLabelNames: &storepb.LabelNamesResponse{
-			Names:    []string{"a", "b"},
-			Warnings: []string{"warning"},
+			Names: []string{"a", "b"},
 		},
 	}
 
@@ -723,6 +722,42 @@ func TestProxyStore_LabelNames(t *testing.T) {
 	testutil.Assert(t, proto.Equal(req, m1.LastLabelNamesReq), "request was not proxied properly to underlying storeAPI: %s vs %s", req, m1.LastLabelNamesReq)
 
 	testutil.Equals(t, []string{"a", "b", "c", "d"}, resp.Names)
+	testutil.Equals(t, 0, len(resp.Warnings))
+}
+
+func TestProxyStore_LabelNames_PartialResponseEnable(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	m1 := &mockedStoreAPI{
+		RespLabelNames: &storepb.LabelNamesResponse{
+			Names: []string{"a", "b"},
+		},
+	}
+
+	m2 := &mockedStoreAPI{
+		RespError: errors.New("error!"),
+	}
+
+	cls := []Client{
+		&testClient{StoreClient: m1},
+		&testClient{StoreClient: m2},
+	}
+
+	q := NewProxyStore(nil,
+		func(context.Context) ([]Client, error) { return cls, nil },
+		component.Query,
+		nil,
+	)
+
+	ctx := context.Background()
+	req := &storepb.LabelNamesRequest{
+		PartialResponseDisabled: false,
+	}
+	resp, err := q.LabelNames(ctx, req)
+	testutil.Ok(t, err)
+	testutil.Assert(t, proto.Equal(req, m1.LastLabelNamesReq), "request was not proxied properly to underlying storeAPI: %s vs %s", req, m1.LastLabelNamesReq)
+
+	testutil.Equals(t, []string{"a", "b"}, resp.Names)
 	testutil.Equals(t, 1, len(resp.Warnings))
 }
 

@@ -336,7 +336,7 @@ func extendLset(lset []storepb.Label, extend labels.Labels) []storepb.Label {
 }
 
 // LabelNames returns all known label names.
-func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
+func (p *PrometheusStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesRequest) (
 	*storepb.LabelNamesResponse, error,
 ) {
 	u := *p.base
@@ -357,13 +357,17 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesR
 	defer runutil.CloseWithLogOnErr(p.logger, resp.Body, "label names request body")
 
 	var m struct {
-		Data []string `json:"data"`
+		Data   []string `json:"data"`
+		Status string   `json:"status"`
+		Error  string   `json:"error"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
 		return nil, status.Error(codes.Unknown, err.Error())
 	}
-	sort.Strings(m.Data)
 
+	if m.Status != "success" {
+		return nil, status.Error(codes.Unknown, m.Error)
+	}
 	return &storepb.LabelNamesResponse{Names: m.Data}, nil
 }
 
