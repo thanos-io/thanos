@@ -5,7 +5,6 @@ Additionally, the sidecar uploads TSDB blocks to an object storage bucket as Pro
 
 Prometheus servers connected to the Thanos cluster via the sidecar are subject to a few limitations for safe operations:
 
-* The `--storage.tsdb.min-block-duration` and `--storage.tsdb.max-block-duration` must be set to equal values to disable local compaction. The default of `2h` is recommended. Mentioned parameters set to equal value disable internal Prometheus compaction, which is needed to avoid the uploaded data corruption when thanos compactor does its job, this is critical for data consistency and should not be ignored if you plan to use thanos compactor. Even though you set mentioned parameters equal, you might observe Prometheus internal metric `prometheus_tsdb_compactions_total` being incremented, don't be confused by that: Prometheus passes all the complete data blocks via internal compaction mechanism with no exception, but if you followed recommendations - data won't be modified by Prometheus before sidecar uploads it.
 * The minimum Prometheus version is 2.2.1
 * The `external_labels` section of the configuration implements is in line with the desired label scheme (will be used by query layer to filter out store APIs to query).
 * The `--web.enable-lifecycle` flag is enabled if you want to use `reload.*` flags.
@@ -68,10 +67,6 @@ Flags:
                                  from other components if you use gossip,
                                  'grpc-advertise-address' is empty and you
                                  require cross-node connection.
-      --grpc-advertise-address=GRPC-ADVERTISE-ADDRESS
-                                 Explicit (external) host:port address to
-                                 advertise for gRPC StoreAPI in gossip cluster.
-                                 If empty, 'grpc-address' will be used.
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
@@ -80,8 +75,6 @@ Flags:
                                  TLS CA to verify clients against. If no client
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --http-address="0.0.0.0:10902"
-                                 Listen host:port for HTTP endpoints.
       --grpc-advertise-address=GRPC-ADVERTISE-ADDRESS
                                  Explicit (external) host:port address to
                                  advertise for gRPC StoreAPI in gossip cluster.
