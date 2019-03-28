@@ -7,7 +7,7 @@ Prometheus servers connected to the Thanos cluster via the sidecar are subject t
 
 * The minimum Prometheus version is 2.0
 * The `external_labels` section of the configuration implements is in line with the cluster's [labeling scheme](/docs-for-labeling-schemas)
-* The `--storage.tsdb.min-block-duration` and `--storage.tsdb.max-block-duration` must be set to equal values to disable local compaction. The default of `2h` is recommended.
+* The `--storage.tsdb.min-block-duration` and `--storage.tsdb.max-block-duration` must be set to equal values to disable local compaction. The default of `2h` is recommended. Mentioned parameters set to equal value disable internal Prometheus compaction, which is needed to avoid the uploaded data corruption when thanos compactor does its job, this is critical for data consistency and should not be ignored if you plan to use thanos compactor. Even though you set mentioned parameters equal, you might observe Prometheus internal metric being incremented `prometheus_tsdb_compactions_total`, don't be confused by that: Prometheus passes all the complete data blocks via internal compaction mechanism with no exception, but if you followed recommendations - data won't be modified by Prometheus before sidecar uploads it.
 
 The retention is recommended to not be lower than three times the block duration. This achieves resilience in the face of connectivity issues to the object storage since all local data will remain available within the Thanos cluster. If connectivity gets restored the backlog of blocks gets uploaded to the object storage.
 
@@ -42,21 +42,21 @@ Flags:
                                  --help-long and --help-man).
       --version                  Show application version.
       --log.level=info           Log filtering level.
-      --gcloudtrace.project=GCLOUDTRACE.PROJECT  
+      --gcloudtrace.project=GCLOUDTRACE.PROJECT
                                  GCP project to send Google Cloud Trace tracings
                                  to. If empty, tracing will be disabled.
-      --gcloudtrace.sample-factor=1  
+      --gcloudtrace.sample-factor=1
                                  How often we send traces (1/<sample-factor>).
                                  If 0 no trace will be sent periodically, unless
                                  forced by baggage item. See
                                  `pkg/tracing/tracing.go` for details.
-      --grpc-address="0.0.0.0:10901"  
+      --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
                                  from other components if you use gossip,
                                  'grpc-advertise-address' is empty and you
                                  require cross-node connection.
-      --grpc-advertise-address=GRPC-ADVERTISE-ADDRESS  
+      --grpc-advertise-address=GRPC-ADVERTISE-ADDRESS
                                  Explicit (external) host:port address to
                                  advertise for gRPC StoreAPI in gossip cluster.
                                  If empty, 'grpc-address' will be used.
@@ -64,61 +64,61 @@ Flags:
                                  disable TLS
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
-      --grpc-server-tls-client-ca=""  
+      --grpc-server-tls-client-ca=""
                                  TLS CA to verify clients against. If no client
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --http-address="0.0.0.0:10902"  
+      --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
-      --cluster.address="0.0.0.0:10900"  
+      --cluster.address="0.0.0.0:10900"
                                  Listen ip:port address for gossip cluster.
-      --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS  
+      --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS
                                  Explicit (external) ip:port address to
                                  advertise for gossip in gossip cluster. Used
                                  internally for membership only.
-      --cluster.peers=CLUSTER.PEERS ...  
+      --cluster.peers=CLUSTER.PEERS ...
                                  Initial peers to join the cluster. It can be
                                  either <ip:port>, or <domain:port>. A lookup
                                  resolution is done only at the startup.
-      --cluster.gossip-interval=<gossip interval>  
+      --cluster.gossip-interval=<gossip interval>
                                  Interval between sending gossip messages. By
                                  lowering this value (more frequent) gossip
                                  messages are propagated across the cluster more
                                  quickly at the expense of increased bandwidth.
                                  Default is used from a specified network-type.
-      --cluster.pushpull-interval=<push-pull interval>  
+      --cluster.pushpull-interval=<push-pull interval>
                                  Interval for gossip state syncs. Setting this
                                  interval lower (more frequent) will increase
                                  convergence speeds across larger clusters at
                                  the expense of increased bandwidth usage.
                                  Default is used from a specified network-type.
-      --cluster.refresh-interval=1m  
+      --cluster.refresh-interval=1m
                                  Interval for membership to refresh
                                  cluster.peers state, 0 disables refresh.
-      --cluster.secret-key=CLUSTER.SECRET-KEY  
+      --cluster.secret-key=CLUSTER.SECRET-KEY
                                  Initial secret key to encrypt cluster gossip.
                                  Can be one of AES-128, AES-192, or AES-256 in
                                  hexadecimal format.
-      --cluster.network-type=lan  
+      --cluster.network-type=lan
                                  Network type with predefined peers
                                  configurations. Sets of configurations
                                  accounting the latency differences between
                                  network types: local, lan, wan.
-      --prometheus.url=http://localhost:9090  
+      --prometheus.url=http://localhost:9090
                                  URL at which to reach Prometheus's API. For
                                  better performance use local network.
       --tsdb.path="./data"       Data directory of TSDB.
       --reloader.config-file=""  Config file watched by the reloader.
-      --reloader.config-envsubst-file=""  
+      --reloader.config-envsubst-file=""
                                  Output file for environment variable
                                  substituted config file.
-      --reloader.rule-dir=RELOADER.RULE-DIR ...  
+      --reloader.rule-dir=RELOADER.RULE-DIR ...
                                  Rule directories for the reloader to refresh
                                  (repeated field).
-      --objstore.config-file=<bucket.config-yaml-path>  
+      --objstore.config-file=<bucket.config-yaml-path>
                                  Path to YAML file that contains object store
                                  configuration.
-      --objstore.config=<bucket.config-yaml>  
+      --objstore.config=<bucket.config-yaml>
                                  Alternative to 'objstore.config-file' flag.
                                  Object store configuration in YAML.
 
