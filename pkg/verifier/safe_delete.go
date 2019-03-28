@@ -2,9 +2,9 @@ package verifier
 
 import (
 	"context"
-	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -31,13 +31,18 @@ func SafeDelete(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 		return errors.Errorf("%s dir seems to exists in backup bucket. Remove this block manually if you are sure it is safe to do", id)
 	}
 
-	dir, err := ioutil.TempDir("", fmt.Sprintf("safe-delete-%s", id))
+	tempdir, err := ioutil.TempDir("", "safe-delete")
+	if err != nil {
+		return err
+	}
+	dir := filepath.Join(tempdir, id.String())
+	err = os.Mkdir(dir, 0755)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		if err := os.RemoveAll(dir); err != nil {
-			level.Warn(logger).Log("msg", "failed to delete dir", "dir", dir, "err", err)
+		if err := os.RemoveAll(tempdir); err != nil {
+			level.Warn(logger).Log("msg", "failed to delete dir", "dir", tempdir, "err", err)
 		}
 	}()
 
