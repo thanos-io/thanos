@@ -183,8 +183,8 @@ go-mod-tidy: check-git check-bzr
 	@go mod tidy
 
 .PHONY: check-go-mod
-check-go-mod: go-mod-tidy
-	@git diff --exit-code go.mod go.sum > /dev/null || echo >&2 "go.mod and/or go.sum have uncommited changes. See CONTRIBUTING.md."
+check-go-mod:
+	@go mod verify
 
 # tooling deps. TODO(bwplotka): Pin them all to certain version!
 .PHONY: check-git
