@@ -5,21 +5,30 @@ Additionally, the sidecar uploads TSDB blocks to an object storage bucket as Pro
 
 Prometheus servers connected to the Thanos cluster via the sidecar are subject to a few limitations for safe operations:
 
-* The minimum Prometheus version is 2.0
-* The `external_labels` section of the configuration implements is in line with the cluster's [labeling scheme](/docs-for-labeling-schemas)
+* The `--storage.tsdb.min-block-duration` and `--storage.tsdb.max-block-duration` must be set to equal values to disable local compaction. The default of `2h` is recommended. Mentioned parameters set to equal value disable internal Prometheus compaction, which is needed to avoid the uploaded data corruption when thanos compactor does its job, this is critical for data consistency and should not be ignored if you plan to use thanos compactor. Even though you set mentioned parameters equal, you might observe Prometheus internal metric `prometheus_tsdb_compactions_total` being incremented, don't be confused by that: Prometheus passes all the complete data blocks via internal compaction mechanism with no exception, but if you followed recommendations - data won't be modified by Prometheus before sidecar uploads it.
+* The minimum Prometheus version is 2.2.1
+* The `external_labels` section of the configuration implements is in line with the desired label scheme (will be used by query layer to filter out store APIs to query).
+* The `--web.enable-lifecycle` flag is enabled if you want to use `reload.*` flags.
 * The `--storage.tsdb.min-block-duration` and `--storage.tsdb.max-block-duration` must be set to equal values to disable local compaction. The default of `2h` is recommended. Mentioned parameters set to equal value disable internal Prometheus compaction, which is needed to avoid the uploaded data corruption when thanos compactor does its job, this is critical for data consistency and should not be ignored if you plan to use thanos compactor. Even though you set mentioned parameters equal, you might observe Prometheus internal metric `prometheus_tsdb_compactions_total` being incremented, don't be confused by that: Prometheus passes all the complete data blocks via internal compaction mechanism with no exception, but if you followed recommendations - data won't be modified by Prometheus before sidecar uploads it.
 
-The retention is recommended to not be lower than three times the block duration. This achieves resilience in the face of connectivity issues to the object storage since all local data will remain available within the Thanos cluster. If connectivity gets restored the backlog of blocks gets uploaded to the object storage.
+The retention is recommended to not be lower than three times the block duration. This achieves resilience in the face of connectivity issues
+to the object storage since all local data will remain available within the Thanos cluster. If connectivity gets restored the backlog of blocks gets uploaded to the object storage.
 
+```console
+$ prometheus \
+  --storage.tsdb.max-block-duration=2h \
+  --storage.tsdb.min-block-duration=2h \
+  --web.enable-lifecycle
 ```
+
+```console
 $ thanos sidecar \
     --tsdb.path        "/path/to/prometheus/data/dir" \
     --prometheus.url   "http://localhost:9090" \
-    --cluster.peers    "thanos-cluster.example.org" \
     --objstore.config-file  "bucket.yml"
 ```
 
-The content of `bucket.yml`:
+The example content of `bucket.yml`:
 
 ```yaml
 type: GCS
@@ -42,6 +51,7 @@ Flags:
                                  --help-long and --help-man).
       --version                  Show application version.
       --log.level=info           Log filtering level.
+      --log.format=logfmt        Log format to use.
       --gcloudtrace.project=GCLOUDTRACE.PROJECT
                                  GCP project to send Google Cloud Trace tracings
                                  to. If empty, tracing will be disabled.
@@ -50,6 +60,8 @@ Flags:
                                  If 0 no trace will be sent periodically, unless
                                  forced by baggage item. See
                                  `pkg/tracing/tracing.go` for details.
+      --http-address="0.0.0.0:10902"
+                                 Listen host:port for HTTP endpoints.
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
@@ -70,6 +82,10 @@ Flags:
                                  verification on server side. (tls.NoClientCert)
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
+      --grpc-advertise-address=GRPC-ADVERTISE-ADDRESS
+                                 Explicit (external) host:port address to
+                                 advertise for gRPC StoreAPI in gossip cluster.
+                                 If empty, 'grpc-address' will be used.
       --cluster.address="0.0.0.0:10900"
                                  Listen ip:port address for gossip cluster.
       --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS
@@ -104,6 +120,8 @@ Flags:
                                  configurations. Sets of configurations
                                  accounting the latency differences between
                                  network types: local, lan, wan.
+      --cluster.disable          If true gossip will be disabled and no cluster
+                                 related server will be started.
       --prometheus.url=http://localhost:9090
                                  URL at which to reach Prometheus's API. For
                                  better performance use local network.
@@ -131,4 +149,4 @@ Thanos can watch changes in Prometheus configuration and refresh Prometheus conf
 
 You can configure watching for changes in directory via `--reloader.rule-dir=DIR_NAME` flag.
 
-Thanos sidecar can watch `--reloader.config-file=CONFIG_FILE` configuration file, evalute environment variables found in there and produce generated config in `--reloader.config-envsubst-file=OUT_CONFIG_FILE` file.
+Thanos sidecar can watch `--reloader.config-file=CONFIG_FILE` configuration file, evaluate environment variables found in there and produce generated config in `--reloader.config-envsubst-file=OUT_CONFIG_FILE` file.

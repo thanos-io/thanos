@@ -78,6 +78,8 @@ Prometheus.Graph.prototype.initialize = function() {
 
   self.dedupBtn = self.queryForm.find(".dedup_btn");
   self.enableDedup = self.queryForm.find("input[name=dedup]");
+  self.partialResponseBtn = self.queryForm.find(".partial_response_btn");
+  self.partialResponse = self.queryForm.find("input[name=partial_response]");
   self.rangeInput = self.queryForm.find("input[name=range_input]");
   self.stackedBtn = self.queryForm.find(".stacked_btn");
   self.stacked = self.queryForm.find("input[name=stacked]");
@@ -160,6 +162,7 @@ Prometheus.Graph.prototype.initialize = function() {
     self.updateGraph();
   });
 
+  // Deduplication.
   self.isDedupEnabled = function() {
       return self.enableDedup.val() === '1';
   };
@@ -176,8 +179,29 @@ Prometheus.Graph.prototype.initialize = function() {
   styleDedupBtn();
 
   self.dedupBtn.click(function() {
-      self.enableDedup.val(self.isDedupEnabled() ? '0' : '1');
-      styleDedupBtn();
+    self.enableDedup.val(self.isDedupEnabled() ? '0' : '1');
+    styleDedupBtn();
+  });
+
+  // Partial response.
+  self.isPartialResponseEnabled = function() {
+    return self.partialResponse.val() === '1';
+  };
+  var stylePartialResponseBtn = function() {
+    var icon = self.partialResponseBtn.find('.glyphicon');
+    if (self.isPartialResponseEnabled()) {
+      icon.addClass("glyphicon-check");
+      icon.removeClass("glyphicon-unchecked");
+    } else {
+      icon.addClass("glyphicon-unchecked");
+      icon.removeClass("glyphicon-check");
+    }
+  };
+  stylePartialResponseBtn();
+
+  self.partialResponseBtn.click(function() {
+    self.partialResponse.val(self.isPartialResponseEnabled() ? '0' : '1');
+    stylePartialResponseBtn();
   });
 
   self.queryForm.submit(function() {
@@ -434,6 +458,7 @@ Prometheus.Graph.prototype.submitQuery = function() {
   };
 
   params.dedup = (self.isDedupEnabled() ? 'true' : 'false');
+  params.partial_response = (self.isPartialResponseEnabled() ? 'true' : 'false');
 
   if (self.options.tab === 0) {
     params.start = endDate - rangeSeconds;

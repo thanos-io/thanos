@@ -66,13 +66,16 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	haltOnError := cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
 		Hidden().Default("true").Bool()
+	acceptMalformedIndex := cmd.Flag("debug.accept-malformed-index",
+		"Compaction index verification will ignore out of order label names.").
+		Hidden().Default("false").Bool()
 
 	httpAddr := regHTTPAddrFlag(cmd)
 
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process compactions.").
 		Default("./data").String()
 
-	objStoreConfig := regCommonObjStoreFlags(cmd, "")
+	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
 
 	syncDelay := modelDuration(cmd.Flag("sync-delay", "Minimum age of fresh (non-compacted) blocks before they are being processed.").
 		Default("30m"))
@@ -92,6 +95,9 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	maxCompactionLevel := cmd.Flag("debug.max-compaction-level", fmt.Sprintf("Maximum compaction level, default is %d: %s", compactions.maxLevel(), compactions.String())).
 		Hidden().Default(strconv.Itoa(compactions.maxLevel())).Int()
 
+	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing block metadata from object storage.").
+		Default("20").Int()
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		return runCompact(g, logger, reg,
 			*httpAddr,
@@ -99,6 +105,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			objStoreConfig,
 			time.Duration(*syncDelay),
 			*haltOnError,
+			*acceptMalformedIndex,
 			*wait,
 			map[compact.ResolutionLevel]time.Duration{
 				compact.ResolutionLevelRaw: time.Duration(*retentionRaw),
@@ -108,6 +115,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			name,
 			*disableDownsampling,
 			*maxCompactionLevel,
+			*blockSyncConcurrency,
 		)
 	}
 }
@@ -121,11 +129,13 @@ func runCompact(
 	objStoreConfig *pathOrContent,
 	syncDelay time.Duration,
 	haltOnError bool,
+	acceptMalformedIndex bool,
 	wait bool,
 	retentionByResolution map[compact.ResolutionLevel]time.Duration,
 	component string,
 	disableDownsampling bool,
 	maxCompactionLevel int,
+	blockSyncConcurrency int,
 ) error {
 	halted := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compactor_halted",
@@ -138,13 +148,14 @@ func runCompact(
 	halted.Set(0)
 
 	reg.MustRegister(halted)
+	reg.MustRegister(retried)
 
-	bucketConfig, err := objStoreConfig.Content()
+	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
 		return err
 	}
 
-	bkt, err := client.NewBucket(logger, bucketConfig, reg, component)
+	bkt, err := client.NewBucket(logger, confContentYaml, reg, component)
 	if err != nil {
 		return err
 	}
@@ -156,7 +167,8 @@ func runCompact(
 		}
 	}()
 
-	sy, err := compact.NewSyncer(logger, reg, bkt, syncDelay)
+	sy, err := compact.NewSyncer(logger, reg, bkt, syncDelay,
+		blockSyncConcurrency, acceptMalformedIndex)
 	if err != nil {
 		return errors.Wrap(err, "create syncer")
 	}

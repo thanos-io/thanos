@@ -25,19 +25,21 @@ var (
 	promHTTPPort = func(i int) string { return fmt.Sprintf("%d", 9090+i) }
 
 	// We keep this one with localhost, to have perfect match with what Prometheus will expose in up metric.
-	promHTTP = func(i int) string { return fmt.Sprintf("localhost:%s", promHTTPPort(i)) }
+	promHTTP            = func(i int) string { return fmt.Sprintf("localhost:%s", promHTTPPort(i)) }
+	promRemoteWriteHTTP = func(i int) string { return fmt.Sprintf("localhost:%s", promHTTPPort(100+i)) }
 
-	sidecarGRPC    = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19090+i) }
-	sidecarHTTP    = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19190+i) }
-	sidecarCluster = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19390+i) }
+	sidecarGRPC = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19090+i) }
+	sidecarHTTP = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19190+i) }
 
-	queryGRPC    = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19490+i) }
-	queryHTTP    = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19590+i) }
-	queryCluster = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19690+i) }
+	queryGRPC = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19490+i) }
+	queryHTTP = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19590+i) }
 
-	rulerGRPC    = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19790+i) }
-	rulerHTTP    = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19890+i) }
-	rulerCluster = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19990+i) }
+	rulerGRPC = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19790+i) }
+	rulerHTTP = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19890+i) }
+
+	remoteWriteReceiveHTTP       = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 18690+i) }
+	remoteWriteReceiveGRPC       = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 18790+i) }
+	remoteWriteReceiveMetricHTTP = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 18890+i) }
 
 	storeGatewayGRPC = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 20090+i) }
 	storeGatewayHTTP = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 20190+i) }
@@ -45,11 +47,10 @@ var (
 	minioHTTP = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 20290+i) }
 )
 
-type cmdScheduleFunc func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error)
+type cmdScheduleFunc func(workDir string) ([]*exec.Cmd, error)
 
 type spinupSuite struct {
 	cmdScheduleFuncs []cmdScheduleFunc
-	clusterPeerFlags []string
 
 	minioConfig         s3.Config
 	withPreStartedMinio bool
@@ -57,21 +58,13 @@ type spinupSuite struct {
 
 func newSpinupSuite() *spinupSuite { return &spinupSuite{} }
 
-func (s *spinupSuite) Add(cmdSchedule cmdScheduleFunc, gossipAddress string) *spinupSuite {
+func (s *spinupSuite) Add(cmdSchedule cmdScheduleFunc) *spinupSuite {
 	s.cmdScheduleFuncs = append(s.cmdScheduleFuncs, cmdSchedule)
-	if gossipAddress != "" {
-		s.clusterPeerFlags = append(s.clusterPeerFlags, fmt.Sprintf("--cluster.peers"), gossipAddress)
-	}
 	return s
 }
 
-func scraper(i int, config string, gossip bool) (cmdScheduleFunc, string) {
-	gossipAddress := ""
-	if gossip {
-		gossipAddress = sidecarCluster(i)
-	}
-
-	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+func scraper(i int, config string) cmdScheduleFunc {
+	return func(workDir string) ([]*exec.Cmd, error) {
 		promDir := fmt.Sprintf("%s/data/prom%d", workDir, i)
 		if err := os.MkdirAll(promDir, 0777); err != nil {
 			return nil, errors.Wrap(err, "create prom dir failed")
@@ -88,39 +81,50 @@ func scraper(i int, config string, gossip bool) (cmdScheduleFunc, string) {
 			"--log.level", "info",
 			"--web.listen-address", promHTTP(i),
 		))
-		args := []string{
-			"sidecar",
+		return append(cmds, exec.Command("thanos", "sidecar",
 			"--debug.name", fmt.Sprintf("sidecar-%d", i),
 			"--grpc-address", sidecarGRPC(i),
 			"--http-address", sidecarHTTP(i),
 			"--prometheus.url", fmt.Sprintf("http://%s", promHTTP(i)),
 			"--tsdb.path", promDir,
-			"--cluster.address", sidecarCluster(i),
+			"--cluster.disable",
+			"--log.level", "debug")), nil
+	}
+}
 
-			"--log.level", "debug",
+func receiver(i int, config string) cmdScheduleFunc {
+	return func(workDir string) ([]*exec.Cmd, error) {
+		promDir := fmt.Sprintf("%s/data/remote-write-prom%d", workDir, i)
+		if err := os.MkdirAll(promDir, 0777); err != nil {
+			return nil, errors.Wrap(err, "create prom dir failed")
 		}
 
-		if gossip {
-			args = append(args, []string{
-				"--cluster.advertise-address", sidecarCluster(i),
-				"--cluster.gossip-interval", "200ms",
-				"--cluster.pushpull-interval", "200ms",
-			}...)
-			args = append(args, clusterPeerFlags...)
+		if err := ioutil.WriteFile(promDir+"/prometheus.yml", []byte(config), 0666); err != nil {
+			return nil, errors.Wrap(err, "creating prom config failed")
 		}
-		cmds = append(cmds, exec.Command("thanos", args...))
 
-		return cmds, nil
-	}, gossipAddress
+		var cmds []*exec.Cmd
+		cmds = append(cmds, exec.Command(testutil.PrometheusBinary(),
+			"--config.file", promDir+"/prometheus.yml",
+			"--storage.tsdb.path", promDir,
+			"--log.level", "info",
+			"--web.listen-address", promRemoteWriteHTTP(i),
+		))
+		return append(cmds, exec.Command("thanos", "receive",
+			"--debug.name", fmt.Sprintf("remote-write-receive-%d", i),
+			"--grpc-address", remoteWriteReceiveGRPC(i),
+			"--http-address", remoteWriteReceiveMetricHTTP(i),
+			"--remote-write.address", remoteWriteReceiveHTTP(i),
+			"--tsdb.path", promDir,
+			"--log.level", "debug")), nil
+	}
 }
 
 func querier(i int, replicaLabel string, staticStores ...string) cmdScheduleFunc {
-	return func(_ string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+	return func(_ string) ([]*exec.Cmd, error) {
 		args := append(defaultQuerierFlags(i, replicaLabel),
-			"--cluster.advertise-address", queryCluster(i),
 			"--cluster.gossip-interval", "200ms",
 			"--cluster.pushpull-interval", "200ms")
-		args = append(args, clusterPeerFlags...)
 		for _, s := range staticStores {
 			args = append(args, "--store", s)
 		}
@@ -129,19 +133,18 @@ func querier(i int, replicaLabel string, staticStores ...string) cmdScheduleFunc
 }
 
 func querierWithStoreFlags(i int, replicaLabel string, storesAddresses ...string) cmdScheduleFunc {
-	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+	return func(_ string) ([]*exec.Cmd, error) {
 		args := defaultQuerierFlags(i, replicaLabel)
 
 		for _, addr := range storesAddresses {
 			args = append(args, "--store", addr)
 		}
-
 		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
 	}
 }
 
 func querierWithFileSD(i int, replicaLabel string, storesAddresses ...string) cmdScheduleFunc {
-	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+	return func(workDir string) ([]*exec.Cmd, error) {
 		queryFileSDDir := fmt.Sprintf("%s/data/queryFileSd%d", workDir, i)
 		if err := os.MkdirAll(queryFileSDDir, 0777); err != nil {
 			return nil, errors.Wrap(err, "create prom dir failed")
@@ -151,16 +154,18 @@ func querierWithFileSD(i int, replicaLabel string, storesAddresses ...string) cm
 			return nil, errors.Wrap(err, "creating prom config failed")
 		}
 
-		args := append(defaultQuerierFlags(i, replicaLabel),
+		args := append(
+			defaultQuerierFlags(i, replicaLabel),
 			"--store.sd-files", path.Join(queryFileSDDir, "filesd.json"),
-			"--store.sd-interval", "5s")
+			"--store.sd-interval", "5s",
+		)
 
 		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
 	}
 }
 
 func storeGateway(i int, bucketConfig []byte) cmdScheduleFunc {
-	return func(workDir string, _ []string) ([]*exec.Cmd, error) {
+	return func(workDir string) ([]*exec.Cmd, error) {
 		dbDir := fmt.Sprintf("%s/data/store-gateway%d", workDir, i)
 
 		if err := os.MkdirAll(dbDir, 0777); err != nil {
@@ -182,7 +187,7 @@ func storeGateway(i int, bucketConfig []byte) cmdScheduleFunc {
 }
 
 func alertManager(i int) cmdScheduleFunc {
-	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+	return func(workDir string) ([]*exec.Cmd, error) {
 		dir := fmt.Sprintf("%s/data/alertmanager%d", workDir, i)
 
 		if err := os.MkdirAll(dir, 0777); err != nil {
@@ -208,8 +213,8 @@ receivers:
 	}
 }
 
-func ruler(i int, rules string) (cmdScheduleFunc, string) {
-	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+func ruler(i int, rules string) cmdScheduleFunc {
+	return func(workDir string) ([]*exec.Cmd, error) {
 		dbDir := fmt.Sprintf("%s/data/rule%d", workDir, i)
 
 		if err := os.MkdirAll(dbDir, 0777); err != nil {
@@ -221,17 +226,14 @@ func ruler(i int, rules string) (cmdScheduleFunc, string) {
 		}
 
 		args := append(defaultRulerFlags(i, dbDir),
-			"--cluster.advertise-address", rulerCluster(i),
 			"--cluster.gossip-interval", "200ms",
 			"--cluster.pushpull-interval", "200ms")
-		args = append(args, clusterPeerFlags...)
-
 		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
-	}, rulerCluster(i)
+	}
 }
 
-func rulerWithQueryFlags(i int, rules string, queryAddresses ...string) (cmdScheduleFunc, string) {
-	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+func rulerWithQueryFlags(i int, rules string, queryAddresses ...string) cmdScheduleFunc {
+	return func(workDir string) ([]*exec.Cmd, error) {
 		dbDir := fmt.Sprintf("%s/data/rule%d", workDir, i)
 
 		if err := os.MkdirAll(dbDir, 0777); err != nil {
@@ -247,13 +249,12 @@ func rulerWithQueryFlags(i int, rules string, queryAddresses ...string) (cmdSche
 		for _, addr := range queryAddresses {
 			args = append(args, "--query", addr)
 		}
-
 		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
-	}, ""
+	}
 }
 
-func rulerWithFileSD(i int, rules string, queryAddresses ...string) (cmdScheduleFunc, string) {
-	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+func rulerWithFileSD(i int, rules string, queryAddresses ...string) cmdScheduleFunc {
+	return func(workDir string) ([]*exec.Cmd, error) {
 		dbDir := fmt.Sprintf("%s/data/rule%d", workDir, i)
 
 		if err := os.MkdirAll(dbDir, 0777); err != nil {
@@ -278,11 +279,11 @@ func rulerWithFileSD(i int, rules string, queryAddresses ...string) (cmdSchedule
 			"--query.sd-interval", "5s")
 
 		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
-	}, ""
+	}
 }
 
 func minio(accessKey string, secretKey string) cmdScheduleFunc {
-	return func(workDir string, clusterPeerFlags []string) ([]*exec.Cmd, error) {
+	return func(workDir string) ([]*exec.Cmd, error) {
 		dbDir := fmt.Sprintf("%s/data/minio", workDir)
 
 		if err := os.MkdirAll(dbDir, 0777); err != nil {
@@ -329,7 +330,7 @@ func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (
 		// Start minio before anything else.
 		// NewTestBucketFromConfig is responsible for healthchecking by creating a requested bucket in retry loop.
 		minioExit, err = newSpinupSuite().
-			Add(minio(s.minioConfig.AccessKey, s.minioConfig.SecretKey), "").
+			Add(minio(s.minioConfig.AccessKey, s.minioConfig.SecretKey)).
 			Exec(t, ctx, testName+"_minio")
 		if err != nil {
 			return nil, errors.Wrap(err, "start minio")
@@ -386,7 +387,7 @@ func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (
 	var commands []*exec.Cmd
 
 	for _, cmdFunc := range s.cmdScheduleFuncs {
-		cmds, err := cmdFunc(dir, s.clusterPeerFlags)
+		cmds, err := cmdFunc(dir)
 		if err != nil {
 			return nil, err
 		}
@@ -461,7 +462,8 @@ func defaultQuerierFlags(i int, replicaLabel string) []string {
 		"--http-address", queryHTTP(i),
 		"--log.level", "debug",
 		"--query.replica-label", replicaLabel,
-		"--cluster.address", queryCluster(i),
+		"--cluster.disable",
+		"--store.sd-dns-interval", "5s",
 	}
 }
 
@@ -475,7 +477,8 @@ func defaultRulerFlags(i int, dbDir string) []string {
 		"--alertmanagers.url", "http://127.0.0.1:29093",
 		"--grpc-address", rulerGRPC(i),
 		"--http-address", rulerHTTP(i),
-		"--cluster.address", rulerCluster(i),
+		"--cluster.disable",
 		"--log.level", "debug",
+		"--query.sd-dns-interval", "5s",
 	}
 }

@@ -8,19 +8,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/pkg/errors"
-	"github.com/prometheus/common/model"
-
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/prometheus/tsdb/labels"
-
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
+	"github.com/improbable-eng/thanos/pkg/promclient"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/testutil"
-	"gopkg.in/yaml.v2"
+	"github.com/pkg/errors"
+	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/tsdb/labels"
+	yaml "gopkg.in/yaml.v2"
 )
 
 func TestStoreGatewayQuery(t *testing.T) {
@@ -44,8 +43,8 @@ func TestStoreGatewayQuery(t *testing.T) {
 
 	exit, err := newSpinupSuite().
 		WithPreStartedMinio(s3Config).
-		Add(storeGateway(1, config), "").
-		Add(querier(1, "replica", storeGatewayGRPC(1)), "").
+		Add(storeGateway(1, config)).
+		Add(querier(1, "replica", storeGatewayGRPC(1))).
 		Exec(t, ctx, "test_store_gateway_query")
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)
@@ -95,7 +94,7 @@ func TestStoreGatewayQuery(t *testing.T) {
 		}
 
 		var err error
-		res, err = queryPrometheus(ctx, "http://"+queryHTTP(1), time.Now(), "{a=\"1\"}", false)
+		res, err = promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "{a=\"1\"}", time.Now(), false)
 		if err != nil {
 			return err
 		}
@@ -129,7 +128,7 @@ func TestStoreGatewayQuery(t *testing.T) {
 		}
 
 		var err error
-		res, err = queryPrometheus(ctx, "http://"+queryHTTP(1), time.Now(), "{a=\"1\"}", true)
+		res, err = promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "{a=\"1\"}", time.Now(), true)
 		if err != nil {
 			return err
 		}

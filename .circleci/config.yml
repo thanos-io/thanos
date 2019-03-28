@@ -4,8 +4,10 @@ jobs:
   test:
     docker:
       # Available from https://hub.docker.com/r/circleci/golang/
-      - image: circleci/golang:1.10
+      - image: circleci/golang:1.12
     working_directory: /go/src/github.com/improbable-eng/thanos
+    environment:
+      GO111MODULE: 'on'
     steps:
       - checkout
       - setup_remote_docker:
@@ -19,7 +21,7 @@ jobs:
               echo $GOOGLE_APPLICATION_CREDENTIALS_CONTENT > /go/src/github.com/improbable-eng/thanos/circleci-gcs-creds.json
               echo "Awesome! GCS integration tests are enabled."
             fi
-      - run: make deps DEPARGS="-v"
+      - run: make check-go-mod
       - run: make errcheck
       - run: make check-docs
       - run: make format
@@ -37,6 +39,8 @@ jobs:
             echo "Skipping Azure tests."
             export THANOS_SKIP_SWIFT_TESTS="true"
             echo "Skipping SWIFT tests."
+            export THANOS_SKIP_TENCENT_COS_TESTS="true"
+            echo "Skipping TENCENT COS tests."
 
             make test
 
@@ -55,7 +59,7 @@ jobs:
   publish_master:
     docker:
       # Available from https://hub.docker.com/r/circleci/golang/
-      - image: circleci/golang:1.10
+      - image: circleci/golang:1.12
     working_directory: /go/src/github.com/improbable-eng/thanos
     steps:
       - checkout
@@ -72,7 +76,7 @@ jobs:
   publish_release:
     docker:
       # Available from https://hub.docker.com/r/circleci/golang/
-      - image: circleci/golang:1.10
+      - image: circleci/golang:1.12
     working_directory: /go/src/github.com/improbable-eng/thanos
     steps:
       - checkout

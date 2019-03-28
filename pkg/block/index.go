@@ -11,7 +11,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
+
+	"github.com/prometheus/tsdb/fileutil"
+
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
@@ -36,23 +41,84 @@ type indexCache struct {
 	Postings    []postingsRange
 }
 
+type realByteSlice []byte
+
+func (b realByteSlice) Len() int {
+	return len(b)
+}
+
+func (b realByteSlice) Range(start, end int) []byte {
+	return b[start:end]
+}
+
+func (b realByteSlice) Sub(start, end int) index.ByteSlice {
+	return b[start:end]
+}
+
+func getSymbolTable(b index.ByteSlice) (map[uint32]string, error) {
+	version := int(b.Range(4, 5)[0])
+
+	if version != 1 && version != 2 {
+		return nil, errors.Errorf("unknown index file version %d", version)
+	}
+
+	toc, err := index.NewTOCFromByteSlice(b)
+	if err != nil {
+		return nil, errors.Wrap(err, "read TOC")
+	}
+
+	symbolsV2, symbolsV1, err := index.ReadSymbols(b, version, int(toc.Symbols))
+	if err != nil {
+		return nil, errors.Wrap(err, "read symbols")
+	}
+
+	symbolsTable := make(map[uint32]string, len(symbolsV1)+len(symbolsV2))
+	for o, s := range symbolsV1 {
+		symbolsTable[o] = s
+	}
+	for o, s := range symbolsV2 {
+		symbolsTable[uint32(o)] = s
+	}
+
+	return symbolsTable, nil
+}
+
 // WriteIndexCache writes a cache file containing the first lookup stages
 // for an index file.
-func WriteIndexCache(logger log.Logger, fn string, r *index.Reader) error {
+func WriteIndexCache(logger log.Logger, indexFn string, fn string) error {
+	indexFile, err := fileutil.OpenMmapFile(indexFn)
+	if err != nil {
+		return errors.Wrapf(err, "open mmap index file %s", indexFn)
+	}
+	defer runutil.CloseWithLogOnErr(logger, indexFile, "close index cache mmap file from %s", indexFn)
+
+	b := realByteSlice(indexFile.Bytes())
+	indexr, err := index.NewReader(b)
+	if err != nil {
+		return errors.Wrap(err, "open index reader")
+	}
+	defer runutil.CloseWithLogOnErr(logger, indexr, "load index cache reader")
+
+	// We assume reader verified index already.
+	symbols, err := getSymbolTable(b)
+	if err != nil {
+		return err
+	}
+
 	f, err := os.Create(fn)
 	if err != nil {
-		return errors.Wrap(err, "create file")
+		return errors.Wrap(err, "create index cache file")
 	}
 	defer runutil.CloseWithLogOnErr(logger, f, "index cache writer")
 
 	v := indexCache{
-		Version:     r.Version(),
-		Symbols:     r.SymbolTable(),
+		Version:     indexr.Version(),
+		Symbols:     symbols,
 		LabelValues: map[string][]string{},
 	}
 
 	// Extract label value indices.
-	lnames, err := r.LabelIndices()
+	lnames, err := indexr.LabelIndices()
 	if err != nil {
 		return errors.Wrap(err, "read label indices")
 	}
@@ -62,7 +128,7 @@ func WriteIndexCache(logger log.Logger, fn string, r *index.Reader) error {
 		}
 		ln := lns[0]
 
-		tpls, err := r.LabelValues(ln)
+		tpls, err := indexr.LabelValues(ln)
 		if err != nil {
 			return errors.Wrap(err, "get label values")
 		}
@@ -82,7 +148,7 @@ func WriteIndexCache(logger log.Logger, fn string, r *index.Reader) error {
 	}
 
 	// Extract postings ranges.
-	pranges, err := r.PostingsRanges()
+	pranges, err := indexr.PostingsRanges()
 	if err != nil {
 		return errors.Wrap(err, "read postings ranges")
 	}
@@ -183,6 +249,20 @@ type Stats struct {
 	// Specifically we mean here chunks with minTime == block.maxTime and maxTime > block.MaxTime. These are
 	// are segregated into separate counters. These chunks are safe to be deleted, since they are duplicated across 2 blocks.
 	Issue347OutsideChunks int
+	// OutOfOrderLabels represents the number of postings that contained out
+	// of order labels, a bug present in Prometheus 2.8.0 and below.
+	OutOfOrderLabels int
+}
+
+// PrometheusIssue5372Err returns an error if the Stats object indicates
+// postings with out of order labels.  This is corrected by Prometheus Issue
+// #5372 and affects Prometheus versions 2.8.0 and below.
+func (i Stats) PrometheusIssue5372Err() error {
+	if i.OutOfOrderLabels > 0 {
+		return errors.Errorf("index contains %d postings with out of order labels",
+			i.OutOfOrderLabels)
+	}
+	return nil
 }
 
 // Issue347OutsideChunksErr returns error if stats indicates issue347 block issue, that is repaired explicitly before compaction (on plan block).
@@ -236,6 +316,10 @@ func (i Stats) AnyErr() error {
 		errMsg = append(errMsg, err.Error())
 	}
 
+	if err := i.PrometheusIssue5372Err(); err != nil {
+		errMsg = append(errMsg, err.Error())
+	}
+
 	if len(errMsg) > 0 {
 		return errors.New(strings.Join(errMsg, ", "))
 	}
@@ -282,8 +366,13 @@ func GatherIndexIssueStats(logger log.Logger, fn string, minTime int64, maxTime 
 		}
 		l0 := lset[0]
 		for _, l := range lset[1:] {
-			if l.Name <= l0.Name {
-				return stats, errors.Errorf("out-of-order label set %s for series %d", lset, id)
+			if l.Name < l0.Name {
+				stats.OutOfOrderLabels++
+				level.Warn(logger).Log("msg",
+					"out-of-order label set: known bug in Prometheus 2.8.0 and below",
+					"labelset", fmt.Sprintf("%s", lset),
+					"series", fmt.Sprintf("%d", id),
+				)
 			}
 			l0 = l
 		}
@@ -346,7 +435,7 @@ type ignoreFnType func(mint, maxt int64, prev *chunks.Meta, curr *chunks.Meta) (
 // - removes all near "complete" outside chunks introduced by https://github.com/prometheus/tsdb/issues/347.
 // Fixable inconsistencies are resolved in the new block.
 // TODO(bplotka): https://github.com/improbable-eng/thanos/issues/378
-func Repair(logger log.Logger, dir string, id ulid.ULID, source SourceType, ignoreChkFns ...ignoreFnType) (resid ulid.ULID, err error) {
+func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceType, ignoreChkFns ...ignoreFnType) (resid ulid.ULID, err error) {
 	if len(ignoreChkFns) == 0 {
 		return resid, errors.New("no ignore chunk function specified")
 	}
@@ -355,7 +444,7 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source SourceType, igno
 	entropy := rand.New(rand.NewSource(time.Now().UnixNano()))
 	resid = ulid.MustNew(ulid.Now(), entropy)
 
-	meta, err := ReadMetaFile(bdir)
+	meta, err := metadata.Read(bdir)
 	if err != nil {
 		return resid, errors.Wrap(err, "read meta file")
 	}
@@ -363,7 +452,7 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source SourceType, igno
 		return resid, errors.New("cannot repair downsampled block")
 	}
 
-	b, err := tsdb.OpenBlock(bdir, nil)
+	b, err := tsdb.OpenBlock(logger, bdir, nil)
 	if err != nil {
 		return resid, errors.Wrap(err, "open block")
 	}
@@ -405,7 +494,7 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source SourceType, igno
 	if err := rewrite(indexr, chunkr, indexw, chunkw, &resmeta, ignoreChkFns); err != nil {
 		return resid, errors.Wrap(err, "rewrite block")
 	}
-	if err := WriteMetaFile(logger, resdir, &resmeta); err != nil {
+	if err := metadata.Write(logger, resdir, &resmeta); err != nil {
 		return resid, err
 	}
 	return resid, nil
@@ -494,7 +583,7 @@ OUTER:
 func rewrite(
 	indexr tsdb.IndexReader, chunkr tsdb.ChunkReader,
 	indexw tsdb.IndexWriter, chunkw tsdb.ChunkWriter,
-	meta *Meta,
+	meta *metadata.Meta,
 	ignoreChkFns []ignoreFnType,
 ) error {
 	symbols, err := indexr.Symbols()

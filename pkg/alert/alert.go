@@ -10,9 +10,8 @@ import (
 	"net/url"
 	"path"
 	"sync"
+	"sync/atomic"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -78,10 +77,11 @@ func (a *Alert) ResolvedAt(ts time.Time) bool {
 // Queue is a queue of alert notifications waiting to be sent. The queue is consumed in batches
 // and entries are dropped at the front if it runs full.
 type Queue struct {
-	logger       log.Logger
-	maxBatchSize int
-	capacity     int
-	labels       labels.Labels
+	logger          log.Logger
+	maxBatchSize    int
+	capacity        int
+	toAddLset       labels.Labels
+	toExcludeLabels labels.Labels
 
 	mtx   sync.Mutex
 	queue []*Alert
@@ -92,17 +92,39 @@ type Queue struct {
 	dropped prometheus.Counter
 }
 
+func relabelLabels(lset labels.Labels, excludeLset []string) (toAdd labels.Labels, toExclude labels.Labels) {
+	for _, ln := range excludeLset {
+		toExclude = append(toExclude, labels.Label{Name: ln})
+	}
+
+	for _, l := range lset {
+		// Exclude labels to  to add straight away.
+		if toExclude.Has(l.Name) {
+			continue
+		}
+		toAdd = append(toAdd, labels.Label{
+			Name:  l.Name,
+			Value: l.Value,
+		})
+	}
+	return toAdd, toExclude
+}
+
 // NewQueue returns a new queue. The given label set is attached to all alerts pushed to the queue.
-func NewQueue(logger log.Logger, reg prometheus.Registerer, capacity, maxBatchSize int, lset labels.Labels) *Queue {
+// The given exclude label set tells what label names to drop including external labels.
+func NewQueue(logger log.Logger, reg prometheus.Registerer, capacity, maxBatchSize int, externalLset labels.Labels, excludeLabels []string) *Queue {
+	toAdd, toExclude := relabelLabels(externalLset, excludeLabels)
+
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	q := &Queue{
-		logger:       logger,
-		capacity:     capacity,
-		morec:        make(chan struct{}, 1),
-		maxBatchSize: maxBatchSize,
-		labels:       lset,
+		logger:          logger,
+		capacity:        capacity,
+		morec:           make(chan struct{}, 1),
+		maxBatchSize:    maxBatchSize,
+		toAddLset:       toAdd,
+		toExcludeLabels: toExclude,
 
 		dropped: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "thanos_alert_queue_alerts_dropped_total",
@@ -174,15 +196,23 @@ func (q *Queue) Push(alerts []*Alert) {
 	if len(alerts) == 0 {
 		return
 	}
+
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
 
 	q.pushed.Add(float64(len(alerts)))
 
-	// Attach external labels before relabelling and sending.
+	// Attach external labels and drop excluded labels before sending.
+	// TODO(bwplotka): User proper relabelling with https://github.com/improbable-eng/thanos/issues/660
 	for _, a := range alerts {
-		lb := labels.NewBuilder(a.Labels)
-		for _, l := range q.labels {
+		lb := labels.NewBuilder(labels.Labels{})
+		for _, l := range a.Labels {
+			if q.toExcludeLabels.Has(l.Name) {
+				continue
+			}
+			lb.Set(l.Name, l.Value)
+		}
+		for _, l := range q.toAddLset {
 			lb.Set(l.Name, l.Value)
 		}
 		a.Labels = lb.Labels()
@@ -223,9 +253,11 @@ type Sender struct {
 	logger        log.Logger
 	alertmanagers func() []*url.URL
 	doReq         func(req *http.Request) (*http.Response, error)
+	timeout       time.Duration
 
 	sent    *prometheus.CounterVec
-	dropped *prometheus.CounterVec
+	errs    *prometheus.CounterVec
+	dropped prometheus.Counter
 	latency *prometheus.HistogramVec
 }
 
@@ -236,6 +268,7 @@ func NewSender(
 	reg prometheus.Registerer,
 	alertmanagers func() []*url.URL,
 	doReq func(req *http.Request) (*http.Response, error),
+	timeout time.Duration,
 ) *Sender {
 	if doReq == nil {
 		doReq = http.DefaultClient.Do
@@ -247,16 +280,22 @@ func NewSender(
 		logger:        logger,
 		alertmanagers: alertmanagers,
 		doReq:         doReq,
+		timeout:       timeout,
 
 		sent: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_alert_sender_alerts_sent_total",
 			Help: "Total number of alerts sent by alertmanager.",
 		}, []string{"alertmanager"}),
 
-		dropped: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "thanos_alert_sender_alerts_dropped_total",
-			Help: "Total number of alerts dropped by alertmanager.",
+		errs: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "thanos_alert_sender_errors_total",
+			Help: "Total number of errors while sending alerts to alertmanager.",
 		}, []string{"alertmanager"}),
+
+		dropped: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "thanos_alert_sender_alerts_dropped_total",
+			Help: "Total number of alerts dropped in case of all sends to alertmanagers failed.",
+		}),
 
 		latency: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name: "thanos_alert_sender_latency_seconds",
@@ -270,22 +309,29 @@ func NewSender(
 }
 
 // Send an alert batch to all given Alertmanager URLs.
-func (s *Sender) Send(ctx context.Context, alerts []*Alert) error {
+// TODO(bwplotka): https://github.com/improbable-eng/thanos/issues/660
+func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 	if len(alerts) == 0 {
-		return nil
+		return
 	}
 	b, err := json.Marshal(alerts)
 	if err != nil {
-		return errors.Wrap(err, "encode alerts")
+		level.Warn(s.logger).Log("msg", "sending alerts failed", "err", err)
+		return
 	}
 
-	var g errgroup.Group
-
-	for _, u := range s.alertmanagers() {
+	var (
+		wg         sync.WaitGroup
+		numSuccess uint64
+	)
+	amrs := s.alertmanagers()
+	for _, u := range amrs {
 		amURL := *u
-		sendCtx, cancel := context.WithCancel(ctx)
+		sendCtx, cancel := context.WithTimeout(ctx, s.timeout)
 
-		g.Go(func() error {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 			defer cancel()
 
 			start := time.Now()
@@ -294,21 +340,27 @@ func (s *Sender) Send(ctx context.Context, alerts []*Alert) error {
 			if err := s.sendOne(sendCtx, amURL.String(), b); err != nil {
 				level.Warn(s.logger).Log(
 					"msg", "sending alerts failed",
-					"alertmanager", u.Host,
-					"numDropped", len(alerts),
+					"alertmanager", amURL.Host,
+					"numAlerts", len(alerts),
 					"err", err)
-				s.dropped.WithLabelValues(u.Host).Add(float64(len(alerts)))
-				return err
+				s.errs.WithLabelValues(amURL.Host).Inc()
+				return
 			}
-			s.sent.WithLabelValues(u.Host).Add(float64(len(alerts)))
-			s.latency.WithLabelValues(u.Host).Observe(time.Since(start).Seconds())
-			return nil
-		})
+			s.latency.WithLabelValues(amURL.Host).Observe(time.Since(start).Seconds())
+			s.sent.WithLabelValues(amURL.Host).Add(float64(len(alerts)))
+
+			atomic.AddUint64(&numSuccess, 1)
+		}()
 	}
-	if err := g.Wait(); err != nil {
-		return errors.Wrap(err, "send alerts")
+	wg.Wait()
+
+	if numSuccess > 0 {
+		return
 	}
-	return nil
+
+	s.dropped.Add(float64(len(alerts)))
+	level.Warn(s.logger).Log("msg", "failed to send alerts to all alertmanagers", "alertmanagers", amrs, "alerts", string(b))
+	return
 }
 
 func (s *Sender) sendOne(ctx context.Context, url string, b []byte) error {

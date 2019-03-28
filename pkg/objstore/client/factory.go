@@ -9,6 +9,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/azure"
+	"github.com/improbable-eng/thanos/pkg/objstore/cos"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/objstore/swift"
@@ -17,30 +18,25 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-type objProvider string
+type ObjProvider string
 
 const (
-	GCS   objProvider = "GCS"
-	S3    objProvider = "S3"
-	AZURE objProvider = "AZURE"
-	SWIFT objProvider = "SWIFT"
+	GCS   ObjProvider = "GCS"
+	S3    ObjProvider = "S3"
+	AZURE ObjProvider = "AZURE"
+	SWIFT ObjProvider = "SWIFT"
+	COS   ObjProvider = "COS"
 )
 
 type BucketConfig struct {
-	Type   objProvider `yaml:"type"`
+	Type   ObjProvider `yaml:"type"`
 	Config interface{} `yaml:"config"`
 }
 
-var ErrNotFound = errors.New("not found bucket")
-
 // NewBucket initializes and returns new object storage clients.
 // NOTE: confContentYaml can contain secrets.
-func NewBucket(logger log.Logger, confContentYaml []byte, reg *prometheus.Registry, component string) (objstore.Bucket, error) {
+func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registerer, component string) (objstore.Bucket, error) {
 	level.Info(logger).Log("msg", "loading bucket configuration")
-	if len(confContentYaml) == 0 {
-		return nil, ErrNotFound
-	}
-
 	bucketConf := &BucketConfig{}
 	if err := yaml.UnmarshalStrict(confContentYaml, bucketConf); err != nil {
 		return nil, errors.Wrap(err, "parsing config YAML file")
@@ -61,6 +57,8 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg *prometheus.Regist
 		bucket, err = azure.NewBucket(logger, config, component)
 	case string(SWIFT):
 		bucket, err = swift.NewContainer(logger, config)
+	case string(COS):
+		bucket, err = cos.NewBucket(logger, config, component)
 	default:
 		return nil, errors.Errorf("bucket with type %s is not supported", bucketConf.Type)
 	}

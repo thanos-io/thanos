@@ -15,10 +15,14 @@
                 <select class="form-control expression_select" name="insert_metric">
                   <option value="">- insert metric at cursor -</option>
                 </select>
-                <button type="button" class="btn btn-default dedup_btn">
+                <button type="button" class="btn btn-default graph_opt_btn dedup_btn">
                 <i class="glyphicon"></i> deduplication
                 </button>
                 <input type="hidden" name="dedup" value="1">
+                <button type="button" class="btn btn-default graph_opt_btn partial_response_btn">
+                <i class="glyphicon"></i> partial response
+                </button>
+                <input type="hidden" name="partial_response" value="1">
               </div>
             </div>
             <div class="row">

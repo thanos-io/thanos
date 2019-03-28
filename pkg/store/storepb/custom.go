@@ -2,6 +2,8 @@ package storepb
 
 import (
 	"strings"
+
+	"github.com/prometheus/prometheus/pkg/labels"
 )
 
 func NewWarnSeriesResponse(err error) *SeriesResponse {
@@ -149,4 +151,21 @@ func (s *mergedSeriesSet) Next() bool {
 		s.bdone = !s.b.Next()
 	}
 	return true
+}
+
+func LabelsToPromLabels(lset []Label) labels.Labels {
+	ret := make(labels.Labels, len(lset), len(lset))
+	for i, l := range lset {
+		ret[i] = labels.Label{Name: l.Name, Value: l.Value}
+	}
+
+	return ret
+}
+
+func LabelsToString(lset []Label) string {
+	var s []string
+	for _, l := range lset {
+		s = append(s, l.String())
+	}
+	return "[" + strings.Join(s, ",") + "]"
 }

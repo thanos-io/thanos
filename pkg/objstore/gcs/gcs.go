@@ -16,6 +16,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/version"
+	"golang.org/x/oauth2/google"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	yaml "gopkg.in/yaml.v2"
@@ -24,9 +25,10 @@ import (
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const DirDelim = "/"
 
-// gcsConfig stores the configuration for gcs bucket.
-type gcsConfig struct {
-	Bucket string `yaml:"bucket"`
+// Config stores the configuration for gcs bucket.
+type Config struct {
+	Bucket         string `yaml:"bucket"`
+	ServiceAccount string `yaml:"service_account"`
 }
 
 // Bucket implements the store.Bucket and shipper.Bucket interfaces against GCS.
@@ -40,15 +42,30 @@ type Bucket struct {
 
 // NewBucket returns a new Bucket against the given bucket handle.
 func NewBucket(ctx context.Context, logger log.Logger, conf []byte, component string) (*Bucket, error) {
-	var gc gcsConfig
+	var gc Config
 	if err := yaml.Unmarshal(conf, &gc); err != nil {
 		return nil, err
 	}
 	if gc.Bucket == "" {
 		return nil, errors.New("missing Google Cloud Storage bucket name for stored blocks")
 	}
-	gcsOptions := option.WithUserAgent(fmt.Sprintf("thanos-%s/%s (%s)", component, version.Version, runtime.Version()))
-	gcsClient, err := storage.NewClient(ctx, gcsOptions)
+
+	var opts []option.ClientOption
+
+	// If ServiceAccount is provided, use them in GCS client, otherwise fallback to Google default logic.
+	if gc.ServiceAccount != "" {
+		credentials, err := google.CredentialsFromJSON(ctx, []byte(gc.ServiceAccount))
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create credentials from JSON")
+		}
+		opts = append(opts, option.WithCredentials(credentials))
+	}
+
+	opts = append(opts,
+		option.WithUserAgent(fmt.Sprintf("thanos-%s/%s (%s)", component, version.Version, runtime.Version())),
+	)
+
+	gcsClient, err := storage.NewClient(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +169,7 @@ func (b *Bucket) Close() error {
 func NewTestBucket(t testing.TB, project string) (objstore.Bucket, func(), error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	src := rand.NewSource(time.Now().UnixNano())
-	gTestConfig := gcsConfig{
+	gTestConfig := Config{
 		Bucket: fmt.Sprintf("test_%s_%x", strings.ToLower(t.Name()), src.Int63()),
 	}
 

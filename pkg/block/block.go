@@ -5,10 +5,11 @@ package block
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
+
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
 
 	"fmt"
 
@@ -17,8 +18,6 @@ import (
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/fileutil"
 )
 
 const (
@@ -32,103 +31,6 @@ const (
 	// DebugMetas is a directory for debug meta files that happen in the past. Useful for debugging.
 	DebugMetas = "debug/metas"
 )
-
-type SourceType string
-
-const (
-	UnknownSource         SourceType = ""
-	SidecarSource         SourceType = "sidecar"
-	CompactorSource       SourceType = "compactor"
-	CompactorRepairSource SourceType = "compactor.repair"
-	RulerSource           SourceType = "ruler"
-	BucketRepairSource    SourceType = "bucket.repair"
-	TestSource            SourceType = "test"
-)
-
-// Meta describes the a block's meta. It wraps the known TSDB meta structure and
-// extends it by Thanos-specific fields.
-type Meta struct {
-	Version int `json:"version"`
-
-	tsdb.BlockMeta
-
-	Thanos ThanosMeta `json:"thanos"`
-}
-
-// ThanosMeta holds block meta information specific to Thanos.
-type ThanosMeta struct {
-	Labels     map[string]string    `json:"labels"`
-	Downsample ThanosDownsampleMeta `json:"downsample"`
-
-	// Source is a real upload source of the block.
-	Source SourceType `json:"source"`
-}
-
-type ThanosDownsampleMeta struct {
-	Resolution int64 `json:"resolution"`
-}
-
-// WriteMetaFile writes the given meta into <dir>/meta.json.
-func WriteMetaFile(logger log.Logger, dir string, meta *Meta) error {
-	// Make any changes to the file appear atomic.
-	path := filepath.Join(dir, MetaFilename)
-	tmp := path + ".tmp"
-
-	f, err := os.Create(tmp)
-	if err != nil {
-		return err
-	}
-
-	enc := json.NewEncoder(f)
-	enc.SetIndent("", "\t")
-
-	if err := enc.Encode(meta); err != nil {
-		runutil.CloseWithLogOnErr(logger, f, "close meta")
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	return renameFile(logger, tmp, path)
-}
-
-// ReadMetaFile reads the given meta from <dir>/meta.json.
-func ReadMetaFile(dir string) (*Meta, error) {
-	b, err := ioutil.ReadFile(filepath.Join(dir, MetaFilename))
-	if err != nil {
-		return nil, err
-	}
-	var m Meta
-
-	if err := json.Unmarshal(b, &m); err != nil {
-		return nil, err
-	}
-	if m.Version != 1 {
-		return nil, errors.Errorf("unexpected meta file version %d", m.Version)
-	}
-	return &m, nil
-}
-
-func renameFile(logger log.Logger, from, to string) error {
-	if err := os.RemoveAll(to); err != nil {
-		return err
-	}
-	if err := os.Rename(from, to); err != nil {
-		return err
-	}
-
-	// Directory was renamed; sync parent dir to persist rename.
-	pdir, err := fileutil.OpenDir(filepath.Dir(to))
-	if err != nil {
-		return err
-	}
-
-	if err = fileutil.Fsync(pdir); err != nil {
-		runutil.CloseWithLogOnErr(logger, pdir, "close dir")
-		return err
-	}
-	return pdir.Close()
-}
 
 // Download downloads directory that is mean to be block directory.
 func Download(ctx context.Context, logger log.Logger, bucket objstore.Bucket, id ulid.ULID, dst string) error {
@@ -169,7 +71,7 @@ func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 		return errors.Wrap(err, "not a block dir")
 	}
 
-	meta, err := ReadMetaFile(bdir)
+	meta, err := metadata.Read(bdir)
 	if err != nil {
 		// No meta or broken meta file.
 		return errors.Wrap(err, "read meta")
@@ -216,16 +118,17 @@ func Delete(ctx context.Context, bucket objstore.Bucket, id ulid.ULID) error {
 }
 
 // DownloadMeta downloads only meta file from bucket by block ID.
-func DownloadMeta(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID) (Meta, error) {
+// TODO(bwplotka): Differentiate between network error & partial upload.
+func DownloadMeta(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID) (metadata.Meta, error) {
 	rc, err := bkt.Get(ctx, path.Join(id.String(), MetaFilename))
 	if err != nil {
-		return Meta{}, errors.Wrapf(err, "meta.json bkt get for %s", id.String())
+		return metadata.Meta{}, errors.Wrapf(err, "meta.json bkt get for %s", id.String())
 	}
 	defer runutil.CloseWithLogOnErr(logger, rc, "download meta bucket client")
 
-	var m Meta
+	var m metadata.Meta
 	if err := json.NewDecoder(rc).Decode(&m); err != nil {
-		return Meta{}, errors.Wrapf(err, "decode meta.json for block %s", id.String())
+		return metadata.Meta{}, errors.Wrapf(err, "decode meta.json for block %s", id.String())
 	}
 	return m, nil
 }
@@ -233,25 +136,4 @@ func DownloadMeta(ctx context.Context, logger log.Logger, bkt objstore.Bucket, i
 func IsBlockDir(path string) (id ulid.ULID, ok bool) {
 	id, err := ulid.Parse(filepath.Base(path))
 	return id, err == nil
-}
-
-// InjectThanosMeta sets Thanos meta to the block meta JSON and saves it to the disk.
-// NOTE: It should be used after writing any block by any Thanos component, otherwise we will miss crucial metadata.
-func InjectThanosMeta(logger log.Logger, bdir string, meta ThanosMeta, downsampledMeta *tsdb.BlockMeta) (*Meta, error) {
-	newMeta, err := ReadMetaFile(bdir)
-	if err != nil {
-		return nil, errors.Wrap(err, "read new meta")
-	}
-	newMeta.Thanos = meta
-
-	// While downsampling we need to copy original compaction.
-	if downsampledMeta != nil {
-		newMeta.Compaction = downsampledMeta.Compaction
-	}
-
-	if err := WriteMetaFile(logger, bdir, newMeta); err != nil {
-		return nil, errors.Wrap(err, "write new meta")
-	}
-
-	return newMeta, nil
 }

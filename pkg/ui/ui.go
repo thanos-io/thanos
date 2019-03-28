@@ -6,7 +6,10 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"net/url"
+	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -65,12 +68,14 @@ func (bu *BaseUI) getTemplate(name string) (string, error) {
 	return string(baseTmpl) + string(menuTmpl) + string(pageTmpl), nil
 }
 
-func (bu *BaseUI) executeTemplate(w http.ResponseWriter, name string, data interface{}) {
+func (bu *BaseUI) executeTemplate(w http.ResponseWriter, name string, prefix string, data interface{}) {
 	text, err := bu.getTemplate(name)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	bu.tmplFuncs["pathPrefix"] = func() string { return prefix }
 
 	t, err := template.New("").Funcs(bu.tmplFuncs).Parse(text)
 	if err != nil {
@@ -80,4 +85,42 @@ func (bu *BaseUI) executeTemplate(w http.ResponseWriter, name string, data inter
 	if err := t.Execute(w, data); err != nil {
 		level.Warn(bu.logger).Log("msg", "template expansion failed", "err", err)
 	}
+}
+
+// GetWebPrefix sanitizes an external URL path prefix value.
+// A value provided by web.external-prefix flag is preferred over the one supplied through an HTTP header.
+func GetWebPrefix(logger log.Logger, flagsMap map[string]string, r *http.Request) string {
+	// Ignore web.prefix-header value if web.external-prefix is defined.
+	if len(flagsMap["web.external-prefix"]) > 0 {
+		return flagsMap["web.external-prefix"]
+	}
+
+	prefix := r.Header.Get(flagsMap["web.prefix-header"])
+
+	// Even if rfc2616 suggests that Location header "value consists of a single absolute URI", browsers
+	// support relative location too. So for extra security, scheme and host parts are stripped from a dynamic prefix.
+	prefix, err := SanitizePrefix(prefix)
+	if err != nil {
+		level.Warn(logger).Log("msg", "Could not parse value of UI external prefix", "prefix", prefix, "err", err)
+	}
+
+	return prefix
+}
+
+// SanitizePrefix makes sure that path prefix value is valid.
+// A prefix is returned without a trailing slash. Hence empty string is returned for the root path.
+func SanitizePrefix(prefix string) (string, error) {
+	u, err := url.Parse(prefix)
+	if err != nil {
+		return "", err
+	}
+
+	// remove double slashes, convert to absolute path
+	sanitizedPrefix := strings.TrimPrefix(path.Clean(u.Path), ".")
+
+	if strings.HasSuffix(sanitizedPrefix, "/") {
+		sanitizedPrefix = strings.TrimSuffix(sanitizedPrefix, "/")
+	}
+
+	return sanitizedPrefix, nil
 }

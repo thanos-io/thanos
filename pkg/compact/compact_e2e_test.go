@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"path"
 	"path/filepath"
@@ -15,12 +16,14 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/objtesting"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
+	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
 )
 
@@ -29,7 +32,7 @@ func TestSyncer_SyncMetas_e2e(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
-		sy, err := NewSyncer(nil, nil, bkt, 0)
+		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false)
 		testutil.Ok(t, err)
 
 		// Generate 15 blocks. Initially the first 10 are synced into memory and only the last
@@ -37,13 +40,13 @@ func TestSyncer_SyncMetas_e2e(t *testing.T) {
 		// After the first synchronization the first 5 should be dropped and the
 		// last 5 be loaded from the bucket.
 		var ids []ulid.ULID
-		var metas []*block.Meta
+		var metas []*metadata.Meta
 
 		for i := 0; i < 15; i++ {
 			id, err := ulid.New(uint64(i), nil)
 			testutil.Ok(t, err)
 
-			var meta block.Meta
+			var meta metadata.Meta
 			meta.Version = 1
 			meta.ULID = id
 
@@ -56,7 +59,7 @@ func TestSyncer_SyncMetas_e2e(t *testing.T) {
 		for _, m := range metas[5:] {
 			var buf bytes.Buffer
 			testutil.Ok(t, json.NewEncoder(&buf).Encode(&m))
-			testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), block.MetaFilename), &buf))
+			testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), metadata.MetaFilename), &buf))
 		}
 
 		groups, err := sy.Groups()
@@ -79,11 +82,11 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 
 		// Generate 10 source block metas and construct higher level blocks
 		// that are higher compactions of them.
-		var metas []*block.Meta
+		var metas []*metadata.Meta
 		var ids []ulid.ULID
 
 		for i := 0; i < 10; i++ {
-			var m block.Meta
+			var m metadata.Meta
 
 			m.Version = 1
 			m.ULID = ulid.MustNew(uint64(i), nil)
@@ -94,28 +97,28 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 			metas = append(metas, &m)
 		}
 
-		var m1 block.Meta
+		var m1 metadata.Meta
 		m1.Version = 1
 		m1.ULID = ulid.MustNew(100, nil)
 		m1.Compaction.Level = 2
 		m1.Compaction.Sources = ids[:4]
 		m1.Thanos.Downsample.Resolution = 0
 
-		var m2 block.Meta
+		var m2 metadata.Meta
 		m2.Version = 1
 		m2.ULID = ulid.MustNew(200, nil)
 		m2.Compaction.Level = 2
 		m2.Compaction.Sources = ids[4:8] // last two source IDs is not part of a level 2 block.
 		m2.Thanos.Downsample.Resolution = 0
 
-		var m3 block.Meta
+		var m3 metadata.Meta
 		m3.Version = 1
 		m3.ULID = ulid.MustNew(300, nil)
 		m3.Compaction.Level = 3
 		m3.Compaction.Sources = ids[:9] // last source ID is not part of level 3 block.
 		m3.Thanos.Downsample.Resolution = 0
 
-		var m4 block.Meta
+		var m4 metadata.Meta
 		m4.Version = 14
 		m4.ULID = ulid.MustNew(400, nil)
 		m4.Compaction.Level = 2
@@ -127,11 +130,11 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 			fmt.Println("create", m.ULID)
 			var buf bytes.Buffer
 			testutil.Ok(t, json.NewEncoder(&buf).Encode(&m))
-			testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), block.MetaFilename), &buf))
+			testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), metadata.MetaFilename), &buf))
 		}
 
 		// Do one initial synchronization with the bucket.
-		sy, err := NewSyncer(nil, nil, bkt, 0)
+		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false)
 		testutil.Ok(t, err)
 		testutil.Ok(t, sy.SyncMetas(ctx))
 
@@ -173,17 +176,17 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
-		var metas []*block.Meta
+		var metas []*metadata.Meta
 		extLset := labels.Labels{{Name: "e1", Value: "1"}}
 		b1, err := testutil.CreateBlock(prepareDir, []labels.Labels{
 			{{Name: "a", Value: "1"}},
-			{{Name: "a", Value: "2"}},
+			{{Name: "a", Value: "2"}, {Name: "a", Value: "2"}},
 			{{Name: "a", Value: "3"}},
 			{{Name: "a", Value: "4"}},
 		}, 100, 0, 1000, extLset, 124)
 		testutil.Ok(t, err)
 
-		meta, err := block.ReadMetaFile(filepath.Join(prepareDir, b1.String()))
+		meta, err := metadata.Read(filepath.Join(prepareDir, b1.String()))
 		testutil.Ok(t, err)
 		metas = append(metas, meta)
 
@@ -196,15 +199,18 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 
 		// Mix order to make sure compact is able to deduct min time / max time.
-		meta, err = block.ReadMetaFile(filepath.Join(prepareDir, b3.String()))
+		meta, err = metadata.Read(filepath.Join(prepareDir, b3.String()))
 		testutil.Ok(t, err)
 		metas = append(metas, meta)
 
-		// Empty block. This can happen when TSDB does not have any samples for min-block-size time.
-		b2, err := testutil.CreateBlock(prepareDir, []labels.Labels{}, 100, 1001, 2000, extLset, 124)
+		// Currently TSDB does not produces empty blocks (see: https://github.com/prometheus/tsdb/pull/374). However before v2.7.0 it was
+		// so we still want to mimick this case as close as possible.
+		b2, err := createEmptyBlock(prepareDir, 1001, 2000, extLset, 124)
 		testutil.Ok(t, err)
 
-		meta, err = block.ReadMetaFile(filepath.Join(prepareDir, b2.String()))
+		// blocks" count=3 mint=0 maxt=3000 ulid=01D1RQCRRJM77KQQ4GYDSC50GM sources="[01D1RQCRMNZBVHBPGRPG2M3NZQ 01D1RQCRPJMYN45T65YA1PRWB7 01D1RQCRNMTWJKTN5QQXFNKKH8]"
+
+		meta, err = metadata.Read(filepath.Join(prepareDir, b2.String()))
 		testutil.Ok(t, err)
 		metas = append(metas, meta)
 
@@ -217,7 +223,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		}, 100, 3001, 4000, extLset, 124)
 		testutil.Ok(t, err)
 
-		meta, err = block.ReadMetaFile(filepath.Join(prepareDir, freshB.String()))
+		meta, err = metadata.Read(filepath.Join(prepareDir, freshB.String()))
 		testutil.Ok(t, err)
 		metas = append(metas, meta)
 
@@ -238,6 +244,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 			bkt,
 			extLset,
 			124,
+			false,
 			metrics.compactions.WithLabelValues(""),
 			metrics.compactionFailures.WithLabelValues(""),
 			metrics.garbageCollectedBlocks,
@@ -247,23 +254,23 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		comp, err := tsdb.NewLeveledCompactor(nil, log.NewLogfmtLogger(os.Stderr), []int64{1000, 3000}, nil)
 		testutil.Ok(t, err)
 
-		id, err := g.Compact(ctx, dir, comp)
+		shouldRerun, id, err := g.Compact(ctx, dir, comp)
 		testutil.Ok(t, err)
-		testutil.Assert(t, id == ulid.ULID{}, "group should be empty, but somehow compaction took place")
+		testutil.Assert(t, !shouldRerun, "group should be empty, but compactor did a compaction and told us to rerun")
 
 		// Add all metas that would be gathered by syncMetas.
 		for _, m := range metas {
 			testutil.Ok(t, g.Add(m))
 		}
 
-		id, err = g.Compact(ctx, dir, comp)
+		shouldRerun, id, err = g.Compact(ctx, dir, comp)
 		testutil.Ok(t, err)
-		testutil.Assert(t, id != ulid.ULID{}, "no compaction took place")
+		testutil.Assert(t, shouldRerun, "there should be compactible data, but the compactor reported there was not")
 
 		resDir := filepath.Join(dir, id.String())
 		testutil.Ok(t, block.Download(ctx, log.NewNopLogger(), bkt, id, resDir))
 
-		meta, err = block.ReadMetaFile(resDir)
+		meta, err = metadata.Read(resDir)
 		testutil.Ok(t, err)
 
 		testutil.Equals(t, int64(0), meta.MinTime)
@@ -293,4 +300,57 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		})
 		testutil.Ok(t, err)
 	})
+}
+
+// createEmptyBlock produces empty block like it was the case before fix: https://github.com/prometheus/tsdb/pull/374.
+// (Prometheus pre v2.7.0)
+func createEmptyBlock(dir string, mint int64, maxt int64, extLset labels.Labels, resolution int64) (ulid.ULID, error) {
+	entropy := rand.New(rand.NewSource(time.Now().UnixNano()))
+	uid := ulid.MustNew(ulid.Now(), entropy)
+
+	if err := os.Mkdir(path.Join(dir, uid.String()), os.ModePerm); err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "close index")
+	}
+
+	if err := os.Mkdir(path.Join(dir, uid.String(), "chunks"), os.ModePerm); err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "close index")
+	}
+
+	w, err := index.NewWriter(path.Join(dir, uid.String(), "index"))
+	if err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "new index")
+	}
+
+	if err := w.Close(); err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "close index")
+	}
+
+	m := tsdb.BlockMeta{
+		Version: 1,
+		ULID:    uid,
+		MinTime: mint,
+		MaxTime: maxt,
+		Compaction: tsdb.BlockMetaCompaction{
+			Level:   1,
+			Sources: []ulid.ULID{uid},
+		},
+	}
+	b, err := json.Marshal(&m)
+	if err != nil {
+		return ulid.ULID{}, err
+	}
+
+	if err := ioutil.WriteFile(path.Join(dir, uid.String(), "meta.json"), b, os.ModePerm); err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "saving meta.json")
+	}
+
+	if _, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(dir, uid.String()), metadata.Thanos{
+		Labels:     extLset.Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: resolution},
+		Source:     metadata.TestSource,
+	}, nil); err != nil {
+		return ulid.ULID{}, errors.Wrap(err, "finalize block")
+	}
+
+	return uid, nil
 }

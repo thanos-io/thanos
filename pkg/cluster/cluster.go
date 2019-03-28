@@ -21,8 +21,23 @@ import (
 	"github.com/prometheus/common/model"
 )
 
+type PeerStateFetcher interface {
+	PeerState(id string) (PeerState, bool)
+}
+
+type Peer interface {
+	PeerStateFetcher
+
+	Name() string
+	SetLabels(labels []storepb.Label)
+	SetTimestamps(mint int64, maxt int64)
+	Join(peerType PeerType, initialMetadata PeerMetadata) error
+	PeerStates(types ...PeerType) map[string]PeerState
+	Close(timeout time.Duration)
+}
+
 // Peer is a single peer in a gossip cluster.
-type Peer struct {
+type peer struct {
 	logger   log.Logger
 	mlistMtx sync.RWMutex
 	mlist    *memberlist.Memberlist
@@ -112,7 +127,7 @@ func New(
 	refreshInterval time.Duration,
 	secretKey []byte,
 	networkType string,
-) (*Peer, error) {
+) (*peer, error) {
 	l = log.With(l, "component", "cluster")
 
 	bindHost, bindPortStr, err := net.SplitHostPort(bindAddr)
@@ -180,7 +195,7 @@ func New(
 	reg.MustRegister(gossipMsgsReceived)
 	reg.MustRegister(gossipClusterMembers)
 
-	return &Peer{
+	return &peer{
 		logger:                   l,
 		knownPeers:               knownPeers,
 		cfg:                      cfg,
@@ -196,7 +211,7 @@ func New(
 }
 
 // Join joins to the memberlist gossip cluster using knownPeers and given peerType and initialMetadata.
-func (p *Peer) Join(peerType PeerType, initialMetadata PeerMetadata) error {
+func (p *peer) Join(peerType PeerType, initialMetadata PeerMetadata) error {
 	if p.hasJoined() {
 		return errors.New("peer already joined; close it first to rejoin")
 	}
@@ -241,7 +256,7 @@ func (p *Peer) Join(peerType PeerType, initialMetadata PeerMetadata) error {
 	return nil
 }
 
-func (p *Peer) periodicallyRefresh() {
+func (p *peer) periodicallyRefresh() {
 	tick := time.NewTicker(p.refreshInterval)
 	defer tick.Stop()
 
@@ -258,7 +273,7 @@ func (p *Peer) periodicallyRefresh() {
 }
 
 // Refresh renews membership cluster, this will refresh DNS names and join newly added members
-func (p *Peer) Refresh() error {
+func (p *peer) Refresh() error {
 	p.mlistMtx.Lock()
 	defer p.mlistMtx.Unlock()
 
@@ -302,7 +317,7 @@ func (p *Peer) Refresh() error {
 	return nil
 }
 
-func (p *Peer) hasJoined() bool {
+func (p *peer) hasJoined() bool {
 	p.mlistMtx.RLock()
 	defer p.mlistMtx.RUnlock()
 
@@ -327,7 +342,7 @@ func warnIfAlone(logger log.Logger, d time.Duration, stopc chan struct{}, numNod
 
 // SetLabels updates internal metadata's labels stored in PeerState for this peer.
 // Note that this data will be propagated based on gossipInterval we set.
-func (p *Peer) SetLabels(labels []storepb.Label) {
+func (p *peer) SetLabels(labels []storepb.Label) {
 	if !p.hasJoined() {
 		return
 	}
@@ -339,7 +354,7 @@ func (p *Peer) SetLabels(labels []storepb.Label) {
 
 // SetTimestamps updates internal metadata's timestamps stored in PeerState for this peer.
 // Note that this data will be propagated based on gossipInterval we set.
-func (p *Peer) SetTimestamps(mint int64, maxt int64) {
+func (p *peer) SetTimestamps(mint int64, maxt int64) {
 	if !p.hasJoined() {
 		return
 	}
@@ -352,7 +367,7 @@ func (p *Peer) SetTimestamps(mint int64, maxt int64) {
 
 // Close leaves the cluster waiting up to timeout and shutdowns peer if cluster left.
 // TODO(bplotka): Add this method into run.Group closing logic for each command. This will improve graceful shutdown.
-func (p *Peer) Close(timeout time.Duration) {
+func (p *peer) Close(timeout time.Duration) {
 	if !p.hasJoined() {
 		return
 	}
@@ -368,7 +383,7 @@ func (p *Peer) Close(timeout time.Duration) {
 }
 
 // Name returns the unique ID of this peer in the cluster.
-func (p *Peer) Name() string {
+func (p *peer) Name() string {
 	if !p.hasJoined() {
 		return ""
 	}
@@ -382,7 +397,7 @@ func PeerTypesStoreAPIs() []PeerType {
 }
 
 // PeerStates returns the custom state information for each peer by memberlist peer id (name).
-func (p *Peer) PeerStates(types ...PeerType) map[string]PeerState {
+func (p *peer) PeerStates(types ...PeerType) map[string]PeerState {
 	if !p.hasJoined() {
 		return nil
 	}
@@ -409,7 +424,7 @@ func (p *Peer) PeerStates(types ...PeerType) map[string]PeerState {
 }
 
 // PeerState returns the custom state information by memberlist peer name.
-func (p *Peer) PeerState(id string) (PeerState, bool) {
+func (p *peer) PeerState(id string) (PeerState, bool) {
 	if !p.hasJoined() {
 		return PeerState{}, false
 	}
@@ -423,7 +438,7 @@ func (p *Peer) PeerState(id string) (PeerState, bool) {
 
 // Info returns a JSON-serializable dump of cluster state.
 // Useful for debug.
-func (p *Peer) Info() map[string]interface{} {
+func (p *peer) Info() map[string]interface{} {
 	if !p.hasJoined() {
 		return nil
 	}
@@ -538,3 +553,17 @@ func parseNetworkConfig(networkType string) (*memberlist.Config, error) {
 
 	return mc, nil
 }
+
+func NewNoop() Peer {
+	return noopPeer{}
+}
+
+type noopPeer struct{}
+
+func (n noopPeer) Name() string                                               { return "no gossip" }
+func (n noopPeer) SetLabels(labels []storepb.Label)                           {}
+func (n noopPeer) SetTimestamps(mint int64, maxt int64)                       {}
+func (n noopPeer) PeerState(id string) (PeerState, bool)                      { return PeerState{}, false }
+func (n noopPeer) Join(peerType PeerType, initialMetadata PeerMetadata) error { return nil }
+func (n noopPeer) PeerStates(types ...PeerType) map[string]PeerState          { return nil }
+func (n noopPeer) Close(timeout time.Duration)                                {}

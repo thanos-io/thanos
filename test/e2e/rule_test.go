@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/promclient"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/pkg/errors"
@@ -28,31 +29,21 @@ groups:
 `
 
 var (
-	ruleGossipSuite = newSpinupSuite().
-			Add(querier(1, ""), queryCluster(1)).
-			Add(ruler(1, alwaysFireRule)).
-			Add(ruler(2, alwaysFireRule)).
-			Add(alertManager(1), "")
-
 	ruleStaticFlagsSuite = newSpinupSuite().
-				Add(querierWithStoreFlags(1, "", rulerGRPC(1), rulerGRPC(2)), "").
+				Add(querierWithStoreFlags(1, "", rulerGRPC(1), rulerGRPC(2))).
 				Add(rulerWithQueryFlags(1, alwaysFireRule, queryHTTP(1))).
 				Add(rulerWithQueryFlags(2, alwaysFireRule, queryHTTP(1))).
-				Add(alertManager(1), "")
+				Add(alertManager(1))
 
 	ruleFileSDSuite = newSpinupSuite().
-			Add(querierWithFileSD(1, "", rulerGRPC(1), rulerGRPC(2)), "").
+			Add(querierWithFileSD(1, "", rulerGRPC(1), rulerGRPC(2))).
 			Add(rulerWithFileSD(1, alwaysFireRule, queryHTTP(1))).
 			Add(rulerWithFileSD(2, alwaysFireRule, queryHTTP(1))).
-			Add(alertManager(1), "")
+			Add(alertManager(1))
 )
 
 func TestRule(t *testing.T) {
 	for _, tt := range []testConfig{
-		{
-			"gossip",
-			ruleGossipSuite,
-		},
 		{
 			"staticFlag",
 			ruleStaticFlagsSuite,
@@ -127,7 +118,7 @@ func testRuleComponent(t *testing.T, conf testConfig) {
 		qtime := time.Now()
 
 		// The time series written for the firing alerting rule must be queryable.
-		res, err := queryPrometheus(ctx, "http://"+queryHTTP(1), time.Now(), "ALERTS", false)
+		res, err := promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "ALERTS", time.Now(), false)
 		if err != nil {
 			return err
 		}
@@ -162,6 +153,7 @@ func testRuleComponent(t *testing.T, conf testConfig) {
 	}))
 }
 
+// TODO(bwplotka): Move to promclient.
 func queryAlertmanagerAlerts(ctx context.Context, url string) ([]*model.Alert, error) {
 	req, err := http.NewRequest("GET", url+"/api/v1/alerts", nil)
 	if err != nil {

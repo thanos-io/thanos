@@ -1,16 +1,18 @@
 package store
 
 import (
+	"context"
+	"io/ioutil"
+	"math"
 	"testing"
 	"time"
 
-	"github.com/oklog/ulid"
-
-	"github.com/improbable-eng/thanos/pkg/compact/downsample"
-
 	"github.com/fortytw2/leaktest"
-	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
+	"github.com/improbable-eng/thanos/pkg/compact/downsample"
+	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
+	"github.com/oklog/ulid"
 	"github.com/prometheus/tsdb/labels"
 )
 
@@ -41,7 +43,7 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 	}
 
 	for _, in := range input {
-		var m block.Meta
+		var m metadata.Meta
 		m.Thanos.Downsample.Resolution = in.window
 		m.MinTime = in.mint
 		m.MaxTime = in.maxt
@@ -102,7 +104,7 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 
 		var exp []*bucketBlock
 		for _, b := range c.res {
-			var m block.Meta
+			var m metadata.Meta
 			m.Thanos.Downsample.Resolution = b.window
 			m.MinTime = b.mint
 			m.MaxTime = b.maxt
@@ -129,7 +131,7 @@ func TestBucketBlockSet_remove(t *testing.T) {
 	}
 
 	for _, in := range input {
-		var m block.Meta
+		var m metadata.Meta
 		m.ULID = in.id
 		m.MinTime = in.mint
 		m.MaxTime = in.maxt
@@ -183,6 +185,27 @@ func TestBucketBlockSet_labelMatchers(t *testing.T) {
 			},
 			match: true,
 		},
+		// Those are matchers mentioned here: https://github.com/prometheus/prometheus/pull/3578#issuecomment-351653555
+		// We want to provide explicit tests that says when Thanos supports its and when not. We don't support it here in
+		// external labelset level.
+		{
+			in: []labels.Matcher{
+				labels.Not(labels.NewEqualMatcher("", "x")),
+			},
+			res: []labels.Matcher{
+				labels.Not(labels.NewEqualMatcher("", "x")),
+			},
+			match: true,
+		},
+		{
+			in: []labels.Matcher{
+				labels.Not(labels.NewEqualMatcher("", "d")),
+			},
+			res: []labels.Matcher{
+				labels.Not(labels.NewEqualMatcher("", "d")),
+			},
+			match: true,
+		},
 	}
 	for _, c := range cases {
 		res, ok := set.labelMatchers(c.in...)
@@ -191,22 +214,22 @@ func TestBucketBlockSet_labelMatchers(t *testing.T) {
 	}
 }
 
-func TestPartitionRanges(t *testing.T) {
+func TestGapBasedPartitioner_Partition(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	const maxGapSize = 1024 * 512
 
 	for _, c := range []struct {
 		input    [][2]int
-		expected [][2]int
+		expected []part
 	}{
 		{
 			input:    [][2]int{{1, 10}},
-			expected: [][2]int{{0, 1}},
+			expected: []part{{start: 1, end: 10, elemRng: [2]int{0, 1}}},
 		},
 		{
 			input:    [][2]int{{1, 2}, {3, 5}, {7, 10}},
-			expected: [][2]int{{0, 3}},
+			expected: []part{{start: 1, end: 10, elemRng: [2]int{0, 3}}},
 		},
 		{
 			input: [][2]int{
@@ -215,23 +238,58 @@ func TestPartitionRanges(t *testing.T) {
 				{20, 30},
 				{maxGapSize + 31, maxGapSize + 32},
 			},
-			expected: [][2]int{{0, 3}, {3, 4}},
+			expected: []part{
+				{start: 1, end: 30, elemRng: [2]int{0, 3}},
+				{start: maxGapSize + 31, end: maxGapSize + 32, elemRng: [2]int{3, 4}},
+			},
 		},
 		// Overlapping ranges.
 		{
 			input: [][2]int{
 				{1, 30},
-				{3, 28},
 				{1, 4},
+				{3, 28},
 				{maxGapSize + 31, maxGapSize + 32},
 				{maxGapSize + 31, maxGapSize + 40},
 			},
-			expected: [][2]int{{0, 3}, {3, 5}},
+			expected: []part{
+				{start: 1, end: 30, elemRng: [2]int{0, 3}},
+				{start: maxGapSize + 31, end: maxGapSize + 40, elemRng: [2]int{3, 5}},
+			},
+		},
+		{
+			input: [][2]int{
+				// Mimick AllPostingsKey, where range specified whole range.
+				{1, 15},
+				{1, maxGapSize + 100},
+				{maxGapSize + 31, maxGapSize + 40},
+			},
+			expected: []part{{start: 1, end: maxGapSize + 100, elemRng: [2]int{0, 3}}},
 		},
 	} {
-		res := partitionRanges(len(c.input), func(i int) (uint64, uint64) {
+		res := gapBasedPartitioner{maxGapSize: maxGapSize}.Partition(len(c.input), func(i int) (uint64, uint64) {
 			return uint64(c.input[i][0]), uint64(c.input[i][1])
-		}, maxGapSize)
+		})
 		testutil.Equals(t, c.expected, res)
 	}
+}
+
+func TestBucketStore_Info(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	dir, err := ioutil.TempDir("", "prometheus-test")
+	testutil.Ok(t, err)
+
+	bucketStore, err := NewBucketStore(nil, nil, nil, dir, 2e5, 2e5, 0, 0, false, 20)
+	testutil.Ok(t, err)
+
+	resp, err := bucketStore.Info(ctx, &storepb.InfoRequest{})
+	testutil.Ok(t, err)
+
+	testutil.Equals(t, storepb.StoreType_STORE, resp.StoreType)
+	testutil.Equals(t, int64(math.MaxInt64), resp.MinTime)
+	testutil.Equals(t, int64(math.MinInt64), resp.MaxTime)
 }

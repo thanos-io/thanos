@@ -155,7 +155,7 @@
       },
       "yaxes": [
         {
-          "format": "s",
+          "format": "reqps",
           "label": null,
           "logBase": 1,
           "max": null,
@@ -396,7 +396,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(prometheus_engine_query_duration_seconds{$labelselector=\"$labelvalue\",kubernetes_pod_name=~\"$pod\",quantile=\"0.99\"}[$interval])",
+          "expr": "prometheus_engine_query_duration_seconds{$labelselector=\"$labelvalue\",kubernetes_pod_name=~\"$pod\",quantile=\"0.99\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{kubernetes_pod_name}} {{slice}}",
@@ -406,7 +406,7 @@
       "thresholds": [],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Prometheus Query 99 Quantile [$interval]",
+      "title": "Prometheus Query 99 Quantile",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -478,7 +478,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(prometheus_engine_queries{$labelselector=\"$labelvalue\",kubernetes_pod_name=~\"$pod\"}[$interval])",
+          "expr": "prometheus_engine_queries{$labelselector=\"$labelvalue\",kubernetes_pod_name=~\"$pod\"}",
           "format": "time_series",
           "instant": false,
           "intervalFactor": 1,
@@ -956,7 +956,7 @@
         "multi": false,
         "name": "pod",
         "options": [],
-        "query": "label_values(thanos_build_info{app=\"thanos-query\"}, kubernetes_pod_name)",
+        "query": "label_values(thanos_build_info{$labelselector=\"$labelvalue\"}, kubernetes_pod_name)",
         "refresh": 1,
         "regex": "",
         "sort": 0,

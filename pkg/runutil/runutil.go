@@ -1,12 +1,50 @@
+// Package runutil provides helpers to advanced function scheduling control like repeat or retry.
+//
+// It's very often the case when you need to excutes some code every fixed intervals or have it retried automatically.
+// To make it reliably with proper timeout, you need to carefully arrange some boilerplate for this.
+// Below function does it for you.
+//
+// For repeat executes, use Repeat:
+//
+// 	err := runutil.Repeat(10*time.Second, stopc, func() error {
+// 		// ...
+// 	})
+//
+// Retry starts executing closure function f until no error is returned from f:
+//
+// 	err := runutil.Retry(10*time.Second, stopc, func() error {
+// 		// ...
+// 	})
+//
+// For logging an error on each f error, use RetryWithLog:
+//
+// 	err := runutil.RetryWithLog(logger, 10*time.Second, stopc, func() error {
+// 		// ...
+// 	})
+//
+// Another use case for runutil package is when you want to close a `Closer` interface. As we all know, we should close all implements of `Closer`, such as *os.File. Commonly we will use:
+//
+// 	defer closer.Close()
+//
+// The problem is that Close() usually can return important error e.g for os.File the actual file flush might happen (and fail) on `Close` method. It's important to *always* check error. Thanos provides utility functions to log every error like those, allowing to put them in convenient `defer`:
+//
+// 	defer runutil.CloseWithLogOnErr(logger, closer, "log format message")
+//
+// For capturing error, use CloseWithErrCapture:
+//
+// 	var err error
+// 	defer runutil.CloseWithErrCapture(logger, &err, closer, "log format message")
+//
+// 	// ...
+//
+// If Close() returns error, err will capture it and return by argument.
 package runutil
 
 import (
+	"fmt"
+	"io"
 	"os"
 	"time"
-
-	"io"
-
-	"fmt"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
