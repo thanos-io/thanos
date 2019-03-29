@@ -769,10 +769,12 @@ func TestProxyStore_LabelNames(t *testing.T) {
 		},
 	} {
 		if ok := t.Run(tc.title, func(t *testing.T) {
-			q := NewProxyStore(nil,
-				func(_ context.Context) ([]Client, error) { return tc.storeAPIs, nil },
+			q := NewProxyStore(
+				nil,
+				func() []Client { return tc.storeAPIs },
 				component.Query,
 				nil,
+				0*time.Second,
 			)
 
 			ctx := context.Background()

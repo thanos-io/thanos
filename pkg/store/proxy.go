@@ -404,11 +404,7 @@ func (s *ProxyStore) LabelNames(ctx context.Context, r *storepb.LabelNamesReques
 		g, gctx  = errgroup.WithContext(ctx)
 	)
 
-	stores, err := s.stores(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Unknown, err.Error())
-	}
-	for _, st := range stores {
+	for _, st := range s.stores() {
 		st := st
 		g.Go(func() error {
 			resp, err := st.LabelNames(gctx, &storepb.LabelNamesRequest{
@@ -460,7 +456,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		store := st
 		g.Go(func() error {
 			resp, err := store.LabelValues(gctx, &storepb.LabelValuesRequest{
-				Label: r.Label,
+				Label:                   r.Label,
 				PartialResponseDisabled: r.PartialResponseDisabled,
 			})
 			if err != nil {
