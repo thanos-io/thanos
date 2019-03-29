@@ -421,7 +421,7 @@ func (s *ProxyStore) LabelNames(ctx context.Context, r *storepb.LabelNamesReques
 				}
 
 				mtx.Lock()
-				warnings = append(warnings, errors.Wrap(err, "fetch label names").Error())
+				warnings = append(warnings, err.Error())
 				mtx.Unlock()
 				return nil
 			}

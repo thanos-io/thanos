@@ -690,75 +690,106 @@ func TestProxyStore_LabelValues(t *testing.T) {
 func TestProxyStore_LabelNames(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
-	m1 := &mockedStoreAPI{
-		RespLabelNames: &storepb.LabelNamesResponse{
-			Names: []string{"a", "b"},
+	for _, tc := range []struct {
+		title     string
+		storeAPIs []Client
+
+		req *storepb.LabelNamesRequest
+
+		expectedNames       []string
+		expectedErr         error
+		expectedWarningsLen int
+	}{
+		{
+			title: "label_names partial response disabled",
+			storeAPIs: []Client{
+				&testClient{
+					StoreClient: &mockedStoreAPI{
+						RespLabelNames: &storepb.LabelNamesResponse{
+							Names: []string{"a", "b"},
+						},
+					},
+				},
+				&testClient{
+					StoreClient: &mockedStoreAPI{
+						RespLabelNames: &storepb.LabelNamesResponse{
+							Names: []string{"a", "c", "d"},
+						},
+					},
+				},
+			},
+			req: &storepb.LabelNamesRequest{
+				PartialResponseDisabled: true,
+			},
+			expectedNames:       []string{"a", "b", "c", "d"},
+			expectedWarningsLen: 0,
 		},
-	}
-
-	m2 := &mockedStoreAPI{
-		RespLabelNames: &storepb.LabelNamesResponse{
-			Names: []string{"a", "c", "d"},
+		{
+			title: "label_names partial response disabled, but returns error",
+			storeAPIs: []Client{
+				&testClient{
+					StoreClient: &mockedStoreAPI{
+						RespLabelNames: &storepb.LabelNamesResponse{
+							Names: []string{"a", "b"},
+						},
+					},
+				},
+				&testClient{
+					StoreClient: &mockedStoreAPI{
+						RespError: errors.New("error!"),
+					},
+				},
+			},
+			req: &storepb.LabelNamesRequest{
+				PartialResponseDisabled: true,
+			},
+			expectedErr: errors.New("fetch label names from store test: error!"),
 		},
-	}
-
-	cls := []Client{
-		&testClient{StoreClient: m1},
-		&testClient{StoreClient: m2},
-	}
-
-	q := NewProxyStore(nil,
-		func(context.Context) ([]Client, error) { return cls, nil },
-		component.Query,
-		nil,
-	)
-
-	ctx := context.Background()
-	req := &storepb.LabelNamesRequest{
-		PartialResponseDisabled: true,
-	}
-	resp, err := q.LabelNames(ctx, req)
-	testutil.Ok(t, err)
-	testutil.Assert(t, proto.Equal(req, m1.LastLabelNamesReq), "request was not proxied properly to underlying storeAPI: %s vs %s", req, m1.LastLabelNamesReq)
-
-	testutil.Equals(t, []string{"a", "b", "c", "d"}, resp.Names)
-	testutil.Equals(t, 0, len(resp.Warnings))
-}
-
-func TestProxyStore_LabelNames_PartialResponseEnable(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
-	m1 := &mockedStoreAPI{
-		RespLabelNames: &storepb.LabelNamesResponse{
-			Names: []string{"a", "b"},
+		{
+			title: "label_names partial response enabled",
+			storeAPIs: []Client{
+				&testClient{
+					StoreClient: &mockedStoreAPI{
+						RespLabelNames: &storepb.LabelNamesResponse{
+							Names: []string{"a", "b"},
+						},
+					},
+				},
+				&testClient{
+					StoreClient: &mockedStoreAPI{
+						RespError: errors.New("error!"),
+					},
+				},
+			},
+			req: &storepb.LabelNamesRequest{
+				PartialResponseDisabled: false,
+			},
+			expectedNames:       []string{"a", "b"},
+			expectedWarningsLen: 1,
 		},
+	} {
+		if ok := t.Run(tc.title, func(t *testing.T) {
+			q := NewProxyStore(nil,
+				func(_ context.Context) ([]Client, error) { return tc.storeAPIs, nil },
+				component.Query,
+				nil,
+			)
+
+			ctx := context.Background()
+			resp, err := q.LabelNames(ctx, tc.req)
+			if tc.expectedErr != nil {
+				testutil.NotOk(t, err)
+				testutil.Equals(t, tc.expectedErr.Error(), err.Error())
+				return
+			}
+			testutil.Ok(t, err)
+
+			testutil.Equals(t, tc.expectedNames, resp.Names)
+			testutil.Equals(t, tc.expectedWarningsLen, len(resp.Warnings), "got %v", resp.Warnings)
+		}); !ok {
+			return
+		}
 	}
-
-	m2 := &mockedStoreAPI{
-		RespError: errors.New("error!"),
-	}
-
-	cls := []Client{
-		&testClient{StoreClient: m1},
-		&testClient{StoreClient: m2},
-	}
-
-	q := NewProxyStore(nil,
-		func(context.Context) ([]Client, error) { return cls, nil },
-		component.Query,
-		nil,
-	)
-
-	ctx := context.Background()
-	req := &storepb.LabelNamesRequest{
-		PartialResponseDisabled: false,
-	}
-	resp, err := q.LabelNames(ctx, req)
-	testutil.Ok(t, err)
-	testutil.Assert(t, proto.Equal(req, m1.LastLabelNamesReq), "request was not proxied properly to underlying storeAPI: %s vs %s", req, m1.LastLabelNamesReq)
-
-	testutil.Equals(t, []string{"a", "b"}, resp.Names)
-	testutil.Equals(t, 1, len(resp.Warnings))
 }
 
 type rawSeries struct {
