@@ -223,7 +223,6 @@ func newLazyOverlapChecker(logger log.Logger, bucket objstore.Bucket, labels fun
 }
 
 func (c *lazyOverlapChecker) sync(ctx context.Context) error {
-	level.Info(c.logger).Log("msg", "gathering all existing blocks from the remote bucket")
 	if err := c.bucket.Iter(ctx, "", func(path string) error {
 		id, ok := block.IsBlockDir(path)
 		if !ok {
@@ -253,6 +252,7 @@ func (c *lazyOverlapChecker) sync(ctx context.Context) error {
 
 func (c *lazyOverlapChecker) IsOverlapping(ctx context.Context, newMeta tsdb.BlockMeta) error {
 	if !c.synced {
+		level.Info(c.logger).Log("msg", "gathering all existing blocks from the remote bucket for check", "id", newMeta.ULID.String())
 		if err := c.sync(ctx); err != nil {
 			return err
 		}
@@ -280,8 +280,8 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 	meta, err := ReadMetaFile(s.dir)
 	if err != nil {
 		// If we encounter any error, proceed with an empty meta file and overwrite it later.
-		// The meta file is only used to deduplicate uploads, which are properly handled
-		// by the system if their occur anyway.
+		// The meta file is only used to avoid unnecessary bucket.Exists call,
+		// which are properly handled by the system if their occur anyway.
 		if !os.IsNotExist(err) {
 			level.Warn(s.logger).Log("msg", "reading meta file failed, will override it", "err", err)
 		}
@@ -316,6 +316,15 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 			return nil
 		}
 
+		// Check against bucket if the meta file for this block exists.
+		ok, err := s.bucket.Exists(ctx, path.Join(m.ULID.String(), block.MetaFilename))
+		if err != nil {
+			return errors.Wrap(err, "check exists")
+		}
+		if ok {
+			return nil
+		}
+
 		// We only ship of the first compacted block level as normal flow.
 		if m.Compaction.Level > 1 {
 			if !s.uploadCompacted {
@@ -327,15 +336,6 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 				uploadErrs++
 				return nil
 			}
-		}
-
-		// Check against bucket if the meta file for this block exists.
-		ok, err := s.bucket.Exists(ctx, path.Join(m.ULID.String(), block.MetaFilename))
-		if err != nil {
-			return errors.Wrap(err, "check exists")
-		}
-		if ok {
-			return nil
 		}
 
 		if err := s.upload(ctx, m); err != nil {

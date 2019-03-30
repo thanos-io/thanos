@@ -65,5 +65,9 @@ func getBlobURL(ctx context.Context, accountName, accountKey, containerName, blo
 
 func parseError(errorCode string) string {
 	re, _ := regexp.Compile(`X-Ms-Error-Code:\D*\[(\w+)\]`)
-	return re.FindStringSubmatch(errorCode)[1]
+	match := re.FindStringSubmatch(errorCode)
+	if match != nil && len(match) == 2 {
+		return match[1]
+	}
+	return errorCode
 }

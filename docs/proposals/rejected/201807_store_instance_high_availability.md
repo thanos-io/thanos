@@ -10,7 +10,7 @@ owner: mattbostock
 
 This proposal makes total sense and solves our goals when using gossip. However there exists a very easy solution
 to this problem in form of using just static entry with any loadbalancer like Kubernetes Service to load balance
-through different Store Gateways. Those are technically stateless, so request can fetch the data independently. 
+through different Store Gateways. Those are technically stateless, so request can fetch the data independently.
 
 ## Motivation
 

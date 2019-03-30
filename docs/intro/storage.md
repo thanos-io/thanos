@@ -11,7 +11,7 @@ Thanos supports any object stores that can be implemented against Thanos [objsto
 
 All clients are configured using `--objstore.config-file` to reference to the configuration file or `--objstore.config` to put yaml config directly.
 
-## Implementations 
+## Implementations
 
 Current object storage client implementations:
 
@@ -19,7 +19,7 @@ Current object storage client implementations:
 |----------------------|-------------------|-----------|---------------|
 | Google Cloud Storage | Stable  (production usage)             | yes       | @bwplotka   |
 | AWS S3               | Stable  (production usage)               | yes        | @bwplotka          |
-| Azure Storage Account | Alpha   | yes       | @vglafirov   |
+| Azure Storage Account | Stable  (production usage) | yes       | @vglafirov   |
 | OpenStack Swift      | Beta  (working PoCs, testing usage)               | no        | @sudhi-vm   |
 | Tencent COS          | Beta  (testing usage)                   | no        | @jojohappy          |
 
@@ -58,6 +58,8 @@ config:
   http_config:
     idle_conn_timeout: 0s
     insecure_skip_verify: false
+  trace:
+    enable: false
 ```
 
 AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region)
@@ -69,6 +71,7 @@ For debug and testing purposes you can set
 
 * `insecure: true` to switch to plain insecure HTTP instead of HTTPS
 * `http_config.insecure_skip_verify: true` to disable TLS certificate verification (if your S3 based storage is using a self-signed certificate, for example)
+* `trace.enable: true` to enable the minio client's verbose logging. Each request and response will be logged into the debug logger, so debug level logging must be enabled for this functionality.
 
 ### Credentials
 By default Thanos will try to retrieve credentials from the following sources:
@@ -78,7 +81,7 @@ By default Thanos will try to retrieve credentials from the following sources:
 1. From `~/.aws/credentials`
 1. IAM credentials retrieved from an instance profile.
 
-NOTE: Getting access key from config file and secret key from other method (and vice versa) is not supported. 
+NOTE: Getting access key from config file and secret key from other method (and vice versa) is not supported.
 
 ### AWS Policies
 
@@ -159,9 +162,13 @@ For example:
 type: GCS
 config:
   bucket: ""
+  service_account: ""
 ```
 
-Application credentials are configured via JSON file, the client looks for:
+### Using GOOGLE_APPLICATION_CREDENTIALS
+
+Application credentials are configured via JSON file and only the bucket needs to be specified,
+the client looks for:
 
 1. A JSON file whose path is specified by the
    `GOOGLE_APPLICATION_CREDENTIALS` environment variable.
@@ -174,6 +181,30 @@ Application credentials are configured via JSON file, the client looks for:
    (In this final case any provided scopes are ignored.)
 
 You can read more on how to get application credential json file in [https://cloud.google.com/docs/authentication/production](https://cloud.google.com/docs/authentication/production)
+
+### Using inline a Service Account
+
+Another possibility is to inline the ServiceAccount into the Thanos configuration and only maintain one file.
+This feature was added, so that the Prometheus Operator only needs to take care of one secret file.
+
+```yaml
+type: GCS
+config:
+  bucket: "thanos"
+  service_account: |-
+    {
+      "type": "service_account",
+      "project_id": "project",
+      "private_key_id": "abcdefghijklmnopqrstuvwxyz12345678906666",
+      "private_key": "-----BEGIN PRIVATE KEY-----\...\n-----END PRIVATE KEY-----\n",
+      "client_email": "project@thanos.iam.gserviceaccount.com",
+      "client_id": "123456789012345678901",
+      "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+      "token_uri": "https://oauth2.googleapis.com/token",
+      "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+      "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/thanos%40gitpods.iam.gserviceaccount.com"
+    }
+```
 
 ### GCS Policies
 
@@ -205,7 +236,7 @@ config:
 ### OpenStack Swift Configuration
 Thanos uses [gophercloud](http://gophercloud.io/) client to upload Prometheus data into [OpenStack Swift](https://docs.openstack.org/swift/latest/).
 
-Below is an example configuration file for thanos to use OpenStack swift container as an object store. 
+Below is an example configuration file for thanos to use OpenStack swift container as an object store.
 
 [embedmd]:# (flags/config_swift.txt yaml)
 ```yaml

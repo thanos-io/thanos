@@ -81,7 +81,7 @@ type Reloader struct {
 	cfgFile       string
 	cfgOutputFile string
 	ruleDirs      []string
-	ruleInterval  time.Duration
+	watchInterval time.Duration
 	retryInterval time.Duration
 
 	lastCfgHash  []byte
@@ -105,55 +105,74 @@ func New(logger log.Logger, reloadURL *url.URL, cfgFile string, cfgOutputFile st
 		cfgFile:       cfgFile,
 		cfgOutputFile: cfgOutputFile,
 		ruleDirs:      ruleDirs,
-		ruleInterval:  3 * time.Minute,
+		watchInterval: 3 * time.Minute,
 		retryInterval: 5 * time.Second,
 	}
 }
 
-// Watch starts to watch the config file and rules and process them until the context
+// We cannot detect everything via watch. Watch interval controls how often we re-read given dirs non-recursively.
+func (r *Reloader) WithWatchInterval(duration time.Duration) {
+	r.watchInterval = duration
+}
+
+// Watch starts to watch periodically the config file and rules and process them until the context
 // gets canceled. Config file gets env expanded if cfgOutputFile is specified and reload is trigger if
 // config or rules changed.
+// Watch watchers periodically based on r.watchInterval.
+// For config file it watches it directly as well via fsnotify.
+// It watches rule dirs as well, but lot's of edge cases are missing, so rely on interval mostly.
 func (r *Reloader) Watch(ctx context.Context) error {
-	configWatcher, err := fsnotify.NewWatcher()
+	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return errors.Wrap(err, "create watcher")
 	}
-	defer runutil.CloseWithLogOnErr(r.logger, configWatcher, "config watcher close")
+	defer runutil.CloseWithLogOnErr(r.logger, watcher, "config watcher close")
 
+	watchables := map[string]struct{}{}
 	if r.cfgFile != "" {
-		if err := configWatcher.Add(r.cfgFile); err != nil {
-			return errors.Wrap(err, "add config file watch")
+		watchables[filepath.Dir(r.cfgFile)] = struct{}{}
+		if err := watcher.Add(r.cfgFile); err != nil {
+			return errors.Wrapf(err, "add config file %s to watcher", r.cfgFile)
 		}
-		level.Info(r.logger).Log(
-			"msg", "started watching config file for changes",
-			"in", r.cfgFile,
-			"out", r.cfgOutputFile)
 
-		err := r.apply(ctx)
-		if err != nil {
+		if err := r.apply(ctx); err != nil {
 			return err
 		}
 	}
 
-	tick := time.NewTicker(r.ruleInterval)
+	// Watch rule dirs in best effort manner.
+	for _, ruleDir := range r.ruleDirs {
+		watchables[filepath.Dir(ruleDir)] = struct{}{}
+		if err := watcher.Add(ruleDir); err != nil {
+			return errors.Wrapf(err, "add rule dir %s to watcher", ruleDir)
+		}
+	}
+
+	tick := time.NewTicker(r.watchInterval)
 	defer tick.Stop()
+
+	level.Info(r.logger).Log(
+		"msg", "started watching config file and non-recursively rule dirs for changes",
+		"cfg", r.cfgFile,
+		"out", r.cfgOutputFile,
+		"dirs", strings.Join(r.ruleDirs, ","))
 
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-tick.C:
-		case event := <-configWatcher.Events:
-			if event.Name != r.cfgFile {
+		case event := <-watcher.Events:
+			// TODO(bwplotka): Add metric if we are not cycling CPU here too much.
+			if _, ok := watchables[filepath.Dir(event.Name)]; !ok {
 				continue
 			}
-		case err := <-configWatcher.Errors:
+		case err := <-watcher.Errors:
 			level.Error(r.logger).Log("msg", "watch error", "err", err)
 			continue
 		}
 
-		err := r.apply(ctx)
-		if err != nil {
+		if err := r.apply(ctx); err != nil {
 			// Critical error.
 			return err
 		}
@@ -162,7 +181,7 @@ func (r *Reloader) Watch(ctx context.Context) error {
 
 // apply triggers Prometheus reload if rules or config changed. If cfgOutputFile is set, we also
 // expand env vars into config file before reloading.
-// Reload is retried in retryInterval until ruleInterval.
+// Reload is retried in retryInterval until watchInterval.
 func (r *Reloader) apply(ctx context.Context) error {
 	var (
 		cfgHash  []byte
@@ -199,8 +218,15 @@ func (r *Reloader) apply(ctx context.Context) error {
 				return errors.Wrap(err, "expand environment variables")
 			}
 
-			if err := ioutil.WriteFile(r.cfgOutputFile, b, 0666); err != nil {
+			tmpFile := r.cfgOutputFile + ".tmp"
+			defer func() {
+				_ = os.Remove(tmpFile)
+			}()
+			if err := ioutil.WriteFile(tmpFile, b, 0666); err != nil {
 				return errors.Wrap(err, "write file")
+			}
+			if err := os.Rename(tmpFile, r.cfgOutputFile); err != nil {
+				return errors.Wrap(err, "rename file")
 			}
 		}
 	}
@@ -247,8 +273,10 @@ func (r *Reloader) apply(ctx context.Context) error {
 	}
 
 	// Retry trigger reload until it succeeded or next tick is near.
-	retryCtx, cancel := context.WithTimeout(ctx, r.ruleInterval)
-	err := runutil.RetryWithLog(r.logger, r.retryInterval, retryCtx.Done(), func() error {
+	retryCtx, cancel := context.WithTimeout(ctx, r.watchInterval)
+	defer cancel()
+
+	if err := runutil.RetryWithLog(r.logger, r.retryInterval, retryCtx.Done(), func() error {
 		if err := r.triggerReload(ctx); err != nil {
 			return errors.Wrap(err, "trigger reload")
 		}
@@ -261,9 +289,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 			"cfg_out", r.cfgOutputFile,
 			"rule_dirs", strings.Join(r.ruleDirs, ", "))
 		return nil
-	})
-	cancel()
-	if err != nil {
+	}); err != nil {
 		level.Error(r.logger).Log("msg", "Failed to trigger reload. Retrying.", "err", err)
 	}
 

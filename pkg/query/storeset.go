@@ -196,6 +196,10 @@ func (s *storeRef) String() string {
 	return fmt.Sprintf("Addr: %s Labels: %v Mint: %d Maxt: %d", s.addr, s.Labels(), mint, maxt)
 }
 
+func (s *storeRef) Addr() string {
+	return s.addr
+}
+
 func (s *storeRef) close() {
 	runutil.CloseWithLogOnErr(s.logger, s.cc, fmt.Sprintf("store %v connection close", s.addr))
 }

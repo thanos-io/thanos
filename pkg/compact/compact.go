@@ -47,6 +47,7 @@ type Syncer struct {
 	blocksMtx            sync.Mutex
 	blockSyncConcurrency int
 	metrics              *syncerMetrics
+	acceptMalformedIndex bool
 }
 
 type syncerMetrics struct {
@@ -128,7 +129,7 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 
 // NewSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, syncDelay time.Duration, blockSyncConcurrency int) (*Syncer, error) {
+func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, syncDelay time.Duration, blockSyncConcurrency int, acceptMalformedIndex bool) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -140,6 +141,7 @@ func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket
 		bkt:                  bkt,
 		metrics:              newSyncerMetrics(reg),
 		blockSyncConcurrency: blockSyncConcurrency,
+		acceptMalformedIndex: acceptMalformedIndex,
 	}, nil
 }
 
@@ -291,6 +293,7 @@ func (c *Syncer) Groups() (res []*Group, err error) {
 				c.bkt,
 				labels.FromMap(m.Thanos.Labels),
 				m.Thanos.Downsample.Resolution,
+				c.acceptMalformedIndex,
 				c.metrics.compactions.WithLabelValues(GroupKey(*m)),
 				c.metrics.compactionFailures.WithLabelValues(GroupKey(*m)),
 				c.metrics.garbageCollectedBlocks,
@@ -436,6 +439,7 @@ type Group struct {
 	resolution                  int64
 	mtx                         sync.Mutex
 	blocks                      map[ulid.ULID]*metadata.Meta
+	acceptMalformedIndex        bool
 	compactions                 prometheus.Counter
 	compactionFailures          prometheus.Counter
 	groupGarbageCollectedBlocks prometheus.Counter
@@ -447,6 +451,7 @@ func newGroup(
 	bkt objstore.Bucket,
 	lset labels.Labels,
 	resolution int64,
+	acceptMalformedIndex bool,
 	compactions prometheus.Counter,
 	compactionFailures prometheus.Counter,
 	groupGarbageCollectedBlocks prometheus.Counter,
@@ -460,6 +465,7 @@ func newGroup(
 		labels:                      lset,
 		resolution:                  resolution,
 		blocks:                      map[ulid.ULID]*metadata.Meta{},
+		acceptMalformedIndex:        acceptMalformedIndex,
 		compactions:                 compactions,
 		compactionFailures:          compactionFailures,
 		groupGarbageCollectedBlocks: groupGarbageCollectedBlocks,
@@ -769,6 +775,11 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		if err := stats.Issue347OutsideChunksErr(); err != nil {
 			return false, ulid.ULID{}, issue347Error(errors.Wrapf(err, "invalid, but reparable block %s", pdir), meta.ULID)
 		}
+
+		if err := stats.PrometheusIssue5372Err(); !cg.acceptMalformedIndex && err != nil {
+			return false, ulid.ULID{}, errors.Wrapf(err,
+				"block id %s, try running with --debug.accept-malformed-index", id)
+		}
 	}
 	level.Debug(cg.logger).Log("msg", "downloaded and verified blocks",
 		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin))
@@ -816,7 +827,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	}
 
 	// Ensure the output block is valid.
-	if err := block.VerifyIndex(cg.logger, filepath.Join(bdir, block.IndexFilename), newMeta.MinTime, newMeta.MaxTime); err != nil {
+	if err := block.VerifyIndex(cg.logger, filepath.Join(bdir, block.IndexFilename), newMeta.MinTime, newMeta.MaxTime); !cg.acceptMalformedIndex && err != nil {
 		return false, ulid.ULID{}, halt(errors.Wrapf(err, "invalid result block %s", bdir))
 	}
 

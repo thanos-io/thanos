@@ -24,12 +24,13 @@ Thanos will work in cloud native environments as well as more traditional ones. 
 * golang 1.10+
 * An object storage bucket (optional)
 
-## Downloading
+## Get Thanos!
 
 You can find the latest Thanos release [here](https://github.com/improbable-eng/thanos/releases).
 
-If you want to build Thanos from source -
-with a working installation of the Go [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`), Thanos can be downloaded and built by running:
+
+If you want to build Thanos from source, make sure you have installed `bzr` and `git`. `bzr` is required, because `go` modules will use whatever VCS dependency use and in our case a single deps is using `bzr`.
+And that you have a working installation of the Go [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`), Thanos can be downloaded and built by running:
 
 ```bash
 go get -d github.com/improbable-eng/thanos/...
@@ -38,6 +39,23 @@ make
 ```
 
 The `thanos` binary should now be in your `$PATH` and is the only thing required to deploy any of its components.
+
+You may meet below error:
+
+```
+go: verifying github.com/grpc-ecosystem/go-grpc-middleware@v1.0.0: checksum mismatch
+    downloaded: h1:BWIsLfhgKhV5g/oF34aRjniBHLTZe5DNekSjbAjIS6c=
+    go.sum:     h1:Iju5GlWwrvL6UBg4zJJt3btmonfrMlCDdsejg4CZE7c=
+Makefile:183: recipe for target 'go-mod-tidy' failed
+```
+
+If your `golang` version is `1.11.4`, you can run following cmd then `make` would pass:
+
+```
+go clean -modcache
+```
+
+If your `golang` version is below `1.11.4`, highly recommend you upgrade to `1.11.4` or above.
 
 ## Prometheus
 

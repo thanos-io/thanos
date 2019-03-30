@@ -13,9 +13,27 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Added
 - [#811](https://github.com/improbable-eng/thanos/pull/811) Remote write receiver
+- [#798](https://github.com/improbable-eng/thanos/pull/798) Ability to limit the maximum concurrent about of Series() calls in Thanos Store and the maximum amount of samples.
+
+New options:
+
+* `--store.grpc.series-sample-limit` limits the amount of samples that might be retrieved on a single Series() call. By default it is 0. Consider enabling it by setting it to more than 0 if you are running on limited resources.
+* `--store.grpc.series-max-concurrency` limits the number of concurrent Series() calls in Thanos Store. By default it is 20. Considering making it lower or bigger depending on the scale of your deployment.
+
+New metrics:
+* `thanos_bucket_store_queries_dropped_total` shows how many queries were dropped due to the samples limit;
+* `thanos_bucket_store_queries_concurrent_max` is a constant metric which shows how many Series() calls can concurrently be executed by Thanos Store;
+* `thanos_bucket_store_queries_in_flight` shows how many queries are currently "in flight" i.e. they are being executed;
+* `thanos_bucket_store_gate_duration_seconds` shows how many seconds it took for queries to pass through the gate in both cases - when that fails and when it does not.
+
+New tracing span:
+* `store_query_gate_ismyturn` shows how long it took for a query to pass (or not) through the gate.
+
+:warning: **WARNING** :warning: #798 adds a new default limit to Thanos Store: `--store.grpc.series-max-concurrency`. Most likely you will want to make it the same as `--query.max-concurrent` on Thanos Query.
 
 ### Fixed
 - [#921](https://github.com/improbable-eng/thanos/pull/921) `thanos_objstore_bucket_last_successful_upload_time` now does not appear when no blocks have been uploaded so far
+- [#966](https://github.com/improbable-eng/thanos/pull/966) Bucket: verify no longer warns about overlapping blocks, that overlap `0s` 
 
 ## [v0.3.2](https://github.com/improbable-eng/thanos/releases/tag/v0.3.2) - 2019.03.04
 
@@ -23,7 +41,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#851](https://github.com/improbable-eng/thanos/pull/851) New read API endpoint for api/v1/rules and api/v1/alerts.
 - [#873](https://github.com/improbable-eng/thanos/pull/873) Store: fix set index cache LRU
 
-:warning: **WARING** :warning: #873 fix fixes actual handling of `index-cache-size`. Handling of limit for this cache was 
+:warning: **WARNING** :warning: #873 fix fixes actual handling of `index-cache-size`. Handling of limit for this cache was
 broken so it was unbounded all the time. From this release actual value matters and is extremely low by default. To "revert"
 the old behaviour (no boundary), use a large enough value.
 
@@ -55,14 +73,14 @@ the old behaviour (no boundary), use a large enough value.
 - [#649](https://github.com/improbable-eng/thanos/issues/649) - Fixed store label values api to add also external label values.
 - [#396](https://github.com/improbable-eng/thanos/issues/396) - Fixed sidecar logic for proxying series that has more than 2^16 samples from Prometheus.
 - [#732](https://github.com/improbable-eng/thanos/pull/732) - Fixed S3 authentication sequence. You can see new sequence enumerated [here](https://github.com/improbable-eng/thanos/blob/master/docs/storage.md#aws-s3-configuration)
-- [#745](https://github.com/improbable-eng/thanos/pull/745) - Fixed race conditions and edge cases for Thanos Querier fanout logic. 
+- [#745](https://github.com/improbable-eng/thanos/pull/745) - Fixed race conditions and edge cases for Thanos Querier fanout logic.
 - [#651](https://github.com/improbable-eng/thanos/issues/651) - Fixed index cache when asked buffer size is bigger than cache max size.
 
 ### Changed
 
 - [#529](https://github.com/improbable-eng/thanos/pull/529) Massive improvement for compactor. Downsampling memory consumption was reduce to only store labels and single chunks per each series.
 - Qurerier UI: Store page now shows the store APIs per component type.
-- Prometheus and TSDB deps are now up to date with ~2.7.0 Prometheus version. Lot's of things has changed. See details [here #704](https://github.com/improbable-eng/thanos/pull/704) Known changes that affects us:    
+- Prometheus and TSDB deps are now up to date with ~2.7.0 Prometheus version. Lot's of things has changed. See details [here #704](https://github.com/improbable-eng/thanos/pull/704) Known changes that affects us:
     - prometheus/prometheus/discovery/file
       - [ENHANCEMENT] Discovery: Improve performance of previously slow updates of changes of targets. #4526
       - [BUGFIX] Wait for service discovery to stop before exiting #4508 ??
@@ -83,11 +101,11 @@ the old behaviour (no boundary), use a large enough value.
 - S3 provider:
   - Added `put_user_metadata` option to config.
   - Added `insecure_skip_verify` option to config.
-  
+
 ### Deprecated
-  
+
 - Tests against Prometheus below v2.2.1. This does not mean *lack* of support for those. Only that we don't tests the compatibility anymore. See [#758](https://github.com/improbable-eng/thanos/issues/758) for details.
-  
+
 ## [v0.2.1](https://github.com/improbable-eng/thanos/releases/tag/v0.2.1) - 2018.12.27
 
 ### Added

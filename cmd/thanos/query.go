@@ -29,7 +29,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/improbable-eng/thanos/pkg/ui"
 	"github.com/oklog/run"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
@@ -39,7 +39,7 @@ import (
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"gopkg.in/alecthomas/kingpin.v2"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 // registerQuery registers a query command.
@@ -91,6 +91,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	enablePartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified.").
 		Default("true").Bool()
 
+	storeResponseTimeout := modelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		peer, err := newPeerFn(logger, reg, true, *httpAdvertiseAddr, true)
 		if err != nil {
@@ -139,6 +141,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*webPrefixHeaderName,
 			*maxConcurrentQueries,
 			time.Duration(*queryTimeout),
+			time.Duration(*storeResponseTimeout),
 			*replicaLabel,
 			peer,
 			selectorLset,
@@ -254,6 +257,7 @@ func runQuery(
 	webPrefixHeaderName string,
 	maxConcurrentQueries int,
 	queryTimeout time.Duration,
+	storeResponseTimeout time.Duration,
 	replicaLabel string,
 	peer cluster.Peer,
 	selectorLset labels.Labels,
@@ -276,7 +280,10 @@ func runQuery(
 	}
 
 	fileSDCache := cache.New()
-	dnsProvider := dns.NewProvider(logger, extprom.NewSubsystem(reg, "query_store_api"))
+	dnsProvider := dns.NewProvider(
+		logger,
+		extprom.WrapRegistererWithPrefix("thanos_querier_store_apis", reg),
+	)
 
 	var (
 		stores = query.NewStoreSet(
@@ -304,7 +311,7 @@ func runQuery(
 			},
 			dialOpts,
 		)
-		proxy            = store.NewProxyStore(logger, stores.Get, component.Query, selectorLset)
+		proxy            = store.NewProxyStore(logger, stores.Get, component.Query, selectorLset, storeResponseTimeout)
 		queryableCreator = query.NewQueryableCreator(logger, proxy, replicaLabel)
 		engine           = promql.NewEngine(
 			promql.EngineOpts{
@@ -355,6 +362,7 @@ func runQuery(
 					}
 					fileSDCache.Update(update)
 					stores.Update(ctxUpdate)
+					dnsProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), storeAddrs...))
 				case <-ctxUpdate.Done():
 					return nil
 				}
