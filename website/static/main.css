@@ -1,0 +1,46 @@
+.bg-purple {
+    background-color: #6D41FF;
+}
+
+.color-purple {
+    color: #6D41FF;
+}
+
+.navbar-brand img {
+    height: 32px;
+    margin-right: 10px;
+    max-width: 100%;
+}
+
+.navbar-dark .navbar-nav .nav-link:hover {
+    color: #ffffff;
+}
+
+.btn-outline-secondary {
+    color: #6D41FF;
+    border-color: #6D41FF;
+}
+
+.btn-outline-secondary:hover, .btn-outline-secondary:active {
+    color: #fff;
+    background-color: #6D41FF !important;
+    border-color: #6D41FF !important;
+}
+
+a {
+    color: #6D41FF;
+}
+
+pre {
+    padding: 1rem;
+}
+
+.list-group-item-thanos {
+    color: #6D41FF;
+    border: 0;
+    background-color: transparent;
+}
+
+.list-group-item-thanos:hover {
+    color: #6D41FF;
+}

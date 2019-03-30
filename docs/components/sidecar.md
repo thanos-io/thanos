@@ -1,3 +1,9 @@
+---
+title: Sidecar
+type: docs
+menu: "components"
+---
+
 # Sidecar
 
 The sidecar component of Thanos gets deployed along with a Prometheus instance. It implements Thanos' Store API on top of Prometheus' remote-read API and advertises itself as a data source to the cluster. Thereby queriers in the cluster can treat Prometheus servers as yet another source of time series data without directly talking to its APIs.
@@ -13,14 +19,14 @@ Prometheus servers connected to the Thanos cluster via the sidecar are subject t
 The retention is recommended to not be lower than three times the block duration. This achieves resilience in the face of connectivity issues
 to the object storage since all local data will remain available within the Thanos cluster. If connectivity gets restored the backlog of blocks gets uploaded to the object storage.
 
-```console
+```bash
 $ prometheus \
   --storage.tsdb.max-block-duration=2h \
   --storage.tsdb.min-block-duration=2h \
   --web.enable-lifecycle
 ```
 
-```console
+```bash
 $ thanos sidecar \
     --tsdb.path        "/path/to/prometheus/data/dir" \
     --prometheus.url   "http://localhost:9090" \

@@ -1,4 +1,10 @@
-# Thanos Service Discovery
+---
+title: Service Discovery
+type: docs
+menu: "thanos"
+---
+
+# Service Discovery
 
 Service discovery has a vital place in Thanos components. It allows Thanos to discover different set API targets required to perform certain operations.
 This logic is meant to replace Gossip that [is planned to be removed.](/docs/proposals/approved/201809_gossip-removal.md)

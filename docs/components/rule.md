@@ -1,3 +1,9 @@
+---
+title: Rule
+type: docs
+menu: "components"
+---
+
 # Rule
 
 _**NOTE:** The rule component is experimental since it has conceptual tradeoffs that might not be favorable for most use cases. It is recommended to keep deploying rules to the relevant Prometheus servers._
@@ -8,7 +14,7 @@ The rule component evaluates Prometheus recording and alerting rules against ran
 
 The data of each rule node can be labeled to satisfy the clusters labeling scheme. High-availability pairs can be run in parallel and should be distinguished by the designated replica label, just like regular Prometheus servers.
 
-```
+```bash
 $ thanos rule \
     --data-dir          "/path/to/data" \
     --eval-interval     "30s" \
