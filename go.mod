@@ -9,7 +9,9 @@ require (
 	github.com/fortytw2/leaktest v1.2.0
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/go-kit/kit v0.8.0
+	github.com/gobuffalo/envy v1.6.15 // indirect
 	github.com/gogo/protobuf v1.2.0
+	github.com/gohugoio/hugo v0.54.0 // indirect
 	github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db
 	github.com/google/martian v2.1.0+incompatible // indirect
 	github.com/googleapis/gax-go v2.0.2+incompatible // indirect
