@@ -8,6 +8,7 @@ jobs:
     working_directory: /go/src/github.com/improbable-eng/thanos
     environment:
       GO111MODULE: 'on'
+      GOBIN: "/go/src/github.com/improbable-eng/thanos/.bin"
     steps:
       - checkout
       - setup_remote_docker:
@@ -48,6 +49,8 @@ jobs:
   cross_build:
     machine: true
     working_directory: /home/circleci/.go_workspace/src/github.com/improbable-eng/thanos
+    environment:
+      GOBIN: "/go/src/github.com/improbable-eng/thanos/.bin"
     steps:
     - checkout
     - run: make crossbuild
@@ -61,6 +64,8 @@ jobs:
       # Available from https://hub.docker.com/r/circleci/golang/
       - image: circleci/golang:1.12
     working_directory: /go/src/github.com/improbable-eng/thanos
+    environment:
+      GOBIN: "/go/src/github.com/improbable-eng/thanos/.bin"
     steps:
       - checkout
       - setup_remote_docker:
@@ -78,6 +83,8 @@ jobs:
       # Available from https://hub.docker.com/r/circleci/golang/
       - image: circleci/golang:1.12
     working_directory: /go/src/github.com/improbable-eng/thanos
+    environment:
+      GOBIN: "/go/src/github.com/improbable-eng/thanos/.bin"
     steps:
       - checkout
       - setup_remote_docker:
@@ -96,27 +103,6 @@ jobs:
       - run: docker run thanos --help
       - run: docker login -u="${DOCKER_USERNAME}" -p="${DOCKER_PASSWORD}"
       - run: make docker-push DOCKER_IMAGE_TAG=$CIRCLE_TAG
-
-  website:
-    # TODO(bwplotka): Leaving for testing, but added Makefile cmd web-deploy for this long term.
-    docker:
-      - image: circleci/golang:1.12
-    working_directory: ~/hugo
-    steps:
-      - run: sudo apt update && sudo apt install -y git bzr perl make
-      - checkout
-      - run:
-          name: Deploy to GitHub Pages
-          command: |
-            mkdir -p /bin
-            make web
-            cd website/public
-            git init
-            git config --global user.email "adrien-f@users.noreply.github.com"
-            git config --global user.name "AdrienF"
-            git add .
-            git commit -m "Deploy from CI"
-            git push --force --quiet "https://${GITHUB_TOKEN}@github.com/adrien-f/thanos.git" master:gh-pages
 
 workflows:
   version: 2
@@ -149,8 +135,3 @@ workflows:
             only: /^v[0-9]+(\.[0-9]+){2}(-.+|[^-.]*)$/
           branches:
             ignore: /.*/
-    - website:
-        filters:
-          branches:
-            # TODO(bwplotka): Change to master
-            only: feature/docs-hugo
