@@ -62,3 +62,7 @@ New menus `.Site.Menus` are added as soon as some file has Front Matter with cer
 Keep `menu` the same as sub-directory the file is in. This will help to manage all docs.
 
 Show new menu section in main page by changing `website/layouts/_default/baseof.html` file.
+
+## Testing
+
+Run `make web-serve` to serve and preview the website locally.
