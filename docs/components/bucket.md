@@ -1,7 +1,7 @@
 ---
 title: Bucket
 type: docs
-menu: "components"
+menu: components
 ---
 
 # Bucket

@@ -1,8 +1,8 @@
 ---
 title: Object Storage
 type: docs
-menu: "thanos"
-markup: mmark
+menu: thanos
+slug: /storage.md
 ---
 
 # Object Storage

@@ -1,7 +1,7 @@
 ---
 title: Store
 type: docs
-menu: "components"
+menu: components
 ---
 
 # Store

@@ -1,7 +1,8 @@
 ---
 title: Service Discovery
 type: docs
-menu: "thanos"
+menu: thanos
+slug: /service-discovery.md
 ---
 
 # Service Discovery

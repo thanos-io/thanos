@@ -1,0 +1,35 @@
+title: "Thanos - Highly available Prometheus setup with long term storage capabilities"
+baseURL: "https://adrien-f.github.io/thanos/"  # TODO: "https://improbable-eng.github.io/thanos/"
+languageCode: "en-us"
+
+enableGitInfo: true
+enableEmoji: true
+pygmentsCodeFences: true
+pygmentsUseClasses: true
+
+# We use preprocessing script so it will not work as expected anyway.
+disableLiveReload: true
+
+googleAnalytics: "${GOOGLE_ANALYTICS_TOKEN}"
+
+# So /thanos/docs/b link from /thanos/docs/some/a will be rewritten as ../b
+canonifyURLs: true
+relativeURL: true
+
+# NOTE: Hugo is expected to run from `website`
+contentDir: "docs-pre-processed"
+archetypeDir: "archetypes"
+layoutDir: "layouts"
+publishDi: "public"
+staticDir: "static"
+
+permalinks:
+  contributing: "/contributing/:filename.md"
+  components: "/components/:filename.md"
+  proposals: "/proposals/:filename.md"
+
+params:
+  SlackInvite: "https://join.slack.com/t/improbable-eng/shared_invite/enQtMzQ1ODcyMzQ5MjM4LWY5ZWZmNGM2ODc5MmViNmQ3ZTA3ZTY3NzQwOTBlMTkzZmIxZTIxODk0OWU3YjZhNWVlNDU3MDlkZGViZjhkMjc"
+  GithubUser: "improbable-eng"
+  GithubProject: "thanos"
+  TwitterHandle: "ThanosMetrics"
