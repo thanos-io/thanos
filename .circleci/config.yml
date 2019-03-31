@@ -97,17 +97,18 @@ jobs:
       - run: docker login -u="${DOCKER_USERNAME}" -p="${DOCKER_PASSWORD}"
       - run: make docker-push DOCKER_IMAGE_TAG=$CIRCLE_TAG
 
-  webiste:
+  website:
     # TODO(bwplotka): Leaving for testing, but added Makefile cmd web-deploy for this long term.
     docker:
-      - image: cibuilds/hugo:latest
+      - image: circleci/golang:1.12
     working_directory: ~/hugo
     steps:
-      - run: apk update && apk add git
+      - run: sudo apt update && sudo apt install -y git bzr perl make
       - checkout
       - run:
           name: Deploy to GitHub Pages
           command: |
+            mkdir -p /bin
             make web
             cd website/public
             git init
@@ -148,7 +149,7 @@ workflows:
             only: /^v[0-9]+(\.[0-9]+){2}(-.+|[^-.]*)$/
           branches:
             ignore: /.*/
-    - webiste:
+    - website:
         filters:
           branches:
             # TODO(bwplotka): Change to master
