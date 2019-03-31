@@ -42,6 +42,29 @@ PROM_VERSIONS           ?=v2.4.3 v2.5.0
 ALERTMANAGER_VERSION    ?=v0.15.2
 MINIO_SERVER_VERSION    ?=RELEASE.2018-10-06T00-15-16Z
 
+# fetch_go_bin_version downloads (go gets) the binary from specific version and installs it in $(GOBIN)/<bin>-<version>
+# arguments:
+# $(1): Install path. (e.g github.com/campoy/embedmd)
+# $(2): Tag or revision for checkout.
+# TODO(bwplotka): Move to just using modules, however make sure to not use or edit Thanos go.mod file!
+define fetch_go_bin_version
+	@mkdir -p $(GOBIN)
+	@mkdir -p $(TMP_GOPATH)
+
+	@echo ">> fetching $(1)@$(2) revision/version"
+	@if [ ! -d '$(TMP_GOPATH)/src/$(1)' ]; then \
+    GOPATH='$(TMP_GOPATH)' GO111MODULE='off' go get -d -u '$(1)/...'; \
+  else \
+    CDPATH='' cd -- '$(TMP_GOPATH)/src/$(1)' && git fetch; \
+  fi
+	@CDPATH='' cd -- '$(TMP_GOPATH)/src/$(1)' && git checkout -f -q '$(2)'
+	@echo ">> installing $(1)@$(2)"
+	@GOBIN='$(TMP_GOPATH)/bin' GOPATH='$(TMP_GOPATH)' GO111MODULE='off' go install '$(1)'
+	@mv -- '$(TMP_GOPATH)/bin/$(shell basename $(1))' '$(GOBIN)/$(shell basename $(1))-$(2)'
+	@echo ">> produced $(GOBIN)/$(shell basename $(1))-$(2)"
+
+endef
+
 define require_clean_work_tree
 	@git update-index -q --ignore-submodules --refresh
 
@@ -233,22 +256,22 @@ web-deploy:
 
 # non-phony targets
 $(EMBEDMD):
-	@go get github.com/campoy/embedmd@$(EMBEDMD_VERSION) && mv $(GOBIN)/embedmd $(EMBEDMD_VERSION)
+	$(call fetch_go_bin_version,github.com/campoy/embedmd,$(EMBEDMD_VERSION))
 
 $(ERRCHECK):
-	@go get github.com/kisielk/errcheck@$(ERRCHECK_VERSION) && mv $(GOBIN)/errcheck $(ERRCHECK_VERSION)
+	$(call fetch_go_bin_version,github.com/kisielk/errcheck,$(ERRCHECK_VERSION))
 
 $(GOIMPORTS):
-	@go get golang.org/x/tools/cmd/goimports@$(GOIMPORTS_VERSION) && mv $(GOBIN)/goimports $(GOIMPORTS_VERSION)
+	$(call fetch_go_bin_version,golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VERSION))
 
 $(LICHE):
-	@go get github.com/raviqqe/liche@$(LICHE_VERSION) && mv $(GOBIN)/liche $(LICHE_VERSION)
+	$(call fetch_go_bin_version,github.com/raviqqe/liche,$(LICHE_VERSION))
 
 $(PROMU):
-	@go get github.com/prometheus/promu@$(PROMU_VERSION) && mv $(GOBIN)/promu $(PROMU_VERSION)
+	$(call fetch_go_bin_version,github.com/prometheus/promu,$(PROMU_VERSION))
 
 $(HUGO):
-	@go get github.com/gohugoio/hugo@$(HUGO_VERSION) && mv $(GOBIN)/hugo $(HUGO)
+	$(call fetch_go_bin_version,github.com/gohugoio/hugo,$(HUGO_VERSION))
 
 $(PROTOC):
 	@mkdir -p $(TMP_GOPATH)
