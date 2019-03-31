@@ -1,7 +1,7 @@
 ---
 title: Rule
 type: docs
-menu: "components"
+menu: components
 ---
 
 # Rule

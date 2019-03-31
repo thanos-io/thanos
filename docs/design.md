@@ -1,7 +1,8 @@
 ---
 title: Design
 type: docs
-menu: "thanos"
+menu: thanos
+slug: /design.md
 ---
 
 # Design

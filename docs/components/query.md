@@ -1,7 +1,7 @@
 ---
 title: Query
 type: docs
-menu: "components"
+menu: components
 ---
 
 # Query

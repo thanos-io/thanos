@@ -1,7 +1,7 @@
 ---
 title: Compact
 type: docs
-menu: "components"
+menu: components
 ---
 
 # Compact

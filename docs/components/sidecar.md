@@ -1,7 +1,7 @@
 ---
 title: Sidecar
 type: docs
-menu: "components"
+menu: components
 ---
 
 # Sidecar

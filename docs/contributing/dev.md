@@ -1,7 +1,7 @@
 ---
 title: Troubleshooting for dev workflow
 type: doc
-menu: help
+menu: contributing
 ---
 
 ## Dep `grouped write of manifest, lock and vendor: scratch directory ... already exists, please remove it`

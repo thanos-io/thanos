@@ -200,16 +200,21 @@ else
 	@echo >&2 "No bzr binary found."; exit 1
 endif
 
+.PHONY: web-pre-process
+web-pre-process:
+	@echo ">> running documentation website pre processing"
+	@bash scripts/websitepreprocess.sh
+
 .PHONY: web
-web: $(HUGO)
+web: web-pre-process $(HUGO)
 	@echo ">> building documentation website"
 	# TODO(bwplotka): Make it --gc
-	@HUGO_ENV=production $(HUGO) --config $(WEB_DIR)/hugo.yaml --minify -v
+	@cd $(WEB_DIR) && HUGO_ENV=production $(HUGO) --config hugo-generated.yaml --minify -v
 
 .PHONY: web-serve
-web-serve: $(HUGO)
+web-serve: web-pre-process $(HUGO)
 	@echo ">> serving documentation website"
-	@$(HUGO) --config $(WEB_DIR)/hugo.yaml -v server
+	@cd $(WEB_DIR) && $(HUGO) --config hugo-generated.yaml -v server
 
 .PHONY: web-deploy
 web-deploy:

@@ -1,8 +1,9 @@
 ---
 title: Getting Started
 type: docs
-menu: "thanos"
+menu: thanos
 weight: 1
+slug: /getting-started.md
 ---
 
 # Getting started
@@ -10,13 +11,13 @@ weight: 1
 Thanos provides a global query view, data backup, and historical data access as its core features in a single binary. All three features can be run independently of each other. This allows you to have a subset of Thanos features ready for immediate benefit or testing, while also making it flexible for gradual roll outs in more complex environments. 
 
 In this quick-start guide, we will configure Thanos and all components mentioned to work against a Google Cloud Storage bucket.
-At the moment, Thanos is able to use [different storage providers](/thanos/intro/storage), with the ability to add more providers as necessary.
+At the moment, Thanos is able to use [different storage providers](storage.md), with the ability to add more providers as necessary.
 
-Thanos will work in cloud native environments as well as more traditional ones. Some users run Thanos in Kubernetes while others on bare metal. More deployments examples and stories are described [here.]({{< ref "help/deployment-stories" >}})
+Thanos will work in cloud native environments as well as more traditional ones. Some users run Thanos in Kubernetes while others on bare metal. More deployments examples and stories will be described soon.
 
 ## Architecture Overview
 
-<img src="../img/arch.jpg" class="img-fluid" alt="architecture overview" />
+<img src="img/arch.jpg" class="img-fluid" alt="architecture overview" />
 
 ## Requirements
 
@@ -63,7 +64,7 @@ Thanos bases itself on vanilla [Prometheus](https://prometheus.io/) (v2.2.1+).
 
 Here's the Prometheus' versions Thanos is tested against:
 
-{{< embedcode file="/Makefile" lang="Makefile" start="44" lines="2" >}}
+[Makefile](/Makefile#35)
 
 ## Components
 
@@ -76,7 +77,7 @@ Following the KISS and Unix philosophies, Thanos is made of a set of components 
 * Ruler: evaluates recording and alerting rules against data in Thanos for exposition and/or upload
 * Query Gateway: implements Prometheus' v1 API to aggregate data from the underlying components
 
-### [Sidecar]({{< ref "components/sidecar.md" >}})
+### [Sidecar](components/sidecar.md)
 
 Thanos integrates with existing Prometheus servers through a [Sidecar process](https://docs.microsoft.com/en-us/azure/architecture/patterns/sidecar#solution), which runs on the same machine or in the same pod as the Prometheus server. 
 
@@ -95,7 +96,7 @@ thanos sidecar \
     --objstore.config-file bucket_config.yaml \       # Storage configuration for uploading data
 ```
 
-The format of YAML file depends on the provider you choose. Examples of config and up-to-date list of storage types Thanos supports is available [here]({{< ref "intro/storage.md" >}}).
+The format of YAML file depends on the provider you choose. Examples of config and up-to-date list of storage types Thanos supports is available [here](storage.md).
 
 Rolling this out has little to zero impact on the running Prometheus instance. It is a good start to ensure you are backing up your data while figuring out the other pieces of Thanos.
 
@@ -103,7 +104,7 @@ If you are not interested in backing up any data, the `--objstore.config-file` f
 
 * _[Example Kubernetes manifest](https://github.com/improbable-eng/thanos/tree/master/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar.yaml)_
 * _[Example Kubernetes manifest with Minio upload](https://github.com/improbable-eng/thanos/tree/master/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar-lts.yaml)_
-* _[Details & Config for other object stores]({{< ref "intro/storage.md" >}})_
+* _[Details & Config for other object stores](storage.md)_
 
 #### Store API
 
@@ -137,9 +138,9 @@ global:
     replica: A
 ```
 
-### [Query Gateway]({{< ref "components/query.md" >}})
+### [Query Gateway](components/query.md)
 
-Now that we have setup the Sidecar for one or more Prometheus instances, we want to use Thanos' global [Query Layer]({{< ref "components/query.md" >}}) to evaluate PromQL queries against all instances at once.
+Now that we have setup the Sidecar for one or more Prometheus instances, we want to use Thanos' global [Query Layer](components/query.md) to evaluate PromQL queries against all instances at once.
 
 The Query component is stateless and horizontally scalable and can be deployed with any number of replicas. Once connected to the Sidecars, it automatically detects which Prometheus servers need to be contacted for a given PromQL query.
 
@@ -159,7 +160,7 @@ Go to the configured HTTP address that should now show a UI similar to that of P
 
 #### Deduplicating Data from Prometheus HA pairs
 
-The Query component is also capable of deduplicating data collected from Prometheus HA pairs. This requires configuring Prometheus's `global.external_labels` configuration block (as mentioned in the [External Labels section](#external-labels)) to identify the role of a given Prometheus instance.
+The Query component is also capable of deduplicating data collected from Prometheus HA pairs. This requires configuring Prometheus's `global.external_labels` configuration block (as mentioned in the [External Labels section](getting-started.md#external-labels)) to identify the role of a given Prometheus instance.
 
 A typical choice is simply the label name "replica" while letting the value be whatever you wish. For example, you might set up the following in Prometheus's configuration file:
 
@@ -205,12 +206,12 @@ thanos query \
     --store        dns+rest.thanos.peers:19092  # Use DNS lookup for getting all registered IPs as separate StoreAPIs    
 ```
 
-Read more details [here.]({{< ref "intro/service-discovery.md" >}})
+Read more details [here](service-discovery.md).
 
 * _[Example Kubernetes manifest](https://github.com/improbable-eng/thanos/tree/master/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar.yaml)_
 * _[Example Kubernetes manifest with GCS upload](https://github.com/improbable-eng/thanos/tree/master/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar-lts.yaml)_
 
-### [Store Gateway]({{< ref "components/store.md" >}})
+### [Store Gateway](components/store.md)
 
 As the sidecar backs up data into the object storage of your choice, you can decrease Prometheus retention and store less locally. However we need a way to query all that historical data again.
 The store gateway does just that by implementing the same gRPC data API as the sidecars but backing it with data it can find in your object storage bucket.
@@ -228,7 +229,7 @@ The store gateway occupies small amounts of disk space for caching basic informa
 
 * _[Example Kubernetes manifest](https://github.com/improbable-eng/thanos/tree/master/tutorials/kubernetes-demo/manifests/thanos-store-gateway.yaml)_
 
-### [Compactor]({{< ref "components/compact.md" >}})
+### [Compactor](components/compact.md)
 
 A local Prometheus installation periodically compacts older data to improve query efficiency. Since the sidecar backs up data as soon as possible, we need a way to apply the same process to data in the object storage.
 
@@ -245,12 +246,12 @@ The compactor is not in the critical path of querying or data backup. It can eit
 
 _NOTE: The compactor must be run as a **singleton** and must not run when manually modifying data in the bucket._
 
-### [Ruler]({{< ref "components/rule.md" >}})
+### [Ruler](components/rule.md)
 
 In case of Prometheus with Thanos sidecar does not have enough retention, or if you want to have alerts or recording rules that requires global view, Thanos has just the component for that: the [Ruler]({{< ref "components/rule.md" >}}),
 which does rule and alert evaluation on top of a given Thanos Querier.
 
-### [Receiver]({{< ref "components/rule.md" >}})
+### Receiver
 
 TBD
 
