@@ -531,7 +531,7 @@ func IgnoreDuplicateOutsideChunk(_ int64, _ int64, last *chunks.Meta, curr *chun
 	// the current one.
 	if curr.MinTime != last.MinTime || curr.MaxTime != last.MaxTime {
 		return false, errors.Errorf("non-sequential chunks not equal: [%d, %d] and [%d, %d]",
-			last.MaxTime, last.MaxTime, curr.MinTime, curr.MaxTime)
+			last.MinTime, last.MaxTime, curr.MinTime, curr.MaxTime)
 	}
 	ca := crc32.Checksum(last.Chunk.Bytes(), castagnoli)
 	cb := crc32.Checksum(curr.Chunk.Bytes(), castagnoli)
@@ -559,9 +559,9 @@ func sanitizeChunkSequence(chks []chunks.Meta, mint int64, maxt int64, ignoreChk
 	var last *chunks.Meta
 
 OUTER:
-	for _, c := range chks {
+	for i := range chks {
 		for _, ignoreChkFn := range ignoreChkFns {
-			ignore, err := ignoreChkFn(mint, maxt, last, &c)
+			ignore, err := ignoreChkFn(mint, maxt, last, &chks[i])
 			if err != nil {
 				return nil, errors.Wrap(err, "ignore function")
 			}
@@ -571,8 +571,8 @@ OUTER:
 			}
 		}
 
-		last = &c
-		repl = append(repl, c)
+		last = &chks[i]
+		repl = append(repl, chks[i])
 	}
 
 	return repl, nil
