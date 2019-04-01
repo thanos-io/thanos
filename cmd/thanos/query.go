@@ -122,13 +122,6 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			fileSD = file.NewDiscovery(conf, logger)
 		}
 
-		queryMaxDuration := time.Duration(*queryTimeout)
-		storeReadMaxDuration := time.Duration(*storeReadTimeout)
-
-		if storeReadMaxDuration > queryMaxDuration {
-			storeReadMaxDuration = queryMaxDuration
-		}
-
 		return runQuery(
 			g,
 			logger,
@@ -148,8 +141,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*webExternalPrefix,
 			*webPrefixHeaderName,
 			*maxConcurrentQueries,
-			queryMaxDuration,
-			storeReadMaxDuration,
+			time.Duration(*queryTimeout),
+			time.Duration(*storeReadTimeout),
 			*replicaLabel,
 			peer,
 			selectorLset,
