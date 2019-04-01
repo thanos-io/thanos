@@ -3,7 +3,7 @@ module github.com/improbable-eng/thanos
 require (
 	cloud.google.com/go v0.34.0
 	github.com/Azure/azure-storage-blob-go v0.0.0-20181022225951-5152f14ace1c
-	github.com/NYTimes/gziphandler v1.0.1
+	github.com/NYTimes/gziphandler v1.1.1
 	github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da
 	github.com/fatih/structtag v1.0.0
 	github.com/fortytw2/leaktest v1.2.0
