@@ -1,5 +1,5 @@
 PREFIX            ?= $(shell pwd)
-FILES             ?= $(shell find . -type f -name '*.go' -not -path "./vendor/*")
+DIRECTORIES       ?= $(shell find . -path './*' -prune -type d -not -path "./vendor")
 DOCKER_IMAGE_NAME ?= thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
 # $GOPATH/bin might not be in $PATH, so we can't assume `which` would give use
@@ -132,7 +132,7 @@ errcheck: $(ERRCHECK)
 .PHONY: format
 format: $(GOIMPORTS)
 	@echo ">> formatting code"
-	@$(GOIMPORTS) -w $(FILES)
+	@$(GOIMPORTS) -w $(DIRECTORIES)
 
 # proto generates golang files from Thanos proto files.
 .PHONY: proto
