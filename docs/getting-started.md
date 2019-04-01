@@ -248,7 +248,7 @@ _NOTE: The compactor must be run as a **singleton** and must not run when manual
 
 ### [Ruler](components/rule.md)
 
-In case of Prometheus with Thanos sidecar does not have enough retention, or if you want to have alerts or recording rules that requires global view, Thanos has just the component for that: the [Ruler]({{< ref "components/rule.md" >}}),
+In case of Prometheus with Thanos sidecar does not have enough retention, or if you want to have alerts or recording rules that requires global view, Thanos has just the component for that: the [Ruler](components/rule.md),
 which does rule and alert evaluation on top of a given Thanos Querier.
 
 ### Receiver

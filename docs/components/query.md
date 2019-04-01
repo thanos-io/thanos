@@ -8,7 +8,7 @@ menu: components
 
 The query component implements the Prometheus HTTP v1 API to query data in a Thanos cluster via PromQL.
 
-It gathers the data needed to evaluate the query from underlying StoreAPIs. See [here](/docs/service_discovery.md)
+It gathers the data needed to evaluate the query from underlying StoreAPIs. See [here](../service-discovery.md)
 on how to connect querier with desired StoreAPIs.
 
 Querier currently is fully stateless and horizontally scalable.
