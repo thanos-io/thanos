@@ -25,36 +25,25 @@ var (
 	firstPromPort       = promHTTPPort(1)
 	remoteWriteEndpoint = fmt.Sprintf("http://%s/api/v1/receive", remoteWriteReceiveHTTP(1))
 
-	queryGossipSuite = newSpinupSuite().
-				Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0), true)).
-				Add(scraper(2, defaultPromConfig("prom-ha", 0), true)).
-				Add(scraper(3, defaultPromConfig("prom-ha", 1), true)).
-				Add(querier(1, "replica"), queryCluster(1)).
-				Add(querier(2, "replica"), queryCluster(2))
-
 	queryStaticFlagsSuite = newSpinupSuite().
-				Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0), false)).
-				Add(scraper(2, defaultPromConfig("prom-ha", 0), false)).
-				Add(scraper(3, defaultPromConfig("prom-ha", 1), false)).
-				Add(querierWithStoreFlags(1, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3), remoteWriteReceiveGRPC(1)), "").
-				Add(querierWithStoreFlags(2, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3), remoteWriteReceiveGRPC(1)), "").
-				Add(receiver(1, defaultPromRemoteWriteConfig(remoteWriteEndpoint)), "")
+				Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0))).
+				Add(scraper(2, defaultPromConfig("prom-ha", 0))).
+				Add(scraper(3, defaultPromConfig("prom-ha", 1))).
+				Add(querierWithStoreFlags(1, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3), remoteWriteReceiveGRPC(1))).
+				Add(querierWithStoreFlags(2, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3), remoteWriteReceiveGRPC(1))).
+				Add(receiver(1, defaultPromRemoteWriteConfig(remoteWriteEndpoint)))
 
 	queryFileSDSuite = newSpinupSuite().
-				Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0), false)).
-				Add(scraper(2, defaultPromConfig("prom-ha", 0), false)).
-				Add(scraper(3, defaultPromConfig("prom-ha", 1), false)).
-				Add(querierWithFileSD(1, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3), remoteWriteReceiveGRPC(1)), "").
-				Add(querierWithFileSD(2, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3), remoteWriteReceiveGRPC(1)), "").
-				Add(receiver(1, defaultPromRemoteWriteConfig(remoteWriteEndpoint)), "")
+				Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0))).
+				Add(scraper(2, defaultPromConfig("prom-ha", 0))).
+				Add(scraper(3, defaultPromConfig("prom-ha", 1))).
+				Add(querierWithFileSD(1, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3), remoteWriteReceiveGRPC(1))).
+				Add(querierWithFileSD(2, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3), remoteWriteReceiveGRPC(1))).
+				Add(receiver(1, defaultPromRemoteWriteConfig(remoteWriteEndpoint)))
 )
 
 func TestQuery(t *testing.T) {
 	for _, tt := range []testConfig{
-		{
-			"gossip",
-			queryGossipSuite,
-		},
 		{
 			"staticFlag",
 			queryStaticFlagsSuite,

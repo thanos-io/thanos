@@ -33,6 +33,9 @@ type Client interface {
 	TimeRange() (mint int64, maxt int64)
 
 	String() string
+
+	// Addr returns address of a Client.
+	Addr() string
 }
 
 // ProxyStore implements the store API that proxies request to all given underlying stores.
@@ -41,6 +44,7 @@ type ProxyStore struct {
 	stores           func() []Client
 	component        component.StoreAPI
 	selectorLabels   labels.Labels
+	responseTimeout  time.Duration
 	storeReadTimeout time.Duration
 }
 
@@ -51,16 +55,19 @@ func NewProxyStore(
 	stores func() []Client,
 	component component.StoreAPI,
 	selectorLabels labels.Labels,
+	responseTimeout time.Duration,
 	storeReadTimeout time.Duration,
 ) *ProxyStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
+
 	s := &ProxyStore{
 		logger:           logger,
 		stores:           stores,
 		component:        component,
 		selectorLabels:   selectorLabels,
+		responseTimeout:  responseTimeout,
 		storeReadTimeout: storeReadTimeout,
 	}
 	return s
@@ -71,9 +78,31 @@ func (s *ProxyStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb
 	res := &storepb.InfoResponse{
 		Labels:    make([]storepb.Label, 0, len(s.selectorLabels)),
 		StoreType: s.component.ToProto(),
-		MinTime:   0,
-		MaxTime:   math.MaxInt64,
 	}
+
+	MinTime := int64(math.MaxInt64)
+	MaxTime := int64(0)
+
+	stores := s.stores()
+	for _, s := range stores {
+		mint, maxt := s.TimeRange()
+		if mint < MinTime {
+			MinTime = mint
+		}
+		if maxt > MaxTime {
+			MaxTime = maxt
+		}
+	}
+
+	// Edge case: we have all of the data if there are no stores.
+	if len(stores) == 0 {
+		MinTime = 0
+		MaxTime = math.MaxInt64
+	}
+
+	res.MaxTime = MaxTime
+	res.MinTime = MinTime
+
 	for _, l := range s.selectorLabels {
 		res.Labels = append(res.Labels, storepb.Label{
 			Name:  l.Name,
@@ -162,7 +191,11 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			}
 			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
 
-			sc, err := st.Series(storeReadCtx, r)
+			// This is used to cancel this stream when one operations takes too long.
+			seriesCtx, closeSeries := context.WithCancel(storeReadCtx)
+			defer closeSeries()
+
+			sc, err := st.Series(seriesCtx, r)
 			if err != nil {
 				storeID := fmt.Sprintf("%v", storepb.LabelsToString(st.Labels()))
 				if storeID == "" {
@@ -177,12 +210,13 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 				continue
 			}
 
-			// Schedule streamSeriesSet that translates gRPC streamed response into seriesSet (if series) or respCh (if warnings).
-			seriesSet = append(seriesSet, startStreamSeriesSet(storeReadCtx, wg, sc, respSender, st.String(), !r.PartialResponseDisabled))
+			// Schedule streamSeriesSet that translates gRPC streamed response
+			// into seriesSet (if series) or respCh if warnings.
+			seriesSet = append(seriesSet, startStreamSeriesSet(seriesCtx, s.logger, closeSeries,
+				wg, sc, respSender, st.String(), !r.PartialResponseDisabled, s.responseTimeout))
 		}
 
 		level.Debug(s.logger).Log("msg", strings.Join(storeDebugMsgs, ";"))
-
 		if len(seriesSet) == 0 {
 			// This is indicates that configured StoreAPIs are not the ones end user expects
 			err := errors.New("No store matched for this query")
@@ -211,7 +245,6 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		return err
 	}
 	return nil
-
 }
 
 type warnSender interface {
@@ -221,6 +254,9 @@ type warnSender interface {
 // streamSeriesSet iterates over incoming stream of series.
 // All errors are sent out of band via warning channel.
 type streamSeriesSet struct {
+	ctx    context.Context
+	logger log.Logger
+
 	stream storepb.Store_SeriesClient
 	warnCh warnSender
 
@@ -230,30 +266,44 @@ type streamSeriesSet struct {
 	errMtx sync.Mutex
 	err    error
 
-	name string
+	name            string
+	partialResponse bool
+
+	responseTimeout time.Duration
+	closeSeries     context.CancelFunc
 }
 
 func startStreamSeriesSet(
 	ctx context.Context,
+	logger log.Logger,
+	closeSeries context.CancelFunc,
 	wg *sync.WaitGroup,
 	stream storepb.Store_SeriesClient,
 	warnCh warnSender,
 	name string,
 	partialResponse bool,
+	responseTimeout time.Duration,
 ) *streamSeriesSet {
 	s := &streamSeriesSet{
-		stream: stream,
-		warnCh: warnCh,
-		recvCh: make(chan *storepb.Series, 10),
-		name:   name,
+		ctx:             ctx,
+		logger:          logger,
+		closeSeries:     closeSeries,
+		stream:          stream,
+		warnCh:          warnCh,
+		recvCh:          make(chan *storepb.Series, 10),
+		name:            name,
+		partialResponse: partialResponse,
+		responseTimeout: responseTimeout,
 	}
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		defer close(s.recvCh)
+
 		for {
 			r, err := s.stream.Recv()
+
 			if err == io.EOF {
 				return
 			}
@@ -278,16 +328,47 @@ func startStreamSeriesSet(
 	return s
 }
 
-// Next blocks until new message is received or stream is closed.
+// Next blocks until new message is received or stream is closed or operation is timed out.
 func (s *streamSeriesSet) Next() (ok bool) {
-	s.currSeries, ok = <-s.recvCh
-	return ok
+	ctx := s.ctx
+	timeoutMsg := fmt.Sprintf("failed to receive any data from %s", s.name)
+
+	if s.responseTimeout != 0 {
+		timeoutMsg = fmt.Sprintf("failed to receive any data in %s from %s", s.responseTimeout.String(), s.name)
+
+		timeoutCtx, done := context.WithTimeout(s.ctx, s.responseTimeout)
+		defer done()
+		ctx = timeoutCtx
+	}
+
+	select {
+	case s.currSeries, ok = <-s.recvCh:
+		return ok
+	case <-ctx.Done():
+		// closeSeries to shutdown a goroutine in startStreamSeriesSet.
+		s.closeSeries()
+
+		err := errors.Wrap(ctx.Err(), timeoutMsg)
+		if s.partialResponse {
+			level.Warn(s.logger).Log("err", err, "msg", "returning partial response")
+			s.warnCh.send(storepb.NewWarnSeriesResponse(err))
+			return false
+		}
+		s.errMtx.Lock()
+		s.err = err
+		s.errMtx.Unlock()
+
+		level.Warn(s.logger).Log("err", err, "msg", "partial response disabled; aborting request")
+		return false
+	}
 }
 
 // writeWarningOrErrorResponse sends warning if partial response enabled or sets error otherwise
 func (s *streamSeriesSet) writeWarningOrErrorResponse(partialResponse bool, err error) {
+	wrapErr := errors.Wrapf(err, "receive series from %s", s.name)
+
 	if partialResponse {
-		s.warnCh.send(storepb.NewWarnSeriesResponse(errors.Wrap(err, "receive series")))
+		s.warnCh.send(storepb.NewWarnSeriesResponse(wrapErr))
 		return
 	}
 
@@ -298,9 +379,8 @@ func (s *streamSeriesSet) writeWarningOrErrorResponse(partialResponse bool, err 
 // setError sets error (thread-safe)
 func (s *streamSeriesSet) setError(err error) {
 	s.errMtx.Lock()
-	defer s.errMtx.Unlock()
-
 	s.err = err
+	s.errMtx.Unlock()
 }
 
 func (s *streamSeriesSet) At() ([]storepb.Label, []storepb.AggrChunk) {

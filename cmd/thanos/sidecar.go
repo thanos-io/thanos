@@ -22,12 +22,12 @@ import (
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/oklog/run"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
-	"gopkg.in/alecthomas/kingpin.v2"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name string) {
@@ -137,6 +137,10 @@ func runSidecar(
 					return err
 				}
 
+				level.Info(logger).Log(
+					"msg", "successfully loaded prometheus external labels",
+					"external_labels", m.Labels().String(),
+				)
 				promUp.Set(1)
 				lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
 				return nil

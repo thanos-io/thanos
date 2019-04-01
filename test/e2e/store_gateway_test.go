@@ -19,7 +19,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/tsdb/labels"
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
 )
 
 func TestStoreGatewayQuery(t *testing.T) {
@@ -43,8 +43,8 @@ func TestStoreGatewayQuery(t *testing.T) {
 
 	exit, err := newSpinupSuite().
 		WithPreStartedMinio(s3Config).
-		Add(storeGateway(1, config), "").
-		Add(querier(1, "replica", storeGatewayGRPC(1)), "").
+		Add(storeGateway(1, config)).
+		Add(querier(1, "replica", storeGatewayGRPC(1))).
 		Exec(t, ctx, "test_store_gateway_query")
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)

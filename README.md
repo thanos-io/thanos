@@ -8,13 +8,13 @@
 
 ## Overview
 
-Thanos is a set of components that can be composed into a highly available metric 
-system with unlimited storage capacity, which can be added seamlessly on top of existing 
-Prometheus deployments. 
+Thanos is a set of components that can be composed into a highly available metric
+system with unlimited storage capacity, which can be added seamlessly on top of existing
+Prometheus deployments.
 
-Thanos leverages the Prometheus 2.0 storage format to cost-efficiently store historical metric 
+Thanos leverages the Prometheus 2.0 storage format to cost-efficiently store historical metric
 data in any object storage while retaining fast query latencies. Additionally, it provides
-a global query view across all Prometheus installations and can merge data from Prometheus 
+a global query view across all Prometheus installations and can merge data from Prometheus
 HA pairs on the fly.
 
 Concretely the aims of the project are:
@@ -65,7 +65,7 @@ Contributions are very welcome! See our [CONTRIBUTING.md](CONTRIBUTING.md) for m
 
 ## Community
 
-Thanos is an open source project and we welcome new contributers and members 
+Thanos is an open source project and we welcome new contributers and members
 of the community. Here are ways to get in touch with the community:
 
 * Slack: [#thanos](https://join.slack.com/t/improbable-eng/shared_invite/enQtMzQ1ODcyMzQ5MjM4LWY5ZWZmNGM2ODc5MmViNmQ3ZTA3ZTY3NzQwOTBlMTkzZmIxZTIxODk0OWU3YjZhNWVlNDU3MDlkZGViZjhkMjc)

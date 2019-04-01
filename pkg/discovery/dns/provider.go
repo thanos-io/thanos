@@ -5,8 +5,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/improbable-eng/thanos/pkg/extprom"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
@@ -25,28 +23,24 @@ type Provider struct {
 }
 
 // NewProvider returns a new empty provider with a default resolver.
-func NewProvider(logger log.Logger, reg *extprom.SubsystemRegisterer) *Provider {
+func NewProvider(logger log.Logger, reg prometheus.Registerer) *Provider {
 	p := &Provider{
 		resolver: NewResolver(),
 		resolved: make(map[string][]string),
 		logger:   logger,
 		resolverLookupsCount: prometheus.NewCounter(prometheus.CounterOpts{
-			Namespace: "thanos",
-			Subsystem: reg.Subsystem(),
 			Name:      "dns_lookups_total",
 			Help:      "The number of DNS lookups resolutions attempts",
 		}),
 		resolverFailuresCount: prometheus.NewCounter(prometheus.CounterOpts{
-			Namespace: "thanos",
-			Subsystem: reg.Subsystem(),
 			Name:      "dns_failures_total",
 			Help:      "The number of DNS lookup failures",
 		}),
 	}
 
-	if r := reg.Registerer(); r != nil {
-		r.MustRegister(p.resolverLookupsCount)
-		r.MustRegister(p.resolverFailuresCount)
+	if reg != nil {
+		reg.MustRegister(p.resolverLookupsCount)
+		reg.MustRegister(p.resolverFailuresCount)
 	}
 
 	return p
