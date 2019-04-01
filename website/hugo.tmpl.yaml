@@ -9,7 +9,6 @@ pygmentsUseClasses: true
 
 # We use preprocessing script so it will not work as expected anyway.
 disableLiveReload: true
-
 googleAnalytics: "${GOOGLE_ANALYTICS_TOKEN}"
 
 # So /thanos/docs/b link from /thanos/docs/some/a will be rewritten as ../b
