@@ -80,6 +80,10 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	syncDelay := modelDuration(cmd.Flag("sync-delay", "Minimum age of fresh (non-compacted) blocks before they are being processed.").
 		Default("30m"))
 
+	compactFutureChunks := cmd.Flag("accept-future-chunks",
+		"Accept chunks with data which are completely in the future.").
+		Default("false").Bool()
+
 	retentionRaw := modelDuration(cmd.Flag("retention.resolution-raw", "How long to retain raw samples in bucket. 0d - disables this retention").Default("0d"))
 	retention5m := modelDuration(cmd.Flag("retention.resolution-5m", "How long to retain samples of resolution 1 (5 minutes) in bucket. 0d - disables this retention").Default("0d"))
 	retention1h := modelDuration(cmd.Flag("retention.resolution-1h", "How long to retain samples of resolution 2 (1 hour) in bucket. 0d - disables this retention").Default("0d"))
@@ -106,6 +110,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			time.Duration(*syncDelay),
 			*haltOnError,
 			*acceptMalformedIndex,
+			*compactFutureChunks,
 			*wait,
 			map[compact.ResolutionLevel]time.Duration{
 				compact.ResolutionLevelRaw: time.Duration(*retentionRaw),
@@ -130,6 +135,7 @@ func runCompact(
 	syncDelay time.Duration,
 	haltOnError bool,
 	acceptMalformedIndex bool,
+	compactFutureChunks bool,
 	wait bool,
 	retentionByResolution map[compact.ResolutionLevel]time.Duration,
 	component string,
@@ -168,7 +174,7 @@ func runCompact(
 	}()
 
 	sy, err := compact.NewSyncer(logger, reg, bkt, syncDelay,
-		blockSyncConcurrency, acceptMalformedIndex)
+		blockSyncConcurrency, acceptMalformedIndex, compactFutureChunks)
 	if err != nil {
 		return errors.Wrap(err, "create syncer")
 	}

@@ -48,6 +48,7 @@ type Syncer struct {
 	blockSyncConcurrency int
 	metrics              *syncerMetrics
 	acceptMalformedIndex bool
+	compactFutureChunks  bool
 }
 
 type syncerMetrics struct {
@@ -129,7 +130,8 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 
 // NewSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, syncDelay time.Duration, blockSyncConcurrency int, acceptMalformedIndex bool) (*Syncer, error) {
+func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, syncDelay time.Duration, blockSyncConcurrency int, acceptMalformedIndex bool,
+	compactFutureChunks bool) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -142,6 +144,7 @@ func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket
 		metrics:              newSyncerMetrics(reg),
 		blockSyncConcurrency: blockSyncConcurrency,
 		acceptMalformedIndex: acceptMalformedIndex,
+		compactFutureChunks:  compactFutureChunks,
 	}, nil
 }
 
@@ -294,6 +297,7 @@ func (c *Syncer) Groups() (res []*Group, err error) {
 				labels.FromMap(m.Thanos.Labels),
 				m.Thanos.Downsample.Resolution,
 				c.acceptMalformedIndex,
+				c.compactFutureChunks,
 				c.metrics.compactions.WithLabelValues(GroupKey(*m)),
 				c.metrics.compactionFailures.WithLabelValues(GroupKey(*m)),
 				c.metrics.garbageCollectedBlocks,
@@ -440,6 +444,7 @@ type Group struct {
 	mtx                         sync.Mutex
 	blocks                      map[ulid.ULID]*metadata.Meta
 	acceptMalformedIndex        bool
+	compactFutureChunks         bool
 	compactions                 prometheus.Counter
 	compactionFailures          prometheus.Counter
 	groupGarbageCollectedBlocks prometheus.Counter
@@ -452,6 +457,7 @@ func newGroup(
 	lset labels.Labels,
 	resolution int64,
 	acceptMalformedIndex bool,
+	compactFutureChunks bool,
 	compactions prometheus.Counter,
 	compactionFailures prometheus.Counter,
 	groupGarbageCollectedBlocks prometheus.Counter,
@@ -466,6 +472,7 @@ func newGroup(
 		resolution:                  resolution,
 		blocks:                      map[ulid.ULID]*metadata.Meta{},
 		acceptMalformedIndex:        acceptMalformedIndex,
+		compactFutureChunks:         compactFutureChunks,
 		compactions:                 compactions,
 		compactionFailures:          compactionFailures,
 		groupGarbageCollectedBlocks: groupGarbageCollectedBlocks,
@@ -779,6 +786,9 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		if err := stats.PrometheusIssue5372Err(); !cg.acceptMalformedIndex && err != nil {
 			return false, ulid.ULID{}, errors.Wrapf(err,
 				"block id %s, try running with --debug.accept-malformed-index", id)
+		}
+		if err := stats.FutureChunksErr(); !cg.compactFutureChunks && err != nil {
+			return false, ulid.ULID{}, errors.Wrapf(err, "found chunks with data in the future")
 		}
 	}
 	level.Debug(cg.logger).Log("msg", "downloaded and verified blocks",

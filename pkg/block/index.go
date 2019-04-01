@@ -252,6 +252,9 @@ type Stats struct {
 	// OutOfOrderLabels represents the number of postings that contained out
 	// of order labels, a bug present in Prometheus 2.8.0 and below.
 	OutOfOrderLabels int
+	// FutureChunks represents the number of chunks that are completely in the future.
+	// This indicates problems with time skew on the machine that runs Thanos Compactor and Thanos Sidecar/Prometheus.
+	FutureChunks int
 }
 
 // PrometheusIssue5372Err returns an error if the Stats object indicates
@@ -261,6 +264,17 @@ func (i Stats) PrometheusIssue5372Err() error {
 	if i.OutOfOrderLabels > 0 {
 		return errors.Errorf("index contains %d postings with out of order labels",
 			i.OutOfOrderLabels)
+	}
+	return nil
+}
+
+// FutureChunksErr returns an error if there any chunks which are completely
+// in the future. It indicates time skew issues between Prometheus, Thanos Sidecar, and Compactor.
+// We should never usually want to compact blocks which are like this.
+func (i Stats) FutureChunksErr() error {
+	if i.FutureChunks > 0 {
+		return errors.Errorf("%d chunks have data which is completely in the future",
+			i.FutureChunks)
 	}
 	return nil
 }
@@ -391,6 +405,11 @@ func GatherIndexIssueStats(logger log.Logger, fn string, minTime int64, maxTime 
 				} else if c.MinTime == maxTime {
 					stats.Issue347OutsideChunks++
 				}
+			}
+
+			// Check if we are in the future.
+			if c.MinTime/1000 > time.Now().Unix() && c.MaxTime/1000 > time.Now().Unix() {
+				stats.FutureChunks++
 			}
 
 			if i == 0 {
