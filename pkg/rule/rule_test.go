@@ -12,7 +12,9 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
+	"github.com/prometheus/prometheus/pkg/rulefmt"
 	"github.com/prometheus/prometheus/rules"
+	yaml "gopkg.in/yaml.v2"
 )
 
 func TestUpdate(t *testing.T) {
@@ -121,4 +123,52 @@ groups:
 	testutil.Equals(t, "something2", g[1].Name())
 	testutil.Equals(t, "something6", g[2].Name())
 	testutil.Equals(t, "something7", g[3].Name())
+}
+
+func TestRuleGroupMarshalYAML(t *testing.T) {
+	const expected = `groups:
+- name: something1
+  rules:
+  - alert: some
+    expr: up
+- name: something2
+  rules:
+  - alert: some
+    expr: up
+  partial_response_strategy: ABORT
+`
+
+	a := storepb.PartialResponseStrategy_ABORT
+	var input = RuleGroups{
+		Groups: []RuleGroup{
+			{
+				RuleGroup: rulefmt.RuleGroup{
+					Name: "something1",
+					Rules: []rulefmt.Rule{
+						{
+							Alert: "some",
+							Expr:  "up",
+						},
+					},
+				},
+			},
+			{
+				RuleGroup: rulefmt.RuleGroup{
+					Name: "something2",
+					Rules: []rulefmt.Rule{
+						{
+							Alert: "some",
+							Expr:  "up",
+						},
+					},
+				},
+				PartialResponseStrategy: &a,
+			},
+		},
+	}
+
+	b, err := yaml.Marshal(input)
+	testutil.Ok(t, err)
+
+	testutil.Equals(t, expected, string(b))
 }
