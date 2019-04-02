@@ -1,4 +1,4 @@
-To deploy thanos sidecar along with Prometheus using official helm chart - just run the next command (), putting the values to a file beforehand:
+To deploy thanos sidecar along with Prometheus using official helm chart - just run the next command, putting the values to a file `values.yaml` and changing `--namespace` value beforehand:
 
 ```
 helm upgrade --version="8.6.0" --install --namespace="my-lovely-namespace" --values values.yaml  prometheus-thanos-sidecar stable/prometheus
@@ -6,18 +6,23 @@ helm upgrade --version="8.6.0" --install --namespace="my-lovely-namespace" --val
 
 Take a note that you need to replace two placeholders in the values: `BUCKET_REPLACE_ME` and `CLUSTER_NAME`. Also adjust all the other values according to your infrastructure requirements.
 
-example of the `values.yaml` file:
+An example of the `values.yaml` file:
 ```
 rbac:
   create: true
+
 alertmanager:
   enabled: false
+
 pushgateway:
   enabled: false
+
 nodeExporter:
   enabled: false
+
 kubeStateMetrics:
   enabled: false
+
 initChownData:
   resources:
     limits:
@@ -26,6 +31,7 @@ initChownData:
     requests:
       memory: 16Mi
       cpu: 50m
+
 server:
   extraArgs:
     log.level: debug
