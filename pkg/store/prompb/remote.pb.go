@@ -53,7 +53,7 @@ func (LabelMatcher_Type) EnumDescriptor() ([]byte, []int) {
 }
 
 type WriteRequest struct {
-	Timeseries           []TimeSeries `protobuf:"bytes,1,rep,name=timeseries" json:"timeseries"`
+	Timeseries           []TimeSeries `protobuf:"bytes,1,rep,name=timeseries,proto3" json:"timeseries"`
 	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
 	XXX_unrecognized     []byte       `json:"-"`
 	XXX_sizecache        int32        `json:"-"`
@@ -93,7 +93,7 @@ func (m *WriteRequest) XXX_DiscardUnknown() {
 var xxx_messageInfo_WriteRequest proto.InternalMessageInfo
 
 type ReadRequest struct {
-	Queries              []Query  `protobuf:"bytes,1,rep,name=queries" json:"queries"`
+	Queries              []Query  `protobuf:"bytes,1,rep,name=queries,proto3" json:"queries"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -134,7 +134,7 @@ var xxx_messageInfo_ReadRequest proto.InternalMessageInfo
 
 type ReadResponse struct {
 	// In same order as the request's queries.
-	Results              []QueryResult `protobuf:"bytes,1,rep,name=results" json:"results"`
+	Results              []QueryResult `protobuf:"bytes,1,rep,name=results,proto3" json:"results"`
 	XXX_NoUnkeyedLiteral struct{}      `json:"-"`
 	XXX_unrecognized     []byte        `json:"-"`
 	XXX_sizecache        int32         `json:"-"`
@@ -176,8 +176,8 @@ var xxx_messageInfo_ReadResponse proto.InternalMessageInfo
 type Query struct {
 	StartTimestampMs     int64          `protobuf:"varint,1,opt,name=start_timestamp_ms,json=startTimestampMs,proto3" json:"start_timestamp_ms,omitempty"`
 	EndTimestampMs       int64          `protobuf:"varint,2,opt,name=end_timestamp_ms,json=endTimestampMs,proto3" json:"end_timestamp_ms,omitempty"`
-	Matchers             []LabelMatcher `protobuf:"bytes,3,rep,name=matchers" json:"matchers"`
-	Hints                *ReadHints     `protobuf:"bytes,4,opt,name=hints" json:"hints,omitempty"`
+	Matchers             []LabelMatcher `protobuf:"bytes,3,rep,name=matchers,proto3" json:"matchers"`
+	Hints                *ReadHints     `protobuf:"bytes,4,opt,name=hints,proto3" json:"hints,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
 	XXX_unrecognized     []byte         `json:"-"`
 	XXX_sizecache        int32          `json:"-"`
@@ -217,7 +217,7 @@ func (m *Query) XXX_DiscardUnknown() {
 var xxx_messageInfo_Query proto.InternalMessageInfo
 
 type QueryResult struct {
-	Timeseries           []TimeSeries `protobuf:"bytes,1,rep,name=timeseries" json:"timeseries"`
+	Timeseries           []TimeSeries `protobuf:"bytes,1,rep,name=timeseries,proto3" json:"timeseries"`
 	XXX_NoUnkeyedLiteral struct{}     `json:"-"`
 	XXX_unrecognized     []byte       `json:"-"`
 	XXX_sizecache        int32        `json:"-"`
@@ -298,8 +298,8 @@ func (m *Sample) XXX_DiscardUnknown() {
 var xxx_messageInfo_Sample proto.InternalMessageInfo
 
 type TimeSeries struct {
-	Labels               []Label  `protobuf:"bytes,1,rep,name=labels" json:"labels"`
-	Samples              []Sample `protobuf:"bytes,2,rep,name=samples" json:"samples"`
+	Labels               []Label  `protobuf:"bytes,1,rep,name=labels,proto3" json:"labels"`
+	Samples              []Sample `protobuf:"bytes,2,rep,name=samples,proto3" json:"samples"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -863,6 +863,9 @@ func encodeVarintRemote(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *WriteRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Timeseries) > 0 {
@@ -878,6 +881,9 @@ func (m *WriteRequest) Size() (n int) {
 }
 
 func (m *ReadRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Queries) > 0 {
@@ -893,6 +899,9 @@ func (m *ReadRequest) Size() (n int) {
 }
 
 func (m *ReadResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Results) > 0 {
@@ -908,6 +917,9 @@ func (m *ReadResponse) Size() (n int) {
 }
 
 func (m *Query) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.StartTimestampMs != 0 {
@@ -933,6 +945,9 @@ func (m *Query) Size() (n int) {
 }
 
 func (m *QueryResult) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Timeseries) > 0 {
@@ -948,6 +963,9 @@ func (m *QueryResult) Size() (n int) {
 }
 
 func (m *Sample) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Value != 0 {
@@ -963,6 +981,9 @@ func (m *Sample) Size() (n int) {
 }
 
 func (m *TimeSeries) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Labels) > 0 {
@@ -984,6 +1005,9 @@ func (m *TimeSeries) Size() (n int) {
 }
 
 func (m *Label) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Name)
@@ -1001,6 +1025,9 @@ func (m *Label) Size() (n int) {
 }
 
 func (m *LabelMatcher) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Type != 0 {
@@ -1021,6 +1048,9 @@ func (m *LabelMatcher) Size() (n int) {
 }
 
 func (m *ReadHints) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.StepMs != 0 {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	qapi "github.com/improbable-eng/thanos/pkg/query/api"
+	thanosrule "github.com/improbable-eng/thanos/pkg/rule"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
@@ -23,7 +24,7 @@ type rulesRetrieverMock struct {
 	testing *testing.T
 }
 
-func (m rulesRetrieverMock) RuleGroups() []*rules.Group {
+func (m rulesRetrieverMock) RuleGroups() []thanosrule.Group {
 	var ar rulesRetrieverMock
 	arules := ar.AlertingRules()
 	storage := testutil.NewStorage(m.testing)
@@ -59,10 +60,10 @@ func (m rulesRetrieverMock) RuleGroups() []*rules.Group {
 	r = append(r, recordingRule)
 
 	group := rules.NewGroup("grp", "/path/to/file", time.Second, r, false, opts)
-	return []*rules.Group{group}
+	return []thanosrule.Group{{Group: group}}
 }
 
-func (m rulesRetrieverMock) AlertingRules() []*rules.AlertingRule {
+func (m rulesRetrieverMock) AlertingRules() []thanosrule.AlertingRule {
 	expr1, err := promql.ParseExpr(`absent(test_metric3) != 1`)
 	if err != nil {
 		m.testing.Fatalf("unable to parse alert expression: %s", err)
@@ -90,9 +91,9 @@ func (m rulesRetrieverMock) AlertingRules() []*rules.AlertingRule {
 		true,
 		log.NewNopLogger(),
 	)
-	var r []*rules.AlertingRule
-	r = append(r, rule1)
-	r = append(r, rule2)
+	var r []thanosrule.AlertingRule
+	r = append(r, thanosrule.AlertingRule{AlertingRule: rule1})
+	r = append(r, thanosrule.AlertingRule{AlertingRule: rule2})
 	return r
 }
 
@@ -122,7 +123,10 @@ func TestEndpoints(t *testing.T) {
 		algr.testing = t
 		algr.AlertingRules()
 		algr.RuleGroups()
-		api := NewAPI(nil, algr)
+		api := NewAPI(
+			nil,
+			algr,
+		)
 		testEndpoints(t, api)
 	})
 }
@@ -142,29 +146,32 @@ func testEndpoints(t *testing.T, api *API) {
 			response: &RuleDiscovery{
 				RuleGroups: []*RuleGroup{
 					{
-						Name:     "grp",
-						File:     "/path/to/file",
-						Interval: 1,
+						Name:                    "grp",
+						File:                    "/path/to/file",
+						Interval:                1,
+						PartialResponseStrategy: "WARN",
 						Rules: []rule{
 							alertingRule{
-								Name:        "test_metric3",
-								Query:       "absent(test_metric3) != 1",
-								Duration:    1,
-								Labels:      labels.Labels{},
-								Annotations: labels.Labels{},
-								Alerts:      []*Alert{},
-								Health:      "unknown",
-								Type:        "alerting",
+								Name:                    "test_metric3",
+								Query:                   "absent(test_metric3) != 1",
+								Duration:                1,
+								Labels:                  labels.Labels{},
+								Annotations:             labels.Labels{},
+								Alerts:                  []*Alert{},
+								Health:                  "unknown",
+								Type:                    "alerting",
+								PartialResponseStrategy: "WARN",
 							},
 							alertingRule{
-								Name:        "test_metric4",
-								Query:       "up == 1",
-								Duration:    1,
-								Labels:      labels.Labels{},
-								Annotations: labels.Labels{},
-								Alerts:      []*Alert{},
-								Health:      "unknown",
-								Type:        "alerting",
+								Name:                    "test_metric4",
+								Query:                   "up == 1",
+								Duration:                1,
+								Labels:                  labels.Labels{},
+								Annotations:             labels.Labels{},
+								Alerts:                  []*Alert{},
+								Health:                  "unknown",
+								Type:                    "alerting",
+								PartialResponseStrategy: "WARN",
 							},
 							recordingRule{
 								Name:   "recording-rule-1",
