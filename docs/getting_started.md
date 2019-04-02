@@ -77,6 +77,7 @@ If you are not interested in backing up any data, the `--objstore.config-file` f
 
 * _[Example Kubernetes manifest](../tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar.yaml)_
 * _[Example Kubernetes manifest with Minio upload](../tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar-lts.yaml)_
+* _[Example Deploying sidecar using official Prometheus Helm Chart](../tutorials/kubernetes-demo/manifests/prometheus-helm-chart-with-sidecar.yaml)_
 * _[Details & Config for other object stores](./storage.md)_
 
 ### [Store API](/pkg/store/storepb/rpc.proto#L19)
