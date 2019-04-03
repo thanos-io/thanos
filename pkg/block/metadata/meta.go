@@ -23,6 +23,7 @@ type SourceType string
 const (
 	UnknownSource         SourceType = ""
 	SidecarSource         SourceType = "sidecar"
+	ReceiveSource         SourceType = "receive"
 	CompactorSource       SourceType = "compactor"
 	CompactorRepairSource SourceType = "compactor.repair"
 	RulerSource           SourceType = "ruler"

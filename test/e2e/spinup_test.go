@@ -145,6 +145,7 @@ func receiver(i int, config string) cmdScheduleFunc {
 			"--grpc-address", remoteWriteReceiveGRPC(i),
 			"--http-address", remoteWriteReceiveMetricHTTP(i),
 			"--remote-write.address", remoteWriteReceiveHTTP(i),
+			"--labels", "receive=\"true\"",
 			"--tsdb.path", promDir,
 			"--log.level", "debug"))), nil
 	}
