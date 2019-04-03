@@ -68,10 +68,10 @@ func TestStoreGatewayQuery(t *testing.T) {
 	extLset2 := labels.FromStrings("ext1", "value1", "replica", "2")
 
 	now := time.Now()
-	id1, err := testutil.CreateBlock(dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset, 0)
+	id1, err := testutil.CreateBlock(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset, 0)
 	testutil.Ok(t, err)
 
-	id2, err := testutil.CreateBlock(dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset2, 0)
+	id2, err := testutil.CreateBlock(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset2, 0)
 	testutil.Ok(t, err)
 
 	l := log.NewLogfmtLogger(os.Stdout)

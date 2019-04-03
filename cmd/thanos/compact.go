@@ -182,9 +182,11 @@ func runCompact(
 		level.Warn(logger).Log("msg", "Max compaction level is lower than should be", "current", maxCompactionLevel, "default", compactions.maxLevel())
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	// Instantiate the compactor with different time slices. Timestamps in TSDB
 	// are in milliseconds.
-	comp, err := tsdb.NewLeveledCompactor(reg, logger, levels, downsample.NewPool())
+	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool())
 	if err != nil {
 		return errors.Wrap(err, "create compactor")
 	}
@@ -210,7 +212,6 @@ func runCompact(
 		level.Info(logger).Log("msg", "retention policy of 1 hour aggregated samples is enabled", "duration", retentionByResolution[compact.ResolutionLevel1h])
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
 	f := func() error {
 		if err := compactor.Compact(ctx); err != nil {
 			return errors.Wrap(err, "compaction failed")

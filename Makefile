@@ -39,7 +39,7 @@ BZR               ?= $(shell which bzr)
 # Referenced by github.com/improbable-eng/thanos/blob/master/docs/getting_started.md#prometheus
 
 # Limitied prom version, because testing was not possibe. This should fix it: https://github.com/improbable-eng/thanos/issues/758
-PROM_VERSIONS           ?=v2.4.3 v2.5.0
+PROM_VERSIONS           ?=v2.4.3 v2.5.0 v2.8.1
 ALERTMANAGER_VERSION    ?=v0.15.2
 MINIO_SERVER_VERSION    ?=RELEASE.2018-10-06T00-15-16Z
 
