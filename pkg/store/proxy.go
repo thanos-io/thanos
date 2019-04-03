@@ -314,12 +314,12 @@ func startStreamSeriesSet(
 			}
 
 			if ctx.Err() != nil {
-				s.writeWarningOrErrorResponse(partialResponse, ctx.Err())
+				s.writeWarningOrErrorResponse(partialResponse, errors.Wrapf(ctx.Err(), "receive series from %s", s.name))
 				return
 			}
 
 			if err != nil {
-				s.writeWarningOrErrorResponse(partialResponse, err)
+				s.writeWarningOrErrorResponse(partialResponse, errors.Wrapf(err, "receive series from %s", s.name))
 				return
 			}
 
@@ -350,17 +350,15 @@ func (s *streamSeriesSet) Next() (ok bool) {
 		// closeSeries to shutdown a goroutine in startStreamSeriesSet.
 		s.closeSeries()
 
-		err := errors.Wrap(ctx.Err(), timeoutMsg)
+		wrapErr := errors.Wrap(ctx.Err(), timeoutMsg)
+		s.writeWarningOrErrorResponse(s.partialResponse, wrapErr)
+
 		if s.partialResponse {
-			level.Warn(s.logger).Log("err", err, "msg", "returning partial response")
-			s.warnCh.send(storepb.NewWarnSeriesResponse(err))
+			level.Warn(s.logger).Log("err", wrapErr, "msg", "returning partial response")
 			return false
 		}
-		s.errMtx.Lock()
-		s.err = err
-		s.errMtx.Unlock()
 
-		level.Warn(s.logger).Log("err", err, "msg", "partial response disabled; aborting request")
+		level.Warn(s.logger).Log("err", wrapErr, "msg", "partial response disabled; aborting request")
 		return false
 	}
 
@@ -371,10 +369,8 @@ func (s *streamSeriesSet) Next() (ok bool) {
 
 // writeWarningOrErrorResponse sends warning if partial response enabled or sets error otherwise
 func (s *streamSeriesSet) writeWarningOrErrorResponse(partialResponse bool, err error) {
-	wrapErr := errors.Wrapf(err, "receive series from %s", s.name)
-
 	if partialResponse {
-		s.warnCh.send(storepb.NewWarnSeriesResponse(wrapErr))
+		s.warnCh.send(storepb.NewWarnSeriesResponse(err))
 		return
 	}
 

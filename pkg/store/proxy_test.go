@@ -452,7 +452,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 		expectedWarningsLen int
 	}{
 		{
-			title: "partial response disabled one thanos query is slow to respond",
+			title: "partial response disabled one thanos query is slow to respond, but responding",
 			storeAPIs: []Client{
 				&testClient{
 					StoreClient: &mockedStoreAPI{
@@ -460,7 +460,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 							storepb.NewWarnSeriesResponse(errors.New("warning")),
 							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
 						},
-						RespDuration: 10 * time.Second,
+						RespDuration: 2 * time.Second,
 					},
 					labels:  []storepb.Label{{Name: "ext", Value: "1"}},
 					minTime: 1,
@@ -484,7 +484,40 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 				PartialResponseDisabled: true,
 			},
-			expectedErr: errors.New("test: failed to receive any data in 4s from test: context deadline exceeded"),
+			expectedErr: errors.New("test: failed to receive any data in 2s from test: context deadline exceeded"),
+		},
+		{
+			title: "partial response disabled one thanos query is slow to respond and doesn't return any data until store.read-timeout occurs",
+			storeAPIs: []Client{
+				&testClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
+						},
+						RespDuration: 7 * time.Second,
+					},
+					labels:  []storepb.Label{{Name: "ext", Value: "1"}},
+					minTime: 1,
+					maxTime: 300,
+				},
+				&testClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
+						},
+					},
+					labels:  []storepb.Label{{Name: "ext", Value: "1"}},
+					minTime: 1,
+					maxTime: 300,
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime:                 1,
+				MaxTime:                 300,
+				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				PartialResponseDisabled: true,
+			},
+			expectedErr: errors.New("test: receive series from test: context deadline exceeded"),
 		},
 		{
 			title: "partial response enabled one thanos query is slow to respond",
@@ -506,7 +539,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 							storepb.NewWarnSeriesResponse(errors.New("warning")),
 							storeSeriesResponse(t, labels.FromStrings("b", "c"), []sample{{1, 1}, {2, 2}, {3, 3}}),
 						},
-						RespDuration: 10 * time.Second,
+						RespDuration: 7 * time.Second,
 					},
 					labels:  []storepb.Label{{Name: "ext", Value: "1"}},
 					minTime: 1,
@@ -524,7 +557,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 					samples: []sample{{1, 1}, {2, 2}, {3, 3}},
 				},
 			},
-			expectedWarningsLen: 2,
+			expectedWarningsLen: 3,
 		},
 	} {
 		if ok := t.Run(tc.title, func(t *testing.T) {
@@ -532,8 +565,8 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				func() []Client { return tc.storeAPIs },
 				component.Query,
 				tc.selectorLabels,
-				0*time.Second,
-				4*time.Second,
+				2*time.Second,
+				5*time.Second,
 			)
 
 			s := newStoreSeriesServer(context.Background())
