@@ -21,13 +21,11 @@ const tmpRuleDir = ".tmp-rules"
 
 type Group struct {
 	*rules.Group
-
 	PartialResponseStrategy storepb.PartialResponseStrategy
 }
 
 type AlertingRule struct {
 	*rules.AlertingRule
-
 	PartialResponseStrategy storepb.PartialResponseStrategy
 }
 
@@ -37,8 +35,7 @@ type RuleGroups struct {
 
 type RuleGroup struct {
 	rulefmt.RuleGroup
-
-	PartialResponseStrategy storepb.PartialResponseStrategy `yaml:"partial_response_strategy"`
+	PartialResponseStrategy *storepb.PartialResponseStrategy
 }
 
 type Managers map[storepb.PartialResponseStrategy]*rules.Manager
@@ -88,9 +85,27 @@ func (r *RuleGroup) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		p = storepb.PartialResponseStrategy_value[storepb.PartialResponseStrategy_ABORT.String()]
 	}
 
+	ps := storepb.PartialResponseStrategy(p)
 	r.RuleGroup = rg
-	r.PartialResponseStrategy = storepb.PartialResponseStrategy(p)
+	r.PartialResponseStrategy = &ps
 	return nil
+}
+
+func (r RuleGroup) MarshalYAML() (interface{}, error) {
+	var ps *string
+	if r.PartialResponseStrategy != nil {
+		str := r.PartialResponseStrategy.String()
+		ps = &str
+	}
+
+	rs := struct {
+		RuleGroup               rulefmt.RuleGroup `yaml:",inline"`
+		PartialResponseStrategy *string           `yaml:"partial_response_strategy,omitempty"`
+	}{
+		RuleGroup:               r.RuleGroup,
+		PartialResponseStrategy: ps,
+	}
+	return rs, nil
 }
 
 // Update updates rules from given files to all managers we hold. We decide which groups should go where, based on
@@ -125,12 +140,12 @@ func (m *Managers) Update(dataDir string, evalInterval time.Duration, files []st
 		// rules.Manager. The problem is that it uses yaml.UnmarshalStrict for some reasons.
 		mapped := map[storepb.PartialResponseStrategy]*rulefmt.RuleGroups{}
 		for _, rg := range rg.Groups {
-			if _, ok := mapped[rg.PartialResponseStrategy]; !ok {
-				mapped[rg.PartialResponseStrategy] = &rulefmt.RuleGroups{}
+			if _, ok := mapped[*rg.PartialResponseStrategy]; !ok {
+				mapped[*rg.PartialResponseStrategy] = &rulefmt.RuleGroups{}
 			}
 
-			mapped[rg.PartialResponseStrategy].Groups = append(
-				mapped[rg.PartialResponseStrategy].Groups,
+			mapped[*rg.PartialResponseStrategy].Groups = append(
+				mapped[*rg.PartialResponseStrategy].Groups,
 				rg.RuleGroup,
 			)
 		}
