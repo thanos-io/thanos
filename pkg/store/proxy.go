@@ -40,12 +40,17 @@ type Client interface {
 
 // ProxyStore implements the store API that proxies request to all given underlying stores.
 type ProxyStore struct {
-	logger           log.Logger
-	stores           func() []Client
-	component        component.StoreAPI
-	selectorLabels   labels.Labels
-	responseTimeout  time.Duration
-	storeReadTimeout time.Duration
+	logger         log.Logger
+	stores         func() []Client
+	component      component.StoreAPI
+	selectorLabels labels.Labels
+
+	// responseTimeout is a short timeout for any GRPC operation
+	// during series query
+	responseTimeout time.Duration
+
+	// readTimeout is a timeout for entire store request
+	readTimeout time.Duration
 }
 
 // NewProxyStore returns a new ProxyStore that uses the given clients that implements storeAPI to fan-in all series to the client.
@@ -56,19 +61,19 @@ func NewProxyStore(
 	component component.StoreAPI,
 	selectorLabels labels.Labels,
 	responseTimeout time.Duration,
-	storeReadTimeout time.Duration,
+	readTimeout time.Duration,
 ) *ProxyStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 
 	s := &ProxyStore{
-		logger:           logger,
-		stores:           stores,
-		component:        component,
-		selectorLabels:   selectorLabels,
-		responseTimeout:  responseTimeout,
-		storeReadTimeout: storeReadTimeout,
+		logger:          logger,
+		stores:          stores,
+		component:       component,
+		selectorLabels:  selectorLabels,
+		responseTimeout: responseTimeout,
+		readTimeout:     readTimeout,
 	}
 	return s
 }
@@ -158,7 +163,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 	// client will get partial response from stores who responded faster than store.read-timeout
 	// If query.timeout <= store.read-timeout
 	// client will get an error with timeout for whole request even if some of stores responded in time, but one timed out
-	storeReadCtx, storeReadCancelFunc := context.WithTimeout(gctx, s.storeReadTimeout)
+	storeReadCtx, storeReadCancelFunc := context.WithTimeout(gctx, s.readTimeout)
 	defer storeReadCancelFunc()
 
 	g.Go(func() error {
@@ -341,10 +346,7 @@ func (s *streamSeriesSet) Next() (ok bool) {
 		ctx = timeoutCtx
 	}
 
-	select {
-	case s.currSeries, ok = <-s.recvCh:
-		return ok
-	case <-ctx.Done():
+	if ctx.Err() != nil {
 		// closeSeries to shutdown a goroutine in startStreamSeriesSet.
 		s.closeSeries()
 
@@ -361,6 +363,10 @@ func (s *streamSeriesSet) Next() (ok bool) {
 		level.Warn(s.logger).Log("err", err, "msg", "partial response disabled; aborting request")
 		return false
 	}
+
+	s.currSeries, ok = <-s.recvCh
+
+	return ok
 }
 
 // writeWarningOrErrorResponse sends warning if partial response enabled or sets error otherwise
@@ -438,7 +444,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		g, gctx  = errgroup.WithContext(ctx)
 	)
 
-	storeReadCtx, storeReadCancelFunc := context.WithTimeout(gctx, s.storeReadTimeout)
+	storeReadCtx, storeReadCancelFunc := context.WithTimeout(gctx, s.readTimeout)
 	defer storeReadCancelFunc()
 
 	for _, st := range s.stores() {

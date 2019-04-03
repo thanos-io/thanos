@@ -532,6 +532,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				func() []Client { return tc.storeAPIs },
 				component.Query,
 				tc.selectorLabels,
+				0*time.Second,
 				4*time.Second,
 			)
 
@@ -797,131 +798,6 @@ func TestStoreMatches(t *testing.T) {
 	}
 }
 
-// slowStoreSeriesClient failing requests with timeout
-type slowStoreSeriesClient struct {
-	storepb.Store_SeriesClient
-	recvCallback func() (*storepb.SeriesResponse, error)
-}
-
-func (c *slowStoreSeriesClient) Recv() (*storepb.SeriesResponse, error) {
-	return c.recvCallback()
-}
-
-type slowStoreClient struct {
-	storepb.StoreClient
-}
-
-func (s *slowStoreClient) Series(ctx context.Context, in *storepb.SeriesRequest, opts ...grpc.CallOption) (storepb.Store_SeriesClient, error) {
-	return &slowStoreSeriesClient{
-		recvCallback: func() (*storepb.SeriesResponse, error) {
-			//Just wait for ctx.Done() as it works internally in GRPC StoreClient
-			<-ctx.Done()
-			return nil, ctx.Err()
-		},
-	}, nil
-}
-
-func (s *slowStoreClient) TimeRange() (int64, int64) { return 1, 1 }
-func (s *slowStoreClient) Labels() []storepb.Label   { return nil }
-func (s *slowStoreClient) String() string            { return "slow_store" }
-
-func TestProxyStore_ReadTimeoutWithPartialResponse(t *testing.T) {
-
-	fastStore := &testClient{
-		StoreClient: &mockedStoreAPI{
-			RespSeries: []*storepb.SeriesResponse{
-				storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 5}}),
-			},
-		},
-		minTime: 1,
-		maxTime: 300,
-		labels:  []storepb.Label{{Name: "ext", Value: "1"}},
-	}
-
-	seriesRequest := &storepb.SeriesRequest{
-		MinTime:  1,
-		MaxTime:  300,
-		Matchers: []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
-	}
-
-	for _, tc := range []struct {
-		queryTimeout     time.Duration
-		storeReadTimeout time.Duration
-		partialResponse  bool
-
-		expectedSeries []rawSeries
-		expectedErr    error
-
-		expectedWarningsLen int
-	}{
-		{
-			queryTimeout:     1 * time.Minute,
-			storeReadTimeout: 1 * time.Millisecond,
-			partialResponse:  true,
-
-			expectedSeries: []rawSeries{
-				{
-					lset:    []storepb.Label{{Name: "a", Value: "a"}},
-					samples: []sample{{0, 5}},
-				},
-			},
-			expectedWarningsLen: 1,
-		},
-		{
-			queryTimeout:     1 * time.Minute,
-			storeReadTimeout: 1 * time.Millisecond,
-			partialResponse:  false,
-
-			expectedErr:         errors.New("slow_store: context deadline exceeded"),
-			expectedWarningsLen: 0,
-		},
-		{
-			// This case is quite strange,
-			// because newMergedSeriesSet calls Next() and
-			// blocks reading from all stores if one of them works slowly
-			queryTimeout:     1 * time.Millisecond,
-			storeReadTimeout: 1 * time.Minute,
-			partialResponse:  true,
-
-			expectedSeries:      []rawSeries{},
-			expectedWarningsLen: 0,
-		},
-		{
-			queryTimeout:     1 * time.Millisecond,
-			storeReadTimeout: 1 * time.Minute,
-			partialResponse:  false,
-
-			expectedErr:         errors.New("slow_store: context deadline exceeded"),
-			expectedWarningsLen: 0,
-		},
-	} {
-		q := NewProxyStore(
-			nil,
-			func() []Client { return []Client{&slowStoreClient{}, fastStore} },
-			component.Query,
-			nil,
-			tc.storeReadTimeout,
-		)
-
-		queryCtx, _ := context.WithTimeout(context.Background(), tc.queryTimeout)
-		s := newStoreSeriesServer(queryCtx)
-
-		seriesRequest.PartialResponseDisabled = !tc.partialResponse
-
-		err := q.Series(seriesRequest, s)
-
-		if tc.expectedErr != nil {
-			testutil.NotOk(t, err)
-			testutil.Equals(t, tc.expectedErr.Error(), err.Error())
-			continue
-		}
-
-		testutil.Ok(t, err)
-		seriesEqual(t, tc.expectedSeries, s.SeriesSet)
-		testutil.Equals(t, tc.expectedWarningsLen, len(s.Warnings), "got %v", s.Warnings)
-	}
-}
-
 // TestProxyStore_StoreReadTimeout checks that
 // store.read-timeout (context) must close before query-timeout
 func TestProxyStore_StoreReadTimeout(t *testing.T) {
@@ -930,7 +806,11 @@ func TestProxyStore_StoreReadTimeout(t *testing.T) {
 
 	q := NewProxyStore(
 		nil,
-		func() []Client { return []Client{&slowStoreClient{}} },
+		func() []Client {
+			return []Client{
+				&testClient{StoreClient: &mockedStoreAPI{}, minTime: 1, maxTime: 300},
+			}
+		},
 		component.Query,
 		nil,
 		0*time.Second,
@@ -952,7 +832,7 @@ func TestProxyStore_StoreReadTimeout(t *testing.T) {
 		// Do nothing - storeQuery expected to finish first
 	case <-queryCtx.Done():
 		// Something went wrong - global query context expected to close last
-		testutil.Ok(t, errors.New("query finished first, but expected store query will finish first (storeReadTimeout is smaller that query timeout)"))
+		testutil.Ok(t, errors.New("query finished first, but expected store query will finish first (readTimeout is smaller that query timeout)"))
 	}
 }
 
