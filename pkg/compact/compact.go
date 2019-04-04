@@ -897,7 +897,48 @@ func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, comp
 }
 
 // Compact runs compaction over bucket.
-func (c *BucketCompactor) Compact(ctx context.Context, groupCompactConcurrency int) error {
+func (c *BucketCompactor) Compact(ctx context.Context, concurrency int) error {
+	// Set up workers who will compact the groups when the groups are ready.
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
+	groupChan := make(chan *Group)
+	errChan := make(chan error, concurrency)
+	var finishedAllGroups bool
+	var mtx sync.Mutex
+
+	workCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			for g := range groupChan {
+				shouldRerunGroup, _, err := g.Compact(workCtx, c.compactDir, c.comp)
+				if err == nil {
+					if shouldRerunGroup {
+						mtx.Lock()
+						finishedAllGroups = false
+						mtx.Unlock()
+					}
+					continue
+				}
+
+				if IsIssue347Error(err) {
+					if err := RepairIssue347(workCtx, c.logger, c.bkt, err); err == nil {
+						mtx.Lock()
+						finishedAllGroups = false
+						mtx.Unlock()
+						continue
+					}
+				}
+				errChan <- errors.Wrap(err, "compaction")
+				return
+			}
+		}()
+	}
+
 	// Loop over bucket and compact until there's no work left.
 	for {
 		// Clean up the compaction temporary directory at the beginning of every compaction loop.
@@ -923,41 +964,22 @@ func (c *BucketCompactor) Compact(ctx context.Context, groupCompactConcurrency i
 		if err != nil {
 			return errors.Wrap(err, "build compaction groups")
 		}
-		finishedAllGroups := true
-		var wg sync.WaitGroup
-		errChan := make(chan error, len(groups))
-		groupChan := make(chan struct{}, groupCompactConcurrency)
-		defer close(groupChan)
-		for i := 0; i < groupCompactConcurrency; i++ {
-			groupChan <- struct{}{}
-		}
-		for _, g := range groups {
-			<-groupChan
-			wg.Add(1)
-			go func(g *Group) {
-				defer func() {
-					wg.Done()
-					groupChan <- struct{}{}
-				}()
-				shouldRerunGroup, _, err := g.Compact(ctx, c.compactDir, c.comp)
-				if err == nil {
-					if shouldRerunGroup {
-						finishedAllGroups = false
-					}
-					return
-				}
 
-				if IsIssue347Error(err) {
-					if err := RepairIssue347(ctx, c.logger, c.bkt, err); err == nil {
-						finishedAllGroups = false
-						return
-					}
+		// Send all groups found during this pass to the compaction workers, the workers will update finishedAllGroups.
+		finishedAllGroups = true
+		for _, g := range groups {
+			select {
+			case err := <-errChan:
+				if err != nil {
+					return err
 				}
-				errChan <- errors.Wrap(err, "compaction")
-			}(g)
+			case groupChan <- g:
+			}
 		}
+		close(groupChan)
 		wg.Wait()
 		close(errChan)
+
 		if err := <-errChan; err != nil {
 			return err
 		}
