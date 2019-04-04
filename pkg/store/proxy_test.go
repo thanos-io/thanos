@@ -517,7 +517,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 				Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
 				PartialResponseDisabled: true,
 			},
-			expectedErr: errors.New("test: receive series from test: context deadline exceeded"),
+			expectedErr: errors.New("test: failed to receive any data in 2s from test: context deadline exceeded"),
 		},
 		{
 			title: "partial response enabled one thanos query is slow to respond",

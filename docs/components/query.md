@@ -275,12 +275,13 @@ Flags:
                                  specified duration then a Store will be ignored
                                  and partial data will be returned if it's
                                  enabled. 0 disables timeout.
-      --store.read-timeout=2m    Maximum time to read response from store. If
-                                 request to one of stores is timed out and
-                                 store.read-timeout < query.timeout partial
-                                 response will be returned. If
-                                 store.read-timeout >= query.timeout one of
-                                 stores is timed out the client will get no data
-                                 and timeout error.
+      --store.read-timeout=2m    Maximum time to read a response from a store.
+                                 If a request to one of the stores has timed out
+                                 and store.read-timeout < query.timeout then a
+                                 partial response will be returned. If
+                                 store.read-timeout >= query.timeout and one of
+                                 the stores has timed out then the client will
+                                 get no data, and the timeout error will be
+                                 returned.
 
 ```

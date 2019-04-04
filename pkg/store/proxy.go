@@ -45,8 +45,7 @@ type ProxyStore struct {
 	component      component.StoreAPI
 	selectorLabels labels.Labels
 
-	// responseTimeout is a short timeout for any GRPC operation
-	// during series query
+	// responseTimeout is a timeout for any GRPC operation during series query
 	responseTimeout time.Duration
 
 	// readTimeout is a timeout for entire store request
@@ -130,12 +129,12 @@ func newRespCh(ctx context.Context, buffer int) (*ctxRespSender, <-chan *storepb
 // send writes response to sender channel
 // or just returns if sender context was timed out
 func (s ctxRespSender) send(r *storepb.SeriesResponse) {
-	// If context closed or deadline exceeded - just skip sending and return
-	if s.ctx.Err() != nil {
+	select {
+	case <-s.ctx.Done():
+		return
+	case s.ch <- r:
 		return
 	}
-
-	s.ch <- r
 }
 
 // Series returns all series for a requested time range and label matcher. Requested series are taken from other
@@ -346,25 +345,26 @@ func (s *streamSeriesSet) Next() (ok bool) {
 		ctx = timeoutCtx
 	}
 
-	if ctx.Err() != nil {
+	select {
+	case s.currSeries, ok = <-s.recvCh:
+		return ok
+	case <-ctx.Done():
 		// closeSeries to shutdown a goroutine in startStreamSeriesSet.
 		s.closeSeries()
 
-		wrapErr := errors.Wrap(ctx.Err(), timeoutMsg)
-		s.writeWarningOrErrorResponse(s.partialResponse, wrapErr)
-
+		err := errors.Wrap(ctx.Err(), timeoutMsg)
 		if s.partialResponse {
-			level.Warn(s.logger).Log("err", wrapErr, "msg", "returning partial response")
+			level.Warn(s.logger).Log("err", err, "msg", "returning partial response")
+			s.warnCh.send(storepb.NewWarnSeriesResponse(err))
 			return false
 		}
+		s.errMtx.Lock()
+		s.err = err
+		s.errMtx.Unlock()
 
-		level.Warn(s.logger).Log("err", wrapErr, "msg", "partial response disabled; aborting request")
+		level.Warn(s.logger).Log("err", err, "msg", "partial response disabled; aborting request")
 		return false
 	}
-
-	s.currSeries, ok = <-s.recvCh
-
-	return ok
 }
 
 // writeWarningOrErrorResponse sends warning if partial response enabled or sets error otherwise
