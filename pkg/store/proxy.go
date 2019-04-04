@@ -156,12 +156,6 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		respSender, respRecv, closeFn = newRespCh(gctx, 10)
 	)
 
-	// We're limiting store read time here.
-	// This limit affects behaviour what result Thanos Query will return to user if one of requested stores timed out.
-	// If query.timeout > store.read-timeout
-	// client will get partial response from stores who responded faster than store.read-timeout
-	// If query.timeout <= store.read-timeout
-	// client will get an error with timeout for whole request even if some of stores responded in time, but one timed out
 	storeReadCtx, storeReadCancelFunc := context.WithTimeout(gctx, s.readTimeout)
 	defer storeReadCancelFunc()
 
