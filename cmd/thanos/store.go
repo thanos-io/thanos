@@ -2,13 +2,11 @@ package main
 
 import (
 	"context"
-	"math"
 	"net"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
@@ -25,7 +23,7 @@ import (
 func registerStore(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "store node giving access to blocks in a bucket provider. Now supported GCS, S3, Azure, Swift and Tencent COS.")
 
-	grpcBindAddr, httpBindAddr, cert, key, clientCA, newPeerFn := regCommonServerFlags(cmd)
+	grpcBindAddr, httpBindAddr, cert, key, clientCA := regCommonServerFlags(cmd)
 
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache remote blocks.").
 		Default("./data").String()
@@ -51,10 +49,6 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 		Default("20").Int()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
-		peer, err := newPeerFn(logger, reg, false, "", false)
-		if err != nil {
-			return errors.Wrap(err, "new cluster peer")
-		}
 		return runStore(g,
 			logger,
 			reg,
@@ -66,7 +60,6 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			*key,
 			*clientCA,
 			*httpBindAddr,
-			peer,
 			uint64(*indexCacheSize),
 			uint64(*chunkPoolSize),
 			uint64(*maxSampleCount),
@@ -92,7 +85,6 @@ func runStore(
 	key string,
 	clientCA string,
 	httpBindAddr string,
-	peer cluster.Peer,
 	indexCacheSizeBytes uint64,
 	chunkPoolSizeBytes uint64,
 	maxSampleCount uint64,
@@ -151,7 +143,6 @@ func runStore(
 				if err := bs.SyncBlocks(ctx); err != nil {
 					level.Warn(logger).Log("msg", "syncing blocks failed", "err", err)
 				}
-				peer.SetTimestamps(bs.TimeRange())
 				return nil
 			})
 
@@ -179,27 +170,6 @@ func runStore(
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
-		})
-	}
-	{
-		ctx, cancel := context.WithCancel(context.Background())
-		g.Add(func() error {
-			// New gossip cluster.
-			if err := peer.Join(
-				cluster.PeerTypeStore,
-				cluster.PeerMetadata{
-					MinTime: math.MinInt64,
-					MaxTime: math.MaxInt64,
-				},
-			); err != nil {
-				return errors.Wrap(err, "join cluster")
-			}
-
-			<-ctx.Done()
-			return nil
-		}, func(error) {
-			cancel()
-			peer.Close(5 * time.Second)
 		})
 	}
 	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {

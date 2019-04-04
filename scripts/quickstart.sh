@@ -106,8 +106,7 @@ do
     --http-address              0.0.0.0:1919${i} \
     --prometheus.url            http://localhost:909${i} \
     --tsdb.path                 data/prom${i} \
-    ${OBJSTORECFG} \
-    --cluster.disable &
+    ${OBJSTORECFG} &
 
   STORES="${STORES} --store 127.0.0.1:1909${i}"
 
@@ -124,8 +123,7 @@ then
     --grpc-address              0.0.0.0:19691 \
     --http-address              0.0.0.0:19791 \
     --data-dir                  data/store \
-    ${OBJSTORECFG} \
-    --cluster.disable &
+    ${OBJSTORECFG} &
 
   STORES="${STORES} --store 127.0.0.1:19691"
 fi
@@ -170,8 +168,7 @@ do
     --debug.name                query-${i} \
     --grpc-address              0.0.0.0:1999${i} \
     --http-address              0.0.0.0:1949${i} \
-    ${STORES} \
-    --cluster.disable &
+    ${STORES} &
 done
 
 wait

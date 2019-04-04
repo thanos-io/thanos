@@ -75,46 +75,6 @@ Flags:
                                  TLS CA to verify clients against. If no client
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --grpc-advertise-address=GRPC-ADVERTISE-ADDRESS
-                                 Explicit (external) host:port address to
-                                 advertise for gRPC StoreAPI in gossip cluster.
-                                 If empty, 'grpc-address' will be used.
-      --cluster.address="0.0.0.0:10900"
-                                 Listen ip:port address for gossip cluster.
-      --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS
-                                 Explicit (external) ip:port address to
-                                 advertise for gossip in gossip cluster. Used
-                                 internally for membership only.
-      --cluster.peers=CLUSTER.PEERS ...
-                                 Initial peers to join the cluster. It can be
-                                 either <ip:port>, or <domain:port>. A lookup
-                                 resolution is done only at the startup.
-      --cluster.gossip-interval=<gossip interval>
-                                 Interval between sending gossip messages. By
-                                 lowering this value (more frequent) gossip
-                                 messages are propagated across the cluster more
-                                 quickly at the expense of increased bandwidth.
-                                 Default is used from a specified network-type.
-      --cluster.pushpull-interval=<push-pull interval>
-                                 Interval for gossip state syncs. Setting this
-                                 interval lower (more frequent) will increase
-                                 convergence speeds across larger clusters at
-                                 the expense of increased bandwidth usage.
-                                 Default is used from a specified network-type.
-      --cluster.refresh-interval=1m
-                                 Interval for membership to refresh
-                                 cluster.peers state, 0 disables refresh.
-      --cluster.secret-key=CLUSTER.SECRET-KEY
-                                 Initial secret key to encrypt cluster gossip.
-                                 Can be one of AES-128, AES-192, or AES-256 in
-                                 hexadecimal format.
-      --cluster.network-type=lan
-                                 Network type with predefined peers
-                                 configurations. Sets of configurations
-                                 accounting the latency differences between
-                                 network types: local, lan, wan.
-      --cluster.disable          If true gossip will be disabled and no cluster
-                                 related server will be started.
       --prometheus.url=http://localhost:9090
                                  URL at which to reach Prometheus's API. For
                                  better performance use local network.

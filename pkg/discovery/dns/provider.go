@@ -29,12 +29,12 @@ func NewProvider(logger log.Logger, reg prometheus.Registerer) *Provider {
 		resolved: make(map[string][]string),
 		logger:   logger,
 		resolverLookupsCount: prometheus.NewCounter(prometheus.CounterOpts{
-			Name:      "dns_lookups_total",
-			Help:      "The number of DNS lookups resolutions attempts",
+			Name: "dns_lookups_total",
+			Help: "The number of DNS lookups resolutions attempts",
 		}),
 		resolverFailuresCount: prometheus.NewCounter(prometheus.CounterOpts{
-			Name:      "dns_failures_total",
-			Help:      "The number of DNS lookup failures",
+			Name: "dns_failures_total",
+			Help: "The number of DNS lookup failures",
 		}),
 	}
 
