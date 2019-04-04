@@ -13,7 +13,6 @@ import (
 	"github.com/go-kit/kit/log/level"
 	version "github.com/hashicorp/go-version"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
-	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/promclient"
@@ -35,7 +34,7 @@ import (
 func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "sidecar for Prometheus server")
 
-	grpcBindAddr, httpBindAddr, cert, key, clientCA, newPeerFn := regCommonServerFlags(cmd)
+	grpcBindAddr, httpBindAddr, cert, key, clientCA := regCommonServerFlags(cmd)
 
 	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API. For better performance use local network.").
 		Default("http://localhost:9090").URL()
@@ -63,10 +62,6 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			*reloaderCfgOutputFile,
 			*reloaderRuleDirs,
 		)
-		peer, err := newPeerFn(logger, reg, false, "", false)
-		if err != nil {
-			return errors.Wrap(err, "new cluster peer")
-		}
 		return runSidecar(
 			g,
 			logger,
@@ -80,7 +75,6 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			*promURL,
 			*dataDir,
 			objStoreConfig,
-			peer,
 			rl,
 			*uploadCompacted,
 		)
@@ -100,7 +94,6 @@ func runSidecar(
 	promURL *url.URL,
 	dataDir string,
 	objStoreConfig *pathOrContent,
-	peer cluster.Peer,
 	reloader *reloader.Reloader,
 	uploadCompacted bool,
 ) error {
@@ -189,16 +182,6 @@ func runSidecar(
 				return errors.New("no external labels configured on Prometheus server, uniquely identifying external labels must be configured")
 			}
 
-			// New gossip cluster.
-			mint, maxt := m.Timestamps()
-			if err = peer.Join(cluster.PeerTypeSource, cluster.PeerMetadata{
-				Labels:  m.LabelsPB(),
-				MinTime: mint,
-				MaxTime: maxt,
-			}); err != nil {
-				return errors.Wrap(err, "join cluster")
-			}
-
 			// Periodically query the Prometheus config. We use this as a heartbeat as well as for updating
 			// the external labels we apply.
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
@@ -209,9 +192,6 @@ func runSidecar(
 					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
 					promUp.Set(0)
 				} else {
-					// Update gossip.
-					peer.SetLabels(m.LabelsPB())
-
 					promUp.Set(1)
 					lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
 				}
@@ -220,7 +200,6 @@ func runSidecar(
 			})
 		}, func(error) {
 			cancel()
-			peer.Close(2 * time.Second)
 		})
 	}
 	{
@@ -305,9 +284,6 @@ func runSidecar(
 					level.Warn(logger).Log("msg", "reading timestamps failed", "err", err)
 				} else {
 					m.UpdateTimestamps(minTime, math.MaxInt64)
-
-					mint, maxt := m.Timestamps()
-					peer.SetTimestamps(mint, maxt)
 				}
 				return nil
 			})
@@ -316,7 +292,7 @@ func runSidecar(
 		})
 	}
 
-	level.Info(logger).Log("msg", "starting sidecar", "peer", peer.Name())
+	level.Info(logger).Log("msg", "starting sidecar")
 	return nil
 }
 
