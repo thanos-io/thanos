@@ -20,3 +20,8 @@ func (c *JSONIndexCache) WriteIndexCache(indexFn string, fn string) error {
 func (c *JSONIndexCache) ReadIndexCache(fn string) error {
 	return nil
 }
+
+// ToFBCache converts the JSON cache into a Flatbuffer one.
+func (c *JSONIndexCache) ToFBCache(fnJSON string, fnFB string) error {
+	return nil
+}
