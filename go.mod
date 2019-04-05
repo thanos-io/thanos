@@ -18,12 +18,15 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.0.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v0.0.0-20181025070259-68e3a13e4117
 	github.com/hashicorp/go-sockaddr v0.0.0-20180320115054-6d291a969b86
+	github.com/hashicorp/go-syslog v1.0.0 // indirect
 	github.com/hashicorp/golang-lru v0.5.0
+	github.com/hashicorp/logutils v1.0.0 // indirect
 	github.com/hashicorp/memberlist v0.1.0
 	github.com/julienschmidt/httprouter v1.1.0 // indirect
 	github.com/lovoo/gcloud-opentracing v0.3.0
 	github.com/miekg/dns v1.0.8 // indirect
 	github.com/minio/minio-go v0.0.0-20190131015406-c8a261de75c1
+	github.com/mitchellh/cli v1.0.0 // indirect
 	github.com/mozillazg/go-cos v0.11.0
 	github.com/mwitkow/go-conntrack v0.0.0-20161129095857-cc309e4a2223
 	github.com/oklog/run v1.0.0

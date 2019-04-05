@@ -1,4 +1,4 @@
-namespace cachebuf;
+namespace indexcachefb;
 
 table postingsRange {
   Name: string;
