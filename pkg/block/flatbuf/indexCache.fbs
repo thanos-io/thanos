@@ -1,0 +1,26 @@
+table postingsRange {
+  Name: string;
+  Value: string;
+  Start: long;
+  End: long;
+}
+
+table symbol {
+  Pos: uint;
+  Sym: string;
+}
+
+table label {
+  Lab: string;
+  Vals: [string];
+}
+
+table indexCache {
+  Version: byte;
+
+  // Always keep these sorted.
+  Symbols:[symbol];
+  LabelValues:[label];
+
+  Postings:[postingsRange];
+}
