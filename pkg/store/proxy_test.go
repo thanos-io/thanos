@@ -55,7 +55,7 @@ func TestProxyStore_Info(t *testing.T) {
 	q := NewProxyStore(nil,
 		func() []Client { return nil },
 		component.Query,
-		nil, 0*time.Second, time.Minute,
+		nil, 0*time.Second, 0*time.Second,
 	)
 
 	resp, err := q.Info(ctx, &storepb.InfoRequest{})
@@ -410,7 +410,7 @@ func TestProxyStore_Series(t *testing.T) {
 				func() []Client { return tc.storeAPIs },
 				component.Query,
 				tc.selectorLabels,
-				0*time.Second, time.Minute,
+				0*time.Second, 0*time.Second,
 			)
 
 			s := newStoreSeriesServer(context.Background())
@@ -609,7 +609,7 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 		component.Query,
 		nil,
 		0*time.Second,
-		time.Minute,
+		0*time.Second,
 	)
 
 	ctx := context.Background()
@@ -669,7 +669,7 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 		component.Query,
 		tlabels.FromStrings("fed", "a"),
 		0*time.Second,
-		time.Minute,
+		0*time.Second,
 	)
 
 	ctx := context.Background()
@@ -708,7 +708,7 @@ func TestProxyStore_LabelValues(t *testing.T) {
 		component.Query,
 		nil,
 		0*time.Second,
-		time.Minute,
+		0*time.Second,
 	)
 
 	ctx := context.Background()
@@ -834,6 +834,11 @@ func TestStoreMatches(t *testing.T) {
 // TestProxyStore_StoreReadTimeout checks that
 // store.read-timeout (context) must close before query-timeout
 func TestProxyStore_StoreReadTimeout(t *testing.T) {
+	enable := os.Getenv("THANOS_ENABLE_STORE_READ_TIMEOUT_TESTS")
+	if enable == "" {
+		t.Skip("enable THANOS_ENABLE_STORE_READ_TIMEOUT_TESTS to run store-read-timeout tests")
+	}
+
 	queryTimeout := 5 * time.Millisecond
 	storeReadTimeout := 1 * time.Millisecond
 

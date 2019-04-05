@@ -156,7 +156,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		respSender, respRecv, closeFn = newRespCh(gctx, 10)
 	)
 
-	storeReadCtx, storeReadCancelFunc := context.WithTimeout(gctx, s.readTimeout)
+	storeReadCtx, storeReadCancelFunc := s.contextWithReadTimeout(gctx)
 	defer storeReadCancelFunc()
 
 	g.Go(func() error {
@@ -434,7 +434,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		g, gctx  = errgroup.WithContext(ctx)
 	)
 
-	storeReadCtx, storeReadCancelFunc := context.WithTimeout(gctx, s.readTimeout)
+	storeReadCtx, storeReadCancelFunc := s.contextWithReadTimeout(gctx)
 	defer storeReadCancelFunc()
 
 	for _, st := range s.stores() {
@@ -473,4 +473,12 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		Values:   strutil.MergeUnsortedSlices(all...),
 		Warnings: warnings,
 	}, nil
+}
+
+func (s *ProxyStore) contextWithReadTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	if s.readTimeout > 0 {
+		return context.WithTimeout(ctx, s.readTimeout)
+	}
+
+	return ctx, func() {}
 }
