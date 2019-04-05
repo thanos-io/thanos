@@ -1,3 +1,5 @@
+namespace cachebuf;
+
 table postingsRange {
   Name: string;
   Value: string;

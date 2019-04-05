@@ -11,6 +11,7 @@ require (
 	github.com/go-kit/kit v0.8.0
 	github.com/gogo/protobuf v1.2.0
 	github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db
+	github.com/google/flatbuffers v1.10.0
 	github.com/google/martian v2.1.0+incompatible // indirect
 	github.com/googleapis/gax-go v2.0.2+incompatible // indirect
 	github.com/gophercloud/gophercloud v0.0.0-20181206160319-9d88c34913a9
