@@ -902,43 +902,44 @@ func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, comp
 
 // Compact runs compaction over bucket.
 func (c *BucketCompactor) Compact(ctx context.Context) error {
-	// Set up workers who will compact the groups when the groups are ready.
-	var (
-		errGroup, errGroupCtx = errgroup.WithContext(ctx)
-		groupChan             = make(chan *Group)
-		finishedAllGroups     bool
-		mtx                   sync.Mutex
-	)
-
-	for i := 0; i < c.concurrency; i++ {
-		errGroup.Go(func() error {
-			for g := range groupChan {
-				shouldRerunGroup, _, err := g.Compact(errGroupCtx, c.compactDir, c.comp)
-				if err == nil {
-					if shouldRerunGroup {
-						mtx.Lock()
-						finishedAllGroups = false
-						mtx.Unlock()
-					}
-					continue
-				}
-
-				if IsIssue347Error(err) {
-					if err := RepairIssue347(errGroupCtx, c.logger, c.bkt, err); err == nil {
-						mtx.Lock()
-						finishedAllGroups = false
-						mtx.Unlock()
-						continue
-					}
-				}
-				return errors.Wrap(err, "compaction")
-			}
-			return nil
-		})
-	}
-
 	// Loop over bucket and compact until there's no work left.
 	for {
+		// Set up workers who will compact the groups when the groups are ready.
+		var (
+			errGroup, errGroupCtx = errgroup.WithContext(ctx)
+			groupChan             = make(chan *Group)
+			finishedAllGroups     bool
+			mtx                   sync.Mutex
+		)
+
+		for i := 0; i < c.concurrency; i++ {
+			errGroup.Go(func() error {
+				for g := range groupChan {
+					level.Info(c.logger).Log("msg", "worker doing some work")
+					shouldRerunGroup, _, err := g.Compact(errGroupCtx, c.compactDir, c.comp)
+					if err == nil {
+						if shouldRerunGroup {
+							mtx.Lock()
+							finishedAllGroups = false
+							mtx.Unlock()
+						}
+						continue
+					}
+
+					if IsIssue347Error(err) {
+						if err := RepairIssue347(errGroupCtx, c.logger, c.bkt, err); err == nil {
+							mtx.Lock()
+							finishedAllGroups = false
+							mtx.Unlock()
+							continue
+						}
+					}
+					return errors.Wrap(err, "compaction")
+				}
+				return nil
+			})
+		}
+
 		// Clean up the compaction temporary directory at the beginning of every compaction loop.
 		if err := os.RemoveAll(c.compactDir); err != nil {
 			return errors.Wrap(err, "clean up the compaction temporary directory")
