@@ -908,7 +908,6 @@ func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, comp
 func (c *BucketCompactor) Compact(ctx context.Context) error {
 	// Loop over bucket and compact until there's no work left.
 	for {
-		// Set up workers who will compact the groups when the groups are ready.
 		var (
 			errGroup, errGroupCtx = errgroup.WithContext(ctx)
 			groupChan             = make(chan *Group)
@@ -916,6 +915,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 			mtx                   sync.Mutex
 		)
 
+		// Set up workers who will compact the groups when the groups are ready.
 		for i := 0; i < c.concurrency; i++ {
 			errGroup.Go(func() error {
 				for g := range groupChan {
