@@ -967,7 +967,8 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 		finishedAllGroups = true
 		for _, g := range groups {
 			select {
-			case <-ctx.Done():
+			case <-errGroupCtx.Done():
+				break
 			case groupChan <- g:
 			}
 		}
