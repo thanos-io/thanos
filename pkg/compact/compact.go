@@ -908,7 +908,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 		var (
 			errGroup, errGroupCtx = errgroup.WithContext(ctx)
 			groupChan             = make(chan *Group)
-			finishedAllGroups     bool
+			finishedAllGroups     = true
 			mtx                   sync.Mutex
 		)
 
@@ -964,8 +964,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 			return errors.Wrap(err, "build compaction groups")
 		}
 
-		// Send all groups found during this pass to the compaction workers, the workers will update finishedAllGroups.
-		finishedAllGroups = true
+		// Send all groups found during this pass to the compaction workers.
 		for _, g := range groups {
 			select {
 			case <-errGroupCtx.Done():
