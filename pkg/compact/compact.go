@@ -23,6 +23,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/labels"
+
+	"golang.org/x/sync/errgroup"
 )
 
 type ResolutionLevel int64
@@ -878,44 +880,40 @@ func (cg *Group) deleteBlock(b string) error {
 
 // BucketCompactor compacts blocks in a bucket.
 type BucketCompactor struct {
-	logger     log.Logger
-	sy         *Syncer
-	comp       tsdb.Compactor
-	compactDir string
-	bkt        objstore.Bucket
+	logger      log.Logger
+	sy          *Syncer
+	comp        tsdb.Compactor
+	compactDir  string
+	bkt         objstore.Bucket
+	concurrency int
 }
 
 // NewBucketCompactor creates a new bucket compactor.
-func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, compactDir string, bkt objstore.Bucket) *BucketCompactor {
+func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, compactDir string, bkt objstore.Bucket, concurrency int) *BucketCompactor {
 	return &BucketCompactor{
-		logger:     logger,
-		sy:         sy,
-		comp:       comp,
-		compactDir: compactDir,
-		bkt:        bkt,
+		logger:      logger,
+		sy:          sy,
+		comp:        comp,
+		compactDir:  compactDir,
+		bkt:         bkt,
+		concurrency: concurrency,
 	}
 }
 
 // Compact runs compaction over bucket.
-func (c *BucketCompactor) Compact(ctx context.Context, concurrency int) error {
+func (c *BucketCompactor) Compact(ctx context.Context) error {
 	// Set up workers who will compact the groups when the groups are ready.
-	var wg sync.WaitGroup
-	defer wg.Wait()
+	var (
+		errGroup, errGroupCtx = errgroup.WithContext(ctx)
+		groupChan             = make(chan *Group)
+		finishedAllGroups     bool
+		mtx                   sync.Mutex
+	)
 
-	groupChan := make(chan *Group)
-	errChan := make(chan error, concurrency)
-	var finishedAllGroups bool
-	var mtx sync.Mutex
-
-	workCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	for i := 0; i < concurrency; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
+	for i := 0; i < c.concurrency; i++ {
+		errGroup.Go(func() error {
 			for g := range groupChan {
-				shouldRerunGroup, _, err := g.Compact(workCtx, c.compactDir, c.comp)
+				shouldRerunGroup, _, err := g.Compact(errGroupCtx, c.compactDir, c.comp)
 				if err == nil {
 					if shouldRerunGroup {
 						mtx.Lock()
@@ -926,17 +924,17 @@ func (c *BucketCompactor) Compact(ctx context.Context, concurrency int) error {
 				}
 
 				if IsIssue347Error(err) {
-					if err := RepairIssue347(workCtx, c.logger, c.bkt, err); err == nil {
+					if err := RepairIssue347(errGroupCtx, c.logger, c.bkt, err); err == nil {
 						mtx.Lock()
 						finishedAllGroups = false
 						mtx.Unlock()
 						continue
 					}
 				}
-				errChan <- errors.Wrap(err, "compaction")
-				return
+				return errors.Wrap(err, "compaction")
 			}
-		}()
+			return nil
+		})
 	}
 
 	// Loop over bucket and compact until there's no work left.
@@ -969,20 +967,15 @@ func (c *BucketCompactor) Compact(ctx context.Context, concurrency int) error {
 		finishedAllGroups = true
 		for _, g := range groups {
 			select {
-			case err := <-errChan:
-				if err != nil {
-					return err
-				}
+			case <-ctx.Done():
 			case groupChan <- g:
 			}
 		}
 		close(groupChan)
-		wg.Wait()
-		close(errChan)
-
-		if err := <-errChan; err != nil {
+		if err := errGroup.Wait(); err != nil {
 			return err
 		}
+
 		if finishedAllGroups {
 			break
 		}

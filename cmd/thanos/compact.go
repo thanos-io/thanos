@@ -203,7 +203,7 @@ func runCompact(
 		return errors.Wrap(err, "clean working downsample directory")
 	}
 
-	compactor := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt)
+	compactor := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt, concurrency)
 
 	if retentionByResolution[compact.ResolutionLevelRaw].Seconds() != 0 {
 		level.Info(logger).Log("msg", "retention policy of raw samples is enabled", "duration", retentionByResolution[compact.ResolutionLevelRaw])
@@ -217,7 +217,7 @@ func runCompact(
 
 	ctx, cancel := context.WithCancel(context.Background())
 	f := func() error {
-		if err := compactor.Compact(ctx, concurrency); err != nil {
+		if err := compactor.Compact(ctx); err != nil {
 			return errors.Wrap(err, "compaction failed")
 		}
 		level.Info(logger).Log("msg", "compaction iterations done")
