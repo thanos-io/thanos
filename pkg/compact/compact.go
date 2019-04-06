@@ -915,7 +915,6 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 		for i := 0; i < c.concurrency; i++ {
 			errGroup.Go(func() error {
 				for g := range groupChan {
-					level.Info(c.logger).Log("msg", "worker doing some work")
 					shouldRerunGroup, _, err := g.Compact(errGroupCtx, c.compactDir, c.comp)
 					if err == nil {
 						if shouldRerunGroup {
