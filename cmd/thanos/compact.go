@@ -98,7 +98,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing block metadata from object storage.").
 		Default("20").Int()
 
-	compactionConcurrency := cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting group.").
+	compactionConcurrency := cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
 		Default("1").Int()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
