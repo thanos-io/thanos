@@ -46,7 +46,7 @@ func translateMatcher(m *labels.Matcher) (storepb.LabelMatcher, error) {
 	return storepb.LabelMatcher{Type: t, Name: m.Name, Value: m.Value}, nil
 }
 
-func translateMatchers(ms ...*labels.Matcher) ([]storepb.LabelMatcher, error) {
+func TranslateMatchers(ms ...*labels.Matcher) ([]storepb.LabelMatcher, error) {
 	res := make([]storepb.LabelMatcher, 0, len(ms))
 	for _, m := range ms {
 		r, err := translateMatcher(m)
@@ -58,17 +58,17 @@ func translateMatchers(ms ...*labels.Matcher) ([]storepb.LabelMatcher, error) {
 	return res, nil
 }
 
-// storeSeriesSet implements a storepb SeriesSet against a list of storepb.Series.
-type storeSeriesSet struct {
+// StoreSeriesSet implements a storepb SeriesSet against a list of storepb.Series.
+type StoreSeriesSet struct {
 	series []storepb.Series
 	i      int
 }
 
-func newStoreSeriesSet(s []storepb.Series) *storeSeriesSet {
-	return &storeSeriesSet{series: s, i: -1}
+func NewStoreSeriesSet(s []storepb.Series) *StoreSeriesSet {
+	return &StoreSeriesSet{series: s, i: -1}
 }
 
-func (s *storeSeriesSet) Next() bool {
+func (s *StoreSeriesSet) Next() bool {
 	if s.i >= len(s.series)-1 {
 		return false
 	}
@@ -76,11 +76,11 @@ func (s *storeSeriesSet) Next() bool {
 	return true
 }
 
-func (storeSeriesSet) Err() error {
+func (StoreSeriesSet) Err() error {
 	return nil
 }
 
-func (s storeSeriesSet) At() ([]storepb.Label, []storepb.AggrChunk) {
+func (s StoreSeriesSet) At() ([]storepb.Label, []storepb.AggrChunk) {
 	ser := s.series[s.i]
 	return ser.Labels, ser.Chunks
 }

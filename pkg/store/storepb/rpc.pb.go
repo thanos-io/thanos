@@ -58,13 +58,22 @@ func (x StoreType) String() string {
 	return proto.EnumName(StoreType_name, int32(x))
 }
 func (StoreType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_rpc_f4f04914f1106c76, []int{0}
+	return fileDescriptor_rpc_936b8cb359cdf695, []int{0}
 }
 
+// / PartialResponseStrategy controls partial response handling.
 type PartialResponseStrategy int32
 
 const (
-	PartialResponseStrategy_WARN  PartialResponseStrategy = 0
+	// / WARN strategy tells server to treat any error that will related to single StoreAPI (e.g missing chunk series because of underlying
+	// / storeAPI is temporarily not available) as warning which will not fail the whole query (still OK response).
+	// / Server should produce those as a warnings field in response.
+	PartialResponseStrategy_WARN PartialResponseStrategy = 0
+	// / ABORT strategy tells server to treat any error that will related to single StoreAPI (e.g missing chunk series because of underlying
+	// / storeAPI is temporarily not available) as the gRPC error that aborts the query.
+	// /
+	// / This is especially useful for any rule/alert evaluations on top of StoreAPI which usually does not tolerate partial
+	// / errors.
 	PartialResponseStrategy_ABORT PartialResponseStrategy = 1
 )
 
@@ -81,7 +90,7 @@ func (x PartialResponseStrategy) String() string {
 	return proto.EnumName(PartialResponseStrategy_name, int32(x))
 }
 func (PartialResponseStrategy) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_rpc_f4f04914f1106c76, []int{1}
+	return fileDescriptor_rpc_936b8cb359cdf695, []int{1}
 }
 
 type Aggr int32
@@ -116,7 +125,33 @@ func (x Aggr) String() string {
 	return proto.EnumName(Aggr_name, int32(x))
 }
 func (Aggr) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_rpc_f4f04914f1106c76, []int{2}
+	return fileDescriptor_rpc_936b8cb359cdf695, []int{2}
+}
+
+// / WindowStrategy specifies strategy for resolution window for source data. Used to control potential downsampled data.
+type Resolution_WindowStrategy int32
+
+const (
+	// / MAX tells server that window specifies maximum resolution to take. Fallback to smaller resolution if needed.
+	Resolution_MAX Resolution_WindowStrategy = 0
+	// / STRICT tells server to use resolution as specified in window strictly. Return gaps if no specifying resolution matches.
+	Resolution_STRICT Resolution_WindowStrategy = 1
+)
+
+var Resolution_WindowStrategy_name = map[int32]string{
+	0: "MAX",
+	1: "STRICT",
+}
+var Resolution_WindowStrategy_value = map[string]int32{
+	"MAX":    0,
+	"STRICT": 1,
+}
+
+func (x Resolution_WindowStrategy) String() string {
+	return proto.EnumName(Resolution_WindowStrategy_name, int32(x))
+}
+func (Resolution_WindowStrategy) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_rpc_936b8cb359cdf695, []int{2, 0}
 }
 
 type InfoRequest struct {
@@ -129,7 +164,7 @@ func (m *InfoRequest) Reset()         { *m = InfoRequest{} }
 func (m *InfoRequest) String() string { return proto.CompactTextString(m) }
 func (*InfoRequest) ProtoMessage()    {}
 func (*InfoRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_rpc_f4f04914f1106c76, []int{0}
+	return fileDescriptor_rpc_936b8cb359cdf695, []int{0}
 }
 func (m *InfoRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -172,7 +207,7 @@ func (m *InfoResponse) Reset()         { *m = InfoResponse{} }
 func (m *InfoResponse) String() string { return proto.CompactTextString(m) }
 func (*InfoResponse) ProtoMessage()    {}
 func (*InfoResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_rpc_f4f04914f1106c76, []int{1}
+	return fileDescriptor_rpc_936b8cb359cdf695, []int{1}
 }
 func (m *InfoResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -201,25 +236,70 @@ func (m *InfoResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_InfoResponse proto.InternalMessageInfo
 
+type Resolution struct {
+	Window               int64                     `protobuf:"varint,1,opt,name=window,proto3" json:"window,omitempty"`
+	Strategy             Resolution_WindowStrategy `protobuf:"varint,2,opt,name=strategy,proto3,enum=thanos.Resolution_WindowStrategy" json:"strategy,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                  `json:"-"`
+	XXX_unrecognized     []byte                    `json:"-"`
+	XXX_sizecache        int32                     `json:"-"`
+}
+
+func (m *Resolution) Reset()         { *m = Resolution{} }
+func (m *Resolution) String() string { return proto.CompactTextString(m) }
+func (*Resolution) ProtoMessage()    {}
+func (*Resolution) Descriptor() ([]byte, []int) {
+	return fileDescriptor_rpc_936b8cb359cdf695, []int{2}
+}
+func (m *Resolution) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Resolution) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_Resolution.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalTo(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (dst *Resolution) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Resolution.Merge(dst, src)
+}
+func (m *Resolution) XXX_Size() int {
+	return m.Size()
+}
+func (m *Resolution) XXX_DiscardUnknown() {
+	xxx_messageInfo_Resolution.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Resolution proto.InternalMessageInfo
+
 type SeriesRequest struct {
-	MinTime             int64          `protobuf:"varint,1,opt,name=min_time,json=minTime,proto3" json:"min_time,omitempty"`
-	MaxTime             int64          `protobuf:"varint,2,opt,name=max_time,json=maxTime,proto3" json:"max_time,omitempty"`
-	Matchers            []LabelMatcher `protobuf:"bytes,3,rep,name=matchers,proto3" json:"matchers"`
-	MaxResolutionWindow int64          `protobuf:"varint,4,opt,name=max_resolution_window,json=maxResolutionWindow,proto3" json:"max_resolution_window,omitempty"`
-	Aggregates          []Aggr         `protobuf:"varint,5,rep,packed,name=aggregates,proto3,enum=thanos.Aggr" json:"aggregates,omitempty"`
+	MinTime  int64          `protobuf:"varint,1,opt,name=min_time,json=minTime,proto3" json:"min_time,omitempty"`
+	MaxTime  int64          `protobuf:"varint,2,opt,name=max_time,json=maxTime,proto3" json:"max_time,omitempty"`
+	Matchers []LabelMatcher `protobuf:"bytes,3,rep,name=matchers,proto3" json:"matchers"`
+	// Deprecated. Use resolution instead.
+	MaxResolutionWindow int64  `protobuf:"varint,4,opt,name=max_resolution_window,json=maxResolutionWindow,proto3" json:"max_resolution_window,omitempty"`
+	Aggregates          []Aggr `protobuf:"varint,5,rep,packed,name=aggregates,proto3,enum=thanos.Aggr" json:"aggregates,omitempty"`
 	// Deprecated. Use partial_response_strategy instead.
-	PartialResponseDisabled bool                    `protobuf:"varint,6,opt,name=partial_response_disabled,json=partialResponseDisabled,proto3" json:"partial_response_disabled,omitempty"`
+	PartialResponseDisabled bool `protobuf:"varint,6,opt,name=partial_response_disabled,json=partialResponseDisabled,proto3" json:"partial_response_disabled,omitempty"`
+	// TODO(bwplotka): Move Thanos components to use strategy instead. Inlcuding QueryAPI.
 	PartialResponseStrategy PartialResponseStrategy `protobuf:"varint,7,opt,name=partial_response_strategy,json=partialResponseStrategy,proto3,enum=thanos.PartialResponseStrategy" json:"partial_response_strategy,omitempty"`
-	XXX_NoUnkeyedLiteral    struct{}                `json:"-"`
-	XXX_unrecognized        []byte                  `json:"-"`
-	XXX_sizecache           int32                   `json:"-"`
+	// TODO(bwplotka): Move Thanos components to use strategy instead. Inlcuding QueryAPI.
+	Resolution           *Resolution `protobuf:"bytes,8,opt,name=resolution,proto3" json:"resolution,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
+	XXX_unrecognized     []byte      `json:"-"`
+	XXX_sizecache        int32       `json:"-"`
 }
 
 func (m *SeriesRequest) Reset()         { *m = SeriesRequest{} }
 func (m *SeriesRequest) String() string { return proto.CompactTextString(m) }
 func (*SeriesRequest) ProtoMessage()    {}
 func (*SeriesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_rpc_f4f04914f1106c76, []int{2}
+	return fileDescriptor_rpc_936b8cb359cdf695, []int{3}
 }
 func (m *SeriesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -262,7 +342,7 @@ func (m *SeriesResponse) Reset()         { *m = SeriesResponse{} }
 func (m *SeriesResponse) String() string { return proto.CompactTextString(m) }
 func (*SeriesResponse) ProtoMessage()    {}
 func (*SeriesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_rpc_f4f04914f1106c76, []int{3}
+	return fileDescriptor_rpc_936b8cb359cdf695, []int{4}
 }
 func (m *SeriesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -399,17 +479,19 @@ func _SeriesResponse_OneofSizer(msg proto.Message) (n int) {
 }
 
 type LabelNamesRequest struct {
-	PartialResponseDisabled bool     `protobuf:"varint,1,opt,name=partial_response_disabled,json=partialResponseDisabled,proto3" json:"partial_response_disabled,omitempty"`
-	XXX_NoUnkeyedLiteral    struct{} `json:"-"`
-	XXX_unrecognized        []byte   `json:"-"`
-	XXX_sizecache           int32    `json:"-"`
+	PartialResponseDisabled bool `protobuf:"varint,1,opt,name=partial_response_disabled,json=partialResponseDisabled,proto3" json:"partial_response_disabled,omitempty"`
+	// TODO(bwplotka): Move Thanos components to use strategy instead. Inlcuding QueryAPI.
+	PartialResponseStrategy PartialResponseStrategy `protobuf:"varint,2,opt,name=partial_response_strategy,json=partialResponseStrategy,proto3,enum=thanos.PartialResponseStrategy" json:"partial_response_strategy,omitempty"`
+	XXX_NoUnkeyedLiteral    struct{}                `json:"-"`
+	XXX_unrecognized        []byte                  `json:"-"`
+	XXX_sizecache           int32                   `json:"-"`
 }
 
 func (m *LabelNamesRequest) Reset()         { *m = LabelNamesRequest{} }
 func (m *LabelNamesRequest) String() string { return proto.CompactTextString(m) }
 func (*LabelNamesRequest) ProtoMessage()    {}
 func (*LabelNamesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_rpc_f4f04914f1106c76, []int{4}
+	return fileDescriptor_rpc_936b8cb359cdf695, []int{5}
 }
 func (m *LabelNamesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -450,7 +532,7 @@ func (m *LabelNamesResponse) Reset()         { *m = LabelNamesResponse{} }
 func (m *LabelNamesResponse) String() string { return proto.CompactTextString(m) }
 func (*LabelNamesResponse) ProtoMessage()    {}
 func (*LabelNamesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_rpc_f4f04914f1106c76, []int{5}
+	return fileDescriptor_rpc_936b8cb359cdf695, []int{6}
 }
 func (m *LabelNamesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -480,18 +562,20 @@ func (m *LabelNamesResponse) XXX_DiscardUnknown() {
 var xxx_messageInfo_LabelNamesResponse proto.InternalMessageInfo
 
 type LabelValuesRequest struct {
-	Label                   string   `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
-	PartialResponseDisabled bool     `protobuf:"varint,2,opt,name=partial_response_disabled,json=partialResponseDisabled,proto3" json:"partial_response_disabled,omitempty"`
-	XXX_NoUnkeyedLiteral    struct{} `json:"-"`
-	XXX_unrecognized        []byte   `json:"-"`
-	XXX_sizecache           int32    `json:"-"`
+	Label                   string `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
+	PartialResponseDisabled bool   `protobuf:"varint,2,opt,name=partial_response_disabled,json=partialResponseDisabled,proto3" json:"partial_response_disabled,omitempty"`
+	// TODO(bwplotka): Move Thanos components to use strategy instead. Inlcuding QueryAPI.
+	PartialResponseStrategy PartialResponseStrategy `protobuf:"varint,3,opt,name=partial_response_strategy,json=partialResponseStrategy,proto3,enum=thanos.PartialResponseStrategy" json:"partial_response_strategy,omitempty"`
+	XXX_NoUnkeyedLiteral    struct{}                `json:"-"`
+	XXX_unrecognized        []byte                  `json:"-"`
+	XXX_sizecache           int32                   `json:"-"`
 }
 
 func (m *LabelValuesRequest) Reset()         { *m = LabelValuesRequest{} }
 func (m *LabelValuesRequest) String() string { return proto.CompactTextString(m) }
 func (*LabelValuesRequest) ProtoMessage()    {}
 func (*LabelValuesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_rpc_f4f04914f1106c76, []int{6}
+	return fileDescriptor_rpc_936b8cb359cdf695, []int{7}
 }
 func (m *LabelValuesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -532,7 +616,7 @@ func (m *LabelValuesResponse) Reset()         { *m = LabelValuesResponse{} }
 func (m *LabelValuesResponse) String() string { return proto.CompactTextString(m) }
 func (*LabelValuesResponse) ProtoMessage()    {}
 func (*LabelValuesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_rpc_f4f04914f1106c76, []int{7}
+	return fileDescriptor_rpc_936b8cb359cdf695, []int{8}
 }
 func (m *LabelValuesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -564,6 +648,7 @@ var xxx_messageInfo_LabelValuesResponse proto.InternalMessageInfo
 func init() {
 	proto.RegisterType((*InfoRequest)(nil), "thanos.InfoRequest")
 	proto.RegisterType((*InfoResponse)(nil), "thanos.InfoResponse")
+	proto.RegisterType((*Resolution)(nil), "thanos.Resolution")
 	proto.RegisterType((*SeriesRequest)(nil), "thanos.SeriesRequest")
 	proto.RegisterType((*SeriesResponse)(nil), "thanos.SeriesResponse")
 	proto.RegisterType((*LabelNamesRequest)(nil), "thanos.LabelNamesRequest")
@@ -573,6 +658,7 @@ func init() {
 	proto.RegisterEnum("thanos.StoreType", StoreType_name, StoreType_value)
 	proto.RegisterEnum("thanos.PartialResponseStrategy", PartialResponseStrategy_name, PartialResponseStrategy_value)
 	proto.RegisterEnum("thanos.Aggr", Aggr_name, Aggr_value)
+	proto.RegisterEnum("thanos.Resolution_WindowStrategy", Resolution_WindowStrategy_name, Resolution_WindowStrategy_value)
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -855,6 +941,37 @@ func (m *InfoResponse) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
+func (m *Resolution) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Resolution) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Window != 0 {
+		dAtA[i] = 0x8
+		i++
+		i = encodeVarintRpc(dAtA, i, uint64(m.Window))
+	}
+	if m.Strategy != 0 {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintRpc(dAtA, i, uint64(m.Strategy))
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
 func (m *SeriesRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -929,6 +1046,16 @@ func (m *SeriesRequest) MarshalTo(dAtA []byte) (int, error) {
 		i++
 		i = encodeVarintRpc(dAtA, i, uint64(m.PartialResponseStrategy))
 	}
+	if m.Resolution != nil {
+		dAtA[i] = 0x42
+		i++
+		i = encodeVarintRpc(dAtA, i, uint64(m.Resolution.Size()))
+		n3, err := m.Resolution.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n3
+	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
 	}
@@ -951,11 +1078,11 @@ func (m *SeriesResponse) MarshalTo(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if m.Result != nil {
-		nn3, err := m.Result.MarshalTo(dAtA[i:])
+		nn4, err := m.Result.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += nn3
+		i += nn4
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -969,11 +1096,11 @@ func (m *SeriesResponse_Series) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintRpc(dAtA, i, uint64(m.Series.Size()))
-		n4, err := m.Series.MarshalTo(dAtA[i:])
+		n5, err := m.Series.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n4
+		i += n5
 	}
 	return i, nil
 }
@@ -1009,6 +1136,11 @@ func (m *LabelNamesRequest) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0
 		}
 		i++
+	}
+	if m.PartialResponseStrategy != 0 {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintRpc(dAtA, i, uint64(m.PartialResponseStrategy))
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -1097,6 +1229,11 @@ func (m *LabelValuesRequest) MarshalTo(dAtA []byte) (int, error) {
 			dAtA[i] = 0
 		}
 		i++
+	}
+	if m.PartialResponseStrategy != 0 {
+		dAtA[i] = 0x18
+		i++
+		i = encodeVarintRpc(dAtA, i, uint64(m.PartialResponseStrategy))
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -1203,6 +1340,24 @@ func (m *InfoResponse) Size() (n int) {
 	return n
 }
 
+func (m *Resolution) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Window != 0 {
+		n += 1 + sovRpc(uint64(m.Window))
+	}
+	if m.Strategy != 0 {
+		n += 1 + sovRpc(uint64(m.Strategy))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *SeriesRequest) Size() (n int) {
 	if m == nil {
 		return 0
@@ -1236,6 +1391,10 @@ func (m *SeriesRequest) Size() (n int) {
 	}
 	if m.PartialResponseStrategy != 0 {
 		n += 1 + sovRpc(uint64(m.PartialResponseStrategy))
+	}
+	if m.Resolution != nil {
+		l = m.Resolution.Size()
+		n += 1 + l + sovRpc(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -1289,6 +1448,9 @@ func (m *LabelNamesRequest) Size() (n int) {
 	if m.PartialResponseDisabled {
 		n += 2
 	}
+	if m.PartialResponseStrategy != 0 {
+		n += 1 + sovRpc(uint64(m.PartialResponseStrategy))
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -1331,6 +1493,9 @@ func (m *LabelValuesRequest) Size() (n int) {
 	}
 	if m.PartialResponseDisabled {
 		n += 2
+	}
+	if m.PartialResponseStrategy != 0 {
+		n += 1 + sovRpc(uint64(m.PartialResponseStrategy))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -1539,6 +1704,95 @@ func (m *InfoResponse) Unmarshal(dAtA []byte) error {
 				b := dAtA[iNdEx]
 				iNdEx++
 				m.StoreType |= (StoreType(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRpc(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRpc
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Resolution) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRpc
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Resolution: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Resolution: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Window", wireType)
+			}
+			m.Window = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRpc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Window |= (int64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Strategy", wireType)
+			}
+			m.Strategy = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRpc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Strategy |= (Resolution_WindowStrategy(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1787,6 +2041,39 @@ func (m *SeriesRequest) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+		case 8:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Resolution", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRpc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRpc
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Resolution == nil {
+				m.Resolution = &Resolution{}
+			}
+			if err := m.Resolution.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipRpc(dAtA[iNdEx:])
@@ -1970,6 +2257,25 @@ func (m *LabelNamesRequest) Unmarshal(dAtA []byte) error {
 				}
 			}
 			m.PartialResponseDisabled = bool(v != 0)
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PartialResponseStrategy", wireType)
+			}
+			m.PartialResponseStrategy = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRpc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.PartialResponseStrategy |= (PartialResponseStrategy(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipRpc(dAtA[iNdEx:])
@@ -2179,6 +2485,25 @@ func (m *LabelValuesRequest) Unmarshal(dAtA []byte) error {
 				}
 			}
 			m.PartialResponseDisabled = bool(v != 0)
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PartialResponseStrategy", wireType)
+			}
+			m.PartialResponseStrategy = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRpc
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.PartialResponseStrategy |= (PartialResponseStrategy(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipRpc(dAtA[iNdEx:])
@@ -2415,54 +2740,60 @@ var (
 	ErrIntOverflowRpc   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("rpc.proto", fileDescriptor_rpc_f4f04914f1106c76) }
+func init() { proto.RegisterFile("rpc.proto", fileDescriptor_rpc_936b8cb359cdf695) }
 
-var fileDescriptor_rpc_f4f04914f1106c76 = []byte{
-	// 729 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x54, 0xcf, 0x6e, 0xda, 0x4e,
-	0x10, 0xc6, 0x36, 0x18, 0x18, 0x12, 0xe4, 0x6c, 0x48, 0x62, 0xfc, 0x93, 0x08, 0xe2, 0x84, 0xf2,
-	0xab, 0x48, 0x4b, 0xa5, 0x4a, 0xed, 0x0d, 0x88, 0xa3, 0xa0, 0x26, 0xd0, 0x2e, 0x10, 0xfa, 0xe7,
-	0x90, 0x9a, 0x64, 0xe3, 0x58, 0x02, 0x9b, 0x7a, 0x4d, 0x93, 0x5c, 0xfb, 0x28, 0x7d, 0x9a, 0x1c,
-	0xfb, 0x04, 0x55, 0x9b, 0xa7, 0xe8, 0xb1, 0xda, 0xf5, 0x1a, 0x70, 0x9b, 0x70, 0xdb, 0xfd, 0xbe,
-	0xf1, 0xcc, 0xb7, 0x33, 0x9f, 0x07, 0xb2, 0xfe, 0xf4, 0xbc, 0x36, 0xf5, 0xbd, 0xc0, 0x43, 0x6a,
-	0x70, 0x65, 0xb9, 0x1e, 0x35, 0x72, 0xc1, 0xed, 0x94, 0xd0, 0x10, 0x34, 0x0a, 0xb6, 0x67, 0x7b,
-	0xfc, 0xb8, 0xcf, 0x4e, 0x21, 0x5a, 0x59, 0x87, 0x5c, 0xdb, 0xbd, 0xf4, 0x30, 0xf9, 0x3c, 0x23,
-	0x34, 0xa8, 0x7c, 0x93, 0x60, 0x2d, 0xbc, 0xd3, 0xa9, 0xe7, 0x52, 0x82, 0xfe, 0x07, 0x75, 0x6c,
-	0x8d, 0xc8, 0x98, 0xea, 0x52, 0x59, 0xa9, 0xe6, 0xea, 0xeb, 0xb5, 0x30, 0x77, 0xed, 0x98, 0xa1,
-	0xcd, 0xe4, 0xdd, 0x8f, 0xdd, 0x04, 0x16, 0x21, 0xa8, 0x08, 0x99, 0x89, 0xe3, 0x9e, 0x05, 0xce,
-	0x84, 0xe8, 0x72, 0x59, 0xaa, 0x2a, 0x38, 0x3d, 0x71, 0xdc, 0xbe, 0x33, 0x21, 0x9c, 0xb2, 0x6e,
-	0x42, 0x4a, 0x11, 0x94, 0x75, 0xc3, 0xa9, 0x7d, 0xc8, 0xd2, 0xc0, 0xf3, 0x49, 0xff, 0x76, 0x4a,
-	0xf4, 0x64, 0x59, 0xaa, 0xe6, 0xeb, 0x1b, 0x51, 0x95, 0x5e, 0x44, 0xe0, 0x45, 0x4c, 0xe5, 0xb7,
-	0x0c, 0xeb, 0x3d, 0xe2, 0x3b, 0x84, 0x0a, 0xd9, 0xb1, 0xc2, 0xd2, 0xe3, 0x85, 0xe5, 0x78, 0xe1,
-	0x17, 0x8c, 0x0a, 0xce, 0xaf, 0x88, 0x4f, 0x75, 0x85, 0xbf, 0xae, 0x10, 0x7b, 0xdd, 0x49, 0x48,
-	0x8a, 0x47, 0xce, 0x63, 0x51, 0x1d, 0xb6, 0x58, 0x4a, 0x9f, 0x50, 0x6f, 0x3c, 0x0b, 0x1c, 0xcf,
-	0x3d, 0xbb, 0x76, 0xdc, 0x0b, 0xef, 0x9a, 0x8b, 0x57, 0xf0, 0xe6, 0xc4, 0xba, 0xc1, 0x73, 0x6e,
-	0xc8, 0x29, 0xf4, 0x04, 0xc0, 0xb2, 0x6d, 0x9f, 0xd8, 0x56, 0x40, 0xa8, 0x9e, 0x2a, 0x2b, 0xd5,
-	0x7c, 0x7d, 0x2d, 0xaa, 0xd6, 0xb0, 0x6d, 0x1f, 0x2f, 0xf1, 0xe8, 0x15, 0x14, 0xa7, 0x96, 0x1f,
-	0x38, 0xd6, 0x98, 0x55, 0xe1, 0x93, 0x38, 0xbb, 0x70, 0xa8, 0x35, 0x1a, 0x93, 0x0b, 0x5d, 0x2d,
-	0x4b, 0xd5, 0x0c, 0xde, 0x11, 0x01, 0xd1, 0xa4, 0x0e, 0x04, 0x8d, 0x3e, 0x3e, 0xf0, 0x2d, 0x0d,
-	0x7c, 0x2b, 0x20, 0xf6, 0xad, 0x9e, 0xe6, 0xed, 0xdd, 0x8d, 0x0a, 0xbf, 0x89, 0xe7, 0xe8, 0x89,
-	0xb0, 0x7f, 0x92, 0x47, 0x44, 0xe5, 0x13, 0xe4, 0xa3, 0xce, 0x0b, 0x83, 0x54, 0x41, 0xa5, 0x1c,
-	0xe1, 0x8d, 0xcf, 0xd5, 0xf3, 0xf3, 0xd1, 0x71, 0xf4, 0x28, 0x81, 0x05, 0x8f, 0x0c, 0x48, 0x5f,
-	0x5b, 0xbe, 0xeb, 0xb8, 0x36, 0x1f, 0x44, 0xf6, 0x28, 0x81, 0x23, 0xa0, 0x99, 0x01, 0xd5, 0x27,
-	0x74, 0x36, 0x0e, 0x2a, 0x5d, 0xd8, 0xe0, 0xcd, 0xef, 0x58, 0x93, 0xc5, 0x7c, 0x57, 0xf6, 0x43,
-	0x5a, 0xd9, 0x8f, 0xca, 0x21, 0xa0, 0xe5, 0x84, 0x42, 0x76, 0x01, 0x52, 0x2e, 0x03, 0xb8, 0xad,
-	0xb3, 0x38, 0xbc, 0x20, 0x03, 0x32, 0x42, 0x11, 0xd5, 0x65, 0x4e, 0xcc, 0xef, 0x95, 0x4b, 0x91,
-	0xe7, 0xd4, 0x1a, 0xcf, 0x16, 0xca, 0x0a, 0x90, 0xe2, 0xe6, 0xe7, 0x2a, 0xb2, 0x38, 0xbc, 0xac,
-	0xd6, 0x2b, 0xaf, 0xd6, 0xdb, 0x86, 0xcd, 0x58, 0x1d, 0x21, 0x78, 0x1b, 0xd4, 0x2f, 0x1c, 0x11,
-	0x8a, 0xc5, 0x6d, 0x95, 0xe4, 0x3d, 0x0c, 0xd9, 0xf9, 0x0f, 0x84, 0x72, 0x90, 0x1e, 0x74, 0x5e,
-	0x77, 0xba, 0xc3, 0x8e, 0x96, 0x40, 0x59, 0x48, 0xbd, 0x1d, 0x98, 0xf8, 0xbd, 0x26, 0xa1, 0x0c,
-	0x24, 0xf1, 0xe0, 0xd8, 0xd4, 0x64, 0x16, 0xd1, 0x6b, 0x1f, 0x98, 0xad, 0x06, 0xd6, 0x14, 0x16,
-	0xd1, 0xeb, 0x77, 0xb1, 0xa9, 0x25, 0x19, 0x8e, 0xcd, 0x96, 0xd9, 0x3e, 0x35, 0xb5, 0xd4, 0x5e,
-	0x0d, 0x76, 0x1e, 0x71, 0x0d, 0xcb, 0x34, 0x6c, 0x60, 0x91, 0xbe, 0xd1, 0xec, 0xe2, 0xbe, 0x26,
-	0xed, 0x35, 0x21, 0xc9, 0xec, 0x8d, 0xd2, 0xa0, 0xe0, 0xc6, 0x30, 0xe4, 0x5a, 0xdd, 0x41, 0xa7,
-	0xaf, 0x49, 0x0c, 0xeb, 0x0d, 0x4e, 0x34, 0x99, 0x1d, 0x4e, 0xda, 0x1d, 0x4d, 0xe1, 0x87, 0xc6,
-	0xbb, 0xb0, 0x26, 0x8f, 0x32, 0xb1, 0x96, 0xaa, 0x7f, 0x95, 0x21, 0xc5, 0x1f, 0x82, 0x9e, 0x41,
-	0x92, 0xad, 0x27, 0xb4, 0x19, 0xb9, 0x6c, 0x69, 0x79, 0x19, 0x85, 0x38, 0x28, 0x1a, 0xf7, 0x12,
-	0xd4, 0xd0, 0x8a, 0x68, 0x2b, 0x6e, 0xcd, 0xe8, 0xb3, 0xed, 0xbf, 0xe1, 0xf0, 0xc3, 0xa7, 0x12,
-	0x6a, 0x01, 0x2c, 0xac, 0x83, 0x8a, 0xb1, 0xe5, 0xb0, 0xec, 0x4f, 0xc3, 0x78, 0x88, 0x12, 0xf5,
-	0x0f, 0x21, 0xb7, 0x34, 0x4f, 0x14, 0x0f, 0x8d, 0x99, 0xc9, 0xf8, 0xef, 0x41, 0x2e, 0xcc, 0xd3,
-	0x2c, 0xde, 0xfd, 0x2a, 0x25, 0xee, 0xee, 0x4b, 0xd2, 0xf7, 0xfb, 0x92, 0xf4, 0xf3, 0xbe, 0x24,
-	0x7d, 0x48, 0xf3, 0x95, 0x38, 0x1d, 0x8d, 0x54, 0xbe, 0xcb, 0x9f, 0xff, 0x09, 0x00, 0x00, 0xff,
-	0xff, 0x92, 0x5a, 0x97, 0xd8, 0x03, 0x06, 0x00, 0x00,
+var fileDescriptor_rpc_936b8cb359cdf695 = []byte{
+	// 822 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x55, 0x4f, 0x6f, 0xea, 0x46,
+	0x10, 0x67, 0x6d, 0x30, 0x30, 0xbc, 0x20, 0xbf, 0x0d, 0x2f, 0xcf, 0xb8, 0x12, 0x8f, 0x5a, 0xaa,
+	0x84, 0xd2, 0x8a, 0xb4, 0xae, 0x54, 0xa9, 0x95, 0x7a, 0x00, 0xe2, 0x28, 0xa8, 0x09, 0xb4, 0x0b,
+	0x84, 0xfe, 0x39, 0xa4, 0x26, 0xd9, 0x3a, 0x96, 0xc0, 0xa6, 0x5e, 0xd3, 0x24, 0xd7, 0x1e, 0xfb,
+	0x31, 0x7a, 0xce, 0xb7, 0xe8, 0x25, 0xc7, 0x7e, 0x82, 0xaa, 0xcd, 0x27, 0xa9, 0xbc, 0x5e, 0x1b,
+	0x9c, 0x97, 0xe4, 0xc2, 0xcd, 0xf3, 0xfb, 0xcd, 0xce, 0x78, 0x7e, 0x33, 0x3b, 0x0b, 0xe5, 0x60,
+	0x79, 0xd1, 0x5e, 0x06, 0x7e, 0xe8, 0x63, 0x25, 0xbc, 0xb2, 0x3d, 0x9f, 0xe9, 0x95, 0xf0, 0x76,
+	0x49, 0x59, 0x0c, 0xea, 0x35, 0xc7, 0x77, 0x7c, 0xfe, 0x79, 0x10, 0x7d, 0xc5, 0xa8, 0xb1, 0x03,
+	0x95, 0xbe, 0xf7, 0x8b, 0x4f, 0xe8, 0xaf, 0x2b, 0xca, 0x42, 0xe3, 0x4f, 0x04, 0xaf, 0x62, 0x9b,
+	0x2d, 0x7d, 0x8f, 0x51, 0xfc, 0x31, 0x28, 0x73, 0x7b, 0x46, 0xe7, 0x4c, 0x43, 0x4d, 0xb9, 0x55,
+	0x31, 0x77, 0xda, 0x71, 0xec, 0xf6, 0x49, 0x84, 0x76, 0xf3, 0xf7, 0xff, 0xbc, 0xcb, 0x11, 0xe1,
+	0x82, 0xeb, 0x50, 0x5a, 0xb8, 0xde, 0x79, 0xe8, 0x2e, 0xa8, 0x26, 0x35, 0x51, 0x4b, 0x26, 0xc5,
+	0x85, 0xeb, 0x8d, 0xdd, 0x05, 0xe5, 0x94, 0x7d, 0x13, 0x53, 0xb2, 0xa0, 0xec, 0x1b, 0x4e, 0x1d,
+	0x40, 0x99, 0x85, 0x7e, 0x40, 0xc7, 0xb7, 0x4b, 0xaa, 0xe5, 0x9b, 0xa8, 0x55, 0x35, 0x5f, 0x27,
+	0x59, 0x46, 0x09, 0x41, 0xd6, 0x3e, 0xc6, 0x1f, 0x08, 0x80, 0x50, 0xe6, 0xcf, 0x57, 0xa1, 0xeb,
+	0x7b, 0x78, 0x0f, 0x94, 0x6b, 0xd7, 0xbb, 0xf4, 0xaf, 0x35, 0xc4, 0x03, 0x0b, 0x0b, 0x7f, 0x0d,
+	0x25, 0x16, 0x06, 0x76, 0x48, 0x9d, 0x5b, 0xfe, 0x37, 0x55, 0xf3, 0xc3, 0x24, 0xec, 0xfa, 0x74,
+	0x7b, 0xca, 0x9d, 0x47, 0xc2, 0x91, 0xa4, 0x47, 0x8c, 0x8f, 0xa0, 0x9a, 0xe5, 0x70, 0x11, 0xe4,
+	0xd3, 0xce, 0xf7, 0x6a, 0x0e, 0x03, 0x28, 0xa3, 0x31, 0xe9, 0xf7, 0xc6, 0x2a, 0x32, 0xee, 0x64,
+	0xd8, 0x19, 0xd1, 0xc0, 0xa5, 0x4c, 0x68, 0x98, 0x51, 0x01, 0x3d, 0xaf, 0x82, 0x94, 0x55, 0xe1,
+	0x8b, 0x88, 0x0a, 0x2f, 0xae, 0x68, 0xc0, 0x34, 0x99, 0x4b, 0x5d, 0xcb, 0x48, 0x7d, 0x1a, 0x93,
+	0x42, 0xf1, 0xd4, 0x17, 0x9b, 0xf0, 0x26, 0x0a, 0x19, 0xa4, 0x15, 0x9d, 0x0b, 0x31, 0xf2, 0x3c,
+	0xfe, 0xee, 0xc2, 0xbe, 0x59, 0x57, 0x1b, 0x17, 0x84, 0x3f, 0x01, 0xb0, 0x1d, 0x27, 0xa0, 0x8e,
+	0x1d, 0x52, 0xa6, 0x15, 0x9a, 0x72, 0xab, 0x6a, 0xbe, 0x4a, 0xb2, 0x75, 0x1c, 0x27, 0x20, 0x1b,
+	0x3c, 0xfe, 0x0a, 0xea, 0x4b, 0x3b, 0x08, 0x5d, 0x7b, 0x1e, 0x65, 0xe1, 0x63, 0x71, 0x7e, 0xe9,
+	0x32, 0x7b, 0x36, 0xa7, 0x97, 0x9a, 0xd2, 0x44, 0xad, 0x12, 0x79, 0x2b, 0x1c, 0x92, 0xb1, 0x39,
+	0x14, 0x34, 0xfe, 0xe9, 0x89, 0xb3, 0x69, 0x53, 0x8a, 0xbc, 0x29, 0xef, 0x92, 0xc4, 0xdf, 0x66,
+	0x63, 0xa4, 0x2d, 0x79, 0x1c, 0x3c, 0xed, 0x87, 0x09, 0xb0, 0x2e, 0x5b, 0x2b, 0x35, 0x51, 0xab,
+	0x62, 0xe2, 0xf7, 0x5b, 0x4c, 0x36, 0xbc, 0x8c, 0x9f, 0xa1, 0x9a, 0x74, 0x4b, 0x4c, 0x78, 0x0b,
+	0x14, 0xc6, 0x11, 0xde, 0xac, 0x8a, 0x59, 0x4d, 0x67, 0x8f, 0xa3, 0xc7, 0x39, 0x22, 0x78, 0xac,
+	0x43, 0xf1, 0xda, 0x0e, 0x3c, 0xd7, 0x73, 0x78, 0xf3, 0xca, 0xc7, 0x39, 0x92, 0x00, 0xdd, 0x12,
+	0x28, 0x01, 0x65, 0xab, 0x79, 0x68, 0xdc, 0x21, 0x78, 0xcd, 0x3b, 0x36, 0xb0, 0x17, 0xeb, 0xa1,
+	0x78, 0x51, 0x44, 0xb4, 0x85, 0x88, 0xd2, 0x76, 0x22, 0x1a, 0x47, 0x80, 0x37, 0xff, 0x56, 0x88,
+	0x52, 0x83, 0x82, 0x17, 0x01, 0xfc, 0xd6, 0x97, 0x49, 0x6c, 0x60, 0x1d, 0x4a, 0xa2, 0x5e, 0xa6,
+	0x49, 0x9c, 0x48, 0x6d, 0xe3, 0x2f, 0x24, 0x02, 0x9d, 0xd9, 0xf3, 0xd5, 0xba, 0xee, 0x1a, 0x14,
+	0xf8, 0x72, 0xe0, 0x35, 0x96, 0x49, 0x6c, 0xbc, 0xac, 0x86, 0xb4, 0x85, 0x1a, 0xf2, 0x96, 0x6a,
+	0xf4, 0x61, 0x37, 0x53, 0x84, 0x90, 0x63, 0x0f, 0x94, 0xdf, 0x38, 0x22, 0xf4, 0x10, 0xd6, 0x4b,
+	0x82, 0xec, 0x13, 0x28, 0xa7, 0xdb, 0x0b, 0x57, 0xa0, 0x38, 0x19, 0x7c, 0x33, 0x18, 0x4e, 0x07,
+	0x6a, 0x0e, 0x97, 0xa1, 0xf0, 0xdd, 0xc4, 0x22, 0x3f, 0xa8, 0x08, 0x97, 0x20, 0x4f, 0x26, 0x27,
+	0x96, 0x2a, 0x45, 0x1e, 0xa3, 0xfe, 0xa1, 0xd5, 0xeb, 0x10, 0x55, 0x8e, 0x3c, 0x46, 0xe3, 0x21,
+	0xb1, 0xd4, 0x7c, 0x84, 0x13, 0xab, 0x67, 0xf5, 0xcf, 0x2c, 0xb5, 0xb0, 0xdf, 0x86, 0xb7, 0xcf,
+	0x94, 0x14, 0x45, 0x9a, 0x76, 0x88, 0x08, 0xdf, 0xe9, 0x0e, 0xc9, 0x58, 0x45, 0xfb, 0x5d, 0xc8,
+	0x47, 0xd7, 0x39, 0xda, 0x5c, 0xa4, 0x33, 0x8d, 0xb9, 0xde, 0x70, 0x32, 0x18, 0xab, 0x28, 0xc2,
+	0x46, 0x93, 0x53, 0x55, 0xe2, 0x6b, 0xad, 0x3f, 0x50, 0xe5, 0x64, 0xbf, 0xf1, 0x9c, 0xdc, 0xcb,
+	0x22, 0x6a, 0xc1, 0xfc, 0x5d, 0x82, 0x02, 0x2f, 0x04, 0x7f, 0x06, 0xf9, 0xe8, 0x6d, 0xc0, 0xbb,
+	0x89, 0xbc, 0x1b, 0x2f, 0x87, 0x5e, 0xcb, 0x82, 0x42, 0xb8, 0x2f, 0x41, 0x89, 0xaf, 0x11, 0x7e,
+	0x93, 0xbd, 0x56, 0xc9, 0xb1, 0xbd, 0xc7, 0x70, 0x7c, 0xf0, 0x53, 0x84, 0x7b, 0x00, 0xeb, 0xc1,
+	0xc4, 0xf5, 0xcc, 0x32, 0xdc, 0xbc, 0x5a, 0xba, 0xfe, 0x14, 0x25, 0xf2, 0x1f, 0x41, 0x65, 0xa3,
+	0x9f, 0x38, 0xeb, 0x9a, 0x99, 0x54, 0xfd, 0x83, 0x27, 0xb9, 0x38, 0x4e, 0xb7, 0x7e, 0xff, 0x5f,
+	0x23, 0x77, 0xff, 0xd0, 0x40, 0x7f, 0x3f, 0x34, 0xd0, 0xbf, 0x0f, 0x0d, 0xf4, 0x63, 0x91, 0xbf,
+	0x47, 0xcb, 0xd9, 0x4c, 0xe1, 0x0f, 0xe9, 0xe7, 0xff, 0x07, 0x00, 0x00, 0xff, 0xff, 0x53, 0xfb,
+	0x17, 0x2d, 0x80, 0x07, 0x00, 0x00,
 }

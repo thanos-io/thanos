@@ -122,7 +122,7 @@ func main() {
 		prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}),
 	)
 
-	prometheus.DefaultRegisterer = metrics
+	prometheus.DefaultRegisterer = prometheus.WrapRegistererWithPrefix("thanos_", metrics)
 	// Memberlist uses go-metrics
 	sink, err := gprom.NewPrometheusSink()
 	if err != nil {

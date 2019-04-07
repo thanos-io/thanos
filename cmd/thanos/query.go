@@ -12,6 +12,7 @@ import (
 	"path"
 	"time"
 
+	"github.com/cortexproject/cortex/pkg/querier/frontend/queryrange"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -23,6 +24,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/extprom"
 	"github.com/improbable-eng/thanos/pkg/query"
 	v1 "github.com/improbable-eng/thanos/pkg/query/api"
+	"github.com/improbable-eng/thanos/pkg/query/cacheclient"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
@@ -66,6 +68,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
 		Default("20").Int()
+
+	queryCacheResultConfig := regQuerierChunkFlags(cmd)
 
 	replicaLabel := cmd.Flag("query.replica-label", "Label to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter.").
 		String()
@@ -162,7 +166,22 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			time.Duration(*dnsSDInterval),
 			*dnsSDResolver,
 			time.Duration(*unhealthyStoreTimeout),
+			queryCacheResultConfig,
 		)
+	}
+}
+
+func regQuerierChunkFlags(cmd *kingpin.CmdClause) *pathOrContent {
+	fileFlag := cmd.Flag("query.cache-results-config-file", "Path to YAML file that contains cache results configuration. Leave empty to disable cache.").PlaceHolder("<cache.config-yaml-path>").String()
+	contentFlag := cmd.Flag("query.cache-results-config", "Path to YAML file that contains cache results configuration. Leave empty to disable cache.").PlaceHolder("<cache.config-yaml>").String()
+
+	return &pathOrContent{
+		fileFlagName:    "query.cache-results-config-file",
+		contentFlagName: "query.cache-results-config",
+		required:        false,
+
+		path:    fileFlag,
+		content: contentFlag,
 	}
 }
 
@@ -280,6 +299,7 @@ func runQuery(
 	dnsSDInterval time.Duration,
 	dnsSDResolver string,
 	unhealthyStoreTimeout time.Duration,
+	queryCacheResultConfig *pathOrContent,
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
 	duplicatedStores := prometheus.NewCounter(prometheus.CounterOpts{
@@ -327,9 +347,8 @@ func runQuery(
 			dialOpts,
 			unhealthyStoreTimeout,
 		)
-		proxy            = store.NewProxyStore(logger, stores.Get, component.Query, selectorLset, storeResponseTimeout)
-		queryableCreator = query.NewQueryableCreator(logger, proxy, replicaLabel)
-		engine           = promql.NewEngine(
+		proxy  = store.NewProxyStore(logger, stores.Get, component.Query, selectorLset, storeResponseTimeout)
+		engine = promql.NewEngine(
 			promql.EngineOpts{
 				Logger:        logger,
 				Reg:           reg,
@@ -434,9 +453,51 @@ func runQuery(
 
 		ui.NewQueryUI(logger, stores, flagsMap).Register(router.WithPrefix(webRoutePrefix))
 
-		api := v1.NewAPI(logger, reg, engine, queryableCreator, enableAutodownsampling, enablePartialResponse)
+		partialResponseStrategy := storepb.PartialResponseStrategy_ABORT
+		if enablePartialResponse {
+			partialResponseStrategy = storepb.PartialResponseStrategy_WARN
+		}
 
-		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger)
+		// Setup query_range.
+		chunkCacheCfg, err := queryCacheResultConfig.Content()
+		if err != nil {
+			return errors.Wrap(err, "chunk cache cfg")
+		}
+
+		var extraMiddlewares []queryrange.Middleware
+		var limits queryrange.Limits // TODO: Implement.
+		if len(chunkCacheCfg) > 0 {
+			chunkCacheClient, err := cacheclient.NewChunk(logger, chunkCacheCfg, reg)
+			if err != nil {
+				return errors.Wrap(err, "create chunk cache client")
+			}
+
+			extraMiddlewares = append(extraMiddlewares, queryrange.StepAlignMiddleware)
+			extraMiddlewares = append(extraMiddlewares, queryrange.SplitByDayMiddleware(limits))
+			// 1 minute is for most recent allowed cacheable result, to prevent caching very recent results that might still be in flux.
+			m, err := queryrange.NewResultsCacheMiddleware(logger, chunkCacheClient, 1*time.Minute, limits)
+			if err != nil {
+				return errors.Wrap(err, "create result cache middleware")
+			}
+			extraMiddlewares = append(extraMiddlewares, m)
+		}
+
+		queryAPI := query.NewAPI(engine, replicaLabel, proxy)
+		api := v1.NewAPI(
+			logger,
+			reg,
+			queryAPI,
+			queryAPI,
+			proxy,
+			query.Options{
+				Deduplicate:             true,
+				PartialResponseStrategy: partialResponseStrategy,
+			},
+			enableAutodownsampling,
+			extraMiddlewares...,
+		)
+
+		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer)
 
 		router.Get("/-/healthy", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)

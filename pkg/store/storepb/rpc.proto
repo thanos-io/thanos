@@ -61,12 +61,27 @@ enum PartialResponseStrategy {
   ABORT = 1;
 }
 
+message Resolution {
+  /// WindowStrategy specifies strategy for resolution window for source data. Used to control potential downsampled data.
+  enum WindowStrategy {
+    /// MAX tells server that window specifies maximum resolution to take. Fallback to smaller resolution if needed.
+    MAX = 0;
+    /// STRICT tells server to use resolution as specified in window strictly. Return gaps if no specifying resolution matches.
+    STRICT = 1;
+  }
+
+  int64 window = 1;
+  WindowStrategy strategy = 2;
+}
+
 message SeriesRequest {
   int64 min_time                 = 1;
   int64 max_time                 = 2;
   repeated LabelMatcher matchers = 3 [(gogoproto.nullable) = false];
 
+  // Deprecated. Use resolution instead.
   int64 max_resolution_window = 4;
+
   repeated Aggr aggregates    = 5;
 
   // Deprecated. Use partial_response_strategy instead.
@@ -74,6 +89,9 @@ message SeriesRequest {
 
   // TODO(bwplotka): Move Thanos components to use strategy instead. Inlcuding QueryAPI.
   PartialResponseStrategy partial_response_strategy = 7;
+
+  // TODO(bwplotka): Move Thanos components to use strategy instead. Inlcuding QueryAPI.
+  Resolution resolution = 8;
 }
 
 enum Aggr {

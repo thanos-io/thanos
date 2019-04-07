@@ -249,30 +249,6 @@ func Snapshot(ctx context.Context, logger log.Logger, base *url.URL, skipHead bo
 	return path.Join("snapshots", d.Data.Name), nil
 }
 
-type QueryOptions struct {
-	Deduplicate             bool
-	PartialResponseStrategy storepb.PartialResponseStrategy
-}
-
-func (p *QueryOptions) AddTo(values url.Values) error {
-	values.Add("dedup", fmt.Sprintf("%v", p.Deduplicate))
-
-	var partialResponseValue string
-	switch p.PartialResponseStrategy {
-	case storepb.PartialResponseStrategy_WARN:
-		partialResponseValue = strconv.FormatBool(true)
-	case storepb.PartialResponseStrategy_ABORT:
-		partialResponseValue = strconv.FormatBool(false)
-	default:
-		return errors.Errorf("unknown partial response strategy %v", p.PartialResponseStrategy)
-	}
-
-	// TODO(bwplotka): Apply change from bool to strategy in Query API as well.
-	values.Add("partial_response", partialResponseValue)
-
-	return nil
-}
-
 // QueryInstant performs instant query and returns results in model.Vector type.
 func QueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query string, t time.Time, opts QueryOptions) (model.Vector, []string, error) {
 	if logger == nil {

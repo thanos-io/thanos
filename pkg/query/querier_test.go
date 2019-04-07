@@ -33,7 +33,7 @@ func TestQuerier_Series(t *testing.T) {
 
 	// Querier clamps the range to [1,300], which should drop some samples of the result above.
 	// The store API allows endpoints to send more data then initially requested.
-	q := newQuerier(context.Background(), nil, 1, 300, "", testProxy, false, 0, true, nil)
+	q := newSelectOnlyQuerier(context.Background(), nil, 1, 300, "", testProxy, false, 0, true, nil)
 	defer func() { testutil.Ok(t, q.Close()) }()
 
 	res, _, err := q.Select(&storage.SelectParams{})
@@ -213,7 +213,7 @@ func TestDedupSeriesSet(t *testing.T) {
 	set := promSeriesSet{
 		mint: 1,
 		maxt: math.MaxInt64,
-		set:  newStoreSeriesSet(series),
+		set:  NewStoreSeriesSet(series),
 	}
 	dedupSet := newDedupSeriesSet(set, "replica")
 
