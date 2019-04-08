@@ -14,6 +14,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ### Added
 - [#811](https://github.com/improbable-eng/thanos/pull/811) Remote write receiver
 - [#798](https://github.com/improbable-eng/thanos/pull/798) Ability to limit the maximum concurrent about of Series() calls in Thanos Store and the maximum amount of samples.
+- [#910](https://github.com/improbable-eng/thanos/pull/910) Query's stores UI page is now sorted by type and old DNS or File SD stores are removed after 5 minutes (configurable via the new `--store.unhealthy-timeout=5m` flag).
 
 New options:
 

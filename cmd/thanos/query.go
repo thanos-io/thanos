@@ -85,7 +85,9 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	dnsSDInterval := modelDuration(cmd.Flag("store.sd-dns-interval", "Interval between DNS resolutions.").
 		Default("30s"))
 
-	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified. ").
+	unhealthyStoreTimeout := modelDuration(cmd.Flag("store.unhealthy-timeout", "Timeout before an unhealthy store is cleaned from the store UI page.").Default("5m"))
+
+	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified.").
 		Default("false").Bool()
 
 	enablePartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified.").
@@ -150,6 +152,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*enablePartialResponse,
 			fileSD,
 			time.Duration(*dnsSDInterval),
+			time.Duration(*unhealthyStoreTimeout),
 		)
 	}
 }
@@ -266,6 +269,7 @@ func runQuery(
 	enablePartialResponse bool,
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
+	unhealthyStoreTimeout time.Duration,
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
 	duplicatedStores := prometheus.NewCounter(prometheus.CounterOpts{
@@ -310,6 +314,7 @@ func runQuery(
 				return specs
 			},
 			dialOpts,
+			unhealthyStoreTimeout,
 		)
 		proxy            = store.NewProxyStore(logger, stores.Get, component.Query, selectorLset, storeResponseTimeout)
 		queryableCreator = query.NewQueryableCreator(logger, proxy, replicaLabel)

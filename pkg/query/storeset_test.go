@@ -142,7 +142,7 @@ func TestStoreSet_AllAvailable_ThenDown(t *testing.T) {
 
 	// Testing if duplicates can cause weird results.
 	initialStoreAddr = append(initialStoreAddr, initialStoreAddr[0])
-	storeSet := NewStoreSet(nil, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts)
+	storeSet := NewStoreSet(nil, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts, time.Minute)
 	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 	defer storeSet.Close()
 
@@ -185,7 +185,7 @@ func TestStoreSet_StaticStores_OneAvailable(t *testing.T) {
 	initialStoreAddr := st.StoreAddresses()
 	st.CloseOne(initialStoreAddr[0])
 
-	storeSet := NewStoreSet(nil, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts)
+	storeSet := NewStoreSet(nil, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts, time.Minute)
 	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 	defer storeSet.Close()
 
@@ -215,7 +215,7 @@ func TestStoreSet_StaticStores_NoneAvailable(t *testing.T) {
 	st.CloseOne(initialStoreAddr[0])
 	st.CloseOne(initialStoreAddr[1])
 
-	storeSet := NewStoreSet(nil, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts)
+	storeSet := NewStoreSet(nil, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts, time.Minute)
 	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 
 	// Should not matter how many of these we run.
@@ -259,7 +259,7 @@ func TestStoreSet_AllAvailable_BlockExtLsetDuplicates(t *testing.T) {
 
 	initialStoreAddr := st.StoreAddresses()
 
-	storeSet := NewStoreSet(nil, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts)
+	storeSet := NewStoreSet(nil, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts, time.Minute)
 	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 	defer storeSet.Close()
 
