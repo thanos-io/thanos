@@ -30,7 +30,8 @@ import (
 	"github.com/improbable-eng/thanos/pkg/extprom"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/promclient"
-	"github.com/improbable-eng/thanos/pkg/rule/api"
+	thanosrule "github.com/improbable-eng/thanos/pkg/rule"
+	v1 "github.com/improbable-eng/thanos/pkg/rule/api"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
@@ -38,7 +39,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/improbable-eng/thanos/pkg/ui"
 	"github.com/oklog/run"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
@@ -52,7 +53,7 @@ import (
 	"github.com/prometheus/prometheus/util/strutil"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
-	"gopkg.in/alecthomas/kingpin.v2"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 // registerRule registers a rule command.
@@ -227,13 +228,23 @@ func runRule(
 			Name: "thanos_rule_loaded_rules",
 			Help: "Loaded rules partitioned by file and group",
 		},
-		[]string{"file", "group"},
+		[]string{"part_resp_strategy", "file", "group"},
 	)
+	ruleEvalWarnings := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "thanos_rule_evaluation_with_warnings_total",
+			Help: "The total number of rule evaluation that were successful but had warnings which can indicate partial error.",
+		}, []string{"strategy"},
+	)
+	ruleEvalWarnings.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_ABORT.String()))
+	ruleEvalWarnings.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_WARN.String()))
+
 	reg.MustRegister(configSuccess)
 	reg.MustRegister(configSuccessTime)
 	reg.MustRegister(duplicatedQuery)
 	reg.MustRegister(alertMngrAddrResolutionErrors)
 	reg.MustRegister(rulesLoaded)
+	reg.MustRegister(ruleEvalWarnings)
 
 	for _, addr := range queryAddrs {
 		if addr == "" {
@@ -257,56 +268,19 @@ func runRule(
 
 	// FileSD query addresses.
 	fileSDCache := cache.New()
-	dnsProvider := dns.NewProvider(logger, extprom.NewSubsystem(reg, "rule_query"))
 
-	// Hit the HTTP query API of query peers in randomized order until we get a result
-	// back or the context get canceled.
-	queryFn := func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {
-		var addrs []string
-
-		// Add addresses from gossip.
-		peers := peer.PeerStates(cluster.PeerTypeQuery)
-		var ids []string
-		for id := range peers {
-			ids = append(ids, id)
-		}
-		sort.Slice(ids, func(i int, j int) bool {
-			return strings.Compare(ids[i], ids[j]) < 0
-		})
-		for _, id := range ids {
-			addrs = append(addrs, peers[id].QueryAPIAddr)
-		}
-
-		// Add DNS resolved addresses from static flags and file SD.
-		// TODO(bwplotka): Consider generating addresses in *url.URL
-		addrs = append(addrs, dnsProvider.Addresses()...)
-
-		removeDuplicateQueryAddrs(logger, duplicatedQuery, addrs)
-
-		for _, i := range rand.Perm(len(addrs)) {
-			u, err := url.Parse(fmt.Sprintf("http://%s", addrs[i]))
-			if err != nil {
-				return nil, errors.Wrapf(err, "url parse %s", addrs[i])
-			}
-
-			span, ctx := tracing.StartSpan(ctx, "/rule_instant_query HTTP[client]")
-			v, err := promclient.PromqlQueryInstant(ctx, logger, u, q, t, true)
-			span.Finish()
-			return v, err
-		}
-		return nil, errors.Errorf("no query peer reachable")
-	}
+	dnsProvider := dns.NewProvider(
+		logger,
+		extprom.WrapRegistererWithPrefix("thanos_ruler_query_apis_", reg),
+	)
 
 	// Run rule evaluation and alert notifications.
 	var (
 		alertmgrs = newAlertmanagerSet(alertmgrURLs)
 		alertQ    = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(lset), alertExcludeLabels)
-		mgr       *rules.Manager
+		ruleMgrs  = thanosrule.Managers{}
 	)
 	{
-		ctx, cancel := context.WithCancel(context.Background())
-		ctx = tracing.ContextWithTracer(ctx, tracer)
-
 		notify := func(ctx context.Context, expr string, alerts ...*rules.Alert) {
 			res := make([]*alert.Alert, 0, len(alerts))
 			for _, alrt := range alerts {
@@ -327,26 +301,38 @@ func runRule(
 			}
 			alertQ.Push(res)
 		}
-
 		st := tsdb.Adapter(db, 0)
-		mgr = rules.NewManager(&rules.ManagerOptions{
-			Context:     ctx,
-			QueryFunc:   queryFn,
+
+		opts := rules.ManagerOptions{
 			NotifyFunc:  notify,
 			Logger:      log.With(logger, "component", "rules"),
 			Appendable:  st,
-			Registerer:  reg,
 			ExternalURL: nil,
 			TSDB:        st,
-		})
-		g.Add(func() error {
-			mgr.Run()
-			<-ctx.Done()
-			mgr.Stop()
-			return nil
-		}, func(error) {
-			cancel()
-		})
+		}
+
+		for _, strategy := range storepb.PartialResponseStrategy_value {
+			s := storepb.PartialResponseStrategy(strategy)
+
+			ctx, cancel := context.WithCancel(context.Background())
+			ctx = tracing.ContextWithTracer(ctx, tracer)
+
+			opts := opts
+			opts.Registerer = extprom.WrapRegistererWith(prometheus.Labels{"strategy": strings.ToLower(s.String())}, reg)
+			opts.Context = ctx
+			opts.QueryFunc = queryFunc(logger, peer, dnsProvider, duplicatedQuery, ruleEvalWarnings, s)
+
+			ruleMgrs[s] = rules.NewManager(&opts)
+			g.Add(func() error {
+				ruleMgrs[s].Run()
+				<-ctx.Done()
+
+				return nil
+			}, func(error) {
+				cancel()
+				ruleMgrs[s].Stop()
+			})
+		}
 	}
 	{
 		var storeLset []storepb.Label
@@ -465,11 +451,13 @@ func runRule(
 						level.Error(logger).Log("msg", "retrieving rule files failed. Ignoring file.", "pattern", pat, "err", err)
 						continue
 					}
+
 					files = append(files, fs...)
 				}
 
 				level.Info(logger).Log("msg", "reload rule files", "numFiles", len(files))
-				if err := mgr.Update(evalInterval, files); err != nil {
+
+				if err := ruleMgrs.Update(dataDir, evalInterval, files); err != nil {
 					configSuccess.Set(0)
 					level.Error(logger).Log("msg", "reloading rules failed", "err", err)
 					continue
@@ -479,9 +467,12 @@ func runRule(
 				configSuccessTime.Set(float64(time.Now().UnixNano()) / 1e9)
 
 				rulesLoaded.Reset()
-				for _, group := range mgr.RuleGroups() {
-					rulesLoaded.WithLabelValues(group.File(), group.Name()).Set(float64(len(group.Rules())))
+				for s, mgr := range ruleMgrs {
+					for _, group := range mgr.RuleGroups() {
+						rulesLoaded.WithLabelValues(s.String(), group.File(), group.Name()).Set(float64(len(group.Rules())))
+					}
 				}
+
 			}
 		}, func(error) {
 			close(cancel)
@@ -565,9 +556,9 @@ func runRule(
 			"web.prefix-header":   webPrefixHeaderName,
 		}
 
-		ui.NewRuleUI(logger, mgr, alertQueryURL.String(), flagsMap).Register(router.WithPrefix(webRoutePrefix))
+		ui.NewRuleUI(logger, ruleMgrs, alertQueryURL.String(), flagsMap).Register(router.WithPrefix(webRoutePrefix))
 
-		api := v1.NewAPI(logger, mgr)
+		api := v1.NewAPI(logger, ruleMgrs)
 		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger)
 
 		mux := http.NewServeMux()
@@ -762,4 +753,76 @@ func removeDuplicateQueryAddrs(logger log.Logger, duplicatedQueriers prometheus.
 		deduplicated = append(deduplicated, key)
 	}
 	return deduplicated
+}
+
+// queryFunc returns query function that hits the HTTP query API of query peers in randomized order until we get a result
+// back or the context get canceled.
+func queryFunc(
+	logger log.Logger,
+	peer cluster.Peer,
+	dnsProvider *dns.Provider,
+	duplicatedQuery prometheus.Counter,
+	ruleEvalWarnings *prometheus.CounterVec,
+	partialResponseStrategy storepb.PartialResponseStrategy,
+) rules.QueryFunc {
+	var spanID string
+
+	switch partialResponseStrategy {
+	case storepb.PartialResponseStrategy_WARN:
+		spanID = "/rule_instant_query HTTP[client]"
+	case storepb.PartialResponseStrategy_ABORT:
+		spanID = "/rule_instant_query_part_resp_abort HTTP[client]"
+	default:
+		// Programming error will be caught by tests.
+		panic(errors.Errorf("unknown partial response strategy %v", partialResponseStrategy).Error())
+	}
+
+	return func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {
+		var addrs []string
+
+		// Add addresses from gossip.
+		peers := peer.PeerStates(cluster.PeerTypeQuery)
+		var ids []string
+		for id := range peers {
+			ids = append(ids, id)
+		}
+		sort.Slice(ids, func(i int, j int) bool {
+			return strings.Compare(ids[i], ids[j]) < 0
+		})
+		for _, id := range ids {
+			addrs = append(addrs, peers[id].QueryAPIAddr)
+		}
+
+		// Add DNS resolved addresses from static flags and file SD.
+		// TODO(bwplotka): Consider generating addresses in *url.URL
+		addrs = append(addrs, dnsProvider.Addresses()...)
+
+		removeDuplicateQueryAddrs(logger, duplicatedQuery, addrs)
+
+		for _, i := range rand.Perm(len(addrs)) {
+			u, err := url.Parse(fmt.Sprintf("http://%s", addrs[i]))
+			if err != nil {
+				return nil, errors.Wrapf(err, "url parse %s", addrs[i])
+			}
+
+			span, ctx := tracing.StartSpan(ctx, spanID)
+			v, warns, err := promclient.PromqlQueryInstant(ctx, logger, u, q, t, promclient.QueryOptions{
+				Deduplicate:             true,
+				PartialResponseStrategy: partialResponseStrategy,
+			})
+			span.Finish()
+
+			if err != nil {
+				level.Error(logger).Log("err", err, "query", q)
+			}
+
+			if err == nil && len(warns) > 0 {
+				ruleEvalWarnings.WithLabelValues(strings.ToLower(partialResponseStrategy.String())).Inc()
+				// TODO(bwplotka): Propagate those to UI, probably requires changing rule manager code ):
+				level.Warn(logger).Log("warnings", strings.Join(warns, ", "), "query", q)
+			}
+			return v, err
+		}
+		return nil, errors.Errorf("no query peer reachable")
+	}
 }

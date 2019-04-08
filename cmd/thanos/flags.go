@@ -17,6 +17,25 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
+func regGRPCFlags(cmd *kingpin.CmdClause) (
+	grpcBindAddr *string,
+	grpcTLSSrvCert *string,
+	grpcTLSSrvKey *string,
+	grpcTLSSrvClientCA *string,
+) {
+	grpcBindAddr = cmd.Flag("grpc-address", "Listen ip:port address for gRPC endpoints (StoreAPI). Make sure this address is routable from other components if you use gossip, 'grpc-advertise-address' is empty and you require cross-node connection.").
+		Default("0.0.0.0:10901").String()
+
+	grpcTLSSrvCert = cmd.Flag("grpc-server-tls-cert", "TLS Certificate for gRPC server, leave blank to disable TLS").Default("").String()
+	grpcTLSSrvKey = cmd.Flag("grpc-server-tls-key", "TLS Key for the gRPC server, leave blank to disable TLS").Default("").String()
+	grpcTLSSrvClientCA = cmd.Flag("grpc-server-tls-client-ca", "TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").Default("").String()
+
+	return grpcBindAddr,
+		grpcTLSSrvCert,
+		grpcTLSSrvKey,
+		grpcTLSSrvClientCA
+}
+
 func regCommonServerFlags(cmd *kingpin.CmdClause) (
 	grpcBindAddr *string,
 	httpBindAddr *string,
@@ -25,17 +44,10 @@ func regCommonServerFlags(cmd *kingpin.CmdClause) (
 	grpcTLSSrvClientCA *string,
 	peerFunc func(log.Logger, *prometheus.Registry, bool, string, bool) (cluster.Peer, error)) {
 
-	grpcBindAddr = cmd.Flag("grpc-address", "Listen ip:port address for gRPC endpoints (StoreAPI). Make sure this address is routable from other components if you use gossip, 'grpc-advertise-address' is empty and you require cross-node connection.").
-		Default("0.0.0.0:10901").String()
-
+	httpBindAddr = regHTTPAddrFlag(cmd)
+	grpcBindAddr, grpcTLSSrvCert, grpcTLSSrvKey, grpcTLSSrvClientCA = regGRPCFlags(cmd)
 	grpcAdvertiseAddr := cmd.Flag("grpc-advertise-address", "Explicit (external) host:port address to advertise for gRPC StoreAPI in gossip cluster. If empty, 'grpc-address' will be used.").
 		String()
-
-	grpcTLSSrvCert = cmd.Flag("grpc-server-tls-cert", "TLS Certificate for gRPC server, leave blank to disable TLS").Default("").String()
-	grpcTLSSrvKey = cmd.Flag("grpc-server-tls-key", "TLS Key for the gRPC server, leave blank to disable TLS").Default("").String()
-	grpcTLSSrvClientCA = cmd.Flag("grpc-server-tls-client-ca", "TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").Default("").String()
-
-	httpBindAddr = regHTTPAddrFlag(cmd)
 
 	clusterBindAddr := cmd.Flag("cluster.address", "Listen ip:port address for gossip cluster.").
 		Default("0.0.0.0:10900").String()

@@ -175,4 +175,14 @@ For Thanos ruler we run some alerts in local Prometheus, to make sure that Thano
     impact: Grafana is not showing metrics
     action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
     dashboard: QUERY_URL
+- alert: ThanosQueryStoreNodeDown
+  expr: avg_over_time(thanos_store_up{app="thanos_query"}[5m]) < 0.9
+  for: 5m
+  labels:
+    team: TEAM
+  annotations:
+    summary: Thanos Query is not reaching a store node
+    impact: Grafana is missing metrics
+    action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
+    dashboard: QUERY_URL
 ```

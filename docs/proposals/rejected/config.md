@@ -16,7 +16,7 @@ Please see [Issue 387](https://github.com/improbable-eng/thanos/pull/387) and [P
 
 Currently, each scraper manages their own configuration via [Prometheus Configuration](https://prometheus.io/docs/prometheus/latest/configuration/configuration/) which contains information about the [scrape_config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#%3Cscrape_config%3E) and targets that the scraper will be collecting metrics from.
 
-As we start to dynamically scale the collection of metrics (new Prometheus instances) or increase the targets for a current tenant we wish to keep the collection of metrics to a consistent node and not re-allocate shards to other scrapers. 
+As we start to dynamically scale the collection of metrics (new Prometheus instances) or increase the targets for a current tenant we wish to keep the collection of metrics to a consistent node and not re-allocate shards to other scrapers.
 
 The reason for adding this as a component within the thanos project is primarily due to the need of a sidecar to interact with the Prometheus instance collecting metrics. In the scale down scenario when we want to remove all targets from a scraper we would also want to force the collection / upload of the WAL block from the running Prometheus instance before removing the Prometheus instance. During this period of scaling down / draining of the scraper we would also want the sidecar and Prometheus to continue to serve the data from within the Prometheus instance itself till we can be sure that Store node can fetch the data for our users.
 ALong with this we are looking to have a sidecar that updates targets via `file_sd_config` this could be a separate sidecar to thanos sidecar but adds another component into the mix. The implementation is also likely to borrow from the thanos codebase to identify which Prometheus instances are in the cluster to assign targets.
@@ -61,17 +61,17 @@ We believe that a central point for configuration and management is better in th
 ┌──────────────────────┐  ┌────────────┬─────────┐
 │ Prometheus │ Sidecar │  │ Prometheus │ Sidecar │
 └─────────────────┬────┘  └────────────┴────┬────┘
-                  │                         │ 
+                  │                         │
                GetConfig                GetConfig
                   │                         │
-                  v                         v 
+                  v                         v
                 ┌─────────────────────────────┐
                 │            Config           │
                 └──────────────┬──────────────┘
-                               │                   
-                           Read files        
-                               │                   
-                               v                  
+                               │
+                           Read files
+                               │
+                               v
                 ┌─────────────────────────────┐
                 │            prom.yml         │
                 └─────────────────────────────┘

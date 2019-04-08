@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"time"
 
@@ -122,7 +123,28 @@ func (q *Query) stores(w http.ResponseWriter, r *http.Request) {
 	for _, status := range q.storeSet.GetStoreStatus() {
 		statuses[status.StoreType] = append(statuses[status.StoreType], status)
 	}
-	q.executeTemplate(w, "stores.html", prefix, statuses)
+
+	sources := make([]component.StoreAPI, 0, len(statuses))
+	for k := range statuses {
+		sources = append(sources, k)
+	}
+	sort.Slice(sources, func(i int, j int) bool {
+		if sources[i] == nil {
+			return false
+		}
+		if sources[j] == nil {
+			return true
+		}
+		return sources[i].String() < sources[j].String()
+	})
+
+	q.executeTemplate(w, "stores.html", prefix, struct {
+		Stores  map[component.StoreAPI][]query.StoreStatus
+		Sources []component.StoreAPI
+	}{
+		Stores:  statuses,
+		Sources: sources,
+	})
 }
 
 func (q *Query) flags(w http.ResponseWriter, r *http.Request) {

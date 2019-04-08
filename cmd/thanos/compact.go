@@ -66,6 +66,9 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	haltOnError := cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
 		Hidden().Default("true").Bool()
+	acceptMalformedIndex := cmd.Flag("debug.accept-malformed-index",
+		"Compaction index verification will ignore out of order label names.").
+		Hidden().Default("false").Bool()
 
 	httpAddr := regHTTPAddrFlag(cmd)
 
@@ -102,6 +105,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			objStoreConfig,
 			time.Duration(*syncDelay),
 			*haltOnError,
+			*acceptMalformedIndex,
 			*wait,
 			map[compact.ResolutionLevel]time.Duration{
 				compact.ResolutionLevelRaw: time.Duration(*retentionRaw),
@@ -125,6 +129,7 @@ func runCompact(
 	objStoreConfig *pathOrContent,
 	syncDelay time.Duration,
 	haltOnError bool,
+	acceptMalformedIndex bool,
 	wait bool,
 	retentionByResolution map[compact.ResolutionLevel]time.Duration,
 	component string,
@@ -162,7 +167,8 @@ func runCompact(
 		}
 	}()
 
-	sy, err := compact.NewSyncer(logger, reg, bkt, syncDelay, blockSyncConcurrency)
+	sy, err := compact.NewSyncer(logger, reg, bkt, syncDelay,
+		blockSyncConcurrency, acceptMalformedIndex)
 	if err != nil {
 		return errors.Wrap(err, "create syncer")
 	}

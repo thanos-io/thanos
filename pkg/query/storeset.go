@@ -81,13 +81,14 @@ type StoreSet struct {
 	dialOpts            []grpc.DialOption
 	gRPCInfoCallTimeout time.Duration
 
-	mtx                  sync.RWMutex
-	storesStatusesMtx    sync.RWMutex
-	stores               map[string]*storeRef
-	storeNodeConnections prometheus.Gauge
-	storeNodeStatus      *prometheus.GaugeVec
-	externalLabelStores  map[string]int
-	storeStatuses        map[string]*StoreStatus
+	mtx                   sync.RWMutex
+	storesStatusesMtx     sync.RWMutex
+	stores                map[string]*storeRef
+	storeNodeConnections  prometheus.Gauge
+	storeNodeStatus       *prometheus.GaugeVec
+	externalLabelStores   map[string]int
+	storeStatuses         map[string]*StoreStatus
+	unhealthyStoreTimeout time.Duration
 }
 
 type storeSetNodeCollector struct {
@@ -119,6 +120,7 @@ func NewStoreSet(
 	reg *prometheus.Registry,
 	storeSpecs func() []StoreSpec,
 	dialOpts []grpc.DialOption,
+	unhealthyStoreTimeout time.Duration,
 ) *StoreSet {
 	storeNodeConnections := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_store_nodes_grpc_connections",
@@ -142,15 +144,16 @@ func NewStoreSet(
 	}
 
 	ss := &StoreSet{
-		logger:               log.With(logger, "component", "storeset"),
-		storeSpecs:           storeSpecs,
-		dialOpts:             dialOpts,
-		storeNodeConnections: storeNodeConnections,
-		storeNodeStatus:      storeNodeStatus,
-		gRPCInfoCallTimeout:  10 * time.Second,
-		externalLabelStores:  map[string]int{},
-		stores:               make(map[string]*storeRef),
-		storeStatuses:        make(map[string]*StoreStatus),
+		logger:                log.With(logger, "component", "storeset"),
+		storeSpecs:            storeSpecs,
+		dialOpts:              dialOpts,
+		storeNodeConnections:  storeNodeConnections,
+		storeNodeStatus:       storeNodeStatus,
+		gRPCInfoCallTimeout:   10 * time.Second,
+		externalLabelStores:   map[string]int{},
+		stores:                make(map[string]*storeRef),
+		storeStatuses:         make(map[string]*StoreStatus),
+		unhealthyStoreTimeout: unhealthyStoreTimeout,
 	}
 
 	storeNodeCollector := &storeSetNodeCollector{externalLabelOccurrences: ss.externalLabelOccurrences}
@@ -202,6 +205,10 @@ func (s *storeRef) TimeRange() (int64, int64) {
 func (s *storeRef) String() string {
 	mint, maxt := s.TimeRange()
 	return fmt.Sprintf("Addr: %s Labels: %v Mint: %d Maxt: %d", s.addr, s.Labels(), mint, maxt)
+}
+
+func (s *storeRef) Addr() string {
+	return s.addr
 }
 
 func (s *storeRef) close() {
@@ -259,6 +266,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 	}
 	s.externalLabelStores = externalLabelStores
 	s.storeNodeConnections.Set(float64(len(s.stores)))
+	s.cleanUpStoreStatuses()
 }
 
 func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
@@ -349,21 +357,26 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 	s.storesStatusesMtx.Lock()
 	defer s.storesStatusesMtx.Unlock()
 
-	now := time.Now()
-	s.storeStatuses[store.addr] = &StoreStatus{
-		Name:      store.addr,
-		LastError: err,
-		LastCheck: now,
-		Labels:    store.labels,
-		StoreType: store.storeType,
-		MinTime:   store.minTime,
-		MaxTime:   store.maxTime,
+	s.storeNodeStatus.WithLabelValues(store.addr).Set(0)
+	status := StoreStatus{Name: store.addr}
+	prev, ok := s.storeStatuses[store.addr]
+	if ok {
+		status = *prev
 	}
-	if err != nil {
-		s.storeNodeStatus.With(prometheus.Labels{"node": store.addr}).Set(0.0)
-	} else {
-		s.storeNodeStatus.With(prometheus.Labels{"node": store.addr}).Set(1.0)
+
+	status.LastError = err
+	status.LastCheck = time.Now()
+
+	if err == nil {
+		s.storeNodeStatus.WithLabelValues(store.addr).Set(1)
+
+		status.Labels = store.labels
+		status.StoreType = store.storeType
+		status.MinTime = store.minTime
+		status.MaxTime = store.maxTime
 	}
+
+	s.storeStatuses[store.addr] = &status
 }
 
 func (s *StoreSet) GetStoreStatus() []StoreStatus {
@@ -408,5 +421,20 @@ func (s *StoreSet) Get() []store.Client {
 func (s *StoreSet) Close() {
 	for _, st := range s.stores {
 		st.close()
+	}
+}
+
+func (s *StoreSet) cleanUpStoreStatuses() {
+	s.storesStatusesMtx.Lock()
+	defer s.storesStatusesMtx.Unlock()
+
+	now := time.Now()
+	for addr, status := range s.storeStatuses {
+		if _, ok := s.stores[addr]; !ok {
+			if now.Sub(status.LastCheck) >= s.unhealthyStoreTimeout {
+				s.storeNodeStatus.DeleteLabelValues(addr)
+				delete(s.storeStatuses, addr)
+			}
+		}
 	}
 }

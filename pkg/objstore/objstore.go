@@ -194,10 +194,10 @@ func BucketWithMetrics(name string, b Bucket, r prometheus.Registerer) Bucket {
 			ConstLabels: prometheus.Labels{"bucket": name},
 			Buckets:     []float64{0.005, 0.01, 0.02, 0.04, 0.08, 0.15, 0.3, 0.6, 1, 1.5, 2.5, 5, 10, 20, 30},
 		}, []string{"operation"}),
-		lastSuccessfullUploadTime: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name:        "thanos_objstore_bucket_last_successful_upload_time",
-			Help:        "Second timestamp of the last successful upload to the bucket.",
-			ConstLabels: prometheus.Labels{"bucket": name}}),
+		lastSuccessfullUploadTime: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "thanos_objstore_bucket_last_successful_upload_time",
+			Help: "Second timestamp of the last successful upload to the bucket.",
+		}, []string{"bucket"}),
 	}
 	if r != nil {
 		r.MustRegister(bkt.ops, bkt.opsFailures, bkt.opsDuration, bkt.lastSuccessfullUploadTime)
@@ -211,7 +211,7 @@ type metricBucket struct {
 	ops                       *prometheus.CounterVec
 	opsFailures               *prometheus.CounterVec
 	opsDuration               *prometheus.HistogramVec
-	lastSuccessfullUploadTime prometheus.Gauge
+	lastSuccessfullUploadTime *prometheus.GaugeVec
 }
 
 func (b *metricBucket) Iter(ctx context.Context, dir string, f func(name string) error) error {
@@ -287,7 +287,7 @@ func (b *metricBucket) Upload(ctx context.Context, name string, r io.Reader) err
 		b.opsFailures.WithLabelValues(op).Inc()
 	} else {
 		//TODO: Use SetToCurrentTime() once we update the Prometheus client_golang
-		b.lastSuccessfullUploadTime.Set(float64(time.Now().UnixNano()) / 1e9)
+		b.lastSuccessfullUploadTime.WithLabelValues(b.bkt.Name()).Set(float64(time.Now().UnixNano()) / 1e9)
 	}
 	b.ops.WithLabelValues(op).Inc()
 	b.opsDuration.WithLabelValues(op).Observe(time.Since(start).Seconds())

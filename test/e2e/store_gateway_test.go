@@ -19,7 +19,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/tsdb/labels"
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
 )
 
 func TestStoreGatewayQuery(t *testing.T) {
@@ -43,8 +43,8 @@ func TestStoreGatewayQuery(t *testing.T) {
 
 	exit, err := newSpinupSuite().
 		WithPreStartedMinio(s3Config).
-		Add(storeGateway(1, config), "").
-		Add(querier(1, "replica", storeGatewayGRPC(1)), "").
+		Add(storeGateway(1, config)).
+		Add(querier(1, "replica", storeGatewayGRPC(1))).
 		Exec(t, ctx, "test_store_gateway_query")
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)
@@ -93,11 +93,22 @@ func TestStoreGatewayQuery(t *testing.T) {
 		default:
 		}
 
-		var err error
-		res, err = promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "{a=\"1\"}", time.Now(), false)
+		var (
+			err      error
+			warnings []string
+		)
+		res, warnings, err = promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "{a=\"1\"}", time.Now(), promclient.QueryOptions{
+			Deduplicate: false,
+		})
 		if err != nil {
 			return err
 		}
+
+		if len(warnings) > 0 {
+			// we don't expect warnings.
+			return errors.Errorf("unexpected warnings %s", warnings)
+		}
+
 		if len(res) != 2 {
 			return errors.Errorf("unexpected result size %d", len(res))
 		}
@@ -127,11 +138,22 @@ func TestStoreGatewayQuery(t *testing.T) {
 		default:
 		}
 
-		var err error
-		res, err = promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "{a=\"1\"}", time.Now(), true)
+		var (
+			err      error
+			warnings []string
+		)
+		res, warnings, err = promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "{a=\"1\"}", time.Now(), promclient.QueryOptions{
+			Deduplicate: true,
+		})
 		if err != nil {
 			return err
 		}
+
+		if len(warnings) > 0 {
+			// we don't expect warnings.
+			return errors.Errorf("unexpected warnings %s", warnings)
+		}
+
 		if len(res) != 1 {
 			return errors.Errorf("unexpected result size %d", len(res))
 		}

@@ -155,7 +155,7 @@
       },
       "yaxes": [
         {
-          "format": "s",
+          "format": "reqps",
           "label": null,
           "logBase": 1,
           "max": null,
@@ -956,7 +956,7 @@
         "multi": false,
         "name": "pod",
         "options": [],
-        "query": "label_values(thanos_build_info{app=\"thanos-query\"}, kubernetes_pod_name)",
+        "query": "label_values(thanos_build_info{$labelselector=\"$labelvalue\"}, kubernetes_pod_name)",
         "refresh": 1,
         "regex": "",
         "sort": 0,

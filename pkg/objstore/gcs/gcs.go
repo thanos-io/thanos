@@ -16,6 +16,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/version"
+	"golang.org/x/oauth2/google"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	yaml "gopkg.in/yaml.v2"
@@ -26,7 +27,8 @@ const DirDelim = "/"
 
 // Config stores the configuration for gcs bucket.
 type Config struct {
-	Bucket string `yaml:"bucket"`
+	Bucket         string `yaml:"bucket"`
+	ServiceAccount string `yaml:"service_account"`
 }
 
 // Bucket implements the store.Bucket and shipper.Bucket interfaces against GCS.
@@ -47,8 +49,23 @@ func NewBucket(ctx context.Context, logger log.Logger, conf []byte, component st
 	if gc.Bucket == "" {
 		return nil, errors.New("missing Google Cloud Storage bucket name for stored blocks")
 	}
-	gcsOptions := option.WithUserAgent(fmt.Sprintf("thanos-%s/%s (%s)", component, version.Version, runtime.Version()))
-	gcsClient, err := storage.NewClient(ctx, gcsOptions)
+
+	var opts []option.ClientOption
+
+	// If ServiceAccount is provided, use them in GCS client, otherwise fallback to Google default logic.
+	if gc.ServiceAccount != "" {
+		credentials, err := google.CredentialsFromJSON(ctx, []byte(gc.ServiceAccount))
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create credentials from JSON")
+		}
+		opts = append(opts, option.WithCredentials(credentials))
+	}
+
+	opts = append(opts,
+		option.WithUserAgent(fmt.Sprintf("thanos-%s/%s (%s)", component, version.Version, runtime.Version())),
+	)
+
+	gcsClient, err := storage.NewClient(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
