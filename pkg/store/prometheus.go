@@ -29,6 +29,14 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+var statusToCode = map[int]codes.Code{
+	http.StatusBadRequest:          codes.InvalidArgument,
+	http.StatusNotFound:            codes.NotFound,
+	http.StatusUnprocessableEntity: codes.Internal,
+	http.StatusServiceUnavailable:  codes.Unavailable,
+	http.StatusInternalServerError: codes.Internal,
+}
+
 // PrometheusStore implements the store node API on top of the Prometheus remote read API.
 type PrometheusStore struct {
 	logger         log.Logger
@@ -336,7 +344,7 @@ func extendLset(lset []storepb.Label, extend labels.Labels) []storepb.Label {
 }
 
 // LabelNames returns all known label names.
-func (p *PrometheusStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesRequest) (
+func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
 	*storepb.LabelNamesResponse, error,
 ) {
 	u := *p.base
@@ -344,7 +352,7 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesR
 
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, status.Error(codes.Unknown, err.Error())
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	span, ctx := tracing.StartSpan(ctx, "/prom_label_names HTTP[client]")
@@ -352,7 +360,7 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesR
 
 	resp, err := p.client.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, status.Error(codes.Unknown, err.Error())
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	defer runutil.CloseWithLogOnErr(p.logger, resp.Body, "label names request body")
 
@@ -362,12 +370,23 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesR
 		Error  string   `json:"error"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
-		return nil, status.Error(codes.Unknown, err.Error())
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	if m.Status != "success" {
-		return nil, status.Error(codes.Unknown, m.Error)
+	if resp.StatusCode == http.StatusNoContent {
+		return &storepb.LabelNamesResponse{Names: []string{}}, nil
+	} else if m.Status != "success" {
+		if !r.PartialResponseDisabled {
+			return &storepb.LabelNamesResponse{Names: m.Data}, nil
+		} else {
+			code, exists := statusToCode[resp.StatusCode]
+			if !exists {
+				code = codes.Internal
+			}
+			return nil, status.Error(code, m.Error)
+		}
 	}
+
 	return &storepb.LabelNamesResponse{Names: m.Data}, nil
 }
 
@@ -385,7 +404,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, status.Error(codes.Unknown, err.Error())
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	span, ctx := tracing.StartSpan(ctx, "/prom_label_values HTTP[client]")
@@ -393,17 +412,33 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 
 	resp, err := p.client.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, status.Error(codes.Unknown, err.Error())
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	defer runutil.CloseWithLogOnErr(p.logger, resp.Body, "label values request body")
 
 	var m struct {
-		Data []string `json:"data"`
+		Data   []string `json:"data"`
+		Status string   `json:"status"`
+		Error  string   `json:"error"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
-		return nil, status.Error(codes.Unknown, err.Error())
+		return nil, status.Error(codes.Internal, err.Error())
 	}
+
 	sort.Strings(m.Data)
+	if resp.StatusCode == http.StatusNoContent {
+		return &storepb.LabelValuesResponse{Values: []string{}}, nil
+	} else if m.Status != "success" {
+		if !r.PartialResponseDisabled {
+			return &storepb.LabelValuesResponse{Values: m.Data}, nil
+		} else {
+			code, exists := statusToCode[resp.StatusCode]
+			if !exists {
+				code = codes.Internal
+			}
+			return nil, status.Error(code, m.Error)
+		}
+	}
 
 	return &storepb.LabelValuesResponse{Values: m.Data}, nil
 }
