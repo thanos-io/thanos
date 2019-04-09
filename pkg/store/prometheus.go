@@ -375,16 +375,18 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesR
 
 	if resp.StatusCode == http.StatusNoContent {
 		return &storepb.LabelNamesResponse{Names: []string{}}, nil
-	} else if m.Status != "success" {
+	}
+
+	if m.Status != "success" {
 		if !r.PartialResponseDisabled {
 			return &storepb.LabelNamesResponse{Names: m.Data}, nil
-		} else {
-			code, exists := statusToCode[resp.StatusCode]
-			if !exists {
-				code = codes.Internal
-			}
-			return nil, status.Error(code, m.Error)
 		}
+
+		code, exists := statusToCode[resp.StatusCode]
+		if !exists {
+			code = codes.Internal
+		}
+		return nil, status.Error(code, m.Error)
 	}
 
 	return &storepb.LabelNamesResponse{Names: m.Data}, nil
@@ -426,18 +428,21 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	}
 
 	sort.Strings(m.Data)
+
 	if resp.StatusCode == http.StatusNoContent {
 		return &storepb.LabelValuesResponse{Values: []string{}}, nil
-	} else if m.Status != "success" {
+	}
+
+	if m.Status != "success" {
 		if !r.PartialResponseDisabled {
 			return &storepb.LabelValuesResponse{Values: m.Data}, nil
-		} else {
-			code, exists := statusToCode[resp.StatusCode]
-			if !exists {
-				code = codes.Internal
-			}
-			return nil, status.Error(code, m.Error)
 		}
+
+		code, exists := statusToCode[resp.StatusCode]
+		if !exists {
+			code = codes.Internal
+		}
+		return nil, status.Error(code, m.Error)
 	}
 
 	return &storepb.LabelValuesResponse{Values: m.Data}, nil
