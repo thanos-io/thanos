@@ -889,10 +889,9 @@ type BucketCompactor struct {
 }
 
 // NewBucketCompactor creates a new bucket compactor.
-func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, compactDir string, bkt objstore.Bucket, concurrency int) *BucketCompactor {
+func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, compactDir string, bkt objstore.Bucket, concurrency int) (*BucketCompactor, error) {
 	if concurrency <= 0 {
-		level.Warn(logger).Log("msg", fmt.Sprintf("provided concurrency(%d) is not valid, using the default value (1)", concurrency))
-		concurrency = 1
+		return nil, errors.New("invalid concurrency level (%d), concurrency level must be >= 0")
 	}
 	return &BucketCompactor{
 		logger:      logger,
@@ -901,7 +900,7 @@ func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, comp
 		compactDir:  compactDir,
 		bkt:         bkt,
 		concurrency: concurrency,
-	}
+	}, nil
 }
 
 // Compact runs compaction over bucket.
