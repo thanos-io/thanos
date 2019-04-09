@@ -890,7 +890,7 @@ type BucketCompactor struct {
 // NewBucketCompactor creates a new bucket compactor.
 func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, compactDir string, bkt objstore.Bucket, concurrency int) (*BucketCompactor, error) {
 	if concurrency <= 0 {
-		return nil, errors.New("invalid concurrency level (%d), concurrency level must be >= 0")
+		return nil, errors.New("invalid concurrency level (%d), concurrency level must be > 0")
 	}
 	return &BucketCompactor{
 		logger:      logger,
