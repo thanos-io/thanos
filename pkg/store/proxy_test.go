@@ -460,7 +460,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 							storepb.NewWarnSeriesResponse(errors.New("warning")),
 							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{1, 1}, {2, 2}, {3, 3}}),
 						},
-						RespDuration: 2 * time.Second,
+						RespDuration: 2100 * time.Millisecond,
 					},
 					labels:  []storepb.Label{{Name: "ext", Value: "1"}},
 					minTime: 1,
