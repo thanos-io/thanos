@@ -98,6 +98,9 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing block metadata from object storage.").
 		Default("20").Int()
 
+	compactionConcurrency := cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
+		Default("1").Int()
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		return runCompact(g, logger, reg,
 			*httpAddr,
@@ -116,6 +119,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			*disableDownsampling,
 			*maxCompactionLevel,
 			*blockSyncConcurrency,
+			*compactionConcurrency,
 		)
 	}
 }
@@ -136,6 +140,7 @@ func runCompact(
 	disableDownsampling bool,
 	maxCompactionLevel int,
 	blockSyncConcurrency int,
+	concurrency int,
 ) error {
 	halted := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compactor_halted",
@@ -198,7 +203,10 @@ func runCompact(
 		return errors.Wrap(err, "clean working downsample directory")
 	}
 
-	compactor := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt)
+	compactor, err := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt, concurrency)
+	if err != nil {
+		return errors.Wrap(err, "create bucket compactor")
+	}
 
 	if retentionByResolution[compact.ResolutionLevelRaw].Seconds() != 0 {
 		level.Info(logger).Log("msg", "retention policy of raw samples is enabled", "duration", retentionByResolution[compact.ResolutionLevelRaw])
