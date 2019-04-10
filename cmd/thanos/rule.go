@@ -233,7 +233,7 @@ func runRule(
 			Name: "thanos_rule_loaded_rules",
 			Help: "Loaded rules partitioned by file and group",
 		},
-		[]string{"part_resp_strategy", "file", "group"},
+		[]string{"strategy", "file", "group"},
 	)
 	ruleEvalWarnings := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
