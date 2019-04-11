@@ -92,7 +92,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", false)
 
-	queries := cmd.Flag("query", "Addresses of statically configured query API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect query API servers through respective DNS lookups.").
+	queries := cmd.Flag("query", "Addresses of statically configured query API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect query API servers through respective DNS lookups. No scheme prefix allowed (https://github.com/improbable-eng/thanos/issues/1025)").
 		PlaceHolder("<query>").Strings()
 
 	fileSDFiles := cmd.Flag("query.sd-files", "Path to file that contain addresses of query peers. The path can be a glob pattern (repeatable).").
@@ -130,6 +130,13 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 
 		lookupQueries := map[string]struct{}{}
 		for _, q := range *queries {
+			if q == "" {
+				return errors.New("Static querier address cannot be empty")
+			}
+			if strings.Contains(q, "://") {
+				return errors.Errorf("Address %s has scheme. It is currently not supported. See: https://github.com/improbable-eng/thanos/issues/1025", q)
+			}
+
 			if _, ok := lookupQueries[q]; ok {
 				return errors.Errorf("Address %s is duplicated for --query flag.", q)
 			}
@@ -250,12 +257,6 @@ func runRule(
 	reg.MustRegister(alertMngrAddrResolutionErrors)
 	reg.MustRegister(rulesLoaded)
 	reg.MustRegister(ruleEvalWarnings)
-
-	for _, addr := range queryAddrs {
-		if addr == "" {
-			return errors.New("static querier address cannot be empty")
-		}
-	}
 
 	db, err := tsdb.Open(dataDir, log.With(logger, "component", "tsdb"), reg, tsdbOpts)
 	if err != nil {

@@ -21,49 +21,60 @@ func TestProvider(t *testing.T) {
 	}
 
 	prv := NewProvider(log.NewNopLogger(), nil, "")
-	prv.resolver = &mockResolver{
-		res: map[string][]string{
-			"a": ips[:2],
-			"b": ips[2:4],
-			"c": {ips[4]},
+
+	m := &mockResolver{
+		res: map[string]map[QType][]string{
+			"a": {
+				A: ips[:2],
+			},
+			"b": {
+				SRV: ips[2:4],
+			},
+			"c": {
+				SRVNoA: {ips[4]},
+			},
 		},
 	}
-	ctx := context.TODO()
+	prv.resolver = m
 
-	prv.Resolve(ctx, []string{"any+x"})
-	result := prv.Addresses()
-	sort.Strings(result)
-	testutil.Equals(t, []string(nil), result)
+	for _, tcase := range []struct {
+		in       []string
+		mockErr  error
+		expected []string
+	}{
+		{in: []string{"dns+x"}, expected: []string(nil)},
+		{in: []string{"dnssrv+b", "dnssrvnoa+c"}, expected: ips[2:]},
+		{in: []string{"dns+x"}, expected: []string(nil)},
+		{in: []string{"dns+a", "dnssrv+b", "dnssrvnoa+c"}, expected: ips},
+		{in: []string{"dns+x"}, expected: []string(nil)},
+		{in: []string{"dns+a", "dnssrv+b", "dnssrvnoa+c"}, expected: ips},
+		// Old record should be remembered.
+		{
+			in:       []string{"dns+a", "dnssrv+b", "dnssrvnoa+c"},
+			mockErr:  errors.New("failed to resolve urls"),
+			expected: ips,
+		},
+		{in: []string{"http://a"}, expected: []string{"http://a"}},
+		{in: []string{"https://a"}, expected: []string{"https://a"}},
+		// TODO(bwplotka):https://github.com/improbable-eng/thanos/issues/1025
+		// This is wrong as we expected to lookup "a".
+		{in: []string{"dns+http://a"}, expected: nil},
+	} {
+		if ok := t.Run("", func(t *testing.T) {
+			m.err = tcase.mockErr
 
-	prv.Resolve(ctx, []string{"any+a", "any+b", "any+c"})
-	result = prv.Addresses()
-	sort.Strings(result)
-	testutil.Equals(t, ips, result)
-
-	prv.Resolve(ctx, []string{"any+b", "any+c"})
-	result = prv.Addresses()
-	sort.Strings(result)
-	testutil.Equals(t, ips[2:], result)
-
-	prv.Resolve(ctx, []string{"any+x"})
-	result = prv.Addresses()
-	sort.Strings(result)
-	testutil.Equals(t, []string(nil), result)
-
-	prv.Resolve(ctx, []string{"any+a", "any+b", "any+c"})
-	result = prv.Addresses()
-	sort.Strings(result)
-	testutil.Equals(t, ips, result)
-
-	prv.resolver = &mockResolver{err: errors.New("failed to resolve urls")}
-	prv.Resolve(ctx, []string{"any+a", "any+b", "any+c"})
-	result = prv.Addresses()
-	sort.Strings(result)
-	testutil.Equals(t, ips, result)
+			prv.Resolve(context.TODO(), tcase.in)
+			result := prv.Addresses()
+			sort.Strings(result)
+			testutil.Equals(t, tcase.expected, result)
+		}); !ok {
+			return
+		}
+	}
 }
 
 type mockResolver struct {
-	res map[string][]string
+	res map[string]map[QType][]string
 	err error
 }
 
@@ -71,5 +82,10 @@ func (d *mockResolver) Resolve(ctx context.Context, name string, qtype QType) ([
 	if d.err != nil {
 		return nil, d.err
 	}
-	return d.res[name], nil
+
+	r, ok := d.res[name]
+	if !ok {
+		return nil, nil
+	}
+	return r[qtype], nil
 }
