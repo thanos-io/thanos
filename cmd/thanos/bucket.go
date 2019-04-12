@@ -85,7 +85,7 @@ func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name 
 		var backupBkt objstore.Bucket
 		if len(backupconfContentYaml) == 0 {
 			if *repair {
-				return fmt.Errorf("repair is specified, so backup client is required")
+				return errors.Errorf("repair is specified, so backup client is required")
 			}
 		} else {
 			// nil Prometheus registerer: don't create conflicting metrics
