@@ -26,8 +26,10 @@ import (
 	"github.com/prometheus/tsdb/labels"
 )
 
-// IndexCacheFilename is the canonical name for index cache files.
-const IndexCacheFilename = "index.cache.json"
+const (
+	// IndexCacheVersion is a enumeration of index cache versions supported by Thanos.
+	IndexCacheVersion1 = iota + 1
+)
 
 type postingsRange struct {
 	Name, Value string
@@ -35,10 +37,11 @@ type postingsRange struct {
 }
 
 type indexCache struct {
-	Version     int
-	Symbols     map[uint32]string
-	LabelValues map[string][]string
-	Postings    []postingsRange
+	Version      int
+	CacheVersion int
+	Symbols      map[uint32]string
+	LabelValues  map[string][]string
+	Postings     []postingsRange
 }
 
 type realByteSlice []byte
@@ -112,9 +115,10 @@ func WriteIndexCache(logger log.Logger, indexFn string, fn string) error {
 	defer runutil.CloseWithLogOnErr(logger, f, "index cache writer")
 
 	v := indexCache{
-		Version:     indexr.Version(),
-		Symbols:     symbols,
-		LabelValues: map[string][]string{},
+		Version:      indexr.Version(),
+		CacheVersion: IndexCacheVersion1,
+		Symbols:      symbols,
+		LabelValues:  map[string][]string{},
 	}
 
 	// Extract label value indices.

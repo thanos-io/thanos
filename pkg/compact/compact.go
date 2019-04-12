@@ -3,6 +3,7 @@ package compact
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -10,8 +11,6 @@ import (
 	"time"
 
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
-
-	"io/ioutil"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -61,6 +60,9 @@ type syncerMetrics struct {
 	garbageCollectionDuration prometheus.Histogram
 	compactions               *prometheus.CounterVec
 	compactionFailures        *prometheus.CounterVec
+	indexCacheBlocks          prometheus.Counter
+	indexCacheTraverse        prometheus.Counter
+	indexCacheFailures        prometheus.Counter
 }
 
 func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
@@ -535,7 +537,6 @@ func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		cg.compactionFailures.Inc()
 	}
 	cg.compactions.Inc()
-
 	return shouldRerun, compID, err
 }
 
@@ -813,6 +814,8 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin))
 
 	bdir := filepath.Join(dir, compID.String())
+	index := filepath.Join(bdir, block.IndexFilename)
+	indexCache := filepath.Join(bdir, block.IndexCacheFilename)
 
 	newMeta, err := metadata.InjectThanos(cg.logger, bdir, metadata.Thanos{
 		Labels:     cg.labels.Map(),
@@ -828,13 +831,17 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	}
 
 	// Ensure the output block is valid.
-	if err := block.VerifyIndex(cg.logger, filepath.Join(bdir, block.IndexFilename), newMeta.MinTime, newMeta.MaxTime); !cg.acceptMalformedIndex && err != nil {
+	if err := block.VerifyIndex(cg.logger, index, newMeta.MinTime, newMeta.MaxTime); !cg.acceptMalformedIndex && err != nil {
 		return false, ulid.ULID{}, halt(errors.Wrapf(err, "invalid result block %s", bdir))
 	}
 
 	// Ensure the output block is not overlapping with anything else.
 	if err := cg.areBlocksOverlapping(newMeta, plan...); err != nil {
 		return false, ulid.ULID{}, halt(errors.Wrapf(err, "resulted compacted block %s overlaps with something", bdir))
+	}
+
+	if err := block.WriteIndexCache(cg.logger, index, indexCache); err != nil {
+		return false, ulid.ULID{}, errors.Wrap(err, "write index cache")
 	}
 
 	begin = time.Now()
@@ -888,7 +895,14 @@ type BucketCompactor struct {
 }
 
 // NewBucketCompactor creates a new bucket compactor.
-func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, compactDir string, bkt objstore.Bucket, concurrency int) (*BucketCompactor, error) {
+func NewBucketCompactor(
+	logger log.Logger,
+	sy *Syncer,
+	comp tsdb.Compactor,
+	compactDir string,
+	bkt objstore.Bucket,
+	concurrency int,
+) (*BucketCompactor, error) {
 	if concurrency <= 0 {
 		return nil, errors.New("invalid concurrency level (%d), concurrency level must be > 0")
 	}
