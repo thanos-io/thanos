@@ -49,6 +49,51 @@ func (c *BinaryCache) WriteIndexCache(indexFn string, fn string) error {
 		return err
 	}
 
+	// Extract label value indices.
+	lnames, err := indexr.LabelNames()
+	if err != nil {
+		return errors.Wrap(err, "read label indices")
+	}
+	for _, ln := range lnames {
+		tpls, err := indexr.LabelValues(ln)
+		if err != nil {
+			return errors.Wrap(err, "get label values")
+		}
+		vals := make([]string, 0, tpls.Len())
+
+		for i := 0; i < tpls.Len(); i++ {
+			v, err := tpls.At(i)
+			if err != nil {
+				return errors.Wrap(err, "get label value")
+			}
+			if len(v) != 1 {
+				return errors.Errorf("unexpected tuple length %d", len(v))
+			}
+			vals = append(vals, v[0])
+		}
+
+		err = w.WriteLabelIndex(lnames, vals)
+		if err != nil {
+			return errors.Wrap(err, "write label indices")
+		}
+	}
+
+	// Extract postings ranges.
+	pranges, err := indexr.PostingsRanges()
+	if err != nil {
+		return errors.Wrap(err, "read postings ranges")
+	}
+	for l := range pranges {
+		p, err := indexr.Postings(l.Name, l.Value)
+		if err != nil {
+			return errors.Wrap(err, "postings reader")
+		}
+		err = w.WritePostings(l.Name, l.Value, p)
+		if err != nil {
+			return errors.Wrap(err, "postings write")
+		}
+	}
+
 	return nil
 }
 
