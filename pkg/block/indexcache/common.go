@@ -30,23 +30,30 @@ func (b realByteSlice) Sub(start, end int) index.ByteSlice {
 	return b[start:end]
 }
 
-func getSymbolTableBinary(b index.ByteSlice) (map[string]struct{}, error) {
+func getSymbols(b index.ByteSlice) (symbolsV2 []string, symbolsV1 map[uint32]string, err error) {
 	version := int(b.Range(4, 5)[0])
 
 	if version != 1 && version != 2 {
-		return nil, errors.Errorf("unknown index file version %d", version)
+		return nil, nil, errors.Errorf("unknown index file version %d", version)
 	}
 
 	toc, err := index.NewTOCFromByteSlice(b)
 	if err != nil {
-		return nil, errors.Wrap(err, "read TOC")
+		return nil, nil, errors.Wrap(err, "read TOC")
 	}
 
-	symbolsV2, symbolsV1, err := index.ReadSymbols(b, version, int(toc.Symbols))
+	symbolsV2, symbolsV1, err = index.ReadSymbols(b, version, int(toc.Symbols))
 	if err != nil {
-		return nil, errors.Wrap(err, "read symbols")
+		return nil, nil, errors.Wrap(err, "read symbols")
 	}
+	return
+}
 
+func getSymbolTableBinary(b index.ByteSlice) (map[string]struct{}, error) {
+	symbolsV2, symbolsV1, err := getSymbols(b)
+	if err != nil {
+		return nil, err
+	}
 	symbolsTable := make(map[string]struct{}, len(symbolsV1)+len(symbolsV2))
 	for _, s := range symbolsV1 {
 		symbolsTable[s] = struct{}{}
@@ -59,20 +66,9 @@ func getSymbolTableBinary(b index.ByteSlice) (map[string]struct{}, error) {
 }
 
 func getSymbolTableJSON(b index.ByteSlice) (map[uint32]string, error) {
-	version := int(b.Range(4, 5)[0])
-
-	if version != 1 && version != 2 {
-		return nil, errors.Errorf("unknown index file version %d", version)
-	}
-
-	toc, err := index.NewTOCFromByteSlice(b)
+	symbolsV2, symbolsV1, err := getSymbols(b)
 	if err != nil {
-		return nil, errors.Wrap(err, "read TOC")
-	}
-
-	symbolsV2, symbolsV1, err := index.ReadSymbols(b, version, int(toc.Symbols))
-	if err != nil {
-		return nil, errors.Wrap(err, "read symbols")
+		return nil, err
 	}
 
 	symbolsTable := make(map[uint32]string, len(symbolsV1)+len(symbolsV2))
