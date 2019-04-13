@@ -61,9 +61,6 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
 
-	queryTimeout := modelDuration(cmd.Flag("query.timeout", "Maximum time to process query by query node.").
-		Default("2m"))
-
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
 		Default("20").Int()
 
@@ -91,10 +88,13 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	enablePartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified.").
 		Default("true").Bool()
 
-	storeResponseTimeout := modelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
-
-	storeReadTimeout := modelDuration(cmd.Flag("store.read-timeout", "Maximum time to read a response from a store. If a request to one of the stores has timed out and store.read-timeout < query.timeout then a partial response will be returned. If store.read-timeout >= query.timeout and one of the stores has timed out then the client will get no data, and the timeout error will be returned.").
+	promqlTimeout := modelDuration(cmd.Flag("promql.timeout", "Maximum time to execute PromQL in query node.").
 		Default("2m"))
+
+	queryTimeout := modelDuration(cmd.Flag("query.timeout", "Maximum time to process request by query node. If a request to one of the stores has timed out and query.timeout < promql.timeout then a partial response will be returned. If query.timeout >= promql.timeout then only timeout error will be returned.").
+		Default("2m"))
+
+	storeResponseTimeout := modelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		peer, err := newPeerFn(logger, reg, true, *httpAdvertiseAddr, true)
@@ -143,9 +143,9 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*webExternalPrefix,
 			*webPrefixHeaderName,
 			*maxConcurrentQueries,
-			time.Duration(*queryTimeout),
+			time.Duration(*promqlTimeout),
 			time.Duration(*storeResponseTimeout),
-			time.Duration(*storeReadTimeout),
+			time.Duration(*queryTimeout),
 			*replicaLabel,
 			peer,
 			selectorLset,
@@ -260,9 +260,9 @@ func runQuery(
 	webExternalPrefix string,
 	webPrefixHeaderName string,
 	maxConcurrentQueries int,
-	queryTimeout time.Duration,
+	promqlTimeout time.Duration,
 	storeResponseTimeout time.Duration,
-	storeReadTimeout time.Duration,
+	queryTimeout time.Duration,
 	replicaLabel string,
 	peer cluster.Peer,
 	selectorLset labels.Labels,
@@ -316,7 +316,7 @@ func runQuery(
 			},
 			dialOpts,
 		)
-		proxy            = store.NewProxyStore(logger, stores.Get, component.Query, selectorLset, storeResponseTimeout, storeReadTimeout)
+		proxy            = store.NewProxyStore(logger, stores.Get, component.Query, selectorLset, storeResponseTimeout, queryTimeout)
 		queryableCreator = query.NewQueryableCreator(logger, proxy, replicaLabel)
 		engine           = promql.NewEngine(
 			promql.EngineOpts{
@@ -325,7 +325,7 @@ func runQuery(
 				MaxConcurrent: maxConcurrentQueries,
 				// TODO(bwplotka): Expose this as a flag: https://github.com/improbable-eng/thanos/issues/703
 				MaxSamples: math.MaxInt32,
-				Timeout:    queryTimeout,
+				Timeout:    promqlTimeout,
 			},
 		)
 	)

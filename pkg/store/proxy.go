@@ -48,8 +48,8 @@ type ProxyStore struct {
 	// responseTimeout is a timeout for any GRPC operation during series query
 	responseTimeout time.Duration
 
-	// readTimeout is a timeout for entire store request
-	readTimeout time.Duration
+	// queryTimeout is a timeout for entire request
+	queryTimeout time.Duration
 }
 
 // NewProxyStore returns a new ProxyStore that uses the given clients that implements storeAPI to fan-in all series to the client.
@@ -60,7 +60,7 @@ func NewProxyStore(
 	component component.StoreAPI,
 	selectorLabels labels.Labels,
 	responseTimeout time.Duration,
-	readTimeout time.Duration,
+	queryTimeout time.Duration,
 ) *ProxyStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -72,7 +72,7 @@ func NewProxyStore(
 		component:       component,
 		selectorLabels:  selectorLabels,
 		responseTimeout: responseTimeout,
-		readTimeout:     readTimeout,
+		queryTimeout:    queryTimeout,
 	}
 	return s
 }
@@ -156,8 +156,8 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		respSender, respRecv, closeFn = newRespCh(gctx, 10)
 	)
 
-	storeReadCtx, storeReadCancelFunc := s.contextWithReadTimeout(gctx)
-	defer storeReadCancelFunc()
+	storeCtx, cancel := s.contextWithTimeout(gctx)
+	defer cancel()
 
 	g.Go(func() error {
 		var (
@@ -189,8 +189,8 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			}
 			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
 
-			// This is used to cancel this stream when one operations takes too long.
-			seriesCtx, closeSeries := context.WithCancel(storeReadCtx)
+			// This is used to cancel this stream when one operation takes too long.
+			seriesCtx, closeSeries := context.WithCancel(storeCtx)
 			defer closeSeries()
 
 			sc, err := st.Series(seriesCtx, r)
@@ -434,13 +434,13 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		g, gctx  = errgroup.WithContext(ctx)
 	)
 
-	storeReadCtx, storeReadCancelFunc := s.contextWithReadTimeout(gctx)
-	defer storeReadCancelFunc()
+	storeCtx, cancel := s.contextWithTimeout(gctx)
+	defer cancel()
 
 	for _, st := range s.stores() {
 		store := st
 		g.Go(func() error {
-			resp, err := store.LabelValues(storeReadCtx, &storepb.LabelValuesRequest{
+			resp, err := store.LabelValues(storeCtx, &storepb.LabelValuesRequest{
 				Label:                   r.Label,
 				PartialResponseDisabled: r.PartialResponseDisabled,
 			})
@@ -475,9 +475,9 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 	}, nil
 }
 
-func (s *ProxyStore) contextWithReadTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
-	if s.readTimeout > 0 {
-		return context.WithTimeout(ctx, s.readTimeout)
+func (s *ProxyStore) contextWithTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	if s.queryTimeout > 0 {
+		return context.WithTimeout(ctx, s.queryTimeout)
 	}
 
 	return ctx, func() {}

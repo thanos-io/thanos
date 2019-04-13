@@ -241,7 +241,6 @@ Flags:
                                  stripped prefix value in X-Forwarded-Prefix
                                  header. This allows thanos UI to be served on a
                                  sub-path.
-      --query.timeout=2m         Maximum time to process query by query node.
       --query.max-concurrent=20  Maximum number of queries processed
                                  concurrently by query node.
       --query.replica-label=QUERY.REPLICA-LABEL
@@ -270,18 +269,17 @@ Flags:
                                  if no max_source_resolution param is specified.
       --query.partial-response   Enable partial response for queries if no
                                  partial_response param is specified.
+      --promql.timeout=2m        Maximum time to execute PromQL in query node.
+      --query.timeout=2m         Maximum time to process request by query node.
+                                 If a request to one of the stores has timed out
+                                 and query.timeout < promql.timeout then a
+                                 partial response will be returned. If
+                                 query.timeout >= promql.timeout then only
+                                 timeout error will be returned.
       --store.response-timeout=0ms
                                  If a Store doesn't send any data in this
                                  specified duration then a Store will be ignored
                                  and partial data will be returned if it's
                                  enabled. 0 disables timeout.
-      --store.read-timeout=2m    Maximum time to read a response from a store.
-                                 If a request to one of the stores has timed out
-                                 and store.read-timeout < query.timeout then a
-                                 partial response will be returned. If
-                                 store.read-timeout >= query.timeout and one of
-                                 the stores has timed out then the client will
-                                 get no data, and the timeout error will be
-                                 returned.
 
 ```
