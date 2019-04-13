@@ -153,8 +153,8 @@ func (m *Chunk) XXX_DiscardUnknown() {
 var xxx_messageInfo_Chunk proto.InternalMessageInfo
 
 type Series struct {
-	Labels               []Label     `protobuf:"bytes,1,rep,name=labels" json:"labels"`
-	Chunks               []AggrChunk `protobuf:"bytes,2,rep,name=chunks" json:"chunks"`
+	Labels               []Label     `protobuf:"bytes,1,rep,name=labels,proto3" json:"labels"`
+	Chunks               []AggrChunk `protobuf:"bytes,2,rep,name=chunks,proto3" json:"chunks"`
 	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
 	XXX_unrecognized     []byte      `json:"-"`
 	XXX_sizecache        int32       `json:"-"`
@@ -196,12 +196,12 @@ var xxx_messageInfo_Series proto.InternalMessageInfo
 type AggrChunk struct {
 	MinTime              int64    `protobuf:"varint,1,opt,name=min_time,json=minTime,proto3" json:"min_time,omitempty"`
 	MaxTime              int64    `protobuf:"varint,2,opt,name=max_time,json=maxTime,proto3" json:"max_time,omitempty"`
-	Raw                  *Chunk   `protobuf:"bytes,3,opt,name=raw" json:"raw,omitempty"`
-	Count                *Chunk   `protobuf:"bytes,4,opt,name=count" json:"count,omitempty"`
-	Sum                  *Chunk   `protobuf:"bytes,5,opt,name=sum" json:"sum,omitempty"`
-	Min                  *Chunk   `protobuf:"bytes,6,opt,name=min" json:"min,omitempty"`
-	Max                  *Chunk   `protobuf:"bytes,7,opt,name=max" json:"max,omitempty"`
-	Counter              *Chunk   `protobuf:"bytes,8,opt,name=counter" json:"counter,omitempty"`
+	Raw                  *Chunk   `protobuf:"bytes,3,opt,name=raw,proto3" json:"raw,omitempty"`
+	Count                *Chunk   `protobuf:"bytes,4,opt,name=count,proto3" json:"count,omitempty"`
+	Sum                  *Chunk   `protobuf:"bytes,5,opt,name=sum,proto3" json:"sum,omitempty"`
+	Min                  *Chunk   `protobuf:"bytes,6,opt,name=min,proto3" json:"min,omitempty"`
+	Max                  *Chunk   `protobuf:"bytes,7,opt,name=max,proto3" json:"max,omitempty"`
+	Counter              *Chunk   `protobuf:"bytes,8,opt,name=counter,proto3" json:"counter,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -541,6 +541,9 @@ func encodeVarintTypes(dAtA []byte, offset int, v uint64) int {
 	return offset + 1
 }
 func (m *Label) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Name)
@@ -558,6 +561,9 @@ func (m *Label) Size() (n int) {
 }
 
 func (m *Chunk) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Type != 0 {
@@ -574,6 +580,9 @@ func (m *Chunk) Size() (n int) {
 }
 
 func (m *Series) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Labels) > 0 {
@@ -595,6 +604,9 @@ func (m *Series) Size() (n int) {
 }
 
 func (m *AggrChunk) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.MinTime != 0 {
@@ -634,6 +646,9 @@ func (m *AggrChunk) Size() (n int) {
 }
 
 func (m *LabelMatcher) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Type != 0 {

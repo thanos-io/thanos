@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"net"
 	"os"
 	"os/exec"
 	"path"
@@ -14,11 +16,11 @@ import (
 
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/runutil"
-
+	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
-
 	"github.com/oklog/run"
 	"github.com/pkg/errors"
+	"google.golang.org/grpc"
 )
 
 var (
@@ -45,9 +47,37 @@ var (
 	storeGatewayHTTP = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 20190+i) }
 
 	minioHTTP = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 20290+i) }
+
+	fakeStoreAPIGRPC = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 21090+i) }
 )
 
-type cmdScheduleFunc func(workDir string) ([]*exec.Cmd, error)
+type Exec interface {
+	Start(stdout io.Writer, stderr io.Writer) error
+	Wait() error
+	Kill() error
+
+	String() string
+}
+
+type cmdExec struct {
+	*exec.Cmd
+}
+
+func newCmdExec(cmd *exec.Cmd) *cmdExec {
+	return &cmdExec{Cmd: cmd}
+}
+
+func (c *cmdExec) Start(stdout io.Writer, stderr io.Writer) error {
+	c.Stderr = stderr
+	c.Stdout = stdout
+	return c.Cmd.Start()
+}
+
+func (c *cmdExec) Kill() error { return c.Process.Signal(syscall.SIGKILL) }
+
+func (c *cmdExec) String() string { return fmt.Sprintf("%s %s", c.Path, c.Args[1]) }
+
+type cmdScheduleFunc func(workDir string) ([]Exec, error)
 
 type spinupSuite struct {
 	cmdScheduleFuncs []cmdScheduleFunc
@@ -64,7 +94,7 @@ func (s *spinupSuite) Add(cmdSchedule cmdScheduleFunc) *spinupSuite {
 }
 
 func scraper(i int, config string) cmdScheduleFunc {
-	return func(workDir string) ([]*exec.Cmd, error) {
+	return func(workDir string) ([]Exec, error) {
 		promDir := fmt.Sprintf("%s/data/prom%d", workDir, i)
 		if err := os.MkdirAll(promDir, 0777); err != nil {
 			return nil, errors.Wrap(err, "create prom dir failed")
@@ -74,26 +104,26 @@ func scraper(i int, config string) cmdScheduleFunc {
 			return nil, errors.Wrap(err, "creating prom config failed")
 		}
 
-		var cmds []*exec.Cmd
-		cmds = append(cmds, exec.Command(testutil.PrometheusBinary(),
+		var cmds []Exec
+		cmds = append(cmds, newCmdExec(exec.Command(testutil.PrometheusBinary(),
 			"--config.file", promDir+"/prometheus.yml",
 			"--storage.tsdb.path", promDir,
 			"--log.level", "info",
 			"--web.listen-address", promHTTP(i),
-		))
-		return append(cmds, exec.Command("thanos", "sidecar",
+		)))
+		return append(cmds, newCmdExec(exec.Command("thanos", "sidecar",
 			"--debug.name", fmt.Sprintf("sidecar-%d", i),
 			"--grpc-address", sidecarGRPC(i),
 			"--http-address", sidecarHTTP(i),
 			"--prometheus.url", fmt.Sprintf("http://%s", promHTTP(i)),
 			"--tsdb.path", promDir,
 			"--cluster.disable",
-			"--log.level", "debug")), nil
+			"--log.level", "debug"))), nil
 	}
 }
 
 func receiver(i int, config string) cmdScheduleFunc {
-	return func(workDir string) ([]*exec.Cmd, error) {
+	return func(workDir string) ([]Exec, error) {
 		promDir := fmt.Sprintf("%s/data/remote-write-prom%d", workDir, i)
 		if err := os.MkdirAll(promDir, 0777); err != nil {
 			return nil, errors.Wrap(err, "create prom dir failed")
@@ -103,48 +133,48 @@ func receiver(i int, config string) cmdScheduleFunc {
 			return nil, errors.Wrap(err, "creating prom config failed")
 		}
 
-		var cmds []*exec.Cmd
-		cmds = append(cmds, exec.Command(testutil.PrometheusBinary(),
+		var cmds []Exec
+		cmds = append(cmds, newCmdExec(exec.Command(testutil.PrometheusBinary(),
 			"--config.file", promDir+"/prometheus.yml",
 			"--storage.tsdb.path", promDir,
 			"--log.level", "info",
 			"--web.listen-address", promRemoteWriteHTTP(i),
-		))
-		return append(cmds, exec.Command("thanos", "receive",
+		)))
+		return append(cmds, newCmdExec(exec.Command("thanos", "receive",
 			"--debug.name", fmt.Sprintf("remote-write-receive-%d", i),
 			"--grpc-address", remoteWriteReceiveGRPC(i),
 			"--http-address", remoteWriteReceiveMetricHTTP(i),
 			"--remote-write.address", remoteWriteReceiveHTTP(i),
 			"--tsdb.path", promDir,
-			"--log.level", "debug")), nil
+			"--log.level", "debug"))), nil
 	}
 }
 
 func querier(i int, replicaLabel string, staticStores ...string) cmdScheduleFunc {
-	return func(_ string) ([]*exec.Cmd, error) {
+	return func(_ string) ([]Exec, error) {
 		args := append(defaultQuerierFlags(i, replicaLabel),
 			"--cluster.gossip-interval", "200ms",
 			"--cluster.pushpull-interval", "200ms")
 		for _, s := range staticStores {
 			args = append(args, "--store", s)
 		}
-		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
+		return []Exec{newCmdExec(exec.Command("thanos", args...))}, nil
 	}
 }
 
 func querierWithStoreFlags(i int, replicaLabel string, storesAddresses ...string) cmdScheduleFunc {
-	return func(_ string) ([]*exec.Cmd, error) {
+	return func(_ string) ([]Exec, error) {
 		args := defaultQuerierFlags(i, replicaLabel)
 
 		for _, addr := range storesAddresses {
 			args = append(args, "--store", addr)
 		}
-		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
+		return []Exec{newCmdExec(exec.Command("thanos", args...))}, nil
 	}
 }
 
 func querierWithFileSD(i int, replicaLabel string, storesAddresses ...string) cmdScheduleFunc {
-	return func(workDir string) ([]*exec.Cmd, error) {
+	return func(workDir string) ([]Exec, error) {
 		queryFileSDDir := fmt.Sprintf("%s/data/queryFileSd%d", workDir, i)
 		if err := os.MkdirAll(queryFileSDDir, 0777); err != nil {
 			return nil, errors.Wrap(err, "create prom dir failed")
@@ -160,19 +190,19 @@ func querierWithFileSD(i int, replicaLabel string, storesAddresses ...string) cm
 			"--store.sd-interval", "5s",
 		)
 
-		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
+		return []Exec{newCmdExec(exec.Command("thanos", args...))}, nil
 	}
 }
 
 func storeGateway(i int, bucketConfig []byte) cmdScheduleFunc {
-	return func(workDir string) ([]*exec.Cmd, error) {
+	return func(workDir string) ([]Exec, error) {
 		dbDir := fmt.Sprintf("%s/data/store-gateway%d", workDir, i)
 
 		if err := os.MkdirAll(dbDir, 0777); err != nil {
 			return nil, errors.Wrap(err, "creating store gateway dir failed")
 		}
 
-		return []*exec.Cmd{exec.Command("thanos",
+		return []Exec{newCmdExec(exec.Command("thanos",
 			"store",
 			"--debug.name", fmt.Sprintf("store-%d", i),
 			"--data-dir", dbDir,
@@ -182,12 +212,12 @@ func storeGateway(i int, bucketConfig []byte) cmdScheduleFunc {
 			"--objstore.config", string(bucketConfig),
 			// Accelerated sync time for quicker test (3m by default)
 			"--sync-block-duration", "5s",
-		)}, nil
+		))}, nil
 	}
 }
 
 func alertManager(i int) cmdScheduleFunc {
-	return func(workDir string) ([]*exec.Cmd, error) {
+	return func(workDir string) ([]Exec, error) {
 		dir := fmt.Sprintf("%s/data/alertmanager%d", workDir, i)
 
 		if err := os.MkdirAll(dir, 0777); err != nil {
@@ -205,85 +235,150 @@ receivers:
 		if err := ioutil.WriteFile(dir+"/config.yaml", []byte(config), 0666); err != nil {
 			return nil, errors.Wrap(err, "creating alertmanager config file failed")
 		}
-		return []*exec.Cmd{exec.Command(testutil.AlertmanagerBinary(),
+		return []Exec{newCmdExec(exec.Command(testutil.AlertmanagerBinary(),
 			"--config.file", dir+"/config.yaml",
 			"--web.listen-address", "127.0.0.1:29093",
 			"--log.level", "debug",
-		)}, nil
+		))}, nil
 	}
 }
 
-func ruler(i int, rules string) cmdScheduleFunc {
-	return func(workDir string) ([]*exec.Cmd, error) {
+func rulerWithQueryFlags(i int, rules []string, queryAddresses ...string) cmdScheduleFunc {
+	return func(workDir string) ([]Exec, error) {
 		dbDir := fmt.Sprintf("%s/data/rule%d", workDir, i)
 
 		if err := os.MkdirAll(dbDir, 0777); err != nil {
-			return nil, errors.Wrap(err, "creating ruler dir failed")
+			return nil, errors.Wrap(err, "creating ruler dir")
 		}
-		err := ioutil.WriteFile(dbDir+"/rules.yaml", []byte(rules), 0666)
-		if err != nil {
-			return nil, errors.Wrap(err, "creating ruler file failed")
-		}
-
-		args := append(defaultRulerFlags(i, dbDir),
-			"--cluster.gossip-interval", "200ms",
-			"--cluster.pushpull-interval", "200ms")
-		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
-	}
-}
-
-func rulerWithQueryFlags(i int, rules string, queryAddresses ...string) cmdScheduleFunc {
-	return func(workDir string) ([]*exec.Cmd, error) {
-		dbDir := fmt.Sprintf("%s/data/rule%d", workDir, i)
-
-		if err := os.MkdirAll(dbDir, 0777); err != nil {
-			return nil, errors.Wrap(err, "creating ruler dir failed")
-		}
-		err := ioutil.WriteFile(dbDir+"/rules.yaml", []byte(rules), 0666)
-		if err != nil {
-			return nil, errors.Wrap(err, "creating ruler file failed")
+		for i, rule := range rules {
+			if err := ioutil.WriteFile(path.Join(dbDir, fmt.Sprintf("/rules-%d.yaml", i)), []byte(rule), 0666); err != nil {
+				return nil, errors.Wrapf(err, "writing rule %s", path.Join(dbDir, fmt.Sprintf("/rules-%d.yaml", i)))
+			}
 		}
 
-		args := defaultRulerFlags(i, dbDir)
+		args := defaultRulerFlags(i, dbDir, dbDir)
 
 		for _, addr := range queryAddresses {
 			args = append(args, "--query", addr)
 		}
-		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
+		return []Exec{newCmdExec(exec.Command("thanos", args...))}, nil
 	}
 }
 
-func rulerWithFileSD(i int, rules string, queryAddresses ...string) cmdScheduleFunc {
-	return func(workDir string) ([]*exec.Cmd, error) {
+func rulerWithDir(i int, ruleDir string, queryAddresses ...string) cmdScheduleFunc {
+	return func(workDir string) ([]Exec, error) {
 		dbDir := fmt.Sprintf("%s/data/rule%d", workDir, i)
 
 		if err := os.MkdirAll(dbDir, 0777); err != nil {
-			return nil, errors.Wrap(err, "creating ruler dir failed")
+			return nil, errors.Wrap(err, "creating ruler dir")
 		}
-		err := ioutil.WriteFile(dbDir+"/rules.yaml", []byte(rules), 0666)
-		if err != nil {
-			return nil, errors.Wrap(err, "creating ruler file failed")
+
+		args := defaultRulerFlags(i, dbDir, ruleDir)
+
+		for _, addr := range queryAddresses {
+			args = append(args, "--query", addr)
+		}
+		return []Exec{newCmdExec(exec.Command("thanos", args...))}, nil
+	}
+}
+
+func rulerWithFileSD(i int, rules []string, queryAddresses ...string) cmdScheduleFunc {
+	return func(workDir string) ([]Exec, error) {
+		dbDir := fmt.Sprintf("%s/data/rule%d", workDir, i)
+
+		if err := os.MkdirAll(dbDir, 0777); err != nil {
+			return nil, errors.Wrap(err, "creating ruler dir")
+		}
+		for i, rule := range rules {
+			if err := ioutil.WriteFile(path.Join(dbDir, fmt.Sprintf("/rules-%d.yaml", i)), []byte(rule), 0666); err != nil {
+				return nil, errors.Wrapf(err, "writing rule %s", path.Join(dbDir, fmt.Sprintf("/rules-%d.yaml", i)))
+			}
 		}
 
 		ruleFileSDDir := fmt.Sprintf("%s/data/ruleFileSd%d", workDir, i)
 		if err := os.MkdirAll(ruleFileSDDir, 0777); err != nil {
-			return nil, errors.Wrap(err, "create ruler filesd dir failed")
+			return nil, errors.Wrap(err, "create ruler filesd dir")
 		}
 
 		if err := ioutil.WriteFile(ruleFileSDDir+"/filesd.json", []byte(generateFileSD(queryAddresses)), 0666); err != nil {
-			return nil, errors.Wrap(err, "creating ruler filesd config failed")
+			return nil, errors.Wrap(err, "creating ruler filesd config")
 		}
 
-		args := append(defaultRulerFlags(i, dbDir),
+		args := append(defaultRulerFlags(i, dbDir, dbDir),
 			"--query.sd-files", path.Join(ruleFileSDDir, "filesd.json"),
 			"--query.sd-interval", "5s")
 
-		return []*exec.Cmd{exec.Command("thanos", args...)}, nil
+		return []Exec{newCmdExec(exec.Command("thanos", args...))}, nil
+	}
+}
+
+type sameProcessGRPCServiceExec struct {
+	i      int
+	stdout io.Writer
+	stderr io.Writer
+
+	ctx     context.Context
+	cancel  context.CancelFunc
+	srvChan <-chan error
+	srv     *grpc.Server
+}
+
+func (c *sameProcessGRPCServiceExec) Start(stdout io.Writer, stderr io.Writer) error {
+	c.stderr = stderr
+	c.stdout = stdout
+
+	if c.ctx != nil {
+		return errors.New("process already started")
+	}
+	c.ctx, c.cancel = context.WithCancel(context.Background())
+
+	l, err := net.Listen("tcp", fakeStoreAPIGRPC(c.i))
+	if err != nil {
+		return errors.Wrap(err, "listen API address")
+	}
+
+	srvChan := make(chan error)
+	go func() {
+		defer close(srvChan)
+		if err := c.srv.Serve(l); err != nil {
+			srvChan <- err
+			_, _ = c.stderr.Write([]byte(fmt.Sprintf("server failed: %s", err)))
+		}
+
+	}()
+	c.srvChan = srvChan
+	return nil
+}
+
+func (c *sameProcessGRPCServiceExec) Wait() error {
+	err := <-c.srvChan
+	if c.ctx.Err() == nil && err != nil {
+		return err
+	}
+	return err
+}
+func (c *sameProcessGRPCServiceExec) Kill() error {
+	c.cancel()
+	c.srv.Stop()
+
+	return nil
+}
+
+func (c *sameProcessGRPCServiceExec) String() string {
+	return fmt.Sprintf("gRPC service %v on %v", c.i, fakeStoreAPIGRPC(c.i))
+}
+
+func fakeStoreAPI(i int, svc storepb.StoreServer) cmdScheduleFunc {
+	return func(_ string) ([]Exec, error) {
+		srv := grpc.NewServer()
+		storepb.RegisterStoreServer(srv, svc)
+
+		return []Exec{&sameProcessGRPCServiceExec{i: i, srv: srv}}, nil
 	}
 }
 
 func minio(accessKey string, secretKey string) cmdScheduleFunc {
-	return func(workDir string) ([]*exec.Cmd, error) {
+	return func(workDir string) ([]Exec, error) {
 		dbDir := fmt.Sprintf("%s/data/minio", workDir)
 
 		if err := os.MkdirAll(dbDir, 0777); err != nil {
@@ -299,7 +394,7 @@ func minio(accessKey string, secretKey string) cmdScheduleFunc {
 			fmt.Sprintf("MINIO_ACCESS_KEY=%s", accessKey),
 			fmt.Sprintf("MINIO_SECRET_KEY=%s", secretKey))
 
-		return []*exec.Cmd{cmd}, nil
+		return []Exec{newCmdExec(cmd)}, nil
 	}
 }
 
@@ -384,7 +479,7 @@ func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (
 		})
 	}
 
-	var commands []*exec.Cmd
+	var commands []Exec
 
 	for _, cmdFunc := range s.cmdScheduleFuncs {
 		cmds, err := cmdFunc(dir)
@@ -398,11 +493,7 @@ func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (
 	// Run go routine for each command.
 	for _, c := range commands {
 		var stderr, stdout bytes.Buffer
-		c.Stderr = &stderr
-		c.Stdout = &stdout
-
-		err := c.Start()
-		if err != nil {
+		if err := c.Start(&stdout, &stderr); err != nil {
 			// Let already started commands finish.
 			go func() { _ = g.Run() }()
 			return nil, errors.Wrap(err, "failed to start")
@@ -410,7 +501,7 @@ func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (
 
 		cmd := c
 		g.Add(func() error {
-			id := fmt.Sprintf("%s %s", cmd.Path, cmd.Args[1])
+			id := c.String()
 
 			err := cmd.Wait()
 
@@ -424,7 +515,7 @@ func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (
 			return errors.Wrap(err, id)
 		}, func(error) {
 			// This's accepted scenario to kill a process immediately for sure and run tests as fast as possible.
-			_ = cmd.Process.Signal(syscall.SIGKILL)
+			_ = cmd.Kill()
 		})
 	}
 
@@ -467,12 +558,12 @@ func defaultQuerierFlags(i int, replicaLabel string) []string {
 	}
 }
 
-func defaultRulerFlags(i int, dbDir string) []string {
+func defaultRulerFlags(i int, dbDir string, ruleDir string) []string {
 	return []string{"rule",
 		"--debug.name", fmt.Sprintf("rule-%d", i),
 		"--label", fmt.Sprintf(`replica="%d"`, i),
 		"--data-dir", dbDir,
-		"--rule-file", path.Join(dbDir, "*.yaml"),
+		"--rule-file", path.Join(ruleDir, "*.yaml"),
 		"--eval-interval", "1s",
 		"--alertmanagers.url", "http://127.0.0.1:29093",
 		"--grpc-address", rulerGRPC(i),
