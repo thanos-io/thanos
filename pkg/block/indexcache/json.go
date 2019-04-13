@@ -2,6 +2,7 @@ package indexcache
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 
 	"github.com/go-kit/kit/log"
@@ -12,8 +13,8 @@ import (
 	"github.com/prometheus/tsdb/labels"
 )
 
-// JSONIndexCache is a JSON index cache.
-type JSONIndexCache struct {
+// JSONCache is a JSON index cache.
+type JSONCache struct {
 	IndexCache
 
 	logger log.Logger
@@ -32,7 +33,7 @@ type indexCache struct {
 }
 
 // WriteIndexCache writes an index cache into the specified filename.
-func (c *JSONIndexCache) WriteIndexCache(indexFn string, fn string) error {
+func (c *JSONCache) WriteIndexCache(indexFn string, fn string) error {
 	indexFile, err := fileutil.OpenMmapFile(indexFn)
 	if err != nil {
 		return errors.Wrapf(err, "open mmap index file %s", indexFn)
@@ -70,6 +71,7 @@ func (c *JSONIndexCache) WriteIndexCache(indexFn string, fn string) error {
 		return errors.Wrap(err, "read label indices")
 	}
 	for _, lns := range lnames {
+		fmt.Println(lns)
 		if len(lns) != 1 {
 			continue
 		}
@@ -91,6 +93,7 @@ func (c *JSONIndexCache) WriteIndexCache(indexFn string, fn string) error {
 			}
 			vals = append(vals, v[0])
 		}
+
 		v.LabelValues[ln] = vals
 	}
 
@@ -115,7 +118,7 @@ func (c *JSONIndexCache) WriteIndexCache(indexFn string, fn string) error {
 }
 
 // ReadIndexCache reads the index cache from the specified file.
-func (c *JSONIndexCache) ReadIndexCache(fn string) (version int,
+func (c *JSONCache) ReadIndexCache(fn string) (version int,
 	symbols map[uint32]string,
 	lvals map[string][]string,
 	postings map[labels.Label]index.Range,
@@ -165,6 +168,6 @@ func (c *JSONIndexCache) ReadIndexCache(fn string) (version int,
 }
 
 // ToBCache converts the JSON cache into a BinaryCache one.
-func (c *JSONIndexCache) ToBCache(fnJSON string, fnB string) error {
+func (c *JSONCache) ToBCache(fnJSON string, fnB string) error {
 	return nil
 }

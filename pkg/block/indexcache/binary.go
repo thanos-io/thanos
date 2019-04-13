@@ -18,6 +18,26 @@ type BinaryCache struct {
 	logger log.Logger
 }
 
+type emptyPostings struct {
+	index.Postings
+}
+
+func (p emptyPostings) Next() bool {
+	return false
+}
+
+func (p emptyPostings) Seek(v uint64) bool {
+	return false
+}
+
+func (p emptyPostings) At() uint64 {
+	return 0
+}
+
+func (p emptyPostings) Err() error {
+	return nil
+}
+
 // WriteIndexCache writes an index cache into the specified filename.
 func (c *BinaryCache) WriteIndexCache(indexFn string, fn string) error {
 	indexFile, err := fileutil.OpenMmapFile(indexFn)
@@ -61,6 +81,7 @@ func (c *BinaryCache) WriteIndexCache(indexFn string, fn string) error {
 		if err != nil {
 			return errors.Wrap(err, "get label values")
 		}
+
 		vals := make([]string, 0, tpls.Len())
 
 		for i := 0; i < tpls.Len(); i++ {
@@ -74,7 +95,7 @@ func (c *BinaryCache) WriteIndexCache(indexFn string, fn string) error {
 			vals = append(vals, v[0])
 		}
 
-		err = w.WriteLabelIndex(lnames, vals)
+		err = w.WriteLabelIndex([]string{ln}, vals)
 		if err != nil {
 			return errors.Wrap(err, "write label indices")
 		}
@@ -86,11 +107,13 @@ func (c *BinaryCache) WriteIndexCache(indexFn string, fn string) error {
 		return errors.Wrap(err, "read postings ranges")
 	}
 	for l := range pranges {
-		p, err := indexr.Postings(l.Name, l.Value)
+		_, err := indexr.Postings(l.Name, l.Value)
 		if err != nil {
 			return errors.Wrap(err, "postings reader")
 		}
-		err = w.WritePostings(l.Name, l.Value, p)
+		ep := emptyPostings{}
+
+		err = w.WritePostings(l.Name, l.Value, ep)
 		if err != nil {
 			return errors.Wrap(err, "postings write")
 		}
@@ -128,6 +151,8 @@ func (c *BinaryCache) ReadIndexCache(fn string) (version int,
 	if err != nil {
 		return 0, nil, nil, nil, errors.Wrap(err, "read label indices")
 	}
+
+	lvals = make(map[string][]string)
 
 	for _, ln := range lnames {
 		tpls, err := indexr.LabelValues(ln)
