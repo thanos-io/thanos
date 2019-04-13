@@ -27,7 +27,7 @@ func (c *JSONIndexCache) ReadIndexCache(fn string) (version int,
 	return 0, nil, nil, nil, nil
 }
 
-// ToFBCache converts the JSON cache into a Flatbuffer one.
-func (c *JSONIndexCache) ToFBCache(fnJSON string, fnFB string) error {
+// ToBCache converts the JSON cache into a BinaryCache one.
+func (c *JSONIndexCache) ToBCache(fnJSON string, fnB string) error {
 	return nil
 }
