@@ -1,6 +1,8 @@
 package indexcache
 
 import (
+	"io/ioutil"
+
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/pkg/errors"
@@ -103,5 +105,56 @@ func (c *BinaryCache) ReadIndexCache(fn string) (version int,
 	lvals map[string][]string,
 	postings map[labels.Label]index.Range,
 	err error) {
-	return 0, nil, nil, nil, nil
+	indexFile, err := ioutil.ReadFile(fn)
+	if err != nil {
+		return 0, nil, nil, nil, errors.Wrapf(err, "open index file %s", fn)
+	}
+	b := realByteSlice(indexFile)
+	indexr, err := index.NewReader(b)
+	if err != nil {
+		return 0, nil, nil, nil, errors.Wrap(err, "open index reader")
+	}
+	defer runutil.CloseWithLogOnErr(c.logger, indexr, "load index cache reader")
+	version = indexr.Version()
+
+	// We assume reader verified index already.
+	symbols, err = getSymbolTableJSON(b)
+	if err != nil {
+		return 0, nil, nil, nil, errors.Wrap(err, "read symbol table")
+	}
+
+	// Extract label value indices.
+	lnames, err := indexr.LabelNames()
+	if err != nil {
+		return 0, nil, nil, nil, errors.Wrap(err, "read label indices")
+	}
+
+	for _, ln := range lnames {
+		tpls, err := indexr.LabelValues(ln)
+		if err != nil {
+			return 0, nil, nil, nil, errors.Wrap(err, "get label values")
+		}
+		vals := make([]string, 0, tpls.Len())
+
+		for i := 0; i < tpls.Len(); i++ {
+			v, err := tpls.At(i)
+			if err != nil {
+				return 0, nil, nil, nil, errors.Wrap(err, "get label value")
+			}
+			if len(v) != 1 {
+				return 0, nil, nil, nil, errors.Errorf("unexpected tuple length %d", len(v))
+			}
+			vals = append(vals, v[0])
+		}
+
+		lvals[ln] = vals
+	}
+
+	// Extract postings ranges.
+	postings, err = indexr.PostingsRanges()
+	if err != nil {
+		return 0, nil, nil, nil, errors.Wrap(err, "read postings ranges")
+	}
+
+	return version, symbols, lvals, postings, nil
 }
