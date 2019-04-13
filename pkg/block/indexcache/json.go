@@ -120,7 +120,48 @@ func (c *JSONIndexCache) ReadIndexCache(fn string) (version int,
 	lvals map[string][]string,
 	postings map[labels.Label]index.Range,
 	err error) {
-	return 0, nil, nil, nil, nil
+	f, err := os.Open(fn)
+	if err != nil {
+		return 0, nil, nil, nil, errors.Wrap(err, "open file")
+	}
+	defer runutil.CloseWithLogOnErr(c.logger, f, "index reader")
+
+	var v indexCache
+	if err := json.NewDecoder(f).Decode(&v); err != nil {
+		return 0, nil, nil, nil, errors.Wrap(err, "decode file")
+	}
+	strs := map[string]string{}
+	lvals = make(map[string][]string, len(v.LabelValues))
+	postings = make(map[labels.Label]index.Range, len(v.Postings))
+
+	// Most strings we encounter are duplicates. Dedup string objects that we keep
+	// around after the function returns to reduce total memory usage.
+	// NOTE(fabxc): it could even make sense to deduplicate globally.
+	getStr := func(s string) string {
+		if cs, ok := strs[s]; ok {
+			return cs
+		}
+		strs[s] = s
+		return s
+	}
+
+	for o, s := range v.Symbols {
+		v.Symbols[o] = getStr(s)
+	}
+	for ln, vals := range v.LabelValues {
+		for i := range vals {
+			vals[i] = getStr(vals[i])
+		}
+		lvals[getStr(ln)] = vals
+	}
+	for _, e := range v.Postings {
+		l := labels.Label{
+			Name:  getStr(e.Name),
+			Value: getStr(e.Value),
+		}
+		postings[l] = index.Range{Start: e.Start, End: e.End}
+	}
+	return v.Version, v.Symbols, lvals, postings, nil
 }
 
 // ToBCache converts the JSON cache into a BinaryCache one.
