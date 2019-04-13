@@ -6,7 +6,7 @@ status: accepted
 owner: bwplotka
 ---
 
-**Tickets:**
+### Tickets:
 
 * https://github.com/improbable-eng/thanos/issues/298 (eventual consistency)
 * https://github.com/improbable-eng/thanos/issues/377 (eventual consistency & partial upload)

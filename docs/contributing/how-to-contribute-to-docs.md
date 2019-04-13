@@ -66,3 +66,12 @@ Show new menu section in main page by changing `website/layouts/_default/baseof.
 ## Testing
 
 Run `make web-serve` to serve and preview the website locally.
+
+
+## Deployment.
+
+Ask maintainer to deploy the page. (`GOOGLE_ANALYTICS_TOKEN="<  >" make web-deploy`)
+
+NOTE: It might take couple of seconds to refresh page / CDN for Github pages.
+
+TODO(bwplotka) CI job which does that on every master commit.

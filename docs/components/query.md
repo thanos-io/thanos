@@ -17,7 +17,7 @@ Querier currently is fully stateless and horizontally scalable.
 $ thanos query \
     --http-address     "0.0.0.0:9090" \
     --store            "<store-api>:<grpc-port>" \
-    --store            "<store-api2>:<grpc-port>" \
+    --store            "<store-api2>:<grpc-port>" 
 ```
 
 ## Deduplication

@@ -3,10 +3,10 @@ title: Deprecated gossip clustering in favor of File SD
 type: proposal
 menu: proposals
 status: accepted
-issue: 484
 owner: bwplotka
 ---
 
+### Ticket: https://github.com/improbable-eng/thanos/issues/484
 ## Summary
 
 It is becoming clear that we need to remove gossip protocol as our main way of communication between Thanos Querier and

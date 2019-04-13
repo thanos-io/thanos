@@ -12,8 +12,12 @@
     max-width: 100%;
 }
 
-.navbar-dark .navbar-nav .nav-link:hover {
-    color: #ffffff;
+.navbar-dark .navbar-nav .nav-link {
+    color: #fff;
+}
+
+.nav-link:hover {
+    color: rgba(255,255,255,.5)
 }
 
 .btn-outline-secondary {
@@ -38,9 +42,11 @@ pre {
 .list-group-item-thanos {
     color: #6D41FF;
     border: 0;
+    padding: 0;
     background-color: transparent;
 }
 
 .list-group-item-thanos:hover {
     color: #6D41FF;
+    padding: 0;
 }
