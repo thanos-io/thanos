@@ -29,8 +29,8 @@ import (
 // IndexCacheFilename is the canonical name for index cache files in JSON.
 const IndexCacheFilename = "index.cache.json"
 
-// IndexCacheFlatbufFilename is the canonical name for index cache files in Flatbuf.
-const indexCacheFlatbufFilename = "index.cache.dat"
+// indexCacheBinaryFilename is the canonical name for index cache files in a binary format.
+const indexCacheBinaryFilename = "index.cache.dat"
 
 type postingsRange struct {
 	Name, Value string
