@@ -379,12 +379,12 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesR
 
 	if m.Status != "success" {
 		if !r.PartialResponseDisabled {
-			return &storepb.LabelNamesResponse{Names: m.Data}, nil
+			return &storepb.LabelNamesResponse{Names: m.Data, Warnings: []string{m.Error}}, nil
 		}
 
 		code, exists := statusToCode[resp.StatusCode]
 		if !exists {
-			code = codes.Internal
+			return nil, status.Error(codes.Internal, m.Error)
 		}
 		return nil, status.Error(code, m.Error)
 	}
@@ -435,12 +435,12 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 
 	if m.Status != "success" {
 		if !r.PartialResponseDisabled {
-			return &storepb.LabelValuesResponse{Values: m.Data}, nil
+			return &storepb.LabelValuesResponse{Values: m.Data, Warnings: []string{m.Error}}, nil
 		}
 
 		code, exists := statusToCode[resp.StatusCode]
 		if !exists {
-			code = codes.Internal
+			return nil, status.Error(codes.Internal, m.Error)
 		}
 		return nil, status.Error(code, m.Error)
 	}
