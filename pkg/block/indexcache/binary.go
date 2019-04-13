@@ -32,7 +32,7 @@ func (c *BinaryCache) WriteIndexCache(indexFn string, fn string) error {
 	defer runutil.CloseWithLogOnErr(c.logger, indexr, "load index cache reader")
 
 	// We assume reader verified index already.
-	symbols, err := getSymbolTable(b)
+	symbols, err := getSymbolTableBinary(b)
 	if err != nil {
 		return err
 	}
