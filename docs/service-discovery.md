@@ -45,6 +45,7 @@ The format of the configuration file is the same as the one used in [Prometheus'
 Both YAML and JSON files can be used. The format of the files is this:
 
 * JSON:
+
 ```json
 [
   {
@@ -54,6 +55,7 @@ Both YAML and JSON files can be used. The format of the files is this:
 ```
 
 * YAML:
+
 ```yaml
 - targets: ['localhost:9090', 'example.org:443']
 ```
