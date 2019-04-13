@@ -39,6 +39,7 @@ This to have SRV resolution working on [Golang 1.11+ with KubeDNS below v1.14](h
 - [#986](https://github.com/improbable-eng/thanos/pull/986) Store index cache files in object storage, reduces store start-up time by skipping the generating the index cache for all blocks and only do this for recently created uncompacted blocks. 
 
 ### Changed 
+- [#895](https://github.com/improbable-eng/thanos/pull/895) Changed Thanos Query `--query.timeout` to actually time out requests on slow Thanos Store API. The old timeout is renamed to `--promql.timeout` and sets maximum time to execute PromQL in query node..
 - [#970](https://github.com/improbable-eng/thanos/pull/970) Deprecated partial_response_disabled proto field. Added partial_response_strategy instead. Both in gRPC and Query API.
 - [#970](https://github.com/improbable-eng/thanos/pull/970) No `PartialResponseStrategy` field for `RuleGroups` by default means `abort` strategy (old PartialResponse disabled) as this is recommended option for Rules and alerts.
 
