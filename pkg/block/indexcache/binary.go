@@ -11,7 +11,7 @@ import (
 	"github.com/prometheus/tsdb/labels"
 )
 
-// BinaryCache is a binary cache.
+// BinaryCache is a binary index cache.
 type BinaryCache struct {
 	IndexCache
 
