@@ -2,7 +2,6 @@ package indexcache
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 
 	"github.com/go-kit/kit/log"
@@ -71,7 +70,6 @@ func (c *JSONCache) WriteIndexCache(indexFn string, fn string) error {
 		return errors.Wrap(err, "read label indices")
 	}
 	for _, lns := range lnames {
-		fmt.Println(lns)
 		if len(lns) != 1 {
 			continue
 		}
@@ -169,6 +167,7 @@ func (c *JSONCache) ReadIndexCache(fn string) (version int,
 
 // ToBCache converts the JSON cache into a BinaryCache one.
 func (c *JSONCache) ToBCache(fnJSON string, fnB string) error {
+	// Ignore the version here: index writer already adds (2) automatically.
 	_, symbols, lvals, postings, err := c.ReadIndexCache(fnJSON)
 	if err != nil {
 		return errors.Wrap(err, "reading json cache")
@@ -180,6 +179,7 @@ func (c *JSONCache) ToBCache(fnJSON string, fnB string) error {
 	}
 	defer runutil.CloseWithLogOnErr(c.logger, w, "index writer")
 
+	// Convert into a type appropriate for the index writer interface.
 	symbolsBinary := make(map[string]struct{})
 	for _, sym := range symbols {
 		symbolsBinary[sym] = struct{}{}
@@ -190,7 +190,6 @@ func (c *JSONCache) ToBCache(fnJSON string, fnB string) error {
 		return err
 	}
 
-	// Extract label value indices.
 	for ln, vals := range lvals {
 		err = w.WriteLabelIndex([]string{ln}, vals)
 		if err != nil {
@@ -198,7 +197,6 @@ func (c *JSONCache) ToBCache(fnJSON string, fnB string) error {
 		}
 	}
 
-	// Extract postings ranges.
 	for l := range postings {
 		ep := emptyPostings{}
 
