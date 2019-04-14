@@ -57,7 +57,7 @@ do
 ---
 
 Found a typo, inconsistency or missing information in our docs?
-Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/improbable-eng/thanos/edit/master/${relFile}) :heart:
+Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/improbable-eng/thanos/edit/master/docs/${relFile}) :heart:
 
 EOT
 )" >> ${file}

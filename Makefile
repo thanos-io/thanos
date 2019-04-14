@@ -241,6 +241,9 @@ web-serve: web-pre-process $(HUGO)
 
 .PHONY: web-deploy
 web-deploy:
+ifndef GOOGLE_ANALYTICS_TOKEN
+	$(error GOOGLE_ANALYTICS_TOKEN is not set)
+endif
 	# Requires git creds configured beforehand.
 	$(call require_clean_work_tree,"deploy website")
 	@rm -rf $(PUBLIC_DIR)
