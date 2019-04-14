@@ -169,5 +169,44 @@ func (c *JSONCache) ReadIndexCache(fn string) (version int,
 
 // ToBCache converts the JSON cache into a BinaryCache one.
 func (c *JSONCache) ToBCache(fnJSON string, fnB string) error {
+	_, symbols, lvals, postings, err := c.ReadIndexCache(fnJSON)
+	if err != nil {
+		return errors.Wrap(err, "reading json cache")
+	}
+
+	w, err := index.NewWriter(fnB)
+	if err != nil {
+		return err
+	}
+	defer runutil.CloseWithLogOnErr(c.logger, w, "index writer")
+
+	symbolsBinary := make(map[string]struct{})
+	for _, sym := range symbols {
+		symbolsBinary[sym] = struct{}{}
+	}
+
+	err = w.AddSymbols(symbolsBinary)
+	if err != nil {
+		return err
+	}
+
+	// Extract label value indices.
+	for ln, vals := range lvals {
+		err = w.WriteLabelIndex([]string{ln}, vals)
+		if err != nil {
+			return errors.Wrap(err, "write label indices")
+		}
+	}
+
+	// Extract postings ranges.
+	for l := range postings {
+		ep := emptyPostings{}
+
+		err = w.WritePostings(l.Name, l.Value, ep)
+		if err != nil {
+			return errors.Wrap(err, "postings write")
+		}
+	}
+
 	return nil
 }
