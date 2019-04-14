@@ -104,6 +104,7 @@ If you are not interested in backing up any data, the `--objstore.config-file` f
 
 * _[Example Kubernetes manifest](https://github.com/improbable-eng/thanos/tree/master/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar.yaml)_
 * _[Example Kubernetes manifest with Minio upload](https://github.com/improbable-eng/thanos/tree/master/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar-lts.yaml)_
+* _[Example Deploying sidecar using official Prometheus Helm Chart](https://github.com/improbable-eng/thanos/tree/master/tutorials/kubernetes-helm/README.md)_
 * _[Details & Config for other object stores](storage.md)_
 
 #### Store API

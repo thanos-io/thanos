@@ -106,7 +106,7 @@ func DeleteDir(ctx context.Context, bkt Bucket, dir string) error {
 // DownloadFile downloads the src file from the bucket to dst. If dst is an existing
 // directory, a file with the same name as the source is created in dst.
 // If destination file is already existing, download file will overwrite it.
-func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src, dst string) error {
+func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src, dst string) (err error) {
 	if fi, err := os.Stat(dst); err == nil {
 		if fi.IsDir() {
 			dst = filepath.Join(dst, filepath.Base(src))
@@ -125,8 +125,6 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 	if err != nil {
 		return errors.Wrap(err, "create file")
 	}
-	defer runutil.CloseWithLogOnErr(logger, f, "download block's output file")
-
 	defer func() {
 		if err != nil {
 			if rerr := os.Remove(dst); rerr != nil {
@@ -134,6 +132,8 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 			}
 		}
 	}()
+	defer runutil.CloseWithLogOnErr(logger, f, "download block's output file")
+
 	if _, err = io.Copy(f, rc); err != nil {
 		return errors.Wrap(err, "copy object to file")
 	}
@@ -168,6 +168,23 @@ func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, src, 
 	}
 
 	return nil
+}
+
+// Exists returns true, if file exists, otherwise false and nil error if presence IsObjNotFoundErr, otherwise false with
+// returning error.
+func Exists(ctx context.Context, bkt Bucket, src string) (bool, error) {
+	rc, err := bkt.Get(ctx, src)
+	if rc != nil {
+		_ = rc.Close()
+	}
+	if err != nil {
+		if bkt.IsObjNotFoundErr(err) {
+			return false, nil
+		}
+		return false, errors.Wrap(err, "stat object")
+	}
+
+	return true, nil
 }
 
 // BucketWithMetrics takes a bucket and registers metrics with the given registry for

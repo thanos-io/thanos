@@ -59,8 +59,33 @@ This logic can also be controlled via parameter on QueryAPI. More details below.
 
 Overall QueryAPI exposed by Thanos is guaranteed to be compatible with Prometheus 2.x.
 
-However, for additional Thanos features, Thanos, on top of Prometheus adds several
-additional parameters listed below as well as custom response fields.
+However, for additional Thanos features, Thanos, on top of Prometheus adds 
+* partial response behaviour
+* several additional parameters listed below 
+* custom response fields.
+
+### Partial Response
+
+QueryAPI and StoreAPI has additional behaviour controlled via query parameter called [PartialResponseStrategy](../../pkg/store/storepb/rpc.pb.go).
+
+This parameter controls tradeoff between accuracy and availability.
+
+Partial response is a potentially missed result within query against QueryAPI or StoreAPI. This can happen if one 
+of StoreAPIs is returning error or timeout whereas couple of others returns success. It does not mean you are missing data,
+you might lucky enough that you actually get the correct data as the broken StoreAPI did not have anything for your query.
+
+If partial response happen QueryAPI returns human readable warnings explained [here](query.md#CustomResponseFields)
+
+NOTE that having warning does not necessary means partial response (e.g no store matched query warning)
+
+See [this](query.md#PartialResponseStrategy) on how to control this behaviour.
+
+Querier also allows to configure different timeouts:
+* `--query.timeout`
+* `--store.response-timeout`
+
+If you prefer availability over accuracy you can set tighter timeout to underlying StoreAPI than overall query timeout. If partial response
+strategy is NOT `abort`, this will "ignore" slower StoreAPIs producing just warning with 200 status code response.
 
 ### Deduplication Enabled
 
@@ -83,7 +108,9 @@ Max source resolution is max resolution in seconds we want to use for data we qu
 * 5m -> we will use max 5m downsampling.
 * 1h -> we will use max 1h downsampling.
 
-### Partial Response / Error Enabled
+### Partial Response Strategy
+
+// TODO(bwplotka): Update. This will change to "strategy" soon as [PartialResponseStrategy enum here](../../pkg/store/storepb/rpc.proto)
 
 | HTTP URL/FORM parameter | Type | Default | Example |
 |----|----|----|----|
@@ -98,6 +125,7 @@ return warning.
 Any additional field does not break compatibility, however there is no guarantee that Grafana or any other client will understand those.
 
 Currently Thanos UI exposed by Thanos understands
+
 ```go
 type queryData struct {
 	ResultType promql.ValueType `json:"resultType"`
@@ -271,11 +299,17 @@ Flags:
                                  is used as a resync fallback.
       --store.sd-dns-interval=30s
                                  Interval between DNS resolutions.
+      --store.unhealthy-timeout=5m
+                                 Timeout before an unhealthy store is cleaned
+                                 from the store UI page.
       --query.auto-downsampling  Enable automatic adjustment (step / 5) to what
                                  source of data should be used in store gateways
                                  if no max_source_resolution param is specified.
       --query.partial-response   Enable partial response for queries if no
                                  partial_response param is specified.
+      --query.default-evaluation-interval=1m
+                                 Set default evaluation interval for sub
+                                 queries.
       --store.response-timeout=0ms
                                  If a Store doesn't send any data in this
                                  specified duration then a Store will be ignored

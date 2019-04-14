@@ -6,6 +6,14 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 )
 
+var PartialResponseStrategyValues = func() []string {
+	var s []string
+	for k := range PartialResponseStrategy_value {
+		s = append(s, k)
+	}
+	return s
+}()
+
 func NewWarnSeriesResponse(err error) *SeriesResponse {
 	return &SeriesResponse{
 		Result: &SeriesResponse_Warning{

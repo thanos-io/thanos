@@ -18,7 +18,7 @@ if ! [[ $(${PROTOC_BIN} --version) =~ "3.4.0" ]]; then
 	exit 255
 fi
 
-THANOS_ROOT="${GOPATH}/src/github.com/improbable-eng/thanos"
+THANOS_ROOT=$(pwd)
 PROM_PATH="${THANOS_ROOT}/pkg/store/storepb"
 GOGOPROTO_ROOT="${THANOS_ROOT}/vendor/github.com/gogo/protobuf"
 GOGOPROTO_PATH="${GOGOPROTO_ROOT}:${GOGOPROTO_ROOT}/protobuf"

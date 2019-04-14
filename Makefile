@@ -1,5 +1,5 @@
 PREFIX            ?= $(shell pwd)
-FILES             ?= $(shell find . -type f -name '*.go' -not -path "./vendor/*")
+DIRECTORIES       ?= $(shell find . -path './*' -prune -type d -not -path "./vendor")
 DOCKER_IMAGE_NAME ?= thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
 
@@ -138,7 +138,7 @@ docs: $(EMBEDMD) build
 .PHONY: check-docs
 check-docs: $(EMBEDMD) $(LICHE) build
 	@EMBEDMD_BIN="$(EMBEDMD)" scripts/genflagdocs.sh check
-	@$(LICHE) --recursive docs --document-root .
+	@$(LICHE) --recursive docs --exclude "cloud.tencent.com" --document-root .
 
 # errcheck performs static analysis and returns error if any of the errors is not checked.
 .PHONY: errcheck
@@ -152,7 +152,7 @@ errcheck: $(ERRCHECK)
 .PHONY: format
 format: $(GOIMPORTS)
 	@echo ">> formatting code"
-	@$(GOIMPORTS) -w $(FILES)
+	@$(GOIMPORTS) -w $(DIRECTORIES)
 
 # proto generates golang files from Thanos proto files.
 .PHONY: proto
@@ -203,8 +203,8 @@ go-mod-tidy: check-git check-bzr
 	@go mod tidy
 
 .PHONY: check-go-mod
-check-go-mod: go-mod-tidy
-	@git diff --exit-code go.mod go.sum > /dev/null || echo >&2 "go.mod and/or go.sum have uncommited changes. See CONTRIBUTING.md."
+check-go-mod:
+	@go mod verify
 
 # tooling deps. TODO(bwplotka): Pin them all to certain version!
 .PHONY: check-git
