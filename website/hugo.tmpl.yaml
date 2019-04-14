@@ -1,5 +1,5 @@
 title: "Thanos - Highly available Prometheus setup with long term storage capabilities"
-baseURL: "https://improbable-eng.github.io/thanos/"
+baseURL: "https://thanos.io"
 languageCode: "en-us"
 
 enableGitInfo: true
