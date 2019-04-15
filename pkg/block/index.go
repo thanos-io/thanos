@@ -497,6 +497,10 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceT
 	if err := metadata.Write(logger, resdir, &resmeta); err != nil {
 		return resid, err
 	}
+	// TSDB may rewrite metadata in bdir
+	if err := metadata.Write(logger, bdir, meta); err != nil {
+		return resid, err
+	}
 	return resid, nil
 }
 
