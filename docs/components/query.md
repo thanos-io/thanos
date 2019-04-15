@@ -1,17 +1,23 @@
+---
+title: Query
+type: docs
+menu: components
+---
+
 # Query
 
 The query component implements the Prometheus HTTP v1 API to query data in a Thanos cluster via PromQL.
 
-It gathers the data needed to evaluate the query from underlying StoreAPIs. See [here](/docs/service_discovery.md)
+It gathers the data needed to evaluate the query from underlying StoreAPIs. See [here](../service-discovery.md)
 on how to connect querier with desired StoreAPIs.
 
 Querier currently is fully stateless and horizontally scalable.
 
-```
+```bash
 $ thanos query \
     --http-address     "0.0.0.0:9090" \
     --store            "<store-api>:<grpc-port>" \
-    --store            "<store-api2>:<grpc-port>" \
+    --store            "<store-api2>:<grpc-port>" 
 ```
 
 ## Deduplication

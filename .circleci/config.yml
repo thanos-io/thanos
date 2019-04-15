@@ -61,6 +61,8 @@ jobs:
       # Available from https://hub.docker.com/r/circleci/golang/
       - image: circleci/golang:1.12
     working_directory: /go/src/github.com/improbable-eng/thanos
+    environment:
+      GOBIN: "/go/src/github.com/improbable-eng/thanos/.bin"
     steps:
       - checkout
       - setup_remote_docker:
