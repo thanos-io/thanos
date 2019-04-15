@@ -491,7 +491,7 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceT
 	resmeta.Stats = tsdb.BlockStats{} // reset stats
 	resmeta.Thanos.Source = source    // update source
 
-	if err := rewrite(indexr, chunkr, indexw, chunkw, &resmeta, ignoreChkFns); err != nil {
+	if err := rewrite(logger, indexr, chunkr, indexw, chunkw, &resmeta, ignoreChkFns); err != nil {
 		return resid, errors.Wrap(err, "rewrite block")
 	}
 	if err := metadata.Write(logger, resdir, &resmeta); err != nil {
@@ -590,6 +590,7 @@ type seriesRepair struct {
 // rewrite writes all data from the readers back into the writers while cleaning
 // up mis-ordered and duplicated chunks.
 func rewrite(
+	logger log.Logger,
 	indexr tsdb.IndexReader, chunkr tsdb.ChunkReader,
 	indexw tsdb.IndexWriter, chunkw tsdb.ChunkWriter,
 	meta *metadata.Meta,
@@ -661,7 +662,15 @@ func rewrite(
 	})
 
 	// build new TSDB block
+	lastSet := labels.Labels{}
 	for _, s := range series {
+		if labels.Compare(lastSet, s.lset) == 0 {
+			level.Warn(logger).Log("msg",
+				"dropping duplicate series in tsdb block found",
+				"labelset", fmt.Sprintf("%s", s.lset),
+			)
+			continue
+		}
 		if err := chunkw.WriteChunks(s.chks...); err != nil {
 			return errors.Wrap(err, "write chunks")
 		}
@@ -686,6 +695,7 @@ func rewrite(
 		}
 		postings.Add(i, s.lset)
 		i++
+		lastSet = s.lset
 	}
 
 	s := make([]string, 0, 256)
