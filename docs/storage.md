@@ -221,7 +221,7 @@ For testing:
 To test the policy is working as expected, exec into the sidecar container, eg:
 
 ```sh
-kubectl exec -it -n monitoring prometheus-prometheus-operator-prometheus-0 -c thanos-sidecar -- /bin/sh
+kubectl exec -it -n <namespace> <prometheus with sidecar pod name> -c <sidecar container name> -- /bin/sh
 ```
 
 Then test that you can at least list objects in the bucket, eg:
