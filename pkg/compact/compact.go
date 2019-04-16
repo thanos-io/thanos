@@ -989,9 +989,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 		for _, g := range groups {
 			select {
 			case err = <-errChan:
-				if err != nil {
-					break groupLoop
-				}
+				break groupLoop
 			case groupChan <- g:
 			}
 		}
