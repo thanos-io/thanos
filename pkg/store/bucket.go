@@ -856,7 +856,7 @@ func chunksSize(chks []storepb.AggrChunk) (size int) {
 }
 
 // LabelNames implements the storepb.StoreServer interface.
-func (s *BucketStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
+func (s *BucketStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
 	g, gctx := errgroup.WithContext(ctx)
 
 	s.mtx.RLock()
@@ -869,25 +869,21 @@ func (s *BucketStore) LabelNames(ctx context.Context, r *storepb.LabelNamesReque
 		g.Go(func() error {
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label names")
 
-			res, err := indexr.LabelNames(gctx)
+			res := indexr.LabelNames()
 			sort.Strings(res)
+
 			mtx.Lock()
 			sets = append(sets, res)
 			mtx.Unlock()
-			return err
+
+			return nil
 		})
 	}
 
 	s.mtx.RUnlock()
 
 	if err := g.Wait(); err != nil {
-		if !r.PartialResponseDisabled {
-			return &storepb.LabelNamesResponse{
-				Names:    strutil.MergeSlices(sets...),
-				Warnings: []string{err.Error()},
-			}, nil
-		}
-		return nil, status.Error(codes.Aborted, err.Error())
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &storepb.LabelNamesResponse{
 		Names: strutil.MergeSlices(sets...),
@@ -1651,15 +1647,12 @@ func (r *bucketIndexReader) LabelValues(name string) []string {
 }
 
 // LabelNames returns a list of label names.
-func (r *bucketIndexReader) LabelNames(ctx context.Context) ([]string, error) {
+func (r *bucketIndexReader) LabelNames() []string {
 	res := make([]string, 0, len(r.block.lvals))
 	for ln, _ := range r.block.lvals {
-		if ctx.Err() != nil {
-			return res, ctx.Err()
-		}
 		res = append(res, ln)
 	}
-	return res, nil
+	return res
 }
 
 // Close released the underlying resources of the reader.

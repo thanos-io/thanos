@@ -344,7 +344,7 @@ func extendLset(lset []storepb.Label, extend labels.Labels) []storepb.Label {
 }
 
 // LabelNames returns all known label names.
-func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
+func (p *PrometheusStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesRequest) (
 	*storepb.LabelNamesResponse, error,
 ) {
 	u := *p.base
@@ -364,6 +364,14 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesR
 	}
 	defer runutil.CloseWithLogOnErr(p.logger, resp.Body, "label names request body")
 
+	if resp.StatusCode/100 != 2 {
+		return nil, status.Error(codes.Internal, fmt.Sprintf("request Prometheus server failed, code %s", resp.Status))
+	}
+
+	if resp.StatusCode == http.StatusNoContent {
+		return &storepb.LabelNamesResponse{Names: []string{}}, nil
+	}
+
 	var m struct {
 		Data   []string `json:"data"`
 		Status string   `json:"status"`
@@ -373,15 +381,7 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesR
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	if resp.StatusCode == http.StatusNoContent {
-		return &storepb.LabelNamesResponse{Names: []string{}}, nil
-	}
-
 	if m.Status != "success" {
-		if !r.PartialResponseDisabled {
-			return &storepb.LabelNamesResponse{Names: m.Data, Warnings: []string{m.Error}}, nil
-		}
-
 		code, exists := statusToCode[resp.StatusCode]
 		if !exists {
 			return nil, status.Error(codes.Internal, m.Error)
@@ -418,6 +418,14 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	}
 	defer runutil.CloseWithLogOnErr(p.logger, resp.Body, "label values request body")
 
+	if resp.StatusCode/100 != 2 {
+		return nil, status.Error(codes.Internal, fmt.Sprintf("request Prometheus server failed, code %s", resp.Status))
+	}
+
+	if resp.StatusCode == http.StatusNoContent {
+		return &storepb.LabelValuesResponse{Values: []string{}}, nil
+	}
+
 	var m struct {
 		Data   []string `json:"data"`
 		Status string   `json:"status"`
@@ -429,15 +437,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 
 	sort.Strings(m.Data)
 
-	if resp.StatusCode == http.StatusNoContent {
-		return &storepb.LabelValuesResponse{Values: []string{}}, nil
-	}
-
 	if m.Status != "success" {
-		if !r.PartialResponseDisabled {
-			return &storepb.LabelValuesResponse{Values: m.Data, Warnings: []string{m.Error}}, nil
-		}
-
 		code, exists := statusToCode[resp.StatusCode]
 		if !exists {
 			return nil, status.Error(codes.Internal, m.Error)
