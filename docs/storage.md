@@ -208,13 +208,27 @@ config:
 
 ### GCS Policies
 
+__Note:__ GCS Policies should be applied at the project level, not at the bucket level
+
 For deployment:
 
-`Storage Object Creator` and ` Storage Object Viewer`
+`Storage Object Creator` and `Storage Object Viewer`
 
 For testing:
 
 `Storage Object Admin` for ability to create and delete temporary buckets.
+
+To test the policy is working as expected, exec into the sidecar container, eg:
+
+```sh
+kubectl exec -it -n <namespace> <prometheus with sidecar pod name> -c <sidecar container name> -- /bin/sh
+```
+
+Then test that you can at least list objects in the bucket, eg:
+
+```sh
+thanos bucket ls --objstore.config="${OBJSTORE_CONFIG}"
+```
 
 ## Azure Configuration
 
