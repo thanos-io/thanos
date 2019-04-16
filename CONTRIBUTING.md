@@ -27,7 +27,7 @@ Adding large new features and components to Thanos should be done by first creat
 
 ## Pull Request Process
 
-1. Read [getting started docs](docs/getting_started.md) and prepare Thanos.
+1. Read [getting started docs](docs/getting-started.md) and prepare Thanos.
 2. Familiarize yourself with [Makefile](Makefile) commands like `format`, `build`, `proto` and `test`.
 3. Fork improbable-eng/thanos.git and start development from your own fork. Here are sample steps to setup your development environment:
 ```console
