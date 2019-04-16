@@ -175,7 +175,7 @@ Note lots of necessary breaking changes in flags that relates to bucket configur
 - In `thanos rule`, file based discovery of query nodes using `--query.file-sd-config.files`
 - In `thanos query`, file based discovery of store nodes using `--store.file-sd-config.files`
 - `/-/healthy` endpoint to Querier.
-- DNS service discovery to static and file based configurations using the `dns+` and `dnssrv+` prefixes for the respective lookup. Details [here](/docs/service_discovery.md)
+- DNS service discovery to static and file based configurations using the `dns+` and `dnssrv+` prefixes for the respective lookup. Details [here](docs/service-discovery.md)
 - `--cluster.disable` flag to disable gossip functionality completely.
 - Hidden flag to configure max compaction level.
 - Azure Storage.
