@@ -17,7 +17,9 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb/labels"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -71,7 +73,7 @@ func NewProxyStore(
 }
 
 // Info returns store information about the external labels this store have.
-func (s *ProxyStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
+func (s *ProxyStore) Info(ctx context.Context, r *storepb.InfoRequest, opts ...grpc.CallOption) (*storepb.InfoResponse, error) {
 	res := &storepb.InfoResponse{
 		Labels:    make([]storepb.Label, 0, len(s.selectorLabels)),
 		StoreType: s.component.ToProto(),
@@ -130,17 +132,20 @@ func (s ctxRespSender) send(r *storepb.SeriesResponse) {
 
 // Series returns all series for a requested time range and label matcher. Requested series are taken from other
 // stores and proxied to RPC client. NOTE: Resulted data are not trimmed exactly to min and max time range.
-func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+func (s *ProxyStore) Series(ctx context.Context, r *storepb.SeriesRequest, opts ...grpc.CallOption) (storepb.Store_SeriesClient, error) {
 	match, newMatchers, err := labelsMatches(s.selectorLabels, r.Matchers)
 	if err != nil {
-		return status.Error(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
+
 	if !match {
-		return nil
+		return &proxySeriesClient{
+			resp: nil,
+		}, nil
 	}
 
 	var (
-		g, gctx = errgroup.WithContext(srv.Context())
+		g, gctx = errgroup.WithContext(ctx)
 
 		// Allow to buffer max 10 series response.
 		// Each might be quite large (multi chunk long series given by sidecar).
@@ -181,7 +186,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			seriesCtx, closeSeries := context.WithCancel(gctx)
 			defer closeSeries()
 
-			sc, err := st.Series(seriesCtx, r)
+			sc, err := st.Series(seriesCtx, r, opts...)
 			if err != nil {
 				storeID := fmt.Sprintf("%v", storepb.LabelsToString(st.Labels()))
 				if storeID == "" {
@@ -220,17 +225,20 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		return mergedSet.Err()
 	})
 
+	var responses []*storepb.SeriesResponse
 	for resp := range respRecv {
-		if err := srv.Send(resp); err != nil {
-			return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
-		}
+		responses = append(responses, resp)
 	}
 
 	if err := g.Wait(); err != nil {
 		level.Error(s.logger).Log("err", err)
-		return err
+		return nil, err
 	}
-	return nil
+
+	return &proxySeriesClient{
+		resp: responses,
+		i:    0,
+	}, nil
 }
 
 type warnSender interface {
@@ -394,14 +402,14 @@ func storeMatches(s Client, mint, maxt int64, matchers ...storepb.LabelMatcher) 
 }
 
 // LabelNames returns all known label names.
-func (s *ProxyStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
+func (s *ProxyStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest, opts ...grpc.CallOption) (
 	*storepb.LabelNamesResponse, error,
 ) {
 	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
 // LabelValues returns all known label values for a given label name.
-func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequest) (
+func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequest, opts ...grpc.CallOption) (
 	*storepb.LabelValuesResponse, error,
 ) {
 	var (
@@ -415,9 +423,9 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		store := st
 		g.Go(func() error {
 			resp, err := store.LabelValues(gctx, &storepb.LabelValuesRequest{
-				Label: r.Label,
+				Label:                   r.Label,
 				PartialResponseDisabled: r.PartialResponseDisabled,
-			})
+			}, opts...)
 			if err != nil {
 				err = errors.Wrapf(err, "fetch label values from store %s", store)
 				if r.PartialResponseDisabled {
@@ -447,4 +455,54 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		Values:   strutil.MergeUnsortedSlices(all...),
 		Warnings: warnings,
 	}, nil
+}
+
+// proxySeriesClient aggregates and merges series sets from multiple GRPC clients
+// TODO(povilasv): allow configuring timeouts per different store, once we remove Gossip
+// This is quite easy as we can pass thru opts grpc.CallOption to clients.
+type proxySeriesClient struct {
+	resp []*storepb.SeriesResponse
+	i    int
+}
+
+// Recv returns a single merged series response
+// TODO(povilasv): In theory we could use stack here and pop the head of the stack
+// so that once this is returned we don't keep a reference to this
+// and thus might be friendlier to Garbage collection.
+func (c *proxySeriesClient) Recv() (*storepb.SeriesResponse, error) {
+	//TODO(povilasv): Check for off by one error
+	if len(c.resp) < c.i {
+		return nil, io.EOF
+	}
+	series := c.resp[c.i]
+	c.i++
+
+	return series, nil
+}
+
+// This is never used as pkg/query/querier.go only calls Info(), Series(), LabelNames(), LabelValues()
+// We can potentially create our own Interface instead of implementing *storepb.Store_SeriesClient
+// And remove this dead code
+func (c *proxySeriesClient) CloseSend() error {
+	panic("proxy series client doesn't implement close")
+}
+
+func (c *proxySeriesClient) Context() context.Context {
+	panic("proxy series client doesn't implement Context()")
+}
+
+func (c *proxySeriesClient) Header() (metadata.MD, error) {
+	panic("proxy series client doesn't implement Header()")
+}
+
+func (c *proxySeriesClient) RecvMsg(m interface{}) error {
+	panic("proxy series client doesn't implement RecvMsg()")
+}
+
+func (c *proxySeriesClient) SendMsg(m interface{}) error {
+	panic("proxy series client doesn't implement SendMsg()")
+}
+
+func (c *proxySeriesClient) Trailer() metadata.MD {
+	panic("proxy series client doesn't implement Trailer()")
 }

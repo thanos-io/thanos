@@ -29,7 +29,7 @@ type WarningReporter func(error)
 type QueryableCreator func(deduplicate bool, maxSourceResolution time.Duration, partialResponse bool, r WarningReporter) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
-func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLabel string) QueryableCreator {
+func NewQueryableCreator(logger log.Logger, proxy storepb.StoreClient, replicaLabel string) QueryableCreator {
 	return func(deduplicate bool, maxSourceResolution time.Duration, partialResponse bool, r WarningReporter) storage.Queryable {
 		return &queryable{
 			logger:              logger,
@@ -46,7 +46,7 @@ func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLa
 type queryable struct {
 	logger              log.Logger
 	replicaLabel        string
-	proxy               storepb.StoreServer
+	proxy               storepb.StoreClient
 	deduplicate         bool
 	maxSourceResolution time.Duration
 	partialResponse     bool
@@ -64,7 +64,7 @@ type querier struct {
 	cancel              func()
 	mint, maxt          int64
 	replicaLabel        string
-	proxy               storepb.StoreServer
+	proxy               storepb.StoreClient
 	deduplicate         bool
 	maxSourceResolution int64
 	partialResponse     bool
@@ -78,7 +78,7 @@ func newQuerier(
 	logger log.Logger,
 	mint, maxt int64,
 	replicaLabel string,
-	proxy storepb.StoreServer,
+	proxy storepb.StoreClient,
 	deduplicate bool,
 	maxSourceResolution int64,
 	partialResponse bool,
@@ -110,6 +110,7 @@ func (q *querier) isDedupEnabled() bool {
 	return q.deduplicate && q.replicaLabel != ""
 }
 
+/*
 type seriesServer struct {
 	// This field just exist to pseudo-implement the unused methods of the interface.
 	storepb.Store_SeriesServer
@@ -135,6 +136,7 @@ func (s *seriesServer) Send(r *storepb.SeriesResponse) error {
 func (s *seriesServer) Context() context.Context {
 	return s.ctx
 }
+*/
 
 type resAggr int
 
@@ -180,22 +182,34 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 
 	queryAggrs, resAggr := aggrsFromFunc(params.Func)
 
-	resp := &seriesServer{ctx: ctx}
-	if err := q.proxy.Series(&storepb.SeriesRequest{
+	//resp := &seriesServer{ctx: ctx}
+	client, err := q.proxy.Series(ctx, &storepb.SeriesRequest{
 		MinTime:                 q.mint,
 		MaxTime:                 q.maxt,
 		Matchers:                sms,
 		MaxResolutionWindow:     q.maxSourceResolution,
 		Aggregates:              queryAggrs,
 		PartialResponseDisabled: !q.partialResponse,
-	}, resp); err != nil {
+	})
+	if err != nil {
 		return nil, nil, errors.Wrap(err, "proxy Series()")
 	}
 
-	for _, w := range resp.warnings {
-		// NOTE(bwplotka): We could use warnings return arguments here, however need reporter anyway for LabelValues and LabelNames method,
-		// so we choose to be consistent and keep reporter.
-		q.warningReporter(errors.New(w))
+	var (
+		seriesSet []storepb.Series
+	)
+	for {
+		r, err := client.Recv()
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "proxy Recv()")
+		}
+
+		warn := r.GetWarning()
+		if warn != "" {
+			q.warningReporter(errors.New(warn))
+		}
+
+		seriesSet = append(seriesSet, *r.GetSeries())
 	}
 
 	if !q.isDedupEnabled() {
@@ -203,19 +217,19 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 		return promSeriesSet{
 			mint: q.mint,
 			maxt: q.maxt,
-			set:  newStoreSeriesSet(resp.seriesSet),
+			set:  newStoreSeriesSet(seriesSet),
 			aggr: resAggr,
 		}, nil, nil
 	}
 
 	// TODO(fabxc): this could potentially pushed further down into the store API
 	// to make true streaming possible.
-	sortDedupLabels(resp.seriesSet, q.replicaLabel)
+	sortDedupLabels(seriesSet, q.replicaLabel)
 
 	set := promSeriesSet{
 		mint: q.mint,
 		maxt: q.maxt,
-		set:  newStoreSeriesSet(resp.seriesSet),
+		set:  newStoreSeriesSet(seriesSet),
 		aggr: resAggr,
 	}
 
