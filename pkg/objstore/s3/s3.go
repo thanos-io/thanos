@@ -37,6 +37,7 @@ const DirDelim = "/"
 type Config struct {
 	Bucket          string            `yaml:"bucket"`
 	Endpoint        string            `yaml:"endpoint"`
+	Region        	string            `yaml:"region"`
 	AccessKey       string            `yaml:"access_key"`
 	Insecure        bool              `yaml:"insecure"`
 	SignatureV2     bool              `yaml:"signature_version2"`
@@ -122,7 +123,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		}
 	}
 
-	client, err := minio.NewWithCredentials(config.Endpoint, credentials.NewChainCredentials(chain), !config.Insecure, "")
+	client, err := minio.NewWithCredentials(config.Endpoint, credentials.NewChainCredentials(chain), !config.Insecure, config.Region)
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize s3 client")
 	}
