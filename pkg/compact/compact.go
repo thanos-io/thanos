@@ -932,8 +932,8 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 		// Set up workers who will compact the groups when the groups are ready.
 		// They will compact available groups until they encounter an error, after which they will stop.
 		for i := 0; i < c.concurrency; i++ {
+			wg.Add(1)
 			go func() {
-				wg.Add(1)
 				defer wg.Done()
 				for g := range groupChan {
 					shouldRerunGroup, _, err := g.Compact(workCtx, c.compactDir, c.comp)
