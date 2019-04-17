@@ -15,13 +15,13 @@ import (
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/oklog/run"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/storage/tsdb"
 	"google.golang.org/grpc"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 func registerReceive(m map[string]setupFunc, app *kingpin.Application, name string) {
@@ -70,10 +70,10 @@ func runReceive(
 	level.Warn(logger).Log("msg", "setting up receive; the Thanos receive component is EXPERIMENTAL, it may break significantly without notice")
 
 	tsdbCfg := &tsdb.Options{
-		Retention:        model.Duration(time.Hour * 24 * 15),
-		NoLockfile:       true,
-		MinBlockDuration: model.Duration(time.Hour * 2),
-		MaxBlockDuration: model.Duration(time.Hour * 2),
+		RetentionDuration: model.Duration(time.Hour * 24 * 15),
+		NoLockfile:        true,
+		MinBlockDuration:  model.Duration(time.Hour * 2),
+		MaxBlockDuration:  model.Duration(time.Hour * 2),
 	}
 
 	localStorage := &tsdb.ReadyStorage{}
