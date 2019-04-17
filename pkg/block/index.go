@@ -627,9 +627,8 @@ func rewrite(
 			return err
 		}
 		// Make sure labels are in sorted order
-		sort.Slice(lset, func(i, j int) bool {
-			return lset[i].Name < lset[j].Name
-		})
+		sort.Sort(lset)
+
 		for i, c := range chks {
 			chks[i].Chunk, err = chunkr.Chunk(c.Ref)
 			if err != nil {
