@@ -1,9 +1,15 @@
+---
+title: Store
+type: docs
+menu: components
+---
+
 # Store
 
 The store component of Thanos implements the Store API on top of historical data in an object storage bucket. It acts primarily as an API gateway and therefore does not need significant amounts of local disk space. It joins a Thanos cluster on startup and advertises the data it can access.
 It keeps a small amount of information about all remote blocks on local disk and keeps it in sync with the bucket. This data is generally safe to delete across restarts at the cost of increased startup times.
 
-```
+```bash
 $ thanos store \
     --data-dir        "/local/state/data/dir" \
     --cluster.peers    "thanos-cluster.example.org" \

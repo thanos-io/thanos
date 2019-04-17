@@ -104,6 +104,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	dnsSDInterval := modelDuration(cmd.Flag("query.sd-dns-interval", "Interval between DNS resolutions.").
 		Default("30s"))
 
+	dnsSDResolver := cmd.Flag("query.sd-dns-resolver", "Resolver to use. Possible options: [golang, miekgdns]").
+		Default("golang").Hidden().String()
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
@@ -173,6 +176,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			*queries,
 			fileSD,
 			time.Duration(*dnsSDInterval),
+			*dnsSDResolver,
 		)
 	}
 }
@@ -206,6 +210,7 @@ func runRule(
 	queryAddrs []string,
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
+	dnsSDResolver string,
 ) error {
 	configSuccess := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_rule_config_last_reload_successful",
@@ -272,11 +277,12 @@ func runRule(
 	dnsProvider := dns.NewProvider(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_ruler_query_apis_", reg),
+		dns.ResolverType(dnsSDResolver),
 	)
 
 	// Run rule evaluation and alert notifications.
 	var (
-		alertmgrs = newAlertmanagerSet(alertmgrURLs)
+		alertmgrs = newAlertmanagerSet(logger, alertmgrURLs, dns.ResolverType(dnsSDResolver))
 		alertQ    = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(lset), alertExcludeLabels)
 		ruleMgrs  = thanosrule.Managers{}
 	)
@@ -641,9 +647,9 @@ type alertmanagerSet struct {
 	current  []*url.URL
 }
 
-func newAlertmanagerSet(addrs []string) *alertmanagerSet {
+func newAlertmanagerSet(logger log.Logger, addrs []string, dnsSDResolver dns.ResolverType) *alertmanagerSet {
 	return &alertmanagerSet{
-		resolver: dns.NewResolver(),
+		resolver: dns.NewResolver(dnsSDResolver.ToResolver(logger)),
 		addrs:    addrs,
 	}
 }

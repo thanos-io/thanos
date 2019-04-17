@@ -1,4 +1,4 @@
-# Releases
+# For maintainers: Releases
 
 This page describes the release process for Thanos project.
 

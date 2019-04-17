@@ -1,17 +1,23 @@
+---
+title: Query
+type: docs
+menu: components
+---
+
 # Query
 
 The query component implements the Prometheus HTTP v1 API to query data in a Thanos cluster via PromQL.
 
-It gathers the data needed to evaluate the query from underlying StoreAPIs. See [here](/docs/service_discovery.md)
+It gathers the data needed to evaluate the query from underlying StoreAPIs. See [here](../service-discovery.md)
 on how to connect querier with desired StoreAPIs.
 
 Querier currently is fully stateless and horizontally scalable.
 
-```
+```bash
 $ thanos query \
     --http-address     "0.0.0.0:9090" \
     --store            "<store-api>:<grpc-port>" \
-    --store            "<store-api2>:<grpc-port>" \
+    --store            "<store-api2>:<grpc-port>" 
 ```
 
 ## Deduplication
@@ -293,11 +299,17 @@ Flags:
                                  is used as a resync fallback.
       --store.sd-dns-interval=30s
                                  Interval between DNS resolutions.
+      --store.unhealthy-timeout=5m
+                                 Timeout before an unhealthy store is cleaned
+                                 from the store UI page.
       --query.auto-downsampling  Enable automatic adjustment (step / 5) to what
                                  source of data should be used in store gateways
                                  if no max_source_resolution param is specified.
       --query.partial-response   Enable partial response for queries if no
                                  partial_response param is specified.
+      --query.default-evaluation-interval=1m
+                                 Set default evaluation interval for sub
+                                 queries.
       --store.response-timeout=0ms
                                  If a Store doesn't send any data in this
                                  specified duration then a Store will be ignored

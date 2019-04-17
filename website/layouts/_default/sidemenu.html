@@ -1,0 +1,32 @@
+{{ $currentPage := . }}
+
+<button class="btn btn-block btn-outline-secondary mb-3 d-block d-lg-none" type="button" data-toggle="collapse" data-target=".docs-menu">
+    Toggle Menu
+</button>
+
+<nav class="docs-menu collapse d-lg-block">
+    <h5>Thanos</h5>
+    <div class="list-group list-group-flush">
+        {{ range .Site.Menus.thanos }}
+            <a class="list-group-item list-group-item-action list-group-item-thanos py-1" href="{{ .URL }}">{{ .Title }}</a>
+        {{ end }}
+    </div>
+    <h5 class="mt-3">Components</h5>
+    <div class="list-group list-group-flush">
+        {{ range .Site.Menus.components }}
+            <a class="list-group-item list-group-item-action list-group-item-thanos py-1" href="{{ .URL }}">{{ .Title }}</a>
+        {{ end }}
+    </div>
+    <h5 class="mt-3">Contributing</h5>
+    <div class="list-group list-group-flush">
+        {{ range .Site.Menus.contributing }}
+            <a class="list-group-item list-group-item-action list-group-item-thanos py-1" href="{{ .URL }}">{{ .Title }}</a>
+        {{ end }}
+    </div>
+    <h5 class="mt-3">Proposals</h5>
+    <div class="list-group list-group-flush">
+        {{ range .Site.Menus.proposals }}
+            <a class="list-group-item list-group-item-action list-group-item-thanos py-1" href="{{ .URL }}">{{ .Title }}</a>
+        {{ end }}
+    </div>
+</nav>

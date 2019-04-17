@@ -1,3 +1,9 @@
+---
+title: Rule
+type: docs
+menu: components
+---
+
 # Rule (aka Ruler)
 
 _**NOTE:** It is recommended to ma deploying rules inside the relevant Prometheus servers locally. Use ruler only on specific cases. Read details[below](rule.md#Risk) why._
@@ -13,7 +19,7 @@ You can think of Rule as a simplified Prometheus that does not require a sidecar
 The data of each Rule node can be labeled to satisfy the clusters labeling scheme. High-availability pairs can be run in parallel and should be distinguished by the designated replica label, just like regular Prometheus servers.
 Read more about Ruler in HA in [here](rule.md#Ruler_HA)
 
-```
+```bash
 $ thanos rule \
     --data-dir             "/path/to/data" \
     --eval-interval        "30s" \
