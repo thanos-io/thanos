@@ -31,6 +31,8 @@ const (
 	ResolutionLevelRaw = ResolutionLevel(downsample.ResLevel0)
 	ResolutionLevel5m  = ResolutionLevel(downsample.ResLevel1)
 	ResolutionLevel1h  = ResolutionLevel(downsample.ResLevel2)
+
+	consistencyDelay = time.Duration(30 * time.Minute)
 )
 
 var blockTooFreshSentinelError = errors.New("Block too fresh")
@@ -149,7 +151,8 @@ func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket
 }
 
 // SyncMetas synchronizes all meta files from blocks in the bucket into
-// the memory.
+// the memory.  It removes any partial blocks older than consistencyDelay
+// from the bucket.
 func (c *Syncer) SyncMetas(ctx context.Context) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
@@ -192,6 +195,11 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 				meta, err := c.downloadMeta(workCtx, id)
 				if err == blockTooFreshSentinelError {
 					continue
+				}
+				if c.bkt.IsObjNotFoundErr(err) {
+					if ulid.Now()-id.Time() < uint64(consistencyDelay/time.Millisecond) {
+						err = c.bkt.Delete(workCtx, id.String())
+					}
 				}
 				if err != nil {
 					errChan <- err
