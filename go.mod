@@ -37,7 +37,7 @@ require (
 	github.com/prometheus/client_golang v0.9.2
 	github.com/prometheus/common v0.0.0-20181218105931-67670fe90761
 	github.com/prometheus/prometheus v0.0.0-20190328180107-4d60eb36dcbe
-	github.com/prometheus/tsdb v0.6.1
+	github.com/prometheus/tsdb v0.7.0
 	go.opencensus.io v0.19.0 // indirect
 	golang.org/x/net v0.0.0-20190213061140-3a22650c66bd
 	golang.org/x/oauth2 v0.0.0-20181203162652-d668ce993890
