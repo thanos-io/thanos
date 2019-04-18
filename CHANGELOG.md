@@ -42,8 +42,6 @@ New options:
   New Store tracing span:
     * `store_query_gate_ismyturn` shows how long it took for a query to pass (or not) through the gate.
     
-- [#910](https://github.com/improbable-eng/thanos/pull/910) Query's stores UI page is now sorted by type and old DNS or File SD stores are removed after 5 minutes (configurable via the new `--store.unhealthy-timeout=5m` flag).
-- [#970](https://github.com/improbable-eng/thanos/pull/970) Added `PartialResponseStrategy` field for `RuleGroups` for `Ruler`.
 - [#1016](https://github.com/improbable-eng/thanos/pull/1016) Added option for another DNS resolver (miekg/dns client). 
 This to have SRV resolution working on [Golang 1.11+ with KubeDNS below v1.14](https://github.com/golang/go/issues/27546)
 
@@ -67,7 +65,6 @@ This to have SRV resolution working on [Golang 1.11+ with KubeDNS below v1.14](h
 - [#963](https://github.com/improbable-eng/thanos/pull/963) GCS: added possibility to inline ServiceAccount into GCS config.
 - [#1010](https://github.com/improbable-eng/thanos/pull/1010) Compact: added new flag `--compact.concurrency`. Number of goroutines to use when compacting groups.
 - [#1028](https://github.com/improbable-eng/thanos/pull/1028) Query: added `--query.default-evaluation-interval`, which sets default evaluation interval for sub queries.
-- [#905](https://github.com/improbable-eng/thanos/pull/905) Query: Add /api/v1/labels support
 
 ### Changed 
 
@@ -86,7 +83,7 @@ This to have SRV resolution working on [Golang 1.11+ with KubeDNS below v1.14](h
   
     * `/rule_instant_query HTTP[client]` is now `/rule_instant_query_part_resp_abort HTTP[client]"` if request is for abort strategy.
     
-- [1009](https://github.com/improbable-eng/thanos/pull/1009): Upgraded Prometheus (~v2.7.0-rc.0 to v2.8.1)  and TSDB (`v0.4.0` to `v0.6.1`) deps.
+- [#1009](https://github.com/improbable-eng/thanos/pull/1009): Upgraded Prometheus (~v2.7.0-rc.0 to v2.8.1)  and TSDB (`v0.4.0` to `v0.6.1`) deps.
   
   Changes that affects Thanos:
    * query: 
