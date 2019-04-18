@@ -8,6 +8,7 @@ jobs:
     working_directory: /go/src/github.com/improbable-eng/thanos
     environment:
       GO111MODULE: 'on'
+      GOBIN: "/go/bin"
     steps:
       - checkout
       - setup_remote_docker:
@@ -49,8 +50,7 @@ jobs:
     machine: true
     working_directory: /home/circleci/.go_workspace/src/github.com/improbable-eng/thanos
     environment:
-      GO111MODULE: 'on'
-      GOBIN: "${GOPATH}/bin"
+      GOBIN: "/home/circleci/.go_workspace/go/bin"
     steps:
     - checkout
     - run: make crossbuild
@@ -65,7 +65,7 @@ jobs:
       - image: circleci/golang:1.12
     working_directory: /go/src/github.com/improbable-eng/thanos
     environment:
-      GOBIN: "/go/src/github.com/improbable-eng/thanos/.bin"
+      GOBIN: "/go/bin"
     steps:
       - checkout
       - setup_remote_docker:
@@ -83,6 +83,8 @@ jobs:
       # Available from https://hub.docker.com/r/circleci/golang/
       - image: circleci/golang:1.12
     working_directory: /go/src/github.com/improbable-eng/thanos
+    environment:
+      GOBIN: "/go/bin"
     steps:
       - checkout
       - setup_remote_docker:
