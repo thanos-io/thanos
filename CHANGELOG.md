@@ -11,7 +11,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
-## [v0.4.0-rc.0](https://github.com/improbable-eng/thanos/releases/tag/v0.4.0-rc.0) - 2019.04.12
+## [v0.4.0-rc.0](https://github.com/improbable-eng/thanos/releases/tag/v0.4.0-rc.0) - 2019.04.18
 
 :warning: **IMPORTANT** :warning: This is the last release that supports gossip. From Thanos v0.5.0, gossip will be completely removed.
 
@@ -24,6 +24,8 @@ See [this](docs/proposals/approved/201809_gossip-removal.md) for more details.
 - [#910](https://github.com/improbable-eng/thanos/pull/910) Query's stores UI page is now sorted by type and old DNS or File SD stores are removed after 5 minutes (configurable via the new `--store.unhealthy-timeout=5m` flag).
 - [#905](https://github.com/improbable-eng/thanos/pull/905) Thanos support for Query API: /api/v1/labels. Notice that the API was added in Prometheus v2.6.
 - [#798](https://github.com/improbable-eng/thanos/pull/798) Ability to limit the maximum number of concurrent request to Series() calls in Thanos Store and the maximum amount of samples we handle.
+
+:warning: **WARNING** :warning: #798 adds a new default limit to Thanos Store: `--store.grpc.series-max-concurrency`. Most likely you will want to make it the same as `--query.max-concurrent` on Thanos Query.
 
 New options:
 
@@ -53,10 +55,7 @@ Note that this is required to have SRV resolution working on [Golang 1.11+ with 
 
   New Compactor flag: `--index.generate-missing-cache-file` was added to allow quicker addition of index cache files. If enabled it precomputes missing files on compactor startup. Note that it will take time and it's only one-off step per bucket.
 
-:warning: **WARNING** :warning: #798 adds a new default limit to Thanos Store: `--store.grpc.series-max-concurrency`. Most likely you will want to make it the same as `--query.max-concurrent` on Thanos Query.
-
 - [#887](https://github.com/improbable-eng/thanos/pull/887) Compact: Added new `--block-sync-concurrency` flag, which allows you to configure number of goroutines to use when syncing block metadata from object storage.
-
 - [#928](https://github.com/improbable-eng/thanos/pull/928) Query: Added `--store.response-timeout` flag. If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.
 - [#893](https://github.com/improbable-eng/thanos/pull/893) S3 storage backend has graduated to `stable` maturity level.
 - [#936](https://github.com/improbable-eng/thanos/pull/936) Azure storage backend has graduated to `stable` maturity level.
@@ -65,10 +64,13 @@ Note that this is required to have SRV resolution working on [Golang 1.11+ with 
 - [#963](https://github.com/improbable-eng/thanos/pull/963) GCS: added possibility to inline ServiceAccount into GCS config.
 - [#1010](https://github.com/improbable-eng/thanos/pull/1010) Compact: added new flag `--compact.concurrency`. Number of goroutines to use when compacting groups.
 - [#1028](https://github.com/improbable-eng/thanos/pull/1028) Query: added `--query.default-evaluation-interval`, which sets default evaluation interval for sub queries.
+- [#980](https://github.com/improbable-eng/thanos/pull/980) Ability to override Azure storage endpoint for other regions (China)
+- [#1021](https://github.com/improbable-eng/thanos/pull/1021) Query API `series` now supports POST method.
+- [#939](https://github.com/improbable-eng/thanos/pull/939) Query API `query_range` now supports POST method.
 
 ### Changed 
 
-- [#970](https://github.com/improbable-eng/thanos/pull/970) Deprecated partial_response_disabled proto field. Added partial_response_strategy instead. Both in gRPC and Query API.
+- [#970](https://github.com/improbable-eng/thanos/pull/970) Deprecated `partial_response_disabled` proto field. Added `partial_response_strategy` instead. Both in gRPC and Query API.
   No `PartialResponseStrategy` field for `RuleGroups` by default means `abort` strategy (old PartialResponse disabled) as this is recommended option for Rules and alerts.
 
   Metrics:
@@ -105,6 +107,8 @@ Note that this is required to have SRV resolution working on [Golang 1.11+ with 
   Whoever due to nature of Thanos compaction (distributed systems), for safety reason this is disabled for Thanos compactor for now.
  
 - [#868](https://github.com/improbable-eng/thanos/pull/868) Go has been updated to 1.12.
+- [#1055](https://github.com/improbable-eng/thanos/pull/1055) Gossip flags are now disabled by default and deprecated. 
+- [#964](https://github.com/improbable-eng/thanos/pull/964) repair: Repair process now sorts the series and labels within block.
 
 ### Fixed
 
@@ -118,6 +122,8 @@ Note that this is required to have SRV resolution working on [Golang 1.11+ with 
 - [#933](https://github.com/improbable-eng/thanos/pull/933) Query: Fixed 30 seconds lag of adding new store to query.
 - [#962](https://github.com/improbable-eng/thanos/pull/962) Sidecar: Make config reloader file writes atomic. 
 - [#982](https://github.com/improbable-eng/thanos/pull/982) Query: now advertises Min & Max Time accordingly to the nodes.
+- [#1041](https://github.com/improbable-eng/thanos/issues/1038) Ruler is now able to return long time range queries.
+- [#904](https://github.com/improbable-eng/thanos/pull/904) Compact: Skip compaction for blocks with no samples.
 
 ## [v0.3.2](https://github.com/improbable-eng/thanos/releases/tag/v0.3.2) - 2019.03.04
 
