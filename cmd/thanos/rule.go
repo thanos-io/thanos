@@ -39,7 +39,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/improbable-eng/thanos/pkg/ui"
 	"github.com/oklog/run"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
@@ -53,7 +53,7 @@ import (
 	"github.com/prometheus/prometheus/util/strutil"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 // registerRule registers a rule command.
@@ -104,6 +104,9 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	dnsSDInterval := modelDuration(cmd.Flag("query.sd-dns-interval", "Interval between DNS resolutions.").
 		Default("30s"))
 
+	dnsSDResolver := cmd.Flag("query.sd-dns-resolver", "Resolver to use. Possible options: [golang, miekgdns]").
+		Default("golang").Hidden().String()
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
@@ -119,10 +122,10 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 		}
 
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration: *tsdbBlockDuration,
-			MaxBlockDuration: *tsdbBlockDuration,
-			Retention:        *tsdbRetention,
-			NoLockfile:       true,
+			MinBlockDuration:  *tsdbBlockDuration,
+			MaxBlockDuration:  *tsdbBlockDuration,
+			RetentionDuration: *tsdbRetention,
+			NoLockfile:        true,
 		}
 
 		lookupQueries := map[string]struct{}{}
@@ -173,6 +176,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			*queries,
 			fileSD,
 			time.Duration(*dnsSDInterval),
+			*dnsSDResolver,
 		)
 	}
 }
@@ -206,6 +210,7 @@ func runRule(
 	queryAddrs []string,
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
+	dnsSDResolver string,
 ) error {
 	configSuccess := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_rule_config_last_reload_successful",
@@ -228,7 +233,7 @@ func runRule(
 			Name: "thanos_rule_loaded_rules",
 			Help: "Loaded rules partitioned by file and group",
 		},
-		[]string{"part_resp_strategy", "file", "group"},
+		[]string{"strategy", "file", "group"},
 	)
 	ruleEvalWarnings := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -272,11 +277,12 @@ func runRule(
 	dnsProvider := dns.NewProvider(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_ruler_query_apis_", reg),
+		dns.ResolverType(dnsSDResolver),
 	)
 
 	// Run rule evaluation and alert notifications.
 	var (
-		alertmgrs = newAlertmanagerSet(alertmgrURLs)
+		alertmgrs = newAlertmanagerSet(logger, alertmgrURLs, dns.ResolverType(dnsSDResolver))
 		alertQ    = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(lset), alertExcludeLabels)
 		ruleMgrs  = thanosrule.Managers{}
 	)
@@ -641,9 +647,9 @@ type alertmanagerSet struct {
 	current  []*url.URL
 }
 
-func newAlertmanagerSet(addrs []string) *alertmanagerSet {
+func newAlertmanagerSet(logger log.Logger, addrs []string, dnsSDResolver dns.ResolverType) *alertmanagerSet {
 	return &alertmanagerSet{
-		resolver: dns.NewResolver(),
+		resolver: dns.NewResolver(dnsSDResolver.ToResolver(logger)),
 		addrs:    addrs,
 	}
 }

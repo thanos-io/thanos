@@ -1,8 +1,10 @@
-## Thanos Remote Write
-
-Status: draft | in-review | rejected | *accepted* | complete
-
-Implementation Owner: @brancz
+---
+title: Thanos Remote Write
+type: proposal
+menu: proposals
+status: accepted
+owner: brancz
+---
 
 ## Summary
 

@@ -195,6 +195,10 @@ func (w *streamedBlockWriter) finalize() error {
 		return errors.Wrap(err, "write mem postings")
 	}
 
+	if err := w.writeIndexCache(); err != nil {
+		return errors.Wrap(err, "write index cache")
+	}
+
 	if err := w.writeMetaFile(); err != nil {
 		return errors.Wrap(err, "write meta meta")
 	}
@@ -250,6 +254,16 @@ func (w *streamedBlockWriter) writeMemPostings() error {
 			return errors.Wrap(err, "write postings")
 		}
 	}
+	return nil
+}
+
+func (w *streamedBlockWriter) writeIndexCache() error {
+	indexFile := filepath.Join(w.blockDir, block.IndexFilename)
+	indexCacheFile := filepath.Join(w.blockDir, block.IndexCacheFilename)
+	if err := block.WriteIndexCache(w.logger, indexFile, indexCacheFile); err != nil {
+		return errors.Wrap(err, "write index cache")
+	}
+
 	return nil
 }
 

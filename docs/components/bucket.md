@@ -1,3 +1,9 @@
+---
+title: Bucket
+type: docs
+menu: components
+---
+
 # Bucket
 
 The bucket component of Thanos is a set of commands to inspect data in object storage buckets.
@@ -5,7 +11,7 @@ It is normally run as a stand alone command to aid with troubleshooting.
 
 Example:
 
-```
+```bash
 $ thanos bucket verify --objstore.config-file=bucket.yml
 ```
 

@@ -139,7 +139,9 @@ then
     --log.level                 debug \
     --tsdb.path                 "./data/remote-write-receive-data" \
     --grpc-address              0.0.0.0:19891 \
-    --http-address              0.0.0.0:19691 \
+    --http-address              0.0.0.0:18091 \
+    --labels                    "receive=\"true\"" \
+    ${OBJSTORECFG} \
     --remote-write.address      0.0.0.0:19291 &
 
   mkdir -p "data/local-prometheus-data/"

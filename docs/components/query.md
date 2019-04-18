@@ -1,17 +1,23 @@
+---
+title: Query
+type: docs
+menu: components
+---
+
 # Query
 
 The query component implements the Prometheus HTTP v1 API to query data in a Thanos cluster via PromQL.
 
-It gathers the data needed to evaluate the query from underlying StoreAPIs. See [here](/docs/service_discovery.md)
+It gathers the data needed to evaluate the query from underlying StoreAPIs. See [here](../service-discovery.md)
 on how to connect querier with desired StoreAPIs.
 
 Querier currently is fully stateless and horizontally scalable.
 
-```
+```bash
 $ thanos query \
     --http-address     "0.0.0.0:9090" \
     --store            "<store-api>:<grpc-port>" \
-    --store            "<store-api2>:<grpc-port>" \
+    --store            "<store-api2>:<grpc-port>" 
 ```
 
 ## Deduplication
@@ -193,44 +199,54 @@ Flags:
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
       --grpc-advertise-address=GRPC-ADVERTISE-ADDRESS
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Explicit (external) host:port address to
                                  advertise for gRPC StoreAPI in gossip cluster.
                                  If empty, 'grpc-address' will be used.
       --cluster.address="0.0.0.0:10900"
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Listen ip:port address for gossip cluster.
       --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Explicit (external) ip:port address to
                                  advertise for gossip in gossip cluster. Used
                                  internally for membership only.
       --cluster.peers=CLUSTER.PEERS ...
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Initial peers to join the cluster. It can be
                                  either <ip:port>, or <domain:port>. A lookup
                                  resolution is done only at the startup.
       --cluster.gossip-interval=<gossip interval>
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Interval between sending gossip messages. By
                                  lowering this value (more frequent) gossip
                                  messages are propagated across the cluster more
                                  quickly at the expense of increased bandwidth.
                                  Default is used from a specified network-type.
       --cluster.pushpull-interval=<push-pull interval>
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Interval for gossip state syncs. Setting this
                                  interval lower (more frequent) will increase
                                  convergence speeds across larger clusters at
                                  the expense of increased bandwidth usage.
                                  Default is used from a specified network-type.
       --cluster.refresh-interval=1m
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Interval for membership to refresh
                                  cluster.peers state, 0 disables refresh.
       --cluster.secret-key=CLUSTER.SECRET-KEY
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Initial secret key to encrypt cluster gossip.
                                  Can be one of AES-128, AES-192, or AES-256 in
                                  hexadecimal format.
       --cluster.network-type=lan
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Network type with predefined peers
                                  configurations. Sets of configurations
                                  accounting the latency differences between
                                  network types: local, lan, wan.
-      --cluster.disable          If true gossip will be disabled and no cluster
+      --cluster.disable          Deprecated(gossip will be removed from v0.5.0):
+                                 If true gossip will be disabled and no cluster
                                  related server will be started.
       --http-advertise-address=HTTP-ADVERTISE-ADDRESS
                                  Explicit (external) host:port address to
@@ -301,6 +317,9 @@ Flags:
                                  if no max_source_resolution param is specified.
       --query.partial-response   Enable partial response for queries if no
                                  partial_response param is specified.
+      --query.default-evaluation-interval=1m
+                                 Set default evaluation interval for sub
+                                 queries.
       --store.response-timeout=0ms
                                  If a Store doesn't send any data in this
                                  specified duration then a Store will be ignored

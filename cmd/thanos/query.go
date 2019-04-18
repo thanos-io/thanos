@@ -82,8 +82,12 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	fileSDInterval := modelDuration(cmd.Flag("store.sd-interval", "Refresh interval to re-read file SD files. It is used as a resync fallback.").
 		Default("5m"))
 
+	// TODO(bwplotka): Grab this from TTL at some point.
 	dnsSDInterval := modelDuration(cmd.Flag("store.sd-dns-interval", "Interval between DNS resolutions.").
 		Default("30s"))
+
+	dnsSDResolver := cmd.Flag("store.sd-dns-resolver", fmt.Sprintf("Resolver to use. Possible options: [%s, %s]", dns.GolangResolverType, dns.MiekgdnsResolverType)).
+		Default(string(dns.GolangResolverType)).Hidden().String()
 
 	unhealthyStoreTimeout := modelDuration(cmd.Flag("store.unhealthy-timeout", "Timeout before an unhealthy store is cleaned from the store UI page.").Default("5m"))
 
@@ -92,6 +96,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 
 	enablePartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified.").
 		Default("true").Bool()
+
+	defaultEvaluationInterval := modelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
 
 	storeResponseTimeout := modelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
 
@@ -123,6 +129,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			fileSD = file.NewDiscovery(conf, logger)
 		}
 
+		promql.SetDefaultEvaluationInterval(time.Duration(*defaultEvaluationInterval))
+
 		return runQuery(
 			g,
 			logger,
@@ -152,6 +160,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*enablePartialResponse,
 			fileSD,
 			time.Duration(*dnsSDInterval),
+			*dnsSDResolver,
 			time.Duration(*unhealthyStoreTimeout),
 		)
 	}
@@ -269,6 +278,7 @@ func runQuery(
 	enablePartialResponse bool,
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
+	dnsSDResolver string,
 	unhealthyStoreTimeout time.Duration,
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
@@ -287,6 +297,7 @@ func runQuery(
 	dnsProvider := dns.NewProvider(
 		logger,
 		extprom.WrapRegistererWithPrefix("thanos_querier_store_apis_", reg),
+		dns.ResolverType(dnsSDResolver),
 	)
 
 	var (

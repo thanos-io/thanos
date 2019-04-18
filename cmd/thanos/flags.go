@@ -46,36 +46,36 @@ func regCommonServerFlags(cmd *kingpin.CmdClause) (
 
 	httpBindAddr = regHTTPAddrFlag(cmd)
 	grpcBindAddr, grpcTLSSrvCert, grpcTLSSrvKey, grpcTLSSrvClientCA = regGRPCFlags(cmd)
-	grpcAdvertiseAddr := cmd.Flag("grpc-advertise-address", "Explicit (external) host:port address to advertise for gRPC StoreAPI in gossip cluster. If empty, 'grpc-address' will be used.").
+	grpcAdvertiseAddr := cmd.Flag("grpc-advertise-address", "Deprecated(gossip will be removed from v0.5.0): Explicit (external) host:port address to advertise for gRPC StoreAPI in gossip cluster. If empty, 'grpc-address' will be used.").
 		String()
 
-	clusterBindAddr := cmd.Flag("cluster.address", "Listen ip:port address for gossip cluster.").
+	clusterBindAddr := cmd.Flag("cluster.address", "Deprecated(gossip will be removed from v0.5.0): Listen ip:port address for gossip cluster.").
 		Default("0.0.0.0:10900").String()
 
-	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "Explicit (external) ip:port address to advertise for gossip in gossip cluster. Used internally for membership only.").
+	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "Deprecated(gossip will be removed from v0.5.0): Explicit (external) ip:port address to advertise for gossip in gossip cluster. Used internally for membership only.").
 		String()
 
-	peers := cmd.Flag("cluster.peers", "Initial peers to join the cluster. It can be either <ip:port>, or <domain:port>. A lookup resolution is done only at the startup.").Strings()
+	peers := cmd.Flag("cluster.peers", "Deprecated(gossip will be removed from v0.5.0): Initial peers to join the cluster. It can be either <ip:port>, or <domain:port>. A lookup resolution is done only at the startup.").Strings()
 
-	gossipInterval := modelDuration(cmd.Flag("cluster.gossip-interval", "Interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth. Default is used from a specified network-type.").
+	gossipInterval := modelDuration(cmd.Flag("cluster.gossip-interval", "Deprecated(gossip will be removed from v0.5.0): Interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth. Default is used from a specified network-type.").
 		PlaceHolder("<gossip interval>"))
 
-	pushPullInterval := modelDuration(cmd.Flag("cluster.pushpull-interval", "Interval for gossip state syncs. Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage. Default is used from a specified network-type.").
+	pushPullInterval := modelDuration(cmd.Flag("cluster.pushpull-interval", "Deprecated(gossip will be removed from v0.5.0): Interval for gossip state syncs. Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage. Default is used from a specified network-type.").
 		PlaceHolder("<push-pull interval>"))
 
-	refreshInterval := modelDuration(cmd.Flag("cluster.refresh-interval", "Interval for membership to refresh cluster.peers state, 0 disables refresh.").Default(cluster.DefaultRefreshInterval.String()))
+	refreshInterval := modelDuration(cmd.Flag("cluster.refresh-interval", "Deprecated(gossip will be removed from v0.5.0): Interval for membership to refresh cluster.peers state, 0 disables refresh.").Default(cluster.DefaultRefreshInterval.String()))
 
-	secretKey := cmd.Flag("cluster.secret-key", "Initial secret key to encrypt cluster gossip. Can be one of AES-128, AES-192, or AES-256 in hexadecimal format.").HexBytes()
+	secretKey := cmd.Flag("cluster.secret-key", "Deprecated(gossip will be removed from v0.5.0): Initial secret key to encrypt cluster gossip. Can be one of AES-128, AES-192, or AES-256 in hexadecimal format.").HexBytes()
 
 	networkType := cmd.Flag("cluster.network-type",
-		fmt.Sprintf("Network type with predefined peers configurations. Sets of configurations accounting the latency differences between network types: %s.",
+		fmt.Sprintf("Deprecated(gossip will be removed from v0.5.0): Network type with predefined peers configurations. Sets of configurations accounting the latency differences between network types: %s.",
 			strings.Join(cluster.NetworkPeerTypes, ", "),
 		),
 	).
 		Default(cluster.LanNetworkPeerType).
 		Enum(cluster.NetworkPeerTypes...)
 
-	gossipDisabled := cmd.Flag("cluster.disable", "If true gossip will be disabled and no cluster related server will be started.").Default("false").Bool()
+	gossipDisabled := cmd.Flag("cluster.disable", "Deprecated(gossip will be removed from v0.5.0): If true gossip will be disabled and no cluster related server will be started.").Default("true").Bool()
 
 	return grpcBindAddr,
 		httpBindAddr,

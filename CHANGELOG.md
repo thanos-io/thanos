@@ -15,12 +15,13 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#811](https://github.com/improbable-eng/thanos/pull/811) Remote write receiver
 - [#798](https://github.com/improbable-eng/thanos/pull/798) Ability to limit the maximum concurrent about of Series() calls in Thanos Store and the maximum amount of samples.
 - [#910](https://github.com/improbable-eng/thanos/pull/910) Query's stores UI page is now sorted by type and old DNS or File SD stores are removed after 5 minutes (configurable via the new `--store.unhealthy-timeout=5m` flag).
-- [#980](https://github.com/improbable-eng/thanos/pull/980) Ability to override Azure storage endpoint for other regions (China)
+- [#905](https://github.com/improbable-eng/thanos/pull/905) New Query API: /api/v1/labels. Noticed that the API was added in Prometheus v2.6.
 
 New options:
 
 * `--store.grpc.series-sample-limit` limits the amount of samples that might be retrieved on a single Series() call. By default it is 0. Consider enabling it by setting it to more than 0 if you are running on limited resources.
 * `--store.grpc.series-max-concurrency` limits the number of concurrent Series() calls in Thanos Store. By default it is 20. Considering making it lower or bigger depending on the scale of your deployment.
+* `--index.generate-missing-cache-file` if enabled, on startup compactor runs an on-off job that scans all the blocks to find all blocks with missing index cache file. It generates those if needed and upload. By default is disabled. Check logs on existence the line `generating index cache files is done`, then you can disable this flag. 
 
 New metrics:
 * `thanos_bucket_store_queries_dropped_total` shows how many queries were dropped due to the samples limit;
@@ -34,6 +35,9 @@ New tracing span:
 :warning: **WARNING** :warning: #798 adds a new default limit to Thanos Store: `--store.grpc.series-max-concurrency`. Most likely you will want to make it the same as `--query.max-concurrent` on Thanos Query.
 
 - [#970](https://github.com/improbable-eng/thanos/pull/970) Added `PartialResponseStrategy` field for `RuleGroups` for `Ruler`.
+- [#1016](https://github.com/improbable-eng/thanos/pull/1016) Added option for another DNS resolver (miekg/dns client). 
+This to have SRV resolution working on [Golang 1.11+ with KubeDNS below v1.14](https://github.com/golang/go/issues/27546)
+- [#986](https://github.com/improbable-eng/thanos/pull/986) Store index cache files in object storage, reduces store start-up time by skipping the generating the index cache for all blocks and only do this for recently created uncompacted blocks. 
 
 ### Changed 
 - [#970](https://github.com/improbable-eng/thanos/pull/970) Deprecated partial_response_disabled proto field. Added partial_response_strategy instead. Both in gRPC and Query API.
@@ -172,7 +176,7 @@ Note lots of necessary breaking changes in flags that relates to bucket configur
 - In `thanos rule`, file based discovery of query nodes using `--query.file-sd-config.files`
 - In `thanos query`, file based discovery of store nodes using `--store.file-sd-config.files`
 - `/-/healthy` endpoint to Querier.
-- DNS service discovery to static and file based configurations using the `dns+` and `dnssrv+` prefixes for the respective lookup. Details [here](/docs/service_discovery.md)
+- DNS service discovery to static and file based configurations using the `dns+` and `dnssrv+` prefixes for the respective lookup. Details [here](docs/service-discovery.md)
 - `--cluster.disable` flag to disable gossip functionality completely.
 - Hidden flag to configure max compaction level.
 - Azure Storage.
