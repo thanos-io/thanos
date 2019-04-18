@@ -196,12 +196,10 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 				if err == blockTooFreshSentinelError {
 					continue
 				}
-				if c.bkt.IsObjNotFoundErr(err) {
-					if ulid.Now()-id.Time() < uint64(consistencyDelay/time.Millisecond) {
-						err = c.bkt.Delete(workCtx, id.String())
-					}
-				}
 				if err != nil {
+					if removed := c.removeIfMalformed(workCtx, id); removed {
+						continue
+					}
 					errChan <- err
 					return
 				}
@@ -277,6 +275,30 @@ func (c *Syncer) downloadMeta(ctx context.Context, id ulid.ULID) (*metadata.Meta
 	}
 
 	return &meta, nil
+}
+
+func (c *Syncer) removeIfMalformed(ctx context.Context, id ulid.ULID) bool {
+	exists, err := block.MetaExists(ctx, c.logger, c.bkt, id)
+	if err != nil {
+		level.Warn(c.logger).Log("msg", "failed to check if block is malformed", "block", id)
+		return false
+	}
+	if exists {
+		// Meta exists, block is not malformed.
+		return false
+	}
+
+	if ulid.Now()-id.Time() <= uint64(consistencyDelay/time.Millisecond) {
+		// Consistency delay has not expired, so can't say block is malformed yet.
+		return false
+	}
+
+	if err := block.Delete(ctx, c.bkt, id); err != nil {
+		level.Warn(c.logger).Log("msg", "failed to delete malformed block", "block", id)
+	}
+	level.Info(c.logger).Log("msg", "deleted malformed block", "block", id)
+
+	return true
 }
 
 // GroupKey returns a unique identifier for the group the block belongs to. It considers
