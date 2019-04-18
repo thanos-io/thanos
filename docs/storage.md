@@ -245,6 +245,7 @@ config:
   storage_account: ""
   storage_account_key: ""
   container: ""
+  endpoint: ""
 ```
 
 ### OpenStack Swift Configuration
