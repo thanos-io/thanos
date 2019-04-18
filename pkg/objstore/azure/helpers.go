@@ -5,36 +5,42 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"time"
 
 	blob "github.com/Azure/azure-storage-blob-go/azblob"
-)
-
-var (
-	blobFormatString = `https://%s.blob.core.windows.net`
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const DirDelim = "/"
 
-func getContainerURL(ctx context.Context, accountName, accountKey, containerName string) (blob.ContainerURL, error) {
-	c, err := blob.NewSharedKeyCredential(accountName, accountKey)
+var errorCodeRegex = regexp.MustCompile(`X-Ms-Error-Code:\D*\[(\w+)\]`)
+
+func getContainerURL(ctx context.Context, conf Config) (blob.ContainerURL, error) {
+	c, err := blob.NewSharedKeyCredential(conf.StorageAccountName, conf.StorageAccountKey)
 	if err != nil {
 		return blob.ContainerURL{}, err
 	}
+
+	retryOptions := blob.RetryOptions{}
+	if deadline, ok := ctx.Deadline(); ok {
+		retryOptions.TryTimeout = deadline.Sub(time.Now())
+	}
+
 	p := blob.NewPipeline(c, blob.PipelineOptions{
+		Retry: retryOptions,
 		Telemetry: blob.TelemetryOptions{Value: "Thanos"},
 	})
-	u, err := url.Parse(fmt.Sprintf(blobFormatString, accountName))
+	u, err := url.Parse(fmt.Sprintf("https://%s.%s", conf.StorageAccountName, conf.Endpoint))
 	if err != nil {
 		return blob.ContainerURL{}, err
 	}
 	service := blob.NewServiceURL(*u, p)
 
-	return service.NewContainerURL(containerName), nil
+	return service.NewContainerURL(conf.ContainerName), nil
 }
 
-func getContainer(ctx context.Context, accountName, accountKey, containerName string) (blob.ContainerURL, error) {
-	c, err := getContainerURL(ctx, accountName, accountKey, containerName)
+func getContainer(ctx context.Context, conf Config) (blob.ContainerURL, error) {
+	c, err := getContainerURL(ctx, conf)
 	if err != nil {
 		return blob.ContainerURL{}, err
 	}
@@ -43,20 +49,20 @@ func getContainer(ctx context.Context, accountName, accountKey, containerName st
 	return c, err
 }
 
-func createContainer(ctx context.Context, accountName, accountKey, containerName string) (blob.ContainerURL, error) {
-	c, err := getContainerURL(ctx, accountName, accountKey, containerName)
+func createContainer(ctx context.Context, conf Config) (blob.ContainerURL, error) {
+	c, err := getContainerURL(ctx, conf)
 	if err != nil {
 		return blob.ContainerURL{}, err
 	}
 	_, err = c.Create(
-		context.Background(),
+		ctx,
 		blob.Metadata{},
 		blob.PublicAccessNone)
 	return c, err
 }
 
-func getBlobURL(ctx context.Context, accountName, accountKey, containerName, blobName string) (blob.BlockBlobURL, error) {
-	c, err := getContainerURL(ctx, accountName, accountKey, containerName)
+func getBlobURL(ctx context.Context, conf Config, blobName string) (blob.BlockBlobURL, error) {
+	c, err := getContainerURL(ctx, conf)
 	if err != nil {
 		return blob.BlockBlobURL{}, err
 	}
@@ -64,8 +70,7 @@ func getBlobURL(ctx context.Context, accountName, accountKey, containerName, blo
 }
 
 func parseError(errorCode string) string {
-	re, _ := regexp.Compile(`X-Ms-Error-Code:\D*\[(\w+)\]`)
-	match := re.FindStringSubmatch(errorCode)
+	match := errorCodeRegex.FindStringSubmatch(errorCode)
 	if match != nil && len(match) == 2 {
 		return match[1]
 	}

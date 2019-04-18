@@ -687,6 +687,113 @@ func TestProxyStore_LabelValues(t *testing.T) {
 	testutil.Equals(t, 1, len(resp.Warnings))
 }
 
+func TestProxyStore_LabelNames(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	for _, tc := range []struct {
+		title     string
+		storeAPIs []Client
+
+		req *storepb.LabelNamesRequest
+
+		expectedNames       []string
+		expectedErr         error
+		expectedWarningsLen int
+	}{
+		{
+			title: "label_names partial response disabled",
+			storeAPIs: []Client{
+				&testClient{
+					StoreClient: &mockedStoreAPI{
+						RespLabelNames: &storepb.LabelNamesResponse{
+							Names: []string{"a", "b"},
+						},
+					},
+				},
+				&testClient{
+					StoreClient: &mockedStoreAPI{
+						RespLabelNames: &storepb.LabelNamesResponse{
+							Names: []string{"a", "c", "d"},
+						},
+					},
+				},
+			},
+			req: &storepb.LabelNamesRequest{
+				PartialResponseDisabled: true,
+			},
+			expectedNames:       []string{"a", "b", "c", "d"},
+			expectedWarningsLen: 0,
+		},
+		{
+			title: "label_names partial response disabled, but returns error",
+			storeAPIs: []Client{
+				&testClient{
+					StoreClient: &mockedStoreAPI{
+						RespLabelNames: &storepb.LabelNamesResponse{
+							Names: []string{"a", "b"},
+						},
+					},
+				},
+				&testClient{
+					StoreClient: &mockedStoreAPI{
+						RespError: errors.New("error!"),
+					},
+				},
+			},
+			req: &storepb.LabelNamesRequest{
+				PartialResponseDisabled: true,
+			},
+			expectedErr: errors.New("fetch label names from store test: error!"),
+		},
+		{
+			title: "label_names partial response enabled",
+			storeAPIs: []Client{
+				&testClient{
+					StoreClient: &mockedStoreAPI{
+						RespLabelNames: &storepb.LabelNamesResponse{
+							Names: []string{"a", "b"},
+						},
+					},
+				},
+				&testClient{
+					StoreClient: &mockedStoreAPI{
+						RespError: errors.New("error!"),
+					},
+				},
+			},
+			req: &storepb.LabelNamesRequest{
+				PartialResponseDisabled: false,
+			},
+			expectedNames:       []string{"a", "b"},
+			expectedWarningsLen: 1,
+		},
+	} {
+		if ok := t.Run(tc.title, func(t *testing.T) {
+			q := NewProxyStore(
+				nil,
+				func() []Client { return tc.storeAPIs },
+				component.Query,
+				nil,
+				0*time.Second,
+			)
+
+			ctx := context.Background()
+			resp, err := q.LabelNames(ctx, tc.req)
+			if tc.expectedErr != nil {
+				testutil.NotOk(t, err)
+				testutil.Equals(t, tc.expectedErr.Error(), err.Error())
+				return
+			}
+			testutil.Ok(t, err)
+
+			testutil.Equals(t, tc.expectedNames, resp.Names)
+			testutil.Equals(t, tc.expectedWarningsLen, len(resp.Warnings), "got %v", resp.Warnings)
+		}); !ok {
+			return
+		}
+	}
+}
+
 type rawSeries struct {
 	lset    []storepb.Label
 	samples []sample
@@ -830,11 +937,13 @@ func (s *storeSeriesServer) Context() context.Context {
 type mockedStoreAPI struct {
 	RespSeries      []*storepb.SeriesResponse
 	RespLabelValues *storepb.LabelValuesResponse
+	RespLabelNames  *storepb.LabelNamesResponse
 	RespError       error
 	RespDuration    time.Duration
 
 	LastSeriesReq      *storepb.SeriesRequest
 	LastLabelValuesReq *storepb.LabelValuesRequest
+	LastLabelNamesReq  *storepb.LabelNamesRequest
 }
 
 func (s *mockedStoreAPI) Info(ctx context.Context, req *storepb.InfoRequest, _ ...grpc.CallOption) (*storepb.InfoResponse, error) {
@@ -848,7 +957,9 @@ func (s *mockedStoreAPI) Series(ctx context.Context, req *storepb.SeriesRequest,
 }
 
 func (s *mockedStoreAPI) LabelNames(ctx context.Context, req *storepb.LabelNamesRequest, _ ...grpc.CallOption) (*storepb.LabelNamesResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+	s.LastLabelNamesReq = req
+
+	return s.RespLabelNames, s.RespError
 }
 
 func (s *mockedStoreAPI) LabelValues(ctx context.Context, req *storepb.LabelValuesRequest, _ ...grpc.CallOption) (*storepb.LabelValuesResponse, error) {

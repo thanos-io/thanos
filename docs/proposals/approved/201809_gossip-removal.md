@@ -1,11 +1,12 @@
-# Deprecated gossip clustering in favor of File SD
+---
+title: Deprecated gossip clustering in favor of File SD
+type: proposal
+menu: proposals
+status: accepted
+owner: bwplotka
+---
 
-Status: draft | in-review | rejected | **accepted** | complete
-
-Implementation Owner: [@bplotka](https://github.com/bwplotka)
-
-Ticket: https://github.com/improbable-eng/thanos/issues/484
-
+### Ticket: https://github.com/improbable-eng/thanos/issues/484
 ## Summary
 
 It is becoming clear that we need to remove gossip protocol as our main way of communication between Thanos Querier and
@@ -56,7 +57,7 @@ are too.. static. (: We need [File SD](https://github.com/improbable-eng/thanos/
 * Add File Service Discovery (SD): https://github.com/improbable-eng/thanos/issues/492
 * Remove gossip from the documentation, be clear what talks with what (!)
 * Deprecate gossip in code.
-* Remove gossip code and flags AFTER [File SD](https://github.com/improbable-eng/thanos/issues/492 is done and stable.
+* Remove gossip code and flags AFTER [File SD](https://github.com/improbable-eng/thanos/issues/492) is done and stable.
 
 ### Backwards compatibility
 

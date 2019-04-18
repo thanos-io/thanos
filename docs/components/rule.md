@@ -1,3 +1,9 @@
+---
+title: Rule
+type: docs
+menu: components
+---
+
 # Rule (aka Ruler)
 
 _**NOTE:** It is recommended to ma deploying rules inside the relevant Prometheus servers locally. Use ruler only on specific cases. Read details[below](rule.md#Risk) why._
@@ -13,7 +19,7 @@ You can think of Rule as a simplified Prometheus that does not require a sidecar
 The data of each Rule node can be labeled to satisfy the clusters labeling scheme. High-availability pairs can be run in parallel and should be distinguished by the designated replica label, just like regular Prometheus servers.
 Read more about Ruler in HA in [here](rule.md#Ruler_HA)
 
-```
+```bash
 $ thanos rule \
     --data-dir             "/path/to/data" \
     --eval-interval        "30s" \
@@ -175,44 +181,54 @@ Flags:
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
       --grpc-advertise-address=GRPC-ADVERTISE-ADDRESS
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Explicit (external) host:port address to
                                  advertise for gRPC StoreAPI in gossip cluster.
                                  If empty, 'grpc-address' will be used.
       --cluster.address="0.0.0.0:10900"
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Listen ip:port address for gossip cluster.
       --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Explicit (external) ip:port address to
                                  advertise for gossip in gossip cluster. Used
                                  internally for membership only.
       --cluster.peers=CLUSTER.PEERS ...
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Initial peers to join the cluster. It can be
                                  either <ip:port>, or <domain:port>. A lookup
                                  resolution is done only at the startup.
       --cluster.gossip-interval=<gossip interval>
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Interval between sending gossip messages. By
                                  lowering this value (more frequent) gossip
                                  messages are propagated across the cluster more
                                  quickly at the expense of increased bandwidth.
                                  Default is used from a specified network-type.
       --cluster.pushpull-interval=<push-pull interval>
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Interval for gossip state syncs. Setting this
                                  interval lower (more frequent) will increase
                                  convergence speeds across larger clusters at
                                  the expense of increased bandwidth usage.
                                  Default is used from a specified network-type.
       --cluster.refresh-interval=1m
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Interval for membership to refresh
                                  cluster.peers state, 0 disables refresh.
       --cluster.secret-key=CLUSTER.SECRET-KEY
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Initial secret key to encrypt cluster gossip.
                                  Can be one of AES-128, AES-192, or AES-256 in
                                  hexadecimal format.
       --cluster.network-type=lan
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Network type with predefined peers
                                  configurations. Sets of configurations
                                  accounting the latency differences between
                                  network types: local, lan, wan.
-      --cluster.disable          If true gossip will be disabled and no cluster
+      --cluster.disable          Deprecated(gossip will be removed from v0.5.0):
+                                 If true gossip will be disabled and no cluster
                                  related server will be started.
       --label=<name>="<value>" ...
                                  Labels to be applied to all generated metrics

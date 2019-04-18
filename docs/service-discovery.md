@@ -1,4 +1,11 @@
-# Thanos Service Discovery
+---
+title: Service Discovery
+type: docs
+menu: thanos
+slug: /service-discovery.md
+---
+
+# Service Discovery
 
 Service discovery has a vital place in Thanos components. It allows Thanos to discover different set API targets required to perform certain operations.
 This logic is meant to replace Gossip that [is planned to be removed.](/docs/proposals/approved/201809_gossip-removal.md)
@@ -38,6 +45,7 @@ The format of the configuration file is the same as the one used in [Prometheus'
 Both YAML and JSON files can be used. The format of the files is this:
 
 * JSON:
+
 ```json
 [
   {
@@ -47,6 +55,7 @@ Both YAML and JSON files can be used. The format of the files is this:
 ```
 
 * YAML:
+
 ```yaml
 - targets: ['localhost:9090', 'example.org:443']
 ```

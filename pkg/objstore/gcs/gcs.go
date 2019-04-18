@@ -54,7 +54,7 @@ func NewBucket(ctx context.Context, logger log.Logger, conf []byte, component st
 
 	// If ServiceAccount is provided, use them in GCS client, otherwise fallback to Google default logic.
 	if gc.ServiceAccount != "" {
-		credentials, err := google.CredentialsFromJSON(ctx, []byte(gc.ServiceAccount))
+		credentials, err := google.CredentialsFromJSON(ctx, []byte(gc.ServiceAccount), storage.ScopeFullControl)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to create credentials from JSON")
 		}

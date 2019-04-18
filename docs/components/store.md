@@ -1,9 +1,15 @@
+---
+title: Store
+type: docs
+menu: components
+---
+
 # Store
 
 The store component of Thanos implements the Store API on top of historical data in an object storage bucket. It acts primarily as an API gateway and therefore does not need significant amounts of local disk space. It joins a Thanos cluster on startup and advertises the data it can access.
 It keeps a small amount of information about all remote blocks on local disk and keeps it in sync with the bucket. This data is generally safe to delete across restarts at the cost of increased startup times.
 
-```
+```bash
 $ thanos store \
     --data-dir        "/local/state/data/dir" \
     --cluster.peers    "thanos-cluster.example.org" \
@@ -61,44 +67,54 @@ Flags:
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
       --grpc-advertise-address=GRPC-ADVERTISE-ADDRESS
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Explicit (external) host:port address to
                                  advertise for gRPC StoreAPI in gossip cluster.
                                  If empty, 'grpc-address' will be used.
       --cluster.address="0.0.0.0:10900"
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Listen ip:port address for gossip cluster.
       --cluster.advertise-address=CLUSTER.ADVERTISE-ADDRESS
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Explicit (external) ip:port address to
                                  advertise for gossip in gossip cluster. Used
                                  internally for membership only.
       --cluster.peers=CLUSTER.PEERS ...
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Initial peers to join the cluster. It can be
                                  either <ip:port>, or <domain:port>. A lookup
                                  resolution is done only at the startup.
       --cluster.gossip-interval=<gossip interval>
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Interval between sending gossip messages. By
                                  lowering this value (more frequent) gossip
                                  messages are propagated across the cluster more
                                  quickly at the expense of increased bandwidth.
                                  Default is used from a specified network-type.
       --cluster.pushpull-interval=<push-pull interval>
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Interval for gossip state syncs. Setting this
                                  interval lower (more frequent) will increase
                                  convergence speeds across larger clusters at
                                  the expense of increased bandwidth usage.
                                  Default is used from a specified network-type.
       --cluster.refresh-interval=1m
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Interval for membership to refresh
                                  cluster.peers state, 0 disables refresh.
       --cluster.secret-key=CLUSTER.SECRET-KEY
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Initial secret key to encrypt cluster gossip.
                                  Can be one of AES-128, AES-192, or AES-256 in
                                  hexadecimal format.
       --cluster.network-type=lan
+                                 Deprecated(gossip will be removed from v0.5.0):
                                  Network type with predefined peers
                                  configurations. Sets of configurations
                                  accounting the latency differences between
                                  network types: local, lan, wan.
-      --cluster.disable          If true gossip will be disabled and no cluster
+      --cluster.disable          Deprecated(gossip will be removed from v0.5.0):
+                                 If true gossip will be disabled and no cluster
                                  related server will be started.
       --data-dir="./data"        Data directory in which to cache remote blocks.
       --index-cache-size=250MB   Maximum size of items held in the index cache.

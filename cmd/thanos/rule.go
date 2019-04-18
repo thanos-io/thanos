@@ -39,7 +39,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/improbable-eng/thanos/pkg/ui"
 	"github.com/oklog/run"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
@@ -53,7 +53,7 @@ import (
 	"github.com/prometheus/prometheus/util/strutil"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 // registerRule registers a rule command.
@@ -122,10 +122,10 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 		}
 
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration: *tsdbBlockDuration,
-			MaxBlockDuration: *tsdbBlockDuration,
-			Retention:        *tsdbRetention,
-			NoLockfile:       true,
+			MinBlockDuration:  *tsdbBlockDuration,
+			MaxBlockDuration:  *tsdbBlockDuration,
+			RetentionDuration: *tsdbRetention,
+			NoLockfile:        true,
 		}
 
 		lookupQueries := map[string]struct{}{}
@@ -233,7 +233,7 @@ func runRule(
 			Name: "thanos_rule_loaded_rules",
 			Help: "Loaded rules partitioned by file and group",
 		},
-		[]string{"part_resp_strategy", "file", "group"},
+		[]string{"strategy", "file", "group"},
 	)
 	ruleEvalWarnings := prometheus.NewCounterVec(
 		prometheus.CounterOpts{

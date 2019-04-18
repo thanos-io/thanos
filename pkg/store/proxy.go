@@ -397,7 +397,48 @@ func storeMatches(s Client, mint, maxt int64, matchers ...storepb.LabelMatcher) 
 func (s *ProxyStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
 	*storepb.LabelNamesResponse, error,
 ) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+	var (
+		warnings []string
+		names    [][]string
+		mtx      sync.Mutex
+		g, gctx  = errgroup.WithContext(ctx)
+	)
+
+	for _, st := range s.stores() {
+		st := st
+		g.Go(func() error {
+			resp, err := st.LabelNames(gctx, &storepb.LabelNamesRequest{
+				PartialResponseDisabled: r.PartialResponseDisabled,
+			})
+			if err != nil {
+				err = errors.Wrapf(err, "fetch label names from store %s", st)
+				if r.PartialResponseDisabled {
+					return err
+				}
+
+				mtx.Lock()
+				warnings = append(warnings, err.Error())
+				mtx.Unlock()
+				return nil
+			}
+
+			mtx.Lock()
+			warnings = append(warnings, resp.Warnings...)
+			names = append(names, resp.Names)
+			mtx.Unlock()
+
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	return &storepb.LabelNamesResponse{
+		Names:    strutil.MergeUnsortedSlices(names...),
+		Warnings: warnings,
+	}, nil
 }
 
 // LabelValues returns all known label values for a given label name.
@@ -415,7 +456,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		store := st
 		g.Go(func() error {
 			resp, err := store.LabelValues(gctx, &storepb.LabelValuesRequest{
-				Label: r.Label,
+				Label:                   r.Label,
 				PartialResponseDisabled: r.PartialResponseDisabled,
 			})
 			if err != nil {

@@ -856,8 +856,38 @@ func chunksSize(chks []storepb.AggrChunk) (size int) {
 }
 
 // LabelNames implements the storepb.StoreServer interface.
-func (s *BucketStore) LabelNames(context.Context, *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+func (s *BucketStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
+	g, gctx := errgroup.WithContext(ctx)
+
+	s.mtx.RLock()
+
+	var mtx sync.Mutex
+	var sets [][]string
+
+	for _, b := range s.blocks {
+		indexr := b.indexReader(gctx)
+		g.Go(func() error {
+			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label names")
+
+			res := indexr.LabelNames()
+			sort.Strings(res)
+
+			mtx.Lock()
+			sets = append(sets, res)
+			mtx.Unlock()
+
+			return nil
+		})
+	}
+
+	s.mtx.RUnlock()
+
+	if err := g.Wait(); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &storepb.LabelNamesResponse{
+		Names: strutil.MergeSlices(sets...),
+	}, nil
 }
 
 // LabelValues implements the storepb.StoreServer interface.
@@ -1033,10 +1063,11 @@ type bucketBlock struct {
 
 	indexVersion int
 	symbols      map[uint32]string
+	symbolsV2    map[string]struct{}
 	lvals        map[string][]string
 	postings     map[labels.Label]index.Range
 
-	indexObj  string
+	id        ulid.ULID
 	chunkObjs []string
 
 	pendingReaders sync.WaitGroup
@@ -1057,7 +1088,7 @@ func newBucketBlock(
 	b = &bucketBlock{
 		logger:      logger,
 		bucket:      bkt,
-		indexObj:    path.Join(id.String(), block.IndexFilename),
+		id:          id,
 		indexCache:  indexCache,
 		chunkPool:   chunkPool,
 		dir:         dir,
@@ -1078,6 +1109,14 @@ func newBucketBlock(
 		return nil, errors.Wrap(err, "list chunk files")
 	}
 	return b, nil
+}
+
+func (b *bucketBlock) indexFilename() string {
+	return path.Join(b.id.String(), block.IndexFilename)
+}
+
+func (b *bucketBlock) indexCacheFilename() string {
+	return path.Join(b.id.String(), block.IndexCacheFilename)
 }
 
 func (b *bucketBlock) loadMeta(ctx context.Context, id ulid.ULID) error {
@@ -1104,20 +1143,29 @@ func (b *bucketBlock) loadMeta(ctx context.Context, id ulid.ULID) error {
 
 func (b *bucketBlock) loadIndexCache(ctx context.Context) (err error) {
 	cachefn := filepath.Join(b.dir, block.IndexCacheFilename)
-
-	b.indexVersion, b.symbols, b.lvals, b.postings, err = block.ReadIndexCache(b.logger, cachefn)
-	if err == nil {
+	if err = b.loadIndexCacheFromFile(ctx, cachefn); err == nil {
 		return nil
 	}
 	if !os.IsNotExist(errors.Cause(err)) {
 		return errors.Wrap(err, "read index cache")
 	}
-	// No cache exists is on disk yet, build it from the downloaded index and retry.
+
+	// Try to download index cache file from object store.
+	if err = objstore.DownloadFile(ctx, b.logger, b.bucket, b.indexCacheFilename(), cachefn); err == nil {
+		return b.loadIndexCacheFromFile(ctx, cachefn)
+	}
+
+	if !b.bucket.IsObjNotFoundErr(errors.Cause(err)) {
+		return errors.Wrap(err, "download index cache file")
+	}
+
+	// No cache exists on disk yet, build it from the downloaded index and retry.
 	fn := filepath.Join(b.dir, block.IndexFilename)
 
-	if err := objstore.DownloadFile(ctx, b.logger, b.bucket, b.indexObj, fn); err != nil {
+	if err := objstore.DownloadFile(ctx, b.logger, b.bucket, b.indexFilename(), fn); err != nil {
 		return errors.Wrap(err, "download index file")
 	}
+
 	defer func() {
 		if rerr := os.Remove(fn); rerr != nil {
 			level.Error(b.logger).Log("msg", "failed to remove temp index file", "path", fn, "err", rerr)
@@ -1128,15 +1176,16 @@ func (b *bucketBlock) loadIndexCache(ctx context.Context) (err error) {
 		return errors.Wrap(err, "write index cache")
 	}
 
-	b.indexVersion, b.symbols, b.lvals, b.postings, err = block.ReadIndexCache(b.logger, cachefn)
-	if err != nil {
-		return errors.Wrap(err, "read index cache")
-	}
-	return nil
+	return errors.Wrap(b.loadIndexCacheFromFile(ctx, cachefn), "read index cache")
+}
+
+func (b *bucketBlock) loadIndexCacheFromFile(ctx context.Context, cache string) (err error) {
+	b.indexVersion, b.symbols, b.lvals, b.postings, err = block.ReadIndexCache(b.logger, cache)
+	return err
 }
 
 func (b *bucketBlock) readIndexRange(ctx context.Context, off, length int64) ([]byte, error) {
-	r, err := b.bucket.GetRange(ctx, b.indexObj, off, length)
+	r, err := b.bucket.GetRange(ctx, b.indexFilename(), off, length)
 	if err != nil {
 		return nil, errors.Wrap(err, "get range reader")
 	}
@@ -1593,6 +1642,15 @@ func (r *bucketIndexReader) LabelValues(name string) []string {
 	res := make([]string, 0, len(r.block.lvals[name]))
 	for _, v := range r.block.lvals[name] {
 		res = append(res, v)
+	}
+	return res
+}
+
+// LabelNames returns a list of label names.
+func (r *bucketIndexReader) LabelNames() []string {
+	res := make([]string, 0, len(r.block.lvals))
+	for ln, _ := range r.block.lvals {
+		res = append(res, ln)
 	}
 	return res
 }

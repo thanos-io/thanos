@@ -178,7 +178,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 
 		var metas []*metadata.Meta
 		extLset := labels.Labels{{Name: "e1", Value: "1"}}
-		b1, err := testutil.CreateBlock(prepareDir, []labels.Labels{
+		b1, err := testutil.CreateBlock(ctx, prepareDir, []labels.Labels{
 			{{Name: "a", Value: "1"}},
 			{{Name: "a", Value: "2"}, {Name: "a", Value: "2"}},
 			{{Name: "a", Value: "3"}},
@@ -190,7 +190,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		metas = append(metas, meta)
 
-		b3, err := testutil.CreateBlock(prepareDir, []labels.Labels{
+		b3, err := testutil.CreateBlock(ctx, prepareDir, []labels.Labels{
 			{{Name: "a", Value: "3"}},
 			{{Name: "a", Value: "4"}},
 			{{Name: "a", Value: "5"}},
@@ -215,7 +215,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		metas = append(metas, meta)
 
 		// Due to TSDB compaction delay (not compacting fresh block), we need one more block to be pushed to trigger compaction.
-		freshB, err := testutil.CreateBlock(prepareDir, []labels.Labels{
+		freshB, err := testutil.CreateBlock(ctx, prepareDir, []labels.Labels{
 			{{Name: "a", Value: "2"}},
 			{{Name: "a", Value: "3"}},
 			{{Name: "a", Value: "4"}},
@@ -251,7 +251,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		)
 		testutil.Ok(t, err)
 
-		comp, err := tsdb.NewLeveledCompactor(nil, log.NewLogfmtLogger(os.Stderr), []int64{1000, 3000}, nil)
+		comp, err := tsdb.NewLeveledCompactor(ctx, nil, log.NewLogfmtLogger(os.Stderr), []int64{1000, 3000}, nil)
 		testutil.Ok(t, err)
 
 		shouldRerun, id, err := g.Compact(ctx, dir, comp)
