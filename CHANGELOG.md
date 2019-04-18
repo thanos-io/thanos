@@ -51,10 +51,22 @@ This to have SRV resolution working on [Golang 1.11+ with KubeDNS below v1.14](h
 
 :warning: **WARNING** :warning: #798 adds a new default limit to Thanos Store: `--store.grpc.series-max-concurrency`. Most likely you will want to make it the same as `--query.max-concurrent` on Thanos Query.
 
+- [#887](https://github.com/improbable-eng/thanos/pull/887) Compact: Added new `--block-sync-concurrency` flag, which allows you tconfigure number of goroutines to use when syncing block metadata from object storage.
+
+- [#928](https://github.com/improbable-eng/thanos/pull/928) Query: Added `--store.response-timeout` flag. If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.
+- [#893](https://github.com/improbable-eng/thanos/pull/893) S3 storage backend has graduated to `stable` maturity level.
+- [#936](https://github.com/improbable-eng/thanos/pull/936) Azure storage backend has graduated to `stable` maturity level.
+- [#937](https://github.com/improbable-eng/thanos/pull/937) S3: added trace functionality. You can add `trace.enable: true` to enable the minio client's verbose logging.
+- [#953](https://github.com/improbable-eng/thanos/pull/953) Compact: now has a hidden flag `--debug.accept-malformed-index`. Compaction index verification will ignore out of order label names.
+- [#963](https://github.com/improbable-eng/thanos/pull/963) GCS: added possibility to inline ServiceAccount into GCS config.
+- [#1010](https://github.com/improbable-eng/thanos/pull/1010) Compact: added new flag `--compact.concurrency`. Number of goroutines to use when compacting groups.
+- [#1028](https://github.com/improbable-eng/thanos/pull/1028) Query: added `--query.default-evaluation-interval", which sets default evaluation interval for sub queries.
+- [#905](https://github.com/improbable-eng/thanos/pull/905) Query: Add /api/v1/labels support
+
 ### Changed 
 
 - [#970](https://github.com/improbable-eng/thanos/pull/970) Deprecated partial_response_disabled proto field. Added partial_response_strategy instead. Both in gRPC and Query API.
-- [#970](https://github.com/improbable-eng/thanos/pull/970) No `PartialResponseStrategy` field for `RuleGroups` by default means `abort` strategy (old PartialResponse disabled) as this is recommended option for Rules and alerts.
+  No `PartialResponseStrategy` field for `RuleGroups` by default means `abort` strategy (old PartialResponse disabled) as this is recommended option for Rules and alerts.
 
   Metrics:
     
@@ -88,11 +100,21 @@ This to have SRV resolution working on [Golang 1.11+ with KubeDNS below v1.14](h
   
   Note that this was added on TSDB and Prometheus: [FEATURE] Time-ovelapping blocks are now allowed. #370
   Whoever due to nature of Thanos compaction (distributed systems), for safety reason this is disabled for Thanos compactor for now.
-  
+ 
+- [#868](https://github.com/improbable-eng/thanos/pull/868) Go has been updated to 1.12.
+- [#1009](https://github.com/improbable-eng/thanos/pull/1009) Prometheus library updated to v2.8.1 
 ### Fixed
 
 - [#921](https://github.com/improbable-eng/thanos/pull/921) `thanos_objstore_bucket_last_successful_upload_time` now does not appear when no blocks have been uploaded so far.
 - [#966](https://github.com/improbable-eng/thanos/pull/966) Bucket: verify no longer warns about overlapping blocks, that overlap `0s` 
+- [#848](https://github.com/improbable-eng/thanos/pull/848) Compact: now correctly works with time series with duplicate labels.
+- [#894](https://github.com/improbable-eng/thanos/pull/894) Thanos Rule: UI now correctly shows evaluation time.
+- [#865](https://github.com/improbable-eng/thanos/pull/865) Query: now properly parses DNS SRV Service Discovery.
+- [#889](https://github.com/improbable-eng/thanos/pull/889) Store: added safeguard against merging posting groups segfault
+- [#941](https://github.com/improbable-eng/thanos/pull/941) Sidecar: added better handling of intermediate restarts.
+- [#933](https://github.com/improbable-eng/thanos/pull/933) Query: Fixed 30 seconds lag of adding new store to query.
+- [#962](https://github.com/improbable-eng/thanos/pull/962) Sidecar: Make config reloader file writes atomic. 
+- [#982](https://github.com/improbable-eng/thanos/pull/982) Query: now advertises Min & Max Time accordingly to the nodes.
 
 ## [v0.3.2](https://github.com/improbable-eng/thanos/releases/tag/v0.3.2) - 2019.03.04
 
