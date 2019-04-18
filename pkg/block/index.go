@@ -535,7 +535,7 @@ func IgnoreDuplicateOutsideChunk(_ int64, _ int64, last *chunks.Meta, curr *chun
 	// the current one.
 	if curr.MinTime != last.MinTime || curr.MaxTime != last.MaxTime {
 		return false, errors.Errorf("non-sequential chunks not equal: [%d, %d] and [%d, %d]",
-			last.MaxTime, last.MaxTime, curr.MinTime, curr.MaxTime)
+			last.MinTime, last.MaxTime, curr.MinTime, curr.MaxTime)
 	}
 	ca := crc32.Checksum(last.Chunk.Bytes(), castagnoli)
 	cb := crc32.Checksum(curr.Chunk.Bytes(), castagnoli)
@@ -563,9 +563,14 @@ func sanitizeChunkSequence(chks []chunks.Meta, mint int64, maxt int64, ignoreChk
 	var last *chunks.Meta
 
 OUTER:
-	for _, c := range chks {
+	// This compares the current chunk to the chunk from the last iteration
+	// by pointers.  If we use "i, c := range chks" the variable c is a new
+	// variable who's address doesn't change through the entire loop.
+	// The current element of the chks slice is copied into it. We must take
+	// the address of the indexed slice instead.
+	for i := range chks {
 		for _, ignoreChkFn := range ignoreChkFns {
-			ignore, err := ignoreChkFn(mint, maxt, last, &c)
+			ignore, err := ignoreChkFn(mint, maxt, last, &chks[i])
 			if err != nil {
 				return nil, errors.Wrap(err, "ignore function")
 			}
@@ -575,11 +580,16 @@ OUTER:
 			}
 		}
 
-		last = &c
-		repl = append(repl, c)
+		last = &chks[i]
+		repl = append(repl, chks[i])
 	}
 
 	return repl, nil
+}
+
+type seriesRepair struct {
+	lset labels.Labels
+	chks []chunks.Meta
 }
 
 // rewrite writes all data from the readers back into the writers while cleaning
@@ -609,17 +619,20 @@ func rewrite(
 		postings = index.NewMemPostings()
 		values   = map[string]stringset{}
 		i        = uint64(0)
+		series   = []seriesRepair{}
 	)
 
-	var lset labels.Labels
-	var chks []chunks.Meta
-
 	for all.Next() {
+		var lset labels.Labels
+		var chks []chunks.Meta
 		id := all.At()
 
 		if err := indexr.Series(id, &lset, &chks); err != nil {
 			return err
 		}
+		// Make sure labels are in sorted order.
+		sort.Sort(lset)
+
 		for i, c := range chks {
 			chks[i].Chunk, err = chunkr.Chunk(c.Ref)
 			if err != nil {
@@ -636,21 +649,39 @@ func rewrite(
 			continue
 		}
 
-		if err := chunkw.WriteChunks(chks...); err != nil {
+		series = append(series, seriesRepair{
+			lset: lset,
+			chks: chks,
+		})
+	}
+
+	if all.Err() != nil {
+		return errors.Wrap(all.Err(), "iterate series")
+	}
+
+	// Sort the series, if labels are re-ordered then the ordering of series
+	// will be different.
+	sort.Slice(series, func(i, j int) bool {
+		return labels.Compare(series[i].lset, series[j].lset) < 0
+	})
+
+	// Build a new TSDB block.
+	for _, s := range series {
+		if err := chunkw.WriteChunks(s.chks...); err != nil {
 			return errors.Wrap(err, "write chunks")
 		}
-		if err := indexw.AddSeries(i, lset, chks...); err != nil {
+		if err := indexw.AddSeries(i, s.lset, s.chks...); err != nil {
 			return errors.Wrap(err, "add series")
 		}
 
-		meta.Stats.NumChunks += uint64(len(chks))
+		meta.Stats.NumChunks += uint64(len(s.chks))
 		meta.Stats.NumSeries++
 
-		for _, chk := range chks {
+		for _, chk := range s.chks {
 			meta.Stats.NumSamples += uint64(chk.Chunk.NumSamples())
 		}
 
-		for _, l := range lset {
+		for _, l := range s.lset {
 			valset, ok := values[l.Name]
 			if !ok {
 				valset = stringset{}
@@ -658,11 +689,8 @@ func rewrite(
 			}
 			valset.set(l.Value)
 		}
-		postings.Add(i, lset)
+		postings.Add(i, s.lset)
 		i++
-	}
-	if all.Err() != nil {
-		return errors.Wrap(all.Err(), "iterate series")
 	}
 
 	s := make([]string, 0, 256)
