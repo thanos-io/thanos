@@ -11,7 +11,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
-## [v0.4.0](https://github.com/improbable-eng/thanos/releases/tag/v0.4.0) - 2019.04.12
+## [v0.4.0-rc.0](https://github.com/improbable-eng/thanos/releases/tag/v0.4.0-rc.0) - 2019.04.12
 
 :warning: **IMPORTANT** :warning: This is the last release that supports gossip. From 0.5.0. Gossip will be removed.
 See [this](docs/proposals/approved/201809_gossip-removal.md) for more details.
@@ -102,7 +102,7 @@ This to have SRV resolution working on [Golang 1.11+ with KubeDNS below v1.14](h
   Whoever due to nature of Thanos compaction (distributed systems), for safety reason this is disabled for Thanos compactor for now.
  
 - [#868](https://github.com/improbable-eng/thanos/pull/868) Go has been updated to 1.12.
-- [#1009](https://github.com/improbable-eng/thanos/pull/1009) Prometheus library updated to v2.8.1 
+
 ### Fixed
 
 - [#921](https://github.com/improbable-eng/thanos/pull/921) `thanos_objstore_bucket_last_successful_upload_time` now does not appear when no blocks have been uploaded so far.
