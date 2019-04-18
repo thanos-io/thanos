@@ -165,10 +165,20 @@ func (s *TSDBStore) translateAndExtendLabels(m, extend labels.Labels) []storepb.
 }
 
 // LabelNames returns all known label names.
-func (s *TSDBStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
+func (s *TSDBStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesRequest) (
 	*storepb.LabelNamesResponse, error,
 ) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+	q, err := s.db.Querier(math.MinInt64, math.MaxInt64)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	defer runutil.CloseWithLogOnErr(s.logger, q, "close tsdb querier label names")
+
+	res, err := q.LabelNames()
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &storepb.LabelNamesResponse{Names: res}, nil
 }
 
 // LabelValues returns all known label values for a given label name.
