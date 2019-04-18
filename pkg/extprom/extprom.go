@@ -1,31 +1,21 @@
 package extprom
 
-import (
-	"github.com/prometheus/client_golang/prometheus"
-)
+import "github.com/prometheus/client_golang/prometheus"
 
-// SubsystemRegisterer type allows for subsystem specification. All packages that uses this type
-// should use the gien subsystem.
-// Registerer methods works even if registerer reference points to nil.
-type SubsystemRegisterer struct {
-	registerer prometheus.Registerer
-	subsystem  string
-}
-
-func (r *SubsystemRegisterer) Registerer() prometheus.Registerer {
-	if r == nil {
+// WrapRegistererWithPrefix is like prometheus.WrapRegistererWithPrefix but it passes nil straight through
+// which allows nil check.
+func WrapRegistererWithPrefix(prefix string, reg prometheus.Registerer) prometheus.Registerer {
+	if reg == nil {
 		return nil
 	}
-	return r.registerer
+	return prometheus.WrapRegistererWithPrefix(prefix, reg)
 }
 
-func (r *SubsystemRegisterer) Subsystem() string {
-	if r == nil {
-		return ""
+// WrapRegistererWith is like prometheus.WrapRegistererWith but it passes nil straight through
+// which allows nil check.
+func WrapRegistererWith(labels prometheus.Labels, reg prometheus.Registerer) prometheus.Registerer {
+	if reg == nil {
+		return nil
 	}
-	return r.subsystem
-}
-
-func NewSubsystem(reg prometheus.Registerer, subsystem string) *SubsystemRegisterer {
-	return &SubsystemRegisterer{registerer: reg, subsystem: subsystem}
+	return prometheus.WrapRegistererWith(labels, reg)
 }

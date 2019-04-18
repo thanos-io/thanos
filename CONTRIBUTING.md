@@ -15,7 +15,7 @@ The philosophy of Thanos and our community is borrowing much from UNIX philosoph
 * Write components that work together
   * e.g. blocks should be stored in native prometheus format
 * Make it easy to read, write, and, run components
-  * e.g. reduce complexity in system design and implementation  
+  * e.g. reduce complexity in system design and implementation
 
 ## Adding New Features / Components
 
@@ -27,7 +27,7 @@ Adding large new features and components to Thanos should be done by first creat
 
 ## Pull Request Process
 
-1. Read [getting started docs](docs/getting_started.md) and prepare Thanos.
+1. Read [getting started docs](docs/getting-started.md) and prepare Thanos.
 2. Familiarize yourself with [Makefile](Makefile) commands like `format`, `build`, `proto` and `test`.
 3. Fork improbable-eng/thanos.git and start development from your own fork. Here are sample steps to setup your development environment:
 ```console
@@ -65,3 +65,27 @@ CI runs GCS and inmem tests only for now. Not having these variables will produc
 7. You may merge the Pull Request in once you have the sign-off of at least one developers with write access, or if you
    do not have permission to do that, you may request the second reviewer to merge it for you.
 8. If you feel like your PR waits too long for a review, feel free to ping [`#thanos-dev`](https://join.slack.com/t/improbable-eng/shared_invite/enQtMzQ1ODcyMzQ5MjM4LWY5ZWZmNGM2ODc5MmViNmQ3ZTA3ZTY3NzQwOTBlMTkzZmIxZTIxODk0OWU3YjZhNWVlNDU3MDlkZGViZjhkMjc) channel on our slack for review!
+
+## Dependency management
+
+The Thanos project uses [Go modules](https://golang.org/cmd/go/#hdr-Modules__module_versions__and_more) to manage dependencies on external packages. This requires a working Go environment with version 1.11 or greater, git and [bzr](http://wiki.bazaar.canonical.com/Download) installed.
+
+To add or update a new dependency, use the `go get` command:
+
+```bash
+# Pick the latest tagged release.
+go get example.com/some/module/pkg
+
+# Pick a specific version.
+go get example.com/some/module/pkg@vX.Y.Z
+```
+
+Tidy up the `go.mod` and `go.sum` files:
+
+```bash
+make go-mod-tidy
+git add go.mod go.sum
+git commit
+```
+
+You have to commit the changes to `go.mod` and `go.sum` before submitting the pull request.

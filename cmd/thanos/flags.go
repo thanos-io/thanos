@@ -17,6 +17,25 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
+func regGRPCFlags(cmd *kingpin.CmdClause) (
+	grpcBindAddr *string,
+	grpcTLSSrvCert *string,
+	grpcTLSSrvKey *string,
+	grpcTLSSrvClientCA *string,
+) {
+	grpcBindAddr = cmd.Flag("grpc-address", "Listen ip:port address for gRPC endpoints (StoreAPI). Make sure this address is routable from other components if you use gossip, 'grpc-advertise-address' is empty and you require cross-node connection.").
+		Default("0.0.0.0:10901").String()
+
+	grpcTLSSrvCert = cmd.Flag("grpc-server-tls-cert", "TLS Certificate for gRPC server, leave blank to disable TLS").Default("").String()
+	grpcTLSSrvKey = cmd.Flag("grpc-server-tls-key", "TLS Key for the gRPC server, leave blank to disable TLS").Default("").String()
+	grpcTLSSrvClientCA = cmd.Flag("grpc-server-tls-client-ca", "TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").Default("").String()
+
+	return grpcBindAddr,
+		grpcTLSSrvCert,
+		grpcTLSSrvKey,
+		grpcTLSSrvClientCA
+}
+
 func regCommonServerFlags(cmd *kingpin.CmdClause) (
 	grpcBindAddr *string,
 	httpBindAddr *string,
@@ -25,45 +44,38 @@ func regCommonServerFlags(cmd *kingpin.CmdClause) (
 	grpcTLSSrvClientCA *string,
 	peerFunc func(log.Logger, *prometheus.Registry, bool, string, bool) (cluster.Peer, error)) {
 
-	grpcBindAddr = cmd.Flag("grpc-address", "Listen ip:port address for gRPC endpoints (StoreAPI). Make sure this address is routable from other components if you use gossip, 'grpc-advertise-address' is empty and you require cross-node connection.").
-		Default("0.0.0.0:10901").String()
-
-	grpcAdvertiseAddr := cmd.Flag("grpc-advertise-address", "Explicit (external) host:port address to advertise for gRPC StoreAPI in gossip cluster. If empty, 'grpc-address' will be used.").
+	httpBindAddr = regHTTPAddrFlag(cmd)
+	grpcBindAddr, grpcTLSSrvCert, grpcTLSSrvKey, grpcTLSSrvClientCA = regGRPCFlags(cmd)
+	grpcAdvertiseAddr := cmd.Flag("grpc-advertise-address", "Deprecated(gossip will be removed from v0.5.0): Explicit (external) host:port address to advertise for gRPC StoreAPI in gossip cluster. If empty, 'grpc-address' will be used.").
 		String()
 
-	grpcTLSSrvCert = cmd.Flag("grpc-server-tls-cert", "TLS Certificate for gRPC server, leave blank to disable TLS").Default("").String()
-	grpcTLSSrvKey = cmd.Flag("grpc-server-tls-key", "TLS Key for the gRPC server, leave blank to disable TLS").Default("").String()
-	grpcTLSSrvClientCA = cmd.Flag("grpc-server-tls-client-ca", "TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").Default("").String()
-
-	httpBindAddr = regHTTPAddrFlag(cmd)
-
-	clusterBindAddr := cmd.Flag("cluster.address", "Listen ip:port address for gossip cluster.").
+	clusterBindAddr := cmd.Flag("cluster.address", "Deprecated(gossip will be removed from v0.5.0): Listen ip:port address for gossip cluster.").
 		Default("0.0.0.0:10900").String()
 
-	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "Explicit (external) ip:port address to advertise for gossip in gossip cluster. Used internally for membership only.").
+	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "Deprecated(gossip will be removed from v0.5.0): Explicit (external) ip:port address to advertise for gossip in gossip cluster. Used internally for membership only.").
 		String()
 
-	peers := cmd.Flag("cluster.peers", "Initial peers to join the cluster. It can be either <ip:port>, or <domain:port>. A lookup resolution is done only at the startup.").Strings()
+	peers := cmd.Flag("cluster.peers", "Deprecated(gossip will be removed from v0.5.0): Initial peers to join the cluster. It can be either <ip:port>, or <domain:port>. A lookup resolution is done only at the startup.").Strings()
 
-	gossipInterval := modelDuration(cmd.Flag("cluster.gossip-interval", "Interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth. Default is used from a specified network-type.").
+	gossipInterval := modelDuration(cmd.Flag("cluster.gossip-interval", "Deprecated(gossip will be removed from v0.5.0): Interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth. Default is used from a specified network-type.").
 		PlaceHolder("<gossip interval>"))
 
-	pushPullInterval := modelDuration(cmd.Flag("cluster.pushpull-interval", "Interval for gossip state syncs. Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage. Default is used from a specified network-type.").
+	pushPullInterval := modelDuration(cmd.Flag("cluster.pushpull-interval", "Deprecated(gossip will be removed from v0.5.0): Interval for gossip state syncs. Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage. Default is used from a specified network-type.").
 		PlaceHolder("<push-pull interval>"))
 
-	refreshInterval := modelDuration(cmd.Flag("cluster.refresh-interval", "Interval for membership to refresh cluster.peers state, 0 disables refresh.").Default(cluster.DefaultRefreshInterval.String()))
+	refreshInterval := modelDuration(cmd.Flag("cluster.refresh-interval", "Deprecated(gossip will be removed from v0.5.0): Interval for membership to refresh cluster.peers state, 0 disables refresh.").Default(cluster.DefaultRefreshInterval.String()))
 
-	secretKey := cmd.Flag("cluster.secret-key", "Initial secret key to encrypt cluster gossip. Can be one of AES-128, AES-192, or AES-256 in hexadecimal format.").HexBytes()
+	secretKey := cmd.Flag("cluster.secret-key", "Deprecated(gossip will be removed from v0.5.0): Initial secret key to encrypt cluster gossip. Can be one of AES-128, AES-192, or AES-256 in hexadecimal format.").HexBytes()
 
 	networkType := cmd.Flag("cluster.network-type",
-		fmt.Sprintf("Network type with predefined peers configurations. Sets of configurations accounting the latency differences between network types: %s.",
+		fmt.Sprintf("Deprecated(gossip will be removed from v0.5.0): Network type with predefined peers configurations. Sets of configurations accounting the latency differences between network types: %s.",
 			strings.Join(cluster.NetworkPeerTypes, ", "),
 		),
 	).
 		Default(cluster.LanNetworkPeerType).
 		Enum(cluster.NetworkPeerTypes...)
 
-	gossipDisabled := cmd.Flag("cluster.disable", "If true gossip will be disabled and no cluster related server will be started.").Default("false").Bool()
+	gossipDisabled := cmd.Flag("cluster.disable", "Deprecated(gossip will be removed from v0.5.0): If true gossip will be disabled and no cluster related server will be started.").Default("true").Bool()
 
 	return grpcBindAddr,
 		httpBindAddr,
@@ -134,42 +146,56 @@ func modelDuration(flags *kingpin.FlagClause) *model.Duration {
 }
 
 type pathOrContent struct {
-	name string
+	fileFlagName    string
+	contentFlagName string
 
-	path    *string
-	content *string
+	required bool
+	path     *string
+	content  *string
 }
 
+// Content returns content of the file. Flag that specifies path has priority.
+// It returns error if the content is empty and required flag is set to true.
 func (p *pathOrContent) Content() ([]byte, error) {
 	if len(*p.path) > 0 && len(*p.content) > 0 {
-		return nil, errors.Errorf("Both file and content are set for %s", p.name)
+		return nil, errors.Errorf("Both %s and %s flags set.", p.fileFlagName, p.contentFlagName)
 	}
 
+	var content []byte
 	if len(*p.path) > 0 {
 		c, err := ioutil.ReadFile(*p.path)
 		if err != nil {
-			return nil, errors.Wrap(err, fmt.Sprintf("loading YAML file %s for %s", *p.path, p.name))
+			return nil, errors.Wrapf(err, "loading YAML file %s for %s", *p.path, p.fileFlagName)
 		}
-		return c, nil
+		content = c
+	} else {
+		content = []byte(*p.content)
 	}
 
-	if len(*p.content) > 0 {
-		return []byte(*p.content), nil
+	if len(content) == 0 && p.required {
+		return nil, errors.Errorf("flag %s or %s is required for running this command and content cannot be empty.", p.fileFlagName, p.contentFlagName)
 	}
 
-	return nil, nil
+	return content, nil
 }
 
-func regCommonObjStoreFlags(cmd *kingpin.CmdClause, suffix string) *pathOrContent {
+func regCommonObjStoreFlags(cmd *kingpin.CmdClause, suffix string, required bool, extraDesc ...string) *pathOrContent {
 	fileFlagName := fmt.Sprintf("objstore%s.config-file", suffix)
-	bucketConfFile := cmd.Flag(fileFlagName, fmt.Sprintf("Path to YAML file that contains object store%s configuration.", suffix)).
-		PlaceHolder("<bucket.config-yaml-path>").String()
+	contentFlagName := fmt.Sprintf("objstore%s.config", suffix)
 
-	bucketConf := cmd.Flag(fmt.Sprintf("objstore%s.config", suffix), fmt.Sprintf("Alternative to '%s' flag. Object store%s configuration in YAML.", fileFlagName, suffix)).
+	help := fmt.Sprintf("Path to YAML file that contains object store%s configuration.", suffix)
+	help = strings.Join(append([]string{help}, extraDesc...), " ")
+	bucketConfFile := cmd.Flag(fileFlagName, help).PlaceHolder("<bucket.config-yaml-path>").String()
+
+	help = fmt.Sprintf("Alternative to '%s' flag. Object store%s configuration in YAML.", fileFlagName, suffix)
+	help = strings.Join(append([]string{help}, extraDesc...), " ")
+	bucketConf := cmd.Flag(contentFlagName, help).
 		PlaceHolder("<bucket.config-yaml>").String()
 
 	return &pathOrContent{
-		name: fmt.Sprintf("objstore%s.config", suffix),
+		fileFlagName:    fileFlagName,
+		contentFlagName: contentFlagName,
+		required:        required,
 
 		path:    bucketConfFile,
 		content: bucketConf,

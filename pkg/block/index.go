@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/tsdb/fileutil"
 
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
@@ -25,8 +26,10 @@ import (
 	"github.com/prometheus/tsdb/labels"
 )
 
-// IndexCacheFilename is the canonical name for index cache files.
-const IndexCacheFilename = "index.cache.json"
+const (
+	// IndexCacheVersion is a enumeration of index cache versions supported by Thanos.
+	IndexCacheVersion1 = iota + 1
+)
 
 type postingsRange struct {
 	Name, Value string
@@ -34,10 +37,11 @@ type postingsRange struct {
 }
 
 type indexCache struct {
-	Version     int
-	Symbols     map[uint32]string
-	LabelValues map[string][]string
-	Postings    []postingsRange
+	Version      int
+	CacheVersion int
+	Symbols      map[uint32]string
+	LabelValues  map[string][]string
+	Postings     []postingsRange
 }
 
 type realByteSlice []byte
@@ -111,9 +115,10 @@ func WriteIndexCache(logger log.Logger, indexFn string, fn string) error {
 	defer runutil.CloseWithLogOnErr(logger, f, "index cache writer")
 
 	v := indexCache{
-		Version:     indexr.Version(),
-		Symbols:     symbols,
-		LabelValues: map[string][]string{},
+		Version:      indexr.Version(),
+		CacheVersion: IndexCacheVersion1,
+		Symbols:      symbols,
+		LabelValues:  map[string][]string{},
 	}
 
 	// Extract label value indices.
@@ -248,6 +253,20 @@ type Stats struct {
 	// Specifically we mean here chunks with minTime == block.maxTime and maxTime > block.MaxTime. These are
 	// are segregated into separate counters. These chunks are safe to be deleted, since they are duplicated across 2 blocks.
 	Issue347OutsideChunks int
+	// OutOfOrderLabels represents the number of postings that contained out
+	// of order labels, a bug present in Prometheus 2.8.0 and below.
+	OutOfOrderLabels int
+}
+
+// PrometheusIssue5372Err returns an error if the Stats object indicates
+// postings with out of order labels.  This is corrected by Prometheus Issue
+// #5372 and affects Prometheus versions 2.8.0 and below.
+func (i Stats) PrometheusIssue5372Err() error {
+	if i.OutOfOrderLabels > 0 {
+		return errors.Errorf("index contains %d postings with out of order labels",
+			i.OutOfOrderLabels)
+	}
+	return nil
 }
 
 // Issue347OutsideChunksErr returns error if stats indicates issue347 block issue, that is repaired explicitly before compaction (on plan block).
@@ -301,6 +320,10 @@ func (i Stats) AnyErr() error {
 		errMsg = append(errMsg, err.Error())
 	}
 
+	if err := i.PrometheusIssue5372Err(); err != nil {
+		errMsg = append(errMsg, err.Error())
+	}
+
 	if len(errMsg) > 0 {
 		return errors.New(strings.Join(errMsg, ", "))
 	}
@@ -347,8 +370,13 @@ func GatherIndexIssueStats(logger log.Logger, fn string, minTime int64, maxTime 
 		}
 		l0 := lset[0]
 		for _, l := range lset[1:] {
-			if l.Name <= l0.Name {
-				return stats, errors.Errorf("out-of-order label set %s for series %d", lset, id)
+			if l.Name < l0.Name {
+				stats.OutOfOrderLabels++
+				level.Warn(logger).Log("msg",
+					"out-of-order label set: known bug in Prometheus 2.8.0 and below",
+					"labelset", fmt.Sprintf("%s", lset),
+					"series", fmt.Sprintf("%d", id),
+				)
 			}
 			l0 = l
 		}

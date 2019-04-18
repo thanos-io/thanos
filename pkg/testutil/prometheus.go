@@ -1,25 +1,29 @@
 package testutil
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"math"
 	"math/rand"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
+	"testing"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
-
 	"github.com/go-kit/kit/log"
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/tsdb/testutil"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -28,17 +32,18 @@ const (
 	defaultAlertmanagerVersion = "v0.15.2"
 	defaultMinioVersion        = "RELEASE.2018-10-06T00-15-16Z"
 
-	promBinEnvVar         = "THANOS_TEST_PROMETHEUS_PATH"
+	// Space delimited list of versions.
+	promVersionsEnvVar    = "THANOS_TEST_PROMETHEUS_VERSIONS"
 	alertmanagerBinEnvVar = "THANOS_TEST_ALERTMANAGER_PATH"
 	minioBinEnvVar        = "THANOS_TEST_MINIO_PATH"
 )
 
 func PrometheusBinary() string {
-	b := os.Getenv(promBinEnvVar)
-	if b == "" {
-		return fmt.Sprintf("prometheus-%s", defaultPrometheusVersion)
-	}
-	return b
+	return prometheusBin(defaultPrometheusVersion)
+}
+
+func prometheusBin(version string) string {
+	return fmt.Sprintf("prometheus-%s", version)
 }
 
 func AlertmanagerBinary() string {
@@ -60,13 +65,15 @@ func MinioBinary() string {
 // Prometheus represents a test instance for integration testing.
 // It can be populated with data before being started.
 type Prometheus struct {
-	dir    string
-	db     *tsdb.DB
-	prefix string
+	dir     string
+	db      *tsdb.DB
+	prefix  string
+	version string
 
-	running bool
-	cmd     *exec.Cmd
-	addr    string
+	running            bool
+	cmd                *exec.Cmd
+	disabledCompaction bool
+	addr               string
 }
 
 func NewTSDB() (*tsdb.DB, error) {
@@ -80,13 +87,40 @@ func NewTSDB() (*tsdb.DB, error) {
 	})
 }
 
+func ForeachPrometheus(t *testing.T, testFn func(t testing.TB, p *Prometheus)) {
+	vers := os.Getenv(promVersionsEnvVar)
+	if vers == "" {
+		vers = defaultPrometheusVersion
+	}
+
+	for _, ver := range strings.Split(vers, " ") {
+		if ok := t.Run(ver, func(t *testing.T) {
+			p, err := newPrometheus(ver, "")
+			testutil.Ok(t, err)
+
+			testFn(t, p)
+		}); !ok {
+			return
+		}
+	}
+}
+
 // NewPrometheus creates a new test Prometheus instance that will listen on local address.
+// DEPRECARED: Use ForeachPrometheus instead.
 func NewPrometheus() (*Prometheus, error) {
-	return NewPrometheusOnPath("")
+	return newPrometheus("", "")
 }
 
 // NewPrometheus creates a new test Prometheus instance that will listen on local address and given prefix path.
 func NewPrometheusOnPath(prefix string) (*Prometheus, error) {
+	return newPrometheus("", prefix)
+}
+
+func newPrometheus(version string, prefix string) (*Prometheus, error) {
+	if version == "" {
+		version = defaultPrometheusVersion
+	}
+
 	db, err := NewTSDB()
 	if err != nil {
 		return nil, err
@@ -99,34 +133,46 @@ func NewPrometheusOnPath(prefix string) (*Prometheus, error) {
 	}
 
 	return &Prometheus{
-		dir:    db.Dir(),
-		db:     db,
-		prefix: prefix,
-		addr:   "<prometheus-not-started>",
+		dir:     db.Dir(),
+		db:      db,
+		prefix:  prefix,
+		version: version,
+		addr:    "<prometheus-not-started>",
 	}, nil
 }
 
 // Start running the Prometheus instance and return.
 func (p *Prometheus) Start() error {
-	p.running = true
-
-	if err := p.db.Close(); err != nil {
-		return err
+	if !p.running {
+		if err := p.db.Close(); err != nil {
+			return err
+		}
 	}
+	p.running = true
 
 	port, err := FreePort()
 	if err != nil {
 		return err
 	}
 
+	var extra []string
+	if p.disabledCompaction {
+		extra = append(extra,
+			"--storage.tsdb.min-block-duration=2h",
+			"--storage.tsdb.max-block-duration=2h",
+		)
+	}
 	p.addr = fmt.Sprintf("localhost:%d", port)
-	p.cmd = exec.Command(
-		PrometheusBinary(),
-		"--storage.tsdb.path="+p.db.Dir(),
-		"--web.listen-address="+p.addr,
-		"--web.route-prefix="+p.prefix,
-		"--config.file="+filepath.Join(p.db.Dir(), "prometheus.yml"),
-	)
+	args := append([]string{
+		"--storage.tsdb.retention=2d", // Pass retention cause prometheus since 2.8.0 don't show default value for that flags in web/api: https://github.com/prometheus/prometheus/pull/5433
+		"--storage.tsdb.path=" + p.db.Dir(),
+		"--web.listen-address=" + p.addr,
+		"--web.route-prefix=" + p.prefix,
+		"--web.enable-admin-api",
+		"--config.file=" + filepath.Join(p.db.Dir(), "prometheus.yml"),
+	}, extra...)
+
+	p.cmd = exec.Command(prometheusBin(p.version), args...)
 	go func() {
 		if b, err := p.cmd.CombinedOutput(); err != nil {
 			fmt.Fprintln(os.Stderr, "running Prometheus failed", err)
@@ -138,12 +184,48 @@ func (p *Prometheus) Start() error {
 	return nil
 }
 
-// Addr gets correct address after Start method.
+func (p *Prometheus) WaitPrometheusUp(ctx context.Context) error {
+	if !p.running {
+		return errors.New("method Start was not invoked.")
+	}
+	return runutil.Retry(time.Second, ctx.Done(), func() error {
+		r, err := http.Get(fmt.Sprintf("http://%s/-/ready", p.addr))
+		if err != nil {
+			return err
+		}
+
+		if r.StatusCode != 200 {
+			return errors.Errorf("Got non 200 response: %v", r.StatusCode)
+		}
+		return nil
+	})
+}
+
+func (p *Prometheus) Restart() error {
+	if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		return errors.Wrap(err, "failed to kill Prometheus. Kill it manually")
+	}
+
+	_ = p.cmd.Wait()
+
+	return p.Start()
+}
+
+// Dir returns TSDB dir.
+func (p *Prometheus) Dir() string {
+	return p.dir
+}
+
+// Addr returns correct address after Start method.
 func (p *Prometheus) Addr() string {
 	return p.addr + p.prefix
 }
 
-// SetConfig updates the contents of the config file.
+func (p *Prometheus) DisableCompaction() {
+	p.disabledCompaction = true
+}
+
+// SetConfig updates the contents of the config file. By default it is empty.
 func (p *Prometheus) SetConfig(s string) (err error) {
 	f, err := os.Create(filepath.Join(p.dir, "prometheus.yml"))
 	if err != nil {
@@ -182,12 +264,39 @@ func (p *Prometheus) Appender() tsdb.Appender {
 // CreateBlock writes a block with the given series and numSamples samples each.
 // Samples will be in the time range [mint, maxt).
 func CreateBlock(
+	ctx context.Context,
 	dir string,
 	series []labels.Labels,
 	numSamples int,
 	mint, maxt int64,
 	extLset labels.Labels,
 	resolution int64,
+) (id ulid.ULID, err error) {
+	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false)
+}
+
+// CreateBlockWithTombstone is same as CreateBlock but leaves tombstones which mimics the Prometheus local block.
+func CreateBlockWithTombstone(
+	ctx context.Context,
+	dir string,
+	series []labels.Labels,
+	numSamples int,
+	mint, maxt int64,
+	extLset labels.Labels,
+	resolution int64,
+) (id ulid.ULID, err error) {
+	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, true)
+}
+
+func createBlock(
+	ctx context.Context,
+	dir string,
+	series []labels.Labels,
+	numSamples int,
+	mint, maxt int64,
+	extLset labels.Labels,
+	resolution int64,
+	tombstones bool,
 ) (id ulid.ULID, err error) {
 	h, err := tsdb.NewHead(nil, nil, nil, 10000000000)
 	if err != nil {
@@ -234,7 +343,7 @@ func CreateBlock(
 	if err := g.Wait(); err != nil {
 		return id, err
 	}
-	c, err := tsdb.NewLeveledCompactor(nil, log.NewNopLogger(), []int64{maxt - mint}, nil)
+	c, err := tsdb.NewLeveledCompactor(ctx, nil, log.NewNopLogger(), []int64{maxt - mint}, nil)
 	if err != nil {
 		return id, errors.Wrap(err, "create compactor")
 	}
@@ -252,8 +361,10 @@ func CreateBlock(
 		return id, errors.Wrap(err, "finalize block")
 	}
 
-	if err = os.Remove(filepath.Join(dir, id.String(), "tombstones")); err != nil {
-		return id, errors.Wrap(err, "remove tombstones")
+	if !tombstones {
+		if err = os.Remove(filepath.Join(dir, id.String(), "tombstones")); err != nil {
+			return id, errors.Wrap(err, "remove tombstones")
+		}
 	}
 
 	return id, nil

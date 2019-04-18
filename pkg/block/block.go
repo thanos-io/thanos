@@ -25,6 +25,8 @@ const (
 	MetaFilename = "meta.json"
 	// IndexFilename is the known index file for block index.
 	IndexFilename = "index"
+	// IndexCacheFilename is the canonical name for index cache file that stores essential information needed.
+	IndexCacheFilename = "index.cache.json"
 	// ChunksDirname is the known dir name for chunks with compressed samples.
 	ChunksDirname = "chunks"
 
@@ -93,6 +95,12 @@ func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 		return cleanUp(bkt, id, errors.Wrap(err, "upload index"))
 	}
 
+	if meta.Thanos.Source == metadata.CompactorSource {
+		if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, IndexCacheFilename), path.Join(id.String(), IndexCacheFilename)); err != nil {
+			return cleanUp(bkt, id, errors.Wrap(err, "upload index cache"))
+		}
+	}
+
 	// Meta.json always need to be uploaded as a last item. This will allow to assume block directories without meta file
 	// to be pending uploads.
 	if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, MetaFilename), path.Join(id.String(), MetaFilename)); err != nil {
@@ -118,6 +126,7 @@ func Delete(ctx context.Context, bucket objstore.Bucket, id ulid.ULID) error {
 }
 
 // DownloadMeta downloads only meta file from bucket by block ID.
+// TODO(bwplotka): Differentiate between network error & partial upload.
 func DownloadMeta(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID) (metadata.Meta, error) {
 	rc, err := bkt.Get(ctx, path.Join(id.String(), MetaFilename))
 	if err != nil {

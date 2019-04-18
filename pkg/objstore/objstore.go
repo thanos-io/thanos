@@ -106,7 +106,7 @@ func DeleteDir(ctx context.Context, bkt Bucket, dir string) error {
 // DownloadFile downloads the src file from the bucket to dst. If dst is an existing
 // directory, a file with the same name as the source is created in dst.
 // If destination file is already existing, download file will overwrite it.
-func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src, dst string) error {
+func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src, dst string) (err error) {
 	if fi, err := os.Stat(dst); err == nil {
 		if fi.IsDir() {
 			dst = filepath.Join(dst, filepath.Base(src))
@@ -125,8 +125,6 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 	if err != nil {
 		return errors.Wrap(err, "create file")
 	}
-	defer runutil.CloseWithLogOnErr(logger, f, "download block's output file")
-
 	defer func() {
 		if err != nil {
 			if rerr := os.Remove(dst); rerr != nil {
@@ -134,6 +132,8 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 			}
 		}
 	}()
+	defer runutil.CloseWithLogOnErr(logger, f, "download block's output file")
+
 	if _, err = io.Copy(f, rc); err != nil {
 		return errors.Wrap(err, "copy object to file")
 	}
@@ -170,6 +170,23 @@ func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, src, 
 	return nil
 }
 
+// Exists returns true, if file exists, otherwise false and nil error if presence IsObjNotFoundErr, otherwise false with
+// returning error.
+func Exists(ctx context.Context, bkt Bucket, src string) (bool, error) {
+	rc, err := bkt.Get(ctx, src)
+	if rc != nil {
+		_ = rc.Close()
+	}
+	if err != nil {
+		if bkt.IsObjNotFoundErr(err) {
+			return false, nil
+		}
+		return false, errors.Wrap(err, "stat object")
+	}
+
+	return true, nil
+}
+
 // BucketWithMetrics takes a bucket and registers metrics with the given registry for
 // operations run against the bucket.
 func BucketWithMetrics(name string, b Bucket, r prometheus.Registerer) Bucket {
@@ -194,10 +211,10 @@ func BucketWithMetrics(name string, b Bucket, r prometheus.Registerer) Bucket {
 			ConstLabels: prometheus.Labels{"bucket": name},
 			Buckets:     []float64{0.005, 0.01, 0.02, 0.04, 0.08, 0.15, 0.3, 0.6, 1, 1.5, 2.5, 5, 10, 20, 30},
 		}, []string{"operation"}),
-		lastSuccessfullUploadTime: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name:        "thanos_objstore_bucket_last_successful_upload_time",
-			Help:        "Second timestamp of the last successful upload to the bucket.",
-			ConstLabels: prometheus.Labels{"bucket": name}}),
+		lastSuccessfullUploadTime: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "thanos_objstore_bucket_last_successful_upload_time",
+			Help: "Second timestamp of the last successful upload to the bucket.",
+		}, []string{"bucket"}),
 	}
 	if r != nil {
 		r.MustRegister(bkt.ops, bkt.opsFailures, bkt.opsDuration, bkt.lastSuccessfullUploadTime)
@@ -211,7 +228,7 @@ type metricBucket struct {
 	ops                       *prometheus.CounterVec
 	opsFailures               *prometheus.CounterVec
 	opsDuration               *prometheus.HistogramVec
-	lastSuccessfullUploadTime prometheus.Gauge
+	lastSuccessfullUploadTime *prometheus.GaugeVec
 }
 
 func (b *metricBucket) Iter(ctx context.Context, dir string, f func(name string) error) error {
@@ -287,7 +304,7 @@ func (b *metricBucket) Upload(ctx context.Context, name string, r io.Reader) err
 		b.opsFailures.WithLabelValues(op).Inc()
 	} else {
 		//TODO: Use SetToCurrentTime() once we update the Prometheus client_golang
-		b.lastSuccessfullUploadTime.Set(float64(time.Now().UnixNano()) / 1e9)
+		b.lastSuccessfullUploadTime.WithLabelValues(b.bkt.Name()).Set(float64(time.Now().UnixNano()) / 1e9)
 	}
 	b.ops.WithLabelValues(op).Inc()
 	b.opsDuration.WithLabelValues(op).Observe(time.Since(start).Seconds())

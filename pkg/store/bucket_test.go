@@ -1,12 +1,16 @@
 package store
 
 import (
+	"context"
+	"io/ioutil"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/fortytw2/leaktest"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
+	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/tsdb/labels"
@@ -210,7 +214,7 @@ func TestBucketBlockSet_labelMatchers(t *testing.T) {
 	}
 }
 
-func TestPartitionRanges(t *testing.T) {
+func TestGapBasedPartitioner_Partition(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	const maxGapSize = 1024 * 512
@@ -263,9 +267,29 @@ func TestPartitionRanges(t *testing.T) {
 			expected: []part{{start: 1, end: maxGapSize + 100, elemRng: [2]int{0, 3}}},
 		},
 	} {
-		res := partitionRanges(len(c.input), func(i int) (uint64, uint64) {
+		res := gapBasedPartitioner{maxGapSize: maxGapSize}.Partition(len(c.input), func(i int) (uint64, uint64) {
 			return uint64(c.input[i][0]), uint64(c.input[i][1])
-		}, maxGapSize)
+		})
 		testutil.Equals(t, c.expected, res)
 	}
+}
+
+func TestBucketStore_Info(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	dir, err := ioutil.TempDir("", "prometheus-test")
+	testutil.Ok(t, err)
+
+	bucketStore, err := NewBucketStore(nil, nil, nil, dir, 2e5, 2e5, 0, 0, false, 20)
+	testutil.Ok(t, err)
+
+	resp, err := bucketStore.Info(ctx, &storepb.InfoRequest{})
+	testutil.Ok(t, err)
+
+	testutil.Equals(t, storepb.StoreType_STORE, resp.StoreType)
+	testutil.Equals(t, int64(math.MaxInt64), resp.MinTime)
+	testutil.Equals(t, int64(math.MinInt64), resp.MaxTime)
 }

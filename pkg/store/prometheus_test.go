@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"github.com/fortytw2/leaktest"
+	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/tsdb/labels"
 )
@@ -53,7 +55,7 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, u,
+	proxy, err := NewPrometheusStore(nil, nil, u, component.Sidecar,
 		func() labels.Labels {
 			return labels.FromStrings("region", "eu-west")
 		}, nil)
@@ -134,7 +136,7 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, u, getExternalLabels, nil)
+	proxy, err := NewPrometheusStore(nil, nil, u, component.Sidecar, getExternalLabels, nil)
 	testutil.Ok(t, err)
 
 	resp, err := proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
@@ -168,7 +170,7 @@ func TestPrometheusStore_ExternalLabelValues_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, u, getExternalLabels, nil)
+	proxy, err := NewPrometheusStore(nil, nil, u, component.Sidecar, getExternalLabels, nil)
 	testutil.Ok(t, err)
 
 	resp, err := proxy.LabelValues(ctx, &storepb.LabelValuesRequest{
@@ -212,7 +214,7 @@ func TestPrometheusStore_Series_MatchExternalLabel_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	proxy, err := NewPrometheusStore(nil, nil, u,
+	proxy, err := NewPrometheusStore(nil, nil, u, component.Sidecar,
 		func() labels.Labels {
 			return labels.FromStrings("region", "eu-west")
 		}, nil)
@@ -258,7 +260,7 @@ func TestPrometheusStore_Info(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	proxy, err := NewPrometheusStore(nil, nil, nil,
+	proxy, err := NewPrometheusStore(nil, nil, nil, component.Sidecar,
 		func() labels.Labels {
 			return labels.FromStrings("region", "eu-west")
 		},
@@ -271,46 +273,29 @@ func TestPrometheusStore_Info(t *testing.T) {
 	testutil.Ok(t, err)
 
 	testutil.Equals(t, []storepb.Label{{Name: "region", Value: "eu-west"}}, resp.Labels)
+	testutil.Equals(t, storepb.StoreType_SIDECAR, resp.StoreType)
 	testutil.Equals(t, int64(123), resp.MinTime)
 	testutil.Equals(t, int64(456), resp.MaxTime)
 }
 
-// Regression test for https://github.com/improbable-eng/thanos/issues/396.
-func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
-	p, err := testutil.NewPrometheus()
-	testutil.Ok(t, err)
-
+func testSeries_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t *testing.T, appender tsdb.Appender, newStore func() storepb.StoreServer) {
 	baseT := timestamp.FromTime(time.Now().AddDate(0, 0, -2)) / 1000 * 1000
-
-	a := p.Appender()
 
 	offset := int64(2*math.MaxUint16 + 5)
 	for i := int64(0); i < offset; i++ {
-		_, err = a.Add(labels.FromStrings("a", "b"), baseT+i, 1)
+		_, err := appender.Add(labels.FromStrings("a", "b"), baseT+i, 1)
 		testutil.Ok(t, err)
 	}
 
-	testutil.Ok(t, a.Commit())
+	testutil.Ok(t, appender.Commit())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	testutil.Ok(t, p.Start())
-	defer func() { testutil.Ok(t, p.Stop()) }()
-
-	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
-	testutil.Ok(t, err)
-
-	proxy, err := NewPrometheusStore(nil, nil, u,
-		func() labels.Labels {
-			return labels.FromStrings("region", "eu-west")
-		}, nil)
-	testutil.Ok(t, err)
+	client := newStore()
 	srv := newStoreSeriesServer(ctx)
 
-	testutil.Ok(t, proxy.Series(&storepb.SeriesRequest{
+	testutil.Ok(t, client.Series(&storepb.SeriesRequest{
 		MinTime: baseT,
 		MaxTime: baseT + offset,
 		Matchers: []storepb.LabelMatcher{
@@ -341,4 +326,28 @@ func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t 
 	chunk, err = chunkenc.FromData(chunkenc.EncXOR, firstSeries.Chunks[2].Raw.Data)
 	testutil.Ok(t, err)
 	testutil.Equals(t, 5, chunk.NumSamples())
+}
+
+// Regression test for https://github.com/improbable-eng/thanos/issues/396.
+func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	p, err := testutil.NewPrometheus()
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, p.Stop()) }()
+
+	testSeries_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t, p.Appender(), func() storepb.StoreServer {
+		testutil.Ok(t, p.Start())
+
+		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
+		testutil.Ok(t, err)
+
+		proxy, err := NewPrometheusStore(nil, nil, u, component.Sidecar,
+			func() labels.Labels {
+				return labels.FromStrings("region", "eu-west")
+			}, nil)
+		testutil.Ok(t, err)
+
+		return proxy
+	})
 }

@@ -36,10 +36,19 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes for chunks.").
 		Default("2GB").Bytes()
 
-	objStoreConfig := regCommonObjStoreFlags(cmd, "")
+	maxSampleCount := cmd.Flag("store.grpc.series-sample-limit",
+		"Maximum amount of samples returned via a single Series call. 0 means no limit. NOTE: for efficiency we take 120 as the number of samples in chunk (it cannot be bigger than that), so the actual number of samples might be lower, even though the maximum could be hit.").
+		Default("0").Uint()
+
+	maxConcurrent := cmd.Flag("store.grpc.series-max-concurrency", "Maximum number of concurrent Series calls.").Default("20").Int()
+
+	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
 
 	syncInterval := cmd.Flag("sync-block-duration", "Repeat interval for syncing the blocks between local and remote view.").
 		Default("3m").Duration()
+
+	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing blocks from object storage.").
+		Default("20").Int()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
 		peer, err := newPeerFn(logger, reg, false, "", false)
@@ -60,9 +69,12 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			peer,
 			uint64(*indexCacheSize),
 			uint64(*chunkPoolSize),
+			uint64(*maxSampleCount),
+			int(*maxConcurrent),
 			name,
 			debugLogging,
 			*syncInterval,
+			*blockSyncConcurrency,
 		)
 	}
 }
@@ -83,17 +95,20 @@ func runStore(
 	peer cluster.Peer,
 	indexCacheSizeBytes uint64,
 	chunkPoolSizeBytes uint64,
+	maxSampleCount uint64,
+	maxConcurrent int,
 	component string,
 	verbose bool,
 	syncInterval time.Duration,
+	blockSyncConcurrency int,
 ) error {
 	{
-		bucketConfig, err := objStoreConfig.Content()
+		confContentYaml, err := objStoreConfig.Content()
 		if err != nil {
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, bucketConfig, reg, component)
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component)
 		if err != nil {
 			return errors.Wrap(err, "create bucket client")
 		}
@@ -112,7 +127,10 @@ func runStore(
 			dataDir,
 			indexCacheSizeBytes,
 			chunkPoolSizeBytes,
+			maxSampleCount,
+			maxConcurrent,
 			verbose,
+			blockSyncConcurrency,
 		)
 		if err != nil {
 			return errors.Wrap(err, "create object storage store")

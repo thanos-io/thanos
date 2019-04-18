@@ -12,24 +12,24 @@ import (
 	"path"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/extprom"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/grpc-ecosystem/go-grpc-prometheus"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/cluster"
+	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/discovery/cache"
 	"github.com/improbable-eng/thanos/pkg/discovery/dns"
+	"github.com/improbable-eng/thanos/pkg/extprom"
 	"github.com/improbable-eng/thanos/pkg/query"
-	"github.com/improbable-eng/thanos/pkg/query/api"
+	v1 "github.com/improbable-eng/thanos/pkg/query/api"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/improbable-eng/thanos/pkg/ui"
 	"github.com/oklog/run"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
@@ -39,7 +39,7 @@ import (
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"gopkg.in/alecthomas/kingpin.v2"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 // registerQuery registers a query command.
@@ -82,14 +82,24 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	fileSDInterval := modelDuration(cmd.Flag("store.sd-interval", "Refresh interval to re-read file SD files. It is used as a resync fallback.").
 		Default("5m"))
 
+	// TODO(bwplotka): Grab this from TTL at some point.
 	dnsSDInterval := modelDuration(cmd.Flag("store.sd-dns-interval", "Interval between DNS resolutions.").
 		Default("30s"))
 
-	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified. ").
+	dnsSDResolver := cmd.Flag("store.sd-dns-resolver", fmt.Sprintf("Resolver to use. Possible options: [%s, %s]", dns.GolangResolverType, dns.MiekgdnsResolverType)).
+		Default(string(dns.GolangResolverType)).Hidden().String()
+
+	unhealthyStoreTimeout := modelDuration(cmd.Flag("store.unhealthy-timeout", "Timeout before an unhealthy store is cleaned from the store UI page.").Default("5m"))
+
+	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified.").
 		Default("false").Bool()
 
 	enablePartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified.").
 		Default("true").Bool()
+
+	defaultEvaluationInterval := modelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
+
+	storeResponseTimeout := modelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		peer, err := newPeerFn(logger, reg, true, *httpAdvertiseAddr, true)
@@ -119,6 +129,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			fileSD = file.NewDiscovery(conf, logger)
 		}
 
+		promql.SetDefaultEvaluationInterval(time.Duration(*defaultEvaluationInterval))
+
 		return runQuery(
 			g,
 			logger,
@@ -139,6 +151,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*webPrefixHeaderName,
 			*maxConcurrentQueries,
 			time.Duration(*queryTimeout),
+			time.Duration(*storeResponseTimeout),
 			*replicaLabel,
 			peer,
 			selectorLset,
@@ -147,6 +160,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*enablePartialResponse,
 			fileSD,
 			time.Duration(*dnsSDInterval),
+			*dnsSDResolver,
+			time.Duration(*unhealthyStoreTimeout),
 		)
 	}
 }
@@ -254,6 +269,7 @@ func runQuery(
 	webPrefixHeaderName string,
 	maxConcurrentQueries int,
 	queryTimeout time.Duration,
+	storeResponseTimeout time.Duration,
 	replicaLabel string,
 	peer cluster.Peer,
 	selectorLset labels.Labels,
@@ -262,6 +278,8 @@ func runQuery(
 	enablePartialResponse bool,
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
+	dnsSDResolver string,
+	unhealthyStoreTimeout time.Duration,
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
 	duplicatedStores := prometheus.NewCounter(prometheus.CounterOpts{
@@ -276,7 +294,11 @@ func runQuery(
 	}
 
 	fileSDCache := cache.New()
-	dnsProvider := dns.NewProvider(logger, extprom.NewSubsystem(reg, "query_store_api"))
+	dnsProvider := dns.NewProvider(
+		logger,
+		extprom.WrapRegistererWithPrefix("thanos_querier_store_apis_", reg),
+		dns.ResolverType(dnsSDResolver),
+	)
 
 	var (
 		stores = query.NewStoreSet(
@@ -303,10 +325,9 @@ func runQuery(
 				return specs
 			},
 			dialOpts,
+			unhealthyStoreTimeout,
 		)
-		proxy = store.NewProxyStore(logger, func(context.Context) ([]store.Client, error) {
-			return stores.Get(), nil
-		}, selectorLset)
+		proxy            = store.NewProxyStore(logger, stores.Get, component.Query, selectorLset, storeResponseTimeout)
 		queryableCreator = query.NewQueryableCreator(logger, proxy, replicaLabel)
 		engine           = promql.NewEngine(
 			promql.EngineOpts{
@@ -357,6 +378,7 @@ func runQuery(
 					}
 					fileSDCache.Update(update)
 					stores.Update(ctxUpdate)
+					dnsProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), storeAddrs...))
 				case <-ctxUpdate.Done():
 					return nil
 				}
@@ -446,7 +468,7 @@ func runQuery(
 		if err != nil {
 			return errors.Wrapf(err, "listen gRPC on address")
 		}
-		logger := log.With(logger, "component", "query")
+		logger := log.With(logger, "component", component.Query.String())
 
 		opts, err := defaultGRPCServerOpts(logger, reg, tracer, srvCert, srvKey, srvClientCA)
 		if err != nil {

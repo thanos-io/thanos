@@ -24,7 +24,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
-	"github.com/grpc-ecosystem/go-grpc-prometheus"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/oklog/run"
@@ -78,6 +78,7 @@ func main() {
 	registerCompact(cmds, app, "compact")
 	registerBucket(cmds, app, "bucket")
 	registerDownsample(cmds, app, "downsample")
+	registerReceive(cmds, app, "receive")
 
 	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {

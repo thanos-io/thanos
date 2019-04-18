@@ -8,19 +8,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/pkg/errors"
-	"github.com/prometheus/common/model"
-
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/prometheus/tsdb/labels"
-
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
+	"github.com/improbable-eng/thanos/pkg/promclient"
+	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/testutil"
-	"gopkg.in/yaml.v2"
+	"github.com/pkg/errors"
+	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/tsdb/labels"
+	yaml "gopkg.in/yaml.v2"
 )
 
 func TestStoreGatewayQuery(t *testing.T) {
@@ -44,8 +43,8 @@ func TestStoreGatewayQuery(t *testing.T) {
 
 	exit, err := newSpinupSuite().
 		WithPreStartedMinio(s3Config).
-		Add(storeGateway(1, config), "").
-		Add(querier(1, "replica", storeGatewayGRPC(1)), "").
+		Add(storeGateway(1, config)).
+		Add(querier(1, "replica", storeGatewayGRPC(1))).
 		Exec(t, ctx, "test_store_gateway_query")
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)
@@ -69,10 +68,10 @@ func TestStoreGatewayQuery(t *testing.T) {
 	extLset2 := labels.FromStrings("ext1", "value1", "replica", "2")
 
 	now := time.Now()
-	id1, err := testutil.CreateBlock(dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset, 0)
+	id1, err := testutil.CreateBlock(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset, 0)
 	testutil.Ok(t, err)
 
-	id2, err := testutil.CreateBlock(dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset2, 0)
+	id2, err := testutil.CreateBlock(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset2, 0)
 	testutil.Ok(t, err)
 
 	l := log.NewLogfmtLogger(os.Stdout)
@@ -94,11 +93,22 @@ func TestStoreGatewayQuery(t *testing.T) {
 		default:
 		}
 
-		var err error
-		res, err = queryPrometheus(ctx, "http://"+queryHTTP(1), time.Now(), "{a=\"1\"}", false)
+		var (
+			err      error
+			warnings []string
+		)
+		res, warnings, err = promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "{a=\"1\"}", time.Now(), promclient.QueryOptions{
+			Deduplicate: false,
+		})
 		if err != nil {
 			return err
 		}
+
+		if len(warnings) > 0 {
+			// we don't expect warnings.
+			return errors.Errorf("unexpected warnings %s", warnings)
+		}
+
 		if len(res) != 2 {
 			return errors.Errorf("unexpected result size %d", len(res))
 		}
@@ -128,11 +138,22 @@ func TestStoreGatewayQuery(t *testing.T) {
 		default:
 		}
 
-		var err error
-		res, err = queryPrometheus(ctx, "http://"+queryHTTP(1), time.Now(), "{a=\"1\"}", true)
+		var (
+			err      error
+			warnings []string
+		)
+		res, warnings, err = promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "{a=\"1\"}", time.Now(), promclient.QueryOptions{
+			Deduplicate: true,
+		})
 		if err != nil {
 			return err
 		}
+
+		if len(warnings) > 0 {
+			// we don't expect warnings.
+			return errors.Errorf("unexpected warnings %s", warnings)
+		}
+
 		if len(res) != 1 {
 			return errors.Errorf("unexpected result size %d", len(res))
 		}

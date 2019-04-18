@@ -1,0 +1,66 @@
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: thanos-store-gateway
+  labels:
+    app: thanos-store-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: thanos-store-gateway
+  serviceName: thanos-store-gateway
+  template:
+    metadata:
+      labels:
+        app: thanos-store-gateway
+        thanos-store-api: "true"
+    spec:
+      containers:
+      - name: thanos
+        # TODO(bwplotka): Move to v0.3.2 once available.
+        image: improbable/thanos:master-2019-02-21-0c730c1
+        args:
+        - store
+        - --log.level=debug
+        - --data-dir=/data
+        - --cluster.disable
+        - --index-cache-size=500MB
+        - --chunk-pool-size=500MB
+        - |
+          --objstore.config=type: S3
+          config:
+            bucket: demo-bucket
+            access_key: smth
+            secret_key: Need8Chars
+            endpoint: %%S3_ENDPOINT%%
+            insecure: true
+        ports:
+        - name: http
+          containerPort: 10902
+        - name: grpc
+          containerPort: 10901
+        resources:
+          limits:
+            cpu: "1"
+            memory: 1Gi
+          requests:
+            cpu: "1"
+            memory: 1Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: thanos-store-gateway
+  name: thanos-store-gateway
+spec:
+  ports:
+  - port: 10901
+    protocol: TCP
+    targetPort: grpc
+    name: grpc
+  selector:
+    app: thanos-store-gateway
+  type: NodePort

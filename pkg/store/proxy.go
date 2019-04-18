@@ -2,15 +2,16 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math"
 	"strings"
 	"sync"
-
-	"fmt"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/strutil"
 	"github.com/pkg/errors"
@@ -32,29 +33,39 @@ type Client interface {
 	TimeRange() (mint int64, maxt int64)
 
 	String() string
+	// Addr returns address of a Client.
+	Addr() string
 }
 
 // ProxyStore implements the store API that proxies request to all given underlying stores.
 type ProxyStore struct {
 	logger         log.Logger
-	stores         func(context.Context) ([]Client, error)
+	stores         func() []Client
+	component      component.StoreAPI
 	selectorLabels labels.Labels
+
+	responseTimeout time.Duration
 }
 
 // NewProxyStore returns a new ProxyStore that uses the given clients that implements storeAPI to fan-in all series to the client.
 // Note that there is no deduplication support. Deduplication should be done on the highest level (just before PromQL)
 func NewProxyStore(
 	logger log.Logger,
-	stores func(context.Context) ([]Client, error),
+	stores func() []Client,
+	component component.StoreAPI,
 	selectorLabels labels.Labels,
+	responseTimeout time.Duration,
 ) *ProxyStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
+
 	s := &ProxyStore{
-		logger:         logger,
-		stores:         stores,
-		selectorLabels: selectorLabels,
+		logger:          logger,
+		stores:          stores,
+		component:       component,
+		selectorLabels:  selectorLabels,
+		responseTimeout: responseTimeout,
 	}
 	return s
 }
@@ -62,10 +73,33 @@ func NewProxyStore(
 // Info returns store information about the external labels this store have.
 func (s *ProxyStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	res := &storepb.InfoResponse{
-		MinTime: 0,
-		MaxTime: math.MaxInt64,
-		Labels:  make([]storepb.Label, 0, len(s.selectorLabels)),
+		Labels:    make([]storepb.Label, 0, len(s.selectorLabels)),
+		StoreType: s.component.ToProto(),
 	}
+
+	MinTime := int64(math.MaxInt64)
+	MaxTime := int64(0)
+
+	stores := s.stores()
+	for _, s := range stores {
+		mint, maxt := s.TimeRange()
+		if mint < MinTime {
+			MinTime = mint
+		}
+		if maxt > MaxTime {
+			MaxTime = maxt
+		}
+	}
+
+	// Edge case: we have all of the data if there are no stores.
+	if len(stores) == 0 {
+		MinTime = 0
+		MaxTime = math.MaxInt64
+	}
+
+	res.MaxTime = MaxTime
+	res.MinTime = MinTime
+
 	for _, l := range s.selectorLabels {
 		res.Labels = append(res.Labels, storepb.Label{
 			Name:  l.Name,
@@ -105,13 +139,6 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		return nil
 	}
 
-	stores, err := s.stores(srv.Context())
-	if err != nil {
-		err = errors.Wrap(err, "failed to get store APIs")
-		level.Error(s.logger).Log("err", err)
-		return status.Errorf(codes.Unknown, err.Error())
-	}
-
 	var (
 		g, gctx = errgroup.WithContext(srv.Context())
 
@@ -140,7 +167,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			closeFn()
 		}()
 
-		for _, st := range stores {
+		for _, st := range s.stores() {
 			// We might be able to skip the store if its meta information indicates
 			// it cannot have series matching our query.
 			// NOTE: all matchers are validated in labelsMatches method so we explicitly ignore error.
@@ -150,7 +177,11 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			}
 			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
 
-			sc, err := st.Series(gctx, r)
+			// This is used to cancel this stream when one operations takes too long.
+			seriesCtx, closeSeries := context.WithCancel(gctx)
+			defer closeSeries()
+
+			sc, err := st.Series(seriesCtx, r)
 			if err != nil {
 				storeID := fmt.Sprintf("%v", storepb.LabelsToString(st.Labels()))
 				if storeID == "" {
@@ -165,12 +196,13 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 				continue
 			}
 
-			// Schedule streamSeriesSet that translates gRPC streamed response into seriesSet (if series) or respCh if warnings.
-			seriesSet = append(seriesSet, startStreamSeriesSet(gctx, wg, sc, respSender, st.String(), !r.PartialResponseDisabled))
+			// Schedule streamSeriesSet that translates gRPC streamed response
+			// into seriesSet (if series) or respCh if warnings.
+			seriesSet = append(seriesSet, startStreamSeriesSet(seriesCtx, s.logger, closeSeries,
+				wg, sc, respSender, st.String(), !r.PartialResponseDisabled, s.responseTimeout))
 		}
 
 		level.Debug(s.logger).Log("msg", strings.Join(storeDebugMsgs, ";"))
-
 		if len(seriesSet) == 0 {
 			// This is indicates that configured StoreAPIs are not the ones end user expects
 			err := errors.New("No store matched for this query")
@@ -199,7 +231,6 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		return err
 	}
 	return nil
-
 }
 
 type warnSender interface {
@@ -209,6 +240,9 @@ type warnSender interface {
 // streamSeriesSet iterates over incoming stream of series.
 // All errors are sent out of band via warning channel.
 type streamSeriesSet struct {
+	ctx    context.Context
+	logger log.Logger
+
 	stream storepb.Store_SeriesClient
 	warnCh warnSender
 
@@ -218,30 +252,44 @@ type streamSeriesSet struct {
 	errMtx sync.Mutex
 	err    error
 
-	name string
+	name            string
+	partialResponse bool
+
+	responseTimeout time.Duration
+	closeSeries     context.CancelFunc
 }
 
 func startStreamSeriesSet(
 	ctx context.Context,
+	logger log.Logger,
+	closeSeries context.CancelFunc,
 	wg *sync.WaitGroup,
 	stream storepb.Store_SeriesClient,
 	warnCh warnSender,
 	name string,
 	partialResponse bool,
+	responseTimeout time.Duration,
 ) *streamSeriesSet {
 	s := &streamSeriesSet{
-		stream: stream,
-		warnCh: warnCh,
-		recvCh: make(chan *storepb.Series, 10),
-		name:   name,
+		ctx:             ctx,
+		logger:          logger,
+		closeSeries:     closeSeries,
+		stream:          stream,
+		warnCh:          warnCh,
+		recvCh:          make(chan *storepb.Series, 10),
+		name:            name,
+		partialResponse: partialResponse,
+		responseTimeout: responseTimeout,
 	}
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		defer close(s.recvCh)
+
 		for {
 			r, err := s.stream.Recv()
+
 			if err == io.EOF {
 				return
 			}
@@ -251,14 +299,15 @@ func startStreamSeriesSet(
 			}
 
 			if err != nil {
+				wrapErr := errors.Wrapf(err, "receive series from %s", s.name)
 				if partialResponse {
-					s.warnCh.send(storepb.NewWarnSeriesResponse(errors.Wrap(err, "receive series")))
+					s.warnCh.send(storepb.NewWarnSeriesResponse(wrapErr))
 					return
 				}
 
 				s.errMtx.Lock()
-				defer s.errMtx.Unlock()
-				s.err = err
+				s.err = wrapErr
+				s.errMtx.Unlock()
 				return
 			}
 
@@ -272,10 +321,39 @@ func startStreamSeriesSet(
 	return s
 }
 
-// Next blocks until new message is received or stream is closed.
+// Next blocks until new message is received or stream is closed or operation is timed out.
 func (s *streamSeriesSet) Next() (ok bool) {
-	s.currSeries, ok = <-s.recvCh
-	return ok
+	ctx := s.ctx
+	timeoutMsg := fmt.Sprintf("failed to receive any data from %s", s.name)
+
+	if s.responseTimeout != 0 {
+		timeoutMsg = fmt.Sprintf("failed to receive any data in %s from %s", s.responseTimeout.String(), s.name)
+
+		timeoutCtx, done := context.WithTimeout(s.ctx, s.responseTimeout)
+		defer done()
+		ctx = timeoutCtx
+	}
+
+	select {
+	case s.currSeries, ok = <-s.recvCh:
+		return ok
+	case <-ctx.Done():
+		// closeSeries to shutdown a goroutine in startStreamSeriesSet.
+		s.closeSeries()
+
+		err := errors.Wrap(ctx.Err(), timeoutMsg)
+		if s.partialResponse {
+			level.Warn(s.logger).Log("err", err, "msg", "returning partial response")
+			s.warnCh.send(storepb.NewWarnSeriesResponse(err))
+			return false
+		}
+		s.errMtx.Lock()
+		s.err = err
+		s.errMtx.Unlock()
+
+		level.Warn(s.logger).Log("err", err, "msg", "partial response disabled; aborting request")
+		return false
+	}
 }
 
 func (s *streamSeriesSet) At() ([]storepb.Label, []storepb.AggrChunk) {
@@ -319,7 +397,48 @@ func storeMatches(s Client, mint, maxt int64, matchers ...storepb.LabelMatcher) 
 func (s *ProxyStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
 	*storepb.LabelNamesResponse, error,
 ) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+	var (
+		warnings []string
+		names    [][]string
+		mtx      sync.Mutex
+		g, gctx  = errgroup.WithContext(ctx)
+	)
+
+	for _, st := range s.stores() {
+		st := st
+		g.Go(func() error {
+			resp, err := st.LabelNames(gctx, &storepb.LabelNamesRequest{
+				PartialResponseDisabled: r.PartialResponseDisabled,
+			})
+			if err != nil {
+				err = errors.Wrapf(err, "fetch label names from store %s", st)
+				if r.PartialResponseDisabled {
+					return err
+				}
+
+				mtx.Lock()
+				warnings = append(warnings, err.Error())
+				mtx.Unlock()
+				return nil
+			}
+
+			mtx.Lock()
+			warnings = append(warnings, resp.Warnings...)
+			names = append(names, resp.Names)
+			mtx.Unlock()
+
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	return &storepb.LabelNamesResponse{
+		Names:    strutil.MergeUnsortedSlices(names...),
+		Warnings: warnings,
+	}, nil
 }
 
 // LabelValues returns all known label values for a given label name.
@@ -333,15 +452,11 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		g, gctx  = errgroup.WithContext(ctx)
 	)
 
-	stores, err := s.stores(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Unknown, err.Error())
-	}
-	for _, st := range stores {
+	for _, st := range s.stores() {
 		store := st
 		g.Go(func() error {
 			resp, err := store.LabelValues(gctx, &storepb.LabelValuesRequest{
-				Label: r.Label,
+				Label:                   r.Label,
 				PartialResponseDisabled: r.PartialResponseDisabled,
 			})
 			if err != nil {

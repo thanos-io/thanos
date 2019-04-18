@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
@@ -26,7 +27,7 @@ const (
 type StoreSpec interface {
 	// Addr returns StoreAPI Address for the store spec. It is used as ID for store.
 	Addr() string
-	// Metadata returns current labels and min, max ranges for store.
+	// Metadata returns current labels, store type and min, max ranges for store.
 	// It can change for every call for this method.
 	// If metadata call fails we assume that store is no longer accessible and we should not use it.
 	// NOTE: It is implementation responsibility to retry until context timeout, but a caller responsibility to manage
@@ -38,9 +39,10 @@ type StoreStatus struct {
 	Name      string
 	LastCheck time.Time
 	LastError error
+	Labels    []storepb.Label
+	StoreType component.StoreAPI
 	MinTime   int64
 	MaxTime   int64
-	Labels    []storepb.Label
 }
 
 type grpcStoreSpec struct {
@@ -79,12 +81,13 @@ type StoreSet struct {
 	dialOpts            []grpc.DialOption
 	gRPCInfoCallTimeout time.Duration
 
-	mtx                  sync.RWMutex
-	storesStatusesMtx    sync.RWMutex
-	stores               map[string]*storeRef
-	storeNodeConnections prometheus.Gauge
-	externalLabelStores  map[string]int
-	storeStatuses        map[string]*StoreStatus
+	mtx                   sync.RWMutex
+	storesStatusesMtx     sync.RWMutex
+	stores                map[string]*storeRef
+	storeNodeConnections  prometheus.Gauge
+	externalLabelStores   map[string]int
+	storeStatuses         map[string]*StoreStatus
+	unhealthyStoreTimeout time.Duration
 }
 
 type storeSetNodeCollector struct {
@@ -116,6 +119,7 @@ func NewStoreSet(
 	reg *prometheus.Registry,
 	storeSpecs func() []StoreSpec,
 	dialOpts []grpc.DialOption,
+	unhealthyStoreTimeout time.Duration,
 ) *StoreSet {
 	storeNodeConnections := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_store_nodes_grpc_connections",
@@ -133,14 +137,15 @@ func NewStoreSet(
 	}
 
 	ss := &StoreSet{
-		logger:               log.With(logger, "component", "storeset"),
-		storeSpecs:           storeSpecs,
-		dialOpts:             dialOpts,
-		storeNodeConnections: storeNodeConnections,
-		gRPCInfoCallTimeout:  10 * time.Second,
-		externalLabelStores:  map[string]int{},
-		stores:               make(map[string]*storeRef),
-		storeStatuses:        make(map[string]*StoreStatus),
+		logger:                log.With(logger, "component", "storeset"),
+		storeSpecs:            storeSpecs,
+		dialOpts:              dialOpts,
+		storeNodeConnections:  storeNodeConnections,
+		gRPCInfoCallTimeout:   10 * time.Second,
+		externalLabelStores:   map[string]int{},
+		stores:                make(map[string]*storeRef),
+		storeStatuses:         make(map[string]*StoreStatus),
+		unhealthyStoreTimeout: unhealthyStoreTimeout,
 	}
 
 	storeNodeCollector := &storeSetNodeCollector{externalLabelOccurrences: ss.externalLabelOccurrences}
@@ -159,9 +164,10 @@ type storeRef struct {
 	addr string
 
 	// Meta (can change during runtime).
-	labels  []storepb.Label
-	minTime int64
-	maxTime int64
+	labels    []storepb.Label
+	storeType component.StoreAPI
+	minTime   int64
+	maxTime   int64
 
 	logger log.Logger
 }
@@ -191,6 +197,10 @@ func (s *storeRef) TimeRange() (int64, int64) {
 func (s *storeRef) String() string {
 	mint, maxt := s.TimeRange()
 	return fmt.Sprintf("Addr: %s Labels: %v Mint: %d Maxt: %d", s.addr, s.Labels(), mint, maxt)
+}
+
+func (s *storeRef) Addr() string {
+	return s.addr
 }
 
 func (s *storeRef) close() {
@@ -248,6 +258,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 	}
 	s.externalLabelStores = externalLabelStores
 	s.storeNodeConnections.Set(float64(len(s.stores)))
+	s.cleanUpStoreStatuses()
 }
 
 func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
@@ -305,6 +316,7 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "initial store client info fetch"), "address", addr)
 					return
 				}
+				store.storeType = component.FromProto(resp.StoreType)
 				store.Update(resp.Labels, resp.MinTime, resp.MaxTime)
 			}
 
@@ -337,15 +349,23 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 	s.storesStatusesMtx.Lock()
 	defer s.storesStatusesMtx.Unlock()
 
-	now := time.Now()
-	s.storeStatuses[store.addr] = &StoreStatus{
-		Name:      store.addr,
-		Labels:    store.labels,
-		LastError: err,
-		LastCheck: now,
-		MinTime:   store.minTime,
-		MaxTime:   store.maxTime,
+	status := StoreStatus{Name: store.addr}
+	prev, ok := s.storeStatuses[store.addr]
+	if ok {
+		status = *prev
 	}
+
+	status.LastError = err
+	status.LastCheck = time.Now()
+
+	if err == nil {
+		status.Labels = store.labels
+		status.StoreType = store.storeType
+		status.MinTime = store.minTime
+		status.MaxTime = store.maxTime
+	}
+
+	s.storeStatuses[store.addr] = &status
 }
 
 func (s *StoreSet) GetStoreStatus() []StoreStatus {
@@ -390,5 +410,19 @@ func (s *StoreSet) Get() []store.Client {
 func (s *StoreSet) Close() {
 	for _, st := range s.stores {
 		st.close()
+	}
+}
+
+func (s *StoreSet) cleanUpStoreStatuses() {
+	s.storesStatusesMtx.Lock()
+	defer s.storesStatusesMtx.Unlock()
+
+	now := time.Now()
+	for addr, status := range s.storeStatuses {
+		if _, ok := s.stores[addr]; !ok {
+			if now.Sub(status.LastCheck) >= s.unhealthyStoreTimeout {
+				delete(s.storeStatuses, addr)
+			}
+		}
 	}
 }

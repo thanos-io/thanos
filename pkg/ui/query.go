@@ -3,14 +3,15 @@ package ui
 import (
 	"html/template"
 	"net/http"
+	"os"
 	"path"
+	"sort"
+	"strings"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/query"
-
-	"os"
-
 	"github.com/go-kit/kit/log"
+	"github.com/improbable-eng/thanos/pkg/component"
+	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
@@ -62,6 +63,7 @@ func queryTmplFuncs() template.FuncMap {
 		"formatTimestamp": func(timestamp int64) string {
 			return time.Unix(timestamp/1000, 0).Format(time.RFC3339)
 		},
+		"title": strings.Title,
 	}
 }
 
@@ -117,11 +119,35 @@ func (q *Query) status(w http.ResponseWriter, r *http.Request) {
 
 func (q *Query) stores(w http.ResponseWriter, r *http.Request) {
 	prefix := GetWebPrefix(q.logger, q.flagsMap, r)
-	q.executeTemplate(w, "stores.html", prefix, q.storeSet.GetStoreStatus())
+	statuses := make(map[component.StoreAPI][]query.StoreStatus)
+	for _, status := range q.storeSet.GetStoreStatus() {
+		statuses[status.StoreType] = append(statuses[status.StoreType], status)
+	}
+
+	sources := make([]component.StoreAPI, 0, len(statuses))
+	for k := range statuses {
+		sources = append(sources, k)
+	}
+	sort.Slice(sources, func(i int, j int) bool {
+		if sources[i] == nil {
+			return false
+		}
+		if sources[j] == nil {
+			return true
+		}
+		return sources[i].String() < sources[j].String()
+	})
+
+	q.executeTemplate(w, "stores.html", prefix, struct {
+		Stores  map[component.StoreAPI][]query.StoreStatus
+		Sources []component.StoreAPI
+	}{
+		Stores:  statuses,
+		Sources: sources,
+	})
 }
 
 func (q *Query) flags(w http.ResponseWriter, r *http.Request) {
 	prefix := GetWebPrefix(q.logger, q.flagsMap, r)
-
 	q.executeTemplate(w, "flags.html", prefix, q.flagsMap)
 }

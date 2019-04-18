@@ -12,21 +12,111 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ## Unreleased
 
 ### Added
+- [#811](https://github.com/improbable-eng/thanos/pull/811) Remote write receiver
+- [#798](https://github.com/improbable-eng/thanos/pull/798) Ability to limit the maximum concurrent about of Series() calls in Thanos Store and the maximum amount of samples.
+- [#910](https://github.com/improbable-eng/thanos/pull/910) Query's stores UI page is now sorted by type and old DNS or File SD stores are removed after 5 minutes (configurable via the new `--store.unhealthy-timeout=5m` flag).
+- [#905](https://github.com/improbable-eng/thanos/pull/905) New Query API: /api/v1/labels. Noticed that the API was added in Prometheus v2.6.
 
+New options:
+
+* `--store.grpc.series-sample-limit` limits the amount of samples that might be retrieved on a single Series() call. By default it is 0. Consider enabling it by setting it to more than 0 if you are running on limited resources.
+* `--store.grpc.series-max-concurrency` limits the number of concurrent Series() calls in Thanos Store. By default it is 20. Considering making it lower or bigger depending on the scale of your deployment.
+* `--index.generate-missing-cache-file` if enabled, on startup compactor runs an on-off job that scans all the blocks to find all blocks with missing index cache file. It generates those if needed and upload. By default is disabled. Check logs on existence the line `generating index cache files is done`, then you can disable this flag. 
+
+New metrics:
+* `thanos_bucket_store_queries_dropped_total` shows how many queries were dropped due to the samples limit;
+* `thanos_bucket_store_queries_concurrent_max` is a constant metric which shows how many Series() calls can concurrently be executed by Thanos Store;
+* `thanos_bucket_store_queries_in_flight` shows how many queries are currently "in flight" i.e. they are being executed;
+* `thanos_bucket_store_gate_duration_seconds` shows how many seconds it took for queries to pass through the gate in both cases - when that fails and when it does not.
+
+New tracing span:
+* `store_query_gate_ismyturn` shows how long it took for a query to pass (or not) through the gate.
+
+:warning: **WARNING** :warning: #798 adds a new default limit to Thanos Store: `--store.grpc.series-max-concurrency`. Most likely you will want to make it the same as `--query.max-concurrent` on Thanos Query.
+
+- [#970](https://github.com/improbable-eng/thanos/pull/970) Added `PartialResponseStrategy` field for `RuleGroups` for `Ruler`.
+- [#1016](https://github.com/improbable-eng/thanos/pull/1016) Added option for another DNS resolver (miekg/dns client). 
+This to have SRV resolution working on [Golang 1.11+ with KubeDNS below v1.14](https://github.com/golang/go/issues/27546)
+- [#986](https://github.com/improbable-eng/thanos/pull/986) Store index cache files in object storage, reduces store start-up time by skipping the generating the index cache for all blocks and only do this for recently created uncompacted blocks. 
+
+### Changed 
+- [#970](https://github.com/improbable-eng/thanos/pull/970) Deprecated partial_response_disabled proto field. Added partial_response_strategy instead. Both in gRPC and Query API.
+- [#970](https://github.com/improbable-eng/thanos/pull/970) No `PartialResponseStrategy` field for `RuleGroups` by default means `abort` strategy (old PartialResponse disabled) as this is recommended option for Rules and alerts.
+
+### Fixed
+- [#921](https://github.com/improbable-eng/thanos/pull/921) `thanos_objstore_bucket_last_successful_upload_time` now does not appear when no blocks have been uploaded so far
+- [#966](https://github.com/improbable-eng/thanos/pull/966) Bucket: verify no longer warns about overlapping blocks, that overlap `0s` 
+
+## [v0.3.2](https://github.com/improbable-eng/thanos/releases/tag/v0.3.2) - 2019.03.04
+
+### Added
+- [#851](https://github.com/improbable-eng/thanos/pull/851) New read API endpoint for api/v1/rules and api/v1/alerts.
+- [#873](https://github.com/improbable-eng/thanos/pull/873) Store: fix set index cache LRU
+
+:warning: **WARNING** :warning: #873 fix fixes actual handling of `index-cache-size`. Handling of limit for this cache was
+broken so it was unbounded all the time. From this release actual value matters and is extremely low by default. To "revert"
+the old behaviour (no boundary), use a large enough value.
+
+### Fixed
+- [#833](https://github.com/improbable-eng/thanos/issues/833) Store Gateway matcher regression for intersecting with empty posting.
+- [#867](https://github.com/improbable-eng/thanos/pull/867) Fixed race condition in sidecare between reloader and shipper.
+
+## [v0.3.1](https://github.com/improbable-eng/thanos/releases/tag/v0.3.1) - 2019.02.18
+
+### Fixed
+- [#829](https://github.com/improbable-eng/thanos/issues/829) Store Gateway crashing due to `slice bounds out of range`.
+- [#834](https://github.com/improbable-eng/thanos/issues/834) Store Gateway matcher regression for `<>` `!=`.
+
+
+## [v0.3.0](https://github.com/improbable-eng/thanos/releases/tag/v0.3.0) - 2019.02.08
+
+### Added
+
+- Support for gzip compressed configuration files before envvar substitution for reloader package.
+- `bucket inspect` command for better insights on blocks in object storage.
+- Support for [Tencent COS](docs/storage.md#tencent-cos-configuration) object storage.
 - Partial Response disable option for StoreAPI and QueryAPI.
 - Partial Response disable button on Thanos UI
+- We have initial docs for goDoc documentation!
+- Flags for Querier and Ruler UIs: `--web.route-prefix`, `--web.external-prefix`, `--web.prefix-header`. Details [here](docs/components/query.md#expose-ui-on-a-sub-path)
 
 ### Fixed
 
-- [#745](https://github.com/improbable-eng/thanos/pull/745) - Fixed race conditions and edge cases for Thanos Querier fanout logic. 
 - [#649](https://github.com/improbable-eng/thanos/issues/649) - Fixed store label values api to add also external label values.
-- [#708](https://github.com/improbable-eng/thanos/issues/708) - `"X-Amz-Acl": "bucket-owner-full-control"` metadata for s3 upload operation is no longer set by default which was breaking some providers handled by minio client.
+- [#396](https://github.com/improbable-eng/thanos/issues/396) - Fixed sidecar logic for proxying series that has more than 2^16 samples from Prometheus.
+- [#732](https://github.com/improbable-eng/thanos/pull/732) - Fixed S3 authentication sequence. You can see new sequence enumerated [here](https://github.com/improbable-eng/thanos/blob/master/docs/storage.md#aws-s3-configuration)
+- [#745](https://github.com/improbable-eng/thanos/pull/745) - Fixed race conditions and edge cases for Thanos Querier fanout logic.
+- [#651](https://github.com/improbable-eng/thanos/issues/651) - Fixed index cache when asked buffer size is bigger than cache max size.
 
 ### Changed
 
+- [#529](https://github.com/improbable-eng/thanos/pull/529) Massive improvement for compactor. Downsampling memory consumption was reduce to only store labels and single chunks per each series.
+- Qurerier UI: Store page now shows the store APIs per component type.
+- Prometheus and TSDB deps are now up to date with ~2.7.0 Prometheus version. Lot's of things has changed. See details [here #704](https://github.com/improbable-eng/thanos/pull/704) Known changes that affects us:
+    - prometheus/prometheus/discovery/file
+      - [ENHANCEMENT] Discovery: Improve performance of previously slow updates of changes of targets. #4526
+      - [BUGFIX] Wait for service discovery to stop before exiting #4508 ??
+    - prometheus/prometheus/promql:
+      - **[ENHANCEMENT] Subqueries support. #4831**
+      - [BUGFIX] PromQL: Fix a goroutine leak in the lexer/parser. #4858
+      - [BUGFIX] Change max/min over_time to handle NaNs properly. #438
+      - [BUGFIX] Check label name for `count_values` PromQL function. #4585
+      - [BUGFIX] Ensure that vectors and matrices do not contain identical label-sets. #4589
+      - [ENHANCEMENT] Optimize PromQL aggregations #4248
+      - [BUGFIX] Only add LookbackDelta to vector selectors #4399
+      - [BUGFIX] Reduce floating point errors in stddev and related functions #4533
+    - prometheus/prometheus/rules:
+      - New metrics exposed! (prometheus evaluation!)
+      - [ENHANCEMENT] Rules: Error out at load time for invalid templates, rather than at evaluation time. #4537
+    - prometheus/tsdb/index: Index reader optimizations.
+- Thanos store gateway flag for sync concurrency (`block-sync-concurrency` with `20` default, so no change by default)
 - S3 provider:
   - Added `put_user_metadata` option to config.
   - Added `insecure_skip_verify` option to config.
+
+### Deprecated
+
+- Tests against Prometheus below v2.2.1. This does not mean *lack* of support for those. Only that we don't tests the compatibility anymore. See [#758](https://github.com/improbable-eng/thanos/issues/758) for details.
 
 ## [v0.2.1](https://github.com/improbable-eng/thanos/releases/tag/v0.2.1) - 2018.12.27
 
@@ -86,7 +176,7 @@ Note lots of necessary breaking changes in flags that relates to bucket configur
 - In `thanos rule`, file based discovery of query nodes using `--query.file-sd-config.files`
 - In `thanos query`, file based discovery of store nodes using `--store.file-sd-config.files`
 - `/-/healthy` endpoint to Querier.
-- DNS service discovery to static and file based configurations using the `dns+` and `dnssrv+` prefixes for the respective lookup. Details [here](/docs/service_discovery.md)
+- DNS service discovery to static and file based configurations using the `dns+` and `dnssrv+` prefixes for the respective lookup. Details [here](docs/service-discovery.md)
 - `--cluster.disable` flag to disable gossip functionality completely.
 - Hidden flag to configure max compaction level.
 - Azure Storage.

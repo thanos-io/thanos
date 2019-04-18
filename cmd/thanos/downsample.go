@@ -13,6 +13,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
+	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -32,10 +33,10 @@ func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name s
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
 		Default("./data").String()
 
-	objStoreConfig := regCommonObjStoreFlags(cmd, "")
+	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
-		return runDownsample(g, logger, reg, *dataDir, objStoreConfig, name)
+		return runDownsample(g, logger, reg, *dataDir, objStoreConfig)
 	}
 }
 
@@ -45,14 +46,13 @@ func runDownsample(
 	reg *prometheus.Registry,
 	dataDir string,
 	objStoreConfig *pathOrContent,
-	component string,
 ) error {
-	bucketConfig, err := objStoreConfig.Content()
+	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
 		return err
 	}
 
-	bkt, err := client.NewBucket(logger, bucketConfig, reg, component)
+	bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Downsample.String())
 	if err != nil {
 		return err
 	}
@@ -173,7 +173,7 @@ func downsampleBucket(
 				continue
 			}
 			if err := processDownsampling(ctx, logger, bkt, m, dir, 5*60*1000); err != nil {
-				return err
+				return errors.Wrap(err, "downsampling to 5 min")
 			}
 
 		case 5 * 60 * 1000:
@@ -194,7 +194,7 @@ func downsampleBucket(
 				continue
 			}
 			if err := processDownsampling(ctx, logger, bkt, m, dir, 60*60*1000); err != nil {
-				return err
+				return errors.Wrap(err, "downsampling to 60 min")
 			}
 		}
 	}

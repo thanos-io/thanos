@@ -39,10 +39,13 @@ for x in "${commands[@]}"; do
     ./thanos "${x}" --help &> "docs/components/flags/${x}.txt"
 done
 
-bucketCommands=("verify" "ls")
+bucketCommands=("verify" "ls" "inspect")
 for x in "${bucketCommands[@]}"; do
     ./thanos bucket "${x}" --help &> "docs/components/flags/bucket_${x}.txt"
 done
+
+# remove white noise
+sed -i 's/[ \t]*$//' docs/components/flags/*.txt
 
 go run scripts/bucketcfggen/main.go --output-dir=docs/flags
 

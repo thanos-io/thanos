@@ -1,0 +1,379 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: grafana
+  name: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - image: grafana/grafana:5.2.4
+          name: grafana
+          ports:
+            - containerPort: 3000
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+          resources:
+            limits:
+              cpu: 200m
+              memory: 200Mi
+            requests:
+              cpu: 200m
+              memory: 200Mi
+          volumeMounts:
+            - mountPath: /var/lib/grafana
+              name: grafana-storage
+            - mountPath: /etc/grafana/provisioning/datasources
+              readOnly: false
+              name: grafana-datasources
+            - mountPath: /etc/grafana/provisioning/dashboards
+              name: grafana-dashboards
+            - mountPath: /grafana-dashboard-definitions/0/pods-memory
+              name: grafana-pods-memory
+          env:
+          - name: GF_AUTH_ANONYMOUS_ENABLED
+            value: "true"
+          - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+            value: "Admin"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      serviceAccountName: grafana
+      volumes:
+        - emptyDir: {}
+          name: grafana-storage
+        - name: grafana-datasources
+          configMap:
+            name: grafana-datasources
+        - configMap:
+            name: grafana-dashboards
+          name: grafana-dashboards
+        - configMap:
+            name: grafana-pods-memory
+          name: grafana-pods-memory
+---
+apiVersion: v1
+data:
+  dashboards.yaml: |-
+    {
+        "apiVersion": 1,
+        "providers": [
+            {
+                "folder": "",
+                "name": "0",
+                "options": {
+                    "path": "/grafana-dashboard-definitions/0"
+                },
+                "orgId": 1,
+                "type": "file"
+            }
+        ]
+    }
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grafana
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: grafana
+  name: grafana
+spec:
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+  selector:
+    app: grafana
+  type: NodePort
+---
+apiVersion: v1
+items:
+  - apiVersion: v1
+    data:
+      pod.json: |-
+        {
+          "annotations": {
+            "list": [
+              {
+                "builtIn": 1,
+                "datasource": "-- Grafana --",
+                "enable": true,
+                "hide": true,
+                "iconColor": "rgba(0, 211, 255, 1)",
+                "name": "Annotations & Alerts",
+                "type": "dashboard"
+              }
+            ]
+          },
+          "editable": true,
+          "gnetId": null,
+          "graphTooltip": 0,
+          "iteration": 1548898867144,
+          "links": [],
+          "panels": [
+            {
+              "aliasColors": {},
+              "bars": false,
+              "dashLength": 10,
+              "dashes": false,
+              "datasource": "$datasource",
+              "fill": 1,
+              "gridPos": {
+                "h": 12,
+                "w": 24,
+                "x": 0,
+                "y": 0
+              },
+              "id": 2,
+              "legend": {
+                "alignAsTable": true,
+                "avg": true,
+                "current": true,
+                "max": false,
+                "min": false,
+                "rightSide": true,
+                "show": true,
+                "total": false,
+                "values": false
+              },
+              "lines": true,
+              "linewidth": 1,
+              "links": [],
+              "nullPointMode": "null",
+              "percentage": false,
+              "pointradius": 5,
+              "points": false,
+              "renderer": "flot",
+              "repeat": null,
+              "seriesOverrides": [],
+              "spaceLength": 10,
+              "stack": false,
+              "steppedLine": false,
+              "targets": [
+                {
+                  "expr": "sum by(container_name, cluster) (container_memory_usage_bytes{job=\"kubelet\", namespace=\"$namespace\", pod=\"$pod\", container_name=~\"$container\", container_name!=\"POD\", cluster=~\"$cluster\"})",
+                  "format": "time_series",
+                  "intervalFactor": 2,
+                  "legendFormat": "Current: {{ container_name }} {{ cluster }}",
+                  "refId": "A"
+                },
+                {
+                  "expr": "sum by(container, cluster) (kube_pod_container_resource_requests_memory_bytes{job=\"kube-state-metrics\", namespace=\"$namespace\", pod=\"$pod\", container=~\"$container\", cluster=~\"$cluster\"})",
+                  "format": "time_series",
+                  "intervalFactor": 2,
+                  "legendFormat": "Requested: {{ container }} {{ cluster }}",
+                  "refId": "B"
+                },
+                {
+                  "expr": "sum by(container, cluster) (kube_pod_container_resource_limits_memory_bytes{job=\"kube-state-metrics\", namespace=\"$namespace\", pod=\"$pod\", container=~\"$container\", cluster=~\"$cluster\"})",
+                  "format": "time_series",
+                  "intervalFactor": 2,
+                  "legendFormat": "Limit: {{ container }} {{ cluster }}",
+                  "refId": "C"
+                }
+              ],
+              "thresholds": [],
+              "timeFrom": null,
+              "timeShift": null,
+              "title": "Memory Usage",
+              "tooltip": {
+                "shared": true,
+                "sort": 0,
+                "value_type": "individual"
+              },
+              "type": "graph",
+              "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+              },
+              "yaxes": [
+                {
+                  "format": "bytes",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": 0,
+                  "show": true
+                },
+                {
+                  "format": "bytes",
+                  "label": null,
+                  "logBase": 1,
+                  "max": null,
+                  "min": 0,
+                  "show": true
+                }
+              ],
+              "yaxis": {
+                "align": false,
+                "alignLevel": null
+              }
+            }
+          ],
+          "refresh": "",
+          "schemaVersion": 16,
+          "style": "dark",
+          "tags": [],
+          "templating": {
+            "list": [
+              {
+                "current": {
+                  "text": "eu1",
+                  "value": "eu1"
+                },
+                "hide": 0,
+                "label": null,
+                "name": "datasource",
+                "options": [],
+                "query": "prometheus",
+                "refresh": 1,
+                "regex": "",
+                "type": "datasource"
+              },
+             {
+                "allValue": ".*",
+                "current": {},
+                "datasource": "$datasource",
+                "hide": 0,
+                "includeAll": true,
+                "label": "Cluster",
+                "multi": true,
+                "name": "cluster",
+                "options": [],
+                "query": "label_values(container_memory_usage_bytes, cluster)",
+                "refresh": 2,
+                "regex": "",
+                "sort": 0,
+                "tagValuesQuery": "",
+                "tags": [],
+                "tagsQuery": "",
+                "type": "query",
+                "useTags": false
+              },
+              {
+                "current": {
+                  "text": "default",
+                  "value": "default"
+                },
+                "datasource": "$datasource",
+                "hide": 0,
+                "includeAll": false,
+                "label": "Namespace",
+                "multi": false,
+                "name": "namespace",
+                "options": [],
+                "query": "label_values(container_memory_usage_bytes, namespace)",
+                "refresh": 2,
+                "regex": "",
+                "sort": 0,
+                "tagValuesQuery": "",
+                "tags": [],
+                "tagsQuery": "",
+                "type": "query",
+                "useTags": false
+              },
+              {
+                "current": {
+                  "text": "prometheus-0",
+                  "value": "prometheus-0"
+                },
+                "datasource": "$datasource",
+                "hide": 0,
+                "includeAll": false,
+                "label": "Pod",
+                "multi": false,
+                "name": "pod",
+                "options": [],
+                "query": "label_values(container_memory_usage_bytes{namespace=~\"$namespace\"}, pod)",
+                "refresh": 2,
+                "regex": "",
+                "sort": 0,
+                "tagValuesQuery": "",
+                "tags": [],
+                "tagsQuery": "",
+                "type": "query",
+                "useTags": false
+              },
+              {
+                "current": {
+                  "text": "prometheus",
+                  "value": "prometheus"
+                },
+                "datasource": "$datasource",
+                "hide": 0,
+                "includeAll": true,
+                "label": "Container",
+                "multi": false,
+                "name": "container",
+                "options": [],
+                "query": "label_values(container_memory_usage_bytes{namespace=\"$namespace\", pod=\"$pod\", container_name!=\"POD\"}, container_name)",
+                "refresh": 2,
+                "regex": "",
+                "sort": 0,
+                "tagValuesQuery": "",
+                "tags": [],
+                "tagsQuery": "",
+                "type": "query",
+                "useTags": false
+              }
+            ]
+          },
+          "time": {
+            "from": "now-1d",
+            "to": "now-1h"
+          },
+          "timepicker": {
+            "refresh_intervals": [
+              "5s",
+              "10s",
+              "30s",
+              "1m",
+              "5m",
+              "15m",
+              "30m",
+              "1h",
+              "2h",
+              "1d"
+            ],
+            "time_options": [
+              "5m",
+              "15m",
+              "1h",
+              "6h",
+              "12h",
+              "24h",
+              "2d",
+              "7d",
+              "30d"
+            ]
+          },
+          "timezone": "",
+          "title": "Pods Memory",
+          "uid": "pods_memory",
+          "version": 1202
+        }
+    kind: ConfigMap
+    metadata:
+      name: grafana-pods-memory
+kind: ConfigMapList
