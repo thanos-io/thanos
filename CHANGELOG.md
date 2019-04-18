@@ -66,7 +66,7 @@ This to have SRV resolution working on [Golang 1.11+ with KubeDNS below v1.14](h
 - [#953](https://github.com/improbable-eng/thanos/pull/953) Compact: now has a hidden flag `--debug.accept-malformed-index`. Compaction index verification will ignore out of order label names.
 - [#963](https://github.com/improbable-eng/thanos/pull/963) GCS: added possibility to inline ServiceAccount into GCS config.
 - [#1010](https://github.com/improbable-eng/thanos/pull/1010) Compact: added new flag `--compact.concurrency`. Number of goroutines to use when compacting groups.
-- [#1028](https://github.com/improbable-eng/thanos/pull/1028) Query: added `--query.default-evaluation-interval", which sets default evaluation interval for sub queries.
+- [#1028](https://github.com/improbable-eng/thanos/pull/1028) Query: added `--query.default-evaluation-interval`, which sets default evaluation interval for sub queries.
 - [#905](https://github.com/improbable-eng/thanos/pull/905) Query: Add /api/v1/labels support
 
 ### Changed 
