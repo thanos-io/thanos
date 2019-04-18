@@ -107,7 +107,7 @@ build: check-git check-bzr go-mod-tidy $(PROMU)
 
 # crossbuild builds all binaries for all platforms.
 .PHONY: crossbuild
-crossbuild: check-git check-bzr go-mod-tidy $(PROMU)
+crossbuild: $(PROMU)
 	@echo ">> crossbuilding all binaries"
 	$(PROMU) crossbuild -v
 
