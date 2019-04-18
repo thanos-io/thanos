@@ -9,9 +9,12 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/component"
+	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/receive"
 	"github.com/improbable-eng/thanos/pkg/runutil"
+	"github.com/improbable-eng/thanos/pkg/shipper"
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/oklog/run"
@@ -20,6 +23,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/storage/tsdb"
+	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
@@ -36,7 +40,16 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application, name stri
 	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").
 		Default("./data").String()
 
+	labelStrs := cmd.Flag("labels", "External labels to announce. This flag will be removed in the future when handling multiple tsdb instances is added.").PlaceHolder("key=\"value\"").Strings()
+
+	objStoreConfig := regCommonObjStoreFlags(cmd, "", false)
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
+		lset, err := parseFlagLabels(*labelStrs)
+		if err != nil {
+			return errors.Wrap(err, "parse labels")
+		}
+
 		return runReceive(
 			g,
 			logger,
@@ -49,6 +62,8 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application, name stri
 			*httpMetricsBindAddr,
 			*remoteWriteAddress,
 			*dataDir,
+			objStoreConfig,
+			lset,
 		)
 	}
 }
@@ -65,6 +80,8 @@ func runReceive(
 	httpMetricsBindAddr string,
 	remoteWriteAddress string,
 	dataDir string,
+	objStoreConfig *pathOrContent,
+	lset labels.Labels,
 ) error {
 	logger = log.With(logger, "component", "receive")
 	level.Warn(logger).Log("msg", "setting up receive; the Thanos receive component is EXPERIMENTAL, it may break significantly without notice")
@@ -189,7 +206,7 @@ func runReceive(
 			}
 
 			db := localStorage.Get()
-			tsdbStore := store.NewTSDBStore(log.With(logger, "component", "thanos-tsdb-store"), reg, db, component.Receive, nil)
+			tsdbStore := store.NewTSDBStore(log.With(logger, "component", "thanos-tsdb-store"), reg, db, component.Receive, lset)
 
 			opts, err := defaultGRPCServerOpts(logger, reg, tracer, cert, key, clientCA)
 			if err != nil {
@@ -225,6 +242,51 @@ func runReceive(
 			},
 		)
 	}
+
+	confContentYaml, err := objStoreConfig.Content()
+	if err != nil {
+		return err
+	}
+
+	upload := true
+	if len(confContentYaml) == 0 {
+		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
+		upload = false
+	}
+
+	if upload {
+		// The background shipper continuously scans the data directory and uploads
+		// new blocks to Google Cloud Storage or an S3-compatible storage service.
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Sidecar.String())
+		if err != nil {
+			return err
+		}
+
+		// Ensure we close up everything properly.
+		defer func() {
+			if err != nil {
+				runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+			}
+		}()
+
+		s := shipper.New(logger, reg, dataDir, bkt, func() labels.Labels { return lset }, metadata.ReceiveSource)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+
+			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+				if uploaded, err := s.Sync(ctx); err != nil {
+					level.Warn(logger).Log("err", err, "uploaded", uploaded)
+				}
+
+				return nil
+			})
+		}, func(error) {
+			cancel()
+		})
+	}
+
 	level.Info(logger).Log("msg", "starting receiver")
 
 	return nil
