@@ -13,15 +13,17 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## [v0.4.0-rc.0](https://github.com/improbable-eng/thanos/releases/tag/v0.4.0-rc.0) - 2019.04.12
 
-:warning: **IMPORTANT** :warning: This is the last release that supports gossip. From 0.5.0. Gossip will be removed.
+:warning: **IMPORTANT** :warning: This is the last release that supports gossip. From Thanos v0.5.0, gossip will be completely removed.
+
+This release also disables gossip mode by default for all components.
 See [this](docs/proposals/approved/201809_gossip-removal.md) for more details.
 
 ### Added
 
-- [#811](https://github.com/improbable-eng/thanos/pull/811) Remote write receiver
+- [#811](https://github.com/improbable-eng/thanos/pull/811) Remote write receiver component :heart: :heart: thanks to RedHat (@brancz) contribution.
 - [#910](https://github.com/improbable-eng/thanos/pull/910) Query's stores UI page is now sorted by type and old DNS or File SD stores are removed after 5 minutes (configurable via the new `--store.unhealthy-timeout=5m` flag).
-- [#905](https://github.com/improbable-eng/thanos/pull/905) New Query API: /api/v1/labels. Noticed that the API was added in Prometheus v2.6.
-- [#798](https://github.com/improbable-eng/thanos/pull/798) Ability to limit the maximum concurrent about of Series() calls in Thanos Store and the maximum amount of samples.
+- [#905](https://github.com/improbable-eng/thanos/pull/905) Thanos support for Query API: /api/v1/labels. Notice that the API was added in Prometheus v2.6.
+- [#798](https://github.com/improbable-eng/thanos/pull/798) Ability to limit the maximum number of concurrent request to Series() calls in Thanos Store and the maximum amount of samples we handle.
 
 New options:
 
