@@ -44,6 +44,8 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", false)
 
+	retention := modelDuration(cmd.Flag("tsdb.retention", "How long to retain raw samples on local storage. 0d - disables this retention").Default("15d"))
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
@@ -64,6 +66,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application, name stri
 			*dataDir,
 			objStoreConfig,
 			lset,
+			*retention,
 		)
 	}
 }
@@ -82,12 +85,13 @@ func runReceive(
 	dataDir string,
 	objStoreConfig *pathOrContent,
 	lset labels.Labels,
+	retention model.Duration,
 ) error {
 	logger = log.With(logger, "component", "receive")
 	level.Warn(logger).Log("msg", "setting up receive; the Thanos receive component is EXPERIMENTAL, it may break significantly without notice")
 
 	tsdbCfg := &tsdb.Options{
-		RetentionDuration: model.Duration(time.Hour * 24 * 15),
+		RetentionDuration: retention,
 		NoLockfile:        true,
 		MinBlockDuration:  model.Duration(time.Hour * 2),
 		MaxBlockDuration:  model.Duration(time.Hour * 2),
