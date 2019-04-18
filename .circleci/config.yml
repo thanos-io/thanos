@@ -48,6 +48,9 @@ jobs:
   cross_build:
     machine: true
     working_directory: /home/circleci/.go_workspace/src/github.com/improbable-eng/thanos
+    environment:
+      GO111MODULE: 'on'
+      GOBIN: "${GOPATH}/bin"
     steps:
     - checkout
     - run: make crossbuild
