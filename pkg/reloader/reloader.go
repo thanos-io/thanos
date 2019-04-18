@@ -129,7 +129,7 @@ func (r *Reloader) Watch(ctx context.Context) error {
 			"in", r.cfgFile,
 			"out", r.cfgOutputFile)
 
-		if r.apply(ctx) != nil {
+		if err := r.apply(ctx); err != nil {
 			return err
 		}
 	}
