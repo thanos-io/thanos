@@ -43,19 +43,19 @@ New options:
     * `store_query_gate_ismyturn` shows how long it took for a query to pass (or not) through the gate.
     
 - [#1016](https://github.com/improbable-eng/thanos/pull/1016) Added option for another DNS resolver (miekg/dns client). 
-This to have SRV resolution working on [Golang 1.11+ with KubeDNS below v1.14](https://github.com/golang/go/issues/27546)
+Note that this is required to have SRV resolution working on [Golang 1.11+ with KubeDNS below v1.14](https://github.com/golang/go/issues/27546)
 
    New Querier and Ruler flag: `-- store.sd-dns-resolver` which allows to specify resolver to use. Either `golang` or `miekgdns`
    
-- [#986](https://github.com/improbable-eng/thanos/pull/986) Allow to save some startup & sync time in store gateway as it is no longer is needed to compute index-cache from block index on its own. 
-  For compatibility store GW still can do it, but it first checks bucket if there is index-cached uploaded already. 
+- [#986](https://github.com/improbable-eng/thanos/pull/986) Allow to save some startup & sync time in store gateway as it is no longer needed to compute index-cache from block index on its own for larger blocks.
+  The store Gateway still can do it, but it first checks bucket if there is index-cached uploaded already. 
   In the same time, compactor precomputes the index cache file on every compaction. 
 
-  New Compactor flag: `--index.generate-missing-cache-file` was added to allow quicker addition of index cache files, if enabled it precomputes missing files on compactor startup. Note that it will take time and it's only one-off step per bucket.
+  New Compactor flag: `--index.generate-missing-cache-file` was added to allow quicker addition of index cache files. If enabled it precomputes missing files on compactor startup. Note that it will take time and it's only one-off step per bucket.
 
 :warning: **WARNING** :warning: #798 adds a new default limit to Thanos Store: `--store.grpc.series-max-concurrency`. Most likely you will want to make it the same as `--query.max-concurrent` on Thanos Query.
 
-- [#887](https://github.com/improbable-eng/thanos/pull/887) Compact: Added new `--block-sync-concurrency` flag, which allows you tconfigure number of goroutines to use when syncing block metadata from object storage.
+- [#887](https://github.com/improbable-eng/thanos/pull/887) Compact: Added new `--block-sync-concurrency` flag, which allows you to configure number of goroutines to use when syncing block metadata from object storage.
 
 - [#928](https://github.com/improbable-eng/thanos/pull/928) Query: Added `--store.response-timeout` flag. If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.
 - [#893](https://github.com/improbable-eng/thanos/pull/893) S3 storage backend has graduated to `stable` maturity level.
