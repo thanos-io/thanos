@@ -115,12 +115,12 @@ func runSidecar(
 
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
-		return errors.Wrap(err, "error getting object store config")
+		return errors.Wrap(err, "getting object store config")
 	}
 
 	var uploads = true
 	if len(confContentYaml) == 0 {
-		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
+		level.Info(logger).Log("msg", "no supported bucket was configured, uploads will be disabled")
 		uploads = false
 	}
 
@@ -339,13 +339,13 @@ func validatePrometheus(ctx context.Context, logger log.Logger, m *promMetadata)
 
 	// Check if compaction is disabled.
 	if flags.TSDBMinTime != flags.TSDBMaxTime {
-		return errors.Errorf("Found that TSDB Max time is %s and Min time is %s. "+
+		return errors.Errorf("found that TSDB Max time is %s and Min time is %s. "+
 			"Compaction needs to be disabled (storage.tsdb.min-block-duration = storage.tsdb.max-block-duration)", flags.TSDBMaxTime, flags.TSDBMinTime)
 	}
 
 	// Check if block time is 2h.
 	if flags.TSDBMinTime != model.Duration(2*time.Hour) {
-		level.Warn(logger).Log("msg", "Found that TSDB block time is not 2h. Only 2h block time is recommended.", "block-time", flags.TSDBMinTime)
+		level.Warn(logger).Log("msg", "found that TSDB block time is not 2h. Only 2h block time is recommended.", "block-time", flags.TSDBMinTime)
 	}
 
 	return nil
