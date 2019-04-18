@@ -145,6 +145,7 @@ func testQuerySimple(t *testing.T, conf testConfig) {
 			"__name__": "up",
 			"instance": model.LabelValue("localhost:9100"),
 			"job":      "node",
+			"receive":  "true",
 		}, res[3].Metric)
 	}
 
@@ -201,6 +202,7 @@ func testQuerySimple(t *testing.T, conf testConfig) {
 			"__name__": "up",
 			"instance": model.LabelValue("localhost:9100"),
 			"job":      "node",
+			"receive":  "true",
 		}, res[2].Metric)
 	}
 }

@@ -29,6 +29,14 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+var statusToCode = map[int]codes.Code{
+	http.StatusBadRequest:          codes.InvalidArgument,
+	http.StatusNotFound:            codes.NotFound,
+	http.StatusUnprocessableEntity: codes.Internal,
+	http.StatusServiceUnavailable:  codes.Unavailable,
+	http.StatusInternalServerError: codes.Internal,
+}
+
 // PrometheusStore implements the store node API on top of the Prometheus remote read API.
 type PrometheusStore struct {
 	logger         log.Logger
@@ -336,10 +344,52 @@ func extendLset(lset []storepb.Label, extend labels.Labels) []storepb.Label {
 }
 
 // LabelNames returns all known label names.
-func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
+func (p *PrometheusStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesRequest) (
 	*storepb.LabelNamesResponse, error,
 ) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+	u := *p.base
+	u.Path = path.Join(u.Path, "/api/v1/labels")
+
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	span, ctx := tracing.StartSpan(ctx, "/prom_label_names HTTP[client]")
+	defer span.Finish()
+
+	resp, err := p.client.Do(req.WithContext(ctx))
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	defer runutil.CloseWithLogOnErr(p.logger, resp.Body, "label names request body")
+
+	if resp.StatusCode/100 != 2 {
+		return nil, status.Error(codes.Internal, fmt.Sprintf("request Prometheus server failed, code %s", resp.Status))
+	}
+
+	if resp.StatusCode == http.StatusNoContent {
+		return &storepb.LabelNamesResponse{Names: []string{}}, nil
+	}
+
+	var m struct {
+		Data   []string `json:"data"`
+		Status string   `json:"status"`
+		Error  string   `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	if m.Status != "success" {
+		code, exists := statusToCode[resp.StatusCode]
+		if !exists {
+			return nil, status.Error(codes.Internal, m.Error)
+		}
+		return nil, status.Error(code, m.Error)
+	}
+
+	return &storepb.LabelNamesResponse{Names: m.Data}, nil
 }
 
 // LabelValues returns all known label values for a given label name.
@@ -356,7 +406,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, status.Error(codes.Unknown, err.Error())
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	span, ctx := tracing.StartSpan(ctx, "/prom_label_values HTTP[client]")
@@ -364,17 +414,36 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 
 	resp, err := p.client.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, status.Error(codes.Unknown, err.Error())
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	defer runutil.CloseWithLogOnErr(p.logger, resp.Body, "label values request body")
 
+	if resp.StatusCode/100 != 2 {
+		return nil, status.Error(codes.Internal, fmt.Sprintf("request Prometheus server failed, code %s", resp.Status))
+	}
+
+	if resp.StatusCode == http.StatusNoContent {
+		return &storepb.LabelValuesResponse{Values: []string{}}, nil
+	}
+
 	var m struct {
-		Data []string `json:"data"`
+		Data   []string `json:"data"`
+		Status string   `json:"status"`
+		Error  string   `json:"error"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
-		return nil, status.Error(codes.Unknown, err.Error())
+		return nil, status.Error(codes.Internal, err.Error())
 	}
+
 	sort.Strings(m.Data)
+
+	if m.Status != "success" {
+		code, exists := statusToCode[resp.StatusCode]
+		if !exists {
+			return nil, status.Error(codes.Internal, m.Error)
+		}
+		return nil, status.Error(code, m.Error)
+	}
 
 	return &storepb.LabelValuesResponse{Values: m.Data}, nil
 }
