@@ -18,22 +18,23 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
-
-	"github.com/prometheus/common/route"
 
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
@@ -80,6 +81,7 @@ func TestEndpoints(t *testing.T) {
 		endpoint ApiFunc
 		params   map[string]string
 		query    url.Values
+		method   string
 		response interface{}
 		errType  ErrorType
 	}{
@@ -406,6 +408,133 @@ func TestEndpoints(t *testing.T) {
 			},
 			errType: errorBadData,
 		},
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric1{foo=~".+o"}`},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric1{foo=~".+o$"}`, `test_metric1{foo=~".+o"}`},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric1{foo=~".+o"}`, `none`},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		// Start and end before series starts.
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"-2"},
+				"end":     []string{"-1"},
+			},
+			response: []labels.Labels(nil),
+		},
+		// Start and end after series ends.
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"100000"},
+				"end":     []string{"100001"},
+			},
+			response: []labels.Labels(nil),
+		},
+		// Start before series starts, end after series ends.
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"-1"},
+				"end":     []string{"100000"},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		// Start and end within series.
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"1"},
+				"end":     []string{"100"},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		// Start within series, end after.
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"1"},
+				"end":     []string{"100000"},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		// Start before series, end within series.
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"-1"},
+				"end":     []string{"1"},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		// Missing match[] query params in series requests.
+		{
+			endpoint: api.series,
+			errType:  errorBadData,
+			method:   http.MethodPost,
+		},
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"dedup":   []string{"sdfsf-series"},
+			},
+			errType: errorBadData,
+			method:  http.MethodPost,
+		},
 	}
 
 	for _, test := range tests {
@@ -416,10 +545,26 @@ func TestEndpoints(t *testing.T) {
 				ctx = route.WithParam(ctx, p, v)
 			}
 
-			req, err := http.NewRequest("ANY", fmt.Sprintf("http://example.com?%s", test.query.Encode()), nil)
+			reqURL := "http://example.com"
+			params := test.query.Encode()
+
+			var body io.Reader
+			if test.method == http.MethodPost {
+				body = strings.NewReader(params)
+			} else if test.method == "" {
+				test.method = "ANY"
+				reqURL += "?" + params
+			}
+
+			req, err := http.NewRequest(test.method, reqURL, body)
 			if err != nil {
 				t.Fatal(err)
 			}
+
+			if body != nil {
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			}
+
 			resp, _, apiErr := test.endpoint(req.WithContext(ctx))
 			if apiErr != nil {
 				if test.errType == errorNone {
