@@ -98,6 +98,9 @@ Flags:
                                  RFC3339 format or time duration relative to
                                  current time, such as -1d or 2h45m. Valid
                                  duration units are ms, s, m, h, d, w, y.
+      --selector-label=<name>="<value>" ...
+                                 Store Gateway selector labels that will be
+                                 exposed in info endpoint (repeated).
 
 ```
 

@@ -215,7 +215,8 @@ type BucketStore struct {
 	samplesLimiter *Limiter
 	partitioner    partitioner
 
-	filterConfig *FilterConfig
+	filterConfig   *FilterConfig
+	selectorLabels labels.Labels
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -232,6 +233,7 @@ func NewBucketStore(
 	debugLogging bool,
 	blockSyncConcurrency int,
 	filterConf *FilterConfig,
+	selectorLabels labels.Labels,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -266,6 +268,7 @@ func NewBucketStore(
 		samplesLimiter: NewLimiter(maxSampleCount, metrics.queriesDropped),
 		partitioner:    gapBasedPartitioner{maxGapSize: maxGapSize},
 		filterConfig:   filterConf,
+		selectorLabels: selectorLabels,
 	}
 	s.metrics = metrics
 
@@ -519,12 +522,19 @@ func (s *BucketStore) TimeRange() (mint, maxt int64) {
 // Info implements the storepb.StoreServer interface.
 func (s *BucketStore) Info(context.Context, *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	mint, maxt := s.TimeRange()
-	// Store nodes hold global data and thus have no labels.
-	return &storepb.InfoResponse{
+
+	infoResp := &storepb.InfoResponse{
 		StoreType: component.Store.ToProto(),
 		MinTime:   mint,
 		MaxTime:   maxt,
-	}, nil
+		Labels:    make([]storepb.Label, 0, len(s.selectorLabels)),
+	}
+
+	for _, lset := range s.selectorLabels {
+		infoResp.Labels = append(infoResp.Labels, storepb.Label{Name: lset.Name, Value: lset.Value})
+	}
+
+	return infoResp, nil
 }
 
 func (s *BucketStore) limitMinTime(mint int64) int64 {
@@ -772,7 +782,7 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt, maxResolutionMill
 }
 
 // Series implements the storepb.StoreServer interface.
-func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) (err error) {
+func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	{
 		span, _ := tracing.StartSpan(srv.Context(), "store_query_gate_ismyturn")
 		err := s.queryGate.IsMyTurn(srv.Context())
@@ -783,10 +793,14 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	}
 	defer s.queryGate.Done()
 
-	matchers, err := translateMatchers(req.Matchers)
+	match, matchers, err := labelsMatchesAndTranslate(s.selectorLabels, req.Matchers)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
+	if !match {
+		return nil
+	}
+
 	req.MinTime = s.limitMinTime(req.MinTime)
 	req.MaxTime = s.limitMaxTime(req.MaxTime)
 

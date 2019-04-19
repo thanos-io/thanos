@@ -11,6 +11,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -56,6 +57,9 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	maxTime := model.TimeOrDuration(cmd.Flag("max-time", "End of time range limit to serve. Thanos Store serves only blocks, which happened eariler than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("9999-12-31T23:59:59Z"))
 
+	selectorLabels := cmd.Flag("selector-label", "Store Gateway selector labels that will be exposed in info endpoint (repeated).").
+		PlaceHolder("<name>=\"<value>\"").Strings()
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
 		if minTime.PrometheusTimestamp() > maxTime.PrometheusTimestamp() {
 			return errors.Errorf("invalid argument: --min-time '%s' can't be greater than --max-time '%s'",
@@ -85,6 +89,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 				MinTime: *minTime,
 				MaxTime: *maxTime,
 			},
+			selectorLset,
 		)
 	}
 }
@@ -111,6 +116,7 @@ func runStore(
 	syncInterval time.Duration,
 	blockSyncConcurrency int,
 	filterConf *store.FilterConfig,
+	selectorLset labels.Labels,
 ) error {
 	{
 		confContentYaml, err := objStoreConfig.Content()
@@ -153,6 +159,7 @@ func runStore(
 			verbose,
 			blockSyncConcurrency,
 			filterConf,
+			selectorLset,
 		)
 		if err != nil {
 			return errors.Wrap(err, "create object storage store")
