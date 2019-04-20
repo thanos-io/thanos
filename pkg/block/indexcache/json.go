@@ -198,9 +198,7 @@ func (c *JSONCache) ToBCache(fnJSON string, fnB string) error {
 	}
 
 	for l := range postings {
-		ep := emptyPostings{}
-
-		err = w.WritePostings(l.Name, l.Value, ep)
+		err = w.WritePostings(l.Name, l.Value, index.EmptyPostings())
 		if err != nil {
 			return errors.Wrap(err, "postings write")
 		}

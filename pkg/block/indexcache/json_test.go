@@ -66,25 +66,32 @@ func TestConvertJSONToBinaryCache(t *testing.T) {
 
 	fn := filepath.Join(tmpDir, "index.cache.json")
 	fnB := filepath.Join(tmpDir, "index.cache.dat")
+	fnBFresh := filepath.Join(tmpDir, "index.cache.fresh.dat")
 	l := log.NewNopLogger()
 	j := JSONCache{logger: l}
+	bcache := BinaryCache{logger: l}
 
 	testutil.Ok(t, j.WriteIndexCache(filepath.Join(tmpDir, b.String(), "index"), fn))
 	version, symbols, lvals, postings, err := j.ReadIndexCache(fn)
 	testutil.Ok(t, err)
 	testutil.Ok(t, j.ToBCache(fn, fnB))
 
-	bcache := BinaryCache{logger: l}
 	versionB, symbolsB, lvalsB, postingsB, err := bcache.ReadIndexCache(fnB)
 	testutil.Ok(t, err)
 
+	testutil.Ok(t, bcache.WriteIndexCache(filepath.Join(tmpDir, b.String(), "index"), fnBFresh))
+	versionBF, symbolsBF, lvalsBF, postingsBF, err := bcache.ReadIndexCache(fnBFresh)
+	testutil.Ok(t, err)
+
+	// compare fresh binary and JSON caches
+	testutil.Equals(t, symbols, symbolsBF)
+	testutil.Equals(t, lvals, lvalsBF)
+	testutil.Equals(t, version, versionBF)
+	testutil.Equals(t, postings, postingsBF)
+
+	// the JSON -> binary function
 	testutil.Equals(t, symbols, symbolsB)
 	testutil.Equals(t, lvals, lvalsB)
 	testutil.Equals(t, version, versionB)
-
-	for _, ls := range lbls {
-		for _, l := range ls {
-			testutil.Equals(t, postings[l], postingsB[l])
-		}
-	}
+	testutil.Equals(t, postings, postingsB)
 }

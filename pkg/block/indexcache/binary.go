@@ -6,6 +6,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/pkg/errors"
+	"github.com/prometheus/tsdb/chunks"
 	"github.com/prometheus/tsdb/fileutil"
 	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
@@ -16,26 +17,6 @@ type BinaryCache struct {
 	IndexCache
 
 	logger log.Logger
-}
-
-type emptyPostings struct {
-	index.Postings
-}
-
-func (p emptyPostings) Next() bool {
-	return false
-}
-
-func (p emptyPostings) Seek(v uint64) bool {
-	return false
-}
-
-func (p emptyPostings) At() uint64 {
-	return 0
-}
-
-func (p emptyPostings) Err() error {
-	return nil
 }
 
 // WriteIndexCache writes an index cache into the specified filename.
@@ -69,6 +50,22 @@ func (c *BinaryCache) WriteIndexCache(indexFn string, fn string) error {
 	err = w.AddSymbols(symbols)
 	if err != nil {
 		return err
+	}
+
+	// Add empty series refs (no metadata)
+	seriesRef := uint64(2) // XXX: where does it start?
+	for {
+		lbls := labels.Labels{}
+		chnks := []chunks.Meta{}
+		err = indexr.Series(seriesRef, &lbls, &chnks)
+		if err != nil {
+			break
+		}
+		err = w.AddSeries(seriesRef, lbls)
+		if err != nil {
+			return errors.Wrap(err, "add series")
+		}
+		seriesRef++
 	}
 
 	// Extract label value indices.
@@ -106,14 +103,13 @@ func (c *BinaryCache) WriteIndexCache(indexFn string, fn string) error {
 	if err != nil {
 		return errors.Wrap(err, "read postings ranges")
 	}
-	for l := range pranges {
-		_, err := indexr.Postings(l.Name, l.Value)
-		if err != nil {
-			return errors.Wrap(err, "postings reader")
-		}
-		ep := emptyPostings{}
 
-		err = w.WritePostings(l.Name, l.Value, ep)
+	for l := range pranges {
+		p, err := indexr.Postings(l.Name, l.Value)
+		if err != nil {
+			return errors.Wrap(err, "postings")
+		}
+		err = w.WritePostings(l.Name, l.Value, p)
 		if err != nil {
 			return errors.Wrap(err, "postings write")
 		}
