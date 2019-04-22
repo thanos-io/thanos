@@ -161,6 +161,7 @@ func runSidecar(
 					"external_labels", m.Labels().String(),
 				)
 				promUp.Set(1)
+				readinessProber.SetReady()
 				lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
 				return nil
 			})

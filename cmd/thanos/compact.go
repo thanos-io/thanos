@@ -319,6 +319,7 @@ func runCompact(
 	})
 
 	level.Info(logger).Log("msg", "starting compact node")
+	readinessProber.SetReady()
 	return nil
 }
 

@@ -323,7 +323,6 @@ func defaultHTTPListener(g *run.Group, logger log.Logger, reg *prometheus.Regist
 	g.Add(func() error {
 		level.Info(logger).Log("msg", "Listening for metrics", "address", httpBindAddr)
 		readinessProber.SetHealthy()
-		readinessProber.SetReady()
 		return errors.Wrap(http.Serve(l, mux), "serve metrics")
 	}, func(err error) {
 		readinessProber.SetNotHealthy(err)

@@ -43,7 +43,8 @@ func TestGenericHttpEndpoints(t *testing.T) {
 	serverAddress := fmt.Sprintf("127.0.0.1:%d", freePort)
 
 	p := prober.NewProber(component, logger)
-	err = defaultHTTPListener(&g, logger, metricsRegistry, serverAddress, *p)
+	err = defaultHTTPListener(&g, logger, metricsRegistry, serverAddress, p)
+	p.SetReady()
 	testutil.Ok(t, err)
 	go func() { _ = g.Run() }()
 
