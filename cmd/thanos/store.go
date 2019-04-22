@@ -97,7 +97,7 @@ func runStore(
 ) error {
 
 	readinessProber := prober.NewProber(component.Store, logger)
-	err := metricHTTPListenGroup(g, logger, reg, httpBindAddr, *readinessProber)
+	err := defaultHTTPListener(g, logger, reg, httpBindAddr, *readinessProber)
 	if err != nil {
 		return errors.Wrap(err, "create readiness prober")
 	}

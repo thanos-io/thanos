@@ -308,8 +308,8 @@ func defaultGRPCServerOpts(logger log.Logger, reg *prometheus.Registry, tracer o
 	return append(opts, grpc.Creds(credentials.NewTLS(tlsCfg))), nil
 }
 
-// metricHTTPListenGroup is a run.Group that servers HTTP endpoint with only Prometheus metrics.
-func metricHTTPListenGroup(g *run.Group, logger log.Logger, reg *prometheus.Registry, httpBindAddr string, readinessProber prober.Prober) error {
+// defaultHTTPListener is a run.Group that servers HTTP endpoint with only Prometheus metrics.
+func defaultHTTPListener(g *run.Group, logger log.Logger, reg *prometheus.Registry, httpBindAddr string, readinessProber prober.Prober) error {
 	mux := http.NewServeMux()
 	registerMetrics(mux, reg)
 	registerProfile(mux)

@@ -117,8 +117,7 @@ func runSidecar(
 	}
 
 	readinessProber := prober.NewProber(component.Sidecar, logger)
-	err := metricHTTPListenGroup(g, logger, reg, httpBindAddr, *readinessProber)
-	if err != nil {
+	if err := defaultHTTPListener(g, logger, reg, httpBindAddr, *readinessProber); err != nil {
 		return errors.Wrap(err, "create readiness prober")
 	}
 

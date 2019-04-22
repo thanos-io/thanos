@@ -208,8 +208,7 @@ func runCompact(
 	}
 
 	readinessProber := prober.NewProber(component.Compact, logger)
-	err = metricHTTPListenGroup(g, logger, reg, httpBindAddr, *readinessProber)
-	if err != nil {
+	if err := defaultHTTPListener(g, logger, reg, httpBindAddr, *readinessProber); err != nil {
 		return errors.Wrap(err, "create readiness prober")
 	}
 
@@ -315,7 +314,7 @@ func runCompact(
 
 			return errors.Wrap(err, "error executing compaction")
 		})
-	}, func(err error) {
+	}, func(error) {
 		cancel()
 	})
 
