@@ -111,11 +111,11 @@ func (p *Prober) SetReady() {
 
 // SetNotReady sets components status to not ready with given error as a cause.
 func (p *Prober) SetNotReady(err error) {
-	p.readyMtx.Lock()
-	defer p.readyMtx.Unlock()
 	if err != nil && p.IsReady() == nil {
 		level.Warn(p.getLogger()).Log("msg", "changing probe status", "status", "not-ready", "reason", err)
 	}
+	p.readyMtx.Lock()
+	defer p.readyMtx.Unlock()
 	p.readiness = err
 }
 
@@ -136,11 +136,11 @@ func (p *Prober) SetHealthy() {
 
 // SetNotHealthy sets components status to not healthy with given error as a cause.
 func (p *Prober) SetNotHealthy(err error) {
-	p.healthyMtx.Lock()
-	defer p.healthyMtx.Unlock()
 	if err != nil && p.IsHealthy() == nil {
 		level.Warn(p.getLogger()).Log("msg", "changing probe status", "status", "unhealthy", "reason", err)
 	}
+	p.healthyMtx.Lock()
+	defer p.healthyMtx.Unlock()
 	p.healthiness = err
 }
 
