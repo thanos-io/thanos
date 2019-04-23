@@ -56,40 +56,50 @@ func newIndexCache(reg prometheus.Registerer, maxBytes uint64) (*indexCache, err
 		Name: "thanos_store_index_cache_items_evicted_total",
 		Help: "Total number of items that were evicted from the index cache.",
 	}, []string{"item_type"})
+	evicted.WithLabelValues(cacheTypePostings)
+	evicted.WithLabelValues(cacheTypeSeries)
 
 	c.added = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_store_index_cache_items_added_total",
 		Help: "Total number of items that were added to the index cache.",
 	}, []string{"item_type"})
+	c.added.WithLabelValues(cacheTypePostings)
+	c.added.WithLabelValues(cacheTypeSeries)
 
 	c.requests = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_store_index_cache_requests_total",
 		Help: "Total number of requests to the cache.",
 	}, []string{"item_type"})
+	c.requests.WithLabelValues(cacheTypePostings)
+	c.requests.WithLabelValues(cacheTypeSeries)
 
 	c.overflow = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_store_index_cache_items_overflowed_total",
 		Help: "Total number of items that could not be added to the cache due to being too big.",
 	}, []string{"item_type"})
+	c.overflow.WithLabelValues(cacheTypePostings)
+	c.overflow.WithLabelValues(cacheTypeSeries)
 
 	c.hits = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_store_index_cache_hits_total",
 		Help: "Total number of requests to the cache that were a hit.",
 	}, []string{"item_type"})
+	c.hits.WithLabelValues(cacheTypePostings)
+	c.hits.WithLabelValues(cacheTypeSeries)
 
 	c.current = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "thanos_store_index_cache_items",
 		Help: "Current number of items in the index cache.",
 	}, []string{"item_type"})
+	c.current.WithLabelValues(cacheTypePostings)
+	c.current.WithLabelValues(cacheTypeSeries)
 
 	c.currentSize = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "thanos_store_index_cache_items_size_bytes",
 		Help: "Current byte size of items in the index cache.",
 	}, []string{"item_type"})
-
-	// Initialize eviction metric with 0.
-	evicted.WithLabelValues(cacheTypePostings)
-	evicted.WithLabelValues(cacheTypeSeries)
+	c.currentSize.WithLabelValues(cacheTypePostings)
+	c.currentSize.WithLabelValues(cacheTypeSeries)
 
 	// Initialize LRU cache with a high size limit since we will manage evictions ourselves
 	// based on stored size.
@@ -116,7 +126,7 @@ func newIndexCache(reg prometheus.Registerer, maxBytes uint64) (*indexCache, err
 		}, func() float64 {
 			return float64(maxBytes)
 		}))
-		reg.MustRegister(c.requests, c.hits, c.added, evicted, c.current, c.currentSize)
+		reg.MustRegister(c.requests, c.hits, c.added, evicted, c.current, c.currentSize, c.overflow)
 	}
 	return c, nil
 }
