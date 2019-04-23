@@ -1246,7 +1246,7 @@ function init() {
   });
 
   $.ajax({
-    url: PATH_PREFIX + "/static/js/graph/graph_template.handlebar?v=" + BUILD_VERSION,
+    url: PATH_PREFIX + "/static/js/graph_template.handlebar?v=" + BUILD_VERSION,
     success: function(data) {
 
       graphTemplate = data;

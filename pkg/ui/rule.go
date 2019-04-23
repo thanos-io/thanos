@@ -49,6 +49,16 @@ func ruleTmplFuncs(queryURL string) template.FuncMap {
 				panic("unknown alert state")
 			}
 		},
+		"ruleHealthToClass": func(rh rules.RuleHealth) string {
+			switch rh {
+			case rules.HealthUnknown:
+				return "warning"
+			case rules.HealthGood:
+				return "success"
+			default:
+				return "danger"
+			}
+		},
 		"queryURL": func() string { return queryURL },
 		"reReplaceAll": func(pattern, repl, text string) string {
 			re := regexp.MustCompile(pattern)
