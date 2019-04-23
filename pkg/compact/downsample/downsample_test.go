@@ -177,6 +177,9 @@ func testDownsample(t *testing.T, data []*downsampleTestSet, meta *metadata.Meta
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, chunkr.Close()) }()
 
+	_, err = metadata.Read(filepath.Join(dir, id.String()))
+	testutil.Ok(t, err)
+
 	pall, err := indexr.Postings(index.AllPostingsKey())
 	testutil.Ok(t, err)
 
