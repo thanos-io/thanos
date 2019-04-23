@@ -11,11 +11,13 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+### Added
+
+- [#1060](https://github.com/improbable-eng/thanos/pull/1060) Allow specifying region attribute in S3 storage configuration
 
 ### Fixed
 
 - [#1070](https://github.com/improbable-eng/thanos/pull/1070) Downsampling works back again. Deferred closer errors are now properly captured.
-
 
 ## [v0.4.0-rc.0](https://github.com/improbable-eng/thanos/releases/tag/v0.4.0-rc.0) - 2019.04.18
 

@@ -49,6 +49,7 @@ type: S3
 config:
   bucket: ""
   endpoint: ""
+  region: ""
   access_key: ""
   insecure: false
   signature_version2: false
@@ -62,7 +63,7 @@ config:
     enable: false
 ```
 
-AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region)
+The attribute `region` is optional. AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region).
 
 Make sure you use a correct signature version.
 Currently AWS require signature v4, so it needs `signature-version2: false`, otherwise, you will get Access Denied error, but several other S3 compatible use `signature-version2: true`
