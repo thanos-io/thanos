@@ -231,7 +231,7 @@ func (p *Prometheus) SetConfig(s string) (err error) {
 	if err != nil {
 		return err
 	}
-	defer runutil.CloseWithErrCapture(nil, &err, f, "prometheus config")
+	defer runutil.CloseWithErrCapture(&err, f, "prometheus config")
 
 	_, err = f.Write([]byte(s))
 	return err
@@ -302,7 +302,7 @@ func createBlock(
 	if err != nil {
 		return id, errors.Wrap(err, "create head block")
 	}
-	defer runutil.CloseWithErrCapture(log.NewNopLogger(), &err, h, "TSDB Head")
+	defer runutil.CloseWithErrCapture(&err, h, "TSDB Head")
 
 	var g errgroup.Group
 	var timeStepSize = (maxt - mint) / int64(numSamples+1)

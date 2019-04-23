@@ -109,11 +109,12 @@ func CloseWithLogOnErr(logger log.Logger, closer io.Closer, format string, a ...
 }
 
 // CloseWithErrCapture runs function and on error return error by argument including the given error (usually
-// from caller function)
+// from caller function).
 func CloseWithErrCapture(err *error, closer io.Closer, format string, a ...interface{}) {
-	var merr tsdb.MultiError
+	merr := tsdb.MultiError{}
 
 	merr.Add(*err)
 	merr.Add(errors.Wrapf(closer.Close(), format, a...))
+
 	*err = merr.Err()
 }

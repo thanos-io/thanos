@@ -81,12 +81,13 @@ func Downsample(
 	if err != nil {
 		return id, errors.Wrap(err, "get streamed block writer")
 	}
-	defer runutil.CloseWithErrCapture(logger, &err, streamedBlockWriter, "close stream block writer")
+	defer runutil.CloseWithErrCapture(&err, streamedBlockWriter, "close stream block writer")
 
 	postings, err := indexr.Postings(index.AllPostingsKey())
 	if err != nil {
 		return id, errors.Wrap(err, "get all postings list")
 	}
+
 	var (
 		aggrChunks []*AggrChunk
 		all        []sample
