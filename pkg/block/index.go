@@ -564,9 +564,9 @@ func sanitizeChunkSequence(chks []chunks.Meta, mint int64, maxt int64, ignoreChk
 
 OUTER:
 	// This compares the current chunk to the chunk from the last iteration
-	// by pointers.  If we use "i, c := range cks" the variable c is a new
+	// by pointers.  If we use "i, c := range chks" the variable c is a new
 	// variable who's address doesn't change through the entire loop.
-	// The current element of the chks slice is copied into it.  We must take
+	// The current element of the chks slice is copied into it. We must take
 	// the address of the indexed slice instead.
 	for i := range chks {
 		for _, ignoreChkFn := range ignoreChkFns {
@@ -631,7 +631,7 @@ func rewrite(
 		if err := indexr.Series(id, &lset, &chks); err != nil {
 			return err
 		}
-		// Make sure labels are in sorted order
+		// Make sure labels are in sorted order.
 		sort.Sort(lset)
 
 		for i, c := range chks {
@@ -660,13 +660,14 @@ func rewrite(
 		return errors.Wrap(all.Err(), "iterate series")
 	}
 
-	// sort the series -- if labels moved around the ordering will be different
+	// Sort the series, if labels are re-ordered then the ordering of series
+	// will be different.
 	sort.Slice(series, func(i, j int) bool {
 		return labels.Compare(series[i].lset, series[j].lset) < 0
 	})
 
-	// build new TSDB block
 	lastSet := labels.Labels{}
+	// Build a new TSDB block.
 	for _, s := range series {
 		if labels.Compare(lastSet, s.lset) == 0 {
 			level.Warn(logger).Log("msg",
