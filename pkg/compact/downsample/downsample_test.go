@@ -163,6 +163,9 @@ func testDownsample(t *testing.T, data []*downsampleTestSet, meta *metadata.Meta
 	id, err := Downsample(log.NewNopLogger(), meta, mb, dir, resolution)
 	testutil.Ok(t, err)
 
+	_, err = metadata.Read(filepath.Join(dir, id.String()))
+	testutil.Ok(t, err)
+
 	exp := map[uint64]map[AggrType][]sample{}
 	got := map[uint64]map[AggrType][]sample{}
 

@@ -11,6 +11,12 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+
+### Fixed
+
+- [#1070](https://github.com/improbable-eng/thanos/pull/1070) Downsampling works back again. Deferred closer errors are now properly captured.
+
+
 ## [v0.4.0-rc.0](https://github.com/improbable-eng/thanos/releases/tag/v0.4.0-rc.0) - 2019.04.18
 
 :warning: **IMPORTANT** :warning: This is the last release that supports gossip. From Thanos v0.5.0, gossip will be completely removed.

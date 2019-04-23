@@ -340,7 +340,7 @@ func GatherIndexIssueStats(logger log.Logger, fn string, minTime int64, maxTime 
 	if err != nil {
 		return stats, errors.Wrap(err, "open index file")
 	}
-	defer runutil.CloseWithErrCapture(logger, &err, r, "gather index issue file reader")
+	defer runutil.CloseWithErrCapture(&err, r, "gather index issue file reader")
 
 	p, err := r.Postings(index.AllPostingsKey())
 	if err != nil {
@@ -460,19 +460,19 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceT
 	if err != nil {
 		return resid, errors.Wrap(err, "open block")
 	}
-	defer runutil.CloseWithErrCapture(logger, &err, b, "repair block reader")
+	defer runutil.CloseWithErrCapture(&err, b, "repair block reader")
 
 	indexr, err := b.Index()
 	if err != nil {
 		return resid, errors.Wrap(err, "open index")
 	}
-	defer runutil.CloseWithErrCapture(logger, &err, indexr, "repair index reader")
+	defer runutil.CloseWithErrCapture(&err, indexr, "repair index reader")
 
 	chunkr, err := b.Chunks()
 	if err != nil {
 		return resid, errors.Wrap(err, "open chunks")
 	}
-	defer runutil.CloseWithErrCapture(logger, &err, chunkr, "repair chunk reader")
+	defer runutil.CloseWithErrCapture(&err, chunkr, "repair chunk reader")
 
 	resdir := filepath.Join(dir, resid.String())
 
@@ -480,13 +480,13 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceT
 	if err != nil {
 		return resid, errors.Wrap(err, "open chunk writer")
 	}
-	defer runutil.CloseWithErrCapture(logger, &err, chunkw, "repair chunk writer")
+	defer runutil.CloseWithErrCapture(&err, chunkw, "repair chunk writer")
 
 	indexw, err := index.NewWriter(filepath.Join(resdir, IndexFilename))
 	if err != nil {
 		return resid, errors.Wrap(err, "open index writer")
 	}
-	defer runutil.CloseWithErrCapture(logger, &err, indexw, "repair index writer")
+	defer runutil.CloseWithErrCapture(&err, indexw, "repair index writer")
 
 	// TODO(fabxc): adapt so we properly handle the version once we update to an upstream
 	// that has multiple.
