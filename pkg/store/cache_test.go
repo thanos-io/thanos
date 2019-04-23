@@ -23,6 +23,28 @@ func TestIndexCacheEdge(t *testing.T) {
 
 	fits = cache.ensureFits([]byte{42})
 	testutil.Equals(t, fits, true)
+
+	fits = cache.ensureFits([]byte{})
+	testutil.Equals(t, fits, true)
+
+	fits = cache.ensureFits([]byte{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1})
+	testutil.Equals(t, fits, false)
+
+	metrics = prometheus.NewRegistry()
+	cache, err = newIndexCache(metrics, 0)
+	testutil.Ok(t, err)
+
+	fits = cache.ensureFits([]byte{42, 24})
+	testutil.Equals(t, fits, false)
+
+	fits = cache.ensureFits([]byte{42})
+	testutil.Equals(t, fits, false)
+
+	fits = cache.ensureFits([]byte{})
+	testutil.Equals(t, fits, true)
+
+	fits = cache.ensureFits([]byte{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1})
+	testutil.Equals(t, fits, false)
 }
 
 // TestIndexCacheSmoke runs the smoke tests for the index cache.
@@ -58,4 +80,10 @@ func TestIndexCacheSmoke(t *testing.T) {
 
 	cache.lru.RemoveOldest()
 	testutil.Equals(t, cache.curSize, uint64(0))
+
+	cache.setSeries(blid, 1234, []byte{1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1})
+	cache.setSeries(blid, 1237, []byte{1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1})
+	cache.setSeries(blid, 1235, []byte{1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 5})
+	testutil.Equals(t, cache.curSize, uint64(20))
+
 }
