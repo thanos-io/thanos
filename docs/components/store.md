@@ -84,5 +84,8 @@ Flags:
       --block-sync-concurrency=20
                                  Number of goroutines to use when syncing blocks
                                  from object storage.
+      --min-time=0s              Start of time range limit to serve
+      --max-time=9999-12-31T23:59:59Z
+                                 End of time range limit to serve
 
 ```
