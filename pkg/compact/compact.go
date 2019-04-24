@@ -256,6 +256,10 @@ func (c *Syncer) downloadMeta(ctx context.Context, id ulid.ULID) (*metadata.Meta
 
 	meta, err := block.DownloadMeta(ctx, c.logger, c.bkt, id)
 	if err != nil {
+		if ulid.Now()-id.Time() < uint64(c.syncDelay/time.Millisecond) {
+			level.Debug(c.logger).Log("msg", "block is too fresh for now", "block", id)
+			return nil, blockTooFreshSentinelError
+		}
 		return nil, errors.Wrapf(err, "downloading meta.json for %s", id)
 	}
 
@@ -277,6 +281,9 @@ func (c *Syncer) downloadMeta(ctx context.Context, id ulid.ULID) (*metadata.Meta
 	return &meta, nil
 }
 
+// removeIfMalformed removes a block from the bucket if that block does not have a meta file.
+// It is the responsibility of the caller to ensure that enough time has passed to ensure that
+// the enough time has passed for the block to become consistent
 func (c *Syncer) removeIfMalformed(ctx context.Context, id ulid.ULID) bool {
 	exists, err := block.MetaExists(ctx, c.logger, c.bkt, id)
 	if err != nil {
@@ -285,11 +292,6 @@ func (c *Syncer) removeIfMalformed(ctx context.Context, id ulid.ULID) bool {
 	}
 	if exists {
 		// Meta exists, block is not malformed.
-		return false
-	}
-
-	if ulid.Now()-id.Time() <= uint64(consistencyDelay/time.Millisecond) {
-		// Consistency delay has not expired, so can't say block is malformed yet.
 		return false
 	}
 
