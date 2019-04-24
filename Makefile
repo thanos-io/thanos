@@ -27,6 +27,9 @@ PROTOC_VERSION    ?= 3.4.0
 # v0.54.0
 HUGO_VERSION      ?= b1a82c61aba067952fdae2f73b826fe7d0f3fc2f
 HUGO              ?= $(GOBIN)/hugo-$(HUGO_VERSION)
+# v3.1.1
+GOBINDATA_VERSION ?= a9c83481b38ebb1c4eb8f0168fd4b10ca1d3c523
+GOBINDATA         ?= $(GOBIN)/go-bindata-$(GOBINDATA_VERSION)
 GIT               ?= $(shell which git)
 BZR               ?= $(shell which bzr)
 
@@ -90,12 +93,11 @@ all: format build
 
 # assets repacks all statis assets into go file for easier deploy.
 .PHONY: assets
-assets:
+assets: $(GOBINDATA)
 	@echo ">> deleting asset file"
 	@rm pkg/ui/bindata.go || true
 	@echo ">> writing assets"
-	@go get -u github.com/jteeuwen/go-bindata/...
-	@go-bindata $(bindata_flags) -pkg ui -o pkg/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  pkg/ui/templates/... pkg/ui/static/...
+	@$(GOBINDATA) $(bindata_flags) -pkg ui -o pkg/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  pkg/ui/templates/... pkg/ui/static/...
 	@go fmt ./pkg/ui
 
 
@@ -277,6 +279,9 @@ $(PROMU):
 
 $(HUGO):
 	$(call fetch_go_bin_version,github.com/gohugoio/hugo,$(HUGO_VERSION))
+
+$(GOBINDATA):
+	$(call fetch_go_bin_version,github.com/go-bindata/go-bindata/go-bindata,$(GOBINDATA_VERSION))
 
 $(PROTOC):
 	@mkdir -p $(TMP_GOPATH)
