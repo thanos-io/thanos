@@ -7,24 +7,20 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"math"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
-	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/promclient"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/fileutil"
 	"github.com/prometheus/tsdb/labels"
@@ -120,39 +116,18 @@ func New(
 // to remote if necessary, including compacted blocks which are already in filesystem.
 // It attaches the Thanos metadata section in each meta JSON file.
 func NewWithCompacted(
-	ctx context.Context,
 	logger log.Logger,
 	r prometheus.Registerer,
 	dir string,
 	bucket objstore.Bucket,
 	lbls func() labels.Labels,
 	source metadata.SourceType,
-	prometheusURL *url.URL,
-) (*Shipper, error) {
+) *Shipper {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	if lbls == nil {
 		lbls = func() labels.Labels { return nil }
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
-	var flags promclient.Flags
-	if err := runutil.Retry(1*time.Second, ctx.Done(), func() (err error) {
-		flags, err = promclient.ConfiguredFlags(ctx, logger, prometheusURL)
-		if err != nil {
-			return errors.Wrap(err, "configured flags; failed to check if compaction is disabled")
-		}
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-
-	if flags.TSDBMinTime != model.Duration(2*time.Hour) || flags.TSDBMaxTime != model.Duration(2*time.Hour) {
-		return nil, errors.Errorf("Found that TSDB Max time is %s and Min time is %s. To use shipper with upload compacted option, "+
-			"compaction needs to be disabled (storage.tsdb.min-block-duration = storage.tsdb.max-block-duration = 2h", flags.TSDBMinTime, flags.TSDBMaxTime)
 	}
 
 	return &Shipper{
@@ -163,7 +138,7 @@ func NewWithCompacted(
 		metrics:         newMetrics(r, true),
 		source:          source,
 		uploadCompacted: true,
-	}, nil
+	}
 }
 
 // Timestamps returns the minimum timestamp for which data is available and the highest timestamp

@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/hashicorp/go-version"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/tracing"
@@ -34,6 +35,8 @@ import (
 	"github.com/prometheus/tsdb/labels"
 	yaml "gopkg.in/yaml.v2"
 )
+
+var FlagsVersion = version.Must(version.NewVersion("2.2.0"))
 
 // IsWALFileAccesible returns no error if WAL dir can be found. This helps to tell
 // if we have access to Prometheus TSDB directory.
@@ -70,7 +73,7 @@ func ExternalLabels(ctx context.Context, logger log.Logger, base *url.URL) (labe
 
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, errors.Errorf("failed to read body")
+		return nil, errors.New("failed to read body")
 	}
 
 	if resp.StatusCode != 200 {
@@ -186,7 +189,7 @@ func ConfiguredFlags(ctx context.Context, logger log.Logger, base *url.URL) (Fla
 
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return Flags{}, errors.Errorf("failed to read body")
+		return Flags{}, errors.New("failed to read body")
 	}
 
 	if resp.StatusCode != 200 {
@@ -230,7 +233,7 @@ func Snapshot(ctx context.Context, logger log.Logger, base *url.URL, skipHead bo
 
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return "", errors.Errorf("failed to read body")
+		return "", errors.New("failed to read body")
 	}
 
 	if resp.StatusCode != 200 {
@@ -376,6 +379,32 @@ func PromqlQueryInstant(ctx context.Context, logger log.Logger, base *url.URL, q
 	return vec, warnings, nil
 }
 
+// PromVersion will return the version of Prometheus by querying /version Prometheus endpoint.
+func PromVersion(logger log.Logger, base *url.URL) (*version.Version, error) {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
+
+	u := *base
+	u.Path = path.Join(u.Path, "/version")
+	resp, err := http.Get(u.String())
+	if err != nil {
+		return nil, errors.Wrapf(err, "request version against %s", u.String())
+	}
+	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
+
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.New("failed to read body")
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, errors.Errorf("got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
+	}
+
+	return parseVersion(b)
+}
+
 // Scalar response consists of array with mixed types so it needs to be
 // unmarshaled separately.
 func convertScalarJSONToVector(scalarJSONResult json.RawMessage) (model.Vector, error) {
@@ -477,4 +506,26 @@ func MetricValues(ctx context.Context, logger log.Logger, base *url.URL, perMetr
 			return err
 		}
 	}
+}
+
+// parseVersion converts string to version.Version.
+func parseVersion(data []byte) (*version.Version, error) {
+	var m struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, errors.Wrapf(err, "unmarshal response: %v", string(data))
+	}
+
+	// Prometheus is built with nil version.
+	if strings.TrimSpace(m.Version) == "" {
+		return nil, nil
+	}
+
+	ver, err := version.NewVersion(m.Version)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to parse version %s", m.Version)
+	}
+
+	return ver, nil
 }

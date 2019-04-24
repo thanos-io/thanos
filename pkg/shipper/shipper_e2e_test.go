@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"math/rand"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -191,11 +190,7 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 		defer upcancel()
 		testutil.Ok(t, p.WaitPrometheusUp(upctx))
 
-		addr, err := url.Parse(p.Addr())
-		testutil.Ok(t, err)
-
-		shipper, err := NewWithCompacted(ctx, log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource, addr)
-		testutil.NotOk(t, err) // Compaction not disabled!
+		shipper := NewWithCompacted(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource)
 
 		p.DisableCompaction()
 		testutil.Ok(t, p.Restart())
@@ -204,11 +199,7 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 		defer upcancel2()
 		testutil.Ok(t, p.WaitPrometheusUp(upctx2))
 
-		addr, err = url.Parse("http://" + p.Addr())
-		testutil.Ok(t, err)
-
-		shipper, err = NewWithCompacted(ctx, log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource, addr)
-		testutil.Ok(t, err)
+		shipper = NewWithCompacted(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource)
 
 		// Create 10 new blocks. 9 of them (non compacted) should be actually uploaded.
 		var (
