@@ -61,7 +61,8 @@ Flags:
                                Alternative to 'objstore.config-file' flag.
                                Object store configuration in YAML.
       --sync-delay=30m         Minimum age of fresh (non-compacted) blocks
-                               before they are being processed.
+                               before they are being processed. Blocks older
+                               than this which are malformed will be removed.
       --retention.resolution-raw=0d
                                How long to retain raw samples in bucket. 0d -
                                disables this retention
