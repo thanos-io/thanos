@@ -280,8 +280,7 @@ func (c *Syncer) downloadMeta(ctx context.Context, id ulid.ULID) (*metadata.Meta
 }
 
 // removeIfMalformed removes a block from the bucket if that block does not have a meta file.
-// It is the responsibility of the caller to ensure that enough time has passed to ensure that
-// the enough time has passed for the block to become consistent
+// It is the responsibility of the caller to ensure that enough time has passed for the block to become consistent
 func (c *Syncer) removeIfMalformed(ctx context.Context, id ulid.ULID) bool {
 	exists, err := block.MetaExists(ctx, c.logger, c.bkt, id)
 	if err != nil {
