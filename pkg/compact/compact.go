@@ -149,7 +149,7 @@ func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket
 }
 
 // SyncMetas synchronizes all meta files from blocks in the bucket into
-// the memory.  It removes any partial blocks older than consistencyDelay
+// the memory.  It removes any partial blocks older than syncDelay
 // from the bucket.
 func (c *Syncer) SyncMetas(ctx context.Context) error {
 	c.mtx.Lock()
