@@ -31,8 +31,6 @@ const (
 	ResolutionLevelRaw = ResolutionLevel(downsample.ResLevel0)
 	ResolutionLevel5m  = ResolutionLevel(downsample.ResLevel1)
 	ResolutionLevel1h  = ResolutionLevel(downsample.ResLevel2)
-
-	consistencyDelay = time.Duration(30 * time.Minute)
 )
 
 var blockTooFreshSentinelError = errors.New("Block too fresh")
