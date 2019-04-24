@@ -41,7 +41,7 @@ type Syncer struct {
 	logger               log.Logger
 	reg                  prometheus.Registerer
 	bkt                  objstore.Bucket
-	syncDelay            time.Duration
+	consistencyDelay     time.Duration
 	mtx                  sync.Mutex
 	blocks               map[ulid.ULID]*metadata.Meta
 	blocksMtx            sync.Mutex
@@ -132,14 +132,14 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 
 // NewSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, syncDelay time.Duration, blockSyncConcurrency int, acceptMalformedIndex bool) (*Syncer, error) {
+func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, consistencyDelay time.Duration, blockSyncConcurrency int, acceptMalformedIndex bool) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	return &Syncer{
 		logger:               logger,
 		reg:                  reg,
-		syncDelay:            syncDelay,
+		consistencyDelay:     consistencyDelay,
 		blocks:               map[ulid.ULID]*metadata.Meta{},
 		bkt:                  bkt,
 		metrics:              newSyncerMetrics(reg),
@@ -149,7 +149,7 @@ func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket
 }
 
 // SyncMetas synchronizes all meta files from blocks in the bucket into
-// the memory.  It removes any partial blocks older than syncDelay
+// the memory.  It removes any partial blocks older than consistencyDelay
 // from the bucket.
 func (c *Syncer) SyncMetas(ctx context.Context) error {
 	c.mtx.Lock()
@@ -254,7 +254,7 @@ func (c *Syncer) downloadMeta(ctx context.Context, id ulid.ULID) (*metadata.Meta
 
 	meta, err := block.DownloadMeta(ctx, c.logger, c.bkt, id)
 	if err != nil {
-		if ulid.Now()-id.Time() < uint64(c.syncDelay/time.Millisecond) {
+		if ulid.Now()-id.Time() < uint64(c.consistencyDelay/time.Millisecond) {
 			level.Debug(c.logger).Log("msg", "block is too fresh for now", "block", id)
 			return nil, blockTooFreshSentinelError
 		}
@@ -267,7 +267,7 @@ func (c *Syncer) downloadMeta(ctx context.Context, id ulid.ULID) (*metadata.Meta
 	// - compactor created blocks
 	// NOTE: It is not safe to miss "old" block (even that it is newly created) in sync step. Compactor needs to aware of ALL old blocks.
 	// TODO(bplotka): https://github.com/improbable-eng/thanos/issues/377
-	if ulid.Now()-id.Time() < uint64(c.syncDelay/time.Millisecond) &&
+	if ulid.Now()-id.Time() < uint64(c.consistencyDelay/time.Millisecond) &&
 		meta.Thanos.Source != metadata.BucketRepairSource &&
 		meta.Thanos.Source != metadata.CompactorSource &&
 		meta.Thanos.Source != metadata.CompactorRepairSource {
