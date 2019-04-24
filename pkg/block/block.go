@@ -146,7 +146,7 @@ func IsBlockDir(path string) (id ulid.ULID, ok bool) {
 	return id, err == nil
 }
 
-// MetaExists checks whether the meta file exists for the provided block
+// MetaExists checks whether the meta file exists for the provided block.
 func MetaExists(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID) (bool, error) {
 	exists, err := bkt.Exists(ctx, path.Join(id.String(), MetaFilename))
 	if err != nil {
