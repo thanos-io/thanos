@@ -15,6 +15,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/objtesting"
 	"github.com/improbable-eng/thanos/pkg/runutil"
+	storecache "github.com/improbable-eng/thanos/pkg/store/cache"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/pkg/errors"
@@ -310,7 +311,10 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 		t.Log("Run ", i)
 
 		// Always clean cache before each test.
-		s.store.indexCache, err = newIndexCache(nil, 100)
+		s.store.indexCache, err = storecache.NewIndexCache(log.NewNopLogger(), nil, storecache.Opts{
+			MaxSizeBytes:     100,
+			MaxItemSizeBytes: 100,
+		})
 		testutil.Ok(t, err)
 
 		srv := newStoreSeriesServer(ctx)

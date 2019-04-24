@@ -26,6 +26,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/pool"
 	"github.com/improbable-eng/thanos/pkg/runutil"
+	storecache "github.com/improbable-eng/thanos/pkg/store/cache"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/strutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
@@ -182,7 +183,7 @@ type BucketStore struct {
 	metrics    *bucketStoreMetrics
 	bucket     objstore.BucketReader
 	dir        string
-	indexCache *indexCache
+	indexCache *storecache.IndexCache
 	chunkPool  *pool.BytesPool
 
 	// Sets of blocks that have the same labels. They are indexed by a hash over their label set.
@@ -225,10 +226,17 @@ func NewBucketStore(
 		return nil, errors.Errorf("max concurrency value cannot be lower than 0 (got %v)", maxConcurrent)
 	}
 
-	indexCache, err := newIndexCache(reg, indexCacheSizeBytes)
+	// TODO(bwplotka): Add as a flag?
+	maxItemSizeBytes := indexCacheSizeBytes / 2
+
+	indexCache, err := storecache.NewIndexCache(logger, reg, storecache.Opts{
+		MaxSizeBytes:     indexCacheSizeBytes,
+		MaxItemSizeBytes: maxItemSizeBytes,
+	})
 	if err != nil {
 		return nil, errors.Wrap(err, "create index cache")
 	}
+
 	chunkPool, err := pool.NewBytesPool(2e5, 50e6, 2, maxChunkPoolBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "create chunk pool")
@@ -1058,7 +1066,7 @@ type bucketBlock struct {
 	bucket     objstore.BucketReader
 	meta       *metadata.Meta
 	dir        string
-	indexCache *indexCache
+	indexCache *storecache.IndexCache
 	chunkPool  *pool.BytesPool
 
 	indexVersion int
@@ -1081,7 +1089,7 @@ func newBucketBlock(
 	bkt objstore.BucketReader,
 	id ulid.ULID,
 	dir string,
-	indexCache *indexCache,
+	indexCache *storecache.IndexCache,
 	chunkPool *pool.BytesPool,
 	p partitioner,
 ) (b *bucketBlock, err error) {
@@ -1241,13 +1249,13 @@ type bucketIndexReader struct {
 	block  *bucketBlock
 	dec    *index.Decoder
 	stats  *queryStats
-	cache  *indexCache
+	cache  *storecache.IndexCache
 
 	mtx          sync.Mutex
 	loadedSeries map[uint64][]byte
 }
 
-func newBucketIndexReader(ctx context.Context, logger log.Logger, block *bucketBlock, cache *indexCache) *bucketIndexReader {
+func newBucketIndexReader(ctx context.Context, logger log.Logger, block *bucketBlock, cache *storecache.IndexCache) *bucketIndexReader {
 	r := &bucketIndexReader{
 		logger:       logger,
 		ctx:          ctx,
@@ -1415,7 +1423,7 @@ func (r *bucketIndexReader) fetchPostings(groups []*postingGroup) error {
 	for i, g := range groups {
 		for j, key := range g.keys {
 			// Get postings for the given key from cache first.
-			if b, ok := r.cache.postings(r.block.meta.ULID, key); ok {
+			if b, ok := r.cache.Postings(r.block.meta.ULID, key); ok {
 				r.stats.postingsTouched++
 				r.stats.postingsTouchedSizeSum += len(b)
 
@@ -1487,7 +1495,7 @@ func (r *bucketIndexReader) fetchPostings(groups []*postingGroup) error {
 
 				// Return postings and fill LRU cache.
 				groups[p.groupID].Fill(p.keyID, fetchedPostings)
-				r.cache.setPostings(r.block.meta.ULID, groups[p.groupID].keys[p.keyID], c)
+				r.cache.SetPostings(r.block.meta.ULID, groups[p.groupID].keys[p.keyID], c)
 
 				// If we just fetched it we still have to update the stats for touched postings.
 				r.stats.postingsTouched++
@@ -1510,7 +1518,7 @@ func (r *bucketIndexReader) PreloadSeries(ids []uint64) error {
 	var newIDs []uint64
 
 	for _, id := range ids {
-		if b, ok := r.cache.series(r.block.meta.ULID, id); ok {
+		if b, ok := r.cache.Series(r.block.meta.ULID, id); ok {
 			r.loadedSeries[id] = b
 			continue
 		}
@@ -1567,7 +1575,7 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []uint64, start,
 		}
 		c = c[n : n+int(l)]
 		r.loadedSeries[id] = c
-		r.cache.setSeries(r.block.meta.ULID, id, c)
+		r.cache.SetSeries(r.block.meta.ULID, id, c)
 	}
 	return nil
 }
