@@ -18,7 +18,6 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ### Fixed
 
 - [#1070](https://github.com/improbable-eng/thanos/pull/1070) Downsampling works back again. Deferred closer errors are now properly captured.
-- [#1074](https://github.com/improbable-eng/thanos/pull/1074) Fixed fetching go-bindata failed.
 
 ## [v0.4.0-rc.0](https://github.com/improbable-eng/thanos/releases/tag/v0.4.0-rc.0) - 2019.04.18
 
