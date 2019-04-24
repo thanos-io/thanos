@@ -71,6 +71,3 @@ perl -pi -e 's/]\(\//]\(https:\/\/github.com\/improbable-eng\/thanos\/tree\/'${C
 perl -pi -e 's/]\(\.\//]\(..\//' ${ALL_DOC_CONTENT_FILES}
 perl -pi -e 's/]\((?!http)/]\(..\//' ${ALL_DOC_CONTENT_FILES}
 perl -pi -e 's/src=\"(?!http)/src=\"..\//' ${ALL_DOC_CONTENT_FILES}
-
-# Pass Google analytics token:
-sed -e 's/${GOOGLE_ANALYTICS_TOKEN}/'${GOOGLE_ANALYTICS_TOKEN}'/' ${WEBSITE_DIR}/hugo.tmpl.yaml > ${WEBSITE_DIR}/hugo-generated.yaml

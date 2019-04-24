@@ -1,0 +1,17 @@
+[Settings]
+
+# All netfliy options should be defined here. UI options should stay empty.
+
+[build]
+base = ""
+publish = "website/public"
+
+# Our Makefile build hugo, but it's faster if netlify grab the correct version on their own
+# via simple curl.
+environment = { HUGO_VERSION="0.55.3" }
+
+[context.production]
+command = "make web HUGO=$(which hugo)"
+
+[context.deploy-preview]
+command = "make web HUGO=$(which hugo) WEBSITE_BASE_URL=${DEPLOY_PRIME_URL}"

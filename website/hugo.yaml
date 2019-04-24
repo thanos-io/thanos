@@ -1,5 +1,5 @@
 title: "Thanos - Highly available Prometheus setup with long term storage capabilities"
-baseURL: "https://thanos.io"
+# This is controlled by makefile: baseURL: "https://thanos.io"
 languageCode: "en-us"
 
 enableGitInfo: true
@@ -9,7 +9,7 @@ pygmentsUseClasses: true
 
 # We use preprocessing script so it will not work as expected anyway.
 disableLiveReload: true
-googleAnalytics: "${GOOGLE_ANALYTICS_TOKEN}"
+googleAnalytics: "UA-137374921-1"
 
 # So /thanos/docs/b link from /thanos/docs/some/a will be rewritten as ../b
 canonifyURLs: true
