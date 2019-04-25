@@ -60,7 +60,7 @@ Flags:
       --objstore.config=<bucket.config-yaml>
                                Alternative to 'objstore.config-file' flag.
                                Object store configuration in YAML.
-      --sync-delay=30m         Minimum age of fresh (non-compacted) blocks
+      --consistency-delay=30m  Minimum age of fresh (non-compacted) blocks
                                before they are being processed. Blocks older
                                than this which are malformed will be removed.
       --retention.resolution-raw=0d

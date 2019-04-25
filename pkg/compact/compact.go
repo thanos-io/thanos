@@ -288,10 +288,6 @@ func (c *Syncer) removeIfMetaMalformed(ctx context.Context, id ulid.ULID) bool {
 		level.Warn(c.logger).Log("msg", "failed to check meta exists for block", "block", id, "err", err)
 		return false
 	}
-	if err != nil {
-		level.Warn(c.logger).Log("msg", "failed to check if block is malformed", "block", id, "err", err)
-		return false
-	}
 	if metaExists {
 		// Meta exists, block is not malformed.
 		return false
