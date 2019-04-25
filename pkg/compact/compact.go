@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -195,7 +196,7 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 					continue
 				}
 				if err != nil {
-					if removed := c.removeIfMalformed(workCtx, id); removed {
+					if removed := c.removeIfMetaMalformed(workCtx, id); removed {
 						continue
 					}
 					errChan <- err
@@ -280,20 +281,25 @@ func (c *Syncer) downloadMeta(ctx context.Context, id ulid.ULID) (*metadata.Meta
 }
 
 // removeIfMalformed removes a block from the bucket if that block does not have a meta file.
-// It is the responsibility of the caller to ensure that enough time has passed for the block to become consistent
-func (c *Syncer) removeIfMalformed(ctx context.Context, id ulid.ULID) bool {
-	exists, err := block.MetaExists(ctx, c.logger, c.bkt, id)
+// It is the responsibility of the caller to ensure that enough time has passed for the block to become consistent.
+func (c *Syncer) removeIfMetaMalformed(ctx context.Context, id ulid.ULID) bool {
+	metaExists, err := c.bkt.Exists(ctx, path.Join(id.String(), block.MetaFilename))
 	if err != nil {
-		level.Warn(c.logger).Log("msg", "failed to check if block is malformed", "block", id)
+		level.Warn(c.logger).Log("msg", "failed to check meta exists for block", "block", id, "err", err)
 		return false
 	}
-	if exists {
+	if err != nil {
+		level.Warn(c.logger).Log("msg", "failed to check if block is malformed", "block", id, "err", err)
+		return false
+	}
+	if metaExists {
 		// Meta exists, block is not malformed.
 		return false
 	}
 
 	if err := block.Delete(ctx, c.bkt, id); err != nil {
-		level.Warn(c.logger).Log("msg", "failed to delete malformed block", "block", id)
+		level.Warn(c.logger).Log("msg", "failed to delete malformed block", "block", id, "err", err)
+		return false
 	}
 	level.Info(c.logger).Log("msg", "deleted malformed block", "block", id)
 
