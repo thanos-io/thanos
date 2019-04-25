@@ -396,18 +396,20 @@ func (s *BucketStore) numBlocks() int {
 }
 
 func (s *BucketStore) isBlockInMinMaxRange(ctx context.Context, id ulid.ULID) (bool, error) {
+	dir := filepath.Join(s.dir, id.String())
+
 	b := &bucketBlock{
 		logger: s.logger,
 		bucket: s.bucket,
 		id:     id,
-		dir:    s.dir,
+		dir:    dir,
 	}
 	if err := b.loadMeta(ctx, id); err != nil {
 		return false, err
 	}
 
 	// We check for blocks in configured minTime, maxTime range
-	if b.meta.MinTime < s.minTime.PrometheusTimestamp() || b.meta.MinTime > s.maxTime.PrometheusTimestamp() {
+	if b.meta.MinTime < s.minTime.PrometheusTimestamp() || b.meta.MaxTime > s.maxTime.PrometheusTimestamp() {
 		return false, nil
 	}
 
