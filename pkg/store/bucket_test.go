@@ -469,12 +469,12 @@ func TestBucketStore_isBlockInMinMaxRange(t *testing.T) {
 	testutil.Ok(t, metadata.Write(log.NewNopLogger(), dir2, meta2))
 
 	// Run actual test
-
 	zeroTime := time.Unix(0, 0)
 	hourBefore := model.Duration(-1 * time.Hour)
 	minTime := &TimeOrDurationValue{t: &zeroTime}
 	maxTime := &TimeOrDurationValue{dur: &hourBefore}
 
+	// bucketStore accepts blocks in range [0, now-1h]
 	bucketStore, err := NewBucketStore(nil, nil, inmem.NewBucket(), dir, 2e5, 2e5, 0, 0, false, 20,
 		minTime, maxTime)
 
