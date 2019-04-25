@@ -84,8 +84,17 @@ Flags:
       --block-sync-concurrency=20
                                  Number of goroutines to use when syncing blocks
                                  from object storage.
-      --min-time=0s              Start of time range limit to serve
+      --min-time=0000-01-01T00:00:00Z
+                                 Start of time range limit to serve. Option can
+                                 be a constant time in RFC3339 format or time
+                                 duration relative to current time, such as
+                                 -1.5d or 2h45m. Valid duration units are ms, s,
+                                 m, h, d, w, y.
       --max-time=9999-12-31T23:59:59Z
-                                 End of time range limit to serve
+                                 End of time range limit to serve. Option can be
+                                 a constant time in RFC3339 format or time
+                                 duration relative to current time, such as
+                                 -1.5d or 2h45m. Valid duration units are ms, s,
+                                 m, h, d, w, y.
 
 ```

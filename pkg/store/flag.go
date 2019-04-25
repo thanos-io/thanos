@@ -3,6 +3,7 @@ package store
 import (
 	"time"
 
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
@@ -12,17 +13,18 @@ import (
 // Only one will be set.
 type TimeOrDurationValue struct {
 	t   *time.Time
-	dur *time.Duration
+	dur *model.Duration
 }
 
 // Set converts string to TimeOrDurationValue
 func (tdv *TimeOrDurationValue) Set(s string) error {
 	t, err := time.Parse(time.RFC3339, s)
 	if err != nil {
-		dur, err := time.ParseDuration(s)
+		dur, err := model.ParseDuration(s)
 		if err != nil {
 			return err
 		}
+
 		tdv.dur = &dur
 		return nil
 	}
@@ -50,7 +52,7 @@ func (tdv *TimeOrDurationValue) PrometheusTimestamp() int64 {
 	case tdv.t != nil:
 		return timestamp.FromTime(*tdv.t)
 	case tdv.dur != nil:
-		return timestamp.FromTime(time.Now().Add(*tdv.dur))
+		return timestamp.FromTime(time.Now().Add(time.Duration(*tdv.dur)))
 	}
 
 	return 0
