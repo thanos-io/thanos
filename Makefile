@@ -34,7 +34,7 @@ GIT               ?= $(shell which git)
 BZR               ?= $(shell which bzr)
 
 WEB_DIR           ?= website
-WEBSITE_BASE_URL  ?= thanos.io
+WEBSITE_BASE_URL  ?= https://thanos.io
 PUBLIC_DIR        ?= $(WEB_DIR)/public
 ME                ?= $(shell whoami)
 
