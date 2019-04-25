@@ -20,11 +20,19 @@ type TimeOrDurationValue struct {
 func (tdv *TimeOrDurationValue) Set(s string) error {
 	t, err := time.Parse(time.RFC3339, s)
 	if err != nil {
+		var minus bool
+		if s[0] == '-' {
+			minus = true
+			s = s[1:]
+		}
 		dur, err := model.ParseDuration(s)
 		if err != nil {
 			return err
 		}
 
+		if minus {
+			dur = dur * -1
+		}
 		tdv.dur = &dur
 		return nil
 	}
