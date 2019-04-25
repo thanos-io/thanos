@@ -10,8 +10,10 @@ publish = "website/public"
 # via simple curl.
 environment = { HUGO_VERSION="0.55.3" }
 
-[context.production]
-command = "make web HUGO=$(which hugo)"
+# NOTE: Sleep at then is to make sure logs are not truncated on error.
+command = "(env && make web HUGO=$(which hugo)) || (sleep 30; false)"
 
 [context.deploy-preview]
-command = "make web HUGO=$(which hugo) WEBSITE_BASE_URL=${DEPLOY_PRIME_URL}"
+
+# NOTE: Sleep at then is to make sure logs are not truncated on error.
+command = "(env && make web HUGO=$(which hugo) WEBSITE_BASE_URL=${DEPLOY_PRIME_URL}) || (sleep 30; false)"

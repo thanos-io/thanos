@@ -24,7 +24,7 @@ PROMU             ?= $(GOBIN)/promu-$(PROMU_VERSION)
 PROMU_VERSION     ?= 264dc36af9ea3103255063497636bd5713e3e9c1
 PROTOC            ?= $(GOBIN)/protoc-$(PROTOC_VERSION)
 PROTOC_VERSION    ?= 3.4.0
-# v0.55.3
+# v0.55.3 This needs to match with version in netlify.toml
 HUGO_VERSION      ?= 993b84333cd75faa224d02618f312a0e96b53372
 HUGO              ?= $(GOBIN)/hugo-$(HUGO_VERSION)
 # v3.1.1
