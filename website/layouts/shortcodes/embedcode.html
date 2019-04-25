@@ -1,7 +1,0 @@
-{{ $lang := .Get "lang" }}
-{{ $start := sub (int (.Get "start")) 2 }}
-{{ $lines := add (int (.Get "lines")) 1 }}
-{{/*{{ $file := .Get "file" | readFile }}*/}}
-{{ $file := first $lines (after $start (split (.Get "file" | readFile) "\n")) }}
-
-{{ (print "```" $lang "\n" (delimit $file "\n") "\n```") | markdownify }}

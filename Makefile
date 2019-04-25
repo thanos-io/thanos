@@ -24,8 +24,8 @@ PROMU             ?= $(GOBIN)/promu-$(PROMU_VERSION)
 PROMU_VERSION     ?= 264dc36af9ea3103255063497636bd5713e3e9c1
 PROTOC            ?= $(GOBIN)/protoc-$(PROTOC_VERSION)
 PROTOC_VERSION    ?= 3.4.0
-# v0.54.0
-HUGO_VERSION      ?= b1a82c61aba067952fdae2f73b826fe7d0f3fc2f
+# v0.55.3
+HUGO_VERSION      ?= 993b84333cd75faa224d02618f312a0e96b53372
 HUGO              ?= $(GOBIN)/hugo-$(HUGO_VERSION)
 # v3.1.1
 GOBINDATA_VERSION ?= a9c83481b38ebb1c4eb8f0168fd4b10ca1d3c523
@@ -34,6 +34,7 @@ GIT               ?= $(shell which git)
 BZR               ?= $(shell which bzr)
 
 WEB_DIR           ?= website
+WEBSITE_BASE_URL  ?= thanos.io
 PUBLIC_DIR        ?= $(WEB_DIR)/public
 ME                ?= $(shell whoami)
 
@@ -236,18 +237,16 @@ web-pre-process:
 web: web-pre-process $(HUGO)
 	@echo ">> building documentation website"
 	# TODO(bwplotka): Make it --gc
-	@cd $(WEB_DIR) && HUGO_ENV=production $(HUGO) --config hugo-generated.yaml --minify -v
+	@cd $(WEB_DIR) && HUGO_ENV=production $(HUGO) --config hugo.yaml --minify -v -b $(WEBSITE_BASE_URL)
 
 .PHONY: web-serve
 web-serve: web-pre-process $(HUGO)
 	@echo ">> serving documentation website"
-	@cd $(WEB_DIR) && $(HUGO) --config hugo-generated.yaml -v server
+	@cd $(WEB_DIR) && $(HUGO) --config hugo.yaml -v server
 
-.PHONY: web-deploy
+# Deprecated.
+.PHONY: web-gh-pages-deploy
 web-deploy:
-ifndef GOOGLE_ANALYTICS_TOKEN
-	$(error GOOGLE_ANALYTICS_TOKEN is not set)
-endif
 	# Requires git creds configured beforehand.
 	$(call require_clean_work_tree,"deploy website")
 	@rm -rf $(PUBLIC_DIR)
@@ -278,7 +277,9 @@ $(PROMU):
 	$(call fetch_go_bin_version,github.com/prometheus/promu,$(PROMU_VERSION))
 
 $(HUGO):
-	$(call fetch_go_bin_version,github.com/gohugoio/hugo,$(HUGO_VERSION))
+	@go get github.com/gohugoio/hugo@$(HUGO_VERSION)
+	@mv $(GOBIN)/hugo $(HUGO)
+	@go mod tidy
 
 $(GOBINDATA):
 	$(call fetch_go_bin_version,github.com/go-bindata/go-bindata/go-bindata,$(GOBINDATA_VERSION))
