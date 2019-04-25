@@ -1,7 +1,6 @@
 /prometheus
 /thanos
-vendor/
-!pkg/ui/static/vendor
+/vendor/
 
 # Ignore minikube setup working dirs.
 kube/bin
