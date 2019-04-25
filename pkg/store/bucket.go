@@ -316,6 +316,17 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 		if err != nil {
 			return nil
 		}
+
+		inRange, err := s.isBlockInMinMaxRange(ctx, id)
+		if err != nil {
+			level.Warn(s.logger).Log("msg", "error parsing block range", "block", id, "err", err)
+			return nil
+		}
+
+		if !inRange {
+			return nil
+		}
+
 		allIDs[id] = struct{}{}
 
 		if b := s.getBlock(id); b != nil {
@@ -384,6 +395,25 @@ func (s *BucketStore) numBlocks() int {
 	return len(s.blocks)
 }
 
+func (s *BucketStore) isBlockInMinMaxRange(ctx context.Context, id ulid.ULID) (bool, error) {
+	b := &bucketBlock{
+		logger: s.logger,
+		bucket: s.bucket,
+		id:     id,
+		dir:    s.dir,
+	}
+	if err := b.loadMeta(ctx, id); err != nil {
+		return false, err
+	}
+
+	// We check for blocks in configured minTime, maxTime range
+	if b.meta.MinTime < s.minTime.PrometheusTimestamp() || b.meta.MinTime > s.maxTime.PrometheusTimestamp() {
+		return false, nil
+	}
+
+	return true, nil
+}
+
 func (s *BucketStore) getBlock(id ulid.ULID) *bucketBlock {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
@@ -415,11 +445,6 @@ func (s *BucketStore) addBlock(ctx context.Context, id ulid.ULID) (err error) {
 	)
 	if err != nil {
 		return errors.Wrap(err, "new bucket block")
-	}
-
-	// We check for blocks in configured minTime, maxTime range
-	if b.meta.MinTime < s.minTime.PrometheusTimestamp() || b.meta.MinTime > s.maxTime.PrometheusTimestamp() {
-		return nil
 	}
 
 	s.mtx.Lock()
