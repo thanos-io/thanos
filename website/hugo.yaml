@@ -19,7 +19,7 @@ relativeURL: true
 contentDir: "docs-pre-processed"
 archetypeDir: "archetypes"
 layoutDir: "layouts"
-publishDi: "public"
+publishDir: "public"
 staticDir: "static"
 
 permalinks:

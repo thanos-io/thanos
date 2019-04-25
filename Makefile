@@ -244,22 +244,6 @@ web-serve: web-pre-process $(HUGO)
 	@echo ">> serving documentation website"
 	@cd $(WEB_DIR) && $(HUGO) --config hugo.yaml -v server
 
-# Deprecated.
-.PHONY: web-gh-pages-deploy
-web-deploy:
-	# Requires git creds configured beforehand.
-	$(call require_clean_work_tree,"deploy website")
-	@rm -rf $(PUBLIC_DIR)
-	@mkdir $(PUBLIC_DIR)
-	@git worktree prune
-	@rm -rf .git/worktrees/$(PUBLIC_DIR)/
-	@git fetch origin
-	@git worktree add -B gh-pages $(PUBLIC_DIR) origin/gh-pages
-	@rm -rf $(PUBLIC_DIR)/*
-	@make web
-	@cd $(PUBLIC_DIR) && git add --all && git commit -m "Publishing to gh-pages as $(ME)" && cd ..
-	@git push origin gh-pages
-
 # non-phony targets
 $(EMBEDMD):
 	$(call fetch_go_bin_version,github.com/campoy/embedmd,$(EMBEDMD_VERSION))
