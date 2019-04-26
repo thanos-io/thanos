@@ -294,10 +294,6 @@ func startStreamSeriesSet(
 				return
 			}
 
-			if ctx.Err() != nil {
-				return
-			}
-
 			if err != nil {
 				wrapErr := errors.Wrapf(err, "receive series from %s", s.name)
 				if partialResponse {
@@ -315,7 +311,14 @@ func startStreamSeriesSet(
 				s.warnCh.send(storepb.NewWarnSeriesResponse(errors.New(w)))
 				continue
 			}
-			s.recvCh <- r.GetSeries()
+
+			select {
+			case s.recvCh <- r.GetSeries():
+				continue
+			case <-ctx.Done():
+				return
+			}
+
 		}
 	}()
 	return s
