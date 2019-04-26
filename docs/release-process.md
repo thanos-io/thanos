@@ -1,27 +1,47 @@
-# For maintainers: Releases
+# Releases
 
-This page describes the release process for Thanos project.
+This page describes the release cadence and process for Thanos project.
 
 NOTE: As [Semantic Versioning](http://semver.org/spec/v2.0.0.html) states all 0.y.z releases can contain breaking changes in API (flags, grpc API, any backward compatibility)
 
 ## Cadence
 
-We aim for *at least* 1 release per 6 weeks. However, no strict dates are planned.
+We aim for regular and strict one release per 6 weeks. 6 weeks is counter from first release candidate to another. 
+This means that there is no *code freeze* or anything like that. We plan to stick to the exact 6 weeks, so there is no rush
+into being within release (except bug fixes).
 
-No release candidates are required until major version.
+No feature should block release.
 
-Additionally we aim for `master` branch being stable.
+Additionally we (obviously) aim for `master` branch being stable.
 
-## Cutting individual release
+## For maintainers: Cutting individual release
 
-Process of cutting a new *minor* Thanos release:
+We will choose a release shepherd for each minor release. 
+
+Release shepherd responsibilities:
+* Perform releases (from first RC to actual release).
+* Announce all releases on all communication channels.
+
+Process of releasing a *minor* Thanos version:
+1. Release `v<major>.<minor+1>.0-rc.0`
+1. If after 3 work days there is no major bug, release `v<major>.<minor>.0`
+1. If within 3 work days there is major bug, let's triage it to fix it and then release `v<major>.<minor>.0-rc.++` Go to step 2.
+1. Do patch release if needed for any bugs afterwards. Use same `release-xxx` branch.
+
+### How to release "a version"
 
 1. Add PR on branch `release-<major>.<minor>` that will start minor release branch and prepare changes to cut release.
+    
+  For release candidate just reuse same branch and rebase it on every candidate until the actual release happens.
+        
 1. Bump [VERSION file](/VERSION)
 1. Update [CHANGELOG file](/CHANGELOG.md)
 
   Note that `CHANGELOG.md` should only document changes relevant to users of Thanos, including external API changes, performance improvements, and new features. Do not document changes of internal interfaces, code refactorings and clean-ups, changes to the build process, etc. People interested in these are asked to refer to the git history.
   Format is described in `CHANGELOG.md`.
+  
+  The whole release from release candidate `rc.0` to actual release should have exactly the same section. We don't separate
+  what have changed between release candidates.
 
 1. Double check backward compatibility:
     1. *In case of version after `v1+.y.z`*, double check if none of the changes break API compatibility. This should be done in PR review process, but double check is good to have.
