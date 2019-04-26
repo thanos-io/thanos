@@ -32,6 +32,8 @@ const (
 	ResolutionLevelRaw = ResolutionLevel(downsample.ResLevel0)
 	ResolutionLevel5m  = ResolutionLevel(downsample.ResLevel1)
 	ResolutionLevel1h  = ResolutionLevel(downsample.ResLevel2)
+
+	MinimumConsistencyDelay = time.Duration(10 * time.Minute)
 )
 
 var blockTooFreshSentinelError = errors.New("Block too fresh")
@@ -134,6 +136,10 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 // NewSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
 func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, consistencyDelay time.Duration, blockSyncConcurrency int, acceptMalformedIndex bool) (*Syncer, error) {
+	if consistencyDelay < MinimumConsistencyDelay {
+		return nil, errors.New(fmt.Sprintf("invalid consistency delay, must be at least %s", MinimumConsistencyDelay))
+	}
+
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}

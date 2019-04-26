@@ -63,6 +63,8 @@ Flags:
       --consistency-delay=30m  Minimum age of fresh (non-compacted) blocks
                                before they are being processed. Blocks older
                                than this which are malformed will be removed.
+                               The smallest possible value of this flag is
+                               10m0s.
       --retention.resolution-raw=0d
                                How long to retain raw samples in bucket. 0d -
                                disables this retention
