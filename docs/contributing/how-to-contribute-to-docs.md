@@ -65,13 +65,16 @@ Show new menu section in main page by changing `website/layouts/_default/baseof.
 
 ## Testing
 
-Run `make web-serve` to serve and preview the website locally.
+Every PR is building website and on success it shows the link to preview.
 
+Alternatively you can run `make web-serve` to serve and preview the website locally.
 
 ## Deployment.
 
-Ask maintainer to deploy the page. (`GOOGLE_ANALYTICS_TOKEN="<  >" make web-deploy`)
+We use [Netlify](https://www.netlify.com/) for hosting. We are using Open Source license (PRO). Thanks Netlify for this!
 
-NOTE: It might take couple of seconds to refresh page / CDN for Github pages.
+On every commit to `master` netlify runs CI that invokes `make web` (defined in [netlify.toml](https://github.com/improbable-eng/thanos/blob/master/netlify.toml)))
 
-TODO(bwplotka) CI job which does that on every master commit.
+NOTE: Check for status badge in README for build status on the page.
+
+If master build for netlify succeed, the new content is published automatically.
