@@ -65,7 +65,7 @@ The philosophy of Thanos and our community is borrowing much from UNIX philosoph
 Master should be stable and usable. Every commit to master builds docker image named `master-<data>-<sha>`.
 
 We also perform minor releases every 6 weeks. 
-During that, wee build tarballs for major platforms and docker image.
+During that, we build tarballs for major platforms and docker image.
 
 See [this](docs/release-process.md) for details.
 
