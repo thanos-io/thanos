@@ -44,7 +44,7 @@ func SafeDelete(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 	}
 	dir := filepath.Join(tempdir, id.String())
 
-	if _, err := os.Stat(dir); err != nil {
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		// TSDB block not already present, download it
 		err = os.Mkdir(dir, 0755)
 		if err != nil {

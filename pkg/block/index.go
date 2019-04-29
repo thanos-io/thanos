@@ -673,6 +673,10 @@ func rewrite(
 	lastSet := labels.Labels{}
 	// Build a new TSDB block.
 	for _, s := range series {
+		// The TSDB library will throw an error if we add a series with
+		// identical labels as the last series.  This means that we have
+		// discovered a duplicate time series in the old block.  We drop
+		// all duplicate series preserving the first one.
 		if labels.Compare(lastSet, s.lset) == 0 {
 			level.Warn(logger).Log("msg",
 				"dropping duplicate series in tsdb block found",
