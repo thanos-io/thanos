@@ -12,13 +12,14 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/store"
+	storecache "github.com/improbable-eng/thanos/pkg/store/cache"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/oklog/run"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
-	"gopkg.in/alecthomas/kingpin.v2"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 // registerStore registers a store command.
@@ -120,12 +121,23 @@ func runStore(
 			}
 		}()
 
+		// TODO(bwplotka): Add as a flag?
+		maxItemSizeBytes := indexCacheSizeBytes / 2
+
+		indexCache, err := storecache.NewIndexCache(logger, reg, storecache.Opts{
+			MaxSizeBytes:     indexCacheSizeBytes,
+			MaxItemSizeBytes: maxItemSizeBytes,
+		})
+		if err != nil {
+			return errors.Wrap(err, "create index cache")
+		}
+
 		bs, err := store.NewBucketStore(
 			logger,
 			reg,
 			bkt,
 			dataDir,
-			indexCacheSizeBytes,
+			indexCache,
 			chunkPoolSizeBytes,
 			maxSampleCount,
 			maxConcurrent,

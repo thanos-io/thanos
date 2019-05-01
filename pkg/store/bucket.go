@@ -26,7 +26,6 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/pool"
 	"github.com/improbable-eng/thanos/pkg/runutil"
-	storecache "github.com/improbable-eng/thanos/pkg/store/cache"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/strutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
@@ -176,6 +175,13 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	return &m
 }
 
+type indexCache interface {
+	SetPostings(b ulid.ULID, l labels.Label, v []byte)
+	Postings(b ulid.ULID, l labels.Label) ([]byte, bool)
+	SetSeries(b ulid.ULID, id uint64, v []byte)
+	Series(b ulid.ULID, id uint64) ([]byte, bool)
+}
+
 // BucketStore implements the store API backed by a bucket. It loads all index
 // files to local disk.
 type BucketStore struct {
@@ -183,7 +189,7 @@ type BucketStore struct {
 	metrics    *bucketStoreMetrics
 	bucket     objstore.BucketReader
 	dir        string
-	indexCache *storecache.IndexCache
+	indexCache indexCache
 	chunkPool  *pool.BytesPool
 
 	// Sets of blocks that have the same labels. They are indexed by a hash over their label set.
@@ -211,7 +217,7 @@ func NewBucketStore(
 	reg prometheus.Registerer,
 	bucket objstore.BucketReader,
 	dir string,
-	indexCacheSizeBytes uint64,
+	indexCache indexCache,
 	maxChunkPoolBytes uint64,
 	maxSampleCount uint64,
 	maxConcurrent int,
@@ -224,17 +230,6 @@ func NewBucketStore(
 
 	if maxConcurrent < 0 {
 		return nil, errors.Errorf("max concurrency value cannot be lower than 0 (got %v)", maxConcurrent)
-	}
-
-	// TODO(bwplotka): Add as a flag?
-	maxItemSizeBytes := indexCacheSizeBytes / 2
-
-	indexCache, err := storecache.NewIndexCache(logger, reg, storecache.Opts{
-		MaxSizeBytes:     indexCacheSizeBytes,
-		MaxItemSizeBytes: maxItemSizeBytes,
-	})
-	if err != nil {
-		return nil, errors.Wrap(err, "create index cache")
 	}
 
 	chunkPool, err := pool.NewBytesPool(2e5, 50e6, 2, maxChunkPoolBytes)
@@ -1066,7 +1061,7 @@ type bucketBlock struct {
 	bucket     objstore.BucketReader
 	meta       *metadata.Meta
 	dir        string
-	indexCache *storecache.IndexCache
+	indexCache indexCache
 	chunkPool  *pool.BytesPool
 
 	indexVersion int
@@ -1089,7 +1084,7 @@ func newBucketBlock(
 	bkt objstore.BucketReader,
 	id ulid.ULID,
 	dir string,
-	indexCache *storecache.IndexCache,
+	indexCache indexCache,
 	chunkPool *pool.BytesPool,
 	p partitioner,
 ) (b *bucketBlock, err error) {
@@ -1105,7 +1100,7 @@ func newBucketBlock(
 	if err = b.loadMeta(ctx, id); err != nil {
 		return nil, errors.Wrap(err, "load meta")
 	}
-	if err = b.loadIndexCache(ctx); err != nil {
+	if err = b.loadIndexCacheFile(ctx); err != nil {
 		return nil, errors.Wrap(err, "load index cache")
 	}
 	// Get object handles for all chunk files.
@@ -1149,9 +1144,9 @@ func (b *bucketBlock) loadMeta(ctx context.Context, id ulid.ULID) error {
 	return nil
 }
 
-func (b *bucketBlock) loadIndexCache(ctx context.Context) (err error) {
+func (b *bucketBlock) loadIndexCacheFile(ctx context.Context) (err error) {
 	cachefn := filepath.Join(b.dir, block.IndexCacheFilename)
-	if err = b.loadIndexCacheFromFile(ctx, cachefn); err == nil {
+	if err = b.loadIndexCacheFileFromFile(ctx, cachefn); err == nil {
 		return nil
 	}
 	if !os.IsNotExist(errors.Cause(err)) {
@@ -1160,7 +1155,7 @@ func (b *bucketBlock) loadIndexCache(ctx context.Context) (err error) {
 
 	// Try to download index cache file from object store.
 	if err = objstore.DownloadFile(ctx, b.logger, b.bucket, b.indexCacheFilename(), cachefn); err == nil {
-		return b.loadIndexCacheFromFile(ctx, cachefn)
+		return b.loadIndexCacheFileFromFile(ctx, cachefn)
 	}
 
 	if !b.bucket.IsObjNotFoundErr(errors.Cause(err)) {
@@ -1184,10 +1179,10 @@ func (b *bucketBlock) loadIndexCache(ctx context.Context) (err error) {
 		return errors.Wrap(err, "write index cache")
 	}
 
-	return errors.Wrap(b.loadIndexCacheFromFile(ctx, cachefn), "read index cache")
+	return errors.Wrap(b.loadIndexCacheFileFromFile(ctx, cachefn), "read index cache")
 }
 
-func (b *bucketBlock) loadIndexCacheFromFile(ctx context.Context, cache string) (err error) {
+func (b *bucketBlock) loadIndexCacheFileFromFile(ctx context.Context, cache string) (err error) {
 	b.indexVersion, b.symbols, b.lvals, b.postings, err = block.ReadIndexCache(b.logger, cache)
 	return err
 }
@@ -1249,13 +1244,13 @@ type bucketIndexReader struct {
 	block  *bucketBlock
 	dec    *index.Decoder
 	stats  *queryStats
-	cache  *storecache.IndexCache
+	cache  indexCache
 
 	mtx          sync.Mutex
 	loadedSeries map[uint64][]byte
 }
 
-func newBucketIndexReader(ctx context.Context, logger log.Logger, block *bucketBlock, cache *storecache.IndexCache) *bucketIndexReader {
+func newBucketIndexReader(ctx context.Context, logger log.Logger, block *bucketBlock, cache indexCache) *bucketIndexReader {
 	r := &bucketIndexReader{
 		logger:       logger,
 		ctx:          ctx,
