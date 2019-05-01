@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oklog/ulid"
+
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
@@ -23,12 +25,46 @@ import (
 	"github.com/prometheus/tsdb/labels"
 )
 
+type noopCache struct{}
+
+func (noopCache) SetPostings(b ulid.ULID, l labels.Label, v []byte)   {}
+func (noopCache) Postings(b ulid.ULID, l labels.Label) ([]byte, bool) { return nil, false }
+func (noopCache) SetSeries(b ulid.ULID, id uint64, v []byte)          {}
+func (noopCache) Series(b ulid.ULID, id uint64) ([]byte, bool)        { return nil, false }
+
+type swappableCache struct {
+	ptr indexCache
+}
+
+func (c *swappableCache) SwapWith(ptr2 indexCache) {
+	c.ptr = ptr2
+}
+
+func (c *swappableCache) SetPostings(b ulid.ULID, l labels.Label, v []byte) {
+	c.ptr.SetPostings(b, l, v)
+}
+
+func (c *swappableCache) Postings(b ulid.ULID, l labels.Label) ([]byte, bool) {
+	return c.ptr.Postings(b, l)
+}
+
+func (c *swappableCache) SetSeries(b ulid.ULID, id uint64, v []byte) {
+	c.ptr.SetSeries(b, id, v)
+}
+
+func (c *swappableCache) Series(b ulid.ULID, id uint64) ([]byte, bool) {
+	return c.ptr.Series(b, id)
+}
+
 type storeSuite struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
 	store            *BucketStore
 	minTime, maxTime int64
+	cache            *swappableCache
+
+	logger log.Logger
 }
 
 func (s *storeSuite) Close() {
@@ -53,7 +89,11 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	now := start
 
 	ctx, cancel := context.WithCancel(context.Background())
-	s := &storeSuite{cancel: cancel}
+	s := &storeSuite{
+		cancel: cancel,
+		logger: log.NewLogfmtLogger(os.Stderr),
+		cache:  &swappableCache{},
+	}
 	blocks := 0
 	for i := 0; i < 3; i++ {
 		mint := timestamp.FromTime(now)
@@ -78,17 +118,17 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		meta, err := metadata.Read(dir2)
 		testutil.Ok(t, err)
 		meta.Thanos.Labels = map[string]string{"ext2": "value2"}
-		testutil.Ok(t, metadata.Write(log.NewNopLogger(), dir2, meta))
+		testutil.Ok(t, metadata.Write(s.logger, dir2, meta))
 
-		testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, dir1))
-		testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, dir2))
+		testutil.Ok(t, block.Upload(ctx, s.logger, bkt, dir1))
+		testutil.Ok(t, block.Upload(ctx, s.logger, bkt, dir2))
 		blocks += 2
 
 		testutil.Ok(t, os.RemoveAll(dir1))
 		testutil.Ok(t, os.RemoveAll(dir2))
 	}
 
-	store, err := NewBucketStore(log.NewLogfmtLogger(os.Stderr), nil, bkt, dir, 100, 0, maxSampleCount, 20, false, 20)
+	store, err := NewBucketStore(s.logger, nil, bkt, dir, s.cache, 0, maxSampleCount, 20, false, 20)
 	testutil.Ok(t, err)
 
 	s.store = store
@@ -310,13 +350,6 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 	} {
 		t.Log("Run ", i)
 
-		// Always clean cache before each test.
-		s.store.indexCache, err = storecache.NewIndexCache(log.NewNopLogger(), nil, storecache.Opts{
-			MaxSizeBytes:     100,
-			MaxItemSizeBytes: 100,
-		})
-		testutil.Ok(t, err)
-
 		srv := newStoreSeriesServer(ctx)
 
 		testutil.Ok(t, s.store.Series(tcase.req, srv))
@@ -341,6 +374,26 @@ func TestBucketStore_e2e(t *testing.T) {
 		s := prepareStoreWithTestBlocks(t, dir, bkt, false, 0)
 		defer s.Close()
 
+		t.Log("Test with no index cache")
+		s.cache.SwapWith(noopCache{})
+		testBucketStore_e2e(t, ctx, s)
+
+		t.Log("Test with large, sufficient index cache")
+		indexCache, err := storecache.NewIndexCache(s.logger, nil, storecache.Opts{
+			MaxItemSizeBytes: 1e5,
+			MaxSizeBytes:     2e5,
+		})
+		testutil.Ok(t, err)
+		s.cache.SwapWith(indexCache)
+		testBucketStore_e2e(t, ctx, s)
+
+		t.Log("Test with small index cache")
+		indexCache2, err := storecache.NewIndexCache(s.logger, nil, storecache.Opts{
+			MaxItemSizeBytes: 50,
+			MaxSizeBytes:     100,
+		})
+		testutil.Ok(t, err)
+		s.cache.SwapWith(indexCache2)
 		testBucketStore_e2e(t, ctx, s)
 	})
 }
@@ -369,6 +422,13 @@ func TestBucketStore_ManyParts_e2e(t *testing.T) {
 
 		s := prepareStoreWithTestBlocks(t, dir, bkt, true, 0)
 		defer s.Close()
+
+		indexCache, err := storecache.NewIndexCache(s.logger, nil, storecache.Opts{
+			MaxItemSizeBytes: 1e5,
+			MaxSizeBytes:     2e5,
+		})
+		testutil.Ok(t, err)
+		s.cache.SwapWith(indexCache)
 
 		testBucketStore_e2e(t, ctx, s)
 	})
