@@ -52,14 +52,16 @@ pre {
 }
 
 .img-sponsor {
-    padding: 1rem;
+    padding: 25px;
     background-color: #fff;
+    box-shadow: 0 2px 4px rgba(0,0,0,.1);
     border: 1px solid #dee2e6;
+    margin: 15px 0 15px;
     border-radius: .25rem;
-    height: 75px;
     display: flex;
     align-items: center;
     justify-content: center;
+    height: 100px;
 }
 
 .img-sponsor img {
