@@ -153,7 +153,7 @@ func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket
 
 // SyncMetas synchronizes all meta files from blocks in the bucket into
 // the memory.  It removes any partial blocks older than the max of
-// consistencyDelay and minimumRemoveAge from the bucket.
+// consistencyDelay and MinimumAgeForRemoval from the bucket.
 func (c *Syncer) SyncMetas(ctx context.Context) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
@@ -283,7 +283,7 @@ func (c *Syncer) downloadMeta(ctx context.Context, id ulid.ULID) (*metadata.Meta
 }
 
 // removeIfMalformed removes a block from the bucket if that block does not have a meta file.  It ignores blocks that
-// are younger than minimumRemoveAge.
+// are younger than MinimumAgeForRemoval.
 func (c *Syncer) removeIfMetaMalformed(ctx context.Context, id ulid.ULID) (removedOrIgnored bool) {
 	metaExists, err := c.bkt.Exists(ctx, path.Join(id.String(), block.MetaFilename))
 	if err != nil {
@@ -296,7 +296,7 @@ func (c *Syncer) removeIfMetaMalformed(ctx context.Context, id ulid.ULID) (remov
 	}
 
 	if ulid.Now()-id.Time() <= uint64(MinimumAgeForRemoval/time.Millisecond) {
-		// Minimum delay has not expired, should ignore for now
+		// Minimum delay has not expired, ignore for now
 		return true
 	}
 
