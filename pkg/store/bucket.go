@@ -57,14 +57,14 @@ type bucketStoreMetrics struct {
 	blockLoadFailures     prometheus.Counter
 	blockDrops            prometheus.Counter
 	blockDropFailures     prometheus.Counter
-	seriesDataTouched     *prometheus.SummaryVec
-	seriesDataFetched     *prometheus.SummaryVec
-	seriesDataSizeTouched *prometheus.SummaryVec
-	seriesDataSizeFetched *prometheus.SummaryVec
-	seriesBlocksQueried   prometheus.Summary
+	seriesDataTouched     *prometheus.CounterVec
+	seriesDataFetched     *prometheus.CounterVec
+	seriesDataSizeTouched *prometheus.CounterVec
+	seriesDataSizeFetched *prometheus.CounterVec
+	seriesBlocksQueried   prometheus.Counter
 	seriesGetAllDuration  prometheus.Histogram
 	seriesMergeDuration   prometheus.Histogram
-	resultSeriesCount     prometheus.Summary
+	resultSeriesCount     prometheus.Counter
 	chunkSizeBytes        prometheus.Histogram
 	queriesDropped        prometheus.Counter
 	queriesLimit          prometheus.Gauge
@@ -94,26 +94,26 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Help: "Number of currently loaded blocks.",
 	})
 
-	m.seriesDataTouched = prometheus.NewSummaryVec(prometheus.SummaryOpts{
-		Name: "thanos_bucket_store_series_data_touched",
+	m.seriesDataTouched = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_series_data_touched_total",
 		Help: "How many items of a data type in a block were touched for a single series request.",
 	}, []string{"data_type"})
-	m.seriesDataFetched = prometheus.NewSummaryVec(prometheus.SummaryOpts{
-		Name: "thanos_bucket_store_series_data_fetched",
+	m.seriesDataFetched = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_series_data_fetched_total",
 		Help: "How many items of a data type in a block were fetched for a single series request.",
 	}, []string{"data_type"})
 
-	m.seriesDataSizeTouched = prometheus.NewSummaryVec(prometheus.SummaryOpts{
-		Name: "thanos_bucket_store_series_data_size_touched_bytes",
+	m.seriesDataSizeTouched = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_series_data_size_touched_bytes_total",
 		Help: "Size of all items of a data type in a block were touched for a single series request.",
 	}, []string{"data_type"})
-	m.seriesDataSizeFetched = prometheus.NewSummaryVec(prometheus.SummaryOpts{
-		Name: "thanos_bucket_store_series_data_size_fetched_bytes",
+	m.seriesDataSizeFetched = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_series_data_size_fetched_bytes_total",
 		Help: "Size of all items of a data type in a block were fetched for a single series request.",
 	}, []string{"data_type"})
 
-	m.seriesBlocksQueried = prometheus.NewSummary(prometheus.SummaryOpts{
-		Name: "thanos_bucket_store_series_blocks_queried",
+	m.seriesBlocksQueried = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_series_blocks_queried_total",
 		Help: "Number of blocks in a bucket store that were touched to satisfy a query.",
 	})
 	m.seriesGetAllDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
@@ -130,8 +130,8 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 			0.01, 0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 30, 60,
 		},
 	})
-	m.resultSeriesCount = prometheus.NewSummary(prometheus.SummaryOpts{
-		Name: "thanos_bucket_store_series_result_series",
+	m.resultSeriesCount = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_series_in_result_total",
 		Help: "Number of series observed in the final result of a query.",
 	})
 
@@ -518,8 +518,6 @@ func (s *bucketSeriesSet) Err() error {
 }
 
 func blockSeries(
-	ctx context.Context,
-	ulid ulid.ULID,
 	extLset map[string]string,
 	indexr *bucketIndexReader,
 	chunkr *bucketChunkReader,
@@ -756,8 +754,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			defer runutil.CloseWithLogOnErr(s.logger, chunkr, "series block")
 
 			g.Add(func() error {
-				part, pstats, err := blockSeries(ctx,
-					b.meta.ULID,
+				part, pstats, err := blockSeries(
 					b.meta.Thanos.Labels,
 					indexr,
 					chunkr,
@@ -786,19 +783,19 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	s.mtx.RUnlock()
 
 	defer func() {
-		s.metrics.seriesDataTouched.WithLabelValues("postings").Observe(float64(stats.postingsTouched))
-		s.metrics.seriesDataFetched.WithLabelValues("postings").Observe(float64(stats.postingsFetched))
-		s.metrics.seriesDataSizeTouched.WithLabelValues("postings").Observe(float64(stats.postingsTouchedSizeSum))
-		s.metrics.seriesDataSizeFetched.WithLabelValues("postings").Observe(float64(stats.postingsFetchedSizeSum))
-		s.metrics.seriesDataTouched.WithLabelValues("series").Observe(float64(stats.seriesTouched))
-		s.metrics.seriesDataFetched.WithLabelValues("series").Observe(float64(stats.seriesFetched))
-		s.metrics.seriesDataSizeTouched.WithLabelValues("series").Observe(float64(stats.seriesTouchedSizeSum))
-		s.metrics.seriesDataSizeFetched.WithLabelValues("series").Observe(float64(stats.seriesFetchedSizeSum))
-		s.metrics.seriesDataTouched.WithLabelValues("chunks").Observe(float64(stats.chunksTouched))
-		s.metrics.seriesDataFetched.WithLabelValues("chunks").Observe(float64(stats.chunksFetched))
-		s.metrics.seriesDataSizeTouched.WithLabelValues("chunks").Observe(float64(stats.chunksTouchedSizeSum))
-		s.metrics.seriesDataSizeFetched.WithLabelValues("chunks").Observe(float64(stats.chunksFetchedSizeSum))
-		s.metrics.resultSeriesCount.Observe(float64(stats.mergedSeriesCount))
+		s.metrics.seriesDataTouched.WithLabelValues("postings").Add(float64(stats.postingsTouched))
+		s.metrics.seriesDataFetched.WithLabelValues("postings").Add(float64(stats.postingsFetched))
+		s.metrics.seriesDataSizeTouched.WithLabelValues("postings").Add(float64(stats.postingsTouchedSizeSum))
+		s.metrics.seriesDataSizeFetched.WithLabelValues("postings").Add(float64(stats.postingsFetchedSizeSum))
+		s.metrics.seriesDataTouched.WithLabelValues("series").Add(float64(stats.seriesTouched))
+		s.metrics.seriesDataFetched.WithLabelValues("series").Add(float64(stats.seriesFetched))
+		s.metrics.seriesDataSizeTouched.WithLabelValues("series").Add(float64(stats.seriesTouchedSizeSum))
+		s.metrics.seriesDataSizeFetched.WithLabelValues("series").Add(float64(stats.seriesFetchedSizeSum))
+		s.metrics.seriesDataTouched.WithLabelValues("chunks").Add(float64(stats.chunksTouched))
+		s.metrics.seriesDataFetched.WithLabelValues("chunks").Add(float64(stats.chunksFetched))
+		s.metrics.seriesDataSizeTouched.WithLabelValues("chunks").Add(float64(stats.chunksTouchedSizeSum))
+		s.metrics.seriesDataSizeFetched.WithLabelValues("chunks").Add(float64(stats.chunksFetchedSizeSum))
+		s.metrics.resultSeriesCount.Add(float64(stats.mergedSeriesCount))
 
 		level.Debug(s.logger).Log("msg", "stats query processed",
 			"stats", fmt.Sprintf("%+v", stats), "err", err)
@@ -816,7 +813,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		}
 		stats.getAllDuration = time.Since(begin)
 		s.metrics.seriesGetAllDuration.Observe(stats.getAllDuration.Seconds())
-		s.metrics.seriesBlocksQueried.Observe(float64(stats.blocksQueried))
+		s.metrics.seriesBlocksQueried.Add(float64(stats.blocksQueried))
 	}
 	// Merge the sub-results from each selected block.
 	{
