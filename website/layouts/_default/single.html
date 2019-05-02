@@ -5,7 +5,9 @@
                 {{ template "_default/sidemenu.html" . }}
             </div>
             <div class="col-12 col-lg-9">
-                {{ replace .Content "<table>" "<table class='table table-striped'>" | safeHTML }}
+                {{ $content := replace .Content "<table>" "<table class='table table-striped'>" }}
+                {{ $content = $content | replaceRE "(<h[1-4] id=\"([^\"]+)\".+)(</h[1-9]+>)" `${1} <a href="#${2}" class="header-anchor" aria-label="Header Anchor">#</a> ${3}` }}
+                {{ $content | safeHTML}}
             </div>
         </div>
     </div>

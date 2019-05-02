@@ -20,3 +20,4 @@ data/
 
 website/public/
 website/docs-pre-processed/
+!website/data
