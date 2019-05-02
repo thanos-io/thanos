@@ -33,7 +33,7 @@ const (
 	ResolutionLevel5m  = ResolutionLevel(downsample.ResLevel1)
 	ResolutionLevel1h  = ResolutionLevel(downsample.ResLevel2)
 
-	MinimumConsistencyDelay = time.Duration(10 * time.Minute)
+	MinimumAgeForRemoval = time.Duration(30 * time.Minute)
 )
 
 var blockTooFreshSentinelError = errors.New("Block too fresh")
@@ -295,7 +295,7 @@ func (c *Syncer) removeIfMetaMalformed(ctx context.Context, id ulid.ULID) (remov
 		return false
 	}
 
-	if ulid.Now()-id.Time() <= uint64(MinimumConsistencyDelay/time.Millisecond) {
+	if ulid.Now()-id.Time() <= uint64(MinimumAgeForRemoval/time.Millisecond) {
 		// Minimum delay has not expired, should ignore for now
 		return true
 	}
