@@ -75,41 +75,6 @@ func TestSyncer_SyncMetas_e2e(t *testing.T) {
 
 }
 
-func TestSyncer_SyncMetas_HandlesMalformedBlocks(t *testing.T) {
-	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
-		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-		defer cancel()
-
-		sy, err := NewSyncer(nil, nil, bkt, 10*time.Second, 1, false)
-		testutil.Ok(t, err)
-
-		// Generate 1 block which is older than MinimumAgeForRemoval which has chunk data but no meta.  Compactor should delete it.
-		shouldDeleteId, err := ulid.New(uint64(time.Now().Add(-time.Hour).Unix()*1000), nil)
-		testutil.Ok(t, err)
-
-		var fakeChunk bytes.Buffer
-		fakeChunk.Write([]byte{0,1,2,3})
-		testutil.Ok(t, bkt.Upload(ctx, path.Join(shouldDeleteId.String(), "chunks", "000001"), &fakeChunk))
-
-		// Generate 1 block which is older than consistencyDelay but younger than MinimumAgeForRemoval, and which has chunk
-		// data but no meta.  Compactor should ignore it.
-		shouldIgnoreId, err := ulid.New(uint64(time.Now().Unix()*1000), nil)
-		testutil.Ok(t, err)
-
-		testutil.Ok(t, bkt.Upload(ctx, path.Join(shouldIgnoreId.String(), "chunks", "000001"), &fakeChunk))
-
-		testutil.Ok(t, sy.SyncMetas(ctx))
-
-		exists, err := bkt.Exists(ctx, shouldDeleteId.String())
-		testutil.Ok(t, err)
-		testutil.Equals(t, false, exists)
-
-		exists, err = bkt.Exists(ctx, shouldIgnoreId.String())
-		testutil.Ok(t, err)
-		testutil.Equals(t, true, exists)
-	})
-}
-
 func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
