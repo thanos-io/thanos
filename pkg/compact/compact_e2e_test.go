@@ -75,6 +75,30 @@ func TestSyncer_SyncMetas_e2e(t *testing.T) {
 
 }
 
+func TestSyncer_SyncMetas_HandlesMalformedBlocks(t *testing.T) {
+	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer cancel()
+
+		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false)
+		testutil.Ok(t, err)
+
+		// Generate 1 block which is older than minimumRemovalAge which has chunk data but no meta.  Compactor should delete it.
+		id, err := ulid.New(uint64(time.Now().Add(-time.Hour).Unix()*1000), nil)
+		testutil.Ok(t, err)
+
+		var fakeChunk bytes.Buffer
+		fakeChunk.Write([]byte{0,1,2,3})
+		testutil.Ok(t, bkt.Upload(ctx, path.Join(id.String(), "chunks", "000001"), &fakeChunk))
+
+		testutil.Ok(t, sy.SyncMetas(ctx))
+
+		exists, err := bkt.Exists(ctx, id.String())
+		testutil.Ok(t, err)
+		testutil.Equals(t, false, exists)
+	})
+}
+
 func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)

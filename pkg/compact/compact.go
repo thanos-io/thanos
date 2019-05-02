@@ -136,10 +136,6 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 // NewSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
 func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, consistencyDelay time.Duration, blockSyncConcurrency int, acceptMalformedIndex bool) (*Syncer, error) {
-	if consistencyDelay < MinimumConsistencyDelay {
-		return nil, errors.New(fmt.Sprintf("invalid consistency delay, must be at least %s", MinimumConsistencyDelay))
-	}
-
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -156,8 +152,8 @@ func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket
 }
 
 // SyncMetas synchronizes all meta files from blocks in the bucket into
-// the memory.  It removes any partial blocks older than consistencyDelay
-// from the bucket.
+// the memory.  It removes any partial blocks older than the max of
+// consistencyDelay and minimumRemoveAge from the bucket.
 func (c *Syncer) SyncMetas(ctx context.Context) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
@@ -202,7 +198,7 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 					continue
 				}
 				if err != nil {
-					if removed := c.removeIfMetaMalformed(workCtx, id); removed {
+					if removedOrIgnored := c.removeIfMetaMalformed(workCtx, id); removedOrIgnored {
 						continue
 					}
 					errChan <- err
@@ -286,9 +282,9 @@ func (c *Syncer) downloadMeta(ctx context.Context, id ulid.ULID) (*metadata.Meta
 	return &meta, nil
 }
 
-// removeIfMalformed removes a block from the bucket if that block does not have a meta file.
-// It is the responsibility of the caller to ensure that enough time has passed for the block to become consistent.
-func (c *Syncer) removeIfMetaMalformed(ctx context.Context, id ulid.ULID) bool {
+// removeIfMalformed removes a block from the bucket if that block does not have a meta file.  It ignores blocks that
+// are younger than minimumRemoveAge.
+func (c *Syncer) removeIfMetaMalformed(ctx context.Context, id ulid.ULID) (removedOrIgnored bool) {
 	metaExists, err := c.bkt.Exists(ctx, path.Join(id.String(), block.MetaFilename))
 	if err != nil {
 		level.Warn(c.logger).Log("msg", "failed to check meta exists for block", "block", id, "err", err)
@@ -297,6 +293,11 @@ func (c *Syncer) removeIfMetaMalformed(ctx context.Context, id ulid.ULID) bool {
 	if metaExists {
 		// Meta exists, block is not malformed.
 		return false
+	}
+
+	if ulid.Now()-id.Time() <= uint64(MinimumConsistencyDelay/time.Millisecond) {
+		// Minimum delay has not expired, should ignore for now
+		return true
 	}
 
 	if err := block.Delete(ctx, c.bkt, id); err != nil {
