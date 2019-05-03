@@ -98,3 +98,15 @@ Flags:
                                  m, h, d, w, y.
 
 ```
+
+## Time & Duration based partioning
+
+By default Thanos Store Gateway looks at all the data in Object Store and returns it based on query's time range.
+You can shard Thanos Store gateway based on time or duration relative to current time.
+
+For example, setting: `--min-time=-6w` & `--max-time=-2w` will make Thanos Store Gateway look at blocks that fall within `now - 6 weeks` up to `now - 2 weeks`. 
+
+You can also set constant time in RFC3339 format. For example, `--min-time=2018-01-01T00:00:00Z`, `--max-time=2019-01-01T23:59:59Z`
+
+Note that Thanos Store Gateway looks at both block's minTime and maxTime. This means that both block start time and end time needs to fall within the provided range. Therefore if block's start time is less than `--min-time`, the block won't be included as well as if block's end time is more than `--max-time`, the block won't be included.
+
