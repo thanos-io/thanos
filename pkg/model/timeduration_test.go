@@ -1,10 +1,10 @@
-package store_test
+package model_test
 
 import (
 	"testing"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/store"
+	"github.com/improbable-eng/thanos/pkg/model"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -13,9 +13,9 @@ import (
 func TestTimeOrDurationValue(t *testing.T) {
 	cmd := kingpin.New("test", "test")
 
-	minTime := store.TimeOrDuration(cmd.Flag("min-time", "Start of time range limit to serve"))
+	minTime := model.TimeOrDuration(cmd.Flag("min-time", "Start of time range limit to serve"))
 
-	maxTime := store.TimeOrDuration(cmd.Flag("max-time", "End of time range limit to serve").
+	maxTime := model.TimeOrDuration(cmd.Flag("max-time", "End of time range limit to serve").
 		Default("9999-12-31T23:59:59Z"))
 
 	_, err := cmd.Parse([]string{"--min-time", "10s"})

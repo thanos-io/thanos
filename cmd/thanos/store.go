@@ -7,6 +7,12 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/model"
+	"github.com/improbable-eng/thanos/pkg/objstore/client"
+	"github.com/improbable-eng/thanos/pkg/runutil"
+	"github.com/improbable-eng/thanos/pkg/store"
+	storecache "github.com/improbable-eng/thanos/pkg/store/cache"
+	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/oklog/run"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -49,10 +55,10 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing blocks from object storage.").
 		Default("20").Int()
 
-	minTime := store.TimeOrDuration(cmd.Flag("min-time", "Start of time range limit to serve. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1.5d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+	minTime := model.TimeOrDuration(cmd.Flag("min-time", "Start of time range limit to serve. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1.5d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("0000-01-01T00:00:00Z"))
 
-	maxTime := store.TimeOrDuration(cmd.Flag("max-time", "End of time range limit to serve. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1.5d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+	maxTime := model.TimeOrDuration(cmd.Flag("max-time", "End of time range limit to serve. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1.5d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("9999-12-31T23:59:59Z"))
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
@@ -107,8 +113,8 @@ func runStore(
 	verbose bool,
 	syncInterval time.Duration,
 	blockSyncConcurrency int,
-	minTime *store.TimeOrDurationValue,
-	maxTime *store.TimeOrDurationValue,
+	minTime *model.TimeOrDurationValue,
+	maxTime *model.TimeOrDurationValue,
 ) error {
 	{
 		confContentYaml, err := objStoreConfig.Content()

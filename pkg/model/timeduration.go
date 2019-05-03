@@ -1,4 +1,4 @@
-package store
+package model
 
 import (
 	"time"
@@ -12,42 +12,43 @@ import (
 // or duration in Go's duration format, such as "300ms", "-1.5h" or "2h45m".
 // Only one will be set.
 type TimeOrDurationValue struct {
-	t   *time.Time
-	dur *model.Duration
+	Time *time.Time
+	Dur  *model.Duration
 }
 
 // Set converts string to TimeOrDurationValue
 func (tdv *TimeOrDurationValue) Set(s string) error {
 	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		var minus bool
-		if s[0] == '-' {
-			minus = true
-			s = s[1:]
-		}
-		dur, err := model.ParseDuration(s)
-		if err != nil {
-			return err
-		}
-
-		if minus {
-			dur = dur * -1
-		}
-		tdv.dur = &dur
+	if err == nil {
+		tdv.Time = &t
 		return nil
 	}
 
-	tdv.t = &t
+	// error parsing time, let's try duration.
+	var minus bool
+	if s[0] == '-' {
+		minus = true
+		s = s[1:]
+	}
+	dur, err := model.ParseDuration(s)
+	if err != nil {
+		return err
+	}
+
+	if minus {
+		dur = dur * -1
+	}
+	tdv.Dur = &dur
 	return nil
 }
 
 // String returns either tume or duration
 func (tdv *TimeOrDurationValue) String() string {
 	switch {
-	case tdv.t != nil:
-		return tdv.t.String()
-	case tdv.dur != nil:
-		return tdv.dur.String()
+	case tdv.Time != nil:
+		return tdv.Time.String()
+	case tdv.Dur != nil:
+		return tdv.Dur.String()
 	}
 
 	return "nil"
@@ -57,10 +58,10 @@ func (tdv *TimeOrDurationValue) String() string {
 // if duration is set now+duration is converted to Timestamp.
 func (tdv *TimeOrDurationValue) PrometheusTimestamp() int64 {
 	switch {
-	case tdv.t != nil:
-		return timestamp.FromTime(*tdv.t)
-	case tdv.dur != nil:
-		return timestamp.FromTime(time.Now().Add(time.Duration(*tdv.dur)))
+	case tdv.Time != nil:
+		return timestamp.FromTime(*tdv.Time)
+	case tdv.Dur != nil:
+		return timestamp.FromTime(time.Now().Add(time.Duration(*tdv.Dur)))
 	}
 
 	return 0
