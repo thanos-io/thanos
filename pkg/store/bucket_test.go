@@ -475,7 +475,7 @@ func TestBucketStore_isBlockInMinMaxRange(t *testing.T) {
 	maxTime := &TimeOrDurationValue{dur: &hourBefore}
 
 	// bucketStore accepts blocks in range [0, now-1h]
-	bucketStore, err := NewBucketStore(nil, nil, inmem.NewBucket(), dir, 2e5, 2e5, 0, 0, false, 20,
+	bucketStore, err := NewBucketStore(nil, nil, inmem.NewBucket(), dir, noopCache{}, 0, 0, 20, false, 20,
 		minTime, maxTime)
 
 	inRange, err := bucketStore.isBlockInMinMaxRange(context.TODO(), id1)
