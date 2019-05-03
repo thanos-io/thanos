@@ -56,7 +56,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 		Default("9999-12-31T23:59:59Z"))
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
-		// Sanity check minTime
+		// Sanity check minTime.
 		if minTime.PrometheusTimestamp() > maxTime.PrometheusTimestamp() {
 			return errors.Errorf("invalid argument: min-time '%s' can't be greater than max-time '%s'", minTime, maxTime)
 		}
