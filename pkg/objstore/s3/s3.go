@@ -100,6 +100,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 	}
 	if config.AccessKey != "" {
 		signature := credentials.SignatureV4
+		// TODO(bwplotka): Don't do flags, use actual v2, v4 params.
 		if config.SignatureV2 {
 			signature = credentials.SignatureV2
 		}
