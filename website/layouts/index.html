@@ -55,7 +55,7 @@
 <div class="container">
        <h2 class="heading-big text-center">Founded By</h2>
     <div class="row">
-        <div class="col-sm-6 offset-sm-3 col-md-4 offset-md-4">
+        <div class="col-6 offset-3 col-sm-6 offset-sm-3 col-md-4 offset-md-4">
             <div class="img-sponsor">
                 <a href="https://improbable.io" rel="nofollow" target="_blank"><img src="{{ "/logos/improbable.png" | relURL }}" class="img-fluid" alt="Improbable"></a>
             </div>
@@ -63,16 +63,16 @@
     </div>
         <h2 class="heading-big text-center">Used By</h2>
     <div class="row">
-        {{ range $sponsor := $.Site.Data.sponsors.sponsors }}
+        {{ range $sponsor := sort $.Site.Data.sponsors.sponsors "name" }}
         {{ if $sponsor.logo }}
-        <div class="col-sm-6 col-md-3">
+        <div class="col-6 col-sm-6 col-md-3">
             <div class="img-sponsor">
                 <a href="{{ $sponsor.url }}" rel="nofollow" target="_blank"><img src="{{ (printf "/logos/%s" $sponsor.logo) | relURL }}" alt="{{ $sponsor.name }}"></a>
             </div>
         </div>
         {{ end }}
         {{ end }}
-        <div class="col-sm-6 col-md-3">
+        <div class="col-6 col-sm-6 col-md-3">
             <div class="img-sponsor">
                 <a class="text-center text-muted" href="{{ "contributing/how-to-contribute-to-docs.md#logos" | relURL }}">Your Company</a>
             </div>
