@@ -17,6 +17,9 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Changed
 
+- [#1118](https://github.com/improbable-eng/thanos/pull/1118) swift: Added support for cross-domain authentication by introducing `userDomainID`, `userDomainName`, `projectDomainID`, `projectDomainName`. 
+  The outdated terms `tenantID`, `tenantName` are deprecated and have been replaced by `projectID`, `projectName`. 
+
 - [#1066](https://github.com/improbable-eng/thanos/pull/1066) Upgrade Thanos ui to Prometheus v2.9.1.
 
   Changes from the upstream:

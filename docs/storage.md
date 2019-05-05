@@ -260,7 +260,10 @@ config:
 ### OpenStack Swift Configuration
 Thanos uses [gophercloud](http://gophercloud.io/) client to upload Prometheus data into [OpenStack Swift](https://docs.openstack.org/swift/latest/).
 
-Below is an example configuration file for thanos to use OpenStack swift container as an object store.
+Below is an example configuration file for thanos to use OpenStack swift container as an object store.  
+Note that if the `name` of a user, project or tenant is used one must also specify its domain by ID or name.  
+Various examples for OpenStack authentication can be found in the [official documentation](https://developer.openstack.org/api-ref/identity/v3/index.html?expanded=password-authentication-with-scoped-authorization-detail#password-authentication-with-unscoped-authorization).
+
 
 [embedmd]:# (flags/config_swift.txt yaml)
 ```yaml
@@ -268,12 +271,16 @@ type: SWIFT
 config:
   auth_url: ""
   username: ""
+  user_domain_name: ""
+  user_domain_id: ""
   user_id: ""
   password: ""
   domain_id: ""
   domain_name: ""
-  tenant_id: ""
-  tenant_name: ""
+  project_id: ""
+  project_name: ""
+  project_domain_id: ""
+  project_domain_name: ""
   region_name: ""
   container_name: ""
 ```

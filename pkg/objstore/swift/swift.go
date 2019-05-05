@@ -11,14 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/objstore"
-
 	"github.com/go-kit/kit/log"
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/objectstorage/v1/containers"
 	"github.com/gophercloud/gophercloud/openstack/objectstorage/v1/objects"
 	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -27,16 +26,20 @@ import (
 const DirDelim = "/"
 
 type SwiftConfig struct {
-	AuthUrl       string `yaml:"auth_url"`
-	Username      string `yaml:"username"`
-	UserId        string `yaml:"user_id"`
-	Password      string `yaml:"password"`
-	DomainId      string `yaml:"domain_id"`
-	DomainName    string `yaml:"domain_name"`
-	TenantID      string `yaml:"tenant_id"`
-	TenantName    string `yaml:"tenant_name"`
-	RegionName    string `yaml:"region_name"`
-	ContainerName string `yaml:"container_name"`
+	AuthUrl           string `yaml:"auth_url"`
+	Username          string `yaml:"username"`
+	UserDomainName    string `yaml:"user_domain_name"`
+	UserDomainID      string `yaml:"user_domain_id"`
+	UserId            string `yaml:"user_id"`
+	Password          string `yaml:"password"`
+	DomainId          string `yaml:"domain_id"`
+	DomainName        string `yaml:"domain_name"`
+	ProjectID         string `yaml:"project_id"`
+	ProjectName       string `yaml:"project_name"`
+	ProjectDomainID   string `yaml:"project_domain_id"`
+	ProjectDomainName string `yaml:"project_domain_name"`
+	RegionName        string `yaml:"region_name"`
+	ContainerName     string `yaml:"container_name"`
 }
 
 type Container struct {
@@ -46,23 +49,14 @@ type Container struct {
 }
 
 func NewContainer(logger log.Logger, conf []byte) (*Container, error) {
-	var sc SwiftConfig
-	if err := yaml.Unmarshal(conf, &sc); err != nil {
+	sc, err := parseConfig(conf)
+	if err != nil {
 		return nil, err
 	}
 
-	authOpts := gophercloud.AuthOptions{
-		IdentityEndpoint: sc.AuthUrl,
-		Username:         sc.Username,
-		UserID:           sc.UserId,
-		Password:         sc.Password,
-		DomainID:         sc.DomainId,
-		DomainName:       sc.DomainName,
-		TenantID:         sc.TenantID,
-		TenantName:       sc.TenantName,
-
-		// Allow Gophercloud to re-authenticate automatically.
-		AllowReauth: true,
+	authOpts, err := authOptsFromConfig(sc)
+	if err != nil {
+		return nil, err
 	}
 
 	provider, err := openstack.AuthenticatedClient(authOpts)
@@ -170,6 +164,59 @@ func (*Container) Close() error {
 	return nil
 }
 
+func parseConfig(conf []byte) (*SwiftConfig, error) {
+	var sc SwiftConfig
+	err := yaml.UnmarshalStrict(conf, &sc)
+	return &sc, err
+}
+
+func authOptsFromConfig(sc *SwiftConfig) (gophercloud.AuthOptions, error) {
+	authOpts := gophercloud.AuthOptions{
+		IdentityEndpoint: sc.AuthUrl,
+		Username:         sc.Username,
+		UserID:           sc.UserId,
+		Password:         sc.Password,
+		DomainID:         sc.DomainId,
+		DomainName:       sc.DomainName,
+		TenantID:         sc.ProjectID,
+		TenantName:       sc.ProjectName,
+
+		// Allow Gophercloud to re-authenticate automatically.
+		AllowReauth: true,
+	}
+
+	// Support for cross-domain scoping (user in different domain than project).
+	// If a userDomainName or userDomainID is given, the user is scoped to this domain.
+	switch {
+	case sc.UserDomainName != "":
+		authOpts.DomainName = sc.UserDomainName
+	case sc.UserDomainID != "":
+		authOpts.DomainID = sc.UserDomainID
+	}
+
+	// A token can be scoped to a domain or project.
+	// The project can be in another domain than the user, which is indicated by setting either projectDomainName or projectDomainID.
+	switch {
+	case sc.ProjectDomainName != "":
+		authOpts.Scope = &gophercloud.AuthScope{
+			DomainName: sc.ProjectDomainName,
+		}
+	case sc.ProjectDomainID != "":
+		authOpts.Scope = &gophercloud.AuthScope{
+			DomainID: sc.ProjectDomainID,
+		}
+	}
+	if authOpts.Scope != nil {
+		switch {
+		case sc.ProjectName != "":
+			authOpts.Scope.ProjectName = sc.ProjectName
+		case sc.ProjectID != "":
+			authOpts.Scope.ProjectID = sc.ProjectID
+		}
+	}
+	return authOpts, nil
+}
+
 func (c *Container) createContainer(name string) error {
 	return containers.Create(c.client, name, nil).Err
 }
@@ -180,13 +227,17 @@ func (c *Container) deleteContainer(name string) error {
 
 func configFromEnv() SwiftConfig {
 	c := SwiftConfig{
-		AuthUrl:       os.Getenv("OS_AUTH_URL"),
-		Username:      os.Getenv("OS_USERNAME"),
-		Password:      os.Getenv("OS_PASSWORD"),
-		TenantID:      os.Getenv("OS_TENANT_ID"),
-		TenantName:    os.Getenv("OS_TENANT_NAME"),
-		RegionName:    os.Getenv("OS_REGION_NAME"),
-		ContainerName: os.Getenv("OS_CONTAINER_NAME"),
+		AuthUrl:           os.Getenv("OS_AUTH_URL"),
+		Username:          os.Getenv("OS_USERNAME"),
+		Password:          os.Getenv("OS_PASSWORD"),
+		RegionName:        os.Getenv("OS_REGION_NAME"),
+		ContainerName:     os.Getenv("OS_CONTAINER_NAME"),
+		ProjectID:         os.Getenv("OS_PROJECT_ID"),
+		ProjectName:       os.Getenv("OS_PROJECT_NAME"),
+		UserDomainID:      os.Getenv("OS_USER_DOMAIN_ID"),
+		UserDomainName:    os.Getenv("OS_USER_DOMAIN_NAME"),
+		ProjectDomainID:   os.Getenv("OS_PROJET_DOMAIN_ID"),
+		ProjectDomainName: os.Getenv("OS_PROJECT_DOMAIN_NAME"),
 	}
 
 	return c
@@ -197,7 +248,7 @@ func validateForTests(conf SwiftConfig) error {
 	if conf.AuthUrl == "" ||
 		conf.Username == "" ||
 		conf.Password == "" ||
-		(conf.TenantName == "" && conf.TenantID == "") ||
+		(conf.ProjectName == "" && conf.ProjectID == "") ||
 		conf.RegionName == "" {
 		return errors.New("insufficient swift test configuration information")
 	}
