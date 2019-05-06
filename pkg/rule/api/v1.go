@@ -51,7 +51,7 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 	}
 
 	r.Get("/alerts", instr("alerts", api.alerts))
-	r.Get("/alerts/:state", instr("alerts", api.stateAlerts))
+	r.Get("/alerts/:state", instr("alerts_state", api.stateAlerts))
 	r.Get("/rules", instr("rules", api.rules))
 
 }
@@ -133,9 +133,9 @@ func (api *API) stateAlerts(r *http.Request) (interface{}, []error, *qapi.ApiErr
 	ctx := r.Context()
 	state := route.Param(ctx, "state")
 
-  var alerts []*Alert
+        var alerts []*Alert
 	for _, alertingRule := range api.ruleRetriever.AlertingRules() {
-		stateAlerts := rulesAlertsToAPIAlerts(alertingRule.ActiveAlerts())
+		stateAlerts := rulesAlertsToAPIAlerts(alertingRule.PartialResponseStrategy, alertingRule.ActiveAlerts())
 		for _, a := range stateAlerts {
 			if a.State == state {
 				alerts = append(alerts, a)
