@@ -32,3 +32,4 @@ params:
   GithubUser: "improbable-eng"
   GithubProject: "thanos"
   TwitterHandle: "ThanosMetrics"
+  Description: "Highly available Prometheus setup with long term storage capabilities."
