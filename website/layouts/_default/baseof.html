@@ -13,10 +13,16 @@
     <link rel="stylesheet" href="{{ "/syntax.css" | relURL }}" />
     <link rel="icon" href="{{ "/icon-light.png" | relURL }}" />
     <title>{{ block "title" . }}{{ .Site.Title }}{{ end }}</title>
-    <meta property="og:image" content="{{ "/icon-light.png" | relURL }}" />
+    <meta name="description" content="{{ .Site.Params.Description }}"></meta>
+    <meta property="og:image" content="{{ "/icon-light.png" | absURL }}" />
     <meta property="og:type" content="object" />
     <meta property="og:title" content="Thanos" />
     <meta property="og:description" content="{{ .Site.Title }}" />
+    <meta name="twitter:card" content="summary_large_image"></meta>
+    <meta name="twitter:site" content="@{{ .Site.Params.TwitterHandle }}"></meta>
+    <meta name="twitter:title" content="Thanos Metrics"></meta>
+    <meta name="twitter:description" content="{{ .Site.Params.Description }}"></meta>
+    <meta name="twitter:image" content="{{ "/thanos-twitter.png" | absURL }}"></meta>
 </head>
 
 <body>
