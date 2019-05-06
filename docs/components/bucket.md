@@ -1,3 +1,9 @@
+---
+title: Bucket
+type: docs
+menu: components
+---
+
 # Bucket
 
 The bucket component of Thanos is a set of commands to inspect data in object storage buckets.
@@ -5,7 +11,7 @@ It is normally run as a stand alone command to aid with troubleshooting.
 
 Example:
 
-```
+```bash
 $ thanos bucket verify --objstore.config-file=bucket.yml
 ```
 
@@ -36,18 +42,18 @@ Flags:
       --version            Show application version.
       --log.level=info     Log filtering level.
       --log.format=logfmt  Log format to use.
-      --gcloudtrace.project=GCLOUDTRACE.PROJECT  
+      --gcloudtrace.project=GCLOUDTRACE.PROJECT
                            GCP project to send Google Cloud Trace tracings to.
                            If empty, tracing will be disabled.
-      --gcloudtrace.sample-factor=1  
+      --gcloudtrace.sample-factor=1
                            How often we send traces (1/<sample-factor>). If 0 no
                            trace will be sent periodically, unless forced by
                            baggage item. See `pkg/tracing/tracing.go` for
                            details.
-      --objstore.config-file=<bucket.config-yaml-path>  
+      --objstore.config-file=<bucket.config-yaml-path>
                            Path to YAML file that contains object store
                            configuration.
-      --objstore.config=<bucket.config-yaml>  
+      --objstore.config=<bucket.config-yaml>
                            Alternative to 'objstore.config-file' flag. Object
                            store configuration in YAML.
 
@@ -86,35 +92,35 @@ Flags:
       --version            Show application version.
       --log.level=info     Log filtering level.
       --log.format=logfmt  Log format to use.
-      --gcloudtrace.project=GCLOUDTRACE.PROJECT  
+      --gcloudtrace.project=GCLOUDTRACE.PROJECT
                            GCP project to send Google Cloud Trace tracings to.
                            If empty, tracing will be disabled.
-      --gcloudtrace.sample-factor=1  
+      --gcloudtrace.sample-factor=1
                            How often we send traces (1/<sample-factor>). If 0 no
                            trace will be sent periodically, unless forced by
                            baggage item. See `pkg/tracing/tracing.go` for
                            details.
-      --objstore.config-file=<bucket.config-yaml-path>  
+      --objstore.config-file=<bucket.config-yaml-path>
                            Path to YAML file that contains object store
                            configuration.
-      --objstore.config=<bucket.config-yaml>  
+      --objstore.config=<bucket.config-yaml>
                            Alternative to 'objstore.config-file' flag. Object
                            store configuration in YAML.
-      --objstore-backup.config-file=<bucket.config-yaml-path>  
+      --objstore-backup.config-file=<bucket.config-yaml-path>
                            Path to YAML file that contains object store-backup
                            configuration. Used for repair logic to backup blocks
                            before removal.
-      --objstore-backup.config=<bucket.config-yaml>  
+      --objstore-backup.config=<bucket.config-yaml>
                            Alternative to 'objstore-backup.config-file' flag.
                            Object store-backup configuration in YAML. Used for
                            repair logic to backup blocks before removal.
   -r, --repair             Attempt to repair blocks for which issues were
                            detected
-  -i, --issues=index_issue... ...  
+  -i, --issues=index_issue... ...
                            Issues to verify (and optionally repair). Possible
                            values: [duplicated_compaction index_issue
                            overlapped_blocks]
-      --id-whitelist=ID-WHITELIST ...  
+      --id-whitelist=ID-WHITELIST ...
                            Block IDs to verify (and optionally repair) only. If
                            none is specified, all blocks will be verified.
                            Repeated field
@@ -143,18 +149,18 @@ Flags:
       --version            Show application version.
       --log.level=info     Log filtering level.
       --log.format=logfmt  Log format to use.
-      --gcloudtrace.project=GCLOUDTRACE.PROJECT  
+      --gcloudtrace.project=GCLOUDTRACE.PROJECT
                            GCP project to send Google Cloud Trace tracings to.
                            If empty, tracing will be disabled.
-      --gcloudtrace.sample-factor=1  
+      --gcloudtrace.sample-factor=1
                            How often we send traces (1/<sample-factor>). If 0 no
                            trace will be sent periodically, unless forced by
                            baggage item. See `pkg/tracing/tracing.go` for
                            details.
-      --objstore.config-file=<bucket.config-yaml-path>  
+      --objstore.config-file=<bucket.config-yaml-path>
                            Path to YAML file that contains object store
                            configuration.
-      --objstore.config=<bucket.config-yaml>  
+      --objstore.config=<bucket.config-yaml>
                            Alternative to 'objstore.config-file' flag. Object
                            store configuration in YAML.
   -o, --output=""          Optional format in which to print each block's
@@ -184,21 +190,21 @@ Flags:
       --version              Show application version.
       --log.level=info       Log filtering level.
       --log.format=logfmt    Log format to use.
-      --gcloudtrace.project=GCLOUDTRACE.PROJECT  
+      --gcloudtrace.project=GCLOUDTRACE.PROJECT
                              GCP project to send Google Cloud Trace tracings to.
                              If empty, tracing will be disabled.
-      --gcloudtrace.sample-factor=1  
+      --gcloudtrace.sample-factor=1
                              How often we send traces (1/<sample-factor>). If 0
                              no trace will be sent periodically, unless forced
                              by baggage item. See `pkg/tracing/tracing.go` for
                              details.
-      --objstore.config-file=<bucket.config-yaml-path>  
+      --objstore.config-file=<bucket.config-yaml-path>
                              Path to YAML file that contains object store
                              configuration.
-      --objstore.config=<bucket.config-yaml>  
+      --objstore.config=<bucket.config-yaml>
                              Alternative to 'objstore.config-file' flag. Object
                              store configuration in YAML.
-  -l, --selector=<name>="<value>" ...  
+  -l, --selector=<name>="<value>" ...
                              Selects blocks based on label, e.g. '-l
                              key1="value1" -l key2="value2"'. All key value
                              pairs must match.

@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/hashicorp/go-version"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/component"
@@ -22,12 +23,13 @@ import (
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/oklog/run"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
-	"gopkg.in/alecthomas/kingpin.v2"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name string) {
@@ -111,6 +113,17 @@ func runSidecar(
 		maxt: math.MaxInt64,
 	}
 
+	confContentYaml, err := objStoreConfig.Content()
+	if err != nil {
+		return errors.Wrap(err, "getting object store config")
+	}
+
+	var uploads = true
+	if len(confContentYaml) == 0 {
+		level.Info(logger).Log("msg", "no supported bucket was configured, uploads will be disabled")
+		uploads = false
+	}
+
 	// Setup all the concurrent groups.
 	{
 		promUp := prometheus.NewGauge(prometheus.GaugeOpts{
@@ -125,6 +138,29 @@ func runSidecar(
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
+			// Only check Prometheus's flags when upload is enabled.
+			if uploads {
+				// Retry infinitely until we get Prometheus version.
+				if err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
+					if m.version, err = promclient.PromVersion(logger, m.promURL); err != nil {
+						level.Warn(logger).Log(
+							"msg", "failed to get Prometheus version. Is Prometheus running? Retrying",
+							"err", err,
+						)
+						return errors.Wrapf(err, "fetch Prometheus version")
+					}
+
+					return nil
+				}); err != nil {
+					return errors.Wrap(err, "fetch Prometheus version")
+				}
+
+				// Check prometheus's flags to ensure sane sidecar flags.
+				if err := validatePrometheus(ctx, logger, m); err != nil {
+					return errors.Wrap(err, "validate Prometheus flags")
+				}
+			}
+
 			// Blocking query of external labels before joining as a Source Peer into gossip.
 			// We retry infinitely until we reach and fetch labels from our Prometheus.
 			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
@@ -137,6 +173,10 @@ func runSidecar(
 					return err
 				}
 
+				level.Info(logger).Log(
+					"msg", "successfully loaded prometheus external labels",
+					"external_labels", m.Labels().String(),
+				)
 				promUp.Set(1)
 				lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
 				return nil
@@ -225,17 +265,6 @@ func runSidecar(
 		})
 	}
 
-	confContentYaml, err := objStoreConfig.Content()
-	if err != nil {
-		return err
-	}
-
-	var uploads = true
-	if len(confContentYaml) == 0 {
-		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
-		uploads = false
-	}
-
 	if uploads {
 		// The background shipper continuously scans the data directory and uploads
 		// new blocks to Google Cloud Storage or an S3-compatible storage service.
@@ -261,10 +290,7 @@ func runSidecar(
 
 			var s *shipper.Shipper
 			if uploadCompacted {
-				s, err = shipper.NewWithCompacted(ctx, logger, reg, dataDir, bkt, m.Labels, metadata.SidecarSource, m.promURL)
-				if err != nil {
-					return errors.Wrap(err, "create shipper")
-				}
+				s = shipper.NewWithCompacted(logger, reg, dataDir, bkt, m.Labels, metadata.SidecarSource)
 			} else {
 				s = shipper.New(logger, reg, dataDir, bkt, m.Labels, metadata.SidecarSource)
 			}
@@ -294,13 +320,45 @@ func runSidecar(
 	return nil
 }
 
+func validatePrometheus(ctx context.Context, logger log.Logger, m *promMetadata) error {
+	if m.version == nil {
+		level.Warn(logger).Log("msg", "fetched version is nil or invalid. Unable to know whether Prometheus supports /version endpoint, skip validation")
+		return nil
+	}
+
+	if m.version.LessThan(promclient.FlagsVersion) {
+		level.Warn(logger).Log("msg",
+			"Prometheus doesn't support flags endpoint, skip validation", "version", m.version.Original())
+		return nil
+	}
+
+	flags, err := promclient.ConfiguredFlags(ctx, logger, m.promURL)
+	if err != nil {
+		return errors.Wrap(err, "failed to check flags")
+	}
+
+	// Check if compaction is disabled.
+	if flags.TSDBMinTime != flags.TSDBMaxTime {
+		return errors.Errorf("found that TSDB Max time is %s and Min time is %s. "+
+			"Compaction needs to be disabled (storage.tsdb.min-block-duration = storage.tsdb.max-block-duration)", flags.TSDBMaxTime, flags.TSDBMinTime)
+	}
+
+	// Check if block time is 2h.
+	if flags.TSDBMinTime != model.Duration(2*time.Hour) {
+		level.Warn(logger).Log("msg", "found that TSDB block time is not 2h. Only 2h block time is recommended.", "block-time", flags.TSDBMinTime)
+	}
+
+	return nil
+}
+
 type promMetadata struct {
 	promURL *url.URL
 
-	mtx    sync.Mutex
-	mint   int64
-	maxt   int64
-	labels labels.Labels
+	mtx     sync.Mutex
+	mint    int64
+	maxt    int64
+	labels  labels.Labels
+	version *version.Version
 }
 
 func (s *promMetadata) UpdateLabels(ctx context.Context, logger log.Logger) error {

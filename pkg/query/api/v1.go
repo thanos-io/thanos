@@ -168,11 +168,17 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 	r.Options("/*path", instr("options", api.options))
 
 	r.Get("/query", instr("query", api.query))
+	r.Post("/query", instr("query", api.query))
+
 	r.Get("/query_range", instr("query_range", api.queryRange))
+	r.Post("/query_range", instr("query_range", api.queryRange))
 
 	r.Get("/label/:name/values", instr("label_values", api.labelValues))
 
 	r.Get("/series", instr("series", api.series))
+	r.Post("/series", instr("series", api.series))
+
+	r.Get("/labels", instr("label_names", api.labelNames))
 }
 
 type queryData struct {
@@ -610,4 +616,36 @@ func parseDuration(s string) (time.Duration, error) {
 		return time.Duration(d), nil
 	}
 	return 0, fmt.Errorf("cannot parse %q to a valid duration", s)
+}
+
+func (api *API) labelNames(r *http.Request) (interface{}, []error, *ApiError) {
+	ctx := r.Context()
+
+	enablePartialResponse, apiErr := api.parsePartialResponseParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
+	var (
+		warnmtx  sync.Mutex
+		warnings []error
+	)
+	warningReporter := func(err error) {
+		warnmtx.Lock()
+		warnings = append(warnings, err)
+		warnmtx.Unlock()
+	}
+
+	q, err := api.queryableCreate(true, 0, enablePartialResponse, warningReporter).Querier(ctx, math.MinInt64, math.MaxInt64)
+	if err != nil {
+		return nil, nil, &ApiError{errorExec, err}
+	}
+	defer runutil.CloseWithLogOnErr(api.logger, q, "queryable labelNames")
+
+	names, err := q.LabelNames()
+	if err != nil {
+		return nil, nil, &ApiError{errorExec, err}
+	}
+
+	return names, warnings, nil
 }

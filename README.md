@@ -5,16 +5,17 @@
 [![GoDoc](https://godoc.org/github.com/improbable-eng/thanos?status.svg)](https://godoc.org/github.com/improbable-eng/thanos)
 [![Slack](https://img.shields.io/badge/join%20slack-%23thanos-brightgreen.svg)](https://join.slack.com/t/improbable-eng/shared_invite/enQtMzQ1ODcyMzQ5MjM4LWY5ZWZmNGM2ODc5MmViNmQ3ZTA3ZTY3NzQwOTBlMTkzZmIxZTIxODk0OWU3YjZhNWVlNDU3MDlkZGViZjhkMjc)
 [![Docker Pulls](https://img.shields.io/docker/pulls/improbable/thanos.svg?maxAge=604800)](https://hub.docker.com/r/improbable/thanos/)
+[![Netlify Status](https://api.netlify.com/api/v1/badges/664a5091-934c-4b0e-a7b6-bc12f822a590/deploy-status)](https://app.netlify.com/sites/thanos-io/deploys)
 
 ## Overview
 
-Thanos is a set of components that can be composed into a highly available metric 
-system with unlimited storage capacity, which can be added seamlessly on top of existing 
-Prometheus deployments. 
+Thanos is a set of components that can be composed into a highly available metric
+system with unlimited storage capacity, which can be added seamlessly on top of existing
+Prometheus deployments.
 
-Thanos leverages the Prometheus 2.0 storage format to cost-efficiently store historical metric 
+Thanos leverages the Prometheus 2.0 storage format to cost-efficiently store historical metric
 data in any object storage while retaining fast query latencies. Additionally, it provides
-a global query view across all Prometheus installations and can merge data from Prometheus 
+a global query view across all Prometheus installations and can merge data from Prometheus
 HA pairs on the fly.
 
 Concretely the aims of the project are:
@@ -29,7 +30,7 @@ Concretely the aims of the project are:
 
 ## Getting Started
 
-* **[Getting Started](docs/getting_started.md)**
+* **[Getting Started](docs/getting-started.md)**
 * [Design](docs/design.md)
 * [Prom Meetup Slides](https://www.slideshare.net/BartomiejPotka/thanos-global-durable-prometheus-monitoring)
 * [Introduction blog post](https://improbable.io/games/blog/thanos-prometheus-at-scale)
@@ -59,14 +60,27 @@ The philosophy of Thanos and our community is borrowing much from UNIX philosoph
 * Make it easy to read, write, and, run components
   * e.g. reduce complexity in system design and implementation
 
+## Releases
+
+Master should be stable and usable. Every commit to master builds docker image named `master-<data>-<sha>`.
+
+We also perform minor releases every 6 weeks. 
+During that, we build tarballs for major platforms and docker image.
+
+See [this](docs/release-process.md) for details.
+
 ## Contributing
 
 Contributions are very welcome! See our [CONTRIBUTING.md](CONTRIBUTING.md) for more information.
 
 ## Community
 
-Thanos is an open source project and we welcome new contributers and members 
+Thanos is an open source project and we value and welcome new contributors and members
 of the community. Here are ways to get in touch with the community:
 
 * Slack: [#thanos](https://join.slack.com/t/improbable-eng/shared_invite/enQtMzQ1ODcyMzQ5MjM4LWY5ZWZmNGM2ODc5MmViNmQ3ZTA3ZTY3NzQwOTBlMTkzZmIxZTIxODk0OWU3YjZhNWVlNDU3MDlkZGViZjhkMjc)
 * Issue Tracker: [GitHub Issues](https://github.com/improbable-eng/thanos/issues)
+
+## Maintainers
+
+See [MAINTAINERS.md](MAINTAINERS.md)

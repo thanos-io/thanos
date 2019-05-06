@@ -167,32 +167,38 @@ func (w *streamedBlockWriter) Close() error {
 	if w.finalized {
 		return nil
 	}
-
-	var merr tsdb.MultiError
 	w.finalized = true
 
-	// Finalise data block only if there wasn't any internal errors.
-	if !w.ignoreFinalize {
-		merr.Add(w.finalize())
+	merr := tsdb.MultiError{}
+
+	if w.ignoreFinalize {
+		// Close open file descriptors anyway.
+		for _, cl := range w.closers {
+			merr.Add(cl.Close())
+		}
+		return merr.Err()
 	}
 
-	for _, cl := range w.closers {
-		merr.Add(cl.Close())
-	}
+	// Finalize saves prepared index and metadata to corresponding files.
 
-	return errors.Wrap(merr.Err(), "close closers")
-}
-
-// finalize saves prepared index and meta data to corresponding files.
-// It is called on Close. Even if an error happened outside of StreamWriter, it will finalize the block anyway,
-// so it's a caller's responsibility to remove the block's directory.
-func (w *streamedBlockWriter) finalize() error {
 	if err := w.writeLabelSets(); err != nil {
 		return errors.Wrap(err, "write label sets")
 	}
 
 	if err := w.writeMemPostings(); err != nil {
 		return errors.Wrap(err, "write mem postings")
+	}
+
+	for _, cl := range w.closers {
+		merr.Add(cl.Close())
+	}
+
+	if err := block.WriteIndexCache(
+		w.logger,
+		filepath.Join(w.blockDir, block.IndexFilename),
+		filepath.Join(w.blockDir, block.IndexCacheFilename),
+	); err != nil {
+		return errors.Wrap(err, "write index cache")
 	}
 
 	if err := w.writeMetaFile(); err != nil {
@@ -203,8 +209,14 @@ func (w *streamedBlockWriter) finalize() error {
 		return errors.Wrap(err, "sync blockDir")
 	}
 
+	if err := merr.Err(); err != nil {
+		return errors.Wrap(err, "finalize")
+	}
+
+	// No error, claim success.
+
 	level.Info(w.logger).Log(
-		"msg", "write downsampled block",
+		"msg", "finalized downsampled block",
 		"mint", w.meta.MinTime,
 		"maxt", w.meta.MaxTime,
 		"ulid", w.meta.ULID,
@@ -220,7 +232,7 @@ func (w *streamedBlockWriter) syncDir() (err error) {
 		return errors.Wrap(err, "open temporary block blockDir")
 	}
 
-	defer runutil.CloseWithErrCapture(w.logger, &err, df, "close temporary block blockDir")
+	defer runutil.CloseWithErrCapture(&err, df, "close temporary block blockDir")
 
 	if err := fileutil.Fsync(df); err != nil {
 		return errors.Wrap(err, "sync temporary blockDir")

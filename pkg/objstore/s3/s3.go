@@ -37,6 +37,7 @@ const DirDelim = "/"
 type Config struct {
 	Bucket          string            `yaml:"bucket"`
 	Endpoint        string            `yaml:"endpoint"`
+	Region        	string            `yaml:"region"`
 	AccessKey       string            `yaml:"access_key"`
 	Insecure        bool              `yaml:"insecure"`
 	SignatureV2     bool              `yaml:"signature_version2"`
@@ -44,6 +45,11 @@ type Config struct {
 	SecretKey       string            `yaml:"secret_key"`
 	PutUserMetadata map[string]string `yaml:"put_user_metadata"`
 	HTTPConfig      HTTPConfig        `yaml:"http_config"`
+	TraceConfig     TraceConfig       `yaml:"trace"`
+}
+
+type TraceConfig struct {
+	Enable bool `yaml:"enable"`
 }
 
 // HTTPConfig stores the http.Transport configuration for the s3 minio client.
@@ -117,7 +123,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		}
 	}
 
-	client, err := minio.NewWithCredentials(config.Endpoint, credentials.NewChainCredentials(chain), !config.Insecure, "")
+	client, err := minio.NewWithCredentials(config.Endpoint, credentials.NewChainCredentials(chain), !config.Insecure, config.Region)
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize s3 client")
 	}
@@ -150,6 +156,11 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 	var sse encrypt.ServerSide
 	if config.SSEEncryption {
 		sse = encrypt.NewSSE()
+	}
+
+	if config.TraceConfig.Enable {
+		logWriter := log.NewStdlibAdapter(level.Debug(logger), log.MessageKey("s3TraceMsg"))
+		client.TraceOn(logWriter)
 	}
 
 	bkt := &Bucket{

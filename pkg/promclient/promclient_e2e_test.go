@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/hashicorp/go-version"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/ulid"
@@ -72,8 +73,8 @@ func TestConfiguredFlags_e2e(t *testing.T) {
 		testutil.Assert(t, !flags.WebEnableLifecycle, "")
 		testutil.Equals(t, p.Dir(), flags.TSDBPath)
 		testutil.Equals(t, int64(2*time.Hour), int64(flags.TSDBMinTime))
-		testutil.Equals(t, int64(36*time.Hour), int64(flags.TSDBMaxTime))
-		testutil.Equals(t, int64(15*24*time.Hour), int64(flags.TSDBRetention))
+		testutil.Equals(t, int64(4.8*float64(time.Hour)), int64(flags.TSDBMaxTime))
+		testutil.Equals(t, int64(2*24*time.Hour), int64(flags.TSDBRetention))
 	})
 }
 
@@ -81,8 +82,10 @@ func TestSnapshot_e2e(t *testing.T) {
 	testutil.ForeachPrometheus(t, func(t testing.TB, p *testutil.Prometheus) {
 		now := time.Now()
 
+		ctx := context.Background()
 		// Create artificial block.
 		id, err := testutil.CreateBlockWithTombstone(
+			ctx,
 			p.Dir(),
 			[]labels.Labels{labels.FromStrings("a", "b")},
 			10,
@@ -99,7 +102,10 @@ func TestSnapshot_e2e(t *testing.T) {
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
 
-		dir, err := Snapshot(context.Background(), log.NewNopLogger(), u, false)
+		// Prometheus since 2.7.0 don't write empty blocks even if it's head block. So it's no matter passing skip_head true or false here
+		// Pass skipHead = true to support all prometheus versions and assert that snapshot creates only one file
+		// https://github.com/prometheus/tsdb/pull/374
+		dir, err := Snapshot(ctx, log.NewNopLogger(), u, true)
 		testutil.Ok(t, err)
 
 		_, err = os.Stat(path.Join(p.Dir(), dir, id.String()))
@@ -113,7 +119,7 @@ func TestSnapshot_e2e(t *testing.T) {
 			testutil.Ok(t, err)
 		}
 
-		testutil.Equals(t, 2, len(files))
+		testutil.Equals(t, 1, len(files))
 	})
 }
 
@@ -141,4 +147,37 @@ func TestRule_UnmarshalScalarResponse(t *testing.T) {
 	// Test invalid format of scalar data.
 	vectorResult, err = convertScalarJSONToVector(invalidDataScalarJSONResult)
 	testutil.NotOk(t, err)
+}
+
+func TestParseVersion(t *testing.T) {
+	promVersions := map[string]string{
+		"":           promVersionResp(""),
+		"2.2.0":      promVersionResp("2.2.0"),
+		"2.3.0":      promVersionResp("2.3.0"),
+		"2.3.0-rc.0": promVersionResp("2.3.0-rc.0"),
+	}
+
+	promMalformedVersions := map[string]string{
+		"foo": promVersionResp("foo"),
+		"bar": promVersionResp("bar"),
+	}
+
+	for v, resp := range promVersions {
+		gotVersion, err := parseVersion([]byte(resp))
+		testutil.Ok(t, err)
+		expectVersion, _ := version.NewVersion(v)
+		testutil.Equals(t, gotVersion, expectVersion)
+	}
+
+	for v, resp := range promMalformedVersions {
+		gotVersion, err := parseVersion([]byte(resp))
+		testutil.NotOk(t, err)
+		expectVersion, _ := version.NewVersion(v)
+		testutil.Equals(t, gotVersion, expectVersion)
+	}
+}
+
+// promVersionResp returns the response of Prometheus /version endpoint.
+func promVersionResp(ver string) string {
+	return fmt.Sprintf(`{"version":"%s","revision":"","branch":"","buildUser":"","buildDate":"","goVersion":""}`, ver)
 }

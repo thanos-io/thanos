@@ -1,4 +1,11 @@
-# Thanos Service Discovery
+---
+title: Service Discovery
+type: docs
+menu: thanos
+slug: /service-discovery.md
+---
+
+# Service Discovery
 
 Service discovery has a vital place in Thanos components. It allows Thanos to discover different set API targets required to perform certain operations.
 This logic is meant to replace Gossip that [is planned to be removed.](/docs/proposals/approved/201809_gossip-removal.md)
@@ -6,13 +13,13 @@ This logic is meant to replace Gossip that [is planned to be removed.](/docs/pro
 Currently places that uses Thanos SD:
 * `Thanos Query` needs to know about [StoreAPI](https://github.com/improbable-eng/thanos/blob/d3fb337da94d11c78151504b1fccb1d7e036f394/pkg/store/storepb/rpc.proto#L14) servers in order to query metrics from them.
 * `Thanos Rule` needs to know about `QueryAPI` servers in order to evaluate recording and alerting rules.
-* (Only static option with DNS discovery): `Thanos Rule` needs to know about `Alertmanagers` HA replicas in order to send alerts. 
+* (Only static option with DNS discovery): `Thanos Rule` needs to know about `Alertmanagers` HA replicas in order to send alerts.
 
 Currently there are several ways to configure this and they are described below in details:
 
 * Static Flags
 * File SD
-* DNS SD 
+* DNS SD
 
 ## Static Flags
 
@@ -38,6 +45,7 @@ The format of the configuration file is the same as the one used in [Prometheus'
 Both YAML and JSON files can be used. The format of the files is this:
 
 * JSON:
+
 ```json
 [
   {
@@ -47,6 +55,7 @@ Both YAML and JSON files can be used. The format of the files is this:
 ```
 
 * YAML:
+
 ```yaml
 - targets: ['localhost:9090', 'example.org:443']
 ```

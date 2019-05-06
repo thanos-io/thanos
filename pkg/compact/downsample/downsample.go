@@ -43,13 +43,13 @@ func Downsample(
 	if err != nil {
 		return id, errors.Wrap(err, "open index reader")
 	}
-	defer runutil.CloseWithErrCapture(logger, &err, indexr, "downsample index reader")
+	defer runutil.CloseWithErrCapture(&err, indexr, "downsample index reader")
 
 	chunkr, err := b.Chunks()
 	if err != nil {
 		return id, errors.Wrap(err, "open chunk reader")
 	}
-	defer runutil.CloseWithErrCapture(logger, &err, chunkr, "downsample chunk reader")
+	defer runutil.CloseWithErrCapture(&err, chunkr, "downsample chunk reader")
 
 	// Generate new block id.
 	uid := ulid.MustNew(ulid.Now(), rand.New(rand.NewSource(time.Now().UnixNano())))
@@ -81,12 +81,13 @@ func Downsample(
 	if err != nil {
 		return id, errors.Wrap(err, "get streamed block writer")
 	}
-	defer runutil.CloseWithErrCapture(logger, &err, streamedBlockWriter, "close stream block writer")
+	defer runutil.CloseWithErrCapture(&err, streamedBlockWriter, "close stream block writer")
 
 	postings, err := indexr.Postings(index.AllPostingsKey())
 	if err != nil {
 		return id, errors.Wrap(err, "get all postings list")
 	}
+
 	var (
 		aggrChunks []*AggrChunk
 		all        []sample

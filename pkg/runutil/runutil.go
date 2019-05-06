@@ -33,7 +33,7 @@
 // For capturing error, use CloseWithErrCapture:
 //
 // 	var err error
-// 	defer runutil.CloseWithErrCapture(logger, &err, closer, "log format message")
+// 	defer runutil.CloseWithErrCapture(&err, closer, "log format message")
 //
 // 	// ...
 //
@@ -49,6 +49,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
+	"github.com/prometheus/tsdb"
 )
 
 // Repeat executes f every interval seconds until stopc is closed.
@@ -107,26 +108,13 @@ func CloseWithLogOnErr(logger log.Logger, closer io.Closer, format string, a ...
 	level.Warn(logger).Log("msg", "detected close error", "err", errors.Wrap(err, fmt.Sprintf(format, a...)))
 }
 
-// CloseWithErrCapture runs function and on error tries to return error by argument.
-// If error is already there we assume that error has higher priority and we just log the function error.
-func CloseWithErrCapture(logger log.Logger, err *error, closer io.Closer, format string, a ...interface{}) {
-	closeErr := closer.Close()
-	if closeErr == nil {
-		return
-	}
+// CloseWithErrCapture runs function and on error return error by argument including the given error (usually
+// from caller function).
+func CloseWithErrCapture(err *error, closer io.Closer, format string, a ...interface{}) {
+	merr := tsdb.MultiError{}
 
-	if *err == nil {
-		err = &closeErr
-		return
-	}
+	merr.Add(*err)
+	merr.Add(errors.Wrapf(closer.Close(), format, a...))
 
-	// There is already an error, let's log this one.
-	if logger == nil {
-		logger = log.NewLogfmtLogger(os.Stderr)
-	}
-
-	level.Warn(logger).Log(
-		"msg", "detected best effort close error that was preempted from the more important one",
-		"err", errors.Wrap(closeErr, fmt.Sprintf(format, a...)),
-	)
+	*err = merr.Err()
 }

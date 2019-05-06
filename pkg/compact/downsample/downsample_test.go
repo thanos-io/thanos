@@ -163,6 +163,9 @@ func testDownsample(t *testing.T, data []*downsampleTestSet, meta *metadata.Meta
 	id, err := Downsample(log.NewNopLogger(), meta, mb, dir, resolution)
 	testutil.Ok(t, err)
 
+	_, err = metadata.Read(filepath.Join(dir, id.String()))
+	testutil.Ok(t, err)
+
 	exp := map[uint64]map[AggrType][]sample{}
 	got := map[uint64]map[AggrType][]sample{}
 
@@ -390,6 +393,8 @@ type memBlock struct {
 	chunks   []chunkenc.Chunk
 
 	numberOfChunks uint64
+
+	minTime, maxTime int64
 }
 
 type series struct {
@@ -398,7 +403,7 @@ type series struct {
 }
 
 func newMemBlock() *memBlock {
-	return &memBlock{symbols: map[string]struct{}{}}
+	return &memBlock{symbols: map[string]struct{}{}, minTime: -1, maxTime: -1}
 }
 
 func (b *memBlock) addSeries(s *series) {
@@ -412,10 +417,32 @@ func (b *memBlock) addSeries(s *series) {
 	}
 
 	for i, cm := range s.chunks {
+		if b.minTime == -1 || cm.MinTime < b.minTime {
+			b.minTime = cm.MinTime
+		}
+		if b.maxTime == -1 || cm.MaxTime < b.maxTime {
+			b.maxTime = cm.MaxTime
+		}
 		s.chunks[i].Ref = b.numberOfChunks
 		b.chunks = append(b.chunks, cm.Chunk)
 		b.numberOfChunks++
 	}
+}
+
+func (b *memBlock) MinTime() int64 {
+	if b.minTime == -1 {
+		return 0
+	}
+
+	return b.minTime
+}
+
+func (b *memBlock) MaxTime() int64 {
+	if b.maxTime == -1 {
+		return 0
+	}
+
+	return b.maxTime
 }
 
 func (b *memBlock) Postings(name, val string) (index.Postings, error) {

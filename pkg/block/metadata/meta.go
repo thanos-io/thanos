@@ -23,6 +23,7 @@ type SourceType string
 const (
 	UnknownSource         SourceType = ""
 	SidecarSource         SourceType = "sidecar"
+	ReceiveSource         SourceType = "receive"
 	CompactorSource       SourceType = "compactor"
 	CompactorRepairSource SourceType = "compactor.repair"
 	RulerSource           SourceType = "ruler"
@@ -36,7 +37,7 @@ const (
 )
 
 const (
-	// MetaVersion is a enumeration of versions supported by Thanos.
+	// MetaVersion is a enumeration of meta versions supported by Thanos.
 	MetaVersion1 = iota + 1
 )
 

@@ -1,9 +1,22 @@
 # Core Maintainers of this repository
 
-| Name                | Email                 | GitHub                                   |
-|---------------------|-----------------------|------------------------------------------|
-| Bartłomiej Płotka   | bartek@improbable.io  | [@bwplotka](https://github.com/bwplotka) |
-| Dominic Green       | dom@improbable.io     | [@domgreen](https://github.com/domgreen) |
+| Name                  | Email                  | Slack                    | GitHub                                                     |
+|-----------------------|------------------------|--------------------------|------------------------------------------------------------|
+| Bartłomiej Płotka     | bwplotka@gmail.com     | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)                   |
+| Dominic Green         | dom@improbable.io      | `@domgreen`              | [@domgreen](https://github.com/domgreen)                   |
+| Frederic Branczyk     | fbranczyk@gmail.com    | `@brancz`                | [@brancz](https://github.com/brancz)                       |
+| Giedrius Statkevičius | giedriuswork@gmail.com | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)                 |
+| Povilas Versockas     | p.versockas@gmail.com  | `@povilasv`              | [@povilasv](https://github.com/povilasv)
+
+We are bunch of people from different companies with various interests and skills.
+We are from different parts of Europe: Germany, Lithuania, Poland and UK. 
+We have something in common though: We all share the love for OpenSource, Golang, Prometheus, :coffee: and Observability topics.
+
+As either Software Developers or SRE (or both!) we've chosen to maintain (mostly in our free time) Thanos, the de facto way to scale awesome [Prometheus](https://prometheus.io) project.
+
+Feel free to contact us (preferably on Slack) anytime for feedback, questions or :beers:/:coffee:/:tea:.
+
+Especially feedback, please share if you have ideas what we can do better! 
 
 ## Storage plugins maintainers
 

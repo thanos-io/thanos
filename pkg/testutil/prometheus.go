@@ -163,16 +163,16 @@ func (p *Prometheus) Start() error {
 		)
 	}
 	p.addr = fmt.Sprintf("localhost:%d", port)
-	p.cmd = exec.Command(
-		prometheusBin(p.version),
-		append([]string{
-			"--storage.tsdb.path=" + p.db.Dir(),
-			"--web.listen-address=" + p.addr,
-			"--web.route-prefix=" + p.prefix,
-			"--web.enable-admin-api",
-			"--config.file=" + filepath.Join(p.db.Dir(), "prometheus.yml"),
-		}, extra...)...,
-	)
+	args := append([]string{
+		"--storage.tsdb.retention=2d", // Pass retention cause prometheus since 2.8.0 don't show default value for that flags in web/api: https://github.com/prometheus/prometheus/pull/5433
+		"--storage.tsdb.path=" + p.db.Dir(),
+		"--web.listen-address=" + p.addr,
+		"--web.route-prefix=" + p.prefix,
+		"--web.enable-admin-api",
+		"--config.file=" + filepath.Join(p.db.Dir(), "prometheus.yml"),
+	}, extra...)
+
+	p.cmd = exec.Command(prometheusBin(p.version), args...)
 	go func() {
 		if b, err := p.cmd.CombinedOutput(); err != nil {
 			fmt.Fprintln(os.Stderr, "running Prometheus failed", err)
@@ -231,7 +231,7 @@ func (p *Prometheus) SetConfig(s string) (err error) {
 	if err != nil {
 		return err
 	}
-	defer runutil.CloseWithErrCapture(nil, &err, f, "prometheus config")
+	defer runutil.CloseWithErrCapture(&err, f, "prometheus config")
 
 	_, err = f.Write([]byte(s))
 	return err
@@ -264,6 +264,7 @@ func (p *Prometheus) Appender() tsdb.Appender {
 // CreateBlock writes a block with the given series and numSamples samples each.
 // Samples will be in the time range [mint, maxt).
 func CreateBlock(
+	ctx context.Context,
 	dir string,
 	series []labels.Labels,
 	numSamples int,
@@ -271,11 +272,12 @@ func CreateBlock(
 	extLset labels.Labels,
 	resolution int64,
 ) (id ulid.ULID, err error) {
-	return createBlock(dir, series, numSamples, mint, maxt, extLset, resolution, false)
+	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false)
 }
 
 // CreateBlockWithTombstone is same as CreateBlock but leaves tombstones which mimics the Prometheus local block.
 func CreateBlockWithTombstone(
+	ctx context.Context,
 	dir string,
 	series []labels.Labels,
 	numSamples int,
@@ -283,10 +285,11 @@ func CreateBlockWithTombstone(
 	extLset labels.Labels,
 	resolution int64,
 ) (id ulid.ULID, err error) {
-	return createBlock(dir, series, numSamples, mint, maxt, extLset, resolution, true)
+	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, true)
 }
 
 func createBlock(
+	ctx context.Context,
 	dir string,
 	series []labels.Labels,
 	numSamples int,
@@ -299,7 +302,7 @@ func createBlock(
 	if err != nil {
 		return id, errors.Wrap(err, "create head block")
 	}
-	defer runutil.CloseWithErrCapture(log.NewNopLogger(), &err, h, "TSDB Head")
+	defer runutil.CloseWithErrCapture(&err, h, "TSDB Head")
 
 	var g errgroup.Group
 	var timeStepSize = (maxt - mint) / int64(numSamples+1)
@@ -340,7 +343,7 @@ func createBlock(
 	if err := g.Wait(); err != nil {
 		return id, err
 	}
-	c, err := tsdb.NewLeveledCompactor(nil, log.NewNopLogger(), []int64{maxt - mint}, nil)
+	c, err := tsdb.NewLeveledCompactor(ctx, nil, log.NewNopLogger(), []int64{maxt - mint}, nil)
 	if err != nil {
 		return id, errors.Wrap(err, "create compactor")
 	}
