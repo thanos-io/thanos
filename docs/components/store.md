@@ -85,17 +85,21 @@ Flags:
                                  Number of goroutines to use when syncing blocks
                                  from object storage.
       --min-time=0000-01-01T00:00:00Z
-                                 Start of time range limit to serve. Option can
-                                 be a constant time in RFC3339 format or time
+                                 Start of time range limit to serve. Thanos
+                                 Store serves only blocks, which have start time
+                                 greater than this value. Option can be a
+                                 constant time in RFC3339 format or time
                                  duration relative to current time, such as
                                  -1.5d or 2h45m. Valid duration units are ms, s,
                                  m, h, d, w, y.
       --max-time=9999-12-31T23:59:59Z
-                                 End of time range limit to serve. Option can be
-                                 a constant time in RFC3339 format or time
-                                 duration relative to current time, such as
-                                 -1.5d or 2h45m. Valid duration units are ms, s,
-                                 m, h, d, w, y.
+                                 End of time range limit to serve. Thanos Store
+                                 serves only blocks, which have start time is
+                                 less than this value. Option can be a constant
+                                 time in RFC3339 format or time duration
+                                 relative to current time, such as -1.5d or
+                                 2h45m. Valid duration units are ms, s, m, h, d,
+                                 w, y.
 
 ```
 
@@ -108,4 +112,7 @@ For example setting: `--min-time=-6w` & `--max-time=-2w` will make Thanos Store 
 
 You can also set constant time in RFC3339 format. For example `--min-time=2018-01-01T00:00:00Z`, `--max-time=2019-01-01T23:59:59Z`.
 
-Note that Thanos Store Gateway looks at both block's minTime and maxTime. This means that both block start time and end time needs to fall within the provided range. Therefore if block's start time is less than `--min-time`, the block won't be included as well as if block's end time is more than `--max-time`, the block won't be included.
+There is a sync-block job, which syncs up with remote storage and filters out blocks. You can configure how often it runs via `--sync-block-duration=3m`. In most cases default should work well.
+
+Note that Thanos Store Gateway only looks at block's start time.  Therefore if block's start time is less than `--min-time`, the block won't be included as well as if it is more than `--max-time`.
+

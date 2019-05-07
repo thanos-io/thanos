@@ -422,7 +422,7 @@ func (s *BucketStore) isBlockInMinMaxRange(ctx context.Context, id ulid.ULID) (b
 	}
 
 	// We check for blocks in configured minTime, maxTime range.
-	if b.meta.MinTime < s.minTime.PrometheusTimestamp() || b.meta.MaxTime > s.maxTime.PrometheusTimestamp() {
+	if b.meta.MinTime < s.minTime.PrometheusTimestamp() || b.meta.MinTime > s.maxTime.PrometheusTimestamp() {
 		return false, nil
 	}
 
