@@ -45,7 +45,7 @@ require (
 	golang.org/x/text v0.3.1-0.20180807135948-17ff2d5776d2
 	google.golang.org/api v0.1.0
 	google.golang.org/appengine v1.4.0 // indirect
-	google.golang.org/grpc v1.17.0
+	google.golang.org/grpc v1.20.1
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/fsnotify/fsnotify.v1 v1.4.7 // indirect
 	gopkg.in/yaml.v2 v2.2.2
