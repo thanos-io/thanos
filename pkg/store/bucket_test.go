@@ -460,6 +460,13 @@ func TestBucketStore_isBlockInMinMaxRange(t *testing.T) {
 		extLset, 0)
 	testutil.Ok(t, err)
 
+	// Create a block in range [+1w, +2w]
+	id3, err := testutil.CreateBlock(ctx, dir, series, 10,
+		timestamp.FromTime(time.Now().Add(7*24*time.Hour)),
+		timestamp.FromTime(time.Now().Add(14*24*time.Hour)),
+		extLset, 0)
+	testutil.Ok(t, err)
+
 	dir1, dir2 := filepath.Join(dir, id1.String()), filepath.Join(dir, id2.String())
 	meta1, err := metadata.Read(dir1)
 	testutil.Ok(t, err)
@@ -484,5 +491,9 @@ func TestBucketStore_isBlockInMinMaxRange(t *testing.T) {
 	testutil.Equals(t, true, inRange)
 
 	inRange, err = bucketStore.isBlockInMinMaxRange(context.TODO(), id2)
+	testutil.Equals(t, true, inRange)
+
+	inRange, err = bucketStore.isBlockInMinMaxRange(context.TODO(), id3)
 	testutil.Equals(t, false, inRange)
+
 }
