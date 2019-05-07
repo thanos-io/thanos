@@ -65,19 +65,26 @@ Show new menu section in main page by changing `website/layouts/_default/baseof.
 
 ## Logos
 
-If your company is using Thanos in production, we'd love to showcase your company's logo on our page. Add yourself in [`website/data/sponsors.yml`](/website/data/sponsors.yml) like so:
+We'd love to showcase your company's logo on our main page and README!
+Requirements for the company:
+* it is using Thanos on production
+* it is a legal registered company
+* it is happy to announce that you use Thanos publicly
 
+If all those are met, add yourself in [`website/data/sponsors.yml`](/website/data/sponsors.yml) like so:
 ```yml
 - name: My Awesome Company
   url: https://wwww.company.com
   logo: company.png
 ```
 
-Copy your company's logo in `website/static/logos`, and make sure it follows these rules:
+Copy your company's logo in [`/website/static/logos`](/website/static/logos), make sure it follows these rules:
 
 * Rectangle shape
-* Greyscale is prefered but color is fine
+* Greyscale is preferred but color is fine
 * Keep it under 50KB
+
+and create PR against Thanos `master` branch.
 
 ## Testing
 
