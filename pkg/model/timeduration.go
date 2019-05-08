@@ -16,7 +16,7 @@ type TimeOrDurationValue struct {
 	Dur  *model.Duration
 }
 
-// Set converts string to TimeOrDurationValue
+// Set converts string to TimeOrDurationValue.
 func (tdv *TimeOrDurationValue) Set(s string) error {
 	t, err := time.Parse(time.RFC3339, s)
 	if err == nil {
@@ -42,7 +42,7 @@ func (tdv *TimeOrDurationValue) Set(s string) error {
 	return nil
 }
 
-// String returns either tume or duration
+// String returns either tume or duration.
 func (tdv *TimeOrDurationValue) String() string {
 	switch {
 	case tdv.Time != nil:
@@ -67,7 +67,7 @@ func (tdv *TimeOrDurationValue) PrometheusTimestamp() int64 {
 	return 0
 }
 
-// TimeOrDuration helper for parsing TimeOrDuration with kingpin
+// TimeOrDuration helper for parsing TimeOrDuration with kingpin.
 func TimeOrDuration(flags *kingpin.FlagClause) *TimeOrDurationValue {
 	value := new(TimeOrDurationValue)
 	flags.SetValue(value)
