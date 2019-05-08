@@ -65,20 +65,8 @@ func main() {
 	logFormat := app.Flag("log.format", "Log format to use.").
 		Default(logFormatLogfmt).Enum(logFormatLogfmt, logFormatJson)
 
-	// tracerFactory := tracing.Newfactory(tracing.FactoryConfigFromKingPin(app))
-	// tracerConfig := tracing.FactoryConfigFromKingPin(app)
-	//tracingFactory, _ := tracing.NewFactory(tracing.FactoryConfigFromKingpin(app))
 	tracingFactory := tracing.NewFactory(tracing.FactoryConfigFromKingpin(app))
 	tracingFactory.RegisterKingpinFlags(app)
-
-	// tracing.ParseFlags(app)
-	// tracer.Configure(app)
-	// tracingType := app.Flag("tracing.type", "gcloud/jaeger.").Default("gcloud").String()
-
-	// gcloudTraceProject := app.Flag("gcloudtrace.project", "GCP project to send Google Cloud Trace tracings to. If empty, tracing will be disabled.").
-	// 	String()
-	// gcloudTraceSampleFactor := app.Flag("gcloudtrace.sample-factor", "How often we send traces (1/<sample-factor>). If 0 no trace will be sent periodically, unless forced by baggage item. See `pkg/tracing/tracing.go` for details.").
-	// 	Default("1").Uint64()
 
 	cmds := map[string]setupFunc{}
 	registerSidecar(cmds, app, "sidecar")
@@ -156,8 +144,6 @@ func main() {
 		var closeFn func() error
 
 		tracer, closeFn = tracingFactory.Create(ctx, logger)
-
-		// tracer, closeFn = tracing.NewOptionalGCloudTracer(ctx, logger, *gcloudTraceProject, *gcloudTraceSampleFactor, *debugName)
 
 		// This is bad, but Prometheus does not support any other tracer injections than just global one.
 		// TODO(bplotka): Work with basictracer to handle gracefully tracker mismatches, and also with Prometheus to allow
