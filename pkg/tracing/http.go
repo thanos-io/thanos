@@ -10,6 +10,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
+	"github.com/improbable-eng/thanos/pkg/tracing/gcloud"
 )
 
 // HTTPMiddleware returns HTTP handler that injects given tracer and starts new server span. If any client span is fetched
@@ -32,7 +33,7 @@ func HTTPMiddleware(tracer opentracing.Tracer, name string, logger log.Logger, n
 		ext.HTTPUrl.Set(span, r.URL.String())
 
 		// If client specified ForceTracingBaggageKey header, ensure span includes it to force tracing.
-		span.SetBaggageItem(ForceTracingBaggageKey, r.Header.Get(ForceTracingBaggageKey))
+		span.SetBaggageItem(gcloud.ForceTracingBaggageKey, r.Header.Get(gcloud.ForceTracingBaggageKey))
 
 		next.ServeHTTP(w, r.WithContext(opentracing.ContextWithSpan(ContextWithTracer(r.Context(), tracer), span)))
 		span.Finish()
