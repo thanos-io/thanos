@@ -35,6 +35,10 @@ GOBINDATA_VERSION ?= a9c83481b38ebb1c4eb8f0168fd4b10ca1d3c523
 GOBINDATA         ?= $(GOBIN)/go-bindata-$(GOBINDATA_VERSION)
 GIT               ?= $(shell which git)
 
+GOGOPROTO_VERSION_PATH ?= $(shell go list -f {{.Dir}} github.com/gogo/protobuf/version)
+GOGOPROTO_SOURCE_DIR   ?= $(GOGOPROTO_VERSION_PATH:/version=)
+GOGOPROTO_VENDOR_DIR   ?= ./vendor/github.com/gogo
+
 WEB_DIR           ?= website
 WEBSITE_BASE_URL  ?= https://thanos.io
 PUBLIC_DIR        ?= $(WEB_DIR)/public
@@ -217,6 +221,14 @@ go-mod-tidy: check-git
 .PHONY: check-go-mod
 check-go-mod:
 	@go mod verify
+
+.PHONY: go-mod-vendor
+go-mod-vendor:
+	@go mod tidy
+	@go mod vendor
+	@go mod verify
+	@mkdir -p $(GOGOPROTO_VENDOR_DIR)
+	@cp -R --no-preserve=mode $(GOGOPROTO_SOURCE_DIR) $(GOGOPROTO_VENDOR_DIR)
 
 # tooling deps. TODO(bwplotka): Pin them all to certain version!
 .PHONY: check-git
