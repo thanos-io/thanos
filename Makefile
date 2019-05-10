@@ -31,7 +31,6 @@ HUGO              ?= $(GOBIN)/hugo-$(HUGO_VERSION)
 GOBINDATA_VERSION ?= a9c83481b38ebb1c4eb8f0168fd4b10ca1d3c523
 GOBINDATA         ?= $(GOBIN)/go-bindata-$(GOBINDATA_VERSION)
 GIT               ?= $(shell which git)
-BZR               ?= $(shell which bzr)
 
 WEB_DIR           ?= website
 WEBSITE_BASE_URL  ?= https://thanos.io
@@ -104,7 +103,7 @@ assets: $(GOBINDATA)
 
 # build builds Thanos binary using `promu`.
 .PHONY: build
-build: check-git check-bzr go-mod-tidy $(PROMU)
+build: check-git  go-mod-tidy $(PROMU)
 	@echo ">> building binaries $(GOBIN)"
 	@$(PROMU) build --prefix $(PREFIX)
 
@@ -161,7 +160,7 @@ format: $(GOIMPORTS)
 
 # proto generates golang files from Thanos proto files.
 .PHONY: proto
-proto: check-git check-bzr $(GOIMPORTS) $(PROTOC)
+proto: check-git  $(GOIMPORTS) $(PROTOC)
 	@go install ./vendor/github.com/gogo/protobuf/protoc-gen-gogofast
 	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" scripts/genproto.sh
 
@@ -183,7 +182,7 @@ tarballs-release: $(PROMU)
 
 # test runs all Thanos golang tests against each supported version of Prometheus.
 .PHONY: test
-test: check-git check-bzr test-deps
+test: check-git test-deps
 	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS='true' or/and THANOS_SKIP_S3_AWS_TESTS='true' or/and THANOS_SKIP_AZURE_TESTS='true' and/or THANOS_SKIP_SWIFT_TESTS='true' and/or THANOS_SKIP_TENCENT_COS_TESTS='true' if you want to skip e2e tests against real store buckets"
 	THANOS_TEST_PROMETHEUS_VERSIONS="$(PROM_VERSIONS)" THANOS_TEST_ALERTMANAGER_PATH="alertmanager-$(ALERTMANAGER_VERSION)" go test $(shell go list ./... | grep -v /vendor/ | grep -v /benchmark/);
 
@@ -198,13 +197,13 @@ test-deps:
 
 # vet vets the code.
 .PHONY: vet
-vet: check-git check-bzr
+vet: check-git
 	@echo ">> vetting code"
 	@go vet ./...
 
 # go mod related
 .PHONY: go-mod-tidy
-go-mod-tidy: check-git check-bzr
+go-mod-tidy: check-git
 	@go mod tidy
 
 .PHONY: check-go-mod
@@ -220,13 +219,6 @@ else
 	@echo >&2 "No git binary found."; exit 1
 endif
 
-.PHONY: check-bzr
-check-bzr:
-ifneq ($(BZR),)
-	@test -x $(BZR) || (echo >&2 "No bzr exectuable binary found at $(BZR)."; exit 1)
-else
-	@echo >&2 "No bzr binary found."; exit 1
-endif
 
 .PHONY: web-pre-process
 web-pre-process:

@@ -30,8 +30,9 @@ Thanos will work in cloud native environments as well as more traditional ones. 
 You can find the latest Thanos release [here](https://github.com/improbable-eng/thanos/releases).
 
 
-If you want to build Thanos from source, make sure you have installed `bzr` and `git`. `bzr` is required, because `go` modules will use whatever VCS dependency use and in our case a single deps is using `bzr`.
-And that you have a working installation of the Go [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`), Thanos can be downloaded and built by running:
+If you want to build Thanos from source, make sure you have installed `git` and that you have a working installation of the Go [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`).
+
+Thanos can be downloaded and built by running:
 
 ```bash
 go get -d github.com/improbable-eng/thanos/...
