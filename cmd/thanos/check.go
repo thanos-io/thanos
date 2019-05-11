@@ -5,7 +5,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	thanosrule "github.com/improbable-eng/thanos/pkg/rule"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
@@ -56,6 +55,16 @@ func checkRulesFiles(logger log.Logger, files *[]string) error {
 	return nil
 }
 
+type ThanosRuleGroup struct{
+    PartialResponseStrategy string `yaml:"partial_response_strategy"`
+    rulefmt.RuleGroup `yaml:",inline"`
+}
+
+type ThanosRuleGroups struct {
+	Groups []ThanosRuleGroup `yaml:"groups"`
+}
+
+
 func checkRules(logger log.Logger, filename string) (int, tsdb.MultiError) {
 	level.Info(logger).Log("msg", "checking", "filename", filename)
 	checkErrors := tsdb.MultiError{}
@@ -66,8 +75,8 @@ func checkRules(logger log.Logger, filename string) (int, tsdb.MultiError) {
 		return 0, checkErrors
 	}
 
-	var rgs thanosrule.RuleGroups
-	if err := yaml.Unmarshal(b, &rgs); err != nil {
+	var rgs ThanosRuleGroups
+	if err := yaml.UnmarshalStrict(b, &rgs); err != nil {
 		checkErrors.Add(err)
 		return 0, checkErrors
 	}
@@ -89,7 +98,7 @@ func checkRules(logger log.Logger, filename string) (int, tsdb.MultiError) {
 	return numRules, checkErrors
 }
 
-func thanosRuleGroupsToPromRuleGroups(ruleGroups thanosrule.RuleGroups) rulefmt.RuleGroups {
+func thanosRuleGroupsToPromRuleGroups(ruleGroups ThanosRuleGroups) rulefmt.RuleGroups {
 	promRuleGroups := rulefmt.RuleGroups{Groups: []rulefmt.RuleGroup{}}
 	for _, g := range ruleGroups.Groups {
 		group := rulefmt.RuleGroup{

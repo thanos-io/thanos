@@ -17,6 +17,7 @@ func Test_checkRules(t *testing.T) {
 		[]string{"./testdata/rules-files/non-existing-file.yaml"},
 		[]string{"./testdata/rules-files/invalid-yaml-format.yaml"},
 		[]string{"./testdata/rules-files/invalid-rules-data.yaml"},
+		[]string{"./testdata/rules-files/invalid-unknown-field.yaml"},
 	}
 
 	logger := log.NewNopLogger()

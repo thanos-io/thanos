@@ -1,7 +1,7 @@
 groups:
   - name: test-alert-group
     partial_response_strategy: "warn"
-    interval: 2m
+    interrrrrrrrval: 2m
     rules:
       - alert: TestAlert
         expr: 1
