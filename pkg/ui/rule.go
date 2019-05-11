@@ -8,6 +8,7 @@ import (
 	"path"
 	"regexp"
 	"sort"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	thanosrule "github.com/improbable-eng/thanos/pkg/rule"
@@ -37,6 +38,9 @@ func NewRuleUI(logger log.Logger, ruleManagers map[storepb.PartialResponseStrate
 
 func ruleTmplFuncs(queryURL string) template.FuncMap {
 	return template.FuncMap{
+		"since": func(t time.Time) time.Duration {
+			return time.Since(t) / time.Millisecond * time.Millisecond
+		},
 		"alertStateToClass": func(as rules.AlertState) string {
 			switch as {
 			case rules.StateInactive:
