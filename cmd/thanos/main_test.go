@@ -44,7 +44,6 @@ func TestGenericHttpEndpoints(t *testing.T) {
 
 	p := prober.NewProber(component, logger)
 	err = defaultHTTPListener(&g, logger, metricsRegistry, serverAddress, p)
-	p.SetReady()
 	testutil.Ok(t, err)
 	go func() { _ = g.Run() }()
 
@@ -59,6 +58,22 @@ func TestGenericHttpEndpoints(t *testing.T) {
 		resp, err := queryHTTPGetEndpoint(ctx, t, log.NewNopLogger(), path.Join(serverAddress, "/debug/pprof/"))
 		testutil.Ok(t, err)
 		testutil.Equals(t, 200, resp.StatusCode)
+		return err
+	}))
+
+	// Verify that defaultHTTPListener sets the prober healthy.
+	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
+		resp, err := queryHTTPGetEndpoint(ctx, t, log.NewNopLogger(), path.Join(serverAddress, "/-/healthy/"))
+		testutil.Ok(t, err)
+		testutil.Equals(t, 200, resp.StatusCode)
+		return err
+	}))
+
+	// Verify that defaultHTTPListener does not set the prober ready.
+	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
+		resp, err := queryHTTPGetEndpoint(ctx, t, log.NewNopLogger(), path.Join(serverAddress, "/-/ready/"))
+		testutil.Ok(t, err)
+		testutil.Equals(t, 503, resp.StatusCode)
 		return err
 	}))
 }
