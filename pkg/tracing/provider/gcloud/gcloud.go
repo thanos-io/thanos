@@ -2,6 +2,7 @@ package gcloud
 
 import (
 	"context"
+	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/prometheus/common/version"
 	"os"
 
@@ -14,8 +15,6 @@ import (
 	"github.com/opentracing/basictracer-go"
 	"github.com/opentracing/opentracing-go"
 )
-
-const ForceTracingBaggageKey = "X-Thanos-Force-Tracing"
 
 type tracer struct {
 	debugName string
@@ -57,7 +56,7 @@ type forceRecorder struct {
 // RecordSpan invokes wrapper SpanRecorder only if Sampled field is true or ForceTracingBaggageKey item is set in span's context.
 // NOTE(bplotka): Currently only HTTP supports ForceTracingBaggageKey injection on ForceTracingBaggageKey header existence.
 func (r *forceRecorder) RecordSpan(sp basictracer.RawSpan) {
-	if force := sp.Context.Baggage[ForceTracingBaggageKey]; force != "" {
+	if force := sp.Context.Baggage[tracing.ForceTracingBaggageKey]; force != "" {
 		sp.Context.Sampled = true
 	}
 

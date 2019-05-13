@@ -6,6 +6,8 @@ import (
 	"github.com/opentracing/opentracing-go"
 )
 
+const ForceTracingBaggageKey = "X-Thanos-Force-Tracing"
+
 type contextKey struct{}
 
 var tracerKey = contextKey{}
