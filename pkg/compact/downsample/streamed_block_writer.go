@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/chunks"
 	"github.com/prometheus/tsdb/fileutil"
+	tsdb_errors "github.com/prometheus/tsdb/errors"
 	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
 )
@@ -83,7 +84,7 @@ func NewStreamedBlockWriter(
 	// We should close any opened Closer up to an error.
 	defer func() {
 		if err != nil {
-			var merr tsdb.MultiError
+			var merr tsdb_errors.MultiError
 			merr.Add(err)
 			for _, cl := range closers {
 				merr.Add(cl.Close())
@@ -169,7 +170,7 @@ func (w *streamedBlockWriter) Close() error {
 	}
 	w.finalized = true
 
-	merr := tsdb.MultiError{}
+	merr := tsdb_errors.MultiError{}
 
 	if w.ignoreFinalize {
 		// Close open file descriptors anyway.
@@ -234,7 +235,7 @@ func (w *streamedBlockWriter) syncDir() (err error) {
 
 	defer runutil.CloseWithErrCapture(&err, df, "close temporary block blockDir")
 
-	if err := fileutil.Fsync(df); err != nil {
+	if err := fileutil.Fdatasync(df); err != nil {
 		return errors.Wrap(err, "sync temporary blockDir")
 	}
 

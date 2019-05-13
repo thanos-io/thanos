@@ -49,7 +49,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
-	"github.com/prometheus/tsdb"
+	tsdb_errors "github.com/prometheus/tsdb/errors"
 )
 
 // Repeat executes f every interval seconds until stopc is closed.
@@ -111,7 +111,7 @@ func CloseWithLogOnErr(logger log.Logger, closer io.Closer, format string, a ...
 // CloseWithErrCapture runs function and on error return error by argument including the given error (usually
 // from caller function).
 func CloseWithErrCapture(err *error, closer io.Closer, format string, a ...interface{}) {
-	merr := tsdb.MultiError{}
+	merr := tsdb_errors.MultiError{}
 
 	merr.Add(*err)
 	merr.Add(errors.Wrapf(closer.Close(), format, a...))

@@ -13,7 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/rulefmt"
 	"github.com/prometheus/prometheus/rules"
-	"github.com/prometheus/tsdb"
+	tsdb_errors "github.com/prometheus/tsdb/errors"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -112,7 +112,7 @@ func (r RuleGroup) MarshalYAML() (interface{}, error) {
 // special field in RuleGroup file.
 func (m *Managers) Update(dataDir string, evalInterval time.Duration, files []string) error {
 	var (
-		errs     tsdb.MultiError
+		errs     tsdb_errors.MultiError
 		filesMap = map[storepb.PartialResponseStrategy][]string{}
 	)
 

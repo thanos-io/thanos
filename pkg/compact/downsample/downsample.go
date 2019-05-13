@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/tsdb/chunks"
+	tsdb_errors "github.com/prometheus/tsdb/errors"
 	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
 )
@@ -63,7 +64,7 @@ func Downsample(
 	// Remove blockDir in case of errors.
 	defer func() {
 		if err != nil {
-			var merr tsdb.MultiError
+			var merr tsdb_errors.MultiError
 			merr.Add(err)
 			merr.Add(os.RemoveAll(blockDir))
 			err = merr.Err()
