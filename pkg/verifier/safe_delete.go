@@ -59,6 +59,9 @@ func SafeDelete(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 		if err := block.Download(ctx, logger, bkt, id, dir); err != nil {
 			return errors.Wrap(err, "download from source")
 		}
+	} else if err != nil {
+		// Error calling Stat() and something is really wrong.
+		return err
 	} else {
 		level.Info(logger).Log("msg", "using previously downloaded tsdb block",
 			"id", id.String())
