@@ -17,15 +17,13 @@ const (
 
 // Factory - tracer factory.
 type Factory struct {
-	FactoryConfig
+	tracingType *string
 	factories map[string]tracing.Factory
 }
 
 // NewFactory return new tracer factory.
-func NewFactory(config FactoryConfig) (*Factory) {
-	f := &Factory{
-		FactoryConfig: config,
-	}
+func NewFactory() (*Factory) {
+	f := &Factory{}
 	f.factories = make(map[string]tracing.Factory)
 
 	f.factories[jaegerTracingType] = jaeger.NewFactory()
@@ -36,10 +34,11 @@ func NewFactory(config FactoryConfig) (*Factory) {
 
 // Create implement factoty.Factory
 func (f *Factory) Create(ctx context.Context, logger log.Logger, debugName string) (opentracing.Tracer, func() error) {
-	return f.factories[*f.FactoryConfig.TracingType].Create(ctx, logger, debugName)
+	return f.factories[*f.tracingType].Create(ctx, logger, debugName)
 }
 
 func (f *Factory) RegisterKingpinFlags(app *kingpin.Application) {
+	f.tracingType = app.Flag("tracing.type", "gcloud/jaeger.").Default("jaeger").String()
 	for _, t := range f.factories {
 		t.RegisterKingpinFlags(app)
 	}

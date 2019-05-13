@@ -66,7 +66,7 @@ func main() {
 	logFormat := app.Flag("log.format", "Log format to use.").
 		Default(logFormatLogfmt).Enum(logFormatLogfmt, logFormatJson)
 
-	tracingFactory := provider.NewFactory(provider.FactoryConfigFromKingpin(app))
+	tracingFactory := provider.NewFactory()
 	tracingFactory.RegisterKingpinFlags(app)
 
 	cmds := map[string]setupFunc{}
