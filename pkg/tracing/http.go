@@ -10,7 +10,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
-	"github.com/improbable-eng/thanos/pkg/tracing/gcloud"
+	"github.com/improbable-eng/thanos/pkg/tracing/provider/gcloud"
 )
 
 // HTTPMiddleware returns HTTP handler that injects given tracer and starts new server span. If any client span is fetched

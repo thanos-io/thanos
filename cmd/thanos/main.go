@@ -27,6 +27,7 @@ import (
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
+	"github.com/improbable-eng/thanos/pkg/tracing/provider"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -65,7 +66,7 @@ func main() {
 	logFormat := app.Flag("log.format", "Log format to use.").
 		Default(logFormatLogfmt).Enum(logFormatLogfmt, logFormatJson)
 
-	tracingFactory := tracing.NewFactory(tracing.FactoryConfigFromKingpin(app))
+	tracingFactory := provider.NewFactory(provider.FactoryConfigFromKingpin(app))
 	tracingFactory.RegisterKingpinFlags(app)
 
 	cmds := map[string]setupFunc{}

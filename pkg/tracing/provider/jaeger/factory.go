@@ -24,7 +24,9 @@ func (f *Factory) Create(ctx context.Context, logger log.Logger) (opentracing.Tr
 	cfg.Sampler.Type = "const"
 	cfg.Sampler.Param = 1
 	cfg.Reporter.LogSpans = true
-	cfg.ServiceName = *f.serviceName
+	if *f.serviceName != "" {
+		cfg.ServiceName = *f.serviceName
+	}
 
 	jLogger := jaeger_log.StdLogger
 	jMetricsFactory := prometheus.New()

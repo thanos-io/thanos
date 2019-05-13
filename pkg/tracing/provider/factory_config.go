@@ -1,4 +1,4 @@
-package tracing
+package provider
 
 import "gopkg.in/alecthomas/kingpin.v2"
 
