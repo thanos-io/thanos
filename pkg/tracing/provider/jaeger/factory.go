@@ -8,7 +8,6 @@ import (
 	"github.com/uber/jaeger-client-go/config"
 	"github.com/uber/jaeger-lib/metrics/prometheus"
 	"gopkg.in/alecthomas/kingpin.v2"
-	jaeger_log "github.com/uber/jaeger-client-go/log"
 )
 
 type Factory struct {
@@ -28,7 +27,9 @@ func (f *Factory) Create(ctx context.Context, logger log.Logger) (opentracing.Tr
 		cfg.ServiceName = *f.serviceName
 	}
 
-	jLogger := jaeger_log.StdLogger
+	jLogger := &jaegerLogger{
+		logger: logger,
+	}
 	jMetricsFactory := prometheus.New()
 	tracer, closer, err := cfg.NewTracer(
 		config.Metrics(jMetricsFactory),
