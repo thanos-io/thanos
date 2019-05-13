@@ -677,6 +677,8 @@ func rewrite(
 		// identical labels as the last series.  This means that we have
 		// discovered a duplicate time series in the old block.  We drop
 		// all duplicate series preserving the first one.
+		// TODO: Add metric to count dropped series if repair becomes a daemon
+		// rather than a batch job.
 		if labels.Compare(lastSet, s.lset) == 0 {
 			level.Warn(logger).Log("msg",
 				"dropping duplicate series in tsdb block found",
