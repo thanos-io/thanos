@@ -15,13 +15,14 @@ import (
 	"github.com/pkg/errors"
 )
 
-// SafeDelete moves block to backup bucket and if succeeded, removes it from
-// source bucket.  It returns error if block dir already exists in backup
-// bucket (blocks should be immutable) or any of the operation fails.  If
-// the block has already been downloaded it must exist in tempdir, else it
-// will be downloaded to be copied to the backup bucket.  tempdir set to the
-// zero value forces download.
-func SafeDelete(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, id ulid.ULID, tempdir string) error {
+// SafeDelete moves a TSDB block to a backup bucket and, on success, removes
+// it from the source bucket.  It returns error if block dir already exists in
+// the backup bucket (blocks should be immutable) or if any of the operations
+// fail.  When useExisting is true do not download the block but use the
+// previously downloaded block found in tempdir to avoid repeated downloads.
+// If tempdir is an empty string a unique temporary directory is created for
+// scratch space, otherwise the given directory is used.
+func SafeDelete(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, id ulid.ULID, useExisting bool, tempdir string) error {
 	foundDir := false
 	err := backupBkt.Iter(ctx, id.String(), func(name string) error {
 		foundDir = true
@@ -41,30 +42,39 @@ func SafeDelete(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 		if err != nil {
 			return err
 		}
-	}
-	dir := filepath.Join(tempdir, id.String())
 
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		// TSDB block not already present, download it
-		err = os.Mkdir(dir, 0755)
-		if err != nil {
-			return err
-		}
+		// We manage this tempdir so we clean it up on exit.
 		defer func() {
 			if err := os.RemoveAll(tempdir); err != nil {
 				level.Warn(logger).Log("msg", "failed to delete dir", "dir", tempdir, "err", err)
 			}
 		}()
+	}
+	dir := filepath.Join(tempdir, id.String())
 
-		if err := block.Download(ctx, logger, bkt, id, dir); err != nil {
-			return errors.Wrap(err, "download from source")
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		// TSDB block not already present, create it.
+		err = os.Mkdir(dir, 0755)
+		if err != nil {
+			return err
 		}
 	} else if err != nil {
 		// Error calling Stat() and something is really wrong.
 		return err
-	} else {
+	}
+
+	if useExisting {
+		if _, err := os.Stat(filepath.Join(dir, "meta.json")); err != nil {
+			// If there is any error stat'ing meta.json inside the TSDB block
+			// then declare the existing block as bad and refuse to upload it.
+			return errors.Wrap(err, "existing tsdb block is invalid")
+		}
 		level.Info(logger).Log("msg", "using previously downloaded tsdb block",
 			"id", id.String())
+	} else {
+		if err := block.Download(ctx, logger, bkt, id, dir); err != nil {
+			return errors.Wrap(err, "download from source")
+		}
 	}
 
 	if err := block.Upload(ctx, logger, backupBkt, dir); err != nil {
