@@ -13,21 +13,20 @@ import (
 )
 
 type Factory struct {
-	serviceName *string
 }
 
 func NewFactory() *Factory {
 	return &Factory{}
 }
 
-func (f *Factory) Create(ctx context.Context, logger log.Logger) (opentracing.Tracer, func() error) {
+func (f *Factory) Create(ctx context.Context, logger log.Logger, debugName string) (opentracing.Tracer, func() error) {
 	cfg, err := config.FromEnv()
 	cfg.Headers = &jaeger.HeadersConfig{
 		JaegerDebugHeader: tracing.ForceTracingBaggageKey,
 	}
 	cfg.Headers.ApplyDefaults()
-	if *f.serviceName != "" {
-		cfg.ServiceName = *f.serviceName
+	if debugName != "" {
+		cfg.ServiceName = debugName
 	}
 
 	jLogger := &jaegerLogger{
@@ -47,5 +46,4 @@ func (f *Factory) Create(ctx context.Context, logger log.Logger) (opentracing.Tr
 }
 
 func (f *Factory) RegisterKingpinFlags(app *kingpin.Application) {
-	f.serviceName = app.Flag("jaeger.service-name", "Jaeger service_name. If empty, tracing will be disabled.").Default("").String()
 }

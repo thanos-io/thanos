@@ -16,8 +16,8 @@ func NewFactory() *Factory {
 	return &Factory{}
 }
 
-func (f *Factory) Create(ctx context.Context, logger log.Logger) (opentracing.Tracer, func() error) {
-	return NewOptionalGCloudTracer(ctx, logger, *f.gcloudTraceProjectID, *f.sampleFactor, "thanos-test")
+func (f *Factory) Create(ctx context.Context, logger log.Logger, debugName string) (opentracing.Tracer, func() error) {
+	return NewOptionalGCloudTracer(ctx, logger, *f.gcloudTraceProjectID, *f.sampleFactor, debugName)
 }
 
 func (f *Factory) RegisterKingpinFlags(app *kingpin.Application) {

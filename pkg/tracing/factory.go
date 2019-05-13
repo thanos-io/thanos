@@ -8,6 +8,6 @@ import (
 )
 
 type Factory interface {
-	Create(ctx context.Context, logger log.Logger) (opentracing.Tracer, func() error)
+	Create(ctx context.Context, logger log.Logger, debugName string) (opentracing.Tracer, func() error)
 	RegisterKingpinFlags(app *kingpin.Application)
 }

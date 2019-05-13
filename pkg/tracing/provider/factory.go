@@ -35,8 +35,8 @@ func NewFactory(config FactoryConfig) (*Factory) {
 }
 
 // Create implement factoty.Factory
-func (f *Factory) Create(ctx context.Context, logger log.Logger) (opentracing.Tracer, func() error) {
-	return f.factories[*f.FactoryConfig.TracingType].Create(ctx, logger)
+func (f *Factory) Create(ctx context.Context, logger log.Logger, debugName string) (opentracing.Tracer, func() error) {
+	return f.factories[*f.FactoryConfig.TracingType].Create(ctx, logger, debugName)
 }
 
 func (f *Factory) RegisterKingpinFlags(app *kingpin.Application) {

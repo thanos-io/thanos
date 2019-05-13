@@ -144,7 +144,7 @@ func main() {
 
 		var closeFn func() error
 
-		tracer, closeFn = tracingFactory.Create(ctx, logger)
+		tracer, closeFn = tracingFactory.Create(ctx, logger, *debugName)
 
 		// This is bad, but Prometheus does not support any other tracer injections than just global one.
 		// TODO(bplotka): Work with basictracer to handle gracefully tracker mismatches, and also with Prometheus to allow
