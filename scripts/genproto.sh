@@ -23,7 +23,7 @@ PROM_PATH="${THANOS_ROOT}/pkg/store/storepb"
 GOGOPROTO_ROOT="${THANOS_ROOT}/vendor/github.com/gogo/protobuf"
 GOGOPROTO_PATH="${GOGOPROTO_ROOT}:${GOGOPROTO_ROOT}/protobuf"
 
-DIRS="pkg/store/storepb pkg/store/prompb"
+DIRS="pkg/store/storepb pkg/store/prompb pkg/block/indexcache"
 
 for dir in ${DIRS}; do
 	pushd ${dir}

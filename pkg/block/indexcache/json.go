@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/go-kit/kit/log"
+	"github.com/golang/snappy"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb/fileutil"
@@ -65,7 +66,7 @@ func (c *JSONCache) WriteIndexCache(indexFn string, fn string) error {
 	}
 
 	// Extract label value indices.
-	lnames, err := indexr.LabelIndices()
+	lnames, err := indexr.LabelNames()
 	if err != nil {
 		return errors.Wrap(err, "read label indices")
 	}
@@ -73,7 +74,7 @@ func (c *JSONCache) WriteIndexCache(indexFn string, fn string) error {
 		if len(lns) != 1 {
 			continue
 		}
-		ln := lns[0]
+		ln := string(lns[0])
 
 		tpls, err := indexr.LabelValues(ln)
 		if err != nil {
@@ -168,40 +169,45 @@ func (c *JSONCache) ReadIndexCache(fn string) (version int,
 // ToBCache converts the JSON cache into a BinaryCache one.
 func (c *JSONCache) ToBCache(fnJSON string, fnB string) error {
 	// Ignore the version here: index writer already adds (2) automatically.
-	_, symbols, lvals, postings, err := c.ReadIndexCache(fnJSON)
+	ver, symbols, lvals, postings, err := c.ReadIndexCache(fnJSON)
 	if err != nil {
 		return errors.Wrap(err, "reading json cache")
 	}
 
-	w, err := index.NewWriter(fnB)
+	f, err := os.Create(fnB)
 	if err != nil {
 		return err
 	}
-	defer runutil.CloseWithLogOnErr(c.logger, w, "index writer")
+	defer runutil.CloseWithLogOnErr(c.logger, f, "binary index writer")
 
-	// Convert into a type appropriate for the index writer interface.
-	symbolsBinary := make(map[string]struct{})
-	for _, sym := range symbols {
-		symbolsBinary[sym] = struct{}{}
+	labelValues := map[string]*Values{}
+	for ln, lns := range lvals {
+		labelValues[ln] = &Values{Val: lns}
 	}
 
-	err = w.AddSymbols(symbolsBinary)
+	postingRanges := []*PostingsRange{}
+	for l, rng := range postings {
+		postingRanges = append(postingRanges, &PostingsRange{Name: l.Name, Value: l.Value, Start: rng.Start, End: rng.End})
+	}
+
+	indexCache := Cache{
+		Version:     int32(ver),
+		Symbols:     symbols,
+		Labelvalues: labelValues,
+		Postings:    postingRanges,
+	}
+
+	snappyWriter := snappy.NewBufferedWriter(f)
+	defer runutil.CloseWithLogOnErr(c.logger, f, "snappy index cache writer")
+	snappyBuffer, err := indexCache.Marshal()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "index cache marshal")
 	}
-
-	for ln, vals := range lvals {
-		err = w.WriteLabelIndex([]string{ln}, vals)
-		if err != nil {
-			return errors.Wrap(err, "write label indices")
-		}
+	if _, err := snappyWriter.Write(snappyBuffer); err != nil {
+		return errors.Wrap(err, "snappy writer write index cache")
 	}
-
-	for l := range postings {
-		err = w.WritePostings(l.Name, l.Value, index.EmptyPostings())
-		if err != nil {
-			return errors.Wrap(err, "postings write")
-		}
+	if err := snappyWriter.Flush(); err != nil {
+		return errors.Wrap(err, "snappy writer flush")
 	}
 
 	return nil

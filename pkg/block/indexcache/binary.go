@@ -2,17 +2,19 @@ package indexcache
 
 import (
 	"io/ioutil"
+	"os"
+
+	"github.com/golang/snappy"
 
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/pkg/errors"
-	"github.com/prometheus/tsdb/chunks"
 	"github.com/prometheus/tsdb/fileutil"
 	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
 )
 
-// BinaryCache is a binary index cache.
+// BinaryCache is a binary index cache that uses protobufs + snappy compression.
 type BinaryCache struct {
 	IndexCache
 
@@ -35,51 +37,34 @@ func (c *BinaryCache) WriteIndexCache(indexFn string, fn string) error {
 	defer runutil.CloseWithLogOnErr(c.logger, indexr, "load index cache reader")
 
 	// We assume reader verified index already.
-	symbols, err := getSymbolTableBinary(b)
+	symbols, err := getSymbolTableJSON(b)
 	if err != nil {
 		return err
 	}
 
-	// Now it is time to write it.
-	w, err := index.NewWriter(fn)
+	f, err := os.Create(fn)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "create index cache file")
 	}
-	defer runutil.CloseWithLogOnErr(c.logger, w, "index writer")
-
-	err = w.AddSymbols(symbols)
-	if err != nil {
-		return err
-	}
-
-	// Add empty series refs (no metadata)
-	seriesRef := uint64(2) // XXX: where does it start?
-	for {
-		lbls := labels.Labels{}
-		chnks := []chunks.Meta{}
-		err = indexr.Series(seriesRef, &lbls, &chnks)
-		if err != nil {
-			break
-		}
-		err = w.AddSeries(seriesRef, lbls)
-		if err != nil {
-			return errors.Wrap(err, "add series")
-		}
-		seriesRef++
-	}
+	defer runutil.CloseWithLogOnErr(c.logger, f, "index cache writer")
 
 	// Extract label value indices.
 	lnames, err := indexr.LabelNames()
 	if err != nil {
 		return errors.Wrap(err, "read label indices")
 	}
-	for _, ln := range lnames {
+	labelValues := map[string]*Values{}
+	for _, lns := range lnames {
+		if len(lns) != 1 {
+			continue
+		}
+		ln := string(lns[0])
+
 		tpls, err := indexr.LabelValues(ln)
 		if err != nil {
 			return errors.Wrap(err, "get label values")
 		}
-
-		vals := make([]string, 0, tpls.Len())
+		vals := Values{}
 
 		for i := 0; i < tpls.Len(); i++ {
 			v, err := tpls.At(i)
@@ -89,13 +74,10 @@ func (c *BinaryCache) WriteIndexCache(indexFn string, fn string) error {
 			if len(v) != 1 {
 				return errors.Errorf("unexpected tuple length %d", len(v))
 			}
-			vals = append(vals, v[0])
+			vals.Val = append(vals.Val, v[0])
 		}
 
-		err = w.WriteLabelIndex([]string{ln}, vals)
-		if err != nil {
-			return errors.Wrap(err, "write label indices")
-		}
+		labelValues[ln] = &vals
 	}
 
 	// Extract postings ranges.
@@ -103,16 +85,34 @@ func (c *BinaryCache) WriteIndexCache(indexFn string, fn string) error {
 	if err != nil {
 		return errors.Wrap(err, "read postings ranges")
 	}
+	postings := []*PostingsRange{}
+	for l, rng := range pranges {
+		postings = append(postings, &PostingsRange{
+			Name:  l.Name,
+			Value: l.Value,
+			Start: rng.Start,
+			End:   rng.End,
+		})
+	}
 
-	for l := range pranges {
-		p, err := indexr.Postings(l.Name, l.Value)
-		if err != nil {
-			return errors.Wrap(err, "postings")
-		}
-		err = w.WritePostings(l.Name, l.Value, p)
-		if err != nil {
-			return errors.Wrap(err, "postings write")
-		}
+	indexCache := Cache{
+		Version:     int32(indexr.Version()),
+		Symbols:     symbols,
+		Labelvalues: labelValues,
+		Postings:    postings,
+	}
+
+	snappyWriter := snappy.NewBufferedWriter(f)
+	defer runutil.CloseWithLogOnErr(c.logger, f, "snappy index cache writer")
+	snappyBuffer, err := indexCache.Marshal()
+	if err != nil {
+		return errors.Wrap(err, "index cache marshal")
+	}
+	if _, err := snappyWriter.Write(snappyBuffer); err != nil {
+		return errors.Wrap(err, "snappy writer write index cache")
+	}
+	if err := snappyWriter.Flush(); err != nil {
+		return errors.Wrap(err, "snappy writer flush")
 	}
 
 	return nil
@@ -124,58 +124,51 @@ func (c *BinaryCache) ReadIndexCache(fn string) (version int,
 	lvals map[string][]string,
 	postings map[labels.Label]index.Range,
 	err error) {
-	indexFile, err := ioutil.ReadFile(fn)
+	indexFile, err := os.Open(fn)
 	if err != nil {
 		return 0, nil, nil, nil, errors.Wrapf(err, "open index file %s", fn)
 	}
-	b := realByteSlice(indexFile)
-	indexr, err := index.NewReader(b)
+	defer runutil.CloseWithLogOnErr(c.logger, indexFile, "index cache reader")
+	snappyReader := snappy.NewReader(indexFile)
+	indexContent, err := ioutil.ReadAll(snappyReader)
 	if err != nil {
-		return 0, nil, nil, nil, errors.Wrap(err, "open index reader")
+		return 0, nil, nil, nil, errors.Wrap(err, "snappy read all index cache")
 	}
-	defer runutil.CloseWithLogOnErr(c.logger, indexr, "load index cache reader")
-	version = indexr.Version()
-
-	// We assume reader verified index already.
-	symbols, err = getSymbolTableJSON(b)
-	if err != nil {
-		return 0, nil, nil, nil, errors.Wrap(err, "read symbol table")
+	bCache := &Cache{}
+	if err = bCache.Unmarshal(indexContent); err != nil {
+		return 0, nil, nil, nil, errors.Wrap(err, "unmarshal index content")
 	}
 
-	// Extract label value indices.
-	lnames, err := indexr.LabelNames()
-	if err != nil {
-		return 0, nil, nil, nil, errors.Wrap(err, "read label indices")
-	}
+	strs := map[string]string{}
+	lvals = make(map[string][]string, len(bCache.Labelvalues))
+	postings = make(map[labels.Label]index.Range, len(bCache.Postings))
 
-	lvals = make(map[string][]string)
-
-	for _, ln := range lnames {
-		tpls, err := indexr.LabelValues(ln)
-		if err != nil {
-			return 0, nil, nil, nil, errors.Wrap(err, "get label values")
+	// Most strings we encounter are duplicates. Dedup string objects that we keep
+	// around after the function returns to reduce total memory usage.
+	// NOTE(fabxc): it could even make sense to deduplicate globally.
+	getStr := func(s string) string {
+		if cs, ok := strs[s]; ok {
+			return cs
 		}
-		vals := make([]string, 0, tpls.Len())
+		strs[s] = s
+		return s
+	}
 
-		for i := 0; i < tpls.Len(); i++ {
-			v, err := tpls.At(i)
-			if err != nil {
-				return 0, nil, nil, nil, errors.Wrap(err, "get label value")
-			}
-			if len(v) != 1 {
-				return 0, nil, nil, nil, errors.Errorf("unexpected tuple length %d", len(v))
-			}
-			vals = append(vals, v[0])
+	for o, s := range bCache.Symbols {
+		bCache.Symbols[o] = getStr(s)
+	}
+	for ln, vals := range bCache.Labelvalues {
+		for i := range vals.Val {
+			vals.Val[i] = getStr(vals.Val[i])
 		}
-
-		lvals[ln] = vals
+		lvals[getStr(ln)] = vals.Val
 	}
-
-	// Extract postings ranges.
-	postings, err = indexr.PostingsRanges()
-	if err != nil {
-		return 0, nil, nil, nil, errors.Wrap(err, "read postings ranges")
+	for _, e := range bCache.Postings {
+		l := labels.Label{
+			Name:  getStr(e.Name),
+			Value: getStr(e.Value),
+		}
+		postings[l] = index.Range{Start: e.Start, End: e.End}
 	}
-
-	return version, symbols, lvals, postings, nil
+	return int(bCache.Version), bCache.Symbols, lvals, postings, nil
 }

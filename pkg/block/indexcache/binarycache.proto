@@ -1,0 +1,29 @@
+syntax = "proto3";
+package thanos;
+
+import "gogoproto/gogo.proto";
+
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
+
+option go_package = "indexcache";
+
+message Values {
+    repeated string val = 1;
+}
+
+message PostingsRange {
+    string name = 1;
+    string value = 2;
+    int64 start = 3;
+    int64 end = 4;
+}
+
+message Cache {
+    int32 version = 1;
+    map<uint32, string> symbols = 2;
+    map<string, Values> labelvalues = 3;
+    repeated PostingsRange postings = 4;
+}

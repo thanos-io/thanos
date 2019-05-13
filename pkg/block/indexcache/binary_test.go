@@ -34,9 +34,9 @@ func TestWriteReadBinaryCache(t *testing.T) {
 	version, symbols, lvals, postings, err := bCache.ReadIndexCache(fn)
 	testutil.Ok(t, err)
 
-	testutil.Equals(t, 2, version)
 	testutil.Equals(t, 6, len(symbols))
 	testutil.Equals(t, 2, len(lvals))
+	testutil.Equals(t, 2, version)
 
 	vals, ok := lvals["a"]
 	testutil.Assert(t, ok, "")
