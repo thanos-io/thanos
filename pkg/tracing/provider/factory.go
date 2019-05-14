@@ -6,17 +6,19 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/tracing"
-	"github.com/improbable-eng/thanos/pkg/tracing/provider/gcloud"
 	"github.com/improbable-eng/thanos/pkg/tracing/provider/jaeger"
 	"github.com/improbable-eng/thanos/pkg/tracing/provider/noop"
+	"github.com/improbable-eng/thanos/pkg/tracing/provider/stackdriver"
 	"github.com/opentracing/opentracing-go"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 const (
-	jaegerTraceType = "jaeger"
-	gcloudTraceType = "gcloud"
-	noopTraceType     = "noop"
+	jaegerTraceType      = "jaeger"
+	stackdriverTraceType = "stackdriver"
+	noopTraceType        = "noop"
+
+	envVarTraceType = "THANOS_TRACE_TYPE"
 )
 
 // Factory - tracer factory.
@@ -27,14 +29,13 @@ type Factory struct {
 
 // NewFactory return new tracer factory.
 func NewFactory() *Factory {
-	f := &Factory{}
-	f.factories = make(map[string]tracing.Factory)
-
-	f.factories[jaegerTraceType] = jaeger.NewFactory()
-	f.factories[gcloudTraceType] = gcloud.NewFactory()
-	f.factories[noopTraceType] = noop.NewFactory()
-
-	return f
+	return &Factory{
+		factories: map[string]tracing.Factory{
+			jaegerTraceType:      jaeger.NewFactory(),
+			stackdriverTraceType: stackdriver.NewFactory(),
+			noopTraceType:        noop.NewFactory(),
+		},
+	}
 }
 
 // Create implement factoty.Factory
@@ -43,7 +44,7 @@ func (f *Factory) Create(ctx context.Context, logger log.Logger, serviceName str
 }
 
 func (f *Factory) RegisterKingpinFlags(app *kingpin.Application) {
-	f.tracingType = app.Flag("tracing.type", "gcloud/jaeger.").Default("noop").String()
+	f.tracingType = app.Flag("tracing.type", "gcloud/jaeger.").Default(noopTraceType).Envar(envVarTraceType).String()
 	for _, t := range f.factories {
 		t.RegisterKingpinFlags(app)
 	}
