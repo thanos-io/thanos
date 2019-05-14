@@ -13,7 +13,7 @@ import (
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/chunks"
 	"github.com/prometheus/tsdb/fileutil"
-	tsdb_errors "github.com/prometheus/tsdb/errors"
+	tsdberrors "github.com/prometheus/tsdb/errors"
 	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
 )
@@ -84,7 +84,7 @@ func NewStreamedBlockWriter(
 	// We should close any opened Closer up to an error.
 	defer func() {
 		if err != nil {
-			var merr tsdb_errors.MultiError
+			var merr tsdberrors.MultiError
 			merr.Add(err)
 			for _, cl := range closers {
 				merr.Add(cl.Close())
@@ -170,7 +170,7 @@ func (w *streamedBlockWriter) Close() error {
 	}
 	w.finalized = true
 
-	merr := tsdb_errors.MultiError{}
+	merr := tsdberrors.MultiError{}
 
 	if w.ignoreFinalize {
 		// Close open file descriptors anyway.
