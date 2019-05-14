@@ -15,7 +15,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore/swift"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
 )
 
 type ObjProvider string
