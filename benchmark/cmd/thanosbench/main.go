@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/common/version"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/alecthomas/kingpin.v2"
 	"k8s.io/client-go/tools/clientcmd"
 )
 

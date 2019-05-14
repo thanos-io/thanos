@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"syscall"
+	"io"
 
 	gmetrics "github.com/armon/go-metrics"
 
@@ -142,9 +143,10 @@ func main() {
 	{
 		ctx := context.Background()
 
-		var closeFn func() error
+		//var closeFn func() error
+		var closer io.Closer
 
-		tracer, closeFn = tracingFactory.Create(ctx, logger, *debugName)
+		tracer, closer = tracingFactory.Create(ctx, logger, *debugName)
 
 		// This is bad, but Prometheus does not support any other tracer injections than just global one.
 		// TODO(bplotka): Work with basictracer to handle gracefully tracker mismatches, and also with Prometheus to allow
@@ -156,7 +158,7 @@ func main() {
 			<-ctx.Done()
 			return ctx.Err()
 		}, func(error) {
-			if err := closeFn(); err != nil {
+			if err := closer.Close(); err != nil {
 				level.Warn(logger).Log("msg", "closing tracer failed", "err", err)
 			}
 			cancel()

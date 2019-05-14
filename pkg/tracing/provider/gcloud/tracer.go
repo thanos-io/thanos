@@ -2,30 +2,30 @@ package gcloud
 
 import (
 	"context"
-	"github.com/improbable-eng/thanos/pkg/tracing"
-	"github.com/prometheus/common/version"
+	"fmt"
+	"io"
 	"os"
 
-	"fmt"
-
 	"cloud.google.com/go/trace/apiv1"
+	"github.com/lovoo/gcloud-opentracing"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/lovoo/gcloud-opentracing"
+	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/opentracing/basictracer-go"
 	"github.com/opentracing/opentracing-go"
+	"github.com/prometheus/common/version"
 )
 
 type tracer struct {
-	debugName string
+	serviceName string
 	wrapped   opentracing.Tracer
 }
 
 func (t *tracer) StartSpan(operationName string, opts ...opentracing.StartSpanOption) opentracing.Span {
 	span := t.wrapped.StartSpan(operationName, opts...)
 
-	if t.debugName != "" {
-		span.SetTag("service_name", t.debugName)
+	if t.serviceName != "" {
+		span.SetTag("service_name", t.serviceName)
 	}
 
 	// Set common tags.
@@ -64,7 +64,6 @@ func (r *forceRecorder) RecordSpan(sp basictracer.RawSpan) {
 	r.wrapped.RecordSpan(sp)
 }
 
-
 type gcloudRecorderLogger struct {
 	logger log.Logger
 }
@@ -77,24 +76,7 @@ func (l *gcloudRecorderLogger) Errorf(format string, args ...interface{}) {
 	level.Error(l.logger).Log("msg", fmt.Sprintf(format, args...))
 }
 
-// NewOptionalGCloudTracer returns GoogleCloudTracer Tracer. In case of error it log warning and returns noop tracer.
-func NewOptionalGCloudTracer(ctx context.Context, logger log.Logger, gcloudTraceProjectID string, sampleFactor uint64, debugName string) (opentracing.Tracer, func() error) {
-	if gcloudTraceProjectID == "" {
-		level.Warn(logger).Log("msg", "gcloudtrace.project is empty. Google Cloud Tracer. Tracing will be disabled")
-		return &opentracing.NoopTracer{}, func() error { return nil }
-	}
-
-	tracer, closeFn, err := newGCloudTracer(ctx, logger, gcloudTraceProjectID, sampleFactor, debugName)
-	if err != nil {
-		level.Warn(logger).Log("msg", "failed to init Google Cloud Tracer. Tracing will be disabled", "err", err)
-		return &opentracing.NoopTracer{}, func() error { return nil }
-	}
-
-	level.Info(logger).Log("msg", "initiated Google Cloud Tracer. Tracing will be enabled", "err", err)
-	return tracer, closeFn
-}
-
-func newGCloudTracer(ctx context.Context, logger log.Logger, gcloudTraceProjectID string, sampleFactor uint64, debugName string) (opentracing.Tracer, func() error, error) {
+func newGCloudTracer(ctx context.Context, logger log.Logger, gcloudTraceProjectID string, sampleFactor uint64, serviceName string) (opentracing.Tracer, io.Closer, error) {
 	traceClient, err := trace.NewClient(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -106,7 +88,7 @@ func newGCloudTracer(ctx context.Context, logger log.Logger, gcloudTraceProjectI
 		traceClient,
 		gcloudtracer.WithLogger(&gcloudRecorderLogger{logger: logger}))
 	if err != nil {
-		return nil, traceClient.Close, err
+		return nil, traceClient, err
 	}
 
 	shouldSample := func(traceID uint64) bool {
@@ -120,11 +102,11 @@ func newGCloudTracer(ctx context.Context, logger log.Logger, gcloudTraceProjectI
 		}
 	}
 	return &tracer{
-		debugName: debugName,
+		serviceName: serviceName,
 		wrapped: basictracer.NewWithOptions(basictracer.Options{
 			ShouldSample:   shouldSample,
 			Recorder:       &forceRecorder{wrapped: r},
 			MaxLogsPerSpan: 100,
 		}),
-	}, r.Close, nil
+	}, r, nil
 }

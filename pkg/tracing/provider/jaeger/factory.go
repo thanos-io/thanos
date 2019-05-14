@@ -2,9 +2,12 @@ package jaeger
 
 import (
 	"context"
+	"io"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/tracing"
+	"github.com/improbable-eng/thanos/pkg/tracing/provider/noop"
 	"github.com/opentracing/opentracing-go"
 	"github.com/uber/jaeger-client-go"
 	"github.com/uber/jaeger-client-go/config"
@@ -19,14 +22,19 @@ func NewFactory() *Factory {
 	return &Factory{}
 }
 
-func (f *Factory) Create(ctx context.Context, logger log.Logger, debugName string) (opentracing.Tracer, func() error) {
+func (f *Factory) Create(ctx context.Context, logger log.Logger, serviceName string) (opentracing.Tracer, io.Closer) {
 	cfg, err := config.FromEnv()
+	if err != nil {
+		level.Warn(logger).Log("msg", "failed to init Jaeger Tracer from Environment variables. Tracing will be disabled", "err", err)
+		t := &noop.Tracer{}
+		return t, t
+	}
 	cfg.Headers = &jaeger.HeadersConfig{
 		JaegerDebugHeader: tracing.ForceTracingBaggageKey,
 	}
 	cfg.Headers.ApplyDefaults()
-	if debugName != "" {
-		cfg.ServiceName = debugName
+	if serviceName != "" {
+		cfg.ServiceName = serviceName
 	}
 
 	jLogger := &jaegerLogger{
@@ -39,10 +47,11 @@ func (f *Factory) Create(ctx context.Context, logger log.Logger, debugName strin
 	)
 	if err != nil {
 		level.Warn(logger).Log("msg", "failed to init Jaeger Tracer. Tracing will be disabled", "err", err)
-		return &opentracing.NoopTracer{}, func() error { return nil }
+		t := &noop.Tracer{}
+		return t, t
 	}
 	level.Info(logger).Log("msg", "initiated Jaeger Tracer. Tracing will be enabled", "err", err)
-	return tracer, closer.Close
+	return tracer, closer
 }
 
 func (f *Factory) RegisterKingpinFlags(app *kingpin.Application) {

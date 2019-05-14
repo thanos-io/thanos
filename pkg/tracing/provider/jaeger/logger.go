@@ -2,11 +2,12 @@ package jaeger
 
 import (
 	"fmt"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 )
 
-type jaegerLogger struct{
+type jaegerLogger struct {
 	logger log.Logger
 }
 
