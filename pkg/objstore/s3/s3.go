@@ -37,7 +37,7 @@ const DirDelim = "/"
 type Config struct {
 	Bucket          string            `yaml:"bucket"`
 	Endpoint        string            `yaml:"endpoint"`
-	Region        	string            `yaml:"region"`
+	Region          string            `yaml:"region"`
 	AccessKey       string            `yaml:"access_key"`
 	Insecure        bool              `yaml:"insecure"`
 	SignatureV2     bool              `yaml:"signature_version2"`
