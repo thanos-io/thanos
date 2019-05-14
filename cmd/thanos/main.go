@@ -143,9 +143,7 @@ func main() {
 	{
 		ctx := context.Background()
 
-		//var closeFn func() error
 		var closer io.Closer
-
 		tracer, closer = tracingFactory.Create(ctx, logger, *debugName)
 
 		// This is bad, but Prometheus does not support any other tracer injections than just global one.
