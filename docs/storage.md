@@ -49,12 +49,12 @@ type: S3
 config:
   bucket: ""
   endpoint: ""
-  access_key: ""
-  secret_key: ""
   region: ""
+  access_key: ""
   insecure: false
   signature_version2: false
   encrypt_sse: false
+  secret_key: ""
   put_user_metadata: {}
   http_config:
     idle_conn_timeout: 0s
