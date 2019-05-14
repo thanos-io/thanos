@@ -190,6 +190,48 @@ func (c *IndexCache) onEvict(key, val interface{}) {
 	c.curSize -= entrySize
 }
 
+func (c *IndexCache) get(typ string, key cacheKey) ([]byte, bool) {
+	c.requests.WithLabelValues(typ).Inc()
+
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	v, ok := c.lru.Get(key)
+	if !ok {
+		return nil, false
+	}
+	c.hits.WithLabelValues(typ).Inc()
+	return v.([]byte), true
+}
+
+func (c *IndexCache) set(typ string, key cacheKey, val []byte) {
+	var size = sliceHeaderSize + uint64(len(val))
+
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	if _, ok := c.lru.Get(key); ok {
+		return
+	}
+
+	if !c.ensureFits(size, typ) {
+		c.overflow.WithLabelValues(typ).Inc()
+		return
+	}
+
+	// The caller may be passing in a sub-slice of a huge array. Copy the data
+	// to ensure we don't waste huge amounts of space for something small.
+	v := make([]byte, len(val))
+	copy(v, val)
+	c.lru.Add(key, v)
+
+	c.added.WithLabelValues(typ).Inc()
+	c.currentSize.WithLabelValues(typ).Add(float64(size))
+	c.totalCurrentSize.WithLabelValues(typ).Add(float64(size + key.size()))
+	c.current.WithLabelValues(typ).Inc()
+	c.curSize += size
+}
+
 // ensureFits tries to make sure that the passed slice will fit into the LRU cache.
 // Returns true if it will fit.
 func (c *IndexCache) ensureFits(size uint64, typ string) bool {
@@ -237,86 +279,22 @@ func (c *IndexCache) ensureFits(size uint64, typ string) bool {
 	return true
 }
 
+// SetPostings sets the postings identfied by the ulid and label to the value v,
+// if the postings already exists in the cache it is not mutated.
 func (c *IndexCache) SetPostings(b ulid.ULID, l labels.Label, v []byte) {
-	var (
-		entrySize = sliceHeaderSize + uint64(len(v))
-		cacheType = cacheTypePostings
-	)
-
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
-
-	if !c.ensureFits(entrySize, cacheType) {
-		c.overflow.WithLabelValues(cacheType).Inc()
-		return
-	}
-
-	// The caller may be passing in a sub-slice of a huge array. Copy the data
-	// to ensure we don't waste huge amounts of space for something small.
-	cv := make([]byte, len(v))
-	copy(cv, v)
-	key := cacheKey{b, cacheKeyPostings(l)}
-	c.lru.Add(key, cv)
-
-	c.added.WithLabelValues(cacheType).Inc()
-	c.currentSize.WithLabelValues(cacheType).Add(float64(entrySize))
-	c.totalCurrentSize.WithLabelValues(cacheType).Add(float64(entrySize + key.size()))
-	c.current.WithLabelValues(cacheType).Inc()
-	c.curSize += entrySize
+	c.set(cacheTypePostings, cacheKey{b, cacheKeyPostings(l)}, v)
 }
 
 func (c *IndexCache) Postings(b ulid.ULID, l labels.Label) ([]byte, bool) {
-	c.requests.WithLabelValues(cacheTypePostings).Inc()
-
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
-
-	v, ok := c.lru.Get(cacheKey{b, cacheKeyPostings(l)})
-	if !ok {
-		return nil, false
-	}
-	c.hits.WithLabelValues(cacheTypePostings).Inc()
-	return v.([]byte), true
+	return c.get(cacheTypePostings, cacheKey{b, cacheKeyPostings(l)})
 }
 
+// SetSeries sets the series identfied by the ulid and id to the value v,
+// if the series already exists in the cache it is not mutated.
 func (c *IndexCache) SetSeries(b ulid.ULID, id uint64, v []byte) {
-	var (
-		entrySize = 16 + uint64(len(v)) // Slice header + bytes.
-		cacheType = cacheTypeSeries
-	)
-
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
-
-	if !c.ensureFits(entrySize, cacheType) {
-		c.overflow.WithLabelValues(cacheType).Inc()
-		return
-	}
-
-	// The caller may be passing in a sub-slice of a huge array. Copy the data
-	// to ensure we don't waste huge amounts of space for something small.
-	cv := make([]byte, len(v))
-	copy(cv, v)
-	key := cacheKey{b, cacheKeySeries(id)}
-	c.lru.Add(key, cv)
-
-	c.added.WithLabelValues(cacheType).Inc()
-	c.currentSize.WithLabelValues(cacheType).Add(float64(entrySize))
-	c.totalCurrentSize.WithLabelValues(cacheType).Add(float64(entrySize + key.size()))
-	c.current.WithLabelValues(cacheType).Inc()
-	c.curSize += entrySize
+	c.set(cacheTypeSeries, cacheKey{b, cacheKeySeries(id)}, v)
 }
 
 func (c *IndexCache) Series(b ulid.ULID, id uint64) ([]byte, bool) {
-	c.requests.WithLabelValues(cacheTypeSeries).Inc()
-
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
-
-	v, ok := c.lru.Get(cacheKey{b, cacheKeySeries(id)})
-	if !ok {
-		return nil, false
-	}
-	c.hits.WithLabelValues(cacheTypeSeries).Inc()
-	return v.([]byte), true
+	return c.get(cacheTypeSeries, cacheKey{b, cacheKeySeries(id)})
 }
