@@ -14,11 +14,11 @@ import (
 )
 
 const (
-	jaegerTraceType      = "jaeger"
-	stackdriverTraceType = "stackdriver"
-	noopTraceType        = "noop"
+	jaegerTracerType      = "jaeger"
+	stackdriverTracerType = "stackdriver"
+	noopTracerType        = "noop"
 
-	envVarTraceType = "THANOS_TRACE_TYPE"
+	envVarTracerType = "THANOS_TRACER_TYPE"
 )
 
 // Factory - tracer factory.
@@ -31,9 +31,9 @@ type Factory struct {
 func NewFactory() *Factory {
 	return &Factory{
 		factories: map[string]tracing.Factory{
-			jaegerTraceType:      jaeger.NewFactory(),
-			stackdriverTraceType: stackdriver.NewFactory(),
-			noopTraceType:        noop.NewFactory(),
+			jaegerTracerType:      jaeger.NewFactory(),
+			stackdriverTracerType: stackdriver.NewFactory(),
+			noopTracerType:        noop.NewFactory(),
 		},
 	}
 }
@@ -44,7 +44,7 @@ func (f *Factory) Create(ctx context.Context, logger log.Logger, serviceName str
 }
 
 func (f *Factory) RegisterKingpinFlags(app *kingpin.Application) {
-	f.tracingType = app.Flag("tracing.type", "gcloud/jaeger.").Default(noopTraceType).Envar(envVarTraceType).String()
+	f.tracingType = app.Flag("tracing.type", "gcloud/jaeger.").Default(noopTracerType).Envar(envVarTracerType).String()
 	for _, t := range f.factories {
 		t.RegisterKingpinFlags(app)
 	}
