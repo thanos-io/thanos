@@ -16,6 +16,73 @@ import (
 	"github.com/prometheus/tsdb/labels"
 )
 
+func TestBucketBlockSet_Interleaved(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	set := newBucketBlockSet(labels.Labels{})
+
+	type resBlock struct {
+		mint, maxt int64
+		window     int64
+	}
+	input := []resBlock{
+		{window: downsample.ResLevel2, mint: 0, maxt: 50},
+		{window: downsample.ResLevel1, mint: 50, maxt: 100},
+		{window: downsample.ResLevel2, mint: 100, maxt: 200},
+		{window: downsample.ResLevel1, mint: 200, maxt: 300},
+		{window: downsample.ResLevel1, mint: 300, maxt: 400},
+		{window: downsample.ResLevel1, mint: 400, maxt: 500},
+		{window: downsample.ResLevel0, mint: 500, maxt: 600},
+		{window: downsample.ResLevel0, mint: 600, maxt: 700},
+	}
+
+	for _, in := range input {
+		var m metadata.Meta
+		m.Thanos.Downsample.Resolution = in.window
+		m.MinTime = in.mint
+		m.MaxTime = in.maxt
+
+		testutil.Ok(t, set.add(&bucketBlock{meta: &m}))
+	}
+
+	cases := []struct {
+		mint, maxt    int64
+		minResolution int64
+		res           []resBlock
+	}{
+		{
+			mint:          0,
+			maxt:          700,
+			minResolution: downsample.ResLevel2,
+			res: []resBlock{
+				{window: downsample.ResLevel2, mint: 0, maxt: 50},
+				{window: downsample.ResLevel1, mint: 50, maxt: 100},
+				{window: downsample.ResLevel2, mint: 100, maxt: 200},
+				{window: downsample.ResLevel1, mint: 200, maxt: 300},
+				{window: downsample.ResLevel1, mint: 300, maxt: 400},
+				{window: downsample.ResLevel1, mint: 400, maxt: 500},
+				{window: downsample.ResLevel0, mint: 500, maxt: 600},
+				{window: downsample.ResLevel0, mint: 600, maxt: 700},
+			},
+		},
+	}
+
+	for i, c := range cases {
+		t.Logf("case %d", i)
+
+		var exp []*bucketBlock
+		for _, b := range c.res {
+			var m metadata.Meta
+			m.Thanos.Downsample.Resolution = b.window
+			m.MinTime = b.mint
+			m.MaxTime = b.maxt
+			exp = append(exp, &bucketBlock{meta: &m})
+		}
+		res := set.getFor(c.mint, c.maxt, c.minResolution)
+		testutil.Equals(t, exp, res)
+	}
+}
+
 func TestBucketBlockSet_addGet(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
