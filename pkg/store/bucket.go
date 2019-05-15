@@ -1022,6 +1022,8 @@ func (s *bucketBlockSet) getFor(mint, maxt, minResolution int64) (bs []*bucketBl
 	}
 	// Our current resolution might not cover all data, recursively fill the gaps at the start
 	// and end of [mint, maxt] with higher resolution blocks.
+	//
+	// Plus, fill the possible gaps between the current blocks with higher resolution blocks.
 	i++
 	// No higher resolution left, we are done.
 	if i >= len(s.resolutions) {
@@ -1030,10 +1032,26 @@ func (s *bucketBlockSet) getFor(mint, maxt, minResolution int64) (bs []*bucketBl
 	if len(bs) == 0 {
 		return s.getFor(mint, maxt, s.resolutions[i])
 	}
+	middle := []*bucketBlock{}
+	for bsi := 0; bsi < len(bs)-1; bsi++ {
+		if bs[bsi+1].meta.MinTime-bs[bsi].meta.MaxTime > 0 {
+			middle = append(middle, s.getFor(bs[bsi].meta.MaxTime, bs[bsi+1].meta.MinTime, s.resolutions[i])...)
+		}
+	}
+
 	left := s.getFor(mint, bs[0].meta.MinTime, s.resolutions[i])
 	right := s.getFor(bs[len(bs)-1].meta.MaxTime, maxt, s.resolutions[i])
 
-	return append(left, append(bs, right...)...)
+	result := append(middle, append(left, append(bs, right...)...)...)
+
+	// Sort the result just one more time since it might be out of order.
+	sort.Slice(result, func(j, k int) bool {
+		if result[j].meta.MinTime < result[k].meta.MinTime {
+			return true
+		}
+		return false
+	})
+	return result
 }
 
 // labelMatchers verifies whether the block set matches the given matchers and returns a new
