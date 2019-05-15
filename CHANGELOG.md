@@ -25,6 +25,10 @@ We use *breaking* word for marking changes that are not backward compatible (rel
   * rule:
     - [ENHANCEMENT] Improve rule views by wrapping lines [PR #4702](https://github.com/prometheus/prometheus/pull/4702)
     - [ENHANCEMENT] Show rule evaluation errors on rules page [PR #4457](https://github.com/prometheus/prometheus/pull/4457)
+    
+### Fixed
+
+- [#1144](https://github.com/improbable-eng/thanos/pull/1144) Query/API: properly pass the downsampling parameter. Before this, wrong max resolution of the metrics data might have been selected.
 
 ## [v0.4.0](https://github.com/improbable-eng/thanos/releases/tag/v0.4.0) - 2019.05.3
 

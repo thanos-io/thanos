@@ -1,5 +1,6 @@
 PREFIX            ?= $(shell pwd)
-DIRECTORIES       ?= $(shell find . -path './*' -prune -type d -not -path "./vendor")
+FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print)
+
 DOCKER_IMAGE_NAME ?= thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
 
@@ -18,7 +19,7 @@ ERRCHECK_VERSION  ?= e14f8d59a22d460d56c5ee92507cd94c78fbf274
 LICHE             ?= $(GOBIN)/liche-$(LICHE_VERSION)
 LICHE_VERSION     ?= 2a2e6e56f6c615c17b2e116669c4cdb31b5453f3
 GOIMPORTS         ?= $(GOBIN)/goimports-$(GOIMPORTS_VERSION)
-GOIMPORTS_VERSION ?= 1c3d964395ce8f04f3b03b30aaed0b096c08c3c6
+GOIMPORTS_VERSION ?= 9d4d845e86f14303813298ede731a971dd65b593
 PROMU             ?= $(GOBIN)/promu-$(PROMU_VERSION)
 # v0.2.0
 PROMU_VERSION     ?= 264dc36af9ea3103255063497636bd5713e3e9c1
@@ -113,6 +114,11 @@ crossbuild: $(PROMU)
 	@echo ">> crossbuilding all binaries"
 	$(PROMU) crossbuild -v
 
+# deps ensures fresh go.mod and go.sum.
+.PHONY: deps
+deps:
+	@go mod tidy
+
 # docker builds docker with no tag.
 .PHONY: docker
 docker: build
@@ -156,7 +162,7 @@ errcheck: $(ERRCHECK)
 .PHONY: format
 format: $(GOIMPORTS)
 	@echo ">> formatting code"
-	@$(GOIMPORTS) -w $(DIRECTORIES)
+	@$(GOIMPORTS) -w $(FILES_TO_FMT)
 
 # proto generates golang files from Thanos proto files.
 .PHONY: proto

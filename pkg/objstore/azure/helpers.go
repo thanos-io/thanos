@@ -27,7 +27,7 @@ func getContainerURL(ctx context.Context, conf Config) (blob.ContainerURL, error
 	}
 
 	p := blob.NewPipeline(c, blob.PipelineOptions{
-		Retry: retryOptions,
+		Retry:     retryOptions,
 		Telemetry: blob.TelemetryOptions{Value: "Thanos"},
 	})
 	u, err := url.Parse(fmt.Sprintf("https://%s.%s", conf.StorageAccountName, conf.Endpoint))

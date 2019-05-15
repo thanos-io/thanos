@@ -14,7 +14,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/mozillazg/go-cos"
+	cos "github.com/mozillazg/go-cos"
 	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
 )

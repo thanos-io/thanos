@@ -3,13 +3,13 @@ package compact
 import (
 	"bytes"
 	"context"
-	"github.com/improbable-eng/thanos/pkg/objstore/inmem"
-	"github.com/oklog/ulid"
 	"path"
 	"testing"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/objstore/inmem"
 	"github.com/improbable-eng/thanos/pkg/testutil"
+	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 )
 
@@ -57,7 +57,7 @@ func TestSyncer_SyncMetas_HandlesMalformedBlocks(t *testing.T) {
 	testutil.Ok(t, err)
 
 	var fakeChunk bytes.Buffer
-	fakeChunk.Write([]byte{0,1,2,3})
+	fakeChunk.Write([]byte{0, 1, 2, 3})
 	testutil.Ok(t, bkt.Upload(ctx, path.Join(shouldDeleteId.String(), "chunks", "000001"), &fakeChunk))
 
 	// Generate 1 block which is older than consistencyDelay but younger than MinimumAgeForRemoval, and which has chunk
