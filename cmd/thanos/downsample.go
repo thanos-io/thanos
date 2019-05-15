@@ -19,12 +19,12 @@ import (
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/chunkenc"
-	"gopkg.in/alecthomas/kingpin.v2"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name string) {

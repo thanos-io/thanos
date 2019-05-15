@@ -9,16 +9,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/prometheus/prometheus/promql"
-
-	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/prometheus/tsdb/labels"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/tsdb"
-	"gopkg.in/alecthomas/kingpin.v2"
+	"github.com/prometheus/tsdb/labels"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 // Allow for more realistic output.

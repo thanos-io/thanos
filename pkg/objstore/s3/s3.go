@@ -16,12 +16,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-kit/kit/log/level"
-
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/minio/minio-go"
+	minio "github.com/minio/minio-go"
 	"github.com/minio/minio-go/pkg/credentials"
 	"github.com/minio/minio-go/pkg/encrypt"
 	"github.com/pkg/errors"
@@ -37,7 +36,7 @@ const DirDelim = "/"
 type Config struct {
 	Bucket          string            `yaml:"bucket"`
 	Endpoint        string            `yaml:"endpoint"`
-	Region        	string            `yaml:"region"`
+	Region          string            `yaml:"region"`
 	AccessKey       string            `yaml:"access_key"`
 	Insecure        bool              `yaml:"insecure"`
 	SignatureV2     bool              `yaml:"signature_version2"`
@@ -100,6 +99,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 	}
 	if config.AccessKey != "" {
 		signature := credentials.SignatureV4
+		// TODO(bwplotka): Don't do flags, use actual v2, v4 params.
 		if config.SignatureV2 {
 			signature = credentials.SignatureV2
 		}

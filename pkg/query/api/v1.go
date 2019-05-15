@@ -32,7 +32,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
@@ -222,6 +222,9 @@ func (api *API) parseDownsamplingParam(r *http.Request, step time.Duration) (max
 	if maxSourceResolution < 0 {
 		return 0, &ApiError{errorBadData, errors.Errorf("negative '%s' is not accepted. Try a positive integer", maxSourceResolutionParam)}
 	}
+
+	/// We need this in milliseconds.
+	maxSourceResolution = maxSourceResolution / (1000 * 1000)
 
 	return maxSourceResolution, nil
 }

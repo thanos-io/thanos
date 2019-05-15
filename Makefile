@@ -1,5 +1,6 @@
 PREFIX            ?= $(shell pwd)
-DIRECTORIES       ?= $(shell find . -path './*' -prune -type d -not -path "./vendor")
+FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print)
+
 DOCKER_IMAGE_NAME ?= thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
 
@@ -18,7 +19,7 @@ ERRCHECK_VERSION  ?= e14f8d59a22d460d56c5ee92507cd94c78fbf274
 LICHE             ?= $(GOBIN)/liche-$(LICHE_VERSION)
 LICHE_VERSION     ?= 2a2e6e56f6c615c17b2e116669c4cdb31b5453f3
 GOIMPORTS         ?= $(GOBIN)/goimports-$(GOIMPORTS_VERSION)
-GOIMPORTS_VERSION ?= 1c3d964395ce8f04f3b03b30aaed0b096c08c3c6
+GOIMPORTS_VERSION ?= 9d4d845e86f14303813298ede731a971dd65b593
 PROMU             ?= $(GOBIN)/promu-$(PROMU_VERSION)
 # v0.2.0
 PROMU_VERSION     ?= 264dc36af9ea3103255063497636bd5713e3e9c1
@@ -31,7 +32,6 @@ HUGO              ?= $(GOBIN)/hugo-$(HUGO_VERSION)
 GOBINDATA_VERSION ?= a9c83481b38ebb1c4eb8f0168fd4b10ca1d3c523
 GOBINDATA         ?= $(GOBIN)/go-bindata-$(GOBINDATA_VERSION)
 GIT               ?= $(shell which git)
-BZR               ?= $(shell which bzr)
 
 WEB_DIR           ?= website
 WEBSITE_BASE_URL  ?= https://thanos.io
@@ -104,7 +104,7 @@ assets: $(GOBINDATA)
 
 # build builds Thanos binary using `promu`.
 .PHONY: build
-build: check-git check-bzr go-mod-tidy $(PROMU)
+build: check-git  go-mod-tidy $(PROMU)
 	@echo ">> building binaries $(GOBIN)"
 	@$(PROMU) build --prefix $(PREFIX)
 
@@ -113,6 +113,11 @@ build: check-git check-bzr go-mod-tidy $(PROMU)
 crossbuild: $(PROMU)
 	@echo ">> crossbuilding all binaries"
 	$(PROMU) crossbuild -v
+
+# deps ensures fresh go.mod and go.sum.
+.PHONY: deps
+deps:
+	@go mod tidy
 
 # docker builds docker with no tag.
 .PHONY: docker
@@ -157,11 +162,11 @@ errcheck: $(ERRCHECK)
 .PHONY: format
 format: $(GOIMPORTS)
 	@echo ">> formatting code"
-	@$(GOIMPORTS) -w $(DIRECTORIES)
+	@$(GOIMPORTS) -w $(FILES_TO_FMT)
 
 # proto generates golang files from Thanos proto files.
 .PHONY: proto
-proto: check-git check-bzr $(GOIMPORTS) $(PROTOC)
+proto: check-git  $(GOIMPORTS) $(PROTOC)
 	@go install ./vendor/github.com/gogo/protobuf/protoc-gen-gogofast
 	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" scripts/genproto.sh
 
@@ -183,7 +188,7 @@ tarballs-release: $(PROMU)
 
 # test runs all Thanos golang tests against each supported version of Prometheus.
 .PHONY: test
-test: check-git check-bzr test-deps
+test: check-git test-deps
 	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS='true' or/and THANOS_SKIP_S3_AWS_TESTS='true' or/and THANOS_SKIP_AZURE_TESTS='true' and/or THANOS_SKIP_SWIFT_TESTS='true' and/or THANOS_SKIP_TENCENT_COS_TESTS='true' if you want to skip e2e tests against real store buckets"
 	THANOS_TEST_PROMETHEUS_VERSIONS="$(PROM_VERSIONS)" THANOS_TEST_ALERTMANAGER_PATH="alertmanager-$(ALERTMANAGER_VERSION)" go test $(shell go list ./... | grep -v /vendor/ | grep -v /benchmark/);
 
@@ -198,13 +203,13 @@ test-deps:
 
 # vet vets the code.
 .PHONY: vet
-vet: check-git check-bzr
+vet: check-git
 	@echo ">> vetting code"
 	@go vet ./...
 
 # go mod related
 .PHONY: go-mod-tidy
-go-mod-tidy: check-git check-bzr
+go-mod-tidy: check-git
 	@go mod tidy
 
 .PHONY: check-go-mod
@@ -220,13 +225,6 @@ else
 	@echo >&2 "No git binary found."; exit 1
 endif
 
-.PHONY: check-bzr
-check-bzr:
-ifneq ($(BZR),)
-	@test -x $(BZR) || (echo >&2 "No bzr exectuable binary found at $(BZR)."; exit 1)
-else
-	@echo >&2 "No bzr binary found."; exit 1
-endif
 
 .PHONY: web-pre-process
 web-pre-process:

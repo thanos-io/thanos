@@ -2,10 +2,9 @@ package cluster
 
 import (
 	"net"
-
 	"strconv"
 
-	"github.com/hashicorp/go-sockaddr"
+	sockaddr "github.com/hashicorp/go-sockaddr"
 	"github.com/pkg/errors"
 )
 

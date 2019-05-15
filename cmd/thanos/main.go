@@ -30,7 +30,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/improbable-eng/thanos/pkg/tracing/provider"
 	"github.com/oklog/run"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
