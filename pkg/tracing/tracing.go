@@ -6,6 +6,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 )
 
+// ForceTracingBaggageKey - force sampling header.
 const ForceTracingBaggageKey = "X-Thanos-Force-Tracing"
 
 type contextKey struct{}

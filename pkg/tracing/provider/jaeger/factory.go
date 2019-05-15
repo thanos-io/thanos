@@ -5,9 +5,7 @@ import (
 	"io"
 
 	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/tracing"
-	"github.com/improbable-eng/thanos/pkg/tracing/provider/noop"
 	"github.com/opentracing/opentracing-go"
 	"github.com/uber/jaeger-client-go"
 	"github.com/uber/jaeger-client-go/config"
@@ -15,19 +13,21 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
+// Factory implements tracing.Factory for Jaeger Tracer.
 type Factory struct {
 }
 
+
+// NewFactory creates a new Factory
 func NewFactory() *Factory {
 	return &Factory{}
 }
 
-func (f *Factory) Create(ctx context.Context, logger log.Logger, serviceName string) (opentracing.Tracer, io.Closer) {
+// Create implements tracing.Factory
+func (f *Factory) Create(ctx context.Context, logger log.Logger, serviceName string) (opentracing.Tracer, io.Closer, error) {
 	cfg, err := config.FromEnv()
 	if err != nil {
-		level.Warn(logger).Log("msg", "failed to init Jaeger Tracer from Environment variables. Tracing will be disabled", "err", err)
-		t := &noop.Tracer{}
-		return t, t
+		return nil, nil, err
 	}
 	cfg.Headers = &jaeger.HeadersConfig{
 		JaegerDebugHeader: tracing.ForceTracingBaggageKey,
@@ -46,13 +46,11 @@ func (f *Factory) Create(ctx context.Context, logger log.Logger, serviceName str
 		config.Logger(jLogger),
 	)
 	if err != nil {
-		level.Warn(logger).Log("msg", "failed to init Jaeger Tracer. Tracing will be disabled", "err", err)
-		t := &noop.Tracer{}
-		return t, t
+		return nil, nil, err
 	}
-	level.Info(logger).Log("msg", "initiated Jaeger Tracer. Tracing will be enabled", "err", err)
-	return tracer, closer
+	return tracer, closer, nil
 }
 
+// RegisterKingpinFlags implements tracing.Factory
 func (f *Factory) RegisterKingpinFlags(app *kingpin.Application) {
 }
