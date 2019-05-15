@@ -223,6 +223,9 @@ func (api *API) parseDownsamplingParam(r *http.Request, step time.Duration) (max
 		return 0, &ApiError{errorBadData, errors.Errorf("negative '%s' is not accepted. Try a positive integer", maxSourceResolutionParam)}
 	}
 
+	/// We need this in milliseconds.
+	maxSourceResolution = maxSourceResolution / (1000 * 1000)
+
 	return maxSourceResolution, nil
 }
 
