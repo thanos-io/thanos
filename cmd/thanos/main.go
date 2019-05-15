@@ -67,8 +67,7 @@ func main() {
 	logFormat := app.Flag("log.format", "Log format to use.").
 		Default(logFormatLogfmt).Enum(logFormatLogfmt, logFormatJson)
 
-	tracingFactory := provider.NewFactory()
-	tracingFactory.RegisterKingpinFlags(app)
+	tracingFactory := provider.NewFactory(app)
 
 	cmds := map[string]setupFunc{}
 	registerSidecar(cmds, app, "sidecar")
@@ -144,7 +143,7 @@ func main() {
 		ctx := context.Background()
 
 		var closer io.Closer
-		tracer, closer, _ = tracingFactory.Create(ctx, logger, *debugName)
+		tracer, closer = tracingFactory.Create(ctx, logger, *debugName)
 
 		// This is bad, but Prometheus does not support any other tracer injections than just global one.
 		// TODO(bplotka): Work with basictracer to handle gracefully tracker mismatches, and also with Prometheus to allow

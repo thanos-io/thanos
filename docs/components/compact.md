@@ -42,7 +42,7 @@ Flags:
       --version                Show application version.
       --log.level=info         Log filtering level.
       --log.format=logfmt      Log format to use.
-      --tracing.type=noop        Tracer to use (stackdriver/jaeger/noop).
+      --tracing.type=noop      Tracer to use (stackdriver/jaeger/noop).
       --stackdriver.project=GCLOUDTRACE.PROJECT
                                GCP project to send Google Cloud Trace tracings
                                to. If empty, tracing will be disabled.
