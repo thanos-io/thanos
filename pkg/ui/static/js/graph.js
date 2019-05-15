@@ -1,6 +1,7 @@
 var Prometheus = Prometheus || {};
 var graphTemplate;
 
+var INPUT_DEBOUNCE_WAIT = 500; // ms
 var SECOND = 1000;
 
 Prometheus.Graph = function(element, options, handleChange, handleRemove) {
@@ -59,21 +60,28 @@ Prometheus.Graph.prototype.initialize = function() {
   var graphWrapper = self.el.find("#graph_wrapper" + self.id);
   self.queryForm = graphWrapper.find(".query_form");
 
+  // Auto-resize the text area on input or mouseclick
+  var resizeTextarea = function(el) {
+    var offset = el.offsetHeight - el.clientHeight;
+    $(el).css('height', 'auto').css('height', el.scrollHeight + offset);
+  };
+
   self.expr = graphWrapper.find("textarea[name=expr]");
   self.expr.keypress(function(e) {
-    // Enter was pressed without the shift key.
-    if (e.which == 13 && !e.shiftKey) {
+    const enter = 13;
+    if (e.which == enter && !e.shiftKey) {
       self.queryForm.submit();
       e.preventDefault();
     }
-
-    // Auto-resize the text area on input.
-    var offset = this.offsetHeight - this.clientHeight;
-    var resizeTextarea = function(el) {
-        $(el).css('height', 'auto').css('height', el.scrollHeight + offset);
-    };
-    $(this).on('keyup input', function() { resizeTextarea(this); });
+    $(this).on('keyup input', debounce(function() {
+      resizeTextarea(this);
+    }, INPUT_DEBOUNCE_WAIT));
   });
+
+  self.expr.click(function(e) {
+    resizeTextarea(this);
+  });
+
   self.expr.change(self.handleChange);
 
   self.dedupBtn = self.queryForm.find(".dedup_btn");
@@ -108,7 +116,7 @@ Prometheus.Graph.prototype.initialize = function() {
   })
 
   self.error = graphWrapper.find(".error").hide();
-  self.warnings = graphWrapper.find(".warnings").hide();
+  self.warning = graphWrapper.find(".warning").hide();
   self.graphArea = graphWrapper.find(".graph_area");
   self.graph = self.graphArea.find(".graph");
   self.yAxis = self.graphArea.find(".y_axis");
@@ -136,6 +144,25 @@ Prometheus.Graph.prototype.initialize = function() {
   self.isStacked = function() {
     return self.stacked.val() === '1';
   };
+
+  self.moment = graphWrapper.find("input[name=moment_input]");
+  self.moment.datetimepicker({
+    locale: 'en',
+    format: 'YYYY-MM-DD HH:mm:ss',
+    toolbarPlacement: 'bottom',
+    sideBySide: true,
+    showTodayButton: true,
+    showClear: true,
+    showClose: true,
+    timeZone: 'UTC',
+  });
+  if (self.options.timestamp) {
+    var date = new Date(self.options.timestamp*1000)
+    self.moment.data('DateTimePicker').date(date);
+  } else if (self.options.moment_input) {
+    self.moment.data('DateTimePicker').date(self.options.moment_input);
+  }
+  self.moment.on("dp.change", function() { self.submitQuery(); });
 
   var styleStackBtn = function() {
     var icon = self.stackedBtn.find('.glyphicon');
@@ -207,6 +234,7 @@ Prometheus.Graph.prototype.initialize = function() {
   self.queryForm.submit(function() {
     self.consoleTab.addClass("reload");
     self.graphTab.addClass("reload");
+    self.handleChange();
     self.submitQuery();
     return false;
   });
@@ -217,6 +245,9 @@ Prometheus.Graph.prototype.initialize = function() {
 
   self.queryForm.find("button[name=inc_end]").click(function() { self.increaseEnd(); });
   self.queryForm.find("button[name=dec_end]").click(function() { self.decreaseEnd(); });
+
+  self.queryForm.find("button[name=inc_moment]").click(function() { self.increaseMoment(); });
+  self.queryForm.find("button[name=dec_moment]").click(function() { self.decreaseMoment(); });
 
   self.insertMetric.change(function() {
     self.expr.selection("replace", {text: self.insertMetric.val(), mode: "before"});
@@ -230,6 +261,10 @@ Prometheus.Graph.prototype.initialize = function() {
   });
 
   self.checkTimeDrift();
+  // initialize query history
+  if (!localStorage.getItem("history")) {
+    localStorage.setItem("history", JSON.stringify([]));
+  }
   self.populateInsertableMetrics();
 
   if (self.expr.val()) {
@@ -253,7 +288,7 @@ Prometheus.Graph.prototype.checkTimeDrift = function() {
             var diff = Math.abs(browserTime - serverTime);
 
             if (diff >= 30) {
-              $("#graph_wrapper0").prepend(
+              this.showWarning(
                   "<div class=\"alert alert-warning\"><strong>Warning!</strong> Detected " +
                   diff.toFixed(2) +
                   " seconds time difference between your browser and the server. Prometheus relies on accurate time and time drift might cause unexpected query results.</div>"
@@ -277,9 +312,10 @@ Prometheus.Graph.prototype.populateInsertableMetrics = function() {
           self.showError("Error loading available metrics!");
           return;
         }
-        var metrics = json.data;
-        for (var i = 0; i < metrics.length; i++) {
-          self.insertMetric[0].options.add(new Option(metrics[i], metrics[i]));
+
+        pageConfig.allMetrics = json.data; // todo: do we need self.allMetrics? Or can it just live on the page
+        for (var i = 0; i < pageConfig.allMetrics.length; i++) {
+          self.insertMetric[0].options.add(new Option(pageConfig.allMetrics[i], pageConfig.allMetrics[i]));
         }
 
         self.fuzzyResult = {
@@ -288,47 +324,50 @@ Prometheus.Graph.prototype.populateInsertableMetrics = function() {
           map: {}
         }
 
-        self.expr.typeahead({
-          source: metrics,
-          items: "all",
-          matcher: function(item) {
-            // If we have result for current query, skip
-            if (self.fuzzyResult.query !== this.query) {
-              self.fuzzyResult.query = this.query;
-              self.fuzzyResult.map = {};
-              self.fuzzyResult.result = fuzzy.filter(this.query.replace(/ /g, ''), metrics, {
-                pre: '<strong>',
-                post: '</strong>'
-              });
-              self.fuzzyResult.result.forEach(function(r) {
-                self.fuzzyResult.map[r.original] = r;
-              });
-            }
-
-            return item in self.fuzzyResult.map;
-          },
-
-          sorter: function(items) {
-            items.sort(function(a,b) {
-              var i = self.fuzzyResult.map[b].score - self.fuzzyResult.map[a].score;
-              return i === 0 ? a.localeCompare(b) : i;
-            });
-            return items;
-          },
-
-          highlighter: function (item) {
-            return $('<div>' + self.fuzzyResult.map[item].string + '</div>')
-          },
-        });
-        // This needs to happen after attaching the typeahead plugin, as it
-        // otherwise breaks the typeahead functionality.
-        self.expr.focus();
+        self.initTypeahead(self);
       },
       error: function() {
         self.showError("Error loading available metrics!");
       },
   });
 };
+
+Prometheus.Graph.prototype.initTypeahead = function(self) {
+  const source = queryHistory.isEnabled() ? pageConfig.queryHistMetrics.concat(pageConfig.allMetrics) : pageConfig.allMetrics;
+  self.expr.typeahead({
+    autoSelect: false,
+    source: source,
+    items: 1000,
+    matcher: function (item) {
+      // If we have result for current query, skip
+      if (self.fuzzyResult.query !== this.query) {
+        self.fuzzyResult.query = this.query;
+        self.fuzzyResult.map = {};
+        self.fuzzyResult.result = fuzzy.filter(this.query.replace(/ /g, ""), this.source, {
+          pre: "<strong>",
+          post: "</strong>"
+        });
+        self.fuzzyResult.result.forEach(function(r) {
+          self.fuzzyResult.map[r.original] = r;
+        });
+      }
+
+      return item in self.fuzzyResult.map;
+    },
+
+    sorter: function (items) {
+      items.sort(function(a,b) {
+        var i = self.fuzzyResult.map[b].score - self.fuzzyResult.map[a].score;
+        return i === 0 ? a.localeCompare(b) : i;
+      });
+      return items;
+    }
+  });
+  // This needs to happen after attaching the typeahead plugin, as it
+  // otherwise breaks the typeahead functionality.
+  self.expr.focus();
+  queryHistory.bindHistoryEvents(self);
+}
 
 Prometheus.Graph.prototype.getOptions = function() {
   var self = this;
@@ -339,7 +378,8 @@ Prometheus.Graph.prototype.getOptions = function() {
     "end_input",
     "step_input",
     "downsample_input",
-    "stacked"
+    "stacked",
+    "moment_input"
   ];
 
   self.queryForm.find("input").each(function(index, element) {
@@ -431,10 +471,46 @@ Prometheus.Graph.prototype.decreaseEnd = function() {
   self.submitQuery();
 };
 
+Prometheus.Graph.prototype.getMoment = function() {
+  var self = this;
+  if (!self.moment || !self.moment.val()) {
+    return moment();
+  }
+  return self.moment.data('DateTimePicker').date();
+};
+
+Prometheus.Graph.prototype.getOrSetMoment = function() {
+  var self = this;
+  var date = self.getMoment();
+  self.setMoment(date);
+  return date;
+};
+
+Prometheus.Graph.prototype.setMoment = function(date) {
+  var self = this;
+  self.moment.data('DateTimePicker').date(date);
+};
+
+Prometheus.Graph.prototype.increaseMoment = function() {
+  var self = this;
+  var newDate = moment(self.getOrSetMoment());
+  newDate.add(10, 'seconds');
+  self.setMoment(newDate);
+  self.submitQuery();
+};
+
+Prometheus.Graph.prototype.decreaseMoment = function() {
+  var self = this;
+  var newDate = moment(self.getOrSetMoment());
+  newDate.subtract(10, 'seconds');
+  self.setMoment(newDate);
+  self.submitQuery();
+};
+
 Prometheus.Graph.prototype.submitQuery = function() {
   var self = this;
   self.clearError();
-  self.clearWarnings();
+  self.clearWarning();
   if (!self.expr.val()) {
     return;
   }
@@ -444,9 +520,10 @@ Prometheus.Graph.prototype.submitQuery = function() {
 
   var startTime = new Date().getTime();
   var rangeSeconds = self.parseDuration(self.rangeInput.val());
-  var renderResolution = parseInt(self.queryForm.find("input[name=step_input]").val()) || Math.max(Math.floor(rangeSeconds / 250), 1);
+  var resolution = parseInt(self.queryForm.find("input[name=step_input]").val()) || Math.max(Math.floor(rangeSeconds / 250), 1);
   var maxSourceResolution = self.queryForm.find("select[name=max_source_resolution_input]").val();
   var endDate = self.getEndDate() / 1000;
+  var moment = self.getMoment() / 1000;
 
   if (self.queryXhr) {
     self.queryXhr.abort();
@@ -454,7 +531,7 @@ Prometheus.Graph.prototype.submitQuery = function() {
   var url;
   var success;
   var params = {
-    "query": self.expr.val(),
+    "query": self.expr.val()
   };
 
   params.dedup = (self.isDedupEnabled() ? 'true' : 'false');
@@ -463,12 +540,12 @@ Prometheus.Graph.prototype.submitQuery = function() {
   if (self.options.tab === 0) {
     params.start = endDate - rangeSeconds;
     params.end = endDate;
-    params.step = renderResolution;
+    params.step = resolution;
     params.max_source_resolution = maxSourceResolution;
     url = PATH_PREFIX + "/api/v1/query_range";
     success = function(json, textStatus) { self.handleGraphResponse(json, textStatus); };
   } else {
-    params.time = startTime / 1000;
+    params.time = moment;
     url = PATH_PREFIX + "/api/v1/query";
     success = function(json, textStatus) { self.handleConsoleResponse(json, textStatus); };
   }
@@ -485,8 +562,10 @@ Prometheus.Graph.prototype.submitQuery = function() {
           return;
         }
         if (json.warnings) {
-          self.showWarnings(json.warnings);
+          self.showWarning(json.warnings);
         }
+
+        queryHistory.handleHistory(self);
         success(json.data, textStatus);
       },
       error: function(xhr, resp) {
@@ -509,11 +588,11 @@ Prometheus.Graph.prototype.submitQuery = function() {
         if (xhr.responseJSON.data !== undefined) {
           if (xhr.responseJSON.data.resultType === "scalar") {
             totalTimeSeries = 1;
-          } else {
+          } else if(xhr.responseJSON.data.result !== null) {
             totalTimeSeries = xhr.responseJSON.data.result.length;
           }
         }
-        self.evalStats.html("Load time: " + duration + "ms <br /> Resolution: " + renderResolution + "s <br />" + "Total time series: " + totalTimeSeries);
+        self.evalStats.html("Load time: " + duration + "ms <br /> Resolution: " + resolution + "s <br />" + "Total time series: " + totalTimeSeries);
         self.spinner.hide();
       }
   });
@@ -525,27 +604,23 @@ Prometheus.Graph.prototype.showError = function(msg) {
   self.error.show();
 };
 
-Prometheus.Graph.prototype.clearError = function(msg) {
+Prometheus.Graph.prototype.clearError = function() {
   var self = this;
   self.error.text('');
   self.error.hide();
 };
 
-Prometheus.Graph.prototype.showWarnings = function(msgs) {
+Prometheus.Graph.prototype.showWarning = function(msg) {
   var self = this;
-  var content = "";
-  for (i = 0; i < msgs.length; i++) {
-    content += "<li>" + escapeHTML(msgs[i]) + "</li>";
-  }
-  self.warnings.html("<ul>" + content + "</ul>");
-  self.warnings.show();
-}
+  self.warning.html(msg);
+  self.warning.show();
+};
 
-Prometheus.Graph.prototype.clearWarnings = function() {
+Prometheus.Graph.prototype.clearWarning = function() {
   var self = this;
-  self.warnings.html("");
-  self.warnings.hide();
-}
+  self.warning.html('');
+  self.warning.hide();
+};
 
 Prometheus.Graph.prototype.updateRefresh = function() {
   var self = this;
@@ -794,10 +869,11 @@ Prometheus.Graph.prototype.handleConsoleResponse = function(data, textStatus) {
 
   switch(data.resultType) {
   case "vector":
-    if (data.result.length === 0) {
+    if (data.result === null || data.result.length === 0) {
       tBody.append("<tr><td colspan='2'><i>no data</i></td></tr>");
       return;
     }
+    data.result = self.limitSeries(data.result);
     for (var i = 0; i < data.result.length; i++) {
       var s = data.result[i];
       var tsName = self.metricToTsName(s.metric);
@@ -809,6 +885,7 @@ Prometheus.Graph.prototype.handleConsoleResponse = function(data, textStatus) {
       tBody.append("<tr><td colspan='2'><i>no data</i></td></tr>");
       return;
     }
+    data.result = self.limitSeries(data.result);
     for (var i = 0; i < data.result.length; i++) {
       var v = data.result[i];
       var tsName = self.metricToTsName(v.metric);
@@ -829,6 +906,7 @@ Prometheus.Graph.prototype.handleConsoleResponse = function(data, textStatus) {
     self.showError("Unsupported value type!");
     break;
   }
+  self.handleChange();
 };
 
 Prometheus.Graph.prototype.remove = function() {
@@ -881,24 +959,27 @@ Prometheus.Graph.prototype.formatKMBT = function(y) {
   }
 }
 
-function escapeHTML(string) {
-  var entityMap = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': '&quot;',
-    "'": '&#39;',
-    "/": '&#x2F;'
-  };
+Prometheus.Graph.prototype.limitSeries = function(result) {
+  var self = this;
+  var MAX_SERIES_NUM = 10000;
+  var message = "<strong>Warning!</strong> Fetched " +
+    result.length + " series, but displaying only first " +
+    MAX_SERIES_NUM + ".";
 
-  return String(string).replace(/[&<>"'\/]/g, function (s) {
-    return entityMap[s];
-  });
+  if (result.length > MAX_SERIES_NUM) {
+    self.showWarning(message);
+    return result.splice(0, MAX_SERIES_NUM);
+  }
+  return result;
 }
 
-Prometheus.Page = function() {
-  this.graphs = [];
+const pageConfig = {
+  allMetrics: [],
+  graphs: [],
+  queryHistMetrics: JSON.parse(localStorage.getItem('history')) || [],
 };
+
+Prometheus.Page = function() {};
 
 Prometheus.Page.prototype.init = function() {
   var graphOptions = this.parseURL();
@@ -907,7 +988,6 @@ Prometheus.Page.prototype.init = function() {
   }
 
   graphOptions.forEach(this.addGraph, this);
-
   $("#add_graph").click(this.addGraph.bind(this, {}));
 };
 
@@ -929,7 +1009,8 @@ Prometheus.Page.prototype.addGraph = function(options) {
     this.removeGraph.bind(this)
   );
 
-  this.graphs.push(graph);
+  pageConfig.graphs.push(graph);
+
   $(window).resize(function() {
     graph.resizeGraph();
   });
@@ -937,7 +1018,7 @@ Prometheus.Page.prototype.addGraph = function(options) {
 
 // NOTE: This needs to be kept in sync with /util/strutil/strconv.go:GraphLinkForExpression
 Prometheus.Page.prototype.updateURL = function() {
-  var queryString = this.graphs.map(function(graph, index) {
+  var queryString = pageConfig.graphs.map(function(graph, index) {
     var graphOptions = graph.getOptions();
     var queryParamHelper = new Prometheus.Page.QueryParamHelper();
     var queryObject = queryParamHelper.generateQueryObject(graphOptions, index);
@@ -948,7 +1029,7 @@ Prometheus.Page.prototype.updateURL = function() {
 };
 
 Prometheus.Page.prototype.removeGraph = function(graph) {
-  this.graphs = this.graphs.filter(function(g) {return g !== graph});
+  pageConfig.graphs = pageConfig.graphs.filter(function(g) {return g !== graph});
 };
 
 Prometheus.Page.QueryParamHelper = function() {};
@@ -1024,29 +1105,6 @@ Prometheus.Page.QueryParamHelper.prototype.generateQueryObject = function(graphO
   return queryObject;
 };
 
-function init() {
-  $.ajaxSetup({
-    cache: false
-  });
-
-  $.ajax({
-    url: PATH_PREFIX + "/static/js/graph_template.handlebar?v=" + BUILD_VERSION,
-    success: function(data) {
-
-      graphTemplate = data;
-      Mustache.parse(data);
-      if (isDeprecatedGraphURL()) {
-        redirectToMigratedURL();
-      } else {
-        var Page = new Prometheus.Page();
-        Page.init();
-      }
-    }
-  });
-}
-
-
-
 // These two methods (isDeprecatedGraphURL and redirectToMigratedURL)
 // are added only for backward compatibility to old query format.
 function isDeprecatedGraphURL() {
@@ -1076,6 +1134,131 @@ function redirectToMigratedURL() {
   });
   var query = $.param(queryObject);
   window.location = PATH_PREFIX + "/graph?" + query;
+}
+
+/**
+ * Query History helper functions
+ * **/
+const queryHistory = {
+  isEnabled: function() {
+    return JSON.parse(localStorage.getItem('enable-query-history'))
+  },
+
+  bindHistoryEvents: function(graph) {
+    const targetEl = $('div.query-history');
+    const icon = $(targetEl).children('i');
+    targetEl.off('click');
+
+    if (queryHistory.isEnabled()) {
+      this.toggleOn(targetEl);
+    }
+
+    targetEl.on('click', function() {
+      if (icon.hasClass('glyphicon-unchecked')) {
+        queryHistory.toggleOn(targetEl);
+      } else if (icon.hasClass('glyphicon-check')) {
+        queryHistory.toggleOff(targetEl);
+      }
+    });
+  },
+
+  handleHistory: function(graph) {
+    const query = graph.expr.val();
+    const isSimpleMetric = pageConfig.allMetrics.indexOf(query) !== -1;
+    if (isSimpleMetric) {
+      return;
+    }
+
+    let parsedQueryHistory = JSON.parse(localStorage.getItem('history'));
+    const hasStoredQuery = parsedQueryHistory.indexOf(query) !== -1;
+    if (hasStoredQuery) {
+      parsedQueryHistory.splice(parsedQueryHistory.indexOf(query), 1);
+    }
+
+    parsedQueryHistory.push(query);
+    const queryCount = parsedQueryHistory.length;
+    parsedQueryHistory = parsedQueryHistory.slice(queryCount - 50, queryCount);
+
+    localStorage.setItem('history', JSON.stringify(parsedQueryHistory));
+    pageConfig.queryHistMetrics = parsedQueryHistory;
+    if (queryHistory.isEnabled()) {
+      this.updateTypeaheadMetricSet(pageConfig.queryHistMetrics.concat(pageConfig.allMetrics));
+    }
+  },
+
+  toggleOn: function(targetEl) {
+    this.updateTypeaheadMetricSet(pageConfig.queryHistMetrics.concat(pageConfig.allMetrics));
+
+    $(targetEl).children('i').removeClass('glyphicon-unchecked').addClass('glyphicon-check');
+    targetEl.addClass('is-checked');
+    localStorage.setItem('enable-query-history', true);
+  },
+
+  toggleOff: function(targetEl) {
+    this.updateTypeaheadMetricSet(pageConfig.allMetrics);
+
+    $(targetEl).children('i').removeClass('glyphicon-check').addClass('glyphicon-unchecked');
+    targetEl.removeClass('is-checked');
+    localStorage.setItem('enable-query-history', false);
+  },
+
+  updateTypeaheadMetricSet: function(metricSet) {
+    pageConfig.graphs.forEach(function(graph) {
+      if (graph.expr.data('typeahead')) {
+        graph.expr.data('typeahead').source = metricSet;
+      }
+    });
+  }
+};
+
+// Defers invocation of fn for waitPeriod if returned function is called repeatedly
+function debounce(fn, waitPeriod) {
+  var timeout;
+  return function() {
+    clearTimeout(timeout);
+    var args = arguments;
+    var scope = this;
+    function invokeFn() {
+      return fn.apply(scope, args);
+    }
+    timeout = setTimeout(invokeFn, waitPeriod);
+  };
+}
+
+function escapeHTML(string) {
+  var entityMap = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': '&quot;',
+    "'": '&#39;',
+    "/": '&#x2F;'
+  };
+
+  return String(string).replace(/[&<>"'\/]/g, function (s) {
+    return entityMap[s];
+  });
+}
+
+function init() {
+  $.ajaxSetup({
+    cache: false
+  });
+
+  $.ajax({
+    url: PATH_PREFIX + "/static/js/graph_template.handlebar?v=" + BUILD_VERSION,
+    success: function(data) {
+
+      graphTemplate = data;
+      Mustache.parse(data);
+      if (isDeprecatedGraphURL()) {
+        redirectToMigratedURL();
+      } else {
+        var Page = new Prometheus.Page();
+        Page.init();
+      }
+    }
+  });
 }
 
 $(init);

@@ -1,21 +1,16 @@
 {{define "nav"}}
-    <nav class="navbar navbar-inverse navbar-fixed-top">
+    <nav class="navbar fixed-top navbar-expand-sm navbar-dark bg-dark">
       <div class="container-fluid">
-        <div class="navbar-header">
-          <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
-            <span class="sr-only">Toggle navigation</span>
-            <span class="icon-bar"></span>
-            <span class="icon-bar"></span>
-            <span class="icon-bar"></span>
-          </button>
-          <a class="navbar-brand" href="{{ pathPrefix }}/">Thanos</a>
-        </div>
-        <div id="navbar" class="navbar-collapse collapse">
-          <ul class="nav navbar-nav navbar-left">
-            <li><a href="{{ pathPrefix }}/alerts">Alerts</a></li>
-            <li><a href="{{ pathPrefix }}/rules">Rules</a></li>
-            <li>
-              <a href="https://github.com/improbable-eng/thanos" target="_blank">Help</a>
+        <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#nav-content" aria-expanded="false" aria-controls="nav-content" aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <a class="navbar-brand" href="{{ pathPrefix }}/">Thanos</a>
+        <div id="nav-content" class="navbar-collapse collapse">
+          <ul class="navbar-nav">
+            <li class="nav-item"><a class="nav-link" href="{{ pathPrefix }}/alerts">Alerts</a></li>
+            <li class="nav-item"><a class="nav-link" href="{{ pathPrefix }}/rules">Rules</a></li>
+            <li class="nav-item">
+              <a class="nav-link" href="https://github.com/improbable-eng/thanos" target="_blank">Help</a>
             </li>
           </ul>
         </div>
