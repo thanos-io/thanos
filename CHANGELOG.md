@@ -13,6 +13,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Fixed
 - [#1144](https://github.com/improbable-eng/thanos/pull/1144) Query/API: properly pass the downsampling parameter. Before this, wrong max resolution of the metrics data might have been selected.
+- [#1146](https://github.com/improbable-eng/thanos/pull/1146) store/bucket: make getFor() work with interleaved resolutions, pass proper resolution from querier.
 
 ## [v0.4.0](https://github.com/improbable-eng/thanos/releases/tag/v0.4.0) - 2019.05.3
 
