@@ -1042,7 +1042,7 @@ func (s *bucketBlockSet) getFor(mint, maxt, minResolution int64) (bs []*bucketBl
 	left := s.getFor(mint, bs[0].meta.MinTime, s.resolutions[i])
 	right := s.getFor(bs[len(bs)-1].meta.MaxTime, maxt, s.resolutions[i])
 
-	result := append(middle, append(left, append(bs, right...)...)...)
+	result := append(left, append(middle, append(bs, right...)...)...)
 
 	// Sort the result just one more time since it might be out of order.
 	sort.Slice(result, func(j, k int) bool {
