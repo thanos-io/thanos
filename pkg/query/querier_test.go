@@ -19,6 +19,24 @@ import (
 	"github.com/prometheus/tsdb/chunkenc"
 )
 
+func TestQueryableCreator_MaxResolution(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	testProxy := &storeServer{resps: []*storepb.SeriesResponse{}}
+	queryableCreator := NewQueryableCreator(nil, testProxy, "test")
+
+	queryable := queryableCreator(false, 1*time.Hour, false, func(err error) {})
+
+	q, err := queryable.Querier(context.Background(), 0, 42)
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, q.Close()) }()
+
+	querierActual, ok := q.(*querier)
+
+	testutil.Assert(t, ok == true, "expected it to be a querier")
+	testutil.Assert(t, querierActual.maxSourceResolution == int64(1*time.Hour), "expected max source resolution to be 1 hour")
+
+}
+
 func TestQuerier_Series(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
