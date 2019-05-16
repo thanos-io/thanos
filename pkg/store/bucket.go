@@ -1032,26 +1032,23 @@ func (s *bucketBlockSet) getFor(mint, maxt, minResolution int64) (bs []*bucketBl
 	if len(bs) == 0 {
 		return s.getFor(mint, maxt, s.resolutions[i])
 	}
-	middle := []*bucketBlock{}
-	for bsi := 0; bsi < len(bs)-1; bsi++ {
+
+	until := len(bs) - 1
+	for bsi := 0; bsi < until; bsi++ {
 		if bs[bsi+1].meta.MinTime-bs[bsi].meta.MaxTime > 0 {
-			middle = append(middle, s.getFor(bs[bsi].meta.MaxTime, bs[bsi+1].meta.MinTime, s.resolutions[i])...)
+			between := s.getFor(bs[bsi].meta.MaxTime, bs[bsi+1].meta.MinTime, s.resolutions[i])
+			bs = append(bs[:bsi+1], append(between, bs[bsi+1:]...)...)
+
+			// Push the iterators further.
+			bsi += len(between)
+			until += len(between)
 		}
 	}
 
 	left := s.getFor(mint, bs[0].meta.MinTime, s.resolutions[i])
 	right := s.getFor(bs[len(bs)-1].meta.MaxTime, maxt, s.resolutions[i])
 
-	result := append(left, append(middle, append(bs, right...)...)...)
-
-	// Sort the result just one more time since it might be out of order.
-	sort.Slice(result, func(j, k int) bool {
-		if result[j].meta.MinTime < result[k].meta.MinTime {
-			return true
-		}
-		return false
-	})
-	return result
+	return append(left, append(bs, right...)...)
 }
 
 // labelMatchers verifies whether the block set matches the given matchers and returns a new
