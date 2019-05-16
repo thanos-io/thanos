@@ -1034,13 +1034,13 @@ func (s *bucketBlockSet) getFor(mint, maxt, minResolution int64) (bs []*bucketBl
 	}
 
 	until := len(bs) - 1
-	for bsi := 0; bsi < until; bsi++ {
-		if bs[bsi+1].meta.MinTime-bs[bsi].meta.MaxTime > 0 {
-			between := s.getFor(bs[bsi].meta.MaxTime, bs[bsi+1].meta.MinTime, s.resolutions[i])
-			bs = append(bs[:bsi+1], append(between, bs[bsi+1:]...)...)
+	for j := 0; j < until; j++ {
+		if bs[j+1].meta.MinTime-bs[j].meta.MaxTime > 0 {
+			between := s.getFor(bs[j].meta.MaxTime, bs[j+1].meta.MinTime, s.resolutions[i])
+			bs = append(bs[:j+1], append(between, bs[j+1:]...)...)
 
 			// Push the iterators further.
-			bsi += len(between)
+			j += len(between)
 			until += len(between)
 		}
 	}
