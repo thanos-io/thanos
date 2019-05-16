@@ -10,8 +10,8 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	gcloudtracer "github.com/lovoo/gcloud-opentracing"
-	"github.com/opentracing/basictracer-go"
-	"github.com/opentracing/opentracing-go"
+	basictracer "github.com/opentracing/basictracer-go"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 type gcloudRecorderLogger struct {

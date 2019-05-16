@@ -39,7 +39,7 @@
             </td>
             <td>
             {{range $label := $store.Labels}}
-                <span class="label label-primary">{{$label.Name}}="{{$label.Value}}"</span>
+                <span class="badge badge-primary">{{$label.Name}}="{{$label.Value}}"</span>
             {{end}}
             </td>
             <td>{{formatTimestamp $store.MinTime}}</td>

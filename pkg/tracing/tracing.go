@@ -1,12 +1,11 @@
 package tracing
 
 import (
+	"context"
 	"os"
 
-	"context"
-
-	"github.com/opentracing/basictracer-go"
-	"github.com/opentracing/opentracing-go"
+	basictracer "github.com/opentracing/basictracer-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/prometheus/common/version"
 )
 

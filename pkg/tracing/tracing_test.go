@@ -12,7 +12,7 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/improbable-eng/thanos/pkg/testutil"
-	"github.com/opentracing/basictracer-go"
+	basictracer "github.com/opentracing/basictracer-go"
 )
 
 // This test shows that if sample factor will enable tracing on client process, even when it would be disabled on server
