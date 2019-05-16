@@ -6,18 +6,18 @@ menu: components
 
 # Rule (aka Ruler)
 
-_**NOTE:** It is recommended to ma deploying rules inside the relevant Prometheus servers locally. Use ruler only on specific cases. Read details[below](rule.md#Risk) why._
+_**NOTE:** It is recommended to keep deploying rules inside the relevant Prometheus servers locally. Use ruler only on specific cases. Read details [below](rule.md#Risk) why._
 
 _The rule component should in particular not be used to circumvent solving rule deployment properly at the configuration management level._
 
-The rule component evaluates Prometheus recording and alerting rules against chosen query API via repeated `--query` (or FileSD via `--query.sd`). If more then one query is passed, round robin balancing is performed.
+The rule component evaluates Prometheus recording and alerting rules against chosen query API via repeated `--query` (or FileSD via `--query.sd`). If more than one query is passed, round robin balancing is performed.
  
 Rule results are written back to disk in the Prometheus 2.0 storage format. Rule nodes at the same time participate in the system as source store nodes, which means that they expose StoreAPI and upload their generated TSDB blocks to an object store.
 
 You can think of Rule as a simplified Prometheus that does not require a sidecar and does not scrape and do PromQL evaluation (no QueryAPI).
 
 The data of each Rule node can be labeled to satisfy the clusters labeling scheme. High-availability pairs can be run in parallel and should be distinguished by the designated replica label, just like regular Prometheus servers.
-Read more about Ruler in HA in [here](rule.md#Ruler_HA)
+Read more about Ruler in HA [here](rule.md#Ruler_HA)
 
 ```bash
 $ thanos rule \
@@ -38,7 +38,7 @@ $ thanos rule \
 Ruler has conceptual tradeoffs that might not be favorable for most use cases. The main tradeoff is its dependence on 
 query reliability. For Prometheus it is unlikely to have alert/recording rule evaluation failure as evaluation is local.
 
-For Ruler the read path is distributed, since most likely ruler is querying Thanos Querier which gets data from remote Store APIs. 
+For Ruler the read path is distributed, since most likely Ruler is querying Thanos Querier which gets data from remote Store APIs. 
 
 This means that **query failure** are more likely to happen, that's why clear strategy on what will happen to alert and during query
 unavailability is the key.
@@ -47,7 +47,7 @@ unavailability is the key.
 
 See [this](query.md#PartialResponse) on initial info.
 
-Rule allows to specify rule groups with additional field that controls PartialResponseStrategy e.g:
+Rule allows you to specify rule groups with additional fields that control PartialResponseStrategy e.g:
 
 ```yaml
 groups:
@@ -67,9 +67,9 @@ groups:
     expr: "up"
 ```
 
-It is recommended to keep partial response to `abort` for alerts and that is the default as well.
+It is recommended to keep partial response as `abort` for alerts and that is the default as well.
 
-Essentially for alerting having partial response can result in symptom being missed by Rule's alert.
+Essentially, for alerting, having partial response can result in symptoms being missed by Rule's alert.
 
 ## Must have: essential Ruler alerts! 
 
@@ -77,28 +77,28 @@ To be sure that alerting works it is essential to monitor Ruler and alert from a
 
 The most important metrics to alert on are:
 
-* `thanos_alert_sender_alerts_dropped_total`. If greater than 0 it means that rule triggered alerts are not being sent to alertmanager which might
+* `thanos_alert_sender_alerts_dropped_total`. If greater than 0, it means that alerts triggered by Rule are not being sent to alertmanager which might
 indicate connection, incompatibility or misconfiguration problems.
 
-* `prometheus_rule_evaluation_failures_total`. If greater than 0 it means that rule failed to be evaluated which results in
+* `prometheus_rule_evaluation_failures_total`. If greater than 0, it means that that rule failed to be evaluated, which results in
 either gap in rule or potentially ignored alert. Alert heavily on this if this happens for longer than your alert thresholds.
-`strategy` label will tell you if failures comes from rules that tolerates [partial response](rule.md#PartialResponse) or not.
+`strategy` label will tell you if failures comes from rules that tolerate [partial response](rule.md#PartialResponse) or not.
 
-* `prometheus_rule_group_last_duration_seconds < prometheus_rule_group_interval_seconds`  If the difference is heavy it means 
-that rule evaluation took more time than scheduled interval. It can indicate your query backend (e.g Querier) takes too much time 
-to evaluate the query, that is not fast enough to fill the rule. This might indicate other problems like slow StoreAPis or 
+* `prometheus_rule_group_last_duration_seconds < prometheus_rule_group_interval_seconds`  If the difference is large, it means 
+that rule evaluation took more time than the scheduled interval. It can indicate that your query backend (e.g Querier) takes too much time 
+to evaluate the query, i.e. that it is not fast enough to fill the rule. This might indicate other problems like slow StoreAPis or 
 too complex query expression in rule. 
 
-* `thanos_rule_evaluation_with_warnings_total`. If you choose to use Rules and Alerts with [partial response strategy](rule.md#PartialResponse)
-equals "warn", this metric will tell you how many evaluation ended up with some kind of warning. To see the actual warnings
-see WARN log level. This might suggest that those evaluations returns partial response and might be or not accurate.
+* `thanos_rule_evaluation_with_warnings_total`. If you choose to use Rules and Alerts with [partial response strategy's](rule.md#PartialResponse)
+value as "warn", this metric will tell you how many evaluation ended up with some kind of warning. To see the actual warnings
+see WARN log level. This might suggest that those evaluations return partial response and might not be accurate.
 
 Those metrics are important for vanilla Prometheus as well, but even more important when we rely on (sometimes WAN) network.
 
 // TODO(bwplotka): Rereview them after recent changes in metrics.
 See [alerts](/examples/alerts/alerts.md#Ruler) for more example alerts for ruler. 
 
-NOTE: It is also recommend to set an mocked Alert on Ruler that checks if query is up. This might be something simple like `vector(1)` query, just
+NOTE: It is also recommended to set a mocked Alert on Ruler that checks if Query is up. This might be something simple like `vector(1)` query, just
 to check if Querier is live.
 
 ## Performance.
@@ -125,18 +125,18 @@ without falling back to manual query.
 
 ## Ruler UI
 
-On HTTP address ruler exposes its UI that shows mainly Alerts and Rules page (similar to Prometheus Alerts page).
-Each alert is linked to query that alert is performing that you can click to navigate to configured `alert.query-url`.
+On HTTP address Ruler exposes its UI that shows mainly Alerts and Rules page (similar to Prometheus Alerts page).
+Each alert is linked to the query that the alert is performing, which you can click to navigate to the configured `alert.query-url`.
 
 ## Ruler HA
 
-Ruler aims to use similar approach as Prometheus does. You can configure external labels, as well as simple relabelling.
+Ruler aims to use a similar approach to the one that Prometheus has. You can configure external labels, as well as simple relabelling.
 
-In case of Ruler in HA you need to make sure you have following labelling setup:
+In case of Ruler in HA you need to make sure you have the following labelling setup:
 
-* Labels that identifies the HA group ruler and replica label with different value for each ruler instance, e.g: 
+* Labels that identify the HA group ruler and replica label with different value for each ruler instance, e.g: 
 `cluster="eu1", replica="A"` and `cluster=eu1, replica="B"` by using `--label` flag.
-* Labels that needs to be dropped just before sending to alermanager in order for alertmanger to deduplicate alerts e.g
+* Labels that need to be dropped just before sending to alermanager in order for alertmanager to deduplicate alerts e.g
 `--alertmanager.label-drop="replica"`.
 
 Full relabelling is planned to be done in future and is tracked here: https://github.com/improbable-eng/thanos/issues/660
