@@ -39,9 +39,9 @@ At that point, anyone can use your provider by spec
 
 ## AWS S3 configuration
 
-Thanos uses minio client to upload Prometheus data into AWS S3.
+Thanos uses the [minio client](https://github.com/minio/minio-go) library to upload Prometheus data into AWS S3.
 
-To configure S3 bucket as an object store you need to set these mandatory S3 variables in yaml format stored in a file:
+You can configure an S3 bucket as an object store with YAML, either by passing the configuration directly to the `--objstore.config` parameter, or (preferably) by passing the path to a configuration file to the `--objstore.config-file` option.
 
 [embedmd]:# (flags/config_s3.txt yaml)
 ```yaml
@@ -58,20 +58,28 @@ config:
   put_user_metadata: {}
   http_config:
     idle_conn_timeout: 0s
+    response_header_timeout: 0s
     insecure_skip_verify: false
   trace:
     enable: false
 ```
 
-The attribute `region` is optional. AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region).
+At a minimum, you will need to provide a value for the `bucket`, `endpoint`, `access_key`, and `secret_key` keys. The rest of the keys are optional.
 
-Make sure you use a correct signature version.
-Currently AWS require signature v4, so it needs `signature-version2: false`, otherwise, you will get Access Denied error, but several other S3 compatible use `signature-version2: true`
+The AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region).
+
+Make sure you use a correct signature version. Currently AWS requires signature v4, so it needs `signature-version2: false`. If you don't specify it, you will get an `Access Denied` error. On the other hand, several S3 compatible APIs use `signature-version2: true`.
+
+You can configure the timeout settings for the HTTP client by setting the `http_config.idle_conn_timeout` and `http_config.response_header_timeout` keys. As a rule of thumb, if you are seeing errors like `timeout awaiting response headers` in your logs, you may want to increase the value of `http_config.response_header_timeout`.
+
+Please refer to the documentation of [the Transport type](https://golang.org/pkg/net/http/#Transport) in the `net/http` package for detailed information on what each option does.
 
 For debug and testing purposes you can set
 
 * `insecure: true` to switch to plain insecure HTTP instead of HTTPS
+
 * `http_config.insecure_skip_verify: true` to disable TLS certificate verification (if your S3 based storage is using a self-signed certificate, for example)
+
 * `trace.enable: true` to enable the minio client's verbose logging. Each request and response will be logged into the debug logger, so debug level logging must be enabled for this functionality.
 
 ### Credentials
