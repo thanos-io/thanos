@@ -675,7 +675,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 // labels and resolution. This is important because we allow mixed resolution results, so it is quite crucial
 // to be aware what exactly resolution we see on query.
 // TODO(bplotka): Consider adding resolution label to all results to propagate that info to UI and Query API.
-func debugFoundBlockSetOverview(logger log.Logger, mint, maxt int64, lset labels.Labels, bs []*bucketBlock) {
+func debugFoundBlockSetOverview(logger log.Logger, mint, maxt, maxresolution int64, lset labels.Labels, bs []*bucketBlock) {
 	if len(bs) == 0 {
 		level.Debug(logger).Log("msg", "No block found", "mint", mint, "maxt", maxt, "lset", lset.String())
 		return
@@ -703,7 +703,7 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt int64, lset labels
 
 	parts = append(parts, fmt.Sprintf("Range: %d-%d Resolution: %d", currMin, currMax, currRes))
 
-	level.Debug(logger).Log("msg", "Blocks source resolutions", "blocks", len(bs), "mint", mint, "maxt", maxt, "lset", lset.String(), "spans", strings.Join(parts, "\n"))
+	level.Debug(logger).Log("msg", "Blocks source resolutions", "blocks", len(bs), "maxresolution", maxresolution, "mint", mint, "maxt", maxt, "lset", lset.String(), "spans", strings.Join(parts, "\n"))
 }
 
 // Series implements the storepb.StoreServer interface.
@@ -738,7 +738,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow)
 
 		if s.debugLogging {
-			debugFoundBlockSetOverview(s.logger, req.MinTime, req.MaxTime, bs.labels, blocks)
+			debugFoundBlockSetOverview(s.logger, req.MinTime, req.MaxTime, req.MaxResolutionWindow, bs.labels, blocks)
 		}
 
 		for _, b := range blocks {
