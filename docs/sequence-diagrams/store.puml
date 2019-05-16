@@ -1,0 +1,4 @@
+@startuml
+thanos_store -> cloud_storage: request metadata
+cloud_storage -> thanos_store: cache indexes
+@enduml

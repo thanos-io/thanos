@@ -1,0 +1,6 @@
+@startuml query
+client -> thanos_query: Request for data
+thanos_query -> thanos_store: Send requests to thanos stores 
+thanos_store -> thanos_query: Return data requested
+thanos_query -> client: Return data requested
+@enduml

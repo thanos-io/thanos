@@ -1,0 +1,3 @@
+@startuml rule
+thanos_rule -> thanos_store: data
+@enduml

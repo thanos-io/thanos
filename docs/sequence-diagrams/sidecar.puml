@@ -1,0 +1,8 @@
+@startuml
+thanos_sidecar -> prometheus_data_dir: On init create thanos.shipper.json 
+thanos_sidecar -> prometheus_data_dir: Watches data directory for new blocks
+prometheus_data_dir -> prometheus_data_dir: Write block to storage
+thanos_sidecar -> prometheus_data_dir: See new block written to storage
+thanos_sidecar -> cloud_storage: Upload block to storage
+thanos_sidecar -> prometheus_data_dir: Write metadata to thanos.shipper.json
+@enduml

@@ -1,0 +1,7 @@
+@startuml compact
+thanos_compact -> thanos_compact_config: Evaluate retention policy to see how long to keep samples
+thanos_compact -> cloud_storage: Evaluate block timestamps
+cloud_storage -> thanos_compact: Download blocks to aggregate
+thanos_compact -> cloud_storage: Upload aggregated blocks
+thanos_compact -> cloud_storage: Delete old blocks that were compacted
+@enduml
