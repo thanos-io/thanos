@@ -34,7 +34,6 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 - [#1144](https://github.com/improbable-eng/thanos/pull/1144) Query/API: properly pass the downsampling parameter. Before this, wrong max resolution of the metrics data might have been selected.
 
-
 ## [v0.4.0](https://github.com/improbable-eng/thanos/releases/tag/v0.4.0) - 2019.05.3
 
 :warning: **IMPORTANT** :warning: This is the last release that supports gossip. From Thanos v0.5.0, gossip will be completely removed.
