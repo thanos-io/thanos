@@ -12,9 +12,72 @@ import (
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
+	"github.com/leanovate/gopter"
+	"github.com/leanovate/gopter/gen"
+	"github.com/leanovate/gopter/prop"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/tsdb/labels"
 )
+
+func TestBucketBlock_Property(t *testing.T) {
+	parameters := gopter.DefaultTestParameters()
+	parameters.Rng.Seed(42)
+	parameters.MinSuccessfulTests = 5000
+	properties := gopter.NewProperties(parameters)
+
+	set := newBucketBlockSet(labels.Labels{})
+
+	type resBlock struct {
+		mint, maxt int64
+		window     int64
+	}
+	input := []resBlock{
+		{window: downsample.ResLevel2, mint: 0, maxt: 100},
+		{window: downsample.ResLevel0, mint: 0, maxt: 100},
+		{window: downsample.ResLevel1, mint: 0, maxt: 100},
+
+		{window: downsample.ResLevel0, mint: 100, maxt: 200},
+		{window: downsample.ResLevel1, mint: 100, maxt: 200},
+		{window: downsample.ResLevel2, mint: 100, maxt: 200},
+
+		{window: downsample.ResLevel2, mint: 200, maxt: 300},
+		{window: downsample.ResLevel1, mint: 200, maxt: 300},
+		{window: downsample.ResLevel0, mint: 200, maxt: 300},
+	}
+
+	for _, in := range input {
+		var m metadata.Meta
+		m.Thanos.Downsample.Resolution = in.window
+		m.MinTime = in.mint
+		m.MaxTime = in.maxt
+
+		testutil.Ok(t, set.add(&bucketBlock{meta: &m}))
+	}
+
+	properties.Property("getFor always gets all data in range", prop.ForAll(
+		func(low, high, maxResolution int64) bool {
+			defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+			res := set.getFor(low, high, maxResolution)
+			mint := int64(301)
+			maxt := int64(0)
+			for _, b := range res {
+				if b.meta.MinTime < mint {
+					mint = b.meta.MinTime
+				}
+				if b.meta.MaxTime > maxt {
+					maxt = b.meta.MaxTime
+				}
+			}
+			if low >= high {
+				return true
+			}
+			return len(res) >= 0 && (mint <= low || mint == 0) && (high <= maxt || math.Abs(float64(high-maxt)) <= 100)
+		}, gen.Int64Range(0, 300), gen.Int64Range(0, 300), gen.Int64Range(0, 60*60*1000)),
+	)
+
+	properties.TestingRun(t)
+}
 
 // TestBucketBlockSet with blocks which have the same time range
 // but different resolutions.
