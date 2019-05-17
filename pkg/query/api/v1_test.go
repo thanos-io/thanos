@@ -837,67 +837,67 @@ func BenchmarkQueryResultEncoding(b *testing.B) {
 
 func TestParseDownsamplingParamMillis(t *testing.T) {
 	var tests = []struct {
-		maxSourceResolution    string
-		result                 int64
-		step                   time.Duration
-		fail                   bool
-		enableAutodownsampling bool
+		maxSourceResolutionParam string
+		result                   int64
+		step                     time.Duration
+		fail                     bool
+		enableAutodownsampling   bool
 	}{
 		{
-			maxSourceResolution:    "0s",
-			enableAutodownsampling: false,
-			step:                   time.Hour,
-			result:                 int64(compact.ResolutionLevelRaw),
-			fail:                   false,
+			maxSourceResolutionParam: "0s",
+			enableAutodownsampling:   false,
+			step:                     time.Hour,
+			result:                   int64(compact.ResolutionLevelRaw),
+			fail:                     false,
 		},
 		{
-			maxSourceResolution:    "5m",
-			step:                   time.Hour,
-			enableAutodownsampling: false,
-			result:                 int64(compact.ResolutionLevel5m),
-			fail:                   false,
+			maxSourceResolutionParam: "5m",
+			step:                     time.Hour,
+			enableAutodownsampling:   false,
+			result:                   int64(compact.ResolutionLevel5m),
+			fail:                     false,
 		},
 		{
-			maxSourceResolution:    "1h",
-			step:                   time.Hour,
-			enableAutodownsampling: false,
-			result:                 int64(compact.ResolutionLevel1h),
-			fail:                   false,
+			maxSourceResolutionParam: "1h",
+			step:                     time.Hour,
+			enableAutodownsampling:   false,
+			result:                   int64(compact.ResolutionLevel1h),
+			fail:                     false,
 		},
 		{
-			maxSourceResolution:    "",
-			enableAutodownsampling: true,
-			step:                   time.Hour,
-			result:                 int64(time.Hour / (5 * 1000 * 1000)),
-			fail:                   false,
+			maxSourceResolutionParam: "",
+			enableAutodownsampling:   true,
+			step:                     time.Hour,
+			result:                   int64(time.Hour / (5 * 1000 * 1000)),
+			fail:                     false,
 		},
 		{
-			maxSourceResolution:    "",
-			enableAutodownsampling: true,
-			step:                   time.Hour,
-			result:                 int64((1 * time.Hour) / 6),
-			fail:                   true,
+			maxSourceResolutionParam: "",
+			enableAutodownsampling:   true,
+			step:                     time.Hour,
+			result:                   int64((1 * time.Hour) / 6),
+			fail:                     true,
 		},
 		{
-			maxSourceResolution:    "",
-			enableAutodownsampling: true,
-			step:                   time.Hour,
-			result:                 int64((1 * time.Hour) / 6),
-			fail:                   true,
+			maxSourceResolutionParam: "",
+			enableAutodownsampling:   true,
+			step:                     time.Hour,
+			result:                   int64((1 * time.Hour) / 6),
+			fail:                     true,
 		},
 	}
 
 	for i, test := range tests {
 		api := API{enableAutodownsampling: test.enableAutodownsampling}
 		v := url.Values{}
-		v.Set("max_source_resolution", test.maxSourceResolution)
+		v.Set("max_source_resolution", test.maxSourceResolutionParam)
 		r := http.Request{PostForm: v}
 
-		maxSourceRes, _ := api.parseDownsamplingParamMillis(&r, test.step)
+		maxResMillis, _ := api.parseDownsamplingParamMillis(&r, test.step)
 		if test.fail == false {
-			testutil.Assert(t, maxSourceRes == test.result, "case %v: expected %v to be equal to %v", i, maxSourceRes, test.result)
+			testutil.Assert(t, maxResMillis == test.result, "case %v: expected %v to be equal to %v", i, maxResMillis, test.result)
 		} else {
-			testutil.Assert(t, maxSourceRes != test.result, "case %v: expected %v not to be equal to %v", i, maxSourceRes, test.result)
+			testutil.Assert(t, maxResMillis != test.result, "case %v: expected %v not to be equal to %v", i, maxResMillis, test.result)
 		}
 
 	}

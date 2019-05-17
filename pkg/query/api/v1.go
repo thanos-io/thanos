@@ -203,7 +203,7 @@ func (api *API) parseEnableDedupParam(r *http.Request) (enableDeduplication bool
 	return enableDeduplication, nil
 }
 
-func (api *API) parseDownsamplingParamMillis(r *http.Request, step time.Duration) (maxSourceResolutionMillis int64, _ *ApiError) {
+func (api *API) parseDownsamplingParamMillis(r *http.Request, step time.Duration) (maxResolutionMillis int64, _ *ApiError) {
 	const maxSourceResolutionParam = "max_source_resolution"
 	maxSourceResolution := 0 * time.Second
 
