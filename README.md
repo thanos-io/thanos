@@ -30,8 +30,8 @@ Concretely the aims of the project are:
 
 ## Getting Started
 
-* **[Getting Started](docs/getting-started.md)**
-* [Design](docs/design.md)
+* **[Getting Started](https://thanos.io/getting-started.md/)**
+* [Design](https://thanos.io/design.md/)
 * [Prom Meetup Slides](https://www.slideshare.net/BartomiejPotka/thanos-global-durable-prometheus-monitoring)
 * [Introduction blog post](https://improbable.io/games/blog/thanos-prometheus-at-scale)
 * [Benchmarks](https://github.com/improbable-eng/thanos/tree/master/benchmark)

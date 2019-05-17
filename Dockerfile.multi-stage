@@ -5,7 +5,7 @@ WORKDIR $GOPATH/src/github.com/improbable-eng/thanos
 
 RUN apk update && apk upgrade && apk add --no-cache alpine-sdk
 
-RUN git update-index --refresh; make
+RUN git update-index --refresh; make build
 
 # -----------------------------------------------------------------------------
 
