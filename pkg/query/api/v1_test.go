@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/compact"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -714,74 +713,6 @@ func TestParseTime(t *testing.T) {
 		if !test.fail && !ts.Equal(test.result) {
 			t.Errorf("Expected time %v for input %q but got %v", test.result, test.input, ts)
 		}
-	}
-}
-
-func TestParseDownsamplingParam(t *testing.T) {
-	var tests = []struct {
-		maxSourceResolution    string
-		result                 time.Duration
-		step                   time.Duration
-		fail                   bool
-		enableAutodownsampling bool
-	}{
-		{
-			maxSourceResolution:    "0s",
-			enableAutodownsampling: false,
-			step:                   time.Hour,
-			result:                 time.Duration(compact.ResolutionLevelRaw),
-			fail:                   false,
-		},
-		{
-			maxSourceResolution:    "5m",
-			step:                   time.Hour,
-			enableAutodownsampling: false,
-			result:                 time.Duration(compact.ResolutionLevel5m),
-			fail:                   false,
-		},
-		{
-			maxSourceResolution:    "1h",
-			step:                   time.Hour,
-			enableAutodownsampling: false,
-			result:                 time.Duration(compact.ResolutionLevel1h),
-			fail:                   false,
-		},
-		{
-			maxSourceResolution:    "",
-			enableAutodownsampling: true,
-			step:                   time.Hour,
-			result:                 time.Duration(time.Hour / (5 * 1000 * 1000)),
-			fail:                   false,
-		},
-		{
-			maxSourceResolution:    "",
-			enableAutodownsampling: true,
-			step:                   time.Hour,
-			result:                 time.Duration((1 * time.Hour) / 6),
-			fail:                   true,
-		},
-		{
-			maxSourceResolution:    "",
-			enableAutodownsampling: true,
-			step:                   time.Hour,
-			result:                 time.Duration((1 * time.Hour) / 6),
-			fail:                   true,
-		},
-	}
-
-	for i, test := range tests {
-		api := API{enableAutodownsampling: test.enableAutodownsampling}
-		v := url.Values{}
-		v.Set("max_source_resolution", test.maxSourceResolution)
-		r := http.Request{PostForm: v}
-
-		maxSourceRes, _ := api.parseDownsamplingParam(&r, test.step)
-		if test.fail == false {
-			testutil.Assert(t, maxSourceRes == test.result, "case %v: expected %v to be equal to %v", i, maxSourceRes, test.result)
-		} else {
-			testutil.Assert(t, maxSourceRes != test.result, "case %v: expected %v not to be equal to %v", i, maxSourceRes, test.result)
-		}
-
 	}
 }
 
