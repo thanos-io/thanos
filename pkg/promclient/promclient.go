@@ -322,6 +322,8 @@ func QueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query s
 			Result     json.RawMessage `json:"result"`
 		} `json:"data"`
 
+		Error     string `json:"error,omitempty"`
+		ErrorType string `json:"errorType,omitempty"`
 		// Extra field supported by Thanos Querier.
 		Warnings []string `json:"warnings"`
 	}
@@ -345,7 +347,14 @@ func QueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query s
 			return nil, nil, errors.Wrap(err, "decode result into ValueTypeScalar")
 		}
 	default:
-		return nil, nil, errors.Errorf("unknown response type: '%q'", m.Data.ResultType)
+		if m.Warnings != nil {
+			return nil, nil, errors.Errorf("error: %s, type: %s, warning: %s", m.Error, m.ErrorType, strings.Join(m.Warnings, ", "))
+		}
+		if m.Error != "" {
+			return nil, nil, errors.Errorf("error: %s, type: %s", m.Error, m.ErrorType)
+		}
+
+		return nil, nil, errors.Errorf("received status code: %d, unknown response type: '%q'", resp.StatusCode, m.Data.ResultType)
 	}
 	return vectorResult, m.Warnings, nil
 }
