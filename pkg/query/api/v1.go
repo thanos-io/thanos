@@ -80,7 +80,7 @@ func (e *ApiError) Error() string {
 type response struct {
 	Status    status      `json:"status"`
 	Data      interface{} `json:"data,omitempty"`
-	ErrorType ErrorType   `json:"ErrorType,omitempty"`
+	ErrorType ErrorType   `json:"errorType,omitempty"`
 	Error     string      `json:"error,omitempty"`
 	Warnings  []string    `json:"warnings,omitempty"`
 }
