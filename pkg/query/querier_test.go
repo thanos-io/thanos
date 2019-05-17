@@ -34,7 +34,7 @@ func TestQueryableCreator_MaxResolution(t *testing.T) {
 	querierActual, ok := q.(*querier)
 
 	testutil.Assert(t, ok == true, "expected it to be a querier")
-	testutil.Assert(t, querierActual.maxSourceResolution == oneHourMillis, "expected max source resolution to be 1 hour in milliseconds")
+	testutil.Assert(t, querierActual.maxSourceResolutionMillis == oneHourMillis, "expected max source resolution to be 1 hour in milliseconds")
 
 }
 

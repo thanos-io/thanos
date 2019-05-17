@@ -675,7 +675,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 // labels and resolution. This is important because we allow mixed resolution results, so it is quite crucial
 // to be aware what exactly resolution we see on query.
 // TODO(bplotka): Consider adding resolution label to all results to propagate that info to UI and Query API.
-func debugFoundBlockSetOverview(logger log.Logger, mint, maxt, maxResolution int64, lset labels.Labels, bs []*bucketBlock) {
+func debugFoundBlockSetOverview(logger log.Logger, mint, maxt, maxSourceResolutionMillis int64, lset labels.Labels, bs []*bucketBlock) {
 	if len(bs) == 0 {
 		level.Debug(logger).Log("msg", "No block found", "mint", mint, "maxt", maxt, "lset", lset.String())
 		return
@@ -703,7 +703,7 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt, maxResolution int
 
 	parts = append(parts, fmt.Sprintf("Range: %d-%d Resolution: %d", currMin, currMax, currRes))
 
-	level.Debug(logger).Log("msg", "Blocks source resolutions", "blocks", len(bs), "Maximum Resolution", maxResolution, "mint", mint, "maxt", maxt, "lset", lset.String(), "spans", strings.Join(parts, "\n"))
+	level.Debug(logger).Log("msg", "Blocks source resolutions", "blocks", len(bs), "Maximum Resolution", maxSourceResolutionMillis, "mint", mint, "maxt", maxt, "lset", lset.String(), "spans", strings.Join(parts, "\n"))
 }
 
 // Series implements the storepb.StoreServer interface.
@@ -934,7 +934,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 type bucketBlockSet struct {
 	labels      labels.Labels
 	mtx         sync.RWMutex
-	resolutions []int64          // available resolution, high to low
+	resolutions []int64          // available resolution, high to low (in milliseconds)
 	blocks      [][]*bucketBlock // ordered buckets for the existing resolutions
 }
 
@@ -997,7 +997,7 @@ func int64index(s []int64, x int64) int {
 
 // getFor returns a time-ordered list of blocks that cover date between mint and maxt.
 // Blocks with the lowest resolution possible but not lower than the given resolution are returned.
-func (s *bucketBlockSet) getFor(mint, maxt, minResolution int64) (bs []*bucketBlock) {
+func (s *bucketBlockSet) getFor(mint, maxt, maxSourceResolutionMillis int64) (bs []*bucketBlock) {
 	if mint == maxt {
 		return nil
 	}
@@ -1007,7 +1007,7 @@ func (s *bucketBlockSet) getFor(mint, maxt, minResolution int64) (bs []*bucketBl
 
 	// Find first matching resolution.
 	i := 0
-	for ; i < len(s.resolutions) && s.resolutions[i] > minResolution; i++ {
+	for ; i < len(s.resolutions) && s.resolutions[i] > maxSourceResolutionMillis; i++ {
 	}
 
 	// Base case, we fill the given interval with the closest resolution.

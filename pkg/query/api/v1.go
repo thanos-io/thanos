@@ -223,7 +223,7 @@ func (api *API) parseDownsamplingParamMillis(r *http.Request, step time.Duration
 		return 0, &ApiError{errorBadData, errors.Errorf("negative '%s' is not accepted. Try a positive integer", maxSourceResolutionParam)}
 	}
 
-	return int64(maxSourceResolution / (1000 * 1000)), nil
+	return int64(maxSourceResolution / time.Millisecond), nil
 }
 
 func (api *API) parsePartialResponseParam(r *http.Request) (enablePartialResponse bool, _ *ApiError) {
