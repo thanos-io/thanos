@@ -31,18 +31,26 @@ func TestBucketBlock_Property(t *testing.T) {
 		mint, maxt int64
 		window     int64
 	}
+	// This input resembles a typical production-level block layout
+	// in remote object storage.
 	input := []resBlock{
-		{window: downsample.ResLevel2, mint: 0, maxt: 100},
 		{window: downsample.ResLevel0, mint: 0, maxt: 100},
-		{window: downsample.ResLevel1, mint: 0, maxt: 100},
-
 		{window: downsample.ResLevel0, mint: 100, maxt: 200},
-		{window: downsample.ResLevel1, mint: 100, maxt: 200},
-		{window: downsample.ResLevel2, mint: 100, maxt: 200},
-
-		{window: downsample.ResLevel2, mint: 200, maxt: 300},
-		{window: downsample.ResLevel1, mint: 200, maxt: 300},
-		{window: downsample.ResLevel0, mint: 200, maxt: 300},
+		// Compaction level 2 begins but not downsampling (8 hour block length)
+		{window: downsample.ResLevel0, mint: 200, maxt: 600},
+		{window: downsample.ResLevel0, mint: 600, maxt: 1000},
+		// Compaction level 3 begins, Some of it is downsampled but still retained (48 hour block length)
+		{window: downsample.ResLevel0, mint: 1000, maxt: 1750},
+		{window: downsample.ResLevel1, mint: 1000, maxt: 1750},
+		// Compaction level 4 begins, different downsampling levels cover the same (336 hour block length)
+		{window: downsample.ResLevel0, mint: 1750, maxt: 7000},
+		{window: downsample.ResLevel1, mint: 1750, maxt: 7000},
+		{window: downsample.ResLevel2, mint: 1750, maxt: 7000},
+		// Compaction level 4 already happened, raw samples have been deleted
+		{window: downsample.ResLevel0, mint: 7000, maxt: 14000},
+		{window: downsample.ResLevel1, mint: 7000, maxt: 14000},
+		// Compaction level 4 already happened, raw and downsample res level 1 samples have been deleted
+		{window: downsample.ResLevel1, mint: 14000, maxt: 21000},
 	}
 
 	for _, in := range input {
@@ -54,26 +62,56 @@ func TestBucketBlock_Property(t *testing.T) {
 		testutil.Ok(t, set.add(&bucketBlock{meta: &m}))
 	}
 
-	properties.Property("getFor always gets all data in range", prop.ForAll(
+	properties.Property("getFor always gets some data in range", prop.ForAll(
 		func(low, high, maxResolution int64) bool {
-			defer leaktest.CheckTimeout(t, 10*time.Second)()
-
-			res := set.getFor(low, high, maxResolution)
-			mint := int64(301)
-			maxt := int64(0)
-			for _, b := range res {
-				if b.meta.MinTime < mint {
-					mint = b.meta.MinTime
-				}
-				if b.meta.MaxTime > maxt {
-					maxt = b.meta.MaxTime
-				}
-			}
+			// Bogus case.
 			if low >= high {
 				return true
 			}
-			return len(res) >= 0 && (mint <= low || mint == 0) && (high <= maxt || math.Abs(float64(high-maxt)) <= 100)
-		}, gen.Int64Range(0, 300), gen.Int64Range(0, 300), gen.Int64Range(0, 60*60*1000)),
+
+			res := set.getFor(low, high, maxResolution)
+			// We must always get some data.
+			if len(res) == 0 {
+				return false
+			}
+
+			// The data that we get must all encompass our requested range
+			if len(res) == 1 && (res[0].meta.Thanos.Downsample.Resolution > maxResolution ||
+				res[0].meta.MinTime > low ||
+				res[0].meta.MaxTime < high) {
+				return false
+			} else if len(res) > 1 {
+				mint := int64(21001)
+				maxt := int64(0)
+				for i := 0; i < len(res)-1; i++ {
+					if res[i].meta.Thanos.Downsample.Resolution > maxResolution {
+						return false
+					}
+					if res[i+1].meta.MinTime != res[i].meta.MaxTime {
+						return false
+					}
+					if res[i].meta.MinTime < mint {
+						mint = res[i].meta.MinTime
+					}
+					if res[i].meta.MaxTime > maxt {
+						maxt = res[i].meta.MaxTime
+					}
+				}
+				if res[len(res)-1].meta.MinTime < mint {
+					mint = res[len(res)-1].meta.MinTime
+				}
+				if res[len(res)-1].meta.MaxTime > maxt {
+					maxt = res[len(res)-1].meta.MaxTime
+				}
+				if low < mint {
+					return false
+				}
+				if maxt < high {
+					return false
+				}
+			}
+			return true
+		}, gen.Int64Range(0, 21000), gen.Int64Range(0, 21000), gen.Int64Range(0, 60*60*1000)),
 	)
 
 	properties.TestingRun(t)
