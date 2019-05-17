@@ -1012,7 +1012,7 @@ func (s *bucketBlockSet) getFor(mint, maxt, maxResolutionMillis int64) (bs []*bu
 
 	// Base case, we fill the given interval with the closest resolution.
 	for _, b := range s.blocks[i] {
-		if b.meta.MinTime < mint && b.meta.MaxTime <= mint {
+		if b.meta.MaxTime <= mint {
 			continue
 		}
 		if b.meta.MinTime >= maxt {
