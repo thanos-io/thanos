@@ -22,7 +22,7 @@ import (
 func TestBucketBlock_Property(t *testing.T) {
 	parameters := gopter.DefaultTestParameters()
 	parameters.Rng.Seed(42)
-	parameters.MinSuccessfulTests = 5000
+	parameters.MinSuccessfulTests = 10000
 	properties := gopter.NewProperties(parameters)
 
 	set := newBucketBlockSet(labels.Labels{})
@@ -62,7 +62,7 @@ func TestBucketBlock_Property(t *testing.T) {
 		testutil.Ok(t, set.add(&bucketBlock{meta: &m}))
 	}
 
-	properties.Property("getFor always gets some data in range", prop.ForAll(
+	properties.Property("getFor always gets at least some data in range", prop.ForAll(
 		func(low, high, maxResolution int64) bool {
 			// Bogus case.
 			if low >= high {
@@ -105,6 +105,55 @@ func TestBucketBlock_Property(t *testing.T) {
 			}
 			return true
 		}, gen.Int64Range(0, 21000), gen.Int64Range(0, 21000), gen.Int64Range(0, 60*60*1000)),
+	)
+
+	properties.Property("getFor always gets all data in range", prop.ForAll(
+		func(low, high int64) bool {
+			// Bogus case.
+			if low >= high {
+				return true
+			}
+
+			maxResolution := downsample.ResLevel2
+			res := set.getFor(low, high, maxResolution)
+
+			// The data that we get must all encompass our requested range
+			if len(res) == 1 && (res[0].meta.Thanos.Downsample.Resolution > maxResolution ||
+				res[0].meta.MinTime > low || res[0].meta.MaxTime < high) {
+				return false
+			} else if len(res) > 1 {
+				mint := int64(21001)
+				maxt := int64(0)
+				for i := 0; i < len(res)-1; i++ {
+					if res[i].meta.Thanos.Downsample.Resolution > maxResolution {
+						return false
+					}
+					if res[i+1].meta.MinTime != res[i].meta.MaxTime {
+						return false
+					}
+					if res[i].meta.MinTime < mint {
+						mint = res[i].meta.MinTime
+					}
+					if res[i].meta.MaxTime > maxt {
+						maxt = res[i].meta.MaxTime
+					}
+				}
+				if res[len(res)-1].meta.MinTime < mint {
+					mint = res[len(res)-1].meta.MinTime
+				}
+				if res[len(res)-1].meta.MaxTime > maxt {
+					maxt = res[len(res)-1].meta.MaxTime
+				}
+				if low < mint {
+					return false
+				}
+				if high > maxt {
+					return false
+				}
+
+			}
+			return true
+		}, gen.Int64Range(0, 21000), gen.Int64Range(0, 21000)),
 	)
 
 	properties.TestingRun(t)
