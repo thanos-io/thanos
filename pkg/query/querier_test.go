@@ -24,7 +24,8 @@ func TestQueryableCreator_MaxResolution(t *testing.T) {
 	testProxy := &storeServer{resps: []*storepb.SeriesResponse{}}
 	queryableCreator := NewQueryableCreator(nil, testProxy, "test")
 
-	queryable := queryableCreator(false, 1*time.Hour, false, func(err error) {})
+	oneHourMillis := int64(1*time.Hour) / (1000 * 1000)
+	queryable := queryableCreator(false, oneHourMillis, false, func(err error) {})
 
 	q, err := queryable.Querier(context.Background(), 0, 42)
 	testutil.Ok(t, err)
@@ -33,7 +34,7 @@ func TestQueryableCreator_MaxResolution(t *testing.T) {
 	querierActual, ok := q.(*querier)
 
 	testutil.Assert(t, ok == true, "expected it to be a querier")
-	testutil.Assert(t, querierActual.maxSourceResolution == int64(1*time.Hour), "expected max source resolution to be 1 hour")
+	testutil.Assert(t, querierActual.maxSourceResolution == oneHourMillis, "expected max source resolution to be 1 hour in milliseconds")
 
 }
 
