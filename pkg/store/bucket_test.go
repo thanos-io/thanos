@@ -21,8 +21,8 @@ import (
 
 func TestBucketBlock_Property(t *testing.T) {
 	parameters := gopter.DefaultTestParameters()
-	parameters.Rng.Seed(42)
-	parameters.MinSuccessfulTests = 10000
+	parameters.Rng.Seed(2000)
+	parameters.MinSuccessfulTests = 20000
 	properties := gopter.NewProperties(parameters)
 
 	set := newBucketBlockSet(labels.Labels{})
@@ -50,7 +50,7 @@ func TestBucketBlock_Property(t *testing.T) {
 		{window: downsample.ResLevel0, mint: 7000, maxt: 14000},
 		{window: downsample.ResLevel1, mint: 7000, maxt: 14000},
 		// Compaction level 4 already happened, raw and downsample res level 1 samples have been deleted
-		{window: downsample.ResLevel1, mint: 14000, maxt: 21000},
+		{window: downsample.ResLevel2, mint: 14000, maxt: 21000},
 	}
 
 	for _, in := range input {
@@ -62,7 +62,7 @@ func TestBucketBlock_Property(t *testing.T) {
 		testutil.Ok(t, set.add(&bucketBlock{meta: &m}))
 	}
 
-	properties.Property("getFor always gets at least some data in range", prop.ForAll(
+	properties.Property("getFor always gets at least some data in range", prop.ForAllNoShrink(
 		func(low, high, maxResolution int64) bool {
 			// Bogus case.
 			if low >= high {
@@ -107,7 +107,7 @@ func TestBucketBlock_Property(t *testing.T) {
 		}, gen.Int64Range(0, 21000), gen.Int64Range(0, 21000), gen.Int64Range(0, 60*60*1000)),
 	)
 
-	properties.Property("getFor always gets all data in range", prop.ForAll(
+	properties.Property("getFor always gets all data in range", prop.ForAllNoShrink(
 		func(low, high int64) bool {
 			// Bogus case.
 			if low >= high {
@@ -125,9 +125,6 @@ func TestBucketBlock_Property(t *testing.T) {
 				mint := int64(21001)
 				maxt := int64(0)
 				for i := 0; i < len(res)-1; i++ {
-					if res[i].meta.Thanos.Downsample.Resolution > maxResolution {
-						return false
-					}
 					if res[i+1].meta.MinTime != res[i].meta.MaxTime {
 						return false
 					}
