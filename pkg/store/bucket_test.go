@@ -70,15 +70,10 @@ func TestBucketBlock_Property(t *testing.T) {
 			}
 
 			res := set.getFor(low, high, maxResolution)
-			// We must always get some data.
-			if len(res) == 0 {
-				return false
-			}
 
 			// The data that we get must all encompass our requested range
 			if len(res) == 1 && (res[0].meta.Thanos.Downsample.Resolution > maxResolution ||
-				res[0].meta.MinTime > low ||
-				res[0].meta.MaxTime < high) {
+				res[0].meta.MinTime > low) {
 				return false
 			} else if len(res) > 1 {
 				mint := int64(21001)
@@ -106,9 +101,7 @@ func TestBucketBlock_Property(t *testing.T) {
 				if low < mint {
 					return false
 				}
-				if maxt < high {
-					return false
-				}
+
 			}
 			return true
 		}, gen.Int64Range(0, 21000), gen.Int64Range(0, 21000), gen.Int64Range(0, 60*60*1000)),
