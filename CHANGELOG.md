@@ -13,7 +13,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Fixed
 
-- [#1146](https://github.com/improbable-eng/thanos/pull/1146) store/bucket: make getFor() work with interleaved resolutions, pass proper resolution from querier.
+- [#1146](https://github.com/improbable-eng/thanos/pull/1146) store/bucket: make getFor() work with interleaved resolutions
 
 ### Added
 
