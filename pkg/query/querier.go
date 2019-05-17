@@ -5,8 +5,6 @@ import (
 	"sort"
 	"strings"
 
-	"time"
-
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/tracing"
@@ -26,11 +24,11 @@ type WarningReporter func(error)
 // If deduplication is enabled, all data retrieved from it will be deduplicated along the replicaLabel by default.
 // maxSourceResolution controls downsampling resolution that is allowed.
 // partialResponse controls `partialResponseDisabled` option of StoreAPI and partial response behaviour of proxy.
-type QueryableCreator func(deduplicate bool, maxSourceResolution time.Duration, partialResponse bool, r WarningReporter) storage.Queryable
+type QueryableCreator func(deduplicate bool, maxSourceResolution int64, partialResponse bool, r WarningReporter) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
 func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLabel string) QueryableCreator {
-	return func(deduplicate bool, maxSourceResolution time.Duration, partialResponse bool, r WarningReporter) storage.Queryable {
+	return func(deduplicate bool, maxSourceResolution int64, partialResponse bool, r WarningReporter) storage.Queryable {
 		return &queryable{
 			logger:              logger,
 			replicaLabel:        replicaLabel,
@@ -48,7 +46,7 @@ type queryable struct {
 	replicaLabel        string
 	proxy               storepb.StoreServer
 	deduplicate         bool
-	maxSourceResolution time.Duration
+	maxSourceResolution int64
 	partialResponse     bool
 	warningReporter     WarningReporter
 }
