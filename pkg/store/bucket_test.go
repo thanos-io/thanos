@@ -189,13 +189,13 @@ func TestBucketBlockSet_Duplicated(t *testing.T) {
 
 	cases := []struct {
 		mint, maxt    int64
-		minResolution int64
+		maxResolution int64
 		res           []resBlock
 	}{
 		{
 			mint:          0,
 			maxt:          300,
-			minResolution: downsample.ResLevel2,
+			maxResolution: downsample.ResLevel2,
 			res: []resBlock{
 				{window: downsample.ResLevel2, mint: 0, maxt: 100},
 				{window: downsample.ResLevel2, mint: 100, maxt: 200},
@@ -215,7 +215,7 @@ func TestBucketBlockSet_Duplicated(t *testing.T) {
 			m.MaxTime = b.maxt
 			exp = append(exp, &bucketBlock{meta: &m})
 		}
-		res := set.getFor(c.mint, c.maxt, c.minResolution)
+		res := set.getFor(c.mint, c.maxt, c.maxResolution)
 		testutil.Equals(t, exp, res)
 	}
 }
@@ -253,13 +253,13 @@ func TestBucketBlockSet_Interleaved(t *testing.T) {
 
 	cases := []struct {
 		mint, maxt    int64
-		minResolution int64
+		maxResolution int64
 		res           []resBlock
 	}{
 		{
 			mint:          0,
 			maxt:          700,
-			minResolution: downsample.ResLevel2,
+			maxResolution: downsample.ResLevel2,
 			res: []resBlock{
 				{window: downsample.ResLevel2, mint: 0, maxt: 50},
 				{window: downsample.ResLevel1, mint: 50, maxt: 100},
@@ -274,7 +274,7 @@ func TestBucketBlockSet_Interleaved(t *testing.T) {
 		{
 			mint:          100,
 			maxt:          400,
-			minResolution: downsample.ResLevel2,
+			maxResolution: downsample.ResLevel2,
 			res: []resBlock{
 				{window: downsample.ResLevel2, mint: 100, maxt: 200},
 				{window: downsample.ResLevel1, mint: 200, maxt: 300},
@@ -294,7 +294,7 @@ func TestBucketBlockSet_Interleaved(t *testing.T) {
 			m.MaxTime = b.maxt
 			exp = append(exp, &bucketBlock{meta: &m})
 		}
-		res := set.getFor(c.mint, c.maxt, c.minResolution)
+		res := set.getFor(c.mint, c.maxt, c.maxResolution)
 		testutil.Equals(t, exp, res)
 	}
 }
@@ -336,13 +336,13 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 
 	cases := []struct {
 		mint, maxt    int64
-		minResolution int64
+		maxResolution int64
 		res           []resBlock
 	}{
 		{
 			mint:          -100,
 			maxt:          1000,
-			minResolution: 0,
+			maxResolution: 0,
 			res: []resBlock{
 				{window: downsample.ResLevel0, mint: 0, maxt: 100},
 				{window: downsample.ResLevel0, mint: 100, maxt: 200},
@@ -353,7 +353,7 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 		}, {
 			mint:          100,
 			maxt:          400,
-			minResolution: downsample.ResLevel1 - 1,
+			maxResolution: downsample.ResLevel1 - 1,
 			res: []resBlock{
 				{window: downsample.ResLevel0, mint: 100, maxt: 200},
 				{window: downsample.ResLevel0, mint: 200, maxt: 300},
@@ -362,7 +362,7 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 		}, {
 			mint:          100,
 			maxt:          500,
-			minResolution: downsample.ResLevel1,
+			maxResolution: downsample.ResLevel1,
 			res: []resBlock{
 				{window: downsample.ResLevel1, mint: 100, maxt: 200},
 				{window: downsample.ResLevel1, mint: 200, maxt: 300},
@@ -372,7 +372,7 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 		}, {
 			mint:          0,
 			maxt:          500,
-			minResolution: downsample.ResLevel2,
+			maxResolution: downsample.ResLevel2,
 			res: []resBlock{
 				{window: downsample.ResLevel1, mint: 0, maxt: 100},
 				{window: downsample.ResLevel2, mint: 100, maxt: 200},
@@ -393,7 +393,7 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 			m.MaxTime = b.maxt
 			exp = append(exp, &bucketBlock{meta: &m})
 		}
-		res := set.getFor(c.mint, c.maxt, c.minResolution)
+		res := set.getFor(c.mint, c.maxt, c.maxResolution)
 		testutil.Equals(t, exp, res)
 	}
 }
