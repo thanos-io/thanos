@@ -8,6 +8,8 @@ TMP_GOPATH        ?= /tmp/thanos-go
 GOBIN             ?= ${GOPATH}/bin
 GO111MODULE       ?= on
 export GO111MODULE
+GOPROXY           ?= https://proxy.golang.org
+export GOPROXY
 
 # Tools.
 EMBEDMD           ?= $(GOBIN)/embedmd-$(EMBEDMD_VERSION)
