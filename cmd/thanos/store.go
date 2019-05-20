@@ -55,16 +55,30 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing blocks from object storage.").
 		Default("20").Int()
 
-	minTime := model.TimeOrDuration(cmd.Flag("min-time", "Start of time range limit to serve. Thanos Store serves only blocks, which have start time greater than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1.5d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+	minBlockStartTime := model.TimeOrDuration(cmd.Flag("--min-block-start-time", "Start of time range limit to serve. Thanos Store serves only blocks, which have start time greater than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1.5d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("0000-01-01T00:00:00Z"))
 
-	maxTime := model.TimeOrDuration(cmd.Flag("max-time", "End of time range limit to serve. Thanos Store serves only blocks, which have start time is less than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1.5d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+	maxBlockStartTime := model.TimeOrDuration(cmd.Flag("--max-block-start-time", "End of time range limit to serve. Thanos Store serves only blocks, which have start time is less than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1.5d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+		Default("9999-12-31T23:59:59Z"))
+
+	minBlockEndTime := model.TimeOrDuration(cmd.Flag("--min-block-end-time", "Start of time range limit to serve. Thanos Store serves only blocks, which have end time greater than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1.5d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+		Default("0000-01-01T00:00:00Z"))
+
+	maxBlockEndTime := model.TimeOrDuration(cmd.Flag("--max-block-end-time", "End of time range limit to serve. Thanos Store serves only blocks, which have end time is less than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1.5d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("9999-12-31T23:59:59Z"))
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
-		// Sanity check minTime.
-		if minTime.PrometheusTimestamp() > maxTime.PrometheusTimestamp() {
-			return errors.Errorf("invalid argument: min-time '%s' can't be greater than max-time '%s'", minTime, maxTime)
+		// Sanity check Time limits
+		switch {
+		case minBlockStartTime.PrometheusTimestamp() > maxBlockStartTime.PrometheusTimestamp():
+			return errors.Errorf("invalid argument: --min-block-start-time '%s' can't be greater than --max-block-start-time  '%s'", minBlockStartTime, maxBlockStartTime)
+		case minBlockEndTime.PrometheusTimestamp() > maxBlockEndTime.PrometheusTimestamp():
+			return errors.Errorf("invalid argument: --min-block-end-time '%s' can't be greater than --max-block-end-time  '%s'", minBlockStartTime, maxBlockStartTime)
+
+		case minBlockStartTime.PrometheusTimestamp() > maxBlockEndTime.PrometheusTimestamp():
+			return errors.Errorf("invalid argument: --min-block-start-time '%s' can't be greater than --max-block-end-time  '%s'", minBlockStartTime, maxBlockStartTime)
+		case minBlockEndTime.PrometheusTimestamp() > maxBlockStartTime.PrometheusTimestamp():
+			return errors.Errorf("invalid argument: --min-block-end-time '%s' can't be greater than --max-block-start-time  '%s'", minBlockStartTime, maxBlockStartTime)
 		}
 
 		return runStore(g,
@@ -86,8 +100,12 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			debugLogging,
 			*syncInterval,
 			*blockSyncConcurrency,
-			minTime,
-			maxTime,
+			&store.BlockFilterConfig{
+				MinBlockStartTime: *minBlockStartTime,
+				MaxBlockStartTime: *maxBlockStartTime,
+				MinBlockEndTime:   *minBlockEndTime,
+				MaxBlockEndTime:   *maxBlockEndTime,
+			},
 		)
 	}
 }
@@ -113,8 +131,7 @@ func runStore(
 	verbose bool,
 	syncInterval time.Duration,
 	blockSyncConcurrency int,
-	minTime *model.TimeOrDurationValue,
-	maxTime *model.TimeOrDurationValue,
+	blockFilterConf *store.BlockFilterConfig,
 ) error {
 	{
 		confContentYaml, err := objStoreConfig.Content()
@@ -156,8 +173,7 @@ func runStore(
 			maxConcurrent,
 			verbose,
 			blockSyncConcurrency,
-			minTime,
-			maxTime,
+			blockFilterConf,
 		)
 		if err != nil {
 			return errors.Wrap(err, "create object storage store")

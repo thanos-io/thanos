@@ -195,6 +195,12 @@ type indexCache interface {
 	Series(b ulid.ULID, id uint64) ([]byte, bool)
 }
 
+// BlockFilterConfig is a configiration, which Store uses for filtering blocks.
+type BlockFilterConfig struct {
+	MinBlockStartTime, MaxBlockStartTime model.TimeOrDurationValue
+	MinBlockEndTime, MaxBlockEndTime     model.TimeOrDurationValue
+}
+
 // BucketStore implements the store API backed by a bucket. It loads all index
 // files to local disk.
 type BucketStore struct {
@@ -222,8 +228,7 @@ type BucketStore struct {
 	samplesLimiter *Limiter
 	partitioner    partitioner
 
-	minTime *model.TimeOrDurationValue
-	maxTime *model.TimeOrDurationValue
+	blockFilterConf *BlockFilterConfig
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -239,8 +244,7 @@ func NewBucketStore(
 	maxConcurrent int,
 	debugLogging bool,
 	blockSyncConcurrency int,
-	minTime *model.TimeOrDurationValue,
-	maxTime *model.TimeOrDurationValue,
+	blockFilterConf *BlockFilterConfig,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -273,10 +277,9 @@ func NewBucketStore(
 			maxConcurrent,
 			extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg),
 		),
-		samplesLimiter: NewLimiter(maxSampleCount, metrics.queriesDropped),
-		partitioner:    gapBasedPartitioner{maxGapSize: maxGapSize},
-		minTime:        minTime,
-		maxTime:        maxTime,
+		samplesLimiter:  NewLimiter(maxSampleCount, metrics.queriesDropped),
+		partitioner:     gapBasedPartitioner{maxGapSize: maxGapSize},
+		blockFilterConf: blockFilterConf,
 	}
 
 	if err := os.MkdirAll(dir, 0777); err != nil {
@@ -421,8 +424,18 @@ func (s *BucketStore) isBlockInMinMaxRange(ctx context.Context, id ulid.ULID) (b
 		return false, err
 	}
 
-	// We check for blocks in configured minTime, maxTime range.
-	if b.meta.MinTime < s.minTime.PrometheusTimestamp() || b.meta.MinTime > s.maxTime.PrometheusTimestamp() {
+	// We check for blocks in configured minTime, maxTime range
+	switch {
+	case b.meta.MinTime < s.blockFilterConf.MinBlockStartTime.PrometheusTimestamp():
+		return false, nil
+
+	case b.meta.MinTime > s.blockFilterConf.MaxBlockStartTime.PrometheusTimestamp():
+		return false, nil
+
+	case b.meta.MaxTime < s.blockFilterConf.MinBlockEndTime.PrometheusTimestamp():
+		return false, nil
+
+	case b.meta.MaxTime > s.blockFilterConf.MaxBlockEndTime.PrometheusTimestamp():
 		return false, nil
 	}
 

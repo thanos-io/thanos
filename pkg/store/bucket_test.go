@@ -426,8 +426,7 @@ func TestBucketStore_Info(t *testing.T) {
 	dir, err := ioutil.TempDir("", "prometheus-test")
 	testutil.Ok(t, err)
 
-	bucketStore, err := NewBucketStore(nil, nil, nil, dir, noopCache{}, 2e5, 0, 0, false, 20, minTimeDuration, maxTimeDuration)
-
+	bucketStore, err := NewBucketStore(nil, nil, nil, dir, noopCache{}, 2e5, 0, 0, false, 20, blockFilterConf)
 	testutil.Ok(t, err)
 
 	resp, err := bucketStore.Info(ctx, &storepb.InfoRequest{})
@@ -477,14 +476,17 @@ func TestBucketStore_isBlockInMinMaxRange(t *testing.T) {
 	testutil.Ok(t, metadata.Write(log.NewNopLogger(), dir2, meta2))
 
 	// Run actual test
-	zeroTime := time.Unix(0, 0)
-	hourBefore := prommodel.Duration(-1 * time.Hour)
-	minTime := &model.TimeOrDurationValue{Time: &zeroTime}
-	maxTime := &model.TimeOrDurationValue{Dur: &hourBefore}
+	hourBeforeDur := prommodel.Duration(-1 * time.Hour)
+	hourBefore := model.TimeOrDurationValue{Dur: &hourBeforeDur}
 
 	// bucketStore accepts blocks in range [0, now-1h]
 	bucketStore, err := NewBucketStore(nil, nil, inmem.NewBucket(), dir, noopCache{}, 0, 0, 20, false, 20,
-		minTime, maxTime)
+		&BlockFilterConfig{
+			MinBlockStartTime: minTimeDuration,
+			MaxBlockStartTime: hourBefore,
+			MinBlockEndTime:   minTimeDuration,
+			MaxBlockEndTime:   maxTimeDuration,
+		})
 
 	inRange, err := bucketStore.isBlockInMinMaxRange(context.TODO(), id1)
 	testutil.Ok(t, err)
@@ -495,5 +497,4 @@ func TestBucketStore_isBlockInMinMaxRange(t *testing.T) {
 
 	inRange, err = bucketStore.isBlockInMinMaxRange(context.TODO(), id3)
 	testutil.Equals(t, false, inRange)
-
 }
