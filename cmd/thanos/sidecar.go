@@ -314,7 +314,7 @@ func validatePrometheus(ctx context.Context, logger log.Logger, m *promMetadata)
 
 		var err error
 		if flags, err = promclient.ConfiguredFlags(ctx, logger, m.promURL); err != nil {
-			if err == promclient.NotFoundFlags { // saw 404
+			if err == promclient.ErrFlagEndpointNotFound { // saw 404
 				level.Warn(logger).Log("msg", "failed to check Promteheus flags endpoint. No extra validation is done: %s", err)
 				return nil
 			}

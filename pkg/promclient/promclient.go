@@ -35,7 +35,7 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
-var NotFoundFlags = errors.New("no flag endpoint found")
+var ErrFlagEndpointNotFound = errors.New("no flag endpoint found")
 
 // IsWALFileAccesible returns no error if WAL dir can be found. This helps to tell
 // if we have access to Prometheus TSDB directory.
@@ -192,23 +192,23 @@ func ConfiguredFlags(ctx context.Context, logger log.Logger, base *url.URL) (Fla
 		return Flags{}, errors.New("failed to read body")
 	}
 
-	if resp.StatusCode == 404 {
-		return Flags{}, NotFoundFlags
-	}
+	switch resp.StatusCode {
+	case 404:
+		return Flags{}, ErrFlagEndpointNotFound
+	case 200:
+		var d struct {
+			Data Flags `json:"data"`
+		}
 
-	if resp.StatusCode != 200 {
+		if err := json.Unmarshal(b, &d); err != nil {
+			return Flags{}, errors.Wrapf(err, "unmarshal response: %v", string(b))
+		}
+
+		return d.Data, nil
+	default:
 		return Flags{}, errors.Errorf("got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
 	}
 
-	var d struct {
-		Data Flags `json:"data"`
-	}
-
-	if err := json.Unmarshal(b, &d); err != nil {
-		return Flags{}, errors.Wrapf(err, "unmarshal response: %v", string(b))
-	}
-
-	return d.Data, nil
 }
 
 // Snapshot will request Prometheus to perform snapshot in directory returned by this function.
