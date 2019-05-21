@@ -92,7 +92,7 @@ Flags:
                                  duration relative to current time, such as
                                  -1.5d or 2h45m. Valid duration units are ms, s,
                                  m, h, d, w, y.
-      ----max-block-start-time=9999-12-31T23:59:59Z
+      --max-block-start-time=9999-12-31T23:59:59Z
                                  End of time range limit to serve. Thanos Store
                                  serves only blocks, which have start time is
                                  less than this value. Option can be a constant
@@ -121,13 +121,23 @@ Flags:
 ## Time & Duration based partioning
 
 By default Thanos Store Gateway looks at all the data in Object Store and returns it based on query's time range.
-You can shard Thanos Store gateway based on time or duration relative to current time.
 
-For example setting: `--min-time=-6w` & `--max-time=-2w` will make Thanos Store Gateway look at blocks that fall within `now - 6 weeks` up to `now - 2 weeks`. 
+There is a block syncing job, which synchronizes local state with remote storage. You can configure how often it runs via `--sync-block-duration=3m`. In most cases default should work well.
 
-You can also set constant time in RFC3339 format. For example `--min-time=2018-01-01T00:00:00Z`, `--max-time=2019-01-01T23:59:59Z`.
 
-There is a sync-block job, which syncs up with remote storage and filters out blocks. You can configure how often it runs via `--sync-block-duration=3m`. In most cases default should work well.
+Recently Thanos Store introduced `--min-block-start-time`, `--max-block-start-time`, `--min-block-end-time`,`--max-block-end-time` flags, that allows you to shard Thanos Store based on constant time or duration relative to current time.
+The `{min,max}-block-start-time` options only look at block's start time and `{min,max}-block-end-time` only at the end time.
 
-Note that Thanos Store Gateway only looks at block's start time.  Therefore if block's start time is less than `--min-time`, the block won't be included as well as if it is more than `--max-time`.
+For example setting: `--min-block-start-time=-6w` & `--max-block-start-time==-2w` will make Thanos Store Gateway look at blocks that fall within `now - 6 weeks` up to `now - 2 weeks` time range.
 
+You can also set constant time in RFC3339 format. For example `--min-block-start-time=2018-01-01T00:00:00Z`, `--max-block-start-time=2019-01-01T23:59:59Z`.
+
+The block filtering is done in Thanos Store's syncing job, which adds some delay, so Thanos Store might not see new blocks or filter out blocks immediately.
+
+We recommend having overlapping time ranges with Thanos Sidecar and other Thanos Store gateways as this improves your resiliency to failures.
+A lot of Object Store implementations provide eventual read-after-write consistency, which means that Thanos Store won't immediately see newly created & uploaded blocks.
+Also Thanos Sidecar might fail to upload new blocks to Object Store due to network timeouts or Object Store downtime, so if your time ranges are too strict, you won't be able to query the data.
+
+Thanos Querier deals with overlapping time series by merging them together. It's important to note, that by having more overlapping time series Thanos Querier will use more resources, like CPU, network & memory, as it will have to pull down all the overlapping blocks and merge them.
+
+When configuring time partitioning keep in mind Thanos Compaction, as it builds bigger blocks and removes data based on your retention policies.

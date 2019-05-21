@@ -7,8 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/objstore/inmem"
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	terrors "github.com/prometheus/tsdb/errors"

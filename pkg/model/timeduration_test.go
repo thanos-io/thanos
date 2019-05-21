@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/model"
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/thanos-io/thanos/pkg/model"
+	"github.com/thanos-io/thanos/pkg/testutil"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
