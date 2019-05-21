@@ -24,3 +24,6 @@ sponsors:
 - name: Meltwater
   url: https://www.meltwater.com
   logo: meltwater.png
+- name: Jetstack
+  url: https://www.jetstack.io
+  logo: jetstack.png
