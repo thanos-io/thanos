@@ -156,7 +156,7 @@ Queriers, compactors and rule nodes require as approximately as many compute res
 
 Data that is just accessed locally in conventional Prometheus setups has to be transferred over the network in Thanos. We generally expect this data shuffling to typically happen in unmetered networks and thus not causing any additional cost.
 
-Typical object storage prices per GB are at about $0.02. The number of retrievals (typically priced at $0.004 per 10,0000) by the store nodes strongly depend on individual querying pattern. Adding 20% to the total storage cost to account for retrievals and running of store nodes seems like a conservative estimate.
+Typical object storage prices per GB are at about $0.02. The number of retrievals (typically priced at $0.004 per 10,000) by the store nodes strongly depend on individual querying pattern. Adding 20% to the total storage cost to account for retrievals and running of store nodes seems like a conservative estimate.
 
 Suppose we want to store 100TB of metric data. At about 1.07 bytes/sample in total data size, this is equivalent to:
 * storing 48.88 years of data across an average of 1 million active time series with default 15s scrape interval.
