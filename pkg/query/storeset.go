@@ -236,11 +236,6 @@ func (s *StoreSet) Update(ctx context.Context) {
 
 	// Add stores that are not yet in s.stores.
 	for addr, store := range healthyStores {
-		if _, ok := s.stores[addr]; ok {
-			s.updateStoreStatus(store, nil)
-			continue
-		}
-
 		// Check if it has some external labels specified.
 		// No external labels means strictly store gateway or ruler and it is fine to have access to multiple instances of them.
 		//
@@ -249,6 +244,11 @@ func (s *StoreSet) Update(ctx context.Context) {
 			store.close()
 			s.updateStoreStatus(store, errors.New(droppingStoreMessage))
 			level.Warn(s.logger).Log("msg", droppingStoreMessage, "address", addr)
+			continue
+		}
+
+		if _, ok := s.stores[addr]; ok {
+			s.updateStoreStatus(store, nil)
 			continue
 		}
 
