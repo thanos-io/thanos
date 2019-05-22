@@ -2,65 +2,49 @@ package provider
 
 import (
 	"context"
-	"github.com/go-kit/kit/log/level"
 	"io"
 	"io/ioutil"
+	"strings"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/tracing"
+	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/tracing/provider/jaeger"
 	"github.com/improbable-eng/thanos/pkg/tracing/provider/stackdriver"
 	"github.com/opentracing/opentracing-go"
-	"gopkg.in/alecthomas/kingpin.v2"
+	"github.com/pkg/errors"
+	"gopkg.in/yaml.v2"
 )
+
+type TracingProvider string
 
 const (
-	jaegerTracerType      = "jaeger"
-	stackdriverTracerType = "stackdriver"
-
-	envVarTracerType = "THANOS_TRACER_TYPE"
+	STACKDRIVER TracingProvider = "STACKDRIVER"
+	JAEGER      TracingProvider = "JAEGER"
 )
 
-// Factory is a meta-factory for tracers.
-type Factory struct {
-	tracingType *string
-	factories   map[string]tracing.Factory
+type TracingConfig struct {
+	Type   TracingProvider `yaml:"type"`
+	Config interface{}     `yaml:"config"`
 }
 
-// NewFactory creates the meta-factory.
-func NewFactory(app *kingpin.Application) *Factory {
-	f :=  &Factory{
-		factories: map[string]tracing.Factory{
-			jaegerTracerType:      jaeger.NewFactory(),
-			stackdriverTracerType: stackdriver.NewFactory(),
-		},
+func NewTracer(ctx context.Context, logger log.Logger, confContentYaml []byte) (opentracing.Tracer, io.Closer, error) {
+	level.Info(logger).Log("msg", "loading tracing configuration")
+	tracingConf := &TracingConfig{}
+	if err := yaml.UnmarshalStrict(confContentYaml, tracingConf); err != nil {
+		return &opentracing.NoopTracer{}, ioutil.NopCloser(nil), errors.Wrap(err, "parsing config YAML file")
 	}
-	f.registerKingpinFlags(app)
-	return f
-}
 
-// Create creates the tracer in appliance with a tracerType
-func (f *Factory) Create(ctx context.Context, logger log.Logger, serviceName string) (opentracing.Tracer, io.Closer) {
-	var tracer opentracing.Tracer
-	var closer io.Closer
-	var err error
-	factory, ok := f.factories[*f.tracingType];
-	if !ok {
-		level.Info(logger).Log("msg", "Invalid tracer type. Tracing will be disabled.", "err", err)
-		return &opentracing.NoopTracer{}, ioutil.NopCloser(nil)
-	}
-	tracer, closer, err = factory.Create(ctx, logger, serviceName)
+	config, err := yaml.Marshal(tracingConf.Config)
 	if err != nil {
-		level.Info(logger).Log("msg", "Tracer create error. Tracing will be disabled.", "err", err)
-		return &opentracing.NoopTracer{}, ioutil.NopCloser(nil)
+		return nil, nil, errors.Wrap(err, "marshal content of tracing configuration")
 	}
-	return tracer, closer
-}
-
-// registerKingpinFlags registers kingpinFlags for every tracer type.
-func (f *Factory) registerKingpinFlags(app *kingpin.Application) {
-	f.tracingType = app.Flag("tracing.type", "gcloud/jaeger.").Default("").Envar(envVarTracerType).String()
-	for _, t := range f.factories {
-		t.RegisterKingpinFlags(app)
+	switch strings.ToUpper(string(tracingConf.Type)) {
+	case string(STACKDRIVER):
+		return stackdriver.NewTracer(ctx, logger, config)
+	case string(JAEGER):
+		return jaeger.NewTracer(ctx, logger, config)
+	default:
+		return nil, nil, errors.Errorf("tracing with type %s is not supported", tracingConf.Type)
 	}
+	return nil, nil, errors.Errorf("tracing bla bla bla")
 }

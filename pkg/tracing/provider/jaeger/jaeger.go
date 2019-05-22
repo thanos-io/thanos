@@ -10,21 +10,30 @@ import (
 	"github.com/uber/jaeger-client-go"
 	"github.com/uber/jaeger-client-go/config"
 	"github.com/uber/jaeger-lib/metrics/prometheus"
-	"gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/yaml.v2"
 )
 
-// Factory implements tracing.Factory for Jaeger Tracer.
-type Factory struct {
+type Config struct {
+	ServiceName string `yaml:"service_name"`
 }
 
-
-// NewFactory creates a new Factory
-func NewFactory() *Factory {
-	return &Factory{}
+func parseConfig(conf []byte) (Config, error) {
+	config := Config{}
+	if err := yaml.Unmarshal(conf, &config); err != nil {
+		return Config{}, err
+	}
+	return config, nil
 }
 
-// Create implements tracing.Factory
-func (f *Factory) Create(ctx context.Context, logger log.Logger, serviceName string) (opentracing.Tracer, io.Closer, error) {
+func NewTracer(ctx context.Context, logger log.Logger, conf []byte) (opentracing.Tracer, io.Closer, error) {
+	config, err := parseConfig(conf)
+	if err != nil {
+		return nil, nil, err
+	}
+	return NewTracerWithConfig(ctx, logger, config)
+}
+
+func NewTracerWithConfig(ctx context.Context, logger log.Logger, conf Config) (opentracing.Tracer, io.Closer, error) {
 	cfg, err := config.FromEnv()
 	if err != nil {
 		return nil, nil, err
@@ -33,9 +42,7 @@ func (f *Factory) Create(ctx context.Context, logger log.Logger, serviceName str
 		JaegerDebugHeader: tracing.ForceTracingBaggageKey,
 	}
 	cfg.Headers.ApplyDefaults()
-	if serviceName != "" {
-		cfg.ServiceName = serviceName
-	}
+	cfg.ServiceName = conf.ServiceName
 
 	jLogger := &jaegerLogger{
 		logger: logger,
@@ -49,8 +56,4 @@ func (f *Factory) Create(ctx context.Context, logger log.Logger, serviceName str
 		return nil, nil, err
 	}
 	return tracer, closer, nil
-}
-
-// RegisterKingpinFlags implements tracing.Factory
-func (f *Factory) RegisterKingpinFlags(app *kingpin.Application) {
 }

@@ -5,6 +5,8 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"github.com/improbable-eng/thanos/pkg/tracing/provider"
+	"io"
 	"io/ioutil"
 	"math"
 	"net"
@@ -16,21 +18,19 @@ import (
 	"runtime"
 	"runtime/debug"
 	"syscall"
-	"io"
 
 	gmetrics "github.com/armon/go-metrics"
 
 	gprom "github.com/armon/go-metrics/prometheus"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
-	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/grpc-ecosystem/go-grpc-middleware"
+	"github.com/grpc-ecosystem/go-grpc-middleware/recovery"
+	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
-	"github.com/improbable-eng/thanos/pkg/tracing/provider"
 	"github.com/oklog/run"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -39,7 +39,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 const (
@@ -67,7 +67,10 @@ func main() {
 	logFormat := app.Flag("log.format", "Log format to use.").
 		Default(logFormatLogfmt).Enum(logFormatLogfmt, logFormatJson)
 
-	tracingFactory := provider.NewFactory(app)
+	//tracingFactory := provider.NewFactory(app)
+
+	//objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
+	tracingConfig := regCommonTracingFlags(app, "", false)
 
 	cmds := map[string]setupFunc{}
 	registerSidecar(cmds, app, "sidecar")
@@ -143,7 +146,15 @@ func main() {
 		ctx := context.Background()
 
 		var closer io.Closer
-		tracer, closer = tracingFactory.Create(ctx, logger, *debugName)
+		var confContentYaml []byte
+		confContentYaml, err = tracingConfig.Content()
+		//tracer, closer = tracingFactory.Create(ctx, logger, *debugName)
+		tracer, closer, err = provider.NewTracer(ctx, logger, confContentYaml)
+
+		if err != nil {
+			fmt.Fprintln(os.Stderr, errors.Wrapf(err, "tracing failed"))
+			os.Exit(1)
+		}
 
 		// This is bad, but Prometheus does not support any other tracer injections than just global one.
 		// TODO(bplotka): Work with basictracer to handle gracefully tracker mismatches, and also with Prometheus to allow
