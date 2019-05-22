@@ -21,8 +21,7 @@ fi
 echo "installing gogofast"
 GO111MODULE=on go install "github.com/gogo/protobuf/protoc-gen-gogofast"
 
-THANOS_ROOT=$(pwd)
-PROM_PATH="${THANOS_ROOT}/pkg/store/prompb"
+PROM_PATH="$(pwd)/pkg/store/prompb"
 GOGOPROTO_ROOT="$(GO111MODULE=on go list -f '{{ .Dir }}' -m github.com/gogo/protobuf)"
 GOGOPROTO_PATH="${GOGOPROTO_ROOT}:${GOGOPROTO_ROOT}/protobuf"
 
