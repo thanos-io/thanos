@@ -996,7 +996,7 @@ func int64index(s []int64, x int64) int {
 }
 
 // getFor returns a time-ordered list of blocks that cover date between mint and maxt.
-// Blocks with the lowest resolution possible but not lower than the given resolution are returned.
+// Blocks with the biggest resolution possible but not bigger than the given max resolution are returned.
 func (s *bucketBlockSet) getFor(mint, maxt, maxResolutionMillis int64) (bs []*bucketBlock) {
 	if mint == maxt {
 		return nil
