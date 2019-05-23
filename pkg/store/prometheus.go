@@ -384,7 +384,7 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesR
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	if err = json.Unmarshal(body, m); err != nil {
+	if err = json.Unmarshal(body, &m); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
@@ -443,7 +443,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	if err = json.Unmarshal(body, m); err != nil {
+	if err = json.Unmarshal(body, &m); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 

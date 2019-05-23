@@ -193,7 +193,7 @@ func ReadIndexCache(logger log.Logger, fn string) (
 		return 0, nil, nil, nil, errors.Wrap(err, "read file")
 	}
 
-	if err = json.Unmarshal(bytes, v); err != nil {
+	if err = json.Unmarshal(bytes, &v); err != nil {
 		return 0, nil, nil, nil, errors.Wrap(err, "unmarshal index cache")
 	}
 

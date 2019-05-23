@@ -333,7 +333,7 @@ func QueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query s
 		return nil, nil, errors.Wrap(err, "read query instant response")
 	}
 
-	if err = json.Unmarshal(body, m); err != nil {
+	if err = json.Unmarshal(body, &m); err != nil {
 		return nil, nil, errors.Wrap(err, "unmarshal query instant response")
 	}
 

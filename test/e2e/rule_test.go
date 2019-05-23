@@ -463,7 +463,7 @@ func queryAlertmanagerAlerts(ctx context.Context, url string) ([]*model.Alert, e
 		return nil, err
 	}
 
-	if err = json.Unmarshal(body, m); err != nil {
+	if err = json.Unmarshal(body, &v); err != nil {
 		return nil, err
 	}
 

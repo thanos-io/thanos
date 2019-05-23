@@ -142,7 +142,7 @@ func DownloadMeta(ctx context.Context, logger log.Logger, bkt objstore.Bucket, i
 		return metadata.Meta{}, errors.Wrapf(err, "read meta.json for block %s", id.String())
 	}
 
-	if err = json.Unmarshal(obj, m); err != nil {
+	if err = json.Unmarshal(obj, &m); err != nil {
 		return metadata.Meta{}, errors.Wrapf(err, "unmarshal meta.json for block %s", id.String())
 	}
 

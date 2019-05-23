@@ -364,7 +364,7 @@ func genMissingIndexCacheFiles(ctx context.Context, logger log.Logger, bkt objst
 			return errors.Wrap(err, "read meta")
 		}
 
-		if err = json.Unmarshal(obj, meta); err != nil {
+		if err = json.Unmarshal(obj, &meta); err != nil {
 			return errors.Wrap(err, "unmarshal meta")
 		}
 
