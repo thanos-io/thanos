@@ -127,7 +127,7 @@ func downsampleBucket(
 			return errors.Wrap(err, "read meta")
 		}
 
-		if err := json.Unmarshal(obj, m); err != nil {
+		if err = json.Unmarshal(obj, m); err != nil {
 			return errors.Wrap(err, "unmarshal meta")
 		}
 
