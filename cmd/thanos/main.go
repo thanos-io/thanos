@@ -67,10 +67,7 @@ func main() {
 	logFormat := app.Flag("log.format", "Log format to use.").
 		Default(logFormatLogfmt).Enum(logFormatLogfmt, logFormatJson)
 
-	//tracingFactory := provider.NewFactory(app)
-
-	//objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
-	tracingConfig := regCommonTracingFlags(app, "", false)
+	tracingConfig := regCommonTracingFlags(app)
 
 	cmds := map[string]setupFunc{}
 	registerSidecar(cmds, app, "sidecar")
@@ -148,11 +145,19 @@ func main() {
 		var closer io.Closer
 		var confContentYaml []byte
 		confContentYaml, err = tracingConfig.Content()
-		//tracer, closer = tracingFactory.Create(ctx, logger, *debugName)
-		tracer, closer, err = provider.NewTracer(ctx, logger, confContentYaml)
+
+		if len(confContentYaml) == 0 {
+			level.Info(logger).Log("msg", "Tracing will be disabled")
+			tracer, closer, err = provider.NoopTracer()
+		} else {
+			tracer, closer, err = provider.NewTracer(ctx, logger, confContentYaml)
+		}
 
 		if err != nil {
 			fmt.Fprintln(os.Stderr, errors.Wrapf(err, "tracing failed"))
+			if closer != nil {
+				closer.Close()
+			}
 			os.Exit(1)
 		}
 

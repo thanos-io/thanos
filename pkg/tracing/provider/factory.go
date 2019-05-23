@@ -24,20 +24,26 @@ const (
 
 type TracingConfig struct {
 	Type   TracingProvider `yaml:"type"`
-	Config interface{}     `yaml:"config"`
+	Config interface{}     `yaml:"config,omitempty"`
 }
 
 func NewTracer(ctx context.Context, logger log.Logger, confContentYaml []byte) (opentracing.Tracer, io.Closer, error) {
 	level.Info(logger).Log("msg", "loading tracing configuration")
 	tracingConf := &TracingConfig{}
+
 	if err := yaml.UnmarshalStrict(confContentYaml, tracingConf); err != nil {
-		return &opentracing.NoopTracer{}, ioutil.NopCloser(nil), errors.Wrap(err, "parsing config YAML file")
+		return nil, nil, errors.Wrap(err, "parsing config tracing YAML")
 	}
 
-	config, err := yaml.Marshal(tracingConf.Config)
+	var config []byte
+	var err error
+	if tracingConf.Config != nil {
+		config, err = yaml.Marshal(tracingConf.Config)
+	}
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "marshal content of tracing configuration")
 	}
+
 	switch strings.ToUpper(string(tracingConf.Type)) {
 	case string(STACKDRIVER):
 		return stackdriver.NewTracer(ctx, logger, config)
@@ -46,5 +52,8 @@ func NewTracer(ctx context.Context, logger log.Logger, confContentYaml []byte) (
 	default:
 		return nil, nil, errors.Errorf("tracing with type %s is not supported", tracingConf.Type)
 	}
-	return nil, nil, errors.Errorf("tracing bla bla bla")
+}
+
+func NoopTracer() (opentracing.Tracer, io.Closer, error) {
+	return &opentracing.NoopTracer{}, ioutil.NopCloser(nil), nil
 }

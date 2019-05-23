@@ -203,23 +203,20 @@ func regCommonObjStoreFlags(cmd *kingpin.CmdClause, suffix string, required bool
 }
 
 
-func regCommonTracingFlags(cmd *kingpin.Application, suffix string, required bool, extraDesc ...string) *pathOrContent {
-	fileFlagName := fmt.Sprintf("tracing%s.config-file", suffix)
-	contentFlagName := fmt.Sprintf("tracing%s.config", suffix)
+func regCommonTracingFlags(app *kingpin.Application) *pathOrContent {
+	fileFlagName := fmt.Sprintf("tracing.config-file")
+	contentFlagName := fmt.Sprintf("tracing.config")
 
-	help := fmt.Sprintf("Path to YAML file that contains tracing%s configuration.", suffix)
-	help = strings.Join(append([]string{help}, extraDesc...), " ")
-	tracingConfFile := cmd.Flag(fileFlagName, help).PlaceHolder("<tracing.config-yaml-path>").String()
+	help := fmt.Sprintf("Path to YAML file that contains tracing configuration.")
+	tracingConfFile := app.Flag(fileFlagName, help).PlaceHolder("<tracing.config-yaml-path>").String()
 
-	help = fmt.Sprintf("Alternative to '%s' flag. Tracing%s configuration in YAML.", fileFlagName, suffix)
-	help = strings.Join(append([]string{help}, extraDesc...), " ")
-	tracingConf := cmd.Flag(contentFlagName, help).
-		PlaceHolder("<tracing.config-yaml>").String()
+	help = fmt.Sprintf("Alternative to '%s' flag. Tracing configuration in YAML.", fileFlagName)
+	tracingConf := app.Flag(contentFlagName, help).PlaceHolder("<tracing.config-yaml>").String()
 
 	return &pathOrContent{
 		fileFlagName:    fileFlagName,
 		contentFlagName: contentFlagName,
-		required:        required,
+		required:        false,
 
 		path:    tracingConfFile,
 		content: tracingConf,
