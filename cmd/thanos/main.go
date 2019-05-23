@@ -156,7 +156,9 @@ func main() {
 		if err != nil {
 			fmt.Fprintln(os.Stderr, errors.Wrapf(err, "tracing failed"))
 			if closer != nil {
-				closer.Close()
+				if err = closer.Close(); err != nil {
+					level.Warn(logger).Log("msg", "closing tracer failed", "err", err)
+				}
 			}
 			os.Exit(1)
 		}
