@@ -5,6 +5,7 @@ package block
 import (
 	"context"
 	"encoding/json"
+	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -135,9 +136,16 @@ func DownloadMeta(ctx context.Context, logger log.Logger, bkt objstore.Bucket, i
 	defer runutil.CloseWithLogOnErr(logger, rc, "download meta bucket client")
 
 	var m metadata.Meta
-	if err := json.NewDecoder(rc).Decode(&m); err != nil {
-		return metadata.Meta{}, errors.Wrapf(err, "decode meta.json for block %s", id.String())
+
+	obj, err := ioutil.ReadAll(rc)
+	if err != nil {
+		return metadata.Meta{}, errors.Wrapf(err, "read meta.json for block %s", id.String())
 	}
+
+	if err = json.Unmarshal(obj, m); err != nil {
+		return metadata.Meta{}, errors.Wrapf(err, "unmarshal meta.json for block %s", id.String())
+	}
+
 	return m, nil
 }
 

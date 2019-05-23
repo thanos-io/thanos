@@ -328,8 +328,13 @@ func QueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query s
 		Warnings []string `json:"warnings"`
 	}
 
-	if err = json.NewDecoder(resp.Body).Decode(&m); err != nil {
-		return nil, nil, errors.Wrap(err, "decode query instant response")
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "read query instant response")
+	}
+
+	if err = json.Unmarshal(body, m); err != nil {
+		return nil, nil, errors.Wrap(err, "unmarshal query instant response")
 	}
 
 	var vectorResult model.Vector

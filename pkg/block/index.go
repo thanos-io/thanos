@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/crc32"
+	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -186,9 +187,16 @@ func ReadIndexCache(logger log.Logger, fn string) (
 	defer runutil.CloseWithLogOnErr(logger, f, "index reader")
 
 	var v indexCache
-	if err := json.NewDecoder(f).Decode(&v); err != nil {
-		return 0, nil, nil, nil, errors.Wrap(err, "decode file")
+
+	bytes, err := ioutil.ReadFile(fn)
+	if err != nil {
+		return 0, nil, nil, nil, errors.Wrap(err, "read file")
 	}
+
+	if err = json.Unmarshal(bytes, v); err != nil {
+		return 0, nil, nil, nil, errors.Wrap(err, "unmarshal index cache")
+	}
+
 	strs := map[string]string{}
 	lvals = make(map[string][]string, len(v.LabelValues))
 	postings = make(map[labels.Label]index.Range, len(v.Postings))

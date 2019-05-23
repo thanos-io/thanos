@@ -457,9 +457,16 @@ func queryAlertmanagerAlerts(ctx context.Context, url string) ([]*model.Alert, e
 	var v struct {
 		Data []*model.Alert `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
 		return nil, err
 	}
+
+	if err = json.Unmarshal(body, m); err != nil {
+		return nil, err
+	}
+
 	sort.Slice(v.Data, func(i, j int) bool {
 		return v.Data[i].Labels.Before(v.Data[j].Labels)
 	})
