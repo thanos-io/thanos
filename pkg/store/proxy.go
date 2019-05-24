@@ -11,9 +11,11 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/strutil"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb/labels"
 	"golang.org/x/sync/errgroup"
@@ -179,6 +181,9 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 
 			// This is used to cancel this stream when one operations takes too long.
 			seriesCtx, closeSeries := context.WithCancel(gctx)
+			seriesCtx = grpc_opentracing.ClientAddContextTags(seriesCtx, opentracing.Tags{
+				"target": st.Addr(),
+			})
 			defer closeSeries()
 
 			sc, err := st.Series(seriesCtx, r)
