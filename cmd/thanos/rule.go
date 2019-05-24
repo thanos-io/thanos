@@ -139,7 +139,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			fileSD = file.NewDiscovery(conf, logger)
 		}
 
-		if fileSD == nil {
+		if fileSD == nil && len(*queries) == 0 {
 			return errors.Errorf("No --query parameter was given.")
 		}
 
@@ -555,7 +555,7 @@ func runRule(
 		return err
 	}
 
-	var uploads = true
+	uploads := true
 	if len(confContentYaml) == 0 {
 		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
 		uploads = false
