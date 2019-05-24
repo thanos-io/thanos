@@ -7,10 +7,10 @@ import (
 	"os"
 
 	"cloud.google.com/go/trace/apiv1"
-	"github.com/lovoo/gcloud-opentracing"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/tracing"
+	"github.com/lovoo/gcloud-opentracing"
 	"github.com/opentracing/basictracer-go"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/common/version"
@@ -19,6 +19,14 @@ import (
 type tracer struct {
 	serviceName string
 	wrapped   opentracing.Tracer
+}
+
+func (t *tracer) GetTraceIdFromSpanContext(ctx opentracing.SpanContext) (string, bool) {
+	if c, ok := ctx.(basictracer.SpanContext); ok {
+		// "%016x%016x" - ugly hack for gcloud find traces by ID https://console.cloud.google.com/traces/traces?project=<project_id>&tid=<62119f61b7c2663962119f61b7c26639>
+		return fmt.Sprintf("%016x%016x", c.TraceID, c.TraceID), true
+	}
+	return "", false
 }
 
 func (t *tracer) StartSpan(operationName string, opts ...opentracing.StartSpanOption) opentracing.Span {

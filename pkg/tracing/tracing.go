@@ -9,9 +9,17 @@ import (
 // ForceTracingBaggageKey - force sampling header.
 const ForceTracingBaggageKey = "X-Thanos-Force-Tracing"
 
+
+// traceIdResponseHeader - Trace ID response header.
+const traceIdResponseHeader = "X-Thanos-Trace-Id"
+
 type contextKey struct{}
 
 var tracerKey = contextKey{}
+
+type Tracer interface {
+	GetTraceIdFromSpanContext(ctx opentracing.SpanContext) (string, bool)
+}
 
 // ContextWithTracer returns a new `context.Context` that holds a reference to given opentracing.Tracer.
 func ContextWithTracer(ctx context.Context, tracer opentracing.Tracer) context.Context {
