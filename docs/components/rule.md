@@ -156,15 +156,12 @@ Flags:
       --version                  Show application version.
       --log.level=info           Log filtering level.
       --log.format=logfmt        Log format to use.
-      --tracing.type=noop        Tracer to use (stackdriver/jaeger/noop).
-      --stackdriver.project=GCLOUDTRACE.PROJECT
-                                 GCP project to send Google Cloud Trace tracings
-                                 to. If empty, tracing will be disabled.
-      --stackdriver.sample-factor=1
-                                 How often we send traces (1/<sample-factor>).
-                                 If 0 no trace will be sent periodically, unless
-                                 forced by baggage item. See
-                                 `pkg/tracing/tracing.go` for details.
+      --tracing.config-file=<tracing.config-yaml-path>
+                                 Path to YAML file that contains tracing
+                                 configuration.
+      --tracing.config=<tracing.config-yaml>
+                                 Alternative to 'tracing.config-file' flag.
+                                 Tracing configuration in YAML.
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --grpc-address="0.0.0.0:10901"
