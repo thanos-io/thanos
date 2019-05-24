@@ -108,9 +108,6 @@ func testQuerySimple(t *testing.T, conf testConfig) {
 		}
 
 		expectedRes := 4
-		if conf.name == "gossip" {
-			expectedRes = 3
-		}
 		if len(res) != expectedRes {
 			return errors.Errorf("unexpected result size %d, expected %d", len(res), expectedRes)
 		}
@@ -140,14 +137,12 @@ func testQuerySimple(t *testing.T, conf testConfig) {
 		"replica":    model.LabelValue("1"),
 	}, res[2].Metric)
 
-	if conf.name != "gossip" {
-		testutil.Equals(t, model.Metric{
-			"__name__": "up",
-			"instance": model.LabelValue("localhost:9100"),
-			"job":      "node",
-			"receive":  "true",
-		}, res[3].Metric)
-	}
+	testutil.Equals(t, model.Metric{
+		"__name__": "up",
+		"instance": model.LabelValue("localhost:9100"),
+		"job":      "node",
+		"receive":  "true",
+	}, res[3].Metric)
 
 	// Try query with deduplication.
 	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
@@ -175,9 +170,6 @@ func testQuerySimple(t *testing.T, conf testConfig) {
 		}
 
 		expectedRes := 3
-		if conf.name == "gossip" {
-			expectedRes = 2
-		}
 		if len(res) != expectedRes {
 			return errors.Errorf("unexpected result size %d, expected %d", len(res), expectedRes)
 		}
@@ -197,14 +189,12 @@ func testQuerySimple(t *testing.T, conf testConfig) {
 		"job":        "prometheus",
 		"prometheus": "prom-ha",
 	}, res[1].Metric)
-	if conf.name != "gossip" {
-		testutil.Equals(t, model.Metric{
-			"__name__": "up",
-			"instance": model.LabelValue("localhost:9100"),
-			"job":      "node",
-			"receive":  "true",
-		}, res[2].Metric)
-	}
+	testutil.Equals(t, model.Metric{
+		"__name__": "up",
+		"instance": model.LabelValue("localhost:9100"),
+		"job":      "node",
+		"receive":  "true",
+	}, res[2].Metric)
 }
 
 func urlParse(t *testing.T, addr string) *url.URL {
