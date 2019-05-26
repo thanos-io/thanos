@@ -6,7 +6,7 @@ menu: components
 
 # Rule (aka Ruler)
 
-_**NOTE:** It is recommended to keep deploying rules inside the relevant Prometheus servers locally. Use ruler only on specific cases. Read details [below](rule.md#Risk) why._
+_**NOTE:** It is recommended to keep deploying rules inside the relevant Prometheus servers locally. Use ruler only on specific cases. Read details [below](rule.md#risk) why._
 
 _The rule component should in particular not be used to circumvent solving rule deployment properly at the configuration management level._
 
@@ -17,7 +17,7 @@ Rule results are written back to disk in the Prometheus 2.0 storage format. Rule
 You can think of Rule as a simplified Prometheus that does not require a sidecar and does not scrape and do PromQL evaluation (no QueryAPI).
 
 The data of each Rule node can be labeled to satisfy the clusters labeling scheme. High-availability pairs can be run in parallel and should be distinguished by the designated replica label, just like regular Prometheus servers.
-Read more about Ruler in HA [here](rule.md#Ruler_HA)
+Read more about Ruler in HA [here](rule.md#ruler-ha)
 
 ```bash
 $ thanos rule \
@@ -45,7 +45,7 @@ unavailability is the key.
 
 ## Partial Response
 
-See [this](query.md#PartialResponse) on initial info.
+See [this](query.md#partial-response) on initial info.
 
 Rule allows you to specify rule groups with additional fields that control PartialResponseStrategy e.g:
 
@@ -82,20 +82,21 @@ indicate connection, incompatibility or misconfiguration problems.
 
 * `prometheus_rule_evaluation_failures_total`. If greater than 0, it means that that rule failed to be evaluated, which results in
 either gap in rule or potentially ignored alert. Alert heavily on this if this happens for longer than your alert thresholds.
-`strategy` label will tell you if failures comes from rules that tolerate [partial response](rule.md#PartialResponse) or not.
+`strategy` label will tell you if failures comes from rules that tolerate [partial response](rule.md#partial-response) or not.
 
 * `prometheus_rule_group_last_duration_seconds < prometheus_rule_group_interval_seconds`  If the difference is large, it means 
 that rule evaluation took more time than the scheduled interval. It can indicate that your query backend (e.g Querier) takes too much time 
 to evaluate the query, i.e. that it is not fast enough to fill the rule. This might indicate other problems like slow StoreAPis or 
 too complex query expression in rule. 
 
-* `thanos_rule_evaluation_with_warnings_total`. If you choose to use Rules and Alerts with [partial response strategy's](rule.md#PartialResponse)
+* `thanos_rule_evaluation_with_warnings_total`. If you choose to use Rules and Alerts with [partial response strategy's](rule.md#partial-response)
 value as "warn", this metric will tell you how many evaluation ended up with some kind of warning. To see the actual warnings
 see WARN log level. This might suggest that those evaluations return partial response and might not be accurate.
 
 Those metrics are important for vanilla Prometheus as well, but even more important when we rely on (sometimes WAN) network.
 
 // TODO(bwplotka): Rereview them after recent changes in metrics.
+
 See [alerts](/examples/alerts/alerts.md#Ruler) for more example alerts for ruler. 
 
 NOTE: It is also recommended to set a mocked Alert on Ruler that checks if Query is up. This might be something simple like `vector(1)` query, just
