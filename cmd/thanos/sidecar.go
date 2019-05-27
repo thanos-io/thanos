@@ -305,27 +305,24 @@ func runSidecar(
 }
 
 func validatePrometheus(ctx context.Context, logger log.Logger, m *promMetadata) error {
-	flags := promclient.Flags{
-		TSDBMinTime: model.Duration(2 * time.Hour),
-		TSDBMaxTime: model.Duration(2 * time.Hour),
-	}
+	var (
+		flagErr error
+		flags   promclient.Flags
+	)
 
 	if err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
-
-		var err error
-		if flags, err = promclient.ConfiguredFlags(ctx, logger, m.promURL); err != nil {
-			if err == promclient.ErrFlagEndpointNotFound { // saw 404
-				level.Warn(logger).Log("msg", "failed to check Promteheus flags endpoint. No extra validation is done: %s", err)
-				return nil
-			}
-			level.Warn(logger).Log("msg", "failed to get Prometheus flags. Is Prometheus running? Retrying", "err", err)
-			return errors.Wrapf(err, "fetch Prometheus flags")
+		if flags, flagErr = promclient.ConfiguredFlags(ctx, logger, m.promURL); flagErr != nil && flagErr != promclient.ErrFlagEndpointNotFound {
+			level.Warn(logger).Log("msg", "failed to get Prometheus flags. Is Prometheus running? Retrying", "err", flagErr)
+			return errors.Wrapf(flagErr, "fetch Prometheus flags")
 		}
-
 		return nil
-
 	}); err != nil {
 		return errors.Wrapf(err, "fetch Prometheus flags")
+	}
+
+	if flagErr != nil {
+		level.Warn(logger).Log("msg", "failed to check Prometheus flags, due to potentially older Prometheus. No extra validation is done.", "err", flagErr)
+		return nil
 	}
 
 	// Check if compaction is disabled.
