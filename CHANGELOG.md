@@ -43,6 +43,16 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 This release also disables gossip mode by default for all components.
 See [this](docs/proposals/approved/201809_gossip-removal.md) for more details.
 
+:warning: This release moves Thanos docker images and artifacts to Golang 1.12. This release includes change in GC's memory release which gives following effect (source: https://golang.org/doc/go1.12):
+
+> On Linux, the runtime now uses MADV_FREE to release unused memory. This is more efficient but may result in higher reported RSS. The kernel will reclaim the unused data when it is needed. To revert to the Go 1.11 behavior (MADV_DONTNEED), set the environment variable GODEBUG=madvdontneed=1.
+
+If you want to see exact memory allocation of Thanos process:
+* Use `go_memstats_heap_alloc_bytes` metric exposed by Golang.
+* Add `GODEBUG=madvdontneed=1` before running Thanos binary to revert to memory releasing to pre 1.12 logic.
+
+Using cadvisor metric could be misleading e.g: https://github.com/google/cadvisor/issues/2242
+
 ### Added
 
 - [thanos.io](https://thanos.io) website & automation :tada: 
