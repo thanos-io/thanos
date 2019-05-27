@@ -166,8 +166,10 @@ func main() {
 			<-ctx.Done()
 			return ctx.Err()
 		}, func(error) {
-			if err := closer.Close(); err != nil {
-				level.Warn(logger).Log("msg", "closing tracer failed", "err", err)
+			if closer != nil {
+				if err := closer.Close(); err != nil {
+					level.Warn(logger).Log("msg", "closing tracer failed", "err", err)
+				}
 			}
 			cancel()
 		})
