@@ -1,15 +1,14 @@
-package provider
+package client
 
 import (
 	"context"
 	"io"
-	"io/ioutil"
 	"strings"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/tracing/provider/jaeger"
-	"github.com/improbable-eng/thanos/pkg/tracing/provider/stackdriver"
+	"github.com/improbable-eng/thanos/pkg/tracing/jaeger"
+	"github.com/improbable-eng/thanos/pkg/tracing/stackdriver"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
@@ -39,9 +38,9 @@ func NewTracer(ctx context.Context, logger log.Logger, confContentYaml []byte) (
 	var err error
 	if tracingConf.Config != nil {
 		config, err = yaml.Marshal(tracingConf.Config)
-	}
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "marshal content of tracing configuration")
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "marshal content of tracing configuration")
+		}
 	}
 
 	switch strings.ToUpper(string(tracingConf.Type)) {
@@ -54,6 +53,6 @@ func NewTracer(ctx context.Context, logger log.Logger, confContentYaml []byte) (
 	}
 }
 
-func NoopTracer() (opentracing.Tracer, io.Closer, error) {
-	return &opentracing.NoopTracer{}, ioutil.NopCloser(nil), nil
+func NoopTracer() opentracing.Tracer {
+	return &opentracing.NoopTracer{}
 }

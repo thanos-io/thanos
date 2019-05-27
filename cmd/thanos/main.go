@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"github.com/improbable-eng/thanos/pkg/tracing/provider"
 	"io"
 	"io/ioutil"
 	"math"
@@ -20,15 +19,15 @@ import (
 	"syscall"
 
 	gmetrics "github.com/armon/go-metrics"
-
 	gprom "github.com/armon/go-metrics/prometheus"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/grpc-ecosystem/go-grpc-middleware/recovery"
+	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
+	"github.com/improbable-eng/thanos/pkg/tracing/client"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -148,19 +147,13 @@ func main() {
 
 		if len(confContentYaml) == 0 {
 			level.Info(logger).Log("msg", "Tracing will be disabled")
-			tracer, closer, err = provider.NoopTracer()
+			tracer = client.NoopTracer()
 		} else {
-			tracer, closer, err = provider.NewTracer(ctx, logger, confContentYaml)
-		}
-
-		if err != nil {
-			fmt.Fprintln(os.Stderr, errors.Wrapf(err, "tracing failed"))
-			if closer != nil {
-				if err = closer.Close(); err != nil {
-					level.Warn(logger).Log("msg", "closing tracer failed", "err", err)
-				}
+			tracer, closer, err = client.NewTracer(ctx, logger, confContentYaml)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, errors.Wrapf(err, "tracing failed"))
+				os.Exit(1)
 			}
-			os.Exit(1)
 		}
 
 		// This is bad, but Prometheus does not support any other tracer injections than just global one.

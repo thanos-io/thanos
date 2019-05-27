@@ -35,7 +35,7 @@ type Config struct {
 	AgentPort              string `yaml:"agent_port"`
 }
 
-// FromYaml uses config YAML to set the tracer's Configuration
+// FromYaml uses config YAML to set the tracer's Configuration.
 func FromYaml(cfg []byte) (*config.Configuration, error) {
 	conf := &Config{}
 
@@ -84,7 +84,7 @@ func FromYaml(cfg []byte) (*config.Configuration, error) {
 	return c, nil
 }
 
-// samplerConfigFromConfig creates a new SamplerConfig based on the YAML Config
+// samplerConfigFromConfig creates a new SamplerConfig based on the YAML Config.
 func samplerConfigFromConfig(cfg Config) (*config.SamplerConfig, error) {
 	sc := &config.SamplerConfig{}
 
@@ -123,7 +123,7 @@ func samplerConfigFromConfig(cfg Config) (*config.SamplerConfig, error) {
 	return sc, nil
 }
 
-// reporterConfigFromConfig creates a new ReporterConfig based on the YAML Config
+// reporterConfigFromConfig creates a new ReporterConfig based on the YAML Config.
 func reporterConfigFromEnv(cfg Config) (*config.ReporterConfig, error) {
 	rc := &config.ReporterConfig{}
 
@@ -188,7 +188,7 @@ func reporterConfigFromEnv(cfg Config) (*config.ReporterConfig, error) {
 // Spec for this value:
 // - comma separated list of key=value
 // - value can be specified using the notation ${envVar:defaultValue}, where `envVar`
-// is an environment variable and `defaultValue` is the value to use in case the env var is not set
+// is an environment variable and `defaultValue` is the value to use in case the env var is not set.
 func parseTags(sTags string) []opentracing.Tag {
 	pairs := strings.Split(sTags, ",")
 	tags := make([]opentracing.Tag, 0)
