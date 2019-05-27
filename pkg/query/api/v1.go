@@ -203,9 +203,9 @@ func (api *API) parseEnableDedupParam(r *http.Request) (enableDeduplication bool
 	return enableDeduplication, nil
 }
 
-func (api *API) parseDownsamplingParam(r *http.Request, step time.Duration) (maxSourceResolution time.Duration, _ *ApiError) {
+func (api *API) parseDownsamplingParamMillis(r *http.Request, step time.Duration) (maxResolutionMillis int64, _ *ApiError) {
 	const maxSourceResolutionParam = "max_source_resolution"
-	maxSourceResolution = 0 * time.Second
+	maxSourceResolution := 0 * time.Second
 
 	if api.enableAutodownsampling {
 		// If no max_source_resolution is specified fit at least 5 samples between steps.
@@ -223,7 +223,7 @@ func (api *API) parseDownsamplingParam(r *http.Request, step time.Duration) (max
 		return 0, &ApiError{errorBadData, errors.Errorf("negative '%s' is not accepted. Try a positive integer", maxSourceResolutionParam)}
 	}
 
-	return maxSourceResolution, nil
+	return int64(maxSourceResolution / time.Millisecond), nil
 }
 
 func (api *API) parsePartialResponseParam(r *http.Request) (enablePartialResponse bool, _ *ApiError) {
@@ -366,7 +366,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	maxSourceResolution, apiErr := api.parseDownsamplingParam(r, step)
+	maxSourceResolution, apiErr := api.parseDownsamplingParamMillis(r, step)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}

@@ -21,6 +21,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.1
 	github.com/hashicorp/memberlist v0.1.3
 	github.com/julienschmidt/httprouter v1.1.0 // indirect
+	github.com/leanovate/gopter v0.2.4
 	github.com/lovoo/gcloud-opentracing v0.3.0
 	github.com/miekg/dns v1.1.8
 	github.com/minio/minio-go v0.0.0-20200511070425-f33eae714a28
