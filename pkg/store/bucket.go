@@ -1010,7 +1010,9 @@ func (s *bucketBlockSet) getFor(mint, maxt, maxResolutionMillis int64) (bs []*bu
 	for ; i < len(s.resolutions) && s.resolutions[i] > maxResolutionMillis; i++ {
 	}
 
-	// Base case, we fill the given interval with the closest resolution.
+	// Fill the given interval with the blocks for the current resolution.
+	// Our current resolution might not cover all data, so recursively fill the gaps with higher resolution blocks if there is any.
+	start := mint
 	for _, b := range s.blocks[i] {
 		if b.meta.MaxTime <= mint {
 			continue
@@ -1018,37 +1020,18 @@ func (s *bucketBlockSet) getFor(mint, maxt, maxResolutionMillis int64) (bs []*bu
 		if b.meta.MinTime >= maxt {
 			break
 		}
-		bs = append(bs, b)
-	}
-	// Our current resolution might not cover all data, recursively fill the gaps at the start
-	// and end of [mint, maxt] with higher resolution blocks.
-	//
-	// Plus, fill the possible gaps between the current blocks with higher resolution blocks.
-	i++
-	// No higher resolution left, we are done.
-	if i >= len(s.resolutions) {
-		return bs
-	}
-	if len(bs) == 0 {
-		return s.getFor(mint, maxt, s.resolutions[i])
-	}
 
-	until := len(bs) - 1
-	for j := 0; j < until; j++ {
-		if bs[j+1].meta.MinTime-bs[j].meta.MaxTime > 0 {
-			between := s.getFor(bs[j].meta.MaxTime, bs[j+1].meta.MinTime, s.resolutions[i])
-			bs = append(bs[:j+1], append(between, bs[j+1:]...)...)
-
-			// Push the iterators further.
-			j += len(between)
-			until += len(between)
+		if i+1 < len(s.resolutions) {
+			bs = append(bs, s.getFor(start, b.meta.MinTime, s.resolutions[i+1])...)
 		}
+		bs = append(bs, b)
+		start = b.meta.MaxTime
 	}
 
-	left := s.getFor(mint, bs[0].meta.MinTime, s.resolutions[i])
-	right := s.getFor(bs[len(bs)-1].meta.MaxTime, maxt, s.resolutions[i])
-
-	return append(left, append(bs, right...)...)
+	if i+1 < len(s.resolutions) {
+		bs = append(bs, s.getFor(start, maxt, s.resolutions[i+1])...)
+	}
+	return bs
 }
 
 // labelMatchers verifies whether the block set matches the given matchers and returns a new
