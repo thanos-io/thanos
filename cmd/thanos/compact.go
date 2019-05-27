@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -357,8 +358,14 @@ func genMissingIndexCacheFiles(ctx context.Context, logger log.Logger, bkt objst
 		defer runutil.CloseWithLogOnErr(logger, rc, "block reader")
 
 		var meta metadata.Meta
-		if err := json.NewDecoder(rc).Decode(&meta); err != nil {
-			return errors.Wrap(err, "decode meta")
+
+		obj, err := ioutil.ReadAll(rc)
+		if err != nil {
+			return errors.Wrap(err, "read meta")
+		}
+
+		if err = json.Unmarshal(obj, &meta); err != nil {
+			return errors.Wrap(err, "unmarshal meta")
 		}
 
 		// New version of compactor pushes index cache along with data block.
