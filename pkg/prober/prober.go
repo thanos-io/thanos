@@ -54,7 +54,7 @@ func (p *Prober) getComponent() component.Component {
 	return p.component
 }
 
-// NewProber returns Prober reprezenting readi	ness and healthiness of given component.
+// NewProber returns Prober representing readiness and healthiness of given component.
 func NewProber(component component.Component, logger log.Logger) *Prober {
 	initialErr := fmt.Errorf(initialErrorText, component)
 	prober := &Prober{}
@@ -65,7 +65,7 @@ func NewProber(component component.Component, logger log.Logger) *Prober {
 	return prober
 }
 
-// HandleInMux registers readiness and liveness probes to mux.
+// RegisterInRouter registers readiness and liveness probes to mux.
 func (p *Prober) RegisterInRouter(router *route.Router) {
 	router.Get(healthyEndpointPath, p.probeHandlerFunc(p.IsHealthy, "healthy"))
 	router.Get(readyEndpointPath, p.probeHandlerFunc(p.IsReady, "ready"))
@@ -147,11 +147,12 @@ func (p *Prober) SetNotHealthy(err error) {
 // HandleIfReady if probe is ready calls the function otherwise returns 503.
 func (p *Prober) HandleIfReady(f http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ready_err := p.IsReady()
-		if ready_err == nil {
+		p.readyMtx.Lock()
+		defer p.readyMtx.Unlock()
+		if p.readiness == nil {
 			f(w, r)
 			return
 		}
-		p.writeResponse(w, p.IsReady, "ready")
+		p.writeResponse(w, func() error { return p.readiness }, "ready")
 	}
 }
