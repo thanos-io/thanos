@@ -149,7 +149,7 @@ func main() {
 			level.Info(logger).Log("msg", "Tracing will be disabled")
 			tracer = client.NoopTracer()
 		} else {
-			tracer, closer, err = client.NewTracer(ctx, logger, confContentYaml)
+			tracer, closer, err = client.NewTracer(ctx, logger, metrics, confContentYaml)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, errors.Wrapf(err, "tracing failed"))
 				os.Exit(1)

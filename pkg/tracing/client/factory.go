@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/tracing/jaeger"
@@ -26,7 +27,7 @@ type TracingConfig struct {
 	Config interface{}     `yaml:"config,omitempty"`
 }
 
-func NewTracer(ctx context.Context, logger log.Logger, confContentYaml []byte) (opentracing.Tracer, io.Closer, error) {
+func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Registry, confContentYaml []byte) (opentracing.Tracer, io.Closer, error) {
 	level.Info(logger).Log("msg", "loading tracing configuration")
 	tracingConf := &TracingConfig{}
 
@@ -47,7 +48,7 @@ func NewTracer(ctx context.Context, logger log.Logger, confContentYaml []byte) (
 	case string(STACKDRIVER):
 		return stackdriver.NewTracer(ctx, logger, config)
 	case string(JAEGER):
-		return jaeger.NewTracer(ctx, logger, config)
+		return jaeger.NewTracer(ctx, logger, metrics, config)
 	default:
 		return nil, nil, errors.Errorf("tracing with type %s is not supported", tracingConf.Type)
 	}

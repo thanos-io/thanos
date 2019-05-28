@@ -11,7 +11,8 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/uber/jaeger-client-go"
 	"github.com/uber/jaeger-client-go/config"
-	"github.com/uber/jaeger-lib/metrics/prometheus"
+	jaeger_prometheus "github.com/uber/jaeger-lib/metrics/prometheus"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type Tracer struct {
@@ -25,7 +26,7 @@ func (t *Tracer) GetTraceIdFromSpanContext(ctx opentracing.SpanContext) (string,
 	return "", false
 }
 
-func NewTracer(ctx context.Context, logger log.Logger, conf []byte) (opentracing.Tracer, io.Closer, error) {
+func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Registry, conf []byte) (opentracing.Tracer, io.Closer, error) {
 	var (
 		cfg *config.Configuration
 		err error
@@ -48,7 +49,7 @@ func NewTracer(ctx context.Context, logger log.Logger, conf []byte) (opentracing
 	}
 	cfg.Headers.ApplyDefaults()
 	jaegerTracer, closer, err = cfg.NewTracer(
-		config.Metrics(prometheus.New()),
+		config.Metrics(jaeger_prometheus.New(jaeger_prometheus.WithRegisterer(metrics))),
 		config.Logger(&jaegerLogger{
 			logger: logger,
 		}),
