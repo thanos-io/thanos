@@ -285,9 +285,9 @@ func runCompact(
 			if err == nil {
 				return nil
 			}
+
 			// The HaltError type signals that we hit a critical bug and should block
-			// for investigation.
-			// You should alert on this being halted.
+			// for investigation. You should alert on this being halted.
 			if compact.IsHaltError(err) {
 				if haltOnError {
 					level.Error(logger).Log("msg", "critical error detected; halting", "err", err)
@@ -299,7 +299,7 @@ func runCompact(
 			}
 
 			// The RetryError signals that we hit an retriable error (transient error, no connection).
-			// You should alert on this being triggered to frequently.
+			// You should alert on this being triggered too frequently.
 			if compact.IsRetryError(err) {
 				level.Error(logger).Log("msg", "retriable error", "err", err)
 				retried.Inc()
