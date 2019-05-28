@@ -29,6 +29,7 @@ import (
 	"github.com/NYTimes/gziphandler"
 
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
@@ -58,6 +59,7 @@ const (
 	errorCanceled           = "canceled"
 	errorExec               = "execution"
 	errorBadData            = "bad_data"
+	errorTooMany            = "too_many_samples"
 	ErrorInternal           = "internal"
 )
 
@@ -101,8 +103,10 @@ type API struct {
 	queryableCreate query.QueryableCreator
 	queryEngine     *promql.Engine
 
-	instantQueryDuration   prometheus.Histogram
-	rangeQueryDuration     prometheus.Histogram
+	instantQueryDuration prometheus.Histogram
+	rangeQueryDuration   prometheus.Histogram
+	// Total number of query failures grouped by type of error.
+	queryFailures          *prometheus.CounterVec
 	enableAutodownsampling bool
 	enablePartialResponse  bool
 	now                    func() time.Time
@@ -131,6 +135,10 @@ func NewAPI(
 			0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 20,
 		},
 	})
+	queryFailures := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_query_api_failures_total",
+		Help: "Total number of failed query operations.",
+	}, []string{"error"})
 
 	reg.MustRegister(
 		instantQueryDuration,
@@ -142,6 +150,7 @@ func NewAPI(
 		queryableCreate:        c,
 		instantQueryDuration:   instantQueryDuration,
 		rangeQueryDuration:     rangeQueryDuration,
+		queryFailures:          queryFailures,
 		enableAutodownsampling: enableAutodownsampling,
 		enablePartialResponse:  enablePartialResponse,
 
@@ -288,27 +297,30 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 		warnmtx.Unlock()
 	}
 
+	raw := r.FormValue("query")
+	level.Debug(api.logger).Log("query", raw)
+
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(r.Context(), "promql_instant_query")
+	span.SetTag("query", raw)
 	defer span.Finish()
 
 	begin := api.now()
-	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDedup, 0, enablePartialResponse, warningReporter), r.FormValue("query"), ts)
+	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDedup, 0, enablePartialResponse, warningReporter), raw, ts)
 	if err != nil {
+		api.queryFailures.With(prometheus.Labels{"error": errorBadData}).Inc()
 		return nil, nil, &ApiError{errorBadData, err}
 	}
 
 	res := qry.Exec(ctx)
 	if res.Err != nil {
-		switch res.Err.(type) {
-		case promql.ErrQueryCanceled:
-			return nil, nil, &ApiError{errorCanceled, res.Err}
-		case promql.ErrQueryTimeout:
-			return nil, nil, &ApiError{errorTimeout, res.Err}
-		case promql.ErrStorage:
-			return nil, nil, &ApiError{ErrorInternal, res.Err}
-		}
-		return nil, nil, &ApiError{errorExec, res.Err}
+		// Cast Prometheus errors to Thanos error constants
+		e := toThanosError(res.Err)
+
+		level.Debug(api.logger).Log("query", raw, "error", res.Err.Error(), "duration", time.Since(begin).Seconds())
+		api.queryFailures.With(prometheus.Labels{"error": string(e)}).Inc()
+
+		return nil, nil, &ApiError{e, res.Err}
 	}
 	api.instantQueryDuration.Observe(time.Since(begin).Seconds())
 
@@ -648,4 +660,21 @@ func (api *API) labelNames(r *http.Request) (interface{}, []error, *ApiError) {
 	}
 
 	return names, warnings, nil
+}
+
+// toThanosError converts a Prometheus execute error into one of the Thanos error constants and returns a generic
+// `errorExec` for unknown types.
+func toThanosError(e error) ErrorType {
+	switch e.(type) {
+	case promql.ErrQueryTimeout:
+		return errorTimeout
+	case promql.ErrQueryCanceled:
+		return errorCanceled
+	case promql.ErrTooManySamples:
+		return errorTooMany
+	case promql.ErrStorage:
+		return ErrorInternal
+	default:
+		return errorExec
+	}
 }
