@@ -3,16 +3,9 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
-	"net"
-	"strconv"
 	"strings"
-	"time"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
@@ -23,7 +16,7 @@ func regGRPCFlags(cmd *kingpin.CmdClause) (
 	grpcTLSSrvKey *string,
 	grpcTLSSrvClientCA *string,
 ) {
-	grpcBindAddr = cmd.Flag("grpc-address", "Listen ip:port address for gRPC endpoints (StoreAPI). Make sure this address is routable from other components if you use gossip, 'grpc-advertise-address' is empty and you require cross-node connection.").
+	grpcBindAddr = cmd.Flag("grpc-address", "Listen ip:port address for gRPC endpoints (StoreAPI). Make sure this address is routable from other components.").
 		Default("0.0.0.0:10901").String()
 
 	grpcTLSSrvCert = cmd.Flag("grpc-server-tls-cert", "TLS Certificate for gRPC server, leave blank to disable TLS").Default("").String()
@@ -36,102 +29,21 @@ func regGRPCFlags(cmd *kingpin.CmdClause) (
 		grpcTLSSrvClientCA
 }
 
+// TODO(povilasv): we don't need this anymore.
 func regCommonServerFlags(cmd *kingpin.CmdClause) (
 	grpcBindAddr *string,
 	httpBindAddr *string,
 	grpcTLSSrvCert *string,
 	grpcTLSSrvKey *string,
-	grpcTLSSrvClientCA *string,
-	peerFunc func(log.Logger, *prometheus.Registry, bool, string, bool) (cluster.Peer, error)) {
-
+	grpcTLSSrvClientCA *string) {
 	httpBindAddr = regHTTPAddrFlag(cmd)
 	grpcBindAddr, grpcTLSSrvCert, grpcTLSSrvKey, grpcTLSSrvClientCA = regGRPCFlags(cmd)
-	grpcAdvertiseAddr := cmd.Flag("grpc-advertise-address", "Deprecated(gossip will be removed from v0.5.0): Explicit (external) host:port address to advertise for gRPC StoreAPI in gossip cluster. If empty, 'grpc-address' will be used.").
-		String()
-
-	clusterBindAddr := cmd.Flag("cluster.address", "Deprecated(gossip will be removed from v0.5.0): Listen ip:port address for gossip cluster.").
-		Default("0.0.0.0:10900").String()
-
-	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "Deprecated(gossip will be removed from v0.5.0): Explicit (external) ip:port address to advertise for gossip in gossip cluster. Used internally for membership only.").
-		String()
-
-	peers := cmd.Flag("cluster.peers", "Deprecated(gossip will be removed from v0.5.0): Initial peers to join the cluster. It can be either <ip:port>, or <domain:port>. A lookup resolution is done only at the startup.").Strings()
-
-	gossipInterval := modelDuration(cmd.Flag("cluster.gossip-interval", "Deprecated(gossip will be removed from v0.5.0): Interval between sending gossip messages. By lowering this value (more frequent) gossip messages are propagated across the cluster more quickly at the expense of increased bandwidth. Default is used from a specified network-type.").
-		PlaceHolder("<gossip interval>"))
-
-	pushPullInterval := modelDuration(cmd.Flag("cluster.pushpull-interval", "Deprecated(gossip will be removed from v0.5.0): Interval for gossip state syncs. Setting this interval lower (more frequent) will increase convergence speeds across larger clusters at the expense of increased bandwidth usage. Default is used from a specified network-type.").
-		PlaceHolder("<push-pull interval>"))
-
-	refreshInterval := modelDuration(cmd.Flag("cluster.refresh-interval", "Deprecated(gossip will be removed from v0.5.0): Interval for membership to refresh cluster.peers state, 0 disables refresh.").Default(cluster.DefaultRefreshInterval.String()))
-
-	secretKey := cmd.Flag("cluster.secret-key", "Deprecated(gossip will be removed from v0.5.0): Initial secret key to encrypt cluster gossip. Can be one of AES-128, AES-192, or AES-256 in hexadecimal format.").HexBytes()
-
-	networkType := cmd.Flag("cluster.network-type",
-		fmt.Sprintf("Deprecated(gossip will be removed from v0.5.0): Network type with predefined peers configurations. Sets of configurations accounting the latency differences between network types: %s.",
-			strings.Join(cluster.NetworkPeerTypes, ", "),
-		),
-	).
-		Default(cluster.LanNetworkPeerType).
-		Enum(cluster.NetworkPeerTypes...)
-
-	gossipDisabled := cmd.Flag("cluster.disable", "Deprecated(gossip will be removed from v0.5.0): If true gossip will be disabled and no cluster related server will be started.").Default("true").Bool()
 
 	return grpcBindAddr,
 		httpBindAddr,
 		grpcTLSSrvCert,
 		grpcTLSSrvKey,
-		grpcTLSSrvClientCA,
-		func(logger log.Logger, reg *prometheus.Registry, waitIfEmpty bool, httpAdvertiseAddr string, queryAPIEnabled bool) (cluster.Peer, error) {
-			if *gossipDisabled {
-				level.Info(logger).Log("msg", "gossip is disabled")
-				return cluster.NewNoop(), nil
-			}
-
-			host, port, err := cluster.CalculateAdvertiseAddress(*grpcBindAddr, *grpcAdvertiseAddr)
-			if err != nil {
-				return nil, errors.Wrapf(err, "calculate advertise StoreAPI addr for gossip based on bindAddr: %s and advAddr: %s", *grpcBindAddr, *grpcAdvertiseAddr)
-			}
-
-			advStoreAPIAddress := net.JoinHostPort(host, strconv.Itoa(port))
-			if cluster.IsUnroutable(advStoreAPIAddress) {
-				level.Warn(logger).Log("msg", "this component advertises its gRPC StoreAPI on an unroutable address. This will not work cross-cluster", "addr", advStoreAPIAddress)
-				level.Warn(logger).Log("msg", "provide --grpc-address as routable ip:port or --grpc-advertise-address as a routable host:port")
-			}
-
-			level.Info(logger).Log("msg", "StoreAPI address that will be propagated through gossip", "address", advStoreAPIAddress)
-
-			advQueryAPIAddress := httpAdvertiseAddr
-			if queryAPIEnabled {
-				host, port, err := cluster.CalculateAdvertiseAddress(*httpBindAddr, advQueryAPIAddress)
-				if err != nil {
-					return nil, errors.Wrapf(err, "calculate advertise QueryAPI addr for gossip based on bindAddr: %s and advAddr: %s", *httpBindAddr, advQueryAPIAddress)
-				}
-
-				advQueryAPIAddress = net.JoinHostPort(host, strconv.Itoa(port))
-				if cluster.IsUnroutable(advQueryAPIAddress) {
-					level.Warn(logger).Log("msg", "this component advertises its HTTP QueryAPI on an unroutable address. This will not work cross-cluster", "addr", advQueryAPIAddress)
-					level.Warn(logger).Log("msg", "provide --http-address as routable ip:port or --http-advertise-address as a routable host:port")
-				}
-
-				level.Info(logger).Log("msg", "QueryAPI address that will be propagated through gossip", "address", advQueryAPIAddress)
-			}
-
-			return cluster.New(logger,
-				reg,
-				*clusterBindAddr,
-				*clusterAdvertiseAddr,
-				advStoreAPIAddress,
-				advQueryAPIAddress,
-				*peers,
-				waitIfEmpty,
-				time.Duration(*gossipInterval),
-				time.Duration(*pushPullInterval),
-				time.Duration(*refreshInterval),
-				*secretKey,
-				*networkType,
-			)
-		}
+		grpcTLSSrvClientCA
 }
 
 func regHTTPAddrFlag(cmd *kingpin.CmdClause) *string {
@@ -139,7 +51,7 @@ func regHTTPAddrFlag(cmd *kingpin.CmdClause) *string {
 }
 
 func modelDuration(flags *kingpin.FlagClause) *model.Duration {
-	var value = new(model.Duration)
+	value := new(model.Duration)
 	flags.SetValue(value)
 
 	return value

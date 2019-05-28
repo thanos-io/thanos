@@ -19,7 +19,6 @@ require (
 	github.com/hashicorp/go-sockaddr v1.0.0
 	github.com/hashicorp/go-version v1.2.0
 	github.com/hashicorp/golang-lru v0.5.1
-	github.com/hashicorp/memberlist v0.1.3
 	github.com/julienschmidt/httprouter v1.1.0 // indirect
 	github.com/leanovate/gopter v0.2.4
 	github.com/lovoo/gcloud-opentracing v0.3.0
