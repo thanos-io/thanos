@@ -8,7 +8,6 @@ slug: /service-discovery.md
 # Service Discovery
 
 Service discovery has a vital place in Thanos components. It allows Thanos to discover different set API targets required to perform certain operations.
-This logic is meant to replace Gossip that [is planned to be removed.](/docs/proposals/approved/201809_gossip-removal.md)
 
 Currently places that uses Thanos SD:
 * `Thanos Query` needs to know about [StoreAPI](https://github.com/improbable-eng/thanos/blob/d3fb337da94d11c78151504b1fccb1d7e036f394/pkg/store/storepb/rpc.proto#L14) servers in order to query metrics from them.
