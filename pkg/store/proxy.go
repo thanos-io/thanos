@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"github.com/improbable-eng/thanos/pkg/tracing"
 	"io"
 	"math"
 	"strings"
@@ -173,7 +174,10 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			// We might be able to skip the store if its meta information indicates
 			// it cannot have series matching our query.
 			// NOTE: all matchers are validated in labelsMatches method so we explicitly ignore error.
-			if ok, _ := storeMatches(st, r.MinTime, r.MaxTime, r.Matchers...); !ok {
+			spanStoreMathes, gctx := tracing.StartSpan(gctx, "store_mathes")
+			ok, _ := storeMatches(st, r.MinTime, r.MaxTime, r.Matchers...)
+			spanStoreMathes.Finish()
+			if !ok {
 				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s filtered out", st))
 				continue
 			}
