@@ -187,9 +187,7 @@ Flags:
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
-                                 from other components if you use gossip,
-                                 'grpc-advertise-address' is empty and you
-                                 require cross-node connection.
+                                 from other components.
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to

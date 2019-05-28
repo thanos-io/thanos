@@ -16,7 +16,7 @@ func regGRPCFlags(cmd *kingpin.CmdClause) (
 	grpcTLSSrvKey *string,
 	grpcTLSSrvClientCA *string,
 ) {
-	grpcBindAddr = cmd.Flag("grpc-address", "Listen ip:port address for gRPC endpoints (StoreAPI). Make sure this address is routable from other components if you use gossip, 'grpc-advertise-address' is empty and you require cross-node connection.").
+	grpcBindAddr = cmd.Flag("grpc-address", "Listen ip:port address for gRPC endpoints (StoreAPI). Make sure this address is routable from other components.").
 		Default("0.0.0.0:10901").String()
 
 	grpcTLSSrvCert = cmd.Flag("grpc-server-tls-cert", "TLS Certificate for gRPC server, leave blank to disable TLS").Default("").String()
@@ -36,7 +36,6 @@ func regCommonServerFlags(cmd *kingpin.CmdClause) (
 	grpcTLSSrvCert *string,
 	grpcTLSSrvKey *string,
 	grpcTLSSrvClientCA *string) {
-
 	httpBindAddr = regHTTPAddrFlag(cmd)
 	grpcBindAddr, grpcTLSSrvCert, grpcTLSSrvKey, grpcTLSSrvClientCA = regGRPCFlags(cmd)
 
@@ -52,7 +51,7 @@ func regHTTPAddrFlag(cmd *kingpin.CmdClause) *string {
 }
 
 func modelDuration(flags *kingpin.FlagClause) *model.Duration {
-	var value = new(model.Duration)
+	value := new(model.Duration)
 	flags.SetValue(value)
 
 	return value

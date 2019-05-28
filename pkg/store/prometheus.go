@@ -79,7 +79,7 @@ func NewPrometheusStore(
 }
 
 // Info returns store information about the Prometheus instance.
-// NOTE(bplotka): MaxTime & MinTime are not accurate nor adjusted dynamically like these included in gossip meta.
+// NOTE(bplotka): MaxTime & MinTime are not accurate nor adjusted dynamically.
 // This is fine for now, but might be needed in future.
 func (p *PrometheusStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	lset := p.externalLabels()
