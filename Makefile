@@ -30,10 +30,14 @@ PROTOC_VERSION    ?= 3.4.0
 # v0.55.3 This needs to match with version in netlify.toml
 HUGO_VERSION      ?= 993b84333cd75faa224d02618f312a0e96b53372
 HUGO              ?= $(GOBIN)/hugo-$(HUGO_VERSION)
+# 2019.1.1
+STATICCHECK_VERSION ?= 95959eaf5e3c41c66151dcfd91779616b84077a8
+STATICCHECK ?= $(GOBIN)/go-staticcheck-$(STATICCHECK_VERSION)
 # v3.1.1
 GOBINDATA_VERSION ?= a9c83481b38ebb1c4eb8f0168fd4b10ca1d3c523
 GOBINDATA         ?= $(GOBIN)/go-bindata-$(GOBINDATA_VERSION)
 GIT               ?= $(shell which git)
+
 
 WEB_DIR           ?= website
 WEBSITE_BASE_URL  ?= https://thanos.io
@@ -158,6 +162,15 @@ errcheck: $(ERRCHECK)
 	@echo ">> errchecking the code"
 	$(ERRCHECK) -verbose -exclude .errcheck_excludes.txt ./cmd/... ./pkg/... ./test/...
 
+# staticcheck performs static analysis and returns an error if any errors have been found
+# For example, json.Unmarshal is passed a non-pointer
+.PHONY: staticcheck
+staticcheck: $(STATICCHECK)
+	@echo ">> staticchecking the code"
+	$(STATICCHECK) ./cmd/... ./pkg/... ./test/...
+
+
+
 # format formats the code (including imports format).
 # NOTE: format requires deps to not remove imports that are used, just not resolved.
 # This is not encoded, because it is often used in IDE onSave logic.
@@ -256,6 +269,9 @@ $(GOIMPORTS):
 
 $(LICHE):
 	$(call fetch_go_bin_version,github.com/raviqqe/liche,$(LICHE_VERSION))
+
+$(STATICCHECK):
+	$(call fetch_go_bin_version,honnef.co/go/tools/cmd/staticcheck,$(STATICCHECK_VERSION))
 
 $(PROMU):
 	$(call fetch_go_bin_version,github.com/prometheus/promu,$(PROMU_VERSION))
