@@ -2,12 +2,14 @@ package main
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/improbable-eng/thanos/pkg/flagutil"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -32,12 +34,19 @@ type series struct {
 type queryData struct {
 	ResultType model.ValueType `json:"resultType"`
 	Result     model.Vector    `json:"result"`
+	Multiplier int             `json:"multiply"`
 }
 
 func main() {
 	app := kingpin.New(filepath.Base(os.Args[0]), "Generates artificial metrics from min time to given max time in compacted TSDB format (including head WAL).")
 	app.HelpFlag.Short('h')
-	input := app.Flag("input", "Input file for series config.").Required().String()
+
+	input := flagutil.NewPathOrContentFlag(
+		app.Flag("input-file", "Input file for series config."),
+		app.Flag("input", "Input content for series config."),
+		true,
+	)
+
 	outputDir := app.Flag("output-dir", "Output directory for generated TSDB data.").Required().String()
 	scrapeInterval := app.Flag("scrape-interval", "Interval for to generate samples with.").Default("15s").Duration()
 
@@ -50,9 +59,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	f, err := ioutil.ReadFile(*input)
+	f, err := input.Content()
 	if err != nil {
-		level.Error(logger).Log("err", err, "file", input)
+		level.Error(logger).Log("err", err)
 		os.Exit(1)
 	}
 
@@ -99,50 +108,58 @@ func main() {
 
 	generators := make(map[string]gen)
 	for _, in := range s {
+		if in.Result.Multiplier == 0 {
+			in.Result.Multiplier = 1
+		}
 		for _, r := range in.Result.Result {
-			lset := labels.New()
-			for n, v := range r.Metric {
-				lset = append(lset, labels.Label{Name: string(n), Value: string(v)})
-			}
-			//level.Debug(logger).Log("msg", "scheduled generation of series", "lset", lset)
+			for i:=0; i< in.Result.Multiplier; i++ {
+				lset := labels.New()
+				for n, v := range r.Metric {
+					lset = append(lset, labels.Label{Name: string(n), Value: string(v)})
+				}
 
-			var chInterval time.Duration
-			if in.ChangeInterval != "" {
-				chInterval, err = time.ParseDuration(in.ChangeInterval)
-				if err != nil {
-					level.Error(logger).Log("err", err)
+				if i > 0 {
+					lset = append(lset, labels.Label{Name: "multiplier", Value: strconv.Itoa(i)})
+				}
+
+				var chInterval time.Duration
+				if in.ChangeInterval != "" {
+					chInterval, err = time.ParseDuration(in.ChangeInterval)
+					if err != nil {
+						level.Error(logger).Log("err", err)
+						os.Exit(1)
+					}
+				}
+
+				switch strings.ToLower(in.Type) {
+				case "counter":
+					// Does not work well (: Too naive.
+					generators[lset.String()] = &counterGen{
+						interval:       *scrapeInterval,
+						maxTime:        maxTime,
+						minTime:        minTime,
+						lset:           lset,
+						min:            in.Min,
+						max:            in.Max,
+						jitter:         in.Jitter,
+						rateInterval:   5 * time.Minute,
+						changeInterval: chInterval,
+					}
+				case "gauge":
+					generators[lset.String()] = &gaugeGen{
+						interval:       *scrapeInterval,
+						maxTime:        maxTime,
+						minTime:        minTime,
+						lset:           lset,
+						min:            in.Min,
+						max:            in.Max,
+						jitter:         in.Jitter,
+						changeInterval: chInterval,
+					}
+				default:
+					level.Error(logger).Log("msg", "unknown metric type", "type", in.Type)
 					os.Exit(1)
 				}
-			}
-
-			switch strings.ToLower(in.Type) {
-			case "counter":
-				// Does not work well (: Too naive.
-				generators[lset.String()] = &counterGen{
-					interval:       *scrapeInterval,
-					maxTime:        maxTime,
-					minTime:        minTime,
-					lset:           lset,
-					min:            in.Min,
-					max:            in.Max,
-					jitter:         in.Jitter,
-					rateInterval:   5 * time.Minute,
-					changeInterval: chInterval,
-				}
-			case "gauge":
-				generators[lset.String()] = &gaugeGen{
-					interval:       *scrapeInterval,
-					maxTime:        maxTime,
-					minTime:        minTime,
-					lset:           lset,
-					min:            in.Min,
-					max:            in.Max,
-					jitter:         in.Jitter,
-					changeInterval: chInterval,
-				}
-			default:
-				level.Error(logger).Log("msg", "unknown metric type", "type", in.Type)
-				os.Exit(1)
 			}
 		}
 	}

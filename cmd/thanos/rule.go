@@ -19,6 +19,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/flagutil"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/alert"
@@ -203,7 +205,7 @@ func runRule(
 	dataDir string,
 	ruleFiles []string,
 	peer cluster.Peer,
-	objStoreConfig *pathOrContent,
+	objStoreConfig *flagutil.PathOrContent,
 	tsdbOpts *tsdb.Options,
 	alertQueryURL *url.URL,
 	alertExcludeLabels []string,

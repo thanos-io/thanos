@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/flagutil"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
@@ -140,7 +142,7 @@ func runCompact(
 	reg *prometheus.Registry,
 	httpBindAddr string,
 	dataDir string,
-	objStoreConfig *pathOrContent,
+	objStoreConfig *flagutil.PathOrContent,
 	consistencyDelay time.Duration,
 	haltOnError bool,
 	acceptMalformedIndex bool,

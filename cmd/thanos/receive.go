@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/flagutil"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
@@ -83,7 +85,7 @@ func runReceive(
 	httpMetricsBindAddr string,
 	remoteWriteAddress string,
 	dataDir string,
-	objStoreConfig *pathOrContent,
+	objStoreConfig *flagutil.PathOrContent,
 	lset labels.Labels,
 	retention model.Duration,
 ) error {

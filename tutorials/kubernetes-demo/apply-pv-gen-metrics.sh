@@ -9,7 +9,7 @@ kubectl apply --context=${cluster} -f manifests/prometheus-pv-${replica}.yaml
 
 rm -rf -- /tmp/prom-out
 mkdir /tmp/prom-out
-go run ./blockgen/main.go --input=./blockgen/container_mem_metrics_${cluster}.json --output-dir=/tmp/prom-out --retention=${retention}
+go run ./blockgen/main.go --input-file=./blockgen/container_mem_metrics_${cluster}.json --output-dir=/tmp/prom-out --retention=${retention}
 chmod -R 775 /tmp/prom-out
 # Fun with permissions because Prometheus process is run a "noone" in a pod... ):
 minikube -p ${cluster} ssh "sudo rm -rf /data/pv-prometheus-${replica} && sudo mkdir /data/pv-prometheus-${replica} && sudo chmod -R 777 /data/pv-prometheus-${replica}"

@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/improbable-eng/thanos/pkg/flagutil"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
@@ -98,7 +100,7 @@ func runSidecar(
 	httpBindAddr string,
 	promURL *url.URL,
 	dataDir string,
-	objStoreConfig *pathOrContent,
+	objStoreConfig *flagutil.PathOrContent,
 	peer cluster.Peer,
 	reloader *reloader.Reloader,
 	uploadCompacted bool,
