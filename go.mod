@@ -14,16 +14,15 @@ require (
 	github.com/google/martian v2.1.0+incompatible // indirect
 	github.com/googleapis/gax-go v2.0.2+incompatible // indirect
 	github.com/gophercloud/gophercloud v0.0.0-20181206160319-9d88c34913a9
+	github.com/gopherjs/gopherjs v0.0.0-20181103185306-d547d1d9531e // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.0.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v0.0.0-20181025070259-68e3a13e4117
-	github.com/hashicorp/go-sockaddr v1.0.0
-	github.com/hashicorp/go-version v1.2.0
 	github.com/hashicorp/golang-lru v0.5.1
 	github.com/julienschmidt/httprouter v1.1.0 // indirect
 	github.com/leanovate/gopter v0.2.4
 	github.com/lovoo/gcloud-opentracing v0.3.0
 	github.com/miekg/dns v1.1.8
-	github.com/minio/minio-go v0.0.0-20200511070425-f33eae714a28
+	github.com/minio/minio-go/v6 v6.0.27-0.20190529152532-de69c0e465ed
 	github.com/mozillazg/go-cos v0.11.0
 	github.com/mwitkow/go-conntrack v0.0.0-20161129095857-cc309e4a2223
 	github.com/oklog/run v1.0.0
@@ -37,11 +36,11 @@ require (
 	github.com/prometheus/common v0.0.0-20181218105931-67670fe90761
 	github.com/prometheus/prometheus v0.0.0-20190328180107-4d60eb36dcbe
 	github.com/prometheus/tsdb v0.6.1
+	github.com/smartystreets/assertions v0.0.0-20190116191733-b6c0e53d7304 // indirect
 	go.opencensus.io v0.19.0 // indirect
-	golang.org/x/net v0.0.0-20190213061140-3a22650c66bd
+	golang.org/x/net v0.0.0-20190522155817-f3200d17e092
 	golang.org/x/oauth2 v0.0.0-20181203162652-d668ce993890
 	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
-	golang.org/x/sys v0.0.0-20190322080309-f49334f85ddc // indirect
 	golang.org/x/text v0.3.1-0.20180807135948-17ff2d5776d2
 	google.golang.org/api v0.1.0
 	google.golang.org/appengine v1.4.0 // indirect
