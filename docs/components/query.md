@@ -66,7 +66,7 @@ However, for additional Thanos features, Thanos, on top of Prometheus adds
 
 ### Partial Response
 
-QueryAPI and StoreAPI has additional behaviour controlled via query parameter called [PartialResponseStrategy](../../pkg/store/storepb/rpc.pb.go).
+QueryAPI and StoreAPI has additional behaviour controlled via query parameter called [PartialResponseStrategy](/pkg/store/storepb/rpc.pb.go).
 
 This parameter controls tradeoff between accuracy and availability.
 
@@ -74,11 +74,11 @@ Partial response is a potentially missed result within query against QueryAPI or
 of StoreAPIs is returning error or timeout whereas couple of others returns success. It does not mean you are missing data,
 you might lucky enough that you actually get the correct data as the broken StoreAPI did not have anything for your query.
 
-If partial response happen QueryAPI returns human readable warnings explained [here](query.md#CustomResponseFields)
+If partial response happen QueryAPI returns human readable warnings explained [here](query.md#custom-response-fields).
 
-NOTE that having warning does not necessary means partial response (e.g no store matched query warning)
+NOTE: Having warning does not necessary means partial response (e.g no store matched query warning).
 
-See [this](query.md#PartialResponseStrategy) on how to control this behaviour.
+See [this](query.md#partial-response) on how to control this behaviour.
 
 Querier also allows to configure different timeouts:
 * `--query.timeout`
@@ -110,7 +110,7 @@ Max source resolution is max resolution in seconds we want to use for data we qu
 
 ### Partial Response Strategy
 
-// TODO(bwplotka): Update. This will change to "strategy" soon as [PartialResponseStrategy enum here](../../pkg/store/storepb/rpc.proto)
+// TODO(bwplotka): Update. This will change to "strategy" soon as [PartialResponseStrategy enum here](/pkg/store/storepb/rpc.proto)
 
 | HTTP URL/FORM parameter | Type | Default | Example |
 |----|----|----|----|

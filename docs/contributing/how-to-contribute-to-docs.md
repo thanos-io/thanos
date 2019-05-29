@@ -26,7 +26,6 @@ type: ...
 weight: <weight>
 menu: <where to link files in>  # This also is refered in permalinks.
 ---
-
 ```
 
 ## Links
@@ -34,15 +33,13 @@ menu: <where to link files in>  # This also is refered in permalinks.
 Aim is to match linking behavior in website being THE SAME as Github. This means:
 
 * For files in Hugo <content> dir (so `./docs`). Put `slug: /<filename with extension>`
-* For any sub dir add to `website/hugo.yaml` new dir as key  `permalinks:` with `<dir>: /<dir>/:filname.md`
+* For any sub dir add to `website/hugo.yaml` new dir as key `permalinks:` with `<dir>: /<dir>/:filename.md`
 
-Then everywhere use native markdown *relative* symbolic links if you want to reference some mardkown file from `docs`:
+Then everywhere use native markdown absolute path to the project repository if you want to link to exact commit e.g:
 
-`[title]( relative path to .md file )`
-
-Or absolute path to the project repository if you want to link to exact commit e.g:
-
-`[title]( /Makefile )`
+```
+[title](/Makefile)
+```
 
 Small [post processing script](/scripts/websitepreprocess.sh) adjusts link for Hugo rendering.
 
@@ -72,13 +69,14 @@ Requirements for the company:
 * it is happy to announce that you use Thanos publicly
 
 If all those are met, add yourself in [`website/data/sponsors.yml`](/website/data/sponsors.yml) like so:
+
 ```yml
 - name: My Awesome Company
   url: https://wwww.company.com
   logo: company.png
 ```
 
-Copy your company's logo in [`/website/static/logos`](/website/static/logos), make sure it follows these rules:
+Copy your company's logo in [`website/static/logos`](/website/static/logos), make sure it follows these rules:
 
 * Rectangle shape
 * Greyscale is preferred but color is fine
@@ -88,14 +86,25 @@ and create PR against Thanos `master` branch.
 
 ## Testing
 
-Every PR is building website and on success it shows the link to preview.
+### PR testing
 
-## Deployment.
+On every PR we build the website and on success display the link to the preview under the checks at the bottom of the github PR.
+
+### Local testing
+
+To test the changes to the docs locally just start serving the website by running the following command and you will be able to access the website on `localhost:1313` by default:
+
+```bash
+make web-serve
+```
+
+## Deployment
 
 We use [Netlify](https://www.netlify.com/) for hosting. We are using Open Source license (PRO). Thanks Netlify for this!
 
-On every commit to `master` netlify runs CI that invokes `make web` (defined in [netlify.toml](https://github.com/improbable-eng/thanos/blob/master/netlify.toml)))
+On every commit to `master` netlify runs CI that invokes `make web` (defined in [netlify.toml](/netlify.toml))
 
 NOTE: Check for status badge in README for build status on the page.
 
 If master build for netlify succeed, the new content is published automatically.
+

@@ -64,8 +64,8 @@ EOT
 
 done
 
-# 3. All the absolute links needs are directly linking github with the given commit.
-perl -pi -e 's/]\(\//]\(https:\/\/github.com\/improbable-eng\/thanos\/tree\/'${COMMIT_SHA}'\/docs\//' ${ALL_DOC_CONTENT_FILES}
+# 3. All the absolute links are replaced with a direct link to the file on github, including the current commit SHA.
+perl -pi -e 's/]\(\//]\(https:\/\/github.com\/improbable-eng\/thanos\/tree\/'${COMMIT_SHA}'\//' ${ALL_DOC_CONTENT_FILES}
 
 # 4. All the relative links needs to have ../  This is because Hugo is missing: https://github.com/gohugoio/hugo/pull/3934
 perl -pi -e 's/]\(\.\//]\(..\//' ${ALL_DOC_CONTENT_FILES}

@@ -44,7 +44,7 @@ The `thanos` binary should now be in your `$PATH` and is the only thing required
 
 You may meet below error:
 
-```
+```bash
 go: verifying github.com/grpc-ecosystem/go-grpc-middleware@v1.0.0: checksum mismatch
     downloaded: h1:BWIsLfhgKhV5g/oF34aRjniBHLTZe5DNekSjbAjIS6c=
     go.sum:     h1:Iju5GlWwrvL6UBg4zJJt3btmonfrMlCDdsejg4CZE7c=
@@ -63,9 +63,7 @@ If your `golang` version is below `1.11.4`, highly recommend you upgrade to `1.1
 
 Thanos bases itself on vanilla [Prometheus](https://prometheus.io/) (v2.2.1+).
 
-Here's the Prometheus' versions Thanos is tested against:
-
-[Makefile](/Makefile#35)
+To find out the Prometheus' versions Thanos is tested against, look at the value of the `PROM_VERSIONS` variable in the [Makefile](/Makefile).
 
 ## Components
 
@@ -103,14 +101,14 @@ Rolling this out has little to zero impact on the running Prometheus instance. I
 
 If you are not interested in backing up any data, the `--objstore.config-file` flag can simply be omitted.
 
-* _[Example Kubernetes manifest](https://github.com/improbable-eng/thanos/tree/master/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar.yaml)_
-* _[Example Kubernetes manifest with Minio upload](https://github.com/improbable-eng/thanos/tree/master/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar-lts.yaml)_
-* _[Example Deploying sidecar using official Prometheus Helm Chart](https://github.com/improbable-eng/thanos/tree/master/tutorials/kubernetes-helm/README.md)_
+* _[Example Kubernetes manifest](/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar.yaml)_
+* _[Example Kubernetes manifest with Minio upload](/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar-lts.yaml)_
+* _[Example Deploying sidecar using official Prometheus Helm Chart](/tutorials/kubernetes-helm/README.md)_
 * _[Details & Config for other object stores](storage.md)_
 
 #### Store API
 
-The Sidecar component implements and exposes a gRPC _[Store API](https://github.com/improbable-eng/thanos/tree/master/pkg/store/storepb/rpc.proto#L19)_. The sidecar implementation allows you to query the metric data stored in Prometheus.
+The Sidecar component implements and exposes a gRPC _[Store API](/pkg/store/storepb/rpc.proto#L19)_. The sidecar implementation allows you to query the metric data stored in Prometheus.
 
 Let's extend the Sidecar in the previous section to connect to a Prometheus server, and expose the Store API.
 
@@ -123,8 +121,8 @@ thanos sidecar \
     --grpc-address              0.0.0.0:19090              # GRPC endpoint for StoreAPI
 ```
 
-* _[Example Kubernetes manifest](https://github.com/improbable-eng/thanos/tree/master/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar.yaml)_
-* _[Example Kubernetes manifest with GCS upload](https://github.com/improbable-eng/thanos/tree/master/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar-lts.yaml)_
+* _[Example Kubernetes manifest](/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar.yaml)_
+* _[Example Kubernetes manifest with GCS upload](/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar-lts.yaml)_
 
 #### External Labels
 
@@ -189,7 +187,7 @@ thanos query \
 
 Go to the configured HTTP address, and you should now be able to query across all Prometheus instances and receive de-duplicated data.
 
-* _[Example Kubernetes manifest](https://github.com/improbable-eng/thanos/tree/master/tutorials/kubernetes-demo/manifests/thanos-querier.yaml)_
+* _[Example Kubernetes manifest](/tutorials/kubernetes-demo/manifests/thanos-querier.yaml)_
 
 #### Communication Between Components
 
@@ -210,8 +208,8 @@ thanos query \
 
 Read more details [here](service-discovery.md).
 
-* _[Example Kubernetes manifest](https://github.com/improbable-eng/thanos/tree/master/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar.yaml)_
-* _[Example Kubernetes manifest with GCS upload](https://github.com/improbable-eng/thanos/tree/master/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar-lts.yaml)_
+* _[Example Kubernetes manifest](/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar.yaml)_
+* _[Example Kubernetes manifest with GCS upload](/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar-lts.yaml)_
 
 ### [Store Gateway](components/store.md)
 
@@ -229,7 +227,7 @@ thanos store \
 
 The store gateway occupies small amounts of disk space for caching basic information about data in the object storage. This will rarely exceed more than a few gigabytes and is used to improve restart times. It is useful but not required to preserve it across restarts.
 
-* _[Example Kubernetes manifest](https://github.com/improbable-eng/thanos/tree/master/tutorials/kubernetes-demo/manifests/thanos-store-gateway.yaml)_
+* _[Example Kubernetes manifest](/tutorials/kubernetes-demo/manifests/thanos-store-gateway.yaml)_
 
 ### [Compactor](components/compact.md)
 
@@ -261,4 +259,4 @@ TBD
 
 Thanos also has a tutorial on deploying it to Kubernetes. We have a full page describing a standard deployment here.
 
-We also have example Grafana dashboards [here](https://github.com/improbable-eng/thanos/tree/master/examples/grafana/monitoring.md) and some [alerts](https://github.com/improbable-eng/thanos/tree/master/examples/alerts/alerts.md) to get you started.
+We also have example Grafana dashboards [here](/examples/grafana/monitoring.md) and some [alerts](/examples/alerts/alerts.md) to get you started.
