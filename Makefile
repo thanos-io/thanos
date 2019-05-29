@@ -169,7 +169,6 @@ format: $(GOIMPORTS)
 # proto generates golang files from Thanos proto files.
 .PHONY: proto
 proto: check-git  $(GOIMPORTS) $(PROTOC)
-	@go install ./vendor/github.com/gogo/protobuf/protoc-gen-gogofast
 	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" scripts/genproto.sh
 
 .PHONY: promu
