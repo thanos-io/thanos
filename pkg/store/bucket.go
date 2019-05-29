@@ -675,7 +675,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 // labels and resolution. This is important because we allow mixed resolution results, so it is quite crucial
 // to be aware what exactly resolution we see on query.
 // TODO(bplotka): Consider adding resolution label to all results to propagate that info to UI and Query API.
-func debugFoundBlockSetOverview(logger log.Logger, mint, maxt int64, lset labels.Labels, bs []*bucketBlock) {
+func debugFoundBlockSetOverview(logger log.Logger, mint, maxt, maxResolutionMillis int64, lset labels.Labels, bs []*bucketBlock) {
 	if len(bs) == 0 {
 		level.Debug(logger).Log("msg", "No block found", "mint", mint, "maxt", maxt, "lset", lset.String())
 		return
@@ -703,7 +703,7 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt int64, lset labels
 
 	parts = append(parts, fmt.Sprintf("Range: %d-%d Resolution: %d", currMin, currMax, currRes))
 
-	level.Debug(logger).Log("msg", "Blocks source resolutions", "blocks", len(bs), "mint", mint, "maxt", maxt, "lset", lset.String(), "spans", strings.Join(parts, "\n"))
+	level.Debug(logger).Log("msg", "Blocks source resolutions", "blocks", len(bs), "Maximum Resolution", maxResolutionMillis, "mint", mint, "maxt", maxt, "lset", lset.String(), "spans", strings.Join(parts, "\n"))
 }
 
 // Series implements the storepb.StoreServer interface.
@@ -738,7 +738,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow)
 
 		if s.debugLogging {
-			debugFoundBlockSetOverview(s.logger, req.MinTime, req.MaxTime, bs.labels, blocks)
+			debugFoundBlockSetOverview(s.logger, req.MinTime, req.MaxTime, req.MaxResolutionWindow, bs.labels, blocks)
 		}
 
 		for _, b := range blocks {
@@ -934,7 +934,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 type bucketBlockSet struct {
 	labels      labels.Labels
 	mtx         sync.RWMutex
-	resolutions []int64          // available resolution, high to low
+	resolutions []int64          // available resolution, high to low (in milliseconds)
 	blocks      [][]*bucketBlock // ordered buckets for the existing resolutions
 }
 
@@ -996,8 +996,8 @@ func int64index(s []int64, x int64) int {
 }
 
 // getFor returns a time-ordered list of blocks that cover date between mint and maxt.
-// Blocks with the lowest resolution possible but not lower than the given resolution are returned.
-func (s *bucketBlockSet) getFor(mint, maxt, minResolution int64) (bs []*bucketBlock) {
+// Blocks with the biggest resolution possible but not bigger than the given max resolution are returned.
+func (s *bucketBlockSet) getFor(mint, maxt, maxResolutionMillis int64) (bs []*bucketBlock) {
 	if mint == maxt {
 		return nil
 	}
@@ -1007,10 +1007,12 @@ func (s *bucketBlockSet) getFor(mint, maxt, minResolution int64) (bs []*bucketBl
 
 	// Find first matching resolution.
 	i := 0
-	for ; i < len(s.resolutions) && s.resolutions[i] > minResolution; i++ {
+	for ; i < len(s.resolutions) && s.resolutions[i] > maxResolutionMillis; i++ {
 	}
 
-	// Base case, we fill the given interval with the closest resolution.
+	// Fill the given interval with the blocks for the current resolution.
+	// Our current resolution might not cover all data, so recursively fill the gaps with higher resolution blocks if there is any.
+	start := mint
 	for _, b := range s.blocks[i] {
 		if b.meta.MaxTime <= mint {
 			continue
@@ -1018,22 +1020,18 @@ func (s *bucketBlockSet) getFor(mint, maxt, minResolution int64) (bs []*bucketBl
 		if b.meta.MinTime >= maxt {
 			break
 		}
-		bs = append(bs, b)
-	}
-	// Our current resolution might not cover all data, recursively fill the gaps at the start
-	// and end of [mint, maxt] with higher resolution blocks.
-	i++
-	// No higher resolution left, we are done.
-	if i >= len(s.resolutions) {
-		return bs
-	}
-	if len(bs) == 0 {
-		return s.getFor(mint, maxt, s.resolutions[i])
-	}
-	left := s.getFor(mint, bs[0].meta.MinTime, s.resolutions[i])
-	right := s.getFor(bs[len(bs)-1].meta.MaxTime, maxt, s.resolutions[i])
 
-	return append(left, append(bs, right...)...)
+		if i+1 < len(s.resolutions) {
+			bs = append(bs, s.getFor(start, b.meta.MinTime, s.resolutions[i+1])...)
+		}
+		bs = append(bs, b)
+		start = b.meta.MaxTime
+	}
+
+	if i+1 < len(s.resolutions) {
+		bs = append(bs, s.getFor(start, maxt, s.resolutions[i+1])...)
+	}
+	return bs
 }
 
 // labelMatchers verifies whether the block set matches the given matchers and returns a new

@@ -44,7 +44,7 @@ func TestStoreGatewayQuery(t *testing.T) {
 	exit, err := newSpinupSuite().
 		WithPreStartedMinio(s3Config).
 		Add(storeGateway(1, config)).
-		Add(querier(1, "replica", storeGatewayGRPC(1))).
+		Add(querierWithStoreFlags(1, "replica", storeGatewayGRPC(1))).
 		Exec(t, ctx, "test_store_gateway_query")
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)

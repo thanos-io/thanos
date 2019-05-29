@@ -34,7 +34,6 @@ Process of releasing a *minor* Thanos version:
     
   For release candidate just reuse same branch and rebase it on every candidate until the actual release happens.
         
-1. Bump [VERSION file](/VERSION)
 1. Update [CHANGELOG file](/CHANGELOG.md)
 
   Note that `CHANGELOG.md` should only document changes relevant to users of Thanos, including external API changes, performance improvements, and new features. Do not document changes of internal interfaces, code refactorings and clean-ups, changes to the build process, etc. People interested in these are asked to refer to the git history.
@@ -50,7 +49,7 @@ Process of releasing a *minor* Thanos version:
 1. After review, merge the PR and immediately after this tag a version:
 
     ```bash
-    $ tag=$(< VERSION)
+    $ tag=x.y.z
     $ git tag -s "v${tag}" -m "v${tag}"
     $ git push origin "v${tag}"
     ```
@@ -66,8 +65,6 @@ Process of releasing a *minor* Thanos version:
  1. Once tarballs are published on release page, you can click `Publish` and release is complete.
 
  1. Announce `#thanos` slack channel.
-
-1. After release create a second PR adding `-master` [VERSION file](/VERSION) suffix to the end of version. This will ensure master built images will have different version then released one.
 
 ## Branch management and versioning strategy
 

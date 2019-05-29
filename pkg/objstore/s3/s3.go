@@ -53,8 +53,9 @@ type TraceConfig struct {
 
 // HTTPConfig stores the http.Transport configuration for the s3 minio client.
 type HTTPConfig struct {
-	IdleConnTimeout    model.Duration `yaml:"idle_conn_timeout"`
-	InsecureSkipVerify bool           `yaml:"insecure_skip_verify"`
+	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
+	ResponseHeaderTimeout model.Duration `yaml:"response_header_timeout"`
+	InsecureSkipVerify    bool           `yaml:"insecure_skip_verify"`
 }
 
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
@@ -68,7 +69,10 @@ type Bucket struct {
 
 // parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
 func parseConfig(conf []byte) (Config, error) {
-	defaultHTTPConfig := HTTPConfig{IdleConnTimeout: model.Duration(90 * time.Second)}
+	defaultHTTPConfig := HTTPConfig{
+		IdleConnTimeout:       model.Duration(90 * time.Second),
+		ResponseHeaderTimeout: model.Duration(2 * time.Minute),
+	}
 	config := Config{HTTPConfig: defaultHTTPConfig}
 	if err := yaml.Unmarshal(conf, &config); err != nil {
 		return Config{}, err
@@ -139,10 +143,11 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		IdleConnTimeout:       time.Duration(config.HTTPConfig.IdleConnTimeout),
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
-		// The ResponseHeaderTimeout here is the only change from the
-		// default minio transport, it was introduced to cover cases
-		// where the tcp connection works but the server never answers
-		ResponseHeaderTimeout: 15 * time.Second,
+		// The ResponseHeaderTimeout here is the only change
+		// from the default minio transport, it was introduced
+		// to cover cases where the tcp connection works but
+		// the server never answers. Defaults to 2 minutes.
+		ResponseHeaderTimeout: time.Duration(config.HTTPConfig.ResponseHeaderTimeout),
 		// Set this value so that the underlying transport round-tripper
 		// doesn't try to auto decode the body of objects with
 		// content-encoding set to `gzip`.

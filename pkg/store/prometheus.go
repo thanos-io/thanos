@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math"
 	"net/http"
 	"net/url"
@@ -79,7 +80,7 @@ func NewPrometheusStore(
 }
 
 // Info returns store information about the Prometheus instance.
-// NOTE(bplotka): MaxTime & MinTime are not accurate nor adjusted dynamically like these included in gossip meta.
+// NOTE(bplotka): MaxTime & MinTime are not accurate nor adjusted dynamically.
 // This is fine for now, but might be needed in future.
 func (p *PrometheusStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	lset := p.externalLabels()
@@ -384,7 +385,13 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesR
 		Status string   `json:"status"`
 		Error  string   `json:"error"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	if err = json.Unmarshal(body, &m); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
@@ -438,7 +445,12 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 		Status string   `json:"status"`
 		Error  string   `json:"error"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	if err = json.Unmarshal(body, &m); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 

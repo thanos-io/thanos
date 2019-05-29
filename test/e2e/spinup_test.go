@@ -75,7 +75,7 @@ func (c *cmdExec) Start(stdout io.Writer, stderr io.Writer) error {
 
 func (c *cmdExec) Kill() error { return c.Process.Signal(syscall.SIGKILL) }
 
-func (c *cmdExec) String() string { return fmt.Sprintf("%s %s", c.Path, c.Args[1]) }
+func (c *cmdExec) String() string { return fmt.Sprintf("%s %v", c.Path, c.Args[1:]) }
 
 type cmdScheduleFunc func(workDir string) ([]Exec, error)
 
@@ -118,7 +118,6 @@ func scraper(i int, config string) cmdScheduleFunc {
 			"--http-address", sidecarHTTP(i),
 			"--prometheus.url", fmt.Sprintf("http://%s", promHTTP(i)),
 			"--tsdb.path", promDir,
-			"--cluster.disable",
 			"--log.level", "debug"))), nil
 	}
 }
@@ -149,18 +148,6 @@ func receiver(i int, config string) cmdScheduleFunc {
 			"--labels", "receive=\"true\"",
 			"--tsdb.path", promDir,
 			"--log.level", "debug"))), nil
-	}
-}
-
-func querier(i int, replicaLabel string, staticStores ...string) cmdScheduleFunc {
-	return func(_ string) ([]Exec, error) {
-		args := append(defaultQuerierFlags(i, replicaLabel),
-			"--cluster.gossip-interval", "200ms",
-			"--cluster.pushpull-interval", "200ms")
-		for _, s := range staticStores {
-			args = append(args, "--store", s)
-		}
-		return []Exec{newCmdExec(exec.Command("thanos", args...))}, nil
 	}
 }
 
@@ -346,7 +333,6 @@ func (c *sameProcessGRPCServiceExec) Start(stdout io.Writer, stderr io.Writer) e
 			srvChan <- err
 			_, _ = c.stderr.Write([]byte(fmt.Sprintf("server failed: %s", err)))
 		}
-
 	}()
 	c.srvChan = srvChan
 	return nil
@@ -359,6 +345,7 @@ func (c *sameProcessGRPCServiceExec) Wait() error {
 	}
 	return err
 }
+
 func (c *sameProcessGRPCServiceExec) Kill() error {
 	c.cancel()
 	c.srv.Stop()
@@ -555,13 +542,13 @@ func defaultQuerierFlags(i int, replicaLabel string) []string {
 		"--http-address", queryHTTP(i),
 		"--log.level", "debug",
 		"--query.replica-label", replicaLabel,
-		"--cluster.disable",
 		"--store.sd-dns-interval", "5s",
 	}
 }
 
 func defaultRulerFlags(i int, dbDir string, ruleDir string) []string {
-	return []string{"rule",
+	return []string{
+		"rule",
 		"--debug.name", fmt.Sprintf("rule-%d", i),
 		"--label", fmt.Sprintf(`replica="%d"`, i),
 		"--data-dir", dbDir,
@@ -570,7 +557,6 @@ func defaultRulerFlags(i int, dbDir string, ruleDir string) []string {
 		"--alertmanagers.url", "http://127.0.0.1:29093",
 		"--grpc-address", rulerGRPC(i),
 		"--http-address", rulerHTTP(i),
-		"--cluster.disable",
 		"--log.level", "debug",
 		"--query.sd-dns-interval", "5s",
 	}

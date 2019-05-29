@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -120,9 +121,16 @@ func downsampleBucket(
 		defer runutil.CloseWithLogOnErr(logger, rc, "block reader")
 
 		var m metadata.Meta
-		if err := json.NewDecoder(rc).Decode(&m); err != nil {
-			return errors.Wrap(err, "decode meta")
+
+		obj, err := ioutil.ReadAll(rc)
+		if err != nil {
+			return errors.Wrap(err, "read meta")
 		}
+
+		if err = json.Unmarshal(obj, &m); err != nil {
+			return errors.Wrap(err, "unmarshal meta")
+		}
+
 		metas = append(metas, &m)
 
 		return nil

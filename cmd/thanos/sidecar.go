@@ -11,9 +11,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	version "github.com/hashicorp/go-version"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
-	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/promclient"
@@ -35,7 +33,7 @@ import (
 func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "sidecar for Prometheus server")
 
-	grpcBindAddr, httpBindAddr, cert, key, clientCA, newPeerFn := regCommonServerFlags(cmd)
+	grpcBindAddr, httpBindAddr, cert, key, clientCA := regCommonServerFlags(cmd)
 
 	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API. For better performance use local network.").
 		Default("http://localhost:9090").URL()
@@ -63,10 +61,6 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			*reloaderCfgOutputFile,
 			*reloaderRuleDirs,
 		)
-		peer, err := newPeerFn(logger, reg, false, "", false)
-		if err != nil {
-			return errors.Wrap(err, "new cluster peer")
-		}
 		return runSidecar(
 			g,
 			logger,
@@ -80,7 +74,6 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			*promURL,
 			*dataDir,
 			objStoreConfig,
-			peer,
 			rl,
 			*uploadCompacted,
 		)
@@ -100,7 +93,6 @@ func runSidecar(
 	promURL *url.URL,
 	dataDir string,
 	objStoreConfig *pathOrContent,
-	peer cluster.Peer,
 	reloader *reloader.Reloader,
 	uploadCompacted bool,
 ) error {
@@ -140,21 +132,6 @@ func runSidecar(
 		g.Add(func() error {
 			// Only check Prometheus's flags when upload is enabled.
 			if uploads {
-				// Retry infinitely until we get Prometheus version.
-				if err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
-					if m.version, err = promclient.PromVersion(logger, m.promURL); err != nil {
-						level.Warn(logger).Log(
-							"msg", "failed to get Prometheus version. Is Prometheus running? Retrying",
-							"err", err,
-						)
-						return errors.Wrapf(err, "fetch Prometheus version")
-					}
-
-					return nil
-				}); err != nil {
-					return errors.Wrap(err, "fetch Prometheus version")
-				}
-
 				// Check prometheus's flags to ensure sane sidecar flags.
 				if err := validatePrometheus(ctx, logger, m); err != nil {
 					return errors.Wrap(err, "validate Prometheus flags")
@@ -189,16 +166,6 @@ func runSidecar(
 				return errors.New("no external labels configured on Prometheus server, uniquely identifying external labels must be configured")
 			}
 
-			// New gossip cluster.
-			mint, maxt := m.Timestamps()
-			if err = peer.Join(cluster.PeerTypeSource, cluster.PeerMetadata{
-				Labels:  m.LabelsPB(),
-				MinTime: mint,
-				MaxTime: maxt,
-			}); err != nil {
-				return errors.Wrap(err, "join cluster")
-			}
-
 			// Periodically query the Prometheus config. We use this as a heartbeat as well as for updating
 			// the external labels we apply.
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
@@ -209,9 +176,6 @@ func runSidecar(
 					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
 					promUp.Set(0)
 				} else {
-					// Update gossip.
-					peer.SetLabels(m.LabelsPB())
-
 					promUp.Set(1)
 					lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
 				}
@@ -220,7 +184,6 @@ func runSidecar(
 			})
 		}, func(error) {
 			cancel()
-			peer.Close(2 * time.Second)
 		})
 	}
 	{
@@ -305,9 +268,6 @@ func runSidecar(
 					level.Warn(logger).Log("msg", "reading timestamps failed", "err", err)
 				} else {
 					m.UpdateTimestamps(minTime, math.MaxInt64)
-
-					mint, maxt := m.Timestamps()
-					peer.SetTimestamps(mint, maxt)
 				}
 				return nil
 			})
@@ -316,25 +276,32 @@ func runSidecar(
 		})
 	}
 
-	level.Info(logger).Log("msg", "starting sidecar", "peer", peer.Name())
+	level.Info(logger).Log("msg", "starting sidecar")
 	return nil
 }
 
 func validatePrometheus(ctx context.Context, logger log.Logger, m *promMetadata) error {
-	if m.version == nil {
-		level.Warn(logger).Log("msg", "fetched version is nil or invalid. Unable to know whether Prometheus supports /version endpoint, skip validation")
-		return nil
+	flags := promclient.Flags{
+		TSDBMinTime: model.Duration(2 * time.Hour),
+		TSDBMaxTime: model.Duration(2 * time.Hour),
 	}
 
-	if m.version.LessThan(promclient.FlagsVersion) {
-		level.Warn(logger).Log("msg",
-			"Prometheus doesn't support flags endpoint, skip validation", "version", m.version.Original())
-		return nil
-	}
+	if err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
 
-	flags, err := promclient.ConfiguredFlags(ctx, logger, m.promURL)
-	if err != nil {
-		return errors.Wrap(err, "failed to check flags")
+		var err error
+		if flags, err = promclient.ConfiguredFlags(ctx, logger, m.promURL); err != nil {
+			if err == promclient.ErrFlagEndpointNotFound { // saw 404
+				level.Warn(logger).Log("msg", "failed to check Promteheus flags endpoint. No extra validation is done: %s", err)
+				return nil
+			}
+			level.Warn(logger).Log("msg", "failed to get Prometheus flags. Is Prometheus running? Retrying", "err", err)
+			return errors.Wrapf(err, "fetch Prometheus flags")
+		}
+
+		return nil
+
+	}); err != nil {
+		return errors.Wrapf(err, "fetch Prometheus flags")
 	}
 
 	// Check if compaction is disabled.
@@ -354,11 +321,10 @@ func validatePrometheus(ctx context.Context, logger log.Logger, m *promMetadata)
 type promMetadata struct {
 	promURL *url.URL
 
-	mtx     sync.Mutex
-	mint    int64
-	maxt    int64
-	labels  labels.Labels
-	version *version.Version
+	mtx    sync.Mutex
+	mint   int64
+	maxt   int64
+	labels labels.Labels
 }
 
 func (s *promMetadata) UpdateLabels(ctx context.Context, logger log.Logger) error {

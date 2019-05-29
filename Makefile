@@ -8,6 +8,8 @@ TMP_GOPATH        ?= /tmp/thanos-go
 GOBIN             ?= ${GOPATH}/bin
 GO111MODULE       ?= on
 export GO111MODULE
+GOPROXY           ?= https://proxy.golang.org
+export GOPROXY
 
 # Tools.
 EMBEDMD           ?= $(GOBIN)/embedmd-$(EMBEDMD_VERSION)
@@ -21,8 +23,8 @@ LICHE_VERSION     ?= 2a2e6e56f6c615c17b2e116669c4cdb31b5453f3
 GOIMPORTS         ?= $(GOBIN)/goimports-$(GOIMPORTS_VERSION)
 GOIMPORTS_VERSION ?= 9d4d845e86f14303813298ede731a971dd65b593
 PROMU             ?= $(GOBIN)/promu-$(PROMU_VERSION)
-# v0.2.0
-PROMU_VERSION     ?= 264dc36af9ea3103255063497636bd5713e3e9c1
+# v0.4.0
+PROMU_VERSION     ?= afc7dfee7697527c08f2632f91b4c1369ed54798
 PROTOC            ?= $(GOBIN)/protoc-$(PROTOC_VERSION)
 PROTOC_VERSION    ?= 3.4.0
 # v0.55.3 This needs to match with version in netlify.toml

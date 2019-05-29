@@ -5,8 +5,6 @@ import (
 	"sort"
 	"strings"
 
-	"time"
-
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/tracing"
@@ -24,19 +22,19 @@ type WarningReporter func(error)
 
 // QueryableCreator returns implementation of promql.Queryable that fetches data from the proxy store API endpoints.
 // If deduplication is enabled, all data retrieved from it will be deduplicated along the replicaLabel by default.
-// maxSourceResolution controls downsampling resolution that is allowed.
+// maxResolutionMillis controls downsampling resolution that is allowed (specified in milliseconds).
 // partialResponse controls `partialResponseDisabled` option of StoreAPI and partial response behaviour of proxy.
-type QueryableCreator func(deduplicate bool, maxSourceResolution time.Duration, partialResponse bool, r WarningReporter) storage.Queryable
+type QueryableCreator func(deduplicate bool, maxResolutionMillis int64, partialResponse bool, r WarningReporter) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
 func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLabel string) QueryableCreator {
-	return func(deduplicate bool, maxSourceResolution time.Duration, partialResponse bool, r WarningReporter) storage.Queryable {
+	return func(deduplicate bool, maxResolutionMillis int64, partialResponse bool, r WarningReporter) storage.Queryable {
 		return &queryable{
 			logger:              logger,
 			replicaLabel:        replicaLabel,
 			proxy:               proxy,
 			deduplicate:         deduplicate,
-			maxSourceResolution: maxSourceResolution,
+			maxResolutionMillis: maxResolutionMillis,
 			partialResponse:     partialResponse,
 			warningReporter:     r,
 		}
@@ -48,14 +46,14 @@ type queryable struct {
 	replicaLabel        string
 	proxy               storepb.StoreServer
 	deduplicate         bool
-	maxSourceResolution time.Duration
+	maxResolutionMillis int64
 	partialResponse     bool
 	warningReporter     WarningReporter
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabel, q.proxy, q.deduplicate, int64(q.maxSourceResolution/time.Millisecond), q.partialResponse, q.warningReporter), nil
+	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabel, q.proxy, q.deduplicate, int64(q.maxResolutionMillis), q.partialResponse, q.warningReporter), nil
 }
 
 type querier struct {
@@ -66,7 +64,7 @@ type querier struct {
 	replicaLabel        string
 	proxy               storepb.StoreServer
 	deduplicate         bool
-	maxSourceResolution int64
+	maxResolutionMillis int64
 	partialResponse     bool
 	warningReporter     WarningReporter
 }
@@ -80,7 +78,7 @@ func newQuerier(
 	replicaLabel string,
 	proxy storepb.StoreServer,
 	deduplicate bool,
-	maxSourceResolution int64,
+	maxResolutionMillis int64,
 	partialResponse bool,
 	warningReporter WarningReporter,
 ) *querier {
@@ -100,7 +98,7 @@ func newQuerier(
 		replicaLabel:        replicaLabel,
 		proxy:               proxy,
 		deduplicate:         deduplicate,
-		maxSourceResolution: maxSourceResolution,
+		maxResolutionMillis: maxResolutionMillis,
 		partialResponse:     partialResponse,
 		warningReporter:     warningReporter,
 	}
@@ -185,7 +183,7 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 		MinTime:                 q.mint,
 		MaxTime:                 q.maxt,
 		Matchers:                sms,
-		MaxResolutionWindow:     q.maxSourceResolution,
+		MaxResolutionWindow:     q.maxResolutionMillis,
 		Aggregates:              queryAggrs,
 		PartialResponseDisabled: !q.partialResponse,
 	}, resp); err != nil {

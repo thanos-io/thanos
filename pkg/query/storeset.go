@@ -94,12 +94,10 @@ type storeSetNodeCollector struct {
 	externalLabelOccurrences func() map[string]int
 }
 
-var (
-	nodeInfoDesc = prometheus.NewDesc(
-		"thanos_store_node_info",
-		"Number of nodes with the same external labels identified by their hash. If any time-series is larger than 1, external label uniqueness is not true",
-		[]string{"external_labels"}, nil,
-	)
+var nodeInfoDesc = prometheus.NewDesc(
+	"thanos_store_node_info",
+	"Number of nodes with the same external labels identified by their hash. If any time-series is larger than 1, external label uniqueness is not true",
+	[]string{"external_labels"}, nil,
 )
 
 func (c *storeSetNodeCollector) Describe(ch chan<- *prometheus.Desc) {
@@ -236,11 +234,6 @@ func (s *StoreSet) Update(ctx context.Context) {
 
 	// Add stores that are not yet in s.stores.
 	for addr, store := range healthyStores {
-		if _, ok := s.stores[addr]; ok {
-			s.updateStoreStatus(store, nil)
-			continue
-		}
-
 		// Check if it has some external labels specified.
 		// No external labels means strictly store gateway or ruler and it is fine to have access to multiple instances of them.
 		//
@@ -249,6 +242,11 @@ func (s *StoreSet) Update(ctx context.Context) {
 			store.close()
 			s.updateStoreStatus(store, errors.New(droppingStoreMessage))
 			level.Warn(s.logger).Log("msg", droppingStoreMessage, "address", addr)
+			continue
+		}
+
+		if _, ok := s.stores[addr]; ok {
+			s.updateStoreStatus(store, nil)
 			continue
 		}
 
@@ -273,7 +271,7 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 	// Gather healthy stores map concurrently. Build new store if does not exist already.
 	for _, storeSpec := range s.storeSpecs() {
 		if _, ok := unique[storeSpec.Addr()]; ok {
-			level.Warn(s.logger).Log("msg", "duplicated address in gossip or static store nodes", "address", storeSpec.Addr())
+			level.Warn(s.logger).Log("msg", "duplicated address in store nodes", "address", storeSpec.Addr())
 			continue
 		}
 		unique[storeSpec.Addr()] = struct{}{}
@@ -308,7 +306,7 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 				}
 				store = &storeRef{StoreClient: storepb.NewStoreClient(conn), cc: conn, addr: addr, logger: s.logger}
 
-				// Initial info call for all types of stores (gossip + static) to check gRPC StoreAPI.
+				// Initial info call for all types of stores to check gRPC StoreAPI.
 				resp, err := store.StoreClient.Info(ctx, &storepb.InfoRequest{}, grpc.FailFast(false))
 				if err != nil {
 					store.close()

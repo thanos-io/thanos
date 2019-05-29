@@ -19,11 +19,11 @@ require (
 	github.com/hashicorp/go-sockaddr v1.0.0
 	github.com/hashicorp/go-version v1.2.0
 	github.com/hashicorp/golang-lru v0.5.1
-	github.com/hashicorp/memberlist v0.1.3
 	github.com/julienschmidt/httprouter v1.1.0 // indirect
+	github.com/leanovate/gopter v0.2.4
 	github.com/lovoo/gcloud-opentracing v0.3.0
 	github.com/miekg/dns v1.1.8
-	github.com/minio/minio-go v0.0.0-20190131015406-c8a261de75c1
+	github.com/minio/minio-go v0.0.0-20200511070425-f33eae714a28
 	github.com/mozillazg/go-cos v0.11.0
 	github.com/mwitkow/go-conntrack v0.0.0-20161129095857-cc309e4a2223
 	github.com/oklog/run v1.0.0
