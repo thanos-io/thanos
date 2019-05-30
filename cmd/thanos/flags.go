@@ -2,10 +2,9 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"strings"
 
-	"github.com/pkg/errors"
+	"github.com/improbable-eng/thanos/pkg/flagutil"
 	"github.com/prometheus/common/model"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
@@ -57,59 +56,18 @@ func modelDuration(flags *kingpin.FlagClause) *model.Duration {
 	return value
 }
 
-type pathOrContent struct {
-	fileFlagName    string
-	contentFlagName string
-
-	required bool
-	path     *string
-	content  *string
-}
-
-// Content returns content of the file. Flag that specifies path has priority.
-// It returns error if the content is empty and required flag is set to true.
-func (p *pathOrContent) Content() ([]byte, error) {
-	if len(*p.path) > 0 && len(*p.content) > 0 {
-		return nil, errors.Errorf("Both %s and %s flags set.", p.fileFlagName, p.contentFlagName)
-	}
-
-	var content []byte
-	if len(*p.path) > 0 {
-		c, err := ioutil.ReadFile(*p.path)
-		if err != nil {
-			return nil, errors.Wrapf(err, "loading YAML file %s for %s", *p.path, p.fileFlagName)
-		}
-		content = c
-	} else {
-		content = []byte(*p.content)
-	}
-
-	if len(content) == 0 && p.required {
-		return nil, errors.Errorf("flag %s or %s is required for running this command and content cannot be empty.", p.fileFlagName, p.contentFlagName)
-	}
-
-	return content, nil
-}
-
-func regCommonObjStoreFlags(cmd *kingpin.CmdClause, suffix string, required bool, extraDesc ...string) *pathOrContent {
+func regCommonObjStoreFlags(cmd *kingpin.CmdClause, suffix string, required bool, extraDesc ...string) *flagutil.PathOrContent {
 	fileFlagName := fmt.Sprintf("objstore%s.config-file", suffix)
 	contentFlagName := fmt.Sprintf("objstore%s.config", suffix)
 
 	help := fmt.Sprintf("Path to YAML file that contains object store%s configuration.", suffix)
 	help = strings.Join(append([]string{help}, extraDesc...), " ")
-	bucketConfFile := cmd.Flag(fileFlagName, help).PlaceHolder("<bucket.config-yaml-path>").String()
+	bucketConfFile := cmd.Flag(fileFlagName, help).PlaceHolder("<bucket.config-yaml-path>")
 
 	help = fmt.Sprintf("Alternative to '%s' flag. Object store%s configuration in YAML.", fileFlagName, suffix)
 	help = strings.Join(append([]string{help}, extraDesc...), " ")
 	bucketConf := cmd.Flag(contentFlagName, help).
-		PlaceHolder("<bucket.config-yaml>").String()
+		PlaceHolder("<bucket.config-yaml>")
 
-	return &pathOrContent{
-		fileFlagName:    fileFlagName,
-		contentFlagName: contentFlagName,
-		required:        required,
-
-		path:    bucketConfFile,
-		content: bucketConf,
-	}
+	return flagutil.NewPathOrContentFlag(bucketConfFile, bucketConf, required)
 }

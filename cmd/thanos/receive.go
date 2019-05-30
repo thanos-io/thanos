@@ -11,6 +11,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/component"
+	"github.com/improbable-eng/thanos/pkg/flagutil"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/receive"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -83,7 +84,7 @@ func runReceive(
 	httpMetricsBindAddr string,
 	remoteWriteAddress string,
 	dataDir string,
-	objStoreConfig *pathOrContent,
+	objStoreConfig *flagutil.PathOrContent,
 	lset labels.Labels,
 	retention model.Duration,
 ) error {

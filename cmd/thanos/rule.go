@@ -25,6 +25,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/discovery/cache"
 	"github.com/improbable-eng/thanos/pkg/discovery/dns"
 	"github.com/improbable-eng/thanos/pkg/extprom"
+	"github.com/improbable-eng/thanos/pkg/flagutil"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/promclient"
 	thanosrule "github.com/improbable-eng/thanos/pkg/rule"
@@ -194,7 +195,7 @@ func runRule(
 	evalInterval time.Duration,
 	dataDir string,
 	ruleFiles []string,
-	objStoreConfig *pathOrContent,
+	objStoreConfig *flagutil.PathOrContent,
 	tsdbOpts *tsdb.Options,
 	alertQueryURL *url.URL,
 	alertExcludeLabels []string,
