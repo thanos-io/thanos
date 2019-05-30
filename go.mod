@@ -42,7 +42,7 @@ require (
 	golang.org/x/oauth2 v0.0.0-20181203162652-d668ce993890
 	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
 	golang.org/x/text v0.3.1-0.20180807135948-17ff2d5776d2
-	google.golang.org/api v0.1.0
+	google.golang.org/api v0.5.0
 	google.golang.org/appengine v1.4.0 // indirect
 	google.golang.org/grpc v1.17.0
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
