@@ -25,7 +25,7 @@ $ thanos query \
 The query layer can deduplicate series that were collected from high-availability pairs of data sources such as Prometheus.
 A fixed replica label must be chosen for the entire cluster and can then be passed to query nodes on startup.
 
-Two or more series that have that are only distinguished by the given replica label, will be merged into a single time series.
+Two or more series that are only distinguished by the given replica label, will be merged into a single time series.
 This also hides gaps in collection of a single data source. For example:
 
 * Prometheus + sidecar "A": `cluster=1,env=2,replica=A`
