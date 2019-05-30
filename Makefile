@@ -124,20 +124,20 @@ deps:
 # docker builds docker with no tag.
 .PHONY: docker
 docker: build
-	@echo ">> building docker image '${DOCKER_IMAGE_NAME}'"
-	@docker build -t "${DOCKER_IMAGE_NAME}" .
+	@echo ">> building docker image '$(DOCKER_IMAGE_NAME)'"
+	@docker build -t "$(DOCKER_IMAGE_NAME)" .
 
 #docker-multi-stage builds docker image using multi-stage.
 .PHONY: docker-multi-stage
 docker-multi-stage:
-	@echo ">> building docker image '${DOCKER_IMAGE_NAME}' with Dockerfile.multi-stage"
-	@docker build -f Dockerfile.multi-stage -t "${DOCKER_IMAGE_NAME}" .
+	@echo ">> building docker image '$(DOCKER_IMAGE_NAME)' with Dockerfile.multi-stage"
+	@docker build -f Dockerfile.multi-stage -t "$(DOCKER_IMAGE_NAME)" .
 
-# docker-push pushes docker image build under `${DOCKER_IMAGE_NAME}` to improbable/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
+# docker-push pushes docker image build under `$(DOCKER_IMAGE_NAME)` to improbable/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
 .PHONY: docker-push
 docker-push:
-	@echo ">> pushing image"
-	@docker tag "${DOCKER_IMAGE_NAME}" improbable/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
+	@echo ">> pushing image improbable/$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
+	@docker tag "$(DOCKER_IMAGE_NAME)" improbable/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
 	@docker push improbable/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
 
 # docs regenerates flags in docs for all thanos commands.
