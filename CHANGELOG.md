@@ -9,11 +9,16 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking* word for marking changes that are not backward compatible (relates only to v0.y.z releases.)
 
-## Unreleased
+## [v0.5.0-rc.0](https://github.com/improbable-eng/thanos/releases/tag/v0.5.0-rc.0) - 2019.05.30
+
+TL;DR: Store LRU cache is no longer leaking, Upgraded Thanos UI to Prometheus 2.9, Fixed auto-downsampling, Moved to Go 1.12.5 and more.
 
 ### Fixed
 
-- [#1146](https://github.com/improbable-eng/thanos/pull/1146) store/bucket: make getFor() work with interleaved resolutions
+- [#1142](https://github.com/improbable-eng/thanos/pull/1142) fixed major leak on store LRU cache for index items (postings and series).
+- [#1163](https://github.com/improbable-eng/thanos/pull/1163) sidecar is no longer blocking for custom Prometheus versions/builds. It only checks if flags return non 404, then it performs optional checks.
+- [#1146](https://github.com/improbable-eng/thanos/pull/1146) store/bucket: make getFor() work with interleaved resolutions.
+- [#1157](https://github.com/improbable-eng/thanos/pull/1157) querier correctly handles duplicated stores when some store changes external labels in place.
 
 ### Added
 
@@ -21,7 +26,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Changed
 
-- [#1118](https://github.com/improbable-eng/thanos/pull/1118) swift: Added support for cross-domain authentication by introducing `userDomainID`, `userDomainName`, `projectDomainID`, `projectDomainName`. 
+- [#1118](https://github.com/improbable-eng/thanos/pull/1118) *breaking* swift: Added support for cross-domain authentication by introducing `userDomainID`, `userDomainName`, `projectDomainID`, `projectDomainName`. 
   The outdated terms `tenantID`, `tenantName` are deprecated and have been replaced by `projectID`, `projectName`. 
 
 - [#1066](https://github.com/improbable-eng/thanos/pull/1066) Upgrade Thanos ui to Prometheus v2.9.1.
@@ -38,6 +43,13 @@ We use *breaking* word for marking changes that are not backward compatible (rel
     - [ENHANCEMENT] Show rule evaluation errors on rules page [PR #4457](https://github.com/prometheus/prometheus/pull/4457)
     
 - [#1156](https://github.com/improbable-eng/thanos/pull/1156) Moved CI and docker multistage to Golang 1.12.5 for latest mem alloc improvements. 
+- [#1103](https://github.com/improbable-eng/thanos/pull/1103) Updated go-cos deps. (COS bucket client).
+- [#1149](https://github.com/improbable-eng/thanos/pull/1149) Updated google Golang API deps (GCS bucket client).
+- [#1190](https://github.com/improbable-eng/thanos/pull/1190) Updated minio deps (S3 bucket client). This fixes minio retries.
+
+## Deprecated 
+
+- [#1008](https://github.com/improbable-eng/thanos/pull/1008) Removed Gossip implementation.
 
 ## [v0.4.0](https://github.com/improbable-eng/thanos/releases/tag/v0.4.0) - 2019.05.3
 
@@ -51,10 +63,10 @@ See [this](docs/proposals/approved/201809_gossip-removal.md) for more details.
 > On Linux, the runtime now uses MADV_FREE to release unused memory. This is more efficient but may result in higher reported RSS. The kernel will reclaim the unused data when it is needed. To revert to the Go 1.11 behavior (MADV_DONTNEED), set the environment variable GODEBUG=madvdontneed=1.
 
 If you want to see exact memory allocation of Thanos process:
-* Use `go_memstats_heap_alloc_bytes` metric exposed by Golang.
+* Use `go_memstats_heap_alloc_bytes` metric exposed by Golang or `container_memory_working_set_bytes` exposed by cadvisor.
 * Add `GODEBUG=madvdontneed=1` before running Thanos binary to revert to memory releasing to pre 1.12 logic.
 
-Using cadvisor metric could be misleading e.g: https://github.com/google/cadvisor/issues/2242
+Using cadvisor `container_memory_usage_bytes` metric could be misleading e.g: https://github.com/google/cadvisor/issues/2242
 
 ### Added
 
