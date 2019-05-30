@@ -23,7 +23,7 @@ require (
 	github.com/lovoo/gcloud-opentracing v0.3.0
 	github.com/miekg/dns v1.1.8
 	github.com/minio/minio-go/v6 v6.0.27-0.20190529152532-de69c0e465ed
-	github.com/mozillazg/go-cos v0.11.0
+	github.com/mozillazg/go-cos v0.12.0
 	github.com/mwitkow/go-conntrack v0.0.0-20161129095857-cc309e4a2223
 	github.com/oklog/run v1.0.0
 	github.com/oklog/ulid v1.3.1
