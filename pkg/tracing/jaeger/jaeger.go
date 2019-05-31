@@ -4,21 +4,24 @@ import (
 	"context"
 	"fmt"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/tracing"
 	"io"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/opentracing/opentracing-go"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/uber/jaeger-client-go"
 	"github.com/uber/jaeger-client-go/config"
 	jaeger_prometheus "github.com/uber/jaeger-lib/metrics/prometheus"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
+
+// Tracer extends opentracing.Tracer
 type Tracer struct {
 	opentracing.Tracer
 }
 
+// GetTraceIdFromSpanContext return TraceID from span.Context
 func (t *Tracer) GetTraceIdFromSpanContext(ctx opentracing.SpanContext) (string, bool) {
 	if c, ok := ctx.(jaeger.SpanContext); ok {
 		return fmt.Sprintf("%016x", c.TraceID().Low), true
@@ -26,6 +29,7 @@ func (t *Tracer) GetTraceIdFromSpanContext(ctx opentracing.SpanContext) (string,
 	return "", false
 }
 
+// NewTracer create tracer from YAML
 func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Registry, conf []byte) (opentracing.Tracer, io.Closer, error) {
 	var (
 		cfg *config.Configuration
@@ -35,7 +39,7 @@ func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Regis
 	)
 	if conf != nil {
 		level.Info(logger).Log("msg", "loading Jaeger tracing configuration from YAML")
-		cfg, err = FromYaml(conf)
+		cfg, err = ParseConfigFromYaml(conf)
 	} else {
 		level.Info(logger).Log("msg", "loading Jaeger tracing configuration from ENV")
 		cfg, err = config.FromEnv()

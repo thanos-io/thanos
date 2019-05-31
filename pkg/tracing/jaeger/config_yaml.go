@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -15,28 +14,29 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// Config - YAML configuration
 type Config struct {
 	ServiceName            string `yaml:"service_name"`
-	Disabled               string `yaml:"disabled"`
-	RPCMetrics             string `yaml:"rpc_metrics"`
+	Disabled               bool `yaml:"disabled"`
+	RPCMetrics             bool `yaml:"rpc_metrics"`
 	Tags                   string `yaml:"tags"`
 	SamplerType            string `yaml:"sampler_type"`
-	SamplerParam           string `yaml:"sampler_param"`
+	SamplerParam           float64 `yaml:"sampler_param"`
 	SamplerManagerHostPort string `yaml:"sampler_manager_host_port"`
-	SamplerMaxOperations   string `yaml:"sampler_max_operations"`
-	SamplerRefreshInterval string `yaml:"sampler_refresh_interval"`
-	ReporterMaxQueueSize   string `yaml:"reporter_max_queue_size"`
-	ReporterFlushInterval  string `yaml:"reporter_flush_interval"`
-	ReporterLogSpans       string `yaml:"reporter_log_spans"`
+	SamplerMaxOperations   int `yaml:"sampler_max_operations"`
+	SamplerRefreshInterval time.Duration `yaml:"sampler_refresh_interval"`
+	ReporterMaxQueueSize   int `yaml:"reporter_max_queue_size"`
+	ReporterFlushInterval  time.Duration `yaml:"reporter_flush_interval"`
+	ReporterLogSpans       bool `yaml:"reporter_log_spans"`
 	Endpoint               string `yaml:"endpoint"`
 	User                   string `yaml:"user"`
 	Password               string `yaml:"password"`
 	AgentHost              string `yaml:"agent_host"`
-	AgentPort              string `yaml:"agent_port"`
+	AgentPort              int `yaml:"agent_port"`
 }
 
 // FromYaml uses config YAML to set the tracer's Configuration.
-func FromYaml(cfg []byte) (*config.Configuration, error) {
+func ParseConfigFromYaml(cfg []byte) (*config.Configuration, error) {
 	conf := &Config{}
 
 	if err := yaml.Unmarshal(cfg, &conf); err != nil {
@@ -45,40 +45,32 @@ func FromYaml(cfg []byte) (*config.Configuration, error) {
 
 	c := &config.Configuration{}
 
-	if e := conf.ServiceName; e != "" {
-		c.ServiceName = e
+	if conf.ServiceName != "" {
+		c.ServiceName = conf.ServiceName
 	}
 
-	if e := conf.RPCMetrics; e != "" {
-		if value, err := strconv.ParseBool(e); err == nil {
-			c.RPCMetrics = value
-		} else {
-			return nil, errors.Wrapf(err, "cannot parse env var %s=%s", conf.RPCMetrics, e)
-		}
+	if conf.RPCMetrics {
+		c.RPCMetrics = conf.RPCMetrics
 	}
 
-	if e := os.Getenv(conf.Disabled); e != "" {
-		if value, err := strconv.ParseBool(e); err == nil {
-			c.Disabled = value
-		} else {
-			return nil, errors.Wrapf(err, "cannot parse env var %s=%s", conf.Disabled, e)
-		}
+	if conf.Disabled {
+			c.Disabled = conf.Disabled
 	}
 
-	if e := conf.Tags; e != "" {
-		c.Tags = parseTags(e)
+	if conf.Tags != "" {
+		c.Tags = parseTags(conf.Tags)
 	}
 
 	if s, err := samplerConfigFromConfig(*conf); err == nil {
 		c.Sampler = s
 	} else {
-		return nil, errors.Wrap(err, "cannot obtain sampler config from env")
+		return nil, errors.Wrap(err, "cannot obtain sampler config from YAML")
 	}
 
-	if r, err := reporterConfigFromEnv(*conf); err == nil {
+	if r, err := reporterConfigFromConfig(*conf); err == nil {
 		c.Reporter = r
 	} else {
-		return nil, errors.Wrap(err, "cannot obtain reporter config from env")
+		return nil, errors.Wrap(err, "cannot obtain reporter config from YAML")
 	}
 
 	return c, nil
@@ -88,95 +80,67 @@ func FromYaml(cfg []byte) (*config.Configuration, error) {
 func samplerConfigFromConfig(cfg Config) (*config.SamplerConfig, error) {
 	sc := &config.SamplerConfig{}
 
-	if e := cfg.SamplerType; e != "" {
-		sc.Type = e
+	if cfg.SamplerType != "" {
+		sc.Type = cfg.SamplerType
 	}
 
-	if e := cfg.SamplerParam; e != "" {
-		if value, err := strconv.ParseFloat(e, 64); err == nil {
-			sc.Param = value
-		} else {
-			return nil, errors.Wrapf(err, "cannot parse env var %s=%s", cfg.SamplerParam, e)
-		}
+	if cfg.SamplerParam != 0 {
+		sc.Param = cfg.SamplerParam
 	}
 
-	if e := cfg.SamplerManagerHostPort; e != "" {
-		sc.SamplingServerURL = e
+	if cfg.SamplerManagerHostPort != "" {
+		sc.SamplingServerURL = cfg.SamplerManagerHostPort
 	}
 
-	if e := cfg.SamplerMaxOperations; e != "" {
-		if value, err := strconv.ParseInt(e, 10, 0); err == nil {
-			sc.MaxOperations = int(value)
-		} else {
-			return nil, errors.Wrapf(err, "cannot parse env var %s=%s", cfg.SamplerMaxOperations, e)
-		}
+	if cfg.SamplerMaxOperations != 0 {
+			sc.MaxOperations = cfg.SamplerMaxOperations
 	}
 
-	if e := cfg.SamplerRefreshInterval; e != "" {
-		if value, err := time.ParseDuration(e); err == nil {
-			sc.SamplingRefreshInterval = value
-		} else {
-			return nil, errors.Wrapf(err, "cannot parse env var %s=%s", cfg.SamplerRefreshInterval, e)
-		}
+	if cfg.SamplerRefreshInterval != 0 {
+		sc.SamplingRefreshInterval = cfg.SamplerRefreshInterval
 	}
 
 	return sc, nil
 }
 
 // reporterConfigFromConfig creates a new ReporterConfig based on the YAML Config.
-func reporterConfigFromEnv(cfg Config) (*config.ReporterConfig, error) {
+func reporterConfigFromConfig(cfg Config) (*config.ReporterConfig, error) {
 	rc := &config.ReporterConfig{}
 
-	if e := cfg.ReporterMaxQueueSize; e != "" {
-		if value, err := strconv.ParseInt(e, 10, 0); err == nil {
-			rc.QueueSize = int(value)
-		} else {
-			return nil, errors.Wrapf(err, "cannot parse env var %s=%s", cfg.ReporterMaxQueueSize, e)
-		}
+	if cfg.ReporterMaxQueueSize != 0 {
+		rc.QueueSize = cfg.ReporterMaxQueueSize
 	}
 
-	if e := cfg.ReporterFlushInterval; e != "" {
-		if value, err := time.ParseDuration(e); err == nil {
-			rc.BufferFlushInterval = value
-		} else {
-			return nil, errors.Wrapf(err, "cannot parse env var %s=%s", cfg.ReporterFlushInterval, e)
-		}
+	if cfg.ReporterFlushInterval != 0 {
+			rc.BufferFlushInterval = cfg.ReporterFlushInterval
 	}
 
-	if e := cfg.ReporterLogSpans; e != "" {
-		if value, err := strconv.ParseBool(e); err == nil {
-			rc.LogSpans = value
-		} else {
-			return nil, errors.Wrapf(err, "cannot parse env var %s=%s", cfg.ReporterLogSpans, e)
-		}
+	if cfg.ReporterLogSpans {
+			rc.LogSpans = cfg.ReporterLogSpans
 	}
 
-	if e := cfg.Endpoint; e != "" {
-		u, err := url.ParseRequestURI(e)
+	if cfg.Endpoint != "" {
+		u, err := url.ParseRequestURI(cfg.Endpoint)
 		if err != nil {
-			return nil, errors.Wrapf(err, "cannot parse env var %s=%s", cfg.Endpoint, e)
+			return nil, errors.Wrapf(err, "cannot parse endpoint=%s", cfg.Endpoint)
 		}
 		rc.CollectorEndpoint = u.String()
 		user := cfg.User
 		pswd := cfg.Password
 		if user != "" && pswd == "" || user == "" && pswd != "" {
-			return nil, errors.Errorf("you must set %s and %s env vars together", cfg.User, cfg.Password)
+			return nil, errors.Errorf("you must set %s and %s parameters together", cfg.User, cfg.Password)
 		}
 		rc.User = user
 		rc.Password = pswd
 	} else {
 		host := jaeger.DefaultUDPSpanServerHost
-		if e := cfg.AgentHost; e != "" {
-			host = e
+		if cfg.AgentHost != "" {
+			host = cfg.AgentHost
 		}
 
 		port := jaeger.DefaultUDPSpanServerPort
-		if e := cfg.AgentPort; e != "" {
-			if value, err := strconv.ParseInt(e, 10, 0); err == nil {
-				port = int(value)
-			} else {
-				return nil, errors.Wrapf(err, "cannot parse env var %s=%s", cfg.AgentPort, e)
-			}
+		if cfg.AgentPort != 0 {
+			port = cfg.AgentPort
 		}
 		rc.LocalAgentHostPort = fmt.Sprintf("%s:%d", host, port)
 	}

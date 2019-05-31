@@ -235,10 +235,8 @@ func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prom
 	preq.Header.Add("Content-Encoding", "snappy")
 	preq.Header.Set("Content-Type", "application/x-protobuf")
 	preq.Header.Set("X-Prometheus-Remote-Read-Version", "0.1.0")
-
-	preq = preq.WithContext(ctx)
-
 	spanReqDo, ctx := tracing.StartSpan(ctx, "query_prometheus_request")
+	preq = preq.WithContext(ctx)
 	presp, err := p.client.Do(preq)
 	if err != nil {
 		return nil, errors.Wrap(err, "send request")
