@@ -174,18 +174,12 @@ proto: check-git  $(GOIMPORTS) $(PROTOC)
 .PHONY: promu
 promu: $(PROMU)
 
-# tarball builds release tarball.
-.PHONY: tarball
-tarball: $(PROMU)
-	@echo ">> building release tarball"
-	$(PROMU) tarball --prefix $(PREFIX) $(GOBIN)
-
 .PHONY: tarballs-release
 tarballs-release: $(PROMU)
 	@echo ">> Publishing tarballs"
-	$(PROMU) crossbuild tarballs
-	$(PROMU) checksum .tarballs
-	$(PROMU) release .tarballs
+	$(PROMU) crossbuild -v tarballs
+	$(PROMU) checksum -v .tarballs
+	$(PROMU) release -v --overwrite .tarballs
 
 # test runs all Thanos golang tests against each supported version of Prometheus.
 .PHONY: test
