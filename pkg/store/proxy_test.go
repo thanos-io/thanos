@@ -46,6 +46,7 @@ func (c *testClient) String() string {
 func (c *testClient) Addr() string {
 	return "testaddr"
 }
+
 func TestProxyStore_Info(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
@@ -404,7 +405,6 @@ func TestProxyStore_Series(t *testing.T) {
 			expectedErr: errors.New("fetch series for [name:\"ext\" value:\"1\" ] test: error!"),
 		},
 	} {
-
 		if ok := t.Run(tc.title, func(t *testing.T) {
 			q := NewProxyStore(nil,
 				func() []Client { return tc.storeAPIs },
@@ -524,7 +524,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 					samples: []sample{{1, 1}, {2, 2}, {3, 3}},
 				},
 			},
-			expectedWarningsLen: 2,
+			expectedWarningsLen: 3,
 		},
 	} {
 		if ok := t.Run(tc.title, func(t *testing.T) {

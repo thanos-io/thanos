@@ -220,9 +220,18 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		return mergedSet.Err()
 	})
 
-	for resp := range respRecv {
-		if err := srv.Send(resp); err != nil {
-			return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+OuterLoop:
+	for {
+		select {
+		case resp, ok := <-respRecv:
+			if !ok {
+				break OuterLoop
+			}
+			if err := srv.Send(resp); err != nil {
+				return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+			}
+		case <-gctx.Done():
+			break OuterLoop
 		}
 	}
 
@@ -365,6 +374,7 @@ func (s *streamSeriesSet) At() ([]storepb.Label, []storepb.AggrChunk) {
 	}
 	return s.currSeries.Labels, s.currSeries.Chunks
 }
+
 func (s *streamSeriesSet) Err() error {
 	s.errMtx.Lock()
 	defer s.errMtx.Unlock()
