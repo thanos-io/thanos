@@ -42,8 +42,6 @@ config:
   bucket: example-bucket
 ```
 
-## Deployment
-
 ## Flags
 
 [embedmd]:# (flags/sidecar.txt $)
@@ -97,7 +95,6 @@ Flags:
                                  Object store configuration in YAML.
 
 ```
-
 
 ## Reloader Configuration
 

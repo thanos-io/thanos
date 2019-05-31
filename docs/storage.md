@@ -7,7 +7,7 @@ slug: /storage.md
 
 # Object Storage
 
-Thanos supports any object stores that can be implemented against Thanos [objstore.Bucket interface](https://github.com/improbable-eng/thanos/pkg/objstore/objstore.go)
+Thanos supports any object stores that can be implemented against Thanos [objstore.Bucket interface](/pkg/objstore/objstore.go)
 
 All clients are configured using `--objstore.config-file` to reference to the configuration file or `--objstore.config` to put yaml config directly.
 
@@ -28,14 +28,14 @@ NOTE: Currently Thanos requires strong consistency (write-read) for object store
 ## How to add a new client?
 
 1. Create new directory under `pkg/objstore/<provider>`
-2. Implement [objstore.Bucket interface](https://github.com/improbable-eng/thanos/pkg/objstore/objstore.go)
+2. Implement [objstore.Bucket interface](/pkg/objstore/objstore.go)
 3. Add `NewTestBucket` constructor for testing purposes, that creates and deletes temporary bucket.
-4. Use created `NewTestBucket` in [ForeachStore method](https://github.com/improbable-eng/thanos/pkg/objstore/objtesting/foreach.go) to ensure we can run tests against new provider. (In PR)
-5. RUN the [TestObjStoreAcceptanceTest](https://github.com/improbable-eng/thanos/pkg/objstore/objtesting/acceptance_e2e_test.go) against your provider to ensure it fits. Fix any found error until test passes. (In PR)
-6. Add client implementation to the factory in [factory](https://github.com/improbable-eng/thanos/pkg/objstore/client/factory.go) code. (Using as small amount of flags as possible in every command)
-7. Add client struct config to [bucketcfggen](https://github.com/improbable-eng/thanos/scripts/bucketcfggen/main.go) to allow config auto generation.
+4. Use created `NewTestBucket` in [ForeachStore method](/pkg/objstore/objtesting/foreach.go) to ensure we can run tests against new provider. (In PR)
+5. RUN the [TestObjStoreAcceptanceTest](/pkg/objstore/objtesting/acceptance_e2e_test.go) against your provider to ensure it fits. Fix any found error until test passes. (In PR)
+6. Add client implementation to the factory in [factory](/pkg/objstore/client/factory.go) code. (Using as small amount of flags as possible in every command)
+7. Add client struct config to [bucketcfggen](/scripts/bucketcfggen/main.go) to allow config auto generation.
 
-At that point, anyone can use your provider by spec
+At that point, anyone can use your provider by spec.
 
 ## AWS S3 configuration
 
@@ -260,7 +260,10 @@ config:
 ### OpenStack Swift Configuration
 Thanos uses [gophercloud](http://gophercloud.io/) client to upload Prometheus data into [OpenStack Swift](https://docs.openstack.org/swift/latest/).
 
-Below is an example configuration file for thanos to use OpenStack swift container as an object store.
+Below is an example configuration file for thanos to use OpenStack swift container as an object store.  
+Note that if the `name` of a user, project or tenant is used one must also specify its domain by ID or name.  
+Various examples for OpenStack authentication can be found in the [official documentation](https://developer.openstack.org/api-ref/identity/v3/index.html?expanded=password-authentication-with-scoped-authorization-detail#password-authentication-with-unscoped-authorization).
+
 
 [embedmd]:# (flags/config_swift.txt yaml)
 ```yaml
@@ -268,12 +271,16 @@ type: SWIFT
 config:
   auth_url: ""
   username: ""
+  user_domain_name: ""
+  user_domain_id: ""
   user_id: ""
   password: ""
   domain_id: ""
   domain_name: ""
-  tenant_id: ""
-  tenant_name: ""
+  project_id: ""
+  project_name: ""
+  project_domain_id: ""
+  project_domain_name: ""
   region_name: ""
   container_name: ""
 ```
