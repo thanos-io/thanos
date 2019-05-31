@@ -9,9 +9,15 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking* word for marking changes that are not backward compatible (relates only to v0.y.z releases.)
 
-## [v0.5.0-rc.0](https://github.com/improbable-eng/thanos/releases/tag/v0.5.0-rc.0) - 2019.05.30
+## Unreleased.
+
+## [v0.5.0-rc.0](https://github.com/improbable-eng/thanos/releases/tag/v0.5.0-rc.0) - 2019.05.31
 
 TL;DR: Store LRU cache is no longer leaking, Upgraded Thanos UI to Prometheus 2.9, Fixed auto-downsampling, Moved to Go 1.12.5 and more.
+
+This version moved tarballs to Golang 1.12.5 from 1.11 as well, so same warning applies if you use `container_memory_usage_bytes` from cadvisor. Use `container_memory_working_set_bytes` instead.
+
+*breaking* As announced couple of times this release also removes gossip with all configuration flags (`--cluster.*`).
 
 ### Fixed
 
@@ -65,7 +71,7 @@ TL;DR: Store LRU cache is no longer leaking, Upgraded Thanos UI to Prometheus 2.
 
 ## Deprecated 
 
-- [#1008](https://github.com/improbable-eng/thanos/pull/1008) Removed Gossip implementation.
+- [#1008](https://github.com/improbable-eng/thanos/pull/1008) *breaking* Removed Gossip implementation. All `--cluster.*` flags removed and Thanos will error out if any is provided.
 
 ## [v0.4.0](https://github.com/improbable-eng/thanos/releases/tag/v0.4.0) - 2019.05.3
 
@@ -74,7 +80,7 @@ TL;DR: Store LRU cache is no longer leaking, Upgraded Thanos UI to Prometheus 2.
 This release also disables gossip mode by default for all components.
 See [this](docs/proposals/approved/201809_gossip-removal.md) for more details.
 
-:warning: This release moves Thanos docker images and artifacts to Golang 1.12. This release includes change in GC's memory release which gives following effect (source: https://golang.org/doc/go1.12):
+:warning: This release moves Thanos docker images (NOT artifacts by accident) to Golang 1.12. This release includes change in GC's memory release which gives following effect (source: https://golang.org/doc/go1.12):
 
 > On Linux, the runtime now uses MADV_FREE to release unused memory. This is more efficient but may result in higher reported RSS. The kernel will reclaim the unused data when it is needed. To revert to the Go 1.11 behavior (MADV_DONTNEED), set the environment variable GODEBUG=madvdontneed=1.
 
@@ -170,7 +176,7 @@ Note that this is required to have SRV resolution working on [Golang 1.11+ with 
    * tooling: [FEATURE] New dump command to tsdb tool to dump all samples.
    * compactor: 
       * [ENHANCEMENT] When closing the db any running compaction will be cancelled so it doesn't block.
-      * [CHANGE] Renamed flag `--sync-delay` to `--consistency-delay` [#1053](https://github.com/improbable-eng/thanos/pull/1053)
+      * [CHANGE] *breaking* Renamed flag `--sync-delay` to `--consistency-delay` [#1053](https://github.com/improbable-eng/thanos/pull/1053)
   
   For ruler essentially whole TSDB CHANGELOG applies beween v0.4.0-v0.6.1: https://github.com/prometheus/tsdb/blob/master/CHANGELOG.md
   
