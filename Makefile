@@ -43,10 +43,10 @@ ME                ?= $(shell whoami)
 # Referenced by github.com/improbable-eng/thanos/blob/master/docs/getting_started.md#prometheus
 
 # Limited prom version, because testing was not possible. This should fix it: https://github.com/improbable-eng/thanos/issues/758
-PROM_VERSIONS           ?=v2.4.3 v2.5.0 v2.8.1
+PROM_VERSIONS           ?= v2.4.3 v2.5.0 v2.8.1 v2.9.2
 
-ALERTMANAGER_VERSION    ?=v0.15.2
-MINIO_SERVER_VERSION    ?=RELEASE.2018-10-06T00-15-16Z
+ALERTMANAGER_VERSION    ?= v0.15.2
+MINIO_SERVER_VERSION    ?= RELEASE.2018-10-06T00-15-16Z
 
 # fetch_go_bin_version downloads (go gets) the binary from specific version and installs it in $(GOBIN)/<bin>-<version>
 # arguments:

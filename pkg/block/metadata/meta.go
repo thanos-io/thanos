@@ -123,7 +123,7 @@ func renameFile(logger log.Logger, from, to string) error {
 		return err
 	}
 
-	if err = fileutil.Fsync(pdir); err != nil {
+	if err = fileutil.Fdatasync(pdir); err != nil {
 		runutil.CloseWithLogOnErr(logger, pdir, "close dir")
 		return err
 	}
