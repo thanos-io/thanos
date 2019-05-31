@@ -47,6 +47,22 @@ TL;DR: Store LRU cache is no longer leaking, Upgraded Thanos UI to Prometheus 2.
 - [#1149](https://github.com/improbable-eng/thanos/pull/1149) Updated google Golang API deps (GCS bucket client).
 - [#1190](https://github.com/improbable-eng/thanos/pull/1190) Updated minio deps (S3 bucket client). This fixes minio retries.
 
+- [#1133](https://github.com/improbable-eng/thanos/pull/1133) Use prometheus v2.9.2, common v0.4.0 & tsdb v0.8.0.
+
+  Changes from the upstreams:
+  * store gateway:
+    - [ENHANCEMENT] Fast path for EmptyPostings cases in Merge, Intersect and Without.
+  * store gateway & compactor:
+    - [BUGFIX] Fix fd and vm_area leak on error path in chunks.NewDirReader.
+    - [BUGFIX] Fix fd and vm_area leak on error path in index.NewFileReader.
+  * query:
+    - [BUGFIX] Make sure subquery range is taken into account for selection #5467
+    - [ENHANCEMENT] Check for cancellation on every step of a range evaluation. #5131
+    - [BUGFIX] Exponentation operator to drop metric name in result of operation. #5329
+    - [BUGFIX] Fix output sample values for scalar-to-vector comparison operations. #5454
+  * rule:
+    - [BUGFIX] Reload rules: copy state on both name and labels. #5368
+
 ## Deprecated 
 
 - [#1008](https://github.com/improbable-eng/thanos/pull/1008) Removed Gossip implementation.
