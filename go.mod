@@ -37,15 +37,14 @@ require (
 	github.com/prometheus/prometheus v0.0.0-20190328180107-4d60eb36dcbe
 	github.com/prometheus/tsdb v0.6.1
 	github.com/smartystreets/assertions v0.0.0-20190116191733-b6c0e53d7304 // indirect
-	go.opencensus.io v0.19.0 // indirect
 	golang.org/x/net v0.0.0-20190522155817-f3200d17e092
-	golang.org/x/oauth2 v0.0.0-20181203162652-d668ce993890
-	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
+	golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421
+	golang.org/x/sync v0.0.0-20190227155943-e225da77a7e6
 	golang.org/x/text v0.3.1-0.20180807135948-17ff2d5776d2
 	google.golang.org/api v0.5.0
-	google.golang.org/appengine v1.4.0 // indirect
-	google.golang.org/grpc v1.17.0
+	google.golang.org/grpc v1.19.0
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
+	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/fsnotify/fsnotify.v1 v1.4.7 // indirect
 	gopkg.in/yaml.v2 v2.2.2
 )
