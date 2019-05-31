@@ -162,7 +162,9 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			wg = &sync.WaitGroup{}
 		)
 
+		queryCtx, cancelQuery := context.WithCancel(gctx)
 		defer func() {
+			cancelQuery()
 			wg.Wait()
 			closeFn()
 		}()
@@ -178,10 +180,10 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s queried", st))
 
 			// This is used to cancel this stream when one operations takes too long.
-			seriesCtx, closeSeries := context.WithCancel(gctx)
-			defer closeSeries()
+			storeCtx, cancelStore := context.WithCancel(queryCtx)
+			defer cancelStore()
 
-			sc, err := st.Series(seriesCtx, r)
+			sc, err := st.Series(storeCtx, r)
 			if err != nil {
 				storeID := fmt.Sprintf("%v", storepb.LabelsToString(st.Labels()))
 				if storeID == "" {
@@ -198,7 +200,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 
 			// Schedule streamSeriesSet that translates gRPC streamed response
 			// into seriesSet (if series) or respCh if warnings.
-			seriesSet = append(seriesSet, startStreamSeriesSet(seriesCtx, s.logger, closeSeries,
+			seriesSet = append(seriesSet, startStreamSeriesSet(storeCtx, s.logger, cancelStore,
 				wg, sc, respSender, st.String(), !r.PartialResponseDisabled, s.responseTimeout))
 		}
 
@@ -365,6 +367,7 @@ func (s *streamSeriesSet) At() ([]storepb.Label, []storepb.AggrChunk) {
 	}
 	return s.currSeries.Labels, s.currSeries.Chunks
 }
+
 func (s *streamSeriesSet) Err() error {
 	s.errMtx.Lock()
 	defer s.errMtx.Unlock()
