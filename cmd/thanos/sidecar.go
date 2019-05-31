@@ -203,8 +203,6 @@ func runSidecar(
 		}
 		logger := log.With(logger, "component", component.Sidecar.String())
 
-		//var client http.Client
-
 		promStore, err := store.NewPrometheusStore(
 			logger, nil, promURL, component.Sidecar, m.Labels, m.Timestamps)
 		if err != nil {
