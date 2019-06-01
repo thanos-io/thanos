@@ -33,7 +33,7 @@ type series struct {
 type queryData struct {
 	ResultType model.ValueType `json:"resultType"`
 	Result     model.Vector    `json:"result"`
-	Multiplier int             `json:"multiply"`
+	Multiplier int             `json:"multiplier"`
 }
 
 func main() {
@@ -89,7 +89,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	db, err := tsdb.Open(*outputDir, nil, nil, &tsdb.Options{
+	db, err := tsdb.Open(*outputDir, logger, nil, &tsdb.Options{
 		BlockRanges:       rngs,
 		RetentionDuration: uint64(retention.Seconds() * 1000),
 		NoLockfile:        true,
