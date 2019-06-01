@@ -177,6 +177,8 @@ github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5
 github.com/miekg/dns v1.0.14/go.mod h1:W1PPwlIAgtquWBMBEV9nkV9Cazfe8ScdGz/Lj7v3Nrg=
 github.com/miekg/dns v1.1.8 h1:1QYRAKU3lN5cRfLCkPU08hwvLJFhvjP6MqNMmQz6ZVI=
 github.com/miekg/dns v1.1.8/go.mod h1:W1PPwlIAgtquWBMBEV9nkV9Cazfe8ScdGz/Lj7v3Nrg=
+github.com/miekg/dns v1.1.13 h1:x7DQtkU0cedzeS8TD36tT/w1Hm4rDtfCaYYAHE7TTBI=
+github.com/miekg/dns v1.1.13/go.mod h1:W1PPwlIAgtquWBMBEV9nkV9Cazfe8ScdGz/Lj7v3Nrg=
 github.com/minio/cli v1.20.0/go.mod h1:bYxnK0uS629N3Bq+AOZZ+6lwF77Sodk4+UL9vNuXhOY=
 github.com/minio/minio-go/v6 v6.0.27-0.20190529152532-de69c0e465ed h1:g3DRJpu22jEjs14fSeJ7Crn9vdreiRsn4RtrEsXH/6A=
 github.com/minio/minio-go/v6 v6.0.27-0.20190529152532-de69c0e465ed/go.mod h1:vaNT59cWULS37E+E9zkuN/BVnKHyXtVGS+b04Boc66Y=

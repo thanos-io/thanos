@@ -20,7 +20,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.1
 	github.com/leanovate/gopter v0.2.4
 	github.com/lovoo/gcloud-opentracing v0.3.0
-	github.com/miekg/dns v1.1.8
+	github.com/miekg/dns v1.1.13
 	github.com/minio/minio-go/v6 v6.0.27-0.20190529152532-de69c0e465ed
 	github.com/mozillazg/go-cos v0.12.0
 	github.com/mwitkow/go-conntrack v0.0.0-20161129095857-cc309e4a2223
