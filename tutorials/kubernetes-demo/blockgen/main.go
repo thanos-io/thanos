@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"math/rand"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -37,22 +40,22 @@ type queryData struct {
 }
 
 func main() {
-	app := kingpin.New(filepath.Base(os.Args[0]), "Generates artificial metrics from min time to given max time in compacted TSDB format (including head WAL).")
+	app := kingpin.New(filepath.Base(os.Args[0]), "Generates artificial metrics from min time to given max time in compacted TSDB format (head WAL)")
 	app.HelpFlag.Short('h')
-
-	input := flagutil.NewPathOrContentFlag(
-		app.Flag("input-file", "Input file for series config."),
-		app.Flag("input", "Input content for series config."),
-		true,
-	)
 
 	outputDir := app.Flag("output-dir", "Output directory for generated TSDB data.").Required().String()
 	scrapeInterval := app.Flag("scrape-interval", "Interval for to generate samples with.").Default("15s").Duration()
+	retention := app.Flag("retention", "Defines the the min time in relation to current time for generated samples.").Required().Duration()
 
-	retention := app.Flag("retention", "Defines the the max time in relation to current time for generated samples.").Required().Duration()
+	synthetic := app.Command("synthetic", "Generate synthetic metrics based on input series and desired basic characteristics. Not efficient for high cardinality load tests (uses ~10x more memory than resulted WAL output size)")
+	input := flagutil.NewPathOrContentFlag(
+		synthetic.Flag("input-file", "Input file for series config."),
+		synthetic.Flag("input", "Input content for series config."),
+		true,
+	)
 
 	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
-	_, err := app.Parse(os.Args[1:])
+	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {
 		level.Error(logger).Log("err", err)
 		os.Exit(1)
@@ -70,9 +73,29 @@ func main() {
 		os.Exit(1)
 	}
 
+	switch cmd {
+	case "synthetic":
+		if err := genSyntheticWAL(logger, *outputDir, *retention, *scrapeInterval, s); err != nil {
+			level.Error(logger).Log("cmd", "synthetic", "err", err)
+			os.Exit(1)
+		}
+	case "random":
+		level.Error(logger).Log("cmd", "random", "err", "not implemented")
+		os.Exit(1)
+	default:
+		panic("no such command")
+	}
+
+	if err := exec.Command("chmod", "777", "-R", *outputDir).Run(); err != nil {
+		level.Error(logger).Log("msg", "linux chmod 777 for dir failed", "err", err)
+		os.Exit(1)
+	}
+}
+
+func genSyntheticWAL(logger log.Logger, outputDir string, relMinTime time.Duration, scrapeInterval time.Duration, s []series) error {
 	// Same code as Prometheus for compaction levels and max block.
 	rngs := tsdb.ExponentialBlockRanges(int64(time.Duration(2*time.Hour).Seconds()*1000), 10, 3)
-	maxBlockDuration := *retention / 10
+	maxBlockDuration := relMinTime / 10
 	for i, v := range rngs {
 		if v > int64(maxBlockDuration.Seconds()*1000) {
 			rngs = rngs[:i]
@@ -84,14 +107,13 @@ func main() {
 		rngs = append(rngs, int64(time.Duration(2*time.Hour).Seconds()*1000))
 	}
 
-	if err := os.RemoveAll(*outputDir); err != nil {
-		level.Error(logger).Log("msg", "remove output dir", "err", err)
-		os.Exit(1)
+	if err := os.RemoveAll(outputDir); err != nil {
+		return errors.Wrap(err, "remove output dir")
 	}
 
-	db, err := tsdb.Open(*outputDir, logger, nil, &tsdb.Options{
+	db, err := tsdb.Open(outputDir, logger, nil, &tsdb.Options{
 		BlockRanges:       rngs,
-		RetentionDuration: uint64(retention.Seconds() * 1000),
+		RetentionDuration: uint64(relMinTime.Seconds() * 1000),
 		NoLockfile:        true,
 	})
 	if err != nil {
@@ -99,11 +121,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Of course there will be small gap in minTime vs time.Now once we finish.
+	// Of course there will be gap in minTime vs time.Now once we finish.
 	// We are fine with this.
 	n := time.Now()
 	maxTime := timestamp.FromTime(n)
-	minTime := timestamp.FromTime(n.Add(-*retention))
+	minTime := timestamp.FromTime(n.Add(-relMinTime))
 
 	generators := make(map[string]gen)
 	for _, in := range s {
@@ -134,7 +156,7 @@ func main() {
 				case "counter":
 					// Does not work well (: Too naive.
 					generators[lset.String()] = &counterGen{
-						interval:       *scrapeInterval,
+						interval:       scrapeInterval,
 						maxTime:        maxTime,
 						minTime:        minTime,
 						lset:           lset,
@@ -146,7 +168,7 @@ func main() {
 					}
 				case "gauge":
 					generators[lset.String()] = &gaugeGen{
-						interval:       *scrapeInterval,
+						interval:       scrapeInterval,
 						maxTime:        maxTime,
 						minTime:        minTime,
 						lset:           lset,
@@ -179,14 +201,35 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Don't wait for compact, it will be compacted by Prometheus anyway.
-
 	if err := db.Close(); err != nil {
 		level.Error(logger).Log("msg", "close", "err", err)
 		os.Exit(1)
 	}
 
-	level.Info(logger).Log("msg", "generated artificial metrics", "series", len(generators))
+	size, err := dirSize(outputDir)
+	if err != nil {
+		return err
+	}
+	level.Info(logger).Log("msg", "generated artificial WAL", "size", size, "series", len(generators))
+	return nil
+}
+
+func dirSize(path string) (int64, error) {
+	var size int64
+	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			size += info.Size()
+		}
+		return err
+	})
+	return size, err
+}
+
+func rangeForTimestamp(t int64, width int64) (maxt int64) {
+	return (t/width)*width + width
 }
 
 type gaugeGen struct {
@@ -316,3 +359,81 @@ type gen interface {
 	Ts() int64
 	Value() float64
 }
+
+//
+//func genTSDBBlock(
+//	ctx context.Context,
+//	dir string,
+//	generator gen,
+//) (id ulid.ULID, err error) {
+//	h, err := tsdb.NewHead(nil, nil, nil, 10000000000)
+//	if err != nil {
+//		return id, errors.Wrap(err, "create head block")
+//	}
+//	defer runutil.CloseWithErrCapture(&err, h, "TSDB Head")
+//
+//	var g errgroup.Group
+//	var timeStepSize = (maxt - mint) / int64(numSamples+1)
+//	var batchSize = len(series) / runtime.GOMAXPROCS(0)
+//
+//	for len(series) > 0 {
+//		l := batchSize
+//		if len(series) < 1000 {
+//			l = len(series)
+//		}
+//		batch := series[:l]
+//		series = series[l:]
+//
+//		g.Go(func() error {
+//			t := mint
+//
+//			for i := 0; i < numSamples; i++ {
+//				app := h.Appender()
+//
+//				for _, lset := range batch {
+//					_, err := app.Add(lset, t, rand.Float64())
+//					if err != nil {
+//						if rerr := app.Rollback(); rerr != nil {
+//							err = errors.Wrapf(err, "rollback failed: %v", rerr)
+//						}
+//
+//						return errors.Wrap(err, "add sample")
+//					}
+//				}
+//				if err := app.Commit(); err != nil {
+//					return errors.Wrap(err, "commit")
+//				}
+//				t += timeStepSize
+//			}
+//			return nil
+//		})
+//	}
+//	if err := g.Wait(); err != nil {
+//		return id, err
+//	}
+//	c, err := tsdb.NewLeveledCompactor(ctx, nil, log.NewNopLogger(), []int64{maxt - mint}, nil)
+//	if err != nil {
+//		return id, errors.Wrap(err, "create compactor")
+//	}
+//
+//	id, err = c.Write(dir, h, mint, maxt, nil)
+//	if err != nil {
+//		return id, errors.Wrap(err, "write block")
+//	}
+//
+//	if _, err = metadata.InjectThanos(log.NewNopLogger(), filepath.Join(dir, id.String()), metadata.Thanos{
+//		Labels:     extLset.Map(),
+//		Downsample: metadata.ThanosDownsample{Resolution: resolution},
+//		Source:     metadata.TestSource,
+//	}, nil); err != nil {
+//		return id, errors.Wrap(err, "finalize block")
+//	}
+//
+//	if !tombstones {
+//		if err = os.Remove(filepath.Join(dir, id.String(), "tombstones")); err != nil {
+//			return id, errors.Wrap(err, "remove tombstones")
+//		}
+//	}
+//
+//	return id, nil
+//}
