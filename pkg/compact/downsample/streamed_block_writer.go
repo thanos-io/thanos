@@ -12,8 +12,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/chunks"
-	"github.com/prometheus/tsdb/fileutil"
 	tsdberrors "github.com/prometheus/tsdb/errors"
+	"github.com/prometheus/tsdb/fileutil"
 	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
 )
