@@ -11,6 +11,10 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased.
 
+### Added
+ 
+- [#1097](https://github.com/improbable-eng/thanos/pull/1097) Added `thanos check rules` linter for Thanos rule rules files.
+
 ## [v0.5.0](https://github.com/improbable-eng/thanos/releases/tag/v0.5.0) - 2019.06.05
 
 TL;DR: Store LRU cache is no longer leaking, Upgraded Thanos UI to Prometheus 2.9, Fixed auto-downsampling, Moved to Go 1.12.5 and more.
@@ -29,8 +33,6 @@ This version moved tarballs to Golang 1.12.5 from 1.11 as well, so same warning 
 ### Added
 
 - [#1094](https://github.com/improbable-eng/thanos/pull/1094) Allow configuring the response header timeout for the S3 client.
-- [#1097](https://github.com/improbable-eng/thanos/pull/1097) Added `thanos check rules` linter for Thanos rule rules files.
-
 
 ### Changed
 
