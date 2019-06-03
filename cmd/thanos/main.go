@@ -177,7 +177,7 @@ func main() {
 	}
 
 	if err := cmds[cmd](&g, logger, metrics, tracer, *logLevel == "debug"); err != nil {
-		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command failed", cmd))
+		level.Error(logger).Log("err", errors.Wrapf(err, "%s command failed", cmd))
 		os.Exit(1)
 	}
 

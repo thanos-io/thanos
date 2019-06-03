@@ -55,15 +55,14 @@ func checkRulesFiles(logger log.Logger, files *[]string) error {
 	return nil
 }
 
-type ThanosRuleGroup struct{
-    PartialResponseStrategy string `yaml:"partial_response_strategy"`
-    rulefmt.RuleGroup `yaml:",inline"`
+type ThanosRuleGroup struct {
+	PartialResponseStrategy string `yaml:"partial_response_strategy"`
+	rulefmt.RuleGroup       `yaml:",inline"`
 }
 
 type ThanosRuleGroups struct {
 	Groups []ThanosRuleGroup `yaml:"groups"`
 }
-
 
 func checkRules(logger log.Logger, filename string) (int, tsdb.MultiError) {
 	level.Info(logger).Log("msg", "checking", "filename", filename)
