@@ -1,0 +1,110 @@
+apiVersion: v1
+items:
+- apiVersion: v1
+  kind: Service
+  metadata:
+    labels:
+      app: thanos-querier
+    name: thanos-querier
+    namespace: thanos
+  spec:
+    ports:
+    - name: grpc
+      port: 10901
+      targetPort: 10901
+    - name: http
+      port: 9090
+      targetPort: 10902
+    selector:
+      app: thanos-querier
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: thanos-querier
+    namespace: thanos
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        app: thanos-querier
+    template:
+      metadata:
+        labels:
+          app: thanos-querier
+      spec:
+        containers:
+        - args:
+          - query
+          - --query.replica-label=replica
+          - --store=thanos-store-0.thanos.svc.cluster.local:10901
+          - --store=thanos-store-1.thanos.svc.cluster.local:10901
+          - --store=thanos-store-2.thanos.svc.cluster.local:10901
+          image: improbable/thanos:v0.5.0-rc.0
+          name: thanos-querier
+- apiVersion: v1
+  kind: Service
+  metadata:
+    labels:
+      app: thanos-store
+    name: thanos-store
+    namespace: thanos
+  spec:
+    clusterIP: None
+    ports:
+    - name: grpc
+      port: 10901
+      targetPort: 10901
+    selector:
+      app: thanos-store
+- apiVersion: apps/v1
+  kind: StatefulSet
+  metadata:
+    labels:
+      app: thanos-store
+    name: thanos-store
+    namespace: thanos
+  spec:
+    replicas: 3
+    selector:
+      matchLabels:
+        app: thanos-store
+    serviceName: thanos-store
+    template:
+      metadata:
+        labels:
+          app: thanos-store
+      spec:
+        containers:
+        - args:
+          - store
+          - --data-dir=/var/thanos/store
+          - --objstore.config=$(OBJSTORE_CONFIG)
+          env:
+          - name: OBJSTORE_CONFIG
+            valueFrom:
+              secretKeyRef:
+                key: thanos.yaml
+                name: thanos-objectstorage
+          image: improbable/thanos:v0.5.0-rc.0
+          name: thanos-store
+          ports:
+          - containerPort: 10901
+            name: grpc
+          - containerPort: 10902
+            name: http
+          volumeMounts:
+          - mountPath: /var/thanos/store
+            name: data
+            readOnly: false
+        volumes: []
+    volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi
+        storageClassName: standard
+kind: List
