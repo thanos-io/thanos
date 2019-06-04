@@ -16,23 +16,23 @@ import (
 
 // Config - YAML configuration. For details see to https://github.com/jaegertracing/jaeger-client-go#environment-variables
 type Config struct {
-	ServiceName            string `yaml:"service_name"`
-	Disabled               bool `yaml:"disabled"`
-	RPCMetrics             bool `yaml:"rpc_metrics"`
-	Tags                   string `yaml:"tags"`
-	SamplerType            string `yaml:"sampler_type"`
-	SamplerParam           float64 `yaml:"sampler_param"`
-	SamplerManagerHostPort string `yaml:"sampler_manager_host_port"`
-	SamplerMaxOperations   int `yaml:"sampler_max_operations"`
+	ServiceName            string        `yaml:"service_name"`
+	Disabled               bool          `yaml:"disabled"`
+	RPCMetrics             bool          `yaml:"rpc_metrics"`
+	Tags                   string        `yaml:"tags"`
+	SamplerType            string        `yaml:"sampler_type"`
+	SamplerParam           float64       `yaml:"sampler_param"`
+	SamplerManagerHostPort string        `yaml:"sampler_manager_host_port"`
+	SamplerMaxOperations   int           `yaml:"sampler_max_operations"`
 	SamplerRefreshInterval time.Duration `yaml:"sampler_refresh_interval"`
-	ReporterMaxQueueSize   int `yaml:"reporter_max_queue_size"`
+	ReporterMaxQueueSize   int           `yaml:"reporter_max_queue_size"`
 	ReporterFlushInterval  time.Duration `yaml:"reporter_flush_interval"`
-	ReporterLogSpans       bool `yaml:"reporter_log_spans"`
-	Endpoint               string `yaml:"endpoint"`
-	User                   string `yaml:"user"`
-	Password               string `yaml:"password"`
-	AgentHost              string `yaml:"agent_host"`
-	AgentPort              int `yaml:"agent_port"`
+	ReporterLogSpans       bool          `yaml:"reporter_log_spans"`
+	Endpoint               string        `yaml:"endpoint"`
+	User                   string        `yaml:"user"`
+	Password               string        `yaml:"password"`
+	AgentHost              string        `yaml:"agent_host"`
+	AgentPort              int           `yaml:"agent_port"`
 }
 
 // ParseConfigFromYaml uses config YAML to set the tracer's Configuration.
@@ -54,7 +54,7 @@ func ParseConfigFromYaml(cfg []byte) (*config.Configuration, error) {
 	}
 
 	if conf.Disabled {
-			c.Disabled = conf.Disabled
+		c.Disabled = conf.Disabled
 	}
 
 	if conf.Tags != "" {
@@ -93,7 +93,7 @@ func samplerConfigFromConfig(cfg Config) (*config.SamplerConfig, error) {
 	}
 
 	if cfg.SamplerMaxOperations != 0 {
-			sc.MaxOperations = cfg.SamplerMaxOperations
+		sc.MaxOperations = cfg.SamplerMaxOperations
 	}
 
 	if cfg.SamplerRefreshInterval != 0 {
@@ -112,11 +112,11 @@ func reporterConfigFromConfig(cfg Config) (*config.ReporterConfig, error) {
 	}
 
 	if cfg.ReporterFlushInterval != 0 {
-			rc.BufferFlushInterval = cfg.ReporterFlushInterval
+		rc.BufferFlushInterval = cfg.ReporterFlushInterval
 	}
 
 	if cfg.ReporterLogSpans {
-			rc.LogSpans = cfg.ReporterLogSpans
+		rc.LogSpans = cfg.ReporterLogSpans
 	}
 
 	if cfg.Endpoint != "" {
