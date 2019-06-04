@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"github.com/improbable-eng/thanos/pkg/tracing"
 	"io"
 	"math"
 	"strings"
@@ -11,9 +12,11 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/strutil"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb/labels"
 	"golang.org/x/sync/errgroup"
@@ -171,7 +174,10 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			// We might be able to skip the store if its meta information indicates
 			// it cannot have series matching our query.
 			// NOTE: all matchers are validated in labelsMatches method so we explicitly ignore error.
-			if ok, _ := storeMatches(st, r.MinTime, r.MaxTime, r.Matchers...); !ok {
+			spanStoreMathes, gctx := tracing.StartSpan(gctx, "store_mathes")
+			ok, _ := storeMatches(st, r.MinTime, r.MaxTime, r.Matchers...)
+			spanStoreMathes.Finish()
+			if !ok {
 				storeDebugMsgs = append(storeDebugMsgs, fmt.Sprintf("store %s filtered out", st))
 				continue
 			}
@@ -179,6 +185,9 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 
 			// This is used to cancel this stream when one operations takes too long.
 			seriesCtx, closeSeries := context.WithCancel(gctx)
+			seriesCtx = grpc_opentracing.ClientAddContextTags(seriesCtx, opentracing.Tags{
+				"target": st.Addr(),
+			})
 			defer closeSeries()
 
 			sc, err := st.Series(seriesCtx, r)

@@ -29,12 +29,16 @@ require (
 	github.com/olekukonko/tablewriter v0.0.1
 	github.com/opentracing-contrib/go-stdlib v0.0.0-20170113013457-1de4cc2120e7
 	github.com/opentracing/basictracer-go v1.0.0
-	github.com/opentracing/opentracing-go v1.0.2
+	github.com/opentracing/opentracing-go v1.1.0
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v0.9.3-0.20190127221311-3c4408c8b829
 	github.com/prometheus/common v0.4.0
 	github.com/prometheus/prometheus v2.9.2+incompatible
 	github.com/prometheus/tsdb v0.8.0
+	github.com/uber-go/atomic v1.4.0 // indirect
+	github.com/uber/jaeger-client-go v2.16.0+incompatible
+	github.com/uber/jaeger-lib v2.0.0+incompatible
+	go.uber.org/atomic v1.4.0 // indirect
 	golang.org/x/net v0.0.0-20190522155817-f3200d17e092
 	golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421
 	golang.org/x/sync v0.0.0-20190227155943-e225da77a7e6

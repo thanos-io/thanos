@@ -113,3 +113,24 @@ func regCommonObjStoreFlags(cmd *kingpin.CmdClause, suffix string, required bool
 		content: bucketConf,
 	}
 }
+
+
+func regCommonTracingFlags(app *kingpin.Application) *pathOrContent {
+	fileFlagName := fmt.Sprintf("tracing.config-file")
+	contentFlagName := fmt.Sprintf("tracing.config")
+
+	help := fmt.Sprintf("Path to YAML file that contains tracing configuration.")
+	tracingConfFile := app.Flag(fileFlagName, help).PlaceHolder("<tracing.config-yaml-path>").String()
+
+	help = fmt.Sprintf("Alternative to '%s' flag. Tracing configuration in YAML.", fileFlagName)
+	tracingConf := app.Flag(contentFlagName, help).PlaceHolder("<tracing.config-yaml>").String()
+
+	return &pathOrContent{
+		fileFlagName:    fileFlagName,
+		contentFlagName: contentFlagName,
+		required:        false,
+
+		path:    tracingConfFile,
+		content: tracingConf,
+	}
+}

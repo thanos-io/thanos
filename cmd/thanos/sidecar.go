@@ -4,7 +4,6 @@ import (
 	"context"
 	"math"
 	"net"
-	"net/http"
 	"net/url"
 	"sync"
 	"time"
@@ -21,13 +20,13 @@ import (
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/oklog/run"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name string) {
@@ -204,10 +203,8 @@ func runSidecar(
 		}
 		logger := log.With(logger, "component", component.Sidecar.String())
 
-		var client http.Client
-
 		promStore, err := store.NewPrometheusStore(
-			logger, &client, promURL, component.Sidecar, m.Labels, m.Timestamps)
+			logger, nil, promURL, component.Sidecar, m.Labels, m.Timestamps)
 		if err != nil {
 			return errors.Wrap(err, "create Prometheus store")
 		}

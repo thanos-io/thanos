@@ -1,18 +1,16 @@
 // This file includes unit tests that test only tiny logic in this package, but are here mainly as a showcase on how tracing can
 // be configured.
 
-package tracing
+package stackdriver
 
 import (
 	"testing"
-
 	"context"
-
 	"time"
-
 	"github.com/fortytw2/leaktest"
 	"github.com/improbable-eng/thanos/pkg/testutil"
-	basictracer "github.com/opentracing/basictracer-go"
+	"github.com/improbable-eng/thanos/pkg/tracing"
+	"github.com/opentracing/basictracer-go"
 )
 
 // This test shows that if sample factor will enable tracing on client process, even when it would be disabled on server
@@ -24,7 +22,7 @@ func TestContextTracing_ClientEnablesTracing(t *testing.T) {
 	r := &forceRecorder{wrapped: m}
 
 	clientTracer := &tracer{
-		debugName: "Test",
+		serviceName: "Test",
 		wrapped: basictracer.NewWithOptions(basictracer.Options{
 			ShouldSample: func(traceID uint64) bool {
 				return true
@@ -34,11 +32,11 @@ func TestContextTracing_ClientEnablesTracing(t *testing.T) {
 		}),
 	}
 
-	clientRoot, clientCtx := StartSpan(ContextWithTracer(context.Background(), clientTracer), "a")
+	clientRoot, clientCtx := tracing.StartSpan(tracing.ContextWithTracer(context.Background(), clientTracer), "a")
 
 	// Simulate Server process with different tracer, but with client span in context.
 	srvTracer := &tracer{
-		debugName: "Test",
+		serviceName: "Test",
 		wrapped: basictracer.NewWithOptions(basictracer.Options{
 			ShouldSample: func(traceID uint64) bool {
 				return false
@@ -47,8 +45,8 @@ func TestContextTracing_ClientEnablesTracing(t *testing.T) {
 			MaxLogsPerSpan: 100,
 		}),
 	}
-	srvRoot, srvCtx := StartSpan(ContextWithTracer(clientCtx, srvTracer), "b")
-	srvChild, _ := StartSpan(srvCtx, "bb")
+	srvRoot, srvCtx := tracing.StartSpan(tracing.ContextWithTracer(clientCtx, srvTracer), "b")
+	srvChild, _ := tracing.StartSpan(srvCtx, "bb")
 	testutil.Equals(t, 0, len(m.GetSpans()))
 
 	srvChild.Finish()
@@ -64,14 +62,14 @@ func TestContextTracing_ClientEnablesTracing(t *testing.T) {
 	testutil.Equals(t, 3, len(m.GetSampledSpans()))
 }
 
-// This test shows that if sample factor will disable tracing on client process, even when it would be enabled on server
+// This test shows that if sample factor will disable tracing on client process,  when it would be enabled on server
 // it will be still disabled for all spans within this span.
 func TestContextTracing_ClientDisablesTracing(t *testing.T) {
 	m := &basictracer.InMemorySpanRecorder{}
 	r := &forceRecorder{wrapped: m}
 
 	clientTracer := &tracer{
-		debugName: "Test",
+		serviceName: "Test",
 		wrapped: basictracer.NewWithOptions(basictracer.Options{
 			ShouldSample: func(traceID uint64) bool {
 				return false
@@ -81,11 +79,11 @@ func TestContextTracing_ClientDisablesTracing(t *testing.T) {
 		}),
 	}
 
-	clientRoot, clientCtx := StartSpan(ContextWithTracer(context.Background(), clientTracer), "a")
+	clientRoot, clientCtx := tracing.StartSpan(tracing.ContextWithTracer(context.Background(), clientTracer), "a")
 
 	// Simulate Server process with different tracer, but with client span in context.
 	srvTracer := &tracer{
-		debugName: "Test",
+		serviceName: "Test",
 		wrapped: basictracer.NewWithOptions(basictracer.Options{
 			ShouldSample: func(traceID uint64) bool {
 				return true
@@ -94,8 +92,8 @@ func TestContextTracing_ClientDisablesTracing(t *testing.T) {
 			MaxLogsPerSpan: 100,
 		}),
 	}
-	srvRoot, srvCtx := StartSpan(ContextWithTracer(clientCtx, srvTracer), "b")
-	srvChild, _ := StartSpan(srvCtx, "bb")
+	srvRoot, srvCtx := tracing.StartSpan(tracing.ContextWithTracer(clientCtx, srvTracer), "b")
+	srvChild, _ := tracing.StartSpan(srvCtx, "bb")
 	testutil.Equals(t, 0, len(m.GetSpans()))
 
 	srvChild.Finish()
@@ -118,7 +116,7 @@ func TestContextTracing_ForceTracing(t *testing.T) {
 	r := &forceRecorder{wrapped: m}
 
 	clientTracer := &tracer{
-		debugName: "Test",
+		serviceName: "Test",
 		wrapped: basictracer.NewWithOptions(basictracer.Options{
 			ShouldSample: func(traceID uint64) bool {
 				return false
@@ -128,14 +126,14 @@ func TestContextTracing_ForceTracing(t *testing.T) {
 		}),
 	}
 
-	clientRoot, clientCtx := StartSpan(ContextWithTracer(context.Background(), clientTracer), "a")
+	clientRoot, clientCtx := tracing.StartSpan(tracing.ContextWithTracer(context.Background(), clientTracer), "a")
 
 	// Force tracing for this span and its children.
-	clientRoot.SetBaggageItem(ForceTracingBaggageKey, "Go for it")
+	clientRoot.SetBaggageItem(tracing.ForceTracingBaggageKey, "Go for it")
 
 	// Simulate Server process with different tracer, but with client span in context.
 	srvTracer := &tracer{
-		debugName: "Test",
+		serviceName: "Test",
 		wrapped: basictracer.NewWithOptions(basictracer.Options{
 			ShouldSample: func(traceID uint64) bool {
 				return false
@@ -144,8 +142,8 @@ func TestContextTracing_ForceTracing(t *testing.T) {
 			MaxLogsPerSpan: 100,
 		}),
 	}
-	srvRoot, srvCtx := StartSpan(ContextWithTracer(clientCtx, srvTracer), "b")
-	srvChild, _ := StartSpan(srvCtx, "bb")
+	srvRoot, srvCtx := tracing.StartSpan(tracing.ContextWithTracer(clientCtx, srvTracer), "b")
+	srvChild, _ := tracing.StartSpan(srvCtx, "bb")
 	testutil.Equals(t, 0, len(m.GetSpans()))
 
 	srvChild.Finish()

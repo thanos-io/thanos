@@ -153,6 +153,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 
 	span, _ := tracing.StartSpan(s.Context(), "transform_and_respond")
 	defer span.Finish()
+	span.SetTag("series_count", len(resp.Results[0].Timeseries))
 
 	for _, e := range resp.Results[0].Timeseries {
 		lset := p.translateAndExtendLabels(e.Labels, ext)
@@ -234,13 +235,13 @@ func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prom
 	preq.Header.Add("Content-Encoding", "snappy")
 	preq.Header.Set("Content-Type", "application/x-protobuf")
 	preq.Header.Set("X-Prometheus-Remote-Read-Version", "0.1.0")
-
+	spanReqDo, ctx := tracing.StartSpan(ctx, "query_prometheus_request")
 	preq = preq.WithContext(ctx)
-
 	presp, err := p.client.Do(preq)
 	if err != nil {
 		return nil, errors.Wrap(err, "send request")
 	}
+	spanReqDo.Finish()
 	defer runutil.CloseWithLogOnErr(p.logger, presp.Body, "prom series request body")
 
 	if presp.StatusCode/100 != 2 {
@@ -254,16 +255,20 @@ func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prom
 	if _, err := io.Copy(buf, presp.Body); err != nil {
 		return nil, errors.Wrap(err, "copy response")
 	}
+	spanSnappyDecode, ctx := tracing.StartSpan(ctx, "decompress_response")
 	decomp, err := snappy.Decode(p.getBuffer(), buf.Bytes())
+	spanSnappyDecode.Finish()
 	defer p.putBuffer(decomp)
 	if err != nil {
 		return nil, errors.Wrap(err, "decompress response")
 	}
 
 	var data prompb.ReadResponse
+	spanUnmarshal, ctx := tracing.StartSpan(ctx, "unmarshal_response")
 	if err := proto.Unmarshal(decomp, &data); err != nil {
 		return nil, errors.Wrap(err, "unmarshal response")
 	}
+	spanUnmarshal.Finish()
 	if len(data.Results) != 1 {
 		return nil, errors.Errorf("unexepected result size %d", len(data.Results))
 	}

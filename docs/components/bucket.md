@@ -42,14 +42,12 @@ Flags:
       --version            Show application version.
       --log.level=info     Log filtering level.
       --log.format=logfmt  Log format to use.
-      --gcloudtrace.project=GCLOUDTRACE.PROJECT
-                           GCP project to send Google Cloud Trace tracings to.
-                           If empty, tracing will be disabled.
-      --gcloudtrace.sample-factor=1
-                           How often we send traces (1/<sample-factor>). If 0 no
-                           trace will be sent periodically, unless forced by
-                           baggage item. See `pkg/tracing/tracing.go` for
-                           details.
+      --tracing.config-file=<tracing.config-yaml-path>
+                           Path to YAML file that contains tracing
+                           configuration.
+      --tracing.config=<tracing.config-yaml>
+                           Alternative to 'tracing.config-file' flag. Tracing
+                           configuration in YAML.
       --objstore.config-file=<bucket.config-yaml-path>
                            Path to YAML file that contains object store
                            configuration.
@@ -92,14 +90,12 @@ Flags:
       --version            Show application version.
       --log.level=info     Log filtering level.
       --log.format=logfmt  Log format to use.
-      --gcloudtrace.project=GCLOUDTRACE.PROJECT
-                           GCP project to send Google Cloud Trace tracings to.
-                           If empty, tracing will be disabled.
-      --gcloudtrace.sample-factor=1
-                           How often we send traces (1/<sample-factor>). If 0 no
-                           trace will be sent periodically, unless forced by
-                           baggage item. See `pkg/tracing/tracing.go` for
-                           details.
+      --tracing.config-file=<tracing.config-yaml-path>
+                           Path to YAML file that contains tracing
+                           configuration.
+      --tracing.config=<tracing.config-yaml>
+                           Alternative to 'tracing.config-file' flag. Tracing
+                           configuration in YAML.
       --objstore.config-file=<bucket.config-yaml-path>
                            Path to YAML file that contains object store
                            configuration.
@@ -149,14 +145,12 @@ Flags:
       --version            Show application version.
       --log.level=info     Log filtering level.
       --log.format=logfmt  Log format to use.
-      --gcloudtrace.project=GCLOUDTRACE.PROJECT
-                           GCP project to send Google Cloud Trace tracings to.
-                           If empty, tracing will be disabled.
-      --gcloudtrace.sample-factor=1
-                           How often we send traces (1/<sample-factor>). If 0 no
-                           trace will be sent periodically, unless forced by
-                           baggage item. See `pkg/tracing/tracing.go` for
-                           details.
+      --tracing.config-file=<tracing.config-yaml-path>
+                           Path to YAML file that contains tracing
+                           configuration.
+      --tracing.config=<tracing.config-yaml>
+                           Alternative to 'tracing.config-file' flag. Tracing
+                           configuration in YAML.
       --objstore.config-file=<bucket.config-yaml-path>
                            Path to YAML file that contains object store
                            configuration.
@@ -190,14 +184,12 @@ Flags:
       --version              Show application version.
       --log.level=info       Log filtering level.
       --log.format=logfmt    Log format to use.
-      --gcloudtrace.project=GCLOUDTRACE.PROJECT
-                             GCP project to send Google Cloud Trace tracings to.
-                             If empty, tracing will be disabled.
-      --gcloudtrace.sample-factor=1
-                             How often we send traces (1/<sample-factor>). If 0
-                             no trace will be sent periodically, unless forced
-                             by baggage item. See `pkg/tracing/tracing.go` for
-                             details.
+      --tracing.config-file=<tracing.config-yaml-path>
+                             Path to YAML file that contains tracing
+                             configuration.
+      --tracing.config=<tracing.config-yaml>
+                             Alternative to 'tracing.config-file' flag. Tracing
+                             configuration in YAML.
       --objstore.config-file=<bucket.config-yaml-path>
                              Path to YAML file that contains object store
                              configuration.
