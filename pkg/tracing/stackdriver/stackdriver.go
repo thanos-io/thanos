@@ -9,14 +9,14 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// Config - YAML configuration
+// Config - YAML configuration.
 type Config struct {
 	ServiceName  string `yaml:"service_name"`
 	ProjectId    string `yaml:"project_id"`
 	SampleFactor uint64 `yaml:"sample_factor"`
 }
 
-// NewTracer create tracer from YAML
+// NewTracer create tracer from YAML.
 func NewTracer(ctx context.Context, logger log.Logger, conf []byte) (opentracing.Tracer, io.Closer, error) {
 	config := Config{}
 	if err := yaml.Unmarshal(conf, &config); err != nil {

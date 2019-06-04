@@ -15,27 +15,26 @@ import (
 	jaeger_prometheus "github.com/uber/jaeger-lib/metrics/prometheus"
 )
 
-
-// Tracer extends opentracing.Tracer
+// Tracer extends opentracing.Tracer.
 type Tracer struct {
 	opentracing.Tracer
 }
 
-// GetTraceIdFromSpanContext return TraceID from span.Context
-func (t *Tracer) GetTraceIdFromSpanContext(ctx opentracing.SpanContext) (string, bool) {
+// GetTraceIDFromSpanContext return TraceID from span.Context.
+func (t *Tracer) GetTraceIDFromSpanContext(ctx opentracing.SpanContext) (string, bool) {
 	if c, ok := ctx.(jaeger.SpanContext); ok {
 		return fmt.Sprintf("%016x", c.TraceID().Low), true
 	}
 	return "", false
 }
 
-// NewTracer create tracer from YAML
+// NewTracer create tracer from YAML.
 func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Registry, conf []byte) (opentracing.Tracer, io.Closer, error) {
 	var (
-		cfg *config.Configuration
-		err error
+		cfg          *config.Configuration
+		err          error
 		jaegerTracer opentracing.Tracer
-		closer io.Closer
+		closer       io.Closer
 	)
 	if conf != nil {
 		level.Info(logger).Log("msg", "loading Jaeger tracing configuration from YAML")

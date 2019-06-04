@@ -14,7 +14,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// Config - YAML configuration
+// Config - YAML configuration. For details see to https://github.com/jaegertracing/jaeger-client-go#environment-variables
 type Config struct {
 	ServiceName            string `yaml:"service_name"`
 	Disabled               bool `yaml:"disabled"`
@@ -35,7 +35,7 @@ type Config struct {
 	AgentPort              int `yaml:"agent_port"`
 }
 
-// FromYaml uses config YAML to set the tracer's Configuration.
+// ParseConfigFromYaml uses config YAML to set the tracer's Configuration.
 func ParseConfigFromYaml(cfg []byte) (*config.Configuration, error) {
 	conf := &Config{}
 

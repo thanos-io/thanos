@@ -11,14 +11,15 @@ const ForceTracingBaggageKey = "X-Thanos-Force-Tracing"
 
 
 // traceIdResponseHeader - Trace ID response header.
-const traceIdResponseHeader = "X-Thanos-Trace-Id"
+const traceIDResponseHeader = "X-Thanos-Trace-Id"
 
 type contextKey struct{}
 
 var tracerKey = contextKey{}
 
+// Tracer interface to provide GetTraceIDFromSpanContext method.
 type Tracer interface {
-	GetTraceIdFromSpanContext(ctx opentracing.SpanContext) (string, bool)
+	GetTraceIDFromSpanContext(ctx opentracing.SpanContext) (string, bool)
 }
 
 // ContextWithTracer returns a new `context.Context` that holds a reference to given opentracing.Tracer.
