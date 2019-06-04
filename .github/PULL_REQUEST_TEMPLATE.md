@@ -3,6 +3,8 @@
     about what components it touches e.g "query:" or ".*:"
 -->
 
+* [] CHANGELOG entry if change is relevant to the end user.
+
 ## Changes
 
 <!-- Enumerate changes you made -->

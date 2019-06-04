@@ -75,7 +75,6 @@ func (q *Query) Register(r *route.Router) {
 	r.Get("/graph", instrf("graph", q.graph))
 	r.Get("/stores", instrf("stores", q.stores))
 	r.Get("/status", instrf("status", q.status))
-	r.Get("/flags", instrf("flags", q.flags))
 
 	r.Get("/static/*filepath", instrf("static", q.serveStaticAsset))
 	// TODO(bplotka): Consider adding more Thanos related data e.g:
@@ -145,9 +144,4 @@ func (q *Query) stores(w http.ResponseWriter, r *http.Request) {
 		Stores:  statuses,
 		Sources: sources,
 	})
-}
-
-func (q *Query) flags(w http.ResponseWriter, r *http.Request) {
-	prefix := GetWebPrefix(q.logger, q.flagsMap, r)
-	q.executeTemplate(w, "flags.html", prefix, q.flagsMap)
 }
