@@ -31,7 +31,7 @@ GIT               ?= $(shell which git)
 # golangci-lint which includes errcheck, goimports
 # and more. v1.16.0
 GOLANGCILINT_VERSION ?= 97ea1cbb21bbf5e4d0e8bcc0f9243385e9262dcc
-GOLANGCILINT ?= $(GOBIN)-golangci-lint-$(GOLANGCILINT_VERSION)
+GOLANGCILINT ?= $(GOBIN)/golangci-lint-$(GOLANGCILINT_VERSION)
 
 WEB_DIR           ?= website
 WEBSITE_BASE_URL  ?= https://thanos.io
@@ -213,7 +213,7 @@ web: web-pre-process $(HUGO)
 .PHONY: lint
 lint: check-git $(GOLANGCILINT)
 	@echo ">> linting all of the Go files"
-	$(GOLANGCILINT) run ./...
+	@$(GOLANGCILINT) run ./...
 
 .PHONY: web-serve
 web-serve: web-pre-process $(HUGO)
