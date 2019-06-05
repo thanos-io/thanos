@@ -213,7 +213,7 @@ web: web-pre-process $(HUGO)
 .PHONY: lint
 lint: check-git $(GOLANGCILINT)
 	@echo ">> linting all of the Go files"
-	golangci-lint run ./...
+	$(GOLANGCILINT) run ./...
 
 .PHONY: web-serve
 web-serve: web-pre-process $(HUGO)
