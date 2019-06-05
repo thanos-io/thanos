@@ -1,4 +1,4 @@
-package main
+package register
 
 import (
 	"context"

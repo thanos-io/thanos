@@ -1,4 +1,4 @@
-package main
+package register
 
 import (
 	"context"
@@ -46,7 +46,7 @@ var (
 	inspectColumns = []string{"ULID", "FROM", "UNTIL", "RANGE", "UNTIL-COMP", "#SERIES", "#SAMPLES", "#CHUNKS", "COMP-LEVEL", "COMP-FAILED", "LABELS", "RESOLUTION", "SOURCE"}
 )
 
-func registerBucket(m map[string]setupFunc, app *kingpin.Application, name string) {
+func Bucket(m map[string]SetupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "Bucket utility commands")
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
@@ -56,7 +56,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	return
 }
 
-func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
+func registerBucketVerify(m map[string]SetupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
 	cmd := root.Command("verify", "Verify all blocks in the bucket against specified issues")
 	objStoreBackupConfig := regCommonObjStoreFlags(cmd, "-backup", false, "Used for repair logic to backup blocks before removal.")
 	repair := cmd.Flag("repair", "Attempt to repair blocks for which issues were detected").
@@ -143,7 +143,7 @@ func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name 
 	}
 }
 
-func registerBucketLs(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
+func registerBucketLs(m map[string]SetupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
 	cmd := root.Command("ls", "List all blocks in the bucket")
 	output := cmd.Flag("output", "Optional format in which to print each block's information. Options are 'json', 'wide' or a custom template.").
 		Short('o').Default("").String()
@@ -234,7 +234,7 @@ func registerBucketLs(m map[string]setupFunc, root *kingpin.CmdClause, name stri
 	}
 }
 
-func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
+func registerBucketInspect(m map[string]SetupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
 	cmd := root.Command("inspect", "Inspect all blocks in the bucket in detailed, table-like way")
 	selector := cmd.Flag("selector", "Selects blocks based on label, e.g. '-l key1=\"value1\" -l key2=\"value2\"'. All key value pairs must match.").Short('l').
 		PlaceHolder("<name>=\"<value>\"").Strings()

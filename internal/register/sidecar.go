@@ -1,4 +1,4 @@
-package main
+package register
 
 import (
 	"context"
@@ -29,7 +29,7 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
-func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name string) {
+func Sidecar(m map[string]SetupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "sidecar for Prometheus server")
 
 	grpcBindAddr, httpBindAddr, cert, key, clientCA := regCommonServerFlags(cmd)

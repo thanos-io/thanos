@@ -1,4 +1,4 @@
-package main
+package register
 
 import (
 	"fmt"
@@ -115,7 +115,7 @@ func regCommonObjStoreFlags(cmd *kingpin.CmdClause, suffix string, required bool
 }
 
 
-func regCommonTracingFlags(app *kingpin.Application) *pathOrContent {
+func CommonTracingFlags(app *kingpin.Application) *pathOrContent {
 	fileFlagName := fmt.Sprintf("tracing.config-file")
 	contentFlagName := fmt.Sprintf("tracing.config")
 
