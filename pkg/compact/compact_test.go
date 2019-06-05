@@ -11,7 +11,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
-	"github.com/prometheus/tsdb"
+	terrors "github.com/prometheus/tsdb/errors"
 )
 
 func TestHaltError(t *testing.T) {
@@ -32,7 +32,7 @@ func TestHaltMultiError(t *testing.T) {
 	haltErr := halt(errors.New("halt error"))
 	nonHaltErr := errors.New("not a halt error")
 
-	errs := tsdb.MultiError{nonHaltErr}
+	errs := terrors.MultiError{nonHaltErr}
 	testutil.Assert(t, !IsHaltError(errs), "should not be a halt error")
 
 	errs.Add(haltErr)
@@ -43,13 +43,13 @@ func TestRetryMultiError(t *testing.T) {
 	retryErr := retry(errors.New("retry error"))
 	nonRetryErr := errors.New("not a retry error")
 
-	errs := tsdb.MultiError{nonRetryErr}
+	errs := terrors.MultiError{nonRetryErr}
 	testutil.Assert(t, !IsRetryError(errs), "should not be a retry error")
 
-	errs = tsdb.MultiError{retryErr}
+	errs = terrors.MultiError{retryErr}
 	testutil.Assert(t, IsRetryError(errs), "if all errors are retriable this should return true")
 
-	errs = tsdb.MultiError{nonRetryErr, retryErr}
+	errs = terrors.MultiError{nonRetryErr, retryErr}
 	testutil.Assert(t, !IsRetryError(errs), "mixed errors should return false")
 }
 
