@@ -21,6 +21,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/tsdb"
+	terrors "github.com/prometheus/tsdb/errors"
 	"github.com/prometheus/tsdb/labels"
 )
 
@@ -613,7 +614,7 @@ func (e HaltError) Error() string {
 // IsHaltError returns true if the base error is a HaltError.
 // If a multierror is passed, any halt error will return true.
 func IsHaltError(err error) bool {
-	if multiErr, ok := err.(tsdb.MultiError); ok {
+	if multiErr, ok := err.(terrors.MultiError); ok {
 		for _, err := range multiErr {
 			if _, ok := errors.Cause(err).(HaltError); ok {
 				return true
@@ -646,7 +647,7 @@ func (e RetryError) Error() string {
 // IsRetryError returns true if the base error is a RetryError.
 // If a multierror is passed, all errors must be retriable.
 func IsRetryError(err error) bool {
-	if multiErr, ok := err.(tsdb.MultiError); ok {
+	if multiErr, ok := err.(terrors.MultiError); ok {
 		for _, err := range multiErr {
 			if _, ok := errors.Cause(err).(RetryError); !ok {
 				return false
@@ -1055,7 +1056,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 		close(errChan)
 		workCtxCancel()
 		if err != nil {
-			errs := tsdb.MultiError{err}
+			errs := terrors.MultiError{err}
 			// Collect any other errors reported by the workers.
 			for e := range errChan {
 				errs.Add(e)
