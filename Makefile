@@ -1,5 +1,4 @@
 PREFIX            ?= $(shell pwd)
-FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print)
 
 DOCKER_IMAGE_NAME ?= thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
@@ -149,6 +148,15 @@ check-docs: $(EMBEDMD) $(LICHE) build
 	@EMBEDMD_BIN="$(EMBEDMD)" scripts/genflagdocs.sh check
 	@$(LICHE) --recursive docs --exclude "cloud.tencent.com" --document-root .
 	@$(LICHE) --exclude "cloud.tencent.com" --document-root . *.md
+
+# format formats the code (including imports format).
+# # NOTE: format requires deps to not remove imports that are used, just not resolved.
+# # This is not encoded, because it is often used in IDE onSave logic.
+.PHONY: format
+format: check-git $(GOLANGCILINT)
+	@echo ">> formatting code"
+	@$(GOLANGCILINT) run --disable-all -E goimports ./...
+
 
 # proto generates golang files from Thanos proto files.
 .PHONY: proto
