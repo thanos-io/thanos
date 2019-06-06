@@ -264,7 +264,7 @@ func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prom
 	}
 
 	var data prompb.ReadResponse
-	spanUnmarshal, ctx := tracing.StartSpan(ctx, "unmarshal_response")
+	spanUnmarshal, _ := tracing.StartSpan(ctx, "unmarshal_response")
 	if err := proto.Unmarshal(decomp, &data); err != nil {
 		return nil, errors.Wrap(err, "unmarshal response")
 	}

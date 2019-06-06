@@ -260,8 +260,6 @@ func processDownsampling(ctx context.Context, logger log.Logger, bkt objstore.Bu
 
 	level.Info(logger).Log("msg", "uploaded block", "id", id, "duration", time.Since(begin))
 
-	begin = time.Now()
-
 	// It is not harmful if these fails.
 	if err := os.RemoveAll(bdir); err != nil {
 		level.Warn(logger).Log("msg", "failed to clean directory", "dir", bdir, "err", err)

@@ -144,6 +144,10 @@ func main() {
 		var closer io.Closer
 		var confContentYaml []byte
 		confContentYaml, err = tracingConfig.Content()
+		if err != nil {
+			level.Error(logger).Log("msg", "getting tracing config failed", "err", err)
+			os.Exit(1)
+		}
 
 		if len(confContentYaml) == 0 {
 			level.Info(logger).Log("msg", "Tracing will be disabled")
