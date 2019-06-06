@@ -233,16 +233,12 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up receive http handler")
 	{
-		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(
 			func() error {
-				if err := webHandler.Run(ctx); err != nil {
-					return fmt.Errorf("error starting web server: %s", err)
-				}
-				return nil
+				return errors.Wrap(webHandler.Run(), "error starting web server")
 			},
 			func(err error) {
-				cancel()
+				webHandler.Close()
 			},
 		)
 	}
