@@ -2,7 +2,7 @@
 title: Deprecated gossip clustering in favor of File SD
 type: proposal
 menu: proposals
-status: accepted
+status: completed
 owner: bwplotka
 ---
 
