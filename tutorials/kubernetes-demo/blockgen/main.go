@@ -41,7 +41,7 @@ func main() {
 	outputDir := app.Flag("output-dir", "Output directory for generated TSDB data.").Required().String()
 	scrapeInterval := app.Flag("scrape-interval", "Interval for to generate samples with.").Default("15s").Duration()
 
-	retention := app.Flag("retention", "Defines the the max time in relation to current time for generated samples.").Required().Duration()
+	retention := app.Flag("retention", "Defines the max time in relation to current time for generated samples.").Required().Duration()
 
 	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
 	_, err := app.Parse(os.Args[1:])
