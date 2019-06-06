@@ -1,4 +1,4 @@
-package register
+package runners
 
 import (
 	"context"
@@ -67,7 +67,7 @@ func (cs compactionSet) maxLevel() int {
 	return len(cs) - 1
 }
 
-func Compact(m map[string]SetupFunc, app *kingpin.Application, name string) {
+func RegisterCompact(m map[string]SetupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "continuously compacts blocks in an object store bucket")
 
 	haltOnError := cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").

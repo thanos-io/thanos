@@ -1,4 +1,4 @@
-package register
+package runners
 
 import (
 	"context"
@@ -28,7 +28,7 @@ import (
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
-func Downsample(m map[string]SetupFunc, app *kingpin.Application, name string) {
+func RegisterDownsample(m map[string]SetupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "continuously downsamples blocks in an object store bucket")
 
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").

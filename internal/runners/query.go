@@ -1,4 +1,4 @@
-package register
+package runners
 
 import (
 	"context"
@@ -42,7 +42,7 @@ import (
 )
 
 // Query registers a query command.
-func Query(m map[string]SetupFunc, app *kingpin.Application, name string) {
+func RegisterQuery(m map[string]SetupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
 
 	grpcBindAddr, httpBindAddr, srvCert, srvKey, srvClientCA := regCommonServerFlags(cmd)

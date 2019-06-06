@@ -1,4 +1,4 @@
-package register
+package runners
 
 import (
 	"context"
@@ -46,7 +46,7 @@ var (
 	inspectColumns = []string{"ULID", "FROM", "UNTIL", "RANGE", "UNTIL-COMP", "#SERIES", "#SAMPLES", "#CHUNKS", "COMP-LEVEL", "COMP-FAILED", "LABELS", "RESOLUTION", "SOURCE"}
 )
 
-func Bucket(m map[string]SetupFunc, app *kingpin.Application, name string) {
+func RegisterBucket(m map[string]SetupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "Bucket utility commands")
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)

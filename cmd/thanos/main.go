@@ -14,7 +14,7 @@ import (
 	gprom "github.com/armon/go-metrics/prometheus"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/internal/register"
+	"github.com/improbable-eng/thanos/internal/runners"
 	"github.com/improbable-eng/thanos/pkg/tracing/client"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
@@ -47,17 +47,17 @@ func main() {
 	logFormat := app.Flag("log.format", "Log format to use.").
 		Default(logFormatLogfmt).Enum(logFormatLogfmt, logFormatJSON)
 
-	tracingConfig := register.CommonTracingFlags(app)
+	tracingConfig := runners.CommonTracingFlags(app)
 
-	cmds := map[string]register.SetupFunc{}
-	register.Sidecar(cmds, app, "sidecar")
-	register.Store(cmds, app, "store")
-	register.Query(cmds, app, "query")
-	register.Rule(cmds, app, "rule")
-	register.Compact(cmds, app, "compact")
-	register.Bucket(cmds, app, "bucket")
-	register.Downsample(cmds, app, "downsample")
-	register.Receive(cmds, app, "receive")
+	cmds := map[string]runners.SetupFunc{}
+	runners.RegisterSidecar(cmds, app, "sidecar")
+	runners.RegisterStore(cmds, app, "store")
+	runners.RegisterQuery(cmds, app, "query")
+	runners.RegisterRule(cmds, app, "rule")
+	runners.RegisterCompact(cmds, app, "compact")
+	runners.RegisterBucket(cmds, app, "bucket")
+	runners.RegisterDownsample(cmds, app, "downsample")
+	runners.RegisterReceive(cmds, app, "receive")
 
 	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {

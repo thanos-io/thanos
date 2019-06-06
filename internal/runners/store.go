@@ -1,4 +1,4 @@
-package register
+package runners
 
 import (
 	"context"
@@ -20,8 +20,8 @@ import (
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
-// Store registers a store command. 
-func Store(m map[string]SetupFunc, app *kingpin.Application, name string) {
+// Store registers a store command.
+func RegisterStore(m map[string]SetupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "store node giving access to blocks in a bucket provider. Now supported GCS, S3, Azure, Swift and Tencent COS.")
 
 	grpcBindAddr, httpBindAddr, cert, key, clientCA := regCommonServerFlags(cmd)

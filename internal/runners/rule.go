@@ -1,4 +1,4 @@
-package register
+package runners
 
 import (
 	"context"
@@ -54,7 +54,7 @@ import (
 )
 
 // registerRule registers a rule command.
-func Rule(m map[string]SetupFunc, app *kingpin.Application, name string) {
+func RegisterRule(m map[string]SetupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "ruler evaluating Prometheus rules against given Query nodes, exposing Store API and storing old blocks in bucket")
 
 	grpcBindAddr, httpBindAddr, cert, key, clientCA := regCommonServerFlags(cmd)

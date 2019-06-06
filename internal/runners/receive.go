@@ -1,4 +1,4 @@
-package register
+package runners
 
 import (
 	"context"
@@ -28,7 +28,7 @@ import (
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
-func Receive(m map[string]SetupFunc, app *kingpin.Application, name string) {
+func RegisterReceive(m map[string]SetupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "Accept Prometheus remote write API requests and write to local tsdb (EXPERIMENTAL, this may change drastically without notice)")
 
 	grpcBindAddr, cert, key, clientCA := regGRPCFlags(cmd)
