@@ -236,8 +236,8 @@ func registerBucketLs(m map[string]setupFunc, root *kingpin.CmdClause, name stri
 
 func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
 	cmd := root.Command("inspect", "Inspect all blocks in the bucket in detailed, table-like way")
-	selector := cmd.Flag("selector", "Selects blocks based on label, e.g. '-l key1=\"value1\" -l key2=\"value2\"'. All key value pairs must match.").Short('l').
-		PlaceHolder("<name>=\"<value>\"").Strings()
+	selector := cmd.Flag("selector", "Selects blocks based on label, e.g. '-l key1=\\\"value1\\\" -l key2=\\\"value2\\\"'. All key value pairs must match.").Short('l').
+		PlaceHolder("<name>=\\\"<value>\\\"").Strings()
 	sortBy := cmd.Flag("sort-by", "Sort by columns. It's also possible to sort by multiple columns, e.g. '--sort-by FROM --sort-by UNTIL'. I.e., if the 'FROM' value is equal the rows are then further sorted by the 'UNTIL' value.").
 		Default("FROM", "UNTIL").Enums(inspectColumns...)
 
