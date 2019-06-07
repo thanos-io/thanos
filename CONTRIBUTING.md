@@ -56,10 +56,11 @@ $ git push origin <your_branch_for_new_pr>
 - THANOS_SKIP_S3_AWS_TESTS to skip AWS tests.
 - THANOS_SKIP_AZURE_TESTS to skip Azure tests.
 - THANOS_SKIP_SWIFT_TESTS to skip SWIFT tests.
+- THANOS_SKIP_ALIBABA_OSS_TESTS to skip Alibaba OSS tests.
 - THANOS_SKIP_TENCENT_COS_TESTS to skip Tencent COS tests.
 
 If you skip all of these, the store specific tests will be run against memory object storage only.
-CI runs GCS and inmem tests only for now. Not having these variables will produce auth errors against GCS, AWS, Azure or COS tests.
+CI runs GCS and inmem tests only for now. Not having these variables will produce auth errors against GCS, AWS, Azure, OSS or COS tests.
 
 6. If your change affects users (adds or removes feature) consider adding the item to [CHANGELOG](CHANGELOG.md)
 7. You may merge the Pull Request in once you have the sign-off of at least one developers with write access, or if you

@@ -33,7 +33,7 @@ In general about 1MB of local disk space is required per TSDB block stored in th
 usage: thanos store [<flags>]
 
 store node giving access to blocks in a bucket provider. Now supported GCS, S3,
-Azure, Swift and Tencent COS.
+Azure, Swift, Alibaba OSS and Tencent COS.
 
 Flags:
   -h, --help                     Show context-sensitive help (also try

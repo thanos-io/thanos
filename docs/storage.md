@@ -21,6 +21,7 @@ Current object storage client implementations:
 | AWS S3               | Stable  (production usage)               | yes        | @bwplotka          |
 | Azure Storage Account | Stable  (production usage) | yes       | @vglafirov   |
 | OpenStack Swift      | Beta  (working PoCs, testing usage)               | no        | @sudhi-vm   |
+| Alibaba OSS          | Beta  (working PoCs, testing usage)               | no        | @wujinhu    |
 | Tencent COS          | Beta  (testing usage)                   | no        | @jojohappy          |
 
 NOTE: Currently Thanos requires strong consistency (write-read) for object store implementation.
@@ -288,6 +289,24 @@ config:
 ## Other minio supported S3 object storages
 
 Minio client used for AWS S3 can be potentially configured against other S3-compatible object storages.
+
+## Alibaba OSS Configuration
+
+Now, Thanos can use Alibaba Object Storage Service(OSS, [https://www.aliyun.com/product/oss](https://www.aliyun.com/product/oss)) as an storage store for Prometheus.
+
+You can configure an OSS bucket as an object store with YAML, either by passing the configuration directly to the `--objstore.config` parameter, or (preferably) by passing the path to a configuration file to the `--objstore.config-file` option.
+
+Config file format is the following:
+
+[embedmd]:# (flags/config_oss.txt yaml)
+```yaml
+type: OSS
+config:
+  bucket: "<Your bucket name>"
+  endpoint: "<Endpoint to connect to>"
+  access_key: "Your access key id"
+  secret_key: "Your secret key id"
+```
 
 ## Tencent COS Configuration
 

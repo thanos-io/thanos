@@ -11,6 +11,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore/cos"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/objstore/inmem"
+	"github.com/improbable-eng/thanos/pkg/objstore/oss"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/objstore/swift"
 	"github.com/improbable-eng/thanos/pkg/testutil"
@@ -100,6 +101,22 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 		}
 	} else {
 		t.Log("THANOS_SKIP_SWIFT_TESTS envvar present. Skipping test against swift.")
+	}
+
+	// Optional OSS.
+	if _, ok := os.LookupEnv("THANOS_SKIP_ALIBABA_OSS_TESTS"); !ok {
+		bkt, closeFn, err := oss.NewTestBucket(t)
+		testutil.Ok(t, err)
+
+		ok := t.Run("Alibaba OSS", func(t *testing.T) {
+			testFn(t, bkt)
+		})
+		closeFn()
+		if !ok {
+			return
+		}
+	} else {
+		t.Log("THANOS_SKIP_ALIBABA_OSS_TESTS envvar present. Skipping test against ALIBABA OSS.")
 	}
 
 	// Optional COS.

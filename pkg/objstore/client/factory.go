@@ -11,6 +11,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore/azure"
 	"github.com/improbable-eng/thanos/pkg/objstore/cos"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
+	"github.com/improbable-eng/thanos/pkg/objstore/oss"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/objstore/swift"
 	"github.com/pkg/errors"
@@ -25,6 +26,7 @@ const (
 	S3    ObjProvider = "S3"
 	AZURE ObjProvider = "AZURE"
 	SWIFT ObjProvider = "SWIFT"
+	OSS   ObjProvider = "OSS"
 	COS   ObjProvider = "COS"
 )
 
@@ -57,6 +59,8 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 		bucket, err = azure.NewBucket(logger, config, component)
 	case string(SWIFT):
 		bucket, err = swift.NewContainer(logger, config)
+	case string(OSS):
+		bucket, err = oss.NewBucket(logger, config, component)
 	case string(COS):
 		bucket, err = cos.NewBucket(logger, config, component)
 	default:
