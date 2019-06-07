@@ -15,6 +15,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/cos"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
+	"github.com/improbable-eng/thanos/pkg/objstore/oss"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/objstore/swift"
 	"github.com/pkg/errors"
@@ -29,6 +30,7 @@ var (
 		client.S3:    s3.Config{},
 		client.SWIFT: swift.SwiftConfig{},
 		client.COS:   cos.Config{},
+		client.OSS:   oss.Config{},
 	}
 )
 
