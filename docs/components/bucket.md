@@ -196,9 +196,9 @@ Flags:
       --objstore.config=<bucket.config-yaml>
                              Alternative to 'objstore.config-file' flag. Object
                              store configuration in YAML.
-  -l, --selector=<name>="<value>" ...
+  -l, --selector=<name>=\"<value>\" ...
                              Selects blocks based on label, e.g. '-l
-                             key1="value1" -l key2="value2"'. All key value
+                             key1=\"value1\" -l key2=\"value2\"'. All key value
                              pairs must match.
       --sort-by=FROM... ...  Sort by columns. It's also possible to sort by
                              multiple columns, e.g. '--sort-by FROM --sort-by
