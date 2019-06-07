@@ -18,7 +18,7 @@ import (
 
 type tracer struct {
 	serviceName string
-	wrapped   opentracing.Tracer
+	wrapped     opentracing.Tracer
 }
 
 // GetTraceIDFromSpanContext return TraceID from span.Context.

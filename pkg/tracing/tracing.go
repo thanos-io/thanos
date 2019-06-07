@@ -9,7 +9,6 @@ import (
 // ForceTracingBaggageKey - force sampling header.
 const ForceTracingBaggageKey = "X-Thanos-Force-Tracing"
 
-
 // traceIdResponseHeader - Trace ID response header.
 const traceIDResponseHeader = "X-Thanos-Trace-Id"
 

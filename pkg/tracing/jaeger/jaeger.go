@@ -3,9 +3,10 @@ package jaeger
 import (
 	"context"
 	"fmt"
+	"io"
+
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/tracing"
-	"io"
 
 	"github.com/go-kit/kit/log"
 	"github.com/opentracing/opentracing-go"
