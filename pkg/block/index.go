@@ -382,7 +382,7 @@ func GatherIndexIssueStats(logger log.Logger, fn string, minTime int64, maxTime 
 				stats.OutOfOrderLabels++
 				level.Warn(logger).Log("msg",
 					"out-of-order label set: known bug in Prometheus 2.8.0 and below",
-					"labelset", fmt.Sprintf("%s", lset),
+					"labelset", lset.String(),
 					"series", fmt.Sprintf("%d", id),
 				)
 			}
@@ -725,11 +725,6 @@ type stringset map[string]struct{}
 
 func (ss stringset) set(s string) {
 	ss[s] = struct{}{}
-}
-
-func (ss stringset) has(s string) bool {
-	_, ok := ss[s]
-	return ok
 }
 
 func (ss stringset) String() string {

@@ -195,23 +195,23 @@ func TestDedupSeriesSet(t *testing.T) {
 		vals []sample
 	}{
 		{
-			lset: labels.Labels{{"a", "1"}, {"c", "3"}},
+			lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
 			vals: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}, {200000, 5}, {210000, 6}},
 		},
 		{
-			lset: labels.Labels{{"a", "1"}, {"c", "3"}, {"d", "4"}},
+			lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
 			vals: []sample{{10000, 1}, {20000, 2}},
 		},
 		{
-			lset: labels.Labels{{"a", "1"}, {"c", "3"}},
+			lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
 			vals: []sample{{10000, 1}, {20000, 2}},
 		},
 		{
-			lset: labels.Labels{{"a", "1"}, {"c", "4"}},
+			lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}},
 			vals: []sample{{10000, 1}, {20000, 2}},
 		},
 		{
-			lset: labels.Labels{{"a", "2"}, {"c", "3"}},
+			lset: labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}},
 			vals: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}},
 		},
 	}

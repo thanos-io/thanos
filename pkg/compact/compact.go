@@ -63,9 +63,6 @@ type syncerMetrics struct {
 	garbageCollectionDuration prometheus.Histogram
 	compactions               *prometheus.CounterVec
 	compactionFailures        *prometheus.CounterVec
-	indexCacheBlocks          prometheus.Counter
-	indexCacheTraverse        prometheus.Counter
-	indexCacheFailures        prometheus.Counter
 }
 
 func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
@@ -1000,18 +997,21 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 
 		// Clean up the compaction temporary directory at the beginning of every compaction loop.
 		if err := os.RemoveAll(c.compactDir); err != nil {
+			workCtxCancel()
 			return errors.Wrap(err, "clean up the compaction temporary directory")
 		}
 
 		level.Info(c.logger).Log("msg", "start sync of metas")
 
 		if err := c.sy.SyncMetas(ctx); err != nil {
+			workCtxCancel()
 			return errors.Wrap(err, "sync")
 		}
 
 		level.Info(c.logger).Log("msg", "start of GC")
 
 		if err := c.sy.GarbageCollect(ctx); err != nil {
+			workCtxCancel()
 			return errors.Wrap(err, "garbage")
 		}
 
@@ -1019,6 +1019,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 
 		groups, err := c.sy.Groups()
 		if err != nil {
+			workCtxCancel()
 			return errors.Wrap(err, "build compaction groups")
 		}
 

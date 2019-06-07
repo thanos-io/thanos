@@ -23,7 +23,7 @@ func getContainerURL(ctx context.Context, conf Config) (blob.ContainerURL, error
 
 	retryOptions := blob.RetryOptions{}
 	if deadline, ok := ctx.Deadline(); ok {
-		retryOptions.TryTimeout = deadline.Sub(time.Now())
+		retryOptions.TryTimeout = time.Until(deadline)
 	}
 
 	p := blob.NewPipeline(c, blob.PipelineOptions{
@@ -71,7 +71,7 @@ func getBlobURL(ctx context.Context, conf Config, blobName string) (blob.BlockBl
 
 func parseError(errorCode string) string {
 	match := errorCodeRegex.FindStringSubmatch(errorCode)
-	if match != nil && len(match) == 2 {
+	if len(match) == 2 {
 		return match[1]
 	}
 	return errorCode

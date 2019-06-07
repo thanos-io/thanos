@@ -18,8 +18,6 @@ import (
 	"github.com/prometheus/common/version"
 )
 
-var localhostRepresentations = []string{"127.0.0.1", "localhost"}
-
 type Query struct {
 	*BaseUI
 	storeSet *query.StoreSet

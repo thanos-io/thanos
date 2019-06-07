@@ -204,6 +204,7 @@ func runCompact(
 	// are in milliseconds.
 	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool())
 	if err != nil {
+		cancel()
 		return errors.Wrap(err, "create compactor")
 	}
 
@@ -214,11 +215,13 @@ func runCompact(
 	)
 
 	if err := os.RemoveAll(downsamplingDir); err != nil {
+		cancel()
 		return errors.Wrap(err, "clean working downsample directory")
 	}
 
 	compactor, err := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt, concurrency)
 	if err != nil {
+		cancel()
 		return errors.Wrap(err, "create bucket compactor")
 	}
 

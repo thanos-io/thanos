@@ -1064,7 +1064,6 @@ type bucketBlock struct {
 
 	indexVersion int
 	symbols      map[uint32]string
-	symbolsV2    map[string]struct{}
 	lvals        map[string][]string
 	postings     map[labels.Label]index.Range
 
