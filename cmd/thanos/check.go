@@ -9,7 +9,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/rulefmt"
-	"github.com/prometheus/tsdb"
+	"github.com/prometheus/tsdb/errors"
 	"gopkg.in/alecthomas/kingpin.v2"
 	"gopkg.in/yaml.v2"
 )
@@ -34,7 +34,7 @@ func registerCheckRules(m map[string]setupFunc, root *kingpin.CmdClause, name st
 }
 
 func checkRulesFiles(logger log.Logger, files *[]string) error {
-	failed := tsdb.MultiError{}
+	failed := errors.MultiError{}
 
 	for _, f := range *files {
 		n, errs := checkRules(logger, f)
@@ -64,9 +64,9 @@ type ThanosRuleGroups struct {
 	Groups []ThanosRuleGroup `yaml:"groups"`
 }
 
-func checkRules(logger log.Logger, filename string) (int, tsdb.MultiError) {
+func checkRules(logger log.Logger, filename string) (int, errors.MultiError) {
 	level.Info(logger).Log("msg", "checking", "filename", filename)
-	checkErrors := tsdb.MultiError{}
+	checkErrors := errors.MultiError{}
 
 	b, err := ioutil.ReadFile(filename)
 	if err != nil {
