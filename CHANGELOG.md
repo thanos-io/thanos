@@ -12,7 +12,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ## Unreleased.
 
 ### Added
- 
+
 - [#1097](https://github.com/improbable-eng/thanos/pull/1097) Added `thanos check rules` linter for Thanos rule rules files.
 
 ## [v0.5.0](https://github.com/improbable-eng/thanos/releases/tag/v0.5.0) - 2019.06.05
