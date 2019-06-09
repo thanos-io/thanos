@@ -43,7 +43,7 @@ func NewGate(maxConcurrent int, reg prometheus.Registerer) *Gate {
 func (g *Gate) IsMyTurn(ctx context.Context) error {
 	start := time.Now()
 	defer func() {
-		g.gateTiming.Observe(float64(time.Now().Sub(start)))
+		g.gateTiming.Observe(float64(time.Since(start)))
 	}()
 
 	if err := g.g.Start(ctx); err != nil {

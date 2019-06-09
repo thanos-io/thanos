@@ -963,10 +963,7 @@ func (s *bucketBlockSet) add(b *bucketBlock) error {
 	s.blocks[i] = bs
 
 	sort.Slice(bs, func(j, k int) bool {
-		if bs[j].meta.MinTime < bs[k].meta.MinTime {
-			return true
-		}
-		return false
+		return bs[j].meta.MinTime < bs[k].meta.MinTime
 	})
 	return nil
 }
@@ -1640,16 +1637,13 @@ func (r *bucketIndexReader) LoadedSeries(ref uint64, lset *labels.Labels, chks *
 // LabelValues returns label values for single name.
 func (r *bucketIndexReader) LabelValues(name string) []string {
 	res := make([]string, 0, len(r.block.lvals[name]))
-	for _, v := range r.block.lvals[name] {
-		res = append(res, v)
-	}
-	return res
+	return append(res, r.block.lvals[name]...)
 }
 
 // LabelNames returns a list of label names.
 func (r *bucketIndexReader) LabelNames() []string {
 	res := make([]string, 0, len(r.block.lvals))
-	for ln, _ := range r.block.lvals {
+	for ln := range r.block.lvals {
 		res = append(res, ln)
 	}
 	return res

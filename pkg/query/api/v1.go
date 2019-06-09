@@ -47,18 +47,18 @@ type status string
 
 const (
 	statusSuccess status = "success"
-	statusError          = "error"
+	statusError   status = "error"
 )
 
 type ErrorType string
 
 const (
 	errorNone     ErrorType = ""
-	errorTimeout            = "timeout"
-	errorCanceled           = "canceled"
-	errorExec               = "execution"
-	errorBadData            = "bad_data"
-	ErrorInternal           = "internal"
+	errorTimeout  ErrorType = "timeout"
+	errorCanceled ErrorType = "canceled"
+	errorExec     ErrorType = "execution"
+	errorBadData  ErrorType = "bad_data"
+	ErrorInternal ErrorType = "internal"
 )
 
 var corsHeaders = map[string]string{

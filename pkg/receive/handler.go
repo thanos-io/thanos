@@ -127,11 +127,6 @@ func (h *Handler) Quit() <-chan struct{} {
 	return h.quitCh
 }
 
-// Checks if server is ready, calls f if it is, returns 503 if it is not.
-func (h *Handler) testReadyHandler(f http.Handler) http.HandlerFunc {
-	return h.testReady(f.ServeHTTP)
-}
-
 // Run serves the HTTP endpoints.
 func (h *Handler) Run(ctx context.Context) error {
 	level.Info(h.logger).Log("msg", "Start listening for connections", "address", h.options.ListenAddress)
