@@ -10,8 +10,8 @@ slug: /getting-started.md
 
 Thanos provides a global query view, data backup, and historical data access as its core features in a single binary. All three features can be run independently of each other. This allows you to have a subset of Thanos features ready for immediate benefit or testing, while also making it flexible for gradual roll outs in more complex environments. 
 
-In this quick-start guide, we will configure Thanos and all components mentioned to work against a Google Cloud Storage bucket.
-At the moment, Thanos is able to use [different storage providers](storage.md), with the ability to add more providers as necessary.
+In this quick-start guide, we will configure Thanos and all components mentioned to work against an object storage cloud provider.
+Thanos is able to use [different storage providers](storage.md), with the ability to add more providers as necessary.
 
 Thanos will work in cloud native environments as well as more traditional ones. Some users run Thanos in Kubernetes while others on bare metal. More deployments examples and stories will be described soon.
 
@@ -30,7 +30,7 @@ Thanos will work in cloud native environments as well as more traditional ones. 
 You can find the latest Thanos release [here](https://github.com/improbable-eng/thanos/releases).
 
 
-If you want to build Thanos from source, make sure you have installed `git` and that you have a working installation of the Go [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`).
+If you want to build Thanos from source you would need a working installation of the Go [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`).
 
 Thanos can be downloaded and built by running:
 
@@ -42,23 +42,6 @@ make
 
 The `thanos` binary should now be in your `$PATH` and is the only thing required to deploy any of its components.
 
-You may meet below error:
-
-```bash
-go: verifying github.com/grpc-ecosystem/go-grpc-middleware@v1.0.0: checksum mismatch
-    downloaded: h1:BWIsLfhgKhV5g/oF34aRjniBHLTZe5DNekSjbAjIS6c=
-    go.sum:     h1:Iju5GlWwrvL6UBg4zJJt3btmonfrMlCDdsejg4CZE7c=
-Makefile:183: recipe for target 'go-mod-tidy' failed
-```
-
-If your `golang` version is `1.11.4`, you can run following cmd then `make` would pass:
-
-```
-go clean -modcache
-```
-
-If your `golang` version is below `1.11.4`, highly recommend you upgrade to `1.11.4` or above.
-
 ## Prometheus
 
 Thanos bases itself on vanilla [Prometheus](https://prometheus.io/) (v2.2.1+).
@@ -67,7 +50,7 @@ To find out the Prometheus' versions Thanos is tested against, look at the value
 
 ## Components
 
-Following the KISS and Unix philosophies, Thanos is made of a set of components with each filling a specific role.
+Following the [KISS](https://en.wikipedia.org/wiki/KISS_principle) and Unix philosophies, Thanos is made of a set of components with each filling a specific role.
 
 * Sidecar: connects to Prometheus and reads its data for query and/or upload it to cloud storage
 * Store Gateway: exposes the content of a cloud storage bucket
