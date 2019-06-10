@@ -43,6 +43,33 @@ func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name s
 	}
 }
 
+type DownsampleMetrics struct {
+	downsamples               *prometheus.CounterVec
+	downsampleFailures        *prometheus.CounterVec
+}
+
+func newDownsampleMetrics(reg *prometheus.Registry) (*DownsampleMetrics, error) {
+	m := new(DownsampleMetrics)
+
+	m.downsamples = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_compact_group_compactions_total",
+		Help: "Total number of group compactions attempts.",
+	}, []string{"group"})
+	m.downsampleFailures = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_compact_group_compactions_failures_total",
+		Help: "Total number of failed group compactions.",
+	}, []string{"group"})
+
+	if err := reg.Register(m.downsamples); err != nil {
+		return nil, err
+	}
+	if err := reg.Register(m.downsampleFailures); err != nil {
+		return nil, err
+	}
+
+	return m, nil
+}
+
 func runDownsample(
 	g *run.Group,
 	logger log.Logger,
@@ -68,6 +95,11 @@ func runDownsample(
 		}
 	}()
 
+	metrics, err := newDownsampleMetrics(reg)
+	if err != nil {
+		return err
+	}
+
 	// Start cycle of syncing blocks from the bucket and garbage collecting the bucket.
 	{
 		ctx, cancel := context.WithCancel(context.Background())
@@ -77,13 +109,13 @@ func runDownsample(
 
 			level.Info(logger).Log("msg", "start first pass of downsampling")
 
-			if err := downsampleBucket(ctx, logger, reg, bkt, dataDir); err != nil {
+			if err := downsampleBucket(ctx, logger, metrics, bkt, dataDir); err != nil {
 				return errors.Wrap(err, "downsampling failed")
 			}
 
 			level.Info(logger).Log("msg", "start second pass of downsampling")
 
-			if err := downsampleBucket(ctx, logger, reg, bkt, dataDir); err != nil {
+			if err := downsampleBucket(ctx, logger, metrics, bkt, dataDir); err != nil {
 				return errors.Wrap(err, "downsampling failed")
 			}
 
@@ -104,7 +136,7 @@ func runDownsample(
 func downsampleBucket(
 	ctx context.Context,
 	logger log.Logger,
-	reg *prometheus.Registry,
+	metrics *DownsampleMetrics,
 	bkt objstore.Bucket,
 	dir string,
 ) error {

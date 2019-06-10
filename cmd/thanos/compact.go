@@ -166,6 +166,11 @@ func runCompact(
 	reg.MustRegister(halted)
 	reg.MustRegister(retried)
 
+	downsampleMetrics, err := newDownsampleMetrics(reg)
+	if err != nil {
+		return err
+	}
+
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
 		return err
@@ -245,13 +250,13 @@ func runCompact(
 			// for 5m downsamplings created in the first run.
 			level.Info(logger).Log("msg", "start first pass of downsampling")
 
-			if err := downsampleBucket(ctx, logger, reg, bkt, downsamplingDir); err != nil {
+			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, downsamplingDir); err != nil {
 				return errors.Wrap(err, "first pass of downsampling failed")
 			}
 
 			level.Info(logger).Log("msg", "start second pass of downsampling")
 
-			if err := downsampleBucket(ctx, logger, reg, bkt, downsamplingDir); err != nil {
+			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, downsamplingDir); err != nil {
 				return errors.Wrap(err, "second pass of downsampling failed")
 			}
 			level.Info(logger).Log("msg", "downsampling iterations done")
