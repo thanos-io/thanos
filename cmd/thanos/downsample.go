@@ -31,13 +31,15 @@ import (
 func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "continuously downsamples blocks in an object store bucket")
 
+	httpAddr := regHTTPAddrFlag(cmd)
+
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
 		Default("./data").String()
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
-		return runDownsample(g, logger, reg, *dataDir, objStoreConfig)
+		return runDownsample(g, logger, reg, *httpAddr, *dataDir, objStoreConfig)
 	}
 }
 
@@ -45,6 +47,7 @@ func runDownsample(
 	g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
+	httpBindAddr string,
 	dataDir string,
 	objStoreConfig *pathOrContent,
 ) error {
@@ -74,13 +77,13 @@ func runDownsample(
 
 			level.Info(logger).Log("msg", "start first pass of downsampling")
 
-			if err := downsampleBucket(ctx, logger, bkt, dataDir); err != nil {
+			if err := downsampleBucket(ctx, logger, reg, bkt, dataDir); err != nil {
 				return errors.Wrap(err, "downsampling failed")
 			}
 
 			level.Info(logger).Log("msg", "start second pass of downsampling")
 
-			if err := downsampleBucket(ctx, logger, bkt, dataDir); err != nil {
+			if err := downsampleBucket(ctx, logger, reg, bkt, dataDir); err != nil {
 				return errors.Wrap(err, "downsampling failed")
 			}
 
@@ -90,6 +93,10 @@ func runDownsample(
 		})
 	}
 
+	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
+		return err
+	}
+
 	level.Info(logger).Log("msg", "starting downsample node")
 	return nil
 }
@@ -97,6 +104,7 @@ func runDownsample(
 func downsampleBucket(
 	ctx context.Context,
 	logger log.Logger,
+	reg *prometheus.Registry,
 	bkt objstore.Bucket,
 	dir string,
 ) error {
