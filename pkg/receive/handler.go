@@ -1,7 +1,6 @@
 package receive
 
 import (
-	"fmt"
 	"io/ioutil"
 	"net/http"
 
@@ -11,9 +10,6 @@ import (
 	"github.com/golang/snappy"
 	"github.com/improbable-eng/thanos/pkg/prober"
 	"github.com/improbable-eng/thanos/pkg/store/prompb"
-	conntrack "github.com/mwitkow/go-conntrack"
-	"github.com/opentracing-contrib/go-stdlib/nethttp"
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/route"
@@ -41,24 +37,21 @@ var (
 
 // Options for the web Handler.
 type Options struct {
-	Receiver      *Writer
+	Receiver        *Writer
 	ReadinessProber *prober.Prober
-	ListenAddress string
-	Registry      prometheus.Registerer
-	ReadyStorage  *promtsdb.ReadyStorage
+	Registry        prometheus.Registerer
+	ReadyStorage    *promtsdb.ReadyStorage
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
 type Handler struct {
-	readyStorage *promtsdb.ReadyStorage
-	logger       log.Logger
-	receiver     *Writer
-	router       *route.Router
-	options      *Options
-	listener     net.Listener
+	readyStorage    *promtsdb.ReadyStorage
+	logger          log.Logger
+	receiver        *Writer
+	router          *route.Router
+	options         *Options
+	quitCh          chan struct{}
 	readinessProber *prober.Prober
-
-	ready uint32 // ready is uint32 rather than boolean to be able to use atomic functions.
 }
 
 func instrumentHandler(handlerName string, handler http.HandlerFunc) http.HandlerFunc {
@@ -78,11 +71,12 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	}
 
 	h := &Handler{
-		logger:       logger,
-		router:       router,
-		readyStorage: o.ReadyStorage,
-		receiver:     o.Receiver,
-		options:      o,
+		logger:          logger,
+		router:          router,
+		readyStorage:    o.ReadyStorage,
+		receiver:        o.Receiver,
+		options:         o,
+		quitCh:          make(chan struct{}),
 		readinessProber: o.ReadinessProber,
 	}
 
@@ -115,45 +109,9 @@ func (h *Handler) HandleInMux(path string, mux *http.ServeMux) {
 	mux.Handle(path, h.router)
 }
 
-// Close stops the Handler.
-func (h *Handler) Close() {
-	runutil.CloseWithLogOnErr(h.logger, h.listener, "receive HTTP listener")
-}
-
-// Checks if server is ready, calls f if it is, returns 503 if it is not.
-func (h *Handler) testReadyHandler(f http.Handler) http.HandlerFunc {
-	return h.testReady(f.ServeHTTP)
-}
-
-// Run serves the HTTP endpoints.
-func (h *Handler) Run() error {
-	level.Info(h.logger).Log("msg", "Start listening for connections", "address", h.options.ListenAddress)
-
-	var err error
-	h.listener, err = net.Listen("tcp", h.options.ListenAddress)
-	if err != nil {
-		return err
-	}
-
-	// Monitor incoming connections with conntrack.
-	h.listener = conntrack.NewListener(h.listener,
-		conntrack.TrackWithName("http"),
-		conntrack.TrackWithTracing())
-
-	operationName := nethttp.OperationNameFunc(func(r *http.Request) string {
-		return fmt.Sprintf("%s %s", r.Method, r.URL.Path)
-	})
-	mux := http.NewServeMux()
-	mux.Handle("/", h.router)
-
-	errlog := stdlog.New(log.NewStdlibAdapter(level.Error(h.logger)), "", 0)
-
-	httpSrv := &http.Server{
-		Handler:  nethttp.Middleware(opentracing.GlobalTracer(), mux, operationName),
-		ErrorLog: errlog,
-	}
-
-	return httpSrv.Serve(h.listener)
+// Quit returns the receive-only quit channel.
+func (h *Handler) Quit() <-chan struct{} {
+	return h.quitCh
 }
 
 func (h *Handler) receive(w http.ResponseWriter, req *http.Request) {

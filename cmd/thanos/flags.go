@@ -7,7 +7,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 func regGRPCFlags(cmd *kingpin.CmdClause) (
@@ -113,7 +113,6 @@ func regCommonObjStoreFlags(cmd *kingpin.CmdClause, suffix string, required bool
 		content: bucketConf,
 	}
 }
-
 
 func regCommonTracingFlags(app *kingpin.Application) *pathOrContent {
 	fileFlagName := fmt.Sprintf("tracing.config-file")

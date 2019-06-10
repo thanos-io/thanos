@@ -194,7 +194,6 @@ func runSidecar(
 		}, func(err error) {
 			cancel()
 			readinessProber.SetNotReady(err)
-			peer.Close(2 * time.Second)
 		})
 	}
 	{
