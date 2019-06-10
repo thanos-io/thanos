@@ -6,6 +6,11 @@ import (
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 )
 
+// Component is a generic component interface
+type Component interface {
+	String() string
+}
+
 // StoreAPI is a component that implements Thanos' gRPC StoreAPI.
 type StoreAPI interface {
 	implementsStoreAPI()
