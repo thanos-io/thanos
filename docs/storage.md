@@ -302,11 +302,24 @@ Config file format is the following:
 ```yaml
 type: OSS
 config:
-  bucket: "<Your bucket name>"
-  endpoint: "<Endpoint to connect to>"
-  access_key: "Your access key id"
-  secret_key: "Your secret key id"
+  bucket: ""
+  endpoint: ""
+  access_key: ""
+  secret_key: ""
+  http_config:
+    enable_crc: false
+    connection_timeout: 0
+    read_write_timeout: 0
+    max_idle_connections: 0
+    max_idle_connections_per_host: 0
+  log_level: 0
 ```
+
+* `http_config.connection_timeout` Default value is 30, in seconds.
+* `http_config.read_write_timeout` Default value is 60, in seconds.
+* `http_config.max_idle_connections` Default value is 100.
+* `http_config.max_idle_connections_per_host` Default value is 100.
+* `log_level` Used for wrap log of oss go sdk. Error(1), Warn(2), Info(3), Debug(4), please view oss go sdk for more details.
 
 ## Tencent COS Configuration
 
