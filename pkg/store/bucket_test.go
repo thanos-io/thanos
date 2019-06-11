@@ -62,14 +62,14 @@ func TestBucketBlock_Property(t *testing.T) {
 		testutil.Ok(t, set.add(&bucketBlock{meta: &m}))
 	}
 
-	properties.Property("getFor always gets at least some data in range", prop.ForAllNoShrink(
+	properties.Property("getFor always gets at least some data in range if minResolution is zero", prop.ForAllNoShrink(
 		func(low, high, maxResolution int64) bool {
 			// Bogus case.
 			if low >= high {
 				return true
 			}
 
-			res := set.getFor(low, high, maxResolution)
+			res := set.getFor(low, high, downsample.ResLevel0, maxResolution)
 
 			// The data that we get must all encompass our requested range
 			if len(res) == 1 && (res[0].meta.Thanos.Downsample.Resolution > maxResolution ||
@@ -107,7 +107,7 @@ func TestBucketBlock_Property(t *testing.T) {
 		}, gen.Int64Range(0, 21000), gen.Int64Range(0, 21000), gen.Int64Range(0, 60*60*1000)),
 	)
 
-	properties.Property("getFor always gets all data in range", prop.ForAllNoShrink(
+	properties.Property("getFor always gets all data in range if all resolutions allowed", prop.ForAllNoShrink(
 		func(low, high int64) bool {
 			// Bogus case.
 			if low >= high {
@@ -115,7 +115,7 @@ func TestBucketBlock_Property(t *testing.T) {
 			}
 
 			maxResolution := downsample.ResLevel2
-			res := set.getFor(low, high, maxResolution)
+			res := set.getFor(low, high, downsample.ResLevel0, maxResolution)
 
 			// The data that we get must all encompass our requested range
 			if len(res) == 1 && (res[0].meta.Thanos.Downsample.Resolution > maxResolution ||
@@ -192,14 +192,16 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 	}
 
 	cases := []struct {
-		mint, maxt    int64
-		maxResolution int64
-		res           []resBlock
+		mint, maxt          int64
+		maxResolutionWindow int64
+		minResolutionWindow int64
+		res                 []resBlock
 	}{
 		{
-			mint:          -100,
-			maxt:          1000,
-			maxResolution: 0,
+			mint:                -100,
+			maxt:                1000,
+			minResolutionWindow: downsample.ResLevel0,
+			maxResolutionWindow: 0,
 			res: []resBlock{
 				{window: downsample.ResLevel0, mint: 0, maxt: 100},
 				{window: downsample.ResLevel0, mint: 100, maxt: 200},
@@ -208,18 +210,20 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 				{window: downsample.ResLevel0, mint: 400, maxt: 500},
 			},
 		}, {
-			mint:          100,
-			maxt:          400,
-			maxResolution: downsample.ResLevel1 - 1,
+			mint:                100,
+			maxt:                400,
+			minResolutionWindow: downsample.ResLevel0,
+			maxResolutionWindow: downsample.ResLevel1 - 1,
 			res: []resBlock{
 				{window: downsample.ResLevel0, mint: 100, maxt: 200},
 				{window: downsample.ResLevel0, mint: 200, maxt: 300},
 				{window: downsample.ResLevel0, mint: 300, maxt: 400},
 			},
 		}, {
-			mint:          100,
-			maxt:          500,
-			maxResolution: downsample.ResLevel1,
+			mint:                100,
+			maxt:                500,
+			minResolutionWindow: downsample.ResLevel0,
+			maxResolutionWindow: downsample.ResLevel1,
 			res: []resBlock{
 				{window: downsample.ResLevel1, mint: 100, maxt: 200},
 				{window: downsample.ResLevel1, mint: 200, maxt: 300},
@@ -227,15 +231,36 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 				{window: downsample.ResLevel0, mint: 400, maxt: 500},
 			},
 		}, {
-			mint:          0,
-			maxt:          500,
-			maxResolution: downsample.ResLevel2,
+			mint:                0,
+			maxt:                500,
+			minResolutionWindow: downsample.ResLevel0,
+			maxResolutionWindow: downsample.ResLevel2,
 			res: []resBlock{
 				{window: downsample.ResLevel1, mint: 0, maxt: 100},
 				{window: downsample.ResLevel2, mint: 100, maxt: 200},
 				{window: downsample.ResLevel2, mint: 200, maxt: 300},
 				{window: downsample.ResLevel1, mint: 300, maxt: 400},
 				{window: downsample.ResLevel0, mint: 400, maxt: 500},
+			},
+		}, {
+			mint:                0,
+			maxt:                500,
+			minResolutionWindow: downsample.ResLevel2,
+			maxResolutionWindow: downsample.ResLevel2,
+			res: []resBlock{
+				{window: downsample.ResLevel2, mint: 100, maxt: 200},
+				{window: downsample.ResLevel2, mint: 200, maxt: 300},
+			},
+		}, {
+			mint:                0,
+			maxt:                500,
+			maxResolutionWindow: downsample.ResLevel2,
+			minResolutionWindow: downsample.ResLevel1,
+			res: []resBlock{
+				{window: downsample.ResLevel1, mint: 0, maxt: 100},
+				{window: downsample.ResLevel2, mint: 100, maxt: 200},
+				{window: downsample.ResLevel2, mint: 200, maxt: 300},
+				{window: downsample.ResLevel1, mint: 300, maxt: 400},
 			},
 		},
 	}
@@ -250,7 +275,7 @@ func TestBucketBlockSet_addGet(t *testing.T) {
 			m.MaxTime = b.maxt
 			exp = append(exp, &bucketBlock{meta: &m})
 		}
-		res := set.getFor(c.mint, c.maxt, c.maxResolution)
+		res := set.getFor(c.mint, c.maxt, c.minResolutionWindow, c.maxResolutionWindow)
 		testutil.Equals(t, exp, res)
 	}
 }
@@ -278,7 +303,7 @@ func TestBucketBlockSet_remove(t *testing.T) {
 		testutil.Ok(t, set.add(&bucketBlock{meta: &m}))
 	}
 	set.remove(input[1].id)
-	res := set.getFor(0, 300, 0)
+	res := set.getFor(0, 300, 0, 0)
 
 	testutil.Equals(t, 2, len(res))
 	testutil.Equals(t, input[0].id, res[0].meta.ULID)

@@ -735,7 +735,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		if !ok {
 			continue
 		}
-		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow)
+		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MinResolutionWindow, req.MaxResolutionWindow)
 
 		if s.debugLogging {
 			debugFoundBlockSetOverview(s.logger, req.MinTime, req.MaxTime, req.MaxResolutionWindow, bs.labels, blocks)
@@ -996,8 +996,9 @@ func int64index(s []int64, x int64) int {
 }
 
 // getFor returns a time-ordered list of blocks that cover date between mint and maxt.
-// Blocks with the biggest resolution possible but not bigger than the given max resolution are returned.
-func (s *bucketBlockSet) getFor(mint, maxt, maxResolutionMillis int64) (bs []*bucketBlock) {
+// All blocks returned have resolution between min resolution and max resolution.
+// Blocks with larger resolution are preferred.
+func (s *bucketBlockSet) getFor(mint, maxt, minResolutionMillis, maxResolutionMillis int64) (bs []*bucketBlock) {
 	if mint == maxt {
 		return nil
 	}
@@ -1007,7 +1008,14 @@ func (s *bucketBlockSet) getFor(mint, maxt, maxResolutionMillis int64) (bs []*bu
 
 	// Find first matching resolution.
 	i := 0
-	for ; i < len(s.resolutions) && s.resolutions[i] > maxResolutionMillis; i++ {
+	for {
+		if i >= len(s.resolutions) {
+			return bs
+		}
+		if minResolutionMillis <= s.resolutions[i] && s.resolutions[i] <= maxResolutionMillis {
+			break
+		}
+		i++
 	}
 
 	// Fill the given interval with the blocks for the current resolution.
@@ -1022,14 +1030,14 @@ func (s *bucketBlockSet) getFor(mint, maxt, maxResolutionMillis int64) (bs []*bu
 		}
 
 		if i+1 < len(s.resolutions) {
-			bs = append(bs, s.getFor(start, b.meta.MinTime, s.resolutions[i+1])...)
+			bs = append(bs, s.getFor(start, b.meta.MinTime, minResolutionMillis, s.resolutions[i+1])...)
 		}
 		bs = append(bs, b)
 		start = b.meta.MaxTime
 	}
 
 	if i+1 < len(s.resolutions) {
-		bs = append(bs, s.getFor(start, maxt, s.resolutions[i+1])...)
+		bs = append(bs, s.getFor(start, maxt, minResolutionMillis, s.resolutions[i+1])...)
 	}
 	return bs
 }

@@ -67,6 +67,7 @@ message SeriesRequest {
   repeated LabelMatcher matchers = 3 [(gogoproto.nullable) = false];
 
   int64 max_resolution_window = 4;
+
   repeated Aggr aggregates    = 5;
 
   // Deprecated. Use partial_response_strategy instead.
@@ -74,6 +75,8 @@ message SeriesRequest {
 
   // TODO(bwplotka): Move Thanos components to use strategy instead. Inlcuding QueryAPI.
   PartialResponseStrategy partial_response_strategy = 7;
+
+  int64 min_resolution_window = 8;
 }
 
 enum Aggr {
