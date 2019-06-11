@@ -13,6 +13,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
+	"github.com/improbable-eng/thanos/pkg/compact"
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/objstore"
@@ -220,9 +221,12 @@ func downsampleBucket(
 			if m.MaxTime-m.MinTime < 40*60*60*1000 {
 				continue
 			}
+
 			if err := processDownsampling(ctx, logger, bkt, m, dir, 5*60*1000); err != nil {
+				metrics.downsampleFailures.WithLabelValues(compact.GroupKey(*m))
 				return errors.Wrap(err, "downsampling to 5 min")
 			}
+			metrics.downsamples.WithLabelValues(compact.GroupKey(*m))
 
 		case 5 * 60 * 1000:
 			missing := false
@@ -242,8 +246,10 @@ func downsampleBucket(
 				continue
 			}
 			if err := processDownsampling(ctx, logger, bkt, m, dir, 60*60*1000); err != nil {
+				metrics.downsampleFailures.WithLabelValues(compact.GroupKey(*m))
 				return errors.Wrap(err, "downsampling to 60 min")
 			}
+			metrics.downsamples.WithLabelValues(compact.GroupKey(*m))
 		}
 	}
 	return nil
