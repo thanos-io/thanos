@@ -148,8 +148,8 @@ docs: $(EMBEDMD) build
 .PHONY: check-docs
 check-docs: $(EMBEDMD) $(LICHE) build
 	@EMBEDMD_BIN="$(EMBEDMD)" scripts/genflagdocs.sh check
-	@$(LICHE) --recursive docs --exclude "cloud.tencent.com" --document-root .
-	@$(LICHE) --exclude "cloud.tencent.com" --document-root . *.md
+	@$(LICHE) --recursive docs --exclude "(cloud.tencent.com|alibabacloud.com)" --document-root .
+	@$(LICHE) --exclude "(cloud.tencent.com|alibabacloud.com)" --document-root . *.md
 
 # errcheck performs static analysis and returns error if any of the errors is not checked.
 .PHONY: errcheck
