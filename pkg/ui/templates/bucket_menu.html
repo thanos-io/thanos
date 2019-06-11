@@ -1,0 +1,17 @@
+{{define "nav"}}
+<nav class="navbar fixed-top navbar-expand-sm navbar-dark bg-dark">
+    <div class="container-fluid">
+        <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#nav-content" aria-expanded="false" aria-controls="nav-content" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <a class="navbar-brand" href="{{ pathPrefix }}/">Thanos Bucket Viewer</a>
+        <div id="nav-content" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item">
+                    <a class="nav-link" href="https://github.com/improbable-eng/thanos" target="_blank">Help</a>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+{{end}}
