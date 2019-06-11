@@ -13,11 +13,10 @@ import (
 
 const sep = '\xff'
 
-// Hashring finds the correct host to handle a given time series
 // for a specified tenant.
-// It returns the hostname and any error encountered.
+// It returns the node and any error encountered.
 type Hashring interface {
-	GetHost(tenant string, timeSeries *prompb.TimeSeries) (string, error)
+	Get(tenant string, timeSeries *prompb.TimeSeries) (string, error)
 }
 
 // Matcher determines whether or tenant matches a hashring.
@@ -71,8 +70,8 @@ type simpleHashring struct {
 	targetgroup.Group
 }
 
-// GetHost returns a hostname to handle the given tenant and time series.
-func (s *simpleHashring) GetHost(tenant string, ts *prompb.TimeSeries) (string, error) {
+// Get returns a target to handle the given tenant and time series.
+func (s *simpleHashring) Get(tenant string, ts *prompb.TimeSeries) (string, error) {
 	// Always return nil here to implement the Hashring interface.
 	return string(s.Targets[hash(tenant, ts)%uint64(len(s.Targets))][model.AddressLabel]), nil
 }
@@ -85,18 +84,18 @@ type matchingHashring struct {
 	matcher   Matcher
 }
 
-// GetHost returns a hostname to handle the given tenant and time series.
-func (m matchingHashring) GetHost(tenant string, ts *prompb.TimeSeries) (string, error) {
+// Get returns a target to handle the given tenant and time series.
+func (m matchingHashring) Get(tenant string, ts *prompb.TimeSeries) (string, error) {
 	if h, ok := m.cache[tenant]; ok {
-		return h.GetHost(tenant, ts)
+		return h.Get(tenant, ts)
 	}
 	for name := range m.hashrings {
 		if m.matcher.Match(tenant, name) {
 			m.cache[tenant] = m.hashrings[name]
-			return m.hashrings[name].GetHost(tenant, ts)
+			return m.hashrings[name].Get(tenant, ts)
 		}
 	}
-	return "", errors.New("no matching hosts to handle tenant")
+	return "", errors.New("no matching hashring to handle tenant")
 }
 
 // NewHashring creates a multi-tenant hashring for a given slice of

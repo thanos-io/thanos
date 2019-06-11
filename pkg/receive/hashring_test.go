@@ -31,7 +31,7 @@ func TestHash(t *testing.T) {
 	}
 }
 
-func TestGetHost(t *testing.T) {
+func TestHashringGet(t *testing.T) {
 	ts := &prompb.TimeSeries{
 		Labels: []prompb.Label{
 			{
@@ -48,7 +48,7 @@ func TestGetHost(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		cfg    []*targetgroup.Group
-		hosts  map[string]struct{}
+		nodes  map[string]struct{}
 		tenant string
 	}{
 		{
@@ -62,12 +62,12 @@ func TestGetHost(t *testing.T) {
 				{
 					Targets: []model.LabelSet{
 						model.LabelSet{
-							model.AddressLabel: "host1",
+							model.AddressLabel: "node1",
 						},
 					},
 				},
 			},
-			hosts: map[string]struct{}{"host1": struct{}{}},
+			nodes: map[string]struct{}{"node1": struct{}{}},
 		},
 		{
 			name: "specific",
@@ -75,7 +75,7 @@ func TestGetHost(t *testing.T) {
 				{
 					Targets: []model.LabelSet{
 						model.LabelSet{
-							model.AddressLabel: "host1",
+							model.AddressLabel: "node1",
 						},
 					},
 					Source: "",
@@ -83,13 +83,13 @@ func TestGetHost(t *testing.T) {
 				{
 					Targets: []model.LabelSet{
 						model.LabelSet{
-							model.AddressLabel: "host2",
+							model.AddressLabel: "node2",
 						},
 					},
 					Source: "tenant1",
 				},
 			},
-			hosts:  map[string]struct{}{"host2": struct{}{}},
+			nodes:  map[string]struct{}{"node2": struct{}{}},
 			tenant: "tenant1",
 		},
 		{
@@ -98,7 +98,7 @@ func TestGetHost(t *testing.T) {
 				{
 					Targets: []model.LabelSet{
 						model.LabelSet{
-							model.AddressLabel: "host1",
+							model.AddressLabel: "node1",
 						},
 					},
 					Source: "tenant1",
@@ -106,7 +106,7 @@ func TestGetHost(t *testing.T) {
 				{
 					Targets: []model.LabelSet{
 						model.LabelSet{
-							model.AddressLabel: "host2",
+							model.AddressLabel: "node2",
 						},
 					},
 					Source: "tenant2",
@@ -114,13 +114,13 @@ func TestGetHost(t *testing.T) {
 				{
 					Targets: []model.LabelSet{
 						model.LabelSet{
-							model.AddressLabel: "host3",
+							model.AddressLabel: "node3",
 						},
 					},
 					Source: "tenant3",
 				},
 			},
-			hosts:  map[string]struct{}{"host1": struct{}{}},
+			nodes:  map[string]struct{}{"node1": struct{}{}},
 			tenant: "tenant1",
 		},
 		{
@@ -129,7 +129,7 @@ func TestGetHost(t *testing.T) {
 				{
 					Targets: []model.LabelSet{
 						model.LabelSet{
-							model.AddressLabel: "host1",
+							model.AddressLabel: "node1",
 						},
 					},
 					Source: "tenant1",
@@ -137,7 +137,7 @@ func TestGetHost(t *testing.T) {
 				{
 					Targets: []model.LabelSet{
 						model.LabelSet{
-							model.AddressLabel: "host2",
+							model.AddressLabel: "node2",
 						},
 					},
 					Source: "tenant2",
@@ -145,7 +145,7 @@ func TestGetHost(t *testing.T) {
 				{
 					Targets: []model.LabelSet{
 						model.LabelSet{
-							model.AddressLabel: "host3",
+							model.AddressLabel: "node3",
 						},
 					},
 					Source: "tenant3",
@@ -154,18 +154,18 @@ func TestGetHost(t *testing.T) {
 			tenant: "tenant4",
 		},
 		{
-			name: "many hosts",
+			name: "many nodes",
 			cfg: []*targetgroup.Group{
 				{
 					Targets: []model.LabelSet{
 						model.LabelSet{
-							model.AddressLabel: "host1",
+							model.AddressLabel: "node1",
 						},
 						model.LabelSet{
-							model.AddressLabel: "host2",
+							model.AddressLabel: "node2",
 						},
 						model.LabelSet{
-							model.AddressLabel: "host3",
+							model.AddressLabel: "node3",
 						},
 					},
 					Source: "tenant1",
@@ -173,38 +173,38 @@ func TestGetHost(t *testing.T) {
 				{
 					Targets: []model.LabelSet{
 						model.LabelSet{
-							model.AddressLabel: "host4",
+							model.AddressLabel: "node4",
 						},
 						model.LabelSet{
-							model.AddressLabel: "host5",
+							model.AddressLabel: "node5",
 						},
 						model.LabelSet{
-							model.AddressLabel: "host6",
+							model.AddressLabel: "node6",
 						},
 					},
 					Source: "",
 				},
 			},
-			hosts: map[string]struct{}{
-				"host1": struct{}{},
-				"host2": struct{}{},
-				"host3": struct{}{},
+			nodes: map[string]struct{}{
+				"node1": struct{}{},
+				"node2": struct{}{},
+				"node3": struct{}{},
 			},
 			tenant: "tenant1",
 		},
 		{
-			name: "many hosts 2",
+			name: "many nodes 2",
 			cfg: []*targetgroup.Group{
 				{
 					Targets: []model.LabelSet{
 						model.LabelSet{
-							model.AddressLabel: "host1",
+							model.AddressLabel: "node1",
 						},
 						model.LabelSet{
-							model.AddressLabel: "host2",
+							model.AddressLabel: "node2",
 						},
 						model.LabelSet{
-							model.AddressLabel: "host3",
+							model.AddressLabel: "node3",
 						},
 					},
 					Source: "tenant1",
@@ -212,33 +212,33 @@ func TestGetHost(t *testing.T) {
 				{
 					Targets: []model.LabelSet{
 						model.LabelSet{
-							model.AddressLabel: "host4",
+							model.AddressLabel: "node4",
 						},
 						model.LabelSet{
-							model.AddressLabel: "host5",
+							model.AddressLabel: "node5",
 						},
 						model.LabelSet{
-							model.AddressLabel: "host6",
+							model.AddressLabel: "node6",
 						},
 					},
 				},
 			},
-			hosts: map[string]struct{}{
-				"host4": struct{}{},
-				"host5": struct{}{},
-				"host6": struct{}{},
+			nodes: map[string]struct{}{
+				"node4": struct{}{},
+				"node5": struct{}{},
+				"node6": struct{}{},
 			},
 		},
 	} {
 		hs := NewHashring(ExactMatcher, tc.cfg)
-		h, err := hs.GetHost(tc.tenant, ts)
-		if tc.hosts != nil {
+		h, err := hs.Get(tc.tenant, ts)
+		if tc.nodes != nil {
 			if err != nil {
 				t.Errorf("case %q: got unexpected error: %v", tc.name, err)
 				continue
 			}
-			if _, ok := tc.hosts[h]; !ok {
-				t.Errorf("case %q: got unexpected host %q", tc.name, h)
+			if _, ok := tc.nodes[h]; !ok {
+				t.Errorf("case %q: got unexpected node %q", tc.name, h)
 			}
 			continue
 		}
