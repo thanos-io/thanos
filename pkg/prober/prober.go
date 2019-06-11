@@ -15,13 +15,13 @@ import (
 const (
 	healthyEndpointPath  = "/-/healthy"
 	readyEndpointPath    = "/-/ready"
-	okProbeText          = "thanos %v is %v"
-	errorProbeText       = "thanos %v is not %v. Reason: %v"
+	okProbeFmt           = "thanos %v is %v"
+	errorProbeFmt        = "thanos %v is not %v. Reason: %v"
 	probeErrorHTTPStatus = 503
-	initialErrorText     = "thanos %s is initializing"
+	initialErrorFmt      = "thanos %s is initializing"
 )
 
-// Prober represents health and readriness status of given compoent.
+// Prober represents health and readiness status of given component.
 type Prober struct {
 	logger       log.Logger
 	componentMtx sync.Mutex
@@ -30,15 +30,6 @@ type Prober struct {
 	readiness    error
 	healthyMtx   sync.Mutex
 	healthiness  error
-}
-
-// SetLogger sets logger used by the Prober.
-func (p *Prober) SetLogger(logger log.Logger) {
-	p.logger = logger
-}
-
-func (p *Prober) getLogger() log.Logger {
-	return p.logger
 }
 
 // SetComponent sets component name of the Prober displayed in responses.
@@ -56,12 +47,13 @@ func (p *Prober) getComponent() component.Component {
 
 // NewProber returns Prober representing readiness and healthiness of given component.
 func NewProber(component component.Component, logger log.Logger) *Prober {
-	initialErr := fmt.Errorf(initialErrorText, component)
-	prober := &Prober{}
-	prober.SetComponent(component)
-	prober.SetLogger(logger)
-	prober.SetNotHealthy(initialErr)
-	prober.SetNotReady(initialErr)
+	initialErr := fmt.Errorf(initialErrorFmt, component)
+	prober := &Prober{
+		component:   component,
+		logger:      logger,
+		healthiness: initialErr,
+		readiness:   initialErr,
+	}
 	return prober
 }
 
@@ -80,11 +72,11 @@ func (p *Prober) RegisterInMux(mux *http.ServeMux) {
 func (p *Prober) writeResponse(w http.ResponseWriter, probeFunc func() error, probeType string) {
 	err := probeFunc()
 	if err != nil {
-		http.Error(w, fmt.Sprintf(errorProbeText, p.getComponent(), probeType, err), probeErrorHTTPStatus)
+		http.Error(w, fmt.Sprintf(errorProbeFmt, p.getComponent(), probeType, err), probeErrorHTTPStatus)
 		return
 	}
-	if _, e := io.WriteString(w, fmt.Sprintf(okProbeText, p.getComponent(), probeType)); e == nil {
-		level.Error(p.getLogger()).Log("msg", "failed to write probe response", "probe type", probeType, "err", err)
+	if _, e := io.WriteString(w, fmt.Sprintf(okProbeFmt, p.getComponent(), probeType)); e == nil {
+		level.Error(p.logger).Log("msg", "failed to write probe response", "probe type", probeType, "err", err)
 	}
 }
 
@@ -104,7 +96,7 @@ func (p *Prober) IsReady() error {
 // SetReady sets components status to ready.
 func (p *Prober) SetReady() {
 	if p.IsReady() != nil {
-		level.Info(p.getLogger()).Log("msg", "changing probe status", "status", "ready")
+		level.Info(p.logger).Log("msg", "changing probe status", "status", "ready")
 	}
 	p.SetNotReady(nil)
 }
@@ -112,7 +104,7 @@ func (p *Prober) SetReady() {
 // SetNotReady sets components status to not ready with given error as a cause.
 func (p *Prober) SetNotReady(err error) {
 	if err != nil && p.IsReady() == nil {
-		level.Warn(p.getLogger()).Log("msg", "changing probe status", "status", "not-ready", "reason", err)
+		level.Warn(p.logger).Log("msg", "changing probe status", "status", "not-ready", "reason", err)
 	}
 	p.readyMtx.Lock()
 	defer p.readyMtx.Unlock()
@@ -129,7 +121,7 @@ func (p *Prober) IsHealthy() error {
 // SetHealthy sets components status to healthy.
 func (p *Prober) SetHealthy() {
 	if p.IsHealthy() != nil {
-		level.Info(p.getLogger()).Log("msg", "changing probe status", "status", "healthy")
+		level.Info(p.logger).Log("msg", "changing probe status", "status", "healthy")
 	}
 	p.SetNotHealthy(nil)
 }
@@ -137,7 +129,7 @@ func (p *Prober) SetHealthy() {
 // SetNotHealthy sets components status to not healthy with given error as a cause.
 func (p *Prober) SetNotHealthy(err error) {
 	if err != nil && p.IsHealthy() == nil {
-		level.Warn(p.getLogger()).Log("msg", "changing probe status", "status", "unhealthy", "reason", err)
+		level.Warn(p.logger).Log("msg", "changing probe status", "status", "unhealthy", "reason", err)
 	}
 	p.healthyMtx.Lock()
 	defer p.healthyMtx.Unlock()

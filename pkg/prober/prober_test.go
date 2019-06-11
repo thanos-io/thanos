@@ -33,7 +33,7 @@ func (c TestComponent) String() string {
 
 func TestProberHealthInitialState(t *testing.T) {
 	component := TestComponent{name: "test"}
-	expectedErrorMessage := fmt.Sprintf(initialErrorText, component)
+	expectedErrorMessage := fmt.Sprintf(initialErrorFmt, component)
 	p := NewProber(component, log.NewNopLogger())
 
 	err := p.IsHealthy()
@@ -43,7 +43,7 @@ func TestProberHealthInitialState(t *testing.T) {
 
 func TestProberReadinessInitialState(t *testing.T) {
 	component := TestComponent{name: "test"}
-	expectedErrorMessage := fmt.Sprintf(initialErrorText, component)
+	expectedErrorMessage := fmt.Sprintf(initialErrorFmt, component)
 	p := NewProber(component, log.NewNopLogger())
 
 	err := p.IsReady()

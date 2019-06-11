@@ -6,7 +6,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 )
 
-// Component is a generic component interface
+// Component is a generic component interface.
 type Component interface {
 	String() string
 }
