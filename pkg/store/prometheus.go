@@ -110,7 +110,7 @@ func (p *PrometheusStore) getBuffer() []byte {
 }
 
 func (p *PrometheusStore) putBuffer(b []byte) {
-	p.buffers.Put(b[:0])
+	p.buffers.Put(&b)
 }
 
 // Series returns all series for a requested time range and label matcher.

@@ -58,7 +58,6 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 			testutil.Ok(t, os.Mkdir(tmp, 0777))
 
 			meta := metadata.Meta{
-				Version: 1,
 				BlockMeta: tsdb.BlockMeta{
 					Version: 1,
 					ULID:    id,
@@ -216,7 +215,6 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 			testutil.Ok(t, os.Mkdir(tmp, 0777))
 
 			meta := metadata.Meta{
-				Version: 1,
 				BlockMeta: tsdb.BlockMeta{
 					Version: 1,
 					ULID:    id,

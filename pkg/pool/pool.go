@@ -82,7 +82,7 @@ func (p *BytesPool) Put(b []byte) {
 		if cap(b) > bktSize {
 			continue
 		}
-		p.buckets[i].Put(b[:0])
+		p.buckets[i].Put(&b)
 		break
 	}
 	atomic.AddUint64(&p.usedTotal, ^uint64(p.usedTotal-1))

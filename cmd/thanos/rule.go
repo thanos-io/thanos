@@ -769,7 +769,11 @@ func queryFunc(
 				// TODO(bwplotka): Propagate those to UI, probably requires changing rule manager code ):
 				level.Warn(logger).Log("warnings", strings.Join(warns, ", "), "query", q)
 			}
-			return v, err
+
+			if err == nil {
+				return v, nil
+			}
+
 		}
 		return nil, errors.Errorf("no query peer reachable")
 	}

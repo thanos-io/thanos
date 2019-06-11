@@ -40,11 +40,11 @@ func TestShipperTimestamps(t *testing.T) {
 	id1 := ulid.MustNew(1, nil)
 	testutil.Ok(t, os.Mkdir(path.Join(dir, id1.String()), os.ModePerm))
 	testutil.Ok(t, metadata.Write(log.NewNopLogger(), path.Join(dir, id1.String()), &metadata.Meta{
-		Version: 1,
 		BlockMeta: tsdb.BlockMeta{
 			ULID:    id1,
 			MaxTime: 2000,
 			MinTime: 1000,
+			Version: 1,
 		},
 	}))
 	mint, maxt, err = s.Timestamps()
@@ -55,11 +55,11 @@ func TestShipperTimestamps(t *testing.T) {
 	id2 := ulid.MustNew(2, nil)
 	testutil.Ok(t, os.Mkdir(path.Join(dir, id2.String()), os.ModePerm))
 	testutil.Ok(t, metadata.Write(log.NewNopLogger(), path.Join(dir, id2.String()), &metadata.Meta{
-		Version: 1,
 		BlockMeta: tsdb.BlockMeta{
 			ULID:    id2,
 			MaxTime: 4000,
 			MinTime: 2000,
+			Version: 1,
 		},
 	}))
 	mint, maxt, err = s.Timestamps()
