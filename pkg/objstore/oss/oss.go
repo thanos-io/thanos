@@ -228,8 +228,7 @@ func NewTestBucketFromConfig(t testing.TB, location string, c Config, reuseBucke
 		return nil, nil, err
 	}
 	b.name = bktToCreate
-	t.Log("created temporary Aliyun bucket for Aliyun tests with name: %s @ %s ", bktToCreate, location)
-
+	
 	return b, func() {
 		objstore.EmptyBucket(t, context.Background(), b)
 		if err := b.client.DeleteBucket(bktToCreate); err != nil {
