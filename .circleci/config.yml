@@ -42,7 +42,8 @@ jobs:
             echo "Skipping SWIFT tests."
             export THANOS_SKIP_TENCENT_COS_TESTS="true"
             echo "Skipping TENCENT COS tests."
-
+            export THANOS_SKIP_ALIYUN_OSS_TESTS="true"
+            echo "Skipping ALIYUN OSS tests."
             make test
 
   # Cross build is needed for publish_release but needs to be done outside of docker.
