@@ -314,7 +314,7 @@ Using AliYun OSS object storage, you should first create a bucket , with ACL `Pr
 
 To configure AliYun OSS objstore need a yaml format configuration file, you should specify the parameters list below.
 
-[embedmd]:# (flag/config_oss.txt $)
+[embedmd]:# (flags/config_oss.txt $)
 ```$
 type: OSS
 config:
