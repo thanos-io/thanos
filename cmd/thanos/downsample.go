@@ -221,7 +221,6 @@ func downsampleBucket(
 			if m.MaxTime-m.MinTime < 40*60*60*1000 {
 				continue
 			}
-
 			if err := processDownsampling(ctx, logger, bkt, m, dir, 5*60*1000); err != nil {
 				metrics.downsampleFailures.WithLabelValues(compact.GroupKey(*m))
 				return errors.Wrap(err, "downsampling to 5 min")
