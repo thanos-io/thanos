@@ -50,6 +50,8 @@ type Syncer struct {
 	blockSyncConcurrency int
 	metrics              *syncerMetrics
 	acceptMalformedIndex bool
+	includeShards        []string
+	excludeShards        []string
 }
 
 type syncerMetrics struct {
@@ -134,7 +136,8 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 
 // NewSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, consistencyDelay time.Duration, blockSyncConcurrency int, acceptMalformedIndex bool) (*Syncer, error) {
+func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, consistencyDelay time.Duration,
+	blockSyncConcurrency int, acceptMalformedIndex bool, includeShards []string, excludeShards []string) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -147,6 +150,8 @@ func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket
 		metrics:              newSyncerMetrics(reg),
 		blockSyncConcurrency: blockSyncConcurrency,
 		acceptMalformedIndex: acceptMalformedIndex,
+		includeShards:        includeShards,
+		excludeShards:        excludeShards,
 	}, nil
 }
 
@@ -202,6 +207,13 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 					}
 					errChan <- err
 					return
+				}
+
+				if shardLabel, ok := meta.Thanos.Labels["prometheus_shard"]; ok {
+					if c.shouldSkipShard(shardLabel) {
+						level.Debug(c.logger).Log("msg", "skipping shard", "label", shardLabel)
+						continue
+					}
 				}
 
 				c.blocksMtx.Lock()
@@ -306,6 +318,32 @@ func (c *Syncer) removeIfMetaMalformed(ctx context.Context, id ulid.ULID) (remov
 	level.Info(c.logger).Log("msg", "deleted malformed block", "block", id)
 
 	return true
+}
+
+func (c *Syncer) shouldSkipShard(shardLabel string) bool {
+
+	// If specified, shard must be present
+	if len(c.includeShards) > 0 {
+		for _, shard := range c.includeShards {
+			if shardLabel == shard {
+				return false
+			}
+		}
+		return true
+	}
+
+	// If specified, shard must *not* be present
+	if len(c.excludeShards) > 0 {
+		for _, shard := range c.excludeShards {
+			if shardLabel == shard {
+				return true
+			}
+		}
+		return false
+	}
+
+	// No shards specified, default is to include all.
+	return false
 }
 
 // GroupKey returns a unique identifier for the group the block belongs to. It considers

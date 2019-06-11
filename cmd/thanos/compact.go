@@ -110,6 +110,10 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	compactionConcurrency := cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
 		Default("1").Int()
 
+	includeShards := cmd.Flag("shard.include", "Prometheus shard to compact. May be specified multiple times. Cannot be used with --shards.exclude.").Strings()
+
+	excludeShards := cmd.Flag("shard.exclude", "Prometheus shard to ignore. May be specified multiple times. Cannot be used with --shards.include.").Strings()
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		return runCompact(g, logger, reg,
 			*httpAddr,
@@ -130,6 +134,8 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			*maxCompactionLevel,
 			*blockSyncConcurrency,
 			*compactionConcurrency,
+			*includeShards,
+			*excludeShards,
 		)
 	}
 }
@@ -152,6 +158,8 @@ func runCompact(
 	maxCompactionLevel int,
 	blockSyncConcurrency int,
 	concurrency int,
+	includeShards []string,
+	excludeShards []string,
 ) error {
 	halted := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compactor_halted",
@@ -168,6 +176,10 @@ func runCompact(
 
 	downsampleMetrics := newDownsampleMetrics(reg)
 
+	if len(includeShards) > 0 && len(excludeShards) > 0 {
+		return errors.New("Only one of --shard.include and --shard.exclude should be specified")
+	}
+	
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
 		return err
@@ -186,7 +198,7 @@ func runCompact(
 	}()
 
 	sy, err := compact.NewSyncer(logger, reg, bkt, consistencyDelay,
-		blockSyncConcurrency, acceptMalformedIndex)
+		blockSyncConcurrency, acceptMalformedIndex, includeShards, excludeShards)
 	if err != nil {
 		return errors.Wrap(err, "create syncer")
 	}

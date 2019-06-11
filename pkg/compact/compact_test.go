@@ -75,7 +75,7 @@ func TestSyncer_SyncMetas_HandlesMalformedBlocks(t *testing.T) {
 	defer cancel()
 
 	bkt := inmem.NewBucket()
-	sy, err := NewSyncer(nil, nil, bkt, 10*time.Second, 1, false)
+	sy, err := NewSyncer(nil, nil, bkt, 10*time.Second, 1, false, []string{}, []string{})
 	testutil.Ok(t, err)
 
 	// Generate 1 block which is older than MinimumAgeForRemoval which has chunk data but no meta.  Compactor should delete it.
@@ -102,4 +102,26 @@ func TestSyncer_SyncMetas_HandlesMalformedBlocks(t *testing.T) {
 	exists, err = bkt.Exists(ctx, path.Join(shouldIgnoreId.String(), "chunks", "000001"))
 	testutil.Ok(t, err)
 	testutil.Equals(t, true, exists)
+}
+
+func TestSyncer_ShouldSkipShard_SkipCorrectly(t *testing.T) {
+
+	sy, err := NewSyncer(nil, nil, nil, time.Second, 1, false, []string{}, []string{})
+	testutil.Ok(t, err)
+
+	testutil.Equals(t, false, sy.shouldSkipShard("prom-1"))
+
+	include := []string{"prom-2"}
+	sy, err = NewSyncer(nil, nil, nil, time.Second, 1, false, include, []string{})
+	testutil.Ok(t, err)
+
+	testutil.Equals(t, true, sy.shouldSkipShard("prom-1"))
+	testutil.Equals(t, false, sy.shouldSkipShard("prom-2"))
+
+	exclude := []string{"prom-3"}
+	sy, err = NewSyncer(nil, nil, nil, time.Second, 1, false, []string{}, exclude)
+	testutil.Ok(t, err)
+
+	testutil.Equals(t, true, sy.shouldSkipShard("prom-3"))
+	testutil.Equals(t, false, sy.shouldSkipShard("prom-1"))
 }
