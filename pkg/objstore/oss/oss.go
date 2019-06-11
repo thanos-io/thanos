@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
@@ -35,6 +36,7 @@ type Bucket struct {
 	logger log.Logger
 	client *alioss.Client
 	config Config
+	bucket *alioss.Bucket
 }
 
 func NewTestBucket(t testing.TB, location string) (objstore.Bucket, func(), error) {
@@ -55,24 +57,16 @@ func NewTestBucket(t testing.TB, location string) (objstore.Bucket, func(), erro
 
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
-	bucket, err := b.client.Bucket(b.config.Bucket)
-	if err != nil {
-		return errors.Wrap(err, "oss bucket")
-	}
-	if err2 := bucket.PutObject(name, r); err != nil {
-		return errors.Wrap(err2, "upload oss object")
+	if err := b.bucket.PutObject(name, r); err != nil {
+		return errors.Wrap(err, "upload oss object")
 	}
 	return nil
 }
 
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
-	bucket, err := b.client.Bucket(b.config.Bucket)
-	if err != nil {
-		return errors.Wrap(err, "oss bucket")
-	}
-	if err2 := bucket.DeleteObject(name); err != nil {
-		return errors.Wrap(err2, "delete oss object")
+	if err := b.bucket.DeleteObject(name); err != nil {
+		return errors.Wrap(err, "delete oss object")
 	}
 	return nil
 }
@@ -112,15 +106,25 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 	if err != nil {
 		return nil, err
 	}
+	if err := validate(config); err != nil {
+		return nil, err
+	}
+
 	client, err := alioss.New(config.EndPoint, config.SecretId, config.SecretKey)
 	if err != nil {
 		return nil, err
 	}
+	bk, err := client.Bucket(config.Bucket)
+	if err != nil {
+		return nil, errors.Wrap(err, "oss bucket")
+	}
+
 	bkt := &Bucket{
 		logger: logger,
 		client: client,
 		name:   config.Bucket,
 		config: config,
+		bucket: bk,
 	}
 	return bkt, nil
 }
@@ -132,26 +136,34 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		dir = strings.TrimSuffix(dir, objstore.DirDelim) + objstore.DirDelim
 	}
 
-	bucket, err := b.client.Bucket(b.config.Bucket)
-	if err != nil {
-		return errors.Wrap(err, "oss bucket")
-	}
-	objects, err2 := bucket.ListObjects(alioss.Prefix(dir), alioss.Delimiter(objstore.DirDelim))
-	if err2 != nil {
-		return errors.Wrap(err2, "oss bucket list")
-	}
-	for _, object := range objects.Objects {
+	marker := alioss.Marker("")
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		objects, err2 := b.bucket.ListObjects(alioss.Prefix(dir), alioss.Delimiter(objstore.DirDelim), marker)
+		if err2 != nil {
+			return errors.Wrap(err2, "oss bucket list")
+		}
+		for _, object := range objects.Objects {
 
-		if object.Key == "" {
-			continue
+			if object.Key == "" {
+				continue
+			}
+			if err := f(object.Key); err != nil {
+				return err
+			}
 		}
-		if err := f(object.Key); err != nil {
-			return err
+		for _, object := range objects.CommonPrefixes {
+			if err := f(object); err != nil {
+				return err
+			}
 		}
-	}
-	for _, object := range objects.CommonPrefixes {
-		if err := f(object); err != nil {
-			return err
+		marker = alioss.Marker(objects.NextMarker)
+		if !objects.IsTruncated {
+			break
 		}
 	}
 
@@ -166,6 +178,9 @@ func (b *Bucket) Name() string {
 func validate(conf Config) error {
 	if conf.EndPoint == "" {
 		return errors.New("no oss endpoint in config file")
+	}
+	if conf.Bucket == "" {
+		return errors.New("no oss bucket in config file")
 	}
 
 	if conf.SecretId == "" && conf.SecretKey != "" {
@@ -225,13 +240,14 @@ func NewTestBucketFromConfig(t testing.TB, location string, c Config, reuseBucke
 
 func (b *Bucket) Close() error { return nil }
 
-func setRange(opts *[]alioss.Option, start, end int64) error {
+func setRange(start, end int64) (alioss.Option, error) {
+	var opt alioss.Option
 	if 0 <= start && start <= end {
-		*opts = []alioss.Option{alioss.Range(start, end)}
+		opt = alioss.Range(start, end)
 	} else {
-		return errors.Errorf("Invalid range specified: start=%d end=%d", start, end)
+		return nil, errors.Errorf("Invalid range specified: start=%d end=%d", start, end)
 	}
-	return nil
+	return opt, nil
 }
 
 func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
@@ -241,17 +257,14 @@ func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (
 
 	var opts []alioss.Option
 	if length != -1 {
-		if err := setRange(&opts, off, off+length-1); err != nil {
+		opt, err := setRange(off, off+length-1)
+		if err != nil {
 			return nil, err
 		}
+		opts = append(opts, opt)
 	}
 
-	bucket, err := b.client.Bucket(b.config.Bucket)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err2 := bucket.GetObject(name, opts...)
+	resp, err2 := b.bucket.GetObject(name, opts...)
 	if err2 != nil {
 		return nil, err2
 	}
@@ -275,11 +288,7 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 
 // Exists checks if the given object exists in the bucket.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
-	bucket, err := b.client.Bucket(b.config.Bucket)
-	if err != nil {
-		return false, errors.Wrap(err, "oss bucket")
-	}
-	exists, err := bucket.IsObjectExist(name)
+	exists, err := b.bucket.IsObjectExist(name)
 	if err != nil {
 		if b.IsObjNotFoundErr(err) {
 			return false, nil
@@ -294,7 +303,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 func (b *Bucket) IsObjNotFoundErr(err error) bool {
 	switch err.(type) {
 	case alioss.ServiceError:
-		if err.(alioss.ServiceError).StatusCode == 404 {
+		if err.(alioss.ServiceError).StatusCode == http.StatusNotFound {
 			return true
 		}
 	}

@@ -11,6 +11,10 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased.
 
+### Added
+- Implemented with [AliYun OSS] object storage, see (docs/storage.md#aliyun-oss-configuration).
+
+
 ## [v0.5.0](https://github.com/improbable-eng/thanos/releases/tag/v0.5.0) - 2019.06.05
 
 TL;DR: Store LRU cache is no longer leaking, Upgraded Thanos UI to Prometheus 2.9, Fixed auto-downsampling, Moved to Go 1.12.5 and more.
