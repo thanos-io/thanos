@@ -318,10 +318,10 @@ To configure AliYun OSS objstore need a yaml format configuration file, you shou
 ```$
 type: OSS
 config:
-  bucket: ""
   endpoint: ""
-  secret_key: ""
-  secret_id: ""
+  bucket: ""
+  access_key_id: ""
+  access_key_secret: ""
 ```
 
 Use --objstore.config-file to reference to this configuration file.

@@ -20,10 +20,10 @@ import (
 )
 
 type Config struct {
-	EndPoint  string `yaml:"endpoint"`
-	Bucket    string `yaml:"bucket"`
-	SecretKey string `yaml:"secret_key"`
-	SecretId  string `yaml:"secret_id"`
+	EndPoint        string `yaml:"endpoint"`
+	Bucket          string `yaml:"bucket"`
+	AccessKeyId     string `yaml:"access_key_id"`
+	AccessKeySecret string `yaml:"access_key_secret"`
 }
 
 type objectInfo struct {
@@ -47,9 +47,7 @@ func NewTestBucket(t testing.TB, location string) (objstore.Bucket, func(), erro
 	if c.Bucket != "" && os.Getenv("THANOS_ALLOW_EXISTING_BUCKET_USE") == "" {
 		return nil, nil, errors.New("OSS_BUCKET is defined. Normally this tests will create temporary bucket " +
 			"and delete it after test. Unset OSS_BUCKET env variable to use default logic. If you really want to run " +
-			"tests against provided (NOT USED!) bucket, set THANOS_ALLOW_EXISTING_BUCKET_USE=true. WARNING: That bucket " +
-			"needs to be manually cleared. This means that it is only useful to run one test in a time. This is due " +
-			"to safety (accidentally pointing prod bucket for test) as well as aliyun oss not being fully strong consistent.")
+			"tests against provided (NOT USED!) bucket, set THANOS_ALLOW_EXISTING_BUCKET_USE=true.")
 	}
 
 	return NewTestBucketFromConfig(t, location, c, true)
@@ -73,20 +71,19 @@ func (b *Bucket) Delete(ctx context.Context, name string) error {
 
 func configFromEnv() Config {
 	c := Config{
-		EndPoint:  os.Getenv("OSS_ENDPOINT"),
-		Bucket:    os.Getenv("OSS_BUCKET"),
-		SecretKey: os.Getenv("OSS_SECRET_KEY"),
-		SecretId:  os.Getenv("OSS_SECRET_ID"),
+		EndPoint:        os.Getenv("OSS_ENDPOINT"),
+		Bucket:          os.Getenv("OSS_BUCKET"),
+		AccessKeyId:     os.Getenv("OSS_ACCESS_KEY_ID"),
+		AccessKeySecret: os.Getenv("OSS_ACCESS_KEY_SECRET"),
 	}
-
 	return c
 }
 
 // ValidateForTests checks to see the config options for tests are set.
 func ValidateForTests(conf Config) error {
 	if conf.EndPoint == "" ||
-		conf.SecretId == "" ||
-		conf.SecretKey == "" {
+		conf.AccessKeyId == "" ||
+		conf.AccessKeySecret == "" {
 		return errors.New("insufficient oss test configuration information")
 	}
 	return nil
@@ -110,7 +107,7 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 		return nil, err
 	}
 
-	client, err := alioss.New(config.EndPoint, config.SecretId, config.SecretKey)
+	client, err := alioss.New(config.EndPoint, config.AccessKeyId, config.AccessKeySecret)
 	if err != nil {
 		return nil, err
 	}
@@ -183,12 +180,12 @@ func validate(conf Config) error {
 		return errors.New("no oss bucket in config file")
 	}
 
-	if conf.SecretId == "" && conf.SecretKey != "" {
-		return errors.New("no oss acccess_key specified while secret_key is present in config file; both of them should be present in config.")
+	if conf.AccessKeyId == "" && conf.AccessKeySecret != "" {
+		return errors.New("no oss access_key_id specified while access_key_secret is present in config file; both of them should be present in config.")
 	}
 
-	if conf.SecretId != "" && conf.SecretKey == "" {
-		return errors.New("no oss secret_key specified while access_key is present in config file; both of them should be present in config.")
+	if conf.AccessKeySecret != "" && conf.AccessKeyId == "" {
+		return errors.New("no oss access_key_secret specified while access_key_id is present in config file; both of them should be present in config.")
 	}
 	return nil
 }
@@ -228,7 +225,7 @@ func NewTestBucketFromConfig(t testing.TB, location string, c Config, reuseBucke
 		return nil, nil, err
 	}
 	b.name = bktToCreate
-	
+
 	return b, func() {
 		objstore.EmptyBucket(t, context.Background(), b)
 		if err := b.client.DeleteBucket(bktToCreate); err != nil {

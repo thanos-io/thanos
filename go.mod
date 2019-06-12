@@ -4,7 +4,9 @@ require (
 	cloud.google.com/go v0.34.0
 	github.com/Azure/azure-storage-blob-go v0.0.0-20181022225951-5152f14ace1c
 	github.com/NYTimes/gziphandler v1.1.1
+	github.com/aliyun/aliyun-oss-go-sdk v1.9.8
 	github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da
+	github.com/baiyubin/aliyun-sts-go-sdk v0.0.0-20180326062324-cfa1a18b161f // indirect
 	github.com/cespare/xxhash v1.1.0
 	github.com/fatih/structtag v1.0.0
 	github.com/fortytw2/leaktest v1.3.0
