@@ -49,7 +49,7 @@ type DownsampleMetrics struct {
 	downsampleFailures        *prometheus.CounterVec
 }
 
-func newDownsampleMetrics(reg *prometheus.Registry) (*DownsampleMetrics, error) {
+func newDownsampleMetrics(reg *prometheus.Registry) *DownsampleMetrics {
 	m := new(DownsampleMetrics)
 
 	m.downsamples = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -61,14 +61,10 @@ func newDownsampleMetrics(reg *prometheus.Registry) (*DownsampleMetrics, error) 
 		Help: "Total number of failed downsampling attempts.",
 	}, []string{"group"})
 
-	if err := reg.Register(m.downsamples); err != nil {
-		return nil, err
-	}
-	if err := reg.Register(m.downsampleFailures); err != nil {
-		return nil, err
-	}
+	reg.MustRegister(m.downsamples)
+	reg.MustRegister(m.downsampleFailures)
 
-	return m, nil
+	return m
 }
 
 func runDownsample(
@@ -96,10 +92,7 @@ func runDownsample(
 		}
 	}()
 
-	metrics, err := newDownsampleMetrics(reg)
-	if err != nil {
-		return err
-	}
+	metrics := newDownsampleMetrics(reg)
 
 	// Start cycle of syncing blocks from the bucket and garbage collecting the bucket.
 	{

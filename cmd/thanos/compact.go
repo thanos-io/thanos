@@ -166,10 +166,7 @@ func runCompact(
 	reg.MustRegister(halted)
 	reg.MustRegister(retried)
 
-	downsampleMetrics, err := newDownsampleMetrics(reg)
-	if err != nil {
-		return err
-	}
+	downsampleMetrics := newDownsampleMetrics(reg)
 
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
