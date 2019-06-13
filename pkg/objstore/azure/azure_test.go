@@ -12,6 +12,7 @@ func TestConfig_validate(t *testing.T) {
 		StorageAccountKey  string
 		ContainerName      string
 		Endpoint           string
+		MaxRetries         int
 	}
 	tests := []struct {
 		name         string
@@ -25,6 +26,7 @@ func TestConfig_validate(t *testing.T) {
 				StorageAccountName: "foo",
 				StorageAccountKey:  "bar",
 				ContainerName:      "roo",
+				MaxRetries:         3,
 			},
 			wantErr:      false,
 			wantEndpoint: azureDefaultEndpoint,
@@ -67,6 +69,17 @@ func TestConfig_validate(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "invalid max retries (negative)",
+			fields: fields{
+				StorageAccountName: "foo",
+				StorageAccountKey:  "bar",
+				ContainerName:      "roo",
+				MaxRetries:         -3,
+			},
+			wantErr:      true,
+			wantEndpoint: azureDefaultEndpoint,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -75,6 +88,7 @@ func TestConfig_validate(t *testing.T) {
 				StorageAccountKey:  tt.fields.StorageAccountKey,
 				ContainerName:      tt.fields.ContainerName,
 				Endpoint:           tt.fields.Endpoint,
+				MaxRetries:         tt.fields.MaxRetries,
 			}
 			err := conf.validate()
 			if (err != nil) != tt.wantErr {
