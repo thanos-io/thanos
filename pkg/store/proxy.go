@@ -3,12 +3,13 @@ package store
 import (
 	"context"
 	"fmt"
-	"github.com/improbable-eng/thanos/pkg/tracing"
 	"io"
 	"math"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/improbable-eng/thanos/pkg/tracing"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
