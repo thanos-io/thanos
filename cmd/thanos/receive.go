@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -109,50 +108,6 @@ func runReceive(
 	// Start all components while we wait for TSDB to open but only load
 	// initial config and mark ourselves as ready after it completed.
 	dbOpen := make(chan struct{})
-
-	// sync.Once is used to make sure we can close the channel at different execution stages(SIGTERM or when the config is loaded).
-	type closeOnce struct {
-		C     chan struct{}
-		once  sync.Once
-		Close func()
-	}
-	// Wait until the server is ready to handle reloading.
-	reloadReady := &closeOnce{
-		C: make(chan struct{}),
-	}
-	reloadReady.Close = func() {
-		reloadReady.once.Do(func() {
-			close(reloadReady.C)
-		})
-	}
-
-	level.Debug(logger).Log("msg", "setting up endpoint readiness")
-	{
-		// Initial configuration loading.
-		cancel := make(chan struct{})
-		g.Add(
-			func() error {
-				select {
-				case <-dbOpen:
-					break
-				case <-cancel:
-					reloadReady.Close()
-					return nil
-				}
-
-				reloadReady.Close()
-
-				webHandler.Ready()
-				level.Info(logger).Log("msg", "server is ready to receive web requests.")
-				<-cancel
-				return nil
-			},
-			func(err error) {
-				close(cancel)
-			},
-		)
-	}
-
 	level.Debug(logger).Log("msg", "setting up tsdb")
 	{
 		// TSDB.
@@ -167,12 +122,15 @@ func runReceive(
 					tsdbCfg,
 				)
 				if err != nil {
+					close(dbOpen)
 					return fmt.Errorf("opening storage failed: %s", err)
 				}
 				level.Info(logger).Log("msg", "tsdb started")
 
 				startTimeMargin := int64(2 * time.Duration(tsdbCfg.MinBlockDuration).Seconds() * 1000)
 				localStorage.Set(db, startTimeMargin)
+				webHandler.Ready()
+				level.Info(logger).Log("msg", "server is ready to receive web requests.")
 				close(dbOpen)
 				<-cancel
 				return nil
