@@ -21,7 +21,9 @@ func getContainerURL(ctx context.Context, conf Config) (blob.ContainerURL, error
 		return blob.ContainerURL{}, err
 	}
 
-	retryOptions := blob.RetryOptions{}
+	retryOptions := blob.RetryOptions{
+		MaxTries: int32(conf.MaxRetries),
+	}
 	if deadline, ok := ctx.Deadline(); ok {
 		retryOptions.TryTimeout = deadline.Sub(time.Now())
 	}
