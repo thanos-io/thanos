@@ -1,0 +1,12 @@
+---
+
+linters:
+  enable:
+    - staticcheck
+    - errcheck
+    - goimports
+  disable-all: true
+
+linters-settings:
+  errcheck:
+    exclude: .errcheck_excludes.txt

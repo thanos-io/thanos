@@ -1,5 +1,7 @@
 PREFIX            ?= $(shell pwd)
 DIRECTORIES       ?= $(shell find . -path './*' -prune -type d -not -path "./vendor")
+GIT               ?= $(shell which git)
+ME                ?= $(shell whoami)
 DOCKER_IMAGE_NAME ?= thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
 
@@ -12,32 +14,41 @@ export GO111MODULE
 EMBEDMD           ?= $(GOBIN)/embedmd-$(EMBEDMD_VERSION)
 # v2.0.0
 EMBEDMD_VERSION   ?= 97c13d6e41602fc6e397eb51c45f38069371a969
+
 ERRCHECK          ?= $(GOBIN)/errcheck-$(ERRCHECK_VERSION)
 # v1.2.0
 ERRCHECK_VERSION  ?= e14f8d59a22d460d56c5ee92507cd94c78fbf274
+
 LICHE             ?= $(GOBIN)/liche-$(LICHE_VERSION)
 LICHE_VERSION     ?= 2a2e6e56f6c615c17b2e116669c4cdb31b5453f3
+
 GOIMPORTS         ?= $(GOBIN)/goimports-$(GOIMPORTS_VERSION)
 GOIMPORTS_VERSION ?= 1c3d964395ce8f04f3b03b30aaed0b096c08c3c6
+
 PROMU             ?= $(GOBIN)/promu-$(PROMU_VERSION)
 # v0.2.0
 PROMU_VERSION     ?= 264dc36af9ea3103255063497636bd5713e3e9c1
+
 PROTOC            ?= $(GOBIN)/protoc-$(PROTOC_VERSION)
 PROTOC_VERSION    ?= 3.4.0
+
+HUGO              ?= $(GOBIN)/hugo-$(HUGO_VERSION)
 # v0.55.3 This needs to match with version in netlify.toml
 HUGO_VERSION      ?= 993b84333cd75faa224d02618f312a0e96b53372
-HUGO              ?= $(GOBIN)/hugo-$(HUGO_VERSION)
+
+GOBINDATA         ?= $(GOBIN)/go-bindata-$(GOBINDATA_VERSION)
 # v3.1.1
 GOBINDATA_VERSION ?= a9c83481b38ebb1c4eb8f0168fd4b10ca1d3c523
-GOBINDATA         ?= $(GOBIN)/go-bindata-$(GOBINDATA_VERSION)
-GIT               ?= $(shell which git)
+
+GOLANGCILINT ?= $(GOBIN)/golangci-lint-$(GOLANGCILINT_VERSION)
+# v1.17.1
+GOLANGCILINT_VERSION ?= 4ba2155996359eabd8800d1fbf3e3a9777c80490
 
 WEB_DIR           ?= website
 WEBSITE_BASE_URL  ?= https://thanos.io
 PUBLIC_DIR        ?= $(WEB_DIR)/public
-ME                ?= $(shell whoami)
 
-# E2e test deps.
+# E2E test deps.
 # Referenced by github.com/improbable-eng/thanos/blob/master/docs/getting_started.md#prometheus
 
 # Limited prom version, because testing was not possible. This should fix it: https://github.com/improbable-eng/thanos/issues/758
@@ -103,7 +114,7 @@ assets: $(GOBINDATA)
 
 # build builds Thanos binary using `promu`.
 .PHONY: build
-build: check-git  go-mod-tidy $(PROMU)
+build: check-git go-mod-tidy $(PROMU)
 	@echo ">> building binaries $(GOBIN)"
 	@$(PROMU) build --prefix $(PREFIX)
 
@@ -144,11 +155,10 @@ check-docs: $(EMBEDMD) $(LICHE) build
 	@$(LICHE) --recursive docs --exclude "cloud.tencent.com" --document-root .
 	@$(LICHE) --exclude "cloud.tencent.com" --document-root . *.md
 
-# errcheck performs static analysis and returns error if any of the errors is not checked.
-.PHONY: errcheck
-errcheck: $(ERRCHECK)
-	@echo ">> errchecking the code"
-	$(ERRCHECK) -verbose -exclude .errcheck_excludes.txt ./cmd/... ./pkg/... ./test/...
+# run uses golangci-lint to make sure the code is up to standards
+check-go: $(GOLANGCILINT)
+	@echo ">> checking code with golangci-lint"
+	@$(GOLANGCILINT) run
 
 # format formats the code (including imports format).
 # NOTE: format requires deps to not remove imports that are used, just not resolved.
@@ -251,6 +261,9 @@ $(LICHE):
 
 $(PROMU):
 	$(call fetch_go_bin_version,github.com/prometheus/promu,$(PROMU_VERSION))
+
+$(GOLANGCILINT):
+	$(call fetch_go_bin_version,github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCILINT_VERSION))
 
 $(HUGO):
 	@go get github.com/gohugoio/hugo@$(HUGO_VERSION)
