@@ -89,7 +89,7 @@ func TestDownsampleAggr(t *testing.T) {
 				},
 			},
 			output: map[AggrType][]sample{
-				AggrCount:   {{499, 29}, {999, 100}},
+				AggrCount:   {{499, 5}, {999, 2}},
 				AggrSum:     {{499, 29}, {999, 100}},
 				AggrMin:     {{499, -3}, {999, 0}},
 				AggrMax:     {{499, 10}, {999, 100}},

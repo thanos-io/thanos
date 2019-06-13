@@ -460,7 +460,7 @@ func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (ch
 		return nil
 	}
 	if err := do(AggrCount, func(a *aggregator) float64 {
-		return a.sum
+		return float64(a.count)
 	}); err != nil {
 		return chk, err
 	}
