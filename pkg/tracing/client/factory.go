@@ -5,13 +5,13 @@ import (
 	"io"
 	"strings"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/tracing/jaeger"
 	"github.com/improbable-eng/thanos/pkg/tracing/stackdriver"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/yaml.v2"
 )
 
