@@ -3,7 +3,8 @@ linters-settings:
         exclude: ./.errcheck_excludes.txt
 
 issues:
-    # TODO: move away from deprecated prometheus.InstrumentHandler{,Func}
-    - linters:
-          - staticcheck
-      text: "SA1019:"
+    exclude-rules:
+        # TODO: move away from deprecated prometheus.InstrumentHandler{,Func}
+        - linters:
+              - staticcheck
+          text: "SA1019:"
