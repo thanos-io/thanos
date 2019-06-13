@@ -22,8 +22,7 @@ type testConfig struct {
 }
 
 var (
-	firstPromPort       = promHTTPPort(1)
-	remoteWriteEndpoint = fmt.Sprintf("http://%s/api/v1/receive", remoteWriteReceiveHTTP(1))
+	firstPromPort = promHTTPPort(1)
 
 	queryStaticFlagsSuite = newSpinupSuite().
 				Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0))).
@@ -31,7 +30,7 @@ var (
 				Add(scraper(3, defaultPromConfig("prom-ha", 1))).
 				Add(querierWithStoreFlags(1, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3), remoteWriteReceiveGRPC(1))).
 				Add(querierWithStoreFlags(2, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3), remoteWriteReceiveGRPC(1))).
-				Add(receiver(1, defaultPromRemoteWriteConfig(remoteWriteEndpoint)))
+				Add(receiver(1, defaultPromRemoteWriteConfig(nodeExporterHTTP(1), remoteWriteEndpoint(1))))
 
 	queryFileSDSuite = newSpinupSuite().
 				Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0))).
@@ -39,7 +38,7 @@ var (
 				Add(scraper(3, defaultPromConfig("prom-ha", 1))).
 				Add(querierWithFileSD(1, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3), remoteWriteReceiveGRPC(1))).
 				Add(querierWithFileSD(2, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3), remoteWriteReceiveGRPC(1))).
-				Add(receiver(1, defaultPromRemoteWriteConfig(remoteWriteEndpoint)))
+				Add(receiver(1, defaultPromRemoteWriteConfig(nodeExporterHTTP(1), remoteWriteEndpoint(1))))
 )
 
 func TestQuery(t *testing.T) {
@@ -139,9 +138,10 @@ func testQuerySimple(t *testing.T, conf testConfig) {
 
 	testutil.Equals(t, model.Metric{
 		"__name__": "up",
-		"instance": model.LabelValue("localhost:9100"),
+		"instance": model.LabelValue(nodeExporterHTTP(1)),
 		"job":      "node",
 		"receive":  "true",
+		"replica":  model.LabelValue("1"),
 	}, res[3].Metric)
 
 	// Try query with deduplication.
@@ -191,7 +191,7 @@ func testQuerySimple(t *testing.T, conf testConfig) {
 	}, res[1].Metric)
 	testutil.Equals(t, model.Metric{
 		"__name__": "up",
-		"instance": model.LabelValue("localhost:9100"),
+		"instance": model.LabelValue(nodeExporterHTTP(1)),
 		"job":      "node",
 		"receive":  "true",
 	}, res[2].Metric)
@@ -219,13 +219,13 @@ scrape_configs:
 `, name, replicas, firstPromPort)
 }
 
-func defaultPromRemoteWriteConfig(remoteWriteEndpoint string) string {
+func defaultPromRemoteWriteConfig(nodeExporterHTTP, remoteWriteEndpoint string) string {
 	return fmt.Sprintf(`
 scrape_configs:
 - job_name: 'node'
   static_configs:
-  - targets: ['localhost:9100']
+  - targets: ['%s']
 remote_write:
 - url: "%s"
-`, remoteWriteEndpoint)
+`, nodeExporterHTTP, remoteWriteEndpoint)
 }
