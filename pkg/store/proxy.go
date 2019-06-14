@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/improbable-eng/thanos/pkg/tracing"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
