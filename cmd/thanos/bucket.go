@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"sort"
@@ -302,108 +303,117 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 //
 // TODOS:
 //
-// 1. Is any of the run.Group, dummy actor etc needed?
-// 2. Some download code is duplicated from `ls -o json`; refactor as needed
-// 3. Some web code is duplicated from query UI, refactor as needed
-// 4. Do we need any of the route prefix?
+// 1. Some download code is duplicated from `ls -o json`; refactor as needed
+// 2. Some web code is duplicated from query UI, refactor as needed
+// 3. Do we need any of the route prefix?
 func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
 	cmd := root.Command("web", "Web interface for remote storage bucket")
 	bind := cmd.Flag("listen", "HTTP host:port to listen on").Default("0.0.0.0:8080").String()
-	interval := cmd.Flag("refresh", "Refresh interal in minutes").Default("30").Int()
+	interval := cmd.Flag("refresh", "Refresh interval in minutes").Default("30").Int()
 
-	m[name+" web"] = func(_ *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
+	m[name+" web"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
+		ctx, cancel := context.WithCancel(context.Background())
 
 		router := route.New()
 
 		bucketUI := ui.NewBucketUI(logger)
 		bucketUI.Register(router)
 
-		go refresh(logger, bucketUI, int(*interval), name, reg, objStoreConfig)
+		g.Add(func() error {
+			return refresh(ctx, logger, bucketUI, int(*interval), name, reg, objStoreConfig)
+		}, func(error) {
+			cancel()
+		})
 
-		level.Info(logger).Log("msg", "Listening for clients", "address", bind)
-		return http.ListenAndServe(*bind, router)
+		l, err := net.Listen("tcp", *bind)
+		if err != nil {
+			return errors.Wrapf(err, "listen HTTP on address %s", *bind)
+		}
+
+		g.Add(func() error {
+			level.Info(logger).Log("msg", "Listening for query and metrics", "address", *bind)
+			return errors.Wrap(http.Serve(l, router), "serve web")
+		}, func(error) {
+			runutil.CloseWithLogOnErr(logger, l, "http listener")
+		})
+
+		return nil
 	}
 }
 
-// Refresh data every 30 minutes
-func refresh(logger log.Logger, bucketUI *ui.Bucket, interval int, name string, reg *prometheus.Registry, objStoreConfig *pathOrContent) {
-	for {
-		// If there are no errors and the data isn't stale, sleep a while before updating again.
-		if bucketUI.Err == nil && time.Since(bucketUI.RefreshedAt) < (time.Duration(interval) * time.Minute) {
-			time.Sleep(time.Duration(interval) * time.Minute)
-		}
+// Refresh metadata from remote storage periodically and update UI
+func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, interval int, name string,
+	reg *prometheus.Registry, objStoreConfig *pathOrContent) error {
 
-		// If the last update failed, sleep a minute before trying again. This could be an exponential decay.
-		if bucketUI.Err != nil  {
-			time.Sleep(time.Minute)
-		}
-
-		downloader, err := download(logger,  name, reg, objStoreConfig)
-		if err != nil {
-			bucketUI.Set("[]", err)
-			continue
-		}
-		blocks, err := downloader()
-		if err != nil {
-			bucketUI.Set("[]", err)
-			continue
-		}
-
-		data, err := json.Marshal(blocks)
-		if err != nil {
-			bucketUI.Set("[]", err)
-			continue
-		}
-		bucketUI.Set(string(data), nil)
-	}
-}
-
-// Download block metadata from s3 and return the JSON data as a string
-//
-// This function returns a closure since creating multiple client buckets will also register the metrics multiple
-// times and will make prometheus library panic.
-func download(logger log.Logger, name string, reg *prometheus.Registry, objStoreConfig *pathOrContent) (f func() (blocks []metadata.Meta, err error), err error) {
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
-		return f, err
+		return err
 	}
 
+	// A client is created for the entire duration of the program to avoid duplicate metrics registration.
 	bkt, err := client.NewBucket(logger, confContentYaml, reg, name)
 	if err != nil {
-		return f, err
+		return err
 	}
 
 	defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
-	return func() (blocks []metadata.Meta, err error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
+	delay := time.Duration(interval) * time.Minute
 
-		level.Info(logger).Log("msg", "synchronizing block metadata")
+	return runutil.Repeat(delay, ctx.Done(), func() error {
+		iterCtx, iterCancel := context.WithTimeout(ctx, 5*time.Minute)
+		defer iterCancel()
 
-		err = bkt.Iter(ctx, "", func(name string) error {
-			id, ok := block.IsBlockDir(name)
-			if !ok {
-				return nil
-			}
+		// If there are no errors and the data isn't stale, wait a while before updating again.
+		if bucketUI.Err == nil && time.Since(bucketUI.RefreshedAt) < (5*time.Minute) {
+			return nil
+		}
 
-			meta, err := block.DownloadMeta(ctx, logger, bkt, id)
+		// Occasional network failures are OK; retry until download succeeds. Exponential decay would work
+		// much better than a simple loop.
+		return runutil.RetryWithLog(logger, time.Minute, iterCtx.Done(), func() error {
+			blocks, err := download(iterCtx, logger, bkt)
 			if err != nil {
+				bucketUI.Set("[]", err)
 				return err
 			}
 
-			blocks = append(blocks, meta)
+			data, err := json.Marshal(blocks)
+			if err != nil {
+				bucketUI.Set("[]", err)
+				return err
+			}
+			bucketUI.Set(string(data), nil)
 			return nil
 		})
+	})
+}
 
-		if err != nil {
-			level.Error(logger).Log("err", err, "msg", "Failed to downloaded block metadata")
-			return blocks, err
+func download(ctx context.Context, logger log.Logger, bkt objstore.Bucket) (blocks []metadata.Meta, err error) {
+	level.Info(logger).Log("msg", "synchronizing block metadata")
+
+	err = bkt.Iter(ctx, "", func(name string) error {
+		id, ok := block.IsBlockDir(name)
+		if !ok {
+			return nil
 		}
 
-		level.Info(logger).Log("msg", "downloaded block metadata")
+		meta, err := block.DownloadMeta(ctx, logger, bkt, id)
+		if err != nil {
+			return err
+		}
+
+		blocks = append(blocks, meta)
+		return nil
+	})
+
+	if err != nil {
+		level.Error(logger).Log("err", err, "msg", "Failed to downloaded block metadata")
 		return blocks, err
-	}, nil
+	}
+
+	level.Info(logger).Log("msg", "downloaded block metadata")
+	return blocks, err
 }
 
 func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortBy []string) error {
