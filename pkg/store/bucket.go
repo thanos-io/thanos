@@ -1195,7 +1195,7 @@ func (b *bucketBlock) readIndexRange(ctx context.Context, off, length int64) ([]
 	return c, nil
 }
 
-func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length int64) ([]byte, error) {
+func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length int64) (*[]byte, error) {
 	c, err := b.chunkPool.Get(int(length))
 	if err != nil {
 		return nil, errors.Wrap(err, "allocate chunk bytes")
@@ -1211,7 +1211,7 @@ func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length i
 	if _, err = io.Copy(buf, r); err != nil {
 		return nil, errors.Wrap(err, "read range")
 	}
-	return buf.Bytes(), nil
+	return c, nil
 }
 
 func (b *bucketBlock) indexReader(ctx context.Context) *bucketIndexReader {
@@ -1665,7 +1665,7 @@ type bucketChunkReader struct {
 	chunks   map[uint64]chunkenc.Chunk
 
 	// Byte slice to return to the chunk pool on close.
-	chunkBytes [][]byte
+	chunkBytes []*[]byte
 }
 
 func newBucketChunkReader(ctx context.Context, block *bucketBlock) *bucketChunkReader {
@@ -1753,7 +1753,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, offs []uint32, seq i
 	r.stats.chunksFetchedSizeSum += int(end - start)
 
 	for _, o := range offs {
-		cb := b[o-start:]
+		cb := (*b)[o-start:]
 
 		l, n := binary.Uvarint(cb)
 		if n < 1 {
@@ -1809,7 +1809,7 @@ func (r *bucketChunkReader) Close() error {
 	r.block.pendingReaders.Done()
 
 	for _, b := range r.chunkBytes {
-		r.block.chunkPool.Put(&b)
+		r.block.chunkPool.Put(b)
 	}
 	return nil
 }
