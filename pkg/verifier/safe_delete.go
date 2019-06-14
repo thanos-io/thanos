@@ -20,8 +20,7 @@ import (
 // the backup bucket (blocks should be immutable) or if any of the operations
 // fail.  When useExistingTempdir is true do not download the block but use the
 // previously downloaded block found in tempdir to avoid repeated downloads.
-// If tempdir is an empty string a unique temporary directory is created for
-// scratch space, otherwise the given directory is used.
+// The tempdir value is ignored unless useExistingTempdir is set to true.
 func SafeDelete(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, id ulid.ULID, useExistingTempdir bool, tempdir string) error {
 	foundDir := false
 	err := backupBkt.Iter(ctx, id.String(), func(name string) error {
