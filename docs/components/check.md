@@ -38,7 +38,7 @@ Subcommands:
 ```
 
 
-### Verify
+### Rules
 
 `check rules` checks the Prometheus rules, used by the Thanos rule node, if they are valid.
 The check should be equivalent for the `promtool check rules` but that cannot be used because
