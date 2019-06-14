@@ -24,7 +24,6 @@ jobs:
             fi
       - run: make check-go-mod
       - run: make errcheck
-      - run: make docs
       - run: make check-docs
       - run: make format
       - run:
