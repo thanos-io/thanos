@@ -144,8 +144,9 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		if err2 != nil {
 			return errors.Wrap(err2, "oss bucket list")
 		}
-		for _, object := range objects.Objects {
+		marker = alioss.Marker(objects.NextMarker)
 
+		for _, object := range objects.Objects {
 			if object.Key == "" {
 				continue
 			}
@@ -153,12 +154,12 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 				return err
 			}
 		}
+
 		for _, object := range objects.CommonPrefixes {
 			if err := f(object); err != nil {
 				return err
 			}
 		}
-		marker = alioss.Marker(objects.NextMarker)
 		if !objects.IsTruncated {
 			break
 		}
