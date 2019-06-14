@@ -12,7 +12,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ## Unreleased.
 
 ### Added
-- Implemented with [AliYun OSS] object storage, see (docs/storage.md#aliyun-oss-configuration).
+- Implemented with `AliYun OSS` object storage, see [documents](docs/storage.md#aliyun-oss-configuration) for further information.
 
 
 ## [v0.5.0](https://github.com/improbable-eng/thanos/releases/tag/v0.5.0) - 2019.06.05
