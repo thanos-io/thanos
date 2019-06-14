@@ -1200,7 +1200,7 @@ func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length i
 	if err != nil {
 		return nil, errors.Wrap(err, "allocate chunk bytes")
 	}
-	buf := bytes.NewBuffer(c)
+	buf := bytes.NewBuffer(*c)
 
 	r, err := b.bucket.GetRange(ctx, b.chunkObjs[seq], off, length)
 	if err != nil {
@@ -1809,7 +1809,7 @@ func (r *bucketChunkReader) Close() error {
 	r.block.pendingReaders.Done()
 
 	for _, b := range r.chunkBytes {
-		r.block.chunkPool.Put(b)
+		r.block.chunkPool.Put(&b)
 	}
 	return nil
 }
