@@ -27,7 +27,7 @@ const (
 	AZURE ObjProvider = "AZURE"
 	SWIFT ObjProvider = "SWIFT"
 	COS   ObjProvider = "COS"
-	OSS   ObjProvider = "OSS"
+	AliYunOSS   ObjProvider = "AliYunOSS"
 )
 
 type BucketConfig struct {
