@@ -1211,7 +1211,8 @@ func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length i
 	if _, err = io.Copy(buf, r); err != nil {
 		return nil, errors.Wrap(err, "read range")
 	}
-	return c, nil
+	internalBuf := buf.Bytes()
+	return &internalBuf, nil
 }
 
 func (b *bucketBlock) indexReader(ctx context.Context) *bucketIndexReader {
