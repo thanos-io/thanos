@@ -77,6 +77,7 @@ func main() {
 	registerBucket(cmds, app, "bucket")
 	registerDownsample(cmds, app, "downsample")
 	registerReceive(cmds, app, "receive")
+	registerChecks(cmds, app, "check")
 
 	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {
@@ -176,7 +177,7 @@ func main() {
 	}
 
 	if err := cmds[cmd](&g, logger, metrics, tracer, *logLevel == "debug"); err != nil {
-		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command failed", cmd))
+		level.Error(logger).Log("err", errors.Wrapf(err, "%s command failed", cmd))
 		os.Exit(1)
 	}
 
