@@ -682,7 +682,7 @@ func rewrite(
 		if labels.Compare(lastSet, s.lset) == 0 {
 			level.Warn(logger).Log("msg",
 				"dropping duplicate series in tsdb block found",
-				"labelset", fmt.Sprintf("%s", s.lset),
+				"labelset", s.lset.String(),
 			)
 			continue
 		}
