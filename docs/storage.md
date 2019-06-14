@@ -310,7 +310,7 @@ config:
 Set the flags `--objstore.config-file` to reference to the configuration file.
 
 ##  AliYun OSS Configuration
-Using AliYun OSS object storage, you should first create a bucket , with proper Storage Class & ACL. Before you access to aliyun oss, you should apply for the AccessKey . Go over [https://www.alibabacloud.com/product/oss](https://www.alibabacloud.com/product/oss) for more detail information.
+In order to use AliYun OSS object storage, you should first create a bucket with proper Storage Class , ACLs and get the access key on the AliYun cloud. Go over [https://www.alibabacloud.com/product/oss](https://www.alibabacloud.com/product/oss) for more detail information.
 
 To configure AliYun OSS objstore need a yaml format configuration file, you should specify the parameters list below.
 
