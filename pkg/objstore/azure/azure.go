@@ -27,7 +27,7 @@ type Config struct {
 	StorageAccountKey  string `yaml:"storage_account_key"`
 	ContainerName      string `yaml:"container"`
 	Endpoint           string `yaml:"endpoint"`
-	MaxRetries         int    `yaml:"maxretries"`
+	MaxRetries         int    `yaml:"max_retries"`
 }
 
 // Bucket implements the store.Bucket interface against Azure APIs.

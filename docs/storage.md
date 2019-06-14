@@ -255,7 +255,7 @@ config:
   storage_account_key: ""
   container: ""
   endpoint: ""
-  maxretries: 0
+  max_retries: 0
 ```
 
 ### OpenStack Swift Configuration
