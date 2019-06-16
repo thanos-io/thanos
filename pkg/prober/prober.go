@@ -24,11 +24,11 @@ const (
 // Prober represents health and readiness status of given component.
 type Prober struct {
 	logger       log.Logger
-	componentMtx sync.Mutex
+	componentMtx sync.RWMutex
 	component    component.Component
-	readyMtx     sync.Mutex
+	readyMtx     sync.RWMutex
 	readiness    error
-	healthyMtx   sync.Mutex
+	healthyMtx   sync.RWMutex
 	healthiness  error
 }
 
@@ -40,24 +40,23 @@ func (p *Prober) SetComponent(component component.Component) {
 }
 
 func (p *Prober) getComponent() component.Component {
-	p.componentMtx.Lock()
-	defer p.componentMtx.Unlock()
+	p.componentMtx.RLock()
+	defer p.componentMtx.RUnlock()
 	return p.component
 }
 
 // NewProber returns Prober representing readiness and healthiness of given component.
 func NewProber(component component.Component, logger log.Logger) *Prober {
 	initialErr := fmt.Errorf(initialErrorFmt, component)
-	prober := &Prober{
+	return &Prober{
 		component:   component,
 		logger:      logger,
 		healthiness: initialErr,
 		readiness:   initialErr,
 	}
-	return prober
 }
 
-// RegisterInRouter registers readiness and liveness probes to mux.
+// RegisterInRouter registers readiness and liveness probes to router.
 func (p *Prober) RegisterInRouter(router *route.Router) {
 	router.Get(healthyEndpointPath, p.probeHandlerFunc(p.IsHealthy, "healthy"))
 	router.Get(readyEndpointPath, p.probeHandlerFunc(p.IsReady, "ready"))
@@ -86,65 +85,68 @@ func (p *Prober) probeHandlerFunc(probeFunc func() error, probeType string) func
 	}
 }
 
-// IsReady returns error if component is not ready and nil if it is.
+// IsReady returns error if component is not ready and nil otherwise.
 func (p *Prober) IsReady() error {
-	p.readyMtx.Lock()
-	defer p.readyMtx.Unlock()
+	p.readyMtx.RLock()
+	defer p.readyMtx.RUnlock()
 	return p.readiness
 }
 
 // SetReady sets components status to ready.
 func (p *Prober) SetReady() {
-	if p.IsReady() != nil {
+	p.readyMtx.Lock()
+	defer p.readyMtx.Unlock()
+	if p.readiness != nil {
 		level.Info(p.logger).Log("msg", "changing probe status", "status", "ready")
 	}
-	p.SetNotReady(nil)
+	p.readiness = nil
 }
 
 // SetNotReady sets components status to not ready with given error as a cause.
 func (p *Prober) SetNotReady(err error) {
-	if err != nil && p.IsReady() == nil {
-		level.Warn(p.logger).Log("msg", "changing probe status", "status", "not-ready", "reason", err)
-	}
 	p.readyMtx.Lock()
 	defer p.readyMtx.Unlock()
+	if err != nil && p.readiness == nil {
+		level.Warn(p.logger).Log("msg", "changing probe status", "status", "not-ready", "reason", err)
+	}
 	p.readiness = err
 }
 
 // IsHealthy returns error if component is not healthy and nil if it is.
 func (p *Prober) IsHealthy() error {
-	p.healthyMtx.Lock()
-	defer p.healthyMtx.Unlock()
+	p.healthyMtx.RLock()
+	defer p.healthyMtx.RUnlock()
 	return p.healthiness
 }
 
 // SetHealthy sets components status to healthy.
 func (p *Prober) SetHealthy() {
-	if p.IsHealthy() != nil {
+	p.healthyMtx.Lock()
+	defer p.healthyMtx.Unlock()
+	if p.healthiness != nil {
 		level.Info(p.logger).Log("msg", "changing probe status", "status", "healthy")
 	}
-	p.SetNotHealthy(nil)
+	p.healthiness = nil
 }
 
 // SetNotHealthy sets components status to not healthy with given error as a cause.
 func (p *Prober) SetNotHealthy(err error) {
-	if err != nil && p.IsHealthy() == nil {
-		level.Warn(p.logger).Log("msg", "changing probe status", "status", "unhealthy", "reason", err)
-	}
 	p.healthyMtx.Lock()
 	defer p.healthyMtx.Unlock()
+	if err != nil && p.healthiness == nil {
+		level.Warn(p.logger).Log("msg", "changing probe status", "status", "unhealthy", "reason", err)
+	}
 	p.healthiness = err
 }
 
 // HandleIfReady if probe is ready calls the function otherwise returns 503.
 func (p *Prober) HandleIfReady(f http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		p.readyMtx.Lock()
-		defer p.readyMtx.Unlock()
-		if p.readiness == nil {
+		ready := p.IsReady()
+		if ready == nil {
 			f(w, r)
 			return
 		}
-		p.writeResponse(w, func() error { return p.readiness }, "ready")
+		p.writeResponse(w, func() error { return ready }, "ready")
 	}
 }
