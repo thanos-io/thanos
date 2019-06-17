@@ -37,6 +37,8 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API. For better performance use local network.").
 		Default("http://localhost:9090").URL()
 
+	promRetention := modelDuration(cmd.Flag("prometheus.retention", "A limit on how much retention to query from Prometheus. 0d means query all TSDB data found on disk").Default("0d"))
+
 	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").
 		Default("./data").String()
 
@@ -71,6 +73,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			*clientCA,
 			*httpBindAddr,
 			*promURL,
+			time.Duration(*promRetention),
 			*dataDir,
 			objStoreConfig,
 			rl,
@@ -90,6 +93,7 @@ func runSidecar(
 	clientCA string,
 	httpBindAddr string,
 	promURL *url.URL,
+	promRetention time.Duration,
 	dataDir string,
 	objStoreConfig *pathOrContent,
 	reloader *reloader.Reloader,
@@ -100,8 +104,9 @@ func runSidecar(
 
 		// Start out with the full time range. The shipper will constrain it later.
 		// TODO(fabxc): minimum timestamp is never adjusted if shipping is disabled.
-		mint: 0,
-		maxt: math.MaxInt64,
+		mint:  0,
+		maxt:  math.MaxInt64,
+		limit: promRetention,
 	}
 
 	confContentYaml, err := objStoreConfig.Content()
@@ -318,6 +323,7 @@ type promMetadata struct {
 	mtx    sync.Mutex
 	mint   int64
 	maxt   int64
+	limit  time.Duration
 	labels labels.Labels
 }
 
@@ -337,8 +343,21 @@ func (s *promMetadata) UpdateLabels(ctx context.Context, logger log.Logger) erro
 func (s *promMetadata) UpdateTimestamps(mint int64, maxt int64) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
+	var limitt int64
 
-	s.mint = mint
+	// Calculate our limit on how far back in time we query Prometheus.
+	// Long term retention should be accessible via a Store component,
+	// therefore, its possible we can ignore anything older than a few days on
+	// the local Prometheus.  This is disabled if limit == 0.
+	if s.limit > 0 {
+		limitt = int64(model.Now().Add(-s.limit))
+	}
+
+	if mint < limitt {
+		s.mint = limitt
+	} else {
+		s.mint = mint
+	}
 	s.maxt = maxt
 }
 
