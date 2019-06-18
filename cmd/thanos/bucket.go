@@ -309,7 +309,7 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
 	cmd := root.Command("web", "Web interface for remote storage bucket")
 	bind := cmd.Flag("listen", "HTTP host:port to listen on").Default("0.0.0.0:8080").String()
-	interval := cmd.Flag("refresh", "Refresh interval in minutes").Default("30").Int()
+	interval := cmd.Flag("refresh", "Refresh interval").Default("30m").Duration()
 
 	m[name+" web"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -320,7 +320,7 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 		bucketUI.Register(router)
 
 		g.Add(func() error {
-			return refresh(ctx, logger, bucketUI, int(*interval), name, reg, objStoreConfig)
+			return refresh(ctx, logger, bucketUI, *interval, name, reg, objStoreConfig)
 		}, func(error) {
 			cancel()
 		})
@@ -342,7 +342,7 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 }
 
 // Refresh metadata from remote storage periodically and update UI
-func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, interval int, name string,
+func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, duration time.Duration, name string,
 	reg *prometheus.Registry, objStoreConfig *pathOrContent) error {
 
 	confContentYaml, err := objStoreConfig.Content()
@@ -358,9 +358,7 @@ func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, interv
 
 	defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
-	delay := time.Duration(interval) * time.Minute
-
-	return runutil.Repeat(delay, ctx.Done(), func() error {
+	return runutil.Repeat(duration, ctx.Done(), func() error {
 		iterCtx, iterCancel := context.WithTimeout(ctx, 5*time.Minute)
 		defer iterCancel()
 
