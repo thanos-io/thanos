@@ -318,6 +318,10 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 		bucketUI := ui.NewBucketUI(logger)
 		bucketUI.Register(router)
 
+		if *interval < 5*time.Minute {
+			level.Warn(logger).Log("msg", "Refreshing more often than 5m could lead to large data transfers")
+		}
+
 		g.Add(func() error {
 			return refresh(ctx, logger, bucketUI, *interval, name, reg, objStoreConfig)
 		}, func(error) {
@@ -358,11 +362,6 @@ func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, durati
 	return runutil.Repeat(duration, ctx.Done(), func() error {
 		iterCtx, iterCancel := context.WithTimeout(ctx, 5*time.Minute)
 		defer iterCancel()
-
-		// If there are no errors and the data isn't stale, wait a while before updating again.
-		if bucketUI.Err == nil && time.Since(bucketUI.RefreshedAt) < (5*time.Minute) {
-			return nil
-		}
 
 		return runutil.RetryWithLog(logger, time.Minute, iterCtx.Done(), func() error {
 			blocks, err := download(iterCtx, logger, bkt)
