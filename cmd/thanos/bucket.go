@@ -299,13 +299,12 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 	}
 }
 
-// RegisterBucketWeb exposes a web interface for the state of Thanos remote store just like `pprof web`
+// registerBucketWeb exposes a web interface for the state of Thanos remote store just like `pprof web`
 //
-// TODOS:
+// TODO(jaseemabid):
 //
 // 1. Some download code is duplicated from `ls -o json`; refactor as needed
 // 2. Some web code is duplicated from query UI, refactor as needed
-// 3. Do we need any of the route prefix?
 func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
 	cmd := root.Command("web", "Web interface for remote storage bucket")
 	bind := cmd.Flag("listen", "HTTP host:port to listen on").Default("0.0.0.0:8080").String()
@@ -341,19 +340,17 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 	}
 }
 
-// Refresh metadata from remote storage periodically and update UI
-func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, duration time.Duration, name string,
-	reg *prometheus.Registry, objStoreConfig *pathOrContent) error {
+// refresh metadata from remote storage periodically and update UI.
+func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, duration time.Duration, name string, reg *prometheus.Registry, objStoreConfig *pathOrContent) error {
 
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
 		return err
 	}
 
-	// A client is created for the entire duration of the program to avoid duplicate metrics registration.
 	bkt, err := client.NewBucket(logger, confContentYaml, reg, name)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "bucket client")
 	}
 
 	defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
@@ -367,8 +364,6 @@ func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, durati
 			return nil
 		}
 
-		// Occasional network failures are OK; retry until download succeeds. Exponential decay would work
-		// much better than a simple loop.
 		return runutil.RetryWithLog(logger, time.Minute, iterCtx.Done(), func() error {
 			blocks, err := download(iterCtx, logger, bkt)
 			if err != nil {
@@ -390,7 +385,7 @@ func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, durati
 func download(ctx context.Context, logger log.Logger, bkt objstore.Bucket) (blocks []metadata.Meta, err error) {
 	level.Info(logger).Log("msg", "synchronizing block metadata")
 
-	err = bkt.Iter(ctx, "", func(name string) error {
+	if err = bkt.Iter(ctx, "", func(name string) error {
 		id, ok := block.IsBlockDir(name)
 		if !ok {
 			return nil
@@ -403,15 +398,13 @@ func download(ctx context.Context, logger log.Logger, bkt objstore.Bucket) (bloc
 
 		blocks = append(blocks, meta)
 		return nil
-	})
-
-	if err != nil {
+	}); err != nil {
 		level.Error(logger).Log("err", err, "msg", "Failed to downloaded block metadata")
 		return blocks, err
 	}
 
-	level.Info(logger).Log("msg", "downloaded block metadata")
-	return blocks, err
+	level.Info(logger).Log("msg", "downloaded blocks meta.json", "num", len(blocks))
+	return blocks, nil
 }
 
 func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortBy []string) error {
