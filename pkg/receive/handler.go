@@ -89,6 +89,13 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	readyf := h.testReady
 	router.Post("/api/v1/receive", readyf(h.receive))
 
+	if o.Registry != nil {
+		o.Registry.MustRegister(
+			requestDuration,
+			responseSize,
+		)
+	}
+
 	return h
 }
 
