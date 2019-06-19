@@ -57,6 +57,10 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	tenantHeader := cmd.Flag("receive.tenant-header", "HTTP header to determine tenant for write requests.").Default("THANOS-TENANT").String()
 
+	replicaHeader := cmd.Flag("receive.replica-header", "HTTP header specifying the replica number of a write request.").Default("THANOS-REPLICA").String()
+
+	replicationFactor := cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64()
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
@@ -101,6 +105,8 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application, name stri
 			cw,
 			*local,
 			*tenantHeader,
+			*replicaHeader,
+			*replicationFactor,
 		)
 	}
 }
@@ -123,6 +129,8 @@ func runReceive(
 	cw *receive.ConfigWatcher,
 	endpoint string,
 	tenantHeader string,
+	replicaHeader string,
+	replicationFactor uint64,
 ) error {
 	logger = log.With(logger, "component", "receive")
 	level.Warn(logger).Log("msg", "setting up receive; the Thanos receive component is EXPERIMENTAL, it may break significantly without notice")
@@ -137,12 +145,14 @@ func runReceive(
 	localStorage := &tsdb.ReadyStorage{}
 	receiver := receive.NewWriter(log.With(logger, "component", "receive-writer"), localStorage)
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
-		Receiver:      receiver,
-		ListenAddress: remoteWriteAddress,
-		Registry:      reg,
-		ReadyStorage:  localStorage,
-		Endpoint:      endpoint,
-		TenantHeader:  tenantHeader,
+		Receiver:          receiver,
+		ListenAddress:     remoteWriteAddress,
+		Registry:          reg,
+		ReadyStorage:      localStorage,
+		Endpoint:          endpoint,
+		TenantHeader:      tenantHeader,
+		ReplicaHeader:     replicaHeader,
+		ReplicationFactor: replicationFactor,
 	})
 
 	// Start all components while we wait for TSDB to open but only load
