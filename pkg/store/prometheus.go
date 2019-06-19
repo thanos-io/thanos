@@ -125,6 +125,14 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		return nil
 	}
 	q := prompb.Query{StartTimestampMs: r.MinTime, EndTimestampMs: r.MaxTime}
+	// Check to see if we can limit the mint/maxt for a more efficient query.
+	mint, maxt := p.timestamps()
+	if mint > q.StartTimestampMs {
+		q.StartTimestampMs = mint
+	}
+	if maxt < q.EndTimestampMs {
+		q.EndTimestampMs = maxt
+	}
 
 	// TODO(fabxc): import common definitions from prompb once we have a stable gRPC
 	// query API there.
