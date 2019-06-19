@@ -22,7 +22,7 @@ import (
 type Config struct {
 	EndPoint        string `yaml:"endpoint"`
 	Bucket          string `yaml:"bucket"`
-	AccessKeyId     string `yaml:"access_key_id"`
+	AccessKeyID     string `yaml:"access_key_id"`
 	AccessKeySecret string `yaml:"access_key_secret"`
 }
 
@@ -73,7 +73,7 @@ func configFromEnv() Config {
 	c := Config{
 		EndPoint:        os.Getenv("OSS_ENDPOINT"),
 		Bucket:          os.Getenv("OSS_BUCKET"),
-		AccessKeyId:     os.Getenv("OSS_ACCESS_KEY_ID"),
+		AccessKeyID:     os.Getenv("OSS_ACCESS_KEY_ID"),
 		AccessKeySecret: os.Getenv("OSS_ACCESS_KEY_SECRET"),
 	}
 	return c
@@ -82,7 +82,7 @@ func configFromEnv() Config {
 // ValidateForTests checks to see the config options for tests are set.
 func ValidateForTests(conf Config) error {
 	if conf.EndPoint == "" ||
-		conf.AccessKeyId == "" ||
+		conf.AccessKeyID == "" ||
 		conf.AccessKeySecret == "" {
 		return errors.New("insufficient oss test configuration information")
 	}
@@ -107,7 +107,7 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 		return nil, err
 	}
 
-	client, err := alioss.New(config.EndPoint, config.AccessKeyId, config.AccessKeySecret)
+	client, err := alioss.New(config.EndPoint, config.AccessKeyID, config.AccessKeySecret)
 	if err != nil {
 		return nil, err
 	}
@@ -135,21 +135,16 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 
 	marker := alioss.Marker("")
 	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
+		if err := ctx.Err() ; err != nil {
+			return  err
 		}
-		objects, err2 := b.bucket.ListObjects(alioss.Prefix(dir), alioss.Delimiter(objstore.DirDelim), marker)
-		if err2 != nil {
-			return errors.Wrap(err2, "oss bucket list")
+		objects, err := b.bucket.ListObjects(alioss.Prefix(dir), alioss.Delimiter(objstore.DirDelim), marker)
+		if err != nil {
+			return errors.Wrap(err, "oss bucket list")
 		}
 		marker = alioss.Marker(objects.NextMarker)
 
 		for _, object := range objects.Objects {
-			if object.Key == "" {
-				continue
-			}
 			if err := f(object.Key); err != nil {
 				return err
 			}
@@ -181,13 +176,10 @@ func validate(conf Config) error {
 		return errors.New("no oss bucket in config file")
 	}
 
-	if conf.AccessKeyId == "" && conf.AccessKeySecret != "" {
-		return errors.New("no oss access_key_id specified while access_key_secret is present in config file; both of them should be present in config.")
+	if conf.AccessKeyID == "" || conf.AccessKeySecret == "" {
+		return errors.New("either oss access_key_id or oss access_key_secret is not present in config file.")
 	}
 
-	if conf.AccessKeySecret != "" && conf.AccessKeyId == "" {
-		return errors.New("no oss access_key_secret specified while access_key_id is present in config file; both of them should be present in config.")
-	}
 	return nil
 }
 
@@ -261,9 +253,9 @@ func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (
 		opts = append(opts, opt)
 	}
 
-	resp, err2 := b.bucket.GetObject(name, opts...)
-	if err2 != nil {
-		return nil, err2
+	resp, err := b.bucket.GetObject(name, opts...)
+	if err != nil {
+		return nil, err
 	}
 
 	if _, err := resp.Read(nil); err != nil {
