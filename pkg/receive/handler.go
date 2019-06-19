@@ -32,6 +32,12 @@ var (
 		},
 		[]string{"handler"},
 	)
+	requestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "thanos_http_requests_total",
+			Help: "Tracks the number of HTTP requests.",
+		}, []string{"code", "handler", "method"},
+	)
 	responseSize = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "thanos_http_response_size_bytes",
@@ -67,7 +73,10 @@ func instrumentHandler(handlerName string, handler http.HandlerFunc) http.Handle
 		requestDuration.MustCurryWith(prometheus.Labels{"handler": handlerName}),
 		promhttp.InstrumentHandlerResponseSize(
 			responseSize.MustCurryWith(prometheus.Labels{"handler": handlerName}),
-			handler,
+			promhttp.InstrumentHandlerCounter(
+				requestsTotal.MustCurryWith(prometheus.Labels{"handler": handlerName}),
+				handler,
+			),
 		),
 	)
 }
@@ -92,6 +101,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	if o.Registry != nil {
 		o.Registry.MustRegister(
 			requestDuration,
+			requestsTotal,
 			responseSize,
 		)
 	}
