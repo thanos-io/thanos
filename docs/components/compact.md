@@ -138,5 +138,9 @@ Flags:
                                selecting blocks. It follows native Prometheus
                                relabel-config syntax. See format details:
                                https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
-
+      --enable-dedup           Enable dedup function, but effect depends on
+                               'dedup.replica-label' config
+      --dedup.replica-label=DEDUP.REPLICA-LABEL
+                               Label to treat as a replica indicator along which
+                               data is deduplicated.
 ```

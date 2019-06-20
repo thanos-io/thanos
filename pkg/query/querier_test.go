@@ -600,7 +600,7 @@ func TestDedupSeriesIterator(t *testing.T) {
 	}
 	for i, c := range cases {
 		t.Logf("case %d:", i)
-		it := newDedupSeriesIterator(
+		it := NewDedupSeriesIterator(
 			&SampleIterator{l: c.a, i: -1},
 			&SampleIterator{l: c.b, i: -1},
 		)
@@ -611,7 +611,7 @@ func TestDedupSeriesIterator(t *testing.T) {
 
 func BenchmarkDedupSeriesIterator(b *testing.B) {
 	run := func(b *testing.B, s1, s2 []sample) {
-		it := newDedupSeriesIterator(
+		it := NewDedupSeriesIterator(
 			&SampleIterator{l: s1, i: -1},
 			&SampleIterator{l: s2, i: -1},
 		)

@@ -263,14 +263,14 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 	})
 	close(metaIDsChan)
 	if err != nil {
-		return retry(errors.Wrap(err, "retrieve bucket block metas"))
+		return Retry(errors.Wrap(err, "retrieve bucket block metas"))
 	}
 
 	wg.Wait()
 	close(errChan)
 
 	if err := <-errChan; err != nil {
-		return retry(err)
+		return Retry(err)
 	}
 
 	// Delete all local block dirs that no longer exist in the bucket.
@@ -493,7 +493,7 @@ func (c *Syncer) garbageCollect(ctx context.Context, resolution int64) error {
 		err := block.Delete(delCtx, c.logger, c.bkt, id)
 		cancel()
 		if err != nil {
-			return retry(errors.Wrapf(err, "delete block %s from bucket", id))
+			return Retry(errors.Wrapf(err, "delete block %s from bucket", id))
 		}
 
 		// Immediately update our in-memory state so no further call to SyncMetas is needed
@@ -682,7 +682,7 @@ type RetryError struct {
 	err error
 }
 
-func retry(err error) error {
+func Retry(err error) error {
 	if IsHaltError(err) {
 		return err
 	}
@@ -765,7 +765,7 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 
 	bdir := filepath.Join(tmpdir, ie.id.String())
 	if err := block.Download(ctx, logger, bkt, ie.id, bdir); err != nil {
-		return retry(errors.Wrapf(err, "download block %s", ie.id))
+		return Retry(errors.Wrapf(err, "download block %s", ie.id))
 	}
 
 	meta, err := metadata.Read(bdir)
@@ -785,7 +785,7 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 
 	level.Info(logger).Log("msg", "uploading repaired block", "newID", resid)
 	if err = block.Upload(ctx, logger, bkt, filepath.Join(tmpdir, resid.String())); err != nil {
-		return retry(errors.Wrapf(err, "upload of %s failed", resid))
+		return Retry(errors.Wrapf(err, "upload of %s failed", resid))
 	}
 
 	level.Info(logger).Log("msg", "deleting broken block", "id", ie.id)
@@ -867,7 +867,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		}
 
 		if err := block.Download(ctx, cg.logger, cg.bkt, id, pdir); err != nil {
-			return false, ulid.ULID{}, retry(errors.Wrapf(err, "download block %s", id))
+			return false, ulid.ULID{}, Retry(errors.Wrapf(err, "download block %s", id))
 		}
 
 		// Ensure all input blocks are valid.
@@ -954,7 +954,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	begin = time.Now()
 
 	if err := block.Upload(ctx, cg.logger, cg.bkt, bdir); err != nil {
-		return false, ulid.ULID{}, retry(errors.Wrapf(err, "upload of %s failed", compID))
+		return false, ulid.ULID{}, Retry(errors.Wrapf(err, "upload of %s failed", compID))
 	}
 	level.Debug(cg.logger).Log("msg", "uploaded block", "result_block", compID, "duration", time.Since(begin))
 
@@ -963,7 +963,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	// Eventually the block we just uploaded should get synced into the group again (including sync-delay).
 	for _, b := range plan {
 		if err := cg.deleteBlock(b); err != nil {
-			return false, ulid.ULID{}, retry(errors.Wrapf(err, "delete old block from bucket"))
+			return false, ulid.ULID{}, Retry(errors.Wrapf(err, "delete old block from bucket"))
 		}
 		cg.groupGarbageCollectedBlocks.Inc()
 	}

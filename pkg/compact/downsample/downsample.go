@@ -81,10 +81,15 @@ func Downsample(
 	newMeta := *origMeta
 	newMeta.Thanos.Downsample.Resolution = resolution
 	newMeta.ULID = uid
+	newMeta.Thanos.Source = metadata.CompactorSource
 
 	// Writes downsampled chunks right into the files, avoiding excess memory allocation.
 	// Flushes index and meta data after aggregations.
-	streamedBlockWriter, err := NewStreamedBlockWriter(blockDir, indexr, logger, newMeta)
+	symbols, err := indexr.Symbols()
+	if err != nil {
+		return id, errors.Wrap(err, "get index symbols")
+	}
+	streamedBlockWriter, err := NewStreamedBlockWriter(blockDir, symbols, logger, newMeta)
 	if err != nil {
 		return id, errors.Wrap(err, "get streamed block writer")
 	}

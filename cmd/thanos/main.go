@@ -61,6 +61,7 @@ func main() {
 	registerDownsample(cmds, app)
 	registerReceive(cmds, app)
 	registerChecks(cmds, app, "check")
+	registerDedup(cmds, app, "dedup")
 
 	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {
