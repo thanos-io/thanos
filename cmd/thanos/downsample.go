@@ -45,8 +45,8 @@ func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name s
 }
 
 type DownsampleMetrics struct {
-	downsamples               *prometheus.CounterVec
-	downsampleFailures        *prometheus.CounterVec
+	downsamples        *prometheus.CounterVec
+	downsampleFailures *prometheus.CounterVec
 }
 
 func newDownsampleMetrics(reg *prometheus.Registry) *DownsampleMetrics {

@@ -35,7 +35,7 @@ func HTTPMiddleware(tracer opentracing.Tracer, name string, logger log.Logger, n
 		span.SetBaggageItem(ForceTracingBaggageKey, r.Header.Get(ForceTracingBaggageKey))
 
 		if t, ok := tracer.(Tracer); ok {
-			if traceID, ok :=t.GetTraceIDFromSpanContext(span.Context()); ok {
+			if traceID, ok := t.GetTraceIDFromSpanContext(span.Context()); ok {
 				w.Header().Set(traceIDResponseHeader, traceID)
 			}
 		}
