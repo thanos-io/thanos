@@ -388,7 +388,7 @@ func (s *dedupSeries) Labels() labels.Labels {
 func (s *dedupSeries) Iterator() (it storage.SeriesIterator) {
 	it = s.replicas[0].Iterator()
 	for _, o := range s.replicas[1:] {
-		it = newDedupSeriesIterator(it, o.Iterator())
+		it = NewDedupSeriesIterator(it, o.Iterator())
 	}
 	return it
 }
@@ -403,7 +403,7 @@ type dedupSeriesIterator struct {
 	useA       bool
 }
 
-func newDedupSeriesIterator(a, b storage.SeriesIterator) *dedupSeriesIterator {
+func NewDedupSeriesIterator(a, b storage.SeriesIterator) *dedupSeriesIterator {
 	return &dedupSeriesIterator{
 		a:     a,
 		b:     b,

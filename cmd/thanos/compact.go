@@ -17,6 +17,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/compact"
+	"github.com/improbable-eng/thanos/pkg/compact/dedup"
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
@@ -110,6 +111,9 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	compactionConcurrency := cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
 		Default("1").Int()
 
+	enableDedup := cmd.Flag("enable-dedup", "Enable dedup function, but effect depends on 'dedup.replica-label' config").Default("false").Bool()
+	dedupReplicaLabel := cmd.Flag("dedup.replica-label", "Label to treat as a replica indicator along which data is deduplicated.").String()
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		return runCompact(g, logger, reg,
 			*httpAddr,
@@ -130,6 +134,8 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 			*maxCompactionLevel,
 			*blockSyncConcurrency,
 			*compactionConcurrency,
+			*enableDedup,
+			*dedupReplicaLabel,
 		)
 	}
 }
@@ -152,6 +158,8 @@ func runCompact(
 	maxCompactionLevel int,
 	blockSyncConcurrency int,
 	concurrency int,
+	enableDedup bool,
+	dedupReplicaLabel string,
 ) error {
 	halted := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compactor_halted",
@@ -210,6 +218,7 @@ func runCompact(
 	}
 
 	var (
+		dedupDir        = path.Join(dataDir, "dedup")
 		compactDir      = path.Join(dataDir, "compact")
 		downsamplingDir = path.Join(dataDir, "downsample")
 		indexCacheDir   = path.Join(dataDir, "index_cache")
@@ -234,7 +243,14 @@ func runCompact(
 		level.Info(logger).Log("msg", "retention policy of 1 hour aggregated samples is enabled", "duration", retentionByResolution[compact.ResolutionLevel1h])
 	}
 
+	deduper := dedup.NewBucketDeduper(logger, reg, bkt, dedupDir, dedupReplicaLabel, consistencyDelay, blockSyncConcurrency)
+
 	f := func() error {
+		if isEnableDedup(enableDedup, dedupReplicaLabel) {
+			if err := deduper.Dedup(ctx); err != nil {
+				return errors.Wrap(err, "dedup failed")
+			}
+		}
 		if err := compactor.Compact(ctx); err != nil {
 			return errors.Wrap(err, "compaction failed")
 		}
@@ -442,4 +458,8 @@ func generateIndexCacheFile(
 		return errors.Wrap(err, "upload index cache")
 	}
 	return nil
+}
+
+func isEnableDedup(enableDedup bool, dedupReplicaLabel string) bool {
+	return enableDedup && len(dedupReplicaLabel) > 0
 }

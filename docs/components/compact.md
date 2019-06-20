@@ -76,5 +76,10 @@ Flags:
                                metadata from object storage.
       --compact.concurrency=1  Number of goroutines to use when compacting
                                groups.
+      --enable-dedup           Enable dedup function, but effect depends on
+                               'dedup.replica-label' config
+      --dedup.replica-label=DEDUP.REPLICA-LABEL
+                               Label to treat as a replica indicator along which
+                               data is deduplicated.
 
 ```
