@@ -27,6 +27,7 @@ type Config struct {
 	StorageAccountKey  string `yaml:"storage_account_key"`
 	ContainerName      string `yaml:"container"`
 	Endpoint           string `yaml:"endpoint"`
+	MaxRetries         int    `yaml:"max_retries"`
 }
 
 // Bucket implements the store.Bucket interface against Azure APIs.
@@ -43,16 +44,19 @@ func (conf *Config) validate() error {
 		return errors.New("invalid Azure storage configuration")
 	}
 	if conf.StorageAccountName == "" && conf.StorageAccountKey != "" {
-		return errors.New("no Azure storage_account specified while storage_account_key is present in config file; both should be present.")
+		return errors.New("no Azure storage_account specified while storage_account_key is present in config file; both should be present")
 	}
 	if conf.StorageAccountName != "" && conf.StorageAccountKey == "" {
-		return errors.New("no Azure storage_account_key specified while storage_account is present in config file; both should be present.")
+		return errors.New("no Azure storage_account_key specified while storage_account is present in config file; both should be present")
 	}
 	if conf.ContainerName == "" {
 		return errors.New("no Azure container specified")
 	}
 	if conf.Endpoint == "" {
 		conf.Endpoint = azureDefaultEndpoint
+	}
+	if conf.MaxRetries < 0 {
+		return errors.New("the value of maxretries must be greater than or equal to 0 in the config file")
 	}
 	return nil
 }
@@ -199,6 +203,9 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 			BlockSize:   blob.BlobDefaultDownloadBlockSize,
 			Parallelism: uint16(3),
 			Progress:    nil,
+			RetryReaderOptionsPerBlock: blob.RetryReaderOptions{
+				MaxRetryRequests: b.config.MaxRetries,
+			},
 		},
 	); err != nil {
 		return nil, errors.Wrapf(err, "cannot download blob, address: %s", blobURL.BlobURL)
