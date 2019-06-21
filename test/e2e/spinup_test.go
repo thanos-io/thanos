@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strconv"
 	"syscall"
 	"testing"
 	"time"
@@ -125,7 +126,7 @@ func scraper(i int, config string) cmdScheduleFunc {
 	}
 }
 
-func receiver(i int, config string, receiveAddresses ...string) cmdScheduleFunc {
+func receiver(i int, config string, replicationFactor int, receiveAddresses ...string) cmdScheduleFunc {
 	if len(receiveAddresses) == 0 {
 		receiveAddresses = []string{remoteWriteEndpoint(1)}
 	}
@@ -165,6 +166,7 @@ func receiver(i int, config string, receiveAddresses ...string) cmdScheduleFunc 
 			"--labels", fmt.Sprintf(`replica="%d"`, i),
 			"--tsdb.path", promDir,
 			"--log.level", "debug",
+			"--receive.replication-factor", strconv.Itoa(replicationFactor),
 			"--receive.local-endpoint", remoteWriteEndpoint(i),
 			"--receive.hashrings-file", path.Join(hashringsFileDir, "hashrings.json"),
 			"--receive.hashrings-file-refresh-interval", "5s"))), nil
