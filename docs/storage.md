@@ -22,7 +22,7 @@ Current object storage client implementations:
 | Azure Storage Account | Stable  (production usage) | yes       | @vglafirov   |
 | OpenStack Swift      | Beta  (working PoCs, testing usage)               | no        | @sudhi-vm   |
 | Tencent COS          | Beta  (testing usage)                   | no        | @jojohappy          |
-| AliYun OSS           | Beta  (testing usage)                   | no        | @shaulboozhiao      |
+| AliYun OSS           | Beta  (testing usage)                   | no        | @shaulboozhiao,@wujinhu      |
 
 NOTE: Currently Thanos requires strong consistency (write-read) for object store implementation.
 
@@ -310,13 +310,13 @@ config:
 Set the flags `--objstore.config-file` to reference to the configuration file.
 
 ##  AliYun OSS Configuration
-In order to use AliYun OSS object storage, you should first create a bucket with proper Storage Class , ACLs and get the access key on the AliYun cloud. Go over [https://www.alibabacloud.com/product/oss](https://www.alibabacloud.com/product/oss) for more detail information.
+In order to use AliYun OSS object storage, you should first create a bucket with proper Storage Class , ACLs and get the access key on the AliYun cloud. Go to [https://www.alibabacloud.com/product/oss](https://www.alibabacloud.com/product/oss) for more detail.
 
-To configure AliYun OSS objstore need a yaml format configuration file, you should specify the parameters list below.
+To use AliYun OSS object storage, please specify following yaml configuration file in `objstore.config*` flag.
 
 [embedmd]:# (flags/config_aliyunoss.txt $)
 ```$
-type: AliYunOSS
+type: ALIYUNOSS
 config:
   endpoint: ""
   bucket: ""

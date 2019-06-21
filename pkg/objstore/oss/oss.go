@@ -20,7 +20,7 @@ import (
 )
 
 type Config struct {
-	EndPoint        string `yaml:"endpoint"`
+	Endpoint        string `yaml:"endpoint"`
 	Bucket          string `yaml:"bucket"`
 	AccessKeyID     string `yaml:"access_key_id"`
 	AccessKeySecret string `yaml:"access_key_secret"`
@@ -41,7 +41,7 @@ type Bucket struct {
 
 func NewTestBucket(t testing.TB, location string) (objstore.Bucket, func(), error) {
 	c := configFromEnv()
-	if err := ValidateForTests(c); err != nil {
+	if err := validate(c); err != nil {
 		return nil, nil, err
 	}
 	if c.Bucket != "" && os.Getenv("THANOS_ALLOW_EXISTING_BUCKET_USE") == "" {
@@ -71,49 +71,38 @@ func (b *Bucket) Delete(ctx context.Context, name string) error {
 
 func configFromEnv() Config {
 	c := Config{
-		EndPoint:        os.Getenv("OSS_ENDPOINT"),
-		Bucket:          os.Getenv("OSS_BUCKET"),
-		AccessKeyID:     os.Getenv("OSS_ACCESS_KEY_ID"),
-		AccessKeySecret: os.Getenv("OSS_ACCESS_KEY_SECRET"),
+		Endpoint:        os.Getenv("ALIYUNOSS_ENDPOINT"),
+		Bucket:          os.Getenv("ALIYUNOSS_BUCKET"),
+		AccessKeyID:     os.Getenv("ALIYUNOSS_ACCESS_KEY_ID"),
+		AccessKeySecret: os.Getenv("ALIYUNOSS_ACCESS_KEY_SECRET"),
 	}
 	return c
 }
 
-// ValidateForTests checks to see the config options for tests are set.
-func ValidateForTests(conf Config) error {
-	if conf.EndPoint == "" ||
-		conf.AccessKeyID == "" ||
-		conf.AccessKeySecret == "" {
-		return errors.New("insufficient oss test configuration information")
-	}
-	return nil
-}
-
-func parseConfig(conf []byte) (Config, error) {
-	var config Config
-	if err := yaml.Unmarshal(conf, &config); err != nil {
-		return Config{}, err
-	}
-
-	return config, nil
-}
-
 func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
-	config, err := parseConfig(conf)
+	config, err := func(conf []byte) (Config, error) {
+		var config Config
+		if err := yaml.Unmarshal(conf, &config); err != nil {
+			return Config{}, err
+		}
+
+		return config, nil
+	} (conf)
+
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "parse aliyun oss config file failed")
 	}
 	if err := validate(config); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "validate aliyun oss config file failed")
 	}
 
-	client, err := alioss.New(config.EndPoint, config.AccessKeyID, config.AccessKeySecret)
+	client, err := alioss.New(config.Endpoint, config.AccessKeyID, config.AccessKeySecret)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "create aliyun oss client failed")
 	}
 	bk, err := client.Bucket(config.Bucket)
 	if err != nil {
-		return nil, errors.Wrap(err, "oss bucket")
+		return nil, errors.Wrap(err, "use oss bucket "+ config.Bucket+" failed")
 	}
 
 	bkt := &Bucket{
@@ -126,7 +115,7 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 	return bkt, nil
 }
 
-// Iter calls f for each entry in the given directory (not recursive.). The argument to f is the full
+// Iter calls f for each entry in the given directory (not recursive). The argument to f is the full
 // object name including the prefix of the inspected directory.
 func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) error {
 	if dir != "" {
@@ -136,7 +125,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 	marker := alioss.Marker("")
 	for {
 		if err := ctx.Err() ; err != nil {
-			return  err
+			return  errors.Wrap(err, "a done channel closed with errors")
 		}
 		objects, err := b.bucket.ListObjects(alioss.Prefix(dir), alioss.Delimiter(objstore.DirDelim), marker)
 		if err != nil {
@@ -146,13 +135,13 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 
 		for _, object := range objects.Objects {
 			if err := f(object.Key); err != nil {
-				return err
+				return errors.Wrap(err, "callback func invoke with filename "+object.Key+" failed")
 			}
 		}
 
 		for _, object := range objects.CommonPrefixes {
 			if err := f(object); err != nil {
-				return err
+				return errors.Wrap(err, "callback func invoke with dirname "+object+" failed")
 			}
 		}
 		if !objects.IsTruncated {
@@ -169,7 +158,7 @@ func (b *Bucket) Name() string {
 
 // validate checks to see the config options are set.
 func validate(conf Config) error {
-	if conf.EndPoint == "" {
+	if conf.Endpoint == "" {
 		return errors.New("no oss endpoint in config file")
 	}
 	if conf.Bucket == "" {
@@ -215,7 +204,7 @@ func NewTestBucketFromConfig(t testing.TB, location string, c Config, reuseBucke
 	}
 
 	if err := b.client.CreateBucket(bktToCreate, alioss.ACL(alioss.ACLPrivate), alioss.StorageClass(alioss.StorageArchive)); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.Wrap(err, "create test bucket failed")
 	}
 	b.name = bktToCreate
 
@@ -282,7 +271,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 		if b.IsObjNotFoundErr(err) {
 			return false, nil
 		}
-		return false, errors.Wrap(err, "head oss object")
+		return false, errors.Wrap(err, "object exists already")
 	}
 
 	return exists, nil
@@ -290,9 +279,9 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 
 // IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
 func (b *Bucket) IsObjNotFoundErr(err error) bool {
-	switch err.(type) {
+	switch aliErr := err.(type) {
 	case alioss.ServiceError:
-		if err.(alioss.ServiceError).StatusCode == http.StatusNotFound {
+		if aliErr.StatusCode == http.StatusNotFound {
 			return true
 		}
 	}

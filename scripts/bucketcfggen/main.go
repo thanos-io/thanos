@@ -30,7 +30,7 @@ var (
 		client.S3:    s3.Config{},
 		client.SWIFT: swift.SwiftConfig{},
 		client.COS:   cos.Config{},
-		client.AliYunOSS:   oss.Config{},
+		client.ALIYUNOSS:   oss.Config{},
 	}
 )
 
