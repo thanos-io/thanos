@@ -93,8 +93,8 @@ too complex query expression in rule.
 value as "warn", this metric will tell you how many evaluation ended up with some kind of warning. To see the actual warnings
 see WARN log level. This might suggest that those evaluations return partial response and might not be accurate.
 
-* `rule_group_iterations_missed_total_total`. With all the networking overhead of thanos - you might end up in a situation when actual group evaluation
-time is bigger than the evaluation interval which leads to an incomplete data set. If you see this metric incrementing - you most likely need to tune
+* `prometheus_rule_group_last_duration_seconds > prometheus_rule_group_interval_seconds`. With all the networking overhead of thanos - you might end up in a situation when actual group evaluation
+time is bigger than the evaluation interval which leads to an incomplete data set. If you see this alert firing - you most likely need to tune
 evaluation interval or divide rules to smaller groups. (Rules within one group are executed sequentially and different groups are executed in parallel)
 
 Those metrics are important for vanilla Prometheus as well, but even more important when we rely on (sometimes WAN) network.
