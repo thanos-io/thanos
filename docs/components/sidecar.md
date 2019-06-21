@@ -104,6 +104,9 @@ Flags:
       --prometheus.url=http://localhost:9090
                                  URL at which to reach Prometheus's API. For
                                  better performance use local network.
+      --prometheus.retention=0d  A limit on how much retention to query from
+                                 Prometheus. 0d means query all TSDB data found
+                                 on disk
       --tsdb.path="./data"       Data directory of TSDB.
       --reloader.config-file=""  Config file watched by the reloader.
       --reloader.config-envsubst-file=""
