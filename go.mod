@@ -49,6 +49,7 @@ require (
 	google.golang.org/api v0.3.2
 	google.golang.org/grpc v1.19.1
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
+	gopkg.in/fsnotify.v1 v1.4.7
 	gopkg.in/fsnotify/fsnotify.v1 v1.4.7 // indirect
 	gopkg.in/yaml.v2 v2.2.2
 )

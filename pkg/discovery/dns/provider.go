@@ -20,6 +20,7 @@ type Provider struct {
 	resolved map[string][]string
 	logger   log.Logger
 
+	resolverAddrs         *prometheus.GaugeVec
 	resolverLookupsCount  prometheus.Counter
 	resolverFailuresCount prometheus.Counter
 }
@@ -52,6 +53,10 @@ func NewProvider(logger log.Logger, reg prometheus.Registerer, resolverType Reso
 		resolver: NewResolver(resolverType.ToResolver(logger)),
 		resolved: make(map[string][]string),
 		logger:   logger,
+		resolverAddrs: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "dns_provider_results",
+			Help: "The number of resolved endpoints for each configured address",
+		}, []string{"addr"}),
 		resolverLookupsCount: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "dns_lookups_total",
 			Help: "The number of DNS lookups resolutions attempts",
@@ -63,6 +68,7 @@ func NewProvider(logger log.Logger, reg prometheus.Registerer, resolverType Reso
 	}
 
 	if reg != nil {
+		reg.MustRegister(p.resolverAddrs)
 		reg.MustRegister(p.resolverLookupsCount)
 		reg.MustRegister(p.resolverFailuresCount)
 	}
@@ -91,6 +97,7 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string) {
 		p.resolverLookupsCount.Inc()
 		if err != nil {
 			// The DNS resolution failed. Continue without modifying the old records.
+			p.resolved[addr] = p.resolved[addr] // Ensure metrics capture the result even if empty.
 			p.resolverFailuresCount.Inc()
 			level.Error(p.logger).Log("msg", "dns resolution failed", "addr", addr, "err", err)
 			continue
@@ -99,14 +106,13 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string) {
 	}
 
 	// Remove stored addresses that are no longer requested.
-	var entriesToDelete []string
 	for existingAddr := range p.resolved {
 		if !contains(addrs, existingAddr) {
-			entriesToDelete = append(entriesToDelete, existingAddr)
+			delete(p.resolved, existingAddr)
+			p.resolverAddrs.DeleteLabelValues(existingAddr)
+		} else {
+			p.resolverAddrs.WithLabelValues(existingAddr).Set(float64(len(p.resolved[existingAddr])))
 		}
-	}
-	for _, toDelete := range entriesToDelete {
-		delete(p.resolved, toDelete)
 	}
 }
 

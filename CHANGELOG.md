@@ -16,6 +16,8 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#1097](https://github.com/improbable-eng/thanos/pull/1097) Added `thanos check rules` linter for Thanos rule rules files.
 - `AliYun OSS` object storage, see [documents](docs/storage.md#aliyun-oss-configuration) for further information.
 
+- [#1253](https://github.com/improbable-eng/thanos/pull/1253) Add support for specifying a maximum amount of retries when using Azure Blob storage (default: no retries).
+
 ## [v0.5.0](https://github.com/improbable-eng/thanos/releases/tag/v0.5.0) - 2019.06.05
 
 TL;DR: Store LRU cache is no longer leaking, Upgraded Thanos UI to Prometheus 2.9, Fixed auto-downsampling, Moved to Go 1.12.5 and more.

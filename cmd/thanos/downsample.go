@@ -45,8 +45,8 @@ func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name s
 }
 
 type DownsampleMetrics struct {
-	downsamples               *prometheus.CounterVec
-	downsampleFailures        *prometheus.CounterVec
+	downsamples        *prometheus.CounterVec
+	downsampleFailures *prometheus.CounterVec
 }
 
 func newDownsampleMetrics(reg *prometheus.Registry) *DownsampleMetrics {
@@ -215,10 +215,10 @@ func downsampleBucket(
 				continue
 			}
 			if err := processDownsampling(ctx, logger, bkt, m, dir, 5*60*1000); err != nil {
-				metrics.downsampleFailures.WithLabelValues(compact.GroupKey(*m))
+				metrics.downsampleFailures.WithLabelValues(compact.GroupKey(*m)).Inc()
 				return errors.Wrap(err, "downsampling to 5 min")
 			}
-			metrics.downsamples.WithLabelValues(compact.GroupKey(*m))
+			metrics.downsamples.WithLabelValues(compact.GroupKey(*m)).Inc()
 
 		case 5 * 60 * 1000:
 			missing := false

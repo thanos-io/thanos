@@ -9,13 +9,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/tracing"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
-	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/strutil"
+	"github.com/improbable-eng/thanos/pkg/tracing"
+
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
+	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb/labels"

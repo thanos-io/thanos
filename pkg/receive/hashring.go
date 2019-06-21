@@ -1,53 +1,24 @@
 package receive
 
 import (
+	"context"
 	"errors"
 	"sort"
+	"sync"
 
 	"github.com/improbable-eng/thanos/pkg/store/prompb"
 
 	"github.com/cespare/xxhash"
-	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/discovery/targetgroup"
 )
 
 const sep = '\xff'
 
-// Hashring finds the correct host to handle a given time series
+// Hashring finds the correct node to handle a given time series
 // for a specified tenant.
-// It returns the hostname and any error encountered.
+// It returns the node and any error encountered.
 type Hashring interface {
-	GetHost(tenant string, timeSeries *prompb.TimeSeries) (string, error)
+	Get(tenant string, timeSeries *prompb.TimeSeries) (string, error)
 }
-
-// Matcher determines whether or tenant matches a hashring.
-type Matcher interface {
-	Match(tenant string, hashring string) bool
-}
-
-// MultiMatcher is a list of Matchers that implements the Matcher interface.
-type MultiMatcher []Matcher
-
-// Match implements the Matcher interface.
-func (m MultiMatcher) Match(tenant, hashring string) bool {
-	for i := range m {
-		if !m[i].Match(tenant, hashring) {
-			return false
-		}
-	}
-	return true
-}
-
-// MatcherFunc is a shim to use a func as a Matcher.
-type MatcherFunc func(string, string) bool
-
-// Match implements the Matcher interface.
-func (m MatcherFunc) Match(tenant, hashring string) bool {
-	return m(tenant, hashring)
-}
-
-// ExactMatcher is a matcher that checks if the tenant exactly matches the hashring name.
-var ExactMatcher = MatcherFunc(func(tenant, hashring string) bool { return tenant == hashring })
 
 // hash returns a hash for the given tenant and time series.
 func hash(tenant string, ts *prompb.TimeSeries) uint64 {
@@ -66,49 +37,109 @@ func hash(tenant string, ts *prompb.TimeSeries) uint64 {
 	return xxhash.Sum64(b)
 }
 
-// simpleHashring represents a group of hosts handling write requests.
-type simpleHashring struct {
-	targetgroup.Group
+// SingleNodeHashring always returns the same node.
+type SingleNodeHashring string
+
+// Get implements the Hashring interface.
+func (s SingleNodeHashring) Get(_ string, _ *prompb.TimeSeries) (string, error) {
+	return string(s), nil
 }
 
-// GetHost returns a hostname to handle the given tenant and time series.
-func (s *simpleHashring) GetHost(tenant string, ts *prompb.TimeSeries) (string, error) {
+// simpleHashring represents a group of nodes handling write requests.
+type simpleHashring []string
+
+// Get returns a target to handle the given tenant and time series.
+func (s simpleHashring) Get(tenant string, ts *prompb.TimeSeries) (string, error) {
 	// Always return nil here to implement the Hashring interface.
-	return string(s.Targets[hash(tenant, ts)%uint64(len(s.Targets))][model.AddressLabel]), nil
+	return s[hash(tenant, ts)%uint64(len(s))], nil
 }
 
-// matchingHashring represents a set of hashrings.
-// Which hashring to use is determined by the matcher.
-type matchingHashring struct {
-	cache     map[string]Hashring
-	hashrings map[string]Hashring
-	matcher   Matcher
+// multiHashring represents a set of hashrings.
+// Which hashring to use for a tenant is determined
+// by the tenants field of the hashring configuration.
+type multiHashring struct {
+	cache      map[string]Hashring
+	hashrings  []Hashring
+	tenantSets []map[string]struct{}
+
+	// We need a mutex to guard concurrent access
+	// to the cache map, as this is both written to
+	// and read from.
+	mu sync.RWMutex
 }
 
-// GetHost returns a hostname to handle the given tenant and time series.
-func (m matchingHashring) GetHost(tenant string, ts *prompb.TimeSeries) (string, error) {
-	if h, ok := m.cache[tenant]; ok {
-		return h.GetHost(tenant, ts)
+// Get returns a target to handle the given tenant and time series.
+func (m *multiHashring) Get(tenant string, ts *prompb.TimeSeries) (string, error) {
+	m.mu.RLock()
+	h, ok := m.cache[tenant]
+	m.mu.RUnlock()
+	if ok {
+		return h.Get(tenant, ts)
 	}
-	for name := range m.hashrings {
-		if m.matcher.Match(tenant, name) {
-			m.cache[tenant] = m.hashrings[name]
-			return m.hashrings[name].GetHost(tenant, ts)
+	var found bool
+	// If the tenant is not in the cache, then we need to check
+	// every tenant in the configuration.
+	for i, t := range m.tenantSets {
+		// If the hashring has no tenants, then it is
+		// considered a default hashring and matches everything.
+		if t == nil {
+			found = true
+		}
+		if _, ok := t[tenant]; ok {
+			found = true
+		}
+		// If the hashring has no tenants, then it is
+		// considered a default hashring and matches everything.
+		if found {
+			m.mu.Lock()
+			m.cache[tenant] = m.hashrings[i]
+			m.mu.Unlock()
+			return m.hashrings[i].Get(tenant, ts)
 		}
 	}
-	return "", errors.New("no matching hosts to handle tenant")
+	return "", errors.New("no matching hashring to handle tenant")
 }
 
-// NewHashring creates a multi-tenant hashring for a given slice of
-// groups. Which tenant's hashring to use is determined by the Matcher.
-func NewHashring(matcher Matcher, groups []*targetgroup.Group) Hashring {
-	m := matchingHashring{
-		cache:     make(map[string]Hashring),
-		hashrings: make(map[string]Hashring),
-		matcher:   matcher,
+// newMultiHashring creates a multi-tenant hashring for a given slice of
+// groups.
+// Which hashring to use for a tenant is determined
+// by the tenants field of the hashring configuration.
+func newMultiHashring(cfg []HashringConfig) Hashring {
+	m := &multiHashring{
+		cache: make(map[string]Hashring),
 	}
-	for _, g := range groups {
-		m.hashrings[g.Source] = &simpleHashring{*g}
+
+	for _, h := range cfg {
+		m.hashrings = append(m.hashrings, simpleHashring(h.Endpoints))
+		var t map[string]struct{}
+		if len(h.Tenants) != 0 {
+			t = make(map[string]struct{})
+		}
+		for _, tenant := range h.Tenants {
+			t[tenant] = struct{}{}
+		}
+		m.tenantSets = append(m.tenantSets, t)
 	}
 	return m
+}
+
+// HashringFromConfig creates multi-tenant hashrings from a
+// hashring configuration file watcher.
+// The configuration file is watched for updates.
+// Hashrings are returned on the updates channel.
+// Which hashring to use for a tenant is determined
+// by the tenants field of the hashring configuration.
+func HashringFromConfig(ctx context.Context, updates chan<- Hashring, cw *ConfigWatcher) {
+	cfgUpdates := make(chan []HashringConfig)
+	defer close(cfgUpdates)
+	go cw.Run(ctx, cfgUpdates)
+
+	for {
+		select {
+		case cfg := <-cfgUpdates:
+			updates <- newMultiHashring(cfg)
+		case <-ctx.Done():
+			return
+		}
+	}
 }
