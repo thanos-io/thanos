@@ -11,7 +11,7 @@ _**NOTE:** It is recommended to keep deploying rules inside the relevant Prometh
 _The rule component should in particular not be used to circumvent solving rule deployment properly at the configuration management level._
 
 The rule component evaluates Prometheus recording and alerting rules against chosen query API via repeated `--query` (or FileSD via `--query.sd`). If more than one query is passed, round robin balancing is performed.
- 
+
 Rule results are written back to disk in the Prometheus 2.0 storage format. Rule nodes at the same time participate in the system as source store nodes, which means that they expose StoreAPI and upload their generated TSDB blocks to an object store.
 
 You can think of Rule as a simplified Prometheus that does not require a sidecar and does not scrape and do PromQL evaluation (no QueryAPI).
@@ -35,10 +35,10 @@ $ thanos rule \
 
 ## Risk
 
-Ruler has conceptual tradeoffs that might not be favorable for most use cases. The main tradeoff is its dependence on 
+Ruler has conceptual tradeoffs that might not be favorable for most use cases. The main tradeoff is its dependence on
 query reliability. For Prometheus it is unlikely to have alert/recording rule evaluation failure as evaluation is local.
 
-For Ruler the read path is distributed, since most likely Ruler is querying Thanos Querier which gets data from remote Store APIs. 
+For Ruler the read path is distributed, since most likely Ruler is querying Thanos Querier which gets data from remote Store APIs.
 
 This means that **query failure** are more likely to happen, that's why clear strategy on what will happen to alert and during query
 unavailability is the key.
@@ -71,7 +71,7 @@ It is recommended to keep partial response as `abort` for alerts and that is the
 
 Essentially, for alerting, having partial response can result in symptoms being missed by Rule's alert.
 
-## Must have: essential Ruler alerts! 
+## Must have: essential Ruler alerts!
 
 To be sure that alerting works it is essential to monitor Ruler and alert from another **Scraper (Prometheus + sidecar)** that sits in same cluster.
 
@@ -84,20 +84,24 @@ indicate connection, incompatibility or misconfiguration problems.
 either gap in rule or potentially ignored alert. Alert heavily on this if this happens for longer than your alert thresholds.
 `strategy` label will tell you if failures comes from rules that tolerate [partial response](rule.md#partial-response) or not.
 
-* `prometheus_rule_group_last_duration_seconds < prometheus_rule_group_interval_seconds`  If the difference is large, it means 
-that rule evaluation took more time than the scheduled interval. It can indicate that your query backend (e.g Querier) takes too much time 
-to evaluate the query, i.e. that it is not fast enough to fill the rule. This might indicate other problems like slow StoreAPis or 
-too complex query expression in rule. 
+* `prometheus_rule_group_last_duration_seconds < prometheus_rule_group_interval_seconds`  If the difference is large, it means
+that rule evaluation took more time than the scheduled interval. It can indicate that your query backend (e.g Querier) takes too much time
+to evaluate the query, i.e. that it is not fast enough to fill the rule. This might indicate other problems like slow StoreAPis or
+too complex query expression in rule.
 
 * `thanos_rule_evaluation_with_warnings_total`. If you choose to use Rules and Alerts with [partial response strategy's](rule.md#partial-response)
 value as "warn", this metric will tell you how many evaluation ended up with some kind of warning. To see the actual warnings
 see WARN log level. This might suggest that those evaluations return partial response and might not be accurate.
 
+* `rule_group_iterations_missed_total_total`. With all the networking overhead of thanos - you might end up in a situation when actual group evaluation
+time is bigger than the evaluation interval which leads to an incomplete data set. If you see this metric incrementing - you most likely need to tune
+evaluation interval or divide rules to smaller groups. (Rules within one group are executed sequentially and different groups are executed in parallel)
+
 Those metrics are important for vanilla Prometheus as well, but even more important when we rely on (sometimes WAN) network.
 
 // TODO(bwplotka): Rereview them after recent changes in metrics.
 
-See [alerts](/examples/alerts/alerts.md#Ruler) for more example alerts for ruler. 
+See [alerts](/examples/alerts/alerts.md#Ruler) for more example alerts for ruler.
 
 NOTE: It is also recommended to set a mocked Alert on Ruler that checks if Query is up. This might be something simple like `vector(1)` query, just
 to check if Querier is live.
@@ -109,7 +113,7 @@ Rules are processed with deduplicated data according to the replica label config
 
 ## External labels
 
-It is *mandatory* to add certain external labels to indicate the ruler origin (e.g `label='replica="A"'` or for `cluster`). 
+It is *mandatory* to add certain external labels to indicate the ruler origin (e.g `label='replica="A"'` or for `cluster`).
 Otherwise running multiple ruler replicas will be not possible, resulting in clash during compaction.
 
 NOTE: It is advised to put different external labels than labels given by other sources we are recording or alerting against.
@@ -135,7 +139,7 @@ Ruler aims to use a similar approach to the one that Prometheus has. You can con
 
 In case of Ruler in HA you need to make sure you have the following labelling setup:
 
-* Labels that identify the HA group ruler and replica label with different value for each ruler instance, e.g: 
+* Labels that identify the HA group ruler and replica label with different value for each ruler instance, e.g:
 `cluster="eu1", replica="A"` and `cluster=eu1, replica="B"` by using `--label` flag.
 * Labels that need to be dropped just before sending to alermanager in order for alertmanager to deduplicate alerts e.g
 `--alertmanager.label-drop="replica"`.
