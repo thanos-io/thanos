@@ -3,6 +3,7 @@ package receive
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 
@@ -13,11 +14,26 @@ import (
 
 const sep = '\xff'
 
+// insufficientNodesError is returned when a hashring does not
+// have enough nodes to satisfy a request for a node.
+type insufficientNodesError struct {
+	have uint64
+	want uint64
+}
+
+// Error implements the error interface.
+func (i *insufficientNodesError) Error() string {
+	return fmt.Sprintf("insufficient nodes; have %d, want %d", i.have, i.want)
+}
+
 // Hashring finds the correct node to handle a given time series
 // for a specified tenant.
 // It returns the node and any error encountered.
 type Hashring interface {
+	// Get returns the first node that should handle the given tenant and time series.
 	Get(tenant string, timeSeries *prompb.TimeSeries) (string, error)
+	// GetN returns the nth node that should handle the given tenant and time series.
+	GetN(tenant string, timeSeries *prompb.TimeSeries, n uint64) (string, error)
 }
 
 // hash returns a hash for the given tenant and time series.
@@ -41,7 +57,15 @@ func hash(tenant string, ts *prompb.TimeSeries) uint64 {
 type SingleNodeHashring string
 
 // Get implements the Hashring interface.
-func (s SingleNodeHashring) Get(_ string, _ *prompb.TimeSeries) (string, error) {
+func (s SingleNodeHashring) Get(tenant string, ts *prompb.TimeSeries) (string, error) {
+	return s.GetN(tenant, ts, 0)
+}
+
+// GetN implements the Hashring interface.
+func (s SingleNodeHashring) GetN(_ string, _ *prompb.TimeSeries, n uint64) (string, error) {
+	if n > 0 {
+		return "", &insufficientNodesError{have: 1, want: n + 1}
+	}
 	return string(s), nil
 }
 
@@ -50,8 +74,15 @@ type simpleHashring []string
 
 // Get returns a target to handle the given tenant and time series.
 func (s simpleHashring) Get(tenant string, ts *prompb.TimeSeries) (string, error) {
-	// Always return nil here to implement the Hashring interface.
-	return s[hash(tenant, ts)%uint64(len(s))], nil
+	return s.GetN(tenant, ts, 0)
+}
+
+// GetN returns the nth target to handle the given tenant and time series.
+func (s simpleHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (string, error) {
+	if n >= uint64(len(s)) {
+		return "", &insufficientNodesError{have: uint64(len(s)), want: n + 1}
+	}
+	return s[(hash(tenant, ts)+n)%uint64(len(s))], nil
 }
 
 // multiHashring represents a set of hashrings.
@@ -70,11 +101,16 @@ type multiHashring struct {
 
 // Get returns a target to handle the given tenant and time series.
 func (m *multiHashring) Get(tenant string, ts *prompb.TimeSeries) (string, error) {
+	return m.GetN(tenant, ts, 0)
+}
+
+// GetN returns the nth target to handle the given tenant and time series.
+func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (string, error) {
 	m.mu.RLock()
 	h, ok := m.cache[tenant]
 	m.mu.RUnlock()
 	if ok {
-		return h.Get(tenant, ts)
+		return h.GetN(tenant, ts, n)
 	}
 	var found bool
 	// If the tenant is not in the cache, then we need to check
@@ -94,7 +130,7 @@ func (m *multiHashring) Get(tenant string, ts *prompb.TimeSeries) (string, error
 			m.mu.Lock()
 			m.cache[tenant] = m.hashrings[i]
 			m.mu.Unlock()
-			return m.hashrings[i].Get(tenant, ts)
+			return m.hashrings[i].GetN(tenant, ts, n)
 		}
 	}
 	return "", errors.New("no matching hashring to handle tenant")
