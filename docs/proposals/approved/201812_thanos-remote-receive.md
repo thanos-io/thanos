@@ -169,7 +169,7 @@ The intention is that the load balancer can distribute requests randomly to all 
 
 ### Replication
 
-The Thanos receiver supports replication of received time-series to other receivers in the same hashring. The replication factor is controlled by setting a flag on the receivers and indicates the maximum number of copies of any time-series that should be stored in the hashring. If any time-series in a write request received by a Thanos receiver is not successfully written to at least `(REPLICATION_FATOR + 1)/2` nodes, the receiver responds with an error. For example, to attempt to store 3 copies of every time-series and ensure that every time-series is successfully written to at least 2 Thanos receivers in the target hashring, all receivers should be configured with the following flag:
+The Thanos receiver supports replication of received time-series to other receivers in the same hashring. The replication factor is controlled by setting a flag on the receivers and indicates the maximum number of copies of any time-series that should be stored in the hashring. If any time-series in a write request received by a Thanos receiver is not successfully written to at least `(REPLICATION_FACTOR + 1)/2` nodes, the receiver responds with an error. For example, to attempt to store 3 copies of every time-series and ensure that every time-series is successfully written to at least 2 Thanos receivers in the target hashring, all receivers should be configured with the following flag:
 
 ```
 --receive.replication-factor=3
