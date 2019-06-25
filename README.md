@@ -36,7 +36,7 @@ Concretely the aims of the project are:
 * [Introduction blog post](https://improbable.io/games/blog/thanos-prometheus-at-scale)
 * [Benchmarks](https://github.com/improbable-eng/thanos/tree/master/benchmark)
 * [Proposals](docs/proposals)
-* [Integrations](docs/integrations)
+* [Integrations](docs/integrations.md)
 
 ## Features
 
