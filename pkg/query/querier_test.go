@@ -48,7 +48,8 @@ func TestQuerier_DownsampledData(t *testing.T) {
 			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "a"), int(resAggrSum), []sample{{99, 1}, {199, 5}}),  // SUM chunk from Store
 			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "b"), int(resAggrSum), []sample{{99, 3}, {199, 8}}),  // SUM chunk from Store
 			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "c"), int(resAggrSum), []sample{{99, 5}, {199, 15}}), // SUM chunk from Store
-			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "d"), -1, []sample{{22, 5}, {44, 8}, {199, 15}}),     // RAW one from Sidecar
+
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "d"), -1, []sample{{22, 5}, {44, 8}, {199, 15}}), // RAW one from Sidecar
 		},
 	}
 
@@ -86,13 +87,14 @@ func TestQuerier_DownsampledData(t *testing.T) {
 	testutil.Ok(t, err)
 	ser := []promql.Series(m)
 
+	// Prometheus code returns the latest value in a time range. It needs to do that otherwise the conversion
+	// between RAW data and pre-aggregated would not work.
 	testutil.Assert(t, len(ser) == 1, "should return 1 series (got %d)", len(ser))
 	testutil.Assert(t, ser[0].Points[0].T == 100, "expected first point to be at 100ms (got %v)", ser[0].Points[0].T)
-	testutil.Assert(t, ser[0].Points[0].V == 22, "expected first point to be 22 (got %v)", ser[0].Points[0].V)
+	testutil.Assert(t, ser[0].Points[0].V == 17, "expected first point to be 17 (got %v)", ser[0].Points[0].V)
 
 	testutil.Assert(t, ser[0].Points[1].T == 200, "expected second point to be at 200ms", ser[0].Points[1].T)
 	testutil.Assert(t, ser[0].Points[1].V == 43, "expected second point to be 43 (got %v)", ser[0].Points[1].V)
-
 }
 
 func TestQuerier_Series(t *testing.T) {
