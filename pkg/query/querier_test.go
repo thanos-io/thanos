@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"math"
 	"math/rand"
+	"reflect"
 	"strconv"
 	"testing"
 
@@ -45,11 +46,12 @@ func TestQuerier_DownsampledData(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 	testProxy := &storeServer{
 		resps: []*storepb.SeriesResponse{
-			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "a"), int(resAggrSum), []sample{{99, 1}, {199, 5}}),  // SUM chunk from Store
-			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "b"), int(resAggrSum), []sample{{99, 3}, {199, 8}}),  // SUM chunk from Store
-			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "c"), int(resAggrSum), []sample{{99, 5}, {199, 15}}), // SUM chunk from Store
-
-			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "d"), -1, []sample{{22, 5}, {44, 8}, {199, 15}}), // RAW one from Sidecar
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "a", "aaa", "bbb"), int(resAggrSum), []sample{{99, 1}, {199, 5}}),            // SUM chunk from Store
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "b", "bbbb", "eee"), int(resAggrSum), []sample{{99, 3}, {199, 8}}),           // SUM chunk from Store
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "c", "qwe", "wqeqw"), int(resAggrSum), []sample{{99, 5}, {199, 15}}),         // SUM chunk from Store
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "c", "htgtreytr", "vbnbv"), int(resAggrSum), []sample{{99, 123}, {199, 15}}), // SUM chunk from Store
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "d", "asdsad", "qweqwewq"), -1, []sample{{22, 5}, {44, 8}, {199, 15}}),       // RAW one from Sidecar
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "d", "asdsad", "qweqwebb"), -1, []sample{{22, 5}, {44, 8}, {199, 15}}),       // RAW one from Sidecar
 		},
 	}
 
@@ -74,7 +76,7 @@ func TestQuerier_DownsampledData(t *testing.T) {
 	ed := ptm("0.2")
 	qry, err := engine.NewRangeQuery(
 		q,
-		"sum(a)",
+		"sum(a) by (zzz)",
 		st,
 		ed,
 		100*time.Millisecond,
@@ -87,14 +89,73 @@ func TestQuerier_DownsampledData(t *testing.T) {
 	testutil.Ok(t, err)
 	ser := []promql.Series(m)
 
-	// Prometheus code returns the latest value in a time range. It needs to do that otherwise the conversion
-	// between RAW data and pre-aggregated would not work.
-	testutil.Assert(t, len(ser) == 1, "should return 1 series (got %d)", len(ser))
-	testutil.Assert(t, ser[0].Points[0].T == 100, "expected first point to be at 100ms (got %v)", ser[0].Points[0].T)
-	testutil.Assert(t, ser[0].Points[0].V == 17, "expected first point to be 17 (got %v)", ser[0].Points[0].V)
+	testutil.Assert(t, len(ser) == 4, "should return 4 series (got %d)", len(ser))
 
-	testutil.Assert(t, ser[0].Points[1].T == 200, "expected second point to be at 200ms", ser[0].Points[1].T)
-	testutil.Assert(t, ser[0].Points[1].V == 43, "expected second point to be 43 (got %v)", ser[0].Points[1].V)
+	exp := []promql.Series{
+		promql.Series{
+			Metric: labels.FromStrings("zzz", "a"),
+			Points: []promql.Point{
+				promql.Point{
+					T: 100,
+					V: 1,
+				},
+				promql.Point{
+					T: 200,
+					V: 5,
+				},
+			},
+		},
+		promql.Series{
+			Metric: labels.FromStrings("zzz", "b"),
+			Points: []promql.Point{
+				promql.Point{
+					T: 100,
+					V: 3,
+				},
+				promql.Point{
+					T: 200,
+					V: 8,
+				},
+			},
+		},
+		promql.Series{
+			Metric: labels.FromStrings("zzz", "c"),
+			// Test case: downsampling code adds all of the samples in the
+			// 5 minute window of each series and pre-aggregates the data. However,
+			// Prometheus engine code only takes the latest sample in each time window of
+			// the retrieved data. Since we are operating in pre-aggregated data here, it leads
+			// to overinflated values.
+			Points: []promql.Point{
+				promql.Point{
+					T: 100,
+					V: 128,
+				},
+				promql.Point{
+					T: 200,
+					V: 30,
+				},
+			},
+		},
+		promql.Series{
+			Metric: labels.FromStrings("zzz", "d"),
+			// Test case: Prometheus engine in each time window selects the sample
+			// which is closest to the boundaries and adds up the different dimensions.
+			Points: []promql.Point{
+				promql.Point{
+					T: 100,
+					V: 16,
+				},
+				promql.Point{
+					T: 200,
+					V: 30,
+				},
+			},
+		},
+	}
+
+	if !reflect.DeepEqual(ser, exp) {
+		t.Fatalf("response does not match, expected:\n%+v\ngot:\n%+v", exp, ser)
+	}
 }
 
 func TestQuerier_Series(t *testing.T) {

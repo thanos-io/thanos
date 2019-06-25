@@ -123,7 +123,7 @@ func (s *chunkSeries) Iterator() storage.SeriesIterator {
 		sit = newChunkSeriesIterator(its)
 	case resAggrSum:
 		for _, c := range s.chunks {
-			its = append(its, getFirstIterator(c.Sum, c.Raw))
+			its = append(its, getFirstIterator(c.Raw, c.Sum))
 		}
 		sit = newChunkSeriesIterator(its)
 	case resAggrMin:
