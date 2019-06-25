@@ -15,7 +15,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// SafeDelete moves a TSDB block to a backup bucket and, on success, removes
+// SafeDelete moves a TSDB block to a backup bucket and on success removes
 // it from the source bucket.  It returns error if block dir already exists in
 // the backup bucket (blocks should be immutable) or if any of the operations
 // fail.  When useExistingTempdir is true do not download the block but use the
