@@ -501,7 +501,8 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceT
 	if err := metadata.Write(logger, resdir, &resmeta); err != nil {
 		return resid, err
 	}
-	// TSDB may rewrite metadata in bdir
+	// TSDB may rewrite metadata in bdir.
+	// TODO: This is not needed in newer TSDB code.
 	if err := metadata.Write(logger, bdir, meta); err != nil {
 		return resid, err
 	}
@@ -674,8 +675,8 @@ func rewrite(
 	// Build a new TSDB block.
 	for _, s := range series {
 		// The TSDB library will throw an error if we add a series with
-		// identical labels as the last series.  This means that we have
-		// discovered a duplicate time series in the old block.  We drop
+		// identical labels as the last series. This means that we have
+		// discovered a duplicate time series in the old block. We drop
 		// all duplicate series preserving the first one.
 		// TODO: Add metric to count dropped series if repair becomes a daemon
 		// rather than a batch job.
