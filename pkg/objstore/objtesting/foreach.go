@@ -121,7 +121,7 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 
 	// Optional OSS.
 	if _, ok := os.LookupEnv("THANOS_SKIP_ALIYUN_OSS_TESTS"); !ok {
-		bkt, closeFn, err := oss.NewTestBucket(t, "e2e-test")
+		bkt, closeFn, err := oss.NewTestBucket(t)
 		testutil.Ok(t, err)
 
 		ok := t.Run("AliYun oss", func(t *testing.T) {
