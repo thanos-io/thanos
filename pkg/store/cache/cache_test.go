@@ -29,25 +29,26 @@ func TestIndexCache_AvoidsDeadlock(t *testing.T) {
 	testutil.Ok(t, err)
 
 	l, err := simplelru.NewLRU(math.MaxInt64, func(key, val interface{}) {
+		// Hack LRU to simulate broken accounting: evictions do not reduce current size.
+		size := cache.curSize
 		cache.onEvict(key, val)
-
-		// We hack LRU to add back entry on eviction to simulate broken evictions.
-		cache.lru.Add(key, val)
-		cache.curSize += sliceHeaderSize + uint64(len(val.([]byte))) // Slice header + bytes.
+		cache.curSize = size
 	})
 	testutil.Ok(t, err)
 	cache.lru = l
 
 	cache.SetPostings(ulid.MustNew(0, nil), labels.Label{Name: "test2", Value: "1"}, []byte{42, 33, 14, 67, 11})
 
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypeSeries)))
+	testutil.Equals(t, uint64(sliceHeaderSize+5), cache.curSize)
+	testutil.Equals(t, float64(cache.curSize), promtest.ToFloat64(cache.currentSize.WithLabelValues(cacheTypePostings)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.current.WithLabelValues(cacheTypePostings)))
 
 	// This triggers deadlock logic.
 	cache.SetPostings(ulid.MustNew(0, nil), labels.Label{Name: "test1", Value: "1"}, []byte{42})
 
-	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypePostings)))
-	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.overflow.WithLabelValues(cacheTypeSeries)))
+	testutil.Equals(t, uint64(sliceHeaderSize+1), cache.curSize)
+	testutil.Equals(t, float64(cache.curSize), promtest.ToFloat64(cache.currentSize.WithLabelValues(cacheTypePostings)))
+	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.current.WithLabelValues(cacheTypePostings)))
 }
 
 func TestIndexCache_UpdateItem(t *testing.T) {
