@@ -313,7 +313,9 @@ func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replic
 	for endpoint := range wreqs {
 		n++
 		// If the request is not yet replicated, let's replicate it.
-		if !replicas[endpoint].replicated {
+		// If the replication factor isn't greater than 1, let's
+		// just forward the requests.
+		if !replicas[endpoint].replicated && h.options.ReplicationFactor > 1 {
 			go func(endpoint string) {
 				ec <- h.replicate(ctx, tenant, wreqs[endpoint])
 			}(endpoint)
