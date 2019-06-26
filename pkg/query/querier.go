@@ -157,7 +157,7 @@ func aggrsFromFunc(f string) ([]storepb.Aggr, resAggr) {
 	if f == "count" || strings.HasPrefix(f, "count_") {
 		return []storepb.Aggr{storepb.Aggr_COUNT}, resAggrCount
 	}
-	if f == "sum" || strings.HasPrefix(f, "sum_") {
+	if strings.HasPrefix(f, "sum_") {
 		return []storepb.Aggr{storepb.Aggr_SUM}, resAggrSum
 	}
 	if f == "increase" || f == "rate" {
