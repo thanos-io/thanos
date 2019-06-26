@@ -46,12 +46,12 @@ func TestQuerier_DownsampledData(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 	testProxy := &storeServer{
 		resps: []*storepb.SeriesResponse{
-			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "a", "aaa", "bbb"), int(resAggrSum), []sample{{99, 1}, {199, 5}}),            // SUM chunk from Store
-			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "b", "bbbb", "eee"), int(resAggrSum), []sample{{99, 3}, {199, 8}}),           // SUM chunk from Store
-			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "c", "qwe", "wqeqw"), int(resAggrSum), []sample{{99, 5}, {199, 15}}),         // SUM chunk from Store
-			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "c", "htgtreytr", "vbnbv"), int(resAggrSum), []sample{{99, 123}, {199, 15}}), // SUM chunk from Store
-			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "d", "asdsad", "qweqwewq"), -1, []sample{{22, 5}, {44, 8}, {199, 15}}),       // RAW one from Sidecar
-			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "d", "asdsad", "qweqwebb"), -1, []sample{{22, 5}, {44, 8}, {199, 15}}),       // RAW one from Sidecar
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "a", "aaa", "bbb"), []sample{{99, 1}, {199, 5}}), // Downsampled chunk from Store
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "b", "bbbb", "eee"), []sample{{99, 3}, {199, 8}}), // Downsampled chunk from Store
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "c", "qwe", "wqeqw"), []sample{{99, 5}, {199, 15}}), // Downsampled chunk from Store
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "c", "htgtreytr", "vbnbv"), []sample{{99, 123}, {199, 15}}), // Downsampled chunk from Store
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "d", "asdsad", "qweqwewq"), []sample{{22, 5}, {44, 8}, {199, 15}}), // Raw chunk from Sidecar
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "d", "asdsad", "qweqwebb"), []sample{{22, 5}, {44, 8}, {199, 15}}), // Raw chunk from Sidecar
 		},
 	}
 
@@ -123,7 +123,7 @@ func TestQuerier_DownsampledData(t *testing.T) {
 			// Test case: downsampling code adds all of the samples in the
 			// 5 minute window of each series and pre-aggregates the data. However,
 			// Prometheus engine code only takes the latest sample in each time window of
-			// the retrieved data. Since we are operating in pre-aggregated data here, it leads
+			// the retrieved data. Since we were operating in pre-aggregated data here, it lead
 			// to overinflated values.
 			Points: []promql.Point{
 				promql.Point{
@@ -163,10 +163,10 @@ func TestQuerier_Series(t *testing.T) {
 
 	testProxy := &storeServer{
 		resps: []*storepb.SeriesResponse{
-			storeSeriesResponse(t, labels.FromStrings("a", "a"), -1, []sample{{0, 0}, {2, 1}, {3, 2}}),
+			storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
 			storepb.NewWarnSeriesResponse(errors.New("partial error")),
-			storeSeriesResponse(t, labels.FromStrings("a", "b"), -1, []sample{{2, 2}, {3, 3}, {4, 4}}, []sample{{1, 1}, {2, 2}, {3, 3}}),
-			storeSeriesResponse(t, labels.FromStrings("a", "c"), -1, []sample{{100, 1}, {300, 3}, {400, 4}}),
+			storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{2, 2}, {3, 3}, {4, 4}}, []sample{{1, 1}, {2, 2}, {3, 3}}),
+			storeSeriesResponse(t, labels.FromStrings("a", "c"), []sample{{100, 1}, {300, 3}, {400, 4}}),
 		},
 	}
 
@@ -521,7 +521,7 @@ func (s *storeServer) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesS
 	return nil
 }
 
-func storeSeriesResponse(t testing.TB, lset labels.Labels, aggr int, smplChunks ...[]sample) *storepb.SeriesResponse {
+func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sample) *storepb.SeriesResponse {
 	var s storepb.Series
 
 	for _, l := range lset {
@@ -540,13 +540,7 @@ func storeSeriesResponse(t testing.TB, lset labels.Labels, aggr int, smplChunks 
 		ch := storepb.AggrChunk{
 			MinTime: smpls[0].t,
 			MaxTime: smpls[len(smpls)-1].t,
-		}
-
-		switch aggr {
-		case int(resAggrSum):
-			ch.Sum = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: c.Bytes()}
-		default:
-			ch.Raw = &storepb.Chunk{Type: storepb.Chunk_XOR, Data: c.Bytes()}
+			Raw: &storepb.Chunk{Type: storepb.Chunk_XOR, Data: c.Bytes()},
 		}
 
 		s.Chunks = append(s.Chunks, ch)
