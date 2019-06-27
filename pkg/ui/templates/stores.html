@@ -15,7 +15,7 @@
         <tr>
             <th>Endpoint</th>
             <th>Status</th>
-            <th>Announced Labels</th>
+            <th>Announced LabelSets</th>
             <th>Min Time</th>
             <th>Max Time</th>
             <th>Last Health Check</th>
@@ -38,8 +38,10 @@
                 {{end}}
             </td>
             <td>
-            {{range $label := $store.Labels}}
-                <span class="badge badge-primary">{{$label.Name}}="{{$label.Value}}"</span>
+            {{range $labelSets := $store.LabelSets}}
+                {{range $label := $labelSets.Labels}}
+                    <span class="badge badge-primary">{{$label.Name}}="{{$label.Value}}"</span>
+                {{end}}
             {{end}}
             </td>
             <td>{{formatTimestamp $store.MinTime}}</td>

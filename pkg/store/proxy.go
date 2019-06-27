@@ -5,18 +5,18 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
+	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/strutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
-
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
-	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb/labels"
@@ -31,7 +31,7 @@ type Client interface {
 	storepb.StoreClient
 
 	// Labels that apply to all data exposed by the backing store.
-	Labels() []storepb.Label
+	LabelSets() []storepb.LabelSet
 
 	// Minimum and maximum time range of data in the store.
 	TimeRange() (mint int64, maxt int64)
@@ -81,28 +81,29 @@ func (s *ProxyStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb
 		StoreType: s.component.ToProto(),
 	}
 
-	MinTime := int64(math.MaxInt64)
-	MaxTime := int64(0)
-
+	minTime := int64(math.MaxInt64)
+	maxTime := int64(0)
 	stores := s.stores()
+
+	if len(stores) == 0 {
+		res.MaxTime = math.MaxInt64
+		res.MinTime = 0
+
+		return res, nil
+	}
+
 	for _, s := range stores {
 		mint, maxt := s.TimeRange()
-		if mint < MinTime {
-			MinTime = mint
+		if mint < minTime {
+			minTime = mint
 		}
-		if maxt > MaxTime {
-			MaxTime = maxt
+		if maxt > maxTime {
+			maxTime = maxt
 		}
 	}
 
-	// Edge case: we have all of the data if there are no stores.
-	if len(stores) == 0 {
-		MinTime = 0
-		MaxTime = math.MaxInt64
-	}
-
-	res.MaxTime = MaxTime
-	res.MinTime = MinTime
+	res.MaxTime = maxTime
+	res.MinTime = minTime
 
 	for _, l := range s.selectorLabels {
 		res.Labels = append(res.Labels, storepb.Label{
@@ -110,7 +111,41 @@ func (s *ProxyStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb
 			Value: l.Value,
 		})
 	}
+
+	labelSets := make(map[uint64][]storepb.Label, len(stores))
+	for _, st := range stores {
+		for _, labelSet := range st.LabelSets() {
+			mergedLabelSet := mergeLabels(labelSet.Labels, s.selectorLabels)
+			ls := storepb.LabelsToPromLabels(mergedLabelSet)
+			sort.Sort(ls)
+			labelSets[ls.Hash()] = mergedLabelSet
+		}
+	}
+
+	res.LabelSets = make([]storepb.LabelSet, 0, len(labelSets))
+	for _, v := range labelSets {
+		res.LabelSets = append(res.LabelSets, storepb.LabelSet{Labels: v})
+	}
+
 	return res, nil
+}
+
+// mergeLabels merges label-sets a and b with label-set b having precedence.
+func mergeLabels(labelSet []storepb.Label, selector labels.Labels) []storepb.Label {
+	ls := map[string]string{}
+	for _, l := range labelSet {
+		ls[l.Name] = l.Value
+	}
+	for _, l := range selector {
+		ls[l.Name] = l.Value
+	}
+
+	res := []storepb.Label{}
+	for k, v := range ls {
+		res = append(res, storepb.Label{Name: k, Value: v})
+	}
+
+	return res
 }
 
 type ctxRespSender struct {
@@ -175,7 +210,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			// We might be able to skip the store if its meta information indicates
 			// it cannot have series matching our query.
 			// NOTE: all matchers are validated in labelsMatches method so we explicitly ignore error.
-			spanStoreMathes, gctx := tracing.StartSpan(gctx, "store_mathes")
+			spanStoreMathes, gctx := tracing.StartSpan(gctx, "store_matches")
 			ok, _ := storeMatches(st, r.MinTime, r.MaxTime, r.Matchers...)
 			spanStoreMathes.Finish()
 			if !ok {
@@ -193,7 +228,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 
 			sc, err := st.Series(seriesCtx, r)
 			if err != nil {
-				storeID := fmt.Sprintf("%v", storepb.LabelsToString(st.Labels()))
+				storeID := storepb.LabelSetsToString(st.LabelSets())
 				if storeID == "" {
 					storeID = "Store Gateway"
 				}
@@ -381,14 +416,39 @@ func (s *streamSeriesSet) Err() error {
 	return errors.Wrap(s.err, s.name)
 }
 
-// matchStore returns true if the given store may hold data for the given label matchers.
+// matchStore returns true if the given store may hold data for the given label
+// matchers.
 func storeMatches(s Client, mint, maxt int64, matchers ...storepb.LabelMatcher) (bool, error) {
 	storeMinTime, storeMaxTime := s.TimeRange()
 	if mint > storeMaxTime || maxt < storeMinTime {
 		return false, nil
 	}
+	return labelSetsMatch(s.LabelSets(), matchers)
+}
+
+// labelSetsMatch returns false if each label-set negative matches against the
+// matchers.
+func labelSetsMatch(lss []storepb.LabelSet, matchers []storepb.LabelMatcher) (bool, error) {
+	if len(lss) == 0 {
+		return true, nil
+	}
+
+	res := false
+	for _, ls := range lss {
+		lsMatch, err := labelSetMatches(ls, matchers)
+		if err != nil {
+			return false, err
+		}
+		res = res || lsMatch
+	}
+	return res, nil
+}
+
+// labelSetMatches returns false if any matcher matches negatively against the
+// respective label-value for the matcher's label-name.
+func labelSetMatches(ls storepb.LabelSet, matchers []storepb.LabelMatcher) (bool, error) {
 	for _, m := range matchers {
-		for _, l := range s.Labels() {
+		for _, l := range ls.Labels {
 			if l.Name != m.Name {
 				continue
 			}
@@ -469,7 +529,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 		store := st
 		g.Go(func() error {
 			resp, err := store.LabelValues(gctx, &storepb.LabelValuesRequest{
-				Label:                   r.Label,
+				Label: r.Label,
 				PartialResponseDisabled: r.PartialResponseDisabled,
 			})
 			if err != nil {

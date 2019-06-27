@@ -241,6 +241,24 @@ func (a *failingStoreAPI) Info(context.Context, *storepb.InfoRequest) (*storepb.
 				Value: "store_api",
 			},
 		},
+		LabelSets: []storepb.LabelSet{
+			{
+				Labels: []storepb.Label{
+					{
+						Name:  "magic",
+						Value: "store_api",
+					},
+				},
+			},
+			{
+				Labels: []storepb.Label{
+					{
+						Name:  "magicmarker",
+						Value: "store_api",
+					},
+				},
+			},
+		},
 	}, nil
 }
 
@@ -258,7 +276,7 @@ func (a *failingStoreAPI) LabelValues(context.Context, *storepb.LabelValuesReque
 
 // Test Ruler behaviour on different storepb.PartialResponseStrategy when having partial response from single `failingStoreAPI`.
 func TestRulePartialResponse(t *testing.T) {
-	const expectedWarning = "receive series from Addr: 127.0.0.1:21091 Labels: [{magic store_api {} [] 0}] Mint: -9223372036854775808 Maxt: 9223372036854775807: rpc error: code = Unknown desc = I always fail. No reason. I am just offended StoreAPI. Don't touch me"
+	const expectedWarning = "receive series from Addr: 127.0.0.1:21091 LabelSets: [name:\"magic\" value:\"store_api\" ][name:\"magicmarker\" value:\"store_api\" ] Mint: -9223372036854775808 Maxt: 9223372036854775807: rpc error: code = Unknown desc = I always fail. No reason. I am just offended StoreAPI. Don't touch me"
 
 	dir, err := ioutil.TempDir("", "test_rulepartial_respn")
 	testutil.Ok(t, err)

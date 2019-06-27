@@ -177,3 +177,11 @@ func LabelsToString(lset []Label) string {
 	}
 	return "[" + strings.Join(s, ",") + "]"
 }
+
+func LabelSetsToString(lsets []LabelSet) string {
+	s := []string{}
+	for _, ls := range lsets {
+		s = append(s, LabelsToString(ls.Labels))
+	}
+	return strings.Join(s, "")
+}
