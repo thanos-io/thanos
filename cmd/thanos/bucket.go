@@ -309,13 +309,14 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 	cmd := root.Command("web", "Web interface for remote storage bucket")
 	bind := cmd.Flag("listen", "HTTP host:port to listen on").Default("0.0.0.0:8080").String()
 	interval := cmd.Flag("refresh", "Refresh interval").Default("30m").Duration()
+	label := cmd.Flag("label", "Prometheus label to use as timeline title").String()
 
 	m[name+" web"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
 		ctx, cancel := context.WithCancel(context.Background())
 
 		router := route.New()
 
-		bucketUI := ui.NewBucketUI(logger)
+		bucketUI := ui.NewBucketUI(logger, *label)
 		bucketUI.Register(router)
 
 		if *interval < 5*time.Minute {

@@ -66,7 +66,7 @@ Subcommands:
     Inspect all blocks in the bucket in detailed, table-like way
 
   bucket web [<flags>]
-    Web interface for remote storage bucket.
+    Web interface for remote storage bucket
 
 
 ```
