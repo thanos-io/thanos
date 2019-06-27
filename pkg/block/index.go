@@ -502,7 +502,8 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceT
 		return resid, err
 	}
 	// TSDB may rewrite metadata in bdir.
-	// TODO: This is not needed in newer TSDB code.
+	// TODO: This is not needed in newer TSDB code. See
+	// https://github.com/prometheus/tsdb/pull/637
 	if err := metadata.Write(logger, bdir, meta); err != nil {
 		return resid, err
 	}
