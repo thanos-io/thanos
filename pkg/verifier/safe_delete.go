@@ -15,75 +15,94 @@ import (
 	"github.com/pkg/errors"
 )
 
-// SafeDelete moves a TSDB block to a backup bucket and on success removes
-// it from the source bucket. It returns error if block dir already exists in
-// the backup bucket (blocks should be immutable) or if any of the operations
-// fail. When useExistingTempdir is true do not download the block but use the
-// previously downloaded block found in tempdir to avoid repeated downloads.
-// The tempdir value is ignored unless useExistingTempdir is set to true.
-func SafeDelete(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, id ulid.ULID, useExistingTempdir bool, tempdir string) error {
+// TSDBBlockExistsInBucket checks to see if a given TSDB block ID exists in a
+// bucket. If so, true is returned. An error is returned on failure and in
+// such case the boolean result has no meaning.
+func TSDBBlockExistsInBucket(ctx context.Context, bkt objstore.Bucket, id ulid.ULID) (bool, error) {
 	foundDir := false
-	err := backupBkt.Iter(ctx, id.String(), func(name string) error {
+	err := bkt.Iter(ctx, id.String(), func(name string) error {
 		foundDir = true
 		return nil
 	})
+
+	return foundDir, err
+}
+
+// BackupAndDelete moves a TSDB block to a backup bucket and on success removes
+// it from the source bucket. It returns error if block dir already exists in
+// the backup bucket (blocks should be immutable) or if any of the operations
+// fail.
+func BackupAndDelete(ctx context.Context, logger log.Logger, bkt, backupBkt objstore.Bucket, id ulid.ULID) error {
+	// Does this TSDB block exist in backupBkt already?
+	found, err := TSDBBlockExistsInBucket(ctx, backupBkt, id)
 	if err != nil {
 		return err
 	}
-
-	if foundDir {
+	if found {
 		return errors.Errorf("%s dir seems to exists in backup bucket. Remove this block manually if you are sure it is safe to do", id)
 	}
 
-	if useExistingTempdir && tempdir == "" {
-		return errors.New("instructed to use existing tempdir but no tempdir provided")
+	// Create a tempdir to locally store TSDB block.
+	tempdir, err := ioutil.TempDir("", fmt.Sprintf("safe-delete-%s", id.String()))
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := os.RemoveAll(tempdir); err != nil {
+			level.Warn(logger).Log("msg", "failed to delete dir", "dir", tempdir, "err", err)
+		}
+	}()
+
+	// Download the TSDB block.
+	dir := filepath.Join(tempdir, id.String())
+	if err := block.Download(ctx, logger, bkt, id, dir); err != nil {
+		return errors.Wrap(err, "download from source")
 	}
 
-	var dir string
-	if useExistingTempdir {
-		dir = filepath.Join(tempdir, id.String())
-		if _, err := os.Stat(filepath.Join(dir, "meta.json")); err != nil {
-			// If there is any error stat'ing meta.json inside the TSDB block
-			// then declare the existing block as bad and refuse to upload it.
-			// TODO: Make this check more robust.
-			return errors.Wrap(err, "existing tsdb block is invalid")
-		}
-		level.Info(logger).Log("msg", "using previously downloaded tsdb block",
-			"id", id.String())
-	} else {
-		// tempdir unspecified, create one
-		tempdir, err = ioutil.TempDir("", fmt.Sprintf("safe-delete-%s", id.String()))
-		if err != nil {
-			return err
-		}
-		// We manage this tempdir so we clean it up on exit.
-		defer func() {
-			if err := os.RemoveAll(tempdir); err != nil {
-				level.Warn(logger).Log("msg", "failed to delete dir", "dir", tempdir, "err", err)
-			}
-		}()
+	// At this point call backupAndDeleteDownloaded() to handle the now local
+	// TSDB block.
+	return backupAndDeleteDownloaded(ctx, logger, dir, bkt, backupBkt, id)
+}
 
-		dir = filepath.Join(tempdir, id.String())
-		if _, err := os.Stat(dir); os.IsNotExist(err) {
-			// TSDB block not already present, create it.
-			err = os.Mkdir(dir, 0755)
-			if err != nil {
-				return errors.Wrap(err, "creating tsdb block tempdir")
-			}
-		} else if err != nil {
-			// Error calling Stat() and something is really wrong.
-			return errors.Wrap(err, "stat call on directory")
-		}
-		if err := block.Download(ctx, logger, bkt, id, dir); err != nil {
-			return errors.Wrap(err, "download from source")
-		}
+// BackupAndDeleteDownloaded works much like BackupAndDelete in that it will
+// move a TSDB block from a bucket to a backup bucket. The bdir parameter
+// points to the location on disk where the TSDB block was previously
+// downloaded allowing this function to avoid downloading the TSDB block from
+// the source bucket again. An error is returned if any operation fails.
+func BackupAndDeleteDownloaded(ctx context.Context, logger log.Logger, bdir string, bkt, backupBkt objstore.Bucket, id ulid.ULID) error {
+	// Does this TSDB block exist in backupBkt already?
+	found, err := TSDBBlockExistsInBucket(ctx, backupBkt, id)
+	if err != nil {
+		return err
+	}
+	if found {
+		return errors.Errorf("%s dir seems to exists in backup bucket. Remove this block manually if you are sure it is safe to do", id)
 	}
 
-	if err := block.Upload(ctx, logger, backupBkt, dir); err != nil {
+	// Now we call backupAndDeleteDownloaded() to handle the work.
+	return backupAndDeleteDownloaded(ctx, logger, bdir, bkt, backupBkt, id)
+}
+
+// backupAndDeleteDownloaded is a helper function that uploads a TSDB block
+// found on disk to the backup bucket and, on success, removes the TSDB block
+// from the source bucket.
+func backupAndDeleteDownloaded(ctx context.Context, logger log.Logger, bdir string, bkt, backupBkt objstore.Bucket, id ulid.ULID) error {
+	// Safety checks.
+	if _, err := os.Stat(filepath.Join(bdir, "meta.json")); err != nil {
+		// If there is any error stat'ing meta.json inside the TSDB block
+		// then declare the existing block as bad and refuse to upload it.
+		// TODO: Make this check more robust.
+		return errors.Wrap(err, "existing tsdb block is invalid")
+	}
+
+	// Upload the on disk TSDB block.
+	level.Info(logger).Log("msg", "Uploading block to backup bucket", "id", id.String())
+	if err := block.Upload(ctx, logger, backupBkt, bdir); err != nil {
 		return errors.Wrap(err, "upload to backup")
 	}
 
 	// Block uploaded, so we are ok to remove from src bucket.
+	level.Info(logger).Log("msg", "Deleting block", "id", id.String())
 	if err := block.Delete(ctx, bkt, id); err != nil {
 		return errors.Wrap(err, "delete from source")
 	}

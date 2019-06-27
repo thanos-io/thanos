@@ -80,7 +80,7 @@ func DuplicatedCompactionIssue(ctx context.Context, logger log.Logger, bkt objst
 	}
 
 	for i, id := range toKill {
-		if err := SafeDelete(ctx, logger, bkt, backupBkt, id, false, ""); err != nil {
+		if err := BackupAndDelete(ctx, logger, bkt, backupBkt, id); err != nil {
 			return err
 		}
 		level.Info(logger).Log("msg", "Removed duplicated block", "id", id, "to-be-removed", len(toKill)-(i+1), "removed", i+1, "issue", DuplicatedCompactionIssueID)
