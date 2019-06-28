@@ -361,10 +361,11 @@ func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, durati
 	defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
 	return runutil.Repeat(duration, ctx.Done(), func() error {
-		iterCtx, iterCancel := context.WithTimeout(ctx, 5*time.Minute)
-		defer iterCancel()
 
-		return runutil.RetryWithLog(logger, time.Minute, iterCtx.Done(), func() error {
+		return runutil.RetryWithLog(logger, time.Minute, ctx.Done(), func() error {
+			iterCtx, iterCancel := context.WithTimeout(ctx, 5*time.Minute)
+			defer iterCancel()
+
 			blocks, err := download(iterCtx, logger, bkt)
 			if err != nil {
 				bucketUI.Set("[]", err)
