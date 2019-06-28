@@ -12,9 +12,6 @@ import (
 	"text/template"
 	"time"
 
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/prometheus/common/route"
-
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/objstore"
@@ -28,12 +25,14 @@ import (
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
 	"github.com/olekukonko/tablewriter"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/route"
 	"github.com/prometheus/tsdb/labels"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
-	"gopkg.in/alecthomas/kingpin.v2"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 var (
@@ -299,12 +298,7 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 	}
 }
 
-// registerBucketWeb exposes a web interface for the state of Thanos remote store just like `pprof web`
-//
-// TODO(jaseemabid):
-//
-// 1. Some download code is duplicated from `ls -o json`; refactor as needed
-// 2. Some web code is duplicated from query UI, refactor as needed
+// registerBucketWeb exposes a web interface for the state of remote store like `pprof web`
 func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
 	cmd := root.Command("web", "Web interface for remote storage bucket")
 	bind := cmd.Flag("listen", "HTTP host:port to listen on").Default("0.0.0.0:8080").String()
@@ -316,7 +310,6 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 		ctx, cancel := context.WithCancel(context.Background())
 
 		router := route.New()
-
 		bucketUI := ui.NewBucketUI(logger, *label)
 		bucketUI.Register(router)
 
@@ -356,7 +349,6 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 
 // refresh metadata from remote storage periodically and update UI.
 func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, duration time.Duration, timeout time.Duration, name string, reg *prometheus.Registry, objStoreConfig *pathOrContent) error {
-
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
 		return err
@@ -368,9 +360,7 @@ func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, durati
 	}
 
 	defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
-
 	return runutil.Repeat(duration, ctx.Done(), func() error {
-
 		return runutil.RetryWithLog(logger, time.Minute, ctx.Done(), func() error {
 			iterCtx, iterCancel := context.WithTimeout(ctx, timeout)
 			defer iterCancel()
