@@ -17,6 +17,8 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 - [#1253](https://github.com/improbable-eng/thanos/pull/1253) Add support for specifying a maximum amount of retries when using Azure Blob storage (default: no retries).
 
+- [#1248](https://github.com/improbable-eng/thanos/pull/1248) Add a web UI to show the state of remote storage.
+
 ## [v0.5.0](https://github.com/improbable-eng/thanos/releases/tag/v0.5.0) - 2019.06.05
 
 TL;DR: Store LRU cache is no longer leaking, Upgraded Thanos UI to Prometheus 2.9, Fixed auto-downsampling, Moved to Go 1.12.5 and more.

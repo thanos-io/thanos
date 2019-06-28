@@ -4,25 +4,31 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"sort"
 	"strings"
 	"text/template"
 	"time"
 
-	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/runutil"
+	"github.com/improbable-eng/thanos/pkg/ui"
 	"github.com/improbable-eng/thanos/pkg/verifier"
+
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
 	"github.com/olekukonko/tablewriter"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/route"
 	"github.com/prometheus/tsdb/labels"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
@@ -53,6 +59,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	registerBucketVerify(m, cmd, name, objStoreConfig)
 	registerBucketLs(m, cmd, name, objStoreConfig)
 	registerBucketInspect(m, cmd, name, objStoreConfig)
+	registerBucketWeb(m, cmd, name, objStoreConfig)
 	return
 }
 
@@ -289,6 +296,115 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 
 		return printTable(blockMetas, selectorLabels, *sortBy)
 	}
+}
+
+// registerBucketWeb exposes a web interface for the state of remote store like `pprof web`
+func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
+	cmd := root.Command("web", "Web interface for remote storage bucket")
+	bind := cmd.Flag("listen", "HTTP host:port to listen on").Default("0.0.0.0:8080").String()
+	interval := cmd.Flag("refresh", "Refresh interval to download metadata from remote storage").Default("30m").Duration()
+	timeout := cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").Duration()
+	label := cmd.Flag("label", "Prometheus label to use as timeline title").String()
+
+	m[name+" web"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
+		ctx, cancel := context.WithCancel(context.Background())
+
+		router := route.New()
+		bucketUI := ui.NewBucketUI(logger, *label)
+		bucketUI.Register(router)
+
+		if *interval < 5*time.Minute {
+			level.Warn(logger).Log("msg", "Refreshing more often than 5m could lead to large data transfers")
+		}
+
+		if *timeout < time.Minute {
+			level.Warn(logger).Log("msg", "Timeout less than 1m could lead to frequent failures")
+		}
+
+		if *interval < (*timeout * 2) {
+			level.Warn(logger).Log("msg", "Refresh interval should be at least 2 times the timeout")
+		}
+
+		g.Add(func() error {
+			return refresh(ctx, logger, bucketUI, *interval, *timeout, name, reg, objStoreConfig)
+		}, func(error) {
+			cancel()
+		})
+
+		l, err := net.Listen("tcp", *bind)
+		if err != nil {
+			return errors.Wrapf(err, "listen HTTP on address %s", *bind)
+		}
+
+		g.Add(func() error {
+			level.Info(logger).Log("msg", "Listening for query and metrics", "address", *bind)
+			return errors.Wrap(http.Serve(l, router), "serve web")
+		}, func(error) {
+			runutil.CloseWithLogOnErr(logger, l, "http listener")
+		})
+
+		return nil
+	}
+}
+
+// refresh metadata from remote storage periodically and update UI.
+func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, duration time.Duration, timeout time.Duration, name string, reg *prometheus.Registry, objStoreConfig *pathOrContent) error {
+	confContentYaml, err := objStoreConfig.Content()
+	if err != nil {
+		return err
+	}
+
+	bkt, err := client.NewBucket(logger, confContentYaml, reg, name)
+	if err != nil {
+		return errors.Wrap(err, "bucket client")
+	}
+
+	defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+	return runutil.Repeat(duration, ctx.Done(), func() error {
+		return runutil.RetryWithLog(logger, time.Minute, ctx.Done(), func() error {
+			iterCtx, iterCancel := context.WithTimeout(ctx, timeout)
+			defer iterCancel()
+
+			blocks, err := download(iterCtx, logger, bkt)
+			if err != nil {
+				bucketUI.Set("[]", err)
+				return err
+			}
+
+			data, err := json.Marshal(blocks)
+			if err != nil {
+				bucketUI.Set("[]", err)
+				return err
+			}
+			bucketUI.Set(string(data), nil)
+			return nil
+		})
+	})
+}
+
+func download(ctx context.Context, logger log.Logger, bkt objstore.Bucket) (blocks []metadata.Meta, err error) {
+	level.Info(logger).Log("msg", "synchronizing block metadata")
+
+	if err = bkt.Iter(ctx, "", func(name string) error {
+		id, ok := block.IsBlockDir(name)
+		if !ok {
+			return nil
+		}
+
+		meta, err := block.DownloadMeta(ctx, logger, bkt, id)
+		if err != nil {
+			return err
+		}
+
+		blocks = append(blocks, meta)
+		return nil
+	}); err != nil {
+		level.Error(logger).Log("err", err, "msg", "Failed to downloaded block metadata")
+		return blocks, err
+	}
+
+	level.Info(logger).Log("msg", "downloaded blocks meta.json", "num", len(blocks))
+	return blocks, nil
 }
 
 func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortBy []string) error {
