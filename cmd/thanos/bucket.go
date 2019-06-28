@@ -360,7 +360,7 @@ func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, durati
 
 	defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
-	runutil.Forever(logger, duration, ctx.Done(), func() error {
+	return runutil.Repeat(duration, ctx.Done(), func() error {
 		iterCtx, iterCancel := context.WithTimeout(ctx, 5*time.Minute)
 		defer iterCancel()
 
@@ -380,8 +380,6 @@ func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, durati
 			return nil
 		})
 	})
-
-	return nil
 }
 
 func download(ctx context.Context, logger log.Logger, bkt objstore.Bucket) (blocks []metadata.Meta, err error) {

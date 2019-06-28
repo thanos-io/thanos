@@ -70,24 +70,6 @@ func Repeat(interval time.Duration, stopc <-chan struct{}, f func() error) error
 	}
 }
 
-// Forever executes f every interval seconds until stopc is closed. Errors are logged and ignored.
-// It executes f once right after being called.
-func Forever(logger log.Logger, interval time.Duration, stopc <-chan struct{}, f func() error) {
-	tick := time.NewTicker(interval)
-	defer tick.Stop()
-
-	for {
-		if err := f(); err != nil {
-			level.Error(logger).Log("msg", "function failed. Retrying in next tick", "err", err)
-		}
-		select {
-		case <-stopc:
-			return
-		case <-tick.C:
-		}
-	}
-}
-
 // Retry executes f every interval seconds until timeout or no error is returned from f.
 func Retry(interval time.Duration, stopc <-chan struct{}, f func() error) error {
 	return RetryWithLog(log.NewNopLogger(), interval, stopc, f)
