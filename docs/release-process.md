@@ -43,7 +43,7 @@ Process of releasing a *minor* Thanos version:
 1. If within 3 work days there is major bug, let's triage it to fix it and then release `v<major>.<minor>.0-rc.++` Go to step 2.
 1. Do patch release if needed for any bugs afterwards. Use same `release-xxx` branch.
 
-## How to release "a version"
+## How to release a version
 
 1. Add PR on branch `release-<major>.<minor>` that will start minor release branch and prepare changes to cut release.
     

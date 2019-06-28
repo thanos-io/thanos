@@ -35,7 +35,7 @@ Please reach any of the maintainer on slack or email if you want to help as well
 ### Triage labels
 
 To improve navigating through issues and PRs we introduce various [labels](https://github.com/improbable-eng/thanos/issues/labels). Part of triaging process for Triage and Maintainers
-is to adjust those labels if needed manual. Some `Prow` can automate a portion of this in future.
+is to adjust those labels if needed manual. The `Prow` system can automate a portion of this in future.
 
 The main labels are: 
 
@@ -65,6 +65,11 @@ This helps to also estimate how long it can potentially take to review the PR or
 
 `priority: P0` should be assigned for the changes or the issues that are critical and should be addressed in first order.
 
+#### State
+
+Github shows some basic states, but sometimes PR is stale due to requested changes, but it's not clear from first glance.
+That's why `state: changes-requested` is helpful on those.
+
 #### Other
 
 Self explanatory ones:
@@ -74,12 +79,6 @@ Self explanatory ones:
 * `duplicate`
 * `feature request / improvement`
 * `bug` and `bugfix`
-
-#### State
-
-Github shows some basic states, but sometimes PR is stale due to requested changes, but it's not clear from first glance.
-That's why `state: changes-requested` is helpful on those.
-
 
 ## Storage plugins maintainers
 

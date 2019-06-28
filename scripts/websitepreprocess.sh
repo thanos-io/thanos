@@ -13,10 +13,27 @@ COMMIT_SHA=`git rev-parse HEAD`
 rm -rf ${OUTPUT_CONTENT_DIR}
 mkdir -p ${OUTPUT_CONTENT_DIR}
 
-# 1. Copy original content.
+# Copy original content.
 cp -r ${ORIGINAL_CONTENT_DIR}/* ${OUTPUT_CONTENT_DIR}
 
-# 2. Add headers to special CODE_OF_CONDUCT.md, CONTRIBUTING.md and CHANGELOG.md files.
+# Add edit footer to `docs/` md items.
+ALL_DOC_CONTENT_FILES=`echo "${OUTPUT_CONTENT_DIR}/**/*.md ${OUTPUT_CONTENT_DIR}/*.md"`
+for file in ${ALL_DOC_CONTENT_FILES}
+do
+  relFile=${file##${OUTPUT_CONTENT_DIR}/}
+  echo "$(cat <<EOT
+
+---
+
+Found a typo, inconsistency or missing information in our docs?
+Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/improbable-eng/thanos/edit/master/docs/${relFile}) :heart:
+
+EOT
+)" >> ${file}
+
+done
+
+# Add headers to special CODE_OF_CONDUCT.md, CONTRIBUTING.md and CHANGELOG.md files.
 echo "$(cat <<EOT
 ---
 title: Code of Conduct
@@ -47,27 +64,23 @@ EOT
 )" > ${OUTPUT_CONTENT_DIR}/CHANGELOG.md
 tail -n +2 CHANGELOG.md >> ${OUTPUT_CONTENT_DIR}/CHANGELOG.md
 
-ALL_DOC_CONTENT_FILES=`echo "${OUTPUT_CONTENT_DIR}/**/*.md ${OUTPUT_CONTENT_DIR}/*.md"`
-for file in ${ALL_DOC_CONTENT_FILES}
-do
-
-  relFile=${file#*/*/}
-  echo "$(cat <<EOT
-
+echo "$(cat <<EOT
 ---
-
-Found a typo, inconsistency or missing information in our docs?
-Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/improbable-eng/thanos/edit/master/docs/${relFile}) :heart:
-
+title: Maintainers
+type: docs
+menu: thanos
+---
 EOT
-)" >> ${file}
+)" > ${OUTPUT_CONTENT_DIR}/MAINTAINERS.md
+tail -n +2 MAINTAINERS.md >> ${OUTPUT_CONTENT_DIR}/MAINTAINERS.md
 
-done
+# Glob again to include new docs.
+ALL_DOC_CONTENT_FILES=`echo "${OUTPUT_CONTENT_DIR}/**/*.md ${OUTPUT_CONTENT_DIR}/*.md"`
 
-# 3. All the absolute links are replaced with a direct link to the file on github, including the current commit SHA.
+# All the absolute links are replaced with a direct link to the file on github, including the current commit SHA.
 perl -pi -e 's/]\(\//]\(https:\/\/github.com\/improbable-eng\/thanos\/tree\/'${COMMIT_SHA}'\//' ${ALL_DOC_CONTENT_FILES}
 
-# 4. All the relative links needs to have ../  This is because Hugo is missing: https://github.com/gohugoio/hugo/pull/3934
+# All the relative links needs to have ../  This is because Hugo is missing: https://github.com/gohugoio/hugo/pull/3934
 perl -pi -e 's/]\(\.\//]\(..\//' ${ALL_DOC_CONTENT_FILES}
 perl -pi -e 's/]\((?!http)/]\(..\//' ${ALL_DOC_CONTENT_FILES}
 perl -pi -e 's/src=\"(?!http)/src=\"..\//' ${ALL_DOC_CONTENT_FILES}
