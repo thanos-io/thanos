@@ -308,7 +308,8 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
 	cmd := root.Command("web", "Web interface for remote storage bucket")
 	bind := cmd.Flag("listen", "HTTP host:port to listen on").Default("0.0.0.0:8080").String()
-	interval := cmd.Flag("refresh", "Refresh interval").Default("30m").Duration()
+	interval := cmd.Flag("refresh", "Refresh interval to download metadata from remote storage").Default("30m").Duration()
+	timeout := cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").Duration()
 	label := cmd.Flag("label", "Prometheus label to use as timeline title").String()
 
 	m[name+" web"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
@@ -323,8 +324,16 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 			level.Warn(logger).Log("msg", "Refreshing more often than 5m could lead to large data transfers")
 		}
 
+		if *timeout < time.Minute {
+			level.Warn(logger).Log("msg", "Timeout less than 1m could lead to frequent failures")
+		}
+
+		if *interval < (*timeout * 2) {
+			level.Warn(logger).Log("msg", "Refresh interval should be at least 2 times the timeout")
+		}
+
 		g.Add(func() error {
-			return refresh(ctx, logger, bucketUI, *interval, name, reg, objStoreConfig)
+			return refresh(ctx, logger, bucketUI, *interval, *timeout, name, reg, objStoreConfig)
 		}, func(error) {
 			cancel()
 		})
@@ -346,7 +355,7 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 }
 
 // refresh metadata from remote storage periodically and update UI.
-func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, duration time.Duration, name string, reg *prometheus.Registry, objStoreConfig *pathOrContent) error {
+func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, duration time.Duration, timeout time.Duration, name string, reg *prometheus.Registry, objStoreConfig *pathOrContent) error {
 
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
@@ -363,7 +372,7 @@ func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, durati
 	return runutil.Repeat(duration, ctx.Done(), func() error {
 
 		return runutil.RetryWithLog(logger, time.Minute, ctx.Done(), func() error {
-			iterCtx, iterCancel := context.WithTimeout(ctx, 5*time.Minute)
+			iterCtx, iterCancel := context.WithTimeout(ctx, timeout)
 			defer iterCancel()
 
 			blocks, err := download(iterCtx, logger, bkt)
