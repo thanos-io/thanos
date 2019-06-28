@@ -75,7 +75,9 @@ Subcommands:
 
 `bucket web` is used to inspect bucket blocks in form of interactive web UI.
 
-![web](/docs/img/bucket-web.png)
+This will start local webserver that will periodically update the view with given refresh.
+
+<img src="../img/bucket-web.jpg" class="img-fluid" alt="web" />
 
 Example:
 
