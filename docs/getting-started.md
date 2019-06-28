@@ -22,7 +22,7 @@ Thanos will work in cloud native environments as well as more traditional ones. 
 ## Requirements
 
 * One or more [Prometheus](https://prometheus.io) v2.2.1+ installations
-* golang 1.10+
+* golang 1.12+
 * An object storage bucket (optional)
 
 ## Get Thanos!
