@@ -29,6 +29,7 @@ Full list of triage persons is displayed below:
 |-----------------------|--------------------------|------------------------------------------------------------|
 | Adrien Fillon         | `@Adrien F`              | [@adrien-f](https://github.com/adrien-f)                   |
 | Martin Chodur         | `@FUSAKLA`               | [@fusakla](https://github.com/fusakla)                     |
+| Michael Dai           | `@jojohappy`             | [@jojohappy](https://github.com/jojohappy)                 |
 
 Please reach any of the maintainer on slack or email if you want to help as well.
 
