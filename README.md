@@ -68,7 +68,7 @@ Master should be stable and usable. Every commit to master builds docker image n
 We also perform minor releases every 6 weeks. 
 During that, we build tarballs for major platforms and docker image.
 
-See [this](docs/release-process.md) for details.
+See [release process docs](docs/release-process.md) for details.
 
 ## Contributing
 
