@@ -33,7 +33,7 @@ type StoreSpec interface {
 	// If metadata call fails we assume that store is no longer accessible and we should not use it.
 	// NOTE: It is implementation responsibility to retry until context timeout, but a caller responsibility to manage
 	// given store connection.
-	Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []storepb.LabelSet, labels []storepb.Label, mint int64, maxt int64, err error)
+	Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []storepb.LabelSet, mint int64, maxt int64, err error)
 }
 
 type StoreStatus struct {
@@ -63,12 +63,16 @@ func (s *grpcStoreSpec) Addr() string {
 
 // Metadata method for gRPC store API tries to reach host Info method until context timeout. If we are unable to get metadata after
 // that time, we assume that the host is unhealthy and return error.
-func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []storepb.LabelSet, labels []storepb.Label, mint int64, maxt int64, err error) {
+func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []storepb.LabelSet, mint int64, maxt int64, err error) {
 	resp, err := client.Info(ctx, &storepb.InfoRequest{}, grpc.FailFast(false))
 	if err != nil {
-		return nil, nil, 0, 0, errors.Wrapf(err, "fetching store info from %s", s.addr)
+		return nil, 0, 0, errors.Wrapf(err, "fetching store info from %s", s.addr)
 	}
-	return resp.LabelSets, resp.Labels, resp.MinTime, resp.MaxTime, nil
+	if len(resp.LabelSets) == 0 && len(resp.Labels) > 0 {
+		resp.LabelSets = []storepb.LabelSet{{Labels: resp.Labels}}
+	}
+
+	return resp.LabelSets, resp.MinTime, resp.MaxTime, nil
 }
 
 // StoreSet maintains a set of active stores. It is backed up by Store Specifications that are dynamically fetched on
@@ -171,11 +175,7 @@ type storeRef struct {
 	logger log.Logger
 }
 
-func (s *storeRef) Update(labelSets []storepb.LabelSet, labels []storepb.Label, minTime int64, maxTime int64) {
-	if len(labelSets) == 0 && len(labels) > 0 {
-		labelSets = []storepb.LabelSet{{Labels: labels}}
-	}
-
+func (s *storeRef) Update(labelSets []storepb.LabelSet, minTime int64, maxTime int64) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -296,14 +296,14 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 			store, ok := s.stores[addr]
 			if ok {
 				// Check existing store. Is it healthy? What are current metadata?
-				labelSets, labels, minTime, maxTime, err := spec.Metadata(ctx, store.StoreClient)
+				labelSets, minTime, maxTime, err := spec.Metadata(ctx, store.StoreClient)
 				if err != nil {
 					// Peer unhealthy. Do not include in healthy stores.
 					s.updateStoreStatus(store, err)
 					level.Warn(s.logger).Log("msg", "update of store node failed", "err", err, "address", addr)
 					return
 				}
-				store.Update(labelSets, labels, minTime, maxTime)
+				store.Update(labelSets, minTime, maxTime)
 			} else {
 				// New store or was unhealthy and was removed in the past - create new one.
 				conn, err := grpc.DialContext(ctx, addr, s.dialOpts...)
@@ -322,8 +322,11 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "initial store client info fetch"), "address", addr)
 					return
 				}
+				if len(resp.LabelSets) == 0 && len(resp.Labels) > 0 {
+					resp.LabelSets = []storepb.LabelSet{{Labels: resp.Labels}}
+				}
 				store.storeType = component.FromProto(resp.StoreType)
-				store.Update(resp.LabelSets, resp.Labels, resp.MinTime, resp.MaxTime)
+				store.Update(resp.LabelSets, resp.MinTime, resp.MaxTime)
 			}
 
 			mtx.Lock()
