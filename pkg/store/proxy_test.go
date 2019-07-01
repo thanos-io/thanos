@@ -893,6 +893,39 @@ func TestStoreMatches(t *testing.T) {
 			},
 			ok: true,
 		},
+		{
+			s: &testClient{labelSets: []storepb.LabelSet{
+				{Labels: []storepb.Label{{Name: "a", Value: "b"}}},
+				{Labels: []storepb.Label{{Name: "a", Value: "c"}}},
+				{Labels: []storepb.Label{{Name: "a", Value: "d"}}},
+			}},
+			ms: []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "e"},
+			},
+			ok: false,
+		},
+		{
+			s: &testClient{labelSets: []storepb.LabelSet{
+				{Labels: []storepb.Label{{Name: "a", Value: "b"}}},
+				{Labels: []storepb.Label{{Name: "a", Value: "c"}}},
+				{Labels: []storepb.Label{{Name: "a", Value: "d"}}},
+			}},
+			ms: []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "c"},
+			},
+			ok: true,
+		},
+		{
+			s: &testClient{labelSets: []storepb.LabelSet{
+				{Labels: []storepb.Label{{Name: "a", Value: "b"}}},
+				{Labels: []storepb.Label{{Name: "a", Value: "c"}}},
+				{Labels: []storepb.Label{{Name: "a", Value: "d"}}},
+			}},
+			ms: []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_NEQ, Name: "a", Value: ""},
+			},
+			ok: true,
+		},
 	}
 
 	for i, c := range cases {
