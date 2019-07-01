@@ -8,3 +8,6 @@ issues:
         - linters:
               - staticcheck
           text: "SA1019:"
+        - linters:
+              - unused
+          text: "SourceStoreAPI.implementsStoreAPI"

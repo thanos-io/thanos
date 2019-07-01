@@ -20,6 +20,7 @@ type Source interface {
 // SourceStoreAPI is a component that implements Thanos' gRPC StoreAPI
 // and produce blocks of metrics.
 type SourceStoreAPI interface {
+	implementsStoreAPI()
 	String() string
 	ToProto() storepb.StoreType
 }
@@ -37,6 +38,8 @@ type storeAPI struct {
 func (s sourceStoreAPI) ToProto() storepb.StoreType {
 	return storepb.StoreType(storepb.StoreType_value[strings.ToUpper(s.String())])
 }
+
+func (s sourceStoreAPI) implementsStoreAPI() {}
 
 func (s storeAPI) ToProto() storepb.StoreType {
 	return storepb.StoreType(storepb.StoreType_value[strings.ToUpper(s.String())])
