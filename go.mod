@@ -9,7 +9,7 @@ require (
 	github.com/fatih/structtag v1.0.0
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/fsnotify/fsnotify v1.4.7
-	github.com/go-kit/kit v0.8.0
+	github.com/go-kit/kit v0.9.0
 	github.com/gogo/protobuf v1.2.1
 	github.com/golang/snappy v0.0.1
 	github.com/google/martian v2.1.0+incompatible // indirect
@@ -21,7 +21,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.1
 	github.com/leanovate/gopter v0.2.4
 	github.com/lovoo/gcloud-opentracing v0.3.0
-	github.com/miekg/dns v1.1.13
+	github.com/miekg/dns v1.1.15
 	github.com/minio/minio-go/v6 v6.0.27-0.20190529152532-de69c0e465ed
 	github.com/mozillazg/go-cos v0.12.0
 	github.com/mwitkow/go-conntrack v0.0.0-20161129095857-cc309e4a2223
@@ -40,7 +40,6 @@ require (
 	github.com/uber/jaeger-client-go v2.16.0+incompatible
 	github.com/uber/jaeger-lib v2.0.0+incompatible
 	go.uber.org/atomic v1.4.0 // indirect
-	golang.org/x/net v0.0.0-20190522155817-f3200d17e092
 	golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421
 	golang.org/x/sync v0.0.0-20190227155943-e225da77a7e6
 	golang.org/x/text v0.3.1-0.20180807135948-17ff2d5776d2

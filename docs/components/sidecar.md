@@ -15,7 +15,7 @@ In details:
 
   NOTE: This still does NOT mean that Prometheus can be fully stateless, because if it crashes and restarts you will lose ~2 hours of metrics, so persistent disk for Prometheus is highly recommended. The closest to stateless you can get is using remote write (which Thanos experimentally supports, see [this](../proposals/approved/201812_thanos-remote-receive.md). Remote write has other risks and consequences, and still if crashed you loose in positive case seconds of metrics data, so persistent disk is recommended in all cases. 
 
-* Optionally Thanos sidecar is able to watch Prometheus rules and configuration, decompress and substitute environment variables if needed and ping Prometheus to reload them. Read more about this in [here](./query.md#reloader-configuration)
+* Optionally Thanos sidecar is able to watch Prometheus rules and configuration, decompress and substitute environment variables if needed and ping Prometheus to reload them. Read more about this in [here](./sidecar.md#reloader-configuration)
 
 
 Prometheus servers connected to the Thanos cluster via the sidecar are subject to a few limitations and recommendations for safe operations:

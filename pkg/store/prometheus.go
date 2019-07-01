@@ -98,6 +98,15 @@ func (p *PrometheusStore) Info(ctx context.Context, r *storepb.InfoRequest) (*st
 			Value: l.Value,
 		})
 	}
+
+	// Until we deprecate the single labels in the reply, we just duplicate
+	// them here for migration/compatibility purposes.
+	res.LabelSets = []storepb.LabelSet{}
+	if len(res.Labels) > 0 {
+		res.LabelSets = append(res.LabelSets, storepb.LabelSet{
+			Labels: res.Labels,
+		})
+	}
 	return res, nil
 }
 
