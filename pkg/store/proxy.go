@@ -85,6 +85,7 @@ func (s *ProxyStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb
 	maxTime := int64(0)
 	stores := s.stores()
 
+	// Edge case: we have all of the data if there are no stores.
 	if len(stores) == 0 {
 		res.MaxTime = math.MaxInt64
 		res.MinTime = 0
@@ -130,13 +131,15 @@ func (s *ProxyStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb
 	return res, nil
 }
 
-// mergeLabels merges label-sets a and b with label-set b having precedence.
-func mergeLabels(labelSet []storepb.Label, selector labels.Labels) []storepb.Label {
+// mergeLabels merges label-set a and label-selector b with the selector's
+// labels having precedence. The types are distinct because of the inputs at
+// hand where this function is used.
+func mergeLabels(a []storepb.Label, b labels.Labels) []storepb.Label {
 	ls := map[string]string{}
-	for _, l := range labelSet {
+	for _, l := range a {
 		ls[l.Name] = l.Value
 	}
-	for _, l := range selector {
+	for _, l := range b {
 		ls[l.Name] = l.Value
 	}
 
@@ -426,8 +429,7 @@ func storeMatches(s Client, mint, maxt int64, matchers ...storepb.LabelMatcher) 
 	return labelSetsMatch(s.LabelSets(), matchers)
 }
 
-// labelSetsMatch returns false if each label-set negative matches against the
-// matchers.
+// labelSetsMatch returns false if all label-set do not match the matchers.
 func labelSetsMatch(lss []storepb.LabelSet, matchers []storepb.LabelMatcher) (bool, error) {
 	if len(lss) == 0 {
 		return true, nil

@@ -174,10 +174,11 @@ var xxx_messageInfo_InfoRequest proto.InternalMessageInfo
 
 type InfoResponse struct {
 	// Deprecated. Use label_sets instead.
-	Labels               []Label    `protobuf:"bytes,1,rep,name=labels,proto3" json:"labels"`
-	MinTime              int64      `protobuf:"varint,2,opt,name=min_time,json=minTime,proto3" json:"min_time,omitempty"`
-	MaxTime              int64      `protobuf:"varint,3,opt,name=max_time,json=maxTime,proto3" json:"max_time,omitempty"`
-	StoreType            StoreType  `protobuf:"varint,4,opt,name=storeType,proto3,enum=thanos.StoreType" json:"storeType,omitempty"`
+	Labels    []Label   `protobuf:"bytes,1,rep,name=labels,proto3" json:"labels"`
+	MinTime   int64     `protobuf:"varint,2,opt,name=min_time,json=minTime,proto3" json:"min_time,omitempty"`
+	MaxTime   int64     `protobuf:"varint,3,opt,name=max_time,json=maxTime,proto3" json:"max_time,omitempty"`
+	StoreType StoreType `protobuf:"varint,4,opt,name=storeType,proto3,enum=thanos.StoreType" json:"storeType,omitempty"`
+	// label_sets is an unsorted list of `LabelSet`s.
 	LabelSets            []LabelSet `protobuf:"bytes,5,rep,name=label_sets,json=labelSets,proto3" json:"label_sets"`
 	XXX_NoUnkeyedLiteral struct{}   `json:"-"`
 	XXX_unrecognized     []byte     `json:"-"`

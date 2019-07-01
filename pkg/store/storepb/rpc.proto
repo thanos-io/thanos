@@ -46,6 +46,7 @@ message InfoResponse {
   int64 min_time = 2;
   int64 max_time = 3;
   StoreType storeType  = 4;
+  // label_sets is an unsorted list of `LabelSet`s.
   repeated LabelSet label_sets = 5 [(gogoproto.nullable) = false];
 }
 
