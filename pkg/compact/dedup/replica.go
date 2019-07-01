@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -64,24 +65,15 @@ func (r *Replica) isAggReplica() bool {
 	return r.Name == AggReplicaLabel
 }
 
-func replicaGroup(labels map[string]string) string {
-	names := make([]string, 0, len(labels))
-	for k := range labels {
-		names = append(names, k)
+func (r *Replica) Resolution() (int64, error) {
+	if _, ok := r.Labels[ResolutionLabel]; !ok {
+		return -1, fmt.Errorf("no resolution found in replica group")
 	}
-	sort.Slice(names, func(i, j int) bool {
-		return names[i] < names[j]
-	})
-	var b strings.Builder
-	b.WriteString("[")
-	for i, name := range names {
-		if i != 0 {
-			b.WriteString(",")
-		}
-		b.WriteString(fmt.Sprintf("%s=%s", name, labels[name]))
+	res, err := strconv.ParseInt(r.Labels[ResolutionLabel], 10, 64)
+	if err != nil {
+		return -1, err
 	}
-	b.WriteString("]")
-	return b.String()
+	return res, nil
 }
 
 type Replicas []*Replica
@@ -122,6 +114,26 @@ func replicaLabels(replicaLabelName string, b *metadata.Meta) map[string]string 
 	}
 	labels[ResolutionLabel] = fmt.Sprint(b.Thanos.Downsample.Resolution)
 	return labels
+}
+
+func replicaGroup(labels map[string]string) string {
+	names := make([]string, 0, len(labels))
+	for k := range labels {
+		names = append(names, k)
+	}
+	sort.Slice(names, func(i, j int) bool {
+		return names[i] < names[j]
+	})
+	var b strings.Builder
+	b.WriteString("[")
+	for i, name := range names {
+		if i != 0 {
+			b.WriteString(",")
+		}
+		b.WriteString(fmt.Sprintf("%s=%s", name, labels[name]))
+	}
+	b.WriteString("]")
+	return b.String()
 }
 
 type ReplicaSyncer struct {

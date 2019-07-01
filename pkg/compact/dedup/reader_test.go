@@ -7,32 +7,70 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/improbable-eng/thanos/pkg/compact/downsample"
+	"github.com/prometheus/tsdb/chunkenc"
+
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestSampleSeries_ToChunkSeries(t *testing.T) {
-	series := &SampleSeries{
-		lset: labels.Labels{
-			{Name: "b", Value: "1"},
-			{Name: "a", Value: "1"},
+	rawData := make(map[SampleType][]*Sample)
+	for i := 0; i < maxSamplesPerChunk; i++ {
+		rawData[RawSample] = append(rawData[RawSample], &Sample{timestamp: int64(i), value: rand.Float64()})
+	}
+
+	downsampleData := make(map[SampleType][]*Sample)
+	for i := 0; i < maxSamplesPerChunk+1; i++ {
+		downsampleData[CountSample] = append(downsampleData[CountSample], &Sample{timestamp: int64(i), value: rand.Float64()})
+		downsampleData[SumSample] = append(downsampleData[SumSample], &Sample{timestamp: int64(i), value: rand.Float64()})
+		downsampleData[MinSample] = append(downsampleData[MinSample], &Sample{timestamp: int64(i), value: rand.Float64()})
+		downsampleData[MaxSample] = append(downsampleData[MaxSample], &Sample{timestamp: int64(i), value: rand.Float64()})
+		downsampleData[CounterSample] = append(downsampleData[CounterSample], &Sample{timestamp: int64(i), value: rand.Float64()})
+	}
+
+	lset := labels.Labels{
+		{Name: "b", Value: "1"},
+		{Name: "a", Value: "1"},
+	}
+
+	input := []struct {
+		series *SampleSeries
+	}{
+		{
+			&SampleSeries{
+				lset: lset,
+				data: rawData,
+				res:  0,
+			},
 		},
-		samples: []*Sample{
-			{timestamp: 7, value: rand.Float64()},
-			{timestamp: 5, value: rand.Float64()},
-			{timestamp: 9, value: rand.Float64()},
-			{timestamp: 1, value: rand.Float64()},
-			{timestamp: 2, value: rand.Float64()},
-			{timestamp: 6, value: rand.Float64()},
+		{
+			&SampleSeries{
+				lset: lset,
+				data: downsampleData,
+				res:  300000,
+			},
 		},
 	}
 
-	chunkSeries, err := series.ToChunkSeries()
-	testutil.Ok(t, err)
-	testutil.Assert(t, len(chunkSeries.chks) == 1, "chunk series conversion failed")
-	testutil.Assert(t, chunkSeries.chks[0].MinTime == 1, "chunk series conversion failed")
-	testutil.Assert(t, chunkSeries.chks[0].MaxTime == 9, "chunk series conversion failed")
+	for _, v := range input {
+		cs, err := v.series.ToChunkSeries()
+		testutil.Ok(t, err)
+		if v.series.res == 0 {
+			testutil.Assert(t, len(cs.chks) == 1, "chunk series conversion failed")
+			for _, chk := range cs.chks {
+				_, ok := chk.Chunk.(*chunkenc.XORChunk)
+				testutil.Equals(t, true, ok, "chunk series conversion failed")
+			}
+		} else {
+			testutil.Assert(t, len(cs.chks) == 2, "chunk series conversion failed")
+			for _, chk := range cs.chks {
+				_, ok := chk.Chunk.(*downsample.AggrChunk)
+				testutil.Equals(t, true, ok, "chunk series conversion failed")
+			}
+		}
+	}
 }
 
 func TestNewBlockReader(t *testing.T) {
@@ -64,7 +102,7 @@ func createBlockReader(t *testing.T) *BlockReader {
 
 	blockDir := filepath.Join(dataDir, id.String())
 
-	reader, err := NewBlockReader(log.NewNopLogger(), blockDir)
+	reader, err := NewBlockReader(log.NewNopLogger(), 0, blockDir)
 	testutil.Ok(t, err)
 
 	return reader

@@ -62,7 +62,14 @@ func (d *BucketDeduper) Dedup(ctx context.Context) error {
 	for k, v := range groups {
 		level.Info(d.logger).Log("msg", "starting to dedup replicas", "group", k)
 		d.metrics.deduplication.WithLabelValues(d.bkt.Name()).Inc()
-		if err := d.merger.Merge(ctx, v); err != nil {
+		if len(v) == 0 {
+			continue
+		}
+		resolution, err := v[0].Resolution()
+		if err != nil {
+			return errors.Wrapf(err, "merge replicas: %s", k)
+		}
+		if err := d.merger.Merge(ctx, resolution, v); err != nil {
 			d.metrics.deduplicationFailures.WithLabelValues(d.bkt.Name(), k).Inc()
 			return errors.Wrapf(err, "merge replicas: %s", k)
 		}

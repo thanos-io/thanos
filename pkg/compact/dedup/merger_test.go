@@ -114,6 +114,6 @@ func TestReplicaMerger_Merge(t *testing.T) {
 
 	merger := NewReplicaMerger(logger, metrics, bkt, dataDir, "replica")
 
-	err = merger.Merge(ctx, replicas)
+	err = merger.Merge(ctx, 0, replicas)
 	testutil.Ok(t, err)
 }
