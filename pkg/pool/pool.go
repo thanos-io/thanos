@@ -86,6 +86,7 @@ func (p *BytesPool) Put(b *[]byte) {
 		if cap(*b) > bktSize {
 			continue
 		}
+		*b = (*b)[:0]
 		p.buckets[i].Put(b)
 		break
 	}
