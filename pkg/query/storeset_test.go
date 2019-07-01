@@ -2,14 +2,18 @@ package query
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"net"
+	"os"
 	"testing"
 	"time"
 
 	"sort"
 
 	"github.com/fortytw2/leaktest"
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"google.golang.org/grpc"
@@ -56,17 +60,23 @@ func newTestStores(numStores int, storesExtLabels ...[]storepb.Label) (*testStor
 	}
 
 	for i := 0; i < numStores; i++ {
-		lsetFn := func(addr string) []storepb.Label {
+		lsetFn := func(addr string) []storepb.LabelSet {
 			if len(storesExtLabels) != numStores {
-				return []storepb.Label{
-					{
-						Name:  "addr",
-						Value: addr,
+				return []storepb.LabelSet{{
+					Labels: []storepb.Label{
+						{
+							Name:  "addr",
+							Value: addr,
+						},
 					},
-				}
+				}}
+			}
+			ls := storesExtLabels[i]
+			if len(ls) == 0 {
+				return []storepb.LabelSet{}
 			}
 
-			return storesExtLabels[i]
+			return []storepb.LabelSet{{Labels: storesExtLabels[i]}}
 		}
 
 		srv, addr, err := startStore(lsetFn)
@@ -82,14 +92,14 @@ func newTestStores(numStores int, storesExtLabels ...[]storepb.Label) (*testStor
 	return st, nil
 }
 
-func startStore(lsetFn func(addr string) []storepb.Label) (*grpc.Server, string, error) {
+func startStore(lsetFn func(addr string) []storepb.LabelSet) (*grpc.Server, string, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, "", err
 	}
 
 	srv := grpc.NewServer()
-	storepb.RegisterStoreServer(srv, &testStore{info: storepb.InfoResponse{Labels: lsetFn(listener.Addr().String())}})
+	storepb.RegisterStoreServer(srv, &testStore{info: storepb.InfoResponse{LabelSets: lsetFn(listener.Addr().String())}})
 	go func() {
 		_ = srv.Serve(listener)
 	}()
@@ -154,9 +164,9 @@ func TestStoreSet_AllAvailable_ThenDown(t *testing.T) {
 
 	for addr, store := range storeSet.stores {
 		testutil.Equals(t, addr, store.addr)
-		testutil.Equals(t, 1, len(store.labels))
-		testutil.Equals(t, "addr", store.labels[0].Name)
-		testutil.Equals(t, addr, store.labels[0].Value)
+		testutil.Equals(t, 1, len(store.labelSets))
+		testutil.Equals(t, "addr", store.labelSets[0].Labels[0].Name)
+		testutil.Equals(t, addr, store.labelSets[0].Labels[0].Value)
 	}
 
 	st.CloseOne(initialStoreAddr[0])
@@ -170,9 +180,9 @@ func TestStoreSet_AllAvailable_ThenDown(t *testing.T) {
 	store, ok := storeSet.stores[addr]
 	testutil.Assert(t, ok, "addr exist")
 	testutil.Equals(t, addr, store.addr)
-	testutil.Equals(t, 1, len(store.labels))
-	testutil.Equals(t, "addr", store.labels[0].Name)
-	testutil.Equals(t, addr, store.labels[0].Value)
+	testutil.Equals(t, 1, len(store.labelSets))
+	testutil.Equals(t, "addr", store.labelSets[0].Labels[0].Name)
+	testutil.Equals(t, addr, store.labelSets[0].Labels[0].Value)
 }
 
 func TestStoreSet_StaticStores_OneAvailable(t *testing.T) {
@@ -199,9 +209,9 @@ func TestStoreSet_StaticStores_OneAvailable(t *testing.T) {
 	store, ok := storeSet.stores[addr]
 	testutil.Assert(t, ok, "addr exist")
 	testutil.Equals(t, addr, store.addr)
-	testutil.Equals(t, 1, len(store.labels))
-	testutil.Equals(t, "addr", store.labels[0].Name)
-	testutil.Equals(t, addr, store.labels[0].Value)
+	testutil.Equals(t, 1, len(store.labelSets))
+	testutil.Equals(t, "addr", store.labelSets[0].Labels[0].Name)
+	testutil.Equals(t, addr, store.labelSets[0].Labels[0].Value)
 }
 
 func TestStoreSet_StaticStores_NoneAvailable(t *testing.T) {
@@ -259,7 +269,10 @@ func TestStoreSet_AllAvailable_BlockExtLsetDuplicates(t *testing.T) {
 
 	initialStoreAddr := st.StoreAddresses()
 
-	storeSet := NewStoreSet(nil, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts, time.Minute)
+	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
+	logger = level.NewFilter(logger, level.AllowDebug())
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.DefaultCaller)
+	storeSet := NewStoreSet(logger, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts, time.Minute)
 	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 	defer storeSet.Close()
 
@@ -269,13 +282,17 @@ func TestStoreSet_AllAvailable_BlockExtLsetDuplicates(t *testing.T) {
 	storeSet.Update(context.Background())
 	storeSet.Update(context.Background())
 
-	testutil.Assert(t, len(storeSet.stores) == 5-2, "all services should respond just fine, but we expect duplicates being blocked.")
+	storeNum := len(storeSet.stores)
+	expectedStoreNum := 5 - 2
+	testutil.Assert(t, storeNum == expectedStoreNum, fmt.Sprintf("all services should respond just fine, but we expect duplicates being blocked. Expected %d stores, got %d", expectedStoreNum, storeNum))
 
 	// Sort result to be able to compare.
 
 	var existingStoreLabels [][]storepb.Label
 	for _, store := range storeSet.stores {
-		existingStoreLabels = append(existingStoreLabels, store.Labels())
+		for _, ls := range store.LabelSets() {
+			existingStoreLabels = append(existingStoreLabels, ls.Labels)
+		}
 	}
 	sort.Slice(existingStoreLabels, func(i, j int) bool {
 		return len(existingStoreLabels[i]) > len(existingStoreLabels[j])

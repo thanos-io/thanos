@@ -84,6 +84,8 @@ EOF
     --storage.tsdb.path   data/prom${i} \
     --log.level           warn \
     --web.enable-lifecycle \
+    --storage.tsdb.min-block-duration=2h \
+    --storage.tsdb.max-block-duration=2h \
     --web.listen-address  0.0.0.0:909${i} &
 
   sleep 0.25
@@ -106,8 +108,7 @@ do
     --http-address              0.0.0.0:1919${i} \
     --prometheus.url            http://localhost:909${i} \
     --tsdb.path                 data/prom${i} \
-    ${OBJSTORECFG} \
-    --cluster.disable &
+    ${OBJSTORECFG} &
 
   STORES="${STORES} --store 127.0.0.1:1909${i}"
 
@@ -124,8 +125,7 @@ then
     --grpc-address              0.0.0.0:19691 \
     --http-address              0.0.0.0:19791 \
     --data-dir                  data/store \
-    ${OBJSTORECFG} \
-    --cluster.disable &
+    ${OBJSTORECFG} &
 
   STORES="${STORES} --store 127.0.0.1:19691"
 fi
@@ -172,8 +172,8 @@ do
     --debug.name                query-${i} \
     --grpc-address              0.0.0.0:1999${i} \
     --http-address              0.0.0.0:1949${i} \
-    ${STORES} \
-    --cluster.disable &
+    --query.replica-label       prometheus \
+    ${STORES} &
 done
 
 wait
