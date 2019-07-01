@@ -8,9 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fortytw2/leaktest"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/improbable-eng/thanos/pkg/tracing"
+
+	"github.com/fortytw2/leaktest"
 	"github.com/opentracing/basictracer-go"
 )
 

@@ -166,6 +166,8 @@ func runCompact(
 	reg.MustRegister(halted)
 	reg.MustRegister(retried)
 
+	downsampleMetrics := newDownsampleMetrics(reg)
+
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
 		return err
@@ -248,13 +250,13 @@ func runCompact(
 			// for 5m downsamplings created in the first run.
 			level.Info(logger).Log("msg", "start first pass of downsampling")
 
-			if err := downsampleBucket(ctx, logger, bkt, downsamplingDir); err != nil {
+			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, downsamplingDir); err != nil {
 				return errors.Wrap(err, "first pass of downsampling failed")
 			}
 
 			level.Info(logger).Log("msg", "start second pass of downsampling")
 
-			if err := downsampleBucket(ctx, logger, bkt, downsamplingDir); err != nil {
+			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, downsamplingDir); err != nil {
 				return errors.Wrap(err, "second pass of downsampling failed")
 			}
 			level.Info(logger).Log("msg", "downsampling iterations done")
@@ -288,9 +290,9 @@ func runCompact(
 			if err == nil {
 				return nil
 			}
+
 			// The HaltError type signals that we hit a critical bug and should block
-			// for investigation.
-			// You should alert on this being halted.
+			// for investigation. You should alert on this being halted.
 			if compact.IsHaltError(err) {
 				if haltOnError {
 					level.Error(logger).Log("msg", "critical error detected; halting", "err", err)
@@ -302,7 +304,7 @@ func runCompact(
 			}
 
 			// The RetryError signals that we hit an retriable error (transient error, no connection).
-			// You should alert on this being triggered to frequently.
+			// You should alert on this being triggered too frequently.
 			if compact.IsRetryError(err) {
 				level.Error(logger).Log("msg", "retriable error", "err", err)
 				retried.Inc()

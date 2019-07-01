@@ -13,6 +13,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
+	"github.com/improbable-eng/thanos/pkg/compact"
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/improbable-eng/thanos/pkg/objstore"
@@ -31,20 +32,46 @@ import (
 func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "continuously downsamples blocks in an object store bucket")
 
+	httpAddr := regHTTPAddrFlag(cmd)
+
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
 		Default("./data").String()
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
-		return runDownsample(g, logger, reg, *dataDir, objStoreConfig)
+		return runDownsample(g, logger, reg, *httpAddr, *dataDir, objStoreConfig)
 	}
+}
+
+type DownsampleMetrics struct {
+	downsamples        *prometheus.CounterVec
+	downsampleFailures *prometheus.CounterVec
+}
+
+func newDownsampleMetrics(reg *prometheus.Registry) *DownsampleMetrics {
+	m := new(DownsampleMetrics)
+
+	m.downsamples = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_compact_downsample_total",
+		Help: "Total number of downsampling attempts.",
+	}, []string{"group"})
+	m.downsampleFailures = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_compact_downsample_failures_total",
+		Help: "Total number of failed downsampling attempts.",
+	}, []string{"group"})
+
+	reg.MustRegister(m.downsamples)
+	reg.MustRegister(m.downsampleFailures)
+
+	return m
 }
 
 func runDownsample(
 	g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
+	httpBindAddr string,
 	dataDir string,
 	objStoreConfig *pathOrContent,
 ) error {
@@ -65,6 +92,8 @@ func runDownsample(
 		}
 	}()
 
+	metrics := newDownsampleMetrics(reg)
+
 	// Start cycle of syncing blocks from the bucket and garbage collecting the bucket.
 	{
 		ctx, cancel := context.WithCancel(context.Background())
@@ -74,13 +103,13 @@ func runDownsample(
 
 			level.Info(logger).Log("msg", "start first pass of downsampling")
 
-			if err := downsampleBucket(ctx, logger, bkt, dataDir); err != nil {
+			if err := downsampleBucket(ctx, logger, metrics, bkt, dataDir); err != nil {
 				return errors.Wrap(err, "downsampling failed")
 			}
 
 			level.Info(logger).Log("msg", "start second pass of downsampling")
 
-			if err := downsampleBucket(ctx, logger, bkt, dataDir); err != nil {
+			if err := downsampleBucket(ctx, logger, metrics, bkt, dataDir); err != nil {
 				return errors.Wrap(err, "downsampling failed")
 			}
 
@@ -90,6 +119,10 @@ func runDownsample(
 		})
 	}
 
+	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
+		return err
+	}
+
 	level.Info(logger).Log("msg", "starting downsample node")
 	return nil
 }
@@ -97,6 +130,7 @@ func runDownsample(
 func downsampleBucket(
 	ctx context.Context,
 	logger log.Logger,
+	metrics *DownsampleMetrics,
 	bkt objstore.Bucket,
 	dir string,
 ) error {
@@ -181,8 +215,10 @@ func downsampleBucket(
 				continue
 			}
 			if err := processDownsampling(ctx, logger, bkt, m, dir, 5*60*1000); err != nil {
+				metrics.downsampleFailures.WithLabelValues(compact.GroupKey(*m)).Inc()
 				return errors.Wrap(err, "downsampling to 5 min")
 			}
+			metrics.downsamples.WithLabelValues(compact.GroupKey(*m)).Inc()
 
 		case 5 * 60 * 1000:
 			missing := false
@@ -202,8 +238,10 @@ func downsampleBucket(
 				continue
 			}
 			if err := processDownsampling(ctx, logger, bkt, m, dir, 60*60*1000); err != nil {
+				metrics.downsampleFailures.WithLabelValues(compact.GroupKey(*m))
 				return errors.Wrap(err, "downsampling to 60 min")
 			}
+			metrics.downsamples.WithLabelValues(compact.GroupKey(*m))
 		}
 	}
 	return nil

@@ -11,6 +11,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	terrors "github.com/prometheus/tsdb/errors"
 )
 
 func TestHaltError(t *testing.T) {
@@ -25,6 +26,31 @@ func TestHaltError(t *testing.T) {
 
 	err = errors.Wrap(errors.Wrap(halt(errors.New("test")), "something"), "something2")
 	testutil.Assert(t, IsHaltError(err), "not a halt error")
+}
+
+func TestHaltMultiError(t *testing.T) {
+	haltErr := halt(errors.New("halt error"))
+	nonHaltErr := errors.New("not a halt error")
+
+	errs := terrors.MultiError{nonHaltErr}
+	testutil.Assert(t, !IsHaltError(errs), "should not be a halt error")
+
+	errs.Add(haltErr)
+	testutil.Assert(t, IsHaltError(errs), "if any halt errors are present this should return true")
+}
+
+func TestRetryMultiError(t *testing.T) {
+	retryErr := retry(errors.New("retry error"))
+	nonRetryErr := errors.New("not a retry error")
+
+	errs := terrors.MultiError{nonRetryErr}
+	testutil.Assert(t, !IsRetryError(errs), "should not be a retry error")
+
+	errs = terrors.MultiError{retryErr}
+	testutil.Assert(t, IsRetryError(errs), "if all errors are retriable this should return true")
+
+	errs = terrors.MultiError{nonRetryErr, retryErr}
+	testutil.Assert(t, !IsRetryError(errs), "mixed errors should return false")
 }
 
 func TestRetryError(t *testing.T) {

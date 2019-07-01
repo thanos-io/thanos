@@ -36,6 +36,7 @@ Concretely the aims of the project are:
 * [Introduction blog post](https://improbable.io/games/blog/thanos-prometheus-at-scale)
 * [Benchmarks](https://github.com/improbable-eng/thanos/tree/master/benchmark)
 * [Proposals](docs/proposals)
+* [Integrations](docs/integrations.md)
 
 ## Features
 
@@ -67,7 +68,7 @@ Master should be stable and usable. Every commit to master builds docker image n
 We also perform minor releases every 6 weeks. 
 During that, we build tarballs for major platforms and docker image.
 
-See [this](docs/release-process.md) for details.
+See [release process docs](docs/release-process.md) for details.
 
 ## Contributing
 

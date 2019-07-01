@@ -6,6 +6,8 @@ import (
 	"io/ioutil"
 	"math"
 	"math/rand"
+	"reflect"
+	"strconv"
 	"testing"
 
 	"time"
@@ -15,6 +17,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/tsdb/chunkenc"
 )
@@ -36,6 +39,123 @@ func TestQueryableCreator_MaxResolution(t *testing.T) {
 	testutil.Assert(t, ok == true, "expected it to be a querier")
 	testutil.Assert(t, querierActual.maxResolutionMillis == oneHourMillis, "expected max source resolution to be 1 hour in milliseconds")
 
+}
+
+// Tests E2E how PromQL works with downsampled data.
+func TestQuerier_DownsampledData(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	testProxy := &storeServer{
+		resps: []*storepb.SeriesResponse{
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "a", "aaa", "bbb"), []sample{{99, 1}, {199, 5}}), // Downsampled chunk from Store
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "b", "bbbb", "eee"), []sample{{99, 3}, {199, 8}}), // Downsampled chunk from Store
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "c", "qwe", "wqeqw"), []sample{{99, 5}, {199, 15}}), // Downsampled chunk from Store
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "c", "htgtreytr", "vbnbv"), []sample{{99, 123}, {199, 15}}), // Downsampled chunk from Store
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "d", "asdsad", "qweqwewq"), []sample{{22, 5}, {44, 8}, {199, 15}}), // Raw chunk from Sidecar
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "d", "asdsad", "qweqwebb"), []sample{{22, 5}, {44, 8}, {199, 15}}), // Raw chunk from Sidecar
+		},
+	}
+
+	q := NewQueryableCreator(nil, testProxy, "")(false, 9999999, false, nil)
+
+	engine := promql.NewEngine(
+		promql.EngineOpts{
+			MaxConcurrent: 10,
+			MaxSamples:    math.MaxInt32,
+			Timeout:       10 * time.Second,
+		},
+	)
+
+	// Minimal function to parse time.Time.
+	ptm := func(in string) time.Time {
+		fl, _ := strconv.ParseFloat(in, 64)
+		s, ns := math.Modf(fl)
+		return time.Unix(int64(s), int64(ns*float64(time.Second)))
+	}
+
+	st := ptm("0")
+	ed := ptm("0.2")
+	qry, err := engine.NewRangeQuery(
+		q,
+		"sum(a) by (zzz)",
+		st,
+		ed,
+		100*time.Millisecond,
+	)
+	testutil.Ok(t, err)
+
+	res := qry.Exec(context.Background())
+	testutil.Ok(t, res.Err)
+	m, err := res.Matrix()
+	testutil.Ok(t, err)
+	ser := []promql.Series(m)
+
+	testutil.Assert(t, len(ser) == 4, "should return 4 series (got %d)", len(ser))
+
+	exp := []promql.Series{
+		promql.Series{
+			Metric: labels.FromStrings("zzz", "a"),
+			Points: []promql.Point{
+				promql.Point{
+					T: 100,
+					V: 1,
+				},
+				promql.Point{
+					T: 200,
+					V: 5,
+				},
+			},
+		},
+		promql.Series{
+			Metric: labels.FromStrings("zzz", "b"),
+			Points: []promql.Point{
+				promql.Point{
+					T: 100,
+					V: 3,
+				},
+				promql.Point{
+					T: 200,
+					V: 8,
+				},
+			},
+		},
+		promql.Series{
+			Metric: labels.FromStrings("zzz", "c"),
+			// Test case: downsampling code adds all of the samples in the
+			// 5 minute window of each series and pre-aggregates the data. However,
+			// Prometheus engine code only takes the latest sample in each time window of
+			// the retrieved data. Since we were operating in pre-aggregated data here, it lead
+			// to overinflated values.
+			Points: []promql.Point{
+				promql.Point{
+					T: 100,
+					V: 128,
+				},
+				promql.Point{
+					T: 200,
+					V: 30,
+				},
+			},
+		},
+		promql.Series{
+			Metric: labels.FromStrings("zzz", "d"),
+			// Test case: Prometheus engine in each time window selects the sample
+			// which is closest to the boundaries and adds up the different dimensions.
+			Points: []promql.Point{
+				promql.Point{
+					T: 100,
+					V: 16,
+				},
+				promql.Point{
+					T: 200,
+					V: 30,
+				},
+			},
+		},
+	}
+
+	if !reflect.DeepEqual(ser, exp) {
+		t.Fatalf("response does not match, expected:\n%+v\ngot:\n%+v", exp, ser)
+	}
 }
 
 func TestQuerier_Series(t *testing.T) {
@@ -416,11 +536,14 @@ func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sampl
 		for _, smpl := range smpls {
 			a.Append(smpl.t, smpl.v)
 		}
-		s.Chunks = append(s.Chunks, storepb.AggrChunk{
+
+		ch := storepb.AggrChunk{
 			MinTime: smpls[0].t,
 			MaxTime: smpls[len(smpls)-1].t,
-			Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR, Data: c.Bytes()},
-		})
+			Raw: &storepb.Chunk{Type: storepb.Chunk_XOR, Data: c.Bytes()},
+		}
+
+		s.Chunks = append(s.Chunks, ch)
 	}
 	return storepb.NewSeriesResponse(&s)
 }

@@ -52,7 +52,7 @@ import (
 	tsdberrors "github.com/prometheus/tsdb/errors"
 )
 
-// Repeat executes f every interval seconds until stopc is closed.
+// Repeat executes f every interval seconds until stopc is closed or f returns an error.
 // It executes f once right after being called.
 func Repeat(interval time.Duration, stopc <-chan struct{}, f func() error) error {
 	tick := time.NewTicker(interval)

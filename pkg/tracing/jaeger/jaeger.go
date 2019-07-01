@@ -9,6 +9,7 @@ import (
 	"github.com/improbable-eng/thanos/pkg/tracing"
 
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/uber/jaeger-client-go"

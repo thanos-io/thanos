@@ -11,7 +11,15 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased.
 
-## [v0.5.0-rc.0](https://github.com/improbable-eng/thanos/releases/tag/v0.5.0-rc.0) - 2019.05.31
+### Added
+
+- [#1097](https://github.com/improbable-eng/thanos/pull/1097) Added `thanos check rules` linter for Thanos rule rules files.
+
+- [#1253](https://github.com/improbable-eng/thanos/pull/1253) Add support for specifying a maximum amount of retries when using Azure Blob storage (default: no retries).
+
+- [#1248](https://github.com/improbable-eng/thanos/pull/1248) Add a web UI to show the state of remote storage.
+
+## [v0.5.0](https://github.com/improbable-eng/thanos/releases/tag/v0.5.0) - 2019.06.05
 
 TL;DR: Store LRU cache is no longer leaking, Upgraded Thanos UI to Prometheus 2.9, Fixed auto-downsampling, Moved to Go 1.12.5 and more.
 
@@ -105,28 +113,28 @@ Using cadvisor `container_memory_usage_bytes` metric could be misleading e.g: ht
 New options:
 
   New Store flags:
-  
+
     * `--store.grpc.series-sample-limit` limits the amount of samples that might be retrieved on a single Series() call. By default it is 0. Consider enabling it by setting it to more than 0 if you are running on limited resources.
     * `--store.grpc.series-max-concurrency` limits the number of concurrent Series() calls in Thanos Store. By default it is 20. Considering making it lower or bigger depending on the scale of your deployment.
 
   New Store metrics:
-  
+
     * `thanos_bucket_store_queries_dropped_total` shows how many queries were dropped due to the samples limit;
     * `thanos_bucket_store_queries_concurrent_max` is a constant metric which shows how many Series() calls can concurrently be executed by Thanos Store;
     * `thanos_bucket_store_queries_in_flight` shows how many queries are currently "in flight" i.e. they are being executed;
     * `thanos_bucket_store_gate_duration_seconds` shows how many seconds it took for queries to pass through the gate in both cases - when that fails and when it does not.
-    
+
   New Store tracing span:
     * `store_query_gate_ismyturn` shows how long it took for a query to pass (or not) through the gate.
-    
-- [#1016](https://github.com/improbable-eng/thanos/pull/1016) Added option for another DNS resolver (miekg/dns client). 
+
+- [#1016](https://github.com/improbable-eng/thanos/pull/1016) Added option for another DNS resolver (miekg/dns client).
 Note that this is required to have SRV resolution working on [Golang 1.11+ with KubeDNS below v1.14](https://github.com/golang/go/issues/27546)
 
    New Querier and Ruler flag: `-- store.sd-dns-resolver` which allows to specify resolver to use. Either `golang` or `miekgdns`
-   
+
 - [#986](https://github.com/improbable-eng/thanos/pull/986) Allow to save some startup & sync time in store gateway as it is no longer needed to compute index-cache from block index on its own for larger blocks.
-  The store Gateway still can do it, but it first checks bucket if there is index-cached uploaded already. 
-  In the same time, compactor precomputes the index cache file on every compaction. 
+  The store Gateway still can do it, but it first checks bucket if there is index-cached uploaded already.
+  In the same time, compactor precomputes the index cache file on every compaction.
 
   New Compactor flag: `--index.generate-missing-cache-file` was added to allow quicker addition of index cache files. If enabled it precomputes missing files on compactor startup. Note that it will take time and it's only one-off step per bucket.
 
@@ -143,31 +151,31 @@ Note that this is required to have SRV resolution working on [Golang 1.11+ with 
 - [#1021](https://github.com/improbable-eng/thanos/pull/1021) Query API `series` now supports POST method.
 - [#939](https://github.com/improbable-eng/thanos/pull/939) Query API `query_range` now supports POST method.
 
-### Changed 
+### Changed
 
 - [#970](https://github.com/improbable-eng/thanos/pull/970) Deprecated `partial_response_disabled` proto field. Added `partial_response_strategy` instead. Both in gRPC and Query API.
   No `PartialResponseStrategy` field for `RuleGroups` by default means `abort` strategy (old PartialResponse disabled) as this is recommended option for Rules and alerts.
 
   Metrics:
-    
+
     * Added `thanos_rule_evaluation_with_warnings_total` to Ruler.
     * DNS `thanos_ruler_query_apis*` are now `thanos_ruler_query_apis_*` for consistency.
     * DNS `thanos_querier_store_apis*` are now `thanos_querier_store_apis__*` for consistency.
     * Query Gate `thanos_bucket_store_series*` are now `thanos_bucket_store_series_*` for consistency.
     * Most of thanos ruler metris related to rule manager has `strategy` label.
-  
+
   Ruler tracing spans:
-  
+
     * `/rule_instant_query HTTP[client]` is now `/rule_instant_query_part_resp_abort HTTP[client]"` if request is for abort strategy.
-    
+
 - [#1009](https://github.com/improbable-eng/thanos/pull/1009): Upgraded Prometheus (~v2.7.0-rc.0 to v2.8.1)  and TSDB (`v0.4.0` to `v0.6.1`) deps.
-  
+
   Changes that affects Thanos:
-   * query: 
-     * [ENHANCEMENT] In histogram_quantile merge buckets with equivalent le values. #5158.   
-     * [ENHANCEMENT] Show list of offending labels in the error message in many-to-many scenarios. #5189   
+   * query:
+     * [ENHANCEMENT] In histogram_quantile merge buckets with equivalent le values. #5158.
+     * [ENHANCEMENT] Show list of offending labels in the error message in many-to-many scenarios. #5189
      * [BUGFIX] Fix panic when aggregator param is not a literal. #5290
-   * ruler: 
+   * ruler:
      * [ENHANCEMENT] Reduce time that Alertmanagers are in flux when reloaded. #5126
      * [BUGFIX] prometheus_rule_group_last_evaluation_timestamp_seconds is now a unix timestamp. #5186
      * [BUGFIX] prometheus_rule_group_last_duration_seconds now reports seconds instead of nanoseconds. Fixes our [issue #1027](https://github.com/improbable-eng/thanos/issues/1027)
@@ -179,26 +187,26 @@ Note that this is required to have SRV resolution working on [Golang 1.11+ with 
       * [CHANGE] *breaking* Renamed flag `--sync-delay` to `--consistency-delay` [#1053](https://github.com/improbable-eng/thanos/pull/1053)
   
   For ruler essentially whole TSDB CHANGELOG applies beween v0.4.0-v0.6.1: https://github.com/prometheus/tsdb/blob/master/CHANGELOG.md
-  
+
   Note that this was added on TSDB and Prometheus: [FEATURE] Time-ovelapping blocks are now allowed. #370
   Whoever due to nature of Thanos compaction (distributed systems), for safety reason this is disabled for Thanos compactor for now.
 
 - [#868](https://github.com/improbable-eng/thanos/pull/868) Go has been updated to 1.12.
-- [#1055](https://github.com/improbable-eng/thanos/pull/1055) Gossip flags are now disabled by default and deprecated. 
+- [#1055](https://github.com/improbable-eng/thanos/pull/1055) Gossip flags are now disabled by default and deprecated.
 - [#964](https://github.com/improbable-eng/thanos/pull/964) repair: Repair process now sorts the series and labels within block.
 - [#1073](https://github.com/improbable-eng/thanos/pull/1073) Store: index cache for requests. It now calculates the size properly (includes slice header), has anti-deadlock safeguard and reports more metrics.
 
 ### Fixed
 
 - [#921](https://github.com/improbable-eng/thanos/pull/921) `thanos_objstore_bucket_last_successful_upload_time` now does not appear when no blocks have been uploaded so far.
-- [#966](https://github.com/improbable-eng/thanos/pull/966) Bucket: verify no longer warns about overlapping blocks, that overlap `0s` 
+- [#966](https://github.com/improbable-eng/thanos/pull/966) Bucket: verify no longer warns about overlapping blocks, that overlap `0s`
 - [#848](https://github.com/improbable-eng/thanos/pull/848) Compact: now correctly works with time series with duplicate labels.
 - [#894](https://github.com/improbable-eng/thanos/pull/894) Thanos Rule: UI now correctly shows evaluation time.
 - [#865](https://github.com/improbable-eng/thanos/pull/865) Query: now properly parses DNS SRV Service Discovery.
 - [#889](https://github.com/improbable-eng/thanos/pull/889) Store: added safeguard against merging posting groups segfault
 - [#941](https://github.com/improbable-eng/thanos/pull/941) Sidecar: added better handling of intermediate restarts.
 - [#933](https://github.com/improbable-eng/thanos/pull/933) Query: Fixed 30 seconds lag of adding new store to query.
-- [#962](https://github.com/improbable-eng/thanos/pull/962) Sidecar: Make config reloader file writes atomic. 
+- [#962](https://github.com/improbable-eng/thanos/pull/962) Sidecar: Make config reloader file writes atomic.
 - [#982](https://github.com/improbable-eng/thanos/pull/982) Query: now advertises Min & Max Time accordingly to the nodes.
 - [#1041](https://github.com/improbable-eng/thanos/issues/1038) Ruler is now able to return long time range queries.
 - [#904](https://github.com/improbable-eng/thanos/pull/904) Compact: Skip compaction for blocks with no samples.

@@ -4,8 +4,6 @@ import (
 	"testing"
 
 	"github.com/improbable-eng/thanos/pkg/store/prompb"
-	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/discovery/targetgroup"
 )
 
 func TestHash(t *testing.T) {
@@ -31,7 +29,7 @@ func TestHash(t *testing.T) {
 	}
 }
 
-func TestGetHost(t *testing.T) {
+func TestHashringGet(t *testing.T) {
 	ts := &prompb.TimeSeries{
 		Labels: []prompb.Label{
 			{
@@ -47,198 +45,120 @@ func TestGetHost(t *testing.T) {
 
 	for _, tc := range []struct {
 		name   string
-		cfg    []*targetgroup.Group
-		hosts  map[string]struct{}
+		cfg    []HashringConfig
+		nodes  map[string]struct{}
 		tenant string
 	}{
 		{
 			name:   "empty",
-			cfg:    []*targetgroup.Group{},
+			cfg:    nil,
 			tenant: "tenant1",
 		},
 		{
 			name: "simple",
-			cfg: []*targetgroup.Group{
+			cfg: []HashringConfig{
 				{
-					Targets: []model.LabelSet{
-						model.LabelSet{
-							model.AddressLabel: "host1",
-						},
-					},
+					Endpoints: []string{"node1"},
 				},
 			},
-			hosts: map[string]struct{}{"host1": struct{}{}},
+			nodes: map[string]struct{}{"node1": struct{}{}},
 		},
 		{
 			name: "specific",
-			cfg: []*targetgroup.Group{
+			cfg: []HashringConfig{
 				{
-					Targets: []model.LabelSet{
-						model.LabelSet{
-							model.AddressLabel: "host1",
-						},
-					},
-					Source: "",
+					Endpoints: []string{"node2"},
+					Tenants:   []string{"tenant2"},
 				},
 				{
-					Targets: []model.LabelSet{
-						model.LabelSet{
-							model.AddressLabel: "host2",
-						},
-					},
-					Source: "tenant1",
+					Endpoints: []string{"node1"},
 				},
 			},
-			hosts:  map[string]struct{}{"host2": struct{}{}},
-			tenant: "tenant1",
+			nodes:  map[string]struct{}{"node2": struct{}{}},
+			tenant: "tenant2",
 		},
 		{
 			name: "many tenants",
-			cfg: []*targetgroup.Group{
+			cfg: []HashringConfig{
 				{
-					Targets: []model.LabelSet{
-						model.LabelSet{
-							model.AddressLabel: "host1",
-						},
-					},
-					Source: "tenant1",
+					Endpoints: []string{"node1"},
+					Tenants:   []string{"tenant1"},
 				},
 				{
-					Targets: []model.LabelSet{
-						model.LabelSet{
-							model.AddressLabel: "host2",
-						},
-					},
-					Source: "tenant2",
+					Endpoints: []string{"node2"},
+					Tenants:   []string{"tenant2"},
 				},
 				{
-					Targets: []model.LabelSet{
-						model.LabelSet{
-							model.AddressLabel: "host3",
-						},
-					},
-					Source: "tenant3",
+					Endpoints: []string{"node3"},
+					Tenants:   []string{"tenant3"},
 				},
 			},
-			hosts:  map[string]struct{}{"host1": struct{}{}},
+			nodes:  map[string]struct{}{"node1": struct{}{}},
 			tenant: "tenant1",
 		},
 		{
 			name: "many tenants error",
-			cfg: []*targetgroup.Group{
+			cfg: []HashringConfig{
 				{
-					Targets: []model.LabelSet{
-						model.LabelSet{
-							model.AddressLabel: "host1",
-						},
-					},
-					Source: "tenant1",
+					Endpoints: []string{"node1"},
+					Tenants:   []string{"tenant1"},
 				},
 				{
-					Targets: []model.LabelSet{
-						model.LabelSet{
-							model.AddressLabel: "host2",
-						},
-					},
-					Source: "tenant2",
+					Endpoints: []string{"node2"},
+					Tenants:   []string{"tenant2"},
 				},
 				{
-					Targets: []model.LabelSet{
-						model.LabelSet{
-							model.AddressLabel: "host3",
-						},
-					},
-					Source: "tenant3",
+					Endpoints: []string{"node3"},
+					Tenants:   []string{"tenant3"},
 				},
 			},
 			tenant: "tenant4",
 		},
 		{
-			name: "many hosts",
-			cfg: []*targetgroup.Group{
+			name: "many nodes",
+			cfg: []HashringConfig{
 				{
-					Targets: []model.LabelSet{
-						model.LabelSet{
-							model.AddressLabel: "host1",
-						},
-						model.LabelSet{
-							model.AddressLabel: "host2",
-						},
-						model.LabelSet{
-							model.AddressLabel: "host3",
-						},
-					},
-					Source: "tenant1",
+					Endpoints: []string{"node1", "node2", "node3"},
+					Tenants:   []string{"tenant1"},
 				},
 				{
-					Targets: []model.LabelSet{
-						model.LabelSet{
-							model.AddressLabel: "host4",
-						},
-						model.LabelSet{
-							model.AddressLabel: "host5",
-						},
-						model.LabelSet{
-							model.AddressLabel: "host6",
-						},
-					},
-					Source: "",
+					Endpoints: []string{"node4", "node5", "node6"},
 				},
 			},
-			hosts: map[string]struct{}{
-				"host1": struct{}{},
-				"host2": struct{}{},
-				"host3": struct{}{},
+			nodes: map[string]struct{}{
+				"node1": struct{}{},
+				"node2": struct{}{},
+				"node3": struct{}{},
 			},
 			tenant: "tenant1",
 		},
 		{
-			name: "many hosts 2",
-			cfg: []*targetgroup.Group{
+			name: "many nodes default",
+			cfg: []HashringConfig{
 				{
-					Targets: []model.LabelSet{
-						model.LabelSet{
-							model.AddressLabel: "host1",
-						},
-						model.LabelSet{
-							model.AddressLabel: "host2",
-						},
-						model.LabelSet{
-							model.AddressLabel: "host3",
-						},
-					},
-					Source: "tenant1",
+					Endpoints: []string{"node1", "node2", "node3"},
+					Tenants:   []string{"tenant1"},
 				},
 				{
-					Targets: []model.LabelSet{
-						model.LabelSet{
-							model.AddressLabel: "host4",
-						},
-						model.LabelSet{
-							model.AddressLabel: "host5",
-						},
-						model.LabelSet{
-							model.AddressLabel: "host6",
-						},
-					},
+					Endpoints: []string{"node4", "node5", "node6"},
 				},
 			},
-			hosts: map[string]struct{}{
-				"host4": struct{}{},
-				"host5": struct{}{},
-				"host6": struct{}{},
+			nodes: map[string]struct{}{
+				"node4": struct{}{},
+				"node5": struct{}{},
+				"node6": struct{}{},
 			},
 		},
 	} {
-		hs := NewHashring(ExactMatcher, tc.cfg)
-		h, err := hs.GetHost(tc.tenant, ts)
-		if tc.hosts != nil {
+		hs := newMultiHashring(tc.cfg)
+		h, err := hs.Get(tc.tenant, ts)
+		if tc.nodes != nil {
 			if err != nil {
 				t.Errorf("case %q: got unexpected error: %v", tc.name, err)
 				continue
 			}
-			if _, ok := tc.hosts[h]; !ok {
-				t.Errorf("case %q: got unexpected host %q", tc.name, h)
+			if _, ok := tc.nodes[h]; !ok {
+				t.Errorf("case %q: got unexpected node %q", tc.name, h)
 			}
 			continue
 		}

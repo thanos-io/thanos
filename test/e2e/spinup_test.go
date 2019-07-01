@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strconv"
 	"syscall"
 	"testing"
 	"time"
@@ -30,6 +31,8 @@ var (
 	promHTTP            = func(i int) string { return fmt.Sprintf("localhost:%s", promHTTPPort(i)) }
 	promRemoteWriteHTTP = func(i int) string { return fmt.Sprintf("localhost:%s", promHTTPPort(100+i)) }
 
+	nodeExporterHTTP = func(i int) string { return fmt.Sprintf("localhost:%d", 9100+i) }
+
 	sidecarGRPC = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19090+i) }
 	sidecarHTTP = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19190+i) }
 
@@ -39,6 +42,7 @@ var (
 	rulerGRPC = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19790+i) }
 	rulerHTTP = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 19890+i) }
 
+	remoteWriteEndpoint          = func(i int) string { return fmt.Sprintf("http://%s/api/v1/receive", remoteWriteReceiveHTTP(i)) }
 	remoteWriteReceiveHTTP       = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 18690+i) }
 	remoteWriteReceiveGRPC       = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 18790+i) }
 	remoteWriteReceiveMetricHTTP = func(i int) string { return fmt.Sprintf("127.0.0.1:%d", 18890+i) }
@@ -122,7 +126,10 @@ func scraper(i int, config string) cmdScheduleFunc {
 	}
 }
 
-func receiver(i int, config string) cmdScheduleFunc {
+func receiver(i int, config string, replicationFactor int, receiveAddresses ...string) cmdScheduleFunc {
+	if len(receiveAddresses) == 0 {
+		receiveAddresses = []string{remoteWriteEndpoint(1)}
+	}
 	return func(workDir string) ([]Exec, error) {
 		promDir := fmt.Sprintf("%s/data/remote-write-prom%d", workDir, i)
 		if err := os.MkdirAll(promDir, 0777); err != nil {
@@ -140,37 +147,52 @@ func receiver(i int, config string) cmdScheduleFunc {
 			"--log.level", "info",
 			"--web.listen-address", promRemoteWriteHTTP(i),
 		)))
+
+		hashringsFileDir := fmt.Sprintf("%s/data/receiveFile%d", workDir, i)
+		if err := os.MkdirAll(hashringsFileDir, 0777); err != nil {
+			return nil, errors.Wrap(err, "create receive dir failed")
+		}
+
+		if err := ioutil.WriteFile(path.Join(hashringsFileDir, "hashrings.json"), []byte(generateHashringsFile(receiveAddresses)), 0666); err != nil {
+			return nil, errors.Wrap(err, "creating receive config failed")
+		}
+
 		return append(cmds, newCmdExec(exec.Command("thanos", "receive",
 			"--debug.name", fmt.Sprintf("remote-write-receive-%d", i),
 			"--grpc-address", remoteWriteReceiveGRPC(i),
 			"--http-address", remoteWriteReceiveMetricHTTP(i),
 			"--remote-write.address", remoteWriteReceiveHTTP(i),
 			"--labels", "receive=\"true\"",
+			"--labels", fmt.Sprintf(`replica="%d"`, i),
 			"--tsdb.path", promDir,
-			"--log.level", "debug"))), nil
+			"--log.level", "debug",
+			"--receive.replication-factor", strconv.Itoa(replicationFactor),
+			"--receive.local-endpoint", remoteWriteEndpoint(i),
+			"--receive.hashrings-file", path.Join(hashringsFileDir, "hashrings.json"),
+			"--receive.hashrings-file-refresh-interval", "5s"))), nil
 	}
 }
 
-func querierWithStoreFlags(i int, replicaLabel string, storesAddresses ...string) cmdScheduleFunc {
+func querierWithStoreFlags(i int, replicaLabel string, storeAddresses ...string) cmdScheduleFunc {
 	return func(_ string) ([]Exec, error) {
 		args := defaultQuerierFlags(i, replicaLabel)
 
-		for _, addr := range storesAddresses {
+		for _, addr := range storeAddresses {
 			args = append(args, "--store", addr)
 		}
 		return []Exec{newCmdExec(exec.Command("thanos", args...))}, nil
 	}
 }
 
-func querierWithFileSD(i int, replicaLabel string, storesAddresses ...string) cmdScheduleFunc {
+func querierWithFileSD(i int, replicaLabel string, storeAddresses ...string) cmdScheduleFunc {
 	return func(workDir string) ([]Exec, error) {
 		queryFileSDDir := fmt.Sprintf("%s/data/queryFileSd%d", workDir, i)
 		if err := os.MkdirAll(queryFileSDDir, 0777); err != nil {
-			return nil, errors.Wrap(err, "create prom dir failed")
+			return nil, errors.Wrap(err, "create query dir failed")
 		}
 
-		if err := ioutil.WriteFile(queryFileSDDir+"/filesd.json", []byte(generateFileSD(storesAddresses)), 0666); err != nil {
-			return nil, errors.Wrap(err, "creating prom config failed")
+		if err := ioutil.WriteFile(queryFileSDDir+"/filesd.json", []byte(generateFileSD(storeAddresses)), 0666); err != nil {
+			return nil, errors.Wrap(err, "creating query SD config failed")
 		}
 
 		args := append(
@@ -524,6 +546,18 @@ func (s *spinupSuite) Exec(t testing.TB, ctx context.Context, testName string) (
 
 func generateFileSD(addresses []string) string {
 	conf := "[ { \"targets\": ["
+	for index, addr := range addresses {
+		conf += fmt.Sprintf("\"%s\"", addr)
+		if index+1 < len(addresses) {
+			conf += ","
+		}
+	}
+	conf += "] } ]"
+	return conf
+}
+
+func generateHashringsFile(addresses []string) string {
+	conf := "[ { \"endpoints\": ["
 	for index, addr := range addresses {
 		conf += fmt.Sprintf("\"%s\"", addr)
 		if index+1 < len(addresses) {

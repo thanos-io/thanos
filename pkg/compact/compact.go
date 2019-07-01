@@ -8,21 +8,20 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
-	"strings"
 	"sync"
 	"time"
-
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/block"
+	"github.com/improbable-eng/thanos/pkg/block/metadata"
 	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/tsdb"
+	terrors "github.com/prometheus/tsdb/errors"
 	"github.com/prometheus/tsdb/labels"
 )
 
@@ -610,7 +609,17 @@ func (e HaltError) Error() string {
 }
 
 // IsHaltError returns true if the base error is a HaltError.
+// If a multierror is passed, any halt error will return true.
 func IsHaltError(err error) bool {
+	if multiErr, ok := err.(terrors.MultiError); ok {
+		for _, err := range multiErr {
+			if _, ok := errors.Cause(err).(HaltError); ok {
+				return true
+			}
+		}
+		return false
+	}
+
 	_, ok := errors.Cause(err).(HaltError)
 	return ok
 }
@@ -633,7 +642,17 @@ func (e RetryError) Error() string {
 }
 
 // IsRetryError returns true if the base error is a RetryError.
+// If a multierror is passed, all errors must be retriable.
 func IsRetryError(err error) bool {
+	if multiErr, ok := err.(terrors.MultiError); ok {
+		for _, err := range multiErr {
+			if _, ok := errors.Cause(err).(RetryError); !ok {
+				return false
+			}
+		}
+		return true
+	}
+
 	_, ok := errors.Cause(err).(RetryError)
 	return ok
 }
@@ -1038,12 +1057,12 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 		close(errChan)
 		workCtxCancel()
 		if err != nil {
-			errMsgs := []string{err.Error()}
+			errs := terrors.MultiError{err}
 			// Collect any other errors reported by the workers.
 			for e := range errChan {
-				errMsgs = append(errMsgs, e.Error())
+				errs.Add(e)
 			}
-			return errors.New(strings.Join(errMsgs, "; "))
+			return errs
 		}
 
 		if finishedAllGroups {
