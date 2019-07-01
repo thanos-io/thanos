@@ -982,6 +982,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 			finishedAllGroups      = true
 			mtx                    sync.Mutex
 		)
+		defer workCtxCancel()
 
 		// Set up workers who will compact the groups when the groups are ready.
 		// They will compact available groups until they encounter an error, after which they will stop.
@@ -1016,21 +1017,18 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 
 		// Clean up the compaction temporary directory at the beginning of every compaction loop.
 		if err := os.RemoveAll(c.compactDir); err != nil {
-			workCtxCancel()
 			return errors.Wrap(err, "clean up the compaction temporary directory")
 		}
 
 		level.Info(c.logger).Log("msg", "start sync of metas")
 
 		if err := c.sy.SyncMetas(ctx); err != nil {
-			workCtxCancel()
 			return errors.Wrap(err, "sync")
 		}
 
 		level.Info(c.logger).Log("msg", "start of GC")
 
 		if err := c.sy.GarbageCollect(ctx); err != nil {
-			workCtxCancel()
 			return errors.Wrap(err, "garbage")
 		}
 
@@ -1038,7 +1036,6 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 
 		groups, err := c.sy.Groups()
 		if err != nil {
-			workCtxCancel()
 			return errors.Wrap(err, "build compaction groups")
 		}
 
