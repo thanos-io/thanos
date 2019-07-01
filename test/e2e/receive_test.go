@@ -2,11 +2,9 @@ package e2e_test
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
-	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/promclient"
 	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/improbable-eng/thanos/pkg/testutil"
@@ -129,10 +127,6 @@ func testReceive(t *testing.T, conf receiveTestConfig) {
 	}()
 
 	var res model.Vector
-
-	w := log.NewSyncWriter(os.Stderr)
-	l := log.NewLogfmtLogger(w)
-	l = log.With(l, "conf-name", conf.name)
 
 	// Query without deduplication so we can check what replica the
 	// time series ended up on.

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/tracing"
 
 	"github.com/go-kit/kit/log"
