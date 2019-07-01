@@ -128,6 +128,14 @@ func (s *ProxyStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb
 		res.LabelSets = append(res.LabelSets, storepb.LabelSet{Labels: v})
 	}
 
+	// We always want to enforce announcing the subset of data that
+	// selector-labels represents. If no label-sets are announced by the
+	// store-proxy's discovered stores, then we still want to enforce
+	// announcing this subset by announcing the selector as the label-set.
+	if len(res.LabelSets) == 0 && len(res.Labels) > 0 {
+		res.LabelSets = append(res.LabelSets, storepb.LabelSet{Labels: res.Labels})
+	}
+
 	return res, nil
 }
 
