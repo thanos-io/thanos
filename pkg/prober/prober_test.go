@@ -34,7 +34,7 @@ func (c TestComponent) String() string {
 func TestProberHealthInitialState(t *testing.T) {
 	component := TestComponent{name: "test"}
 	expectedErrorMessage := fmt.Sprintf(initialErrorFmt, component)
-	p := NewProber(component, log.NewNopLogger())
+	p := NewProber(component, log.NewNopLogger(), nil)
 
 	err := p.IsHealthy()
 	testutil.NotOk(t, err)
@@ -44,7 +44,7 @@ func TestProberHealthInitialState(t *testing.T) {
 func TestProberReadinessInitialState(t *testing.T) {
 	component := TestComponent{name: "test"}
 	expectedErrorMessage := fmt.Sprintf(initialErrorFmt, component)
-	p := NewProber(component, log.NewNopLogger())
+	p := NewProber(component, log.NewNopLogger(), nil)
 
 	err := p.IsReady()
 	testutil.NotOk(t, err)
@@ -54,7 +54,7 @@ func TestProberReadinessInitialState(t *testing.T) {
 func TestProberReadyStatusSetting(t *testing.T) {
 	component := TestComponent{name: "test"}
 	testError := fmt.Errorf("test error")
-	p := NewProber(component, log.NewNopLogger())
+	p := NewProber(component, log.NewNopLogger(), nil)
 
 	p.SetReady()
 	err := p.IsReady()
@@ -67,7 +67,7 @@ func TestProberReadyStatusSetting(t *testing.T) {
 func TestProberHeatlthyStatusSetting(t *testing.T) {
 	component := TestComponent{name: "test"}
 	testError := fmt.Errorf("test error")
-	p := NewProber(component, log.NewNopLogger())
+	p := NewProber(component, log.NewNopLogger(), nil)
 
 	p.SetHealthy()
 	err := p.IsHealthy()
@@ -93,7 +93,7 @@ func TestProberMuxRegistering(t *testing.T) {
 		return errors.Wrap(http.Serve(l, mux), "serve probes")
 	}, func(error) {})
 
-	p := NewProber(component, log.NewNopLogger())
+	p := NewProber(component, log.NewNopLogger(), nil)
 	p.RegisterInMux(mux)
 
 	go func() { _ = g.Run() }()
@@ -140,7 +140,7 @@ func TestProberRouterRegistering(t *testing.T) {
 		return errors.Wrap(http.Serve(l, mux), "serve probes")
 	}, func(error) {})
 
-	p := NewProber(component, log.NewNopLogger())
+	p := NewProber(component, log.NewNopLogger(), nil)
 	p.RegisterInRouter(router)
 	mux.Handle("/", router)
 

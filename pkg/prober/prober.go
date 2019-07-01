@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/component"
@@ -23,37 +25,39 @@ const (
 
 // Prober represents health and readiness status of given component.
 type Prober struct {
-	logger       log.Logger
-	componentMtx sync.RWMutex
-	component    component.Component
-	readyMtx     sync.RWMutex
-	readiness    error
-	healthyMtx   sync.RWMutex
-	healthiness  error
-}
-
-// SetComponent sets component name of the Prober displayed in responses.
-func (p *Prober) SetComponent(component component.Component) {
-	p.componentMtx.Lock()
-	defer p.componentMtx.Unlock()
-	p.component = component
-}
-
-func (p *Prober) getComponent() component.Component {
-	p.componentMtx.RLock()
-	defer p.componentMtx.RUnlock()
-	return p.component
+	logger             log.Logger
+	componentMtx       sync.RWMutex
+	component          component.Component
+	readyMtx           sync.RWMutex
+	readiness          error
+	healthyMtx         sync.RWMutex
+	healthiness        error
+	readyStateMetric   prometheus.Gauge
+	healthyStateMetric prometheus.Gauge
 }
 
 // NewProber returns Prober representing readiness and healthiness of given component.
-func NewProber(component component.Component, logger log.Logger) *Prober {
+func NewProber(component component.Component, logger log.Logger, reg prometheus.Registerer) *Prober {
 	initialErr := fmt.Errorf(initialErrorFmt, component)
-	return &Prober{
+
+	p := &Prober{
 		component:   component,
 		logger:      logger,
 		healthiness: initialErr,
 		readiness:   initialErr,
+		readyStateMetric: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: fmt.Sprintf("thanos_%s_ready", component),
+			Help: "Represents readiness status of the thanos component.",
+		}),
+		healthyStateMetric: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: fmt.Sprintf("thanos_%s_healthy", component),
+			Help: "Represents healthiness status of the thanos component.",
+		}),
 	}
+	if reg != nil {
+		reg.MustRegister(p.readyStateMetric, p.healthyStateMetric)
+	}
+	return p
 }
 
 // RegisterInRouter registers readiness and liveness probes to router.
@@ -71,10 +75,10 @@ func (p *Prober) RegisterInMux(mux *http.ServeMux) {
 func (p *Prober) writeResponse(w http.ResponseWriter, probeFunc func() error, probeType string) {
 	err := probeFunc()
 	if err != nil {
-		http.Error(w, fmt.Sprintf(errorProbeFmt, p.getComponent(), probeType, err), probeErrorHTTPStatus)
+		http.Error(w, fmt.Sprintf(errorProbeFmt, p.component, probeType, err), probeErrorHTTPStatus)
 		return
 	}
-	if _, e := io.WriteString(w, fmt.Sprintf(okProbeFmt, p.getComponent(), probeType)); e == nil {
+	if _, e := io.WriteString(w, fmt.Sprintf(okProbeFmt, p.component, probeType)); e == nil {
 		level.Error(p.logger).Log("msg", "failed to write probe response", "probe type", probeType, "err", err)
 	}
 }
@@ -98,6 +102,7 @@ func (p *Prober) SetReady() {
 	defer p.readyMtx.Unlock()
 	if p.readiness != nil {
 		level.Info(p.logger).Log("msg", "changing probe status", "status", "ready")
+		p.readyStateMetric.Set(1)
 	}
 	p.readiness = nil
 }
@@ -108,6 +113,7 @@ func (p *Prober) SetNotReady(err error) {
 	defer p.readyMtx.Unlock()
 	if err != nil && p.readiness == nil {
 		level.Warn(p.logger).Log("msg", "changing probe status", "status", "not-ready", "reason", err)
+		p.readyStateMetric.Set(0)
 	}
 	p.readiness = err
 }
@@ -125,6 +131,7 @@ func (p *Prober) SetHealthy() {
 	defer p.healthyMtx.Unlock()
 	if p.healthiness != nil {
 		level.Info(p.logger).Log("msg", "changing probe status", "status", "healthy")
+		p.healthyStateMetric.Set(1)
 	}
 	p.healthiness = nil
 }
@@ -135,6 +142,7 @@ func (p *Prober) SetNotHealthy(err error) {
 	defer p.healthyMtx.Unlock()
 	if err != nil && p.healthiness == nil {
 		level.Warn(p.logger).Log("msg", "changing probe status", "status", "unhealthy", "reason", err)
+		p.healthyStateMetric.Set(0)
 	}
 	p.healthiness = err
 }
