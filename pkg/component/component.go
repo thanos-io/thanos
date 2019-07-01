@@ -8,12 +8,14 @@ import (
 
 // StoreAPI is a component that implements Thanos' gRPC StoreAPI.
 type StoreAPI interface {
+	implementsStoreAPI()
 	String() string
 	ToProto() storepb.StoreType
 }
 
 // Source is a Thanos component that produce blocks of metrics.
 type Source interface {
+	producesBlocks()
 	String() string
 }
 
@@ -21,6 +23,7 @@ type Source interface {
 // and produce blocks of metrics.
 type SourceStoreAPI interface {
 	implementsStoreAPI()
+	producesBlocks()
 	String() string
 	ToProto() storepb.StoreType
 }
@@ -35,11 +38,11 @@ type storeAPI struct {
 	component
 }
 
+func (storeAPI) implementsStoreAPI() {}
+
 func (s sourceStoreAPI) ToProto() storepb.StoreType {
 	return storepb.StoreType(storepb.StoreType_value[strings.ToUpper(s.String())])
 }
-
-func (s sourceStoreAPI) implementsStoreAPI() {}
 
 func (s storeAPI) ToProto() storepb.StoreType {
 	return storepb.StoreType(storepb.StoreType_value[strings.ToUpper(s.String())])
@@ -48,6 +51,8 @@ func (s storeAPI) ToProto() storepb.StoreType {
 type source struct {
 	component
 }
+
+func (source) producesBlocks() {}
 
 type sourceStoreAPI struct {
 	component
