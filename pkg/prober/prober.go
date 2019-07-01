@@ -17,8 +17,6 @@ import (
 const (
 	healthyEndpointPath  = "/-/healthy"
 	readyEndpointPath    = "/-/ready"
-	okProbeFmt           = "thanos %v is %v"
-	errorProbeFmt        = "thanos %v is not %v. Reason: %v"
 	probeErrorHTTPStatus = 503
 	initialErrorFmt      = "thanos %s is initializing"
 )
@@ -46,12 +44,14 @@ func NewProber(component component.Component, logger log.Logger, reg prometheus.
 		healthiness: initialErr,
 		readiness:   initialErr,
 		readyStateMetric: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: fmt.Sprintf("thanos_%s_ready", component),
-			Help: "Represents readiness status of the thanos component.",
+			Name:        "prober_ready",
+			Help:        "Represents readiness status of the component Prober.",
+			ConstLabels: map[string]string{"component": component.String()},
 		}),
 		healthyStateMetric: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: fmt.Sprintf("thanos_%s_healthy", component),
-			Help: "Represents healthiness status of the thanos component.",
+			Name:        "prober_healthy",
+			Help:        "Represents health status of the component Prober.",
+			ConstLabels: map[string]string{"component": component.String()},
 		}),
 	}
 	if reg != nil {
@@ -72,13 +72,12 @@ func (p *Prober) RegisterInMux(mux *http.ServeMux) {
 	mux.HandleFunc(readyEndpointPath, p.probeHandlerFunc(p.IsReady, "ready"))
 }
 
-func (p *Prober) writeResponse(w http.ResponseWriter, probeFunc func() error, probeType string) {
-	err := probeFunc()
-	if err != nil {
-		http.Error(w, fmt.Sprintf(errorProbeFmt, p.component, probeType, err), probeErrorHTTPStatus)
+func (p *Prober) writeResponse(w http.ResponseWriter, probeFn func() error, probeType string) {
+	if err := probeFn(); err != nil {
+		http.Error(w, fmt.Sprintf("thanos %v is not %v. Reason: %v", p.component, probeType, err), probeErrorHTTPStatus)
 		return
 	}
-	if _, e := io.WriteString(w, fmt.Sprintf(okProbeFmt, p.component, probeType)); e == nil {
+	if _, err := io.WriteString(w, fmt.Sprintf("thanos %v is %v", p.component, probeType)); err == nil {
 		level.Error(p.logger).Log("msg", "failed to write probe response", "probe type", probeType, "err", err)
 	}
 }
