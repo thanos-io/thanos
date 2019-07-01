@@ -138,7 +138,7 @@ In case of Ruler in HA you need to make sure you have the following labelling se
 * Labels that identify the HA group ruler and replica label with different value for each ruler instance, e.g: 
 `cluster="eu1", replica="A"` and `cluster=eu1, replica="B"` by using `--label` flag.
 * Labels that need to be dropped just before sending to alermanager in order for alertmanager to deduplicate alerts e.g
-`--alertmanager.label-drop="replica"`.
+`--alert.label-drop="replica"`.
 
 Full relabelling is planned to be done in future and is tracked here: https://github.com/improbable-eng/thanos/issues/660
 
