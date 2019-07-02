@@ -109,18 +109,18 @@ A sample of the configuration of tenants and their respective infrastructure:
 ```json
 [
     {
-        hashring: "tenant-a",
-        endpoints: ["tenant-a-1.metrics.local:19291/api/v1/receive", "tenant-a-2.metrics.local:19291/api/v1/receive"],
-        tenants: ["tenant-a"]
+        "hashring": "tenant-a",
+        "endpoints": ["tenant-a-1.metrics.local:19291/api/v1/receive", "tenant-a-2.metrics.local:19291/api/v1/receive"],
+        "tenants": ["tenant-a"]
     },
     {
-        hashring: "tenants-b-c",
-        endpoints: ["tenant-b-c-1.metrics.local:19291/api/v1/receive", "tenant-b-c-2.metrics.local:19291/api/v1/receive"],
-        tenants: ["tenant-b", "tenant-c"]
+        "hashring": "tenants-b-c",
+        "endpoints": ["tenant-b-c-1.metrics.local:19291/api/v1/receive", "tenant-b-c-2.metrics.local:19291/api/v1/receive"],
+        "tenants": ["tenant-b", "tenant-c"]
     },
     {
-        hashring: "soft-tenants",
-        endpoints: ["http://soft-tenants-1.metrics.local:19291/api/v1/receive"]
+        "hashring": "soft-tenants",
+        "endpoints": ["http://soft-tenants-1.metrics.local:19291/api/v1/receive"]
     }
 ]
 ```
