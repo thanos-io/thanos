@@ -18,6 +18,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ### Changed
 
 - [#1338](https://github.com/thanos-io/thanos/pull/1338) Querier still warns on store API duplicate, but allows a single one from duplicated set. This is gracefully warn about the problematic logic and not disrupt immediately.
+- [#1297](https://github.com/improbable-eng/thanos/pull/1297) Added `/-/ready` and `/-/healthy` endpoints to Thanos compact.
 
 ### Fixed
 

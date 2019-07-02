@@ -31,6 +31,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/version"
+	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/tracing/client"
@@ -73,7 +74,7 @@ func main() {
 	registerStore(cmds, app, "store")
 	registerQuery(cmds, app, "query")
 	registerRule(cmds, app, "rule")
-	registerCompact(cmds, app, "compact")
+	registerCompact(cmds, app)
 	registerBucket(cmds, app, "bucket")
 	registerDownsample(cmds, app, "downsample")
 	registerReceive(cmds, app, "receive")
@@ -122,7 +123,7 @@ func main() {
 	)
 
 	prometheus.DefaultRegisterer = metrics
-	// Memberlist uses go-metrics
+	// Memberlist uses go-metrics.
 	sink, err := gprom.NewPrometheusSink()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command failed", cmd))
@@ -311,6 +312,7 @@ func defaultGRPCServerOpts(logger log.Logger, reg *prometheus.Registry, tracer o
 	return append(opts, grpc.Creds(credentials.NewTLS(tlsCfg))), nil
 }
 
+// TODO Remove once all components are migrated to the new defaultHTTPListener.
 // metricHTTPListenGroup is a run.Group that servers HTTP endpoint with only Prometheus metrics.
 func metricHTTPListenGroup(g *run.Group, logger log.Logger, reg *prometheus.Registry, httpBindAddr string) error {
 	mux := http.NewServeMux()
@@ -326,6 +328,30 @@ func metricHTTPListenGroup(g *run.Group, logger log.Logger, reg *prometheus.Regi
 		level.Info(logger).Log("msg", "Listening for metrics", "address", httpBindAddr)
 		return errors.Wrap(http.Serve(l, mux), "serve metrics")
 	}, func(error) {
+		runutil.CloseWithLogOnErr(logger, l, "metric listener")
+	})
+	return nil
+}
+
+// defaultHTTPListener starts a run.Group that servers HTTP endpoint with default endpoints providing Prometheus metrics,
+// profiling and liveness/readiness probes.
+func defaultHTTPListener(g *run.Group, logger log.Logger, reg *prometheus.Registry, httpBindAddr string, readinessProber *prober.Prober) error {
+	mux := http.NewServeMux()
+	registerMetrics(mux, reg)
+	registerProfile(mux)
+	readinessProber.RegisterInMux(mux)
+
+	l, err := net.Listen("tcp", httpBindAddr)
+	if err != nil {
+		return errors.Wrap(err, "listen metrics address")
+	}
+
+	g.Add(func() error {
+		level.Info(logger).Log("msg", "listening for metrics", "address", httpBindAddr)
+		readinessProber.SetHealthy()
+		return errors.Wrap(http.Serve(l, mux), "serve metrics")
+	}, func(err error) {
+		readinessProber.SetNotHealthy(err)
 		runutil.CloseWithLogOnErr(logger, l, "metric listener")
 	})
 	return nil
