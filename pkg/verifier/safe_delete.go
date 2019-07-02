@@ -59,9 +59,18 @@ func BackupAndDelete(ctx context.Context, logger log.Logger, bkt, backupBkt objs
 		return errors.Wrap(err, "download from source")
 	}
 
-	// At this point call backupAndDeleteDownloaded() to handle the now local
-	// TSDB block.
-	return backupAndDeleteDownloaded(ctx, logger, dir, bkt, backupBkt, id)
+	// Backup the block.
+	if err := backupDownloaded(ctx, logger, dir, backupBkt, id); err != nil {
+		return err
+	}
+
+	// Block uploaded, so we are ok to remove from src bucket.
+	level.Info(logger).Log("msg", "Deleting block", "id", id.String())
+	if err := block.Delete(ctx, bkt, id); err != nil {
+		return errors.Wrap(err, "delete from source")
+	}
+
+	return nil
 }
 
 // BackupAndDeleteDownloaded works much like BackupAndDelete in that it will
@@ -79,14 +88,24 @@ func BackupAndDeleteDownloaded(ctx context.Context, logger log.Logger, bdir stri
 		return errors.Errorf("%s dir seems to exists in backup bucket. Remove this block manually if you are sure it is safe to do", id)
 	}
 
-	// Now we call backupAndDeleteDownloaded() to handle the work.
-	return backupAndDeleteDownloaded(ctx, logger, bdir, bkt, backupBkt, id)
+	// Backup the block.
+	if err := backupDownloaded(ctx, logger, bdir, backupBkt, id); err != nil {
+		return err
+	}
+
+	// Block uploaded, so we are ok to remove from src bucket.
+	level.Info(logger).Log("msg", "Deleting block", "id", id.String())
+	if err := block.Delete(ctx, bkt, id); err != nil {
+		return errors.Wrap(err, "delete from source")
+	}
+
+	return nil
 }
 
-// backupAndDeleteDownloaded is a helper function that uploads a TSDB block
-// found on disk to the backup bucket and, on success, removes the TSDB block
-// from the source bucket.
-func backupAndDeleteDownloaded(ctx context.Context, logger log.Logger, bdir string, bkt, backupBkt objstore.Bucket, id ulid.ULID) error {
+// backupDownloaded is a helper function that uploads a TSDB block
+// found on disk to the given bucket. An error is returned if any operation
+// fails.
+func backupDownloaded(ctx context.Context, logger log.Logger, bdir string, backupBkt objstore.Bucket, id ulid.ULID) error {
 	// Safety checks.
 	if _, err := os.Stat(filepath.Join(bdir, "meta.json")); err != nil {
 		// If there is any error stat'ing meta.json inside the TSDB block
@@ -99,12 +118,6 @@ func backupAndDeleteDownloaded(ctx context.Context, logger log.Logger, bdir stri
 	level.Info(logger).Log("msg", "Uploading block to backup bucket", "id", id.String())
 	if err := block.Upload(ctx, logger, backupBkt, bdir); err != nil {
 		return errors.Wrap(err, "upload to backup")
-	}
-
-	// Block uploaded, so we are ok to remove from src bucket.
-	level.Info(logger).Log("msg", "Deleting block", "id", id.String())
-	if err := block.Delete(ctx, bkt, id); err != nil {
-		return errors.Wrap(err, "delete from source")
 	}
 
 	return nil
