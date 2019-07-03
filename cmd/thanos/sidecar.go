@@ -248,7 +248,7 @@ func runSidecar(
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
-			extLabelsTimeout := 2 * time.Minute
+			extLabelsTimeout := 10 * time.Minute
 			extLabelsCtx, _ := context.WithTimeout(ctx, extLabelsTimeout)
 			if err := runutil.Retry(2*time.Second, extLabelsCtx.Done(), func() error {
 				if len(m.Labels()) == 0 {
