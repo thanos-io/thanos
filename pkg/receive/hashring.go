@@ -166,13 +166,14 @@ func newMultiHashring(cfg []HashringConfig) Hashring {
 // Which hashring to use for a tenant is determined
 // by the tenants field of the hashring configuration.
 func HashringFromConfig(ctx context.Context, updates chan<- Hashring, cw *ConfigWatcher) {
-	cfgUpdates := make(chan []HashringConfig)
-	defer close(cfgUpdates)
-	go cw.Run(ctx, cfgUpdates)
+	go cw.Run(ctx)
 
 	for {
 		select {
-		case cfg := <-cfgUpdates:
+		case cfg, ok := <-cw.C():
+			if !ok {
+				return
+			}
 			updates <- newMultiHashring(cfg)
 		case <-ctx.Done():
 			return
