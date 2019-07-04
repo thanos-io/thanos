@@ -576,7 +576,7 @@ func TestEndpoints(t *testing.T) {
 				}
 				return
 			}
-			if apiErr == nil && test.errType != errorNone {
+			if test.errType != errorNone {
 				t.Fatalf("Expected error of type %q but got none", test.errType)
 			}
 

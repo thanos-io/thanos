@@ -1,0 +1,21 @@
+linters-settings:
+    errcheck:
+        exclude: ./.errcheck_excludes.txt
+
+issues:
+    exclude-rules:
+        # TODO: move away from deprecated prometheus.InstrumentHandler{,Func}
+        - linters:
+              - staticcheck
+          text: "SA1019:"
+        # These are not being checked since these methods exist
+        # so that no one else could implement them.
+        - linters:
+              - unused
+          text: "SourceStoreAPI.implementsStoreAPI"
+        - linters:
+              - unused
+          text: "SourceStoreAPI.producesBlocks"
+        - linters:
+              - unused
+          text: "Source.producesBlocks"

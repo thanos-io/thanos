@@ -762,14 +762,14 @@ func queryFunc(
 
 			if err != nil {
 				level.Error(logger).Log("err", err, "query", q)
+			} else {
+				if len(warns) > 0 {
+					ruleEvalWarnings.WithLabelValues(strings.ToLower(partialResponseStrategy.String())).Inc()
+					// TODO(bwplotka): Propagate those to UI, probably requires changing rule manager code ):
+					level.Warn(logger).Log("warnings", strings.Join(warns, ", "), "query", q)
+				}
+				return v, nil
 			}
-
-			if err == nil && len(warns) > 0 {
-				ruleEvalWarnings.WithLabelValues(strings.ToLower(partialResponseStrategy.String())).Inc()
-				// TODO(bwplotka): Propagate those to UI, probably requires changing rule manager code ):
-				level.Warn(logger).Log("warnings", strings.Join(warns, ", "), "query", q)
-			}
-			return v, err
 		}
 		return nil, errors.Errorf("no query peer reachable")
 	}

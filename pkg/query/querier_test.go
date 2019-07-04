@@ -46,10 +46,10 @@ func TestQuerier_DownsampledData(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 	testProxy := &storeServer{
 		resps: []*storepb.SeriesResponse{
-			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "a", "aaa", "bbb"), []sample{{99, 1}, {199, 5}}), // Downsampled chunk from Store
-			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "b", "bbbb", "eee"), []sample{{99, 3}, {199, 8}}), // Downsampled chunk from Store
-			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "c", "qwe", "wqeqw"), []sample{{99, 5}, {199, 15}}), // Downsampled chunk from Store
-			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "c", "htgtreytr", "vbnbv"), []sample{{99, 123}, {199, 15}}), // Downsampled chunk from Store
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "a", "aaa", "bbb"), []sample{{99, 1}, {199, 5}}),                   // Downsampled chunk from Store
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "b", "bbbb", "eee"), []sample{{99, 3}, {199, 8}}),                  // Downsampled chunk from Store
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "c", "qwe", "wqeqw"), []sample{{99, 5}, {199, 15}}),                // Downsampled chunk from Store
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "c", "htgtreytr", "vbnbv"), []sample{{99, 123}, {199, 15}}),        // Downsampled chunk from Store
 			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "d", "asdsad", "qweqwewq"), []sample{{22, 5}, {44, 8}, {199, 15}}), // Raw chunk from Sidecar
 			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "d", "asdsad", "qweqwebb"), []sample{{22, 5}, {44, 8}, {199, 15}}), // Raw chunk from Sidecar
 		},
@@ -315,23 +315,23 @@ func TestDedupSeriesSet(t *testing.T) {
 		vals []sample
 	}{
 		{
-			lset: labels.Labels{{"a", "1"}, {"c", "3"}},
+			lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
 			vals: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}, {200000, 5}, {210000, 6}},
 		},
 		{
-			lset: labels.Labels{{"a", "1"}, {"c", "3"}, {"d", "4"}},
+			lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
 			vals: []sample{{10000, 1}, {20000, 2}},
 		},
 		{
-			lset: labels.Labels{{"a", "1"}, {"c", "3"}},
+			lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
 			vals: []sample{{10000, 1}, {20000, 2}},
 		},
 		{
-			lset: labels.Labels{{"a", "1"}, {"c", "4"}},
+			lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}},
 			vals: []sample{{10000, 1}, {20000, 2}},
 		},
 		{
-			lset: labels.Labels{{"a", "2"}, {"c", "3"}},
+			lset: labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}},
 			vals: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}},
 		},
 	}
@@ -540,7 +540,7 @@ func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sampl
 		ch := storepb.AggrChunk{
 			MinTime: smpls[0].t,
 			MaxTime: smpls[len(smpls)-1].t,
-			Raw: &storepb.Chunk{Type: storepb.Chunk_XOR, Data: c.Bytes()},
+			Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR, Data: c.Bytes()},
 		}
 
 		s.Chunks = append(s.Chunks, ch)

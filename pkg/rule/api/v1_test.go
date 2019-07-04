@@ -138,7 +138,6 @@ func testEndpoints(t *testing.T, api *API) {
 		params   map[string]string
 		query    url.Values
 		response interface{}
-		errType  qapi.ErrorType
 	}
 	var tests = []test{
 		{

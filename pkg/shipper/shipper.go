@@ -77,7 +77,6 @@ func newMetrics(r prometheus.Registerer, uploadCompacted bool) *metrics {
 type Shipper struct {
 	logger          log.Logger
 	dir             string
-	workDir         string
 	metrics         *metrics
 	bucket          objstore.Bucket
 	labels          func() labels.Labels

@@ -257,10 +257,7 @@ func runReceive(
 			err error
 		)
 		g.Add(func() error {
-			select {
-			case <-dbOpen:
-				break
-			}
+			<-dbOpen
 
 			l, err = net.Listen("tcp", grpcBindAddr)
 			if err != nil {

@@ -104,7 +104,7 @@ func (api *API) rules(r *http.Request) (interface{}, []error, *qapi.ApiError) {
 				}
 			default:
 				err := fmt.Errorf("failed to assert type of rule '%v'", rule.Name())
-				return nil, nil, &qapi.ApiError{qapi.ErrorInternal, err}
+				return nil, nil, &qapi.ApiError{Typ: qapi.ErrorInternal, Err: err}
 			}
 
 			apiRuleGroup.Rules = append(apiRuleGroup.Rules, enrichedRule)

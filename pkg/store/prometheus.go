@@ -110,16 +110,17 @@ func (p *PrometheusStore) Info(ctx context.Context, r *storepb.InfoRequest) (*st
 	return res, nil
 }
 
-func (p *PrometheusStore) getBuffer() []byte {
+func (p *PrometheusStore) getBuffer() *[]byte {
 	b := p.buffers.Get()
 	if b == nil {
-		return make([]byte, 0, 32*1024) // 32KB seems like a good minimum starting size.
+		buf := make([]byte, 0, 32*1024) // 32KB seems like a good minimum starting size.
+		return &buf
 	}
-	return b.([]byte)
+	return b.(*[]byte)
 }
 
-func (p *PrometheusStore) putBuffer(b []byte) {
-	p.buffers.Put(b[:0])
+func (p *PrometheusStore) putBuffer(b *[]byte) {
+	p.buffers.Put(b)
 }
 
 // Series returns all series for a requested time range and label matcher.
@@ -257,23 +258,24 @@ func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prom
 		return nil, errors.Errorf("request failed with code %s", presp.Status)
 	}
 
-	buf := bytes.NewBuffer(p.getBuffer())
-	defer func() {
-		p.putBuffer(buf.Bytes())
-	}()
+	c := p.getBuffer()
+	buf := bytes.NewBuffer(*c)
+	defer p.putBuffer(c)
 	if _, err := io.Copy(buf, presp.Body); err != nil {
 		return nil, errors.Wrap(err, "copy response")
 	}
+
 	spanSnappyDecode, ctx := tracing.StartSpan(ctx, "decompress_response")
-	decomp, err := snappy.Decode(p.getBuffer(), buf.Bytes())
+	sc := p.getBuffer()
+	decomp, err := snappy.Decode(*sc, buf.Bytes())
 	spanSnappyDecode.Finish()
-	defer p.putBuffer(decomp)
+	defer p.putBuffer(sc)
 	if err != nil {
 		return nil, errors.Wrap(err, "decompress response")
 	}
 
 	var data prompb.ReadResponse
-	spanUnmarshal, ctx := tracing.StartSpan(ctx, "unmarshal_response")
+	spanUnmarshal, _ := tracing.StartSpan(ctx, "unmarshal_response")
 	if err := proto.Unmarshal(decomp, &data); err != nil {
 		return nil, errors.Wrap(err, "unmarshal response")
 	}

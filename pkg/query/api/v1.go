@@ -47,18 +47,18 @@ type status string
 
 const (
 	statusSuccess status = "success"
-	statusError          = "error"
+	statusError   status = "error"
 )
 
 type ErrorType string
 
 const (
 	errorNone     ErrorType = ""
-	errorTimeout            = "timeout"
-	errorCanceled           = "canceled"
-	errorExec               = "execution"
-	errorBadData            = "bad_data"
-	ErrorInternal           = "internal"
+	errorTimeout  ErrorType = "timeout"
+	errorCanceled ErrorType = "canceled"
+	errorExec     ErrorType = "execution"
+	errorBadData  ErrorType = "bad_data"
+	ErrorInternal ErrorType = "internal"
 )
 
 var corsHeaders = map[string]string{
@@ -289,7 +289,7 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 	}
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
-	span, ctx := tracing.StartSpan(r.Context(), "promql_instant_query")
+	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
 
 	begin := api.now()
@@ -387,7 +387,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 	}
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
-	span, ctx := tracing.StartSpan(r.Context(), "promql_range_query")
+	span, ctx := tracing.StartSpan(ctx, "promql_range_query")
 	defer span.Finish()
 
 	begin := api.now()

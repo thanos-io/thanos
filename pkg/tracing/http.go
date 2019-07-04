@@ -42,7 +42,6 @@ func HTTPMiddleware(tracer opentracing.Tracer, name string, logger log.Logger, n
 
 		next.ServeHTTP(w, r.WithContext(opentracing.ContextWithSpan(ContextWithTracer(r.Context(), tracer), span)))
 		span.Finish()
-		return
 	}
 }
 

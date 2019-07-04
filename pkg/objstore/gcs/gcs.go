@@ -168,6 +168,7 @@ func (b *Bucket) Close() error {
 // In a close function it empties and deletes the bucket.
 func NewTestBucket(t testing.TB, project string) (objstore.Bucket, func(), error) {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	src := rand.NewSource(time.Now().UnixNano())
 	gTestConfig := Config{
 		Bucket: fmt.Sprintf("test_%s_%x", strings.ToLower(t.Name()), src.Int63()),
@@ -180,12 +181,10 @@ func NewTestBucket(t testing.TB, project string) (objstore.Bucket, func(), error
 
 	b, err := NewBucket(ctx, log.NewNopLogger(), bc, "thanos-e2e-test")
 	if err != nil {
-		cancel()
 		return nil, nil, err
 	}
 
 	if err = b.bkt.Create(ctx, project, nil); err != nil {
-		cancel()
 		_ = b.Close()
 		return nil, nil, err
 	}
@@ -196,7 +195,6 @@ func NewTestBucket(t testing.TB, project string) (objstore.Bucket, func(), error
 		if err := b.bkt.Delete(ctx); err != nil {
 			t.Logf("deleting bucket failed: %s", err)
 		}
-		cancel()
 		if err := b.Close(); err != nil {
 			t.Logf("closing bucket failed: %s", err)
 		}
