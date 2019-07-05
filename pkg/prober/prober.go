@@ -24,7 +24,6 @@ const (
 // Prober represents health and readiness status of given component.
 type Prober struct {
 	logger             log.Logger
-	componentMtx       sync.RWMutex
 	component          component.Component
 	readyMtx           sync.RWMutex
 	readiness          error
