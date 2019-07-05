@@ -248,6 +248,17 @@ func runSidecar(
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
+			extLabelsTimeout := 10 * time.Minute
+			extLabelsCtx, _ := context.WithTimeout(ctx, extLabelsTimeout)
+			if err := runutil.Retry(2*time.Second, extLabelsCtx.Done(), func() error {
+				if len(m.Labels()) == 0 {
+					return errors.New("not uploading as no external labels are configured yet - is Prometheus healthy/reachable?")
+				}
+				return nil
+			}); err != nil {
+				return errors.Wrapf(err, "aborting as no external labels found after waiting %s", extLabelsTimeout)
+			}
+
 			var s *shipper.Shipper
 			if uploadCompacted {
 				s = shipper.NewWithCompacted(logger, reg, dataDir, bkt, m.Labels, metadata.SidecarSource)
