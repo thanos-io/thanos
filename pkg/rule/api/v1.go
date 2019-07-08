@@ -7,7 +7,7 @@ import (
 
 	"github.com/NYTimes/gziphandler"
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/extprom"
+	extpromhttp "github.com/improbable-eng/thanos/pkg/extprom/http"
 	qapi "github.com/improbable-eng/thanos/pkg/query/api"
 	thanosrule "github.com/improbable-eng/thanos/pkg/rule"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
@@ -35,7 +35,7 @@ func NewAPI(
 	}
 }
 
-func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger) {
+func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger, ins extpromhttp.ServerInstrumentor) {
 	instr := func(name string, f qapi.ApiFunc) http.HandlerFunc {
 		hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			qapi.SetCORS(w)
@@ -47,7 +47,7 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 				w.WriteHeader(http.StatusNoContent)
 			}
 		})
-		return extprom.NewInstrumentedHandler(name, tracing.HTTPMiddleware(tracer, name, logger, gziphandler.GzipHandler(hf)))
+		return ins.NewInstrumentedHandler(name, tracing.HTTPMiddleware(tracer, name, logger, gziphandler.GzipHandler(hf)))
 	}
 
 	r.Get("/alerts", instr("alerts", api.alerts))

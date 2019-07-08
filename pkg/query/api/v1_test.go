@@ -31,6 +31,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/compact"
+	extpromhttp "github.com/improbable-eng/thanos/pkg/extprom/http"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/testutil"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -774,7 +775,7 @@ func TestParseDuration(t *testing.T) {
 func TestOptionsMethod(t *testing.T) {
 	r := route.New()
 	api := &API{}
-	api.Register(r, &opentracing.NoopTracer{}, log.NewNopLogger())
+	api.Register(r, &opentracing.NoopTracer{}, log.NewNopLogger(), extpromhttp.NewNopServerInstrumentor())
 
 	s := httptest.NewServer(r)
 	defer s.Close()
