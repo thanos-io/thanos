@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/prometheus/client_golang/prometheus"
+	"github.com/improbable-eng/thanos/pkg/extprom"
 	"github.com/prometheus/common/route"
 )
 
@@ -31,7 +31,7 @@ func NewBucketUI(logger log.Logger, label string) *Bucket {
 
 // Register registers http routes for bucket UI.
 func (b *Bucket) Register(r *route.Router) {
-	instrf := prometheus.InstrumentHandlerFunc
+	instrf := extprom.NewInstrumentedHandlerFunc
 
 	r.Get("/", instrf("root", b.root))
 	r.Get("/static/*filepath", instrf("static", b.serveStaticAsset))

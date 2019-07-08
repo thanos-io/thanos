@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/improbable-eng/thanos/pkg/extprom"
 	thanosrule "github.com/improbable-eng/thanos/pkg/rule"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/rules"
 )
@@ -146,7 +146,7 @@ func (ru *Rule) root(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ru *Rule) Register(r *route.Router) {
-	instrf := prometheus.InstrumentHandlerFunc
+	instrf := extprom.NewInstrumentedHandlerFunc
 
 	r.Get("/", instrf("root", ru.root))
 	r.Get("/alerts", instrf("alerts", ru.alerts))
