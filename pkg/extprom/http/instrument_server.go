@@ -8,7 +8,7 @@ import (
 )
 
 // ServerInstrumentor holds necessary metrics to instrument an http.Server
-// and provides necessary behaviors
+// and provides necessary behaviors.
 type ServerInstrumentor interface {
 	// NewInstrumentedHandler wraps the given HTTP handler for instrumentation.
 	NewInstrumentedHandler(handlerName string, handler http.Handler) http.HandlerFunc
@@ -22,7 +22,7 @@ func (ins nopServerInstrumentor) NewInstrumentedHandler(handlerName string, hand
 	})
 }
 
-// NewNopServerInstrumentor provides a ServerInstrumentor which does nothing
+// NewNopServerInstrumentor provides a ServerInstrumentor which does nothing.
 func NewNopServerInstrumentor() ServerInstrumentor {
 	return nopServerInstrumentor{}
 }
@@ -34,7 +34,7 @@ type serverInstrumentor struct {
 	responseSize    *prometheus.SummaryVec
 }
 
-// NewServerInstrumentor provides default ServerInstrumentor
+// NewServerInstrumentor provides default ServerInstrumentor.
 func NewServerInstrumentor(reg *prometheus.Registry) ServerInstrumentor {
 	ins := serverInstrumentor{
 		requestDuration: prometheus.NewHistogramVec(
