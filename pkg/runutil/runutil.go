@@ -117,7 +117,7 @@ func CloseWithLogOnErr(logger log.Logger, closer io.Closer, format string, a ...
 
 // ExhaustCloseWithLogOnErr closes the io.ReadCloser with a log message on error but exhausts the reader before.
 func ExhaustCloseWithLogOnErr(logger log.Logger, r io.ReadCloser, format string, a ...interface{}) {
-	io.Copy(ioutil.Discard, r)
+	_, _ = io.Copy(ioutil.Discard, r)
 	CloseWithLogOnErr(logger, r, format, a...)
 }
 
@@ -134,6 +134,6 @@ func CloseWithErrCapture(err *error, closer io.Closer, format string, a ...inter
 
 // ExhaustCloseWithErrCapture closes the io.ReadCloser with error capture but exhausts the reader before.
 func ExhaustCloseWithErrCapture(err *error, r io.ReadCloser, format string, a ...interface{}) {
-	io.Copy(ioutil.Discard, r)
+	_, _ = io.Copy(ioutil.Discard, r)
 	CloseWithErrCapture(err, r, format, a...)
 }
