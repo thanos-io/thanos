@@ -251,7 +251,7 @@ func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prom
 		return nil, errors.Wrap(err, "send request")
 	}
 	spanReqDo.Finish()
-	defer runutil.CloseWithLogOnErr(p.logger, presp.Body, "prom series request body")
+	defer runutil.ExhaustCloseWithLogOnErr(p.logger, presp.Body, "prom series request body")
 
 	if presp.StatusCode/100 != 2 {
 		return nil, errors.Errorf("request failed with code %s", presp.Status)
@@ -377,7 +377,7 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesR
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	defer runutil.CloseWithLogOnErr(p.logger, resp.Body, "label names request body")
+	defer runutil.ExhaustCloseWithLogOnErr(p.logger, resp.Body, "label names request body")
 
 	if resp.StatusCode/100 != 2 {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("request Prometheus server failed, code %s", resp.Status))
@@ -437,7 +437,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	defer runutil.CloseWithLogOnErr(p.logger, resp.Body, "label values request body")
+	defer runutil.ExhaustCloseWithLogOnErr(p.logger, resp.Body, "label values request body")
 
 	if resp.StatusCode/100 != 2 {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("request Prometheus server failed, code %s", resp.Status))
