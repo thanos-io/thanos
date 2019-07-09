@@ -146,7 +146,9 @@ func (ru *Rule) root(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ru *Rule) Register(r *route.Router, ins extpromhttp.ServerInstrumentor) {
-	instrf := ins.NewInstrumentedHandlerFunc
+	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+		return ins.NewInstrumentedHandler(name, http.HandlerFunc(next))
+	}
 
 	r.Get("/", instrf("root", ru.root))
 	r.Get("/alerts", instrf("alerts", ru.alerts))

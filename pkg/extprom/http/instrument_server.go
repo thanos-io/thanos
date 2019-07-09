@@ -12,18 +12,14 @@ import (
 type ServerInstrumentor interface {
 	// NewInstrumentedHandler wraps the given HTTP handler for instrumentation.
 	NewInstrumentedHandler(handlerName string, handler http.Handler) http.HandlerFunc
-	// NewInstrumentedHandlerFunc wraps the given function for instrumentation.
-	NewInstrumentedHandlerFunc(handlerName string, next func(http.ResponseWriter, *http.Request)) http.HandlerFunc
 }
 
 type nopServerInstrumentor struct{}
 
 func (ins nopServerInstrumentor) NewInstrumentedHandler(handlerName string, handler http.Handler) http.HandlerFunc {
-	return ins.NewInstrumentedHandlerFunc(handlerName, handler.ServeHTTP)
-}
-
-func (ins nopServerInstrumentor) NewInstrumentedHandlerFunc(handlerName string, next func(http.ResponseWriter, *http.Request)) http.HandlerFunc {
-	return http.HandlerFunc(next)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler.ServeHTTP(w, r)
+	})
 }
 
 // NewNopServerInstrumentor provides a ServerInstrumentor which does nothing
@@ -85,12 +81,6 @@ func NewServerInstrumentor(reg *prometheus.Registry) ServerInstrumentor {
 // value. http_requests_total is a metric vector partitioned by HTTP method
 // (label name "method") and HTTP status code (label name "code").
 func (ins *serverInstrumentor) NewInstrumentedHandler(handlerName string, handler http.Handler) http.HandlerFunc {
-	return ins.NewInstrumentedHandlerFunc(handlerName, handler.ServeHTTP)
-}
-
-// NewInstrumentedHandlerFunc wraps the given function for instrumentation. It
-// otherwise works in the same way as NewInstrumentedHandler.
-func (ins *serverInstrumentor) NewInstrumentedHandlerFunc(handlerName string, next func(http.ResponseWriter, *http.Request)) http.HandlerFunc {
 	return promhttp.InstrumentHandlerDuration(
 		ins.requestDuration.MustCurryWith(prometheus.Labels{"handler": handlerName}),
 		promhttp.InstrumentHandlerRequestSize(
@@ -99,7 +89,7 @@ func (ins *serverInstrumentor) NewInstrumentedHandlerFunc(handlerName string, ne
 				ins.requestsTotal.MustCurryWith(prometheus.Labels{"handler": handlerName}),
 				promhttp.InstrumentHandlerResponseSize(
 					ins.responseSize.MustCurryWith(prometheus.Labels{"handler": handlerName}),
-					http.HandlerFunc(next),
+					handler,
 				),
 			),
 		),
