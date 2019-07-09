@@ -311,7 +311,7 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 
 		router := route.New()
 		bucketUI := ui.NewBucketUI(logger, *label)
-		bucketUI.Register(router, extpromhttp.NewServerInstrumentor())
+		bucketUI.Register(router, extpromhttp.NewServerInstrumentor(reg))
 
 		if *interval < 5*time.Minute {
 			level.Warn(logger).Log("msg", "Refreshing more often than 5m could lead to large data transfers")

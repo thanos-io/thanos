@@ -39,7 +39,7 @@ type serverInstrumentor struct {
 }
 
 // NewServerInstrumentor provides default ServerInstrumentor
-func NewServerInstrumentor() ServerInstrumentor {
+func NewServerInstrumentor(reg *prometheus.Registry) ServerInstrumentor {
 	ins := serverInstrumentor{
 		requestDuration: prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{
@@ -72,7 +72,7 @@ func NewServerInstrumentor() ServerInstrumentor {
 			[]string{"code", "handler", "method"},
 		),
 	}
-	prometheus.MustRegister(ins.requestDuration, ins.requestSize, ins.requestsTotal, ins.responseSize)
+	reg.MustRegister(ins.requestDuration, ins.requestSize, ins.requestsTotal, ins.responseSize)
 	return &ins
 }
 
