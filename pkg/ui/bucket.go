@@ -30,9 +30,9 @@ func NewBucketUI(logger log.Logger, label string) *Bucket {
 }
 
 // Register registers http routes for bucket UI.
-func (b *Bucket) Register(r *route.Router, ins extpromhttp.ServerInstrumentor) {
+func (b *Bucket) Register(r *route.Router, ins extpromhttp.InstrumentationMiddleware) {
 	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
-		return ins.NewInstrumentedHandler(name, http.HandlerFunc(next))
+		return ins.NewHandler(name, http.HandlerFunc(next))
 	}
 
 	r.Get("/", instrf("root", b.root))

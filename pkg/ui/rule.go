@@ -145,9 +145,9 @@ func (ru *Rule) root(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, path.Join(prefix, "/alerts"), http.StatusFound)
 }
 
-func (ru *Rule) Register(r *route.Router, ins extpromhttp.ServerInstrumentor) {
+func (ru *Rule) Register(r *route.Router, ins extpromhttp.InstrumentationMiddleware) {
 	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
-		return ins.NewInstrumentedHandler(name, http.HandlerFunc(next))
+		return ins.NewHandler(name, http.HandlerFunc(next))
 	}
 
 	r.Get("/", instrf("root", ru.root))

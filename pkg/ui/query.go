@@ -66,9 +66,9 @@ func queryTmplFuncs() template.FuncMap {
 }
 
 // Register registers new GET routes for subpages and retirects from / to /graph.
-func (q *Query) Register(r *route.Router, ins extpromhttp.ServerInstrumentor) {
+func (q *Query) Register(r *route.Router, ins extpromhttp.InstrumentationMiddleware) {
 	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
-		return ins.NewInstrumentedHandler(name, http.HandlerFunc(next))
+		return ins.NewHandler(name, http.HandlerFunc(next))
 	}
 
 	r.Get("/", instrf("root", q.root))

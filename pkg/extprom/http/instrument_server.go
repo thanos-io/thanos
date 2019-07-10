@@ -7,36 +7,36 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// ServerInstrumentor holds necessary metrics to instrument an http.Server
+// InstrumentationMiddleware holds necessary metrics to instrument an http.Server
 // and provides necessary behaviors.
-type ServerInstrumentor interface {
-	// NewInstrumentedHandler wraps the given HTTP handler for instrumentation.
-	NewInstrumentedHandler(handlerName string, handler http.Handler) http.HandlerFunc
+type InstrumentationMiddleware interface {
+	// NewHandler wraps the given HTTP handler for instrumentation.
+	NewHandler(handlerName string, handler http.Handler) http.HandlerFunc
 }
 
-type nopServerInstrumentor struct{}
+type nopInstrumentationMiddleware struct{}
 
-func (ins nopServerInstrumentor) NewInstrumentedHandler(handlerName string, handler http.Handler) http.HandlerFunc {
+func (ins nopInstrumentationMiddleware) NewHandler(handlerName string, handler http.Handler) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		handler.ServeHTTP(w, r)
 	})
 }
 
-// NewNopServerInstrumentor provides a ServerInstrumentor which does nothing.
-func NewNopServerInstrumentor() ServerInstrumentor {
-	return nopServerInstrumentor{}
+// NewNopInstrumentationMiddleware provides a InstrumentationMiddleware which does nothing.
+func NewNopInstrumentationMiddleware() InstrumentationMiddleware {
+	return nopInstrumentationMiddleware{}
 }
 
-type serverInstrumentor struct {
+type defaultInstrumentationMiddleware struct {
 	requestDuration *prometheus.HistogramVec
 	requestSize     *prometheus.SummaryVec
 	requestsTotal   *prometheus.CounterVec
 	responseSize    *prometheus.SummaryVec
 }
 
-// NewServerInstrumentor provides default ServerInstrumentor.
-func NewServerInstrumentor(reg *prometheus.Registry) ServerInstrumentor {
-	ins := serverInstrumentor{
+// NewInstrumentationMiddleware provides default InstrumentationMiddleware.
+func NewInstrumentationMiddleware(reg *prometheus.Registry) InstrumentationMiddleware {
+	ins := defaultInstrumentationMiddleware{
 		requestDuration: prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{
 				Name: "http_request_duration_seconds",
@@ -72,7 +72,7 @@ func NewServerInstrumentor(reg *prometheus.Registry) ServerInstrumentor {
 	return &ins
 }
 
-// NewInstrumentedHandler wraps the given HTTP handler for instrumentation. It
+// NewHandler wraps the given HTTP handler for instrumentation. It
 // registers four metric collectors (if not already done) and reports HTTP
 // metrics to the (newly or already) registered collectors: http_requests_total
 // (CounterVec), http_request_duration_seconds (Histogram),
@@ -80,7 +80,7 @@ func NewServerInstrumentor(reg *prometheus.Registry) ServerInstrumentor {
 // has a constant label named "handler" with the provided handlerName as
 // value. http_requests_total is a metric vector partitioned by HTTP method
 // (label name "method") and HTTP status code (label name "code").
-func (ins *serverInstrumentor) NewInstrumentedHandler(handlerName string, handler http.Handler) http.HandlerFunc {
+func (ins *defaultInstrumentationMiddleware) NewHandler(handlerName string, handler http.Handler) http.HandlerFunc {
 	return promhttp.InstrumentHandlerDuration(
 		ins.requestDuration.MustCurryWith(prometheus.Labels{"handler": handlerName}),
 		promhttp.InstrumentHandlerRequestSize(

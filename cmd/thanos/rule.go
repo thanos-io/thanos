@@ -528,7 +528,7 @@ func runRule(
 			"web.prefix-header":   webPrefixHeaderName,
 		}
 
-		ins := extpromhttp.NewServerInstrumentor(reg)
+		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 
 		ui.NewRuleUI(logger, ruleMgrs, alertQueryURL.String(), flagsMap).Register(router.WithPrefix(webRoutePrefix), ins)
 

@@ -398,7 +398,7 @@ func runQuery(
 			"web.prefix-header":   webPrefixHeaderName,
 		}
 
-		ins := extpromhttp.NewServerInstrumentor(reg)
+		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 
 		ui.NewQueryUI(logger, stores, flagsMap).Register(router.WithPrefix(webRoutePrefix), ins)
 
