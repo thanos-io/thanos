@@ -11,8 +11,8 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/component"
+	extpromhttp "github.com/improbable-eng/thanos/pkg/extprom/http"
 	"github.com/improbable-eng/thanos/pkg/query"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/common/version"
@@ -66,8 +66,10 @@ func queryTmplFuncs() template.FuncMap {
 }
 
 // Register registers new GET routes for subpages and retirects from / to /graph.
-func (q *Query) Register(r *route.Router) {
-	instrf := prometheus.InstrumentHandlerFunc
+func (q *Query) Register(r *route.Router, ins extpromhttp.InstrumentationMiddleware) {
+	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+		return ins.NewHandler(name, http.HandlerFunc(next))
+	}
 
 	r.Get("/", instrf("root", q.root))
 	r.Get("/graph", instrf("graph", q.graph))

@@ -4,10 +4,6 @@ linters-settings:
 
 issues:
     exclude-rules:
-        # TODO: move away from deprecated prometheus.InstrumentHandler{,Func}
-        - linters:
-              - staticcheck
-          text: "SA1019:"
         # These are not being checked since these methods exist
         # so that no one else could implement them.
         - linters:

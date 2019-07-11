@@ -14,6 +14,7 @@ import (
 
 	"github.com/improbable-eng/thanos/pkg/block"
 	"github.com/improbable-eng/thanos/pkg/block/metadata"
+	extpromhttp "github.com/improbable-eng/thanos/pkg/extprom/http"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/runutil"
@@ -310,7 +311,7 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 
 		router := route.New()
 		bucketUI := ui.NewBucketUI(logger, *label)
-		bucketUI.Register(router)
+		bucketUI.Register(router, extpromhttp.NewInstrumentationMiddleware(reg))
 
 		if *interval < 5*time.Minute {
 			level.Warn(logger).Log("msg", "Refreshing more often than 5m could lead to large data transfers")
