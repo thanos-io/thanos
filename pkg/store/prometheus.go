@@ -125,15 +125,21 @@ func (p *PrometheusStore) putBuffer(b *[]byte) {
 
 // Series returns all series for a requested time range and label matcher.
 func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_SeriesServer) error {
-	ext := p.externalLabels()
+	externalLabels := p.externalLabels()
 
-	match, newMatchers, err := labelsMatches(ext, r.Matchers)
+	match, newMatchers, err := matchesExternalLabels(r.Matchers, externalLabels)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
+
 	if !match {
 		return nil
 	}
+
+	if len(newMatchers) == 0 {
+		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding external labels)").Error())
+	}
+
 	q := prompb.Query{StartTimestampMs: r.MinTime, EndTimestampMs: r.MaxTime}
 
 	// TODO(fabxc): import common definitions from prompb once we have a stable gRPC
@@ -166,7 +172,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	span.SetTag("series_count", len(resp.Results[0].Timeseries))
 
 	for _, e := range resp.Results[0].Timeseries {
-		lset := p.translateAndExtendLabels(e.Labels, ext)
+		lset := p.translateAndExtendLabels(e.Labels, externalLabels)
 
 		if len(e.Samples) == 0 {
 			// As found in https://github.com/improbable-eng/thanos/issues/381
@@ -286,8 +292,10 @@ func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prom
 	return &data, nil
 }
 
-func labelsMatches(lset labels.Labels, ms []storepb.LabelMatcher) (bool, []storepb.LabelMatcher, error) {
-	if len(lset) == 0 {
+// matchesExternalLabels filters out external labels matching from matcher if exsits as the local storage does not have them.
+// It also returns false if given matchers are not matching external labels.
+func matchesExternalLabels(ms []storepb.LabelMatcher, externalLabels labels.Labels) (bool, []storepb.LabelMatcher, error) {
+	if len(externalLabels) == 0 {
 		return true, ms, nil
 	}
 
@@ -299,7 +307,7 @@ func labelsMatches(lset labels.Labels, ms []storepb.LabelMatcher) (bool, []store
 			return false, nil, err
 		}
 
-		extValue := lset.Get(m.Name)
+		extValue := externalLabels.Get(m.Name)
 		if extValue == "" {
 			// Agnostic to external labels.
 			newMatcher = append(newMatcher, m)
@@ -312,6 +320,7 @@ func labelsMatches(lset labels.Labels, ms []storepb.LabelMatcher) (bool, []store
 			return false, nil, nil
 		}
 	}
+
 	return true, newMatcher, nil
 }
 
