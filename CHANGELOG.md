@@ -11,6 +11,9 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased.
 
+### Fixed
+- [#1311](https://github.com/improbable-eng/thanos/pull/1311) Fixed occasional panics in Compact and Store when using Azure Blob cloud storage caused by lack of error checking in client library.
+
 ### Added
 
 - [#1097](https://github.com/improbable-eng/thanos/pull/1097) Added `thanos check rules` linter for Thanos rule rules files.
