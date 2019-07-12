@@ -9,10 +9,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking* word for marking changes that are not backward compatible (relates only to v0.y.z releases.)
 
-## Unreleased.
-
-### Fixed
-- [#1311](https://github.com/improbable-eng/thanos/pull/1311) Fixed occasional panics in Compact and Store when using Azure Blob cloud storage caused by lack of error checking in client library.
+## [v0.6.0-rc.0](https://github.com/improbable-eng/thanos/releases/tag/v0.6.0-rc.0) - 2019.07.12
 
 ### Added
 
@@ -20,13 +17,68 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 - [#1253](https://github.com/improbable-eng/thanos/pull/1253) Add support for specifying a maximum amount of retries when using Azure Blob storage (default: no retries).
 
+- [#1244](https://github.com/improbable-eng/thanos/pull/1244) Thanos Compact now exposes new metrics `thanos_compact_downsample_total` and `thanos_compact_downsample_failures_total` which are useful to catch when errors happen
+
+- [#1260](https://github.com/improbable-eng/thanos/pull/1260) Thanos Query/Rule now exposes metrics `thanos_querier_store_apis_dns_provider_results` and `thanos_ruler_query_apis_dns_provider_results` which tell how many addresses were configured and how many were actually discovered respectively
+
 - [#1248](https://github.com/improbable-eng/thanos/pull/1248) Add a web UI to show the state of remote storage.
+
+- [#1217](https://github.com/improbable-eng/thanos/pull/1217) Thanos Receive gained basic hashring support
+
+- [#1262](https://github.com/improbable-eng/thanos/pull/1262) Thanos Receive got a new metric `thanos_http_requests_total` which shows how many requests were handled by it
+
+- [#1243](https://github.com/improbable-eng/thanos/pull/1243) Thanos Receive got an ability to forward time series data between nodes. Now you can pass the hashring configuration via `--receive.hashrings-file`; the refresh interval `--receive.hashrings-file-refresh-interval`; the name of the local node's name `--receive.local-endpoint`; and finally the header's name which is used to determine the tenant `--receive.tenant-header`.
+
+- [#1147](https://github.com/improbable-eng/thanos/pull/1147) Support for the Jaeger tracer has been added!
+
+*breaking* New common flags were added for configuring tracing: `--tracing.config-file` and `--tracing.config`. You can either pass a file to Thanos with the tracing configuration or pass it in the command line itself. Old `--gcloudtrace.*` flags were removed :warning:
+
+To migrate over the old `--gcloudtrace.*` configuration, your tracing configuration should look like this:
+
+```yaml
+---
+type: STACKDRIVER
+config:
+- service_name: 'foo'
+  project_id: '123'
+  sample_factor: 123
+```
+
+The other `type` you can use is `JAEGER` now. The `config` keys and values are Jaeger specific and you can find all of the information [here](https://github.com/jaegertracing/jaeger-client-go#environment-variables).
 
 ### Changed
 
 - [#1284](https://github.com/improbable-eng/thanos/pull/1284) Add support for multiple label-sets in Info gRPC service. This deprecates the single `Labels` slice of the `InfoResponse`, in a future release backward compatible handling for the single set of Labels will be removed. Upgrading to v0.6.0 or higher is advised.
 
 - [#1314](https://github.com/improbable-eng/thanos/pull/1314) Removes `http_request_duration_microseconds` (Summary) and adds `http_request_duration_seconds` (Histogram) from http server instrumentation used in Thanos APIs and UIs.
+
+- [#1287](https://github.com/improbable-eng/thanos/pull/1287) Sidecar now waits on Prometheus' external labels before starting the uploading process
+
+- [#1261](https://github.com/improbable-eng/thanos/pull/1261) Thanos Receive now exposes metrics `thanos_http_request_duration_seconds` and `thanos_http_response_size_bytes` properly of each handler
+
+- [#1274](https://github.com/improbable-eng/thanos/pull/1274) Iteration limit has been lifted from the LRU cache so there should be no more spam of error messages as they were harmless
+
+- [#1321](https://github.com/improbable-eng/thanos/pull/1321) Thanos Query now fails early on a query which only uses external labels - this improves clarity in certain situations
+
+### Fixed
+
+- [#1227](https://github.com/improbable-eng/thanos/pull/1227) Some context handling issues were fixed in Thanos Compact; some unnecessary memory allocations were removed in the hot path of Thanos Store.
+
+- [#1183](https://github.com/improbable-eng/thanos/pull/1183) Compactor now correctly propogates retriable/haltable errors which means that it will not unnecessarily restart if such an error occurs
+
+- [#1231](https://github.com/improbable-eng/thanos/pull/1231) Receive now correctly handles SIGINT and closes without deadlocking
+
+- [#1278](https://github.com/improbable-eng/thanos/pull/1278) Fixed inflated values problem with `sum()` on Thanos Query
+
+- [#1280](https://github.com/improbable-eng/thanos/pull/1280) Fixed a problem with concurrent writes to a `map` in Thanos Query while rendering the UI
+
+- [#1311](https://github.com/improbable-eng/thanos/pull/1311) Fixed occasional panics in Compact and Store when using Azure Blob cloud storage caused by lack of error checking in client library.
+
+- [#1322](https://github.com/improbable-eng/thanos/pull/1322) Removed duplicated closing of the gRPC listener - this gets rids of harmless messages like `store gRPC listener: close tcp 0.0.0.0:10901: use of closed network connection` when those programs are being closed
+
+### Deprecated
+
+- [#1216](https://github.com/improbable-eng/thanos/pull/1216) the old "Command-line flags" has been removed from Thanos Query UI since it was not populated and because we are striving for consistency
 
 ## [v0.5.0](https://github.com/improbable-eng/thanos/releases/tag/v0.5.0) - 2019.06.05
 
