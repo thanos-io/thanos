@@ -74,7 +74,7 @@ The other `type` you can use is `JAEGER` now. The `config` keys and values are J
 
 - [#1311](https://github.com/improbable-eng/thanos/pull/1311) Fixed occasional panics in Compact and Store when using Azure Blob cloud storage caused by lack of error checking in client library.
 
-- [#1322](https://github.com/improbable-eng/thanos/pull/1322) Removed duplicated closing of the gRPC listener - this gets rids of harmless messages like `store gRPC listener: close tcp 0.0.0.0:10901: use of closed network connection` when those programs are being closed
+- [#1322](https://github.com/improbable-eng/thanos/pull/1322) Removed duplicated closing of the gRPC listener - this gets rid of harmless messages like `store gRPC listener: close tcp 0.0.0.0:10901: use of closed network connection` when those programs are being closed
 
 ### Deprecated
 
