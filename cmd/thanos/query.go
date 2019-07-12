@@ -451,7 +451,6 @@ func runQuery(
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			s.Stop()
-			runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
 		})
 	}
 

@@ -280,9 +280,6 @@ func runReceive(
 			if s != nil {
 				s.Stop()
 			}
-			if l != nil {
-				runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
-			}
 		})
 	}
 

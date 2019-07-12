@@ -181,7 +181,7 @@ func runStore(
 			level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
-			runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
+			s.Stop()
 		})
 	}
 	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
