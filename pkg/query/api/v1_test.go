@@ -302,6 +302,14 @@ func TestEndpoints(t *testing.T) {
 				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
 			},
 		},
+		// Series that does not exist should return an empty array.
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`foobar`},
+			},
+			response: []labels.Labels{},
+		},
 		{
 			endpoint: api.series,
 			query: url.Values{
@@ -337,7 +345,7 @@ func TestEndpoints(t *testing.T) {
 				"start":   []string{"-2"},
 				"end":     []string{"-1"},
 			},
-			response: []labels.Labels(nil),
+			response: []labels.Labels{},
 		},
 		// Start and end after series ends.
 		{
@@ -347,7 +355,7 @@ func TestEndpoints(t *testing.T) {
 				"start":   []string{"100000"},
 				"end":     []string{"100001"},
 			},
-			response: []labels.Labels(nil),
+			response: []labels.Labels{},
 		},
 		// Start before series starts, end after series ends.
 		{
@@ -458,7 +466,7 @@ func TestEndpoints(t *testing.T) {
 				"start":   []string{"-2"},
 				"end":     []string{"-1"},
 			},
-			response: []labels.Labels(nil),
+			response: []labels.Labels{},
 		},
 		// Start and end after series ends.
 		{
@@ -468,7 +476,7 @@ func TestEndpoints(t *testing.T) {
 				"start":   []string{"100000"},
 				"end":     []string{"100001"},
 			},
-			response: []labels.Labels(nil),
+			response: []labels.Labels{},
 		},
 		// Start before series starts, end after series ends.
 		{
