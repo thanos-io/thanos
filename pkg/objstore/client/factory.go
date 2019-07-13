@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/azure"
+	"github.com/thanos-io/thanos/pkg/objstore/bos"
 	"github.com/thanos-io/thanos/pkg/objstore/cos"
 	"github.com/thanos-io/thanos/pkg/objstore/filesystem"
 	"github.com/thanos-io/thanos/pkg/objstore/gcs"
@@ -30,6 +31,7 @@ const (
 	SWIFT      ObjProvider = "SWIFT"
 	COS        ObjProvider = "COS"
 	ALIYUNOSS  ObjProvider = "ALIYUNOSS"
+	BOS   ObjProvider = "BOS"
 )
 
 type BucketConfig struct {
@@ -61,6 +63,8 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 		bucket, err = azure.NewBucket(logger, config, component)
 	case string(SWIFT):
 		bucket, err = swift.NewContainer(logger, config)
+	case string(BOS):
+		bucket, err = bos.NewBucket(logger, config, component)
 	case string(COS):
 		bucket, err = cos.NewBucket(logger, config, component)
 	case string(ALIYUNOSS):
