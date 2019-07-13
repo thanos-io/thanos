@@ -9,6 +9,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/azure"
+	"github.com/thanos-io/thanos/pkg/objstore/bos"
 	"github.com/thanos-io/thanos/pkg/objstore/cos"
 	"github.com/thanos-io/thanos/pkg/objstore/gcs"
 	"github.com/thanos-io/thanos/pkg/objstore/inmem"
@@ -116,6 +117,22 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 
 	} else {
 		t.Log("THANOS_SKIP_SWIFT_TESTS envvar present. Skipping test against swift.")
+	}
+
+	// Optional BOS.
+	if _, ok := os.LookupEnv("THANOS_SKIP_BAIDU_BOS_TESTS"); !ok {
+		bkt, closeFn, err := bos.NewTestBucket(t)
+		testutil.Ok(t, err)
+
+		ok := t.Run("Baidu bos", func(t *testing.T) {
+			testFn(t, bkt)
+		})
+		closeFn()
+		if !ok {
+			return
+		}
+	} else {
+		t.Log("THANOS_SKIP_BAIDU_BOS_TESTS envvar present. Skipping test against Baidu BOS")
 	}
 
 	// Optional COS.
