@@ -160,20 +160,23 @@ func (b *Bucket) getRange(ctx context.Context, bucketName, objectKey string, off
 	if len(objectKey) == 0 {
 		return nil, errors.Errorf("given object name should not empty")
 	}
+
 	getObjectRequest := &bos.GetObjectRequest{
 		BucketName: bucketName,
 		ObjectKey:  objectKey,
 	}
+
 	if length != -1 {
 		if err := setRange(getObjectRequest, off, off+length-1); err != nil {
 			return nil, err
 		}
 	}
-	obj, err := b.client.GetObjectFromRequest(*getObjectRequest, nil)
-	if err != nil {
+
+	if obj, err := b.client.GetObjectFromRequest(*getObjectRequest, nil); err != nil {
 		return nil, err
+	}else {
+		return obj.ObjectContent, nil
 	}
-	return obj.ObjectContent, nil
 }
 
 func setRange(getObjectRequest *bos.GetObjectRequest, start, end int64) error {
