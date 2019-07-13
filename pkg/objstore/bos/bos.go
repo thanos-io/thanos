@@ -132,14 +132,12 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 // Exists checks if the given object exists in the bucket.
 // TODO(bplotka): Consider removing Exists in favor of helper that do Get & IsObjNotFoundErr (less code to maintain).
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
-	obj, err := b.getRange(ctx, b.name, name, 0, 2)
-	if err != nil {
+	if _, err := b.client.GetObjectMetadata(b.name, name, nil); err != nil {
 		if b.IsObjNotFoundErr(err) {
 			return false, nil
 		}
 		return false, errors.Wrap(err, "get bos object metadata")
 	}
-	obj.Close()
 	return true, nil
 }
 
@@ -163,21 +161,10 @@ func (b *Bucket) getRange(ctx context.Context, bucketName, objectKey string, off
 		return nil, errors.Errorf("given object name should not empty")
 	}
 
-	getObjectRequest := &bos.GetObjectRequest{
-		BucketName: bucketName,
-		ObjectKey:  objectKey,
-	}
-
 	if length != -1 {
 		if err := setRange(getObjectRequest, off, off+length-1); err != nil {
 			return nil, err
 		}
-	}
-
-	if obj, err := b.client.GetObjectFromRequest(*getObjectRequest, nil); err != nil {
-		return nil, err
-	} else {
-		return obj.ObjectContent, nil
 	}
 }
 
