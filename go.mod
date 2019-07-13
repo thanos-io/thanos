@@ -5,6 +5,7 @@ require (
 	github.com/Azure/azure-storage-blob-go v0.7.0
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da
+	github.com/baidu/baiducloud-sdk-go v0.0.0-20190503095948-43b25d6fa6f0
 	github.com/cespare/xxhash v1.1.0
 	github.com/fatih/structtag v1.0.0
 	github.com/fortytw2/leaktest v1.3.0

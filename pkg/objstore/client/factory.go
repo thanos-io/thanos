@@ -9,13 +9,14 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/improbable-eng/thanos/pkg/objstore/azure"
+	"github.com/improbable-eng/thanos/pkg/objstore/bos"
 	"github.com/improbable-eng/thanos/pkg/objstore/cos"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
 	"github.com/improbable-eng/thanos/pkg/objstore/s3"
 	"github.com/improbable-eng/thanos/pkg/objstore/swift"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 type ObjProvider string
@@ -25,6 +26,7 @@ const (
 	S3    ObjProvider = "S3"
 	AZURE ObjProvider = "AZURE"
 	SWIFT ObjProvider = "SWIFT"
+	BOS   ObjProvider = "BOS"
 	COS   ObjProvider = "COS"
 )
 
@@ -57,6 +59,8 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 		bucket, err = azure.NewBucket(logger, config, component)
 	case string(SWIFT):
 		bucket, err = swift.NewContainer(logger, config)
+	case string(BOS):
+		bucket, err = bos.NewBucket(logger, config, component)
 	case string(COS):
 		bucket, err = cos.NewBucket(logger, config, component)
 	default:

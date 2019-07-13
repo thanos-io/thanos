@@ -22,7 +22,7 @@ import (
 
 // registerStore registers a store command.
 func registerStore(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "store node giving access to blocks in a bucket provider. Now supported GCS, S3, Azure, Swift and Tencent COS.")
+	cmd := app.Command(name, "store node giving access to blocks in a bucket provider. Now supported GCS, S3, Azure, Swift, Baidu BOS and Tencent COS.")
 
 	grpcBindAddr, httpBindAddr, cert, key, clientCA := regCommonServerFlags(cmd)
 

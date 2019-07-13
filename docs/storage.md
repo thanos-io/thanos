@@ -20,6 +20,7 @@ Current object storage client implementations:
 | Google Cloud Storage | Stable  (production usage)             | yes       | @bwplotka   |
 | AWS S3               | Stable  (production usage)               | yes        | @bwplotka          |
 | Azure Storage Account | Stable  (production usage) | yes       | @vglafirov   |
+| Baidu BOS            | Beta  (testing usage)                   | no      | @tianyuansun          |
 | OpenStack Swift      | Beta  (working PoCs, testing usage)               | no        | @sudhi-vm   |
 | Tencent COS          | Beta  (testing usage)                   | no        | @jojohappy          |
 
@@ -308,3 +309,20 @@ config:
 ```
 
 Set the flags `--objstore.config-file` to reference to the configuration file.
+
+## Baidu BOS Configuration
+
+To use Baidu BOS as storage store, you should create a Baidu Account to create an object storage bucket first. Follow the instructions from Baidu Cloud Documents: [https://cloud.baidu.com/doc/BOS/index.html](https://cloud.baidu.com/doc/BOS/index.html)
+
+To configure Baidu Account to use BOS as an object store you need to set these parameters in yaml format stored in a file:
+
+```yaml
+type: BOS
+config:
+  bucket: ""
+  region: ""
+  access_key_id: ""
+  secret_access_key: ""
+```
+Set the flags `--objstore.config-file` to reference to the configuration file.
+

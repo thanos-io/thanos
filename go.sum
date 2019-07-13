@@ -33,6 +33,8 @@ github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da/go.mod h1:Q73ZrmV
 github.com/armon/go-radix v0.0.0-20180808171621-7fddfc383310/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
 github.com/aws/aws-sdk-go v0.0.0-20180507225419-00862f899353 h1:qFKf58XUUvHaEz0zFkLJsQ4dzoAyrQ8QyhK4nHGHBI4=
 github.com/aws/aws-sdk-go v0.0.0-20180507225419-00862f899353/go.mod h1:ZRmQr0FajVIyZ4ZzBYKG5P3ZqPz9IHG41ZoMu1ADI3k=
+github.com/baidu/baiducloud-sdk-go v0.0.0-20190503095948-43b25d6fa6f0 h1:p5tdkhPVTVBtkJM6/we/sJRkl84DX3ZCXdPH8jtmPyo=
+github.com/baidu/baiducloud-sdk-go v0.0.0-20190503095948-43b25d6fa6f0/go.mod h1:YpbdNTGpFZY7AH5EkjRsd1QmLsK8aZ0uSCOeiPG8h+8=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973 h1:xJ4a3vCFaGF/jqvzLMYoU8P317H5OQ+Via4RmuPwCS0=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
 github.com/beorn7/perks v1.0.0 h1:HWo1m869IqiPhD389kmkxeTalrjNbbJTC8LXupb+sl0=

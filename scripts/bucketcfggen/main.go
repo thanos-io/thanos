@@ -12,6 +12,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/objstore/azure"
+	"github.com/improbable-eng/thanos/pkg/objstore/bos"
 	"github.com/improbable-eng/thanos/pkg/objstore/client"
 	"github.com/improbable-eng/thanos/pkg/objstore/cos"
 	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
@@ -28,6 +29,7 @@ var (
 		client.GCS:   gcs.Config{},
 		client.S3:    s3.Config{},
 		client.SWIFT: swift.SwiftConfig{},
+		client.BOS:   bos.Config{},
 		client.COS:   cos.Config{},
 	}
 )

@@ -38,6 +38,8 @@ jobs:
             echo "Skipping AWS tests."
             export THANOS_SKIP_AZURE_TESTS="true"
             echo "Skipping Azure tests."
+            export THANOS_SKIP_BAIDU_BOS_TESTS="true"
+            echo "Skipping Baidu BOS tests."
             export THANOS_SKIP_SWIFT_TESTS="true"
             echo "Skipping SWIFT tests."
             export THANOS_SKIP_TENCENT_COS_TESTS="true"
