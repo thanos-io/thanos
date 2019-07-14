@@ -176,7 +176,7 @@ func (b *Bucket) getRange(ctx context.Context, bucketName, objectKey string, off
 
 	if obj, err := b.client.GetObjectFromRequest(*getObjectRequest, nil); err != nil {
 		return nil, err
-	}else {
+	} else {
 		return obj.ObjectContent, nil
 	}
 }
@@ -206,10 +206,10 @@ func (b *Bucket) listObjects(ctx context.Context, objectPrefix string) <-chan ob
 		for {
 			result, err := b.client.ListObjectsFromRequest(bos.ListObjectsRequest{
 				BucketName: b.name,
-				Prefix:    objectPrefix,
-				Delimiter: dirDelim,
-				Marker:    marker,
-				MaxKeys:   1000,
+				Prefix:     objectPrefix,
+				Delimiter:  dirDelim,
+				Marker:     marker,
+				MaxKeys:    1000,
 			}, nil)
 			if err != nil {
 				select {
@@ -332,8 +332,7 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 }
 
 func validateForTest(conf Config) error {
-	if conf.Bucket == "" ||
-		conf.Region == "" ||
+	if conf.Region == "" ||
 		conf.AccessKeyID == "" ||
 		conf.SecretAccessKey == "" {
 		return errors.New("insufficient bos configuration information")
