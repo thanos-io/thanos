@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"net/http"
 	"os"
@@ -11,16 +12,26 @@ import (
 	"testing"
 	"time"
 
-	"github.com/baidu/baiducloud-sdk-go/bce"
-	"github.com/baidu/baiducloud-sdk-go/bos"
+	"github.com/baidubce/bce-sdk-go/bce"
+	"github.com/baidubce/bce-sdk-go/services/bos"
+	"github.com/baidubce/bce-sdk-go/services/bos/api"
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
+
+	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
-// DirDelim is the delimiter used to model a directory structure in an object store bucket.
-const dirDelim = "/"
+const partSize = 1024 * 1024 * 128
+
+var endpoints = map[string]string{
+	"bj": "bj.bcebos.com",
+	"gz": "gz.bcebos.com",
+	"hk": "hkg.bcebos.com",
+	"su": "su.bcebos.com",
+	"bd": "bd.bcebos.com",
+	"wh": "fwh.bcebos.com",
+}
 
 // Bucket implements the store.Bucket interface against bos-compatible(Baidu Object Storage) APIs.
 type Bucket struct {
@@ -44,6 +55,11 @@ func (conf *Config) validate() error {
 		conf.SecretAccessKey == "" {
 		return errors.New("insufficient bos configuration information")
 	}
+
+	if _, exist := endpoints[conf.Region]; !exist {
+		return errors.New(fmt.Sprintf("region %s not supported", conf.Region))
+	}
+
 	return nil
 }
 
@@ -60,13 +76,12 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 		return nil, errors.Wrap(err, "validate bos configuration")
 	}
 
-	client := bos.NewClient(&bce.Config{
-		Region: config.Region,
-		Credentials: &bce.Credentials{
-			AccessKeyID:     config.AccessKeyID,
-			SecretAccessKey: config.SecretAccessKey,
-		},
-	})
+	client, err := bos.NewClient(config.AccessKeyID, config.SecretAccessKey, endpoints[config.Region])
+	if err != nil {
+		return nil, errors.Wrap(err, "create bos client")
+	}
+	client.MaxParallel = 20
+	client.MultipartSize = 128 * 1024
 
 	bkt := &Bucket{
 		logger: logger,
@@ -83,7 +98,7 @@ func (b *Bucket) Name() string {
 
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
-	if err := b.client.DeleteObject(b.name, name, nil); err != nil {
+	if err := b.client.DeleteObject(b.name, name); err != nil {
 		return err
 	}
 	return nil
@@ -91,28 +106,99 @@ func (b *Bucket) Delete(ctx context.Context, name string) error {
 
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
-	if _, err := b.client.PutObject(b.name, name, r, nil, nil); err != nil {
+	chunksnum, lastslice, err := calculateChunks(name, r)
+	if err != nil {
 		return err
+	}
+
+	switch chunksnum {
+	case 0:
+		body, err := bce.NewBodyFromSizedReader(r, lastslice)
+		if err != nil {
+			return errors.Wrap(err, "failed to NewBodyFromSizedReader")
+		}
+		if _, err := b.client.PutObject(b.name, name, body, nil); err != nil {
+			return errors.Wrap(err, "failed to upload oss object")
+		}
+	default:
+		{
+			init, err := b.client.BasicInitiateMultipartUpload(b.name, name)
+			if err != nil {
+				return errors.Wrap(err, "failed to initiate multi-part upload")
+			}
+			chunk := 0
+			uploadEveryPart := func(everypartsize int64, cnk int) (string, error) {
+				body, err := bce.NewBodyFromSectionFile(r.(*os.File), (int64(cnk)-1)*everypartsize+1, everypartsize)
+				if err != nil {
+					return "", errors.Wrap(err, "failed to NewBodyFromSectionFile")
+				}
+				etag, err := b.client.BasicUploadPart(b.name, name, init.UploadId, cnk, body)
+				if err != nil {
+					if err := b.client.AbortMultipartUpload(b.name, name, init.UploadId); err != nil {
+						return etag, errors.Wrap(err, "failed to abort multi-part upload")
+					}
+
+					return etag, errors.Wrap(err, "failed to upload multi-part chunk")
+				}
+				return etag, nil
+			}
+			var parts []api.UploadInfoType
+			for ; chunk < chunksnum; chunk++ {
+				etag, err := uploadEveryPart(partSize, chunk+1)
+				if err != nil {
+					return errors.Wrap(err, "failed to upload every part")
+				}
+				parts = append(parts, api.UploadInfoType{PartNumber: chunk + 1, ETag: etag})
+			}
+			if lastslice != 0 {
+				etag, err := uploadEveryPart(lastslice, chunksnum+1)
+				if err != nil {
+					return errors.Wrap(err, "failed to upload the last chunk")
+				}
+				parts = append(parts, api.UploadInfoType{PartNumber: chunksnum + 1, ETag: etag})
+			}
+			if _, err := b.client.CompleteMultipartUploadFromStruct(b.name, name, init.UploadId, &api.CompleteMultipartUploadArgs{Parts: parts}); err != nil {
+				return errors.Wrap(err, "failed to set multi-part upload completive")
+			}
+		}
 	}
 	return nil
 }
 
-// Iter calls f for each entry in the given directory (not recursive.). The argument to f is the full
+// Iter calls f for each entry in the given directory (not recursive). The argument to f is the full
 // object name including the prefix of the inspected directory.
 func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) error {
 	if dir != "" {
-		dir = strings.TrimSuffix(dir, dirDelim) + dirDelim
+		dir = strings.TrimSuffix(dir, objstore.DirDelim) + objstore.DirDelim
 	}
 
-	for object := range b.listObjects(ctx, dir) {
-		if object.err != nil {
-			return object.err
+	var marker string
+	for {
+		if err := ctx.Err(); err != nil {
+			return errors.Wrap(err, "context closed while iterating bucket")
 		}
-		if object.key == "" {
-			continue
+		objects, err := b.client.ListObjects(b.name, &api.ListObjectsArgs{
+			Delimiter: objstore.DirDelim,
+			Marker:    marker,
+			MaxKeys:   1000,
+			Prefix:    dir,
+		})
+		if err != nil {
+			return errors.Wrap(err, "listing baidu bos bucket failed")
 		}
-		if err := f(object.key); err != nil {
-			return err
+		marker = objects.NextMarker
+		for _, object := range objects.Contents {
+			if err := f(object.Key); err != nil {
+				return errors.Wrapf(err, "callback func invoke for object %s failed ", object.Key)
+			}
+		}
+		for _, object := range objects.CommonPrefixes {
+			if err := f(object.Prefix); err != nil {
+				return errors.Wrapf(err, "callback func invoke for object %s failed ", object.Prefix)
+			}
+		}
+		if !objects.IsTruncated {
+			break
 		}
 	}
 
@@ -132,14 +218,13 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 // Exists checks if the given object exists in the bucket.
 // TODO(bplotka): Consider removing Exists in favor of helper that do Get & IsObjNotFoundErr (less code to maintain).
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
-	obj, err := b.getRange(ctx, b.name, name, 0, 2)
+	_, err := b.client.GetObjectMeta(b.name, name)
 	if err != nil {
 		if b.IsObjNotFoundErr(err) {
 			return false, nil
 		}
 		return false, errors.Wrap(err, "get bos object metadata")
 	}
-	obj.Close()
 	return true, nil
 }
 
@@ -148,14 +233,30 @@ func (b *Bucket) Close() error {
 }
 
 // IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
+// IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
 func (b *Bucket) IsObjNotFoundErr(err error) bool {
 	switch tmpErr := err.(type) {
-	case *bce.Error:
-		if tmpErr.StatusCode == http.StatusNotFound {
+	case *bce.BceServiceError:
+		if tmpErr.Code == "NoSuchKey" || tmpErr.StatusCode == http.StatusNotFound {
 			return true
 		}
 	}
 	return false
+}
+
+func calculateChunks(name string, r io.Reader) (int, int64, error) {
+	switch r.(type) {
+	case *os.File:
+		f, _ := r.(*os.File)
+		if fileInfo, err := f.Stat(); err == nil {
+			s := fileInfo.Size()
+			return int(math.Floor(float64(s) / partSize)), s % partSize, nil
+		}
+	case *strings.Reader:
+		f, _ := r.(*strings.Reader)
+		return int(math.Floor(float64(f.Size()) / partSize)), f.Size() % partSize, nil
+	}
+	return -1, 0, errors.New("unsupported implement of io.Reader")
 }
 
 func (b *Bucket) getRange(ctx context.Context, bucketName, objectKey string, off, length int64) (io.ReadCloser, error) {
@@ -163,78 +264,19 @@ func (b *Bucket) getRange(ctx context.Context, bucketName, objectKey string, off
 		return nil, errors.Errorf("given object name should not empty")
 	}
 
-}
-
-func setRange(getObjectRequest *bos.GetObjectRequest, start, end int64) error {
-	if start >= 0 && end <= 0 {
-		getObjectRequest.Range = fmt.Sprintf("%v-", start)
-	} else if start >= 0 && start <= end {
-		getObjectRequest.Range = fmt.Sprintf("%v-%v", start, end)
-	} else {
-		return errors.Errorf("Invalid range specified: start=%d end=%d", start, end)
+	ranges := make([]int64, 0)
+	ranges = append(ranges, off)
+	if length != -1 {
+		ranges = append(ranges, off+length-1)
 	}
-	return nil
-}
 
-type objectInfo struct {
-	key string
-	err error
-}
+	responseHeaders := make(map[string]string)
 
-func (b *Bucket) listObjects(ctx context.Context, objectPrefix string) <-chan objectInfo {
-	objectsCh := make(chan objectInfo, 1)
-
-	go func(objectsCh chan<- objectInfo) {
-		defer close(objectsCh)
-		var marker string
-		for {
-			result, err := b.client.ListObjectsFromRequest(bos.ListObjectsRequest{
-				BucketName: b.name,
-				Prefix:     objectPrefix,
-				Delimiter:  dirDelim,
-				Marker:     marker,
-				MaxKeys:    1000,
-			}, nil)
-			if err != nil {
-				select {
-				case objectsCh <- objectInfo{
-					err: err,
-				}:
-				case <-ctx.Done():
-				}
-				return
-			}
-
-			for _, object := range result.Contents {
-				select {
-				case objectsCh <- objectInfo{
-					key: object.Key,
-				}:
-				case <-ctx.Done():
-					return
-				}
-			}
-
-			// The result of CommonPrefixes contains the objects
-			// that have the same keys between Prefix and the key specified by delimiter.
-			for _, obj := range result.GetCommonPrefixes() {
-				select {
-				case objectsCh <- objectInfo{
-					key: obj,
-				}:
-				case <-ctx.Done():
-					return
-				}
-			}
-
-			if !result.IsTruncated {
-				return
-			}
-
-			marker = result.NextMarker
-		}
-	}(objectsCh)
-	return objectsCh
+	if obj, err := b.client.GetObject(bucketName, objectKey, responseHeaders, ranges...); err != nil {
+		return nil, err
+	} else {
+		return obj.Body, nil
+	}
 }
 
 func configFromEnv() Config {
@@ -302,14 +344,14 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 		return nil, nil, err
 	}
 
-	if err := b.client.CreateBucket(b.name, nil); err != nil {
+	if _, err := b.client.PutBucket(b.name); err != nil {
 		return nil, nil, err
 	}
 	t.Log("created temporary BOS bucket for BOS tests with name", tmpBucketName)
 
 	return b, func() {
 		objstore.EmptyBucket(t, context.Background(), b)
-		if err := b.client.DeleteBucket(b.name, nil); err != nil {
+		if err := b.client.DeleteBucket(b.name); err != nil {
 			t.Logf("deleting bucket %s failed: %s", tmpBucketName, err)
 		}
 	}, nil
