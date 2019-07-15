@@ -543,7 +543,7 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 
 	set := storage.NewMergeSeriesSet(sets, nil)
 
-	var metrics []labels.Labels
+	metrics := []labels.Labels{}
 	for set.Next() {
 		metrics = append(metrics, set.At().Labels())
 	}
