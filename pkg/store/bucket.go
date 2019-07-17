@@ -33,6 +33,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/tsdb/chunks"
 	"github.com/prometheus/tsdb/fileutil"
@@ -1234,8 +1235,8 @@ func (b *bucketBlock) Close() error {
 	return nil
 }
 
-// bucketIndexReader is a custom index reader (not conforming index.Reader interface) that gets postings
-// by
+// bucketIndexReader is a custom index reader (not conforming index.Reader interface)
+// that gets postings filtered by given label matchers.
 type bucketIndexReader struct {
 	logger log.Logger
 	ctx    context.Context
@@ -1280,28 +1281,40 @@ func (r *bucketIndexReader) lookupSymbol(o uint32) (string, error) {
 // chunk where the series contains the matching label-value pair for a given block of data. Postings can be fetched by
 // single label name=value.
 func (r *bucketIndexReader) ExpandedPostings(ms []labels.Matcher) ([]uint64, error) {
-	var postingGroups []*postingGroup
+	var keys []labels.Label
 
-	// NOTE: Derived from tsdb.PostingsForMatchers.
 	for _, m := range ms {
-		// Each group is separate to tell later what postings are intersecting with what.
-		postingGroups = append(postingGroups, toPostingGroup(r.LabelValues, m))
+		keys = append(keys, toLabelKey(r.LabelValues, m)...)
 	}
 
-	if len(postingGroups) == 0 {
-		return nil, nil
+	var ptrs []postingPtr
+
+	postings := make([]index.Postings, len(keys))
+
+	for i, key := range keys {
+		posting, indexRange, err := r.fetchCatched(key)
+		if err != nil {
+			return nil, err
+		}
+		if posting != nil {
+			postings[i] = posting
+			continue
+		}
+		if indexRange == (index.Range{}) {
+			return nil, errors.New("index range should not be empty for uncached postings")
+		}
+		r.stats.postingsToFetch++
+		ptrs = append(ptrs, postingPtr{ptr: indexRange, keyID: i})
 	}
 
-	if err := r.fetchPostings(postingGroups); err != nil {
-		return nil, errors.Wrap(err, "get postings")
+	r.fetchUnCatched(postings, keys, ptrs)
+
+	p, err := tsdb.PostingsForMatchers(newTsdbIndex(r), ms...)
+	if err != nil {
+		return nil, errors.Wrap(err, "postings for matchers")
 	}
 
-	var postings []index.Postings
-	for _, g := range postingGroups {
-		postings = append(postings, g.Postings())
-	}
-
-	ps, err := index.ExpandPostings(index.Intersect(postings...))
+	ps, err := index.ExpandPostings(p)
 	if err != nil {
 		return nil, errors.Wrap(err, "expand")
 	}
@@ -1315,6 +1328,75 @@ func (r *bucketIndexReader) ExpandedPostings(ms []labels.Matcher) ([]uint64, err
 	}
 
 	return ps, nil
+}
+
+type tsdbIndex struct {
+	*bucketIndexReader
+}
+
+func newTsdbIndex(br *bucketIndexReader) tsdbIndex {
+	ix := tsdbIndex{
+		bucketIndexReader: br,
+	}
+	return ix
+}
+
+func (m tsdbIndex) Symbols() (map[string]struct{}, error) {
+	return nil, errors.New("not implemented")
+
+}
+
+func (m tsdbIndex) Close() error {
+	return nil
+}
+
+func (m tsdbIndex) LabelValues(names ...string) (index.StringTuples, error) {
+	// TODO support composite indexes
+	if len(names) != 1 {
+		return nil, errors.New("composite indexes not supported yet")
+	}
+
+	return index.NewStringTuples(m.bucketIndexReader.LabelValues(names[0]), 1)
+}
+
+func (m tsdbIndex) Postings(name, value string) (index.Postings, error) {
+	key := labels.Label{Name: name, Value: value}
+	posting, indexRange, err := m.bucketIndexReader.fetchCatched(key)
+	if err != nil {
+		return nil, err
+	}
+	if posting != nil {
+		return posting, nil
+	}
+	if indexRange == (index.Range{}) {
+		return nil, errors.New("index range should not be empty for uncached postings")
+	}
+	ptrs := []postingPtr{postingPtr{ptr: indexRange, keyID: 0}}
+	postings := make([]index.Postings, 1)
+	keys := []labels.Label{key}
+	err = m.bucketIndexReader.fetchUnCatched(postings, keys, ptrs)
+	if err != nil {
+		return nil, err
+	}
+	return postings[0], nil
+}
+
+func (m tsdbIndex) SortedPostings(p index.Postings) index.Postings {
+	// Postings are already sorted so no need to do anything.
+	return p
+}
+
+func (m tsdbIndex) Series(ref uint64, lset *labels.Labels, chks *[]chunks.Meta) error {
+	return errors.New("not implemented")
+}
+
+func (m tsdbIndex) LabelIndices() ([][]string, error) {
+	return nil, errors.New("not implemented")
+
+}
+
+func (m tsdbIndex) LabelNames() ([]string, error) {
+	return nil, errors.New("not implemented")
 }
 
 type postingGroup struct {
@@ -1400,10 +1482,131 @@ func toPostingGroup(lvalsFn func(name string) []string, m labels.Matcher) *posti
 	return newPostingGroup(matchingLabels, merge)
 }
 
+func toLabelKey(lvalsFn func(name string) []string, m labels.Matcher) []labels.Label {
+	var matchingLabels []labels.Label
+
+	// If the matcher selects an empty value, it selects all the series which don't
+	// have the label name set too. See: https://github.com/prometheus/prometheus/issues/3575
+	// and https://github.com/prometheus/prometheus/pull/3578#issuecomment-351653555
+	if m.Matches("") {
+		allName, allValue := index.AllPostingsKey()
+
+		matchingLabels = append(matchingLabels, labels.Label{Name: allName, Value: allValue})
+		for _, val := range lvalsFn(m.Name()) {
+			if !m.Matches(val) {
+				matchingLabels = append(matchingLabels, labels.Label{Name: m.Name(), Value: val})
+			}
+		}
+		return matchingLabels
+	}
+
+	// Fast-path for equal matching.
+	if em, ok := m.(*labels.EqualMatcher); ok {
+		return labels.Labels{{Name: em.Name(), Value: em.Value()}}
+	}
+
+	for _, val := range lvalsFn(m.Name()) {
+		if m.Matches(val) {
+			matchingLabels = append(matchingLabels, labels.Label{Name: m.Name(), Value: val})
+		}
+	}
+
+	return matchingLabels
+}
+
 type postingPtr struct {
 	groupID int
 	keyID   int
 	ptr     index.Range
+}
+
+func (r *bucketIndexReader) fetchCatched(key labels.Label) (index.Postings, index.Range, error) {
+	// Get postings for the given key from cache.
+	if b, ok := r.cache.Postings(r.block.meta.ULID, key); ok {
+		r.stats.postingsTouched++
+		r.stats.postingsTouchedSizeSum += len(b)
+
+		_, l, err := r.dec.Postings(b)
+		if err != nil {
+			return nil, index.Range{}, errors.Wrap(err, "decode postings")
+		}
+		return l, index.Range{}, nil
+
+	}
+
+	// Cache miss; save pointer for actual posting in index stored in object store.
+	ptr, ok := r.block.postings[key]
+	if !ok {
+		// This block does not have any posting for given key.
+		return index.EmptyPostings(), index.Range{}, nil
+	}
+	r.stats.postingsToFetch++
+	return nil, ptr, nil
+}
+
+func (r *bucketIndexReader) fetchUnCatched(postings []index.Postings, keys []labels.Label, ptrs []postingPtr) error {
+	sort.Slice(ptrs, func(i, j int) bool {
+		return ptrs[i].ptr.Start < ptrs[j].ptr.Start
+	})
+
+	// TODO(bwplotka): Asses how large in worst case scenario this can be. (e.g fetch for AllPostingsKeys)
+	// Consider sub split if too big.
+	parts := r.block.partitioner.Partition(len(ptrs), func(i int) (start, end uint64) {
+		return uint64(ptrs[i].ptr.Start), uint64(ptrs[i].ptr.End)
+	})
+
+	var g run.Group
+	for _, part := range parts {
+		ctx, cancel := context.WithCancel(r.ctx)
+		i, j := part.elemRng[0], part.elemRng[1]
+
+		start := int64(part.start)
+		// We assume index does not have any ptrs that has 0 length.
+		length := int64(part.end) - start
+
+		// Fetch from object storage concurrently and update stats and posting list.
+		g.Add(func() error {
+			begin := time.Now()
+
+			b, err := r.block.readIndexRange(ctx, start, length)
+			if err != nil {
+				return errors.Wrap(err, "read postings range")
+			}
+			fetchTime := time.Since(begin)
+
+			r.mtx.Lock()
+			defer r.mtx.Unlock()
+
+			r.stats.postingsFetchCount++
+			r.stats.postingsFetched += j - i
+			r.stats.postingsFetchDurationSum += fetchTime
+			r.stats.postingsFetchedSizeSum += int(length)
+
+			for _, p := range ptrs[i:j] {
+				c := b[p.ptr.Start-start : p.ptr.End-start]
+
+				_, fetchedPostings, err := r.dec.Postings(c)
+				if err != nil {
+					return errors.Wrap(err, "read postings list")
+				}
+
+				// Return postings and fill LRU cache.
+				postings[p.keyID] = fetchedPostings
+				r.cache.SetPostings(r.block.meta.ULID, keys[p.keyID], c)
+
+				// If we just fetched it we still have to update the stats for touched postings.
+				r.stats.postingsTouched++
+				r.stats.postingsTouchedSizeSum += len(c)
+			}
+			return nil
+		}, func(err error) {
+			if err != nil {
+				cancel()
+			}
+		})
+	}
+
+	return g.Run()
 }
 
 // fetchPostings fill postings requested by posting groups.
@@ -1650,7 +1853,7 @@ func (r *bucketIndexReader) LabelValues(name string) []string {
 // LabelNames returns a list of label names.
 func (r *bucketIndexReader) LabelNames() []string {
 	res := make([]string, 0, len(r.block.lvals))
-	for ln, _ := range r.block.lvals {
+	for ln := range r.block.lvals {
 		res = append(res, ln)
 	}
 	return res
