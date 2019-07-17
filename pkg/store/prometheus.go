@@ -110,29 +110,36 @@ func (p *PrometheusStore) Info(ctx context.Context, r *storepb.InfoRequest) (*st
 	return res, nil
 }
 
-func (p *PrometheusStore) getBuffer() []byte {
+func (p *PrometheusStore) getBuffer() *[]byte {
 	b := p.buffers.Get()
 	if b == nil {
-		return make([]byte, 0, 32*1024) // 32KB seems like a good minimum starting size.
+		buf := make([]byte, 0, 32*1024) // 32KB seems like a good minimum starting size.
+		return &buf
 	}
-	return b.([]byte)
+	return b.(*[]byte)
 }
 
-func (p *PrometheusStore) putBuffer(b []byte) {
-	p.buffers.Put(b[:0])
+func (p *PrometheusStore) putBuffer(b *[]byte) {
+	p.buffers.Put(b)
 }
 
 // Series returns all series for a requested time range and label matcher.
 func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_SeriesServer) error {
-	ext := p.externalLabels()
+	externalLabels := p.externalLabels()
 
-	match, newMatchers, err := labelsMatches(ext, r.Matchers)
+	match, newMatchers, err := matchesExternalLabels(r.Matchers, externalLabels)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
+
 	if !match {
 		return nil
 	}
+
+	if len(newMatchers) == 0 {
+		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding external labels)").Error())
+	}
+
 	q := prompb.Query{StartTimestampMs: r.MinTime, EndTimestampMs: r.MaxTime}
 
 	// TODO(fabxc): import common definitions from prompb once we have a stable gRPC
@@ -165,7 +172,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	span.SetTag("series_count", len(resp.Results[0].Timeseries))
 
 	for _, e := range resp.Results[0].Timeseries {
-		lset := p.translateAndExtendLabels(e.Labels, ext)
+		lset := p.translateAndExtendLabels(e.Labels, externalLabels)
 
 		if len(e.Samples) == 0 {
 			// As found in https://github.com/improbable-eng/thanos/issues/381
@@ -257,23 +264,24 @@ func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prom
 		return nil, errors.Errorf("request failed with code %s", presp.Status)
 	}
 
-	buf := bytes.NewBuffer(p.getBuffer())
-	defer func() {
-		p.putBuffer(buf.Bytes())
-	}()
+	c := p.getBuffer()
+	buf := bytes.NewBuffer(*c)
+	defer p.putBuffer(c)
 	if _, err := io.Copy(buf, presp.Body); err != nil {
 		return nil, errors.Wrap(err, "copy response")
 	}
+
 	spanSnappyDecode, ctx := tracing.StartSpan(ctx, "decompress_response")
-	decomp, err := snappy.Decode(p.getBuffer(), buf.Bytes())
+	sc := p.getBuffer()
+	decomp, err := snappy.Decode(*sc, buf.Bytes())
 	spanSnappyDecode.Finish()
-	defer p.putBuffer(decomp)
+	defer p.putBuffer(sc)
 	if err != nil {
 		return nil, errors.Wrap(err, "decompress response")
 	}
 
 	var data prompb.ReadResponse
-	spanUnmarshal, ctx := tracing.StartSpan(ctx, "unmarshal_response")
+	spanUnmarshal, _ := tracing.StartSpan(ctx, "unmarshal_response")
 	if err := proto.Unmarshal(decomp, &data); err != nil {
 		return nil, errors.Wrap(err, "unmarshal response")
 	}
@@ -284,8 +292,10 @@ func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prom
 	return &data, nil
 }
 
-func labelsMatches(lset labels.Labels, ms []storepb.LabelMatcher) (bool, []storepb.LabelMatcher, error) {
-	if len(lset) == 0 {
+// matchesExternalLabels filters out external labels matching from matcher if exsits as the local storage does not have them.
+// It also returns false if given matchers are not matching external labels.
+func matchesExternalLabels(ms []storepb.LabelMatcher, externalLabels labels.Labels) (bool, []storepb.LabelMatcher, error) {
+	if len(externalLabels) == 0 {
 		return true, ms, nil
 	}
 
@@ -297,7 +307,7 @@ func labelsMatches(lset labels.Labels, ms []storepb.LabelMatcher) (bool, []store
 			return false, nil, err
 		}
 
-		extValue := lset.Get(m.Name)
+		extValue := externalLabels.Get(m.Name)
 		if extValue == "" {
 			// Agnostic to external labels.
 			newMatcher = append(newMatcher, m)
@@ -310,6 +320,7 @@ func labelsMatches(lset labels.Labels, ms []storepb.LabelMatcher) (bool, []store
 			return false, nil, nil
 		}
 	}
+
 	return true, newMatcher, nil
 }
 

@@ -254,11 +254,11 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 func uploadMockBlock(t *testing.T, bkt objstore.Bucket, id string, minTime, maxTime time.Time, resolutionLevel int64) {
 	t.Helper()
 	meta1 := metadata.Meta{
-		Version: 1,
 		BlockMeta: tsdb.BlockMeta{
 			ULID:    ulid.MustParse(id),
 			MinTime: minTime.Unix() * 1000,
 			MaxTime: maxTime.Unix() * 1000,
+			Version: 1,
 		},
 		Thanos: metadata.Thanos{
 			Downsample: metadata.ThanosDownsample{

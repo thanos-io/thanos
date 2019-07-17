@@ -2,6 +2,7 @@ package verifier
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -14,29 +15,35 @@ import (
 	"github.com/pkg/errors"
 )
 
-// SafeDelete moves block to backup bucket and if succeeded, removes it from source bucket.
-// It returns error if block dir already exists in backup bucket (blocks should be immutable) or any
-// of the operation fails.
-func SafeDelete(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, id ulid.ULID) error {
+// TSDBBlockExistsInBucket checks to see if a given TSDB block ID exists in a
+// bucket. If so, true is returned. An error is returned on failure and in
+// such case the boolean result has no meaning.
+func TSDBBlockExistsInBucket(ctx context.Context, bkt objstore.Bucket, id ulid.ULID) (bool, error) {
 	foundDir := false
-	err := backupBkt.Iter(ctx, id.String(), func(name string) error {
+	err := bkt.Iter(ctx, id.String(), func(name string) error {
 		foundDir = true
 		return nil
 	})
+
+	return foundDir, err
+}
+
+// BackupAndDelete moves a TSDB block to a backup bucket and on success removes
+// it from the source bucket. It returns error if block dir already exists in
+// the backup bucket (blocks should be immutable) or if any of the operations
+// fail.
+func BackupAndDelete(ctx context.Context, logger log.Logger, bkt, backupBkt objstore.Bucket, id ulid.ULID) error {
+	// Does this TSDB block exist in backupBkt already?
+	found, err := TSDBBlockExistsInBucket(ctx, backupBkt, id)
 	if err != nil {
 		return err
 	}
-
-	if foundDir {
+	if found {
 		return errors.Errorf("%s dir seems to exists in backup bucket. Remove this block manually if you are sure it is safe to do", id)
 	}
 
-	tempdir, err := ioutil.TempDir("", "safe-delete")
-	if err != nil {
-		return err
-	}
-	dir := filepath.Join(tempdir, id.String())
-	err = os.Mkdir(dir, 0755)
+	// Create a tempdir to locally store TSDB block.
+	tempdir, err := ioutil.TempDir("", fmt.Sprintf("safe-delete-%s", id.String()))
 	if err != nil {
 		return err
 	}
@@ -46,17 +53,71 @@ func SafeDelete(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 		}
 	}()
 
+	// Download the TSDB block.
+	dir := filepath.Join(tempdir, id.String())
 	if err := block.Download(ctx, logger, bkt, id, dir); err != nil {
 		return errors.Wrap(err, "download from source")
 	}
 
-	if err := block.Upload(ctx, logger, backupBkt, dir); err != nil {
-		return errors.Wrap(err, "upload to backup")
+	// Backup the block.
+	if err := backupDownloaded(ctx, logger, dir, backupBkt, id); err != nil {
+		return err
 	}
 
 	// Block uploaded, so we are ok to remove from src bucket.
+	level.Info(logger).Log("msg", "Deleting block", "id", id.String())
 	if err := block.Delete(ctx, bkt, id); err != nil {
 		return errors.Wrap(err, "delete from source")
+	}
+
+	return nil
+}
+
+// BackupAndDeleteDownloaded works much like BackupAndDelete in that it will
+// move a TSDB block from a bucket to a backup bucket. The bdir parameter
+// points to the location on disk where the TSDB block was previously
+// downloaded allowing this function to avoid downloading the TSDB block from
+// the source bucket again. An error is returned if any operation fails.
+func BackupAndDeleteDownloaded(ctx context.Context, logger log.Logger, bdir string, bkt, backupBkt objstore.Bucket, id ulid.ULID) error {
+	// Does this TSDB block exist in backupBkt already?
+	found, err := TSDBBlockExistsInBucket(ctx, backupBkt, id)
+	if err != nil {
+		return err
+	}
+	if found {
+		return errors.Errorf("%s dir seems to exists in backup bucket. Remove this block manually if you are sure it is safe to do", id)
+	}
+
+	// Backup the block.
+	if err := backupDownloaded(ctx, logger, bdir, backupBkt, id); err != nil {
+		return err
+	}
+
+	// Block uploaded, so we are ok to remove from src bucket.
+	level.Info(logger).Log("msg", "Deleting block", "id", id.String())
+	if err := block.Delete(ctx, bkt, id); err != nil {
+		return errors.Wrap(err, "delete from source")
+	}
+
+	return nil
+}
+
+// backupDownloaded is a helper function that uploads a TSDB block
+// found on disk to the given bucket. An error is returned if any operation
+// fails.
+func backupDownloaded(ctx context.Context, logger log.Logger, bdir string, backupBkt objstore.Bucket, id ulid.ULID) error {
+	// Safety checks.
+	if _, err := os.Stat(filepath.Join(bdir, "meta.json")); err != nil {
+		// If there is any error stat'ing meta.json inside the TSDB block
+		// then declare the existing block as bad and refuse to upload it.
+		// TODO: Make this check more robust.
+		return errors.Wrap(err, "existing tsdb block is invalid")
+	}
+
+	// Upload the on disk TSDB block.
+	level.Info(logger).Log("msg", "Uploading block to backup bucket", "id", id.String())
+	if err := block.Upload(ctx, logger, backupBkt, bdir); err != nil {
+		return errors.Wrap(err, "upload to backup")
 	}
 
 	return nil

@@ -117,7 +117,7 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 		}
 
 		level.Info(logger).Log("msg", "safe deleting broken block", "id", id, "issue", IndexIssueID)
-		if err := SafeDelete(ctx, logger, bkt, backupBkt, id); err != nil {
+		if err := BackupAndDeleteDownloaded(ctx, logger, filepath.Join(tmpdir, id.String()), bkt, backupBkt, id); err != nil {
 			return errors.Wrapf(err, "safe deleting old block %s failed", id)
 		}
 		level.Info(logger).Log("msg", "all good, continuing", "id", id, "issue", IndexIssueID)

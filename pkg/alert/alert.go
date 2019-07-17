@@ -360,7 +360,6 @@ func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 
 	s.dropped.Add(float64(len(alerts)))
 	level.Warn(s.logger).Log("msg", "failed to send alerts to all alertmanagers", "alertmanagers", amrs, "alerts", string(b))
-	return
 }
 
 func (s *Sender) sendOne(ctx context.Context, url string, b []byte) error {

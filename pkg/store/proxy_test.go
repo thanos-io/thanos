@@ -644,7 +644,7 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 		&storepb.SeriesRequest{
 			MinTime:  1,
 			MaxTime:  300,
-			Matchers: []storepb.LabelMatcher{{Name: "fed", Value: "a", Type: storepb.LabelMatcher_EQ}},
+			Matchers: []storepb.LabelMatcher{{Name: "any", Value: ".*", Type: storepb.LabelMatcher_RE}},
 		}, s,
 	))
 	testutil.Equals(t, 0, len(s.SeriesSet))
@@ -677,7 +677,7 @@ func TestProxyStore_LabelValues(t *testing.T) {
 
 	ctx := context.Background()
 	req := &storepb.LabelValuesRequest{
-		Label: "a",
+		Label:                   "a",
 		PartialResponseDisabled: true,
 	}
 	resp, err := q.LabelValues(ctx, req)

@@ -62,9 +62,6 @@ type syncerMetrics struct {
 	garbageCollectionDuration prometheus.Histogram
 	compactions               *prometheus.CounterVec
 	compactionFailures        *prometheus.CounterVec
-	indexCacheBlocks          prometheus.Counter
-	indexCacheTraverse        prometheus.Counter
-	indexCacheFailures        prometheus.Counter
 }
 
 func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
@@ -985,6 +982,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 			finishedAllGroups      = true
 			mtx                    sync.Mutex
 		)
+		defer workCtxCancel()
 
 		// Set up workers who will compact the groups when the groups are ready.
 		// They will compact available groups until they encounter an error, after which they will stop.

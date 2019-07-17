@@ -395,7 +395,6 @@ func (s *dedupSeries) Iterator() (it storage.SeriesIterator) {
 
 type dedupSeriesIterator struct {
 	a, b storage.SeriesIterator
-	i    int
 
 	aok, bok   bool
 	lastT      int64

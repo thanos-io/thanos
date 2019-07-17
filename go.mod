@@ -2,7 +2,7 @@ module github.com/improbable-eng/thanos
 
 require (
 	cloud.google.com/go v0.34.0
-	github.com/Azure/azure-storage-blob-go v0.0.0-20181022225951-5152f14ace1c
+	github.com/Azure/azure-storage-blob-go v0.7.0
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da
 	github.com/cespare/xxhash v1.1.0
@@ -32,8 +32,9 @@ require (
 	github.com/opentracing/basictracer-go v1.0.0
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/pkg/errors v0.8.1
-	github.com/prometheus/client_golang v0.9.3-0.20190127221311-3c4408c8b829
-	github.com/prometheus/common v0.4.0
+	github.com/prometheus/client_golang v1.0.0
+	github.com/prometheus/common v0.6.0
+	github.com/prometheus/procfs v0.0.3 // indirect
 	github.com/prometheus/prometheus v2.9.2+incompatible
 	github.com/prometheus/tsdb v0.8.0
 	github.com/uber-go/atomic v1.4.0 // indirect
@@ -45,6 +46,7 @@ require (
 	golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	golang.org/x/sys v0.0.0-20190712062909-fae7ac547cb7 // indirect
+	golang.org/x/sys v0.0.0-20190626221950-04f50cda93cb // indirect
 	golang.org/x/text v0.3.2
 	google.golang.org/api v0.3.2
 	google.golang.org/grpc v1.19.1

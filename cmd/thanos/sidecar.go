@@ -20,14 +20,16 @@ import (
 	"github.com/improbable-eng/thanos/pkg/store"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/oklog/run"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
-	"gopkg.in/alecthomas/kingpin.v2"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
+
+const waitForExternalLabelsTimeout = 10 * time.Minute
 
 func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "sidecar for Prometheus server")
@@ -221,7 +223,6 @@ func runSidecar(
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			s.Stop()
-			runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
 		})
 	}
 
@@ -247,6 +248,18 @@ func runSidecar(
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+
+			extLabelsCtx, cancel := context.WithTimeout(ctx, waitForExternalLabelsTimeout)
+			defer cancel()
+
+			if err := runutil.Retry(2*time.Second, extLabelsCtx.Done(), func() error {
+				if len(m.Labels()) == 0 {
+					return errors.New("not uploading as no external labels are configured yet - is Prometheus healthy/reachable?")
+				}
+				return nil
+			}); err != nil {
+				return errors.Wrapf(err, "aborting as no external labels found after waiting %s", waitForExternalLabelsTimeout)
+			}
 
 			var s *shipper.Shipper
 			if uploadCompacted {
