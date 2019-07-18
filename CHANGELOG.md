@@ -9,7 +9,9 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking* word for marking changes that are not backward compatible (relates only to v0.y.z releases.)
 
-## [v0.6.0-rc.0](https://github.com/improbable-eng/thanos/releases/tag/v0.6.0-rc.0) - 2019.07.12
+## Unreleased.
+
+## [v0.6.0](https://github.com/improbable-eng/thanos/releases/tag/v0.6.0) - 2019.07.18
 
 ### Added
 
