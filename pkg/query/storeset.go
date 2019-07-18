@@ -240,21 +240,24 @@ func (s *StoreSet) Update(ctx context.Context) {
 
 	// Add stores that are not yet in s.stores.
 	for addr, store := range healthyStores {
-		// Check if it has some external labels specified.
-		// No external labels means strictly store gateway or ruler and it is fine to have access to multiple instances of them.
-		//
-		// Sidecar will error out if it will be configured with empty external labels.
-		externalLabels := externalLabelsFromStore(store)
-		storesWithExternalLabels := externalLabelOccurrencesInStores[externalLabels]
-		if len(store.LabelSets()) > 0 && storesWithExternalLabels != 1 {
-			store.close()
-			s.updateStoreStatus(store, errors.New(droppingStoreMessage))
-			level.Warn(s.logger).Log("msg", droppingStoreMessage, "address", addr, "extLset", externalLabels, "duplicates", storesWithExternalLabels)
+		if _, ok := s.stores[addr]; ok {
+			s.updateStoreStatus(store, nil)
 			continue
 		}
 
-		if _, ok := s.stores[addr]; ok {
-			s.updateStoreStatus(store, nil)
+		// Check if the store has some external labels specified and if any if there are duplicates.
+		// We warn and exclude duplicates because it unnecessarily puts additional load on querier, network and underlying StoreAPIs and
+		// it indicates misconfiguration.
+		//
+		// Note: No external labels means strictly store gateway or ruler and it is fine to have access to multiple instances of them.
+		// Any other component will error out if it will be configured with empty external labels.
+		externalLabels := externalLabelsFromStore(store)
+		if len(store.LabelSets()) > 0 && externalLabelOccurrencesInStores[externalLabels] != 1 {
+			store.close()
+			s.updateStoreStatus(store, errors.New(droppingStoreMessage))
+			level.Warn(s.logger).Log("msg", droppingStoreMessage, "address", addr, "extLset", externalLabels, "duplicates", externalLabelOccurrencesInStores[externalLabels])
+			// We don't want to block all of them. Leave one to not disrupt in terms of migration.
+			externalLabelOccurrencesInStores[externalLabels]--
 			continue
 		}
 
@@ -262,6 +265,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 		s.updateStoreStatus(store, nil)
 		level.Info(s.logger).Log("msg", "adding new store to query storeset", "address", addr)
 	}
+
 	s.externalLabelOccurrencesInStores = externalLabelOccurrencesInStores
 	s.storeNodeConnections.Set(float64(len(s.stores)))
 	s.cleanUpStoreStatuses()

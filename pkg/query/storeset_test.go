@@ -241,38 +241,35 @@ func TestStoreSet_AllAvailable_BlockExtLsetDuplicates(t *testing.T) {
 
 	storeExtLabels := [][]storepb.Label{
 		{
-			{
-				Name:  "l1",
-				Value: "v1",
-			},
+			{Name: "l1", Value: "v1"},
 		},
 		{
-			{
-				Name:  "l1",
-				Value: "v2",
-			},
+			{Name: "l1", Value: "v2"},
+			{Name: "l2", Value: "v3"},
 		},
 		{
-			{
-				// Duplicate with above.
-				Name:  "l1",
-				Value: "v2",
-			},
+			// Duplicate with above.
+			{Name: "l1", Value: "v2"},
+			{Name: "l2", Value: "v3"},
 		},
 		// Two store nodes, they don't have ext labels set.
 		nil,
 		nil,
+		{
+			// Duplicate with two others.
+			{Name: "l1", Value: "v2"},
+			{Name: "l2", Value: "v3"},
+		},
 	}
-	st, err := newTestStores(5, storeExtLabels...)
+
+	st, err := newTestStores(6, storeExtLabels...)
 	testutil.Ok(t, err)
 	defer st.Close()
-
-	initialStoreAddr := st.StoreAddresses()
 
 	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
 	logger = level.NewFilter(logger, level.AllowDebug())
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.DefaultCaller)
-	storeSet := NewStoreSet(logger, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts, time.Minute)
+	storeSet := NewStoreSet(logger, nil, specsFromAddrFunc(st.StoreAddresses()), testGRPCOpts, time.Minute)
 	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 	defer storeSet.Close()
 
@@ -282,12 +279,9 @@ func TestStoreSet_AllAvailable_BlockExtLsetDuplicates(t *testing.T) {
 	storeSet.Update(context.Background())
 	storeSet.Update(context.Background())
 
-	storeNum := len(storeSet.stores)
-	expectedStoreNum := 5 - 2
-	testutil.Assert(t, storeNum == expectedStoreNum, fmt.Sprintf("all services should respond just fine, but we expect duplicates being blocked. Expected %d stores, got %d", expectedStoreNum, storeNum))
+	testutil.Assert(t, len(storeSet.stores) == 4, fmt.Sprintf("all services should respond just fine, but we expect duplicates being blocked. Expected %d stores, got %d", expectedStoreNum, storeNum))
 
 	// Sort result to be able to compare.
-
 	var existingStoreLabels [][]storepb.Label
 	for _, store := range storeSet.stores {
 		for _, ls := range store.LabelSets() {
@@ -298,14 +292,13 @@ func TestStoreSet_AllAvailable_BlockExtLsetDuplicates(t *testing.T) {
 		return len(existingStoreLabels[i]) > len(existingStoreLabels[j])
 	})
 
-	var i int
-	for _, lset := range existingStoreLabels {
-		testutil.Equals(t, storeExtLabels[i], lset)
-
-		i++
-		if i == 1 {
-			// Store 1 and 2 should be blocked, so fast forward.
-			i += 2
-		}
-	}
+	testutil.Equals(t, [][]storepb.Label{
+		{
+			{Name: "l1", Value: "v2"},
+			{Name: "l2", Value: "v3"},
+		},
+		{
+			{Name: "l1", Value: "v1"},
+		},
+	}, existingStoreLabels)
 }
