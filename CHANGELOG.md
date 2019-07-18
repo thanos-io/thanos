@@ -11,6 +11,8 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased.
 
+- [#1338](https://github.com/improbable-eng/thanos/pull/1338) Querier still warns on store API duplicate, but allows a single one from duplicated set. This is gracefully warn about the problematic logic and not disrupt immediately.
+
 ### Fixed
 
 - [#1327](https://github.com/improbable-eng/thanos/pull/1327) `/series` API end-point now properly returns an empty array just like Prometheus if there are no results
@@ -42,6 +44,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 To migrate over the old `--gcloudtrace.*` configuration, your tracing configuration should look like this:
 
 ```yaml
+
 ---
 type: STACKDRIVER
 config:
@@ -54,7 +57,9 @@ The other `type` you can use is `JAEGER` now. The `config` keys and values are J
 
 ### Changed
 
-- [#1284](https://github.com/improbable-eng/thanos/pull/1284) Add support for multiple label-sets in Info gRPC service. This deprecates the single `Labels` slice of the `InfoResponse`, in a future release backward compatible handling for the single set of Labels will be removed. Upgrading to v0.6.0 or higher is advised.
+- [#1284](https://github.com/improbable-eng/thanos/pull/1284) Add support for multiple label-sets in Info gRPC service. 
+This deprecates the single `Labels` slice of the `InfoResponse`, in a future release backward compatible handling for the single set of Labels will be removed. Upgrading to v0.6.0 or higher is advised.
+*breaking* If you run have duplicate queries in your Querier configuration with hierarchical federation of multiple Queries this PR makes Thanos Querier to detect this case and block all duplicates. Refer to 0.6.1 which at least allows for single replica to work.
 
 - [#1314](https://github.com/improbable-eng/thanos/pull/1314) Removes `http_request_duration_microseconds` (Summary) and adds `http_request_duration_seconds` (Histogram) from http server instrumentation used in Thanos APIs and UIs.
 
@@ -70,7 +75,7 @@ The other `type` you can use is `JAEGER` now. The `config` keys and values are J
 
 - [#1227](https://github.com/improbable-eng/thanos/pull/1227) Some context handling issues were fixed in Thanos Compact; some unnecessary memory allocations were removed in the hot path of Thanos Store.
 
-- [#1183](https://github.com/improbable-eng/thanos/pull/1183) Compactor now correctly propogates retriable/haltable errors which means that it will not unnecessarily restart if such an error occurs
+- [#1183](https://github.com/improbable-eng/thanos/pull/1183) Compactor now correctly propagates retriable/haltable errors which means that it will not unnecessarily restart if such an error occurs
 
 - [#1231](https://github.com/improbable-eng/thanos/pull/1231) Receive now correctly handles SIGINT and closes without deadlocking
 

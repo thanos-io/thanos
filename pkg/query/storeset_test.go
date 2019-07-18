@@ -279,7 +279,7 @@ func TestStoreSet_AllAvailable_BlockExtLsetDuplicates(t *testing.T) {
 	storeSet.Update(context.Background())
 	storeSet.Update(context.Background())
 
-	testutil.Assert(t, len(storeSet.stores) == 4, fmt.Sprintf("all services should respond just fine, but we expect duplicates being blocked. Expected %d stores, got %d", expectedStoreNum, storeNum))
+	testutil.Assert(t, len(storeSet.stores) == 4, fmt.Sprintf("all services should respond just fine, but we expect duplicates being blocked. Expected %d stores, got %d", 4, len(storeSet.stores)))
 
 	// Sort result to be able to compare.
 	var existingStoreLabels [][]storepb.Label
