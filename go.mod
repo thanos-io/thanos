@@ -1,4 +1,4 @@
-module github.com/improbable-eng/thanos
+module github.com/thanos-io/thanos
 
 require (
 	cloud.google.com/go v0.34.0
@@ -15,7 +15,6 @@ require (
 	github.com/google/martian v2.1.0+incompatible // indirect
 	github.com/googleapis/gax-go v2.0.2+incompatible // indirect
 	github.com/gophercloud/gophercloud v0.0.0-20190301152420-fca40860790e
-	github.com/gopherjs/gopherjs v0.0.0-20181103185306-d547d1d9531e // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.0.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v0.0.0-20181025070259-68e3a13e4117
 	github.com/hashicorp/golang-lru v0.5.1
@@ -34,23 +33,18 @@ require (
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.0.0
 	github.com/prometheus/common v0.6.0
-	github.com/prometheus/procfs v0.0.3 // indirect
 	github.com/prometheus/prometheus v2.9.2+incompatible
 	github.com/prometheus/tsdb v0.8.0
 	github.com/uber-go/atomic v1.4.0 // indirect
 	github.com/uber/jaeger-client-go v2.16.0+incompatible
 	github.com/uber/jaeger-lib v2.0.0+incompatible
 	go.uber.org/atomic v1.4.0 // indirect
-	golang.org/x/crypto v0.0.0-20190701094942-4def268fd1a4 // indirect
-	golang.org/x/net v0.0.0-20190628185345-da137c7871d7 // indirect
 	golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
-	golang.org/x/sys v0.0.0-20190626221950-04f50cda93cb // indirect
 	golang.org/x/text v0.3.2
 	google.golang.org/api v0.3.2
 	google.golang.org/grpc v1.19.1
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/fsnotify.v1 v1.4.7
-	gopkg.in/fsnotify/fsnotify.v1 v1.4.7 // indirect
 	gopkg.in/yaml.v2 v2.2.2
 )

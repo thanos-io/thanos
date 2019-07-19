@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
 func ExampleRepeat() {

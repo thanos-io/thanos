@@ -19,23 +19,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/alert"
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
-	"github.com/improbable-eng/thanos/pkg/component"
-	"github.com/improbable-eng/thanos/pkg/discovery/cache"
-	"github.com/improbable-eng/thanos/pkg/discovery/dns"
-	"github.com/improbable-eng/thanos/pkg/extprom"
-	extpromhttp "github.com/improbable-eng/thanos/pkg/extprom/http"
-	"github.com/improbable-eng/thanos/pkg/objstore/client"
-	"github.com/improbable-eng/thanos/pkg/promclient"
-	thanosrule "github.com/improbable-eng/thanos/pkg/rule"
-	v1 "github.com/improbable-eng/thanos/pkg/rule/api"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/improbable-eng/thanos/pkg/shipper"
-	"github.com/improbable-eng/thanos/pkg/store"
-	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/improbable-eng/thanos/pkg/tracing"
-	"github.com/improbable-eng/thanos/pkg/ui"
 	"github.com/oklog/run"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -50,6 +33,23 @@ import (
 	"github.com/prometheus/prometheus/storage/tsdb"
 	"github.com/prometheus/prometheus/util/strutil"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/alert"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/discovery/cache"
+	"github.com/thanos-io/thanos/pkg/discovery/dns"
+	"github.com/thanos-io/thanos/pkg/extprom"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/promclient"
+	thanosrule "github.com/thanos-io/thanos/pkg/rule"
+	v1 "github.com/thanos-io/thanos/pkg/rule/api"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/shipper"
+	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/tracing"
+	"github.com/thanos-io/thanos/pkg/ui"
 	"google.golang.org/grpc"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
@@ -333,7 +333,7 @@ func runRule(
 		}
 	}
 	{
-		// TODO(bwplotka): https://github.com/improbable-eng/thanos/issues/660
+		// TODO(bwplotka): https://github.com/thanos-io/thanos/issues/660
 		sdr := alert.NewSender(logger, reg, alertmgrs.get, nil, alertmgrsTimeout)
 		ctx, cancel := context.WithCancel(context.Background())
 

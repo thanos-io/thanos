@@ -9,7 +9,7 @@ all: build
 .PHONY: build
 build:
 	@echo ">> building thanosbench"
-	@go install github.com/improbable-eng/thanos/benchmark/cmd/thanosbench
+	@go install github.com/thanos-io/thanos/benchmark/cmd/thanosbench
 
 format: $(GOIMPORTS)
 	@echo ">> formatting code"

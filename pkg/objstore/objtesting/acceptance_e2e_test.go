@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 // TestObjStoreAcceptanceTest_e2e tests all known implementation against interface behaviour contract we agreed on.

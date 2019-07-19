@@ -7,15 +7,15 @@ import (
 
 	"github.com/NYTimes/gziphandler"
 	"github.com/go-kit/kit/log"
-	extpromhttp "github.com/improbable-eng/thanos/pkg/extprom/http"
-	qapi "github.com/improbable-eng/thanos/pkg/query/api"
-	thanosrule "github.com/improbable-eng/thanos/pkg/rule"
-	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/improbable-eng/thanos/pkg/tracing"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/rules"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	qapi "github.com/thanos-io/thanos/pkg/query/api"
+	thanosrule "github.com/thanos-io/thanos/pkg/rule"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 type API struct {

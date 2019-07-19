@@ -12,17 +12,17 @@ import (
 	"github.com/oklog/ulid"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
-	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/objstore/objtesting"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	storecache "github.com/improbable-eng/thanos/pkg/store/cache"
-	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/objstore/objtesting"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	storecache "github.com/thanos-io/thanos/pkg/store/cache"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 type noopCache struct{}
@@ -335,7 +335,7 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 				{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
 			},
 		},
-		// Regression https://github.com/improbable-eng/thanos/issues/833.
+		// Regression https://github.com/thanos-io/thanos/issues/833.
 		// Problem: Matcher that was selecting NO series, was ignored instead of passed as emptyPosting to Intersect.
 		{
 			req: &storepb.SeriesRequest{
@@ -410,7 +410,7 @@ func (g naivePartitioner) Partition(length int, rng func(int) (uint64, uint64)) 
 
 // Naive partitioner splits the array equally (it does not combine anything).
 // This tests if our, sometimes concurrent, fetches for different parts works.
-// Regression test against: https://github.com/improbable-eng/thanos/issues/829
+// Regression test against: https://github.com/thanos-io/thanos/issues/829
 func TestBucketStore_ManyParts_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
 		ctx, cancel := context.WithCancel(context.Background())

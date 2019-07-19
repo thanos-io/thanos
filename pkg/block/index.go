@@ -12,19 +12,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 
 	"github.com/prometheus/tsdb/fileutil"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/chunks"
 	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
 const (
