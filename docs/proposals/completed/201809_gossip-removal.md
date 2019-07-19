@@ -6,12 +6,12 @@ status: completed
 owner: bwplotka
 ---
 
-### Ticket: https://github.com/improbable-eng/thanos/issues/484
+### Ticket: https://github.com/thanos-io/thanos/issues/484
 ## Summary
 
 It is becoming clear that we need to remove gossip protocol as our main way of communication between Thanos Querier and
 other components. Static configuration seems to be well enough for our simple use cases. To give users more flexibility
-(similar to gossip auto-join logic), we already wanted to introduce a [File SD](https://github.com/improbable-eng/thanos/issues/492)
+(similar to gossip auto-join logic), we already wanted to introduce a [File SD](https://github.com/thanos-io/thanos/issues/492)
 that allows changing `StoreAPI`s on-the-fly.
 
 ## Motivation
@@ -40,9 +40,9 @@ custom app level protocol. This is a no-go if you use L7 loadbalancers and proxi
  we needed to implement health check and metadata propagation anyway. In fact, `StoreAPI.Info` was already there all the time.
 * Gossip operates per `peer` level and there is no way you can abstract multiple peers behind loadbalancer. This hides easy
 solutions from our eyes, e.g how to make Store Gateway HA. Without gossip, you can just use Kubernetes HA Service or any other loadbalancer.
-To support Store Gateway HA for gossip we would end up implementing LB logic in Thanos Querier (like proposed [here](https://github.com/improbable-eng/thanos/pull/404))
+To support Store Gateway HA for gossip we would end up implementing LB logic in Thanos Querier (like proposed [here](https://github.com/thanos-io/thanos/pull/404))
 * At some point we want to be flexible and allow other discovery mechanisms. Gossip does not work for everyone and static flags
-are too.. static. (: We need [File SD](https://github.com/improbable-eng/thanos/issues/492) for flexibility anyway.
+are too.. static. (: We need [File SD](https://github.com/thanos-io/thanos/issues/492) for flexibility anyway.
 * One thing less to maintain.
 
 ## Goals
@@ -50,14 +50,14 @@ are too.. static. (: We need [File SD](https://github.com/improbable-eng/thanos/
 * Remove gossip support from code (Decision after initial feedback)
   * We are still RC, so technically there are no API guarantees yet.
 * Leave --store flags
-* Make sure [File SD](https://github.com/improbable-eng/thanos/issues/492) is in place and documented before removal.
+* Make sure [File SD](https://github.com/thanos-io/thanos/issues/492) is in place and documented before removal.
 
 ## Proposal: Steps
 
-* Add File Service Discovery (SD): https://github.com/improbable-eng/thanos/issues/492
+* Add File Service Discovery (SD): https://github.com/thanos-io/thanos/issues/492
 * Remove gossip from the documentation, be clear what talks with what (!)
 * Deprecate gossip in code.
-* Remove gossip code and flags AFTER [File SD](https://github.com/improbable-eng/thanos/issues/492) is done and stable.
+* Remove gossip code and flags AFTER [File SD](https://github.com/thanos-io/thanos/issues/492) is done and stable.
 
 ### Backwards compatibility
 
