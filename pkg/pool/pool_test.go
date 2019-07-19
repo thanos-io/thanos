@@ -68,7 +68,7 @@ func TestRacePutGet(t *testing.T) {
 	// to which they write 'foo' / 'barbazbaz' and check if the data is still
 	// there after writing it, before putting it back
 	errs := make(chan error, 2)
-	stop := make(chan bool)
+	stop := make(chan bool, 2)
 
 	f := func(txt string) {
 		for {
