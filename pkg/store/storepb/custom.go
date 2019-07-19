@@ -162,7 +162,7 @@ func (s *mergedSeriesSet) Next() bool {
 }
 
 func LabelsToPromLabels(lset []Label) labels.Labels {
-	ret := make(labels.Labels, len(lset), len(lset))
+	ret := make(labels.Labels, len(lset))
 	for i, l := range lset {
 		ret[i] = labels.Label{Name: l.Name, Value: l.Value}
 	}

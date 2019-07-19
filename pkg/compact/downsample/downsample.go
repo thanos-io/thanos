@@ -241,7 +241,6 @@ func (a *aggregator) add(v float64) {
 // aggrChunkBuilder builds chunks for multiple different aggregates.
 type aggrChunkBuilder struct {
 	mint, maxt int64
-	isCounter  bool
 	added      int
 
 	chunks [5]chunkenc.Chunk

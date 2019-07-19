@@ -11,18 +11,89 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased.
 
+- [#1338](https://github.com/improbable-eng/thanos/pull/1338) Querier still warns on store API duplicate, but allows a single one from duplicated set. This is gracefully warn about the problematic logic and not disrupt immediately.
+
+### Fixed
+
+- [#1327](https://github.com/improbable-eng/thanos/pull/1327) `/series` API end-point now properly returns an empty array just like Prometheus if there are no results
+
+- [#1302](https://github.com/improbable-eng/thanos/pull/1302) Thanos now efficiently reuses HTTP keep-alive connections
+
+## [v0.6.0](https://github.com/improbable-eng/thanos/releases/tag/v0.6.0) - 2019.07.18
+
 ### Added
 
 - [#1097](https://github.com/improbable-eng/thanos/pull/1097) Added `thanos check rules` linter for Thanos rule rules files.
 
 - [#1253](https://github.com/improbable-eng/thanos/pull/1253) Add support for specifying a maximum amount of retries when using Azure Blob storage (default: no retries).
 
+- [#1244](https://github.com/improbable-eng/thanos/pull/1244) Thanos Compact now exposes new metrics `thanos_compact_downsample_total` and `thanos_compact_downsample_failures_total` which are useful to catch when errors happen
+
+- [#1260](https://github.com/improbable-eng/thanos/pull/1260) Thanos Query/Rule now exposes metrics `thanos_querier_store_apis_dns_provider_results` and `thanos_ruler_query_apis_dns_provider_results` which tell how many addresses were configured and how many were actually discovered respectively
+
 - [#1248](https://github.com/improbable-eng/thanos/pull/1248) Add a web UI to show the state of remote storage.
+
+- [#1217](https://github.com/improbable-eng/thanos/pull/1217) Thanos Receive gained basic hashring support
+
+- [#1262](https://github.com/improbable-eng/thanos/pull/1262) Thanos Receive got a new metric `thanos_http_requests_total` which shows how many requests were handled by it
+
+- [#1243](https://github.com/improbable-eng/thanos/pull/1243) Thanos Receive got an ability to forward time series data between nodes. Now you can pass the hashring configuration via `--receive.hashrings-file`; the refresh interval `--receive.hashrings-file-refresh-interval`; the name of the local node's name `--receive.local-endpoint`; and finally the header's name which is used to determine the tenant `--receive.tenant-header`.
+
+- [#1147](https://github.com/improbable-eng/thanos/pull/1147) Support for the Jaeger tracer has been added!
+
+*breaking* New common flags were added for configuring tracing: `--tracing.config-file` and `--tracing.config`. You can either pass a file to Thanos with the tracing configuration or pass it in the command line itself. Old `--gcloudtrace.*` flags were removed :warning:
+
+To migrate over the old `--gcloudtrace.*` configuration, your tracing configuration should look like this:
+
+```yaml
+
+---
+type: STACKDRIVER
+config:
+- service_name: 'foo'
+  project_id: '123'
+  sample_factor: 123
+```
+
+The other `type` you can use is `JAEGER` now. The `config` keys and values are Jaeger specific and you can find all of the information [here](https://github.com/jaegertracing/jaeger-client-go#environment-variables).
 
 ### Changed
 
 - [#1284](https://github.com/improbable-eng/thanos/pull/1284) Add support for multiple label-sets in Info gRPC service. This deprecates the single `Labels` slice of the `InfoResponse`, in a future release backward compatible handling for the single set of Labels will be removed. Upgrading to v0.6.0 or higher is advised.
-- [#1302](https://github.com/improbable-eng/thanos/pull/1302) Thanos now efficiently reuses HTTP keep-alive connections
+=======
+- [#1284](https://github.com/improbable-eng/thanos/pull/1284) Add support for multiple label-sets in Info gRPC service. 
+This deprecates the single `Labels` slice of the `InfoResponse`, in a future release backward compatible handling for the single set of Labels will be removed. Upgrading to v0.6.0 or higher is advised.
+*breaking* If you run have duplicate queries in your Querier configuration with hierarchical federation of multiple Queries this PR makes Thanos Querier to detect this case and block all duplicates. Refer to 0.6.1 which at least allows for single replica to work.
+
+- [#1314](https://github.com/improbable-eng/thanos/pull/1314) Removes `http_request_duration_microseconds` (Summary) and adds `http_request_duration_seconds` (Histogram) from http server instrumentation used in Thanos APIs and UIs.
+
+- [#1287](https://github.com/improbable-eng/thanos/pull/1287) Sidecar now waits on Prometheus' external labels before starting the uploading process
+
+- [#1261](https://github.com/improbable-eng/thanos/pull/1261) Thanos Receive now exposes metrics `thanos_http_request_duration_seconds` and `thanos_http_response_size_bytes` properly of each handler
+
+- [#1274](https://github.com/improbable-eng/thanos/pull/1274) Iteration limit has been lifted from the LRU cache so there should be no more spam of error messages as they were harmless
+
+- [#1321](https://github.com/improbable-eng/thanos/pull/1321) Thanos Query now fails early on a query which only uses external labels - this improves clarity in certain situations
+
+### Fixed
+
+- [#1227](https://github.com/improbable-eng/thanos/pull/1227) Some context handling issues were fixed in Thanos Compact; some unnecessary memory allocations were removed in the hot path of Thanos Store.
+
+- [#1183](https://github.com/improbable-eng/thanos/pull/1183) Compactor now correctly propagates retriable/haltable errors which means that it will not unnecessarily restart if such an error occurs
+
+- [#1231](https://github.com/improbable-eng/thanos/pull/1231) Receive now correctly handles SIGINT and closes without deadlocking
+
+- [#1278](https://github.com/improbable-eng/thanos/pull/1278) Fixed inflated values problem with `sum()` on Thanos Query
+
+- [#1280](https://github.com/improbable-eng/thanos/pull/1280) Fixed a problem with concurrent writes to a `map` in Thanos Query while rendering the UI
+
+- [#1311](https://github.com/improbable-eng/thanos/pull/1311) Fixed occasional panics in Compact and Store when using Azure Blob cloud storage caused by lack of error checking in client library.
+
+- [#1322](https://github.com/improbable-eng/thanos/pull/1322) Removed duplicated closing of the gRPC listener - this gets rid of harmless messages like `store gRPC listener: close tcp 0.0.0.0:10901: use of closed network connection` when those programs are being closed
+
+### Deprecated
+
+- [#1216](https://github.com/improbable-eng/thanos/pull/1216) the old "Command-line flags" has been removed from Thanos Query UI since it was not populated and because we are striving for consistency
 
 ## [v0.5.0](https://github.com/improbable-eng/thanos/releases/tag/v0.5.0) - 2019.06.05
 
@@ -45,8 +116,8 @@ This version moved tarballs to Golang 1.12.5 from 1.11 as well, so same warning 
 
 ### Changed
 
-- [#1118](https://github.com/improbable-eng/thanos/pull/1118) *breaking* swift: Added support for cross-domain authentication by introducing `userDomainID`, `userDomainName`, `projectDomainID`, `projectDomainName`. 
-  The outdated terms `tenantID`, `tenantName` are deprecated and have been replaced by `projectID`, `projectName`. 
+- [#1118](https://github.com/improbable-eng/thanos/pull/1118) *breaking* swift: Added support for cross-domain authentication by introducing `userDomainID`, `userDomainName`, `projectDomainID`, `projectDomainName`.
+  The outdated terms `tenantID`, `tenantName` are deprecated and have been replaced by `projectID`, `projectName`.
 
 - [#1066](https://github.com/improbable-eng/thanos/pull/1066) Upgrade Thanos ui to Prometheus v2.9.1.
 
@@ -60,8 +131,8 @@ This version moved tarballs to Golang 1.12.5 from 1.11 as well, so same warning 
   * rule:
     - [ENHANCEMENT] Improve rule views by wrapping lines [PR #4702](https://github.com/prometheus/prometheus/pull/4702)
     - [ENHANCEMENT] Show rule evaluation errors on rules page [PR #4457](https://github.com/prometheus/prometheus/pull/4457)
-    
-- [#1156](https://github.com/improbable-eng/thanos/pull/1156) Moved CI and docker multistage to Golang 1.12.5 for latest mem alloc improvements. 
+
+- [#1156](https://github.com/improbable-eng/thanos/pull/1156) Moved CI and docker multistage to Golang 1.12.5 for latest mem alloc improvements.
 - [#1103](https://github.com/improbable-eng/thanos/pull/1103) Updated go-cos deps. (COS bucket client).
 - [#1149](https://github.com/improbable-eng/thanos/pull/1149) Updated google Golang API deps (GCS bucket client).
 - [#1190](https://github.com/improbable-eng/thanos/pull/1190) Updated minio deps (S3 bucket client). This fixes minio retries.
@@ -82,7 +153,7 @@ This version moved tarballs to Golang 1.12.5 from 1.11 as well, so same warning 
   * rule:
     - [BUGFIX] Reload rules: copy state on both name and labels. #5368
 
-## Deprecated 
+## Deprecated
 
 - [#1008](https://github.com/improbable-eng/thanos/pull/1008) *breaking* Removed Gossip implementation. All `--cluster.*` flags removed and Thanos will error out if any is provided.
 
@@ -105,7 +176,7 @@ Using cadvisor `container_memory_usage_bytes` metric could be misleading e.g: ht
 
 ### Added
 
-- [thanos.io](https://thanos.io) website & automation :tada: 
+- [thanos.io](https://thanos.io) website & automation :tada:
 - [#1053](https://github.com/improbable-eng/thanos/pull/1053) compactor: Compactor & store gateway now handles incomplete uploads gracefully. Added hard limit on how long block upload can take (30m).
 - [#811](https://github.com/improbable-eng/thanos/pull/811) Remote write receiver component :heart: :heart: thanks to RedHat (@brancz) contribution.
 - [#910](https://github.com/improbable-eng/thanos/pull/910) Query's stores UI page is now sorted by type and old DNS or File SD stores are removed after 5 minutes (configurable via the new `--store.unhealthy-timeout=5m` flag).
@@ -187,10 +258,10 @@ Note that this is required to have SRV resolution working on [Golang 1.11+ with 
      * [BUGFIX] Fix sorting of rule groups. #5260
    * store: [ENHANCEMENT] Fast path for EmptyPostings cases in Merge, Intersect and Without.
    * tooling: [FEATURE] New dump command to tsdb tool to dump all samples.
-   * compactor: 
+   * compactor:
       * [ENHANCEMENT] When closing the db any running compaction will be cancelled so it doesn't block.
       * [CHANGE] *breaking* Renamed flag `--sync-delay` to `--consistency-delay` [#1053](https://github.com/improbable-eng/thanos/pull/1053)
-  
+
   For ruler essentially whole TSDB CHANGELOG applies beween v0.4.0-v0.6.1: https://github.com/prometheus/tsdb/blob/master/CHANGELOG.md
 
   Note that this was added on TSDB and Prometheus: [FEATURE] Time-ovelapping blocks are now allowed. #370

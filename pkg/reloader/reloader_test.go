@@ -139,6 +139,7 @@ config:
 		}
 	}()
 	err = reloader.Watch(ctx)
+	testutil.Ok(t, err)
 	cancel()
 	g.Wait()
 	testutil.Equals(t, 2, reloads.Load().(int))

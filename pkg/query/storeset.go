@@ -64,7 +64,7 @@ func (s *grpcStoreSpec) Addr() string {
 // Metadata method for gRPC store API tries to reach host Info method until context timeout. If we are unable to get metadata after
 // that time, we assume that the host is unhealthy and return error.
 func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []storepb.LabelSet, mint int64, maxt int64, err error) {
-	resp, err := client.Info(ctx, &storepb.InfoRequest{}, grpc.FailFast(false))
+	resp, err := client.Info(ctx, &storepb.InfoRequest{}, grpc.WaitForReady(true))
 	if err != nil {
 		return nil, 0, 0, errors.Wrapf(err, "fetching store info from %s", s.addr)
 	}
@@ -146,9 +146,9 @@ func NewStoreSet(
 		storeNodeConnections:             storeNodeConnections,
 		gRPCInfoCallTimeout:              10 * time.Second,
 		externalLabelOccurrencesInStores: map[string]int{},
-		stores:                make(map[string]*storeRef),
-		storeStatuses:         make(map[string]*StoreStatus),
-		unhealthyStoreTimeout: unhealthyStoreTimeout,
+		stores:                           make(map[string]*storeRef),
+		storeStatuses:                    make(map[string]*StoreStatus),
+		unhealthyStoreTimeout:            unhealthyStoreTimeout,
 	}
 
 	storeNodeCollector := &storeSetNodeCollector{externalLabelOccurrences: ss.externalLabelOccurrences}
@@ -240,21 +240,24 @@ func (s *StoreSet) Update(ctx context.Context) {
 
 	// Add stores that are not yet in s.stores.
 	for addr, store := range healthyStores {
-		// Check if it has some external labels specified.
-		// No external labels means strictly store gateway or ruler and it is fine to have access to multiple instances of them.
-		//
-		// Sidecar will error out if it will be configured with empty external labels.
-		externalLabels := externalLabelsFromStore(store)
-		storesWithExternalLabels := externalLabelOccurrencesInStores[externalLabels]
-		if len(store.LabelSets()) > 0 && storesWithExternalLabels != 1 {
-			store.close()
-			s.updateStoreStatus(store, errors.New(droppingStoreMessage))
-			level.Warn(s.logger).Log("msg", droppingStoreMessage, "address", addr, "extLset", externalLabels, "duplicates", storesWithExternalLabels)
+		if _, ok := s.stores[addr]; ok {
+			s.updateStoreStatus(store, nil)
 			continue
 		}
 
-		if _, ok := s.stores[addr]; ok {
-			s.updateStoreStatus(store, nil)
+		// Check if the store has some external labels specified and if any if there are duplicates.
+		// We warn and exclude duplicates because it unnecessarily puts additional load on querier, network and underlying StoreAPIs and
+		// it indicates misconfiguration.
+		//
+		// Note: No external labels means strictly store gateway or ruler and it is fine to have access to multiple instances of them.
+		// Any other component will error out if it will be configured with empty external labels.
+		externalLabels := externalLabelsFromStore(store)
+		if len(store.LabelSets()) > 0 && externalLabelOccurrencesInStores[externalLabels] != 1 {
+			store.close()
+			s.updateStoreStatus(store, errors.New(droppingStoreMessage))
+			level.Warn(s.logger).Log("msg", droppingStoreMessage, "address", addr, "extLset", externalLabels, "duplicates", externalLabelOccurrencesInStores[externalLabels])
+			// We don't want to block all of them. Leave one to not disrupt in terms of migration.
+			externalLabelOccurrencesInStores[externalLabels]--
 			continue
 		}
 
@@ -262,6 +265,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 		s.updateStoreStatus(store, nil)
 		level.Info(s.logger).Log("msg", "adding new store to query storeset", "address", addr)
 	}
+
 	s.externalLabelOccurrencesInStores = externalLabelOccurrencesInStores
 	s.storeNodeConnections.Set(float64(len(s.stores)))
 	s.cleanUpStoreStatuses()
@@ -315,7 +319,7 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 				store = &storeRef{StoreClient: storepb.NewStoreClient(conn), cc: conn, addr: addr, logger: s.logger}
 
 				// Initial info call for all types of stores to check gRPC StoreAPI.
-				resp, err := store.StoreClient.Info(ctx, &storepb.InfoRequest{}, grpc.FailFast(false))
+				resp, err := store.StoreClient.Info(ctx, &storepb.InfoRequest{}, grpc.WaitForReady(true))
 				if err != nil {
 					store.close()
 					s.updateStoreStatus(store, err)

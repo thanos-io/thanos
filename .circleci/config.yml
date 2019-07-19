@@ -23,7 +23,7 @@ jobs:
               echo "Awesome! GCS integration tests are enabled."
             fi
       - run: make check-go-mod
-      - run: make errcheck
+      - run: make lint
       - run: make check-docs
       - run: make format
       - run:

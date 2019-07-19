@@ -6,11 +6,10 @@ import (
 	"io"
 	"os"
 
-	"github.com/improbable-eng/thanos/pkg/tracing"
-
 	trace "cloud.google.com/go/trace/apiv1"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/tracing"
 	gcloudtracer "github.com/lovoo/gcloud-opentracing"
 	"github.com/opentracing/basictracer-go"
 	"github.com/opentracing/opentracing-go"

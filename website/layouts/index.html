@@ -56,24 +56,24 @@
     <h2 class="heading-big text-center">Founded By</h2>
     <div class="row">
         <div class="col-6 offset-3 col-sm-6 offset-sm-3 col-md-4 offset-md-4">
-            <div class="img-sponsor">
+            <div class="img-adopter">
                 <a href="https://improbable.io" rel="nofollow" target="_blank"><img src="{{ "/logos/improbable.png" | relURL }}" class="img-fluid" alt="Improbable"></a>
             </div>
         </div>
     </div>
         <h2 class="heading-big text-center">Used By</h2>
     <div class="row">
-        {{ range $sponsor := sort $.Site.Data.sponsors.sponsors "name" }}
-        {{ if $sponsor.logo }}
+        {{ range $adopter := sort $.Site.Data.adopters.adopters "name" }}
+        {{ if $adopter.logo }}
         <div class="col-6 col-sm-6 col-md-3">
-            <div class="img-sponsor">
-                <a href="{{ $sponsor.url }}" rel="nofollow" target="_blank"><img src="{{ (printf "/logos/%s" $sponsor.logo) | relURL }}" alt="{{ $sponsor.name }}"></a>
+            <div class="img-adopter">
+                <a href="{{ $adopter.url }}" rel="nofollow" target="_blank"><img src="{{ (printf "/logos/%s" $adopter.logo) | relURL }}" alt="{{ $adopter.name }}"></a>
             </div>
         </div>
         {{ end }}
         {{ end }}
         <div class="col-6 col-sm-6 col-md-3">
-            <div class="img-sponsor">
+            <div class="img-adopter">
                 <a class="text-center text-muted" href="{{ "contributing/how-to-contribute-to-docs.md#logos" | relURL }}">Your Company</a>
             </div>
         </div>

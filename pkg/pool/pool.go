@@ -16,7 +16,7 @@ type BytesPool struct {
 	maxTotal  uint64
 	usedTotal uint64
 
-	new func(s int) []byte
+	new func(s int) *[]byte
 }
 
 // NewBytesPool returns a new BytesPool with size buckets for minSize to maxSize
@@ -42,8 +42,9 @@ func NewBytesPool(minSize, maxSize int, factor float64, maxTotal uint64) (*Bytes
 		buckets:  make([]sync.Pool, len(sizes)),
 		sizes:    sizes,
 		maxTotal: maxTotal,
-		new: func(sz int) []byte {
-			return make([]byte, 0, sz)
+		new: func(sz int) *[]byte {
+			s := make([]byte, 0, sz)
+			return &s
 		},
 	}
 	return p, nil
@@ -53,7 +54,7 @@ func NewBytesPool(minSize, maxSize int, factor float64, maxTotal uint64) (*Bytes
 var ErrPoolExhausted = errors.New("pool exhausted")
 
 // Get returns a new byte slices that fits the given size.
-func (p *BytesPool) Get(sz int) ([]byte, error) {
+func (p *BytesPool) Get(sz int) (*[]byte, error) {
 	used := atomic.LoadUint64(&p.usedTotal)
 
 	if p.maxTotal > 0 && used+uint64(sz) > p.maxTotal {
@@ -63,11 +64,11 @@ func (p *BytesPool) Get(sz int) ([]byte, error) {
 		if sz > bktSize {
 			continue
 		}
-		b, ok := p.buckets[i].Get().([]byte)
+		b, ok := p.buckets[i].Get().(*[]byte)
 		if !ok {
 			b = p.new(bktSize)
 		}
-		atomic.AddUint64(&p.usedTotal, uint64(cap(b)))
+		atomic.AddUint64(&p.usedTotal, uint64(cap(*b)))
 		return b, nil
 	}
 
@@ -77,12 +78,16 @@ func (p *BytesPool) Get(sz int) ([]byte, error) {
 }
 
 // Put returns a byte slice to the right bucket in the pool.
-func (p *BytesPool) Put(b []byte) {
+func (p *BytesPool) Put(b *[]byte) {
+	if b == nil {
+		return
+	}
 	for i, bktSize := range p.sizes {
-		if cap(b) > bktSize {
+		if cap(*b) > bktSize {
 			continue
 		}
-		p.buckets[i].Put(b[:0])
+		*b = (*b)[:0]
+		p.buckets[i].Put(b)
 		break
 	}
 	atomic.AddUint64(&p.usedTotal, ^uint64(p.usedTotal-1))

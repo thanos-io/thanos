@@ -963,10 +963,7 @@ func (s *bucketBlockSet) add(b *bucketBlock) error {
 	s.blocks[i] = bs
 
 	sort.Slice(bs, func(j, k int) bool {
-		if bs[j].meta.MinTime < bs[k].meta.MinTime {
-			return true
-		}
-		return false
+		return bs[j].meta.MinTime < bs[k].meta.MinTime
 	})
 	return nil
 }
@@ -1064,7 +1061,6 @@ type bucketBlock struct {
 
 	indexVersion int
 	symbols      map[uint32]string
-	symbolsV2    map[string]struct{}
 	lvals        map[string][]string
 	postings     map[labels.Label]index.Range
 
@@ -1199,12 +1195,12 @@ func (b *bucketBlock) readIndexRange(ctx context.Context, off, length int64) ([]
 	return c, nil
 }
 
-func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length int64) ([]byte, error) {
+func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length int64) (*[]byte, error) {
 	c, err := b.chunkPool.Get(int(length))
 	if err != nil {
 		return nil, errors.Wrap(err, "allocate chunk bytes")
 	}
-	buf := bytes.NewBuffer(c)
+	buf := bytes.NewBuffer(*c)
 
 	r, err := b.bucket.GetRange(ctx, b.chunkObjs[seq], off, length)
 	if err != nil {
@@ -1215,7 +1211,8 @@ func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length i
 	if _, err = io.Copy(buf, r); err != nil {
 		return nil, errors.Wrap(err, "read range")
 	}
-	return buf.Bytes(), nil
+	internalBuf := buf.Bytes()
+	return &internalBuf, nil
 }
 
 func (b *bucketBlock) indexReader(ctx context.Context) *bucketIndexReader {
@@ -1641,16 +1638,13 @@ func (r *bucketIndexReader) LoadedSeries(ref uint64, lset *labels.Labels, chks *
 // LabelValues returns label values for single name.
 func (r *bucketIndexReader) LabelValues(name string) []string {
 	res := make([]string, 0, len(r.block.lvals[name]))
-	for _, v := range r.block.lvals[name] {
-		res = append(res, v)
-	}
-	return res
+	return append(res, r.block.lvals[name]...)
 }
 
 // LabelNames returns a list of label names.
 func (r *bucketIndexReader) LabelNames() []string {
 	res := make([]string, 0, len(r.block.lvals))
-	for ln, _ := range r.block.lvals {
+	for ln := range r.block.lvals {
 		res = append(res, ln)
 	}
 	return res
@@ -1672,7 +1666,7 @@ type bucketChunkReader struct {
 	chunks   map[uint64]chunkenc.Chunk
 
 	// Byte slice to return to the chunk pool on close.
-	chunkBytes [][]byte
+	chunkBytes []*[]byte
 }
 
 func newBucketChunkReader(ctx context.Context, block *bucketBlock) *bucketChunkReader {
@@ -1760,7 +1754,7 @@ func (r *bucketChunkReader) loadChunks(ctx context.Context, offs []uint32, seq i
 	r.stats.chunksFetchedSizeSum += int(end - start)
 
 	for _, o := range offs {
-		cb := b[o-start:]
+		cb := (*b)[o-start:]
 
 		l, n := binary.Uvarint(cb)
 		if n < 1 {

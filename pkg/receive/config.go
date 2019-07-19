@@ -27,6 +27,7 @@ type HashringConfig struct {
 // ConfigWatcher is able to watch a file containing a hashring configuration
 // for updates.
 type ConfigWatcher struct {
+	ch       chan []HashringConfig
 	path     string
 	interval time.Duration
 	logger   log.Logger
@@ -54,6 +55,7 @@ func NewConfigWatcher(logger log.Logger, r prometheus.Registerer, path string, i
 		return nil, errors.Wrap(err, "adding path to file watcher")
 	}
 	c := &ConfigWatcher{
+		ch:       make(chan []HashringConfig),
 		path:     path,
 		interval: time.Duration(interval),
 		logger:   logger,
@@ -86,12 +88,11 @@ func NewConfigWatcher(logger log.Logger, r prometheus.Registerer, path string, i
 	return c, nil
 }
 
-// Run starts the ConfigWatcher and sends all updates on the specified channel
-// until the given context is cancelled.
-func (cw *ConfigWatcher) Run(ctx context.Context, ch chan<- []HashringConfig) {
+// Run starts the ConfigWatcher until the given context is cancelled.
+func (cw *ConfigWatcher) Run(ctx context.Context) {
 	defer cw.stop()
 
-	cw.refresh(ctx, ch)
+	cw.refresh(ctx)
 
 	ticker := time.NewTicker(cw.interval)
 	defer ticker.Stop()
@@ -115,12 +116,12 @@ func (cw *ConfigWatcher) Run(ctx context.Context, ch chan<- []HashringConfig) {
 			// different combinations of operations. For all practical purposes
 			// this is inaccurate.
 			// The most reliable solution is to reload everything if anything happens.
-			cw.refresh(ctx, ch)
+			cw.refresh(ctx)
 
 		case <-ticker.C:
 			// Setting a new watch after an update might fail. Make sure we don't lose
 			// those files forever.
-			cw.refresh(ctx, ch)
+			cw.refresh(ctx)
 
 		case err := <-cw.watcher.Errors:
 			if err != nil {
@@ -154,7 +155,7 @@ func (cw *ConfigWatcher) readFile() ([]HashringConfig, error) {
 }
 
 // refresh reads the configured file and sends the hashring configuration on the channel.
-func (cw *ConfigWatcher) refresh(ctx context.Context, ch chan<- []HashringConfig) {
+func (cw *ConfigWatcher) refresh(ctx context.Context) {
 	cw.refreshCounter.Inc()
 	config, err := cw.readFile()
 	if err != nil {
@@ -174,7 +175,7 @@ func (cw *ConfigWatcher) refresh(ctx context.Context, ch chan<- []HashringConfig
 	select {
 	case <-ctx.Done():
 		return
-	case ch <- config:
+	case cw.ch <- config:
 		return
 	}
 }
@@ -192,7 +193,7 @@ func (cw *ConfigWatcher) stop() {
 			select {
 			case <-cw.watcher.Errors:
 			case <-cw.watcher.Events:
-				// Drain all events and errors.
+			// Drain all events and errors.
 			case <-done:
 				return
 			}
@@ -202,5 +203,11 @@ func (cw *ConfigWatcher) stop() {
 		level.Error(cw.logger).Log("msg", "error closing file watcher", "path", cw.path, "err", err)
 	}
 
+	close(cw.ch)
 	level.Debug(cw.logger).Log("msg", "hashring configuration watcher stopped")
+}
+
+// C returns a chan that gets hashring configuration updates.
+func (cw *ConfigWatcher) C() <-chan []HashringConfig {
+	return cw.ch
 }

@@ -7,12 +7,12 @@ import (
 
 	"github.com/NYTimes/gziphandler"
 	"github.com/go-kit/kit/log"
+	extpromhttp "github.com/improbable-eng/thanos/pkg/extprom/http"
 	qapi "github.com/improbable-eng/thanos/pkg/query/api"
 	thanosrule "github.com/improbable-eng/thanos/pkg/rule"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/improbable-eng/thanos/pkg/tracing"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/rules"
@@ -35,7 +35,7 @@ func NewAPI(
 	}
 }
 
-func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger) {
+func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger, ins extpromhttp.InstrumentationMiddleware) {
 	instr := func(name string, f qapi.ApiFunc) http.HandlerFunc {
 		hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			qapi.SetCORS(w)
@@ -47,12 +47,11 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 				w.WriteHeader(http.StatusNoContent)
 			}
 		})
-		return prometheus.InstrumentHandler(name, tracing.HTTPMiddleware(tracer, name, logger, gziphandler.GzipHandler(hf)))
+		return ins.NewHandler(name, tracing.HTTPMiddleware(tracer, name, logger, gziphandler.GzipHandler(hf)))
 	}
 
 	r.Get("/alerts", instr("alerts", api.alerts))
 	r.Get("/rules", instr("rules", api.rules))
-
 }
 
 type RulesRetriever interface {
@@ -104,7 +103,7 @@ func (api *API) rules(r *http.Request) (interface{}, []error, *qapi.ApiError) {
 				}
 			default:
 				err := fmt.Errorf("failed to assert type of rule '%v'", rule.Name())
-				return nil, nil, &qapi.ApiError{qapi.ErrorInternal, err}
+				return nil, nil, &qapi.ApiError{Typ: qapi.ErrorInternal, Err: err}
 			}
 
 			apiRuleGroup.Rules = append(apiRuleGroup.Rules, enrichedRule)

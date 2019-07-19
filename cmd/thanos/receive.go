@@ -257,10 +257,7 @@ func runReceive(
 			err error
 		)
 		g.Add(func() error {
-			select {
-			case <-dbOpen:
-				break
-			}
+			<-dbOpen
 
 			l, err = net.Listen("tcp", grpcBindAddr)
 			if err != nil {
@@ -282,9 +279,6 @@ func runReceive(
 		}, func(error) {
 			if s != nil {
 				s.Stop()
-			}
-			if l != nil {
-				runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
 			}
 		})
 	}

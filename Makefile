@@ -1,5 +1,4 @@
 PREFIX            ?= $(shell pwd)
-FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print)
 
 DOCKER_IMAGE_NAME ?= thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
@@ -15,13 +14,8 @@ export GOPROXY
 EMBEDMD           ?= $(GOBIN)/embedmd-$(EMBEDMD_VERSION)
 # v2.0.0
 EMBEDMD_VERSION   ?= 97c13d6e41602fc6e397eb51c45f38069371a969
-ERRCHECK          ?= $(GOBIN)/errcheck-$(ERRCHECK_VERSION)
-# v1.2.0
-ERRCHECK_VERSION  ?= e14f8d59a22d460d56c5ee92507cd94c78fbf274
 LICHE             ?= $(GOBIN)/liche-$(LICHE_VERSION)
 LICHE_VERSION     ?= 2a2e6e56f6c615c17b2e116669c4cdb31b5453f3
-GOIMPORTS         ?= $(GOBIN)/goimports-$(GOIMPORTS_VERSION)
-GOIMPORTS_VERSION ?= 9d4d845e86f14303813298ede731a971dd65b593
 PROMU             ?= $(GOBIN)/promu-$(PROMU_VERSION)
 PROMU_VERSION     ?= 9583e5a6448f97c6294dca72dd1d173e28f8d4a4
 PROTOC            ?= $(GOBIN)/protoc-$(PROTOC_VERSION)
@@ -33,6 +27,10 @@ HUGO              ?= $(GOBIN)/hugo-$(HUGO_VERSION)
 GOBINDATA_VERSION ?= a9c83481b38ebb1c4eb8f0168fd4b10ca1d3c523
 GOBINDATA         ?= $(GOBIN)/go-bindata-$(GOBINDATA_VERSION)
 GIT               ?= $(shell which git)
+# golangci-lint which includes errcheck, goimports
+# and more. v1.16.0
+GOLANGCILINT_VERSION ?= 97ea1cbb21bbf5e4d0e8bcc0f9243385e9262dcc
+GOLANGCILINT ?= $(GOBIN)/golangci-lint-$(GOLANGCILINT_VERSION)
 
 WEB_DIR           ?= website
 WEBSITE_BASE_URL  ?= https://thanos.io
@@ -151,19 +149,14 @@ check-docs: $(EMBEDMD) $(LICHE) build
 	@$(LICHE) --recursive docs --exclude "cloud.tencent.com" --document-root .
 	@$(LICHE) --exclude "cloud.tencent.com" --document-root . *.md
 
-# errcheck performs static analysis and returns error if any of the errors is not checked.
-.PHONY: errcheck
-errcheck: $(ERRCHECK)
-	@echo ">> errchecking the code"
-	$(ERRCHECK) -verbose -exclude .errcheck_excludes.txt ./cmd/... ./pkg/... ./test/...
-
 # format formats the code (including imports format).
-# NOTE: format requires deps to not remove imports that are used, just not resolved.
-# This is not encoded, because it is often used in IDE onSave logic.
+# # NOTE: format requires deps to not remove imports that are used, just not resolved.
+# # This is not encoded, because it is often used in IDE onSave logic.
 .PHONY: format
-format: $(GOIMPORTS)
+format: check-git $(GOLANGCILINT)
 	@echo ">> formatting code"
-	@$(GOIMPORTS) -w $(FILES_TO_FMT)
+	@$(GOLANGCILINT) run --disable-all -E goimports ./...
+
 
 # proto generates golang files from Thanos proto files.
 .PHONY: proto
@@ -195,12 +188,6 @@ test-deps:
 	$(call fetch_go_bin_version,github.com/prometheus/alertmanager/cmd/alertmanager,$(ALERTMANAGER_VERSION))
 	$(call fetch_go_bin_version,github.com/minio/minio,$(MINIO_SERVER_VERSION))
 
-# vet vets the code.
-.PHONY: vet
-vet: check-git
-	@echo ">> vetting code"
-	@go vet ./...
-
 # go mod related
 .PHONY: go-mod-tidy
 go-mod-tidy: check-git
@@ -231,6 +218,11 @@ web: web-pre-process $(HUGO)
 	# TODO(bwplotka): Make it --gc
 	@cd $(WEB_DIR) && HUGO_ENV=production $(HUGO) --config hugo.yaml --minify -v -b $(WEBSITE_BASE_URL)
 
+.PHONY: lint
+lint: check-git $(GOLANGCILINT)
+	@echo ">> linting all of the Go files"
+	@$(GOLANGCILINT) run ./...
+
 .PHONY: web-serve
 web-serve: web-pre-process $(HUGO)
 	@echo ">> serving documentation website"
@@ -239,9 +231,6 @@ web-serve: web-pre-process $(HUGO)
 # non-phony targets
 $(EMBEDMD):
 	$(call fetch_go_bin_version,github.com/campoy/embedmd,$(EMBEDMD_VERSION))
-
-$(ERRCHECK):
-	$(call fetch_go_bin_version,github.com/kisielk/errcheck,$(ERRCHECK_VERSION))
 
 $(GOIMPORTS):
 	$(call fetch_go_bin_version,golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VERSION))
@@ -259,6 +248,9 @@ $(HUGO):
 
 $(GOBINDATA):
 	$(call fetch_go_bin_version,github.com/go-bindata/go-bindata/go-bindata,$(GOBINDATA_VERSION))
+
+$(GOLANGCILINT):
+	$(call fetch_go_bin_version,github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCILINT_VERSION))
 
 $(PROTOC):
 	@mkdir -p $(TMP_GOPATH)
