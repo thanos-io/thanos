@@ -97,7 +97,7 @@ func (p *BytesPool) Put(b *[]byte) {
 		break
 	}
 
-	// Early return if the slice is too big and we cannot Put() it anywhere
+	// Early return if the slice is too big and we cannot Put() it anywhere.
 	if !succeeded {
 		return
 	}
