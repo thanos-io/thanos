@@ -77,7 +77,7 @@ func TestRacePutGet(t *testing.T) {
 				s.Done()
 				return
 			default:
-				c, err := chunkPool.Get(len(txt))
+				c, err := chunkPool.Get(3)
 				if err != nil {
 					errs <- errors.Wrapf(err, "goroutine %s", txt)
 					s.Done()
