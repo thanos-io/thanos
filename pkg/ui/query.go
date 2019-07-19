@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/component"
-	extpromhttp "github.com/improbable-eng/thanos/pkg/extprom/http"
-	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/common/version"
+	"github.com/thanos-io/thanos/pkg/component"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/query"
 )
 
 type Query struct {

@@ -68,7 +68,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/pkg/errors"
 )
 

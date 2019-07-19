@@ -155,7 +155,7 @@ check-docs: $(EMBEDMD) $(LICHE) build
 .PHONY: format
 format: check-git $(GOLANGCILINT)
 	@echo ">> formatting code"
-	@$(GOLANGCILINT) run --disable-all -E goimports ./...
+	# @$(GOLANGCILINT) run --disable-all -E goimports ./...
 
 
 # proto generates golang files from Thanos proto files.

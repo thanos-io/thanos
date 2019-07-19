@@ -5,8 +5,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/improbable-eng/thanos/pkg/tracing/jaeger"
-	"github.com/improbable-eng/thanos/pkg/tracing/stackdriver"
+	"github.com/thanos-io/thanos/pkg/tracing/jaeger"
+	"github.com/thanos-io/thanos/pkg/tracing/stackdriver"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"

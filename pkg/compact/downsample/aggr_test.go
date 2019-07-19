@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/fortytw2/leaktest"
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/prometheus/tsdb/chunkenc"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestAggrChunk(t *testing.T) {

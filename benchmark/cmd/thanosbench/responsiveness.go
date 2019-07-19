@@ -13,7 +13,7 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/benchmark/pkg/tsdb"
+	"github.com/thanos-io/thanos/benchmark/pkg/tsdb"
 	"github.com/pkg/errors"
 	"google.golang.org/api/iterator"
 	"k8s.io/client-go/kubernetes"

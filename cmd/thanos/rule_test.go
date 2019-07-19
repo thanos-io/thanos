@@ -5,9 +5,9 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/improbable-eng/thanos/pkg/discovery/dns"
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/discovery/dns"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func Test_parseFlagLabels(t *testing.T) {
