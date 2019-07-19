@@ -1,6 +1,6 @@
 <p align="center"><img src="docs/img/Thanos-logo_fullmedium.png" alt="Thanos Logo"></p>
 
-[![CircleCI](https://circleci.com/gh/improbable-eng/thanos.svg?style=svg)](https://circleci.com/gh/improbable-eng/thanos)
+[![CircleCI](https://circleci.com/gh/thanos-io/thanos.svg?style=svg)](https://circleci.com/gh/thanos-io/thanos)
 [![Go Report Card](https://goreportcard.com/badge/github.com/thanos-io/thanos)](https://goreportcard.com/report/github.com/thanos-io/thanos)
 [![GoDoc](https://godoc.org/github.com/thanos-io/thanos?status.svg)](https://godoc.org/github.com/thanos-io/thanos)
 [![Slack](https://img.shields.io/badge/join%20slack-%23thanos-brightgreen.svg)](https://slack.cncf.io/)
@@ -33,7 +33,7 @@ Concretely the aims of the project are:
 * [Design](https://thanos.io/design.md/)
 * [Prom Meetup Slides](https://www.slideshare.net/BartomiejPotka/thanos-global-durable-prometheus-monitoring)
 * [Introduction blog post](https://improbable.io/games/blog/thanos-prometheus-at-scale)
-* [Benchmarks](https://github.com/improbable-eng/thanos/tree/master/benchmark)
+* [Benchmarks](https://github.com/thanos-io/thanos/tree/master/benchmark)
 * [Proposals](docs/proposals)
 * [Integrations](docs/integrations.md)
 

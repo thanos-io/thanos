@@ -6,7 +6,7 @@ about what components it touches e.g "query:" or ".*:"
 -->
 
 <!--
-In case of issues related to exact bucket implementation, please ping corresponded maintainer from list here: https://github.com/improbable-eng/thanos/blob/master/docs/storage.md
+In case of issues related to exact bucket implementation, please ping corresponded maintainer from list here: https://github.com/thanos-io/thanos/blob/master/docs/storage.md
 -->
 
 **Thanos, Prometheus and Golang version used**

@@ -29,10 +29,10 @@ Adding large new features and components to Thanos should be done by first creat
 
 1. Read [getting started docs](docs/getting-started.md) and prepare Thanos.
 2. Familiarize yourself with [Makefile](Makefile) commands like `format`, `build`, `proto` and `test`.
-3. Fork improbable-eng/thanos.git and start development from your own fork. Here are sample steps to setup your development environment:
+3. Fork thanos-io/thanos.git and start development from your own fork. Here are sample steps to setup your development environment:
 ```console
-$ mkdir -p $GOPATH/src/github.com/improbable-eng
-$ cd $GOPATH/src/github.com/improbable-eng
+$ mkdir -p $GOPATH/src/github.com/thanos-io
+$ cd $GOPATH/src/github.com/thanos-io
 $ git clone https://github.com/<your_github_id>/thanos.git
 $ cd thanos
 $ git remote add upstream https://github.com/thanos-io/thanos.git
