@@ -62,6 +62,7 @@ type syncerMetrics struct {
 	garbageCollectionDuration prometheus.Histogram
 	compactions               *prometheus.CounterVec
 	compactionFailures        *prometheus.CounterVec
+	partiallyWrittenBlocks    *prometheus.CounterVec
 }
 
 func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
@@ -112,6 +113,10 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 		Name: "thanos_compact_group_compactions_failures_total",
 		Help: "Total number of failed group compactions.",
 	}, []string{"group"})
+	m.partiallyWrittenBlocks = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_compact_group_partially_written_blocks_detected_total",
+		Help: "Total number of partially written blocks that have been detected during a run",
+	}, []string{"group"})
 
 	if reg != nil {
 		reg.MustRegister(
@@ -124,6 +129,7 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 			m.garbageCollectionDuration,
 			m.compactions,
 			m.compactionFailures,
+			m.partiallyWrittenBlocks,
 		)
 	}
 	return &m
@@ -334,6 +340,7 @@ func (c *Syncer) Groups() (res []*Group, err error) {
 				c.metrics.compactions.WithLabelValues(GroupKey(*m)),
 				c.metrics.compactionFailures.WithLabelValues(GroupKey(*m)),
 				c.metrics.garbageCollectedBlocks,
+				c.metrics.partiallyWrittenBlocks.WithLabelValues(GroupKey(*m)),
 			)
 			if err != nil {
 				return nil, errors.Wrap(err, "create compaction group")
@@ -480,6 +487,7 @@ type Group struct {
 	compactions                 prometheus.Counter
 	compactionFailures          prometheus.Counter
 	groupGarbageCollectedBlocks prometheus.Counter
+	partiallyWrittenBlocks      prometheus.Counter
 }
 
 // newGroup returns a new compaction group.
@@ -492,6 +500,7 @@ func newGroup(
 	compactions prometheus.Counter,
 	compactionFailures prometheus.Counter,
 	groupGarbageCollectedBlocks prometheus.Counter,
+	partiallyWrittenBlocks prometheus.Counter,
 ) (*Group, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -506,6 +515,7 @@ func newGroup(
 		compactions:                 compactions,
 		compactionFailures:          compactionFailures,
 		groupGarbageCollectedBlocks: groupGarbageCollectedBlocks,
+		partiallyWrittenBlocks:      partiallyWrittenBlocks,
 	}
 	return g, nil
 }
@@ -819,7 +829,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		}
 
 		// Ensure all input blocks are valid.
-		stats, err := block.GatherIndexIssueStats(cg.logger, filepath.Join(pdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
+		stats, err := block.GatherBlockIssueStats(cg.logger, pdir, meta.MinTime, meta.MaxTime)
 		if err != nil {
 			return false, ulid.ULID{}, errors.Wrapf(err, "gather index issues for block %s", pdir)
 		}
@@ -835,6 +845,11 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		if err := stats.PrometheusIssue5372Err(); !cg.acceptMalformedIndex && err != nil {
 			return false, ulid.ULID{}, errors.Wrapf(err,
 				"block id %s, try running with --debug.accept-malformed-index", id)
+		}
+
+		if err := stats.PartiallyWrittenBlockErr(); err != nil {
+			level.Warn(cg.logger).Log("err", err.Error(), "msg", fmt.Sprintf("skipping block %s", pdir))
+			cg.partiallyWrittenBlocks.Inc()
 		}
 	}
 	level.Debug(cg.logger).Log("msg", "downloaded and verified blocks",
