@@ -56,7 +56,6 @@ var ErrPoolExhausted = errors.New("pool exhausted")
 // Get returns a new byte slices that fits the given size.
 func (p *BytesPool) Get(sz int) (*[]byte, error) {
 	used := atomic.LoadUint64(&p.usedTotal)
-
 	if p.maxTotal > 0 && used+uint64(sz) > p.maxTotal {
 		return nil, ErrPoolExhausted
 	}
@@ -90,5 +89,5 @@ func (p *BytesPool) Put(b *[]byte) {
 		p.buckets[i].Put(b)
 		break
 	}
-	atomic.AddUint64(&p.usedTotal, ^uint64(p.usedTotal-1))
+	atomic.AddUint64(&p.usedTotal, ^uint64(cap(*b)-1))
 }
