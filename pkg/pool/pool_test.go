@@ -93,7 +93,7 @@ func TestRacePutGet(t *testing.T) {
 					return
 				}
 
-				if fmt.Sprintf("%s", buf) != txt {
+				if buf.String() != txt {
 					errs <- errors.New("expected to get the data just written")
 					s.Done()
 					return
