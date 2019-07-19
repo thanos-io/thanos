@@ -68,8 +68,8 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
 // Reloader can watch config files and trigger reloads of a Prometheus server.

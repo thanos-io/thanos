@@ -1,4 +1,5 @@
 PREFIX            ?= $(shell pwd)
+FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print)
 
 DOCKER_IMAGE_NAME ?= thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
@@ -16,6 +17,8 @@ EMBEDMD           ?= $(GOBIN)/embedmd-$(EMBEDMD_VERSION)
 EMBEDMD_VERSION   ?= 97c13d6e41602fc6e397eb51c45f38069371a969
 LICHE             ?= $(GOBIN)/liche-$(LICHE_VERSION)
 LICHE_VERSION     ?= 2a2e6e56f6c615c17b2e116669c4cdb31b5453f3
+GOIMPORTS         ?= $(GOBIN)/goimports-$(GOIMPORTS_VERSION)
+GOIMPORTS_VERSION ?= 9d4d845e86f14303813298ede731a971dd65b593
 PROMU             ?= $(GOBIN)/promu-$(PROMU_VERSION)
 PROMU_VERSION     ?= 9583e5a6448f97c6294dca72dd1d173e28f8d4a4
 PROTOC            ?= $(GOBIN)/protoc-$(PROTOC_VERSION)
@@ -150,13 +153,10 @@ check-docs: $(EMBEDMD) $(LICHE) build
 	@$(LICHE) --exclude "cloud.tencent.com" --document-root . *.md
 
 # format formats the code (including imports format).
-# # NOTE: format requires deps to not remove imports that are used, just not resolved.
-# # This is not encoded, because it is often used in IDE onSave logic.
 .PHONY: format
-format: check-git $(GOLANGCILINT)
+format: $(GOIMPORTS)
 	@echo ">> formatting code"
-	# @$(GOLANGCILINT) run --disable-all -E goimports ./...
-
+	@$(GOIMPORTS) -w $(FILES_TO_FMT)
 
 # proto generates golang files from Thanos proto files.
 .PHONY: proto
@@ -221,6 +221,7 @@ web: web-pre-process $(HUGO)
 .PHONY: lint
 lint: check-git $(GOLANGCILINT)
 	@echo ">> linting all of the Go files"
+	@$(GOLANGCILINT) run --disable-all -E goimports ./...
 	@$(GOLANGCILINT) run ./...
 
 .PHONY: web-serve
