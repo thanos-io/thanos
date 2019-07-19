@@ -67,17 +67,17 @@ func TestRacePutGet(t *testing.T) {
 	// Start two goroutines: they always Get and Put two byte slices
 	// to which they write 'foo' / 'barbazbaz' and check if the data is still
 	// there after writing it, before putting it back
-
 	errs := make(chan error, 2)
+	stop := make(chan bool)
 
 	f := func(txt string) {
 		for {
 			select {
-			case <-time.After(5 * time.Second):
+			case <-stop:
 				s.Done()
 				return
 			default:
-				c, err := chunkPool.Get(3)
+				c, err := chunkPool.Get(len(txt))
 				if err != nil {
 					errs <- errors.Wrapf(err, "goroutine %s", txt)
 					s.Done()
@@ -105,12 +105,15 @@ func TestRacePutGet(t *testing.T) {
 		}
 	}
 
+	s.Add(2)
 	go f("foo")
 	go f("barbazbaz")
 
-	s.Add(2)
-	s.Wait()
+	time.Sleep(5 * time.Second)
+	stop <- true
+	stop <- true
 
+	s.Wait()
 	select {
 	case err := <-errs:
 		testutil.Ok(t, err)
