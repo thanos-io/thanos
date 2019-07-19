@@ -175,12 +175,12 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		lset := p.translateAndExtendLabels(e.Labels, externalLabels)
 
 		if len(e.Samples) == 0 {
-			// As found in https://github.com/improbable-eng/thanos/issues/381
+			// As found in https://github.com/thanos-io/thanos/issues/381
 			// Prometheus can give us completely empty time series. Ignore these with log until we figure out that
 			// this is expected from Prometheus perspective.
 			level.Warn(p.logger).Log(
 				"msg",
-				"found timeseries without any chunk. See https://github.com/improbable-eng/thanos/issues/381 for details",
+				"found timeseries without any chunk. See https://github.com/thanos-io/thanos/issues/381 for details",
 				"lset",
 				fmt.Sprintf("%v", lset),
 			)
@@ -189,7 +189,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 
 		// XOR encoding supports a max size of 2^16 - 1 samples, so we need
 		// to chunk all samples into groups of no more than 2^16 - 1
-		// See: https://github.com/improbable-eng/thanos/pull/718
+		// See: https://github.com/thanos-io/thanos/pull/718
 		aggregatedChunks, err := p.chunkSamples(e, math.MaxUint16)
 		if err != nil {
 			return err

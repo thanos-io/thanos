@@ -96,7 +96,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	generateMissingIndexCacheFiles := cmd.Flag("index.generate-missing-cache-file", "If enabled, on startup compactor runs an on-off job that scans all the blocks to find all blocks with missing index cache file. It generates those if needed and upload.").
 		Hidden().Default("false").Bool()
 
-	// TODO(bplotka): Remove this flag once https://github.com/improbable-eng/thanos/issues/297 is fixed.
+	// TODO(bplotka): Remove this flag once https://github.com/thanos-io/thanos/issues/297 is fixed.
 	disableDownsampling := cmd.Flag("debug.disable-downsampling", "Disables downsampling. This is not recommended "+
 		"as querying long time ranges without non-downsampled data is not efficient and not useful (is not possible to render all for human eye).").
 		Hidden().Default("false").Bool()
@@ -243,7 +243,7 @@ func runCompact(
 		}
 		level.Info(logger).Log("msg", "compaction iterations done")
 
-		// TODO(bplotka): Remove "disableDownsampling" once https://github.com/improbable-eng/thanos/issues/297 is fixed.
+		// TODO(bplotka): Remove "disableDownsampling" once https://github.com/thanos-io/thanos/issues/297 is fixed.
 		if !disableDownsampling {
 			// After all compactions are done, work down the downsampling backlog.
 			// We run two passes of this to ensure that the 1h downsampling is generated

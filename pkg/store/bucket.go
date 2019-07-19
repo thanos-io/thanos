@@ -1340,7 +1340,7 @@ func (p *postingGroup) Postings() index.Postings {
 
 	for i, posting := range p.postings {
 		if posting == nil {
-			// This should not happen. Debug for https://github.com/improbable-eng/thanos/issues/874.
+			// This should not happen. Debug for https://github.com/thanos-io/thanos/issues/874.
 			return index.ErrPostings(errors.Errorf("at least one of %d postings is nil for %s. It was never fetched.", i, p.keys[i]))
 		}
 	}

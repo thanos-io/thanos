@@ -333,7 +333,7 @@ func runRule(
 		}
 	}
 	{
-		// TODO(bwplotka): https://github.com/improbable-eng/thanos/issues/660
+		// TODO(bwplotka): https://github.com/thanos-io/thanos/issues/660
 		sdr := alert.NewSender(logger, reg, alertmgrs.get, nil, alertmgrsTimeout)
 		ctx, cancel := context.WithCancel(context.Background())
 

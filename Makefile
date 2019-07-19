@@ -38,9 +38,9 @@ PUBLIC_DIR        ?= $(WEB_DIR)/public
 ME                ?= $(shell whoami)
 
 # E2e test deps.
-# Referenced by github.com/improbable-eng/thanos/blob/master/docs/getting_started.md#prometheus
+# Referenced by github.com/thanos-io/thanos/blob/master/docs/getting_started.md#prometheus
 
-# Limited prom version, because testing was not possible. This should fix it: https://github.com/improbable-eng/thanos/issues/758
+# Limited prom version, because testing was not possible. This should fix it: https://github.com/thanos-io/thanos/issues/758
 PROM_VERSIONS           ?= v2.4.3 v2.5.0 v2.8.1 v2.9.2
 
 ALERTMANAGER_VERSION    ?= v0.15.2
@@ -183,7 +183,7 @@ test: check-git test-deps
 # It installs current Thanos, supported versions of Prometheus and alertmanager to test against in e2e.
 .PHONY: test-deps
 test-deps:
-	@go install github.com/improbable-eng/thanos/cmd/thanos
+	@go install github.com/thanos-io/thanos/cmd/thanos
 	$(foreach ver,$(PROM_VERSIONS),$(call fetch_go_bin_version,github.com/prometheus/prometheus/cmd/prometheus,$(ver)))
 	$(call fetch_go_bin_version,github.com/prometheus/alertmanager/cmd/alertmanager,$(ALERTMANAGER_VERSION))
 	$(call fetch_go_bin_version,github.com/minio/minio,$(MINIO_SERVER_VERSION))

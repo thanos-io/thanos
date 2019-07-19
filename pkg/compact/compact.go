@@ -265,7 +265,7 @@ func (c *Syncer) downloadMeta(ctx context.Context, id ulid.ULID) (*metadata.Meta
 	// - repair created blocks
 	// - compactor created blocks
 	// NOTE: It is not safe to miss "old" block (even that it is newly created) in sync step. Compactor needs to aware of ALL old blocks.
-	// TODO(bplotka): https://github.com/improbable-eng/thanos/issues/377
+	// TODO(bplotka): https://github.com/thanos-io/thanos/issues/377
 	if ulid.Now()-id.Time() < uint64(c.consistencyDelay/time.Millisecond) &&
 		meta.Thanos.Source != metadata.BucketRepairSource &&
 		meta.Thanos.Source != metadata.CompactorSource &&

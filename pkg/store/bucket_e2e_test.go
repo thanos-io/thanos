@@ -335,7 +335,7 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 				{{Name: "a", Value: "2"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
 			},
 		},
-		// Regression https://github.com/improbable-eng/thanos/issues/833.
+		// Regression https://github.com/thanos-io/thanos/issues/833.
 		// Problem: Matcher that was selecting NO series, was ignored instead of passed as emptyPosting to Intersect.
 		{
 			req: &storepb.SeriesRequest{
@@ -410,7 +410,7 @@ func (g naivePartitioner) Partition(length int, rng func(int) (uint64, uint64)) 
 
 // Naive partitioner splits the array equally (it does not combine anything).
 // This tests if our, sometimes concurrent, fetches for different parts works.
-// Regression test against: https://github.com/improbable-eng/thanos/issues/829
+// Regression test against: https://github.com/thanos-io/thanos/issues/829
 func TestBucketStore_ManyParts_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
 		ctx, cancel := context.WithCancel(context.Background())

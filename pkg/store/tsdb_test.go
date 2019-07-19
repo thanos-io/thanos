@@ -34,7 +34,7 @@ func TestTSDBStore_Info(t *testing.T) {
 	testutil.Equals(t, int64(math.MaxInt64), resp.MaxTime)
 }
 
-// Regression test for https://github.com/improbable-eng/thanos/issues/1038.
+// Regression test for https://github.com/thanos-io/thanos/issues/1038.
 func TestTSDBStore_Series_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
