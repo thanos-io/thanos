@@ -26,7 +26,7 @@ do
 ---
 
 Found a typo, inconsistency or missing information in our docs?
-Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/improbable-eng/thanos/edit/master/docs/${relFile}) :heart:
+Help us to improve [Thanos](https://thanos.io) documentation by proposing a fix [on GitHub here](https://github.com/thanos-io/thanos/edit/master/docs/${relFile}) :heart:
 
 EOT
 )" >> ${file}
@@ -78,7 +78,7 @@ tail -n +2 MAINTAINERS.md >> ${OUTPUT_CONTENT_DIR}/MAINTAINERS.md
 ALL_DOC_CONTENT_FILES=`echo "${OUTPUT_CONTENT_DIR}/**/*.md ${OUTPUT_CONTENT_DIR}/*.md"`
 
 # All the absolute links are replaced with a direct link to the file on github, including the current commit SHA.
-perl -pi -e 's/]\(\//]\(https:\/\/github.com\/improbable-eng\/thanos\/tree\/'${COMMIT_SHA}'\//' ${ALL_DOC_CONTENT_FILES}
+perl -pi -e 's/]\(\//]\(https:\/\/github.com\/thanos-io\/thanos\/tree\/'${COMMIT_SHA}'\//' ${ALL_DOC_CONTENT_FILES}
 
 # All the relative links needs to have ../  This is because Hugo is missing: https://github.com/gohugoio/hugo/pull/3934
 perl -pi -e 's/]\(\.\//]\(..\//' ${ALL_DOC_CONTENT_FILES}
