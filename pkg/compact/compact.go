@@ -782,11 +782,11 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	}
 
 	// Plan against the written meta.json files.
-	plan, err := comp.Plan(dir)
+	preliminaryPlan, err := comp.Plan(dir)
 	if err != nil {
 		return false, ulid.ULID{}, errors.Wrap(err, "plan compaction")
 	}
-	if len(plan) == 0 {
+	if len(preliminaryPlan) == 0 {
 		// Nothing to do.
 		return false, ulid.ULID{}, nil
 	}
@@ -798,7 +798,8 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	// Once we have a plan we need to download the actual data.
 	begin := time.Now()
 
-	for _, pdir := range plan {
+	plan := []string{}
+	for _, pdir := range preliminaryPlan {
 		meta, err := metadata.Read(pdir)
 		if err != nil {
 			return false, ulid.ULID{}, errors.Wrapf(err, "read meta from %s", pdir)
@@ -810,7 +811,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 
 		for _, s := range meta.Compaction.Sources {
 			if _, ok := uniqueSources[s]; ok {
-				return false, ulid.ULID{}, halt(errors.Errorf("overlapping sources detected for plan %v", plan))
+				return false, ulid.ULID{}, halt(errors.Errorf("overlapping sources detected for plan %v", preliminaryPlan))
 			}
 			uniqueSources[s] = struct{}{}
 		}
@@ -850,7 +851,10 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		if err := stats.PartiallyWrittenBlockErr(); err != nil {
 			level.Warn(cg.logger).Log("err", err.Error(), "msg", fmt.Sprintf("skipping block %s", pdir))
 			cg.partiallyWrittenBlocks.Inc()
+			continue
 		}
+
+		plan = append(plan, pdir)
 	}
 	level.Debug(cg.logger).Log("msg", "downloaded and verified blocks",
 		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin))
