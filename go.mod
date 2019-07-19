@@ -12,12 +12,11 @@ require (
 	github.com/go-kit/kit v0.9.0
 	github.com/gogo/protobuf v1.2.1
 	github.com/golang/snappy v0.0.1
-	github.com/google/martian v2.1.0+incompatible // indirect
-	github.com/googleapis/gax-go v2.0.2+incompatible // indirect
 	github.com/gophercloud/gophercloud v0.0.0-20190301152420-fca40860790e
 	github.com/grpc-ecosystem/go-grpc-middleware v1.0.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v0.0.0-20181025070259-68e3a13e4117
 	github.com/hashicorp/golang-lru v0.5.1
+	github.com/improbable-eng/thanos v0.6.0 // indirect
 	github.com/leanovate/gopter v0.2.4
 	github.com/lovoo/gcloud-opentracing v0.3.0
 	github.com/miekg/dns v1.1.15
@@ -35,10 +34,8 @@ require (
 	github.com/prometheus/common v0.6.0
 	github.com/prometheus/prometheus v2.9.2+incompatible
 	github.com/prometheus/tsdb v0.8.0
-	github.com/uber-go/atomic v1.4.0 // indirect
 	github.com/uber/jaeger-client-go v2.16.0+incompatible
 	github.com/uber/jaeger-lib v2.0.0+incompatible
-	go.uber.org/atomic v1.4.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	golang.org/x/text v0.3.2
