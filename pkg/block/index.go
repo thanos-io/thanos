@@ -264,6 +264,59 @@ type Stats struct {
 	// OutOfOrderLabels represents the number of postings that contained out
 	// of order labels, a bug present in Prometheus 2.8.0 and below.
 	OutOfOrderLabels int
+	// IndexMissing represents whether the index could be found at all. In a
+	// partially written block (https://github.com/thanos-io/thanos/issues/1331)
+	// situation it might be missing.
+	IndexMissing bool
+	// ChunksReferencedInIndex lists all chunks that have been referenced within
+	// the index. It is used to determine whether there is a mismatch
+	// between the index and the chunks (https://github.com/thanos-io/thanos/issues/1331)
+	ChunksReferencedInIndex []string
+	// ChunksReferencedInDirectory lists all chunks that are present in the chunks/ directory
+	// of the block. It is used to determine whether there is a mismatch
+	// between the index and the chunks (https://github.com/thanos-io/thanos/issues/1331)
+	ChunksReferencedInDirectory []string
+}
+
+// PartiallyWrittenBlockErr returns an error if the Stats object indicates one
+// of the following issues with the block:
+// * missing index
+// * chunks referenced in index that aren't present in the chunks/ directory of
+//   the block
+// * chunks in chunks/ subdirectory of the block that aren't referenced from the
+//   index (this should not be possible)
+func (i Stats) PartiallyWrittenBlockErr() error {
+	if i.IndexMissing {
+		return errors.Errorf("index file is missing, block is considered partially written")
+	}
+	missingInFiles := 0
+	for _, ref := range i.ChunksReferencedInIndex {
+		present := false
+		for _, other := range i.ChunksReferencedInDirectory {
+			if ref == other {
+				present = true
+			}
+		}
+		if !present {
+			missingInFiles = missingInFiles + 1
+		}
+	}
+	missingInIndex := 0
+	for _, ref := range i.ChunksReferencedInDirectory {
+		present := false
+		for _, other := range i.ChunksReferencedInIndex {
+			if ref == other {
+				present = true
+			}
+		}
+		if !present {
+			missingInIndex = missingInIndex + 1
+		}
+	}
+	if missingInIndex != 0 || missingInFiles != 0 {
+		return errors.Errorf("Found mismatch between chunks and index, block is only partially written (missing in index: %d, missing in directory: %d)", missingInIndex, missingInFiles)
+	}
+	return nil
 }
 
 // PrometheusIssue5372Err returns an error if the Stats object indicates
@@ -339,6 +392,40 @@ func (i Stats) AnyErr() error {
 	return nil
 }
 
+// GatherBlockIssueStats returns useful counters as well as outsider chunks (chunks outside of block time range) that
+// helps to assess index health. It uses GatherIndexIssueStats to discover information from within the index and adds
+// additional Stats to determine the issue state of the entire block (e.g. to discover whether a block is only partially written).
+// It considers https://github.com/prometheus/tsdb/issues/347 as something that Thanos can handle.
+// See Stats.Issue347OutsideChunks for details.
+func GatherBlockIssueStats(logger log.Logger, blockDirectory string, minTime int64, maxTime int64) (stats Stats, err error) {
+	fn := filepath.Join(blockDirectory, IndexFilename)
+	_, err = os.Stat(fn)
+	if os.IsNotExist(err) {
+		return Stats{
+			IndexMissing: true,
+		}, nil
+	}
+
+	stats, err = GatherIndexIssueStats(logger, fn, minTime, maxTime)
+	chunkDir := filepath.Join(blockDirectory, ChunksDirname)
+	if _, statErr := os.Stat(chunkDir); os.IsNotExist(statErr) {
+		return stats, errors.Wrap(err, "could not find chunks directory")
+	}
+	filepath.Walk(chunkDir, func(path string, info os.FileInfo, pathErr error) error {
+		if info.Name() == ChunksDirname {
+			return nil
+		}
+		for _, chunkRef := range stats.ChunksReferencedInDirectory {
+			if info.Name() == chunkRef {
+				return nil
+			}
+		}
+		stats.ChunksReferencedInDirectory = append(stats.ChunksReferencedInDirectory, info.Name())
+		return nil
+	})
+	return stats, err
+}
+
 // GatherIndexIssueStats returns useful counters as well as outsider chunks (chunks outside of block time range) that
 // helps to assess index health.
 // It considers https://github.com/prometheus/tsdb/issues/347 as something that Thanos can handle.
@@ -395,6 +482,20 @@ func GatherIndexIssueStats(logger log.Logger, fn string, minTime int64, maxTime 
 		ooo := 0
 		// Per chunk in series.
 		for i, c := range chks {
+			referencedAlready := false
+			// c.Ref contains a reference indicating the chunk file and the offset within the file
+			// the 4 most significant bytes denote the seqence id.
+			// the chunk file is created by using the sequence number adding 1 to it and
+			// padding it with zeroes to get a 6 digit number (base 10).
+			ref := fmt.Sprintf("%06d", (c.Ref>>32)+1)
+			for _, chunkRef := range stats.ChunksReferencedInIndex {
+				if ref == chunkRef {
+					referencedAlready = true
+				}
+			}
+			if !referencedAlready {
+				stats.ChunksReferencedInIndex = append(stats.ChunksReferencedInIndex, ref)
+			}
 			// Chunk vs the block ranges.
 			if c.MinTime < minTime || c.MaxTime > maxTime {
 				stats.OutsideChunks++
