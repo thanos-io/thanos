@@ -145,7 +145,7 @@ func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (
 		return nil, err
 	}
 	if _, err := resp.Body.Read(nil); err != nil {
-		runutil.CloseWithLogOnErr(b.logger, resp.Body, "cos get range obj close")
+		runutil.ExhaustCloseWithLogOnErr(b.logger, resp.Body, "cos get range obj close")
 		return nil, err
 	}
 
