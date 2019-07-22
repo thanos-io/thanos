@@ -15,8 +15,6 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/improbable-eng/thanos/pkg/store/prompb"
 	conntrack "github.com/mwitkow/go-conntrack"
 	"github.com/opentracing-contrib/go-stdlib/nethttp"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -26,6 +24,8 @@ import (
 	"github.com/prometheus/common/route"
 	promtsdb "github.com/prometheus/prometheus/storage/tsdb"
 	terrors "github.com/prometheus/tsdb/errors"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/prompb"
 )
 
 // Options for the web Handler.

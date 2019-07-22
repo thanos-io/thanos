@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/runutil"
 	cos "github.com/mozillazg/go-cos"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	yaml "gopkg.in/yaml.v2"
 )
 

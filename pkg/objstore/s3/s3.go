@@ -18,14 +18,14 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/runutil"
 	minio "github.com/minio/minio-go/v6"
 	"github.com/minio/minio-go/v6/pkg/credentials"
 	"github.com/minio/minio-go/v6/pkg/encrypt"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
+	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -298,7 +298,7 @@ func (b *Bucket) guessFileSize(name string, r io.Reader) int64 {
 
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
-	// TODO(https://github.com/improbable-eng/thanos/issues/678): Remove guessing length when minio provider will support multipart upload without this.
+	// TODO(https://github.com/thanos-io/thanos/issues/678): Remove guessing length when minio provider will support multipart upload without this.
 	fileSize := b.guessFileSize(name, r)
 
 	if _, err := b.client.PutObjectWithContext(

@@ -27,7 +27,7 @@ Thanos will work in cloud native environments as well as more traditional ones. 
 
 ## Get Thanos!
 
-You can find the latest Thanos release [here](https://github.com/improbable-eng/thanos/releases).
+You can find the latest Thanos release [here](https://github.com/thanos-io/thanos/releases).
 
 
 If you want to build Thanos from source you would need a working installation of the Go [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`).
@@ -35,8 +35,8 @@ If you want to build Thanos from source you would need a working installation of
 Thanos can be downloaded and built by running:
 
 ```bash
-go get -d github.com/improbable-eng/thanos/...
-cd ${GOPATH}/src/github.com/improbable-eng/thanos
+go get -d github.com/thanos-io/thanos/...
+cd ${GOPATH}/src/github.com/thanos-io/thanos
 make
 ```
 

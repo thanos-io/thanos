@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestWriteReadIndexCache(t *testing.T) {

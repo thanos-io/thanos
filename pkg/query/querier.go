@@ -6,11 +6,11 @@ import (
 	"strings"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 // WarningReporter allows to report warnings to frontend layer.

@@ -13,9 +13,9 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/version"
+	"github.com/thanos-io/thanos/pkg/objstore"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"

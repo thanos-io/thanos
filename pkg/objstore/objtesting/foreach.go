@@ -6,14 +6,14 @@ import (
 	"time"
 
 	"github.com/fortytw2/leaktest"
-	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/objstore/azure"
-	"github.com/improbable-eng/thanos/pkg/objstore/cos"
-	"github.com/improbable-eng/thanos/pkg/objstore/gcs"
-	"github.com/improbable-eng/thanos/pkg/objstore/inmem"
-	"github.com/improbable-eng/thanos/pkg/objstore/s3"
-	"github.com/improbable-eng/thanos/pkg/objstore/swift"
-	"github.com/improbable-eng/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/objstore/azure"
+	"github.com/thanos-io/thanos/pkg/objstore/cos"
+	"github.com/thanos-io/thanos/pkg/objstore/gcs"
+	"github.com/thanos-io/thanos/pkg/objstore/inmem"
+	"github.com/thanos-io/thanos/pkg/objstore/s3"
+	"github.com/thanos-io/thanos/pkg/objstore/swift"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 // ForeachStore runs given test using all available objstore implementations.

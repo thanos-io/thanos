@@ -9,16 +9,16 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/objstore/client"
-	"github.com/improbable-eng/thanos/pkg/objstore/s3"
-	"github.com/improbable-eng/thanos/pkg/promclient"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/objstore/s3"
+	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/testutil"
 	yaml "gopkg.in/yaml.v2"
 )
 

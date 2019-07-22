@@ -12,19 +12,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 
 	"github.com/prometheus/tsdb/fileutil"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/chunks"
 	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
 const (
@@ -446,7 +446,7 @@ type ignoreFnType func(mint, maxt int64, prev *chunks.Meta, curr *chunks.Meta) (
 // - all "complete" outsiders (they will not accessed anyway)
 // - removes all near "complete" outside chunks introduced by https://github.com/prometheus/tsdb/issues/347.
 // Fixable inconsistencies are resolved in the new block.
-// TODO(bplotka): https://github.com/improbable-eng/thanos/issues/378
+// TODO(bplotka): https://github.com/thanos-io/thanos/issues/378
 func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceType, ignoreChkFns ...ignoreFnType) (resid ulid.ULID, err error) {
 	if len(ignoreChkFns) == 0 {
 		return resid, errors.New("no ignore chunk function specified")

@@ -11,9 +11,6 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/value"
 	"github.com/prometheus/tsdb"
@@ -21,6 +18,9 @@ import (
 	"github.com/prometheus/tsdb/chunks"
 	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestExpandChunkIterator(t *testing.T) {

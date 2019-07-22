@@ -6,9 +6,9 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
 // Apply removes blocks depending on the specified retentionByResolution based on blocks MaxTime.

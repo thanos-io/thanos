@@ -10,8 +10,8 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/component"
 	"github.com/prometheus/common/route"
+	"github.com/thanos-io/thanos/pkg/component"
 )
 
 const (

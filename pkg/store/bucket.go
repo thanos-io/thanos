@@ -18,17 +18,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
-	"github.com/improbable-eng/thanos/pkg/compact/downsample"
-	"github.com/improbable-eng/thanos/pkg/component"
-	"github.com/improbable-eng/thanos/pkg/extprom"
-	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/pool"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/improbable-eng/thanos/pkg/strutil"
-	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
@@ -38,6 +27,17 @@ import (
 	"github.com/prometheus/tsdb/fileutil"
 	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/compact/downsample"
+	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/pool"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/strutil"
+	"github.com/thanos-io/thanos/pkg/tracing"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -1340,7 +1340,7 @@ func (p *postingGroup) Postings() index.Postings {
 
 	for i, posting := range p.postings {
 		if posting == nil {
-			// This should not happen. Debug for https://github.com/improbable-eng/thanos/issues/874.
+			// This should not happen. Debug for https://github.com/thanos-io/thanos/issues/874.
 			return index.ErrPostings(errors.Errorf("at least one of %d postings is nil for %s. It was never fetched.", i, p.keys[i]))
 		}
 	}

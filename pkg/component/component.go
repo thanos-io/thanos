@@ -3,7 +3,7 @@ package component
 import (
 	"strings"
 
-	"github.com/improbable-eng/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 // Component is a generic component interface.

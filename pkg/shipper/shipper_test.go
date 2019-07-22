@@ -8,10 +8,10 @@ import (
 	"testing"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/tsdb"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestShipperTimestamps(t *testing.T) {

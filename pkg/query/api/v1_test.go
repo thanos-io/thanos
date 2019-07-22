@@ -30,10 +30,6 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/compact"
-	extpromhttp "github.com/improbable-eng/thanos/pkg/extprom/http"
-	"github.com/improbable-eng/thanos/pkg/query"
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
@@ -41,6 +37,10 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/thanos-io/thanos/pkg/compact"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/query"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func testQueryableCreator(queryable storage.Queryable) query.QueryableCreator {

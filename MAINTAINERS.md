@@ -35,7 +35,7 @@ Please reach any of the maintainer on slack or email if you want to help as well
 
 ### Triage labels
 
-To improve navigating through issues and PRs we introduce various [labels](https://github.com/improbable-eng/thanos/issues/labels). Part of triaging process for Triage and Maintainers
+To improve navigating through issues and PRs we introduce various [labels](https://github.com/thanos-io/thanos/issues/labels). Part of triaging process for Triage and Maintainers
 is to adjust those labels if needed manual. The `Prow` system can automate a portion of this in future.
 
 The main labels are: 

@@ -15,12 +15,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/objstore/s3"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/run"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/objstore/s3"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/testutil"
 	"google.golang.org/grpc"
 )
 

@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
-	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/value"
@@ -19,6 +17,8 @@ import (
 	tsdberrors "github.com/prometheus/tsdb/errors"
 	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
 // Standard downsampling resolution levels in Thanos.

@@ -1,8 +1,8 @@
 # Thanosbench
-A series of benchmarking/stress test tools for [thanos](https://github.com/improbable-eng/thanos).
+A series of benchmarking/stress test tools for [thanos](https://github.com/thanos-io/thanos).
 
 ## Installation
-1. Fetch thanosbench `go get github.com/improbable-eng/thanosbench`
+1. Fetch thanosbench `go get github.com/thanos-io/thanosbench`
 1. Install thanosbench with `make`
 1. Create cloud resources for the load test k8s cluster.
    * `cd terraform`
