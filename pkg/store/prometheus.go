@@ -18,14 +18,14 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
-	"github.com/improbable-eng/thanos/pkg/component"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/improbable-eng/thanos/pkg/store/prompb"
-	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/prompb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/tracing"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -175,12 +175,12 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		lset := p.translateAndExtendLabels(e.Labels, externalLabels)
 
 		if len(e.Samples) == 0 {
-			// As found in https://github.com/improbable-eng/thanos/issues/381
+			// As found in https://github.com/thanos-io/thanos/issues/381
 			// Prometheus can give us completely empty time series. Ignore these with log until we figure out that
 			// this is expected from Prometheus perspective.
 			level.Warn(p.logger).Log(
 				"msg",
-				"found timeseries without any chunk. See https://github.com/improbable-eng/thanos/issues/381 for details",
+				"found timeseries without any chunk. See https://github.com/thanos-io/thanos/issues/381 for details",
 				"lset",
 				fmt.Sprintf("%v", lset),
 			)
@@ -189,7 +189,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 
 		// XOR encoding supports a max size of 2^16 - 1 samples, so we need
 		// to chunk all samples into groups of no more than 2^16 - 1
-		// See: https://github.com/improbable-eng/thanos/pull/718
+		// See: https://github.com/thanos-io/thanos/pull/718
 		aggregatedChunks, err := p.chunkSamples(e, math.MaxUint16)
 		if err != nil {
 			return err
@@ -258,7 +258,7 @@ func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prom
 		return nil, errors.Wrap(err, "send request")
 	}
 	spanReqDo.Finish()
-	defer runutil.CloseWithLogOnErr(p.logger, presp.Body, "prom series request body")
+	defer runutil.ExhaustCloseWithLogOnErr(p.logger, presp.Body, "prom series request body")
 
 	if presp.StatusCode/100 != 2 {
 		return nil, errors.Errorf("request failed with code %s", presp.Status)
@@ -388,7 +388,7 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesR
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	defer runutil.CloseWithLogOnErr(p.logger, resp.Body, "label names request body")
+	defer runutil.ExhaustCloseWithLogOnErr(p.logger, resp.Body, "label names request body")
 
 	if resp.StatusCode/100 != 2 {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("request Prometheus server failed, code %s", resp.Status))
@@ -448,7 +448,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	defer runutil.CloseWithLogOnErr(p.logger, resp.Body, "label values request body")
+	defer runutil.ExhaustCloseWithLogOnErr(p.logger, resp.Body, "label values request body")
 
 	if resp.StatusCode/100 != 2 {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("request Prometheus server failed, code %s", resp.Status))

@@ -9,11 +9,11 @@ import (
 	trace "cloud.google.com/go/trace/apiv1"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/tracing"
 	gcloudtracer "github.com/lovoo/gcloud-opentracing"
 	"github.com/opentracing/basictracer-go"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/common/version"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 type tracer struct {

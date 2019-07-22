@@ -15,16 +15,16 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
-	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/objstore/objtesting"
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/objstore/objtesting"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestSyncer_SyncMetas_e2e(t *testing.T) {

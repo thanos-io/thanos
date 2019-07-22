@@ -10,13 +10,13 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/component"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/improbable-eng/thanos/pkg/store"
-	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"google.golang.org/grpc"
 )
 

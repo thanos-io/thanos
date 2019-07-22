@@ -3,7 +3,7 @@ package azure
 import (
 	"testing"
 
-	"github.com/improbable-eng/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestConfig_validate(t *testing.T) {

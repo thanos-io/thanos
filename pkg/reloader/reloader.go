@@ -68,8 +68,8 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
 // Reloader can watch config files and trigger reloads of a Prometheus server.
@@ -329,7 +329,7 @@ func (r *Reloader) triggerReload(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "reload request failed")
 	}
-	defer runutil.CloseWithLogOnErr(r.logger, resp.Body, "trigger reload resp body")
+	defer runutil.ExhaustCloseWithLogOnErr(r.logger, resp.Body, "trigger reload resp body")
 
 	if resp.StatusCode != 200 {
 		return errors.Errorf("received non-200 response: %s; have you set `--web.enable-lifecycle` Prometheus flag?", resp.Status)

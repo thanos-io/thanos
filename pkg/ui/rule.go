@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	extpromhttp "github.com/improbable-eng/thanos/pkg/extprom/http"
-	thanosrule "github.com/improbable-eng/thanos/pkg/rule"
-	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/rules"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	thanosrule "github.com/thanos-io/thanos/pkg/rule"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 type Rule struct {

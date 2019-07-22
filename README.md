@@ -1,10 +1,9 @@
 <p align="center"><img src="docs/img/Thanos-logo_fullmedium.png" alt="Thanos Logo"></p>
 
-[![CircleCI](https://circleci.com/gh/improbable-eng/thanos.svg?style=svg)](https://circleci.com/gh/improbable-eng/thanos)
-[![Go Report Card](https://goreportcard.com/badge/github.com/improbable-eng/thanos)](https://goreportcard.com/report/github.com/improbable-eng/thanos)
-[![GoDoc](https://godoc.org/github.com/improbable-eng/thanos?status.svg)](https://godoc.org/github.com/improbable-eng/thanos)
-[![Slack](https://img.shields.io/badge/join%20slack-%23thanos-brightgreen.svg)](https://join.slack.com/t/improbable-eng/shared_invite/enQtMzQ1ODcyMzQ5MjM4LWY5ZWZmNGM2ODc5MmViNmQ3ZTA3ZTY3NzQwOTBlMTkzZmIxZTIxODk0OWU3YjZhNWVlNDU3MDlkZGViZjhkMjc)
-[![Docker Pulls](https://img.shields.io/docker/pulls/improbable/thanos.svg?maxAge=604800)](https://hub.docker.com/r/improbable/thanos/)
+[![CircleCI](https://circleci.com/gh/thanos-io/thanos.svg?style=svg)](https://circleci.com/gh/thanos-io/thanos)
+[![Go Report Card](https://goreportcard.com/badge/github.com/thanos-io/thanos)](https://goreportcard.com/report/github.com/thanos-io/thanos)
+[![GoDoc](https://godoc.org/github.com/thanos-io/thanos?status.svg)](https://godoc.org/github.com/thanos-io/thanos)
+[![Slack](https://img.shields.io/badge/join%20slack-%23thanos-brightgreen.svg)](https://slack.cncf.io/)
 [![Netlify Status](https://api.netlify.com/api/v1/badges/664a5091-934c-4b0e-a7b6-bc12f822a590/deploy-status)](https://app.netlify.com/sites/thanos-io/deploys)
 
 ## Overview
@@ -34,7 +33,7 @@ Concretely the aims of the project are:
 * [Design](https://thanos.io/design.md/)
 * [Prom Meetup Slides](https://www.slideshare.net/BartomiejPotka/thanos-global-durable-prometheus-monitoring)
 * [Introduction blog post](https://improbable.io/games/blog/thanos-prometheus-at-scale)
-* [Benchmarks](https://github.com/improbable-eng/thanos/tree/master/benchmark)
+* [Benchmarks](https://github.com/thanos-io/thanos/tree/master/benchmark)
 * [Proposals](docs/proposals)
 * [Integrations](docs/integrations.md)
 
@@ -79,8 +78,8 @@ Contributions are very welcome! See our [CONTRIBUTING.md](CONTRIBUTING.md) for m
 Thanos is an open source project and we value and welcome new contributors and members
 of the community. Here are ways to get in touch with the community:
 
-* Slack: [#thanos](https://join.slack.com/t/improbable-eng/shared_invite/enQtMzQ1ODcyMzQ5MjM4LWY5ZWZmNGM2ODc5MmViNmQ3ZTA3ZTY3NzQwOTBlMTkzZmIxZTIxODk0OWU3YjZhNWVlNDU3MDlkZGViZjhkMjc)
-* Issue Tracker: [GitHub Issues](https://github.com/improbable-eng/thanos/issues)
+* Slack: [#thanos](https://slack.cncf.io/)
+* Issue Tracker: [GitHub Issues](https://github.com/thanos-io/thanos/issues)
 
 ## Maintainers
 

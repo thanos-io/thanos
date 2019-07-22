@@ -36,7 +36,7 @@ func main() {
 }
 
 func randomMetrics(w http.ResponseWriter, _ *http.Request) {
-	// TODO(adamhosier) these are dummy metrics. These should be more realistic & follow https://github.com/improbable-eng/thanos/issues/346
+	// TODO(adamhosier) these are dummy metrics. These should be more realistic & follow https://github.com/thanos-io/thanos/issues/346
 	var metrics string
 	for i := 0; i < *fNumTimeseries; i++ {
 		metrics += fmt.Sprintf("ts_%d %f\n", i, rng.Float64())

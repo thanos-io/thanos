@@ -38,11 +38,18 @@
 // 	// ...
 //
 // If Close() returns error, err will capture it and return by argument.
+//
+// The rununtil.Exhaust* family of functions provide the same functionality but
+// they take an io.ReadCloser and they exhaust the whole reader before closing
+// them. They are useful when trying to use http keep-alive connections because
+// for the same connection to be re-used the whole response body needs to be
+// exhausted.
 package runutil
 
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"time"
 
@@ -108,6 +115,16 @@ func CloseWithLogOnErr(logger log.Logger, closer io.Closer, format string, a ...
 	level.Warn(logger).Log("msg", "detected close error", "err", errors.Wrap(err, fmt.Sprintf(format, a...)))
 }
 
+// ExhaustCloseWithLogOnErr closes the io.ReadCloser with a log message on error but exhausts the reader before.
+func ExhaustCloseWithLogOnErr(logger log.Logger, r io.ReadCloser, format string, a ...interface{}) {
+	_, err := io.Copy(ioutil.Discard, r)
+	if err != nil {
+		level.Warn(logger).Log("msg", "failed to exhaust reader, performance may be impeded", "err", err)
+	}
+
+	CloseWithLogOnErr(logger, r, format, a...)
+}
+
 // CloseWithErrCapture runs function and on error return error by argument including the given error (usually
 // from caller function).
 func CloseWithErrCapture(err *error, closer io.Closer, format string, a ...interface{}) {
@@ -115,6 +132,20 @@ func CloseWithErrCapture(err *error, closer io.Closer, format string, a ...inter
 
 	merr.Add(*err)
 	merr.Add(errors.Wrapf(closer.Close(), format, a...))
+
+	*err = merr.Err()
+}
+
+// ExhaustCloseWithErrCapture closes the io.ReadCloser with error capture but exhausts the reader before.
+func ExhaustCloseWithErrCapture(err *error, r io.ReadCloser, format string, a ...interface{}) {
+	_, copyErr := io.Copy(ioutil.Discard, r)
+
+	CloseWithErrCapture(err, r, format, a...)
+
+	// Prepend the io.Copy error.
+	merr := tsdberrors.MultiError{}
+	merr.Add(copyErr)
+	merr.Add(*err)
 
 	*err = merr.Err()
 }

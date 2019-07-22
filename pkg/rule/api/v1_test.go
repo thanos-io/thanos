@@ -11,13 +11,13 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	qapi "github.com/improbable-eng/thanos/pkg/query/api"
-	thanosrule "github.com/improbable-eng/thanos/pkg/rule"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/util/testutil"
+	qapi "github.com/thanos-io/thanos/pkg/query/api"
+	thanosrule "github.com/thanos-io/thanos/pkg/rule"
 )
 
 type rulesRetrieverMock struct {

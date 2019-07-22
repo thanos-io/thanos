@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/rulefmt"
 	"github.com/prometheus/prometheus/rules"
 	tsdberrors "github.com/prometheus/tsdb/errors"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	yaml "gopkg.in/yaml.v2"
 )
 

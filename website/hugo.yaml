@@ -28,8 +28,8 @@ permalinks:
   proposals: "/proposals/:filename.md"
 
 params:
-  SlackInvite: "https://join.slack.com/t/improbable-eng/shared_invite/enQtMzQ1ODcyMzQ5MjM4LWY5ZWZmNGM2ODc5MmViNmQ3ZTA3ZTY3NzQwOTBlMTkzZmIxZTIxODk0OWU3YjZhNWVlNDU3MDlkZGViZjhkMjc"
-  GithubUser: "improbable-eng"
+  SlackInvite: "https://slack.cncf.io"
+  GithubUser: "thanos-io"
   GithubProject: "thanos"
   TwitterHandle: "ThanosMetrics"
   Description: "Highly available Prometheus setup with long term storage capabilities."

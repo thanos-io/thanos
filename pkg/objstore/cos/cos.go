@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/runutil"
 	cos "github.com/mozillazg/go-cos"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -145,7 +145,7 @@ func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (
 		return nil, err
 	}
 	if _, err := resp.Body.Read(nil); err != nil {
-		runutil.CloseWithLogOnErr(b.logger, resp.Body, "cos get range obj close")
+		runutil.ExhaustCloseWithLogOnErr(b.logger, resp.Body, "cos get range obj close")
 		return nil, err
 	}
 

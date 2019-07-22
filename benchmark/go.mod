@@ -1,4 +1,4 @@
-module github.com/improbable-eng/thanos/benchmark
+module github.com/thanos-io/thanos/benchmark
 
 require (
 	cloud.google.com/go v0.25.0

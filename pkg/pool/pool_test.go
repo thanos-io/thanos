@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/fortytw2/leaktest"
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestBytesPool(t *testing.T) {

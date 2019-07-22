@@ -23,15 +23,15 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/tracing"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -68,7 +68,7 @@ func ExternalLabels(ctx context.Context, logger log.Logger, base *url.URL) (labe
 	if err != nil {
 		return nil, errors.Wrapf(err, "request flags against %s", u.String())
 	}
-	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
+	defer runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "query body")
 
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -185,7 +185,7 @@ func ConfiguredFlags(ctx context.Context, logger log.Logger, base *url.URL) (Fla
 	if err != nil {
 		return Flags{}, errors.Wrapf(err, "request config against %s", u.String())
 	}
-	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
+	defer runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "query body")
 
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -234,7 +234,7 @@ func Snapshot(ctx context.Context, logger log.Logger, base *url.URL, skipHead bo
 	if err != nil {
 		return "", errors.Wrapf(err, "request snapshot against %s", u.String())
 	}
-	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
+	defer runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "query body")
 
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -317,7 +317,7 @@ func QueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query s
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "perform GET request against %s", u.String())
 	}
-	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
+	defer runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "query body")
 
 	// Decode only ResultType and load Result only as RawJson since we don't know
 	// structure of the Result yet.
@@ -452,7 +452,7 @@ func MetricValues(ctx context.Context, logger log.Logger, base *url.URL, perMetr
 	if err != nil {
 		return errors.Wrapf(err, "perform GET request against %s", u.String())
 	}
-	defer runutil.CloseWithLogOnErr(logger, resp.Body, "metrics body")
+	defer runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "metrics body")
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Errorf("server returned HTTP status %s", resp.Status)

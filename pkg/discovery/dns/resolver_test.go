@@ -6,8 +6,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 type mockHostnameResolver struct {

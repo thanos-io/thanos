@@ -9,8 +9,8 @@ import (
 	"io/ioutil"
 	"strings"
 
-	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
 var errNotFound = errors.New("inmem: object not found")
