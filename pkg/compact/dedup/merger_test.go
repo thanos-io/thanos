@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -49,37 +50,37 @@ func TestNewBlockGroups(t *testing.T) {
 
 	expected := []struct {
 		length    int
-		windows   []*TimeWindow
+		ranges    []*tsdb.TimeRange
 		blockNums []int
 	}{
 		{
 			length: 1,
-			windows: []*TimeWindow{
-				NewTimeWindow(100, 200),
+			ranges: []*tsdb.TimeRange{
+				NewTimeRange(100, 200),
 			},
 			blockNums: []int{2},
 		},
 		{
 			length: 2,
-			windows: []*TimeWindow{
-				NewTimeWindow(100, 200),
-				NewTimeWindow(200, 300),
+			ranges: []*tsdb.TimeRange{
+				NewTimeRange(100, 200),
+				NewTimeRange(200, 300),
 			},
 			blockNums: []int{1, 2},
 		},
 		{
 			length: 2,
-			windows: []*TimeWindow{
-				NewTimeWindow(100, 200),
-				NewTimeWindow(200, 400),
+			ranges: []*tsdb.TimeRange{
+				NewTimeRange(100, 200),
+				NewTimeRange(200, 400),
 			},
 			blockNums: []int{1, 3},
 		},
 		{
 			length: 2,
-			windows: []*TimeWindow{
-				NewTimeWindow(100, 300),
-				NewTimeWindow(300, 400),
+			ranges: []*tsdb.TimeRange{
+				NewTimeRange(100, 300),
+				NewTimeRange(300, 400),
 			},
 			blockNums: []int{2, 2},
 		},
@@ -91,7 +92,7 @@ func TestNewBlockGroups(t *testing.T) {
 		groups := NewBlockGroups(replicas)
 		testutil.Assert(t, len(groups) == expected[i].length, "new block groups failed")
 		for j, g := range groups {
-			testutil.Assert(t, reflect.DeepEqual(g.window, expected[i].windows[j]), "new block groups failed")
+			testutil.Assert(t, reflect.DeepEqual(g.tr, expected[i].ranges[j]), "new block groups failed")
 			testutil.Assert(t, len(g.blocks) == expected[i].blockNums[j], "new block groups failed")
 
 		}

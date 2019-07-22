@@ -15,6 +15,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/chunks"
 	"github.com/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block"
@@ -25,22 +26,13 @@ import (
 	"github.com/thanos-io/thanos/pkg/query"
 )
 
-type TimeWindow struct {
-	MinTime int64
-	MaxTime int64
-}
-
-func (tw *TimeWindow) String() string {
-	return fmt.Sprintf("[%d, %d]", tw.MinTime, tw.MaxTime)
-}
-
-func NewTimeWindow(minTime, maxTime int64) *TimeWindow {
-	return &TimeWindow{MinTime: minTime, MaxTime: maxTime}
+func NewTimeRange(minTime, maxTime int64) *tsdb.TimeRange {
+	return &tsdb.TimeRange{Min: minTime, Max: maxTime}
 }
 
 // Group blocks under the same time window from different replicas
 type BlockGroup struct {
-	window *TimeWindow
+	tr     *tsdb.TimeRange
 	blocks []*metadata.Meta
 }
 
@@ -54,11 +46,11 @@ func (g *BlockGroup) String() string {
 		builder.WriteString(b.ULID.String())
 	}
 	builder.WriteString("]")
-	return fmt.Sprintf("BlockGroup{window: %s, blocks: %s}", g.window, builder.String())
+	return fmt.Sprintf("BlockGroup{tr: %s, blocks: %s}", g.tr, builder.String())
 }
 
-func NewBlockGroup(window *TimeWindow, blocks []*metadata.Meta) *BlockGroup {
-	return &BlockGroup{window: window, blocks: blocks}
+func NewBlockGroup(tr *tsdb.TimeRange, blocks []*metadata.Meta) *BlockGroup {
+	return &BlockGroup{tr: tr, blocks: blocks}
 }
 
 type BlockGroups []*BlockGroup
@@ -82,7 +74,7 @@ func NewBlockGroups(replicas Replicas) BlockGroups {
 		return d1 > d2
 	})
 	groups := make(BlockGroups, 0)
-	covered := make([]*TimeWindow, 0)
+	covered := make([]*tsdb.TimeRange, 0)
 	for _, b := range blocks {
 		tw := getUncoveredTimeWindow(covered, b)
 		if tw == nil {
@@ -92,37 +84,37 @@ func NewBlockGroups(replicas Replicas) BlockGroups {
 		covered = append(covered, tw)
 	}
 	sort.Slice(groups, func(i, j int) bool {
-		return groups[i].window.MinTime < groups[j].window.MinTime
+		return groups[i].tr.Min < groups[j].tr.Min
 	})
 	return groups
 }
 
-func getUncoveredTimeWindow(covered []*TimeWindow, b *metadata.Meta) *TimeWindow {
+func getUncoveredTimeWindow(covered []*tsdb.TimeRange, b *metadata.Meta) *tsdb.TimeRange {
 	minTime := b.MinTime
 	maxTime := b.MaxTime
 	for _, v := range covered {
-		if minTime >= v.MinTime && minTime < v.MaxTime {
-			minTime = v.MaxTime
+		if minTime >= v.Min && minTime < v.Max {
+			minTime = v.Max
 		}
-		if maxTime > v.MinTime && maxTime <= v.MaxTime {
-			maxTime = v.MinTime
+		if maxTime > v.Min && maxTime <= v.Max {
+			maxTime = v.Min
 		}
 		if minTime >= maxTime {
 			return nil
 		}
 	}
-	return NewTimeWindow(minTime, maxTime)
+	return NewTimeRange(minTime, maxTime)
 }
 
-func getBlockGroup(blocks []*metadata.Meta, tw *TimeWindow) *BlockGroup {
+func getBlockGroup(blocks []*metadata.Meta, tr *tsdb.TimeRange) *BlockGroup {
 	target := make([]*metadata.Meta, 0)
 	for _, b := range blocks {
-		if b.MaxTime <= tw.MinTime || b.MinTime >= tw.MaxTime {
+		if b.MaxTime <= tr.Min || b.MinTime >= tr.Max {
 			continue
 		}
 		target = append(target, b)
 	}
-	return NewBlockGroup(tw, target)
+	return NewBlockGroup(tr, target)
 }
 
 type ReplicaMerger struct {
@@ -256,20 +248,20 @@ func (rm *ReplicaMerger) merge(ctx context.Context, resolution int64, group *Blo
 	}
 
 	newId := ulid.MustNew(ulid.Now(), rand.New(rand.NewSource(time.Now().UnixNano())))
-	newMeta := rm.newMeta(baseBlock, newId, group.window)
+	newMeta := rm.newMeta(baseBlock, newId, group.tr)
 	blockDir := filepath.Join(rm.dir, newMeta.ULID.String())
 
-	if err := rm.write(readers, blockDir, newMeta, group.window, resolution); err != nil {
+	if err := rm.write(readers, blockDir, newMeta, group.tr, resolution); err != nil {
 		return nil, err
 	}
 	return &newId, nil
 }
 
-func (rm *ReplicaMerger) newMeta(baseMeta *metadata.Meta, newId ulid.ULID, tw *TimeWindow) *metadata.Meta {
+func (rm *ReplicaMerger) newMeta(baseMeta *metadata.Meta, newId ulid.ULID, tr *tsdb.TimeRange) *metadata.Meta {
 	newMeta := *baseMeta
 	newMeta.ULID = newId
-	newMeta.MinTime = tw.MinTime
-	newMeta.MaxTime = tw.MaxTime
+	newMeta.MinTime = tr.Min
+	newMeta.MaxTime = tr.Max
 	newSources := make([]ulid.ULID, 0, len(newMeta.Compaction.Sources))
 	var hasOldId bool
 	for _, source := range newMeta.Compaction.Sources {
@@ -287,7 +279,7 @@ func (rm *ReplicaMerger) newMeta(baseMeta *metadata.Meta, newId ulid.ULID, tw *T
 	return &newMeta
 }
 
-func (rm *ReplicaMerger) write(readers []*BlockReader, blockDir string, meta *metadata.Meta, tw *TimeWindow, resolution int64) error {
+func (rm *ReplicaMerger) write(readers []*BlockReader, blockDir string, meta *metadata.Meta, tr *tsdb.TimeRange, resolution int64) error {
 	symbols, err := rm.getMergedSymbols(readers)
 	if err != nil {
 		return err
@@ -321,7 +313,7 @@ func (rm *ReplicaMerger) write(readers []*BlockReader, blockDir string, meta *me
 			running = true
 		}
 
-		cs, err := rm.getMergedChunkSeries(buf, tw, resolution)
+		cs, err := rm.getMergedChunkSeries(buf, tr, resolution)
 		if err != nil {
 			return err
 		}
@@ -366,7 +358,7 @@ func (rm *ReplicaMerger) getMergedSymbols(readers []*BlockReader) (map[string]st
 	return result, nil
 }
 
-func (rm *ReplicaMerger) getMergedChunkSeries(readers []*SampleReader, tw *TimeWindow, resolution int64) (*ChunkSeries, error) {
+func (rm *ReplicaMerger) getMergedChunkSeries(readers []*SampleReader, tr *tsdb.TimeRange, resolution int64) (*ChunkSeries, error) {
 	buf := make([]*SampleReader, len(readers))
 	copy(buf, readers)
 
@@ -385,7 +377,7 @@ func (rm *ReplicaMerger) getMergedChunkSeries(readers []*SampleReader, tw *TimeW
 	}
 
 	lset := buf[0].lset
-	d0, err := buf[0].Read(tw)
+	d0, err := buf[0].Read(tr)
 	if err != nil {
 		return nil, err
 	}
@@ -397,7 +389,7 @@ func (rm *ReplicaMerger) getMergedChunkSeries(readers []*SampleReader, tw *TimeW
 		if labels.Compare(buf[i].lset, lset) != 0 {
 			break
 		}
-		di, err := buf[i].Read(tw)
+		di, err := buf[i].Read(tr)
 		if err != nil {
 			return nil, err
 		}
@@ -441,7 +433,7 @@ func (rm *ReplicaMerger) mergeSamples(a, b map[SampleType][]*Sample, res int64) 
 
 func (rm *ReplicaMerger) upload(ctx context.Context, group *BlockGroup, newId *ulid.ULID) error {
 	blockDir := filepath.Join(rm.dir, newId.String())
-	if err := block.VerifyIndex(rm.logger, filepath.Join(blockDir, block.IndexFilename), group.window.MinTime, group.window.MaxTime); err != nil {
+	if err := block.VerifyIndex(rm.logger, filepath.Join(blockDir, block.IndexFilename), group.tr.Min, group.tr.Max); err != nil {
 		return errors.Wrapf(err, "agg block index not valid: %s", newId)
 	}
 	level.Debug(rm.logger).Log("msg", "verified agg block index", "block", newId, "dir", blockDir)
@@ -456,7 +448,7 @@ func (rm *ReplicaMerger) upload(ctx context.Context, group *BlockGroup, newId *u
 func (rm *ReplicaMerger) clean(ctx context.Context, group *BlockGroup, newId *ulid.ULID) error {
 	// delete blocks in remote storage
 	for _, b := range group.blocks {
-		if b.MaxTime > group.window.MaxTime {
+		if b.MaxTime > group.tr.Max {
 			continue
 		}
 		if err := rm.deleteRemoteBlock(&b.ULID); err != nil {

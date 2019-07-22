@@ -7,11 +7,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/improbable-eng/thanos/pkg/compact/downsample"
-	"github.com/prometheus/tsdb/chunkenc"
-
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 

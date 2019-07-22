@@ -5,7 +5,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/compact/downsample"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/chunkenc"
@@ -13,6 +12,7 @@ import (
 	tsdberrors "github.com/prometheus/tsdb/errors"
 	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/compact/downsample"
 )
 
 // maxSamplesPerChunk is approximately the max number of samples that we may have in any given chunk.
@@ -205,17 +205,17 @@ func NewSampleReader(logger log.Logger, cr tsdb.ChunkReader, lset labels.Labels,
 	}
 }
 
-func (r *SampleReader) Read(tw *TimeWindow) (map[SampleType][]*Sample, error) {
+func (r *SampleReader) Read(tr *tsdb.TimeRange) (map[SampleType][]*Sample, error) {
 	if len(r.chks) == 0 {
 		return nil, nil
 	}
 	if r.res == 0 {
-		return r.readRawSamples(tw)
+		return r.readRawSamples(tr)
 	}
-	return r.readDownSamples(tw)
+	return r.readDownSamples(tr)
 }
 
-func (r *SampleReader) readRawSamples(tw *TimeWindow) (map[SampleType][]*Sample, error) {
+func (r *SampleReader) readRawSamples(tr *tsdb.TimeRange) (map[SampleType][]*Sample, error) {
 	samples := make([]*Sample, 0)
 	for _, c := range r.chks {
 		chk, err := r.cr.Chunk(c.Ref)
@@ -226,7 +226,7 @@ func (r *SampleReader) readRawSamples(tw *TimeWindow) (map[SampleType][]*Sample,
 			level.Warn(r.logger).Log("msg", "find empty raw chunk", "ref", c.Ref, "labels", r.lset)
 			continue
 		}
-		ss := r.parseSamples(chk, tw)
+		ss := r.parseSamples(chk, tr)
 		if len(ss) == 0 {
 			continue
 		}
@@ -240,7 +240,7 @@ func (r *SampleReader) readRawSamples(tw *TimeWindow) (map[SampleType][]*Sample,
 	return result, nil
 }
 
-func (r *SampleReader) readDownSamples(tw *TimeWindow) (map[SampleType][]*Sample, error) {
+func (r *SampleReader) readDownSamples(tr *tsdb.TimeRange) (map[SampleType][]*Sample, error) {
 	result := make(map[SampleType][]*Sample)
 	result[CountSample] = make([]*Sample, 0)
 	result[SumSample] = make([]*Sample, 0)
@@ -261,7 +261,7 @@ func (r *SampleReader) readDownSamples(tw *TimeWindow) (map[SampleType][]*Sample
 				level.Warn(r.logger).Log("msg", "find empty downsample chunk", "type", at, "ref", c.Ref, "labels", r.lset)
 				continue
 			}
-			samples := r.parseSamples(ac, tw)
+			samples := r.parseSamples(ac, tr)
 			if len(samples) == 0 {
 				continue
 			}
@@ -271,17 +271,17 @@ func (r *SampleReader) readDownSamples(tw *TimeWindow) (map[SampleType][]*Sample
 	return result, nil
 }
 
-func (r *SampleReader) parseSamples(c chunkenc.Chunk, tw *TimeWindow) []*Sample {
+func (r *SampleReader) parseSamples(c chunkenc.Chunk, tr *tsdb.TimeRange) []*Sample {
 	samples := make([]*Sample, 0)
 	iterator := c.Iterator()
 	for iterator.Next() {
 		timestamp, value := iterator.At()
-		if timestamp < tw.MinTime {
+		if timestamp < tr.Min {
 			continue
 		}
 		// Ignore the data point which timestamp is same with MaxTime.
 		// Make sure the block use scope [MinTime, MaxTime) instead of [MinTime, MaxTime]
-		if timestamp >= tw.MaxTime {
+		if timestamp >= tr.Max {
 			break
 		}
 		samples = append(samples, &Sample{
