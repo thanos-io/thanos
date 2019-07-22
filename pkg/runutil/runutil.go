@@ -118,7 +118,9 @@ func CloseWithLogOnErr(logger log.Logger, closer io.Closer, format string, a ...
 // ExhaustCloseWithLogOnErr closes the io.ReadCloser with a log message on error but exhausts the reader before.
 func ExhaustCloseWithLogOnErr(logger log.Logger, r io.ReadCloser, format string, a ...interface{}) {
 	_, err := io.Copy(ioutil.Discard, r)
-	level.Warn(logger).Log("msg", "failed to exhaust reader, performance may be impeded", "err", err)
+	if err != nil {
+		level.Warn(logger).Log("msg", "failed to exhaust reader, performance may be impeded", "err", err)
+	}
 
 	CloseWithLogOnErr(logger, r, format, a...)
 }
