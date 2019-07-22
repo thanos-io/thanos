@@ -46,7 +46,7 @@ func (g *BlockGroup) String() string {
 		builder.WriteString(b.ULID.String())
 	}
 	builder.WriteString("]")
-	return fmt.Sprintf("BlockGroup{tr: %s, blocks: %s}", g.tr, builder.String())
+	return fmt.Sprintf("BlockGroup{tr: {%d, %d}, blocks: %s}", g.tr.Min, g.tr.Max, builder.String())
 }
 
 func NewBlockGroup(tr *tsdb.TimeRange, blocks []*metadata.Meta) *BlockGroup {
@@ -402,15 +402,15 @@ func (rm *ReplicaMerger) getMergedChunkSeries(readers []*SampleReader, tr *tsdb.
 	return NewSampleSeries(lset, mergedData, resolution).ToChunkSeries()
 }
 
-func (rm *ReplicaMerger) mergeSamples(a, b map[SampleType][]*Sample, res int64) map[SampleType][]*Sample {
-	result := make(map[SampleType][]*Sample)
+func (rm *ReplicaMerger) mergeSamples(a, b map[downsample.AggrType][]*Sample, res int64) map[downsample.AggrType][]*Sample {
+	result := make(map[downsample.AggrType][]*Sample)
 	if len(a) == 0 {
 		return b
 	}
 	if len(b) == 0 {
 		return a
 	}
-	merge := func(st SampleType) []*Sample {
+	merge := func(st downsample.AggrType) []*Sample {
 		it := query.NewDedupSeriesIterator(NewSampleIterator(a[st]), NewSampleIterator(b[st]))
 		samples := make([]*Sample, 0)
 		for it.Next() {
@@ -420,14 +420,14 @@ func (rm *ReplicaMerger) mergeSamples(a, b map[SampleType][]*Sample, res int64) 
 		return samples
 	}
 	if res == 0 {
-		result[RawSample] = merge(RawSample)
+		result[rawType] = merge(rawType)
 		return result
 	}
-	result[CountSample] = merge(CountSample)
-	result[SumSample] = merge(SumSample)
-	result[MinSample] = merge(MinSample)
-	result[MaxSample] = merge(MaxSample)
-	result[CounterSample] = merge(CounterSample)
+	result[downsample.AggrCount] = merge(downsample.AggrCount)
+	result[downsample.AggrSum] = merge(downsample.AggrSum)
+	result[downsample.AggrMin] = merge(downsample.AggrMin)
+	result[downsample.AggrMax] = merge(downsample.AggrMax)
+	result[downsample.AggrCounter] = merge(downsample.AggrCounter)
 	return result
 }
 

@@ -15,18 +15,18 @@ import (
 )
 
 func TestSampleSeries_ToChunkSeries(t *testing.T) {
-	rawData := make(map[SampleType][]*Sample)
+	rawData := make(map[downsample.AggrType][]*Sample)
 	for i := 0; i < maxSamplesPerChunk; i++ {
-		rawData[RawSample] = append(rawData[RawSample], &Sample{timestamp: int64(i), value: rand.Float64()})
+		rawData[rawType] = append(rawData[rawType], &Sample{timestamp: int64(i), value: rand.Float64()})
 	}
 
-	downsampleData := make(map[SampleType][]*Sample)
+	downsampleData := make(map[downsample.AggrType][]*Sample)
 	for i := 0; i < maxSamplesPerChunk+1; i++ {
-		downsampleData[CountSample] = append(downsampleData[CountSample], &Sample{timestamp: int64(i), value: rand.Float64()})
-		downsampleData[SumSample] = append(downsampleData[SumSample], &Sample{timestamp: int64(i), value: rand.Float64()})
-		downsampleData[MinSample] = append(downsampleData[MinSample], &Sample{timestamp: int64(i), value: rand.Float64()})
-		downsampleData[MaxSample] = append(downsampleData[MaxSample], &Sample{timestamp: int64(i), value: rand.Float64()})
-		downsampleData[CounterSample] = append(downsampleData[CounterSample], &Sample{timestamp: int64(i), value: rand.Float64()})
+		downsampleData[downsample.AggrCount] = append(downsampleData[downsample.AggrCount], &Sample{timestamp: int64(i), value: rand.Float64()})
+		downsampleData[downsample.AggrSum] = append(downsampleData[downsample.AggrSum], &Sample{timestamp: int64(i), value: rand.Float64()})
+		downsampleData[downsample.AggrMin] = append(downsampleData[downsample.AggrMin], &Sample{timestamp: int64(i), value: rand.Float64()})
+		downsampleData[downsample.AggrMax] = append(downsampleData[downsample.AggrMax], &Sample{timestamp: int64(i), value: rand.Float64()})
+		downsampleData[downsample.AggrCounter] = append(downsampleData[downsample.AggrCounter], &Sample{timestamp: int64(i), value: rand.Float64()})
 	}
 
 	lset := labels.Labels{

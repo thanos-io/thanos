@@ -15,12 +15,28 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 )
 
-// maxSamplesPerChunk is approximately the max number of samples that we may have in any given chunk.
-// Please take a look at https://github.com/prometheus/tsdb/pull/397 to know where this number comes from.
-// Long story short: TSDB is made in such a way, and it is made in such a way
-// because you barely get any improvements in compression when the number of samples is beyond this.
-// Take a look at Figure 6 in this whitepaper http://www.vldb.org/pvldb/vol8/p1816-teller.pdf.
-const maxSamplesPerChunk = 120
+const (
+	// maxSamplesPerChunk is approximately the max number of samples that we may have in any given chunk.
+	// Please take a look at https://github.com/prometheus/tsdb/pull/397 to know where this number comes from.
+	// Long story short: TSDB is made in such a way, and it is made in such a way
+	// because you barely get any improvements in compression when the number of samples is beyond this.
+	// Take a look at Figure 6 in this whitepaper http://www.vldb.org/pvldb/vol8/p1816-teller.pdf.
+	maxSamplesPerChunk = 120
+
+	// Use rawType to represent the raw data.
+	// It picks the highest number possible to prevent future collisions with downsample aggregation types.
+	rawType = downsample.AggrType(0xff)
+)
+
+var (
+	downsampleAggrTypes = []downsample.AggrType{
+		downsample.AggrCount,
+		downsample.AggrSum,
+		downsample.AggrMin,
+		downsample.AggrMax,
+		downsample.AggrCounter,
+	}
+)
 
 type ChunkSeries struct {
 	lset labels.Labels
@@ -78,11 +94,11 @@ func (s *SampleIterator) Seek(t int64) bool {
 
 type SampleSeries struct {
 	lset labels.Labels
-	data map[SampleType][]*Sample
+	data map[downsample.AggrType][]*Sample
 	res  int64
 }
 
-func NewSampleSeries(lset labels.Labels, data map[SampleType][]*Sample, res int64) *SampleSeries {
+func NewSampleSeries(lset labels.Labels, data map[downsample.AggrType][]*Sample, res int64) *SampleSeries {
 	return &SampleSeries{
 		lset: lset,
 		data: data,
@@ -101,7 +117,7 @@ func (ss *SampleSeries) ToChunkSeries() (*ChunkSeries, error) {
 }
 
 func (ss *SampleSeries) toRawChunkSeries() (*ChunkSeries, error) {
-	chks, err := ss.toChunks(RawSample)
+	chks, err := ss.toChunks(rawType)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +133,7 @@ func (ss *SampleSeries) toRawChunkSeries() (*ChunkSeries, error) {
 func (ss *SampleSeries) toDownsampleChunkSeries() (*ChunkSeries, error) {
 	all := make([][]chunks.Meta, len(downsampleAggrTypes), len(downsampleAggrTypes))
 	for _, at := range downsampleAggrTypes {
-		chks, err := ss.toChunks(typeMapping[at])
+		chks, err := ss.toChunks(at)
 		if err != nil {
 			return nil, err
 		}
@@ -149,8 +165,8 @@ func (ss *SampleSeries) toDownsampleChunkSeries() (*ChunkSeries, error) {
 	}, nil
 }
 
-func (ss *SampleSeries) toChunks(st SampleType) ([]chunks.Meta, error) {
-	samples := ss.data[st]
+func (ss *SampleSeries) toChunks(at downsample.AggrType) ([]chunks.Meta, error) {
+	samples := ss.data[at]
 	if len(samples) == 0 {
 		return nil, nil
 	}
@@ -175,7 +191,7 @@ func (ss *SampleSeries) toChunks(st SampleType) ([]chunks.Meta, error) {
 			appender.Append(v.timestamp, v.value)
 		}
 		// InjectThanosMeta the chunk's counter aggregate with the last true sample.
-		if st == CounterSample {
+		if at == downsample.AggrCounter {
 			appender.Append(samples[end-1].timestamp, samples[end-1].value)
 		}
 		chks = append(chks, chunks.Meta{
@@ -205,7 +221,7 @@ func NewSampleReader(logger log.Logger, cr tsdb.ChunkReader, lset labels.Labels,
 	}
 }
 
-func (r *SampleReader) Read(tr *tsdb.TimeRange) (map[SampleType][]*Sample, error) {
+func (r *SampleReader) Read(tr *tsdb.TimeRange) (map[downsample.AggrType][]*Sample, error) {
 	if len(r.chks) == 0 {
 		return nil, nil
 	}
@@ -215,7 +231,7 @@ func (r *SampleReader) Read(tr *tsdb.TimeRange) (map[SampleType][]*Sample, error
 	return r.readDownSamples(tr)
 }
 
-func (r *SampleReader) readRawSamples(tr *tsdb.TimeRange) (map[SampleType][]*Sample, error) {
+func (r *SampleReader) readRawSamples(tr *tsdb.TimeRange) (map[downsample.AggrType][]*Sample, error) {
 	samples := make([]*Sample, 0)
 	for _, c := range r.chks {
 		chk, err := r.cr.Chunk(c.Ref)
@@ -235,18 +251,18 @@ func (r *SampleReader) readRawSamples(tr *tsdb.TimeRange) (map[SampleType][]*Sam
 	if len(samples) == 0 {
 		return nil, nil
 	}
-	result := make(map[SampleType][]*Sample)
-	result[RawSample] = samples
+	result := make(map[downsample.AggrType][]*Sample)
+	result[rawType] = samples
 	return result, nil
 }
 
-func (r *SampleReader) readDownSamples(tr *tsdb.TimeRange) (map[SampleType][]*Sample, error) {
-	result := make(map[SampleType][]*Sample)
-	result[CountSample] = make([]*Sample, 0)
-	result[SumSample] = make([]*Sample, 0)
-	result[MinSample] = make([]*Sample, 0)
-	result[MaxSample] = make([]*Sample, 0)
-	result[CounterSample] = make([]*Sample, 0)
+func (r *SampleReader) readDownSamples(tr *tsdb.TimeRange) (map[downsample.AggrType][]*Sample, error) {
+	result := make(map[downsample.AggrType][]*Sample)
+	result[downsample.AggrCount] = make([]*Sample, 0)
+	result[downsample.AggrSum] = make([]*Sample, 0)
+	result[downsample.AggrMin] = make([]*Sample, 0)
+	result[downsample.AggrMax] = make([]*Sample, 0)
+	result[downsample.AggrCounter] = make([]*Sample, 0)
 	for _, c := range r.chks {
 		chk, err := r.cr.Chunk(c.Ref)
 		if err != nil {
@@ -265,7 +281,7 @@ func (r *SampleReader) readDownSamples(tr *tsdb.TimeRange) (map[SampleType][]*Sa
 			if len(samples) == 0 {
 				continue
 			}
-			result[typeMapping[at]] = append(result[typeMapping[at]], samples...)
+			result[at] = append(result[at], samples...)
 		}
 	}
 	return result, nil
@@ -290,54 +306,6 @@ func (r *SampleReader) parseSamples(c chunkenc.Chunk, tr *tsdb.TimeRange) []*Sam
 		})
 	}
 	return samples
-}
-
-type SampleType uint8
-
-const (
-	// samples from non-downsample blocks
-	RawSample SampleType = iota
-	// samples from downsample blocks, map to downsample AggrType
-	CountSample
-	SumSample
-	MinSample
-	MaxSample
-	CounterSample
-)
-
-var (
-	typeMapping = map[downsample.AggrType]SampleType{
-		downsample.AggrCount:   CountSample,
-		downsample.AggrSum:     SumSample,
-		downsample.AggrMin:     MinSample,
-		downsample.AggrMax:     MaxSample,
-		downsample.AggrCounter: CounterSample,
-	}
-	downsampleAggrTypes = []downsample.AggrType{
-		downsample.AggrCount,
-		downsample.AggrSum,
-		downsample.AggrMin,
-		downsample.AggrMax,
-		downsample.AggrCounter,
-	}
-)
-
-func (t SampleType) String() string {
-	switch t {
-	case RawSample:
-		return "raw"
-	case CountSample:
-		return "count"
-	case SumSample:
-		return "sum"
-	case MinSample:
-		return "min"
-	case MaxSample:
-		return "max"
-	case CounterSample:
-		return "counter"
-	}
-	return "<unknown>"
 }
 
 type BlockReader struct {
