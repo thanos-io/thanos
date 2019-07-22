@@ -85,7 +85,6 @@ func (p *BytesPool) Put(b *[]byte) {
 	if b == nil {
 		return
 	}
-	var succeeded bool
 
 	for i, bktSize := range p.sizes {
 		if cap(*b) > bktSize {
@@ -93,13 +92,7 @@ func (p *BytesPool) Put(b *[]byte) {
 		}
 		*b = (*b)[:0]
 		p.buckets[i].Put(b)
-		succeeded = true
 		break
-	}
-
-	// Early return if the slice is too big and we cannot Put() it anywhere.
-	if !succeeded {
-		return
 	}
 
 	p.mtx.Lock()
