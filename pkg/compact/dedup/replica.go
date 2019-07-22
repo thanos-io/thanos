@@ -80,7 +80,7 @@ type Replicas []*Replica
 
 // Group blocks by their global configs and resolution into different replicas.
 func NewReplicas(replicaLabelName string, blocks []*metadata.Meta) (Replicas, error) {
-	m := make(map[string]map[string][]*metadata.Meta, 0)
+	m := make(map[string]map[string][]*metadata.Meta)
 	groupLabels := make(map[string]map[string]string)
 	for _, b := range blocks {
 		name, ok := b.Thanos.Labels[replicaLabelName]
@@ -91,7 +91,7 @@ func NewReplicas(replicaLabelName string, blocks []*metadata.Meta) (Replicas, er
 		group := replicaGroup(labels)
 		groupLabels[group] = labels
 		if _, ok := m[group]; !ok {
-			m[group] = make(map[string][]*metadata.Meta, 0)
+			m[group] = make(map[string][]*metadata.Meta)
 		}
 		m[group][name] = append(m[group][name], b)
 	}

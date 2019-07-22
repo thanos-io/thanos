@@ -131,7 +131,7 @@ func (ss *SampleSeries) toRawChunkSeries() (*ChunkSeries, error) {
 }
 
 func (ss *SampleSeries) toDownsampleChunkSeries() (*ChunkSeries, error) {
-	all := make([][]chunks.Meta, len(downsampleAggrTypes), len(downsampleAggrTypes))
+	all := make([][]chunks.Meta, len(downsampleAggrTypes))
 	for _, at := range downsampleAggrTypes {
 		chks, err := ss.toChunks(at)
 		if err != nil {

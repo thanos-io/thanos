@@ -289,7 +289,7 @@ func (rm *ReplicaMerger) write(readers []*BlockReader, blockDir string, meta *me
 		return err
 	}
 
-	buf := make([]*SampleReader, len(readers), len(readers))
+	buf := make([]*SampleReader, len(readers))
 
 	running := true
 	for running {
