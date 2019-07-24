@@ -12,7 +12,6 @@ It keeps a small amount of information about all remote blocks on local disk and
 ```bash
 $ thanos store \
     --data-dir        "/local/state/data/dir" \
-    --cluster.peers    "thanos-cluster.example.org" \
     --objstore.config-file "bucket.yml"
 ```
 
