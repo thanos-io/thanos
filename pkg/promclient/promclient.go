@@ -76,7 +76,7 @@ func ExternalLabels(ctx context.Context, logger log.Logger, base *url.URL) (labe
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, errors.Errorf("is 'web.enable-admin-api' flag enabled? got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
+		return nil, errors.Errorf("got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
 	}
 
 	var d struct {
@@ -242,7 +242,7 @@ func Snapshot(ctx context.Context, logger log.Logger, base *url.URL, skipHead bo
 	}
 
 	if resp.StatusCode != 200 {
-		return "", errors.Errorf("got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
+		return "", errors.Errorf("is 'web.enable-admin-api' flag enabled? got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
 	}
 
 	var d struct {
