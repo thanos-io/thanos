@@ -27,7 +27,6 @@ import (
 	terrors "github.com/prometheus/tsdb/errors"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/prompb"
-
 )
 
 // Options for the web Handler.
