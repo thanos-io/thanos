@@ -29,7 +29,6 @@ type Config struct {
 	AccessKeySecret string `yaml:"access_key_secret"`
 }
 
-
 type Bucket struct {
 	name   string
 	logger log.Logger
