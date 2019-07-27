@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-
 	"github.com/fortytw2/leaktest"
 	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/testutil"
