@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"net/http"
 	"os"
@@ -14,9 +15,9 @@ import (
 
 	alioss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -42,14 +43,14 @@ type Bucket struct {
 
 func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 	c := configFromEnv()
-	err := func (conf Config) error {
+	err := func(conf Config) error {
 		if conf.Endpoint == "" {
 			return errors.New("no aliyun oss endpoint in config file")
 		}
 		if conf.AccessKeyID == "" {
 			return errors.New("access_key_id is not present in config file")
 		}
-		if conf.AccessKeySecret == ""  {
+		if conf.AccessKeySecret == "" {
 			return errors.New("access_key_secret is not present in config file")
 		}
 		return nil
@@ -57,20 +58,78 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	if c.Bucket != "" && os.Getenv("THANOS_ALLOW_EXISTING_BUCKET_USE") == "true"  {
+	if c.Bucket != "" && os.Getenv("THANOS_ALLOW_EXISTING_BUCKET_USE") == "true" {
 		t.Log("ALIYUNOSS_BUCKET is defined. Normally this tests will create temporary bucket " +
 			"and delete it after test. Unset ALIYUNOSS_BUCKET env variable to use default logic. If you really want to run " +
 			"tests against provided (NOT USED!) bucket, set THANOS_ALLOW_EXISTING_BUCKET_USE=true.")
-		return NewTestBucketFromConfig(t,  c, true)
+		return NewTestBucketFromConfig(t, c, true)
 	}
-	return NewTestBucketFromConfig(t,  c, false)
+	return NewTestBucketFromConfig(t, c, false)
+}
+
+func calculateChunks(name string, r io.Reader) (int, int64, error) {
+	switch r.(type) {
+	case *os.File:
+		f, _ := r.(*os.File)
+		if fileInfo, err := f.Stat(); err == nil {
+			s := fileInfo.Size()
+			return int(math.Floor(float64(s) / alioss.MaxPartSize)), s % alioss.MaxPartSize, nil
+		}
+	case *strings.Reader:
+		f, _ := r.(*strings.Reader)
+		return int(math.Floor(float64(f.Size()) / alioss.MaxPartSize)), f.Size() % alioss.MaxPartSize, nil
+	}
+	return -1, 0, errors.New("unsupported implement of io.Reader")
 }
 
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
+	chunksnum, lastslice, err := calculateChunks(name, r)
+	if err != nil {
+		return err
+	}
+
 	ncloser := ioutil.NopCloser(r)
-	if err := b.bucket.PutObject(name, ncloser); err != nil {
-		return errors.Wrap(err, "upload oss object")
+	switch chunksnum {
+	case 0:
+		if err := b.bucket.PutObject(name, ncloser); err != nil {
+			return errors.Wrap(err, "failed to upload oss object")
+		}
+	default:
+		{
+			init, err := b.bucket.InitiateMultipartUpload(name)
+			if err != nil {
+				return errors.Wrap(err, "failed to initiate multi-part upload")
+			}
+			chunk := 0
+			uploadEveryPart := func(everypartsize int64, cnk int) (alioss.UploadPart, error) {
+				prt, err := b.bucket.UploadPart(init, ncloser, everypartsize, cnk)
+				if err != nil {
+					b.bucket.AbortMultipartUpload(init)
+					return prt, errors.Wrap(err, "failed to upload multi-part chunk")
+				}
+				return prt, nil
+			}
+			var parts []alioss.UploadPart
+			for ; chunk < chunksnum; chunk++ {
+				part, err := uploadEveryPart(alioss.MaxPartSize, chunk+1)
+				if err != nil {
+					return err
+				}
+				parts = append(parts, part)
+			}
+			if lastslice != 0 {
+				part, err := uploadEveryPart(lastslice, chunksnum+1)
+				if err != nil {
+					return errors.Wrap(err, "failed to upload the last chunk")
+				}
+				parts = append(parts, part)
+			}
+			_, err = b.bucket.CompleteMultipartUpload(init, parts)
+			if err != nil {
+				return errors.Wrap(err, "failed to set multi-part upload completive")
+			}
+		}
 	}
 	return nil
 }
@@ -101,7 +160,7 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 		}
 
 		return config, nil
-	} (conf)
+	}(conf)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "parse aliyun oss config file failed")
@@ -138,8 +197,8 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 
 	marker := alioss.Marker("")
 	for {
-		if err := ctx.Err() ; err != nil {
-			return  errors.Wrap(err, "context closed while iterating bucket")
+		if err := ctx.Err(); err != nil {
+			return errors.Wrap(err, "context closed while iterating bucket")
 		}
 		objects, err := b.bucket.ListObjects(alioss.Prefix(dir), alioss.Delimiter(objstore.DirDelim), marker)
 		if err != nil {
@@ -149,13 +208,13 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 
 		for _, object := range objects.Objects {
 			if err := f(object.Key); err != nil {
-				return errors.Wrapf(err, "callback func invoke for object %s failed ",object.Key)
+				return errors.Wrapf(err, "callback func invoke for object %s failed ", object.Key)
 			}
 		}
 
 		for _, object := range objects.CommonPrefixes {
 			if err := f(object); err != nil {
-				return errors.Wrapf(err, "callback func invoke for directory %s failed",object)
+				return errors.Wrapf(err, "callback func invoke for directory %s failed", object)
 			}
 		}
 		if !objects.IsTruncated {
@@ -182,7 +241,7 @@ func validate(conf Config) error {
 	if conf.AccessKeyID == "" {
 		return errors.New("access_key_id is not present in config file")
 	}
-	if conf.AccessKeySecret == ""  {
+	if conf.AccessKeySecret == "" {
 		return errors.New("access_key_secret is not present in config file")
 	}
 	return nil
@@ -198,7 +257,7 @@ func NewTestBucketFromConfig(t testing.TB, c Config, reuseBucket bool) (objstore
 		}
 		testclient, err := alioss.New(c.Endpoint, c.AccessKeyID, c.AccessKeySecret)
 		if err != nil {
-			return nil,nil, errors.Wrap(err, "create aliyun oss client failed")
+			return nil, nil, errors.Wrap(err, "create aliyun oss client failed")
 		}
 
 		if err := testclient.CreateBucket(bktToCreate); err != nil {
@@ -212,10 +271,10 @@ func NewTestBucketFromConfig(t testing.TB, c Config, reuseBucket bool) (objstore
 		return nil, nil, err
 	}
 
-        b, err := NewBucket(log.NewNopLogger(), bc, "thanos-aliyun-oss-test")
-        if err != nil {
-                return nil, nil, err
-        }
+	b, err := NewBucket(log.NewNopLogger(), bc, "thanos-aliyun-oss-test")
+	if err != nil {
+		return nil, nil, err
+	}
 
 	if reuseBucket {
 		if err := b.Iter(context.Background(), "", func(f string) error {

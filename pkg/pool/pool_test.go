@@ -3,7 +3,7 @@ package pool
 import (
 	"testing"
 
-	"github.com/improbable-eng/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestBytesPool(t *testing.T) {

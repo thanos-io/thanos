@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/component"
-	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/improbable-eng/thanos/pkg/strutil"
-	"github.com/improbable-eng/thanos/pkg/tracing"
+	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/strutil"
+	"github.com/thanos-io/thanos/pkg/tracing"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"

@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/improbable-eng/thanos/pkg/tracing"
+	"github.com/thanos-io/thanos/pkg/tracing"
 
 	trace "cloud.google.com/go/trace/apiv1"
 	"github.com/go-kit/kit/log"

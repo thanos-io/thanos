@@ -12,9 +12,9 @@ import (
 
 	"github.com/prometheus/prometheus/pkg/labels"
 
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/pkg/errors"
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestQueue_Push_Relabelled(t *testing.T) {

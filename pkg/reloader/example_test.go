@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/improbable-eng/thanos/pkg/reloader"
+	"github.com/thanos-io/thanos/pkg/reloader"
 )
 
 func ExampleReloader() {

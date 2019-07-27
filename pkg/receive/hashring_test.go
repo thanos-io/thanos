@@ -3,7 +3,7 @@ package receive
 import (
 	"testing"
 
-	"github.com/improbable-eng/thanos/pkg/store/prompb"
+	"github.com/thanos-io/thanos/pkg/store/prompb"
 )
 
 func TestHash(t *testing.T) {

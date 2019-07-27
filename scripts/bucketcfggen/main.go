@@ -25,12 +25,12 @@ import (
 
 var (
 	configs = map[client.ObjProvider]interface{}{
-		client.AZURE: azure.Config{},
-		client.GCS:   gcs.Config{},
-		client.S3:    s3.Config{},
-		client.SWIFT: swift.SwiftConfig{},
-		client.COS:   cos.Config{},
-		client.ALIYUNOSS:   oss.Config{},
+		client.AZURE:     azure.Config{},
+		client.GCS:       gcs.Config{},
+		client.S3:        s3.Config{},
+		client.SWIFT:     swift.SwiftConfig{},
+		client.COS:       cos.Config{},
+		client.ALIYUNOSS: oss.Config{},
 	}
 )
 
