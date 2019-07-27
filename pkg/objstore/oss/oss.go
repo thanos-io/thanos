@@ -14,6 +14,7 @@ import (
 	"time"
 
 	alioss "github.com/aliyun/aliyun-oss-go-sdk/oss"
+
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/objstore"
