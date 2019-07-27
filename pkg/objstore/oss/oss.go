@@ -29,10 +29,6 @@ type Config struct {
 	AccessKeySecret string `yaml:"access_key_secret"`
 }
 
-type objectInfo struct {
-	key string
-	err error
-}
 
 type Bucket struct {
 	name   string
@@ -106,8 +102,9 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 			uploadEveryPart := func(everypartsize int64, cnk int) (alioss.UploadPart, error) {
 				prt, err := b.bucket.UploadPart(init, ncloser, everypartsize, cnk)
 				if err != nil {
-					b.bucket.AbortMultipartUpload(init)
-					return prt, errors.Wrap(err, "failed to upload multi-part chunk")
+					if err := b.bucket.AbortMultipartUpload(init); err != nil {
+						return prt, errors.Wrap(err, "failed to upload multi-part chunk")
+					}
 				}
 				return prt, nil
 			}
