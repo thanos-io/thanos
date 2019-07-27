@@ -39,6 +39,9 @@ import (
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/extprom"
+
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	thanosrule "github.com/thanos-io/thanos/pkg/rule"
@@ -503,7 +506,6 @@ func runRule(
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			s.Stop()
-			runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
 		})
 	}
 	// Start UI & metrics HTTP server.
@@ -527,10 +529,12 @@ func runRule(
 			"web.prefix-header":   webPrefixHeaderName,
 		}
 
-		ui.NewRuleUI(logger, ruleMgrs, alertQueryURL.String(), flagsMap).Register(router.WithPrefix(webRoutePrefix))
+		ins := extpromhttp.NewInstrumentationMiddleware(reg)
+
+		ui.NewRuleUI(logger, ruleMgrs, alertQueryURL.String(), flagsMap).Register(router.WithPrefix(webRoutePrefix), ins)
 
 		api := v1.NewAPI(logger, ruleMgrs)
-		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger)
+		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
 
 		mux := http.NewServeMux()
 		registerMetrics(mux, reg)
@@ -762,14 +766,14 @@ func queryFunc(
 
 			if err != nil {
 				level.Error(logger).Log("err", err, "query", q)
+			} else {
+				if len(warns) > 0 {
+					ruleEvalWarnings.WithLabelValues(strings.ToLower(partialResponseStrategy.String())).Inc()
+					// TODO(bwplotka): Propagate those to UI, probably requires changing rule manager code ):
+					level.Warn(logger).Log("warnings", strings.Join(warns, ", "), "query", q)
+				}
+				return v, nil
 			}
-
-			if err == nil && len(warns) > 0 {
-				ruleEvalWarnings.WithLabelValues(strings.ToLower(partialResponseStrategy.String())).Inc()
-				// TODO(bwplotka): Propagate those to UI, probably requires changing rule manager code ):
-				level.Warn(logger).Log("warnings", strings.Join(warns, ", "), "query", q)
-			}
-			return v, err
 		}
 		return nil, errors.Errorf("no query peer reachable")
 	}

@@ -68,7 +68,7 @@ func ExternalLabels(ctx context.Context, logger log.Logger, base *url.URL) (labe
 	if err != nil {
 		return nil, errors.Wrapf(err, "request flags against %s", u.String())
 	}
-	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
+	defer runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "query body")
 
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -76,7 +76,7 @@ func ExternalLabels(ctx context.Context, logger log.Logger, base *url.URL) (labe
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, errors.Errorf("is 'web.enable-admin-api' flag enabled? got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
+		return nil, errors.Errorf("got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
 	}
 
 	var d struct {
@@ -185,7 +185,7 @@ func ConfiguredFlags(ctx context.Context, logger log.Logger, base *url.URL) (Fla
 	if err != nil {
 		return Flags{}, errors.Wrapf(err, "request config against %s", u.String())
 	}
-	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
+	defer runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "query body")
 
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -234,7 +234,7 @@ func Snapshot(ctx context.Context, logger log.Logger, base *url.URL, skipHead bo
 	if err != nil {
 		return "", errors.Wrapf(err, "request snapshot against %s", u.String())
 	}
-	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
+	defer runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "query body")
 
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -242,7 +242,7 @@ func Snapshot(ctx context.Context, logger log.Logger, base *url.URL, skipHead bo
 	}
 
 	if resp.StatusCode != 200 {
-		return "", errors.Errorf("got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
+		return "", errors.Errorf("is 'web.enable-admin-api' flag enabled? got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
 	}
 
 	var d struct {
@@ -317,7 +317,7 @@ func QueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query s
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "perform GET request against %s", u.String())
 	}
-	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
+	defer runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "query body")
 
 	// Decode only ResultType and load Result only as RawJson since we don't know
 	// structure of the Result yet.
@@ -452,7 +452,7 @@ func MetricValues(ctx context.Context, logger log.Logger, base *url.URL, perMetr
 	if err != nil {
 		return errors.Wrapf(err, "perform GET request against %s", u.String())
 	}
-	defer runutil.CloseWithLogOnErr(logger, resp.Body, "metrics body")
+	defer runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "metrics body")
 
 	if resp.StatusCode != http.StatusOK {
 		return errors.Errorf("server returned HTTP status %s", resp.Status)

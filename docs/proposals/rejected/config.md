@@ -12,7 +12,7 @@ The proposal of creating a central configuration component within Thanos has bee
 
 Cluster configuration for targets will be implemented in a separate repository and we may look at open sourcing in the future if there are others that have the same needs.
 
-Please see [Issue 387](https://github.com/improbable-eng/thanos/pull/387) and [Prometheus/Prometheus - Issue 4309](https://github.com/prometheus/prometheus/issues/4309) for more information.
+Please see [Issue 387](https://github.com/thanos-io/thanos/pull/387) and [Prometheus/Prometheus - Issue 4309](https://github.com/prometheus/prometheus/issues/4309) for more information.
 
 ## Motivation
 

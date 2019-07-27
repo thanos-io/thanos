@@ -22,29 +22,29 @@ import (
 // It attaches the provided external labels to all results. It only responds with raw data
 // and does not support downsampling.
 type TSDBStore struct {
-	logger    log.Logger
-	db        *tsdb.DB
-	component component.SourceStoreAPI
-	labels    labels.Labels
+	logger         log.Logger
+	db             *tsdb.DB
+	component      component.SourceStoreAPI
+	externalLabels labels.Labels
 }
 
 // NewTSDBStore creates a new TSDBStore.
-func NewTSDBStore(logger log.Logger, reg prometheus.Registerer, db *tsdb.DB, component component.SourceStoreAPI, externalLabels labels.Labels) *TSDBStore {
+func NewTSDBStore(logger log.Logger, _ prometheus.Registerer, db *tsdb.DB, component component.SourceStoreAPI, externalLabels labels.Labels) *TSDBStore {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	return &TSDBStore{
-		logger:    logger,
-		db:        db,
-		component: component,
-		labels:    externalLabels,
+		logger:         logger,
+		db:             db,
+		component:      component,
+		externalLabels: externalLabels,
 	}
 }
 
 // Info returns store information about the Prometheus instance.
 func (s *TSDBStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	res := &storepb.InfoResponse{
-		Labels:    make([]storepb.Label, 0, len(s.labels)),
+		Labels:    make([]storepb.Label, 0, len(s.externalLabels)),
 		StoreType: s.component.ToProto(),
 		MinTime:   0,
 		MaxTime:   math.MaxInt64,
@@ -52,10 +52,19 @@ func (s *TSDBStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.
 	if blocks := s.db.Blocks(); len(blocks) > 0 {
 		res.MinTime = blocks[0].Meta().MinTime
 	}
-	for _, l := range s.labels {
+	for _, l := range s.externalLabels {
 		res.Labels = append(res.Labels, storepb.Label{
 			Name:  l.Name,
 			Value: l.Value,
+		})
+	}
+
+	// Until we deprecate the single labels in the reply, we just duplicate
+	// them here for migration/compatibility purposes.
+	res.LabelSets = []storepb.LabelSet{}
+	if len(res.Labels) > 0 {
+		res.LabelSets = append(res.LabelSets, storepb.LabelSet{
+			Labels: res.Labels,
 		})
 	}
 	return res, nil
@@ -64,13 +73,19 @@ func (s *TSDBStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.
 // Series returns all series for a requested time range and label matcher. The returned data may
 // exceed the requested time bounds.
 func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
-	match, newMatchers, err := labelsMatches(s.labels, r.Matchers)
+	match, newMatchers, err := matchesExternalLabels(r.Matchers, s.externalLabels)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
+
 	if !match {
 		return nil
 	}
+
+	if len(newMatchers) == 0 {
+		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding external labels)").Error())
+	}
+
 	matchers, err := translateMatchers(newMatchers)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
@@ -104,7 +119,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 			return status.Errorf(codes.Internal, "encode chunk: %s", err)
 		}
 
-		respSeries.Labels = s.translateAndExtendLabels(series.Labels(), s.labels)
+		respSeries.Labels = s.translateAndExtendLabels(series.Labels(), s.externalLabels)
 		respSeries.Chunks = append(respSeries.Chunks[:0], c...)
 
 		if err := srv.Send(storepb.NewSeriesResponse(&respSeries)); err != nil {

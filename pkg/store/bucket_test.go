@@ -77,7 +77,6 @@ func TestBucketBlock_Property(t *testing.T) {
 				return false
 			} else if len(res) > 1 {
 				mint := int64(21001)
-				maxt := int64(0)
 				for i := 0; i < len(res)-1; i++ {
 					if res[i].meta.Thanos.Downsample.Resolution > maxResolution {
 						return false
@@ -88,15 +87,9 @@ func TestBucketBlock_Property(t *testing.T) {
 					if res[i].meta.MinTime < mint {
 						mint = res[i].meta.MinTime
 					}
-					if res[i].meta.MaxTime > maxt {
-						maxt = res[i].meta.MaxTime
-					}
 				}
 				if res[len(res)-1].meta.MinTime < mint {
 					mint = res[len(res)-1].meta.MinTime
-				}
-				if res[len(res)-1].meta.MaxTime > maxt {
-					maxt = res[len(res)-1].meta.MaxTime
 				}
 				if low < mint {
 					return false

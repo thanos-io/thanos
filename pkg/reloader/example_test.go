@@ -35,7 +35,6 @@ func ExampleReloader() {
 		if _, err := io.WriteString(w, "Reloaded\n"); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-		return
 	}
 
 	http.HandleFunc("/-/reload", reloadHandler)

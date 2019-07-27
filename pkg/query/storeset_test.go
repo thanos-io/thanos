@@ -2,14 +2,20 @@ package query
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"net"
+	"os"
 	"testing"
 	"time"
 
 	"sort"
 
 	"github.com/fortytw2/leaktest"
+
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
+
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"google.golang.org/grpc"
@@ -56,17 +62,23 @@ func newTestStores(numStores int, storesExtLabels ...[]storepb.Label) (*testStor
 	}
 
 	for i := 0; i < numStores; i++ {
-		lsetFn := func(addr string) []storepb.Label {
+		lsetFn := func(addr string) []storepb.LabelSet {
 			if len(storesExtLabels) != numStores {
-				return []storepb.Label{
-					{
-						Name:  "addr",
-						Value: addr,
+				return []storepb.LabelSet{{
+					Labels: []storepb.Label{
+						{
+							Name:  "addr",
+							Value: addr,
+						},
 					},
-				}
+				}}
+			}
+			ls := storesExtLabels[i]
+			if len(ls) == 0 {
+				return []storepb.LabelSet{}
 			}
 
-			return storesExtLabels[i]
+			return []storepb.LabelSet{{Labels: storesExtLabels[i]}}
 		}
 
 		srv, addr, err := startStore(lsetFn)
@@ -82,14 +94,14 @@ func newTestStores(numStores int, storesExtLabels ...[]storepb.Label) (*testStor
 	return st, nil
 }
 
-func startStore(lsetFn func(addr string) []storepb.Label) (*grpc.Server, string, error) {
+func startStore(lsetFn func(addr string) []storepb.LabelSet) (*grpc.Server, string, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, "", err
 	}
 
 	srv := grpc.NewServer()
-	storepb.RegisterStoreServer(srv, &testStore{info: storepb.InfoResponse{Labels: lsetFn(listener.Addr().String())}})
+	storepb.RegisterStoreServer(srv, &testStore{info: storepb.InfoResponse{LabelSets: lsetFn(listener.Addr().String())}})
 	go func() {
 		_ = srv.Serve(listener)
 	}()
@@ -154,9 +166,9 @@ func TestStoreSet_AllAvailable_ThenDown(t *testing.T) {
 
 	for addr, store := range storeSet.stores {
 		testutil.Equals(t, addr, store.addr)
-		testutil.Equals(t, 1, len(store.labels))
-		testutil.Equals(t, "addr", store.labels[0].Name)
-		testutil.Equals(t, addr, store.labels[0].Value)
+		testutil.Equals(t, 1, len(store.labelSets))
+		testutil.Equals(t, "addr", store.labelSets[0].Labels[0].Name)
+		testutil.Equals(t, addr, store.labelSets[0].Labels[0].Value)
 	}
 
 	st.CloseOne(initialStoreAddr[0])
@@ -170,9 +182,9 @@ func TestStoreSet_AllAvailable_ThenDown(t *testing.T) {
 	store, ok := storeSet.stores[addr]
 	testutil.Assert(t, ok, "addr exist")
 	testutil.Equals(t, addr, store.addr)
-	testutil.Equals(t, 1, len(store.labels))
-	testutil.Equals(t, "addr", store.labels[0].Name)
-	testutil.Equals(t, addr, store.labels[0].Value)
+	testutil.Equals(t, 1, len(store.labelSets))
+	testutil.Equals(t, "addr", store.labelSets[0].Labels[0].Name)
+	testutil.Equals(t, addr, store.labelSets[0].Labels[0].Value)
 }
 
 func TestStoreSet_StaticStores_OneAvailable(t *testing.T) {
@@ -199,9 +211,9 @@ func TestStoreSet_StaticStores_OneAvailable(t *testing.T) {
 	store, ok := storeSet.stores[addr]
 	testutil.Assert(t, ok, "addr exist")
 	testutil.Equals(t, addr, store.addr)
-	testutil.Equals(t, 1, len(store.labels))
-	testutil.Equals(t, "addr", store.labels[0].Name)
-	testutil.Equals(t, addr, store.labels[0].Value)
+	testutil.Equals(t, 1, len(store.labelSets))
+	testutil.Equals(t, "addr", store.labelSets[0].Labels[0].Name)
+	testutil.Equals(t, addr, store.labelSets[0].Labels[0].Value)
 }
 
 func TestStoreSet_StaticStores_NoneAvailable(t *testing.T) {
@@ -231,35 +243,35 @@ func TestStoreSet_AllAvailable_BlockExtLsetDuplicates(t *testing.T) {
 
 	storeExtLabels := [][]storepb.Label{
 		{
-			{
-				Name:  "l1",
-				Value: "v1",
-			},
+			{Name: "l1", Value: "v1"},
 		},
 		{
-			{
-				Name:  "l1",
-				Value: "v2",
-			},
+			{Name: "l1", Value: "v2"},
+			{Name: "l2", Value: "v3"},
 		},
 		{
-			{
-				// Duplicate with above.
-				Name:  "l1",
-				Value: "v2",
-			},
+			// Duplicate with above.
+			{Name: "l1", Value: "v2"},
+			{Name: "l2", Value: "v3"},
 		},
 		// Two store nodes, they don't have ext labels set.
 		nil,
 		nil,
+		{
+			// Duplicate with two others.
+			{Name: "l1", Value: "v2"},
+			{Name: "l2", Value: "v3"},
+		},
 	}
-	st, err := newTestStores(5, storeExtLabels...)
+
+	st, err := newTestStores(6, storeExtLabels...)
 	testutil.Ok(t, err)
 	defer st.Close()
 
-	initialStoreAddr := st.StoreAddresses()
-
-	storeSet := NewStoreSet(nil, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts, time.Minute)
+	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
+	logger = level.NewFilter(logger, level.AllowDebug())
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.DefaultCaller)
+	storeSet := NewStoreSet(logger, nil, specsFromAddrFunc(st.StoreAddresses()), testGRPCOpts, time.Minute)
 	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 	defer storeSet.Close()
 
@@ -269,26 +281,26 @@ func TestStoreSet_AllAvailable_BlockExtLsetDuplicates(t *testing.T) {
 	storeSet.Update(context.Background())
 	storeSet.Update(context.Background())
 
-	testutil.Assert(t, len(storeSet.stores) == 5-2, "all services should respond just fine, but we expect duplicates being blocked.")
+	testutil.Assert(t, len(storeSet.stores) == 4, fmt.Sprintf("all services should respond just fine, but we expect duplicates being blocked. Expected %d stores, got %d", 4, len(storeSet.stores)))
 
 	// Sort result to be able to compare.
-
 	var existingStoreLabels [][]storepb.Label
 	for _, store := range storeSet.stores {
-		existingStoreLabels = append(existingStoreLabels, store.Labels())
+		for _, ls := range store.LabelSets() {
+			existingStoreLabels = append(existingStoreLabels, ls.Labels)
+		}
 	}
 	sort.Slice(existingStoreLabels, func(i, j int) bool {
 		return len(existingStoreLabels[i]) > len(existingStoreLabels[j])
 	})
 
-	var i int
-	for _, lset := range existingStoreLabels {
-		testutil.Equals(t, storeExtLabels[i], lset)
-
-		i++
-		if i == 1 {
-			// Store 1 and 2 should be blocked, so fast forward.
-			i += 2
-		}
-	}
+	testutil.Equals(t, [][]storepb.Label{
+		{
+			{Name: "l1", Value: "v2"},
+			{Name: "l2", Value: "v3"},
+		},
+		{
+			{Name: "l1", Value: "v1"},
+		},
+	}, existingStoreLabels)
 }

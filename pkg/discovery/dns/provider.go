@@ -97,7 +97,6 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string) {
 		p.resolverLookupsCount.Inc()
 		if err != nil {
 			// The DNS resolution failed. Continue without modifying the old records.
-			p.resolved[addr] = p.resolved[addr] // Ensure metrics capture the result even if empty.
 			p.resolverFailuresCount.Inc()
 			level.Error(p.logger).Log("msg", "dns resolution failed", "addr", addr, "err", err)
 			continue

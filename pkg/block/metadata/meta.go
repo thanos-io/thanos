@@ -44,8 +44,6 @@ const (
 // Meta describes the a block's meta. It wraps the known TSDB meta structure and
 // extends it by Thanos-specific fields.
 type Meta struct {
-	Version int `json:"version"`
-
 	tsdb.BlockMeta
 
 	Thanos Thanos `json:"thanos"`

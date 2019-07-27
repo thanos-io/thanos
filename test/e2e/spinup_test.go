@@ -10,16 +10,17 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strconv"
 	"syscall"
 	"testing"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/objstore/s3"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/run"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/objstore/s3"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/testutil"
 	"google.golang.org/grpc"
 )
 
@@ -125,7 +126,7 @@ func scraper(i int, config string) cmdScheduleFunc {
 	}
 }
 
-func receiver(i int, config string, receiveAddresses ...string) cmdScheduleFunc {
+func receiver(i int, config string, replicationFactor int, receiveAddresses ...string) cmdScheduleFunc {
 	if len(receiveAddresses) == 0 {
 		receiveAddresses = []string{remoteWriteEndpoint(1)}
 	}
@@ -165,6 +166,7 @@ func receiver(i int, config string, receiveAddresses ...string) cmdScheduleFunc 
 			"--labels", fmt.Sprintf(`replica="%d"`, i),
 			"--tsdb.path", promDir,
 			"--log.level", "debug",
+			"--receive.replication-factor", strconv.Itoa(replicationFactor),
 			"--receive.local-endpoint", remoteWriteEndpoint(i),
 			"--receive.hashrings-file", path.Join(hashringsFileDir, "hashrings.json"),
 			"--receive.hashrings-file-refresh-interval", "5s"))), nil

@@ -7,11 +7,13 @@ slug: /release-process.md
 
 This page describes the release cadence and process for Thanos project.
 
+We use [Semantic Versioning](http://semver.org/).
+
 NOTE: As [Semantic Versioning](http://semver.org/spec/v2.0.0.html) states all 0.y.z releases can contain breaking changes in API (flags, grpc API, any backward compatibility)
 
 ## Cadence
 
-We aim for regular and strict one release per 6 weeks. 6 weeks is counter from first release candidate to another. 
+We aim for regular and strict one release per *6 weeks*. 6 weeks is counter from first release candidate to another. 
 This means that there is no *code freeze* or anything like that. We plan to stick to the exact 6 weeks, so there is no rush
 into being within release (except bug fixes).
 
@@ -19,13 +21,21 @@ No feature should block release.
 
 Additionally we (obviously) aim for `master` branch being stable.
 
-## For maintainers: Cutting individual release
-
-We will choose a release shepherd for each minor release. 
+We are assigning a release shepherd for each minor release. 
 
 Release shepherd responsibilities:
+
 * Perform releases (from first RC to actual release).
 * Announce all releases on all communication channels.
+
+
+| Release   | Time of first RC         | Shepherd (Github handle) |
+|-----------|--------------------------|--------------------------|
+| v0.7.0    | (planned) 23.08.2019     | TBC                      |
+| v0.6.0    | (planned) 12.07.2019     | `@GiedriusS`             |
+| v0.5.0    | 31.06.2019               | `@bwplotka`              |
+
+# For maintainers: Cutting individual release 
 
 Process of releasing a *minor* Thanos version:
 1. Release `v<major>.<minor+1>.0-rc.0`
@@ -33,7 +43,7 @@ Process of releasing a *minor* Thanos version:
 1. If within 3 work days there is major bug, let's triage it to fix it and then release `v<major>.<minor>.0-rc.++` Go to step 2.
 1. Do patch release if needed for any bugs afterwards. Use same `release-xxx` branch.
 
-### How to release "a version"
+## How to release a version
 
 1. Add PR on branch `release-<major>.<minor>` that will start minor release branch and prepare changes to cut release.
     
@@ -70,13 +80,6 @@ Process of releasing a *minor* Thanos version:
  1. Once tarballs are published on release page, you can click `Publish` and release is complete.
 
  1. Announce `#thanos` slack channel.
-
-## Branch management and versioning strategy
-
-We use [Semantic Versioning](http://semver.org/).
-
-NOTE: We have a separate branch for each minor release, named `release-<major>.<minor>`, e.g. `release-0.1`, `release-0.2`. but they are
-*NOT* maintained as we don't have major version yet.
 
 ## Pre-releases (release candidates)
 

@@ -58,7 +58,6 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 			testutil.Ok(t, os.Mkdir(tmp, 0777))
 
 			meta := metadata.Meta{
-				Version: 1,
 				BlockMeta: tsdb.BlockMeta{
 					Version: 1,
 					ULID:    id,
@@ -190,8 +189,6 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 		defer upcancel()
 		testutil.Ok(t, p.WaitPrometheusUp(upctx))
 
-		shipper := NewWithCompacted(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource)
-
 		p.DisableCompaction()
 		testutil.Ok(t, p.Restart())
 
@@ -199,7 +196,7 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 		defer upcancel2()
 		testutil.Ok(t, p.WaitPrometheusUp(upctx2))
 
-		shipper = NewWithCompacted(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource)
+		shipper := NewWithCompacted(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource)
 
 		// Create 10 new blocks. 9 of them (non compacted) should be actually uploaded.
 		var (
@@ -218,7 +215,6 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 			testutil.Ok(t, os.Mkdir(tmp, 0777))
 
 			meta := metadata.Meta{
-				Version: 1,
 				BlockMeta: tsdb.BlockMeta{
 					Version: 1,
 					ULID:    id,

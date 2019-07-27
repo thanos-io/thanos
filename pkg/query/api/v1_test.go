@@ -38,6 +38,9 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/compact"
+
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -301,6 +304,14 @@ func TestEndpoints(t *testing.T) {
 				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
 			},
 		},
+		// Series that does not exist should return an empty array.
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`foobar`},
+			},
+			response: []labels.Labels{},
+		},
 		{
 			endpoint: api.series,
 			query: url.Values{
@@ -336,7 +347,7 @@ func TestEndpoints(t *testing.T) {
 				"start":   []string{"-2"},
 				"end":     []string{"-1"},
 			},
-			response: []labels.Labels(nil),
+			response: []labels.Labels{},
 		},
 		// Start and end after series ends.
 		{
@@ -346,7 +357,7 @@ func TestEndpoints(t *testing.T) {
 				"start":   []string{"100000"},
 				"end":     []string{"100001"},
 			},
-			response: []labels.Labels(nil),
+			response: []labels.Labels{},
 		},
 		// Start before series starts, end after series ends.
 		{
@@ -457,7 +468,7 @@ func TestEndpoints(t *testing.T) {
 				"start":   []string{"-2"},
 				"end":     []string{"-1"},
 			},
-			response: []labels.Labels(nil),
+			response: []labels.Labels{},
 		},
 		// Start and end after series ends.
 		{
@@ -467,7 +478,7 @@ func TestEndpoints(t *testing.T) {
 				"start":   []string{"100000"},
 				"end":     []string{"100001"},
 			},
-			response: []labels.Labels(nil),
+			response: []labels.Labels{},
 		},
 		// Start before series starts, end after series ends.
 		{
@@ -576,7 +587,7 @@ func TestEndpoints(t *testing.T) {
 				}
 				return
 			}
-			if apiErr == nil && test.errType != errorNone {
+			if test.errType != errorNone {
 				t.Fatalf("Expected error of type %q but got none", test.errType)
 			}
 
@@ -774,7 +785,7 @@ func TestParseDuration(t *testing.T) {
 func TestOptionsMethod(t *testing.T) {
 	r := route.New()
 	api := &API{}
-	api.Register(r, &opentracing.NoopTracer{}, log.NewNopLogger())
+	api.Register(r, &opentracing.NoopTracer{}, log.NewNopLogger(), extpromhttp.NewNopInstrumentationMiddleware())
 
 	s := httptest.NewServer(r)
 	defer s.Close()

@@ -61,36 +61,53 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 		}, nil)
 	testutil.Ok(t, err)
 
-	// Query all three samples except for the first one. Since we round up queried data
-	// to seconds, we can test whether the extra sample gets stripped properly.
-	srv := newStoreSeriesServer(ctx)
+	{
+		// Query all three samples except for the first one. Since we round up queried data
+		// to seconds, we can test whether the extra sample gets stripped properly.
+		srv := newStoreSeriesServer(ctx)
 
-	err = proxy.Series(&storepb.SeriesRequest{
-		MinTime: baseT + 101,
-		MaxTime: baseT + 300,
-		Matchers: []storepb.LabelMatcher{
-			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
-		},
-	}, srv)
-	testutil.Ok(t, err)
+		err = proxy.Series(&storepb.SeriesRequest{
+			MinTime: baseT + 101,
+			MaxTime: baseT + 300,
+			Matchers: []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
+			},
+		}, srv)
+		testutil.Ok(t, err)
 
-	testutil.Equals(t, 1, len(srv.SeriesSet))
+		testutil.Equals(t, 1, len(srv.SeriesSet))
 
-	testutil.Equals(t, []storepb.Label{
-		{Name: "a", Value: "b"},
-		{Name: "region", Value: "eu-west"},
-	}, srv.SeriesSet[0].Labels)
+		testutil.Equals(t, []storepb.Label{
+			{Name: "a", Value: "b"},
+			{Name: "region", Value: "eu-west"},
+		}, srv.SeriesSet[0].Labels)
 
-	testutil.Equals(t, 1, len(srv.SeriesSet[0].Chunks))
+		testutil.Equals(t, 1, len(srv.SeriesSet[0].Chunks))
 
-	c := srv.SeriesSet[0].Chunks[0]
-	testutil.Equals(t, storepb.Chunk_XOR, c.Raw.Type)
+		c := srv.SeriesSet[0].Chunks[0]
+		testutil.Equals(t, storepb.Chunk_XOR, c.Raw.Type)
 
-	chk, err := chunkenc.FromData(chunkenc.EncXOR, c.Raw.Data)
-	testutil.Ok(t, err)
+		chk, err := chunkenc.FromData(chunkenc.EncXOR, c.Raw.Data)
+		testutil.Ok(t, err)
 
-	samples := expandChunk(chk.Iterator())
-	testutil.Equals(t, []sample{{baseT + 200, 2}, {baseT + 300, 3}}, samples)
+		samples := expandChunk(chk.Iterator())
+		testutil.Equals(t, []sample{{baseT + 200, 2}, {baseT + 300, 3}}, samples)
+
+	}
+	// Querying by external labels only.
+	{
+		srv := newStoreSeriesServer(ctx)
+
+		err = proxy.Series(&storepb.SeriesRequest{
+			MinTime: baseT + 101,
+			MaxTime: baseT + 300,
+			Matchers: []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"},
+			},
+		}, srv)
+		testutil.NotOk(t, err)
+		testutil.Equals(t, "rpc error: code = InvalidArgument desc = no matchers specified (excluding external labels)", err.Error())
+	}
 }
 
 type sample struct {

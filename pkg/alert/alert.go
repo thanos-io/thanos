@@ -360,7 +360,6 @@ func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 
 	s.dropped.Add(float64(len(alerts)))
 	level.Warn(s.logger).Log("msg", "failed to send alerts to all alertmanagers", "alertmanagers", amrs, "alerts", string(b))
-	return
 }
 
 func (s *Sender) sendOne(ctx context.Context, url string, b []byte) error {
@@ -375,7 +374,7 @@ func (s *Sender) sendOne(ctx context.Context, url string, b []byte) error {
 	if err != nil {
 		return errors.Wrapf(err, "send request to %q", url)
 	}
-	defer runutil.CloseWithLogOnErr(s.logger, resp.Body, "send one alert")
+	defer runutil.ExhaustCloseWithLogOnErr(s.logger, resp.Body, "send one alert")
 
 	if resp.StatusCode/100 != 2 {
 		return errors.Errorf("bad response status %v from %q", resp.Status, url)

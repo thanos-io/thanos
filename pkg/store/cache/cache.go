@@ -235,8 +235,6 @@ func (c *IndexCache) set(typ string, key cacheKey, val []byte) {
 // ensureFits tries to make sure that the passed slice will fit into the LRU cache.
 // Returns true if it will fit.
 func (c *IndexCache) ensureFits(size uint64, typ string) bool {
-	const saneMaxIterations = 500
-
 	if size > c.maxItemSizeBytes {
 		level.Debug(c.logger).Log(
 			"msg", "item bigger than maxItemSizeBytes. Ignoring..",
@@ -249,34 +247,28 @@ func (c *IndexCache) ensureFits(size uint64, typ string) bool {
 		return false
 	}
 
-	for i := 0; c.curSize+size > c.maxSizeBytes; i++ {
-		if i >= saneMaxIterations {
+	for c.curSize+size > c.maxSizeBytes {
+		if _, _, ok := c.lru.RemoveOldest(); !ok {
 			level.Error(c.logger).Log(
-				"msg", "After max sane iterations of LRU evictions, we still cannot allocate the item. Ignoring.",
-				"maxItemSizeBytes", c.maxItemSizeBytes,
-				"maxSizeBytes", c.maxSizeBytes,
-				"curSize", c.curSize,
-				"itemSize", size,
-				"cacheType", typ,
-				"iterations", i,
-			)
-			return false
-		}
-
-		_, _, ok := c.lru.RemoveOldest()
-		if !ok {
-			level.Error(c.logger).Log(
-				"msg", "LRU has nothing more to evict, but we still cannot allocate the item. Ignoring.",
+				"msg", "LRU has nothing more to evict, but we still cannot allocate the item. Resetting cache.",
 				"maxItemSizeBytes", c.maxItemSizeBytes,
 				"maxSizeBytes", c.maxSizeBytes,
 				"curSize", c.curSize,
 				"itemSize", size,
 				"cacheType", typ,
 			)
-			return false
+			c.reset()
 		}
 	}
 	return true
+}
+
+func (c *IndexCache) reset() {
+	c.lru.Purge()
+	c.current.Reset()
+	c.currentSize.Reset()
+	c.totalCurrentSize.Reset()
+	c.curSize = 0
 }
 
 // SetPostings sets the postings identfied by the ulid and label to the value v,

@@ -38,6 +38,9 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
+
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -47,18 +50,18 @@ type status string
 
 const (
 	statusSuccess status = "success"
-	statusError          = "error"
+	statusError   status = "error"
 )
 
 type ErrorType string
 
 const (
 	errorNone     ErrorType = ""
-	errorTimeout            = "timeout"
-	errorCanceled           = "canceled"
-	errorExec               = "execution"
-	errorBadData            = "bad_data"
-	ErrorInternal           = "internal"
+	errorTimeout  ErrorType = "timeout"
+	errorCanceled ErrorType = "canceled"
+	errorExec     ErrorType = "execution"
+	errorBadData  ErrorType = "bad_data"
+	ErrorInternal ErrorType = "internal"
 )
 
 var corsHeaders = map[string]string{
@@ -150,7 +153,7 @@ func NewAPI(
 }
 
 // Register the API's endpoints in the given router.
-func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger) {
+func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger, ins extpromhttp.InstrumentationMiddleware) {
 	instr := func(name string, f ApiFunc) http.HandlerFunc {
 		hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			SetCORS(w)
@@ -162,7 +165,7 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 				w.WriteHeader(http.StatusNoContent)
 			}
 		})
-		return prometheus.InstrumentHandler(name, tracing.HTTPMiddleware(tracer, name, logger, gziphandler.GzipHandler(hf)))
+		return ins.NewHandler(name, tracing.HTTPMiddleware(tracer, name, logger, gziphandler.GzipHandler(hf)))
 	}
 
 	r.Options("/*path", instr("options", api.options))
@@ -289,7 +292,7 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 	}
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
-	span, ctx := tracing.StartSpan(r.Context(), "promql_instant_query")
+	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
 
 	begin := api.now()
@@ -387,7 +390,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 	}
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
-	span, ctx := tracing.StartSpan(r.Context(), "promql_range_query")
+	span, ctx := tracing.StartSpan(ctx, "promql_range_query")
 	defer span.Finish()
 
 	begin := api.now()
@@ -542,7 +545,7 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 
 	set := storage.NewMergeSeriesSet(sets, nil)
 
-	var metrics []labels.Labels
+	metrics := []labels.Labels{}
 	for set.Next() {
 		metrics = append(metrics, set.At().Labels())
 	}

@@ -2,7 +2,6 @@ package pool
 
 import (
 	"sync"
-	"sync/atomic"
 
 	"github.com/pkg/errors"
 )
@@ -15,8 +14,9 @@ type BytesPool struct {
 	sizes     []int
 	maxTotal  uint64
 	usedTotal uint64
+	mtx       sync.Mutex
 
-	new func(s int) []byte
+	new func(s int) *[]byte
 }
 
 // NewBytesPool returns a new BytesPool with size buckets for minSize to maxSize
@@ -42,8 +42,9 @@ func NewBytesPool(minSize, maxSize int, factor float64, maxTotal uint64) (*Bytes
 		buckets:  make([]sync.Pool, len(sizes)),
 		sizes:    sizes,
 		maxTotal: maxTotal,
-		new: func(sz int) []byte {
-			return make([]byte, 0, sz)
+		new: func(sz int) *[]byte {
+			s := make([]byte, 0, sz)
+			return &s
 		},
 	}
 	return p, nil
@@ -53,37 +54,56 @@ func NewBytesPool(minSize, maxSize int, factor float64, maxTotal uint64) (*Bytes
 var ErrPoolExhausted = errors.New("pool exhausted")
 
 // Get returns a new byte slices that fits the given size.
-func (p *BytesPool) Get(sz int) ([]byte, error) {
-	used := atomic.LoadUint64(&p.usedTotal)
+func (p *BytesPool) Get(sz int) (*[]byte, error) {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
 
-	if p.maxTotal > 0 && used+uint64(sz) > p.maxTotal {
+	if p.maxTotal > 0 && p.usedTotal+uint64(sz) > p.maxTotal {
 		return nil, ErrPoolExhausted
 	}
+
 	for i, bktSize := range p.sizes {
 		if sz > bktSize {
 			continue
 		}
-		b, ok := p.buckets[i].Get().([]byte)
+		b, ok := p.buckets[i].Get().(*[]byte)
 		if !ok {
 			b = p.new(bktSize)
 		}
-		atomic.AddUint64(&p.usedTotal, uint64(cap(b)))
+
+		p.usedTotal += uint64(cap(*b))
 		return b, nil
 	}
 
 	// The requested size exceeds that of our highest bucket, allocate it directly.
-	atomic.AddUint64(&p.usedTotal, uint64(sz))
+	p.usedTotal += uint64(sz)
 	return p.new(sz), nil
 }
 
 // Put returns a byte slice to the right bucket in the pool.
-func (p *BytesPool) Put(b []byte) {
+func (p *BytesPool) Put(b *[]byte) {
+	if b == nil {
+		return
+	}
+
 	for i, bktSize := range p.sizes {
-		if cap(b) > bktSize {
+		if cap(*b) > bktSize {
 			continue
 		}
-		p.buckets[i].Put(b[:0])
+		*b = (*b)[:0]
+		p.buckets[i].Put(b)
 		break
 	}
-	atomic.AddUint64(&p.usedTotal, ^uint64(p.usedTotal-1))
+
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+
+	// We could assume here that our users will not make the slices larger
+	// but lets be on the safe side to avoid an underflow of p.usedTotal.
+	sz := uint64(cap(*b))
+	if sz >= p.usedTotal {
+		p.usedTotal = 0
+	} else {
+		p.usedTotal -= sz
+	}
 }

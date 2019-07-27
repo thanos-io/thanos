@@ -38,7 +38,7 @@ require (
 	github.com/prometheus/tsdb v0.8.0
 	github.com/uber/jaeger-client-go v2.16.0+incompatible
 	github.com/uber/jaeger-lib v2.0.0+incompatible
-	golang.org/x/net v0.0.0-20190628185345-da137c7871d7
+  go.uber.org/atomic v1.4.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	golang.org/x/text v0.3.2

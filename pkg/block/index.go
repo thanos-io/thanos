@@ -382,7 +382,7 @@ func GatherIndexIssueStats(logger log.Logger, fn string, minTime int64, maxTime 
 				stats.OutOfOrderLabels++
 				level.Warn(logger).Log("msg",
 					"out-of-order label set: known bug in Prometheus 2.8.0 and below",
-					"labelset", fmt.Sprintf("%s", lset),
+					"labelset", lset.String(),
 					"series", fmt.Sprintf("%d", id),
 				)
 			}
@@ -503,10 +503,16 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceT
 	resmeta.Stats = tsdb.BlockStats{} // reset stats
 	resmeta.Thanos.Source = source    // update source
 
-	if err := rewrite(indexr, chunkr, indexw, chunkw, &resmeta, ignoreChkFns); err != nil {
+	if err := rewrite(logger, indexr, chunkr, indexw, chunkw, &resmeta, ignoreChkFns); err != nil {
 		return resid, errors.Wrap(err, "rewrite block")
 	}
 	if err := metadata.Write(logger, resdir, &resmeta); err != nil {
+		return resid, err
+	}
+	// TSDB may rewrite metadata in bdir.
+	// TODO: This is not needed in newer TSDB code. See
+	// https://github.com/prometheus/tsdb/pull/637
+	if err := metadata.Write(logger, bdir, meta); err != nil {
 		return resid, err
 	}
 	return resid, nil
@@ -603,6 +609,7 @@ type seriesRepair struct {
 // rewrite writes all data from the readers back into the writers while cleaning
 // up mis-ordered and duplicated chunks.
 func rewrite(
+	logger log.Logger,
 	indexr tsdb.IndexReader, chunkr tsdb.ChunkReader,
 	indexw tsdb.IndexWriter, chunkw tsdb.ChunkWriter,
 	meta *metadata.Meta,
@@ -673,8 +680,22 @@ func rewrite(
 		return labels.Compare(series[i].lset, series[j].lset) < 0
 	})
 
+	lastSet := labels.Labels{}
 	// Build a new TSDB block.
 	for _, s := range series {
+		// The TSDB library will throw an error if we add a series with
+		// identical labels as the last series. This means that we have
+		// discovered a duplicate time series in the old block. We drop
+		// all duplicate series preserving the first one.
+		// TODO: Add metric to count dropped series if repair becomes a daemon
+		// rather than a batch job.
+		if labels.Compare(lastSet, s.lset) == 0 {
+			level.Warn(logger).Log("msg",
+				"dropping duplicate series in tsdb block found",
+				"labelset", s.lset.String(),
+			)
+			continue
+		}
 		if err := chunkw.WriteChunks(s.chks...); err != nil {
 			return errors.Wrap(err, "write chunks")
 		}
@@ -699,6 +720,7 @@ func rewrite(
 		}
 		postings.Add(i, s.lset)
 		i++
+		lastSet = s.lset
 	}
 
 	s := make([]string, 0, 256)
@@ -725,11 +747,6 @@ type stringset map[string]struct{}
 
 func (ss stringset) set(s string) {
 	ss[s] = struct{}{}
-}
-
-func (ss stringset) has(s string) bool {
-	_, ok := ss[s]
-	return ok
 }
 
 func (ss stringset) String() string {

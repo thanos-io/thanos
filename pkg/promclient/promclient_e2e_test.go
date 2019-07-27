@@ -140,10 +140,10 @@ func TestRule_UnmarshalScalarResponse(t *testing.T) {
 	testutil.Equals(t, vectorResult.String(), expectedVector.String())
 
 	// Test invalid length of scalar data structure.
-	vectorResult, err = convertScalarJSONToVector(invalidLengthScalarJSONResult)
+	_, err = convertScalarJSONToVector(invalidLengthScalarJSONResult)
 	testutil.NotOk(t, err)
 
 	// Test invalid format of scalar data.
-	vectorResult, err = convertScalarJSONToVector(invalidDataScalarJSONResult)
+	_, err = convertScalarJSONToVector(invalidDataScalarJSONResult)
 	testutil.NotOk(t, err)
 }

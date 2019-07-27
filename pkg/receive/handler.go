@@ -8,6 +8,7 @@ import (
 	stdlog "log"
 	"net"
 	"net/http"
+	"strconv"
 	"sync/atomic"
 
 	"github.com/go-kit/kit/log"
@@ -22,43 +23,23 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/route"
 	promtsdb "github.com/prometheus/prometheus/storage/tsdb"
+
+	terrors "github.com/prometheus/tsdb/errors"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/prompb"
-)
 
-var (
-	requestDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "thanos_http_request_duration_seconds",
-			Help:    "Histogram of latencies for HTTP requests.",
-			Buckets: []float64{.1, .2, .4, 1, 3, 8, 20, 60, 120},
-		},
-		[]string{"handler"},
-	)
-	requestsTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "thanos_http_requests_total",
-			Help: "Tracks the number of HTTP requests.",
-		}, []string{"code", "handler", "method"},
-	)
-	responseSize = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "thanos_http_response_size_bytes",
-			Help:    "Histogram of response size for HTTP requests.",
-			Buckets: prometheus.ExponentialBuckets(100, 10, 8),
-		},
-		[]string{"handler"},
-	)
 )
 
 // Options for the web Handler.
 type Options struct {
-	Receiver      *Writer
-	ListenAddress string
-	Registry      prometheus.Registerer
-	ReadyStorage  *promtsdb.ReadyStorage
-	Endpoint      string
-	TenantHeader  string
+	Receiver          *Writer
+	ListenAddress     string
+	Registry          prometheus.Registerer
+	ReadyStorage      *promtsdb.ReadyStorage
+	Endpoint          string
+	TenantHeader      string
+	ReplicaHeader     string
+	ReplicationFactor uint64
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -71,50 +52,86 @@ type Handler struct {
 	options      *Options
 	listener     net.Listener
 
+	// Metrics
+	requestDuration      *prometheus.HistogramVec
+	requestsTotal        *prometheus.CounterVec
+	responseSize         *prometheus.HistogramVec
+	forwardRequestsTotal *prometheus.CounterVec
+
 	// These fields are uint32 rather than boolean to be able to use atomic functions.
 	storageReady  uint32
 	hashringReady uint32
 }
 
-func instrumentHandler(handlerName string, handler http.HandlerFunc) http.HandlerFunc {
-	return promhttp.InstrumentHandlerDuration(
-		requestDuration.MustCurryWith(prometheus.Labels{"handler": handlerName}),
-		promhttp.InstrumentHandlerResponseSize(
-			responseSize.MustCurryWith(prometheus.Labels{"handler": handlerName}),
-			promhttp.InstrumentHandlerCounter(
-				requestsTotal.MustCurryWith(prometheus.Labels{"handler": handlerName}),
-				handler,
-			),
-		),
-	)
-}
-
 func NewHandler(logger log.Logger, o *Options) *Handler {
-	router := route.New().WithInstrumentation(instrumentHandler)
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 
 	h := &Handler{
 		logger:       logger,
-		router:       router,
 		readyStorage: o.ReadyStorage,
 		receiver:     o.Receiver,
 		options:      o,
+		requestDuration: prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "thanos_http_request_duration_seconds",
+				Help:    "Histogram of latencies for HTTP requests.",
+				Buckets: []float64{.1, .2, .4, 1, 3, 8, 20, 60, 120},
+			},
+			[]string{"handler"},
+		),
+		requestsTotal: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "thanos_http_requests_total",
+				Help: "Tracks the number of HTTP requests.",
+			}, []string{"code", "handler", "method"},
+		),
+		responseSize: prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "thanos_http_response_size_bytes",
+				Help:    "Histogram of response size for HTTP requests.",
+				Buckets: prometheus.ExponentialBuckets(100, 10, 8),
+			},
+			[]string{"handler"},
+		),
+		forwardRequestsTotal: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_forward_requests_total",
+				Help: "The number of forward requests.",
+			}, []string{"result"},
+		),
 	}
+
+	router := route.New().WithInstrumentation(h.instrumentHandler)
+	h.router = router
 
 	readyf := h.testReady
 	router.Post("/api/v1/receive", readyf(h.receive))
 
 	if o.Registry != nil {
 		o.Registry.MustRegister(
-			requestDuration,
-			requestsTotal,
-			responseSize,
+			h.requestDuration,
+			h.requestsTotal,
+			h.responseSize,
+			h.forwardRequestsTotal,
 		)
 	}
 
 	return h
+}
+
+func (h *Handler) instrumentHandler(handlerName string, handler http.HandlerFunc) http.HandlerFunc {
+	return promhttp.InstrumentHandlerDuration(
+		h.requestDuration.MustCurryWith(prometheus.Labels{"handler": handlerName}),
+		promhttp.InstrumentHandlerResponseSize(
+			h.responseSize.MustCurryWith(prometheus.Labels{"handler": handlerName}),
+			promhttp.InstrumentHandlerCounter(
+				h.requestsTotal.MustCurryWith(prometheus.Labels{"handler": handlerName}),
+				handler,
+			),
+		),
+	)
 }
 
 // StorageReady marks the storage as ready.
@@ -159,7 +176,9 @@ func (h *Handler) testReady(f http.HandlerFunc) http.HandlerFunc {
 
 // Close stops the Handler.
 func (h *Handler) Close() {
-	runutil.CloseWithLogOnErr(h.logger, h.listener, "receive HTTP listener")
+	if h.listener != nil {
+		runutil.CloseWithLogOnErr(h.logger, h.listener, "receive HTTP listener")
+	}
 }
 
 // Run serves the HTTP endpoints.
@@ -193,6 +212,13 @@ func (h *Handler) Run() error {
 	return httpSrv.Serve(h.listener)
 }
 
+// replica encapsulates the replica number of a request and if the request is
+// already replicated.
+type replica struct {
+	n          uint64
+	replicated bool
+}
+
 func (h *Handler) receive(w http.ResponseWriter, r *http.Request) {
 	compressed, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -213,30 +239,44 @@ func (h *Handler) receive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenant := r.Header.Get(h.options.TenantHeader)
-	local, err := h.forward(r.Context(), tenant, &wreq)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	// There may be no WriteRequest destined for the local node.
-	if local != nil {
-		if err := h.receiver.Receive(local); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+	var rep replica
+	replicaRaw := r.Header.Get(h.options.ReplicaHeader)
+	// If the header is emtpy, we assume the request is not yet replicated.
+	if replicaRaw != "" {
+		if rep.n, err = strconv.ParseUint(replicaRaw, 10, 64); err != nil {
+			http.Error(w, "could not parse replica header", http.StatusBadRequest)
 			return
 		}
+		rep.replicated = true
+	}
+	// The replica value in the header is zero-indexed, thus we need >=.
+	if rep.n >= h.options.ReplicationFactor {
+		http.Error(w, "replica count exceeds replication factor", http.StatusBadRequest)
+		return
+	}
+
+	tenant := r.Header.Get(h.options.TenantHeader)
+
+	// Forward any time series as necessary. All time series
+	// destined for the local node will be written to the receiver.
+	// Time series will be replicated as necessary.
+	if err := h.forward(r.Context(), tenant, rep, &wreq); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 }
 
 // forward accepts a write request, batches its time series by
-// corresponding endpoint, and forwards them in parallel. It returns a write
-// request containing only the time series that correspond to
-// local handler. For a given write request, at most one outgoing
-// write request will be made to every other node in the hashring.
-// The function only returns when all requests have finished,
+// corresponding endpoint, and forwards them in parallel to the
+// correct endpoint. Requests destined for the local node are written
+// the the local receiver. For a given write request, at most one outgoing
+// write request will be made to every other node in the hashring,
+// unless the request needs to be replicated.
+// The function only returns when all requests have finished
 // or the context is canceled.
-func (h *Handler) forward(ctx context.Context, tenant string, wreq *prompb.WriteRequest) (*prompb.WriteRequest, error) {
+func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *prompb.WriteRequest) error {
 	wreqs := make(map[string]*prompb.WriteRequest)
+	replicas := make(map[string]replica)
 	// Batch all of the time series in the write request
 	// into several smaller write requests that are
 	// grouped by target endpoint. This ensures that
@@ -245,17 +285,25 @@ func (h *Handler) forward(ctx context.Context, tenant string, wreq *prompb.Write
 	// to every other node in the hashring, rather than
 	// one request per time series.
 	for i := range wreq.Timeseries {
-		endpoint, err := h.hashring.Get(tenant, &wreq.Timeseries[i])
+		endpoint, err := h.hashring.GetN(tenant, &wreq.Timeseries[i], r.n)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if _, ok := wreqs[endpoint]; !ok {
 			wreqs[endpoint] = &prompb.WriteRequest{}
+			replicas[endpoint] = r
 		}
 		wr := wreqs[endpoint]
 		wr.Timeseries = append(wr.Timeseries, wreq.Timeseries[i])
 	}
 
+	return h.parallelizeRequests(ctx, tenant, replicas, wreqs)
+}
+
+// parallelizeRequests parallelizes a given set of write requests.
+// The function only returns when all requests have finished
+// or the context is canceled.
+func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replicas map[string]replica, wreqs map[string]*prompb.WriteRequest) error {
 	ec := make(chan error)
 	defer close(ec)
 	// We don't wan't to use a sync.WaitGroup here because that
@@ -264,16 +312,30 @@ func (h *Handler) forward(ctx context.Context, tenant string, wreq *prompb.Write
 	// as in order to collect errors while doing wg.Wait, we would
 	// need a separate error collection goroutine.
 	var n int
-	var local *prompb.WriteRequest
 	for endpoint := range wreqs {
-		// If the endpoint for the write request is the
-		// local node, then don't make a request.
-		// Save it for later so it can be returned.
-		if endpoint == h.options.Endpoint {
-			local = wreqs[endpoint]
+		n++
+		// If the request is not yet replicated, let's replicate it.
+		// If the replication factor isn't greater than 1, let's
+		// just forward the requests.
+		if !replicas[endpoint].replicated && h.options.ReplicationFactor > 1 {
+			go func(endpoint string) {
+				ec <- h.replicate(ctx, tenant, wreqs[endpoint])
+			}(endpoint)
 			continue
 		}
-		n++
+		// If the endpoint for the write request is the
+		// local node, then don't make a request but store locally.
+		// By handing replication to the local node in the same
+		// function as replication to other nodes, we can treat
+		// a failure to write locally as just another error that
+		// can be ignored if the replication factor is met.
+		if endpoint == h.options.Endpoint {
+			go func(endpoint string) {
+				ec <- h.receiver.Receive(wreqs[endpoint])
+			}(endpoint)
+			continue
+		}
+		// Make a request to the specified endpoint.
 		go func(endpoint string) {
 			buf, err := proto.Marshal(wreqs[endpoint])
 			if err != nil {
@@ -288,11 +350,29 @@ func (h *Handler) forward(ctx context.Context, tenant string, wreq *prompb.Write
 				return
 			}
 			req.Header.Add(h.options.TenantHeader, tenant)
+			req.Header.Add(h.options.ReplicaHeader, strconv.FormatUint(replicas[endpoint].n, 10))
+
+			// Increment the counters as necessary now that
+			// the requests will go out.
+			defer func() {
+				if err != nil {
+					h.forwardRequestsTotal.WithLabelValues("error").Inc()
+					return
+				}
+				h.forwardRequestsTotal.WithLabelValues("success").Inc()
+			}()
+
 			// Actually make the request against the endpoint
 			// we determined should handle these time series.
-			if _, err := http.DefaultClient.Do(req.WithContext(ctx)); err != nil {
+			var res *http.Response
+			res, err = http.DefaultClient.Do(req.WithContext(ctx))
+			if err != nil {
 				level.Error(h.logger).Log("msg", "forward request error", "err", err, "endpoint", endpoint)
 				ec <- err
+				return
+			}
+			if res.StatusCode != http.StatusOK {
+				ec <- errors.New(res.Status)
 				return
 			}
 			ec <- nil
@@ -304,16 +384,38 @@ func (h *Handler) forward(ctx context.Context, tenant string, wreq *prompb.Write
 	// for every error received on the chan. This simplifies
 	// error collection and avoids data races with a separate
 	// error collection goroutine.
-	var errs error
+	var errs terrors.MultiError
 	for ; n > 0; n-- {
 		if err := <-ec; err != nil {
-			if errs == nil {
-				errs = err
-				continue
-			}
-			errs = errors.Wrap(errs, err.Error())
+			errs.Add(err)
 		}
 	}
 
-	return local, errs
+	return errs.Err()
+}
+
+// replicate replicates a write request to (replication-factor) nodes
+// selected by the tenant and time series.
+// The function only returns when all replication requests have finished
+// or the context is canceled.
+func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.WriteRequest) error {
+	wreqs := make(map[string]*prompb.WriteRequest)
+	replicas := make(map[string]replica)
+	var i uint64
+	for i = 0; i < h.options.ReplicationFactor; i++ {
+		endpoint, err := h.hashring.GetN(tenant, &wreq.Timeseries[0], i)
+		if err != nil {
+			return err
+		}
+		wreqs[endpoint] = wreq
+		replicas[endpoint] = replica{i, true}
+	}
+
+	err := h.parallelizeRequests(ctx, tenant, replicas, wreqs)
+	if errs, ok := err.(terrors.MultiError); ok {
+		if uint64(len(errs)) >= (h.options.ReplicationFactor+1)/2 {
+			return errors.New("did not meet replication threshhold")
+		}
+	}
+	return errors.Wrap(err, "could not replicate write request")
 }
