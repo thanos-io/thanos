@@ -32,6 +32,10 @@ import (
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const DirDelim = "/"
 
+// Minimum file size after which an HTTP multipart request should be used to upload objects to storage.
+// Set to 128 MiB as in the minio client.
+const minPartSize = 1024 * 1024 * 128
+
 // Config stores the configuration for s3 bucket.
 type Config struct {
 	Bucket          string            `yaml:"bucket"`
@@ -84,9 +88,9 @@ func parseConfig(conf []byte) (Config, error) {
 		config.PutUserMetadata = make(map[string]string)
 	}
 
-	// Use the default minio minPartSize if not set
+	// Use the default minPartSize if not set.
 	if config.PartSize == 0 {
-		config.PartSize = 1024 * 1024 * 128
+		config.PartSize = minPartSize
 	}
 
 	return config, nil
