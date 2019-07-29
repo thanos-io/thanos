@@ -62,6 +62,7 @@ config:
     insecure_skip_verify: false
   trace:
     enable: false
+  part_size: 0
 ```
 
 At a minimum, you will need to provide a value for the `bucket`, `endpoint`, `access_key`, and `secret_key` keys. The rest of the keys are optional.
@@ -73,6 +74,8 @@ Make sure you use a correct signature version. Currently AWS requires signature 
 You can configure the timeout settings for the HTTP client by setting the `http_config.idle_conn_timeout` and `http_config.response_header_timeout` keys. As a rule of thumb, if you are seeing errors like `timeout awaiting response headers` in your logs, you may want to increase the value of `http_config.response_header_timeout`.
 
 Please refer to the documentation of [the Transport type](https://golang.org/pkg/net/http/#Transport) in the `net/http` package for detailed information on what each option does.
+
+`part_size` is specified in bytes and refers to the minimum file size used for multipart uploads, as some custom S3 implementations may have different requirements. A value of `0` means to use a default 128 MiB size.
 
 For debug and testing purposes you can set
 
