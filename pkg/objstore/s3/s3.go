@@ -45,7 +45,7 @@ type Config struct {
 	PutUserMetadata map[string]string `yaml:"put_user_metadata"`
 	HTTPConfig      HTTPConfig        `yaml:"http_config"`
 	TraceConfig     TraceConfig       `yaml:"trace"`
-	PartSize        uint64            `yaml:"part_size,omitempty"`
+	PartSize        uint64            `yaml:"part_size"`
 }
 
 type TraceConfig struct {
