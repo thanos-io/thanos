@@ -182,7 +182,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		client:          client,
 		sse:             sse,
 		putUserMetadata: config.PutUserMetadata,
-		partSize:		 config.PartSize,
+		partSize:        config.PartSize,
 	}
 	return bkt, nil
 }
