@@ -11,6 +11,12 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased.
 
+### Added
+
+- [#1358](https://github.com/thanos-io/thanos/pull/1358) Added `part_size` configuration option for HTTP multipart requests minimum part size for S3 storage type
+
+### Changed
+
 - [#1338](https://github.com/thanos-io/thanos/pull/1338) Querier still warns on store API duplicate, but allows a single one from duplicated set. This is gracefully warn about the problematic logic and not disrupt immediately.
 
 ### Fixed
