@@ -4,8 +4,11 @@ jobs:
   test:
     docker:
       # Available from https://hub.docker.com/r/circleci/golang/
-      - image: circleci/golang:1.10
-    working_directory: /go/src/github.com/improbable-eng/thanos
+      - image: circleci/golang:1.12.5
+    working_directory: /go/src/github.com/thanos-io/thanos
+    environment:
+      GO111MODULE: 'on'
+      GOBIN: "/go/bin"
     steps:
       - checkout
       - setup_remote_docker:
@@ -16,11 +19,11 @@ jobs:
           # require credentials. Env variables that sets up these tests will work only for these kind of PRs.
           command: |
             if ! [ -z ${GCP_PROJECT} ]; then
-              echo $GOOGLE_APPLICATION_CREDENTIALS_CONTENT > /go/src/github.com/improbable-eng/thanos/circleci-gcs-creds.json
+              echo $GOOGLE_APPLICATION_CREDENTIALS_CONTENT > $GOOGLE_APPLICATION_CREDENTIALS
               echo "Awesome! GCS integration tests are enabled."
             fi
-      - run: make deps DEPARGS="-v"
-      - run: make errcheck
+      - run: make check-go-mod
+      - run: make lint
       - run: make check-docs
       - run: make format
       - run:
@@ -45,7 +48,9 @@ jobs:
   # Cross build is needed for publish_release but needs to be done outside of docker.
   cross_build:
     machine: true
-    working_directory: /home/circleci/.go_workspace/src/github.com/improbable-eng/thanos
+    working_directory: /home/circleci/.go_workspace/src/github.com/thanos-io/thanos
+    environment:
+      GOBIN: "/home/circleci/.go_workspace/go/bin"
     steps:
     - checkout
     - run: make crossbuild
@@ -57,8 +62,10 @@ jobs:
   publish_master:
     docker:
       # Available from https://hub.docker.com/r/circleci/golang/
-      - image: circleci/golang:1.10
-    working_directory: /go/src/github.com/improbable-eng/thanos
+      - image: circleci/golang:1.12.5
+    working_directory: /go/src/github.com/thanos-io/thanos
+    environment:
+      GOBIN: "/go/bin"
     steps:
       - checkout
       - setup_remote_docker:
@@ -68,21 +75,20 @@ jobs:
       - run: ln -s .build/linux-amd64/thanos thanos
       - run: make docker
       - run: docker run thanos --help
-      - run: docker login -u="${DOCKER_USERNAME}" -p="${DOCKER_PASSWORD}"
+      - run: echo "${QUAY_PASSWORD}" | docker login -u="${QUAY_USERNAME}" quay.io --password-stdin
       - run: make docker-push
 
   publish_release:
     docker:
       # Available from https://hub.docker.com/r/circleci/golang/
-      - image: circleci/golang:1.10
-    working_directory: /go/src/github.com/improbable-eng/thanos
+      - image: circleci/golang:1.12.5
+    working_directory: /go/src/github.com/thanos-io/thanos
+    environment:
+      GOBIN: "/go/bin"
     steps:
       - checkout
       - setup_remote_docker:
           version: 17.07.0-ce
-      - run: mkdir -v -p ${HOME}/bin
-      - run: curl -L 'https://github.com/aktau/github-release/releases/download/v0.7.2/linux-amd64-github-release.tar.bz2' | tar xvjf - --strip-components 3 -C ${HOME}/bin
-      - run: echo 'export PATH=${HOME}/bin:${PATH}' >> ${BASH_ENV}
       - attach_workspace:
           at: .
       - run: make tarballs-release
@@ -92,7 +98,7 @@ jobs:
       - run: ln -s .build/linux-amd64/thanos thanos
       - run: make docker
       - run: docker run thanos --help
-      - run: docker login -u="${DOCKER_USERNAME}" -p="${DOCKER_PASSWORD}"
+      - run: echo "${QUAY_PASSWORD}" | docker login -u="${QUAY_USERNAME}" quay.io --password-stdin
       - run: make docker-push DOCKER_IMAGE_TAG=$CIRCLE_TAG
 
 workflows:

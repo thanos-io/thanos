@@ -1,22 +1,25 @@
 package block
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestWriteReadIndexCache(t *testing.T) {
+	ctx := context.Background()
+
 	tmpDir, err := ioutil.TempDir("", "test-compact-prepare")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
-	b, err := testutil.CreateBlock(tmpDir, []labels.Labels{
+	b, err := testutil.CreateBlock(ctx, tmpDir, []labels.Labels{
 		{{Name: "a", Value: "1"}},
 		{{Name: "a", Value: "2"}},
 		{{Name: "a", Value: "3"}},

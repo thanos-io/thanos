@@ -33,16 +33,24 @@ fi
 
 CHECK=${1:-}
 
-commands=("compact" "query" "rule" "sidecar" "store" "bucket")
+commands=("compact" "query" "rule" "sidecar" "store" "bucket" "check")
 
 for x in "${commands[@]}"; do
     ./thanos "${x}" --help &> "docs/components/flags/${x}.txt"
 done
 
-bucketCommands=("verify" "ls" "inspect")
+bucketCommands=("verify" "ls" "inspect" "web")
 for x in "${bucketCommands[@]}"; do
     ./thanos bucket "${x}" --help &> "docs/components/flags/bucket_${x}.txt"
 done
+
+checkCommands=("rules")
+for x in "${checkCommands[@]}"; do
+    ./thanos check "${x}" --help &> "docs/components/flags/check_${x}.txt"
+done
+
+# remove white noise
+sed -i 's/[ \t]*$//' docs/components/flags/*.txt
 
 go run scripts/bucketcfggen/main.go --output-dir=docs/flags
 

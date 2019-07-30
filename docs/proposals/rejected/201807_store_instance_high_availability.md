@@ -1,15 +1,16 @@
-# High-availability for store instances
+---
+title: High-availability for store instances
+type: proposal
+menu: proposals
+status: rejected
+owner: mattbostock
+---
 
-Status: draft | in-review | **rejected** | accepted | complete
-
-Proposal author: [@mattbostock](https://github.com/mattbostock)
-Implementation owner: [@mattbostock](https://github.com/mattbostock)
-
-## Status: Rejected
+## Summary
 
 This proposal makes total sense and solves our goals when using gossip. However there exists a very easy solution
 to this problem in form of using just static entry with any loadbalancer like Kubernetes Service to load balance
-through different Store Gateways. Those are technically stateless, so request can fetch the data independently. 
+through different Store Gateways. Those are technically stateless, so request can fetch the data independently.
 
 ## Motivation
 
@@ -42,13 +43,13 @@ with the same bucket have access to the same data.
 
 To support the desired behaviour for bucket store instances while still
 allowing for deduplication, we propose to expand the [InfoResponse
-Protobuf](https://github.com/improbable-eng/thanos/blob/b67aa3a709062be97215045f7488df67a9af2c66/pkg/store/storepb/rpc.proto#L28-L32)
+Protobuf](https://github.com/thanos-io/thanos/blob/b67aa3a709062be97215045f7488df67a9af2c66/pkg/store/storepb/rpc.proto#L28-L32)
 used by the Store API by adding two fields:
 
 - a string identifier that can be used to group store instances
 
 - an enum representing the [peer type as defined in the cluster
-  package](https://github.com/improbable-eng/thanos/blob/673614d9310f3f90fdb4585ca6201496ff92c697/pkg/cluster/cluster.go#L51-L64)
+  package](https://github.com/thanos-io/thanos/blob/673614d9310f3f90fdb4585ca6201496ff92c697/pkg/cluster/cluster.go#L51-L64)
 
 For example;
 

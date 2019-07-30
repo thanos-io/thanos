@@ -18,8 +18,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
 const (
@@ -203,7 +203,7 @@ func (q *Queue) Push(alerts []*Alert) {
 	q.pushed.Add(float64(len(alerts)))
 
 	// Attach external labels and drop excluded labels before sending.
-	// TODO(bwplotka): User proper relabelling with https://github.com/improbable-eng/thanos/issues/660
+	// TODO(bwplotka): User proper relabelling with https://github.com/thanos-io/thanos/issues/660
 	for _, a := range alerts {
 		lb := labels.NewBuilder(labels.Labels{})
 		for _, l := range a.Labels {
@@ -309,7 +309,7 @@ func NewSender(
 }
 
 // Send an alert batch to all given Alertmanager URLs.
-// TODO(bwplotka): https://github.com/improbable-eng/thanos/issues/660
+// TODO(bwplotka): https://github.com/thanos-io/thanos/issues/660
 func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 	if len(alerts) == 0 {
 		return
@@ -360,7 +360,6 @@ func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 
 	s.dropped.Add(float64(len(alerts)))
 	level.Warn(s.logger).Log("msg", "failed to send alerts to all alertmanagers", "alertmanagers", amrs, "alerts", string(b))
-	return
 }
 
 func (s *Sender) sendOne(ctx context.Context, url string, b []byte) error {
@@ -375,7 +374,7 @@ func (s *Sender) sendOne(ctx context.Context, url string, b []byte) error {
 	if err != nil {
 		return errors.Wrapf(err, "send request to %q", url)
 	}
-	defer runutil.CloseWithLogOnErr(s.logger, resp.Body, "send one alert")
+	defer runutil.ExhaustCloseWithLogOnErr(s.logger, resp.Body, "send one alert")
 
 	if resp.StatusCode/100 != 2 {
 		return errors.Errorf("bad response status %v from %q", resp.Status, url)

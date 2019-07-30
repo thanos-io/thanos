@@ -4,14 +4,16 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"os"
 	"testing"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/promclient"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/improbable-eng/thanos/pkg/testutil"
+	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
+	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 type testConfig struct {
@@ -22,34 +24,25 @@ type testConfig struct {
 var (
 	firstPromPort = promHTTPPort(1)
 
-	queryGossipSuite = newSpinupSuite().
-				Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0), true)).
-				Add(scraper(2, defaultPromConfig("prom-ha", 0), true)).
-				Add(scraper(3, defaultPromConfig("prom-ha", 1), true)).
-				Add(querier(1, "replica"), queryCluster(1)).
-				Add(querier(2, "replica"), queryCluster(2))
-
 	queryStaticFlagsSuite = newSpinupSuite().
-				Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0), false)).
-				Add(scraper(2, defaultPromConfig("prom-ha", 0), false)).
-				Add(scraper(3, defaultPromConfig("prom-ha", 1), false)).
-				Add(querierWithStoreFlags(1, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3)), "").
-				Add(querierWithStoreFlags(2, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3)), "")
+				Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0))).
+				Add(scraper(2, defaultPromConfig("prom-ha", 0))).
+				Add(scraper(3, defaultPromConfig("prom-ha", 1))).
+				Add(querierWithStoreFlags(1, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3), remoteWriteReceiveGRPC(1))).
+				Add(querierWithStoreFlags(2, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3), remoteWriteReceiveGRPC(1))).
+				Add(receiver(1, defaultPromRemoteWriteConfig(nodeExporterHTTP(1), remoteWriteEndpoint(1)), 1))
 
 	queryFileSDSuite = newSpinupSuite().
-				Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0), false)).
-				Add(scraper(2, defaultPromConfig("prom-ha", 0), false)).
-				Add(scraper(3, defaultPromConfig("prom-ha", 1), false)).
-				Add(querierWithFileSD(1, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3)), "").
-				Add(querierWithFileSD(2, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3)), "")
+				Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0))).
+				Add(scraper(2, defaultPromConfig("prom-ha", 0))).
+				Add(scraper(3, defaultPromConfig("prom-ha", 1))).
+				Add(querierWithFileSD(1, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3), remoteWriteReceiveGRPC(1))).
+				Add(querierWithFileSD(2, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3), remoteWriteReceiveGRPC(1))).
+				Add(receiver(1, defaultPromRemoteWriteConfig(nodeExporterHTTP(1), remoteWriteEndpoint(1)), 1))
 )
 
 func TestQuery(t *testing.T) {
 	for _, tt := range []testConfig{
-		{
-			"gossip",
-			queryGossipSuite,
-		},
 		{
 			"staticFlag",
 			queryStaticFlagsSuite,
@@ -84,22 +77,38 @@ func testQuerySimple(t *testing.T, conf testConfig) {
 
 	var res model.Vector
 
+	w := log.NewSyncWriter(os.Stderr)
+	l := log.NewLogfmtLogger(w)
+	l = log.With(l, "conf-name", conf.name)
+
 	// Try query without deduplication.
-	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
+	testutil.Ok(t, runutil.RetryWithLog(l, time.Second, ctx.Done(), func() error {
 		select {
 		case <-exit:
 			cancel()
-			return nil
+			return errors.Errorf("exiting test, possibly due to timeout")
 		default:
 		}
 
-		var err error
-		res, err = promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "up", time.Now(), false)
+		var (
+			err      error
+			warnings []string
+		)
+		res, warnings, err = promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "up", time.Now(), promclient.QueryOptions{
+			Deduplicate: false,
+		})
 		if err != nil {
 			return err
 		}
-		if len(res) != 3 {
-			return errors.Errorf("unexpected result size %d", len(res))
+
+		if len(warnings) > 0 {
+			// we don't expect warnings.
+			return errors.Errorf("unexpected warnings %s", warnings)
+		}
+
+		expectedRes := 4
+		if len(res) != expectedRes {
+			return errors.Errorf("unexpected result size %d, expected %d", len(res), expectedRes)
 		}
 		return nil
 	}))
@@ -127,6 +136,14 @@ func testQuerySimple(t *testing.T, conf testConfig) {
 		"replica":    model.LabelValue("1"),
 	}, res[2].Metric)
 
+	testutil.Equals(t, model.Metric{
+		"__name__": "up",
+		"instance": model.LabelValue(nodeExporterHTTP(1)),
+		"job":      "node",
+		"receive":  "true",
+		"replica":  model.LabelValue("1"),
+	}, res[3].Metric)
+
 	// Try query with deduplication.
 	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
 		select {
@@ -136,13 +153,25 @@ func testQuerySimple(t *testing.T, conf testConfig) {
 		default:
 		}
 
-		var err error
-		res, err = promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "up", time.Now(), true)
+		var (
+			err      error
+			warnings []string
+		)
+		res, warnings, err = promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "up", time.Now(), promclient.QueryOptions{
+			Deduplicate: true,
+		})
 		if err != nil {
 			return err
 		}
-		if len(res) != 2 {
-			return errors.Errorf("unexpected result size for query with deduplication %d", len(res))
+
+		if len(warnings) > 0 {
+			// we don't expect warnings.
+			return errors.Errorf("unexpected warnings %s", warnings)
+		}
+
+		expectedRes := 3
+		if len(res) != expectedRes {
+			return errors.Errorf("unexpected result size %d, expected %d", len(res), expectedRes)
 		}
 
 		return nil
@@ -160,6 +189,12 @@ func testQuerySimple(t *testing.T, conf testConfig) {
 		"job":        "prometheus",
 		"prometheus": "prom-ha",
 	}, res[1].Metric)
+	testutil.Equals(t, model.Metric{
+		"__name__": "up",
+		"instance": model.LabelValue(nodeExporterHTTP(1)),
+		"job":      "node",
+		"receive":  "true",
+	}, res[2].Metric)
 }
 
 func urlParse(t *testing.T, addr string) *url.URL {
@@ -182,4 +217,15 @@ scrape_configs:
   - targets:
     - "localhost:%s"
 `, name, replicas, firstPromPort)
+}
+
+func defaultPromRemoteWriteConfig(nodeExporterHTTP, remoteWriteEndpoint string) string {
+	return fmt.Sprintf(`
+scrape_configs:
+- job_name: 'node'
+  static_configs:
+  - targets: ['%s']
+remote_write:
+- url: "%s"
+`, nodeExporterHTTP, remoteWriteEndpoint)
 }

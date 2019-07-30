@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math"
 	"net"
@@ -18,26 +19,26 @@ import (
 	"syscall"
 
 	gmetrics "github.com/armon/go-metrics"
-
 	gprom "github.com/armon/go-metrics/prometheus"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
-	"github.com/grpc-ecosystem/go-grpc-prometheus"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/improbable-eng/thanos/pkg/tracing"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/version"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/tracing"
+	"github.com/thanos-io/thanos/pkg/tracing/client"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/status"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 const (
@@ -65,10 +66,7 @@ func main() {
 	logFormat := app.Flag("log.format", "Log format to use.").
 		Default(logFormatLogfmt).Enum(logFormatLogfmt, logFormatJson)
 
-	gcloudTraceProject := app.Flag("gcloudtrace.project", "GCP project to send Google Cloud Trace tracings to. If empty, tracing will be disabled.").
-		String()
-	gcloudTraceSampleFactor := app.Flag("gcloudtrace.sample-factor", "How often we send traces (1/<sample-factor>). If 0 no trace will be sent periodically, unless forced by baggage item. See `pkg/tracing/tracing.go` for details.").
-		Default("1").Uint64()
+	tracingConfig := regCommonTracingFlags(app)
 
 	cmds := map[string]setupFunc{}
 	registerSidecar(cmds, app, "sidecar")
@@ -78,6 +76,8 @@ func main() {
 	registerCompact(cmds, app, "compact")
 	registerBucket(cmds, app, "bucket")
 	registerDownsample(cmds, app, "downsample")
+	registerReceive(cmds, app, "receive")
+	registerChecks(cmds, app, "check")
 
 	cmd, err := app.Parse(os.Args[1:])
 	if err != nil {
@@ -142,8 +142,24 @@ func main() {
 	{
 		ctx := context.Background()
 
-		var closeFn func() error
-		tracer, closeFn = tracing.NewOptionalGCloudTracer(ctx, logger, *gcloudTraceProject, *gcloudTraceSampleFactor, *debugName)
+		var closer io.Closer
+		var confContentYaml []byte
+		confContentYaml, err = tracingConfig.Content()
+		if err != nil {
+			level.Error(logger).Log("msg", "getting tracing config failed", "err", err)
+			os.Exit(1)
+		}
+
+		if len(confContentYaml) == 0 {
+			level.Info(logger).Log("msg", "Tracing will be disabled")
+			tracer = client.NoopTracer()
+		} else {
+			tracer, closer, err = client.NewTracer(ctx, logger, metrics, confContentYaml)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, errors.Wrapf(err, "tracing failed"))
+				os.Exit(1)
+			}
+		}
 
 		// This is bad, but Prometheus does not support any other tracer injections than just global one.
 		// TODO(bplotka): Work with basictracer to handle gracefully tracker mismatches, and also with Prometheus to allow
@@ -155,15 +171,17 @@ func main() {
 			<-ctx.Done()
 			return ctx.Err()
 		}, func(error) {
-			if err := closeFn(); err != nil {
-				level.Warn(logger).Log("msg", "closing tracer failed", "err", err)
+			if closer != nil {
+				if err := closer.Close(); err != nil {
+					level.Warn(logger).Log("msg", "closing tracer failed", "err", err)
+				}
 			}
 			cancel()
 		})
 	}
 
 	if err := cmds[cmd](&g, logger, metrics, tracer, *logLevel == "debug"); err != nil {
-		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "%s command failed", cmd))
+		level.Error(logger).Log("err", errors.Wrapf(err, "%s command failed", cmd))
 		os.Exit(1)
 	}
 

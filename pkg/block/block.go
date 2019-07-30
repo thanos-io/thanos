@@ -5,19 +5,20 @@ package block
 import (
 	"context"
 	"encoding/json"
+	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
 
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 
 	"fmt"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
 const (
@@ -25,6 +26,8 @@ const (
 	MetaFilename = "meta.json"
 	// IndexFilename is the known index file for block index.
 	IndexFilename = "index"
+	// IndexCacheFilename is the canonical name for index cache file that stores essential information needed.
+	IndexCacheFilename = "index.cache.json"
 	// ChunksDirname is the known dir name for chunks with compressed samples.
 	ChunksDirname = "chunks"
 
@@ -93,6 +96,12 @@ func Upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 		return cleanUp(bkt, id, errors.Wrap(err, "upload index"))
 	}
 
+	if meta.Thanos.Source == metadata.CompactorSource {
+		if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, IndexCacheFilename), path.Join(id.String(), IndexCacheFilename)); err != nil {
+			return cleanUp(bkt, id, errors.Wrap(err, "upload index cache"))
+		}
+	}
+
 	// Meta.json always need to be uploaded as a last item. This will allow to assume block directories without meta file
 	// to be pending uploads.
 	if err := objstore.UploadFile(ctx, logger, bkt, path.Join(bdir, MetaFilename), path.Join(id.String(), MetaFilename)); err != nil {
@@ -118,6 +127,7 @@ func Delete(ctx context.Context, bucket objstore.Bucket, id ulid.ULID) error {
 }
 
 // DownloadMeta downloads only meta file from bucket by block ID.
+// TODO(bwplotka): Differentiate between network error & partial upload.
 func DownloadMeta(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID) (metadata.Meta, error) {
 	rc, err := bkt.Get(ctx, path.Join(id.String(), MetaFilename))
 	if err != nil {
@@ -126,9 +136,16 @@ func DownloadMeta(ctx context.Context, logger log.Logger, bkt objstore.Bucket, i
 	defer runutil.CloseWithLogOnErr(logger, rc, "download meta bucket client")
 
 	var m metadata.Meta
-	if err := json.NewDecoder(rc).Decode(&m); err != nil {
-		return metadata.Meta{}, errors.Wrapf(err, "decode meta.json for block %s", id.String())
+
+	obj, err := ioutil.ReadAll(rc)
+	if err != nil {
+		return metadata.Meta{}, errors.Wrapf(err, "read meta.json for block %s", id.String())
 	}
+
+	if err = json.Unmarshal(obj, &m); err != nil {
+		return metadata.Meta{}, errors.Wrapf(err, "unmarshal meta.json for block %s", id.String())
+	}
+
 	return m, nil
 }
 

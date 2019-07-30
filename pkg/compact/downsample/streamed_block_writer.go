@@ -6,15 +6,16 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
-	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/chunks"
+	tsdberrors "github.com/prometheus/tsdb/errors"
 	"github.com/prometheus/tsdb/fileutil"
 	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
 type labelValues map[string]struct{}
@@ -83,7 +84,7 @@ func NewStreamedBlockWriter(
 	// We should close any opened Closer up to an error.
 	defer func() {
 		if err != nil {
-			var merr tsdb.MultiError
+			var merr tsdberrors.MultiError
 			merr.Add(err)
 			for _, cl := range closers {
 				merr.Add(cl.Close())
@@ -167,32 +168,38 @@ func (w *streamedBlockWriter) Close() error {
 	if w.finalized {
 		return nil
 	}
-
-	var merr tsdb.MultiError
 	w.finalized = true
 
-	// Finalise data block only if there wasn't any internal errors.
-	if !w.ignoreFinalize {
-		merr.Add(w.finalize())
+	merr := tsdberrors.MultiError{}
+
+	if w.ignoreFinalize {
+		// Close open file descriptors anyway.
+		for _, cl := range w.closers {
+			merr.Add(cl.Close())
+		}
+		return merr.Err()
 	}
 
-	for _, cl := range w.closers {
-		merr.Add(cl.Close())
-	}
+	// Finalize saves prepared index and metadata to corresponding files.
 
-	return errors.Wrap(merr.Err(), "close closers")
-}
-
-// finalize saves prepared index and meta data to corresponding files.
-// It is called on Close. Even if an error happened outside of StreamWriter, it will finalize the block anyway,
-// so it's a caller's responsibility to remove the block's directory.
-func (w *streamedBlockWriter) finalize() error {
 	if err := w.writeLabelSets(); err != nil {
 		return errors.Wrap(err, "write label sets")
 	}
 
 	if err := w.writeMemPostings(); err != nil {
 		return errors.Wrap(err, "write mem postings")
+	}
+
+	for _, cl := range w.closers {
+		merr.Add(cl.Close())
+	}
+
+	if err := block.WriteIndexCache(
+		w.logger,
+		filepath.Join(w.blockDir, block.IndexFilename),
+		filepath.Join(w.blockDir, block.IndexCacheFilename),
+	); err != nil {
+		return errors.Wrap(err, "write index cache")
 	}
 
 	if err := w.writeMetaFile(); err != nil {
@@ -203,8 +210,14 @@ func (w *streamedBlockWriter) finalize() error {
 		return errors.Wrap(err, "sync blockDir")
 	}
 
+	if err := merr.Err(); err != nil {
+		return errors.Wrap(err, "finalize")
+	}
+
+	// No error, claim success.
+
 	level.Info(w.logger).Log(
-		"msg", "write downsampled block",
+		"msg", "finalized downsampled block",
 		"mint", w.meta.MinTime,
 		"maxt", w.meta.MaxTime,
 		"ulid", w.meta.ULID,
@@ -220,9 +233,9 @@ func (w *streamedBlockWriter) syncDir() (err error) {
 		return errors.Wrap(err, "open temporary block blockDir")
 	}
 
-	defer runutil.CloseWithErrCapture(w.logger, &err, df, "close temporary block blockDir")
+	defer runutil.CloseWithErrCapture(&err, df, "close temporary block blockDir")
 
-	if err := fileutil.Fsync(df); err != nil {
+	if err := fileutil.Fdatasync(df); err != nil {
 		return errors.Wrap(err, "sync temporary blockDir")
 	}
 

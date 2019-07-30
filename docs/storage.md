@@ -1,18 +1,25 @@
+---
+title: Object Storage
+type: docs
+menu: thanos
+slug: /storage.md
+---
+
 # Object Storage
 
 Thanos supports any object stores that can be implemented against Thanos [objstore.Bucket interface](/pkg/objstore/objstore.go)
 
 All clients are configured using `--objstore.config-file` to reference to the configuration file or `--objstore.config` to put yaml config directly.
 
-## Implementations 
+## Implementations
 
 Current object storage client implementations:
 
 | Provider             | Maturity | Auto-tested on CI | Maintainers |
 |----------------------|-------------------|-----------|---------------|
 | Google Cloud Storage | Stable  (production usage)             | yes       | @bwplotka   |
-| AWS S3               | Beta  (working PoCs, testing usage)               | no        | @bwplotka          |
-| Azure Storage Account | Alpha   | yes       | @vglafirov   |
+| AWS S3               | Stable  (production usage)               | yes        | @bwplotka          |
+| Azure Storage Account | Stable  (production usage) | yes       | @vglafirov   |
 | OpenStack Swift      | Beta  (working PoCs, testing usage)               | no        | @sudhi-vm   |
 | Tencent COS          | Beta  (testing usage)                   | no        | @jojohappy          |
 
@@ -28,13 +35,13 @@ NOTE: Currently Thanos requires strong consistency (write-read) for object store
 6. Add client implementation to the factory in [factory](/pkg/objstore/client/factory.go) code. (Using as small amount of flags as possible in every command)
 7. Add client struct config to [bucketcfggen](/scripts/bucketcfggen/main.go) to allow config auto generation.
 
-At that point, anyone can use your provider by spec
+At that point, anyone can use your provider by spec.
 
 ## AWS S3 configuration
 
-Thanos uses minio client to upload Prometheus data into AWS S3.
+Thanos uses the [minio client](https://github.com/minio/minio-go) library to upload Prometheus data into AWS S3.
 
-To configure S3 bucket as an object store you need to set these mandatory S3 variables in yaml format stored in a file:
+You can configure an S3 bucket as an object store with YAML, either by passing the configuration directly to the `--objstore.config` parameter, or (preferably) by passing the path to a configuration file to the `--objstore.config-file` option.
 
 [embedmd]:# (flags/config_s3.txt yaml)
 ```yaml
@@ -42,6 +49,7 @@ type: S3
 config:
   bucket: ""
   endpoint: ""
+  region: ""
   access_key: ""
   insecure: false
   signature_version2: false
@@ -50,18 +58,29 @@ config:
   put_user_metadata: {}
   http_config:
     idle_conn_timeout: 0s
+    response_header_timeout: 0s
     insecure_skip_verify: false
+  trace:
+    enable: false
 ```
 
-AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region)
+At a minimum, you will need to provide a value for the `bucket`, `endpoint`, `access_key`, and `secret_key` keys. The rest of the keys are optional.
 
-Make sure you use a correct signature version.
-Currently AWS require signature v4, so it needs `signature-version2: false`, otherwise, you will get Access Denied error, but several other S3 compatible use `signature-version2: true`
+The AWS region to endpoint mapping can be found in this [link](https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region).
+
+Make sure you use a correct signature version. Currently AWS requires signature v4, so it needs `signature-version2: false`. If you don't specify it, you will get an `Access Denied` error. On the other hand, several S3 compatible APIs use `signature-version2: true`.
+
+You can configure the timeout settings for the HTTP client by setting the `http_config.idle_conn_timeout` and `http_config.response_header_timeout` keys. As a rule of thumb, if you are seeing errors like `timeout awaiting response headers` in your logs, you may want to increase the value of `http_config.response_header_timeout`.
+
+Please refer to the documentation of [the Transport type](https://golang.org/pkg/net/http/#Transport) in the `net/http` package for detailed information on what each option does.
 
 For debug and testing purposes you can set
 
 * `insecure: true` to switch to plain insecure HTTP instead of HTTPS
+
 * `http_config.insecure_skip_verify: true` to disable TLS certificate verification (if your S3 based storage is using a self-signed certificate, for example)
+
+* `trace.enable: true` to enable the minio client's verbose logging. Each request and response will be logged into the debug logger, so debug level logging must be enabled for this functionality.
 
 ### Credentials
 By default Thanos will try to retrieve credentials from the following sources:
@@ -71,7 +90,7 @@ By default Thanos will try to retrieve credentials from the following sources:
 1. From `~/.aws/credentials`
 1. IAM credentials retrieved from an instance profile.
 
-NOTE: Getting access key from config file and secret key from other method (and vice versa) is not supported. 
+NOTE: Getting access key from config file and secret key from other method (and vice versa) is not supported.
 
 ### AWS Policies
 
@@ -152,9 +171,13 @@ For example:
 type: GCS
 config:
   bucket: ""
+  service_account: ""
 ```
 
-Application credentials are configured via JSON file, the client looks for:
+### Using GOOGLE_APPLICATION_CREDENTIALS
+
+Application credentials are configured via JSON file and only the bucket needs to be specified,
+the client looks for:
 
 1. A JSON file whose path is specified by the
    `GOOGLE_APPLICATION_CREDENTIALS` environment variable.
@@ -168,15 +191,53 @@ Application credentials are configured via JSON file, the client looks for:
 
 You can read more on how to get application credential json file in [https://cloud.google.com/docs/authentication/production](https://cloud.google.com/docs/authentication/production)
 
+### Using inline a Service Account
+
+Another possibility is to inline the ServiceAccount into the Thanos configuration and only maintain one file.
+This feature was added, so that the Prometheus Operator only needs to take care of one secret file.
+
+```yaml
+type: GCS
+config:
+  bucket: "thanos"
+  service_account: |-
+    {
+      "type": "service_account",
+      "project_id": "project",
+      "private_key_id": "abcdefghijklmnopqrstuvwxyz12345678906666",
+      "private_key": "-----BEGIN PRIVATE KEY-----\...\n-----END PRIVATE KEY-----\n",
+      "client_email": "project@thanos.iam.gserviceaccount.com",
+      "client_id": "123456789012345678901",
+      "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+      "token_uri": "https://oauth2.googleapis.com/token",
+      "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+      "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/thanos%40gitpods.iam.gserviceaccount.com"
+    }
+```
+
 ### GCS Policies
+
+__Note:__ GCS Policies should be applied at the project level, not at the bucket level
 
 For deployment:
 
-`Storage Object Creator` and ` Storage Object Viewer`
+`Storage Object Creator` and `Storage Object Viewer`
 
 For testing:
 
 `Storage Object Admin` for ability to create and delete temporary buckets.
+
+To test the policy is working as expected, exec into the sidecar container, eg:
+
+```sh
+kubectl exec -it -n <namespace> <prometheus with sidecar pod name> -c <sidecar container name> -- /bin/sh
+```
+
+Then test that you can at least list objects in the bucket, eg:
+
+```sh
+thanos bucket ls --objstore.config="${OBJSTORE_CONFIG}"
+```
 
 ## Azure Configuration
 
@@ -193,12 +254,17 @@ config:
   storage_account: ""
   storage_account_key: ""
   container: ""
+  endpoint: ""
+  max_retries: 0
 ```
 
 ### OpenStack Swift Configuration
 Thanos uses [gophercloud](http://gophercloud.io/) client to upload Prometheus data into [OpenStack Swift](https://docs.openstack.org/swift/latest/).
 
-Below is an example configuration file for thanos to use OpenStack swift container as an object store. 
+Below is an example configuration file for thanos to use OpenStack swift container as an object store.  
+Note that if the `name` of a user, project or tenant is used one must also specify its domain by ID or name.  
+Various examples for OpenStack authentication can be found in the [official documentation](https://developer.openstack.org/api-ref/identity/v3/index.html?expanded=password-authentication-with-scoped-authorization-detail#password-authentication-with-unscoped-authorization).
+
 
 [embedmd]:# (flags/config_swift.txt yaml)
 ```yaml
@@ -206,12 +272,16 @@ type: SWIFT
 config:
   auth_url: ""
   username: ""
+  user_domain_name: ""
+  user_domain_id: ""
   user_id: ""
   password: ""
   domain_id: ""
   domain_name: ""
-  tenant_id: ""
-  tenant_name: ""
+  project_id: ""
+  project_name: ""
+  project_domain_id: ""
+  project_domain_name: ""
   region_name: ""
   container_name: ""
 ```

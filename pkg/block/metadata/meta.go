@@ -12,10 +12,10 @@ import (
 	"path/filepath"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/fileutil"
+	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
 type SourceType string
@@ -23,6 +23,7 @@ type SourceType string
 const (
 	UnknownSource         SourceType = ""
 	SidecarSource         SourceType = "sidecar"
+	ReceiveSource         SourceType = "receive"
 	CompactorSource       SourceType = "compactor"
 	CompactorRepairSource SourceType = "compactor.repair"
 	RulerSource           SourceType = "ruler"
@@ -36,15 +37,13 @@ const (
 )
 
 const (
-	// MetaVersion is a enumeration of versions supported by Thanos.
+	// MetaVersion is a enumeration of meta versions supported by Thanos.
 	MetaVersion1 = iota + 1
 )
 
 // Meta describes the a block's meta. It wraps the known TSDB meta structure and
 // extends it by Thanos-specific fields.
 type Meta struct {
-	Version int `json:"version"`
-
 	tsdb.BlockMeta
 
 	Thanos Thanos `json:"thanos"`
@@ -122,7 +121,7 @@ func renameFile(logger log.Logger, from, to string) error {
 		return err
 	}
 
-	if err = fileutil.Fsync(pdir); err != nil {
+	if err = fileutil.Fdatasync(pdir); err != nil {
 		runutil.CloseWithLogOnErr(logger, pdir, "close dir")
 		return err
 	}

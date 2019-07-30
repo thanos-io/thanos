@@ -8,7 +8,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestProvider(t *testing.T) {
@@ -20,7 +20,7 @@ func TestProvider(t *testing.T) {
 		"127.0.0.5:19095",
 	}
 
-	prv := NewProvider(log.NewNopLogger(), nil)
+	prv := NewProvider(log.NewNopLogger(), nil, "")
 	prv.resolver = &mockResolver{
 		res: map[string][]string{
 			"a": ips[:2],

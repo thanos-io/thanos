@@ -15,16 +15,16 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
-	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/objstore/objtesting"
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/objstore/objtesting"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestSyncer_SyncMetas_e2e(t *testing.T) {
@@ -32,7 +32,7 @@ func TestSyncer_SyncMetas_e2e(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
-		sy, err := NewSyncer(nil, nil, bkt, 0)
+		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false)
 		testutil.Ok(t, err)
 
 		// Generate 15 blocks. Initially the first 10 are synced into memory and only the last
@@ -134,7 +134,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		}
 
 		// Do one initial synchronization with the bucket.
-		sy, err := NewSyncer(nil, nil, bkt, 0)
+		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false)
 		testutil.Ok(t, err)
 		testutil.Ok(t, sy.SyncMetas(ctx))
 
@@ -178,9 +178,9 @@ func TestGroup_Compact_e2e(t *testing.T) {
 
 		var metas []*metadata.Meta
 		extLset := labels.Labels{{Name: "e1", Value: "1"}}
-		b1, err := testutil.CreateBlock(prepareDir, []labels.Labels{
+		b1, err := testutil.CreateBlock(ctx, prepareDir, []labels.Labels{
 			{{Name: "a", Value: "1"}},
-			{{Name: "a", Value: "2"}},
+			{{Name: "a", Value: "2"}, {Name: "a", Value: "2"}},
 			{{Name: "a", Value: "3"}},
 			{{Name: "a", Value: "4"}},
 		}, 100, 0, 1000, extLset, 124)
@@ -190,7 +190,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		metas = append(metas, meta)
 
-		b3, err := testutil.CreateBlock(prepareDir, []labels.Labels{
+		b3, err := testutil.CreateBlock(ctx, prepareDir, []labels.Labels{
 			{{Name: "a", Value: "3"}},
 			{{Name: "a", Value: "4"}},
 			{{Name: "a", Value: "5"}},
@@ -215,7 +215,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		metas = append(metas, meta)
 
 		// Due to TSDB compaction delay (not compacting fresh block), we need one more block to be pushed to trigger compaction.
-		freshB, err := testutil.CreateBlock(prepareDir, []labels.Labels{
+		freshB, err := testutil.CreateBlock(ctx, prepareDir, []labels.Labels{
 			{{Name: "a", Value: "2"}},
 			{{Name: "a", Value: "3"}},
 			{{Name: "a", Value: "4"}},
@@ -244,27 +244,28 @@ func TestGroup_Compact_e2e(t *testing.T) {
 			bkt,
 			extLset,
 			124,
+			false,
 			metrics.compactions.WithLabelValues(""),
 			metrics.compactionFailures.WithLabelValues(""),
 			metrics.garbageCollectedBlocks,
 		)
 		testutil.Ok(t, err)
 
-		comp, err := tsdb.NewLeveledCompactor(nil, log.NewLogfmtLogger(os.Stderr), []int64{1000, 3000}, nil)
+		comp, err := tsdb.NewLeveledCompactor(ctx, nil, log.NewLogfmtLogger(os.Stderr), []int64{1000, 3000}, nil)
 		testutil.Ok(t, err)
 
-		id, err := g.Compact(ctx, dir, comp)
+		shouldRerun, id, err := g.Compact(ctx, dir, comp)
 		testutil.Ok(t, err)
-		testutil.Assert(t, id == ulid.ULID{}, "group should be empty, but somehow compaction took place")
+		testutil.Assert(t, !shouldRerun, "group should be empty, but compactor did a compaction and told us to rerun")
 
 		// Add all metas that would be gathered by syncMetas.
 		for _, m := range metas {
 			testutil.Ok(t, g.Add(m))
 		}
 
-		id, err = g.Compact(ctx, dir, comp)
+		shouldRerun, id, err = g.Compact(ctx, dir, comp)
 		testutil.Ok(t, err)
-		testutil.Assert(t, id != ulid.ULID{}, "no compaction took place")
+		testutil.Assert(t, shouldRerun, "there should be compactible data, but the compactor reported there was not")
 
 		resDir := filepath.Join(dir, id.String())
 		testutil.Ok(t, block.Download(ctx, log.NewNopLogger(), bkt, id, resDir))

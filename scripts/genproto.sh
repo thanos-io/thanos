@@ -18,13 +18,16 @@ if ! [[ $(${PROTOC_BIN} --version) =~ "3.4.0" ]]; then
 	exit 255
 fi
 
-THANOS_ROOT="${GOPATH}/src/github.com/improbable-eng/thanos"
-PROM_PATH="${THANOS_ROOT}/pkg/store/storepb"
-GOGOPROTO_ROOT="${THANOS_ROOT}/vendor/github.com/gogo/protobuf"
+echo "installing gogofast"
+GO111MODULE=on go install "github.com/gogo/protobuf/protoc-gen-gogofast"
+
+PROM_PATH="$(pwd)/pkg/store/prompb"
+GOGOPROTO_ROOT="$(GO111MODULE=on go list -f '{{ .Dir }}' -m github.com/gogo/protobuf)"
 GOGOPROTO_PATH="${GOGOPROTO_ROOT}:${GOGOPROTO_ROOT}/protobuf"
 
 DIRS="pkg/store/storepb pkg/store/prompb"
 
+echo "generating code"
 for dir in ${DIRS}; do
 	pushd ${dir}
 		${PROTOC_BIN} --gogofast_out=plugins=grpc:. -I=. \

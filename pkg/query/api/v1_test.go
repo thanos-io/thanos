@@ -18,30 +18,33 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/prometheus/common/route"
-
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/query"
-	"github.com/improbable-eng/thanos/pkg/testutil"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/thanos-io/thanos/pkg/compact"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/query"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func testQueryableCreator(queryable storage.Queryable) query.QueryableCreator {
-	return func(_ bool, _ time.Duration, _ bool, _ query.WarningReporter) storage.Queryable {
+	return func(_ bool, _ int64, _ bool, _ query.WarningReporter) storage.Queryable {
 		return queryable
 	}
 }
@@ -77,11 +80,12 @@ func TestEndpoints(t *testing.T) {
 	start := time.Unix(0, 0)
 
 	var tests = []struct {
-		endpoint apiFunc
+		endpoint ApiFunc
 		params   map[string]string
 		query    url.Values
+		method   string
 		response interface{}
-		errType  errorType
+		errType  ErrorType
 	}{
 		{
 			endpoint: api.query,
@@ -298,6 +302,14 @@ func TestEndpoints(t *testing.T) {
 				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
 			},
 		},
+		// Series that does not exist should return an empty array.
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`foobar`},
+			},
+			response: []labels.Labels{},
+		},
 		{
 			endpoint: api.series,
 			query: url.Values{
@@ -333,7 +345,7 @@ func TestEndpoints(t *testing.T) {
 				"start":   []string{"-2"},
 				"end":     []string{"-1"},
 			},
-			response: []labels.Labels(nil),
+			response: []labels.Labels{},
 		},
 		// Start and end after series ends.
 		{
@@ -343,7 +355,7 @@ func TestEndpoints(t *testing.T) {
 				"start":   []string{"100000"},
 				"end":     []string{"100001"},
 			},
-			response: []labels.Labels(nil),
+			response: []labels.Labels{},
 		},
 		// Start before series starts, end after series ends.
 		{
@@ -406,6 +418,133 @@ func TestEndpoints(t *testing.T) {
 			},
 			errType: errorBadData,
 		},
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric1{foo=~".+o"}`},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric1{foo=~".+o$"}`, `test_metric1{foo=~".+o"}`},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric1{foo=~".+o"}`, `none`},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		// Start and end before series starts.
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"-2"},
+				"end":     []string{"-1"},
+			},
+			response: []labels.Labels{},
+		},
+		// Start and end after series ends.
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"100000"},
+				"end":     []string{"100001"},
+			},
+			response: []labels.Labels{},
+		},
+		// Start before series starts, end after series ends.
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"-1"},
+				"end":     []string{"100000"},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		// Start and end within series.
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"1"},
+				"end":     []string{"100"},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		// Start within series, end after.
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"1"},
+				"end":     []string{"100000"},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		// Start before series, end within series.
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"start":   []string{"-1"},
+				"end":     []string{"1"},
+			},
+			response: []labels.Labels{
+				labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+			},
+			method: http.MethodPost,
+		},
+		// Missing match[] query params in series requests.
+		{
+			endpoint: api.series,
+			errType:  errorBadData,
+			method:   http.MethodPost,
+		},
+		{
+			endpoint: api.series,
+			query: url.Values{
+				"match[]": []string{`test_metric2`},
+				"dedup":   []string{"sdfsf-series"},
+			},
+			errType: errorBadData,
+			method:  http.MethodPost,
+		},
 	}
 
 	for _, test := range tests {
@@ -416,21 +555,37 @@ func TestEndpoints(t *testing.T) {
 				ctx = route.WithParam(ctx, p, v)
 			}
 
-			req, err := http.NewRequest("ANY", fmt.Sprintf("http://example.com?%s", test.query.Encode()), nil)
+			reqURL := "http://example.com"
+			params := test.query.Encode()
+
+			var body io.Reader
+			if test.method == http.MethodPost {
+				body = strings.NewReader(params)
+			} else if test.method == "" {
+				test.method = "ANY"
+				reqURL += "?" + params
+			}
+
+			req, err := http.NewRequest(test.method, reqURL, body)
 			if err != nil {
 				t.Fatal(err)
 			}
+
+			if body != nil {
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			}
+
 			resp, _, apiErr := test.endpoint(req.WithContext(ctx))
 			if apiErr != nil {
 				if test.errType == errorNone {
 					t.Fatalf("Unexpected error: %s", apiErr)
 				}
-				if test.errType != apiErr.typ {
-					t.Fatalf("Expected error of type %q but got type %q", test.errType, apiErr.typ)
+				if test.errType != apiErr.Typ {
+					t.Fatalf("Expected error of type %q but got type %q", test.errType, apiErr.Typ)
 				}
 				return
 			}
-			if apiErr == nil && test.errType != errorNone {
+			if test.errType != errorNone {
 				t.Fatalf("Expected error of type %q but got none", test.errType)
 			}
 
@@ -446,7 +601,7 @@ func TestEndpoints(t *testing.T) {
 
 func TestRespondSuccess(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		respond(w, "test", nil)
+		Respond(w, "test", nil)
 	}))
 	defer s.Close()
 
@@ -483,7 +638,7 @@ func TestRespondSuccess(t *testing.T) {
 
 func TestRespondError(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		respondError(w, &apiError{errorTimeout, errors.New("message")}, "test")
+		RespondError(w, &ApiError{errorTimeout, errors.New("message")}, "test")
 	}))
 	defer s.Close()
 
@@ -628,7 +783,7 @@ func TestParseDuration(t *testing.T) {
 func TestOptionsMethod(t *testing.T) {
 	r := route.New()
 	api := &API{}
-	api.Register(r, &opentracing.NoopTracer{}, log.NewNopLogger())
+	api.Register(r, &opentracing.NoopTracer{}, log.NewNopLogger(), extpromhttp.NewNopInstrumentationMiddleware())
 
 	s := httptest.NewServer(r)
 	defer s.Close()
@@ -687,4 +842,72 @@ func BenchmarkQueryResultEncoding(b *testing.B) {
 	c, err := json.Marshal(&input)
 	testutil.Ok(b, err)
 	fmt.Println(len(c))
+}
+
+func TestParseDownsamplingParamMillis(t *testing.T) {
+	var tests = []struct {
+		maxSourceResolutionParam string
+		result                   int64
+		step                     time.Duration
+		fail                     bool
+		enableAutodownsampling   bool
+	}{
+		{
+			maxSourceResolutionParam: "0s",
+			enableAutodownsampling:   false,
+			step:                     time.Hour,
+			result:                   int64(compact.ResolutionLevelRaw),
+			fail:                     false,
+		},
+		{
+			maxSourceResolutionParam: "5m",
+			step:                     time.Hour,
+			enableAutodownsampling:   false,
+			result:                   int64(compact.ResolutionLevel5m),
+			fail:                     false,
+		},
+		{
+			maxSourceResolutionParam: "1h",
+			step:                     time.Hour,
+			enableAutodownsampling:   false,
+			result:                   int64(compact.ResolutionLevel1h),
+			fail:                     false,
+		},
+		{
+			maxSourceResolutionParam: "",
+			enableAutodownsampling:   true,
+			step:                     time.Hour,
+			result:                   int64(time.Hour / (5 * 1000 * 1000)),
+			fail:                     false,
+		},
+		{
+			maxSourceResolutionParam: "",
+			enableAutodownsampling:   true,
+			step:                     time.Hour,
+			result:                   int64((1 * time.Hour) / 6),
+			fail:                     true,
+		},
+		{
+			maxSourceResolutionParam: "",
+			enableAutodownsampling:   true,
+			step:                     time.Hour,
+			result:                   int64((1 * time.Hour) / 6),
+			fail:                     true,
+		},
+	}
+
+	for i, test := range tests {
+		api := API{enableAutodownsampling: test.enableAutodownsampling}
+		v := url.Values{}
+		v.Set("max_source_resolution", test.maxSourceResolutionParam)
+		r := http.Request{PostForm: v}
+
+		maxResMillis, _ := api.parseDownsamplingParamMillis(&r, test.step)
+		if test.fail == false {
+			testutil.Assert(t, maxResMillis == test.result, "case %v: expected %v to be equal to %v", i, maxResMillis, test.result)
+		} else {
+			testutil.Assert(t, maxResMillis != test.result, "case %v: expected %v not to be equal to %v", i, maxResMillis, test.result)
+		}
+
+	}
 }

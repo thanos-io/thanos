@@ -4,36 +4,37 @@ import (
 	"context"
 	"math"
 	"net"
-	"net/http"
 	"net/url"
 	"sync"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
-	"github.com/improbable-eng/thanos/pkg/cluster"
-	"github.com/improbable-eng/thanos/pkg/component"
-	"github.com/improbable-eng/thanos/pkg/objstore/client"
-	"github.com/improbable-eng/thanos/pkg/promclient"
-	"github.com/improbable-eng/thanos/pkg/reloader"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/improbable-eng/thanos/pkg/shipper"
-	"github.com/improbable-eng/thanos/pkg/store"
-	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/oklog/run"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/reloader"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/shipper"
+	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"google.golang.org/grpc"
-	"gopkg.in/alecthomas/kingpin.v2"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
+
+const waitForExternalLabelsTimeout = 10 * time.Minute
 
 func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "sidecar for Prometheus server")
 
-	grpcBindAddr, httpBindAddr, cert, key, clientCA, newPeerFn := regCommonServerFlags(cmd)
+	grpcBindAddr, httpBindAddr, cert, key, clientCA := regCommonServerFlags(cmd)
 
 	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API. For better performance use local network.").
 		Default("http://localhost:9090").URL()
@@ -61,10 +62,6 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			*reloaderCfgOutputFile,
 			*reloaderRuleDirs,
 		)
-		peer, err := newPeerFn(logger, reg, false, "", false)
-		if err != nil {
-			return errors.Wrap(err, "new cluster peer")
-		}
 		return runSidecar(
 			g,
 			logger,
@@ -78,7 +75,6 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			*promURL,
 			*dataDir,
 			objStoreConfig,
-			peer,
 			rl,
 			*uploadCompacted,
 		)
@@ -98,7 +94,6 @@ func runSidecar(
 	promURL *url.URL,
 	dataDir string,
 	objStoreConfig *pathOrContent,
-	peer cluster.Peer,
 	reloader *reloader.Reloader,
 	uploadCompacted bool,
 ) error {
@@ -109,6 +104,17 @@ func runSidecar(
 		// TODO(fabxc): minimum timestamp is never adjusted if shipping is disabled.
 		mint: 0,
 		maxt: math.MaxInt64,
+	}
+
+	confContentYaml, err := objStoreConfig.Content()
+	if err != nil {
+		return errors.Wrap(err, "getting object store config")
+	}
+
+	var uploads = true
+	if len(confContentYaml) == 0 {
+		level.Info(logger).Log("msg", "no supported bucket was configured, uploads will be disabled")
+		uploads = false
 	}
 
 	// Setup all the concurrent groups.
@@ -125,6 +131,14 @@ func runSidecar(
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
+			// Only check Prometheus's flags when upload is enabled.
+			if uploads {
+				// Check prometheus's flags to ensure sane sidecar flags.
+				if err := validatePrometheus(ctx, logger, m); err != nil {
+					return errors.Wrap(err, "validate Prometheus flags")
+				}
+			}
+
 			// Blocking query of external labels before joining as a Source Peer into gossip.
 			// We retry infinitely until we reach and fetch labels from our Prometheus.
 			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
@@ -137,6 +151,10 @@ func runSidecar(
 					return err
 				}
 
+				level.Info(logger).Log(
+					"msg", "successfully loaded prometheus external labels",
+					"external_labels", m.Labels().String(),
+				)
 				promUp.Set(1)
 				lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
 				return nil
@@ -149,16 +167,6 @@ func runSidecar(
 				return errors.New("no external labels configured on Prometheus server, uniquely identifying external labels must be configured")
 			}
 
-			// New gossip cluster.
-			mint, maxt := m.Timestamps()
-			if err = peer.Join(cluster.PeerTypeSource, cluster.PeerMetadata{
-				Labels:  m.LabelsPB(),
-				MinTime: mint,
-				MaxTime: maxt,
-			}); err != nil {
-				return errors.Wrap(err, "join cluster")
-			}
-
 			// Periodically query the Prometheus config. We use this as a heartbeat as well as for updating
 			// the external labels we apply.
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
@@ -169,9 +177,6 @@ func runSidecar(
 					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
 					promUp.Set(0)
 				} else {
-					// Update gossip.
-					peer.SetLabels(m.LabelsPB())
-
 					promUp.Set(1)
 					lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
 				}
@@ -180,7 +185,6 @@ func runSidecar(
 			})
 		}, func(error) {
 			cancel()
-			peer.Close(2 * time.Second)
 		})
 	}
 	{
@@ -201,10 +205,8 @@ func runSidecar(
 		}
 		logger := log.With(logger, "component", component.Sidecar.String())
 
-		var client http.Client
-
 		promStore, err := store.NewPrometheusStore(
-			logger, &client, promURL, component.Sidecar, m.Labels, m.Timestamps)
+			logger, nil, promURL, component.Sidecar, m.Labels, m.Timestamps)
 		if err != nil {
 			return errors.Wrap(err, "create Prometheus store")
 		}
@@ -221,19 +223,7 @@ func runSidecar(
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			s.Stop()
-			runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
 		})
-	}
-
-	confContentYaml, err := objStoreConfig.Content()
-	if err != nil {
-		return err
-	}
-
-	var uploads = true
-	if len(confContentYaml) == 0 {
-		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
-		uploads = false
 	}
 
 	if uploads {
@@ -256,18 +246,27 @@ func runSidecar(
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
-		var s *shipper.Shipper
-		if uploadCompacted {
-			s, err = shipper.NewWithCompacted(ctx, logger, reg, dataDir, bkt, m.Labels, metadata.SidecarSource, promURL)
-			if err != nil {
-				return errors.Wrap(err, "create shipper")
-			}
-		} else {
-			s = shipper.New(logger, reg, dataDir, bkt, m.Labels, metadata.SidecarSource)
-		}
-
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+
+			extLabelsCtx, cancel := context.WithTimeout(ctx, waitForExternalLabelsTimeout)
+			defer cancel()
+
+			if err := runutil.Retry(2*time.Second, extLabelsCtx.Done(), func() error {
+				if len(m.Labels()) == 0 {
+					return errors.New("not uploading as no external labels are configured yet - is Prometheus healthy/reachable?")
+				}
+				return nil
+			}); err != nil {
+				return errors.Wrapf(err, "aborting as no external labels found after waiting %s", waitForExternalLabelsTimeout)
+			}
+
+			var s *shipper.Shipper
+			if uploadCompacted {
+				s = shipper.NewWithCompacted(logger, reg, dataDir, bkt, m.Labels, metadata.SidecarSource)
+			} else {
+				s = shipper.New(logger, reg, dataDir, bkt, m.Labels, metadata.SidecarSource)
+			}
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				if uploaded, err := s.Sync(ctx); err != nil {
@@ -279,9 +278,6 @@ func runSidecar(
 					level.Warn(logger).Log("msg", "reading timestamps failed", "err", err)
 				} else {
 					m.UpdateTimestamps(minTime, math.MaxInt64)
-
-					mint, maxt := m.Timestamps()
-					peer.SetTimestamps(mint, maxt)
 				}
 				return nil
 			})
@@ -290,7 +286,42 @@ func runSidecar(
 		})
 	}
 
-	level.Info(logger).Log("msg", "starting sidecar", "peer", peer.Name())
+	level.Info(logger).Log("msg", "starting sidecar")
+	return nil
+}
+
+func validatePrometheus(ctx context.Context, logger log.Logger, m *promMetadata) error {
+	var (
+		flagErr error
+		flags   promclient.Flags
+	)
+
+	if err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
+		if flags, flagErr = promclient.ConfiguredFlags(ctx, logger, m.promURL); flagErr != nil && flagErr != promclient.ErrFlagEndpointNotFound {
+			level.Warn(logger).Log("msg", "failed to get Prometheus flags. Is Prometheus running? Retrying", "err", flagErr)
+			return errors.Wrapf(flagErr, "fetch Prometheus flags")
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrapf(err, "fetch Prometheus flags")
+	}
+
+	if flagErr != nil {
+		level.Warn(logger).Log("msg", "failed to check Prometheus flags, due to potentially older Prometheus. No extra validation is done.", "err", flagErr)
+		return nil
+	}
+
+	// Check if compaction is disabled.
+	if flags.TSDBMinTime != flags.TSDBMaxTime {
+		return errors.Errorf("found that TSDB Max time is %s and Min time is %s. "+
+			"Compaction needs to be disabled (storage.tsdb.min-block-duration = storage.tsdb.max-block-duration)", flags.TSDBMaxTime, flags.TSDBMinTime)
+	}
+
+	// Check if block time is 2h.
+	if flags.TSDBMinTime != model.Duration(2*time.Hour) {
+		level.Warn(logger).Log("msg", "found that TSDB block time is not 2h. Only 2h block time is recommended.", "block-time", flags.TSDBMinTime)
+	}
+
 	return nil
 }
 

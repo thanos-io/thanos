@@ -8,14 +8,14 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
 const IndexIssueID = "index_issue"
@@ -117,7 +117,7 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 		}
 
 		level.Info(logger).Log("msg", "safe deleting broken block", "id", id, "issue", IndexIssueID)
-		if err := SafeDelete(ctx, logger, bkt, backupBkt, id); err != nil {
+		if err := BackupAndDeleteDownloaded(ctx, logger, filepath.Join(tmpdir, id.String()), bkt, backupBkt, id); err != nil {
 			return errors.Wrapf(err, "safe deleting old block %s failed", id)
 		}
 		level.Info(logger).Log("msg", "all good, continuing", "id", id, "issue", IndexIssueID)

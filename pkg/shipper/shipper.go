@@ -7,27 +7,23 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"math"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
-	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
-	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/promclient"
-	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/fileutil"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
 type metrics struct {
@@ -81,7 +77,6 @@ func newMetrics(r prometheus.Registerer, uploadCompacted bool) *metrics {
 type Shipper struct {
 	logger          log.Logger
 	dir             string
-	workDir         string
 	metrics         *metrics
 	bucket          objstore.Bucket
 	labels          func() labels.Labels
@@ -120,30 +115,18 @@ func New(
 // to remote if necessary, including compacted blocks which are already in filesystem.
 // It attaches the Thanos metadata section in each meta JSON file.
 func NewWithCompacted(
-	ctx context.Context,
 	logger log.Logger,
 	r prometheus.Registerer,
 	dir string,
 	bucket objstore.Bucket,
 	lbls func() labels.Labels,
 	source metadata.SourceType,
-	prometheusURL *url.URL,
-) (*Shipper, error) {
+) *Shipper {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	if lbls == nil {
 		lbls = func() labels.Labels { return nil }
-	}
-
-	flags, err := promclient.ConfiguredFlags(ctx, logger, prometheusURL)
-	if err != nil {
-		return nil, errors.Wrap(err, "configured flags; failed to check if compaction is disabled")
-	}
-
-	if flags.TSDBMinTime != model.Duration(2*time.Hour) || flags.TSDBMaxTime != model.Duration(2*time.Hour) {
-		return nil, errors.Errorf("Found that TSDB Max time is %s and Min time is %s. To use shipper with upload compacted option, "+
-			"compaction needs to be disabled (storage.tsdb.min-block-duration = storage.tsdb.max-block-duration = 2h", flags.TSDBMinTime, flags.TSDBMaxTime)
 	}
 
 	return &Shipper{
@@ -154,7 +137,7 @@ func NewWithCompacted(
 		metrics:         newMetrics(r, true),
 		source:          source,
 		uploadCompacted: true,
-	}, nil
+	}
 }
 
 // Timestamps returns the minimum timestamp for which data is available and the highest timestamp
@@ -214,7 +197,6 @@ func newLazyOverlapChecker(logger log.Logger, bucket objstore.Bucket, labels fun
 }
 
 func (c *lazyOverlapChecker) sync(ctx context.Context) error {
-	level.Info(c.logger).Log("msg", "gathering all existing blocks from the remote bucket")
 	if err := c.bucket.Iter(ctx, "", func(path string) error {
 		id, ok := block.IsBlockDir(path)
 		if !ok {
@@ -244,6 +226,7 @@ func (c *lazyOverlapChecker) sync(ctx context.Context) error {
 
 func (c *lazyOverlapChecker) IsOverlapping(ctx context.Context, newMeta tsdb.BlockMeta) error {
 	if !c.synced {
+		level.Info(c.logger).Log("msg", "gathering all existing blocks from the remote bucket for check", "id", newMeta.ULID.String())
 		if err := c.sync(ctx); err != nil {
 			return err
 		}
@@ -271,8 +254,8 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 	meta, err := ReadMetaFile(s.dir)
 	if err != nil {
 		// If we encounter any error, proceed with an empty meta file and overwrite it later.
-		// The meta file is only used to deduplicate uploads, which are properly handled
-		// by the system if their occur anyway.
+		// The meta file is only used to avoid unnecessary bucket.Exists call,
+		// which are properly handled by the system if their occur anyway.
 		if !os.IsNotExist(err) {
 			level.Warn(s.logger).Log("msg", "reading meta file failed, will override it", "err", err)
 		}
@@ -307,6 +290,15 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 			return nil
 		}
 
+		// Check against bucket if the meta file for this block exists.
+		ok, err := s.bucket.Exists(ctx, path.Join(m.ULID.String(), block.MetaFilename))
+		if err != nil {
+			return errors.Wrap(err, "check exists")
+		}
+		if ok {
+			return nil
+		}
+
 		// We only ship of the first compacted block level as normal flow.
 		if m.Compaction.Level > 1 {
 			if !s.uploadCompacted {
@@ -318,15 +310,6 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 				uploadErrs++
 				return nil
 			}
-		}
-
-		// Check against bucket if the meta file for this block exists.
-		ok, err := s.bucket.Exists(ctx, path.Join(m.ULID.String(), block.MetaFilename))
-		if err != nil {
-			return errors.Wrap(err, "check exists")
-		}
-		if ok {
-			return nil
 		}
 
 		if err := s.upload(ctx, m); err != nil {
@@ -520,7 +503,7 @@ func renameFile(logger log.Logger, from, to string) error {
 		return err
 	}
 
-	if err = fileutil.Fsync(pdir); err != nil {
+	if err = fileutil.Fdatasync(pdir); err != nil {
 		runutil.CloseWithLogOnErr(logger, pdir, "rename file dir close")
 		return err
 	}

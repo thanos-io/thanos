@@ -2,30 +2,29 @@ package main
 
 import (
 	"context"
-	"math"
 	"net"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/cluster"
-	"github.com/improbable-eng/thanos/pkg/objstore/client"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/improbable-eng/thanos/pkg/store"
-	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/oklog/run"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store"
+	storecache "github.com/thanos-io/thanos/pkg/store/cache"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"google.golang.org/grpc"
-	"gopkg.in/alecthomas/kingpin.v2"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 // registerStore registers a store command.
 func registerStore(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "store node giving access to blocks in a bucket provider. Now supported GCS, S3, Azure, Swift and Tencent COS.")
 
-	grpcBindAddr, httpBindAddr, cert, key, clientCA, newPeerFn := regCommonServerFlags(cmd)
+	grpcBindAddr, httpBindAddr, cert, key, clientCA := regCommonServerFlags(cmd)
 
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache remote blocks.").
 		Default("./data").String()
@@ -36,6 +35,12 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes for chunks.").
 		Default("2GB").Bytes()
 
+	maxSampleCount := cmd.Flag("store.grpc.series-sample-limit",
+		"Maximum amount of samples returned via a single Series call. 0 means no limit. NOTE: for efficiency we take 120 as the number of samples in chunk (it cannot be bigger than that), so the actual number of samples might be lower, even though the maximum could be hit.").
+		Default("0").Uint()
+
+	maxConcurrent := cmd.Flag("store.grpc.series-max-concurrency", "Maximum number of concurrent Series calls.").Default("20").Int()
+
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
 
 	syncInterval := cmd.Flag("sync-block-duration", "Repeat interval for syncing the blocks between local and remote view.").
@@ -45,10 +50,6 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 		Default("20").Int()
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
-		peer, err := newPeerFn(logger, reg, false, "", false)
-		if err != nil {
-			return errors.Wrap(err, "new cluster peer")
-		}
 		return runStore(g,
 			logger,
 			reg,
@@ -60,9 +61,10 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			*key,
 			*clientCA,
 			*httpBindAddr,
-			peer,
 			uint64(*indexCacheSize),
 			uint64(*chunkPoolSize),
+			uint64(*maxSampleCount),
+			int(*maxConcurrent),
 			name,
 			debugLogging,
 			*syncInterval,
@@ -84,9 +86,10 @@ func runStore(
 	key string,
 	clientCA string,
 	httpBindAddr string,
-	peer cluster.Peer,
 	indexCacheSizeBytes uint64,
 	chunkPoolSizeBytes uint64,
+	maxSampleCount uint64,
+	maxConcurrent int,
 	component string,
 	verbose bool,
 	syncInterval time.Duration,
@@ -110,13 +113,26 @@ func runStore(
 			}
 		}()
 
+		// TODO(bwplotka): Add as a flag?
+		maxItemSizeBytes := indexCacheSizeBytes / 2
+
+		indexCache, err := storecache.NewIndexCache(logger, reg, storecache.Opts{
+			MaxSizeBytes:     indexCacheSizeBytes,
+			MaxItemSizeBytes: maxItemSizeBytes,
+		})
+		if err != nil {
+			return errors.Wrap(err, "create index cache")
+		}
+
 		bs, err := store.NewBucketStore(
 			logger,
 			reg,
 			bkt,
 			dataDir,
-			indexCacheSizeBytes,
+			indexCache,
 			chunkPoolSizeBytes,
+			maxSampleCount,
+			maxConcurrent,
 			verbose,
 			blockSyncConcurrency,
 		)
@@ -139,7 +155,6 @@ func runStore(
 				if err := bs.SyncBlocks(ctx); err != nil {
 					level.Warn(logger).Log("msg", "syncing blocks failed", "err", err)
 				}
-				peer.SetTimestamps(bs.TimeRange())
 				return nil
 			})
 
@@ -166,28 +181,7 @@ func runStore(
 			level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
-			runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
-		})
-	}
-	{
-		ctx, cancel := context.WithCancel(context.Background())
-		g.Add(func() error {
-			// New gossip cluster.
-			if err := peer.Join(
-				cluster.PeerTypeStore,
-				cluster.PeerMetadata{
-					MinTime: math.MinInt64,
-					MaxTime: math.MaxInt64,
-				},
-			); err != nil {
-				return errors.Wrap(err, "join cluster")
-			}
-
-			<-ctx.Done()
-			return nil
-		}, func(error) {
-			cancel()
-			peer.Close(5 * time.Second)
+			s.Stop()
 		})
 	}
 	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {

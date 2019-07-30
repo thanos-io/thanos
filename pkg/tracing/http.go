@@ -34,9 +34,14 @@ func HTTPMiddleware(tracer opentracing.Tracer, name string, logger log.Logger, n
 		// If client specified ForceTracingBaggageKey header, ensure span includes it to force tracing.
 		span.SetBaggageItem(ForceTracingBaggageKey, r.Header.Get(ForceTracingBaggageKey))
 
+		if t, ok := tracer.(Tracer); ok {
+			if traceID, ok := t.GetTraceIDFromSpanContext(span.Context()); ok {
+				w.Header().Set(traceIDResponseHeader, traceID)
+			}
+		}
+
 		next.ServeHTTP(w, r.WithContext(opentracing.ContextWithSpan(ContextWithTracer(r.Context(), tracer), span)))
 		span.Finish()
-		return
 	}
 }
 

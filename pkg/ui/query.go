@@ -5,19 +5,18 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/component"
-	"github.com/improbable-eng/thanos/pkg/query"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/common/version"
+	"github.com/thanos-io/thanos/pkg/component"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/query"
 )
-
-var localhostRepresentations = []string{"127.0.0.1", "localhost"}
 
 type Query struct {
 	*BaseUI
@@ -67,14 +66,15 @@ func queryTmplFuncs() template.FuncMap {
 }
 
 // Register registers new GET routes for subpages and retirects from / to /graph.
-func (q *Query) Register(r *route.Router) {
-	instrf := prometheus.InstrumentHandlerFunc
+func (q *Query) Register(r *route.Router, ins extpromhttp.InstrumentationMiddleware) {
+	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+		return ins.NewHandler(name, http.HandlerFunc(next))
+	}
 
 	r.Get("/", instrf("root", q.root))
 	r.Get("/graph", instrf("graph", q.graph))
 	r.Get("/stores", instrf("stores", q.stores))
 	r.Get("/status", instrf("status", q.status))
-	r.Get("/flags", instrf("flags", q.flags))
 
 	r.Get("/static/*filepath", instrf("static", q.serveStaticAsset))
 	// TODO(bplotka): Consider adding more Thanos related data e.g:
@@ -122,10 +122,26 @@ func (q *Query) stores(w http.ResponseWriter, r *http.Request) {
 	for _, status := range q.storeSet.GetStoreStatus() {
 		statuses[status.StoreType] = append(statuses[status.StoreType], status)
 	}
-	q.executeTemplate(w, "stores.html", prefix, statuses)
-}
 
-func (q *Query) flags(w http.ResponseWriter, r *http.Request) {
-	prefix := GetWebPrefix(q.logger, q.flagsMap, r)
-	q.executeTemplate(w, "flags.html", prefix, q.flagsMap)
+	sources := make([]component.StoreAPI, 0, len(statuses))
+	for k := range statuses {
+		sources = append(sources, k)
+	}
+	sort.Slice(sources, func(i int, j int) bool {
+		if sources[i] == nil {
+			return false
+		}
+		if sources[j] == nil {
+			return true
+		}
+		return sources[i].String() < sources[j].String()
+	})
+
+	q.executeTemplate(w, "stores.html", prefix, struct {
+		Stores  map[component.StoreAPI][]query.StoreStatus
+		Sources []component.StoreAPI
+	}{
+		Stores:  statuses,
+		Sources: sources,
+	})
 }

@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/improbable-eng/thanos/pkg/reloader"
+	"github.com/thanos-io/thanos/pkg/reloader"
 )
 
 func ExampleReloader() {
@@ -35,7 +35,6 @@ func ExampleReloader() {
 		if _, err := io.WriteString(w, "Reloaded\n"); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-		return
 	}
 
 	http.HandleFunc("/-/reload", reloadHandler)

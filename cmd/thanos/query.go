@@ -14,22 +14,10 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/grpc-ecosystem/go-grpc-middleware"
-	"github.com/grpc-ecosystem/go-grpc-prometheus"
-	"github.com/improbable-eng/thanos/pkg/cluster"
-	"github.com/improbable-eng/thanos/pkg/component"
-	"github.com/improbable-eng/thanos/pkg/discovery/cache"
-	"github.com/improbable-eng/thanos/pkg/discovery/dns"
-	"github.com/improbable-eng/thanos/pkg/extprom"
-	"github.com/improbable-eng/thanos/pkg/query"
-	"github.com/improbable-eng/thanos/pkg/query/api"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/improbable-eng/thanos/pkg/store"
-	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/improbable-eng/thanos/pkg/tracing"
-	"github.com/improbable-eng/thanos/pkg/ui"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/oklog/run"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
@@ -37,19 +25,28 @@ import (
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/discovery/cache"
+	"github.com/thanos-io/thanos/pkg/discovery/dns"
+	"github.com/thanos-io/thanos/pkg/extprom"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/query"
+	v1 "github.com/thanos-io/thanos/pkg/query/api"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/tracing"
+	"github.com/thanos-io/thanos/pkg/ui"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"gopkg.in/alecthomas/kingpin.v2"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 // registerQuery registers a query command.
 func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string) {
 	cmd := app.Command(name, "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
 
-	grpcBindAddr, httpBindAddr, srvCert, srvKey, srvClientCA, newPeerFn := regCommonServerFlags(cmd)
-
-	httpAdvertiseAddr := cmd.Flag("http-advertise-address", "Explicit (external) host:port address to advertise for HTTP QueryAPI in gossip cluster. If empty, 'http-address' will be used.").
-		String()
+	grpcBindAddr, httpBindAddr, srvCert, srvKey, srvClientCA := regCommonServerFlags(cmd)
 
 	secure := cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").Bool()
 	cert := cmd.Flag("grpc-client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").String()
@@ -82,20 +79,26 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	fileSDInterval := modelDuration(cmd.Flag("store.sd-interval", "Refresh interval to re-read file SD files. It is used as a resync fallback.").
 		Default("5m"))
 
+	// TODO(bwplotka): Grab this from TTL at some point.
 	dnsSDInterval := modelDuration(cmd.Flag("store.sd-dns-interval", "Interval between DNS resolutions.").
 		Default("30s"))
 
-	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified. ").
+	dnsSDResolver := cmd.Flag("store.sd-dns-resolver", fmt.Sprintf("Resolver to use. Possible options: [%s, %s]", dns.GolangResolverType, dns.MiekgdnsResolverType)).
+		Default(string(dns.GolangResolverType)).Hidden().String()
+
+	unhealthyStoreTimeout := modelDuration(cmd.Flag("store.unhealthy-timeout", "Timeout before an unhealthy store is cleaned from the store UI page.").Default("5m"))
+
+	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified.").
 		Default("false").Bool()
 
 	enablePartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified.").
 		Default("true").Bool()
 
+	defaultEvaluationInterval := modelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
+
+	storeResponseTimeout := modelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
-		peer, err := newPeerFn(logger, reg, true, *httpAdvertiseAddr, true)
-		if err != nil {
-			return errors.Wrap(err, "new cluster peer")
-		}
 		selectorLset, err := parseFlagLabels(*selectorLabels)
 		if err != nil {
 			return errors.Wrap(err, "parse federation labels")
@@ -119,6 +122,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			fileSD = file.NewDiscovery(conf, logger)
 		}
 
+		promql.SetDefaultEvaluationInterval(time.Duration(*defaultEvaluationInterval))
+
 		return runQuery(
 			g,
 			logger,
@@ -139,14 +144,16 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*webPrefixHeaderName,
 			*maxConcurrentQueries,
 			time.Duration(*queryTimeout),
+			time.Duration(*storeResponseTimeout),
 			*replicaLabel,
-			peer,
 			selectorLset,
 			*stores,
 			*enableAutodownsampling,
 			*enablePartialResponse,
 			fileSD,
 			time.Duration(*dnsSDInterval),
+			*dnsSDResolver,
+			time.Duration(*unhealthyStoreTimeout),
 		)
 	}
 }
@@ -254,14 +261,16 @@ func runQuery(
 	webPrefixHeaderName string,
 	maxConcurrentQueries int,
 	queryTimeout time.Duration,
+	storeResponseTimeout time.Duration,
 	replicaLabel string,
-	peer cluster.Peer,
 	selectorLset labels.Labels,
 	storeAddrs []string,
 	enableAutodownsampling bool,
 	enablePartialResponse bool,
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
+	dnsSDResolver string,
+	unhealthyStoreTimeout time.Duration,
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
 	duplicatedStores := prometheus.NewCounter(prometheus.CounterOpts{
@@ -276,23 +285,17 @@ func runQuery(
 	}
 
 	fileSDCache := cache.New()
-	dnsProvider := dns.NewProvider(logger, extprom.NewSubsystem(reg, "query_store_api"))
+	dnsProvider := dns.NewProvider(
+		logger,
+		extprom.WrapRegistererWithPrefix("thanos_querier_store_apis_", reg),
+		dns.ResolverType(dnsSDResolver),
+	)
 
 	var (
 		stores = query.NewStoreSet(
 			logger,
 			reg,
 			func() (specs []query.StoreSpec) {
-				// Add store specs from gossip.
-				for id, ps := range peer.PeerStates(cluster.PeerTypesStoreAPIs()...) {
-					if ps.StoreAPIAddr == "" {
-						level.Error(logger).Log("msg", "Gossip found peer that propagates empty address, ignoring.", "lset", fmt.Sprintf("%v", ps.Metadata.Labels))
-						continue
-					}
-
-					specs = append(specs, &gossipSpec{id: id, addr: ps.StoreAPIAddr, stateFetcher: peer})
-				}
-
 				// Add DNS resolved addresses from static flags and file SD.
 				for _, addr := range dnsProvider.Addresses() {
 					specs = append(specs, query.NewGRPCStoreSpec(addr))
@@ -303,17 +306,16 @@ func runQuery(
 				return specs
 			},
 			dialOpts,
+			unhealthyStoreTimeout,
 		)
-		proxy = store.NewProxyStore(logger, func(context.Context) ([]store.Client, error) {
-			return stores.Get(), nil
-		}, component.Query, selectorLset)
+		proxy            = store.NewProxyStore(logger, stores.Get, component.Query, selectorLset, storeResponseTimeout)
 		queryableCreator = query.NewQueryableCreator(logger, proxy, replicaLabel)
 		engine           = promql.NewEngine(
 			promql.EngineOpts{
 				Logger:        logger,
 				Reg:           reg,
 				MaxConcurrent: maxConcurrentQueries,
-				// TODO(bwplotka): Expose this as a flag: https://github.com/improbable-eng/thanos/issues/703
+				// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703
 				MaxSamples: math.MaxInt32,
 				Timeout:    queryTimeout,
 			},
@@ -357,6 +359,7 @@ func runQuery(
 					}
 					fileSDCache.Update(update)
 					stores.Update(ctxUpdate)
+					dnsProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), storeAddrs...))
 				case <-ctxUpdate.Done():
 					return nil
 				}
@@ -364,21 +367,6 @@ func runQuery(
 		}, func(error) {
 			cancelUpdate()
 			close(fileSDUpdates)
-		})
-	}
-	{
-		ctx, cancel := context.WithCancel(context.Background())
-		g.Add(func() error {
-			// New gossip cluster.
-			if err := peer.Join(cluster.PeerTypeQuery, cluster.PeerMetadata{}); err != nil {
-				return errors.Wrap(err, "join cluster")
-			}
-
-			<-ctx.Done()
-			return nil
-		}, func(error) {
-			cancel()
-			peer.Close(5 * time.Second)
 		})
 	}
 	// Periodically update the addresses from static flags and file SD by resolving them using DNS SD if necessary.
@@ -410,11 +398,13 @@ func runQuery(
 			"web.prefix-header":   webPrefixHeaderName,
 		}
 
-		ui.NewQueryUI(logger, stores, flagsMap).Register(router.WithPrefix(webRoutePrefix))
+		ins := extpromhttp.NewInstrumentationMiddleware(reg)
+
+		ui.NewQueryUI(logger, stores, flagsMap).Register(router.WithPrefix(webRoutePrefix), ins)
 
 		api := v1.NewAPI(logger, reg, engine, queryableCreator, enableAutodownsampling, enablePartialResponse)
 
-		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger)
+		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
 
 		router.Get("/-/healthy", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
@@ -461,7 +451,6 @@ func runQuery(
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			s.Stop()
-			runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
 		})
 	}
 
@@ -484,24 +473,4 @@ func removeDuplicateStoreSpecs(logger log.Logger, duplicatedStores prometheus.Co
 		deduplicated = append(deduplicated, value)
 	}
 	return deduplicated
-}
-
-type gossipSpec struct {
-	id   string
-	addr string
-
-	stateFetcher cluster.PeerStateFetcher
-}
-
-func (s *gossipSpec) Addr() string {
-	return s.addr
-}
-
-// Metadata method for gossip store tries get current peer state.
-func (s *gossipSpec) Metadata(_ context.Context, _ storepb.StoreClient) (labels []storepb.Label, mint int64, maxt int64, err error) {
-	state, ok := s.stateFetcher.PeerState(s.id)
-	if !ok {
-		return nil, 0, 0, errors.Errorf("peer %s is no longer in gossip cluster", s.id)
-	}
-	return state.Metadata.Labels, state.Metadata.MinTime, state.Metadata.MaxTime, nil
 }

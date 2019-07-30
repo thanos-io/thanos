@@ -12,17 +12,13 @@ import (
 	blob "github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/objstore"
 	yaml "gopkg.in/yaml.v2"
 )
 
 const (
-	opObjectsList  = "ListBucket"
-	opObjectInsert = "PutObject"
-	opObjectGet    = "GetObject"
-	opObjectHead   = "HeadObject"
-	opObjectDelete = "DeleteObject"
+	azureDefaultEndpoint = "blob.core.windows.net"
 )
 
 // Config Azure storage configuration.
@@ -30,6 +26,8 @@ type Config struct {
 	StorageAccountName string `yaml:"storage_account"`
 	StorageAccountKey  string `yaml:"storage_account_key"`
 	ContainerName      string `yaml:"container"`
+	Endpoint           string `yaml:"endpoint"`
+	MaxRetries         int    `yaml:"max_retries"`
 }
 
 // Bucket implements the store.Bucket interface against Azure APIs.
@@ -44,6 +42,21 @@ func (conf *Config) validate() error {
 	if conf.StorageAccountName == "" ||
 		conf.StorageAccountKey == "" {
 		return errors.New("invalid Azure storage configuration")
+	}
+	if conf.StorageAccountName == "" && conf.StorageAccountKey != "" {
+		return errors.New("no Azure storage_account specified while storage_account_key is present in config file; both should be present")
+	}
+	if conf.StorageAccountName != "" && conf.StorageAccountKey == "" {
+		return errors.New("no Azure storage_account_key specified while storage_account is present in config file; both should be present")
+	}
+	if conf.ContainerName == "" {
+		return errors.New("no Azure container specified")
+	}
+	if conf.Endpoint == "" {
+		conf.Endpoint = azureDefaultEndpoint
+	}
+	if conf.MaxRetries < 0 {
+		return errors.New("the value of maxretries must be greater than or equal to 0 in the config file")
 	}
 	return nil
 }
@@ -62,7 +75,7 @@ func NewBucket(logger log.Logger, azureConfig []byte, component string) (*Bucket
 	}
 
 	ctx := context.Background()
-	container, err := createContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, conf.ContainerName)
+	container, err := createContainer(ctx, conf)
 	if err != nil {
 		ret, ok := err.(blob.StorageError)
 		if !ok {
@@ -70,7 +83,7 @@ func NewBucket(logger log.Logger, azureConfig []byte, component string) (*Bucket
 		}
 		if ret.ServiceCode() == "ContainerAlreadyExists" {
 			level.Debug(logger).Log("msg", "Getting connection to existing Azure blob container", "container", conf.ContainerName)
-			container, err = getContainer(ctx, conf.StorageAccountName, conf.StorageAccountKey, conf.ContainerName)
+			container, err = getContainer(ctx, conf)
 			if err != nil {
 				return nil, errors.Wrapf(err, "cannot get existing Azure blob container: %s", container)
 			}
@@ -166,7 +179,7 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 		return nil, errors.New("X-Ms-Error-Code: [BlobNotFound]")
 	}
 
-	blobURL, err := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
+	blobURL, err := getBlobURL(ctx, *b.config, name)
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot get Azure blob URL, address: %s", name)
 	}
@@ -190,6 +203,9 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 			BlockSize:   blob.BlobDefaultDownloadBlockSize,
 			Parallelism: uint16(3),
 			Progress:    nil,
+			RetryReaderOptionsPerBlock: blob.RetryReaderOptions{
+				MaxRetryRequests: b.config.MaxRetries,
+			},
 		},
 	); err != nil {
 		return nil, errors.Wrapf(err, "cannot download blob, address: %s", blobURL.BlobURL)
@@ -211,7 +227,7 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 // Exists checks if the given object exists.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 	level.Debug(b.logger).Log("msg", "check if blob exists", "blob", name)
-	blobURL, err := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
+	blobURL, err := getBlobURL(ctx, *b.config, name)
 	if err != nil {
 		return false, errors.Wrapf(err, "cannot get Azure blob URL, address: %s", name)
 	}
@@ -229,7 +245,7 @@ func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	level.Debug(b.logger).Log("msg", "Uploading blob", "blob", name)
-	blobURL, err := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
+	blobURL, err := getBlobURL(ctx, *b.config, name)
 	if err != nil {
 		return errors.Wrapf(err, "cannot get Azure blob URL, address: %s", name)
 	}
@@ -247,7 +263,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
 	level.Debug(b.logger).Log("msg", "Deleting blob", "blob", name)
-	blobURL, err := getBlobURL(ctx, b.config.StorageAccountName, b.config.StorageAccountKey, b.config.ContainerName, name)
+	blobURL, err := getBlobURL(ctx, *b.config, name)
 	if err != nil {
 		return errors.Wrapf(err, "cannot get Azure blob URL, address: %s", name)
 	}

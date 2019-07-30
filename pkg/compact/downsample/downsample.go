@@ -8,16 +8,17 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
-	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/value"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/tsdb/chunks"
+	tsdberrors "github.com/prometheus/tsdb/errors"
 	"github.com/prometheus/tsdb/index"
 	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
 // Standard downsampling resolution levels in Thanos.
@@ -43,13 +44,13 @@ func Downsample(
 	if err != nil {
 		return id, errors.Wrap(err, "open index reader")
 	}
-	defer runutil.CloseWithErrCapture(logger, &err, indexr, "downsample index reader")
+	defer runutil.CloseWithErrCapture(&err, indexr, "downsample index reader")
 
 	chunkr, err := b.Chunks()
 	if err != nil {
 		return id, errors.Wrap(err, "open chunk reader")
 	}
-	defer runutil.CloseWithErrCapture(logger, &err, chunkr, "downsample chunk reader")
+	defer runutil.CloseWithErrCapture(&err, chunkr, "downsample chunk reader")
 
 	// Generate new block id.
 	uid := ulid.MustNew(ulid.Now(), rand.New(rand.NewSource(time.Now().UnixNano())))
@@ -63,7 +64,7 @@ func Downsample(
 	// Remove blockDir in case of errors.
 	defer func() {
 		if err != nil {
-			var merr tsdb.MultiError
+			var merr tsdberrors.MultiError
 			merr.Add(err)
 			merr.Add(os.RemoveAll(blockDir))
 			err = merr.Err()
@@ -81,12 +82,13 @@ func Downsample(
 	if err != nil {
 		return id, errors.Wrap(err, "get streamed block writer")
 	}
-	defer runutil.CloseWithErrCapture(logger, &err, streamedBlockWriter, "close stream block writer")
+	defer runutil.CloseWithErrCapture(&err, streamedBlockWriter, "close stream block writer")
 
 	postings, err := indexr.Postings(index.AllPostingsKey())
 	if err != nil {
 		return id, errors.Wrap(err, "get all postings list")
 	}
+
 	var (
 		aggrChunks []*AggrChunk
 		all        []sample
@@ -239,7 +241,6 @@ func (a *aggregator) add(v float64) {
 // aggrChunkBuilder builds chunks for multiple different aggregates.
 type aggrChunkBuilder struct {
 	mint, maxt int64
-	isCounter  bool
 	added      int
 
 	chunks [5]chunkenc.Chunk
