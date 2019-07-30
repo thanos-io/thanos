@@ -1,12 +1,10 @@
 package storecache
 
 import (
-	"math"
 	"sync"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	lru "github.com/hashicorp/golang-lru/simplelru"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -53,7 +51,7 @@ type IndexCache struct {
 	mtx sync.Mutex
 
 	logger           log.Logger
-	lru              *lru.LRU
+	storage          StorageCache
 	maxSizeBytes     uint64
 	maxItemSizeBytes uint64
 
@@ -163,11 +161,11 @@ func NewIndexCache(logger log.Logger, reg prometheus.Registerer, opts Opts) (*In
 
 	// Initialize LRU cache with a high size limit since we will manage evictions ourselves
 	// based on stored size using `RemoveOldest` method.
-	l, err := lru.NewLRU(math.MaxInt64, c.onEvict)
+	storage, err := NewSimpleLRU(c.onEvict)
 	if err != nil {
 		return nil, err
 	}
-	c.lru = l
+	c.storage = storage
 
 	level.Info(logger).Log(
 		"msg", "created index cache",
@@ -196,7 +194,7 @@ func (c *IndexCache) get(typ string, key cacheKey) ([]byte, bool) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
-	v, ok := c.lru.Get(key)
+	v, ok := c.storage.Get(key)
 	if !ok {
 		return nil, false
 	}
@@ -210,7 +208,7 @@ func (c *IndexCache) set(typ string, key cacheKey, val []byte) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
-	if _, ok := c.lru.Get(key); ok {
+	if _, ok := c.storage.Get(key); ok {
 		return
 	}
 
@@ -223,7 +221,7 @@ func (c *IndexCache) set(typ string, key cacheKey, val []byte) {
 	// to ensure we don't waste huge amounts of space for something small.
 	v := make([]byte, len(val))
 	copy(v, val)
-	c.lru.Add(key, v)
+	c.storage.Add(key, v)
 
 	c.added.WithLabelValues(typ).Inc()
 	c.currentSize.WithLabelValues(typ).Add(float64(size))
@@ -248,7 +246,7 @@ func (c *IndexCache) ensureFits(size uint64, typ string) bool {
 	}
 
 	for c.curSize+size > c.maxSizeBytes {
-		if _, _, ok := c.lru.RemoveOldest(); !ok {
+		if _, _, ok := c.storage.RemoveOldest(); !ok {
 			level.Error(c.logger).Log(
 				"msg", "LRU has nothing more to evict, but we still cannot allocate the item. Resetting cache.",
 				"maxItemSizeBytes", c.maxItemSizeBytes,
@@ -264,7 +262,7 @@ func (c *IndexCache) ensureFits(size uint64, typ string) bool {
 }
 
 func (c *IndexCache) reset() {
-	c.lru.Purge()
+	c.storage.Purge()
 	c.current.Reset()
 	c.currentSize.Reset()
 	c.totalCurrentSize.Reset()
