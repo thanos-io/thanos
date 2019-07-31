@@ -64,8 +64,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
 		Default("20").Int()
 
-	replicaLabel := cmd.Flag("query.replica-label", "Label to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter.").
-		String()
+	replicaLabels := cmd.Flag("query.replica-label", "Label to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter.").
+		Strings()
 
 	selectorLabels := cmd.Flag("selector-label", "Query selector labels that will be exposed in info endpoint (repeated).").
 		PlaceHolder("<name>=\"<value>\"").Strings()
@@ -145,7 +145,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*maxConcurrentQueries,
 			time.Duration(*queryTimeout),
 			time.Duration(*storeResponseTimeout),
-			*replicaLabel,
+			*replicaLabels,
 			selectorLset,
 			*stores,
 			*enableAutodownsampling,
@@ -262,7 +262,7 @@ func runQuery(
 	maxConcurrentQueries int,
 	queryTimeout time.Duration,
 	storeResponseTimeout time.Duration,
-	replicaLabel string,
+	replicaLabels []string,
 	selectorLset labels.Labels,
 	storeAddrs []string,
 	enableAutodownsampling bool,
@@ -309,7 +309,7 @@ func runQuery(
 			unhealthyStoreTimeout,
 		)
 		proxy            = store.NewProxyStore(logger, stores.Get, component.Query, selectorLset, storeResponseTimeout)
-		queryableCreator = query.NewQueryableCreator(logger, proxy, replicaLabel)
+		queryableCreator = query.NewQueryableCreator(logger, proxy, replicaLabels)
 		engine           = promql.NewEngine(
 			promql.EngineOpts{
 				Logger:        logger,

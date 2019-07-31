@@ -292,8 +292,8 @@ func (it *chunkSeriesIterator) Err() error {
 }
 
 type dedupSeriesSet struct {
-	set          storage.SeriesSet
-	replicaLabel string
+	set           storage.SeriesSet
+	replicaLabels map[string]struct{}
 
 	replicas []storage.Series
 	lset     labels.Labels
@@ -301,8 +301,8 @@ type dedupSeriesSet struct {
 	ok       bool
 }
 
-func newDedupSeriesSet(set storage.SeriesSet, replicaLabel string) storage.SeriesSet {
-	s := &dedupSeriesSet{set: set, replicaLabel: replicaLabel}
+func newDedupSeriesSet(set storage.SeriesSet, replicaLabels map[string]struct{}) storage.SeriesSet {
+	s := &dedupSeriesSet{set: set, replicaLabels: replicaLabels}
 	s.ok = s.set.Next()
 	if s.ok {
 		s.peek = s.set.At()
@@ -325,7 +325,7 @@ func (s *dedupSeriesSet) Next() bool {
 // replica label if it exists
 func (s *dedupSeriesSet) peekLset() labels.Labels {
 	lset := s.peek.Labels()
-	if lset[len(lset)-1].Name != s.replicaLabel {
+	if _, ok := s.replicaLabels[lset[len(lset)-1].Name]; !ok {
 		return lset
 	}
 	return lset[:len(lset)-1]

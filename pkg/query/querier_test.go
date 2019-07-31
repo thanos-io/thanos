@@ -25,7 +25,7 @@ import (
 func TestQueryableCreator_MaxResolution(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 	testProxy := &storeServer{resps: []*storepb.SeriesResponse{}}
-	queryableCreator := NewQueryableCreator(nil, testProxy, "test")
+	queryableCreator := NewQueryableCreator(nil, testProxy, []string{"test"})
 
 	oneHourMillis := int64(1*time.Hour) / int64(time.Millisecond)
 	queryable := queryableCreator(false, oneHourMillis, false, func(err error) {})
@@ -55,7 +55,7 @@ func TestQuerier_DownsampledData(t *testing.T) {
 		},
 	}
 
-	q := NewQueryableCreator(nil, testProxy, "")(false, 9999999, false, nil)
+	q := NewQueryableCreator(nil, testProxy, []string{""})(false, 9999999, false, nil)
 
 	engine := promql.NewEngine(
 		promql.EngineOpts{
@@ -172,7 +172,7 @@ func TestQuerier_Series(t *testing.T) {
 
 	// Querier clamps the range to [1,300], which should drop some samples of the result above.
 	// The store API allows endpoints to send more data then initially requested.
-	q := newQuerier(context.Background(), nil, 1, 300, "", testProxy, false, 0, true, nil)
+	q := newQuerier(context.Background(), nil, 1, 300, []string{""}, testProxy, false, 0, true, nil)
 	defer func() { testutil.Ok(t, q.Close()) }()
 
 	res, _, err := q.Select(&storage.SelectParams{})
@@ -216,56 +216,129 @@ func TestQuerier_Series(t *testing.T) {
 func TestSortReplicaLabel(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
-	set := []storepb.Series{
-		{Labels: []storepb.Label{
-			{Name: "a", Value: "1"},
-			{Name: "b", Value: "replica-1"},
-			{Name: "c", Value: "3"},
-		}},
-		{Labels: []storepb.Label{
-			{Name: "a", Value: "1"},
-			{Name: "b", Value: "replica-1"},
-			{Name: "c", Value: "3"},
-			{Name: "d", Value: "4"},
-		}},
-		{Labels: []storepb.Label{
-			{Name: "a", Value: "1"},
-			{Name: "b", Value: "replica-1"},
-			{Name: "c", Value: "4"},
-		}},
-		{Labels: []storepb.Label{
-			{Name: "a", Value: "1"},
-			{Name: "b", Value: "replica-2"},
-			{Name: "c", Value: "3"},
-		}},
+	tests := []struct {
+		Input       []storepb.Series
+		Exp         []storepb.Series
+		DedupLabels map[string]struct{}
+	}{
+		// 0 Single deduplication label.
+		{
+			Input: []storepb.Series{
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "b", Value: "replica-1"},
+					{Name: "c", Value: "3"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "b", Value: "replica-1"},
+					{Name: "c", Value: "3"},
+					{Name: "d", Value: "4"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "b", Value: "replica-1"},
+					{Name: "c", Value: "4"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "b", Value: "replica-2"},
+					{Name: "c", Value: "3"},
+				}},
+			},
+			Exp: []storepb.Series{
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "3"},
+					{Name: "b", Value: "replica-1"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "3"},
+					{Name: "b", Value: "replica-2"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "3"},
+					{Name: "d", Value: "4"},
+					{Name: "b", Value: "replica-1"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "4"},
+					{Name: "b", Value: "replica-1"},
+				}},
+			},
+			DedupLabels: map[string]struct{}{"b": struct{}{}},
+		},
+		// 1 Multi deduplication labels.
+		{
+			Input: []storepb.Series{
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "b", Value: "replica-1"},
+					{Name: "b1", Value: "replica-1"},
+					{Name: "c", Value: "3"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "b", Value: "replica-1"},
+					{Name: "b1", Value: "replica-1"},
+					{Name: "c", Value: "3"},
+					{Name: "d", Value: "4"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "b", Value: "replica-1"},
+					{Name: "b1", Value: "replica-1"},
+					{Name: "c", Value: "4"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "b", Value: "replica-2"},
+					{Name: "b1", Value: "replica-2"},
+					{Name: "c", Value: "3"},
+				}},
+			},
+			Exp: []storepb.Series{
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "3"},
+					{Name: "b", Value: "replica-1"},
+					{Name: "b1", Value: "replica-1"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "3"},
+					{Name: "b", Value: "replica-2"},
+					{Name: "b1", Value: "replica-2"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "3"},
+					{Name: "d", Value: "4"},
+					{Name: "b", Value: "replica-1"},
+					{Name: "b1", Value: "replica-1"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "4"},
+					{Name: "b", Value: "replica-1"},
+					{Name: "b1", Value: "replica-1"},
+				}},
+			},
+			DedupLabels: map[string]struct{}{
+				"b":  struct{}{},
+				"b1": struct{}{},
+			},
+		},
 	}
-
-	sortDedupLabels(set, "b")
-
-	exp := []storepb.Series{
-		{Labels: []storepb.Label{
-			{Name: "a", Value: "1"},
-			{Name: "c", Value: "3"},
-			{Name: "b", Value: "replica-1"},
-		}},
-		{Labels: []storepb.Label{
-			{Name: "a", Value: "1"},
-			{Name: "c", Value: "3"},
-			{Name: "b", Value: "replica-2"},
-		}},
-		{Labels: []storepb.Label{
-			{Name: "a", Value: "1"},
-			{Name: "c", Value: "3"},
-			{Name: "d", Value: "4"},
-			{Name: "b", Value: "replica-1"},
-		}},
-		{Labels: []storepb.Label{
-			{Name: "a", Value: "1"},
-			{Name: "c", Value: "4"},
-			{Name: "b", Value: "replica-1"},
-		}},
+	for _, test := range tests {
+		t.Run("", func(t *testing.T) {
+			sortDedupLabels(test.Input, test.DedupLabels)
+			testutil.Equals(t, test.Exp, test.Input)
+		})
 	}
-	testutil.Equals(t, exp, set)
 }
 
 func expandSeries(t testing.TB, it storage.SeriesIterator) (res []sample) {
@@ -354,7 +427,7 @@ func TestDedupSeriesSet(t *testing.T) {
 		maxt: math.MaxInt64,
 		set:  newStoreSeriesSet(series),
 	}
-	dedupSet := newDedupSeriesSet(set, "replica")
+	dedupSet := newDedupSeriesSet(set, map[string]struct{}{"replica": struct{}{}})
 
 	i := 0
 	for dedupSet.Next() {
