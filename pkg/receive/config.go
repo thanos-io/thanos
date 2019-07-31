@@ -79,13 +79,13 @@ func NewConfigWatcher(logger log.Logger, r prometheus.Registerer, path string, i
 			}),
 		hashringNodesGauge: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: "thanos_receive_hashrings_nodes",
+				Name: "thanos_receive_hashring_nodes",
 				Help: "The number of nodes per hashring.",
 			},
 			[]string{"name"}),
 		hashringTenantsGauge: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: "thanos_receive_hashrings_tenants",
+				Name: "thanos_receive_hashring_tenants",
 				Help: "The number of tenants per hashring.",
 			},
 			[]string{"name"}),
