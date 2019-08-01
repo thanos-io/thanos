@@ -23,10 +23,12 @@ $ thanos query \
 ## Deduplication
 
 The query layer can deduplicate series that were collected from high-availability pairs of data sources such as Prometheus.
-A fixed replica label must be chosen for the entire cluster and can then be passed to query nodes on startup.
+A fixed single or multiple replica labels must be chosen for the entire cluster and can then be passed to query nodes on startup.
 
 Two or more series that are only distinguished by the given replica label, will be merged into a single time series.
-This also hides gaps in collection of a single data source. For example:
+This also hides gaps in collection of a single data source.
+
+### An example with a single replica labels:
 
 * Prometheus + sidecar "A": `cluster=1,env=2,replica=A`
 * Prometheus + sidecar "B": `cluster=1,env=2,replica=B`
@@ -47,11 +49,27 @@ And we query for metric `up{job="prometheus",env="2"}` with this option we will 
   * `up{job="prometheus",env="2",cluster="1"} 1`
   * `up{job="prometheus",env="2",cluster="2"} 1`
 
-WITHOUT this replica flag (so deduplication turned off), we will get 3 results:
+WITHOUT this replica flag (deduplication turned off), we will get 3 results:
 
   * `up{job="prometheus",env="2",cluster="1",replica="A"} 1`
   * `up{job="prometheus",env="2",cluster="1",replica="B"} 1`
   * `up{job="prometheus",env="2",cluster="2",replica="A"} 1`
+
+### The same example with multiple replica labels:
+
+* Prometheus + sidecar "A": `cluster=1,env=2,replica=A,replicaX=A`
+* Prometheus + sidecar "B": `cluster=1,env=2,replica=B,replicaX=B`
+* Prometheus + sidecar "A" in different cluster: `cluster=2,env=2,replica=A,replicaX=A`
+
+```
+$ thanos query \
+    --http-address        "0.0.0.0:9090" \
+    --query.replica-label "replica" \
+    --query.replica-label "replicaX" \
+    --store               "<store-api>:<grpc-port>" \
+    --store               "<store-api2>:<grpc-port>" \
+```
+
 
 This logic can also be controlled via parameter on QueryAPI. More details below.
 

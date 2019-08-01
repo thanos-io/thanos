@@ -166,6 +166,7 @@ thanos query \
     --store               1.2.3.4:19090 \
     --store               1.2.3.5:19090 \
     --query.replica-label replica  # Replica label for de-duplication
+    --query.replica-label replicaX # Supports multiple replica labels for de-duplication
 ```
 
 Go to the configured HTTP address, and you should now be able to query across all Prometheus instances and receive de-duplicated data.
