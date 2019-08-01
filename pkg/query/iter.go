@@ -328,7 +328,7 @@ func (s *dedupSeriesSet) peekLset() labels.Labels {
 	if _, ok := s.replicaLabels[lset[len(lset)-1].Name]; !ok {
 		return lset
 	}
-	return lset[:len(lset)-1]
+	return lset[:len(lset)-len(s.replicaLabels)]
 }
 
 func (s *dedupSeriesSet) next() bool {
