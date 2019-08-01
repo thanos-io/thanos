@@ -217,13 +217,13 @@ func TestSortReplicaLabel(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	tests := []struct {
-		Input       []storepb.Series
-		Exp         []storepb.Series
-		DedupLabels map[string]struct{}
+		input       []storepb.Series
+		exp         []storepb.Series
+		dedupLabels map[string]struct{}
 	}{
 		// 0 Single deduplication label.
 		{
-			Input: []storepb.Series{
+			input: []storepb.Series{
 				{Labels: []storepb.Label{
 					{Name: "a", Value: "1"},
 					{Name: "b", Value: "replica-1"},
@@ -246,7 +246,7 @@ func TestSortReplicaLabel(t *testing.T) {
 					{Name: "c", Value: "3"},
 				}},
 			},
-			Exp: []storepb.Series{
+			exp: []storepb.Series{
 				{Labels: []storepb.Label{
 					{Name: "a", Value: "1"},
 					{Name: "c", Value: "3"},
@@ -269,11 +269,11 @@ func TestSortReplicaLabel(t *testing.T) {
 					{Name: "b", Value: "replica-1"},
 				}},
 			},
-			DedupLabels: map[string]struct{}{"b": struct{}{}},
+			dedupLabels: map[string]struct{}{"b": struct{}{}},
 		},
 		// 1 Multi deduplication labels.
 		{
-			Input: []storepb.Series{
+			input: []storepb.Series{
 				{Labels: []storepb.Label{
 					{Name: "a", Value: "1"},
 					{Name: "b", Value: "replica-1"},
@@ -300,7 +300,7 @@ func TestSortReplicaLabel(t *testing.T) {
 					{Name: "c", Value: "3"},
 				}},
 			},
-			Exp: []storepb.Series{
+			exp: []storepb.Series{
 				{Labels: []storepb.Label{
 					{Name: "a", Value: "1"},
 					{Name: "c", Value: "3"},
@@ -327,7 +327,7 @@ func TestSortReplicaLabel(t *testing.T) {
 					{Name: "b1", Value: "replica-1"},
 				}},
 			},
-			DedupLabels: map[string]struct{}{
+			dedupLabels: map[string]struct{}{
 				"b":  struct{}{},
 				"b1": struct{}{},
 			},
@@ -335,8 +335,8 @@ func TestSortReplicaLabel(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
-			sortDedupLabels(test.Input, test.DedupLabels)
-			testutil.Equals(t, test.Exp, test.Input)
+			sortDedupLabels(test.input, test.dedupLabels)
+			testutil.Equals(t, test.exp, test.input)
 		})
 	}
 }
@@ -353,91 +353,173 @@ func expandSeries(t testing.TB, it storage.SeriesIterator) (res []sample) {
 func TestDedupSeriesSet(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
-	input := []struct {
-		lset []storepb.Label
-		vals []sample
-	}{
-		{
-			lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-1"}},
-			vals: []sample{{10000, 1}, {20000, 2}},
-		}, {
-			lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-2"}},
-			vals: []sample{{60000, 3}, {70000, 4}},
-		}, {
-			lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-3"}},
-			vals: []sample{{200000, 5}, {210000, 6}},
-		}, {
-			lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
-			vals: []sample{{10000, 1}, {20000, 2}},
-		}, {
-			lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
-			vals: []sample{{10000, 1}, {20000, 2}},
-		}, {
-			lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "replica", Value: "replica-1"}},
-			vals: []sample{{10000, 1}, {20000, 2}},
-		}, {
-			lset: []storepb.Label{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-3"}},
-			vals: []sample{{10000, 1}, {20000, 2}},
-		}, {
-			lset: []storepb.Label{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-3"}},
-			vals: []sample{{60000, 3}, {70000, 4}},
-		},
-	}
-	exp := []struct {
-		lset labels.Labels
-		vals []sample
-	}{
-		{
-			lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
-			vals: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}, {200000, 5}, {210000, 6}},
-		},
-		{
-			lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
-			vals: []sample{{10000, 1}, {20000, 2}},
-		},
-		{
-			lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
-			vals: []sample{{10000, 1}, {20000, 2}},
-		},
-		{
-			lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}},
-			vals: []sample{{10000, 1}, {20000, 2}},
-		},
-		{
-			lset: labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}},
-			vals: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}},
-		},
-	}
-	var series []storepb.Series
-	for _, c := range input {
-		chk := chunkenc.NewXORChunk()
-		app, _ := chk.Appender()
-		for _, s := range c.vals {
-			app.Append(s.t, s.v)
+	tests := []struct {
+		input []struct {
+			lset []storepb.Label
+			vals []sample
 		}
-		series = append(series, storepb.Series{
-			Labels: c.lset,
-			Chunks: []storepb.AggrChunk{
-				{Raw: &storepb.Chunk{Type: storepb.Chunk_XOR, Data: chk.Bytes()}},
+		exp []struct {
+			lset labels.Labels
+			vals []sample
+		}
+		dedupLabels map[string]struct{}
+	}{
+		{ // 0 Single dedup label.
+			input: []struct {
+				lset []storepb.Label
+				vals []sample
+			}{
+				{
+					lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-1"}},
+					vals: []sample{{10000, 1}, {20000, 2}},
+				}, {
+					lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-2"}},
+					vals: []sample{{60000, 3}, {70000, 4}},
+				}, {
+					lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-3"}},
+					vals: []sample{{200000, 5}, {210000, 6}},
+				}, {
+					lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
+					vals: []sample{{10000, 1}, {20000, 2}},
+				}, {
+					lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					vals: []sample{{10000, 1}, {20000, 2}},
+				}, {
+					lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "replica", Value: "replica-1"}},
+					vals: []sample{{10000, 1}, {20000, 2}},
+				}, {
+					lset: []storepb.Label{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-3"}},
+					vals: []sample{{10000, 1}, {20000, 2}},
+				}, {
+					lset: []storepb.Label{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-3"}},
+					vals: []sample{{60000, 3}, {70000, 4}},
+				},
 			},
+			exp: []struct {
+				lset labels.Labels
+				vals []sample
+			}{
+				{
+					lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					vals: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}, {200000, 5}, {210000, 6}},
+				},
+				{
+					lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
+					vals: []sample{{10000, 1}, {20000, 2}},
+				},
+				{
+					lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					vals: []sample{{10000, 1}, {20000, 2}},
+				},
+				{
+					lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}},
+					vals: []sample{{10000, 1}, {20000, 2}},
+				},
+				{
+					lset: labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}},
+					vals: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}},
+				},
+			},
+			dedupLabels: map[string]struct{}{
+				"replica": struct{}{},
+			},
+		},
+		{ // 1 Multi dedup label.
+			input: []struct {
+				lset []storepb.Label
+				vals []sample
+			}{
+				{
+					lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-1"}, {Name: "replicaA", Value: "replica-1"}},
+					vals: []sample{{10000, 1}, {20000, 2}},
+				}, {
+					lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-2"}, {Name: "replicaA", Value: "replica-2"}},
+					vals: []sample{{60000, 3}, {70000, 4}},
+				}, {
+					lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-3"}, {Name: "replicaA", Value: "replica-3"}},
+					vals: []sample{{200000, 5}, {210000, 6}},
+				}, {
+					lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
+					vals: []sample{{10000, 1}, {20000, 2}},
+				}, {
+					lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					vals: []sample{{10000, 1}, {20000, 2}},
+				}, {
+					lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}, {Name: "replica", Value: "replica-1"}, {Name: "replicaA", Value: "replica-1"}},
+					vals: []sample{{10000, 1}, {20000, 2}},
+				}, {
+					lset: []storepb.Label{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-3"}, {Name: "replicaA", Value: "replica-3"}},
+					vals: []sample{{10000, 1}, {20000, 2}},
+				}, {
+					lset: []storepb.Label{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-3"}, {Name: "replicaA", Value: "replica-3"}},
+					vals: []sample{{60000, 3}, {70000, 4}},
+				},
+			},
+			exp: []struct {
+				lset labels.Labels
+				vals []sample
+			}{
+				{
+					lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					vals: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}, {200000, 5}, {210000, 6}},
+				},
+				{
+					lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "d", Value: "4"}},
+					vals: []sample{{10000, 1}, {20000, 2}},
+				},
+				{
+					lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
+					vals: []sample{{10000, 1}, {20000, 2}},
+				},
+				{
+					lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "4"}},
+					vals: []sample{{10000, 1}, {20000, 2}},
+				},
+				{
+					lset: labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}},
+					vals: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}},
+				},
+			},
+			dedupLabels: map[string]struct{}{
+				"replica":  struct{}{},
+				"replicaA": struct{}{},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run("", func(t *testing.T) {
+			var series []storepb.Series
+			for _, c := range test.input {
+				chk := chunkenc.NewXORChunk()
+				app, _ := chk.Appender()
+				for _, s := range c.vals {
+					app.Append(s.t, s.v)
+				}
+				series = append(series, storepb.Series{
+					Labels: c.lset,
+					Chunks: []storepb.AggrChunk{
+						{Raw: &storepb.Chunk{Type: storepb.Chunk_XOR, Data: chk.Bytes()}},
+					},
+				})
+			}
+			set := promSeriesSet{
+				mint: 1,
+				maxt: math.MaxInt64,
+				set:  newStoreSeriesSet(series),
+			}
+			dedupSet := newDedupSeriesSet(set, test.dedupLabels)
+
+			i := 0
+			for dedupSet.Next() {
+				testutil.Equals(t, test.exp[i].lset, dedupSet.At().Labels(), "labels mismatch at index:%v", i)
+				res := expandSeries(t, dedupSet.At().Iterator())
+				testutil.Equals(t, test.exp[i].vals, res, "values mismatch at index:%v", i)
+				i++
+			}
+			testutil.Ok(t, dedupSet.Err())
 		})
 	}
-	set := promSeriesSet{
-		mint: 1,
-		maxt: math.MaxInt64,
-		set:  newStoreSeriesSet(series),
-	}
-	dedupSet := newDedupSeriesSet(set, map[string]struct{}{"replica": struct{}{}})
-
-	i := 0
-	for dedupSet.Next() {
-		testutil.Equals(t, exp[i].lset, dedupSet.At().Labels())
-
-		res := expandSeries(t, dedupSet.At().Iterator())
-		testutil.Equals(t, exp[i].vals, res)
-		i++
-	}
-	testutil.Ok(t, dedupSet.Err())
 }
 
 func TestDedupSeriesIterator(t *testing.T) {
