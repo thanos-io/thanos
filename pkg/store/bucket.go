@@ -1060,7 +1060,7 @@ type bucketBlock struct {
 	chunkPool  *pool.BytesPool
 
 	indexVersion int
-	symbols      map[uint32]string
+	symbols      []string
 	lvals        map[string][]string
 	postings     map[labels.Label]index.Range
 
@@ -1260,11 +1260,12 @@ func newBucketIndexReader(ctx context.Context, logger log.Logger, block *bucketB
 }
 
 func (r *bucketIndexReader) lookupSymbol(o uint32) (string, error) {
-	s, ok := r.block.symbols[o]
-	if !ok {
-		return "", errors.Errorf("bucketIndexReader: unknown symbol offset %d", o)
+	idx := int(o)
+	if idx < len(r.block.symbols) {
+		return r.block.symbols[idx], nil
 	}
-	return s, nil
+
+	return "", errors.Errorf("bucketIndexReader: unknown symbol offset %d", o)
 }
 
 // ExpandedPostings returns postings in expanded list instead of index.Postings.
