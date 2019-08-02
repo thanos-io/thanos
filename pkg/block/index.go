@@ -201,10 +201,10 @@ func ReadIndexCache(logger log.Logger, fn string) (
 	lvals = make(map[string][]string, len(v.LabelValues))
 	postings = make(map[labels.Label]index.Range, len(v.Postings))
 
-	maxSymbolID := 0
+	var maxSymbolID uint32
 	for o := range v.Symbols {
-		if int(o) > maxSymbolID {
-			maxSymbolID = int(o)
+		if o > maxSymbolID {
+			maxSymbolID = o
 		}
 	}
 	symbols = make([]string, maxSymbolID+1)

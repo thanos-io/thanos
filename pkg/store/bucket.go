@@ -1261,11 +1261,11 @@ func newBucketIndexReader(ctx context.Context, logger log.Logger, block *bucketB
 
 func (r *bucketIndexReader) lookupSymbol(o uint32) (string, error) {
 	idx := int(o)
-	if idx < len(r.block.symbols) {
-		return r.block.symbols[idx], nil
+	if idx >= len(r.block.symbols) {
+		return "", errors.Errorf("bucketIndexReader: unknown symbol offset %d", o)
 	}
 
-	return "", errors.Errorf("bucketIndexReader: unknown symbol offset %d", o)
+	return r.block.symbols[idx], nil
 }
 
 // ExpandedPostings returns postings in expanded list instead of index.Postings.
