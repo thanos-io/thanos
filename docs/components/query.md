@@ -105,6 +105,15 @@ Querier also allows to configure different timeouts:
 If you prefer availability over accuracy you can set tighter timeout to underlying StoreAPI than overall query timeout. If partial response
 strategy is NOT `abort`, this will "ignore" slower StoreAPIs producing just warning with 200 status code response.
 
+### Deduplication replica labels.
+
+| HTTP URL/FORM parameter | Type | Default | Example |
+|----|----|----|----|
+| `replicaLabels` | `[]string` | `query.replica-label` flag (default: empty). | `replicaLabels=replicaA&replicaLabels=replicaB` |
+|  |  |  |  |
+
+This overwrites the `query.replica-label` cli flag to allow dynamic replica labels at query time.
+
 ### Deduplication Enabled
 
 | HTTP URL/FORM parameter | Type | Default | Example |
@@ -112,7 +121,7 @@ strategy is NOT `abort`, this will "ignore" slower StoreAPIs producing just warn
 | `dedup` | `Boolean` | True, but effect depends on `query.replica` configuration flag. | `1, t, T, TRUE, true, True` for "True" |
 |  |  |  |  |
 
-This controls if query should use `replica` label for deduplication or not.
+This controls if query results should be deduplicated using the replica labels.
 
 ### Auto downsampling
 
