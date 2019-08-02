@@ -255,10 +255,17 @@ func (h *Handler) receive(w http.ResponseWriter, r *http.Request) {
 
 	tenant := r.Header.Get(h.options.TenantHeader)
 
-	// Forward any time series as necessary. All time series
-	// destined for the local node will be written to the receiver.
-	// Time series will be replicated as necessary.
-	if err := h.forward(r.Context(), tenant, rep, &wreq); err != nil {
+	if !rep.replicated && h.options.ReplicationFactor > 1 {
+		// If the request is not yet replicated, let's replicate it.
+		// If the replication factor isn't greater than 1, let's
+		// just forward the requests.
+		err = h.replicate(r.Context(), tenant, &wreq)
+	} else {
+		// Forward any time series as necessary. All time series
+		// destined for the local node will be written to the receiver.
+		err = h.forward(r.Context(), tenant, rep, &wreq)
+	}
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -312,15 +319,6 @@ func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replic
 	var n int
 	for endpoint := range wreqs {
 		n++
-		// If the request is not yet replicated, let's replicate it.
-		// If the replication factor isn't greater than 1, let's
-		// just forward the requests.
-		if !replicas[endpoint].replicated && h.options.ReplicationFactor > 1 {
-			go func(endpoint string) {
-				ec <- h.replicate(ctx, tenant, wreqs[endpoint])
-			}(endpoint)
-			continue
-		}
 		// If the endpoint for the write request is the
 		// local node, then don't make a request but store locally.
 		// By handing replication to the local node in the same
