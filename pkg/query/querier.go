@@ -22,13 +22,18 @@ type WarningReporter func(error)
 
 // QueryableCreator returns implementation of promql.Queryable that fetches data from the proxy store API endpoints.
 // If deduplication is enabled, all data retrieved from it will be deduplicated along all replicaLabels by default.
+// When the replicaLabels argument is not empty it overwrites the global replicaLabels flag. This allows specifing
+// replicaLabels at query time.
 // maxResolutionMillis controls downsampling resolution that is allowed (specified in milliseconds).
 // partialResponse controls `partialResponseDisabled` option of StoreAPI and partial response behaviour of proxy.
-type QueryableCreator func(deduplicate bool, maxResolutionMillis int64, partialResponse bool, r WarningReporter) storage.Queryable
+type QueryableCreator func(deduplicate bool, replicaLabels []string, maxResolutionMillis int64, partialResponse bool, r WarningReporter) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
 func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLabels []string) QueryableCreator {
-	return func(deduplicate bool, maxResolutionMillis int64, partialResponse bool, r WarningReporter) storage.Queryable {
+	return func(deduplicate bool, replicaLabelsOverwrite []string, maxResolutionMillis int64, partialResponse bool, r WarningReporter) storage.Queryable {
+		if len(replicaLabelsOverwrite) > 0 {
+			replicaLabels = replicaLabelsOverwrite
+		}
 		return &queryable{
 			logger:              logger,
 			replicaLabels:       replicaLabels,

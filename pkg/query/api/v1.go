@@ -204,6 +204,17 @@ func (api *API) parseEnableDedupParam(r *http.Request) (enableDeduplication bool
 	return enableDeduplication, nil
 }
 
+func (api *API) parseReplicaLabelsParam(r *http.Request) (replicaLabels []string, _ *ApiError) {
+	if err := r.ParseForm(); err != nil {
+		return nil, &ApiError{ErrorInternal, errors.Wrap(err, "parse form")}
+	}
+
+	if len(r.Form["replicaLabels[]"]) > 0 {
+		replicaLabels = r.Form["match[]"]
+	}
+	return replicaLabels, nil
+}
+
 func (api *API) parseDownsamplingParamMillis(r *http.Request, step time.Duration) (maxResolutionMillis int64, _ *ApiError) {
 	const maxSourceResolutionParam = "max_source_resolution"
 	maxSourceResolution := 0 * time.Second
@@ -274,6 +285,11 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
+	replicaLabels, apiErr := api.parseReplicaLabelsParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
 	enablePartialResponse, apiErr := api.parsePartialResponseParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr
@@ -294,7 +310,7 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 	defer span.Finish()
 
 	begin := api.now()
-	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDedup, 0, enablePartialResponse, warningReporter), r.FormValue("query"), ts)
+	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDedup, replicaLabels, 0, enablePartialResponse, warningReporter), r.FormValue("query"), ts)
 	if err != nil {
 		return nil, nil, &ApiError{errorBadData, err}
 	}
@@ -367,6 +383,11 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
+	replicaLabels, apiErr := api.parseReplicaLabelsParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
 	maxSourceResolution, apiErr := api.parseDownsamplingParamMillis(r, step)
 	if apiErr != nil {
 		return nil, nil, apiErr
@@ -393,7 +414,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 
 	begin := api.now()
 	qry, err := api.queryEngine.NewRangeQuery(
-		api.queryableCreate(enableDedup, maxSourceResolution, enablePartialResponse, warningReporter),
+		api.queryableCreate(enableDedup, replicaLabels, maxSourceResolution, enablePartialResponse, warningReporter),
 		r.FormValue("query"),
 		start,
 		end,
@@ -444,7 +465,7 @@ func (api *API) labelValues(r *http.Request) (interface{}, []error, *ApiError) {
 		warnmtx.Unlock()
 	}
 
-	q, err := api.queryableCreate(true, 0, enablePartialResponse, warningReporter).Querier(ctx, math.MinInt64, math.MaxInt64)
+	q, err := api.queryableCreate(true, nil, 0, enablePartialResponse, warningReporter).Querier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
@@ -510,6 +531,11 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
+	replicaLabels, apiErr := api.parseReplicaLabelsParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
 	enablePartialResponse, apiErr := api.parsePartialResponseParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr
@@ -526,7 +552,7 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 	}
 
 	// TODO(bwplotka): Support downsampling?
-	q, err := api.queryableCreate(enableDedup, 0, enablePartialResponse, warningReporter).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
+	q, err := api.queryableCreate(enableDedup, replicaLabels, 0, enablePartialResponse, warningReporter).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
@@ -637,7 +663,7 @@ func (api *API) labelNames(r *http.Request) (interface{}, []error, *ApiError) {
 		warnmtx.Unlock()
 	}
 
-	q, err := api.queryableCreate(true, 0, enablePartialResponse, warningReporter).Querier(ctx, math.MinInt64, math.MaxInt64)
+	q, err := api.queryableCreate(true, nil, 0, enablePartialResponse, warningReporter).Querier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
