@@ -12,7 +12,8 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ## Unreleased.
 
 - [#1338](https://github.com/thanos-io/thanos/pull/1338) Querier still warns on store API duplicate, but allows a single one from duplicated set. This is gracefully warn about the problematic logic and not disrupt immediately.
-- `AliYun OSS` object storage, see [documents](docs/storage.md#aliyun-oss-configuration) for further information.
+- [#1234](https://github.com/thanos-io/thanos/pull/1234) `AliYun OSS` object storage, see [documents](docs/storage.md#aliyun-oss-configuration) for further information.
+
 ### Fixed
 
 - [#1327](https://github.com/thanos-io/thanos/pull/1327) `/series` API end-point now properly returns an empty array just like Prometheus if there are no results

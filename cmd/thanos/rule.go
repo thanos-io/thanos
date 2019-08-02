@@ -39,9 +39,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/extprom"
-
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
-
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	thanosrule "github.com/thanos-io/thanos/pkg/rule"

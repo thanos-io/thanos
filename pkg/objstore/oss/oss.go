@@ -14,7 +14,6 @@ import (
 	"time"
 
 	alioss "github.com/aliyun/aliyun-oss-go-sdk/oss"
-
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -86,46 +85,44 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	}
 
 	ncloser := ioutil.NopCloser(r)
-	switch chunksnum {
-	case 0:
+	if chunksnum == 0 {
 		if err := b.bucket.PutObject(name, ncloser); err != nil {
 			return errors.Wrap(err, "failed to upload oss object")
 		}
-	default:
-		{
-			init, err := b.bucket.InitiateMultipartUpload(name)
+	} else {
+		init, err := b.bucket.InitiateMultipartUpload(name)
+		if err != nil {
+			return errors.Wrap(err, "failed to initiate multi-part upload")
+		}
+		chunk := 0
+		uploadEveryPart := func(everypartsize int64, cnk int) (alioss.UploadPart, error) {
+			prt, err := b.bucket.UploadPart(init, ncloser, everypartsize, cnk)
 			if err != nil {
-				return errors.Wrap(err, "failed to initiate multi-part upload")
-			}
-			chunk := 0
-			uploadEveryPart := func(everypartsize int64, cnk int) (alioss.UploadPart, error) {
-				prt, err := b.bucket.UploadPart(init, ncloser, everypartsize, cnk)
-				if err != nil {
-					if err := b.bucket.AbortMultipartUpload(init); err != nil {
-						return prt, errors.Wrap(err, "failed to upload multi-part chunk")
-					}
+				if err2 := b.bucket.AbortMultipartUpload(init); err2 != nil {
+					return prt, errors.Wrap(err2, "failed to abort multi-part upload")
 				}
-				return prt, nil
+				return prt, errors.Wrap(err, "failed to upload multi-part chunk")
 			}
-			var parts []alioss.UploadPart
-			for ; chunk < chunksnum; chunk++ {
-				part, err := uploadEveryPart(alioss.MaxPartSize, chunk+1)
-				if err != nil {
-					return err
-				}
-				parts = append(parts, part)
-			}
-			if lastslice != 0 {
-				part, err := uploadEveryPart(lastslice, chunksnum+1)
-				if err != nil {
-					return errors.Wrap(err, "failed to upload the last chunk")
-				}
-				parts = append(parts, part)
-			}
-			_, err = b.bucket.CompleteMultipartUpload(init, parts)
+			return prt, nil
+		}
+		var parts []alioss.UploadPart
+		for ; chunk < chunksnum; chunk++ {
+			part, err := uploadEveryPart(alioss.MaxPartSize, chunk+1)
 			if err != nil {
-				return errors.Wrap(err, "failed to set multi-part upload completive")
+				return err
 			}
+			parts = append(parts, part)
+		}
+		if lastslice != 0 {
+			part, err := uploadEveryPart(lastslice, chunksnum+1)
+			if err != nil {
+				return errors.Wrap(err, "failed to upload the last chunk")
+			}
+			parts = append(parts, part)
+		}
+		_, err = b.bucket.CompleteMultipartUpload(init, parts)
+		if err != nil {
+			return errors.Wrap(err, "failed to set multi-part upload completive")
 		}
 	}
 	return nil
