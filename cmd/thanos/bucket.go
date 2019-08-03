@@ -316,18 +316,30 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 	timeout := cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").Duration()
 	label := cmd.Flag("label", "Prometheus label to use as timeline title").String()
 
+	webRoutePrefix := cmd.Flag("web.route-prefix", "Prefix for API and UI endpoints. This allows thanos UI to be served on a sub-path. This option is analogous to --web.route-prefix of Prometheus.").Default("").String()
+	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI bucket web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
+	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
+
 	m[name+" web"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
 		ctx, cancel := context.WithCancel(context.Background())
 
 		statusProber := prober.NewProber(component.Bucket, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
-		// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-		srv := server.NewHTTP(logger, reg, component.Bucket, statusProber,
-			server.WithListen(*bind),
-			server.WithGracePeriod(time.Duration(*httpGracePeriod)),
-		)
 
-		bucketUI := ui.NewBucketUI(logger, *label)
-		bucketUI.Register(srv, extpromhttp.NewInstrumentationMiddleware(reg))
+		router := route.New()
+		// redirect from / to /webRoutePrefix
+		if *webRoutePrefix != "" {
+			router.Get("/", func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, *webRoutePrefix, http.StatusFound)
+			})
+		}
+
+		flagsMap := map[string]string{
+			"web.external-prefix": *webExternalPrefix,
+			"web.prefix-header":   *webPrefixHeaderName,
+		}
+
+		bucketUI := ui.NewBucketUI(logger, *label, flagsMap)
+		bucketUI.Register(router.WithPrefix(*webRoutePrefix), extpromhttp.NewInstrumentationMiddleware(reg))
 
 		if *interval < 5*time.Minute {
 			level.Warn(logger).Log("msg", "Refreshing more often than 5m could lead to large data transfers")
@@ -340,6 +352,13 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 		if *interval < (*timeout * 2) {
 			level.Warn(logger).Log("msg", "Refresh interval should be at least 2 times the timeout")
 		}
+
+		// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
+		srv := server.NewHTTP(logger, reg, component.Bucket, statusProber,
+			server.WithListen(*bind),
+			server.WithGracePeriod(time.Duration(*httpGracePeriod)),
+		)
+		srv.Handle("/", router)
 
 		g.Add(func() error {
 			return refresh(ctx, logger, bucketUI, *interval, *timeout, name, reg, objStoreConfig)

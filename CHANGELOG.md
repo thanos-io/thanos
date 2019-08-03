@@ -111,6 +111,8 @@ Accepted into CNCF:
 - [#1431](https://github.com/thanos-io/thanos/pull/1431) Thanos Query added hidden flag to allow the use of downsampled resolution data for instant queries.
 - [#1408](https://github.com/thanos-io/thanos/pull/1408) Thanos Store Gateway can now allow the specifying of supported time ranges it will serve (time sharding). Flags: `min-time` & `max-time`
 
+- [#1368](https://github.com/thanos-io/thanos/pull/1368) Flags for Bucket web UIs: --web.route-prefix, --web.external-prefix, --web.prefix-header.
+
 ### Changed
 
 - [#1414](https://github.com/thanos-io/thanos/pull/1413) Upgraded important dependencies: Prometheus to 2.12-rc.0. TSDB is now part of Prometheus.

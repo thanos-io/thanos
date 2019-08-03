@@ -18,14 +18,16 @@ type Bucket struct {
 	Label       string
 	Blocks      template.JS
 	RefreshedAt time.Time
+	flagsMap    map[string]string
 	Err         error
 }
 
-func NewBucketUI(logger log.Logger, label string) *Bucket {
+func NewBucketUI(logger log.Logger, label string, flagsMap map[string]string) *Bucket {
 	return &Bucket{
-		BaseUI: NewBaseUI(logger, "bucket_menu.html", queryTmplFuncs()),
-		Blocks: "[]",
-		Label:  label,
+		BaseUI:   NewBaseUI(logger, "bucket_menu.html", queryTmplFuncs()),
+		Blocks:   "[]",
+		Label:    label,
+		flagsMap: flagsMap,
 	}
 }
 
@@ -41,7 +43,8 @@ func (b *Bucket) Register(s server.Server, ins extpromhttp.InstrumentationMiddle
 
 // Handle / of bucket UIs.
 func (b *Bucket) root(w http.ResponseWriter, r *http.Request) {
-	b.executeTemplate(w, "bucket.html", "", b)
+	prefix := GetWebPrefix(b.logger, b.flagsMap, r)
+	b.executeTemplate(w, "bucket.html", prefix, b)
 }
 
 func (b *Bucket) Set(data string, err error) {
