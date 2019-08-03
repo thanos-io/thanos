@@ -6,12 +6,13 @@ import (
 	"math"
 	"net/http"
 	"path"
+	"strconv"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
@@ -66,6 +67,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 		Strings()
 
 	instantDefaultMaxSourceResolution := modelDuration(cmd.Flag("query.instant.default.max_source_resolution", "default value for max_source_resolution for instant queries. If not set, defaults to 0s only taking raw resolution into account. 1h can be a good value if you use instant queries over time ranges that incorporate times outside of your raw-retention.").Default("0s").Hidden())
+
+	maxQuerySamples := cmd.Flag("query.max-samples", "Maximum number of samples a single query can load into memory.").Default(strconv.Itoa(math.MaxInt32)).Int()
 
 	selectorLabels := cmd.Flag("selector-label", "Query selector labels that will be exposed in info endpoint (repeated).").
 		PlaceHolder("<name>=\"<value>\"").Strings()
@@ -158,6 +161,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			time.Duration(*unhealthyStoreTimeout),
 			time.Duration(*instantDefaultMaxSourceResolution),
 			component.Query,
+			*maxQuerySamples,
 		)
 	}
 }
@@ -198,6 +202,7 @@ func runQuery(
 	unhealthyStoreTimeout time.Duration,
 	instantDefaultMaxSourceResolution time.Duration,
 	comp component.Component,
+	maxQuerySamples int,
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
 	duplicatedStores := prometheus.NewCounter(prometheus.CounterOpts{
@@ -242,9 +247,8 @@ func runQuery(
 				Logger:        logger,
 				Reg:           reg,
 				MaxConcurrent: maxConcurrentQueries,
-				// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
-				MaxSamples: math.MaxInt32,
-				Timeout:    queryTimeout,
+				MaxSamples:    maxQuerySamples,
+				Timeout:       queryTimeout,
 			},
 		)
 	)
