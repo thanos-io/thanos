@@ -15,7 +15,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/tsdb"
@@ -23,10 +23,12 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
+	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 var (
@@ -49,7 +51,7 @@ func (cs compactionSet) String() string {
 	return strings.Join(result, ", ")
 }
 
-// levels returns set of compaction levels not higher than specified max compaction level
+// levels returns set of compaction levels not higher than specified max compaction level.
 func (cs compactionSet) levels(maxLevel int) ([]int64, error) {
 	if maxLevel >= len(cs) {
 		return nil, errors.Errorf("level is bigger then default set of %d", len(cs))
@@ -62,13 +64,14 @@ func (cs compactionSet) levels(maxLevel int) ([]int64, error) {
 	return levels, nil
 }
 
-// maxLevel returns max available compaction level
+// maxLevel returns max available compaction level.
 func (cs compactionSet) maxLevel() int {
 	return len(cs) - 1
 }
 
-func registerCompact(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "continuously compacts blocks in an object store bucket")
+func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
+	comp := component.Compact
+	cmd := app.Command(comp.String(), "continuously compacts blocks in an object store bucket")
 
 	haltOnError := cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
 		Hidden().Default("true").Bool()
@@ -110,7 +113,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	compactionConcurrency := cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
 		Default("1").Int()
 
-	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
+	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		return runCompact(g, logger, reg,
 			*httpAddr,
 			*dataDir,
@@ -125,7 +128,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 				compact.ResolutionLevel5m:  time.Duration(*retention5m),
 				compact.ResolutionLevel1h:  time.Duration(*retention1h),
 			},
-			name,
+			comp,
 			*disableDownsampling,
 			*maxCompactionLevel,
 			*blockSyncConcurrency,
@@ -147,7 +150,7 @@ func runCompact(
 	wait bool,
 	generateMissingIndexCacheFiles bool,
 	retentionByResolution map[compact.ResolutionLevel]time.Duration,
-	component string,
+	component component.Component,
 	disableDownsampling bool,
 	maxCompactionLevel int,
 	blockSyncConcurrency int,
@@ -168,12 +171,18 @@ func runCompact(
 
 	downsampleMetrics := newDownsampleMetrics(reg)
 
+	readinessProber := prober.NewProber(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	// Initiate default HTTP listener providing metrics endpoint and readiness/liveness probes.
+	if err := defaultHTTPListener(g, logger, reg, httpBindAddr, readinessProber); err != nil {
+		return errors.Wrap(err, "create readiness prober")
+	}
+
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
 		return err
 	}
 
-	bkt, err := client.NewBucket(logger, confContentYaml, reg, component)
+	bkt, err := client.NewBucket(logger, confContentYaml, reg, component.String())
 	if err != nil {
 		return err
 	}
@@ -318,11 +327,8 @@ func runCompact(
 		cancel()
 	})
 
-	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
-		return err
-	}
-
 	level.Info(logger).Log("msg", "starting compact node")
+	readinessProber.SetReady()
 	return nil
 }
 
