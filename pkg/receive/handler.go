@@ -260,7 +260,7 @@ func (h *Handler) receive(w http.ResponseWriter, r *http.Request) {
 	// destined for the local node will be written to the receiver.
 	// Time series will be replicated as necessary.
 	if err := h.forward(r.Context(), tenant, rep, &wreq); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 }
@@ -341,7 +341,11 @@ func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replic
 		// can be ignored if the replication factor is met.
 		if endpoint == h.options.Endpoint {
 			go func(endpoint string) {
-				ec <- h.receiver.Receive(wreqs[endpoint])
+				err := h.receiver.Receive(wreqs[endpoint])
+				if err != nil {
+					level.Error(h.logger).Log("msg", "storing locally", "err", err, "endpoint", endpoint)
+				}
+				ec <- err
 			}(endpoint)
 			continue
 		}
@@ -349,13 +353,13 @@ func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replic
 		go func(endpoint string) {
 			buf, err := proto.Marshal(wreqs[endpoint])
 			if err != nil {
-				level.Error(h.logger).Log("msg", "proto marshal error", "err", err, "endpoint", endpoint)
+				level.Error(h.logger).Log("msg", "marshaling proto", "err", err, "endpoint", endpoint)
 				ec <- err
 				return
 			}
 			req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(snappy.Encode(nil, buf)))
 			if err != nil {
-				level.Error(h.logger).Log("msg", "create request error", "err", err, "endpoint", endpoint)
+				level.Error(h.logger).Log("msg", "creating request", "err", err, "endpoint", endpoint)
 				ec <- err
 				return
 			}
@@ -377,12 +381,14 @@ func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replic
 			var res *http.Response
 			res, err = http.DefaultClient.Do(req.WithContext(ctx))
 			if err != nil {
-				level.Error(h.logger).Log("msg", "forward request error", "err", err, "endpoint", endpoint)
+				level.Error(h.logger).Log("msg", "forwarding request", "err", err, "endpoint", endpoint)
 				ec <- err
 				return
 			}
 			if res.StatusCode != http.StatusOK {
-				ec <- errors.New(res.Status)
+				err = errors.New(res.Status)
+				level.Error(h.logger).Log("msg", "forwarding returned non-200 status", "err", err, "endpoint", endpoint)
+				ec <- err
 				return
 			}
 			ec <- nil
