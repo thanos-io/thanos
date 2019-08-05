@@ -411,7 +411,7 @@ func GatherBlockIssueStats(logger log.Logger, blockDirectory string, minTime int
 	if _, statErr := os.Stat(chunkDir); os.IsNotExist(statErr) {
 		return stats, errors.Wrap(err, "could not find chunks directory")
 	}
-	filepath.Walk(chunkDir, func(path string, info os.FileInfo, pathErr error) error {
+	err = filepath.Walk(chunkDir, func(path string, info os.FileInfo, pathErr error) error {
 		if info.Name() == ChunksDirname {
 			return nil
 		}
