@@ -96,6 +96,8 @@ func NewConfigWatcher(logger log.Logger, r prometheus.Registerer, path string, i
 			c.changesCounter,
 			c.errorCounter,
 			c.refreshCounter,
+			c.hashringNodesGauge,
+			c.hashringTenantsGauge,
 		)
 	}
 
