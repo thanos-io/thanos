@@ -33,9 +33,11 @@ type ConfigWatcher struct {
 	logger   log.Logger
 	watcher  *fsnotify.Watcher
 
-	changesCounter prometheus.Counter
-	errorCounter   prometheus.Counter
-	refreshCounter prometheus.Counter
+	changesCounter       prometheus.Counter
+	errorCounter         prometheus.Counter
+	refreshCounter       prometheus.Counter
+	hashringNodesGauge   *prometheus.GaugeVec
+	hashringTenantsGauge *prometheus.GaugeVec
 
 	// last is the last known configuration.
 	last []HashringConfig
@@ -75,6 +77,18 @@ func NewConfigWatcher(logger log.Logger, r prometheus.Registerer, path string, i
 				Name: "thanos_receive_hashrings_file_refreshes_total",
 				Help: "The number of refreshes of the hashrings configuration file.",
 			}),
+		hashringNodesGauge: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_hashring_nodes",
+				Help: "The number of nodes per hashring.",
+			},
+			[]string{"name"}),
+		hashringTenantsGauge: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_hashring_tenants",
+				Help: "The number of tenants per hashring.",
+			},
+			[]string{"name"}),
 	}
 
 	if r != nil {
@@ -82,6 +96,8 @@ func NewConfigWatcher(logger log.Logger, r prometheus.Registerer, path string, i
 			c.changesCounter,
 			c.errorCounter,
 			c.refreshCounter,
+			c.hashringNodesGauge,
+			c.hashringTenantsGauge,
 		)
 	}
 
@@ -171,6 +187,11 @@ func (cw *ConfigWatcher) refresh(ctx context.Context) {
 	cw.changesCounter.Inc()
 	// Save the last known configuration.
 	cw.last = config
+
+	for _, c := range config {
+		cw.hashringNodesGauge.WithLabelValues(c.Hashring).Set(float64(len(c.Endpoints)))
+		cw.hashringTenantsGauge.WithLabelValues(c.Hashring).Set(float64(len(c.Tenants)))
+	}
 
 	select {
 	case <-ctx.Done():
