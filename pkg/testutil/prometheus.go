@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	defaultPrometheusVersion   = "v2.9.2"
+	defaultPrometheusVersion   = "v2.10.0"
 	defaultAlertmanagerVersion = "v0.15.2"
 	defaultMinioVersion        = "RELEASE.2018-10-06T00-15-16Z"
 

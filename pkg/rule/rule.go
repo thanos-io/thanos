@@ -13,6 +13,8 @@ import (
 	"github.com/prometheus/prometheus/pkg/rulefmt"
 	"github.com/prometheus/prometheus/rules"
 	tsdberrors "github.com/prometheus/tsdb/errors"
+	"github.com/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/labelutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -110,7 +112,7 @@ func (r RuleGroup) MarshalYAML() (interface{}, error) {
 
 // Update updates rules from given files to all managers we hold. We decide which groups should go where, based on
 // special field in RuleGroup file.
-func (m *Managers) Update(dataDir string, evalInterval time.Duration, files []string) error {
+func (m *Managers) Update(dataDir string, evalInterval time.Duration, files []string, lset labels.Labels) error {
 	var (
 		errs     tsdberrors.MultiError
 		filesMap = map[storepb.PartialResponseStrategy][]string{}
@@ -174,7 +176,7 @@ func (m *Managers) Update(dataDir string, evalInterval time.Duration, files []st
 			errs = append(errs, errors.Errorf("no updater found for %v", s))
 			continue
 		}
-		if err := updater.Update(evalInterval, fs); err != nil {
+		if err := updater.Update(evalInterval, fs, labelutil.TSDBLabelsToPromLabels(lset)); err != nil {
 			errs = append(errs, err)
 			continue
 		}

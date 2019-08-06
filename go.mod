@@ -33,7 +33,7 @@ require (
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.0.0
 	github.com/prometheus/common v0.6.0
-	github.com/prometheus/prometheus v2.9.2+incompatible
+	github.com/prometheus/prometheus v2.10.0+incompatible
 	github.com/prometheus/tsdb v0.8.0
 	github.com/uber-go/atomic v1.4.0 // indirect
 	github.com/uber/jaeger-client-go v2.16.0+incompatible
