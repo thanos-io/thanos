@@ -36,3 +36,6 @@ adopters:
 - name: Ebay
   url: https://www.ebay.co.uk/
   logo: ebay.png
+- name: Sauce Labs
+  url: https://saucelabs.com/
+  logo: saucelabs.png
