@@ -14,7 +14,7 @@ import (
 	"github.com/prometheus/prometheus/rules"
 	tsdberrors "github.com/prometheus/tsdb/errors"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 const tmpRuleDir = ".tmp-rules"
@@ -112,7 +112,7 @@ func (r RuleGroup) MarshalYAML() (interface{}, error) {
 // special field in RuleGroup file.
 func (m *Managers) Update(dataDir string, evalInterval time.Duration, files []string) error {
 	var (
-		errs     tsdberrors.MultiError
+		errs     = tsdberrors.MultiError{}
 		filesMap = map[storepb.PartialResponseStrategy][]string{}
 	)
 
@@ -174,7 +174,8 @@ func (m *Managers) Update(dataDir string, evalInterval time.Duration, files []st
 			errs = append(errs, errors.Errorf("no updater found for %v", s))
 			continue
 		}
-		if err := updater.Update(evalInterval, fs); err != nil {
+		// We add external labels in `pkg/alert.Queue`.
+		if err := updater.Update(evalInterval, fs, nil); err != nil {
 			errs = append(errs, err)
 			continue
 		}
