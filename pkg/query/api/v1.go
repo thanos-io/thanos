@@ -23,13 +23,11 @@ import (
 	"math"
 	"net/http"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/NYTimes/gziphandler"
-
 	"github.com/go-kit/kit/log"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
@@ -279,22 +277,12 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	var (
-		warnmtx  sync.Mutex
-		warnings []error
-	)
-	warningReporter := func(err error) {
-		warnmtx.Lock()
-		warnings = append(warnings, err)
-		warnmtx.Unlock()
-	}
-
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
 
 	begin := api.now()
-	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDedup, 0, enablePartialResponse, warningReporter), r.FormValue("query"), ts)
+	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDedup, 0, enablePartialResponse), r.FormValue("query"), ts)
 	if err != nil {
 		return nil, nil, &ApiError{errorBadData, err}
 	}
@@ -316,7 +304,7 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 	return &queryData{
 		ResultType: res.Value.Type(),
 		Result:     res.Value,
-	}, warnings, nil
+	}, res.Warnings, nil
 }
 
 func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
@@ -377,23 +365,13 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	var (
-		warnmtx  sync.Mutex
-		warnings []error
-	)
-	warningReporter := func(err error) {
-		warnmtx.Lock()
-		warnings = append(warnings, err)
-		warnmtx.Unlock()
-	}
-
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(ctx, "promql_range_query")
 	defer span.Finish()
 
 	begin := api.now()
 	qry, err := api.queryEngine.NewRangeQuery(
-		api.queryableCreate(enableDedup, maxSourceResolution, enablePartialResponse, warningReporter),
+		api.queryableCreate(enableDedup, maxSourceResolution, enablePartialResponse),
 		r.FormValue("query"),
 		start,
 		end,
@@ -418,7 +396,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 	return &queryData{
 		ResultType: res.Value.Type(),
 		Result:     res.Value,
-	}, warnings, nil
+	}, res.Warnings, nil
 }
 
 func (api *API) labelValues(r *http.Request) (interface{}, []error, *ApiError) {
@@ -434,17 +412,7 @@ func (api *API) labelValues(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	var (
-		warnmtx  sync.Mutex
-		warnings []error
-	)
-	warningReporter := func(err error) {
-		warnmtx.Lock()
-		warnings = append(warnings, err)
-		warnmtx.Unlock()
-	}
-
-	q, err := api.queryableCreate(true, 0, enablePartialResponse, warningReporter).Querier(ctx, math.MinInt64, math.MaxInt64)
+	q, err := api.queryableCreate(true, 0, enablePartialResponse).Querier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
@@ -452,7 +420,7 @@ func (api *API) labelValues(r *http.Request) (interface{}, []error, *ApiError) {
 
 	// TODO(fabxc): add back request context.
 
-	vals, err := q.LabelValues(name)
+	vals, warnings, err := q.LabelValues(name)
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
@@ -515,42 +483,34 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	var (
-		warnmtx  sync.Mutex
-		warnings []error
-	)
-	warningReporter := func(err error) {
-		warnmtx.Lock()
-		warnings = append(warnings, err)
-		warnmtx.Unlock()
-	}
-
 	// TODO(bwplotka): Support downsampling?
-	q, err := api.queryableCreate(enableDedup, 0, enablePartialResponse, warningReporter).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
+	q, err := api.queryableCreate(enableDedup, 0, enablePartialResponse).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
 	defer runutil.CloseWithLogOnErr(api.logger, q, "queryable series")
 
-	var sets []storage.SeriesSet
+	var (
+		warnings []error
+		metrics  = []labels.Labels{}
+		sets     []storage.SeriesSet
+	)
 	for _, mset := range matcherSets {
-		s, _, err := q.Select(&storage.SelectParams{}, mset...)
+		s, warns, err := q.Select(&storage.SelectParams{}, mset...)
 		if err != nil {
 			return nil, nil, &ApiError{errorExec, err}
 		}
+		warnings = append(warnings, warns...)
 		sets = append(sets, s)
 	}
 
 	set := storage.NewMergeSeriesSet(sets, nil)
-
-	metrics := []labels.Labels{}
 	for set.Next() {
 		metrics = append(metrics, set.At().Labels())
 	}
 	if set.Err() != nil {
 		return nil, nil, &ApiError{errorExec, set.Err()}
 	}
-
 	return metrics, warnings, nil
 }
 
@@ -627,23 +587,13 @@ func (api *API) labelNames(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	var (
-		warnmtx  sync.Mutex
-		warnings []error
-	)
-	warningReporter := func(err error) {
-		warnmtx.Lock()
-		warnings = append(warnings, err)
-		warnmtx.Unlock()
-	}
-
-	q, err := api.queryableCreate(true, 0, enablePartialResponse, warningReporter).Querier(ctx, math.MinInt64, math.MaxInt64)
+	q, err := api.queryableCreate(true, 0, enablePartialResponse).Querier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
 	defer runutil.CloseWithLogOnErr(api.logger, q, "queryable labelNames")
 
-	names, err := q.LabelNames()
+	names, warnings, err := q.LabelNames()
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}

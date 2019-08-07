@@ -4,6 +4,7 @@ require (
 	cloud.google.com/go v0.34.0
 	github.com/Azure/azure-storage-blob-go v0.7.0
 	github.com/NYTimes/gziphandler v1.1.1
+	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
 	github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da
 	github.com/cespare/xxhash v1.1.0
 	github.com/fatih/structtag v1.0.0
@@ -33,8 +34,8 @@ require (
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.0.0
 	github.com/prometheus/common v0.6.0
-	github.com/prometheus/prometheus v2.9.2+incompatible
-	github.com/prometheus/tsdb v0.8.0
+	github.com/prometheus/prometheus v0.0.0-20190710134608-e5b22494857d
+	github.com/prometheus/tsdb v0.9.1
 	github.com/uber-go/atomic v1.4.0 // indirect
 	github.com/uber/jaeger-client-go v2.16.0+incompatible
 	github.com/uber/jaeger-lib v2.0.0+incompatible

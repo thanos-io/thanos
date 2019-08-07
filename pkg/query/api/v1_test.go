@@ -44,7 +44,7 @@ import (
 )
 
 func testQueryableCreator(queryable storage.Queryable) query.QueryableCreator {
-	return func(_ bool, _ int64, _ bool, _ query.WarningReporter) storage.Queryable {
+	return func(_ bool, _ int64, _ bool) storage.Queryable {
 		return queryable
 	}
 }
