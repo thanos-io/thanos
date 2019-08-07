@@ -152,7 +152,7 @@ func (s *chunkSeries) Iterator() storage.SeriesIterator {
 		}
 		sit = newChunkSeriesIterator(its)
 	default:
-		return errSeriesIterator{err: errors.Errorf("unexpected result aggreagte type %v", s.aggr)}
+		return errSeriesIterator{err: errors.Errorf("unexpected result aggregate type %v", s.aggr)}
 	}
 	return newBoundedSeriesIterator(sit, s.mint, s.maxt)
 }
