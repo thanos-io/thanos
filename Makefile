@@ -5,7 +5,7 @@ DOCKER_IMAGE_NAME ?= thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
 
 TMP_GOPATH        ?= /tmp/thanos-go
-GOBIN             ?= ${GOPATH}/bin
+GOBIN             ?= $(firstword $(subst :, ,$GOPATH))/bin
 GO111MODULE       ?= on
 export GO111MODULE
 GOPROXY           ?= https://proxy.golang.org
