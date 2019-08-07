@@ -172,7 +172,7 @@ This version moved tarballs to Golang 1.12.5 from 1.11 as well, so same warning 
 :warning: **IMPORTANT** :warning: This is the last release that supports gossip. From Thanos v0.5.0, gossip will be completely removed.
 
 This release also disables gossip mode by default for all components.
-See [this](docs/proposals/completed/201809_gossip-removal.md) for more details.
+See [this](docs/proposals/201809_gossip-removal.md) for more details.
 
 :warning: This release moves Thanos docker images (NOT artifacts by accident) to Golang 1.12. This release includes change in GC's memory release which gives following effect (source: https://golang.org/doc/go1.12):
 
@@ -449,7 +449,7 @@ Note lots of necessary breaking changes in flags that relates to bucket configur
 
 ## [v0.1.0](https://github.com/thanos-io/thanos/releases/tag/v0.1.0) - 2018.09.14
 
-Initial version to have a stable reference before [gossip protocol removal](/docs/proposals/completed/201809_gossip-removal.md).
+Initial version to have a stable reference before [gossip protocol removal](/docs/proposals/201809_gossip-removal.md).
 
 ### Added
 

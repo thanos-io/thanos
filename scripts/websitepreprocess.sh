@@ -75,12 +75,14 @@ EOT
 tail -n +2 MAINTAINERS.md >> ${OUTPUT_CONTENT_DIR}/MAINTAINERS.md
 
 # Glob again to include new docs.
-ALL_DOC_CONTENT_FILES=`echo "${OUTPUT_CONTENT_DIR}/**/*.md ${OUTPUT_CONTENT_DIR}/*.md"`
+ALL_DOC_CONTENT_FILES=$(echo "${OUTPUT_CONTENT_DIR}/**/*.md ${OUTPUT_CONTENT_DIR}/*.md")
 
 # All the absolute links are replaced with a direct link to the file on github, including the current commit SHA.
 perl -pi -e 's/]\(\//]\(https:\/\/github.com\/thanos-io\/thanos\/tree\/'${COMMIT_SHA}'\//' ${ALL_DOC_CONTENT_FILES}
 
 # All the relative links needs to have ../  This is because Hugo is missing: https://github.com/gohugoio/hugo/pull/3934
-perl -pi -e 's/]\(\.\//]\(..\//' ${ALL_DOC_CONTENT_FILES}
 perl -pi -e 's/]\((?!http)/]\(..\//' ${ALL_DOC_CONTENT_FILES}
+# All the relative links in src= needs to have ../ as well.
 perl -pi -e 's/src=\"(?!http)/src=\"..\//' ${ALL_DOC_CONTENT_FILES}
+
+
