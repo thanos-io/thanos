@@ -18,7 +18,10 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
-const IndexIssueID = "index_issue"
+const (
+	IndexIssueID                   = "index_issue"
+	defaultBlockMDFetchConcurrency = 3
+)
 
 // IndexIssue verifies any known index issue.
 // It rewrites the problematic blocks while fixing repairable inconsistencies.
@@ -28,14 +31,18 @@ const IndexIssueID = "index_issue"
 func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool) error {
 	level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", IndexIssueID)
 
-	err := bkt.Iter(ctx, "", func(name string) error {
-		id, ok := block.IsBlockDir(name)
-		if !ok {
-			return nil
+	mdFetcher := block.NewMetadataFetcher(logger, defaultBlockMDFetchConcurrency, bkt)
+	mds, err := mdFetcher.Fetch(ctx)
+	if err != nil {
+		return errors.Wrapf(err, "download metadata for all blocks")
+	}
+	for id, md := range mds {
+		if md == nil {
+			continue
 		}
 
 		if idMatcher != nil && !idMatcher(id) {
-			return nil
+			continue
 		}
 
 		tmpdir, err := ioutil.TempDir("", fmt.Sprintf("index-issue-block-%s-", id))
@@ -52,25 +59,20 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 			return errors.Wrapf(err, "download index file %s", path.Join(id.String(), block.IndexFilename))
 		}
 
-		meta, err := block.DownloadMeta(ctx, logger, bkt, id)
-		if err != nil {
-			return errors.Wrapf(err, "download meta file %s", id)
-		}
-
-		stats, err := block.GatherIndexIssueStats(logger, filepath.Join(tmpdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
+		stats, err := block.GatherIndexIssueStats(logger, filepath.Join(tmpdir, block.IndexFilename), md.MinTime, md.MaxTime)
 		if err != nil {
 			return errors.Wrapf(err, "gather index issues %s", id)
 		}
 
 		if err = stats.AnyErr(); err == nil {
-			return nil
+			continue
 		}
 
 		level.Warn(logger).Log("msg", "detected issue", "id", id, "err", err, "issue", IndexIssueID)
 
 		if !repair {
 			// Only verify.
-			return nil
+			continue
 		}
 
 		if stats.OutOfOrderChunks > stats.DuplicatedChunks {
@@ -81,7 +83,7 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 			level.Warn(logger).Log("msg", "detected outsiders are not all 'complete' outsiders or outsiders from https://github.com/prometheus/tsdb/issues/347. We can safely delete only these outsiders", "id", id, "issue", IndexIssueID)
 		}
 
-		if meta.Thanos.Downsample.Resolution > 0 {
+		if md.Thanos.Downsample.Resolution > 0 {
 			return errors.New("cannot repair downsampled blocks")
 		}
 
@@ -107,7 +109,7 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 		level.Info(logger).Log("msg", "verifying repaired block", "id", id, "newID", resid, "issue", IndexIssueID)
 
 		// Verify repaired block before uploading it.
-		if err := block.VerifyIndex(logger, filepath.Join(tmpdir, resid.String(), block.IndexFilename), meta.MinTime, meta.MaxTime); err != nil {
+		if err := block.VerifyIndex(logger, filepath.Join(tmpdir, resid.String(), block.IndexFilename), md.MinTime, md.MaxTime); err != nil {
 			return errors.Wrapf(err, "repaired block is invalid %s", resid)
 		}
 
@@ -121,10 +123,6 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 			return errors.Wrapf(err, "safe deleting old block %s failed", id)
 		}
 		level.Info(logger).Log("msg", "all good, continuing", "id", id, "issue", IndexIssueID)
-		return nil
-	})
-	if err != nil {
-		return errors.Wrapf(err, "verify iter, issue %s", IndexIssueID)
 	}
 
 	level.Info(logger).Log("msg", "verified issue", "with-repair", repair, "issue", IndexIssueID)

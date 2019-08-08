@@ -205,8 +205,6 @@ type BucketStore struct {
 
 	// Verbose enabled additional logging.
 	debugLogging bool
-	// Number of goroutines to use when syncing blocks from object storage.
-	blockSyncConcurrency int
 
 	// Query gate which limits the maximum amount of concurrent queries.
 	queryGate *Gate
@@ -214,6 +212,7 @@ type BucketStore struct {
 	// samplesLimiter limits the number of samples per each Series() call.
 	samplesLimiter *Limiter
 	partitioner    partitioner
+	blockMDFetcher *block.MetadataFetcher
 
 	filterConfig *FilterConfig
 }
@@ -250,15 +249,14 @@ func NewBucketStore(
 
 	metrics := newBucketStoreMetrics(reg)
 	s := &BucketStore{
-		logger:               logger,
-		bucket:               bucket,
-		dir:                  dir,
-		indexCache:           indexCache,
-		chunkPool:            chunkPool,
-		blocks:               map[ulid.ULID]*bucketBlock{},
-		blockSets:            map[uint64]*bucketBlockSet{},
-		debugLogging:         debugLogging,
-		blockSyncConcurrency: blockSyncConcurrency,
+		logger:       logger,
+		bucket:       bucket,
+		dir:          dir,
+		indexCache:   indexCache,
+		chunkPool:    chunkPool,
+		blocks:       map[ulid.ULID]*bucketBlock{},
+		blockSets:    map[uint64]*bucketBlockSet{},
+		debugLogging: debugLogging,
 		queryGate: NewGate(
 			maxConcurrent,
 			extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg),
@@ -266,6 +264,7 @@ func NewBucketStore(
 		samplesLimiter: NewLimiter(maxSampleCount, metrics.queriesDropped),
 		partitioner:    gapBasedPartitioner{maxGapSize: maxGapSize},
 		filterConfig:   filterConf,
+		blockMDFetcher: block.NewMetadataFetcher(logger, blockSyncConcurrency, bucket),
 	}
 	s.metrics = metrics
 
@@ -295,59 +294,38 @@ func (s *BucketStore) Close() (err error) {
 // SyncBlocks synchronizes the stores state with the Bucket bucket.
 // It will reuse disk space as persistent cache based on s.dir param.
 func (s *BucketStore) SyncBlocks(ctx context.Context) error {
-	var wg sync.WaitGroup
-	blockc := make(chan ulid.ULID)
-
-	for i := 0; i < s.blockSyncConcurrency; i++ {
-		wg.Add(1)
-		go func() {
-			for id := range blockc {
-				if err := s.addBlock(ctx, id); err != nil {
-					level.Warn(s.logger).Log("msg", "loading block failed", "id", id, "err", err)
-					continue
-				}
-			}
-			wg.Done()
-		}()
-	}
-
 	allIDs := map[ulid.ULID]struct{}{}
 
-	err := s.bucket.Iter(ctx, "", func(name string) error {
-		// Strip trailing slash indicating a directory.
-		id, err := ulid.Parse(name[:len(name)-1])
-		if err != nil {
-			return nil
+	mds, err := s.blockMDFetcher.Fetch(ctx)
+	if err != nil {
+		return errors.Wrap(err, "fetching remote block metadata failed")
+	}
+	for blockID, md := range mds {
+		if md == nil {
+			continue
 		}
 
-		inRange, err := s.isBlockInMinMaxRange(ctx, id)
+		inRange, err := s.isBlockInMinMaxRange(ctx, blockID)
 		if err != nil {
-			level.Warn(s.logger).Log("msg", "error parsing block range", "block", id, "err", err)
-			return nil
+			level.Warn(s.logger).Log("msg", "error parsing block range", "block", blockID, "err", err)
+			continue
 		}
 
 		if !inRange {
-			return nil
+			continue
 		}
 
-		allIDs[id] = struct{}{}
+		allIDs[blockID] = struct{}{}
 
-		if b := s.getBlock(id); b != nil {
-			return nil
+		if b := s.getBlock(blockID); b != nil {
+			continue
 		}
-		select {
-		case <-ctx.Done():
-		case blockc <- id:
+
+		if err := s.addBlock(ctx, blockID); err != nil {
+			level.Warn(s.logger).Log("msg", "loading block failed", "id", blockID, "err", err)
 		}
-		return nil
-	})
-
-	close(blockc)
-	wg.Wait()
-
-	if err != nil {
-		return errors.Wrap(err, "iter")
 	}
+
 	// Drop all blocks that are no longer present in the bucket.
 	for id := range s.blocks {
 		if _, ok := allIDs[id]; ok {

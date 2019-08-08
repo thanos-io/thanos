@@ -47,22 +47,18 @@ func OverlappedBlocksIssue(ctx context.Context, logger log.Logger, bkt objstore.
 
 func fetchOverlaps(ctx context.Context, logger log.Logger, bkt objstore.Bucket) (map[string]tsdb.Overlaps, error) {
 	metas := map[string][]tsdb.BlockMeta{}
-	err := bkt.Iter(ctx, "", func(name string) error {
-		id, ok := block.IsBlockDir(name)
-		if !ok {
-			return nil
-		}
-
-		m, err := block.DownloadMeta(ctx, logger, bkt, id)
-		if err != nil {
-			return err
-		}
-
-		metas[compact.GroupKey(m)] = append(metas[compact.GroupKey(m)], m.BlockMeta)
-		return nil
-	})
+	mdFetcher := block.NewMetadataFetcher(logger, 3, bkt)
+	mds, err := mdFetcher.Fetch(ctx)
 	if err != nil {
 		return nil, err
+	}
+	for _, md := range mds {
+		if md == nil {
+			continue
+		}
+
+		mdStruct := *md
+		metas[compact.GroupKey(mdStruct)] = append(metas[compact.GroupKey(mdStruct)], md.BlockMeta)
 	}
 
 	overlaps := map[string]tsdb.Overlaps{}

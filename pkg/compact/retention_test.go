@@ -246,7 +246,7 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 				return nil
 			}))
 
-			testutil.Equals(t, got, tt.want)
+			testutil.Equals(t, tt.want, got)
 		})
 	}
 }

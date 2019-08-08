@@ -10,7 +10,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/tsdb"
@@ -24,7 +24,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 func registerDownsample(m map[string]setupFunc, app *kingpin.Application) {
@@ -142,23 +142,9 @@ func downsampleBucket(
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return errors.Wrap(err, "create dir")
 	}
-	var metas []*metadata.Meta
 
-	err := bkt.Iter(ctx, "", func(name string) error {
-		id, ok := block.IsBlockDir(name)
-		if !ok {
-			return nil
-		}
-
-		m, err := block.DownloadMeta(ctx, logger, bkt, id)
-		if err != nil {
-			return errors.Wrap(err, "download metadata")
-		}
-
-		metas = append(metas, &m)
-
-		return nil
-	})
+	mdFetcher := block.NewMetadataFetcher(logger, 4, bkt)
+	blockMDs, err := mdFetcher.Fetch(ctx)
 	if err != nil {
 		return errors.Wrap(err, "retrieve bucket block metas")
 	}
@@ -168,7 +154,11 @@ func downsampleBucket(
 	sources5m := map[ulid.ULID]struct{}{}
 	sources1h := map[ulid.ULID]struct{}{}
 
-	for _, m := range metas {
+	for _, m := range blockMDs {
+		if m == nil {
+			continue
+		}
+
 		switch m.Thanos.Downsample.Resolution {
 		case 0:
 			continue
@@ -185,7 +175,11 @@ func downsampleBucket(
 		}
 	}
 
-	for _, m := range metas {
+	for _, m := range blockMDs {
+		if m == nil {
+			continue
+		}
+
 		switch m.Thanos.Downsample.Resolution {
 		case 0:
 			missing := false

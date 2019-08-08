@@ -184,6 +184,7 @@ type lazyOverlapChecker struct {
 
 	metas       []tsdb.BlockMeta
 	lookupMetas map[ulid.ULID]struct{}
+	mdFetcher   *block.MetadataFetcher
 }
 
 func newLazyOverlapChecker(logger log.Logger, bucket objstore.Bucket, labels func() labels.Labels) *lazyOverlapChecker {
@@ -193,31 +194,27 @@ func newLazyOverlapChecker(logger log.Logger, bucket objstore.Bucket, labels fun
 		labels: labels,
 
 		lookupMetas: map[ulid.ULID]struct{}{},
+		mdFetcher:   block.NewMetadataFetcher(logger, 3, bucket),
 	}
 }
 
 func (c *lazyOverlapChecker) sync(ctx context.Context) error {
-	if err := c.bucket.Iter(ctx, "", func(path string) error {
-		id, ok := block.IsBlockDir(path)
-		if !ok {
-			return nil
-		}
-
-		m, err := block.DownloadMeta(ctx, c.logger, c.bucket, id)
-		if err != nil {
-			return err
-		}
-
-		if !labels.FromMap(m.Thanos.Labels).Equals(c.labels()) {
-			return nil
-		}
-
-		c.metas = append(c.metas, m.BlockMeta)
-		c.lookupMetas[m.ULID] = struct{}{}
-		return nil
-
-	}); err != nil {
+	mds, err := c.mdFetcher.Fetch(ctx)
+	if err != nil {
 		return errors.Wrap(err, "get all block meta.")
+	}
+
+	for _, md := range mds {
+		if md == nil {
+			continue
+		}
+
+		if !labels.FromMap(md.Thanos.Labels).Equals(c.labels()) {
+			return nil
+		}
+
+		c.metas = append(c.metas, md.BlockMeta)
+		c.lookupMetas[md.ULID] = struct{}{}
 	}
 
 	c.synced = true

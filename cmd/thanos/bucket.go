@@ -36,6 +36,10 @@ import (
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
+const (
+	defaultBlockMDFetchConcurrency = 3
+)
+
 var (
 	issuesMap = map[string]verifier.Issue{
 		verifier.IndexIssueID:                verifier.IndexIssue,
@@ -175,28 +179,26 @@ func registerBucketLs(m map[string]setupFunc, root *kingpin.CmdClause, name stri
 
 		var (
 			format     = *output
-			printBlock func(id ulid.ULID) error
+			printBlock func(id ulid.ULID, md *metadata.Meta) error
 		)
 
 		switch format {
 		case "":
-			printBlock = func(id ulid.ULID) error {
+			printBlock = func(id ulid.ULID, md *metadata.Meta) error {
 				fmt.Fprintln(os.Stdout, id.String())
 				return nil
 			}
 		case "wide":
-			printBlock = func(id ulid.ULID) error {
-				m, err := block.DownloadMeta(ctx, logger, bkt, id)
-				if err != nil {
-					return err
+			printBlock = func(id ulid.ULID, md *metadata.Meta) error {
+				if md == nil {
+					return nil
 				}
-
-				minTime := time.Unix(m.MinTime/1000, 0)
-				maxTime := time.Unix(m.MaxTime/1000, 0)
+				minTime := time.Unix(md.MinTime/1000, 0)
+				maxTime := time.Unix(md.MaxTime/1000, 0)
 
 				if _, err = fmt.Fprintf(os.Stdout, "%s -- %s - %s Diff: %s, Compaction: %d, Downsample: %d, Source: %s\n",
-					m.ULID, minTime.Format("2006-01-02 15:04"), maxTime.Format("2006-01-02 15:04"), maxTime.Sub(minTime),
-					m.Compaction.Level, m.Thanos.Downsample.Resolution, m.Thanos.Source); err != nil {
+					md.ULID, minTime.Format("2006-01-02 15:04"), maxTime.Format("2006-01-02 15:04"), maxTime.Sub(minTime),
+					md.Compaction.Level, md.Thanos.Downsample.Resolution, md.Thanos.Source); err != nil {
 					return err
 				}
 				return nil
@@ -205,25 +207,22 @@ func registerBucketLs(m map[string]setupFunc, root *kingpin.CmdClause, name stri
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "\t")
 
-			printBlock = func(id ulid.ULID) error {
-				m, err := block.DownloadMeta(ctx, logger, bkt, id)
-				if err != nil {
-					return err
+			printBlock = func(id ulid.ULID, md *metadata.Meta) error {
+				if md == nil {
+					return nil
 				}
-				return enc.Encode(&m)
+				return enc.Encode(&md)
 			}
 		default:
 			tmpl, err := template.New("").Parse(format)
 			if err != nil {
 				return errors.Wrap(err, "invalid template")
 			}
-			printBlock = func(id ulid.ULID) error {
-				m, err := block.DownloadMeta(ctx, logger, bkt, id)
-				if err != nil {
-					return err
+			printBlock = func(id ulid.ULID, md *metadata.Meta) error {
+				if md == nil {
+					return nil
 				}
-
-				if err := tmpl.Execute(os.Stdout, &m); err != nil {
+				if err := tmpl.Execute(os.Stdout, &md); err != nil {
 					return errors.Wrap(err, "execute template")
 				}
 				fmt.Fprintln(os.Stdout, "")
@@ -231,13 +230,18 @@ func registerBucketLs(m map[string]setupFunc, root *kingpin.CmdClause, name stri
 			}
 		}
 
-		return bkt.Iter(ctx, "", func(name string) error {
-			id, ok := block.IsBlockDir(name)
-			if !ok {
-				return nil
+		mdFetcher := block.NewMetadataFetcher(logger, defaultBlockMDFetchConcurrency, bkt)
+		mds, err := mdFetcher.Fetch(ctx)
+		if err != nil {
+			return err
+		}
+		for id, md := range mds {
+			if err := printBlock(id, md); err != nil {
+				return err
 			}
-			return printBlock(id)
-		})
+		}
+
+		return nil
 	}
 }
 
@@ -276,22 +280,8 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 		defer cancel()
 
 		// Getting Metas.
-		var blockMetas []*metadata.Meta
-		if err = bkt.Iter(ctx, "", func(name string) error {
-			id, ok := block.IsBlockDir(name)
-			if !ok {
-				return nil
-			}
-
-			m, err := block.DownloadMeta(ctx, logger, bkt, id)
-			if err != nil {
-				return err
-			}
-
-			blockMetas = append(blockMetas, &m)
-
-			return nil
-		}); err != nil {
+		blockMetas, err := download(ctx, logger, bkt)
+		if err != nil {
 			return err
 		}
 
@@ -383,25 +373,21 @@ func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, durati
 	})
 }
 
-func download(ctx context.Context, logger log.Logger, bkt objstore.Bucket) (blocks []metadata.Meta, err error) {
+func download(ctx context.Context, logger log.Logger, bkt objstore.Bucket) (blocks []*metadata.Meta, err error) {
 	level.Info(logger).Log("msg", "synchronizing block metadata")
-
-	if err = bkt.Iter(ctx, "", func(name string) error {
-		id, ok := block.IsBlockDir(name)
-		if !ok {
-			return nil
-		}
-
-		meta, err := block.DownloadMeta(ctx, logger, bkt, id)
-		if err != nil {
-			return err
-		}
-
-		blocks = append(blocks, meta)
-		return nil
-	}); err != nil {
+	mdFetcher := block.NewMetadataFetcher(logger, defaultBlockMDFetchConcurrency, bkt)
+	mds, err := mdFetcher.Fetch(ctx)
+	if err != nil {
 		level.Error(logger).Log("err", err, "msg", "Failed to downloaded block metadata")
-		return blocks, err
+		return nil, err
+	}
+
+	for _, md := range mds {
+		if md == nil {
+			continue
+		}
+
+		blocks = append(blocks, md)
 	}
 
 	level.Info(logger).Log("msg", "downloaded blocks meta.json", "num", len(blocks))

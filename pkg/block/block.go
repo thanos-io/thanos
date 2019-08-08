@@ -163,7 +163,7 @@ func deleteDir(ctx context.Context, logger log.Logger, bkt objstore.Bucket, dir 
 
 // DownloadMeta downloads only meta file from bucket by block ID.
 // TODO(bwplotka): Differentiate between network error & partial upload.
-func DownloadMeta(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID) (metadata.Meta, error) {
+func DownloadMeta(ctx context.Context, logger log.Logger, bkt objstore.BucketReader, id ulid.ULID) (metadata.Meta, error) {
 	rc, err := bkt.Get(ctx, path.Join(id.String(), MetaFilename))
 	if err != nil {
 		return metadata.Meta{}, errors.Wrapf(err, "meta.json bkt get for %s", id.String())

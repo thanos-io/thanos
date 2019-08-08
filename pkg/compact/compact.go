@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"sync"
@@ -35,8 +34,6 @@ const (
 	MinimumAgeForRemoval = time.Duration(30 * time.Minute)
 )
 
-var blockTooFreshSentinelError = errors.New("Block too fresh")
-
 // Syncer syncronizes block metas from a bucket into a local directory.
 // It sorts them into compaction groups based on equal label sets.
 type Syncer struct {
@@ -50,6 +47,7 @@ type Syncer struct {
 	blockSyncConcurrency int
 	metrics              *syncerMetrics
 	acceptMalformedIndex bool
+	remoteBlockMDFetcher *block.MetadataFetcher
 }
 
 type syncerMetrics struct {
@@ -144,6 +142,7 @@ func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket
 		metrics:              newSyncerMetrics(reg),
 		blockSyncConcurrency: blockSyncConcurrency,
 		acceptMalformedIndex: acceptMalformedIndex,
+		remoteBlockMDFetcher: block.NewMetadataFetcher(logger, blockSyncConcurrency, bkt),
 	}, nil
 }
 
@@ -167,142 +166,52 @@ func (c *Syncer) SyncMetas(ctx context.Context) error {
 }
 
 func (c *Syncer) syncMetas(ctx context.Context) error {
-	var wg sync.WaitGroup
-	defer wg.Wait()
-
-	metaIDsChan := make(chan ulid.ULID)
-	errChan := make(chan error, c.blockSyncConcurrency)
-
-	workCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	for i := 0; i < c.blockSyncConcurrency; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			for id := range metaIDsChan {
-				// Check if we already have this block cached locally.
-				c.blocksMtx.Lock()
-				_, seen := c.blocks[id]
-				c.blocksMtx.Unlock()
-				if seen {
-					continue
-				}
-
-				meta, err := c.downloadMeta(workCtx, id)
-				if err == blockTooFreshSentinelError {
-					continue
-				}
-				if err != nil {
-					if removedOrIgnored := c.removeIfMetaMalformed(workCtx, id); removedOrIgnored {
-						continue
-					}
-					errChan <- err
-					return
-				}
-
-				c.blocksMtx.Lock()
-				c.blocks[id] = meta
-				c.blocksMtx.Unlock()
-			}
-		}()
-	}
-
-	// Read back all block metas so we can detect deleted blocks.
-	remote := map[ulid.ULID]struct{}{}
-
-	err := c.bkt.Iter(ctx, "", func(name string) error {
-		id, ok := block.IsBlockDir(name)
-		if !ok {
-			return nil
-		}
-
-		remote[id] = struct{}{}
-
-		select {
-		case <-ctx.Done():
-		case metaIDsChan <- id:
-		}
-
-		return nil
-	})
-	close(metaIDsChan)
+	remoteBlockMDs, err := c.remoteBlockMDFetcher.Fetch(ctx)
 	if err != nil {
-		return retry(errors.Wrap(err, "retrieve bucket block metas"))
+		return err
 	}
 
-	wg.Wait()
-	close(errChan)
-
-	if err := <-errChan; err != nil {
-		return retry(err)
-	}
-
-	// Delete all local block dirs that no longer exist in the bucket.
-	for id := range c.blocks {
-		if _, ok := remote[id]; !ok {
-			delete(c.blocks, id)
+	for blockID, md := range remoteBlockMDs {
+		if md == nil && ulid.Now()-blockID.Time() < uint64(c.consistencyDelay/time.Millisecond) {
+			level.Debug(c.logger).Log("msg", "ignoring block that is too fresh", "block", blockID)
+			continue
 		}
+
+		// ULIDs contain a millisecond timestamp. We do not consider blocks that have been created too recently to
+		// avoid races when a block is only partially uploaded. This relates to all blocks, excluding:
+		// - repair created blocks
+		// - compactor created blocks
+		// NOTE: It is not safe to miss "old" block (even that it is newly created) in sync step. Compactor needs to aware of ALL old blocks.
+		// TODO(bplotka): https://github.com/thanos-io/thanos/issues/377
+		if md != nil && ulid.Now()-blockID.Time() < uint64(c.consistencyDelay/time.Millisecond) &&
+			md.Thanos.Source != metadata.BucketRepairSource &&
+			md.Thanos.Source != metadata.CompactorSource &&
+			md.Thanos.Source != metadata.CompactorRepairSource {
+			level.Debug(c.logger).Log("msg", "ignoring block that is too fresh", "block", blockID)
+			continue
+		}
+
+		// Minimum delay has not expired, ignore for now
+		if md == nil && ulid.Now()-blockID.Time() <= uint64(MinimumAgeForRemoval/time.Millisecond) {
+			level.Debug(c.logger).Log("msg", "ignoring block that is within minimum age for removal", "block", blockID)
+			continue
+		}
+
+		if md != nil {
+			continue
+		}
+
+		if err := block.Delete(ctx, c.logger, c.bkt, blockID); err != nil {
+			level.Warn(c.logger).Log("msg", "failed to delete malformed block", "block", blockID, "err", err)
+		}
+		level.Info(c.logger).Log("msg", "deleted malformed block", "block", blockID)
 	}
+
+	c.blocksMtx.Lock()
+	defer c.blocksMtx.Unlock()
+	c.blocks = remoteBlockMDs
 
 	return nil
-}
-
-func (c *Syncer) downloadMeta(ctx context.Context, id ulid.ULID) (*metadata.Meta, error) {
-	level.Debug(c.logger).Log("msg", "download meta", "block", id)
-
-	meta, err := block.DownloadMeta(ctx, c.logger, c.bkt, id)
-	if err != nil {
-		if ulid.Now()-id.Time() < uint64(c.consistencyDelay/time.Millisecond) {
-			level.Debug(c.logger).Log("msg", "block is too fresh for now", "block", id)
-			return nil, blockTooFreshSentinelError
-		}
-		return nil, errors.Wrapf(err, "downloading meta.json for %s", id)
-	}
-
-	// ULIDs contain a millisecond timestamp. We do not consider blocks that have been created too recently to
-	// avoid races when a block is only partially uploaded. This relates to all blocks, excluding:
-	// - repair created blocks
-	// - compactor created blocks
-	// NOTE: It is not safe to miss "old" block (even that it is newly created) in sync step. Compactor needs to aware of ALL old blocks.
-	// TODO(bplotka): https://github.com/thanos-io/thanos/issues/377
-	if ulid.Now()-id.Time() < uint64(c.consistencyDelay/time.Millisecond) &&
-		meta.Thanos.Source != metadata.BucketRepairSource &&
-		meta.Thanos.Source != metadata.CompactorSource &&
-		meta.Thanos.Source != metadata.CompactorRepairSource {
-
-		level.Debug(c.logger).Log("msg", "block is too fresh for now", "block", id)
-		return nil, blockTooFreshSentinelError
-	}
-
-	return &meta, nil
-}
-
-// removeIfMalformed removes a block from the bucket if that block does not have a meta file.  It ignores blocks that
-// are younger than MinimumAgeForRemoval.
-func (c *Syncer) removeIfMetaMalformed(ctx context.Context, id ulid.ULID) (removedOrIgnored bool) {
-	metaExists, err := c.bkt.Exists(ctx, path.Join(id.String(), block.MetaFilename))
-	if err != nil {
-		level.Warn(c.logger).Log("msg", "failed to check meta exists for block", "block", id, "err", err)
-		return false
-	}
-	if metaExists {
-		// Meta exists, block is not malformed.
-		return false
-	}
-
-	if ulid.Now()-id.Time() <= uint64(MinimumAgeForRemoval/time.Millisecond) {
-		// Minimum delay has not expired, ignore for now
-		return true
-	}
-
-	if err := block.Delete(ctx, c.logger, c.bkt, id); err != nil {
-		level.Warn(c.logger).Log("msg", "failed to delete malformed block", "block", id, "err", err)
-		return false
-	}
-	level.Info(c.logger).Log("msg", "deleted malformed block", "block", id)
-
-	return true
 }
 
 // GroupKey returns a unique identifier for the group the block belongs to. It considers

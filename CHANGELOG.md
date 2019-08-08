@@ -10,6 +10,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 We use *breaking* word for marking changes that are not backward compatible (relates only to v0.y.z releases.)
 
 ## Unreleased
+- [#1394](https://github.com/thanos-io/thanos/pull/1394) Fix a bug where partially uploaded blocks cause issues when retrieved. 
 
 ## Added
 - [#1540](https://github.com/thanos-io/thanos/pull/1540) Added `/-/ready` and `/-/healthy` endpoints to Thanos Downsample.
