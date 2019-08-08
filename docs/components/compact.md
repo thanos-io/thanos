@@ -71,6 +71,11 @@ Flags:
                                hour) in bucket. 0d - disables this retention
   -w, --wait                   Do not exit after all compactions have been
                                processed and wait for new work.
+      --downsampling.disable   Disables downsampling. This is not recommended as
+                               querying long time ranges without non-downsampled
+                               data is not efficient and useful e.g it is not
+                               possible to render all samples for a human eye
+                               anyway
       --block-sync-concurrency=20
                                Number of goroutines to use when syncing block
                                metadata from object storage.
