@@ -94,12 +94,7 @@ func parseConfig(conf []byte) (Config, error) {
 		config.PartSize = defaultMinPartSize
 	}
 
-	// ensure that the prefix isn't too long
-	if config.Prefix != "" && len(config.Prefix) >= 1024 {
-		return Config{}, errors.New("prefix is too long (limited by Amazon at 1024 bytes long)")
-	}
-
-	// trim trailing slash and insert one
+	// here for testing
 	if config.Prefix != "" {
 		config.Prefix = strings.TrimSuffix(config.Prefix, DirDelim) + DirDelim
 	}
@@ -117,7 +112,7 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 	return NewBucketWithConfig(logger, config, component)
 }
 
-// NewBucket returns a new Bucket using the provided s3 config values.
+// NewBucketWithConfig returns a new Bucket using the provided s3 config values.
 func NewBucketWithConfig(logger log.Logger, config Config, component string) (*Bucket, error) {
 	var chain []credentials.Provider
 
@@ -255,15 +250,16 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 	}
 
 	for object := range b.client.ListObjects(b.name, b.objectPrefix+dir, false, ctx.Done()) {
+		keyName := strings.Replace(object.Key, b.objectPrefix, "", 1)
 		// Catch the error when failed to list objects.
 		if object.Err != nil {
 			return object.Err
 		}
 		// This sometimes happens with empty buckets.
-		if object.Key == "" {
+		if keyName == "" {
 			continue
 		}
-		if err := f(object.Key); err != nil {
+		if err := f(keyName); err != nil {
 			return err
 		}
 	}
