@@ -27,7 +27,7 @@ then
       --address ${MINIO_ENDPOINT} &
   sleep 3
   # create the bucket
-  mc config host add tmp http://${MINIO_ENDPOINT} THANOS ITSTHANOSTIME
+  mc config host add tmp http://${MINIO_ENDPOINT} ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY}
   mc mb tmp/${MINIO_BUCKET}
   mc config host rm tmp
 
