@@ -99,10 +99,9 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 	generateMissingIndexCacheFiles := cmd.Flag("index.generate-missing-cache-file", "If enabled, on startup compactor runs an on-off job that scans all the blocks to find all blocks with missing index cache file. It generates those if needed and upload.").
 		Hidden().Default("false").Bool()
 
-	// TODO(bplotka): Remove this flag once https://github.com/thanos-io/thanos/issues/297 is fixed.
-	disableDownsampling := cmd.Flag("debug.disable-downsampling", "Disables downsampling. This is not recommended "+
-		"as querying long time ranges without non-downsampled data is not efficient and not useful (is not possible to render all for human eye).").
-		Hidden().Default("false").Bool()
+	disableDownsampling := cmd.Flag("downsampling.disable", "Disables downsampling. This is not recommended "+
+		"as querying long time ranges without non-downsampled data is not efficient and useful e.g it is not possible to render all samples for a human eye anyway").
+		Default("false").Bool()
 
 	maxCompactionLevel := cmd.Flag("debug.max-compaction-level", fmt.Sprintf("Maximum compaction level, default is %d: %s", compactions.maxLevel(), compactions.String())).
 		Hidden().Default(strconv.Itoa(compactions.maxLevel())).Int()
