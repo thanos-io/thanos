@@ -67,6 +67,28 @@ http_config:
 	}
 }
 
+func TestParseConfig_PrefixNoSlash(t *testing.T) {
+	input := []byte(`bucket: abcd
+prefix: ssss`)
+	cfg, err := parseConfig(input)
+	testutil.Ok(t, err)
+
+	if cfg.Prefix != "ssss/" {
+		t.Errorf("parsing of prefix failed: got '%s', expected 'ssss/'", cfg.Prefix)
+	}
+}
+
+func TestParseConfig_PrefixSlash(t *testing.T) {
+	input := []byte(`bucket: abcd
+prefix: ssss/`)
+	cfg, err := parseConfig(input)
+	testutil.Ok(t, err)
+
+	if cfg.Prefix != "ssss/" {
+		t.Errorf("parsing of prefix failed: got '%s', expected 'ssss/'", cfg.Prefix)
+	}
+}
+
 func TestValidate_OK(t *testing.T) {
 	input := []byte(`bucket: "bucket-name"
 endpoint: "s3-endpoint"

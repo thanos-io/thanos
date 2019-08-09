@@ -50,6 +50,7 @@ type Config struct {
 	HTTPConfig      HTTPConfig        `yaml:"http_config"`
 	TraceConfig     TraceConfig       `yaml:"trace"`
 	PartSize        uint64            `yaml:"part_size"`
+	Prefix          string            `yaml:"prefix"`
 }
 
 type TraceConfig struct {
@@ -71,6 +72,7 @@ type Bucket struct {
 	sse             encrypt.ServerSide
 	putUserMetadata map[string]string
 	partSize        uint64
+	objectPrefix    string
 }
 
 // parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
@@ -90,6 +92,16 @@ func parseConfig(conf []byte) (Config, error) {
 
 	if config.PartSize == 0 {
 		config.PartSize = defaultMinPartSize
+	}
+
+	// ensure that the prefix isn't too long
+	if config.Prefix != "" && len(config.Prefix) >= 1024 {
+		return Config{}, errors.New("prefix is too long (limited by Amazon at 1024 bytes long)")
+	}
+
+	// trim trailing slash and insert one
+	if config.Prefix != "" {
+		config.Prefix = strings.TrimSuffix(config.Prefix, DirDelim) + DirDelim
 	}
 
 	return config, nil
@@ -186,6 +198,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		sse:             sse,
 		putUserMetadata: config.PutUserMetadata,
 		partSize:        config.PartSize,
+		objectPrefix:    config.Prefix,
 	}
 	return bkt, nil
 }
@@ -208,6 +221,17 @@ func validate(conf Config) error {
 	if conf.AccessKey != "" && conf.SecretKey == "" {
 		return errors.New("no s3 secret_key specified while access_key is present in config file; either both should be present in config or envvars/IAM should be used.")
 	}
+
+	// ensure that the prefix isn't too long
+	if conf.Prefix != "" && len(conf.Prefix) >= 1024 {
+		return errors.New("prefix is too long (limited by Amazon at 1024 bytes long)")
+	}
+
+	// trim trailing slash and insert one
+	if conf.Prefix != "" {
+		conf.Prefix = strings.TrimSuffix(conf.Prefix, DirDelim) + DirDelim
+	}
+
 	return nil
 }
 
@@ -230,7 +254,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		dir = strings.TrimSuffix(dir, DirDelim) + DirDelim
 	}
 
-	for object := range b.client.ListObjects(b.name, dir, false, ctx.Done()) {
+	for object := range b.client.ListObjects(b.name, b.objectPrefix+dir, false, ctx.Done()) {
 		// Catch the error when failed to list objects.
 		if object.Err != nil {
 			return object.Err
@@ -254,7 +278,7 @@ func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (
 			return nil, err
 		}
 	}
-	r, err := b.client.GetObjectWithContext(ctx, b.name, name, *opts)
+	r, err := b.client.GetObjectWithContext(ctx, b.name, b.objectPrefix+name, *opts)
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +307,7 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 
 // Exists checks if the given object exists.
 func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
-	_, err := b.client.StatObject(b.name, name, minio.StatObjectOptions{})
+	_, err := b.client.StatObject(b.name, b.objectPrefix+name, minio.StatObjectOptions{})
 	if err != nil {
 		if b.IsObjNotFoundErr(err) {
 			return false, nil
@@ -316,7 +340,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	if _, err := b.client.PutObjectWithContext(
 		ctx,
 		b.name,
-		name,
+		b.objectPrefix+name,
 		r,
 		fileSize,
 		minio.PutObjectOptions{
@@ -333,7 +357,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 
 // Delete removes the object with the given name.
 func (b *Bucket) Delete(ctx context.Context, name string) error {
-	return b.client.RemoveObject(b.name, name)
+	return b.client.RemoveObject(b.name, b.objectPrefix+name)
 }
 
 // IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.

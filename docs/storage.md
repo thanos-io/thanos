@@ -63,6 +63,7 @@ config:
   trace:
     enable: false
   part_size: 0
+  prefix: ""
 ```
 
 At a minimum, you will need to provide a value for the `bucket`, `endpoint`, `access_key`, and `secret_key` keys. The rest of the keys are optional.
