@@ -70,7 +70,7 @@ func main() {
 	tracingConfig := regCommonTracingFlags(app)
 
 	cmds := map[string]setupFunc{}
-	registerSidecar(cmds, app, "sidecar")
+	registerSidecar(cmds, app)
 	registerStore(cmds, app, "store")
 	registerQuery(cmds, app, "query")
 	registerRule(cmds, app, "rule")
