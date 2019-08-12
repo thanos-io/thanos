@@ -793,12 +793,17 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	}
 	defer s.queryGate.Done()
 
-	match, matchers, err := labelsMatchesAndTranslate(s.selectorLabels, req.Matchers)
+	match, matchers, err := matchesExternalLabels(req.Matchers, s.selectorLabels)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
 	if !match {
 		return nil
+	}
+
+	newMatchers, err := translateMatchers(matchers)
+	if err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	req.MinTime = s.limitMinTime(req.MinTime)
@@ -813,7 +818,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	s.mtx.RLock()
 
 	for _, bs := range s.blockSets {
-		blockMatchers, ok := bs.labelMatchers(matchers...)
+		blockMatchers, ok := bs.labelMatchers(newMatchers...)
 		if !ok {
 			continue
 		}

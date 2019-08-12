@@ -442,32 +442,6 @@ func matchesExternalLabels(ms []storepb.LabelMatcher, externalLabels labels.Labe
 	return true, newMatcher, nil
 }
 
-func labelsMatchesAndTranslate(lset labels.Labels, ms []storepb.LabelMatcher) (bool, []labels.Matcher, error) {
-	tms, err := translateMatchers(ms)
-	if err != nil {
-		return false, nil, err
-	}
-
-	if len(lset) == 0 {
-		return true, tms, nil
-	}
-
-	for i := len(tms) - 1; i >= 0; i-- {
-		tm := tms[i]
-		v := lset.Get(tm.Name())
-		if v == "" {
-			continue
-		}
-
-		if !tm.Matches(v) {
-			return false, nil, nil
-		}
-
-		tms = append(tms[:i], tms[i+1:]...)
-	}
-	return true, tms, nil
-}
-
 // encodeChunk translates the sample pairs into a chunk.
 func (p *PrometheusStore) encodeChunk(ss []prompb.Sample) (storepb.Chunk_Encoding, []byte, error) {
 	c := chunkenc.NewXORChunk()
