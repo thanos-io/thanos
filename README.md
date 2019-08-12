@@ -33,7 +33,6 @@ Concretely the aims of the project are:
 * [Design](https://thanos.io/design.md/)
 * [Prom Meetup Slides](https://www.slideshare.net/BartomiejPotka/thanos-global-durable-prometheus-monitoring)
 * [Introduction blog post](https://improbable.io/games/blog/thanos-prometheus-at-scale)
-* [Benchmarks](https://github.com/thanos-io/thanos/tree/master/benchmark)
 * [Proposals](docs/proposals)
 * [Integrations](docs/integrations.md)
 
