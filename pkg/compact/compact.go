@@ -589,7 +589,7 @@ func (e Issue347Error) Error() string {
 	return e.err.Error()
 }
 
-// Issue347Error returns true if the base error is a Issue347Error.
+// IsIssue347Error returns true if the base error is a Issue347Error.
 func IsIssue347Error(err error) bool {
 	_, ok := errors.Cause(err).(Issue347Error)
 	return ok

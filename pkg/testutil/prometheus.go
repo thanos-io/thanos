@@ -111,7 +111,7 @@ func NewPrometheus() (*Prometheus, error) {
 	return newPrometheus("", "")
 }
 
-// NewPrometheus creates a new test Prometheus instance that will listen on local address and given prefix path.
+// NewPrometheusOnPath creates a new test Prometheus instance that will listen on local address and given prefix path.
 func NewPrometheusOnPath(prefix string) (*Prometheus, error) {
 	return newPrometheus("", prefix)
 }

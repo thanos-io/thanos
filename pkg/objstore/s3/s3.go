@@ -105,7 +105,7 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 	return NewBucketWithConfig(logger, config, component)
 }
 
-// NewBucket returns a new Bucket using the provided s3 config values.
+// NewBucketWithConfig returns a new Bucket using the provided s3 config values.
 func NewBucketWithConfig(logger log.Logger, config Config, component string) (*Bucket, error) {
 	var chain []credentials.Provider
 
