@@ -217,11 +217,6 @@ func validate(conf Config) error {
 		return errors.New("no s3 secret_key specified while access_key is present in config file; either both should be present in config or envvars/IAM should be used.")
 	}
 
-	// ensure that the prefix isn't too long
-	if conf.Prefix != "" && len(conf.Prefix) >= 1024 {
-		return errors.New("prefix is too long (limited by Amazon at 1024 bytes long)")
-	}
-
 	// trim trailing slash and insert one
 	if conf.Prefix != "" {
 		conf.Prefix = strings.TrimSuffix(conf.Prefix, DirDelim) + DirDelim
