@@ -66,6 +66,11 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 				minTime, maxTime)
 		}
 
+		selectorLset, err := parseFlagLabels(*selectorLabels)
+		if err != nil {
+			return errors.Wrap(err, "parse selector labels")
+		}
+
 		return runStore(g,
 			logger,
 			reg,
