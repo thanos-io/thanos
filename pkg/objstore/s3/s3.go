@@ -250,7 +250,7 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 	}
 
 	for object := range b.client.ListObjects(b.name, b.objectPrefix+dir, false, ctx.Done()) {
-		keyName := strings.Replace(object.Key, b.objectPrefix, "", 1)
+		keyName := strings.TrimPrefix(object.Key, b.objectPrefix)
 		// Catch the error when failed to list objects.
 		if object.Err != nil {
 			return object.Err
