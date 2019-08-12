@@ -1,32 +1,45 @@
 {
   "title": "Interactive Thanos Deployment for Global View and HA of Prometheus Servers",
-  "description": "...",
+  "description": "In this scenario, we'll learn how to launch a Prometheus with a Thanos Sidecar and having a global view with Thanos Query.",
   "details": {
     "steps": [
       {
-        "title": "Step 1",
+        "title": "Configure Prometheus",
         "text": "step1.md"
       },
       {
-        "title": "Step 2",
+        "title": "Start Prometheus instances",
         "text": "step2.md"
       },
       {
-        "title": "Step 3",
+        "title": "Start Sidecar and Query",
         "text": "step3.md"
+      },
+      {
+        "title": "Write data to object storage",
+        "text": "step4.md"
       }
     ],
     "intro": {
-      "text": "intro.md"
+      "text": "intro.md",
+      "courseData": "courseBase.sh"
     },
     "finish": {
       "text": "finish.md"
     }
   },
+  "files": [
+    "prometheus_us1.yml",
+    "prometheus_eu1.yml",
+    "thanos_sidecar.yml"
+  ],
   "environment": {
-    "uilayout": "editor-terminal"
+    "uilayout": "editor-terminal",
+    "uisettings": "yaml",
+    "showdashboard": true,
+    "dashboards": [{"name": "Prometheus US1", "port": 9090}, {"name": "Prometheus EU1", "port": 9091}, {"name": "Thanos Query", "port": 19090}]
   },
   "backend": {
-    "imageid": "docker"
+    "imageid": "docker-direct"
   }
 }
