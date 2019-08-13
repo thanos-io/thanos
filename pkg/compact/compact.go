@@ -958,7 +958,7 @@ func NewBucketCompactor(
 	concurrency int,
 ) (*BucketCompactor, error) {
 	if concurrency <= 0 {
-		return nil, errors.New("invalid concurrency level (%d), concurrency level must be > 0")
+		return nil, errors.Errorf("invalid concurrency level (%d), concurrency level must be > 0", concurrency)
 	}
 	return &BucketCompactor{
 		logger:      logger,
