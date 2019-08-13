@@ -441,7 +441,7 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	err := h.parallelizeRequests(ctx, tenant, replicas, wreqs)
 	if errs, ok := err.(terrors.MultiError); ok {
 		if uint64(len(errs)) >= (h.options.ReplicationFactor+1)/2 {
-			return errors.New("did not meet replication threshhold")
+			return errors.New("did not meet replication threshold")
 		}
 	}
 	return errors.Wrap(err, "could not replicate write request")
