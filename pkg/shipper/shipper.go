@@ -259,7 +259,7 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 		if !os.IsNotExist(err) {
 			level.Warn(s.logger).Log("msg", "reading meta file failed, will override it", "err", err)
 		}
-		meta = &Meta{Version: 1}
+		meta = &Meta{Version: MetaVersion1}
 	}
 
 	// Build a map of blocks we already uploaded.
@@ -444,8 +444,13 @@ type Meta struct {
 	Uploaded []ulid.ULID `json:"uploaded"`
 }
 
-// MetaFilename is the known JSON filename for meta information.
-const MetaFilename = "thanos.shipper.json"
+const (
+	// MetaFilename is the known JSON filename for meta information.
+	MetaFilename = "thanos.shipper.json"
+
+	// MetaVersion1 represents 1 version of meta.
+	MetaVersion1 = 1
+)
 
 // WriteMetaFile writes the given meta into <dir>/thanos.shipper.json.
 func WriteMetaFile(logger log.Logger, dir string, meta *Meta) error {
@@ -482,7 +487,7 @@ func ReadMetaFile(dir string) (*Meta, error) {
 	if err := json.Unmarshal(b, &m); err != nil {
 		return nil, err
 	}
-	if m.Version != 1 {
+	if m.Version != MetaVersion1 {
 		return nil, errors.Errorf("unexpected meta file version %d", m.Version)
 	}
 

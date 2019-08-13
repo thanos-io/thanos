@@ -97,7 +97,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 			if len(shipMeta.Uploaded) == 0 {
 				shipMeta.Uploaded = []ulid.ULID{}
 			}
-			testutil.Equals(t, &Meta{Version: 1, Uploaded: ids}, shipMeta)
+			testutil.Equals(t, &Meta{Version: MetaVersion1, Uploaded: ids}, shipMeta)
 
 			testutil.Ok(t, os.MkdirAll(tmp+"/chunks", 0777))
 			testutil.Ok(t, ioutil.WriteFile(tmp+"/chunks/0001", []byte("chunkcontents1"), 0666))
@@ -140,7 +140,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 			// The shipper meta file should show all blocks as uploaded except the compacted one.
 			shipMeta, err = ReadMetaFile(dir)
 			testutil.Ok(t, err)
-			testutil.Equals(t, &Meta{Version: 1, Uploaded: ids}, shipMeta)
+			testutil.Equals(t, &Meta{Version: MetaVersion1, Uploaded: ids}, shipMeta)
 
 			// Verify timestamps were updated correctly.
 			minTotal, maxSync, err := shipper.Timestamps()
@@ -254,7 +254,7 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 			if len(shipMeta.Uploaded) == 0 {
 				shipMeta.Uploaded = []ulid.ULID{}
 			}
-			testutil.Equals(t, &Meta{Version: 1, Uploaded: ids}, shipMeta)
+			testutil.Equals(t, &Meta{Version: MetaVersion1, Uploaded: ids}, shipMeta)
 
 			testutil.Ok(t, os.MkdirAll(tmp+"/chunks", 0777))
 			testutil.Ok(t, ioutil.WriteFile(tmp+"/chunks/0001", []byte("chunkcontents1"), 0666))
@@ -292,7 +292,7 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 			// The shipper meta file should show all blocks as uploaded except the compacted one.
 			shipMeta, err = ReadMetaFile(dir)
 			testutil.Ok(t, err)
-			testutil.Equals(t, &Meta{Version: 1, Uploaded: ids}, shipMeta)
+			testutil.Equals(t, &Meta{Version: MetaVersion1, Uploaded: ids}, shipMeta)
 
 			// Verify timestamps were updated correctly.
 			minTotal, maxSync, err := shipper.Timestamps()
