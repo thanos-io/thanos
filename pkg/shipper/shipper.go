@@ -326,6 +326,7 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 		return nil
 	}); err != nil {
 		s.metrics.dirSyncFailures.Inc()
+		s.metrics.uploadFailures.Add(float64(uploadErrs))
 		return uploaded, errors.Wrap(err, "iter local block metas")
 	}
 
