@@ -183,10 +183,9 @@ type indexCache interface {
 	Series(b ulid.ULID, id uint64) ([]byte, bool)
 }
 
-// BlockFilterConfig is a configiration, which Store uses for filtering blocks.
-type BlockFilterConfig struct {
-	MinBlockStartTime, MaxBlockStartTime model.TimeOrDurationValue
-	MinBlockEndTime, MaxBlockEndTime     model.TimeOrDurationValue
+// FilterConfig is a configiration, which Store uses for filtering metrics.
+type FilterConfig struct {
+	MinTime, MaxTime model.TimeOrDurationValue
 }
 
 // BucketStore implements the store API backed by a bucket. It loads all index
@@ -216,7 +215,7 @@ type BucketStore struct {
 	samplesLimiter *Limiter
 	partitioner    partitioner
 
-	blockFilterConf *BlockFilterConfig
+	filterConfig *FilterConfig
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -232,7 +231,7 @@ func NewBucketStore(
 	maxConcurrent int,
 	debugLogging bool,
 	blockSyncConcurrency int,
-	blockFilterConf *BlockFilterConfig,
+	filterConf *FilterConfig,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -265,9 +264,9 @@ func NewBucketStore(
 			maxConcurrent,
 			extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg),
 		),
-		samplesLimiter:  NewLimiter(maxSampleCount, metrics.queriesDropped),
-		partitioner:     gapBasedPartitioner{maxGapSize: maxGapSize},
-		blockFilterConf: blockFilterConf,
+		samplesLimiter: NewLimiter(maxSampleCount, metrics.queriesDropped),
+		partitioner:    gapBasedPartitioner{maxGapSize: maxGapSize},
+		filterConfig:   filterConf,
 	}
 
 	if err := os.MkdirAll(dir, 0777); err != nil {
@@ -414,16 +413,10 @@ func (s *BucketStore) isBlockInMinMaxRange(ctx context.Context, id ulid.ULID) (b
 
 	// We check for blocks in configured minTime, maxTime range
 	switch {
-	case b.meta.MinTime < s.blockFilterConf.MinBlockStartTime.PrometheusTimestamp():
+	case b.meta.MaxTime <= s.filterConfig.MinTime.PrometheusTimestamp():
 		return false, nil
 
-	case b.meta.MinTime > s.blockFilterConf.MaxBlockStartTime.PrometheusTimestamp():
-		return false, nil
-
-	case b.meta.MaxTime < s.blockFilterConf.MinBlockEndTime.PrometheusTimestamp():
-		return false, nil
-
-	case b.meta.MaxTime > s.blockFilterConf.MaxBlockEndTime.PrometheusTimestamp():
+	case b.meta.MinTime >= s.filterConfig.MaxTime.PrometheusTimestamp():
 		return false, nil
 	}
 
@@ -522,7 +515,31 @@ func (s *BucketStore) TimeRange() (mint, maxt int64) {
 			maxt = b.meta.MaxTime
 		}
 	}
+
+	mint = s.normalizeMinTime(mint)
+	maxt = s.normalizeMaxTime(maxt)
+
 	return mint, maxt
+}
+
+func (s *BucketStore) normalizeMinTime(mint int64) int64 {
+	filterMinTime := s.filterConfig.MinTime.PrometheusTimestamp()
+
+	if mint < filterMinTime {
+		return filterMinTime
+	}
+
+	return mint
+}
+
+func (s *BucketStore) normalizeMaxTime(maxt int64) int64 {
+	filterMaxTime := s.filterConfig.MaxTime.PrometheusTimestamp()
+
+	if maxt > filterMaxTime {
+		maxt = filterMaxTime
+	}
+
+	return maxt
 }
 
 // Info implements the storepb.StoreServer interface.
@@ -784,11 +801,16 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	)
 	s.mtx.RLock()
 
+	// Adjust Request MinTime based on filters.
+	req.MinTime = s.normalizeMinTime(req.MinTime)
+	req.MaxTime = s.normalizeMaxTime(req.MaxTime)
+
 	for _, bs := range s.blockSets {
 		blockMatchers, ok := bs.labelMatchers(matchers...)
 		if !ok {
 			continue
 		}
+
 		blocks := bs.getFor(req.MinTime, req.MaxTime, req.MaxResolutionWindow)
 
 		if s.debugLogging {
