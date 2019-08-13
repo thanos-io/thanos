@@ -80,7 +80,7 @@ func testStoreResponsiveness(logger log.Logger, opts *opts) error {
 	fmt.Printf("WARNING: this will delete all data in the bucket (%s). Do you want to continue? Y/n: ", *opts.bucket)
 	var resp string
 	if _, err := fmt.Scanln(&resp); err != nil {
-		return errors.Wrap(err, "failed to confirm intput")
+		return errors.Wrap(err, "failed to confirm input")
 	}
 	if resp != "Y" && resp != "y" {
 		return nil
