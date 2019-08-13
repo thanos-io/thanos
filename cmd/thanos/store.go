@@ -11,6 +11,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store"
@@ -49,7 +50,19 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing blocks from object storage.").
 		Default("20").Int()
 
+	minTime := model.TimeOrDuration(cmd.Flag("min-time", "Start of time range limit to serve. Thanos Store serves only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+		Default("0000-01-01T00:00:00Z"))
+
+	maxTime := model.TimeOrDuration(cmd.Flag("max-time", "End of time range limit to serve. Thanos Store serves only blocks, which happened eariler than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+		Default("9999-12-31T23:59:59Z"))
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
+		// Sanity check Time filters
+		if minTime.PrometheusTimestamp() > maxTime.PrometheusTimestamp() {
+			return errors.Errorf("invalid argument: --min-time '%s' can't be greater than --max-time '%s'",
+				minTime, maxTime)
+		}
+
 		return runStore(g,
 			logger,
 			reg,
@@ -69,6 +82,10 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			debugLogging,
 			*syncInterval,
 			*blockSyncConcurrency,
+			&store.FilterConfig{
+				MinTime: *minTime,
+				MaxTime: *maxTime,
+			},
 		)
 	}
 }
@@ -94,6 +111,7 @@ func runStore(
 	verbose bool,
 	syncInterval time.Duration,
 	blockSyncConcurrency int,
+	filterConf *store.FilterConfig,
 ) error {
 	{
 		confContentYaml, err := objStoreConfig.Content()
@@ -135,6 +153,7 @@ func runStore(
 			maxConcurrent,
 			verbose,
 			blockSyncConcurrency,
+			filterConf,
 		)
 		if err != nil {
 			return errors.Wrap(err, "create object storage store")

@@ -32,6 +32,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/pool"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -182,6 +183,11 @@ type indexCache interface {
 	Series(b ulid.ULID, id uint64) ([]byte, bool)
 }
 
+// FilterConfig is a configuration, which Store uses for filtering metrics.
+type FilterConfig struct {
+	MinTime, MaxTime model.TimeOrDurationValue
+}
+
 // BucketStore implements the store API backed by a bucket. It loads all index
 // files to local disk.
 type BucketStore struct {
@@ -208,6 +214,8 @@ type BucketStore struct {
 	// samplesLimiter limits the number of samples per each Series() call.
 	samplesLimiter *Limiter
 	partitioner    partitioner
+
+	filterConfig *FilterConfig
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -223,6 +231,7 @@ func NewBucketStore(
 	maxConcurrent int,
 	debugLogging bool,
 	blockSyncConcurrency int,
+	filterConf *FilterConfig,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -256,6 +265,7 @@ func NewBucketStore(
 		),
 		samplesLimiter: NewLimiter(maxSampleCount, metrics.queriesDropped),
 		partitioner:    gapBasedPartitioner{maxGapSize: maxGapSize},
+		filterConfig:   filterConf,
 	}
 	s.metrics = metrics
 
@@ -309,6 +319,17 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 		if err != nil {
 			return nil
 		}
+
+		inRange, err := s.isBlockInMinMaxRange(ctx, id)
+		if err != nil {
+			level.Warn(s.logger).Log("msg", "error parsing block range", "block", id, "err", err)
+			return nil
+		}
+
+		if !inRange {
+			return nil
+		}
+
 		allIDs[id] = struct{}{}
 
 		if b := s.getBlock(id); b != nil {
@@ -375,6 +396,31 @@ func (s *BucketStore) numBlocks() int {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 	return len(s.blocks)
+}
+
+func (s *BucketStore) isBlockInMinMaxRange(ctx context.Context, id ulid.ULID) (bool, error) {
+	dir := filepath.Join(s.dir, id.String())
+
+	b := &bucketBlock{
+		logger: s.logger,
+		bucket: s.bucket,
+		id:     id,
+		dir:    dir,
+	}
+	if err := b.loadMeta(ctx, id); err != nil {
+		return false, err
+	}
+
+	// We check for blocks in configured minTime, maxTime range
+	switch {
+	case b.meta.MaxTime <= s.filterConfig.MinTime.PrometheusTimestamp():
+		return false, nil
+
+	case b.meta.MinTime >= s.filterConfig.MaxTime.PrometheusTimestamp():
+		return false, nil
+	}
+
+	return true, nil
 }
 
 func (s *BucketStore) getBlock(id ulid.ULID) *bucketBlock {
@@ -468,6 +514,10 @@ func (s *BucketStore) TimeRange() (mint, maxt int64) {
 			maxt = b.meta.MaxTime
 		}
 	}
+
+	mint = s.normalizeMinTime(mint)
+	maxt = s.normalizeMaxTime(maxt)
+
 	return mint, maxt
 }
 
@@ -480,6 +530,26 @@ func (s *BucketStore) Info(context.Context, *storepb.InfoRequest) (*storepb.Info
 		MinTime:   mint,
 		MaxTime:   maxt,
 	}, nil
+}
+
+func (s *BucketStore) normalizeMinTime(mint int64) int64 {
+	filterMinTime := s.filterConfig.MinTime.PrometheusTimestamp()
+
+	if mint < filterMinTime {
+		return filterMinTime
+	}
+
+	return mint
+}
+
+func (s *BucketStore) normalizeMaxTime(maxt int64) int64 {
+	filterMaxTime := s.filterConfig.MaxTime.PrometheusTimestamp()
+
+	if maxt > filterMaxTime {
+		maxt = filterMaxTime
+	}
+
+	return maxt
 }
 
 type seriesEntry struct {
@@ -722,6 +792,10 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
+	// Adjust Request MinTime based on filters.
+	req.MinTime = s.normalizeMinTime(req.MinTime)
+	req.MaxTime = s.normalizeMaxTime(req.MaxTime)
+
 	var (
 		stats = &queryStats{}
 		g     run.Group
