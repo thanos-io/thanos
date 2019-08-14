@@ -18,6 +18,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Changed
 
+- [#1414](https://github.com/thanos-io/thanos/pull/1413) Upgraded important dependencies: Prometheus to 2.12-rc.0. TSDB is now part of Prometheus.
 - [#1380](https://github.com/thanos-io/thanos/pull/1380) Upgraded important dependencies: Prometheus to 2.11.1 and TSDB to 0.9.1. Some changes affecting Querier:
   - [ENHANCEMENT] Query performance improvement: Efficient iteration and search in HashForLabels and HashWithoutLabels. #5707
   - [ENHANCEMENT] Optimize queries using regexp for set lookups. tsdb#602

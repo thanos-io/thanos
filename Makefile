@@ -106,7 +106,7 @@ assets: $(GOBINDATA)
 
 # build builds Thanos binary using `promu`.
 .PHONY: build
-build: check-git  go-mod-tidy $(PROMU)
+build: check-git deps $(PROMU)
 	@echo ">> building binaries $(GOBIN)"
 	@$(PROMU) build --prefix $(PREFIX)
 
@@ -120,6 +120,7 @@ crossbuild: $(PROMU)
 .PHONY: deps
 deps:
 	@go mod tidy
+	@go mod verify
 
 # docker builds docker with no tag.
 .PHONY: docker
@@ -187,15 +188,6 @@ test-deps:
 	$(foreach ver,$(PROM_VERSIONS),$(call fetch_go_bin_version,github.com/prometheus/prometheus/cmd/prometheus,$(ver)))
 	$(call fetch_go_bin_version,github.com/prometheus/alertmanager/cmd/alertmanager,$(ALERTMANAGER_VERSION))
 	$(call fetch_go_bin_version,github.com/minio/minio,$(MINIO_SERVER_VERSION))
-
-# go mod related
-.PHONY: go-mod-tidy
-go-mod-tidy: check-git
-	@go mod tidy
-
-.PHONY: check-go-mod
-check-go-mod:
-	@go mod verify
 
 # tooling deps. TODO(bwplotka): Pin them all to certain version!
 .PHONY: check-git
