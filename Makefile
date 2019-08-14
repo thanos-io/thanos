@@ -8,7 +8,7 @@ TMP_GOPATH        ?= /tmp/thanos-go
 GOBIN             ?= $(firstword $(subst :, ,${GOPATH}))/bin
 GO111MODULE       ?= on
 export GO111MODULE
-GOPROXY           ?= https://proxy.golang.org
+GOPROXY           ?= https://goproxy.io
 export GOPROXY
 
 # Tools.

@@ -7,7 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
@@ -166,7 +166,7 @@ func getFirstIterator(cs ...*storepb.Chunk) chunkenc.Iterator {
 		if err != nil {
 			return errSeriesIterator{err}
 		}
-		return chk.Iterator()
+		return chk.Iterator(nil)
 	}
 	return errSeriesIterator{errors.New("no valid chunk found")}
 }

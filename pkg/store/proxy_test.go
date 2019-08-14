@@ -13,8 +13,8 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/tsdb/chunkenc"
-	tlabels "github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	tlabels "github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -811,7 +811,7 @@ func seriesEqual(t *testing.T, expected []rawSeries, got []storepb.Series) {
 			c, err := chunkenc.FromData(chunkenc.EncXOR, chk.Raw.Data)
 			testutil.Ok(t, err)
 
-			iter := c.Iterator()
+			iter := c.Iterator(nil)
 			for iter.Next() {
 				testutil.Assert(t, k < len(expected[i].samples), "more samples than expected")
 
