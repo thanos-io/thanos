@@ -28,7 +28,7 @@ import (
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/prometheus/promql"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"

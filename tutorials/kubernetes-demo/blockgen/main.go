@@ -14,8 +14,8 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 

@@ -13,11 +13,11 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/value"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/chunkenc"
-	"github.com/prometheus/tsdb/chunks"
-	"github.com/prometheus/tsdb/index"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/chunks"
+	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -205,7 +205,7 @@ func testDownsample(t *testing.T, data []*downsampleTestSet, meta *metadata.Meta
 				testutil.Ok(t, err)
 
 				buf := m[at]
-				testutil.Ok(t, expandChunkIterator(c.Iterator(), &buf))
+				testutil.Ok(t, expandChunkIterator(c.Iterator(nil), &buf))
 				m[at] = buf
 			}
 		}
@@ -443,6 +443,10 @@ func (b *memBlock) MaxTime() int64 {
 	}
 
 	return b.maxTime
+}
+
+func (b *memBlock) Meta() tsdb.BlockMeta {
+	return tsdb.BlockMeta{}
 }
 
 func (b *memBlock) Postings(name, val string) (index.Postings, error) {

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/fortytw2/leaktest"
-	"github.com/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -41,7 +41,7 @@ func TestAggrChunk(t *testing.T) {
 	for _, at := range []AggrType{AggrCount, AggrSum, AggrMin, AggrMax, AggrCounter} {
 		if c, err := ac.Get(at); err != ErrAggrNotExist {
 			testutil.Ok(t, err)
-			testutil.Ok(t, expandChunkIterator(c.Iterator(), &res[at]))
+			testutil.Ok(t, expandChunkIterator(c.Iterator(nil), &res[at]))
 		}
 	}
 	testutil.Equals(t, input, res)

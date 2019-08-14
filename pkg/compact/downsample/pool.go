@@ -3,7 +3,7 @@ package downsample
 import (
 	"sync"
 
-	"github.com/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 )
 
 // Pool is a memory pool of chunk objects, supporting Thanos aggregated chunk encoding.

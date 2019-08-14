@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/go-kit/kit/log"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/oklog/ulid"
-	"github.com/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
