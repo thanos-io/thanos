@@ -73,7 +73,7 @@ The other `type` you can use is `JAEGER` now. The `config` keys and values are J
 
 - [#1284](https://github.com/thanos-io/thanos/pull/1284) Add support for multiple label-sets in Info gRPC service.
 This deprecates the single `Labels` slice of the `InfoResponse`, in a future release backward compatible handling for the single set of Labels will be removed. Upgrading to v0.6.0 or higher is advised.
-*breaking* If you run have duplicate queries in your Querier configuration with hierarchical federation of multiple Queries this PR makes Thanos Querier to detect this case and block all duplicates. Refer to 0.6.1 which at least allows for single replica to work.
+*breaking* If you have duplicated `storeAPIs` in your Querier configuration with the hierarchical federation of the multiple Queries this PR makes Thanos Querier to detect this case and block all duplicates. Refer to `master` or future `v0.7.0` builds which allows for a single replica to work in this case.
 
 - [#1314](https://github.com/thanos-io/thanos/pull/1314) Removes `http_request_duration_microseconds` (Summary) and adds `http_request_duration_seconds` (Histogram) from http server instrumentation used in Thanos APIs and UIs.
 
