@@ -11,6 +11,12 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased.
 
+## [v0.6.1](https://github.com/thanos-io/thanos/releases/tag/v0.6.1) - 2019.08.14
+
+### Changed
+
+- [#1409](https://github.com/thanos-io/thanos/pull/1409) bootstrap typeahead to v4.0.2
+
 ## [v0.6.0](https://github.com/improbable-eng/thanos/releases/tag/v0.6.0) - 2019.07.18
 
 ### Added
