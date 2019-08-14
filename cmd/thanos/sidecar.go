@@ -8,8 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/thanos-io/thanos/pkg/prober"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -21,6 +19,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/reloader"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -34,8 +33,7 @@ import (
 const waitForExternalLabelsTimeout = 10 * time.Minute
 
 func registerSidecar(m map[string]setupFunc, app *kingpin.Application) {
-	comp := component.Sidecar
-	cmd := app.Command(comp.String(), "sidecar for Prometheus server")
+	cmd := app.Command(component.Sidecar.String(), "sidecar for Prometheus server")
 
 	grpcBindAddr, httpBindAddr, cert, key, clientCA := regCommonServerFlags(cmd)
 
@@ -57,7 +55,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application) {
 
 	uploadCompacted := cmd.Flag("shipper.upload-compacted", "[Experimental] If true sidecar will try to upload compacted blocks as well. Useful for migration purposes. Works only if compaction is disabled on Prometheus.").Default("false").Hidden().Bool()
 
-	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
+	m[component.Sidecar.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		rl := reloader.New(
 			log.With(logger, "component", "reloader"),
 			reloader.ReloadURLFromBase(*promURL),
@@ -80,7 +78,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application) {
 			objStoreConfig,
 			rl,
 			*uploadCompacted,
-			comp,
+			component.Sidecar,
 		)
 	}
 }
