@@ -287,7 +287,7 @@ func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prom
 	}
 	spanUnmarshal.Finish()
 	if len(data.Results) != 1 {
-		return nil, errors.Errorf("unexepected result size %d", len(data.Results))
+		return nil, errors.Errorf("unexpected result size %d", len(data.Results))
 	}
 	return &data, nil
 }
