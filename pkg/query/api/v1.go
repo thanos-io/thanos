@@ -310,6 +310,8 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 	defer span.Finish()
 
 	begin := api.now()
+	defer api.instantQueryDuration.Observe(time.Since(begin).Seconds())
+
 	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDedup, 0, enablePartialResponse), r.FormValue("query"), ts)
 	if err != nil {
 		return nil, nil, &ApiError{errorBadData, err}
@@ -329,7 +331,6 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, &ApiError{errorExec, res.Err}
 	}
 	api.instantQueries.Inc()
-	api.instantQueryDuration.Observe(time.Since(begin).Seconds())
 
 	return &queryData{
 		ResultType: res.Value.Type(),
@@ -400,6 +401,8 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 	defer span.Finish()
 
 	begin := api.now()
+	defer api.rangeQueryDuration.Observe(time.Since(begin).Seconds())
+
 	qry, err := api.queryEngine.NewRangeQuery(
 		api.queryableCreate(enableDedup, maxSourceResolution, enablePartialResponse),
 		r.FormValue("query"),
@@ -423,7 +426,6 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, &ApiError{errorExec, res.Err}
 	}
 	api.rangeQueries.Inc()
-	api.rangeQueryDuration.Observe(time.Since(begin).Seconds())
 
 	return &queryData{
 		ResultType: res.Value.Type(),
