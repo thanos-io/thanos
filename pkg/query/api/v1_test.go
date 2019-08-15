@@ -71,7 +71,11 @@ func TestEndpoints(t *testing.T) {
 		queryableCreate: testQueryableCreator(suite.Storage()),
 		queryEngine:     suite.QueryEngine(),
 
+		instantQueries:       prometheus.NewCounter(prometheus.CounterOpts{}),
+		instantQueryFailures: prometheus.NewCounter(prometheus.CounterOpts{}),
 		instantQueryDuration: prometheus.NewHistogram(prometheus.HistogramOpts{}),
+		rangeQueries:         prometheus.NewCounter(prometheus.CounterOpts{}),
+		rangeQueryFailures:   prometheus.NewCounter(prometheus.CounterOpts{}),
 		rangeQueryDuration:   prometheus.NewHistogram(prometheus.HistogramOpts{}),
 
 		now: func() time.Time { return now },
