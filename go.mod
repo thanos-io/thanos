@@ -50,6 +50,9 @@ require (
 	gopkg.in/yaml.v2 v2.2.2
 )
 
+// We want to replace the client-go version with a specific commit hash,
+// so that we don't get errors about being incompatible with the Go proxies.
+// See https://github.com/thanos-io/thanos/issues/1415
 replace (
 	k8s.io/api => k8s.io/api v0.0.0-20190620084959-7cf5895f2711
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.0.0-20190620085554-14e95df34f1f
