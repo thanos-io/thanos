@@ -13,6 +13,8 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Added
 
+- [#xxx](https://github.com/thanos-io/thanos/pull/xxx) Thanos Query API now exposes `thanos_query_api_instant_query_total`, `thanos_query_api_instant_query_failures_total`, `thanos_query_api_range_query_total` and `thanos_query_api_range_query_failures_total` metrics to track error rates of query api
+- [#1363](https://github.com/thanos-io/thanos/pull/1378) Thanos Receive now exposes `thanos_receive_config_hash`, `thanos_receive_config_last_reload_successful` and `thanos_receive_config_last_reload_success_timestamp_seconds` metrics to track latest configuration change
 - [#1358](https://github.com/thanos-io/thanos/pull/1358) Added `part_size` configuration option for HTTP multipart requests minimum part size for S3 storage type
 - [#1363](https://github.com/thanos-io/thanos/pull/1363) Thanos Receive now exposes `thanos_receive_hashring_nodes` and `thanos_receive_hashring_tenants` metrics to monitor status of hash-rings
 
