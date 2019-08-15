@@ -100,7 +100,11 @@ type API struct {
 	queryableCreate query.QueryableCreator
 	queryEngine     *promql.Engine
 
+	instantQueries         prometheus.Counter
+	instantQueryFailures   prometheus.Counter
 	instantQueryDuration   prometheus.Histogram
+	rangeQueries           prometheus.Counter
+	rangeQueryFailures     prometheus.Counter
 	rangeQueryDuration     prometheus.Histogram
 	enableAutodownsampling bool
 	enablePartialResponse  bool
@@ -116,12 +120,28 @@ func NewAPI(
 	enableAutodownsampling bool,
 	enablePartialResponse bool,
 ) *API {
+	instantQueries := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_query_api_instant_query_total",
+		Help: "Total number of instant queries.",
+	})
+	instantQueryFailures := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_query_api_instant_query_failures_total",
+		Help: "Total number of failed instant queries.",
+	})
 	instantQueryDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name: "thanos_query_api_instant_query_duration_seconds",
 		Help: "Time it takes to perform instant query on promEngine backed up with thanos querier.",
 		Buckets: []float64{
 			0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 20,
 		},
+	})
+	rangeQueries := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_query_api_range_query_total",
+		Help: "Total number of range queries.",
+	})
+	rangeQueryFailures := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_query_api_range_query_failures_total",
+		Help: "Total number of failed range queries.",
 	})
 	rangeQueryDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name: "thanos_query_api_range_query_duration_seconds",
@@ -132,14 +152,22 @@ func NewAPI(
 	})
 
 	reg.MustRegister(
+		instantQueries,
+		instantQueryFailures,
 		instantQueryDuration,
+		rangeQueries,
+		rangeQueryFailures,
 		rangeQueryDuration,
 	)
 	return &API{
 		logger:                 logger,
 		queryEngine:            qe,
 		queryableCreate:        c,
-		instantQueryDuration:   instantQueryDuration,
+		instantQueries:         instantQueries,
+		instantQueryFailures:   instantQueries,
+		instantQueryDuration:   instantQueryFailures,
+		rangeQueries:           rangeQueries,
+		rangeQueryFailures:     rangeQueries,
 		rangeQueryDuration:     rangeQueryDuration,
 		enableAutodownsampling: enableAutodownsampling,
 		enablePartialResponse:  enablePartialResponse,
@@ -289,6 +317,7 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 
 	res := qry.Exec(ctx)
 	if res.Err != nil {
+		api.instantQueryFailures.Inc()
 		switch res.Err.(type) {
 		case promql.ErrQueryCanceled:
 			return nil, nil, &ApiError{errorCanceled, res.Err}
@@ -299,6 +328,7 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 		}
 		return nil, nil, &ApiError{errorExec, res.Err}
 	}
+	api.instantQueries.Inc()
 	api.instantQueryDuration.Observe(time.Since(begin).Seconds())
 
 	return &queryData{
@@ -383,6 +413,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 
 	res := qry.Exec(ctx)
 	if res.Err != nil {
+		api.rangeQueryFailures.Inc()
 		switch res.Err.(type) {
 		case promql.ErrQueryCanceled:
 			return nil, nil, &ApiError{errorCanceled, res.Err}
@@ -391,6 +422,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 		}
 		return nil, nil, &ApiError{errorExec, res.Err}
 	}
+	api.rangeQueries.Inc()
 	api.rangeQueryDuration.Observe(time.Since(begin).Seconds())
 
 	return &queryData{
