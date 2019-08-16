@@ -35,6 +35,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/tracing/client"
+	"go.uber.org/automaxprocs/maxprocs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -113,6 +114,16 @@ func main() {
 		}
 
 		logger = log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.DefaultCaller)
+	}
+
+	loggerAdapter := func(template string, args ...interface{}) {
+		level.Debug(logger).Log("msg", fmt.Sprintf(template, args))
+	}
+
+	undo, err := maxprocs.Set(maxprocs.Logger(loggerAdapter))
+	defer undo()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, errors.Wrapf(err, "failed to set GOMAXPROCS: %v", err))
 	}
 
 	metrics := prometheus.NewRegistry()
