@@ -100,9 +100,10 @@ type API struct {
 	queryableCreate query.QueryableCreator
 	queryEngine     *promql.Engine
 
-	enableAutodownsampling bool
-	enablePartialResponse  bool
-	reg                    prometheus.Registerer
+	enableAutodownsampling                 bool
+	enablePartialResponse                  bool
+	reg                                    prometheus.Registerer
+	defaultInstantQueryMaxSourceResolution time.Duration
 
 	now func() time.Time
 }
@@ -115,14 +116,16 @@ func NewAPI(
 	c query.QueryableCreator,
 	enableAutodownsampling bool,
 	enablePartialResponse bool,
+	defaultInstantQueryMaxSourceResolution time.Duration,
 ) *API {
 	return &API{
-		logger:                 logger,
-		queryEngine:            qe,
-		queryableCreate:        c,
-		enableAutodownsampling: enableAutodownsampling,
-		enablePartialResponse:  enablePartialResponse,
-		reg:                    reg,
+		logger:                                 logger,
+		queryEngine:                            qe,
+		queryableCreate:                        c,
+		enableAutodownsampling:                 enableAutodownsampling,
+		enablePartialResponse:                  enablePartialResponse,
+		reg:                                    reg,
+		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
 
 		now: time.Now,
 	}
@@ -262,8 +265,7 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	const defaultMaxSourceResolution = 3600 * time.Second
-	maxSourceResolution, apiErr := api.parseDownsamplingParamMillisWithDefault(r, defaultMaxSourceResolution)
+	maxSourceResolution, apiErr := api.parseDownsamplingParamMillisWithDefault(r, api.defaultInstantQueryMaxSourceResolution)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
