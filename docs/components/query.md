@@ -238,6 +238,10 @@ Flags:
                                  which data is deduplicated. Still you will be
                                  able to query without deduplication using
                                  'dedup=false' parameter.
+      --query.instant.default.max_source_resolution=0s
+                                 default value for max_source_resolution for
+                                 instant queries. If not set, defaults to 0s
+                                 only taking raw resolution into account.
       --selector-label=<name>="<value>" ...
                                  Query selector labels that will be exposed in
                                  info endpoint (repeated).
