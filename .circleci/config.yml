@@ -38,19 +38,10 @@ jobs:
           # TODO(bplotka): Setup some S3 tests for CI.
           command: |
             if [ -z ${GCP_PROJECT} ]; then
-              export THANOS_SKIP_GCS_TESTS="true"
-              echo "Skipping GCS tests."
+              make test-local
+              exit
             fi
-            export THANOS_SKIP_S3_AWS_TESTS="true"
-            echo "Skipping AWS tests."
-            export THANOS_SKIP_AZURE_TESTS="true"
-            echo "Skipping Azure tests."
-            export THANOS_SKIP_SWIFT_TESTS="true"
-            echo "Skipping SWIFT tests."
-            export THANOS_SKIP_TENCENT_COS_TESTS="true"
-            echo "Skipping TENCENT COS tests."
-
-            make test
+            make test-only-gcs
 
   # Cross build is needed for publish_release but needs to be done outside of docker.
   cross_build:
