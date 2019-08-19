@@ -21,7 +21,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/labels"
-	"github.com/prometheus/prometheus/tsdb/testutil"
+	"github.com/prometheus/prometheus/util/testutil"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"golang.org/x/sync/errgroup"
