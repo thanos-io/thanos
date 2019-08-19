@@ -148,12 +148,6 @@ func runSidecar(
 				}
 			}
 
-			// When the heartbeat to Prometheus fails, the sidecar is marked as not ready.
-			// But after `sinceLastSuccessfulHeartbeatLimit` duration of consequential fails it's marked also not healthy,
-			// so the orchestrator (if any) can try restarting it if it would help.
-			sinceLastSuccessfulHeartbeat := 0 * time.Minute
-			sinceLastSuccessfulHeartbeatLimit := 3 * time.Minute
-
 			// Blocking query of external labels before joining as a Source Peer into gossip.
 			// We retry infinitely until we reach and fetch labels from our Prometheus.
 			err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
@@ -164,9 +158,6 @@ func runSidecar(
 					)
 					promUp.Set(0)
 					statusProber.SetNotReady(err)
-					if sinceLastSuccessfulHeartbeat >= sinceLastSuccessfulHeartbeatLimit {
-						statusProber.SetNotHealthy(err)
-					}
 					return err
 				}
 
@@ -176,7 +167,6 @@ func runSidecar(
 				)
 				promUp.Set(1)
 				statusProber.SetReady()
-				sinceLastSuccessfulHeartbeat = 0
 				lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
 				return nil
 			})
@@ -198,14 +188,9 @@ func runSidecar(
 					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
 					promUp.Set(0)
 					statusProber.SetNotReady(err)
-					if sinceLastSuccessfulHeartbeat >= sinceLastSuccessfulHeartbeatLimit {
-						statusProber.SetNotHealthy(err)
-					}
-					sinceLastSuccessfulHeartbeat = 0
 				} else {
 					promUp.Set(1)
 					statusProber.SetReady()
-					sinceLastSuccessfulHeartbeat = 0
 					lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
 				}
 
