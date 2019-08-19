@@ -180,6 +180,24 @@ test: check-git test-deps
 	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS='true' or/and THANOS_SKIP_S3_AWS_TESTS='true' or/and THANOS_SKIP_AZURE_TESTS='true' and/or THANOS_SKIP_SWIFT_TESTS='true' and/or THANOS_SKIP_TENCENT_COS_TESTS='true' if you want to skip e2e tests against real store buckets"
 	THANOS_TEST_PROMETHEUS_VERSIONS="$(PROM_VERSIONS)" THANOS_TEST_ALERTMANAGER_PATH="alertmanager-$(ALERTMANAGER_VERSION)" go test $(shell go list ./... | grep -v /vendor/ | grep -v /benchmark/);
 
+.PHONY: test-only-gcs
+test-only-gcs: export THANOS_SKIP_S3_AWS_TESTS = true
+test-only-gcs: export THANOS_SKIP_AZURE_TESTS = true
+test-only-gcs: export THANOS_SKIP_SWIFT_TESTS = true
+test-only-gcs: export THANOS_SKIP_TENCENT_COS_TESTS = true
+test-only-gcs:
+	@echo ">> Skipping S3 tests"
+	@echo ">> Skipping AZURE tests"
+	@echo ">> Skipping SWIFT tests"
+	@echo ">> Skipping TENCENT tests"
+	$(MAKE) test
+
+.PHONY: test-local
+test-local: export THANOS_SKIP_GCS_TESTS = true
+test-local:
+	@echo ">> Skipping GCE tests"
+	$(MAKE) test-only-gcs
+
 # test-deps installs dependency for e2e tets.
 # It installs current Thanos, supported versions of Prometheus and alertmanager to test against in e2e.
 .PHONY: test-deps
@@ -212,9 +230,10 @@ web: web-pre-process $(HUGO)
 
 .PHONY: lint
 lint: check-git $(GOLANGCILINT)
+	@echo ">> checking formatting"
+	@$(GOLANGCILINT) run -v --disable-all -E goimports ./...
 	@echo ">> linting all of the Go files"
-	@$(GOLANGCILINT) run --disable-all -E goimports ./...
-	@$(GOLANGCILINT) run ./...
+	@$(GOLANGCILINT) run -v ./...
 
 .PHONY: web-serve
 web-serve: web-pre-process $(HUGO)
