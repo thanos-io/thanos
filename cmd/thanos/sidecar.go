@@ -187,10 +187,8 @@ func runSidecar(
 				if err := m.UpdateLabels(iterCtx, logger); err != nil {
 					level.Warn(logger).Log("msg", "heartbeat failed", "err", err)
 					promUp.Set(0)
-					statusProber.SetNotReady(err)
 				} else {
 					promUp.Set(1)
-					statusProber.SetReady()
 					lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
 				}
 
