@@ -2,10 +2,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"io/ioutil"
 	"os"
-	"path"
 	"path/filepath"
 	"time"
 
@@ -148,21 +145,9 @@ func downsampleBucket(
 			return nil
 		}
 
-		rc, err := bkt.Get(ctx, path.Join(id.String(), block.MetaFilename))
+		m, err := block.DownloadMeta(ctx, logger, bkt, id)
 		if err != nil {
-			return errors.Wrapf(err, "get meta for block %s", id)
-		}
-		defer runutil.CloseWithLogOnErr(logger, rc, "block reader")
-
-		var m metadata.Meta
-
-		obj, err := ioutil.ReadAll(rc)
-		if err != nil {
-			return errors.Wrap(err, "read meta")
-		}
-
-		if err = json.Unmarshal(obj, &m); err != nil {
-			return errors.Wrap(err, "unmarshal meta")
+			return errors.Wrap(err, "download metadata")
 		}
 
 		metas = append(metas, &m)
