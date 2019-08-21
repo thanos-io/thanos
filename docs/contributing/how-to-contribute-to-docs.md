@@ -24,7 +24,7 @@ in GitHub as markdown just fine:
 title: <titke>
 type: ...
 weight: <weight>
-menu: <where to link files in>  # This also is refered in permalinks.
+menu: <where to link files in>  # This also is referred in permalinks.
 ---
 ```
 
