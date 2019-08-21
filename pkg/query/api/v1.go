@@ -185,11 +185,6 @@ func (api *API) parseEnableDedupParam(r *http.Request) (enableDeduplication bool
 	return enableDeduplication, nil
 }
 
-func (api *API) parseDownsamplingParamMillis(r *http.Request, step time.Duration) (maxResolutionMillis int64, _ *ApiError) {
-	// If no max_source_resolution is specified fit at least 5 samples between steps.
-	return api.parseDownsamplingParamMillisWithDefault(r, step/5)
-}
-
 func (api *API) parseDownsamplingParamMillisWithDefault(r *http.Request, defaultVal time.Duration) (maxResolutionMillis int64, _ *ApiError) {
 	const maxSourceResolutionParam = "max_source_resolution"
 	maxSourceResolution := 0 * time.Second
@@ -346,7 +341,8 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	maxSourceResolution, apiErr := api.parseDownsamplingParamMillis(r, step)
+	// If no max_source_resolution is specified fit at least 5 samples between steps.
+	maxSourceResolution, apiErr := api.parseDownsamplingParamMillisWithDefault(r, step/5)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
