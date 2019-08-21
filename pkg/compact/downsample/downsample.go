@@ -191,7 +191,7 @@ func targetChunkCount(mint, maxt, inRes, outRes int64, count int) (x int) {
 	return x
 }
 
-// aggregator collects commulative stats for a stream of values.
+// aggregator collects cumulative stats for a stream of values.
 type aggregator struct {
 	total   int     // total samples processed
 	count   int     // samples in current window
@@ -199,7 +199,7 @@ type aggregator struct {
 	min     float64 // min of current window
 	max     float64 // max of current window
 	counter float64 // total counter state since beginning
-	resets  int     // number of counter resests since beginning
+	resets  int     // number of counter resets since beginning
 	last    float64 // last added value
 }
 

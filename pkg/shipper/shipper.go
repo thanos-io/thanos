@@ -438,7 +438,7 @@ func hardlinkBlock(src, dst string) error {
 	return nil
 }
 
-// Meta defines the fomart thanos.shipper.json file that the shipper places in the data directory.
+// Meta defines the format thanos.shipper.json file that the shipper places in the data directory.
 type Meta struct {
 	Version  int         `json:"version"`
 	Uploaded []ulid.ULID `json:"uploaded"`
