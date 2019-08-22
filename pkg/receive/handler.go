@@ -23,10 +23,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/prompb"
 	promtsdb "github.com/prometheus/prometheus/storage/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"github.com/thanos-io/thanos/pkg/store/prompb"
 )
 
 // Options for the web Handler.

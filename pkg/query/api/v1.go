@@ -104,7 +104,9 @@ type API struct {
 	rangeQueryDuration     prometheus.Histogram
 	enableAutodownsampling bool
 	enablePartialResponse  bool
-	now                    func() time.Time
+	reg                    prometheus.Registerer
+
+	now func() time.Time
 }
 
 // NewAPI returns an initialized API type.
@@ -143,6 +145,7 @@ func NewAPI(
 		rangeQueryDuration:     rangeQueryDuration,
 		enableAutodownsampling: enableAutodownsampling,
 		enablePartialResponse:  enablePartialResponse,
+		reg:                    reg,
 
 		now: time.Now,
 	}

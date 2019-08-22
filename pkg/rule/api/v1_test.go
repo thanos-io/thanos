@@ -12,15 +12,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/storage"
-	"github.com/prometheus/prometheus/storage/tsdb"
-
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
+	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/storage/tsdb"
 	qapi "github.com/thanos-io/thanos/pkg/query/api"
 	thanosrule "github.com/thanos-io/thanos/pkg/rule"
 )
@@ -164,6 +164,7 @@ func TestEndpoints(t *testing.T) {
 		algr.RuleGroups()
 		api := NewAPI(
 			nil,
+			prometheus.DefaultRegisterer,
 			algr,
 		)
 		testEndpoints(t, api)

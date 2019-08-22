@@ -54,45 +54,22 @@ groups:
 
 var (
 	alertsToTest = []string{testAlertRuleAbortOnPartialResponse, testAlertRuleWarnOnPartialResponse}
-
-	ruleStaticFlagsSuite = newSpinupSuite().
-				Add(querierWithStoreFlags(1, "", rulerGRPC(1), rulerGRPC(2))).
-				Add(rulerWithQueryFlags(1, alertsToTest, queryHTTP(1))).
-				Add(rulerWithQueryFlags(2, alertsToTest, queryHTTP(1))).
-				Add(alertManager(1))
-
-	ruleFileSDSuite = newSpinupSuite().
-			Add(querierWithFileSD(1, "", rulerGRPC(1), rulerGRPC(2))).
-			Add(rulerWithFileSD(1, alertsToTest, queryHTTP(1))).
-			Add(rulerWithFileSD(2, alertsToTest, queryHTTP(1))).
-			Add(alertManager(1))
 )
 
 func TestRule(t *testing.T) {
-	for _, tt := range []testConfig{
-		{
-			"staticFlag",
-			ruleStaticFlagsSuite,
-		},
-		{
-			"fileSD",
-			ruleFileSDSuite,
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			testRuleComponent(t, tt)
-		})
-	}
-}
+	a := newLocalAddresser()
 
-// testRuleComponent tests the basic interaction between the rule component
-// and the querying layer.
-// Rules are evaluated against the query layer and the query layer in return
-// can access data written by the rules.
-func testRuleComponent(t *testing.T, conf testConfig) {
+	am := alertManager(a.New())
+	qAddr := a.New()
+
+	r1 := rule(a.New(), a.New(), alertsToTest, am.HTTP, []address{qAddr}, nil)
+	r2 := rule(a.New(), a.New(), alertsToTest, am.HTTP, nil, []address{qAddr})
+
+	q := querier(qAddr, a.New(), []address{r1.GRPC, r2.GRPC}, nil)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 
-	exit, err := conf.suite.Exec(t, ctx, "test_rule_component")
+	exit, err := e2eSpinup(t, ctx, q, r1, r2, am)
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)
 		cancel()
@@ -110,50 +87,50 @@ func testRuleComponent(t *testing.T, conf testConfig) {
 			"severity":   "page",
 			"alertname":  "TestAlert_AbortOnPartialResponse",
 			"alertstate": "firing",
-			"replica":    "1",
+			"replica":    model.LabelValue(r1.HTTP.Port),
 		},
 		{
 			"__name__":   "ALERTS",
 			"severity":   "page",
 			"alertname":  "TestAlert_AbortOnPartialResponse",
 			"alertstate": "firing",
-			"replica":    "2",
+			"replica":    model.LabelValue(r2.HTTP.Port),
 		},
 		{
 			"__name__":   "ALERTS",
 			"severity":   "page",
 			"alertname":  "TestAlert_WarnOnPartialResponse",
 			"alertstate": "firing",
-			"replica":    "1",
+			"replica":    model.LabelValue(r1.HTTP.Port),
 		},
 		{
 			"__name__":   "ALERTS",
 			"severity":   "page",
 			"alertname":  "TestAlert_WarnOnPartialResponse",
 			"alertstate": "firing",
-			"replica":    "2",
+			"replica":    model.LabelValue(r2.HTTP.Port),
 		},
 	}
 	expAlertLabels := []model.LabelSet{
 		{
 			"severity":  "page",
 			"alertname": "TestAlert_AbortOnPartialResponse",
-			"replica":   "1",
+			"replica":   model.LabelValue(r1.HTTP.Port),
 		},
 		{
 			"severity":  "page",
 			"alertname": "TestAlert_AbortOnPartialResponse",
-			"replica":   "2",
+			"replica":   model.LabelValue(r2.HTTP.Port),
 		},
 		{
 			"severity":  "page",
 			"alertname": "TestAlert_WarnOnPartialResponse",
-			"replica":   "1",
+			"replica":   model.LabelValue(r1.HTTP.Port),
 		},
 		{
 			"severity":  "page",
 			"alertname": "TestAlert_WarnOnPartialResponse",
-			"replica":   "2",
+			"replica":   model.LabelValue(r2.HTTP.Port),
 		},
 	}
 
@@ -168,7 +145,7 @@ func testRuleComponent(t *testing.T, conf testConfig) {
 		qtime := time.Now()
 
 		// The time series written for the firing alerting rule must be queryable.
-		res, warnings, err := promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "ALERTS", time.Now(), promclient.QueryOptions{
+		res, warnings, err := promclient.QueryInstant(ctx, nil, urlParse(t, q.HTTP.URL()), "ALERTS", time.Now(), promclient.QueryOptions{
 			Deduplicate: false,
 		})
 		if err != nil {
@@ -181,7 +158,7 @@ func testRuleComponent(t *testing.T, conf testConfig) {
 		}
 
 		if len(res) != len(expMetrics) {
-			return errors.Errorf("unexpected result length %d", len(res))
+			return errors.Errorf("unexpected result %v, expected %d", res, len(expMetrics))
 		}
 
 		for i, r := range res {
@@ -197,7 +174,7 @@ func testRuleComponent(t *testing.T, conf testConfig) {
 		}
 
 		// A notification must be sent to Alertmanager.
-		alrts, err := queryAlertmanagerAlerts(ctx, "http://localhost:29093")
+		alrts, err := queryAlertmanagerAlerts(ctx, am.HTTP.URL())
 		if err != nil {
 			return err
 		}
@@ -215,7 +192,7 @@ func testRuleComponent(t *testing.T, conf testConfig) {
 	// checks counter ensures we are not missing metrics.
 	checks := 0
 	// Check metrics to make sure we report correct ones that allow handling the AlwaysFiring not being triggered because of query issue.
-	testutil.Ok(t, promclient.MetricValues(ctx, nil, urlParse(t, "http://"+rulerHTTP(1)), func(lset labels.Labels, val float64) error {
+	testutil.Ok(t, promclient.MetricValues(ctx, nil, urlParse(t, r1.HTTP.URL()), func(lset labels.Labels, val float64) error {
 		switch lset.Get("__name__") {
 		case "prometheus_rule_group_rules":
 			checks++
@@ -276,21 +253,20 @@ func (a *failingStoreAPI) LabelValues(context.Context, *storepb.LabelValuesReque
 
 // Test Ruler behaviour on different storepb.PartialResponseStrategy when having partial response from single `failingStoreAPI`.
 func TestRulePartialResponse(t *testing.T) {
-	const expectedWarning = "receive series from Addr: 127.0.0.1:21091 LabelSets: [name:\"magic\" value:\"store_api\" ][name:\"magicmarker\" value:\"store_api\" ] Mint: -9223372036854775808 Maxt: 9223372036854775807: rpc error: code = Unknown desc = I always fail. No reason. I am just offended StoreAPI. Don't touch me"
-
-	dir, err := ioutil.TempDir("", "test_rulepartial_respn")
+	dir, err := ioutil.TempDir("", "test_rulepartial_response")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-	suite := newSpinupSuite().
-		Add(querierWithStoreFlags(1, "", rulerGRPC(1), fakeStoreAPIGRPC(1))).
-		Add(rulerWithDir(1, dir, queryHTTP(1))).
-		Add(fakeStoreAPI(1, &failingStoreAPI{})).
-		Add(alertManager(1))
+	a := newLocalAddresser()
+	qAddr := a.New()
+
+	f := fakeStoreAPI(a.New(), &failingStoreAPI{})
+	am := alertManager(a.New())
+	r := ruleWithDir(a.New(), a.New(), dir, nil, am.HTTP, []address{qAddr}, nil)
+	q := querier(qAddr, a.New(), []address{r.GRPC, f.GRPC}, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-
-	exit, err := suite.Exec(t, ctx, "test_rule_partial_response_component")
+	exit, err := e2eSpinup(t, ctx, am, f, q, r)
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)
 		cancel()
@@ -311,7 +287,7 @@ func TestRulePartialResponse(t *testing.T) {
 		}
 
 		// The time series written for the firing alerting rule must be queryable.
-		res, warnings, err := promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "ALERTS", time.Now(), promclient.QueryOptions{
+		res, warnings, err := promclient.QueryInstant(ctx, nil, urlParse(t, q.HTTP.URL()), "ALERTS", time.Now(), promclient.QueryOptions{
 			Deduplicate: false,
 		})
 		if err != nil {
@@ -335,7 +311,7 @@ func TestRulePartialResponse(t *testing.T) {
 		testutil.Ok(t, ioutil.WriteFile(path.Join(dir, fmt.Sprintf("rules-%d.yaml", i)), []byte(rule), 0666))
 	}
 
-	resp, err := http.Post("http://"+rulerHTTP(1)+"/-/reload", "", nil)
+	resp, err := http.Post(r.HTTP.URL()+"/-/reload", "", nil)
 	testutil.Ok(t, err)
 	defer func() { _, _ = ioutil.ReadAll(resp.Body); _ = resp.Body.Close() }()
 	testutil.Equals(t, http.StatusOK, resp.StatusCode)
@@ -347,16 +323,18 @@ func TestRulePartialResponse(t *testing.T) {
 			"severity":   "page",
 			"alertname":  "TestAlert_WarnOnPartialResponse",
 			"alertstate": "firing",
-			"replica":    "1",
+			"replica":    model.LabelValue(r.HTTP.Port),
 		},
 	}
 	expAlertLabels := []model.LabelSet{
 		{
 			"severity":  "page",
 			"alertname": "TestAlert_WarnOnPartialResponse",
-			"replica":   "1",
+			"replica":   model.LabelValue(r.HTTP.Port),
 		},
 	}
+
+	expectedWarning := "receive series from Addr: " + f.GRPC.HostPort() + " LabelSets: [name:\"magic\" value:\"store_api\" ][name:\"magicmarker\" value:\"store_api\" ] Mint: -9223372036854775808 Maxt: 9223372036854775807: rpc error: code = Unknown desc = I always fail. No reason. I am just offended StoreAPI. Don't touch me"
 
 	testutil.Ok(t, runutil.Retry(5*time.Second, ctx.Done(), func() (err error) {
 		select {
@@ -369,7 +347,7 @@ func TestRulePartialResponse(t *testing.T) {
 		qtime := time.Now()
 
 		// The time series written for the firing alerting rule must be queryable.
-		res, warnings, err := promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "ALERTS", time.Now(), promclient.QueryOptions{
+		res, warnings, err := promclient.QueryInstant(ctx, nil, urlParse(t, q.HTTP.URL()), "ALERTS", time.Now(), promclient.QueryOptions{
 			Deduplicate: false,
 		})
 		if err != nil {
@@ -403,7 +381,7 @@ func TestRulePartialResponse(t *testing.T) {
 		}
 
 		// A notification must be sent to Alertmanager.
-		alrts, err := queryAlertmanagerAlerts(ctx, "http://localhost:29093")
+		alrts, err := queryAlertmanagerAlerts(ctx, am.HTTP.URL())
 		if err != nil {
 			return err
 		}
@@ -421,7 +399,7 @@ func TestRulePartialResponse(t *testing.T) {
 	// checks counter ensures we are not missing metrics.
 	checks := 0
 	// Check metrics to make sure we report correct ones that allow handling the AlwaysFiring not being triggered because of query issue.
-	testutil.Ok(t, promclient.MetricValues(ctx, nil, urlParse(t, "http://"+rulerHTTP(1)), func(lset labels.Labels, val float64) error {
+	testutil.Ok(t, promclient.MetricValues(ctx, nil, urlParse(t, r.HTTP.URL()), func(lset labels.Labels, val float64) error {
 		switch lset.Get("__name__") {
 		case "prometheus_rule_group_rules":
 			checks++

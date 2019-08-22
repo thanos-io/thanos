@@ -107,10 +107,11 @@ func newGCloudTracer(ctx context.Context, logger log.Logger, gcloudTraceProjectI
 		return nil, nil, err
 	}
 
+	// TODO(bwplotka): gcloudtracer is archived. Find replacement. For now wrap traceClient for compatibility.
 	r, err := gcloudtracer.NewRecorder(
 		ctx,
 		gcloudTraceProjectID,
-		&compTraceWrapper{traceClient},
+		&compTraceWrapper{cl: traceClient},
 		gcloudtracer.WithLogger(&gcloudRecorderLogger{logger: logger}))
 	if err != nil {
 		return nil, traceClient, err

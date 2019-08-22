@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/rules"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -25,14 +26,16 @@ type Rule struct {
 
 	ruleManagers thanosrule.Managers
 	queryURL     string
+	reg          prometheus.Registerer
 }
 
-func NewRuleUI(logger log.Logger, ruleManagers map[storepb.PartialResponseStrategy]*rules.Manager, queryURL string, flagsMap map[string]string) *Rule {
+func NewRuleUI(logger log.Logger, reg prometheus.Registerer, ruleManagers map[storepb.PartialResponseStrategy]*rules.Manager, queryURL string, flagsMap map[string]string) *Rule {
 	return &Rule{
 		BaseUI:       NewBaseUI(logger, "rule_menu.html", ruleTmplFuncs(queryURL)),
 		flagsMap:     flagsMap,
 		ruleManagers: ruleManagers,
 		queryURL:     queryURL,
+		reg:          reg,
 	}
 }
 

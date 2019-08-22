@@ -175,6 +175,7 @@ func (m *Managers) Update(dataDir string, evalInterval time.Duration, files []st
 			continue
 		}
 		// We add external labels in `pkg/alert.Queue`.
+		// TODO(bwplotka): Investigate if we should put ext labels here or not.
 		if err := updater.Update(evalInterval, fs, nil); err != nil {
 			errs = append(errs, err)
 			continue
