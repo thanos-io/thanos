@@ -34,6 +34,7 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 
 	p, err := testutil.NewPrometheusOnPath(prefix)
 	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, p.Stop()) }()
 
 	baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
 
@@ -50,7 +51,6 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 	defer cancel()
 
 	testutil.Ok(t, p.Start())
-	defer func() { testutil.Ok(t, p.Stop()) }()
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
@@ -65,15 +65,13 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 		// Query all three samples except for the first one. Since we round up queried data
 		// to seconds, we can test whether the extra sample gets stripped properly.
 		srv := newStoreSeriesServer(ctx)
-
-		err = proxy.Series(&storepb.SeriesRequest{
+		testutil.Ok(t, proxy.Series(&storepb.SeriesRequest{
 			MinTime: baseT + 101,
 			MaxTime: baseT + 300,
 			Matchers: []storepb.LabelMatcher{
 				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
 			},
-		}, srv)
-		testutil.Ok(t, err)
+		}, srv))
 
 		testutil.Equals(t, 1, len(srv.SeriesSet))
 
@@ -134,6 +132,7 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 
 	p, err := testutil.NewPrometheus()
 	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, p.Stop()) }()
 
 	a := p.Appender()
 	_, err = a.Add(labels.FromStrings("a", "b"), 0, 1)
@@ -148,7 +147,6 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 	defer cancel()
 
 	testutil.Ok(t, p.Start())
-	defer func() { testutil.Ok(t, p.Stop()) }()
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
@@ -170,6 +168,7 @@ func TestPrometheusStore_ExternalLabelValues_e2e(t *testing.T) {
 
 	p, err := testutil.NewPrometheus()
 	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, p.Stop()) }()
 
 	a := p.Appender()
 	_, err = a.Add(labels.FromStrings("ext_a", "b"), 0, 1)
@@ -182,7 +181,6 @@ func TestPrometheusStore_ExternalLabelValues_e2e(t *testing.T) {
 	defer cancel()
 
 	testutil.Ok(t, p.Start())
-	defer func() { testutil.Ok(t, p.Stop()) }()
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
@@ -210,6 +208,7 @@ func TestPrometheusStore_Series_MatchExternalLabel_e2e(t *testing.T) {
 
 	p, err := testutil.NewPrometheus()
 	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, p.Stop()) }()
 
 	baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
 
@@ -226,7 +225,6 @@ func TestPrometheusStore_Series_MatchExternalLabel_e2e(t *testing.T) {
 	defer cancel()
 
 	testutil.Ok(t, p.Start())
-	defer func() { testutil.Ok(t, p.Stop()) }()
 
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
