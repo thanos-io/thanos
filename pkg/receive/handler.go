@@ -240,7 +240,7 @@ func (h *Handler) receive(w http.ResponseWriter, r *http.Request) {
 
 	var rep replica
 	replicaRaw := r.Header.Get(h.options.ReplicaHeader)
-	// If the header is emtpy, we assume the request is not yet replicated.
+	// If the header is empty, we assume the request is not yet replicated.
 	if replicaRaw != "" {
 		if rep.n, err = strconv.ParseUint(replicaRaw, 10, 64); err != nil {
 			http.Error(w, "could not parse replica header", http.StatusBadRequest)

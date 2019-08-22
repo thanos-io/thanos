@@ -79,7 +79,7 @@ message SeriesRequest {
   // Deprecated. Use partial_response_strategy instead.
   bool partial_response_disabled = 6;
 
-  // TODO(bwplotka): Move Thanos components to use strategy instead. Inlcuding QueryAPI.
+  // TODO(bwplotka): Move Thanos components to use strategy instead. Including QueryAPI.
   PartialResponseStrategy partial_response_strategy = 7;
 }
 
@@ -105,7 +105,7 @@ message SeriesResponse {
 message LabelNamesRequest {
   bool partial_response_disabled = 1;
 
-  // TODO(bwplotka): Move Thanos components to use strategy instead. Inlcuding QueryAPI.
+  // TODO(bwplotka): Move Thanos components to use strategy instead. Including QueryAPI.
   PartialResponseStrategy partial_response_strategy = 2;
 }
 
@@ -119,7 +119,7 @@ message LabelValuesRequest {
 
   bool partial_response_disabled = 2;
 
-  // TODO(bwplotka): Move Thanos components to use strategy instead. Inlcuding QueryAPI.
+  // TODO(bwplotka): Move Thanos components to use strategy instead. Including QueryAPI.
   PartialResponseStrategy partial_response_strategy = 3;
 }
 

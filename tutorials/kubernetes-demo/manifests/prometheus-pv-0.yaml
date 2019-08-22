@@ -1,4 +1,4 @@
-# Prepare 2 volumes for replicas. It is required only for demo purposes as we artifically generate metrics.
+# Prepare 2 volumes for replicas. It is required only for demo purposes as we artificially generate metrics.
 kind: PersistentVolume
 apiVersion: v1
 metadata:

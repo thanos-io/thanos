@@ -125,7 +125,7 @@ func TestSnapshot_e2e(t *testing.T) {
 func TestRule_UnmarshalScalarResponse(t *testing.T) {
 	var (
 		scalarJSONResult              = []byte(`[1541196373.677,"1"]`)
-		invalidLengthScalarJSONResult = []byte(`[1541196373.677,"1", "nonsence"]`)
+		invalidLengthScalarJSONResult = []byte(`[1541196373.677,"1", "nonsense"]`)
 		invalidDataScalarJSONResult   = []byte(`["foo","bar"]`)
 
 		vectorResult   model.Vector

@@ -30,10 +30,11 @@ HUGO              ?= $(GOBIN)/hugo-$(HUGO_VERSION)
 GOBINDATA_VERSION ?= a9c83481b38ebb1c4eb8f0168fd4b10ca1d3c523
 GOBINDATA         ?= $(GOBIN)/go-bindata-$(GOBINDATA_VERSION)
 GIT               ?= $(shell which git)
-# golangci-lint which includes errcheck, goimports
-# and more. v1.16.0
-GOLANGCILINT_VERSION ?= 97ea1cbb21bbf5e4d0e8bcc0f9243385e9262dcc
-GOLANGCILINT ?= $(GOBIN)/golangci-lint-$(GOLANGCILINT_VERSION)
+
+GOLANGCILINT_VERSION ?= d2b1eea2c6171a1a1141a448a745335ce2e928a1
+GOLANGCILINT         ?= $(GOBIN)/golangci-lint-$(GOLANGCILINT_VERSION)
+MISSPELL_VERSION     ?= c0b55c8239520f6b5aa15a0207ca8b28027ba49e
+MISSPELL             ?= $(GOBIN)/misspell-$(MISSPELL_VERSION)
 
 WEB_DIR           ?= website
 WEBSITE_BASE_URL  ?= https://thanos.io
@@ -229,11 +230,17 @@ web: web-pre-process $(HUGO)
 	@cd $(WEB_DIR) && HUGO_ENV=production $(HUGO) --config hugo.yaml --minify -v -b $(WEBSITE_BASE_URL)
 
 .PHONY: lint
-lint: check-git $(GOLANGCILINT)
-	@echo ">> checking formatting"
-	@$(GOLANGCILINT) run -v --disable-all -E goimports ./...
+# PROTIP:
+# Add
+#      --cpu-profile-path string   Path to CPU profile output file
+#      --mem-profile-path string   Path to memory profile output file
+#
+# to debug big allocations during linting.
+lint: check-git $(GOLANGCILINT) $(MISSPELL)
 	@echo ">> linting all of the Go files"
-	@$(GOLANGCILINT) run -v ./...
+	@$(GOLANGCILINT) run -v --enable goimports --enable goconst --skip-dirs vendor
+	@echo ">> detecting misspells"
+	@find . -type f | grep -v vendor/ | grep -vE '\./\..*' | xargs $(MISSPELL) -error
 
 .PHONY: web-serve
 web-serve: web-pre-process $(HUGO)
@@ -263,6 +270,9 @@ $(GOBINDATA):
 
 $(GOLANGCILINT):
 	$(call fetch_go_bin_version,github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCILINT_VERSION))
+
+$(MISSPELL):
+	$(call fetch_go_bin_version,github.com/client9/misspell/cmd/misspell,$(MISSPELL_VERSION))
 
 $(PROTOC):
 	@mkdir -p $(TMP_GOPATH)

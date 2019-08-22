@@ -149,7 +149,7 @@ It is possible to expose thanos-query UI and optionally API on a sub-path.
 The sub-path can be defined either statically or dynamically via an HTTP header.
 Static path prefix definition follows the pattern used in Prometheus,
 where `web.route-prefix` option defines HTTP request path prefix (endpoints prefix)
-and `web.external-prefix` prefixes the URLs in HTML code and the HTTP redirect responces.
+and `web.external-prefix` prefixes the URLs in HTML code and the HTTP redirect responses.
 
 Additionally, Thanos supports dynamic prefix configuration, which
 [is not yet implemented by Prometheus](https://github.com/prometheus/prometheus/issues/3156).
