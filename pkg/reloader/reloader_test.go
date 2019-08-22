@@ -167,8 +167,7 @@ func TestReloader_RuleApply(t *testing.T) {
 	l, err := net.Listen("tcp", "localhost:0")
 	testutil.Ok(t, err)
 
-	reloads := &atomic.Value{}
-	reloads.Store(0)
+	var reloads int64
 	i := 0
 	srv := &http.Server{}
 	srv.Handler = http.HandlerFunc(func(resp http.ResponseWriter, r *http.Request) {
@@ -179,7 +178,7 @@ func TestReloader_RuleApply(t *testing.T) {
 			return
 		}
 
-		reloads.Store(reloads.Load().(int) + 1) // The only writer.
+		atomic.AddInt64(&reloads, 1)
 		resp.WriteHeader(http.StatusOK)
 	})
 	go func() {
@@ -227,7 +226,7 @@ func TestReloader_RuleApply(t *testing.T) {
 			case <-time.After(300 * time.Millisecond):
 			}
 
-			rel := reloads.Load().(int)
+			rel := int(atomic.LoadInt64(&reloads))
 			if init && rel <= reloadsSeen {
 				continue
 			}
@@ -266,5 +265,5 @@ func TestReloader_RuleApply(t *testing.T) {
 	g.Wait()
 
 	testutil.Ok(t, err)
-	testutil.Equals(t, 5, reloads.Load().(int))
+	testutil.Equals(t, 5, int(atomic.LoadInt64(&reloads)))
 }
