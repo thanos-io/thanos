@@ -150,7 +150,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		maxTime: maxTime,
 	}
 
-	store, err := NewBucketStore(s.logger, nil, bkt, dir, s.cache, 0, maxSampleCount, 20, false, 20, filterConf)
+	store, err := NewBucketStore(s.logger, nil, bkt, dir, s.cache, 0, maxSampleCount, 20, false, 20, filterConf, labels.FromStrings("c", "1"))
 	testutil.Ok(t, err)
 	s.store = store
 
@@ -190,6 +190,10 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 	vals, err := s.store.LabelValues(ctx, &storepb.LabelValuesRequest{Label: "a"})
 	testutil.Ok(t, err)
 	testutil.Equals(t, []string{"1", "2"}, vals.Values)
+
+	names, err := s.store.LabelNames(ctx, &storepb.LabelNamesRequest{})
+	testutil.Ok(t, err)
+	testutil.Equals(t, []string{"a", "b", "c"}, names.Names)
 
 	// TODO(bwplotka): Add those test cases to TSDB querier_test.go as well, there are no tests for matching.
 	for i, tcase := range []struct {
@@ -362,6 +366,15 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 				Matchers: []storepb.LabelMatcher{
 					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 					{Type: storepb.LabelMatcher_RE, Name: "non_existing", Value: "something"},
+				},
+				MinTime: mint,
+				MaxTime: maxt,
+			},
+		},
+		{
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "c", Value: "2"},
 				},
 				MinTime: mint,
 				MaxTime: maxt,
