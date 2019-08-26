@@ -31,7 +31,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
@@ -70,9 +69,6 @@ func TestEndpoints(t *testing.T) {
 	api := &API{
 		queryableCreate: testQueryableCreator(suite.Storage()),
 		queryEngine:     suite.QueryEngine(),
-
-		instantQueryDuration: prometheus.NewHistogram(prometheus.HistogramOpts{}),
-		rangeQueryDuration:   prometheus.NewHistogram(prometheus.HistogramOpts{}),
 
 		now: func() time.Time { return now },
 	}
