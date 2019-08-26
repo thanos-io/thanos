@@ -22,7 +22,6 @@ import (
 func TestIsWALFileAccesible_e2e(t *testing.T) {
 	testutil.ForeachPrometheus(t, func(t testing.TB, p *testutil.Prometheus) {
 		testutil.Ok(t, p.Start())
-		defer func() { testutil.Ok(t, p.Stop()) }()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 		defer cancel()
@@ -43,7 +42,6 @@ global:
 `))
 
 		testutil.Ok(t, p.Start())
-		defer func() { testutil.Ok(t, p.Stop()) }()
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
@@ -60,7 +58,6 @@ global:
 func TestConfiguredFlags_e2e(t *testing.T) {
 	testutil.ForeachPrometheus(t, func(t testing.TB, p *testutil.Prometheus) {
 		testutil.Ok(t, p.Start())
-		defer func() { testutil.Ok(t, p.Stop()) }()
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
@@ -96,7 +93,6 @@ func TestSnapshot_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 
 		testutil.Ok(t, p.Start())
-		defer func() { testutil.Ok(t, p.Stop()) }()
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)

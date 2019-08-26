@@ -21,8 +21,8 @@ import (
 // HashringConfig represents the configuration for a hashring
 // a receive node knows about.
 type HashringConfig struct {
-	Hashring  string   `json:"hashring"`
-	Tenants   []string `json:"tenants"`
+	Hashring  string   `json:"hashring,omitempty"`
+	Tenants   []string `json:"tenants,omitempty"`
 	Endpoints []string `json:"endpoints"`
 }
 
@@ -231,6 +231,7 @@ func (cw *ConfigWatcher) refresh(ctx context.Context) {
 		cw.hashringTenantsGauge.WithLabelValues(c.Hashring).Set(float64(len(c.Tenants)))
 	}
 
+	level.Debug(cw.logger).Log("msg", "refreshed hashring config")
 	select {
 	case <-ctx.Done():
 		return

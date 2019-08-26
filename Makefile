@@ -177,9 +177,12 @@ tarballs-release: $(PROMU)
 
 # test runs all Thanos golang tests against each supported version of Prometheus.
 .PHONY: test
+test: export GOCACHE= $(TMP_GOPATH)/gocache
 test: check-git test-deps
+	# Be careful on GOCACHE. Those tests are sometimes using built Thanos/Prometheus binaries directly. Don't cache those.
+	@rm -rf ${GOCACHE}
 	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS='true' or/and THANOS_SKIP_S3_AWS_TESTS='true' or/and THANOS_SKIP_AZURE_TESTS='true' and/or THANOS_SKIP_SWIFT_TESTS='true' and/or THANOS_SKIP_TENCENT_COS_TESTS='true' if you want to skip e2e tests against real store buckets"
-	THANOS_TEST_PROMETHEUS_VERSIONS="$(PROM_VERSIONS)" THANOS_TEST_ALERTMANAGER_PATH="alertmanager-$(ALERTMANAGER_VERSION)" go test $(shell go list ./... | grep -v /vendor/ | grep -v /benchmark/);
+	THANOS_TEST_PROMETHEUS_VERSIONS="$(PROM_VERSIONS)" THANOS_TEST_ALERTMANAGER_PATH="alertmanager-$(ALERTMANAGER_VERSION)" go test $(shell go list ./... | grep -v /vendor/);
 
 .PHONY: test-only-gcs
 test-only-gcs: export THANOS_SKIP_S3_AWS_TESTS = true
@@ -203,6 +206,7 @@ test-local:
 # It installs current Thanos, supported versions of Prometheus and alertmanager to test against in e2e.
 .PHONY: test-deps
 test-deps:
+	@echo ">> install thanos GOOPTS=${GOOPTS}"
 	@go install github.com/thanos-io/thanos/cmd/thanos
 	$(foreach ver,$(PROM_VERSIONS),$(call fetch_go_bin_version,github.com/prometheus/prometheus/cmd/prometheus,$(ver)))
 	$(call fetch_go_bin_version,github.com/prometheus/alertmanager/cmd/alertmanager,$(ALERTMANAGER_VERSION))
@@ -216,7 +220,6 @@ ifneq ($(GIT),)
 else
 	@echo >&2 "No git binary found."; exit 1
 endif
-
 
 .PHONY: web-pre-process
 web-pre-process:
@@ -237,8 +240,8 @@ web: web-pre-process $(HUGO)
 #
 # to debug big allocations during linting.
 lint: check-git $(GOLANGCILINT) $(MISSPELL)
-	@echo ">> linting all of the Go files"
-	@$(GOLANGCILINT) run -v --enable goimports --enable goconst --skip-dirs vendor
+	@echo ">> linting all of the Go files GOGC=${GOGC}"
+	@$(GOLANGCILINT) run --enable goimports --enable goconst --skip-dirs vendor
 	@echo ">> detecting misspells"
 	@find . -type f | grep -v vendor/ | grep -vE '\./\..*' | xargs $(MISSPELL) -error
 
