@@ -21,10 +21,10 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/route"
 	promtsdb "github.com/prometheus/prometheus/storage/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/prompb"
 )
@@ -54,9 +54,6 @@ type Handler struct {
 	hashring Hashring
 
 	// Metrics
-	requestDuration      *prometheus.HistogramVec
-	requestsTotal        *prometheus.CounterVec
-	responseSize         *prometheus.HistogramVec
 	forwardRequestsTotal *prometheus.CounterVec
 
 	// These fields are uint32 rather than boolean to be able to use atomic functions.
@@ -72,29 +69,8 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		logger:       logger,
 		readyStorage: o.ReadyStorage,
 		receiver:     o.Receiver,
+		router:       route.New(),
 		options:      o,
-		requestDuration: prometheus.NewHistogramVec(
-			prometheus.HistogramOpts{
-				Name:    "thanos_http_request_duration_seconds",
-				Help:    "Histogram of latencies for HTTP requests.",
-				Buckets: []float64{.1, .2, .4, 1, 3, 8, 20, 60, 120},
-			},
-			[]string{"handler"},
-		),
-		requestsTotal: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "thanos_http_requests_total",
-				Help: "Tracks the number of HTTP requests.",
-			}, []string{"code", "handler", "method"},
-		),
-		responseSize: prometheus.NewHistogramVec(
-			prometheus.HistogramOpts{
-				Name:    "thanos_http_response_size_bytes",
-				Help:    "Histogram of response size for HTTP requests.",
-				Buckets: prometheus.ExponentialBuckets(100, 10, 8),
-			},
-			[]string{"handler"},
-		),
 		forwardRequestsTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
@@ -103,35 +79,20 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		),
 	}
 
-	router := route.New().WithInstrumentation(h.instrumentHandler)
-	h.router = router
-
-	readyf := h.testReady
-	router.Post("/api/v1/receive", readyf(h.receive))
-
+	ins := extpromhttp.NewNopInstrumentationMiddleware()
 	if o.Registry != nil {
-		o.Registry.MustRegister(
-			h.requestDuration,
-			h.requestsTotal,
-			h.responseSize,
-			h.forwardRequestsTotal,
-		)
+		ins = extpromhttp.NewInstrumentationMiddleware(o.Registry)
+		o.Registry.MustRegister(h.forwardRequestsTotal)
 	}
 
-	return h
-}
+	readyf := h.testReady
+	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+		return ins.NewHandler(name, http.HandlerFunc(next))
+	}
 
-func (h *Handler) instrumentHandler(handlerName string, handler http.HandlerFunc) http.HandlerFunc {
-	return promhttp.InstrumentHandlerDuration(
-		h.requestDuration.MustCurryWith(prometheus.Labels{"handler": handlerName}),
-		promhttp.InstrumentHandlerResponseSize(
-			h.responseSize.MustCurryWith(prometheus.Labels{"handler": handlerName}),
-			promhttp.InstrumentHandlerCounter(
-				h.requestsTotal.MustCurryWith(prometheus.Labels{"handler": handlerName}),
-				handler,
-			),
-		),
-	)
+	h.router.Post("/api/v1/receive", instrf("receive", readyf(h.receive)))
+
+	return h
 }
 
 // StorageReady marks the storage as ready.
