@@ -8,20 +8,22 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 // registerStore registers a store command.
-func registerStore(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "store node giving access to blocks in a bucket provider. Now supported GCS, S3, Azure, Swift and Tencent COS.")
+func registerStore(m map[string]setupFunc, app *kingpin.Application) {
+	cmd := app.Command(component.Store.String(), "store node giving access to blocks in a bucket provider. Now supported GCS, S3, Azure, Swift and Tencent COS.")
 
 	grpcBindAddr, httpBindAddr, cert, key, clientCA := regCommonServerFlags(cmd)
 
@@ -54,7 +56,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	maxTime := model.TimeOrDuration(cmd.Flag("max-time", "End of time range limit to serve. Thanos Store serves only blocks, which happened eariler than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("9999-12-31T23:59:59Z"))
 
-	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
+	m[component.Store.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
 		if minTime.PrometheusTimestamp() > maxTime.PrometheusTimestamp() {
 			return errors.Errorf("invalid argument: --min-time '%s' can't be greater than --max-time '%s'",
 				minTime, maxTime)
@@ -75,7 +77,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			uint64(*chunkPoolSize),
 			uint64(*maxSampleCount),
 			int(*maxConcurrent),
-			name,
+			component.Store,
 			debugLogging,
 			*syncInterval,
 			*blockSyncConcurrency,
@@ -104,102 +106,104 @@ func runStore(
 	chunkPoolSizeBytes uint64,
 	maxSampleCount uint64,
 	maxConcurrent int,
-	component string,
+	component component.Component,
 	verbose bool,
 	syncInterval time.Duration,
 	blockSyncConcurrency int,
 	filterConf *store.FilterConfig,
 ) error {
-	{
-		confContentYaml, err := objStoreConfig.Content()
-		if err != nil {
-			return err
-		}
+	statusProber := prober.NewProber(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component)
-		if err != nil {
-			return errors.Wrap(err, "create bucket client")
-		}
-
-		// Ensure we close up everything properly.
-		defer func() {
-			if err != nil {
-				runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
-			}
-		}()
-
-		// TODO(bwplotka): Add as a flag?
-		maxItemSizeBytes := indexCacheSizeBytes / 2
-
-		indexCache, err := storecache.NewIndexCache(logger, reg, storecache.Opts{
-			MaxSizeBytes:     indexCacheSizeBytes,
-			MaxItemSizeBytes: maxItemSizeBytes,
-		})
-		if err != nil {
-			return errors.Wrap(err, "create index cache")
-		}
-
-		bs, err := store.NewBucketStore(
-			logger,
-			reg,
-			bkt,
-			dataDir,
-			indexCache,
-			chunkPoolSizeBytes,
-			maxSampleCount,
-			maxConcurrent,
-			verbose,
-			blockSyncConcurrency,
-			filterConf,
-		)
-		if err != nil {
-			return errors.Wrap(err, "create object storage store")
-		}
-
-		begin := time.Now()
-		level.Debug(logger).Log("msg", "initializing bucket store")
-		if err := bs.InitialSync(context.Background()); err != nil {
-			return errors.Wrap(err, "bucket store initial sync")
-		}
-		level.Debug(logger).Log("msg", "bucket store ready", "init_duration", time.Since(begin).String())
-
-		ctx, cancel := context.WithCancel(context.Background())
-		g.Add(func() error {
-			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
-
-			err := runutil.Repeat(syncInterval, ctx.Done(), func() error {
-				if err := bs.SyncBlocks(ctx); err != nil {
-					level.Warn(logger).Log("msg", "syncing blocks failed", "err", err)
-				}
-				return nil
-			})
-
-			runutil.CloseWithLogOnErr(logger, bs, "bucket store")
-			return err
-		}, func(error) {
-			cancel()
-		})
-
-		l, err := net.Listen("tcp", grpcBindAddr)
-		if err != nil {
-			return errors.Wrap(err, "listen API address")
-		}
-
-		opts, err := defaultGRPCServerOpts(logger, cert, key, clientCA)
-		if err != nil {
-			return errors.Wrap(err, "grpc server options")
-		}
-		s := newStoreGRPCServer(logger, reg, tracer, bs, opts)
-
-		g.Add(func() error {
-			level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)
-			return errors.Wrap(s.Serve(l), "serve gRPC")
-		}, func(error) {
-			s.Stop()
-		})
-	}
-	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
+	confContentYaml, err := objStoreConfig.Content()
+	if err != nil {
 		return err
+	}
+
+	bkt, err := client.NewBucket(logger, confContentYaml, reg, component.String())
+	if err != nil {
+		return errors.Wrap(err, "create bucket client")
+	}
+
+	// Ensure we close up everything properly.
+	defer func() {
+		if err != nil {
+			runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+		}
+	}()
+
+	// TODO(bwplotka): Add as a flag?
+	maxItemSizeBytes := indexCacheSizeBytes / 2
+
+	indexCache, err := storecache.NewIndexCache(logger, reg, storecache.Opts{
+		MaxSizeBytes:     indexCacheSizeBytes,
+		MaxItemSizeBytes: maxItemSizeBytes,
+	})
+	if err != nil {
+		return errors.Wrap(err, "create index cache")
+	}
+
+	bs, err := store.NewBucketStore(
+		logger,
+		reg,
+		bkt,
+		dataDir,
+		indexCache,
+		chunkPoolSizeBytes,
+		maxSampleCount,
+		maxConcurrent,
+		verbose,
+		blockSyncConcurrency,
+		filterConf,
+	)
+	if err != nil {
+		return errors.Wrap(err, "create object storage store")
+	}
+
+	begin := time.Now()
+	level.Debug(logger).Log("msg", "initializing bucket store")
+	if err := bs.InitialSync(context.Background()); err != nil {
+		return errors.Wrap(err, "bucket store initial sync")
+	}
+	level.Debug(logger).Log("msg", "bucket store ready", "init_duration", time.Since(begin).String())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	g.Add(func() error {
+		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+
+		err := runutil.Repeat(syncInterval, ctx.Done(), func() error {
+			if err := bs.SyncBlocks(ctx); err != nil {
+				level.Warn(logger).Log("msg", "syncing blocks failed", "err", err)
+			}
+			return nil
+		})
+
+		runutil.CloseWithLogOnErr(logger, bs, "bucket store")
+		return err
+	}, func(error) {
+		cancel()
+	})
+
+	l, err := net.Listen("tcp", grpcBindAddr)
+	if err != nil {
+		return errors.Wrap(err, "listen API address")
+	}
+
+	opts, err := defaultGRPCServerOpts(logger, cert, key, clientCA)
+	if err != nil {
+		return errors.Wrap(err, "grpc server options")
+	}
+	s := newStoreGRPCServer(logger, reg, tracer, bs, opts)
+
+	g.Add(func() error {
+		level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)
+		statusProber.SetReady()
+		return errors.Wrap(s.Serve(l), "serve gRPC")
+	}, func(error) {
+		s.Stop()
+	})
+
+	if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, nil, component); err != nil {
+		return errors.Wrap(err, "schedule HTTP server")
 	}
 
 	level.Info(logger).Log("msg", "starting store node")

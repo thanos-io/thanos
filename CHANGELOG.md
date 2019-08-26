@@ -12,10 +12,11 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ## Unreleased
 
 ## Added
-- [#1540](https://github.com/thanos-io/thanos/pull/1540) Added `/-/ready` and `/-/healthy` endpoints to Thanos Downsample.
-- [#1538](https://github.com/thanos-io/thanos/pull/1538) Added `/-/ready` and `/-/healthy` endpoints to Thanos Rule.
-- [#1537](https://github.com/thanos-io/thanos/pull/1537) Added `/-/ready` and `/-/healthy` endpoints to Thanos Receive.
-- [#1534](https://github.com/thanos-io/thanos/pull/1534) Added `/-/ready` endpoint to Thanos Query.
+- [#1540](https://github.com/thanos-io/thanos/pull/1540) Thanos Downsample added `/-/ready` and `/-/healthy` endpoints.
+- [#1538](https://github.com/thanos-io/thanos/pull/1538) Thanos Rule added `/-/ready` and `/-/healthy` endpoints.
+- [#1537](https://github.com/thanos-io/thanos/pull/1537) Thanos Receive added `/-/ready` and `/-/healthy` endpoints.
+- [#1460](https://github.com/thanos-io/thanos/pull/1460) Thanos Store Added `/-/ready` and `/-/healthy` endpoints.
+- [#1534](https://github.com/thanos-io/thanos/pull/1534) Thanos Query Added `/-/ready` and `/-/healthy` endpoints.
 - [#1533](https://github.com/thanos-io/thanos/pull/1533) Thanos inspect now supports the timeout flag.
 
 ### Fixed
