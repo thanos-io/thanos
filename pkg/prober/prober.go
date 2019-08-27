@@ -89,7 +89,7 @@ func (p *Prober) writeResponse(w http.ResponseWriter, probeFn func() error, prob
 		http.Error(w, fmt.Sprintf("thanos %v is not %v. Reason: %v", p.component, probeType, err), probeErrorHTTPStatus)
 		return
 	}
-	if _, err := io.WriteString(w, fmt.Sprintf("thanos %v is %v", p.component, probeType)); err == nil {
+	if _, err := io.WriteString(w, fmt.Sprintf("thanos %v is %v", p.component, probeType)); err != nil {
 		level.Error(p.logger).Log("msg", "failed to write probe response", "probe type", probeType, "err", err)
 	}
 }
