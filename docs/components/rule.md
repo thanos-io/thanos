@@ -30,7 +30,7 @@ $ thanos rule \
     --query                "query2.example.org" \
     --objstore.config-file "bucket.yml" \
     --label                'monitor_cluster="cluster1"'
-    --label                'replica="A"
+    --label                'replica="A"'
 ```
 
 ## Risk

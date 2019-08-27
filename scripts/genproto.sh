@@ -21,18 +21,16 @@ fi
 echo "installing gogofast"
 GO111MODULE=on go install "github.com/gogo/protobuf/protoc-gen-gogofast"
 
-PROM_PATH="$(pwd)/pkg/store/prompb"
 GOGOPROTO_ROOT="$(GO111MODULE=on go list -f '{{ .Dir }}' -m github.com/gogo/protobuf)"
 GOGOPROTO_PATH="${GOGOPROTO_ROOT}:${GOGOPROTO_ROOT}/protobuf"
 
-DIRS="pkg/store/storepb pkg/store/prompb"
+DIRS="pkg/store/storepb"
 
 echo "generating code"
 for dir in ${DIRS}; do
 	pushd ${dir}
 		${PROTOC_BIN} --gogofast_out=plugins=grpc:. -I=. \
             -I="${GOGOPROTO_PATH}" \
-            -I="${PROM_PATH}" \
             *.proto
 
 		sed -i.bak -E 's/import _ \"gogoproto\"//g' *.pb.go

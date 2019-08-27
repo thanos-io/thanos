@@ -16,7 +16,7 @@ import (
 	"github.com/oklog/ulid"
 	prommodel "github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/model"
@@ -419,7 +419,7 @@ func TestBucketStore_Info(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	dir, err := ioutil.TempDir("", "prometheus-test")
+	dir, err := ioutil.TempDir("", "bucketstore-test")
 	testutil.Ok(t, err)
 
 	bucketStore, err := NewBucketStore(nil, nil, nil, dir, noopCache{}, 2e5, 0, 0, false, 20, filterConf)

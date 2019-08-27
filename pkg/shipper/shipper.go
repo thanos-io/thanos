@@ -17,9 +17,9 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/fileutil"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/fileutil"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -438,7 +438,7 @@ func hardlinkBlock(src, dst string) error {
 	return nil
 }
 
-// Meta defines the fomart thanos.shipper.json file that the shipper places in the data directory.
+// Meta defines the format thanos.shipper.json file that the shipper places in the data directory.
 type Meta struct {
 	Version  int         `json:"version"`
 	Uploaded []ulid.ULID `json:"uploaded"`

@@ -19,9 +19,8 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/labels"
-	"github.com/prometheus/tsdb/testutil"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"golang.org/x/sync/errgroup"
@@ -96,9 +95,10 @@ func ForeachPrometheus(t *testing.T, testFn func(t testing.TB, p *Prometheus)) {
 	for _, ver := range strings.Split(vers, " ") {
 		if ok := t.Run(ver, func(t *testing.T) {
 			p, err := newPrometheus(ver, "")
-			testutil.Ok(t, err)
+			Ok(t, err)
 
 			testFn(t, p)
+			Ok(t, p.Stop())
 		}); !ok {
 			return
 		}
@@ -106,7 +106,7 @@ func ForeachPrometheus(t *testing.T, testFn func(t testing.TB, p *Prometheus)) {
 }
 
 // NewPrometheus creates a new test Prometheus instance that will listen on local address.
-// DEPRECARED: Use ForeachPrometheus instead.
+// DEPRECATED: Use ForeachPrometheus instead.
 func NewPrometheus() (*Prometheus, error) {
 	return newPrometheus("", "")
 }
@@ -143,11 +143,17 @@ func newPrometheus(version string, prefix string) (*Prometheus, error) {
 
 // Start running the Prometheus instance and return.
 func (p *Prometheus) Start() error {
-	if !p.running {
-		if err := p.db.Close(); err != nil {
-			return err
-		}
+	if p.running {
+		return errors.New("Already started")
 	}
+
+	if err := p.db.Close(); err != nil {
+		return err
+	}
+	return p.start()
+}
+
+func (p *Prometheus) start() error {
 	p.running = true
 
 	port, err := FreePort()
@@ -173,6 +179,10 @@ func (p *Prometheus) Start() error {
 	}, extra...)
 
 	p.cmd = exec.Command(prometheusBin(p.version), args...)
+	p.cmd.SysProcAttr = &syscall.SysProcAttr{
+		// For linux only, kill this if the go test process dies before the cleanup.
+		Pdeathsig: syscall.SIGKILL,
+	}
 	go func() {
 		if b, err := p.cmd.CombinedOutput(); err != nil {
 			fmt.Fprintln(os.Stderr, "running Prometheus failed", err)
@@ -205,10 +215,8 @@ func (p *Prometheus) Restart() error {
 	if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		return errors.Wrap(err, "failed to kill Prometheus. Kill it manually")
 	}
-
 	_ = p.cmd.Wait()
-
-	return p.Start()
+	return p.start()
 }
 
 // Dir returns TSDB dir.
@@ -239,15 +247,19 @@ func (p *Prometheus) SetConfig(s string) (err error) {
 
 // Stop terminates Prometheus and clean up its data directory.
 func (p *Prometheus) Stop() error {
+	if !p.running {
+		return nil
+	}
+
 	if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		return errors.Wrapf(err, "failed to Prometheus. Kill it manually and clean %s dir", p.db.Dir())
 	}
-
 	time.Sleep(time.Second / 2)
 	return p.cleanup()
 }
 
 func (p *Prometheus) cleanup() error {
+	p.running = false
 	return os.RemoveAll(p.db.Dir())
 }
 

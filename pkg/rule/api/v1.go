@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/NYTimes/gziphandler"
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/go-kit/kit/log"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/prometheus/common/route"
@@ -22,16 +24,19 @@ type API struct {
 	logger        log.Logger
 	now           func() time.Time
 	ruleRetriever RulesRetriever
+	reg           prometheus.Registerer
 }
 
 func NewAPI(
 	logger log.Logger,
+	reg prometheus.Registerer,
 	ruleRetriever RulesRetriever,
 ) *API {
 	return &API{
 		logger:        logger,
 		now:           time.Now,
 		ruleRetriever: ruleRetriever,
+		reg:           reg,
 	}
 }
 

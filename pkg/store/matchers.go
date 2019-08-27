@@ -2,7 +2,7 @@ package store
 
 import (
 	"github.com/pkg/errors"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 

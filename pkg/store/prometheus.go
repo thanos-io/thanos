@@ -19,11 +19,11 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/pkg/errors"
-	"github.com/prometheus/tsdb/chunkenc"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/prompb"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"github.com/thanos-io/thanos/pkg/store/prompb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"google.golang.org/grpc/codes"
@@ -140,12 +140,12 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding external labels)").Error())
 	}
 
-	q := prompb.Query{StartTimestampMs: r.MinTime, EndTimestampMs: r.MaxTime}
+	q := &prompb.Query{StartTimestampMs: r.MinTime, EndTimestampMs: r.MaxTime}
 
 	// TODO(fabxc): import common definitions from prompb once we have a stable gRPC
 	// query API there.
 	for _, m := range newMatchers {
-		pm := prompb.LabelMatcher{Name: m.Name, Value: m.Value}
+		pm := &prompb.LabelMatcher{Name: m.Name, Value: m.Value}
 
 		switch m.Type {
 		case storepb.LabelMatcher_EQ:
@@ -206,7 +206,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	return nil
 }
 
-func (p *PrometheusStore) chunkSamples(series prompb.TimeSeries, maxSamplesPerChunk int) (chks []storepb.AggrChunk, err error) {
+func (p *PrometheusStore) chunkSamples(series *prompb.TimeSeries, maxSamplesPerChunk int) (chks []storepb.AggrChunk, err error) {
 	samples := series.Samples
 
 	for len(samples) > 0 {
@@ -232,11 +232,11 @@ func (p *PrometheusStore) chunkSamples(series prompb.TimeSeries, maxSamplesPerCh
 	return chks, nil
 }
 
-func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prompb.ReadResponse, error) {
+func (p *PrometheusStore) promSeries(ctx context.Context, q *prompb.Query) (*prompb.ReadResponse, error) {
 	span, ctx := tracing.StartSpan(ctx, "query_prometheus")
 	defer span.Finish()
 
-	reqb, err := proto.Marshal(&prompb.ReadRequest{Queries: []prompb.Query{q}})
+	reqb, err := proto.Marshal(&prompb.ReadRequest{Queries: []*prompb.Query{q}})
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal read request")
 	}
@@ -287,7 +287,7 @@ func (p *PrometheusStore) promSeries(ctx context.Context, q prompb.Query) (*prom
 	}
 	spanUnmarshal.Finish()
 	if len(data.Results) != 1 {
-		return nil, errors.Errorf("unexepected result size %d", len(data.Results))
+		return nil, errors.Errorf("unexpected result size %d", len(data.Results))
 	}
 	return &data, nil
 }

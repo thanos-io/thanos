@@ -10,9 +10,9 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/chunkenc"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -90,7 +90,7 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 		chk, err := chunkenc.FromData(chunkenc.EncXOR, c.Raw.Data)
 		testutil.Ok(t, err)
 
-		samples := expandChunk(chk.Iterator())
+		samples := expandChunk(chk.Iterator(nil))
 		testutil.Equals(t, []sample{{baseT + 200, 2}, {baseT + 300, 3}}, samples)
 
 	}

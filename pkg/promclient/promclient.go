@@ -28,7 +28,7 @@ import (
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/prometheus/promql"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -403,7 +403,7 @@ func PromqlQueryInstant(ctx context.Context, logger log.Logger, base *url.URL, q
 func convertScalarJSONToVector(scalarJSONResult json.RawMessage) (model.Vector, error) {
 	var (
 		// Do not specify exact length of the expected slice since JSON unmarshaling
-		// would make the leght fit the size and we won't be able to check the length afterwards.
+		// would make the length fit the size and we won't be able to check the length afterwards.
 		resultPointSlice []json.RawMessage
 		resultTime       model.Time
 		resultValue      model.SampleValue

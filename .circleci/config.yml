@@ -9,6 +9,13 @@ jobs:
     environment:
       GO111MODULE: 'on'
       GOBIN: "/go/bin"
+      # Run garbage collection more aggresively to avoid getting OOMed during the lint phase (4GB limit).
+      GOGC: "20"
+      # By default Go uses GOMAXPROCS but a Circle CI executor has many
+      # cores (> 30) while the CPU and RAM resources are throttled. If we
+      # don't limit this to the number of allocated cores, the job is
+      # likely to get OOMed and killed.
+      GOOPTS: "-p 2"
     steps:
       - checkout
       - setup_remote_docker:
@@ -22,28 +29,20 @@ jobs:
               echo $GOOGLE_APPLICATION_CREDENTIALS_CONTENT > $GOOGLE_APPLICATION_CREDENTIALS
               echo "Awesome! GCS integration tests are enabled."
             fi
-      - run: make check-go-mod
+      - run: make deps
       - run: make lint
       - run: make check-docs
       - run: make format
       - run:
           name: "Run all tests"
-          # TODO(bplotka): Setup some S3 tests for CI.
+          # TODO(bwplotka): Setup some S3 tests for CI.
+          # taskset sets CPU affinity to 2 (current CPU limit).
           command: |
             if [ -z ${GCP_PROJECT} ]; then
-              export THANOS_SKIP_GCS_TESTS="true"
-              echo "Skipping GCS tests."
+              taskset 2 make test-local
+              exit
             fi
-            export THANOS_SKIP_S3_AWS_TESTS="true"
-            echo "Skipping AWS tests."
-            export THANOS_SKIP_AZURE_TESTS="true"
-            echo "Skipping Azure tests."
-            export THANOS_SKIP_SWIFT_TESTS="true"
-            echo "Skipping SWIFT tests."
-            export THANOS_SKIP_TENCENT_COS_TESTS="true"
-            echo "Skipping TENCENT COS tests."
-
-            make test
+            taskset 2 make test-only-gcs
 
   # Cross build is needed for publish_release but needs to be done outside of docker.
   cross_build:

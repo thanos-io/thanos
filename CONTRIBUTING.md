@@ -83,7 +83,7 @@ go get example.com/some/module/pkg@vX.Y.Z
 Tidy up the `go.mod` and `go.sum` files:
 
 ```bash
-make go-mod-tidy
+make deps
 git add go.mod go.sum
 git commit
 ```
