@@ -898,7 +898,8 @@ func TestParseDownsamplingParamMillis(t *testing.T) {
 		v.Set("max_source_resolution", test.maxSourceResolutionParam)
 		r := http.Request{PostForm: v}
 
-		maxResMillis, _ := api.parseDownsamplingParamMillis(&r, test.step)
+		// If no max_source_resolution is specified fit at least 5 samples between steps.
+		maxResMillis, _ := api.parseDownsamplingParamMillis(&r, test.step/5)
 		if test.fail == false {
 			testutil.Assert(t, maxResMillis == test.result, "case %v: expected %v to be equal to %v", i, maxResMillis, test.result)
 		} else {

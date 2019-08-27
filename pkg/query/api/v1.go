@@ -100,9 +100,10 @@ type API struct {
 	queryableCreate query.QueryableCreator
 	queryEngine     *promql.Engine
 
-	enableAutodownsampling bool
-	enablePartialResponse  bool
-	reg                    prometheus.Registerer
+	enableAutodownsampling                 bool
+	enablePartialResponse                  bool
+	reg                                    prometheus.Registerer
+	defaultInstantQueryMaxSourceResolution time.Duration
 
 	now func() time.Time
 }
@@ -115,14 +116,16 @@ func NewAPI(
 	c query.QueryableCreator,
 	enableAutodownsampling bool,
 	enablePartialResponse bool,
+	defaultInstantQueryMaxSourceResolution time.Duration,
 ) *API {
 	return &API{
-		logger:                 logger,
-		queryEngine:            qe,
-		queryableCreate:        c,
-		enableAutodownsampling: enableAutodownsampling,
-		enablePartialResponse:  enablePartialResponse,
-		reg:                    reg,
+		logger:                                 logger,
+		queryEngine:                            qe,
+		queryableCreate:                        c,
+		enableAutodownsampling:                 enableAutodownsampling,
+		enablePartialResponse:                  enablePartialResponse,
+		reg:                                    reg,
+		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
 
 		now: time.Now,
 	}
@@ -182,14 +185,14 @@ func (api *API) parseEnableDedupParam(r *http.Request) (enableDeduplication bool
 	return enableDeduplication, nil
 }
 
-func (api *API) parseDownsamplingParamMillis(r *http.Request, step time.Duration) (maxResolutionMillis int64, _ *ApiError) {
+func (api *API) parseDownsamplingParamMillis(r *http.Request, defaultVal time.Duration) (maxResolutionMillis int64, _ *ApiError) {
 	const maxSourceResolutionParam = "max_source_resolution"
 	maxSourceResolution := 0 * time.Second
 
 	if api.enableAutodownsampling {
-		// If no max_source_resolution is specified fit at least 5 samples between steps.
-		maxSourceResolution = step / 5
+		maxSourceResolution = defaultVal
 	}
+
 	if val := r.FormValue(maxSourceResolutionParam); val != "" {
 		var err error
 		maxSourceResolution, err = parseDuration(val)
@@ -257,11 +260,16 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
+	maxSourceResolution, apiErr := api.parseDownsamplingParamMillis(r, api.defaultInstantQueryMaxSourceResolution)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
 
-	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDedup, 0, enablePartialResponse), r.FormValue("query"), ts)
+	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDedup, maxSourceResolution, enablePartialResponse), r.FormValue("query"), ts)
 	if err != nil {
 		return nil, nil, &ApiError{errorBadData, err}
 	}
@@ -333,7 +341,8 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	maxSourceResolution, apiErr := api.parseDownsamplingParamMillis(r, step)
+	// If no max_source_resolution is specified fit at least 5 samples between steps.
+	maxSourceResolution, apiErr := api.parseDownsamplingParamMillis(r, step/5)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
