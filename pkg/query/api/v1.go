@@ -100,8 +100,6 @@ type API struct {
 	queryableCreate query.QueryableCreator
 	queryEngine     *promql.Engine
 
-	instantQueryDuration   prometheus.Histogram
-	rangeQueryDuration     prometheus.Histogram
 	enableAutodownsampling bool
 	enablePartialResponse  bool
 	reg                    prometheus.Registerer
@@ -118,31 +116,10 @@ func NewAPI(
 	enableAutodownsampling bool,
 	enablePartialResponse bool,
 ) *API {
-	instantQueryDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name: "thanos_query_api_instant_query_duration_seconds",
-		Help: "Time it takes to perform instant query on promEngine backed up with thanos querier.",
-		Buckets: []float64{
-			0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 20,
-		},
-	})
-	rangeQueryDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name: "thanos_query_api_range_query_duration_seconds",
-		Help: "Time it takes to perform range query on promEngine backed up with thanos querier.",
-		Buckets: []float64{
-			0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 20,
-		},
-	})
-
-	reg.MustRegister(
-		instantQueryDuration,
-		rangeQueryDuration,
-	)
 	return &API{
 		logger:                 logger,
 		queryEngine:            qe,
 		queryableCreate:        c,
-		instantQueryDuration:   instantQueryDuration,
-		rangeQueryDuration:     rangeQueryDuration,
 		enableAutodownsampling: enableAutodownsampling,
 		enablePartialResponse:  enablePartialResponse,
 		reg:                    reg,
@@ -284,7 +261,6 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
 
-	begin := api.now()
 	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDedup, 0, enablePartialResponse), r.FormValue("query"), ts)
 	if err != nil {
 		return nil, nil, &ApiError{errorBadData, err}
@@ -302,7 +278,6 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 		}
 		return nil, nil, &ApiError{errorExec, res.Err}
 	}
-	api.instantQueryDuration.Observe(time.Since(begin).Seconds())
 
 	return &queryData{
 		ResultType: res.Value.Type(),
@@ -372,7 +347,6 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 	span, ctx := tracing.StartSpan(ctx, "promql_range_query")
 	defer span.Finish()
 
-	begin := api.now()
 	qry, err := api.queryEngine.NewRangeQuery(
 		api.queryableCreate(enableDedup, maxSourceResolution, enablePartialResponse),
 		r.FormValue("query"),
@@ -394,7 +368,6 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 		}
 		return nil, nil, &ApiError{errorExec, res.Err}
 	}
-	api.rangeQueryDuration.Observe(time.Since(begin).Seconds())
 
 	return &queryData{
 		ResultType: res.Value.Type(),
