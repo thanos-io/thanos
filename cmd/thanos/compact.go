@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -356,26 +354,14 @@ func genMissingIndexCacheFiles(ctx context.Context, logger log.Logger, bkt objst
 			return nil
 		}
 
-		rc, err := bkt.Get(ctx, path.Join(id.String(), block.MetaFilename))
+		meta, err := block.DownloadMeta(ctx, logger, bkt, id)
 		if err != nil {
 			// Probably not finished block, skip it.
-			if bkt.IsObjNotFoundErr(err) {
+			if bkt.IsObjNotFoundErr(errors.Cause(err)) {
 				level.Warn(logger).Log("msg", "meta file wasn't found", "block", id.String())
 				return nil
 			}
-			return errors.Wrapf(err, "get meta for block %s", id)
-		}
-		defer runutil.CloseWithLogOnErr(logger, rc, "block reader")
-
-		var meta metadata.Meta
-
-		obj, err := ioutil.ReadAll(rc)
-		if err != nil {
-			return errors.Wrap(err, "read meta")
-		}
-
-		if err = json.Unmarshal(obj, &meta); err != nil {
-			return errors.Wrap(err, "unmarshal meta")
+			return errors.Wrap(err, "download metadata")
 		}
 
 		// New version of compactor pushes index cache along with data block.
