@@ -43,7 +43,7 @@ import (
 )
 
 func testQueryableCreator(queryable storage.Queryable) query.QueryableCreator {
-	return func(_ bool, _ int64, _ bool) storage.Queryable {
+	return func(_ bool, _ query.MaxResolutionMillisFn, _ bool) storage.Queryable {
 		return queryable
 	}
 }
@@ -898,11 +898,15 @@ func TestParseDownsamplingParamMillis(t *testing.T) {
 		v.Set("max_source_resolution", test.maxSourceResolutionParam)
 		r := http.Request{PostForm: v}
 
-		maxResMillis, _ := api.parseDownsamplingParamMillis(&r, test.step)
+		maxResMillisFn, err := api.parseDownsamplingParamMillis(&r)
+		testutil.Equals(t, (*ApiError)(nil), err)
+
+		result := maxResMillisFn(&storage.SelectParams{Step: int64(test.step / time.Millisecond)})
+
 		if test.fail == false {
-			testutil.Assert(t, maxResMillis == test.result, "case %v: expected %v to be equal to %v", i, maxResMillis, test.result)
+			testutil.Assert(t, result == test.result, "case %v: expected %v to be equal to %v", i, result, test.result)
 		} else {
-			testutil.Assert(t, maxResMillis != test.result, "case %v: expected %v not to be equal to %v", i, maxResMillis, test.result)
+			testutil.Assert(t, result != test.result, "case %v: expected %v not to be equal to %v", i, result, test.result)
 		}
 
 	}

@@ -15,48 +15,56 @@ import (
 
 // QueryableCreator returns implementation of promql.Queryable that fetches data from the proxy store API endpoints.
 // If deduplication is enabled, all data retrieved from it will be deduplicated along the replicaLabel by default.
-// maxResolutionMillis controls downsampling resolution that is allowed (specified in milliseconds).
+// maxResolutionMillisFn controls downsampling resolution that is allowed (specified in milliseconds).
 // partialResponse controls `partialResponseDisabled` option of StoreAPI and partial response behaviour of proxy.
-type QueryableCreator func(deduplicate bool, maxResolutionMillis int64, partialResponse bool) storage.Queryable
+type QueryableCreator func(deduplicate bool, maxResolutionMillisFn MaxResolutionMillisFn, partialResponse bool) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
 func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLabel string) QueryableCreator {
-	return func(deduplicate bool, maxResolutionMillis int64, partialResponse bool) storage.Queryable {
+	return func(deduplicate bool, maxResolutionMillisFn MaxResolutionMillisFn, partialResponse bool) storage.Queryable {
 		return &queryable{
-			logger:              logger,
-			replicaLabel:        replicaLabel,
-			proxy:               proxy,
-			deduplicate:         deduplicate,
-			maxResolutionMillis: maxResolutionMillis,
-			partialResponse:     partialResponse,
+			logger:                logger,
+			replicaLabel:          replicaLabel,
+			proxy:                 proxy,
+			deduplicate:           deduplicate,
+			maxResolutionMillisFn: maxResolutionMillisFn,
+			partialResponse:       partialResponse,
 		}
 	}
 }
 
 type queryable struct {
-	logger              log.Logger
-	replicaLabel        string
-	proxy               storepb.StoreServer
-	deduplicate         bool
-	maxResolutionMillis int64
-	partialResponse     bool
+	logger                log.Logger
+	replicaLabel          string
+	proxy                 storepb.StoreServer
+	deduplicate           bool
+	maxResolutionMillisFn MaxResolutionMillisFn
+	partialResponse       bool
+}
+
+type MaxResolutionMillisFn func(params *storage.SelectParams) int64
+
+// StepBasedMaxResolution returns max data resolution to be at least 1/5 requested step.
+// 5 is to ensure that we choose downsampling/raw resolution that have at least 5 samples per evaluation.
+func StepBasedMaxResolution(params *storage.SelectParams) int64 {
+	return params.Step / 5
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabel, q.proxy, q.deduplicate, int64(q.maxResolutionMillis), q.partialResponse), nil
+	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabel, q.proxy, q.deduplicate, q.maxResolutionMillisFn, q.partialResponse), nil
 }
 
 type querier struct {
-	ctx                 context.Context
-	logger              log.Logger
-	cancel              func()
-	mint, maxt          int64
-	replicaLabel        string
-	proxy               storepb.StoreServer
-	deduplicate         bool
-	maxResolutionMillis int64
-	partialResponse     bool
+	ctx                   context.Context
+	logger                log.Logger
+	cancel                func()
+	mint, maxt            int64
+	replicaLabel          string
+	proxy                 storepb.StoreServer
+	deduplicate           bool
+	maxResolutionMillisFn MaxResolutionMillisFn
+	partialResponse       bool
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -68,7 +76,7 @@ func newQuerier(
 	replicaLabel string,
 	proxy storepb.StoreServer,
 	deduplicate bool,
-	maxResolutionMillis int64,
+	maxResolutionMillisFn MaxResolutionMillisFn,
 	partialResponse bool,
 ) *querier {
 	if logger == nil {
@@ -76,16 +84,16 @@ func newQuerier(
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	return &querier{
-		ctx:                 ctx,
-		logger:              logger,
-		cancel:              cancel,
-		mint:                mint,
-		maxt:                maxt,
-		replicaLabel:        replicaLabel,
-		proxy:               proxy,
-		deduplicate:         deduplicate,
-		maxResolutionMillis: maxResolutionMillis,
-		partialResponse:     partialResponse,
+		ctx:                   ctx,
+		logger:                logger,
+		cancel:                cancel,
+		mint:                  mint,
+		maxt:                  maxt,
+		replicaLabel:          replicaLabel,
+		proxy:                 proxy,
+		deduplicate:           deduplicate,
+		maxResolutionMillisFn: maxResolutionMillisFn,
+		partialResponse:       partialResponse,
 	}
 }
 
@@ -169,7 +177,7 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 		MinTime:                 q.mint,
 		MaxTime:                 q.maxt,
 		Matchers:                sms,
-		MaxResolutionWindow:     q.maxResolutionMillis,
+		MaxResolutionWindow:     q.maxResolutionMillisFn(params),
 		Aggregates:              queryAggrs,
 		PartialResponseDisabled: !q.partialResponse,
 	}, resp); err != nil {

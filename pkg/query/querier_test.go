@@ -22,23 +22,180 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-func TestQueryableCreator_MaxResolution(t *testing.T) {
+type recordRequestsStoreServer struct {
+	// This field just exist to pseudo-implement the unused methods of the interface.
+	storepb.StoreServer
+
+	reqs []storepb.SeriesRequest
+}
+
+func (s *recordRequestsStoreServer) Series(r *storepb.SeriesRequest, _ storepb.Store_SeriesServer) error {
+	s.reqs = append(s.reqs, *r)
+	return nil
+}
+
+// timeParse is a minimal function to parse time.Time.
+func timeParse(sec string) time.Time {
+	fl, _ := strconv.ParseFloat(sec, 64)
+	s, ns := math.Modf(fl)
+	return time.Unix(int64(s), int64(ns*float64(time.Second)))
+}
+
+// TODO(bwplotka): Result is not expected. Investigate.
+func TestQuerier_PromQLToStoreAPI(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
-	testProxy := &storeServer{resps: []*storepb.SeriesResponse{}}
-	queryableCreator := NewQueryableCreator(nil, testProxy, "test")
 
-	oneHourMillis := int64(1*time.Hour) / int64(time.Millisecond)
-	queryable := queryableCreator(false, oneHourMillis, false)
+	const staleness = 5 * time.Minute
 
-	q, err := queryable.Querier(context.Background(), 0, 42)
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, q.Close()) }()
+	for _, tcase := range []struct {
+		query      string
+		start, end time.Duration // From 0 unix time.
+		step       time.Duration
 
-	querierActual, ok := q.(*querier)
+		expectedRequests []storepb.SeriesRequest
+	}{
+		{
+			query: "up{}",
+			end:   -1 * time.Millisecond,
 
-	testutil.Assert(t, ok == true, "expected it to be a querier")
-	testutil.Assert(t, querierActual.maxResolutionMillis == oneHourMillis, "expected max source resolution to be 1 hour in milliseconds")
+			expectedRequests: []storepb.SeriesRequest{
+				{
+					MaxTime: timePast(-1 * time.Millisecond),
+					MinTime: timePast(-1*time.Millisecond - staleness),
+					Matchers: []storepb.LabelMatcher{
+						{
+							Type:  0,
+							Name:  "__name__",
+							Value: "up",
+						},
+					},
+					Aggregates: []storepb.Aggr{storepb.Aggr_COUNT, storepb.Aggr_SUM},
+				},
+			},
+		},
+		{
+			query: "up{}",
+			start: -24 * time.Hour,
+			end:   -1 * time.Millisecond,
+			step:  100 * time.Millisecond,
 
+			expectedRequests: []storepb.SeriesRequest{
+				{
+					MaxTime: timePast(-1 * time.Millisecond),
+					MinTime: timePast(-24*time.Hour - staleness),
+					Matchers: []storepb.LabelMatcher{
+						{
+							Type:  0,
+							Name:  "__name__",
+							Value: "up",
+						},
+					},
+					MaxResolutionWindow: 20, // Milis.
+					Aggregates:          []storepb.Aggr{storepb.Aggr_COUNT, storepb.Aggr_SUM},
+				},
+			},
+		},
+		{
+			query: "up[5m]",
+			end:   -1 * time.Millisecond,
+
+			expectedRequests: []storepb.SeriesRequest{
+				{
+					MaxTime: timePast(-1 * time.Millisecond),
+					MinTime: timePast(-1*time.Millisecond - staleness),
+					Matchers: []storepb.LabelMatcher{
+						{
+							Type:  0,
+							Name:  "__name__",
+							Value: "up",
+						},
+					},
+					Aggregates: []storepb.Aggr{storepb.Aggr_COUNT, storepb.Aggr_SUM},
+				},
+			},
+		},
+		{
+			query: "rate(up[5m:200s])",
+			start: -24 * time.Hour,
+			end:   -1 * time.Millisecond,
+			step:  100 * time.Millisecond,
+
+			expectedRequests: []storepb.SeriesRequest{
+				{
+					MaxTime: timePast(-1 * time.Millisecond),
+					MinTime: timePast(-24*time.Hour - 5*time.Minute - staleness),
+					Matchers: []storepb.LabelMatcher{
+						{
+							Type:  0,
+							Name:  "__name__",
+							Value: "up",
+						},
+					},
+					MaxResolutionWindow: 20, // TODO: Why? I specified 200s step in range.
+					Aggregates:          []storepb.Aggr{storepb.Aggr_COUNTER},
+				},
+			},
+		},
+		{
+			query: "up[5m:100s]",
+			end:   -1 * time.Millisecond,
+
+			expectedRequests: []storepb.SeriesRequest{
+				{
+					MaxTime: timePast(-1 * time.Millisecond),
+					MinTime: timePast(-1*time.Millisecond - 5*time.Minute - staleness),
+					Matchers: []storepb.LabelMatcher{
+						{
+							Type:  0,
+							Name:  "__name__",
+							Value: "up",
+						},
+					},
+					MaxResolutionWindow: 0, // TODO: Why? I specified 100s step in range.
+					Aggregates:          []storepb.Aggr{storepb.Aggr_COUNT, storepb.Aggr_SUM},
+				},
+			},
+		},
+	} {
+		if ok := t.Run("", func(t *testing.T) {
+			rec := &recordRequestsStoreServer{}
+			q := NewQueryableCreator(nil, rec, "")(false, StepBasedMaxResolution, true)
+
+			engine := promql.NewEngine(
+				promql.EngineOpts{
+					MaxConcurrent: 1,
+					MaxSamples:    math.MaxInt32,
+					Timeout:       10 * time.Second,
+				},
+			)
+
+			var qry promql.Query
+			var err error
+			if tcase.start == 0*time.Millisecond {
+				qry, err = engine.NewInstantQuery(q, tcase.query, time.Unix(0, 0).Add(tcase.end))
+			} else {
+				qry, err = engine.NewRangeQuery(
+					q,
+					tcase.query,
+					time.Unix(0, 0).Add(tcase.start),
+					time.Unix(0, 0).Add(tcase.end),
+					tcase.step,
+				)
+			}
+			testutil.Ok(t, err)
+			defer qry.Close()
+
+			res := qry.Exec(context.Background())
+			testutil.Ok(t, res.Err)
+
+			testutil.Equals(t, tcase.expectedRequests, rec.reqs)
+		}); !ok {
+			return
+		}
+	}
+}
+func timePast(duration time.Duration) int64 {
+	return int64(duration / time.Millisecond)
 }
 
 // Tests E2E how PromQL works with downsampled data.
@@ -55,7 +212,7 @@ func TestQuerier_DownsampledData(t *testing.T) {
 		},
 	}
 
-	q := NewQueryableCreator(nil, testProxy, "")(false, 9999999, false)
+	q := NewQueryableCreator(nil, testProxy, "")(false, StepBasedMaxResolution, false)
 
 	engine := promql.NewEngine(
 		promql.EngineOpts{
@@ -65,23 +222,15 @@ func TestQuerier_DownsampledData(t *testing.T) {
 		},
 	)
 
-	// Minimal function to parse time.Time.
-	ptm := func(in string) time.Time {
-		fl, _ := strconv.ParseFloat(in, 64)
-		s, ns := math.Modf(fl)
-		return time.Unix(int64(s), int64(ns*float64(time.Second)))
-	}
-
-	st := ptm("0")
-	ed := ptm("0.2")
 	qry, err := engine.NewRangeQuery(
 		q,
 		"sum(a) by (zzz)",
-		st,
-		ed,
+		timeParse("0"),
+		timeParse("0.2"),
 		100*time.Millisecond,
 	)
 	testutil.Ok(t, err)
+	defer qry.Close()
 
 	res := qry.Exec(context.Background())
 	testutil.Ok(t, res.Err)
@@ -176,7 +325,7 @@ func TestQuerier_Series(t *testing.T) {
 
 	// Querier clamps the range to [1,300], which should drop some samples of the result above.
 	// The store API allows endpoints to send more data then initially requested.
-	q := newQuerier(context.Background(), nil, 1, 300, "", testProxy, false, 0, true)
+	q := newQuerier(context.Background(), nil, 1, 300, "", testProxy, false, StepBasedMaxResolution, true)
 	defer func() { testutil.Ok(t, q.Close()) }()
 
 	res, _, err := q.Select(&storage.SelectParams{})

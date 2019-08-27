@@ -182,27 +182,27 @@ func (api *API) parseEnableDedupParam(r *http.Request) (enableDeduplication bool
 	return enableDeduplication, nil
 }
 
-func (api *API) parseDownsamplingParamMillis(r *http.Request, step time.Duration) (maxResolutionMillis int64, _ *ApiError) {
+func (api *API) parseDownsamplingParamMillis(r *http.Request) (query.MaxResolutionMillisFn, *ApiError) {
 	const maxSourceResolutionParam = "max_source_resolution"
-	maxSourceResolution := 0 * time.Second
 
-	if api.enableAutodownsampling {
-		// If no max_source_resolution is specified fit at least 5 samples between steps.
-		maxSourceResolution = step / 5
-	}
-	if val := r.FormValue(maxSourceResolutionParam); val != "" {
-		var err error
-		maxSourceResolution, err = parseDuration(val)
-		if err != nil {
-			return 0, &ApiError{errorBadData, errors.Wrapf(err, "'%s' parameter", maxSourceResolutionParam)}
+	val := r.FormValue(maxSourceResolutionParam)
+	if val == "" {
+		if api.enableAutodownsampling {
+			return query.StepBasedMaxResolution, nil
 		}
+		return func(_ *storage.SelectParams) int64 { return 0 }, nil
+	}
+
+	maxSourceResolution, err := parseDuration(val)
+	if err != nil {
+		return nil, &ApiError{errorBadData, errors.Wrapf(err, "'%s' parameter", maxSourceResolutionParam)}
 	}
 
 	if maxSourceResolution < 0 {
-		return 0, &ApiError{errorBadData, errors.Errorf("negative '%s' is not accepted. Try a positive integer", maxSourceResolutionParam)}
+		return nil, &ApiError{errorBadData, errors.Errorf("negative '%s' is not accepted. Try a positive integer", maxSourceResolutionParam)}
 	}
 
-	return int64(maxSourceResolution / time.Millisecond), nil
+	return func(_ *storage.SelectParams) int64 { return int64(maxSourceResolution / time.Millisecond) }, nil
 }
 
 func (api *API) parsePartialResponseParam(r *http.Request) (enablePartialResponse bool, _ *ApiError) {
@@ -261,7 +261,12 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
 
-	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDedup, 0, enablePartialResponse), r.FormValue("query"), ts)
+	maxResolutionMillisFn := func(_ *storage.SelectParams) int64 { return 0 }
+	if api.enableAutodownsampling {
+		maxResolutionMillisFn = query.StepBasedMaxResolution
+	}
+
+	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDedup, maxResolutionMillisFn, enablePartialResponse), r.FormValue("query"), ts)
 	if err != nil {
 		return nil, nil, &ApiError{errorBadData, err}
 	}
@@ -333,7 +338,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	maxSourceResolution, apiErr := api.parseDownsamplingParamMillis(r, step)
+	maxSourceResMillisFn, apiErr := api.parseDownsamplingParamMillis(r)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
@@ -348,7 +353,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 	defer span.Finish()
 
 	qry, err := api.queryEngine.NewRangeQuery(
-		api.queryableCreate(enableDedup, maxSourceResolution, enablePartialResponse),
+		api.queryableCreate(enableDedup, maxSourceResMillisFn, enablePartialResponse),
 		r.FormValue("query"),
 		start,
 		end,
@@ -388,7 +393,7 @@ func (api *API) labelValues(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	q, err := api.queryableCreate(true, 0, enablePartialResponse).Querier(ctx, math.MinInt64, math.MaxInt64)
+	q, err := api.queryableCreate(true, nil, enablePartialResponse).Querier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
@@ -460,7 +465,7 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 	}
 
 	// TODO(bwplotka): Support downsampling?
-	q, err := api.queryableCreate(enableDedup, 0, enablePartialResponse).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
+	q, err := api.queryableCreate(enableDedup, func(_ *storage.SelectParams) int64 { return 0 }, enablePartialResponse).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
@@ -563,7 +568,7 @@ func (api *API) labelNames(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	q, err := api.queryableCreate(true, 0, enablePartialResponse).Querier(ctx, math.MinInt64, math.MaxInt64)
+	q, err := api.queryableCreate(true, nil, enablePartialResponse).Querier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
