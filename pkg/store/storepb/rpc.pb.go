@@ -712,6 +712,11 @@ type StoreClient interface {
 	/// available.
 	Info(ctx context.Context, in *InfoRequest, opts ...grpc.CallOption) (*InfoResponse, error)
 	/// Series streams each Series (Labels and chunk/downsampling chunk) for given label matchers and time range.
+	///
+	/// Series should strictly stream full series after series, optionally split by time. This means that a single frame can contain
+	/// partition of the single series, but once a new series is started to be streamed it means that no more data will
+	/// be sent for previous one.
+	/// Series has to be sorted.
 	Series(ctx context.Context, in *SeriesRequest, opts ...grpc.CallOption) (Store_SeriesClient, error)
 	/// LabelNames returns all label names that is available.
 	/// Currently unimplemented in all Thanos implementations, because Query API does not implement this either.
@@ -793,6 +798,11 @@ type StoreServer interface {
 	/// available.
 	Info(context.Context, *InfoRequest) (*InfoResponse, error)
 	/// Series streams each Series (Labels and chunk/downsampling chunk) for given label matchers and time range.
+	///
+	/// Series should strictly stream full series after series, optionally split by time. This means that a single frame can contain
+	/// partition of the single series, but once a new series is started to be streamed it means that no more data will
+	/// be sent for previous one.
+	/// Series has to be sorted.
 	Series(*SeriesRequest, Store_SeriesServer) error
 	/// LabelNames returns all label names that is available.
 	/// Currently unimplemented in all Thanos implementations, because Query API does not implement this either.

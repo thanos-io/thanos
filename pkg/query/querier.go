@@ -183,7 +183,7 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 
 	if !q.isDedupEnabled() {
 		// Return data without any deduplication.
-		return promSeriesSet{
+		return &promSeriesSet{
 			mint: q.mint,
 			maxt: q.maxt,
 			set:  newStoreSeriesSet(resp.seriesSet),
@@ -195,7 +195,7 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 	// to make true streaming possible.
 	sortDedupLabels(resp.seriesSet, q.replicaLabel)
 
-	set := promSeriesSet{
+	set := &promSeriesSet{
 		mint: q.mint,
 		maxt: q.maxt,
 		set:  newStoreSeriesSet(resp.seriesSet),

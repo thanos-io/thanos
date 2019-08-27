@@ -163,8 +163,12 @@ func TestQuerier_Series(t *testing.T) {
 
 	testProxy := &storeServer{
 		resps: []*storepb.SeriesResponse{
+			// Expected sorted  series per seriesSet input. However we Series API allows for single series being chunks across multiple frames.
+			// This should be handled here.
 			storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
 			storepb.NewWarnSeriesResponse(errors.New("partial error")),
+			storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 5}, {6, 6}, {7, 7}}),
+			storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 5}, {6, 66}}), // Overlap samples for some reason.
 			storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{2, 2}, {3, 3}, {4, 4}}, []sample{{1, 1}, {2, 2}, {3, 3}}),
 			storeSeriesResponse(t, labels.FromStrings("a", "c"), []sample{{100, 1}, {300, 3}, {400, 4}}),
 		},
@@ -184,7 +188,7 @@ func TestQuerier_Series(t *testing.T) {
 	}{
 		{
 			lset:    labels.FromStrings("a", "a"),
-			samples: []sample{{2, 1}, {3, 2}},
+			samples: []sample{{2, 1}, {3, 2}, {5, 5}, {6, 6}, {7, 7}},
 		},
 		{
 			lset:    labels.FromStrings("a", "b"),
@@ -349,7 +353,7 @@ func TestDedupSeriesSet(t *testing.T) {
 			},
 		})
 	}
-	set := promSeriesSet{
+	set := &promSeriesSet{
 		mint: 1,
 		maxt: math.MaxInt64,
 		set:  newStoreSeriesSet(series),
@@ -521,6 +525,7 @@ func (s *storeServer) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesS
 	return nil
 }
 
+// storeSeriesResponse creates test storepb.SeriesResponse that includes series with single chunk that stores all the given samples.
 func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sample) *storepb.SeriesResponse {
 	var s storepb.Series
 
