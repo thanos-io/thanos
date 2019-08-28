@@ -62,10 +62,11 @@ The philosophy of Thanos and our community is borrowing much from UNIX philosoph
 
 ## Releases
 
-Master should be stable and usable. Every commit to master builds docker image named `master-<data>-<sha>`.
+Master should be stable and usable. Every commit to master builds docker image named `master-<data>-<sha>` in [quay.io/thanos/thanos](https://quay.io/repository/thanos/thanos) and [thanosio/thanos dockerhub (mirror)](https://hub.docker.com/r/thanosio/thanos)
 
 We also perform minor releases every 6 weeks.
-During that, we build tarballs for major platforms and docker image ([available from Quay](https://quay.io/repository/thanos/thanos)).
+
+During that, we build tarballs for major platforms and release docker images.
 
 See [release process docs](docs/release-process.md) for details.
 
