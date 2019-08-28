@@ -406,7 +406,7 @@ func (s *BucketStore) isBlockInMinMaxRange(ctx context.Context, id ulid.ULID) (b
 		return false, err
 	}
 
-	// We check for blocks in configured minTime, maxTime range
+	// We check for blocks in configured minTime, maxTime range.
 	switch {
 	case meta.MaxTime <= s.filterConfig.MinTime.PrometheusTimestamp():
 		return false, nil
