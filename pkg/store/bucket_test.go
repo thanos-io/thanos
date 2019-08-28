@@ -484,7 +484,7 @@ func TestBucketStore_isBlockInMinMaxRange(t *testing.T) {
 		&FilterConfig{
 			MinTime: minTimeDuration,
 			MaxTime: hourBefore,
-		})
+		}, nil)
 	testutil.Ok(t, err)
 
 	inRange, err := bucketStore.isBlockInMinMaxRange(context.TODO(), id1)

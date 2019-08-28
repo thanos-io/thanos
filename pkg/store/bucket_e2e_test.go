@@ -497,7 +497,7 @@ func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
 		&FilterConfig{
 			MinTime: minTimeDuration,
 			MaxTime: filterMaxTime,
-		})
+		}, nil)
 	testutil.Ok(t, err)
 
 	err = store.SyncBlocks(ctx)
