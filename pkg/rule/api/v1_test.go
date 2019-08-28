@@ -4,21 +4,58 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
-	"github.com/prometheus/prometheus/util/testutil"
+	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/storage/tsdb"
 	qapi "github.com/thanos-io/thanos/pkg/query/api"
 	thanosrule "github.com/thanos-io/thanos/pkg/rule"
 )
+
+// NewStorage returns a new storage for testing purposes
+// that removes all associated files on closing.
+func newStorage(t *testing.T) storage.Storage {
+	dir, err := ioutil.TempDir("", "test_storage")
+	if err != nil {
+		t.Fatalf("Opening test dir failed: %s", err)
+	}
+
+	// Tests just load data for a series sequentially. Thus we
+	// need a long appendable window.
+	db, err := tsdb.Open(dir, nil, nil, &tsdb.Options{
+		MinBlockDuration: model.Duration(24 * time.Hour),
+		MaxBlockDuration: model.Duration(24 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("Opening test storage failed: %s", err)
+	}
+	return testStorage{Storage: tsdb.Adapter(db, int64(0)), dir: dir}
+}
+
+type testStorage struct {
+	storage.Storage
+	dir string
+}
+
+func (s testStorage) Close() error {
+	if err := s.Storage.Close(); err != nil {
+		return err
+	}
+	return os.RemoveAll(s.dir)
+}
 
 type rulesRetrieverMock struct {
 	testing *testing.T
@@ -27,7 +64,7 @@ type rulesRetrieverMock struct {
 func (m rulesRetrieverMock) RuleGroups() []thanosrule.Group {
 	var ar rulesRetrieverMock
 	arules := ar.AlertingRules()
-	storage := testutil.NewStorage(m.testing)
+	storage := newStorage(m.testing)
 	//defer storage.Close()
 
 	engineOpts := promql.EngineOpts{
@@ -79,6 +116,7 @@ func (m rulesRetrieverMock) AlertingRules() []thanosrule.AlertingRule {
 		time.Second,
 		labels.Labels{},
 		labels.Labels{},
+		labels.Labels{},
 		true,
 		log.NewNopLogger(),
 	)
@@ -86,6 +124,7 @@ func (m rulesRetrieverMock) AlertingRules() []thanosrule.AlertingRule {
 		"test_metric4",
 		expr2,
 		time.Second,
+		labels.Labels{},
 		labels.Labels{},
 		labels.Labels{},
 		true,
@@ -125,6 +164,7 @@ func TestEndpoints(t *testing.T) {
 		algr.RuleGroups()
 		api := NewAPI(
 			nil,
+			prometheus.DefaultRegisterer,
 			algr,
 		)
 		testEndpoints(t, api)

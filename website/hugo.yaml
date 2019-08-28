@@ -31,5 +31,7 @@ params:
   SlackInvite: "https://slack.cncf.io"
   GithubUser: "thanos-io"
   GithubProject: "thanos"
+  QuayIoUser: "thanos"
+  QuayIoRepository: "thanos"
   TwitterHandle: "ThanosMetrics"
   Description: "Highly available Prometheus setup with long term storage capabilities."

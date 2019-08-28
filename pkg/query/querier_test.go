@@ -17,7 +17,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -28,7 +28,7 @@ func TestQueryableCreator_MaxResolution(t *testing.T) {
 	queryableCreator := NewQueryableCreator(nil, testProxy, []string{"test"})
 
 	oneHourMillis := int64(1*time.Hour) / int64(time.Millisecond)
-	queryable := queryableCreator(false, nil, oneHourMillis, false, func(err error) {})
+	queryable := queryableCreator(false, nil, oneHourMillis, false)
 
 	q, err := queryable.Querier(context.Background(), 0, 42)
 	testutil.Ok(t, err)
@@ -55,7 +55,7 @@ func TestQuerier_DownsampledData(t *testing.T) {
 		},
 	}
 
-	q := NewQueryableCreator(nil, testProxy, []string{""})(false, nil, 9999999, false, nil)
+	q := NewQueryableCreator(nil, testProxy, "")(false, nil, 9999999, false)
 
 	engine := promql.NewEngine(
 		promql.EngineOpts{
@@ -163,8 +163,12 @@ func TestQuerier_Series(t *testing.T) {
 
 	testProxy := &storeServer{
 		resps: []*storepb.SeriesResponse{
+			// Expected sorted  series per seriesSet input. However we Series API allows for single series being chunks across multiple frames.
+			// This should be handled here.
 			storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
 			storepb.NewWarnSeriesResponse(errors.New("partial error")),
+			storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 5}, {6, 6}, {7, 7}}),
+			storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 5}, {6, 66}}), // Overlap samples for some reason.
 			storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{2, 2}, {3, 3}, {4, 4}}, []sample{{1, 1}, {2, 2}, {3, 3}}),
 			storeSeriesResponse(t, labels.FromStrings("a", "c"), []sample{{100, 1}, {300, 3}, {400, 4}}),
 		},
@@ -172,7 +176,7 @@ func TestQuerier_Series(t *testing.T) {
 
 	// Querier clamps the range to [1,300], which should drop some samples of the result above.
 	// The store API allows endpoints to send more data then initially requested.
-	q := newQuerier(context.Background(), nil, 1, 300, []string{""}, testProxy, false, 0, true, nil)
+	q := newQuerier(context.Background(), nil, 1, 300, []string{""}, testProxy, false, 0, true)
 	defer func() { testutil.Ok(t, q.Close()) }()
 
 	res, _, err := q.Select(&storage.SelectParams{})
@@ -184,7 +188,7 @@ func TestQuerier_Series(t *testing.T) {
 	}{
 		{
 			lset:    labels.FromStrings("a", "a"),
-			samples: []sample{{2, 1}, {3, 2}},
+			samples: []sample{{2, 1}, {3, 2}, {5, 5}, {6, 6}, {7, 7}},
 		},
 		{
 			lset:    labels.FromStrings("a", "b"),
@@ -503,7 +507,7 @@ func TestDedupSeriesSet(t *testing.T) {
 					},
 				})
 			}
-			set := promSeriesSet{
+			set := &promSeriesSet{
 				mint: 1,
 				maxt: math.MaxInt64,
 				set:  newStoreSeriesSet(series),
@@ -676,6 +680,7 @@ func (s *storeServer) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesS
 	return nil
 }
 
+// storeSeriesResponse creates test storepb.SeriesResponse that includes series with single chunk that stores all the given samples.
 func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sample) *storepb.SeriesResponse {
 	var s storepb.Series
 

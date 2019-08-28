@@ -23,13 +23,11 @@ import (
 	"math"
 	"net/http"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/NYTimes/gziphandler"
-
 	"github.com/go-kit/kit/log"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
@@ -102,11 +100,12 @@ type API struct {
 	queryableCreate query.QueryableCreator
 	queryEngine     *promql.Engine
 
-	instantQueryDuration   prometheus.Histogram
-	rangeQueryDuration     prometheus.Histogram
-	enableAutodownsampling bool
-	enablePartialResponse  bool
-	now                    func() time.Time
+	enableAutodownsampling                 bool
+	enablePartialResponse                  bool
+	reg                                    prometheus.Registerer
+	defaultInstantQueryMaxSourceResolution time.Duration
+
+	now func() time.Time
 }
 
 // NewAPI returns an initialized API type.
@@ -117,34 +116,16 @@ func NewAPI(
 	c query.QueryableCreator,
 	enableAutodownsampling bool,
 	enablePartialResponse bool,
+	defaultInstantQueryMaxSourceResolution time.Duration,
 ) *API {
-	instantQueryDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name: "thanos_query_api_instant_query_duration_seconds",
-		Help: "Time it takes to perform instant query on promEngine backed up with thanos querier.",
-		Buckets: []float64{
-			0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 20,
-		},
-	})
-	rangeQueryDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name: "thanos_query_api_range_query_duration_seconds",
-		Help: "Time it takes to perform range query on promEngine backed up with thanos querier.",
-		Buckets: []float64{
-			0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 20,
-		},
-	})
-
-	reg.MustRegister(
-		instantQueryDuration,
-		rangeQueryDuration,
-	)
 	return &API{
-		logger:                 logger,
-		queryEngine:            qe,
-		queryableCreate:        c,
-		instantQueryDuration:   instantQueryDuration,
-		rangeQueryDuration:     rangeQueryDuration,
-		enableAutodownsampling: enableAutodownsampling,
-		enablePartialResponse:  enablePartialResponse,
+		logger:                                 logger,
+		queryEngine:                            qe,
+		queryableCreate:                        c,
+		enableAutodownsampling:                 enableAutodownsampling,
+		enablePartialResponse:                  enablePartialResponse,
+		reg:                                    reg,
+		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
 
 		now: time.Now,
 	}
@@ -215,14 +196,14 @@ func (api *API) parseReplicaLabelsParam(r *http.Request) (replicaLabels []string
 	return replicaLabels, nil
 }
 
-func (api *API) parseDownsamplingParamMillis(r *http.Request, step time.Duration) (maxResolutionMillis int64, _ *ApiError) {
+func (api *API) parseDownsamplingParamMillis(r *http.Request, defaultVal time.Duration) (maxResolutionMillis int64, _ *ApiError) {
 	const maxSourceResolutionParam = "max_source_resolution"
 	maxSourceResolution := 0 * time.Second
 
 	if api.enableAutodownsampling {
-		// If no max_source_resolution is specified fit at least 5 samples between steps.
-		maxSourceResolution = step / 5
+		maxSourceResolution = defaultVal
 	}
+
 	if val := r.FormValue(maxSourceResolutionParam); val != "" {
 		var err error
 		maxSourceResolution, err = parseDuration(val)
@@ -295,22 +276,16 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	var (
-		warnmtx  sync.Mutex
-		warnings []error
-	)
-	warningReporter := func(err error) {
-		warnmtx.Lock()
-		warnings = append(warnings, err)
-		warnmtx.Unlock()
+	maxSourceResolution, apiErr := api.parseDownsamplingParamMillis(r, api.defaultInstantQueryMaxSourceResolution)
+	if apiErr != nil {
+		return nil, nil, apiErr
 	}
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
 
-	begin := api.now()
-	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDedup, replicaLabels, 0, enablePartialResponse, warningReporter), r.FormValue("query"), ts)
+	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDedup, replicaLabels,maxSourceResolution, enablePartialResponse), r.FormValue("query"), ts)
 	if err != nil {
 		return nil, nil, &ApiError{errorBadData, err}
 	}
@@ -327,12 +302,11 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 		}
 		return nil, nil, &ApiError{errorExec, res.Err}
 	}
-	api.instantQueryDuration.Observe(time.Since(begin).Seconds())
 
 	return &queryData{
 		ResultType: res.Value.Type(),
 		Result:     res.Value,
-	}, warnings, nil
+	}, res.Warnings, nil
 }
 
 func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
@@ -388,7 +362,8 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	maxSourceResolution, apiErr := api.parseDownsamplingParamMillis(r, step)
+	// If no max_source_resolution is specified fit at least 5 samples between steps.
+	maxSourceResolution, apiErr := api.parseDownsamplingParamMillis(r, step/5)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
@@ -398,23 +373,12 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	var (
-		warnmtx  sync.Mutex
-		warnings []error
-	)
-	warningReporter := func(err error) {
-		warnmtx.Lock()
-		warnings = append(warnings, err)
-		warnmtx.Unlock()
-	}
-
 	// We are starting promQL tracing span here, because we have no control over promQL code.
 	span, ctx := tracing.StartSpan(ctx, "promql_range_query")
 	defer span.Finish()
 
-	begin := api.now()
 	qry, err := api.queryEngine.NewRangeQuery(
-		api.queryableCreate(enableDedup, replicaLabels, maxSourceResolution, enablePartialResponse, warningReporter),
+		api.queryableCreate(enableDedup,replicaLabels, maxSourceResolution, enablePartialResponse),
 		r.FormValue("query"),
 		start,
 		end,
@@ -434,12 +398,11 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 		}
 		return nil, nil, &ApiError{errorExec, res.Err}
 	}
-	api.rangeQueryDuration.Observe(time.Since(begin).Seconds())
 
 	return &queryData{
 		ResultType: res.Value.Type(),
 		Result:     res.Value,
-	}, warnings, nil
+	}, res.Warnings, nil
 }
 
 func (api *API) labelValues(r *http.Request) (interface{}, []error, *ApiError) {
@@ -455,17 +418,7 @@ func (api *API) labelValues(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	var (
-		warnmtx  sync.Mutex
-		warnings []error
-	)
-	warningReporter := func(err error) {
-		warnmtx.Lock()
-		warnings = append(warnings, err)
-		warnmtx.Unlock()
-	}
-
-	q, err := api.queryableCreate(true, nil, 0, enablePartialResponse, warningReporter).Querier(ctx, math.MinInt64, math.MaxInt64)
+	q, err := api.queryableCreate(true,nil, 0, enablePartialResponse).Querier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
@@ -473,7 +426,7 @@ func (api *API) labelValues(r *http.Request) (interface{}, []error, *ApiError) {
 
 	// TODO(fabxc): add back request context.
 
-	vals, err := q.LabelValues(name)
+	vals, warnings, err := q.LabelValues(name)
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
@@ -541,42 +494,34 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	var (
-		warnmtx  sync.Mutex
-		warnings []error
-	)
-	warningReporter := func(err error) {
-		warnmtx.Lock()
-		warnings = append(warnings, err)
-		warnmtx.Unlock()
-	}
-
 	// TODO(bwplotka): Support downsampling?
-	q, err := api.queryableCreate(enableDedup, replicaLabels, 0, enablePartialResponse, warningReporter).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
+	q, err := api.queryableCreate(enableDedup,replicaLabels, 0, enablePartialResponse).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
 	defer runutil.CloseWithLogOnErr(api.logger, q, "queryable series")
 
-	var sets []storage.SeriesSet
+	var (
+		warnings []error
+		metrics  = []labels.Labels{}
+		sets     []storage.SeriesSet
+	)
 	for _, mset := range matcherSets {
-		s, _, err := q.Select(&storage.SelectParams{}, mset...)
+		s, warns, err := q.Select(&storage.SelectParams{}, mset...)
 		if err != nil {
 			return nil, nil, &ApiError{errorExec, err}
 		}
+		warnings = append(warnings, warns...)
 		sets = append(sets, s)
 	}
 
 	set := storage.NewMergeSeriesSet(sets, nil)
-
-	metrics := []labels.Labels{}
 	for set.Next() {
 		metrics = append(metrics, set.At().Labels())
 	}
 	if set.Err() != nil {
 		return nil, nil, &ApiError{errorExec, set.Err()}
 	}
-
 	return metrics, warnings, nil
 }
 
@@ -653,23 +598,13 @@ func (api *API) labelNames(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	var (
-		warnmtx  sync.Mutex
-		warnings []error
-	)
-	warningReporter := func(err error) {
-		warnmtx.Lock()
-		warnings = append(warnings, err)
-		warnmtx.Unlock()
-	}
-
-	q, err := api.queryableCreate(true, nil, 0, enablePartialResponse, warningReporter).Querier(ctx, math.MinInt64, math.MaxInt64)
+	q, err := api.queryableCreate(true,nil, 0, enablePartialResponse).Querier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
 	defer runutil.CloseWithLogOnErr(api.logger, q, "queryable labelNames")
 
-	names, err := q.LabelNames()
+	names, warnings, err := q.LabelNames()
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}

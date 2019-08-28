@@ -11,12 +11,12 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/value"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/chunkenc"
-	"github.com/prometheus/tsdb/chunks"
-	tsdberrors "github.com/prometheus/tsdb/errors"
-	"github.com/prometheus/tsdb/index"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/chunks"
+	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
+	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
@@ -94,6 +94,7 @@ func Downsample(
 		all        []sample
 		chks       []chunks.Meta
 		lset       labels.Labels
+		reuseIt    chunkenc.Iterator
 	)
 	for postings.Next() {
 		lset = lset[:0]
@@ -119,7 +120,7 @@ func Downsample(
 		// Raw and already downsampled data need different processing.
 		if origMeta.Thanos.Downsample.Resolution == 0 {
 			for _, c := range chks {
-				if err := expandChunkIterator(c.Chunk.Iterator(), &all); err != nil {
+				if err := expandChunkIterator(c.Chunk.Iterator(reuseIt), &all); err != nil {
 					return id, errors.Wrapf(err, "expand chunk %d, series %d", c.Ref, postings.At())
 				}
 			}
@@ -190,7 +191,7 @@ func targetChunkCount(mint, maxt, inRes, outRes int64, count int) (x int) {
 	return x
 }
 
-// aggregator collects commulative stats for a stream of values.
+// aggregator collects cumulative stats for a stream of values.
 type aggregator struct {
 	total   int     // total samples processed
 	count   int     // samples in current window
@@ -198,7 +199,7 @@ type aggregator struct {
 	min     float64 // min of current window
 	max     float64 // max of current window
 	counter float64 // total counter state since beginning
-	resets  int     // number of counter resests since beginning
+	resets  int     // number of counter resets since beginning
 	last    float64 // last added value
 }
 
@@ -425,6 +426,7 @@ func expandChunkIterator(it chunkenc.Iterator, buf *[]sample) error {
 func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (chk chunks.Meta, err error) {
 	ab := &aggrChunkBuilder{}
 	mint, maxt := int64(math.MaxInt64), int64(math.MinInt64)
+	var reuseIt chunkenc.Iterator
 
 	// do does a generic aggregation for count, sum, min, and max aggregates.
 	// Counters need special treatment.
@@ -438,7 +440,7 @@ func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (ch
 			} else if err != nil {
 				return err
 			}
-			if err := expandChunkIterator(c.Iterator(), buf); err != nil {
+			if err := expandChunkIterator(c.Iterator(reuseIt), buf); err != nil {
 				return err
 			}
 		}
@@ -488,7 +490,7 @@ func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (ch
 		} else if err != nil {
 			return chk, err
 		}
-		acs = append(acs, c.Iterator())
+		acs = append(acs, c.Iterator(reuseIt))
 	}
 	*buf = (*buf)[:0]
 	it := NewCounterSeriesIterator(acs...)

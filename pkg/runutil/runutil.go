@@ -56,7 +56,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
-	tsdberrors "github.com/prometheus/tsdb/errors"
+	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
 )
 
 // Repeat executes f every interval seconds until stopc is closed or f returns an error.

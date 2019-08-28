@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"sync"
 	"sync/atomic"
 
 	"github.com/go-kit/kit/log"
@@ -20,12 +21,12 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/prompb"
 	promtsdb "github.com/prometheus/prometheus/storage/tsdb"
-	terrors "github.com/prometheus/tsdb/errors"
+	terrors "github.com/prometheus/prometheus/tsdb/errors"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"github.com/thanos-io/thanos/pkg/store/prompb"
 )
 
 // Options for the web Handler.
@@ -46,19 +47,17 @@ type Handler struct {
 	logger       log.Logger
 	receiver     *Writer
 	router       *route.Router
-	hashring     Hashring
 	options      *Options
 	listener     net.Listener
 
+	mtx      sync.RWMutex
+	hashring Hashring
+
 	// Metrics
-	requestDuration      *prometheus.HistogramVec
-	requestsTotal        *prometheus.CounterVec
-	responseSize         *prometheus.HistogramVec
 	forwardRequestsTotal *prometheus.CounterVec
 
 	// These fields are uint32 rather than boolean to be able to use atomic functions.
-	storageReady  uint32
-	hashringReady uint32
+	storageReady uint32
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -70,29 +69,8 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		logger:       logger,
 		readyStorage: o.ReadyStorage,
 		receiver:     o.Receiver,
+		router:       route.New(),
 		options:      o,
-		requestDuration: prometheus.NewHistogramVec(
-			prometheus.HistogramOpts{
-				Name:    "thanos_http_request_duration_seconds",
-				Help:    "Histogram of latencies for HTTP requests.",
-				Buckets: []float64{.1, .2, .4, 1, 3, 8, 20, 60, 120},
-			},
-			[]string{"handler"},
-		),
-		requestsTotal: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "thanos_http_requests_total",
-				Help: "Tracks the number of HTTP requests.",
-			}, []string{"code", "handler", "method"},
-		),
-		responseSize: prometheus.NewHistogramVec(
-			prometheus.HistogramOpts{
-				Name:    "thanos_http_response_size_bytes",
-				Help:    "Histogram of response size for HTTP requests.",
-				Buckets: prometheus.ExponentialBuckets(100, 10, 8),
-			},
-			[]string{"handler"},
-		),
 		forwardRequestsTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
@@ -101,35 +79,20 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		),
 	}
 
-	router := route.New().WithInstrumentation(h.instrumentHandler)
-	h.router = router
-
-	readyf := h.testReady
-	router.Post("/api/v1/receive", readyf(h.receive))
-
+	ins := extpromhttp.NewNopInstrumentationMiddleware()
 	if o.Registry != nil {
-		o.Registry.MustRegister(
-			h.requestDuration,
-			h.requestsTotal,
-			h.responseSize,
-			h.forwardRequestsTotal,
-		)
+		ins = extpromhttp.NewInstrumentationMiddleware(o.Registry)
+		o.Registry.MustRegister(h.forwardRequestsTotal)
 	}
 
-	return h
-}
+	readyf := h.testReady
+	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+		return ins.NewHandler(name, http.HandlerFunc(next))
+	}
 
-func (h *Handler) instrumentHandler(handlerName string, handler http.HandlerFunc) http.HandlerFunc {
-	return promhttp.InstrumentHandlerDuration(
-		h.requestDuration.MustCurryWith(prometheus.Labels{"handler": handlerName}),
-		promhttp.InstrumentHandlerResponseSize(
-			h.responseSize.MustCurryWith(prometheus.Labels{"handler": handlerName}),
-			promhttp.InstrumentHandlerCounter(
-				h.requestsTotal.MustCurryWith(prometheus.Labels{"handler": handlerName}),
-				handler,
-			),
-		),
-	)
+	h.router.Post("/api/v1/receive", instrf("receive", readyf(h.receive)))
+
+	return h
 }
 
 // StorageReady marks the storage as ready.
@@ -140,20 +103,19 @@ func (h *Handler) StorageReady() {
 // Hashring sets the hashring for the handler and marks the hashring as ready.
 // If the hashring is nil, then the hashring is marked as not ready.
 func (h *Handler) Hashring(hashring Hashring) {
-	if hashring == nil {
-		atomic.StoreUint32(&h.hashringReady, 0)
-		h.hashring = nil
-		return
-	}
+	h.mtx.Lock()
+	defer h.mtx.Unlock()
+
 	h.hashring = hashring
-	atomic.StoreUint32(&h.hashringReady, 1)
 }
 
 // Verifies whether the server is ready or not.
 func (h *Handler) isReady() bool {
 	sr := atomic.LoadUint32(&h.storageReady)
-	hr := atomic.LoadUint32(&h.hashringReady)
-	return sr > 0 && hr > 0
+	h.mtx.RLock()
+	hr := h.hashring != nil
+	h.mtx.RUnlock()
+	return sr > 0 && hr
 }
 
 // Checks if server is ready, calls f if it is, returns 503 if it is not.
@@ -239,7 +201,7 @@ func (h *Handler) receive(w http.ResponseWriter, r *http.Request) {
 
 	var rep replica
 	replicaRaw := r.Header.Get(h.options.ReplicaHeader)
-	// If the header is emtpy, we assume the request is not yet replicated.
+	// If the header is empty, we assume the request is not yet replicated.
 	if replicaRaw != "" {
 		if rep.n, err = strconv.ParseUint(replicaRaw, 10, 64); err != nil {
 			http.Error(w, "could not parse replica header", http.StatusBadRequest)
@@ -259,7 +221,7 @@ func (h *Handler) receive(w http.ResponseWriter, r *http.Request) {
 	// destined for the local node will be written to the receiver.
 	// Time series will be replicated as necessary.
 	if err := h.forward(r.Context(), tenant, rep, &wreq); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 }
@@ -275,6 +237,15 @@ func (h *Handler) receive(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *prompb.WriteRequest) error {
 	wreqs := make(map[string]*prompb.WriteRequest)
 	replicas := make(map[string]replica)
+
+	// It is possible that hashring is ready in testReady() but unready now,
+	// so need to lock here.
+	h.mtx.RLock()
+	if h.hashring == nil {
+		h.mtx.RUnlock()
+		return errors.New("hashring is not ready")
+	}
+
 	// Batch all of the time series in the write request
 	// into several smaller write requests that are
 	// grouped by target endpoint. This ensures that
@@ -285,6 +256,7 @@ func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *p
 	for i := range wreq.Timeseries {
 		endpoint, err := h.hashring.GetN(tenant, &wreq.Timeseries[i], r.n)
 		if err != nil {
+			h.mtx.RUnlock()
 			return err
 		}
 		if _, ok := wreqs[endpoint]; !ok {
@@ -294,6 +266,7 @@ func (h *Handler) forward(ctx context.Context, tenant string, r replica, wreq *p
 		wr := wreqs[endpoint]
 		wr.Timeseries = append(wr.Timeseries, wreq.Timeseries[i])
 	}
+	h.mtx.RUnlock()
 
 	return h.parallelizeRequests(ctx, tenant, replicas, wreqs)
 }
@@ -329,7 +302,11 @@ func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replic
 		// can be ignored if the replication factor is met.
 		if endpoint == h.options.Endpoint {
 			go func(endpoint string) {
-				ec <- h.receiver.Receive(wreqs[endpoint])
+				err := h.receiver.Receive(wreqs[endpoint])
+				if err != nil {
+					level.Error(h.logger).Log("msg", "storing locally", "err", err, "endpoint", endpoint)
+				}
+				ec <- err
 			}(endpoint)
 			continue
 		}
@@ -337,13 +314,13 @@ func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replic
 		go func(endpoint string) {
 			buf, err := proto.Marshal(wreqs[endpoint])
 			if err != nil {
-				level.Error(h.logger).Log("msg", "proto marshal error", "err", err, "endpoint", endpoint)
+				level.Error(h.logger).Log("msg", "marshaling proto", "err", err, "endpoint", endpoint)
 				ec <- err
 				return
 			}
 			req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(snappy.Encode(nil, buf)))
 			if err != nil {
-				level.Error(h.logger).Log("msg", "create request error", "err", err, "endpoint", endpoint)
+				level.Error(h.logger).Log("msg", "creating request", "err", err, "endpoint", endpoint)
 				ec <- err
 				return
 			}
@@ -365,12 +342,14 @@ func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replic
 			var res *http.Response
 			res, err = http.DefaultClient.Do(req.WithContext(ctx))
 			if err != nil {
-				level.Error(h.logger).Log("msg", "forward request error", "err", err, "endpoint", endpoint)
+				level.Error(h.logger).Log("msg", "forwarding request", "err", err, "endpoint", endpoint)
 				ec <- err
 				return
 			}
 			if res.StatusCode != http.StatusOK {
-				ec <- errors.New(res.Status)
+				err = errors.New(res.Status)
+				level.Error(h.logger).Log("msg", "forwarding returned non-200 status", "err", err, "endpoint", endpoint)
+				ec <- err
 				return
 			}
 			ec <- nil
@@ -400,19 +379,30 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	wreqs := make(map[string]*prompb.WriteRequest)
 	replicas := make(map[string]replica)
 	var i uint64
+
+	// It is possible that hashring is ready in testReady() but unready now,
+	// so need to lock here.
+	h.mtx.RLock()
+	if h.hashring == nil {
+		h.mtx.RUnlock()
+		return errors.New("hashring is not ready")
+	}
+
 	for i = 0; i < h.options.ReplicationFactor; i++ {
 		endpoint, err := h.hashring.GetN(tenant, &wreq.Timeseries[0], i)
 		if err != nil {
+			h.mtx.RUnlock()
 			return err
 		}
 		wreqs[endpoint] = wreq
 		replicas[endpoint] = replica{i, true}
 	}
+	h.mtx.RUnlock()
 
 	err := h.parallelizeRequests(ctx, tenant, replicas, wreqs)
 	if errs, ok := err.(terrors.MultiError); ok {
 		if uint64(len(errs)) >= (h.options.ReplicationFactor+1)/2 {
-			return errors.New("did not meet replication threshhold")
+			return errors.New("did not meet replication threshold")
 		}
 	}
 	return errors.Wrap(err, "could not replicate write request")

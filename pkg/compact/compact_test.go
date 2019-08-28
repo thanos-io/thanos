@@ -9,7 +9,7 @@ import (
 
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
-	terrors "github.com/prometheus/tsdb/errors"
+	terrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/thanos-io/thanos/pkg/objstore/inmem"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )

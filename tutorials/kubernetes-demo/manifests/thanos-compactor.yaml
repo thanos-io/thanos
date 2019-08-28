@@ -35,6 +35,14 @@ spec:
           ports:
             - name: http
               containerPort: 10902
+          livenessProbe:
+            httpGet:
+              port: 10902
+              path: /-/healthy
+          readinessProbe:
+            httpGet:
+              port: 10902
+              path: /-/ready
           resources:
             limits:
               cpu: "1"

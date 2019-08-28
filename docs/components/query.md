@@ -17,7 +17,7 @@ Querier currently is fully stateless and horizontally scalable.
 $ thanos query \
     --http-address     "0.0.0.0:9090" \
     --store            "<store-api>:<grpc-port>" \
-    --store            "<store-api2>:<grpc-port>" 
+    --store            "<store-api2>:<grpc-port>"
 ```
 
 ## Deduplication
@@ -77,9 +77,10 @@ This logic can also be controlled via parameter on QueryAPI. More details below.
 
 Overall QueryAPI exposed by Thanos is guaranteed to be compatible with Prometheus 2.x.
 
-However, for additional Thanos features, Thanos, on top of Prometheus adds 
+However, for additional Thanos features, Thanos, on top of Prometheus adds
+
 * partial response behaviour
-* several additional parameters listed below 
+* several additional parameters listed below
 * custom response fields.
 
 ### Partial Response
@@ -88,7 +89,7 @@ QueryAPI and StoreAPI has additional behaviour controlled via query parameter ca
 
 This parameter controls tradeoff between accuracy and availability.
 
-Partial response is a potentially missed result within query against QueryAPI or StoreAPI. This can happen if one 
+Partial response is a potentially missed result within query against QueryAPI or StoreAPI. This can happen if one
 of StoreAPIs is returning error or timeout whereas couple of others returns success. It does not mean you are missing data,
 you might lucky enough that you actually get the correct data as the broken StoreAPI did not have anything for your query.
 
@@ -99,6 +100,7 @@ NOTE: Having warning does not necessary means partial response (e.g no store mat
 See [this](query.md#partial-response) on how to control this behaviour.
 
 Querier also allows to configure different timeouts:
+
 * `--query.timeout`
 * `--store.response-timeout`
 
@@ -131,6 +133,7 @@ This controls if query results should be deduplicated using the replica labels.
 |  |  |  |  |
 
 Max source resolution is max resolution in seconds we want to use for data we query for. This means that for value:
+
 * 0 -> we will use only raw data.
 * 5m -> we will use max 5m downsampling.
 * 1h -> we will use max 1h downsampling.
@@ -173,7 +176,7 @@ It is possible to expose thanos-query UI and optionally API on a sub-path.
 The sub-path can be defined either statically or dynamically via an HTTP header.
 Static path prefix definition follows the pattern used in Prometheus,
 where `web.route-prefix` option defines HTTP request path prefix (endpoints prefix)
-and `web.external-prefix` prefixes the URLs in HTML code and the HTTP redirect responces.
+and `web.external-prefix` prefixes the URLs in HTML code and the HTTP redirect responses.
 
 Additionally, Thanos supports dynamic prefix configuration, which
 [is not yet implemented by Prometheus](https://github.com/prometheus/prometheus/issues/3156).

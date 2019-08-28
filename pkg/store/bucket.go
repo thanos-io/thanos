@@ -22,11 +22,11 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/tsdb/chunkenc"
-	"github.com/prometheus/tsdb/chunks"
-	"github.com/prometheus/tsdb/fileutil"
-	"github.com/prometheus/tsdb/index"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/chunks"
+	"github.com/prometheus/prometheus/tsdb/fileutil"
+	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
@@ -1060,7 +1060,7 @@ type bucketBlock struct {
 	chunkPool  *pool.BytesPool
 
 	indexVersion int
-	symbols      map[uint32]string
+	symbols      []string
 	lvals        map[string][]string
 	postings     map[labels.Label]index.Range
 
@@ -1260,11 +1260,12 @@ func newBucketIndexReader(ctx context.Context, logger log.Logger, block *bucketB
 }
 
 func (r *bucketIndexReader) lookupSymbol(o uint32) (string, error) {
-	s, ok := r.block.symbols[o]
-	if !ok {
+	idx := int(o)
+	if idx >= len(r.block.symbols) {
 		return "", errors.Errorf("bucketIndexReader: unknown symbol offset %d", o)
 	}
-	return s, nil
+
+	return r.block.symbols[idx], nil
 }
 
 // ExpandedPostings returns postings in expanded list instead of index.Postings.
@@ -1794,7 +1795,7 @@ func (b rawChunk) Bytes() []byte {
 	return b[1:]
 }
 
-func (b rawChunk) Iterator() chunkenc.Iterator {
+func (b rawChunk) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
 	panic("invalid call")
 }
 

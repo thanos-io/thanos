@@ -7,7 +7,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/thanos-io/thanos/pkg/store/prompb"
+	"github.com/prometheus/prometheus/prompb"
 
 	"github.com/cespare/xxhash"
 )

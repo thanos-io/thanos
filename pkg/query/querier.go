@@ -13,24 +13,17 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
-// WarningReporter allows to report warnings to frontend layer.
-//
-// Warning can include partial errors `partialResponse` is enabled. It occurs when only part of the results are ready and
-// another is not available because of the failure.
-// It is required to be thread-safe.
-type WarningReporter func(error)
-
 // QueryableCreator returns implementation of promql.Queryable that fetches data from the proxy store API endpoints.
 // If deduplication is enabled, all data retrieved from it will be deduplicated along all replicaLabels by default.
 // When the replicaLabels argument is not empty it overwrites the global replicaLabels flag. This allows specifing
 // replicaLabels at query time.
 // maxResolutionMillis controls downsampling resolution that is allowed (specified in milliseconds).
 // partialResponse controls `partialResponseDisabled` option of StoreAPI and partial response behaviour of proxy.
-type QueryableCreator func(deduplicate bool, replicaLabels []string, maxResolutionMillis int64, partialResponse bool, r WarningReporter) storage.Queryable
+type QueryableCreator func(deduplicate bool, replicaLabels []string, maxResolutionMillis int64, partialResponse bool) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
 func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLabels []string) QueryableCreator {
-	return func(deduplicate bool, replicaLabelsOverwrite []string, maxResolutionMillis int64, partialResponse bool, r WarningReporter) storage.Queryable {
+	return func(deduplicate bool, replicaLabelsOverwrite []string, maxResolutionMillis int64, partialResponse bool) storage.Queryable {
 		if len(replicaLabelsOverwrite) > 0 {
 			replicaLabels = replicaLabelsOverwrite
 		}
@@ -41,7 +34,6 @@ func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLa
 			deduplicate:         deduplicate,
 			maxResolutionMillis: maxResolutionMillis,
 			partialResponse:     partialResponse,
-			warningReporter:     r,
 		}
 	}
 }
@@ -53,12 +45,11 @@ type queryable struct {
 	deduplicate         bool
 	maxResolutionMillis int64
 	partialResponse     bool
-	warningReporter     WarningReporter
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.proxy, q.deduplicate, int64(q.maxResolutionMillis), q.partialResponse, q.warningReporter), nil
+	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.proxy, q.deduplicate, int64(q.maxResolutionMillis), q.partialResponse), nil
 }
 
 type querier struct {
@@ -71,7 +62,6 @@ type querier struct {
 	deduplicate         bool
 	maxResolutionMillis int64
 	partialResponse     bool
-	warningReporter     WarningReporter
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -85,13 +75,9 @@ func newQuerier(
 	deduplicate bool,
 	maxResolutionMillis int64,
 	partialResponse bool,
-	warningReporter WarningReporter,
 ) *querier {
 	if logger == nil {
 		logger = log.NewNopLogger()
-	}
-	if warningReporter == nil {
-		warningReporter = func(error) {}
 	}
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -110,7 +96,6 @@ func newQuerier(
 		deduplicate:         deduplicate,
 		maxResolutionMillis: maxResolutionMillis,
 		partialResponse:     partialResponse,
-		warningReporter:     warningReporter,
 	}
 }
 
@@ -201,27 +186,26 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 		return nil, nil, errors.Wrap(err, "proxy Series()")
 	}
 
+	var warns storage.Warnings
 	for _, w := range resp.warnings {
-		// NOTE(bwplotka): We could use warnings return arguments here, however need reporter anyway for LabelValues and LabelNames method,
-		// so we choose to be consistent and keep reporter.
-		q.warningReporter(errors.New(w))
+		warns = append(warns, errors.New(w))
 	}
 
 	if !q.isDedupEnabled() {
 		// Return data without any deduplication.
-		return promSeriesSet{
+		return &promSeriesSet{
 			mint: q.mint,
 			maxt: q.maxt,
 			set:  newStoreSeriesSet(resp.seriesSet),
 			aggr: resAggr,
-		}, nil, nil
+		}, warns, nil
 	}
 
 	// TODO(fabxc): this could potentially pushed further down into the store API
 	// to make true streaming possible.
 	sortDedupLabels(resp.seriesSet, q.replicaLabels)
 
-	set := promSeriesSet{
+	set := &promSeriesSet{
 		mint: q.mint,
 		maxt: q.maxt,
 		set:  newStoreSeriesSet(resp.seriesSet),
@@ -231,7 +215,11 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 	// The merged series set assembles all potentially-overlapping time ranges
 	// of the same series into a single one. The series are ordered so that equal series
 	// from different replicas are sequential. We can now deduplicate those.
-	return newDedupSeriesSet(set, q.replicaLabels), nil, nil
+<<<<<<< HEAD
+	return newDedupSeriesSet(set, q.replicaLabels), warns, nil
+=======
+	return newDedupSeriesSet(set, q.replicaLabel), warns, nil
+>>>>>>> upstream/master
 }
 
 // sortDedupLabels re-sorts the set so that the same series with different replica
@@ -257,37 +245,39 @@ func sortDedupLabels(set []storepb.Series, replicaLabels map[string]struct{}) {
 }
 
 // LabelValues returns all potential values for a label name.
-func (q *querier) LabelValues(name string) ([]string, error) {
+func (q *querier) LabelValues(name string) ([]string, storage.Warnings, error) {
 	span, ctx := tracing.StartSpan(q.ctx, "querier_label_values")
 	defer span.Finish()
 
 	resp, err := q.proxy.LabelValues(ctx, &storepb.LabelValuesRequest{Label: name, PartialResponseDisabled: !q.partialResponse})
 	if err != nil {
-		return nil, errors.Wrap(err, "proxy LabelValues()")
+		return nil, nil, errors.Wrap(err, "proxy LabelValues()")
 	}
 
+	var warns storage.Warnings
 	for _, w := range resp.Warnings {
-		q.warningReporter(errors.New(w))
+		warns = append(warns, errors.New(w))
 	}
 
-	return resp.Values, nil
+	return resp.Values, warns, nil
 }
 
 // LabelNames returns all the unique label names present in the block in sorted order.
-func (q *querier) LabelNames() ([]string, error) {
+func (q *querier) LabelNames() ([]string, storage.Warnings, error) {
 	span, ctx := tracing.StartSpan(q.ctx, "querier_label_names")
 	defer span.Finish()
 
 	resp, err := q.proxy.LabelNames(ctx, &storepb.LabelNamesRequest{PartialResponseDisabled: !q.partialResponse})
 	if err != nil {
-		return nil, errors.Wrap(err, "proxy LabelNames()")
+		return nil, nil, errors.Wrap(err, "proxy LabelNames()")
 	}
 
+	var warns storage.Warnings
 	for _, w := range resp.Warnings {
-		q.warningReporter(errors.New(w))
+		warns = append(warns, errors.New(w))
 	}
 
-	return resp.Names, nil
+	return resp.Names, warns, nil
 }
 
 func (q *querier) Close() error {
