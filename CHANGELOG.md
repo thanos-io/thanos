@@ -18,6 +18,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
   request for both Prometheus and sidecar. Single requests now should take constant amount of memory on sidecar, so resource consumption prediction is now straightforward.   
 - [#1358](https://github.com/thanos-io/thanos/pull/1358) Added `part_size` configuration option for HTTP multipart requests minimum part size for S3 storage type
 - [#1363](https://github.com/thanos-io/thanos/pull/1363) Thanos Receive now exposes `thanos_receive_hashring_nodes` and `thanos_receive_hashring_tenants` metrics to monitor status of hash-rings
+- [#1395](https://github.com/thanos-io/thanos/pull/1395) Added `/-/ready` and `/-/healthy` endpoints to Thanos sidecar.
 
 ### Changed
 

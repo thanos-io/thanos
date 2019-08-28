@@ -68,8 +68,7 @@ func (cs compactionSet) maxLevel() int {
 }
 
 func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
-	comp := component.Compact
-	cmd := app.Command(comp.String(), "continuously compacts blocks in an object store bucket")
+	cmd := app.Command(component.Compact.String(), "continuously compacts blocks in an object store bucket")
 
 	haltOnError := cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
 		Hidden().Default("true").Bool()
@@ -110,7 +109,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 	compactionConcurrency := cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
 		Default("1").Int()
 
-	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
+	m[component.Compact.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		return runCompact(g, logger, reg,
 			*httpAddr,
 			*dataDir,
@@ -125,7 +124,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 				compact.ResolutionLevel5m:  time.Duration(*retention5m),
 				compact.ResolutionLevel1h:  time.Duration(*retention1h),
 			},
-			comp,
+			component.Compact,
 			*disableDownsampling,
 			*maxCompactionLevel,
 			*blockSyncConcurrency,
@@ -168,9 +167,9 @@ func runCompact(
 
 	downsampleMetrics := newDownsampleMetrics(reg)
 
-	readinessProber := prober.NewProber(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	statusProber := prober.NewProber(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	// Initiate default HTTP listener providing metrics endpoint and readiness/liveness probes.
-	if err := defaultHTTPListener(g, logger, reg, httpBindAddr, readinessProber); err != nil {
+	if err := defaultHTTPListener(g, logger, reg, httpBindAddr, statusProber); err != nil {
 		return errors.Wrap(err, "create readiness prober")
 	}
 
@@ -325,7 +324,7 @@ func runCompact(
 	})
 
 	level.Info(logger).Log("msg", "starting compact node")
-	readinessProber.SetReady()
+	statusProber.SetReady()
 	return nil
 }
 
