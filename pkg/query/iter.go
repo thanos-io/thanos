@@ -360,10 +360,18 @@ func (s *dedupSeriesSet) Next() bool {
 // replica label if it exists
 func (s *dedupSeriesSet) peekLset() labels.Labels {
 	lset := s.peek.Labels()
-	if _, ok := s.replicaLabels[lset[len(lset)-1].Name]; !ok {
+	if len(s.replicaLabels) == 0 {
 		return lset
 	}
-	return lset[:len(lset)-len(s.replicaLabels)]
+	// Check how many replica labels are present so that these are removed.
+	var totalToRemove int
+	for index := 0; index < len(s.replicaLabels); index++ {
+		if _, ok := s.replicaLabels[lset[len(lset)-index-1].Name]; ok {
+			totalToRemove++
+		}
+	}
+	// Strip all present replica labels.
+	return lset[:len(lset)-totalToRemove]
 }
 
 func (s *dedupSeriesSet) next() bool {

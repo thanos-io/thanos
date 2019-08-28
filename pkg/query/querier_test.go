@@ -55,7 +55,7 @@ func TestQuerier_DownsampledData(t *testing.T) {
 		},
 	}
 
-	q := NewQueryableCreator(nil, testProxy, "")(false, nil, 9999999, false)
+	q := NewQueryableCreator(nil, testProxy, []string{""})(false, nil, 9999999, false)
 
 	engine := promql.NewEngine(
 		promql.EngineOpts{
@@ -481,6 +481,33 @@ func TestDedupSeriesSet(t *testing.T) {
 				},
 				{
 					lset: labels.Labels{{Name: "a", Value: "2"}, {Name: "c", Value: "3"}},
+					vals: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}},
+				},
+			},
+			dedupLabels: map[string]struct{}{
+				"replica":  struct{}{},
+				"replicaA": struct{}{},
+			},
+		},
+		{ // 2 Multi dedup label - some series don't have all dedup labels.
+			input: []struct {
+				lset []storepb.Label
+				vals []sample
+			}{
+				{
+					lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-1"}, {Name: "replicaA", Value: "replica-1"}},
+					vals: []sample{{10000, 1}, {20000, 2}},
+				}, {
+					lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}, {Name: "replica", Value: "replica-2"}},
+					vals: []sample{{60000, 3}, {70000, 4}},
+				},
+			},
+			exp: []struct {
+				lset labels.Labels
+				vals []sample
+			}{
+				{
+					lset: labels.Labels{{Name: "a", Value: "1"}, {Name: "c", Value: "3"}},
 					vals: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}},
 				},
 			},
