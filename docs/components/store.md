@@ -84,5 +84,37 @@ Flags:
       --block-sync-concurrency=20
                                  Number of goroutines to use when syncing blocks
                                  from object storage.
+      --min-time=0000-01-01T00:00:00Z
+                                 Start of time range limit to serve. Thanos
+                                 Store serves only metrics, which happened later
+                                 than this value. Option can be a constant time
+                                 in RFC3339 format or time duration relative to
+                                 current time, such as -1d or 2h45m. Valid
+                                 duration units are ms, s, m, h, d, w, y.
+      --max-time=9999-12-31T23:59:59Z
+                                 End of time range limit to serve. Thanos Store
+                                 serves only blocks, which happened eariler than
+                                 this value. Option can be a constant time in
+                                 RFC3339 format or time duration relative to
+                                 current time, such as -1d or 2h45m. Valid
+                                 duration units are ms, s, m, h, d, w, y.
 
 ```
+
+## Time based partioning
+
+By default Thanos Store Gateway looks at all the data in Object Store and returns it based on query's time range.
+
+Thanos Store `--min-time`, `--max-time` flags allows you to shard Thanos Store based on constant time or time duration relative to current time. 
+
+For example setting: `--min-time=-6w` & `--max-time==-2w` will make Thanos Store Gateway return metrics that fall within `now - 6 weeks` up to `now - 2 weeks` time range.
+
+Constant time needs to be set in RFC3339 format. For example `--min-time=2018-01-01T00:00:00Z`, `--max-time=2019-01-01T23:59:59Z`.
+
+Thanos Store Gateway might not get new blocks immediately, as Time partitioning is partly done in asynchronous block synchronization job, which is by default done every 3 minutes. Additionally some of the Object Store implementations provide eventual read-after-write consistency, which means that Thanos Store might not immediately get newly created & uploaded blocks anyway.
+
+We recommend having overlapping time ranges with Thanos Sidecar and other Thanos Store gateways as this will improve your resiliency to failures.
+
+Thanos Querier deals with overlapping time series by merging them together. 
+
+Filtering is done on a Chunk level, so Thanos Store might still return Samples which are outside of `--min-time` & `--max-time`.
