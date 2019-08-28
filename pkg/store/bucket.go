@@ -401,22 +401,17 @@ func (s *BucketStore) numBlocks() int {
 func (s *BucketStore) isBlockInMinMaxRange(ctx context.Context, id ulid.ULID) (bool, error) {
 	dir := filepath.Join(s.dir, id.String())
 
-	b := &bucketBlock{
-		logger: s.logger,
-		bucket: s.bucket,
-		id:     id,
-		dir:    dir,
-	}
-	if err := b.loadMeta(ctx, id); err != nil {
+	err, meta := loadMeta(ctx, s.logger, s.bucket, dir, id)
+	if err != nil {
 		return false, err
 	}
 
 	// We check for blocks in configured minTime, maxTime range
 	switch {
-	case b.meta.MaxTime <= s.filterConfig.MinTime.PrometheusTimestamp():
+	case meta.MaxTime <= s.filterConfig.MinTime.PrometheusTimestamp():
 		return false, nil
 
-	case b.meta.MinTime >= s.filterConfig.MaxTime.PrometheusTimestamp():
+	case meta.MinTime >= s.filterConfig.MaxTime.PrometheusTimestamp():
 		return false, nil
 	}
 
@@ -515,8 +510,8 @@ func (s *BucketStore) TimeRange() (mint, maxt int64) {
 		}
 	}
 
-	mint = s.normalizeMinTime(mint)
-	maxt = s.normalizeMaxTime(maxt)
+	mint = s.limitMinTime(mint)
+	maxt = s.limitMaxTime(maxt)
 
 	return mint, maxt
 }
@@ -532,7 +527,7 @@ func (s *BucketStore) Info(context.Context, *storepb.InfoRequest) (*storepb.Info
 	}, nil
 }
 
-func (s *BucketStore) normalizeMinTime(mint int64) int64 {
+func (s *BucketStore) limitMinTime(mint int64) int64 {
 	filterMinTime := s.filterConfig.MinTime.PrometheusTimestamp()
 
 	if mint < filterMinTime {
@@ -542,7 +537,7 @@ func (s *BucketStore) normalizeMinTime(mint int64) int64 {
 	return mint
 }
 
-func (s *BucketStore) normalizeMaxTime(maxt int64) int64 {
+func (s *BucketStore) limitMaxTime(maxt int64) int64 {
 	filterMaxTime := s.filterConfig.MaxTime.PrometheusTimestamp()
 
 	if maxt > filterMaxTime {
@@ -792,9 +787,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
-	// Adjust Request MinTime based on filters.
-	req.MinTime = s.normalizeMinTime(req.MinTime)
-	req.MaxTime = s.normalizeMaxTime(req.MaxTime)
+	req.MinTime = s.limitMinTime(req.MinTime)
+	req.MaxTime = s.limitMaxTime(req.MaxTime)
 
 	var (
 		stats = &queryStats{}
@@ -1165,9 +1159,12 @@ func newBucketBlock(
 		dir:         dir,
 		partitioner: p,
 	}
-	if err = b.loadMeta(ctx, id); err != nil {
+	err, meta := loadMeta(ctx, logger, bkt, dir, id)
+	if err != nil {
 		return nil, errors.Wrap(err, "load meta")
 	}
+	b.meta = meta
+
 	if err = b.loadIndexCacheFile(ctx); err != nil {
 		return nil, errors.Wrap(err, "load index cache")
 	}
@@ -1190,26 +1187,26 @@ func (b *bucketBlock) indexCacheFilename() string {
 	return path.Join(b.id.String(), block.IndexCacheFilename)
 }
 
-func (b *bucketBlock) loadMeta(ctx context.Context, id ulid.ULID) error {
+func loadMeta(ctx context.Context, logger log.Logger, bucket objstore.BucketReader, dir string, id ulid.ULID) (error, *metadata.Meta) {
 	// If we haven't seen the block before download the meta.json file.
-	if _, err := os.Stat(b.dir); os.IsNotExist(err) {
-		if err := os.MkdirAll(b.dir, 0777); err != nil {
-			return errors.Wrap(err, "create dir")
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if err := os.MkdirAll(dir, 0777); err != nil {
+			return errors.Wrap(err, "create dir"), nil
 		}
 		src := path.Join(id.String(), block.MetaFilename)
 
-		if err := objstore.DownloadFile(ctx, b.logger, b.bucket, src, b.dir); err != nil {
-			return errors.Wrap(err, "download meta.json")
+		if err := objstore.DownloadFile(ctx, logger, bucket, src, dir); err != nil {
+			return errors.Wrap(err, "download meta.json"), nil
 		}
 	} else if err != nil {
-		return err
+		return err, nil
 	}
-	meta, err := metadata.Read(b.dir)
+	meta, err := metadata.Read(dir)
 	if err != nil {
-		return errors.Wrap(err, "read meta.json")
+		return errors.Wrap(err, "read meta.json"), nil
 	}
-	b.meta = meta
-	return nil
+
+	return nil, meta
 }
 
 func (b *bucketBlock) loadIndexCacheFile(ctx context.Context) (err error) {
