@@ -15,7 +15,7 @@ import (
 
 // QueryableCreator returns implementation of promql.Queryable that fetches data from the proxy store API endpoints.
 // If deduplication is enabled, all data retrieved from it will be deduplicated along all replicaLabels by default.
-// When the replicaLabels argument is not empty it overwrites the global replicaLabels flag. This allows specifing
+// When the replicaLabels argument is not empty it overwrites the global replicaLabels flag. This allows specifying
 // replicaLabels at query time.
 // maxResolutionMillis controls downsampling resolution that is allowed (specified in milliseconds).
 // partialResponse controls `partialResponseDisabled` option of StoreAPI and partial response behaviour of proxy.
