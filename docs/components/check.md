@@ -25,10 +25,12 @@ Flags:
       --log.format=logfmt  Log format to use.
       --tracing.config-file=<tracing.config-yaml-path>
                            Path to YAML file that contains tracing
-                           configuration.
+                           configuration. See fomrat details:
+                           https://thanos.io/tracing.md/#configuration
       --tracing.config=<tracing.config-yaml>
                            Alternative to 'tracing.config-file' flag. Tracing
-                           configuration in YAML.
+                           configuration in YAML. See format details:
+                           https://thanos.io/tracing.md/#configuration
 
 Subcommands:
   check rules <rule-files>...
@@ -67,10 +69,12 @@ Flags:
       --log.format=logfmt  Log format to use.
       --tracing.config-file=<tracing.config-yaml-path>
                            Path to YAML file that contains tracing
-                           configuration.
+                           configuration. See fomrat details:
+                           https://thanos.io/tracing.md/#configuration
       --tracing.config=<tracing.config-yaml>
                            Alternative to 'tracing.config-file' flag. Tracing
-                           configuration in YAML.
+                           configuration in YAML. See format details:
+                           https://thanos.io/tracing.md/#configuration
 
 Args:
   <rule-files>  The rule files to check.

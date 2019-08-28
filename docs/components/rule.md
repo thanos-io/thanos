@@ -159,10 +159,13 @@ Flags:
       --log.format=logfmt        Log format to use.
       --tracing.config-file=<tracing.config-yaml-path>
                                  Path to YAML file that contains tracing
-                                 configuration.
+                                 configuration. See fomrat details:
+                                 https://thanos.io/tracing.md/#configuration
       --tracing.config=<tracing.config-yaml>
                                  Alternative to 'tracing.config-file' flag.
-                                 Tracing configuration in YAML.
+                                 Tracing configuration in YAML. See format
+                                 details:
+                                 https://thanos.io/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --grpc-address="0.0.0.0:10901"
@@ -233,10 +236,13 @@ Flags:
                                  sub-path.
       --objstore.config-file=<bucket.config-yaml-path>
                                  Path to YAML file that contains object store
-                                 configuration.
+                                 configuration. See format details:
+                                 https://thanos.io/storage.md/#configuration
       --objstore.config=<bucket.config-yaml>
                                  Alternative to 'objstore.config-file' flag.
-                                 Object store configuration in YAML.
+                                 Object store configuration in YAML. See format
+                                 details:
+                                 https://thanos.io/storage.md/#configuration
       --query=<query> ...        Addresses of statically configured query API
                                  servers (repeatable). The scheme may be
                                  prefixed with 'dns+' or 'dnssrv+' to detect
