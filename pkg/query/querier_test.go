@@ -25,7 +25,7 @@ import (
 func TestQueryableCreator_MaxResolution(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 	testProxy := &storeServer{resps: []*storepb.SeriesResponse{}}
-	queryableCreator := NewQueryableCreator(nil, testProxy, []string{"test"})
+	queryableCreator := NewQueryableCreator(nil, testProxy)
 
 	oneHourMillis := int64(1*time.Hour) / int64(time.Millisecond)
 	queryable := queryableCreator(false, nil, oneHourMillis, false)
@@ -55,7 +55,7 @@ func TestQuerier_DownsampledData(t *testing.T) {
 		},
 	}
 
-	q := NewQueryableCreator(nil, testProxy, []string{""})(false, nil, 9999999, false)
+	q := NewQueryableCreator(nil, testProxy)(false, nil, 9999999, false)
 
 	engine := promql.NewEngine(
 		promql.EngineOpts{
@@ -303,6 +303,11 @@ func TestSortReplicaLabel(t *testing.T) {
 					{Name: "b1", Value: "replica-2"},
 					{Name: "c", Value: "3"},
 				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "b", Value: "replica-2"},
+					{Name: "c", Value: "3"},
+				}},
 			},
 			exp: []storepb.Series{
 				{Labels: []storepb.Label{
@@ -310,6 +315,11 @@ func TestSortReplicaLabel(t *testing.T) {
 					{Name: "c", Value: "3"},
 					{Name: "b", Value: "replica-1"},
 					{Name: "b1", Value: "replica-1"},
+				}},
+				{Labels: []storepb.Label{
+					{Name: "a", Value: "1"},
+					{Name: "c", Value: "3"},
+					{Name: "b", Value: "replica-2"},
 				}},
 				{Labels: []storepb.Label{
 					{Name: "a", Value: "1"},

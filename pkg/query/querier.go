@@ -22,11 +22,8 @@ import (
 type QueryableCreator func(deduplicate bool, replicaLabels []string, maxResolutionMillis int64, partialResponse bool) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
-func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLabels []string) QueryableCreator {
-	return func(deduplicate bool, replicaLabelsOverwrite []string, maxResolutionMillis int64, partialResponse bool) storage.Queryable {
-		if len(replicaLabelsOverwrite) > 0 {
-			replicaLabels = replicaLabelsOverwrite
-		}
+func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer) QueryableCreator {
+	return func(deduplicate bool, replicaLabels []string, maxResolutionMillis int64, partialResponse bool) storage.Queryable {
 		return &queryable{
 			logger:              logger,
 			replicaLabels:       replicaLabels,
