@@ -95,11 +95,11 @@ func regCommonObjStoreFlags(cmd *kingpin.CmdClause, suffix string, required bool
 	fileFlagName := fmt.Sprintf("objstore%s.config-file", suffix)
 	contentFlagName := fmt.Sprintf("objstore%s.config", suffix)
 
-	help := fmt.Sprintf("Path to YAML file that contains object store%s configuration.", suffix)
+	help := fmt.Sprintf("Path to YAML file that contains object store%s configuration. See format details: https://thanos.io/storage.md/#configuration ", suffix)
 	help = strings.Join(append([]string{help}, extraDesc...), " ")
 	bucketConfFile := cmd.Flag(fileFlagName, help).PlaceHolder("<bucket.config-yaml-path>").String()
 
-	help = fmt.Sprintf("Alternative to '%s' flag. Object store%s configuration in YAML.", fileFlagName, suffix)
+	help = fmt.Sprintf("Alternative to '%s' flag. Object store%s configuration in YAML. See format details: https://thanos.io/storage.md/#configuration ", fileFlagName, suffix)
 	help = strings.Join(append([]string{help}, extraDesc...), " ")
 	bucketConf := cmd.Flag(contentFlagName, help).
 		PlaceHolder("<bucket.config-yaml>").String()
@@ -118,10 +118,10 @@ func regCommonTracingFlags(app *kingpin.Application) *pathOrContent {
 	fileFlagName := fmt.Sprintf("tracing.config-file")
 	contentFlagName := fmt.Sprintf("tracing.config")
 
-	help := fmt.Sprintf("Path to YAML file that contains tracing configuration.")
+	help := fmt.Sprintf("Path to YAML file that contains tracing configuration. See fomrat details: https://thanos.io/tracing.md/#configuration ")
 	tracingConfFile := app.Flag(fileFlagName, help).PlaceHolder("<tracing.config-yaml-path>").String()
 
-	help = fmt.Sprintf("Alternative to '%s' flag. Tracing configuration in YAML.", fileFlagName)
+	help = fmt.Sprintf("Alternative to '%s' flag. Tracing configuration in YAML. See format details: https://thanos.io/tracing.md/#configuration", fileFlagName)
 	tracingConf := app.Flag(contentFlagName, help).PlaceHolder("<tracing.config-yaml>").String()
 
 	return &pathOrContent{
