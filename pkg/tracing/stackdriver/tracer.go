@@ -92,9 +92,9 @@ type compTraceWrapper struct {
 	cl *trace.Client
 }
 
-func (w *compTraceWrapper) PatchTraces(ctx context.Context, r *pb.PatchTracesRequest, opts ...gax.CallOption) error {
+func (w *compTraceWrapper) PatchTraces(ctx context.Context, r *pb.PatchTracesRequest, _ ...gax.CallOption) error {
 	// Opts are never used in `gcloudtracer.NewRecorder`.
-	return w.cl.PatchTraces(ctx, r, nil)
+	return w.cl.PatchTraces(ctx, r)
 }
 
 func (w *compTraceWrapper) Close() error {
@@ -114,7 +114,7 @@ func newGCloudTracer(ctx context.Context, logger log.Logger, gcloudTraceProjectI
 		&compTraceWrapper{cl: traceClient},
 		gcloudtracer.WithLogger(&gcloudRecorderLogger{logger: logger}))
 	if err != nil {
-		return nil, traceClient, err
+		return nil, nil, err
 	}
 
 	shouldSample := func(traceID uint64) bool {
