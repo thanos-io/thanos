@@ -19,6 +19,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/oklog/run"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -493,12 +494,14 @@ func runRule(
 
 		store := store.NewTSDBStore(logger, reg, db, component.Rule, lset)
 
-		opts, err := defaultGRPCServerOpts(logger, reg, tracer, cert, key, clientCA)
+		met := grpc_prometheus.NewServerMetrics()
+		opts, err := defaultGRPCServerOpts(logger, reg, tracer, met, cert, key, clientCA)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC options")
 		}
 		s := grpc.NewServer(opts...)
 		storepb.RegisterStoreServer(s, store)
+		met.InitializeMetrics(s)
 
 		g.Add(func() error {
 			return errors.Wrap(s.Serve(l), "serve gRPC")

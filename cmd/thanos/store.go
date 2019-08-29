@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/oklog/run"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -187,13 +188,15 @@ func runStore(
 			return errors.Wrap(err, "listen API address")
 		}
 
-		opts, err := defaultGRPCServerOpts(logger, reg, tracer, cert, key, clientCA)
+		met := grpc_prometheus.NewServerMetrics()
+		opts, err := defaultGRPCServerOpts(logger, reg, tracer, met, cert, key, clientCA)
 		if err != nil {
 			return errors.Wrap(err, "grpc server options")
 		}
 
 		s := grpc.NewServer(opts...)
 		storepb.RegisterStoreServer(s, bs)
+		met.InitializeMetrics(s)
 
 		g.Add(func() error {
 			level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)

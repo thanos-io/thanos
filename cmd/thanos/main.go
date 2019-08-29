@@ -248,8 +248,7 @@ func registerMetrics(mux *http.ServeMux, g prometheus.Gatherer) {
 // - request histogram
 // - tracing
 // - panic recovery with panic counter
-func defaultGRPCServerOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, cert, key, clientCA string) ([]grpc.ServerOption, error) {
-	met := grpc_prometheus.NewServerMetrics()
+func defaultGRPCServerOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, met *grpc_prometheus.ServerMetrics, cert, key, clientCA string) ([]grpc.ServerOption, error) {
 	met.EnableHandlingTimeHistogram(
 		grpc_prometheus.WithHistogramBuckets([]float64{
 			0.001, 0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4,
@@ -265,6 +264,7 @@ func defaultGRPCServerOpts(logger log.Logger, reg *prometheus.Registry, tracer o
 		level.Error(logger).Log("msg", "recovered from panic", "panic", p, "stack", debug.Stack())
 		return status.Errorf(codes.Internal, "%s", p)
 	}
+
 	reg.MustRegister(met, panicsTotal)
 	opts := []grpc.ServerOption{
 		grpc.MaxSendMsgSize(math.MaxInt32),

@@ -441,13 +441,15 @@ func runQuery(
 		}
 		logger := log.With(logger, "component", component.Query.String())
 
-		opts, err := defaultGRPCServerOpts(logger, reg, tracer, srvCert, srvKey, srvClientCA)
+		met := grpc_prometheus.NewServerMetrics()
+		opts, err := defaultGRPCServerOpts(logger, reg, tracer, met, srvCert, srvKey, srvClientCA)
 		if err != nil {
 			return errors.Wrapf(err, "build gRPC server")
 		}
 
 		s := grpc.NewServer(opts...)
 		storepb.RegisterStoreServer(s, proxy)
+		met.InitializeMetrics(s)
 
 		g.Add(func() error {
 			level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)
