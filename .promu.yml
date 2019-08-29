@@ -19,3 +19,4 @@ crossbuild:
         - darwin/amd64
         - linux/arm64
         - windows/amd64
+        - freebsd/amd64
