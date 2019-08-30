@@ -252,7 +252,7 @@ test-e2e: docker
 	@echo ">> running /test/e2e tests."
 	# NOTE(bwplotka):
 	# * If you see errors on CI (timeouts), but not locally, try to add -parallel 1 to limit to single CPU to reproduce small 1CPU machine.
-	@go test -failfast -timeout 10m -v ./test/e2e/...
+	@go test -failfast -timeout 10m $(RUN_ARGS) -v ./test/e2e/...
 
 .PHONY: install-deps
 install-deps: ## Installs dependencies for integration tests. It installs supported versions of Prometheus and alertmanager to test against in integration tests.

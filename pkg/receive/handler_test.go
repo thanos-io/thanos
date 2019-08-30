@@ -163,7 +163,7 @@ func newHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64)
 			TenantHeader:      DefaultTenantHeader,
 			ReplicaHeader:     DefaultReplicaHeader,
 			ReplicationFactor: replicationFactor,
-			Writer:            NewWriter(log.NewNopLogger(), appendables[i]),
+			Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i])),
 		})
 		handlers = append(handlers, h)
 		h.peers = peers
@@ -479,12 +479,12 @@ func TestReceive(t *testing.T) {
 			// on which node is erroring and which node is receiving.
 			for i, handler := range handlers {
 				// Test that the correct status is returned.
-				status, err := makeRequest(handler, tenant, tc.wreq)
+				rec, err := makeRequest(handler, tenant, tc.wreq)
 				if err != nil {
 					t.Fatalf("handler %d: unexpectedly failed making HTTP request: %v", tc.status, err)
 				}
-				if status != tc.status {
-					t.Errorf("handler %d: got unexpected HTTP status code: expected %d, got %d", i, tc.status, status)
+				if rec.Code != tc.status {
+					t.Errorf("handler %d: got unexpected HTTP status code: expected %d, got %d; body: %s", i, tc.status, rec.Code, rec.Body.String())
 				}
 			}
 			// Test that each time series is stored
@@ -547,14 +547,14 @@ func cycleErrors(errs []error) func() error {
 }
 
 // makeRequest is a helper to make a correct request against a remote write endpoint given a request.
-func makeRequest(h *Handler, tenant string, wreq *prompb.WriteRequest) (int, error) {
+func makeRequest(h *Handler, tenant string, wreq *prompb.WriteRequest) (*httptest.ResponseRecorder, error) {
 	buf, err := proto.Marshal(wreq)
 	if err != nil {
-		return 0, errors.Wrap(err, "marshal request")
+		return nil, errors.Wrap(err, "marshal request")
 	}
 	req, err := http.NewRequest("POST", h.options.Endpoint, bytes.NewBuffer(snappy.Encode(nil, buf)))
 	if err != nil {
-		return 0, errors.Wrap(err, "create request")
+		return nil, errors.Wrap(err, "create request")
 	}
 	req.Header.Add(h.options.TenantHeader, tenant)
 
@@ -562,7 +562,7 @@ func makeRequest(h *Handler, tenant string, wreq *prompb.WriteRequest) (int, err
 	h.receiveHTTP(rec, req)
 	rec.Flush()
 
-	return rec.Code, nil
+	return rec, nil
 }
 
 func randomAddr() string {

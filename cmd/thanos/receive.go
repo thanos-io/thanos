@@ -72,6 +72,10 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 
 	tenantHeader := cmd.Flag("receive.tenant-header", "HTTP header to determine tenant for write requests.").Default(receive.DefaultTenantHeader).String()
 
+	defaultTenantID := cmd.Flag("receive.default-tenant-id", "Default tenant ID to use when none is provided via a header.").Default(receive.DefaultTenant).String()
+
+	tenantLabelName := cmd.Flag("receive.tenant-label-name", "Label name through which the tenant will be announced.").Default(receive.DefaultTenantLabel).String()
+
 	replicaHeader := cmd.Flag("receive.replica-header", "HTTP header specifying the replica number of a write request.").Default(receive.DefaultReplicaHeader).String()
 
 	replicationFactor := cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64()
@@ -144,6 +148,8 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			cw,
 			*local,
 			*tenantHeader,
+			*defaultTenantID,
+			*tenantLabelName,
 			*replicaHeader,
 			*replicationFactor,
 			comp,
@@ -179,6 +185,8 @@ func runReceive(
 	cw *receive.ConfigWatcher,
 	endpoint string,
 	tenantHeader string,
+	defaultTenantID string,
+	tenantLabelName string,
 	replicaHeader string,
 	replicationFactor uint64,
 	comp component.SourceStoreAPI,
@@ -186,7 +194,6 @@ func runReceive(
 	logger = log.With(logger, "component", "receive")
 	level.Warn(logger).Log("msg", "setting up receive; the Thanos receive component is EXPERIMENTAL, it may break significantly without notice")
 
-	localStorage := &tsdb.ReadyStorage{}
 	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), rwServerCert, rwServerKey, rwServerClientCA)
 	if err != nil {
 		return err
@@ -196,11 +203,15 @@ func runReceive(
 		return err
 	}
 
+	dbs := receive.NewMultiTSDB(dataDir, logger, reg, tsdbOpts, lset, tenantLabelName)
+	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs)
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
+		Writer:            writer,
 		ListenAddress:     rwAddress,
 		Registry:          reg,
 		Endpoint:          endpoint,
 		TenantHeader:      tenantHeader,
+		DefaultTenantID:   defaultTenantID,
 		ReplicaHeader:     replicaHeader,
 		ReplicationFactor: replicationFactor,
 		Tracer:            tracer,
@@ -250,24 +261,13 @@ func runReceive(
 	{
 		// TSDB.
 		cancel := make(chan struct{})
-		startTimeMargin := int64(2 * time.Duration(tsdbOpts.MinBlockDuration).Seconds() * 1000)
 		g.Add(func() error {
 			defer close(dbReady)
 			defer close(uploadC)
 
-			// Before actually starting, we need to make sure the
-			// WAL is flushed. The WAL is flushed after the
-			// hashring is loaded.
-			db := receive.NewFlushableStorage(
-				dataDir,
-				log.With(logger, "component", "tsdb"),
-				reg,
-				tsdbOpts,
-			)
-
 			// Before quitting, ensure the WAL is flushed and the DB is closed.
 			defer func() {
-				if err := db.Flush(); err != nil {
+				if err := dbs.Flush(); err != nil {
 					level.Warn(logger).Log("err", err, "msg", "failed to flush storage")
 				}
 			}()
@@ -283,10 +283,10 @@ func runReceive(
 
 					level.Info(logger).Log("msg", "updating DB")
 
-					if err := db.Flush(); err != nil {
+					if err := dbs.Flush(); err != nil {
 						return errors.Wrap(err, "flushing storage")
 					}
-					if err := db.Open(); err != nil {
+					if err := dbs.Open(); err != nil {
 						return errors.Wrap(err, "opening storage")
 					}
 					if upload {
@@ -294,8 +294,6 @@ func runReceive(
 						<-uploadDone
 					}
 					level.Info(logger).Log("msg", "tsdb started")
-					localStorage.Set(db.Get(), startTimeMargin)
-					webHandler.SetWriter(receive.NewWriter(log.With(logger, "component", "receive-writer"), localStorage))
 					statusProber.Ready()
 					level.Info(logger).Log("msg", "server is ready to receive web requests")
 					dbReady <- struct{}{}
@@ -303,8 +301,7 @@ func runReceive(
 			}
 		}, func(err error) {
 			close(cancel)
-		},
-		)
+		})
 	}
 
 	level.Debug(logger).Log("msg", "setting up hashring")
@@ -349,7 +346,6 @@ func runReceive(
 					if !ok {
 						return nil
 					}
-					webHandler.SetWriter(nil)
 					webHandler.Hashring(h)
 					msg := "hashring has changed; server is not ready to receive web requests."
 					statusProber.NotReady(errors.New(msg))
@@ -397,9 +393,10 @@ func runReceive(
 				if s != nil {
 					s.Shutdown(errors.New("reload hashrings"))
 				}
-				tsdbStore := store.NewTSDBStore(log.With(logger, "component", "thanos-tsdb-store"), nil, localStorage.Get(), comp, lset)
+
+				multiStore := store.NewMultiTSDBStore(logger, reg, comp, dbs.TSDBStores)
 				rw := store.ReadWriteTSDBStore{
-					StoreServer:          tsdbStore,
+					StoreServer:          multiStore,
 					WriteableStoreServer: webHandler,
 				}
 
@@ -419,6 +416,7 @@ func runReceive(
 		// whenever the DB changes, thus it needs its own run group.
 		g.Add(func() error {
 			for range startGRPC {
+				level.Info(logger).Log("msg", "listening for StoreAPI and WritableStoreAPI gRPC", "address", grpcBindAddr)
 				if err := s.ListenAndServe(); err != nil {
 					return errors.Wrap(err, "serve gRPC")
 				}

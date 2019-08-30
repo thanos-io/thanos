@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/storage/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
@@ -21,28 +22,43 @@ type Appendable interface {
 	Appender() (storage.Appender, error)
 }
 
-type Writer struct {
-	logger log.Logger
-	append Appendable
+type TenantStorage interface {
+	TenantAppendable(string) (Appendable, error)
 }
 
-func NewWriter(logger log.Logger, app Appendable) *Writer {
+type Writer struct {
+	logger    log.Logger
+	multitsdb TenantStorage
+}
+
+func NewWriter(logger log.Logger, multitsdb TenantStorage) *Writer {
 	return &Writer{
-		logger: logger,
-		append: app,
+		logger:    logger,
+		multitsdb: multitsdb,
 	}
 }
 
-func (r *Writer) Write(wreq *prompb.WriteRequest) error {
+func (r *Writer) Write(tenantID string, wreq *prompb.WriteRequest) error {
 	var (
 		numOutOfOrder  = 0
 		numDuplicates  = 0
 		numOutOfBounds = 0
 	)
 
-	app, err := r.append.Appender()
+	s, err := r.multitsdb.TenantAppendable(tenantID)
+	if err != nil {
+		return errors.Wrap(err, "get tenant appendable")
+	}
+
+	app, err := s.Appender()
+	if err == tsdb.ErrNotReady {
+		return err
+	}
 	if err != nil {
 		return errors.Wrap(err, "get appender")
+	}
+	if app == nil {
+		return errors.New("tsdb not ready yet to be appended to")
 	}
 
 	var errs terrors.MultiError
@@ -92,6 +108,18 @@ func (r *Writer) Write(wreq *prompb.WriteRequest) error {
 	}
 
 	return errs.Err()
+}
+
+type fakeTenantAppendable struct {
+	f *fakeAppendable
+}
+
+func newFakeTenantAppendable(f *fakeAppendable) *fakeTenantAppendable {
+	return &fakeTenantAppendable{f: f}
+}
+
+func (t *fakeTenantAppendable) TenantAppendable(tenantID string) (Appendable, error) {
+	return t.f, nil
 }
 
 type fakeAppendable struct {

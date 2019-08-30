@@ -81,18 +81,21 @@ func TestReceive(t *testing.T) {
 				"prometheus": "prom1",
 				"receive":    "2",
 				"replica":    "0",
+				"tenant_id":  "default-tenant",
 			},
 			{
 				"job":        "myself",
 				"prometheus": "prom2",
 				"receive":    "1",
 				"replica":    "0",
+				"tenant_id":  "default-tenant",
 			},
 			{
 				"job":        "myself",
 				"prometheus": "prom3",
-				"receive":    "3",
+				"receive":    "2",
 				"replica":    "0",
+				"tenant_id":  "default-tenant",
 			},
 		})
 	})
@@ -153,18 +156,21 @@ func TestReceive(t *testing.T) {
 				"prometheus": "prom1",
 				"receive":    "1",
 				"replica":    "0",
+				"tenant_id":  "default-tenant",
 			},
 			{
 				"job":        "myself",
 				"prometheus": "prom1",
 				"receive":    "2",
 				"replica":    "0",
+				"tenant_id":  "default-tenant",
 			},
 			{
 				"job":        "myself",
 				"prometheus": "prom1",
 				"receive":    "3",
 				"replica":    "0",
+				"tenant_id":  "default-tenant",
 			},
 		})
 	})
@@ -222,12 +228,14 @@ func TestReceive(t *testing.T) {
 				"prometheus": "prom1",
 				"receive":    "1",
 				"replica":    "0",
+				"tenant_id":  "default-tenant",
 			},
 			{
 				"job":        "myself",
 				"prometheus": "prom1",
 				"receive":    "2",
 				"replica":    "0",
+				"tenant_id":  "default-tenant",
 			},
 		})
 	})

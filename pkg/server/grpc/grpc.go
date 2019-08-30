@@ -103,7 +103,7 @@ func (s *Server) ListenAndServe() error {
 	}
 	s.listener = l
 
-	level.Info(s.logger).Log("msg", "listening for StoreAPI gRPC", "address", s.opts.listen)
+	level.Info(s.logger).Log("msg", "listening for serving gRPC", "address", s.opts.listen)
 	return errors.Wrap(s.srv.Serve(s.listener), "serve gRPC")
 }
 
