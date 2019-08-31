@@ -149,14 +149,17 @@ func runReceive(
 		MaxBlockDuration:  tsdbBlockDuration,
 		WALCompression:    true,
 	}
+	db := receive.NewFlushableStorage(
+		dataDir,
+		log.With(logger, "component", "tsdb"),
+		reg,
+		tsdbCfg,
+	)
 
 	localStorage := &tsdb.ReadyStorage{}
-	receiver := receive.NewWriter(log.With(logger, "component", "receive-writer"), localStorage)
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
-		Receiver:          receiver,
 		ListenAddress:     remoteWriteAddress,
 		Registry:          reg,
-		ReadyStorage:      localStorage,
 		Endpoint:          endpoint,
 		TenantHeader:      tenantHeader,
 		ReplicaHeader:     replicaHeader,
@@ -164,50 +167,93 @@ func runReceive(
 	})
 
 	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	confContentYaml, err := objStoreConfig.Content()
+	if err != nil {
+		return err
+	}
+	upload := true
+	if len(confContentYaml) == 0 {
+		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
+		upload = false
+	}
 
 	// Start all components while we wait for TSDB to open but only load
 	// initial config and mark ourselves as ready after it completed.
-	dbOpen := make(chan struct{})
+
+	// dbReady signals when TSDB is ready and the Store gRPC server can start.
+	dbReady := make(chan struct{}, 1)
+	// updateDB signals when TSDB needs to be flushed and updated.
+	updateDB := make(chan struct{}, 1)
+	// uploadC signals when new blocks should be uploaded.
+	uploadC := make(chan struct{}, 1)
+	// uploadDone signals when uploading has finished.
+	uploadDone := make(chan struct{}, 1)
+
 	level.Debug(logger).Log("msg", "setting up tsdb")
 	{
 		// TSDB.
 		cancel := make(chan struct{})
-		g.Add(
-			func() error {
-				level.Info(logger).Log("msg", "starting TSDB ...")
-				db, err := tsdb.Open(
-					dataDir,
-					log.With(logger, "component", "tsdb"),
-					reg,
-					tsdbCfg,
-				)
-				if err != nil {
-					close(dbOpen)
-					return fmt.Errorf("opening storage failed: %s", err)
-				}
-				level.Info(logger).Log("msg", "tsdb started")
+		// Before actually starting, we need to make sure
+		// the WAL is flushed.
+		startTimeMargin := int64(2 * time.Duration(tsdbCfg.MinBlockDuration).Seconds() * 1000)
+		if err := db.Open(); err != nil {
+			return errors.Wrap(err, "opening storage")
+		}
+		if err := db.Flush(); err != nil {
+			return errors.Wrap(err, "flushing storage")
+		}
+		g.Add(func() error {
+			defer close(dbReady)
+			defer close(uploadC)
 
-				startTimeMargin := int64(2 * time.Duration(tsdbCfg.MinBlockDuration).Seconds() * 1000)
-				localStorage.Set(db, startTimeMargin)
-				webHandler.StorageReady()
-				level.Info(logger).Log("msg", "server is ready to receive web requests.")
-				close(dbOpen)
-				<-cancel
-				return nil
-			},
-			func(err error) {
-				if err := localStorage.Close(); err != nil {
-					level.Error(logger).Log("msg", "error stopping storage", "err", err)
+			// Before quitting, ensure the WAL is flushed and the DB is closed.
+			defer func() {
+				if err := db.Flush(); err != nil {
+					level.Warn(logger).Log("err", err, "msg", "failed to flush storage")
+					return
 				}
-				close(cancel)
-			},
+				if err := db.Close(); err != nil {
+					level.Warn(logger).Log("err", err, "msg", "failed to close storage")
+					return
+				}
+			}()
+
+			for {
+				select {
+				case <-cancel:
+					return nil
+				case _, ok := <-updateDB:
+					if !ok {
+						return nil
+					}
+					if err := db.Flush(); err != nil {
+						return errors.Wrap(err, "flushing storage")
+					}
+					if upload {
+						uploadC <- struct{}{}
+						<-uploadDone
+					}
+					level.Info(logger).Log("msg", "tsdb started")
+					localStorage.Set(db.Get(), startTimeMargin)
+					webHandler.SetWriter(receive.NewWriter(log.With(logger, "component", "receive-writer"), localStorage))
+					statusProber.SetReady()
+					level.Info(logger).Log("msg", "server is ready to receive web requests.")
+					dbReady <- struct{}{}
+				}
+			}
+		}, func(err error) {
+			close(cancel)
+		},
 		)
 	}
 
-	hashringReady := make(chan struct{})
 	level.Debug(logger).Log("msg", "setting up hashring")
 	{
-		updates := make(chan receive.Hashring)
+		// Note: the hashring configuration watcher
+		// is the sender and thus closes the chan.
+		// In the single-node case, which has no configuration
+		// watcher, we close the chan ourselves.
+		updates := make(chan receive.Hashring, 1)
 		if cw != nil {
 			ctx, cancel := context.WithCancel(context.Background())
 			g.Add(func() error {
@@ -215,9 +261,9 @@ func runReceive(
 				return nil
 			}, func(error) {
 				cancel()
-				close(updates)
 			})
 		} else {
+			defer close(updates)
 			cancel := make(chan struct{})
 			g.Add(func() error {
 				updates <- receive.SingleNodeHashring(endpoint)
@@ -225,38 +271,31 @@ func runReceive(
 				return nil
 			}, func(error) {
 				close(cancel)
-				close(updates)
 			})
 		}
 
 		cancel := make(chan struct{})
-		g.Add(
-			func() error {
+		g.Add(func() error {
+			defer close(updateDB)
+			for {
 				select {
-				case h := <-updates:
-					close(hashringReady)
+				case h, ok := <-updates:
+					if !ok {
+						return nil
+					}
+					webHandler.SetWriter(nil)
 					webHandler.Hashring(h)
-					statusProber.SetReady()
-				case <-cancel:
-					close(hashringReady)
-					return nil
-				}
-				select {
-				// If any new hashring is received, then mark the handler as unready, but keep it alive.
-				case <-updates:
 					msg := "hashring has changed; server is not ready to receive web requests."
-					webHandler.Hashring(nil)
 					statusProber.SetNotReady(errors.New(msg))
 					level.Info(logger).Log("msg", msg)
+					updateDB <- struct{}{}
 				case <-cancel:
 					return nil
 				}
-				<-cancel
-				return nil
-			},
-			func(err error) {
-				close(cancel)
-			},
+			}
+		}, func(err error) {
+			close(cancel)
+		},
 		)
 	}
 
@@ -269,36 +308,46 @@ func runReceive(
 	level.Debug(logger).Log("msg", "setting up grpc server")
 	{
 		var (
-			s   *grpc.Server
-			l   net.Listener
-			err error
+			s *grpc.Server
+			l net.Listener
 		)
+		startGRPC := make(chan struct{})
 		g.Add(func() error {
-			<-dbOpen
-
-			l, err = net.Listen("tcp", grpcBindAddr)
-			if err != nil {
-				return errors.Wrap(err, "listen API address")
-			}
-
-			db := localStorage.Get()
-			tsdbStore := store.NewTSDBStore(log.With(logger, "component", "thanos-tsdb-store"), reg, db, component.Receive, lset)
-
+			defer close(startGRPC)
 			opts, err := defaultGRPCServerOpts(logger, cert, key, clientCA)
 			if err != nil {
 				return errors.Wrap(err, "setup gRPC server")
 			}
-			s := newStoreGRPCServer(logger, reg, tracer, tsdbStore, opts)
 
-			// Wait hashring to be ready before start serving metrics
-			<-hashringReady
-			level.Info(logger).Log("msg", "listening for StoreAPI gRPC", "address", grpcBindAddr)
-			return errors.Wrap(s.Serve(l), "serve gRPC")
+			for range dbReady {
+				if s != nil {
+					s.Stop()
+				}
+				l, err = net.Listen("tcp", grpcBindAddr)
+				if err != nil {
+					return errors.Wrap(err, "listen API address")
+				}
+				tsdbStore := store.NewTSDBStore(log.With(logger, "component", "thanos-tsdb-store"), nil, localStorage.Get(), component.Receive, lset)
+				s = newStoreGRPCServer(logger, &receive.UnRegisterer{Registerer: reg}, tracer, tsdbStore, opts)
+				startGRPC <- struct{}{}
+			}
+			return nil
 		}, func(error) {
 			if s != nil {
 				s.Stop()
 			}
 		})
+		// We need to be able to start and stop the gRPC server
+		// whenever the DB changes, thus it needs its own run group.
+		g.Add(func() error {
+			for range startGRPC {
+				level.Info(logger).Log("msg", "listening for StoreAPI gRPC", "address", grpcBindAddr)
+				if err := s.Serve(l); err != nil {
+					return errors.Wrap(err, "serve gRPC")
+				}
+			}
+			return nil
+		}, func(error) {})
 	}
 
 	level.Debug(logger).Log("msg", "setting up receive http handler")
@@ -311,17 +360,6 @@ func runReceive(
 				webHandler.Close()
 			},
 		)
-	}
-
-	confContentYaml, err := objStoreConfig.Content()
-	if err != nil {
-		return err
-	}
-
-	upload := true
-	if len(confContentYaml) == 0 {
-		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
-		upload = false
 	}
 
 	if upload {
@@ -341,20 +379,54 @@ func runReceive(
 
 		s := shipper.New(logger, reg, dataDir, bkt, func() labels.Labels { return lset }, metadata.ReceiveSource)
 
-		ctx, cancel := context.WithCancel(context.Background())
-		g.Add(func() error {
-			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+		// Before starting, ensure any old blocks are uploaded.
+		if uploaded, err := s.Sync(context.Background()); err != nil {
+			level.Warn(logger).Log("err", err, "failed to upload", uploaded)
+		}
+		// Before quitting, ensure all blocks are uploaded.
+		defer func() {
+			if uploaded, err := s.Sync(context.Background()); err != nil {
+				level.Warn(logger).Log("err", err, "failed to upload", uploaded)
+			}
+		}()
 
-			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
-				if uploaded, err := s.Sync(ctx); err != nil {
-					level.Warn(logger).Log("err", err, "uploaded", uploaded)
-				}
+		{
+			// Run the uploader in a loop.
+			ctx, cancel := context.WithCancel(context.Background())
+			g.Add(func() error {
+				return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+					if uploaded, err := s.Sync(ctx); err != nil {
+						level.Warn(logger).Log("err", err, "uploaded", uploaded)
+					}
 
-				return nil
+					return nil
+				})
+			}, func(error) {
+				cancel()
 			})
-		}, func(error) {
-			cancel()
-		})
+		}
+
+		{
+			// Upload on demand.
+			ctx, cancel := context.WithCancel(context.Background())
+			g.Add(func() error {
+				defer close(uploadC)
+				for {
+					select {
+					case <-ctx.Done():
+						return nil
+					case <-uploadC:
+						if uploaded, err := s.Sync(ctx); err != nil {
+							level.Warn(logger).Log("err", err, "failed to upload", uploaded)
+						}
+						cancel()
+						uploadDone <- struct{}{}
+					}
+				}
+			}, func(error) {
+				cancel()
+			})
+		}
 	}
 
 	level.Info(logger).Log("msg", "starting receiver")
