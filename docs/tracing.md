@@ -13,7 +13,7 @@ All clients are configured using `--tracing.config-file` to reference to the con
 
 ## How to use `config` flags?
 
-You can either pass YAML file defined below in `--tracing.config-file` or pass the YAML content directly using `--tracing.config`. 
+You can either pass YAML file defined below in `--tracing.config-file` or pass the YAML content directly using `--tracing.config`.
 We recommend the latter as it gives an explicit static view of configuration for each component. It also saves you the fuss of creating and managing additional file.
 
 Don't be afraid of multiline flags!
@@ -46,7 +46,7 @@ In Kubernetes it is as easy as (on Thanos sidecar example):
 
 At that point, anyone can use your provider by spec.
 
-## Configuration 
+## Configuration
 
 Current tracing supported backends:
 
@@ -63,7 +63,7 @@ config:
   rpc_metrics: false
   tags: ""
   sampler_type: ""
-  sampler_param: 0
+  sampler_param: 1
   sampler_manager_host_port: ""
   sampler_max_operations: 0
   sampler_refresh_interval: 0s
@@ -76,6 +76,9 @@ config:
   agent_host: ""
   agent_port: 0
 ```
+
+In above yaml struct `agent_host`& `agent_port` are Jaeger agent IP (Eg: 127.0.0.1) and port (Eg: 5775). `sampler_param` defines sampling rate (Eg: 1 for complete sampling).
+
 
 ### Stackdriver
 
