@@ -5,6 +5,8 @@ import (
 	"io"
 	"strings"
 
+	"github.com/thanos-io/thanos/pkg/tracing/elasticapm"
+
 	"github.com/thanos-io/thanos/pkg/tracing/jaeger"
 	"github.com/thanos-io/thanos/pkg/tracing/stackdriver"
 
@@ -21,6 +23,7 @@ type TracingProvider string
 const (
 	STACKDRIVER TracingProvider = "STACKDRIVER"
 	JAEGER      TracingProvider = "JAEGER"
+	ELASTIC_APM TracingProvider = "ELASTIC_APM"
 )
 
 type TracingConfig struct {
@@ -50,6 +53,8 @@ func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Regis
 		return stackdriver.NewTracer(ctx, logger, config)
 	case string(JAEGER):
 		return jaeger.NewTracer(ctx, logger, metrics, config)
+	case string(ELASTIC_APM):
+		return elasticapm.NewTracer(config)
 	default:
 		return nil, nil, errors.Errorf("tracing with type %s is not supported", tracingConf.Type)
 	}

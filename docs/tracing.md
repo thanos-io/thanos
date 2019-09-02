@@ -89,3 +89,15 @@ config:
   project_id: ""
   sample_factor: 0
 ```
+### Elastic APM
+
+Client for https://www.elastic.co/products/apm tracing.
+
+[embedmd]:# (flags/config_tracing_elastic_apm.txt yaml)
+```yaml
+type: ELASTIC_APM
+config:
+  service_name: ""
+  service_version: ""
+  service_environment: ""
+```
