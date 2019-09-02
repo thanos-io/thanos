@@ -10,7 +10,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/oklog/run"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -25,7 +24,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"google.golang.org/grpc"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
@@ -268,14 +266,11 @@ func runReceive(
 			db := localStorage.Get()
 			tsdbStore := store.NewTSDBStore(log.With(logger, "component", "thanos-tsdb-store"), reg, db, component.Receive, lset)
 
-			met := grpc_prometheus.NewServerMetrics()
-			opts, err := defaultGRPCServerOpts(logger, reg, tracer, met, cert, key, clientCA)
+			opts, err := defaultGRPCServerOpts(logger, cert, key, clientCA)
 			if err != nil {
 				return errors.Wrap(err, "setup gRPC server")
 			}
-			s = grpc.NewServer(opts...)
-			storepb.RegisterStoreServer(s, tsdbStore)
-			met.InitializeMetrics(s)
+			s := newStoreGRPCServer(logger, reg, tracer, tsdbStore, opts)
 
 			level.Info(logger).Log("msg", "listening for StoreAPI gRPC", "address", grpcBindAddr)
 			return errors.Wrap(s.Serve(l), "serve gRPC")
