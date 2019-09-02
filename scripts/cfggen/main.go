@@ -8,8 +8,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/thanos-io/thanos/pkg/tracing/elasticapm"
-
 	"github.com/fatih/structtag"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -21,6 +19,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/objstore/swift"
 	trclient "github.com/thanos-io/thanos/pkg/tracing/client"
+	"github.com/thanos-io/thanos/pkg/tracing/elasticapm"
 	"github.com/thanos-io/thanos/pkg/tracing/jaeger"
 	"github.com/thanos-io/thanos/pkg/tracing/stackdriver"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
