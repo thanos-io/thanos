@@ -1,0 +1,6 @@
+# Available from https://hub.docker.com/r/circleci/golang/
+FROM circleci/golang:1.12.5
+
+ENV GOBIN=/go/bin
+
+COPY tmp/bin ${GOBIN}
