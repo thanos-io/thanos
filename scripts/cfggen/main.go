@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/thanos-io/thanos/pkg/tracing/elasticapm"
+
 	"github.com/fatih/structtag"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -36,6 +38,7 @@ var (
 	tracingConfigs = map[trclient.TracingProvider]interface{}{
 		trclient.JAEGER:      jaeger.Config{},
 		trclient.STACKDRIVER: stackdriver.Config{},
+		trclient.ELASTIC_APM: elasticapm.Config{},
 	}
 )
 
