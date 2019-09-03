@@ -34,7 +34,6 @@ import (
 	v1 "github.com/thanos-io/thanos/pkg/query/api"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/ui"
 	"google.golang.org/grpc"
@@ -441,13 +440,11 @@ func runQuery(
 		}
 		logger := log.With(logger, "component", component.Query.String())
 
-		opts, err := defaultGRPCServerOpts(logger, reg, tracer, srvCert, srvKey, srvClientCA)
+		opts, err := defaultGRPCServerOpts(logger, srvCert, srvKey, srvClientCA)
 		if err != nil {
 			return errors.Wrapf(err, "build gRPC server")
 		}
-
-		s := grpc.NewServer(opts...)
-		storepb.RegisterStoreServer(s, proxy)
+		s := newStoreGRPCServer(logger, reg, tracer, proxy, opts)
 
 		g.Add(func() error {
 			level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)

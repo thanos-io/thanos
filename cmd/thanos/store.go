@@ -16,8 +16,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"google.golang.org/grpc"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -187,13 +185,11 @@ func runStore(
 			return errors.Wrap(err, "listen API address")
 		}
 
-		opts, err := defaultGRPCServerOpts(logger, reg, tracer, cert, key, clientCA)
+		opts, err := defaultGRPCServerOpts(logger, cert, key, clientCA)
 		if err != nil {
 			return errors.Wrap(err, "grpc server options")
 		}
-
-		s := grpc.NewServer(opts...)
-		storepb.RegisterStoreServer(s, bs)
+		s := newStoreGRPCServer(logger, reg, tracer, bs, opts)
 
 		g.Add(func() error {
 			level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)

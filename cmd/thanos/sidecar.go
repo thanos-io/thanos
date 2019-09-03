@@ -26,7 +26,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"google.golang.org/grpc"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -220,12 +219,11 @@ func runSidecar(
 			return errors.Wrap(err, "create Prometheus store")
 		}
 
-		opts, err := defaultGRPCServerOpts(logger, reg, tracer, cert, key, clientCA)
+		opts, err := defaultGRPCServerOpts(logger, cert, key, clientCA)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}
-		s := grpc.NewServer(opts...)
-		storepb.RegisterStoreServer(s, promStore)
+		s := newStoreGRPCServer(logger, reg, tracer, promStore, opts)
 
 		g.Add(func() error {
 			level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)
