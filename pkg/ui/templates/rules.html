@@ -24,7 +24,7 @@
           </tr>
           {{range .Rules}}
           <tr>
-            <td class="rule_cell">{{.HTMLSnippet pathPrefix}}</td>
+            <td class="rule_cell">{{.HTMLSnippet queryURL}}</td>
             <td class="state">
               <span class="alert alert-{{ .Health | ruleHealthToClass }} state_indicator text-uppercase">
                 {{.Health}}
