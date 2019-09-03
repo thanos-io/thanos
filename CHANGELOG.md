@@ -11,11 +11,11 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
-## v0.7.0-rc.0 - 2019.08.28
+## v0.7.0 - 2019.09.02
 
 Accepted into CNCF:
 - Thanos moved to new repository <https://github.com/thanos-io/thanos>
-- Docker images moved to <https://quay.io/thanos/thanos>
+- Docker images moved to <https://quay.io/thanos/thanos> and mirrored at <https://hub.docker.com/r/thanosio/thanos>
 - Slack moved to <https://slack.cncf.io> `#thanos`/`#thanos-dev` / `#thanos-prs`
 
 ### Added

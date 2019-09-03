@@ -3,12 +3,11 @@ version: 2
 jobs:
   test:
     docker:
-      # Available from https://hub.docker.com/r/circleci/golang/
-      - image: circleci/golang:1.12.5
+     # Build by Thanos make docker-ci
+      - image: quay.io/thanos/thanos-ci:v0.1.0
     working_directory: /go/src/github.com/thanos-io/thanos
     environment:
       GO111MODULE: 'on'
-      GOBIN: "/go/bin"
       # Run garbage collection more aggresively to avoid getting OOMed during the lint phase (4GB limit).
       GOGC: "20"
       # By default Go uses GOMAXPROCS but a Circle CI executor has many
@@ -60,11 +59,9 @@ jobs:
 
   publish_master:
     docker:
-      # Available from https://hub.docker.com/r/circleci/golang/
-      - image: circleci/golang:1.12.5
+      # Build by Thanos make docker-ci
+      - image: quay.io/thanos/thanos-ci:v0.1.0
     working_directory: /go/src/github.com/thanos-io/thanos
-    environment:
-      GOBIN: "/go/bin"
     steps:
       - checkout
       - setup_remote_docker:
