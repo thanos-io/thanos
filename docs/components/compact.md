@@ -9,6 +9,8 @@ menu: components
 The compactor component of Thanos applies the compaction procedure of the Prometheus 2.0 storage engine to block data stored in object storage.
 It is generally not semantically concurrency safe and must be deployed as a singleton against a bucket.
 
+It is also responsible for downsampling of data - performing 5m downsampling after **40 hours** and 1h downsampling after **10 days**.
+
 Example:
 
 ```bash
