@@ -5,16 +5,36 @@
 
 trap 'kill 0' SIGTERM
 
-MINIO_EXECUTABLE="minio"
-MC_EXECUTABLE="mc"
-PROMETHEUS_EXECUTABLE="./prometheus"
-THANOS_EXECUTABLE="./thanos"
+MINIO_EXECUTABLE=${MINIO_EXECUTABLE:-"minio"}
+MC_EXECUTABLE=${MC_EXECUTABLE:-"mc"}
+PROMETHEUS_EXECUTABLE=${PROMETHEUS_EXECUTABLE:-"./prometheus"}
+THANOS_EXECUTABLE=${THANOS_EXECUTABLE:-"./thanos"}
+
+if [ ! $(command -v $PROMETHEUS_EXECUTABLE) ]; then
+  echo "Cannot find or execute Prometheus binary $PROMETHEUS_EXECUTABLE, you can override it by setting the PROMETHEUS_EXECUTABLE env variable"
+  exit 1
+fi
+
+if [ ! $(command -v $THANOS_EXECUTABLE) ]; then
+  echo "Cannot find or execute Thanos binary $THANOS_EXECUTABLE, you can override it by setting the THANOS_EXECUTABLE env variable"
+  exit 1
+fi
 
 # Start local object storage, if desired.
 # NOTE: If you would like to use an actual S3-compatible API with this setup
 #       set the S3_* environment variables set in the Minio example.
 if [ -n "${MINIO_ENABLED}" ]
 then
+  if [ ! $(command -v $MINIO_EXECUTABLE) ]; then
+    echo "Cannot find or execute Minio binary $MINIO_EXECUTABLE, you can override it by setting the MINIO_EXECUTABLE env variable"
+    exit 1
+  fi
+
+  if [ ! $(command -v $MC_EXECUTABLE) ]; then
+    echo "Cannot find or execute Minio client binary $MC_EXECUTABLE, you can override it by setting the MC_EXECUTABLE env variable"
+    exit 1
+  fi
+
   export MINIO_ACCESS_KEY="THANOS"
   export MINIO_SECRET_KEY="ITSTHANOSTIME"
   export MINIO_ENDPOINT="127.0.0.1:9000"
@@ -51,7 +71,7 @@ fi
 STORES=""
 
 # Start three Prometheus servers monitoring themselves.
-for i in `seq 1 3`
+for i in `seq 0 2`
 do
   rm -rf data/prom${i}
   mkdir -p data/prom${i}/
@@ -70,18 +90,23 @@ scrape_configs:
   scrape_interval: 5s
   static_configs:
   - targets:
-    - "localhost:1919${i}"
+    - "localhost:109${i}2"
 - job_name: thanos-store
   scrape_interval: 5s
   static_configs:
   - targets:
-    - "localhost:19791"
+    - "localhost:10906"
+- job_name: thanos-receive
+  scrape_interval: 5s
+  static_configs:
+  - targets:
+    - "localhost:10909"
 - job_name: thanos-query
   scrape_interval: 5s
   static_configs:
   - targets:
-    - "localhost:19491"
-    - "localhost:19492"
+    - "localhost:10904"
+    - "localhost:10914"
 EOF
 
   ${PROMETHEUS_EXECUTABLE} \
@@ -105,17 +130,17 @@ OBJSTORECFG="--objstore.config-file      data/bucket.yml"
 fi
 
 # Start one sidecar for each Prometheus server.
-for i in `seq 1 3`
+for i in `seq 0 2`
 do
   ${THANOS_EXECUTABLE} sidecar \
     --debug.name                sidecar-${i} \
-    --grpc-address              0.0.0.0:1909${i} \
-    --http-address              0.0.0.0:1919${i} \
+    --grpc-address              0.0.0.0:109${i}1 \
+    --http-address              0.0.0.0:109${i}2 \
     --prometheus.url            http://localhost:909${i} \
     --tsdb.path                 data/prom${i} \
     ${OBJSTORECFG} &
 
-  STORES="${STORES} --store 127.0.0.1:1909${i}"
+  STORES="${STORES} --store 127.0.0.1:109${i}1"
 
   sleep 0.25
 done
@@ -127,12 +152,12 @@ then
   ${THANOS_EXECUTABLE} store \
     --debug.name                store \
     --log.level                 debug \
-    --grpc-address              0.0.0.0:19691 \
-    --http-address              0.0.0.0:19791 \
+    --grpc-address              0.0.0.0:10905 \
+    --http-address              0.0.0.0:10906 \
     --data-dir                  data/store \
     ${OBJSTORECFG} &
 
-  STORES="${STORES} --store 127.0.0.1:19691"
+  STORES="${STORES} --store 127.0.0.1:10905"
 fi
 
 sleep 0.5
@@ -143,11 +168,11 @@ then
     --debug.name                receive \
     --log.level                 debug \
     --tsdb.path                 "./data/remote-write-receive-data" \
-    --grpc-address              0.0.0.0:19891 \
-    --http-address              0.0.0.0:18091 \
+    --grpc-address              0.0.0.0:10907 \
+    --http-address              0.0.0.0:10909 \
     --labels                    "receive=\"true\"" \
     ${OBJSTORECFG} \
-    --remote-write.address      0.0.0.0:19291 &
+    --remote-write.address      0.0.0.0:10908 &
 
   mkdir -p "data/local-prometheus-data/"
   cat <<EOF > data/local-prometheus-data/prometheus.yml
@@ -161,24 +186,24 @@ scrape_configs:
     static_configs:
     - targets: ['localhost:9100']
 remote_write:
-- url: http://localhost:19291/api/v1/receive
+- url: http://localhost:10908/api/v1/receive
 EOF
   ${PROMETHEUS_EXECUTABLE} \
     --config.file data/local-prometheus-data/prometheus.yml \
     --storage.tsdb.path "data/local-prometheus-data/" &
 
-  STORES="${STORES} --store 127.0.0.1:19891"
+  STORES="${STORES} --store 127.0.0.1:10907"
 fi
 
 sleep 0.5
 
-# Start to query nodes.
-for i in `seq 1 2`
+# Start two query nodes.
+for i in `seq 0 1`
 do
   ${THANOS_EXECUTABLE} query \
     --debug.name                query-${i} \
-    --grpc-address              0.0.0.0:1999${i} \
-    --http-address              0.0.0.0:1949${i} \
+    --grpc-address              0.0.0.0:109${i}3 \
+    --http-address              0.0.0.0:109${i}4 \
     --query.replica-label       prometheus \
     ${STORES} &
 done
