@@ -60,7 +60,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	replicationFactor := cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64()
 
-	tsdbBlockDuration := modelDuration(cmd.Flag("tsdb.blockduration", "Duration for local TSDB blocks").Default("2h"))
+	tsdbBlockDuration := modelDuration(cmd.Flag("tsdb.block-duration", "Duration for local TSDB blocks").Default("2h").Hidden())
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
