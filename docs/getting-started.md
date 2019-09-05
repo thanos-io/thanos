@@ -243,3 +243,22 @@ TBD
 Thanos also has a tutorial on deploying it to Kubernetes. We have a full page describing a standard deployment here.
 
 We also have example Grafana dashboards [here](/examples/grafana/monitoring.md) and some [alerts](/examples/alerts/alerts.md) to get you started.
+
+## Single host port layout
+In case you need to run multiple Thanos components on the same host you
+can follow this standardized port layout to avoid port collisions. 
+> The port can be changed using the `--http-address` and `--grpc-address` flags.
+
+| Component | Interface  | Port  |
+| --------- | ---------- | ----- |
+| Sidecar   | gRPC       | 10901 |
+| Sidecar   | HTTP       | 10902 |
+| Query     | gRPC       | 10903 |
+| Query     | HTTP       | 10904 |
+| Store     | gRPC       | 10905 |
+| Store     | HTTP       | 10906 |
+| Receive   | gRPC       | 10907 |
+| Receive   | HTTP       | 10908 |
+| Rule      | gRPC       | 10909 |
+| Rule      | HTTP       | 10910 |
+| Compact   | HTTP       | 10911 |
