@@ -268,4 +268,4 @@ on a single node, we recommend following the port layout:
 | Rule      | HTTP                    | 10911 |
 | Compact   | HTTP                    | 10912 |
 
-You can see example one-node setup [here](../scripts/quickstart.sh)
+You can see example one-node setup [here](/scripts/quickstart.sh)
