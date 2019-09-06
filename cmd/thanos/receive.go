@@ -40,7 +40,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application, name stri
 	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").
 		Default("./data").String()
 
-	labelStrs := cmd.Flag("labels", "External labels to announce. This flag will be removed in the future when handling multiple tsdb instances is added.").PlaceHolder("key=\"value\"").Strings()
+	labelStrs := cmd.Flag("label", "External labels to announce. This flag will be removed in the future when handling multiple tsdb instances is added.").PlaceHolder("key=\"value\"").Strings()
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", false)
 
