@@ -170,7 +170,7 @@ then
     --tsdb.path                 "./data/remote-write-receive-data" \
     --grpc-address              0.0.0.0:10907 \
     --http-address              0.0.0.0:10909 \
-    --labels                    "receive=\"true\"" \
+    --label                     "receive=\"true\"" \
     ${OBJSTORECFG} \
     --remote-write.address      0.0.0.0:10908 &
 
