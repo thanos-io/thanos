@@ -31,7 +31,7 @@ We also perform minor releases every 6 weeks.
 
 During that, we build tarballs for major platforms and release docker images.
 
-See [release process docs](docs/release-process.md) for details.
+See [release process docs](release-process.md) for details.
 
 ## Running Thanos 
 
