@@ -143,6 +143,7 @@ func runReceive(
 		NoLockfile:        true,
 		MinBlockDuration:  tsdbBlockDuration,
 		MaxBlockDuration:  tsdbBlockDuration,
+		WALCompression:    true,
 	}
 
 	localStorage := &tsdb.ReadyStorage{}
