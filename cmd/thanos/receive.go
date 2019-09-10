@@ -60,6 +60,8 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	replicationFactor := cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64()
 
+	tsdbBlockDuration := modelDuration(cmd.Flag("tsdb.block-duration", "Duration for local TSDB blocks").Default("2h").Hidden())
+
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
@@ -106,6 +108,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application, name stri
 			*tenantHeader,
 			*replicaHeader,
 			*replicationFactor,
+			*tsdbBlockDuration,
 		)
 	}
 }
@@ -130,6 +133,7 @@ func runReceive(
 	tenantHeader string,
 	replicaHeader string,
 	replicationFactor uint64,
+	tsdbBlockDuration model.Duration,
 ) error {
 	logger = log.With(logger, "component", "receive")
 	level.Warn(logger).Log("msg", "setting up receive; the Thanos receive component is EXPERIMENTAL, it may break significantly without notice")
@@ -137,8 +141,9 @@ func runReceive(
 	tsdbCfg := &tsdb.Options{
 		RetentionDuration: retention,
 		NoLockfile:        true,
-		MinBlockDuration:  model.Duration(time.Hour * 2),
-		MaxBlockDuration:  model.Duration(time.Hour * 2),
+		MinBlockDuration:  tsdbBlockDuration,
+		MaxBlockDuration:  tsdbBlockDuration,
+		WALCompression:    true,
 	}
 
 	localStorage := &tsdb.ReadyStorage{}
