@@ -1275,11 +1275,13 @@ func (b *bucketBlock) readChunkRange(ctx context.Context, seq int, off, length i
 
 	r, err := b.bucket.GetRange(ctx, b.chunkObjs[seq], off, length)
 	if err != nil {
+		b.chunkPool.Put(c)
 		return nil, errors.Wrap(err, "get range reader")
 	}
 	defer runutil.CloseWithLogOnErr(b.logger, r, "readChunkRange close range reader")
 
 	if _, err = io.Copy(buf, r); err != nil {
+		b.chunkPool.Put(c)
 		return nil, errors.Wrap(err, "read range")
 	}
 	internalBuf := buf.Bytes()
