@@ -55,7 +55,7 @@ WITHOUT this replica flag (deduplication turned off), we will get 3 results:
   * `up{job="prometheus",env="2",cluster="1",replica="B"} 1`
   * `up{job="prometheus",env="2",cluster="2",replica="A"} 1`
 
-### The same example with multiple replica labels:
+### The same output will be present for this example with multiple replica labels:
 
 * Prometheus + sidecar "A": `cluster=1,env=2,replica=A,replicaX=A`
 * Prometheus + sidecar "B": `cluster=1,env=2,replica=B,replicaX=B`
