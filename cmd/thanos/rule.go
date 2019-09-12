@@ -50,7 +50,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/ui"
-	"google.golang.org/grpc"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -493,12 +492,11 @@ func runRule(
 
 		store := store.NewTSDBStore(logger, reg, db, component.Rule, lset)
 
-		opts, err := defaultGRPCServerOpts(logger, reg, tracer, cert, key, clientCA)
+		opts, err := defaultGRPCServerOpts(logger, cert, key, clientCA)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC options")
 		}
-		s := grpc.NewServer(opts...)
-		storepb.RegisterStoreServer(s, store)
+		s := newStoreGRPCServer(logger, reg, tracer, store, opts)
 
 		g.Add(func() error {
 			return errors.Wrap(s.Serve(l), "serve gRPC")

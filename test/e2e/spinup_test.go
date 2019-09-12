@@ -195,7 +195,7 @@ func receiver(http, grpc, metric address, replicationFactor int, hashring ...rec
 				"--grpc-address", grpc.HostPort(),
 				"--http-address", metric.HostPort(),
 				"--remote-write.address", http.HostPort(),
-				"--labels", fmt.Sprintf(`receive="%s"`, http.Port),
+				"--label", fmt.Sprintf(`receive="%s"`, http.Port),
 				"--tsdb.path", path.Join(receiveDir, "tsdb"),
 				"--log.level", "debug",
 				"--receive.replication-factor", strconv.Itoa(replicationFactor),

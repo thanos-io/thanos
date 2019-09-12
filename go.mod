@@ -20,6 +20,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.3
 	github.com/leanovate/gopter v0.2.4
 	github.com/lovoo/gcloud-opentracing v0.3.0
+	github.com/mattn/go-ieproxy v0.0.0-20190805055040-f9202b1cfdeb // indirect; Pinned for FreeBSD support.
 	github.com/mattn/go-runewidth v0.0.4 // indirect
 	github.com/miekg/dns v1.1.15
 	github.com/minio/minio-go/v6 v6.0.27-0.20190529152532-de69c0e465ed
@@ -38,6 +39,8 @@ require (
 	github.com/uber-go/atomic v1.4.0 // indirect
 	github.com/uber/jaeger-client-go v2.16.0+incompatible
 	github.com/uber/jaeger-lib v2.0.0+incompatible
+	go.elastic.co/apm v1.5.0
+	go.elastic.co/apm/module/apmot v1.5.0
 	go.uber.org/atomic v1.4.0 // indirect
 	go.uber.org/automaxprocs v1.2.0
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45

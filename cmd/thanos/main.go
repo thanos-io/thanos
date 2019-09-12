@@ -33,6 +33,7 @@ import (
 	"github.com/prometheus/common/version"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/tracing/client"
 	"go.uber.org/automaxprocs/maxprocs"
@@ -244,41 +245,8 @@ func registerMetrics(mux *http.ServeMux, g prometheus.Gatherer) {
 	mux.Handle("/metrics", promhttp.HandlerFor(g, promhttp.HandlerOpts{}))
 }
 
-// defaultGRPCServerOpts returns default gRPC server opts that includes:
-// - request histogram
-// - tracing
-// - panic recovery with panic counter
-func defaultGRPCServerOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, cert, key, clientCA string) ([]grpc.ServerOption, error) {
-	met := grpc_prometheus.NewServerMetrics()
-	met.EnableHandlingTimeHistogram(
-		grpc_prometheus.WithHistogramBuckets([]float64{
-			0.001, 0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4,
-		}),
-	)
-
-	panicsTotal := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "thanos_grpc_req_panics_recovered_total",
-		Help: "Total number of gRPC requests recovered from internal panic.",
-	})
-	grpcPanicRecoveryHandler := func(p interface{}) (err error) {
-		panicsTotal.Inc()
-		level.Error(logger).Log("msg", "recovered from panic", "panic", p, "stack", debug.Stack())
-		return status.Errorf(codes.Internal, "%s", p)
-	}
-	reg.MustRegister(met, panicsTotal)
-	opts := []grpc.ServerOption{
-		grpc.MaxSendMsgSize(math.MaxInt32),
-		grpc_middleware.WithUnaryServerChain(
-			met.UnaryServerInterceptor(),
-			tracing.UnaryServerInterceptor(tracer),
-			grpc_recovery.UnaryServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
-		),
-		grpc_middleware.WithStreamServerChain(
-			met.StreamServerInterceptor(),
-			tracing.StreamServerInterceptor(tracer),
-			grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
-		),
-	}
+func defaultGRPCServerOpts(logger log.Logger, cert, key, clientCA string) ([]grpc.ServerOption, error) {
+	opts := []grpc.ServerOption{}
 
 	if key == "" && cert == "" {
 		if clientCA != "" {
@@ -323,6 +291,45 @@ func defaultGRPCServerOpts(logger log.Logger, reg *prometheus.Registry, tracer o
 	}
 
 	return append(opts, grpc.Creds(credentials.NewTLS(tlsCfg))), nil
+}
+
+func newStoreGRPCServer(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, srv storepb.StoreServer, opts []grpc.ServerOption) *grpc.Server {
+	met := grpc_prometheus.NewServerMetrics()
+	met.EnableHandlingTimeHistogram(
+		grpc_prometheus.WithHistogramBuckets([]float64{
+			0.001, 0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4,
+		}),
+	)
+	panicsTotal := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_grpc_req_panics_recovered_total",
+		Help: "Total number of gRPC requests recovered from internal panic.",
+	})
+	reg.MustRegister(met, panicsTotal)
+
+	grpcPanicRecoveryHandler := func(p interface{}) (err error) {
+		panicsTotal.Inc()
+		level.Error(logger).Log("msg", "recovered from panic", "panic", p, "stack", debug.Stack())
+		return status.Errorf(codes.Internal, "%s", p)
+	}
+	opts = append(opts,
+		grpc.MaxSendMsgSize(math.MaxInt32),
+		grpc_middleware.WithUnaryServerChain(
+			met.UnaryServerInterceptor(),
+			tracing.UnaryServerInterceptor(tracer),
+			grpc_recovery.UnaryServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
+		),
+		grpc_middleware.WithStreamServerChain(
+			met.StreamServerInterceptor(),
+			tracing.StreamServerInterceptor(tracer),
+			grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
+		),
+	)
+
+	s := grpc.NewServer(opts...)
+	storepb.RegisterStoreServer(s, srv)
+	met.InitializeMetrics(s)
+
+	return s
 }
 
 // TODO Remove once all components are migrated to the new defaultHTTPListener.
