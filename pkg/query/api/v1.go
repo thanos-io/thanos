@@ -189,7 +189,7 @@ func (api *API) parseEnableDedupParam(r *http.Request) (enableDeduplication bool
 }
 
 func (api *API) parseReplicaLabelsParam(r *http.Request) (replicaLabels []string, _ *ApiError) {
-	const replicaLabelsParam = "replicLabeals[]"
+	const replicaLabelsParam = "replicaLabels[]"
 	if err := r.ParseForm(); err != nil {
 		return nil, &ApiError{ErrorInternal, errors.Wrap(err, "parse form")}
 	}
