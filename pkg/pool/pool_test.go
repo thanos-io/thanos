@@ -1,8 +1,14 @@
 package pool
 
 import (
+	"bytes"
+	"fmt"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/fortytw2/leaktest"
+	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -49,4 +55,68 @@ func TestBytesPool(t *testing.T) {
 	chunkPool.Put(b2)
 
 	testutil.Equals(t, uint64(0), chunkPool.usedTotal)
+}
+
+func TestRacePutGet(t *testing.T) {
+	chunkPool, err := NewBytesPool(3, 100, 2, 5000)
+	testutil.Ok(t, err)
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	s := sync.WaitGroup{}
+
+	// Start two goroutines: they always Get and Put two byte slices
+	// to which they write 'foo' / 'barbazbaz' and check if the data is still
+	// there after writing it, before putting it back
+	errs := make(chan error, 2)
+	stop := make(chan bool, 2)
+
+	f := func(txt string) {
+		for {
+			select {
+			case <-stop:
+				s.Done()
+				return
+			default:
+				c, err := chunkPool.Get(3)
+				if err != nil {
+					errs <- errors.Wrapf(err, "goroutine %s", txt)
+					s.Done()
+					return
+				}
+
+				buf := bytes.NewBuffer(*c)
+
+				_, err = fmt.Fprintf(buf, "%s", txt)
+				if err != nil {
+					errs <- errors.Wrapf(err, "goroutine %s", txt)
+					s.Done()
+					return
+				}
+
+				if buf.String() != txt {
+					errs <- errors.New("expected to get the data just written")
+					s.Done()
+					return
+				}
+
+				b := buf.Bytes()
+				chunkPool.Put(&b)
+			}
+		}
+	}
+
+	s.Add(2)
+	go f("foo")
+	go f("barbazbaz")
+
+	time.Sleep(5 * time.Second)
+	stop <- true
+	stop <- true
+
+	s.Wait()
+	select {
+	case err := <-errs:
+		testutil.Ok(t, err)
+	default:
+	}
 }

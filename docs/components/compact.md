@@ -9,6 +9,8 @@ menu: components
 The compactor component of Thanos applies the compaction procedure of the Prometheus 2.0 storage engine to block data stored in object storage.
 It is generally not semantically concurrency safe and must be deployed as a singleton against a bucket.
 
+It is also responsible for downsampling of data - performing 5m downsampling after **40 hours** and 1h downsampling after **10 days**.
+
 Example:
 
 ```bash
@@ -42,20 +44,26 @@ Flags:
       --log.format=logfmt      Log format to use.
       --tracing.config-file=<tracing.config-yaml-path>
                                Path to YAML file that contains tracing
-                               configuration.
+                               configuration. See fomrat details:
+                               https://thanos.io/tracing.md/#configuration
       --tracing.config=<tracing.config-yaml>
                                Alternative to 'tracing.config-file' flag.
-                               Tracing configuration in YAML.
+                               Tracing configuration in YAML. See format
+                               details:
+                               https://thanos.io/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                Listen host:port for HTTP endpoints.
       --data-dir="./data"      Data directory in which to cache blocks and
                                process compactions.
       --objstore.config-file=<bucket.config-yaml-path>
                                Path to YAML file that contains object store
-                               configuration.
+                               configuration. See format details:
+                               https://thanos.io/storage.md/#configuration
       --objstore.config=<bucket.config-yaml>
                                Alternative to 'objstore.config-file' flag.
-                               Object store configuration in YAML.
+                               Object store configuration in YAML. See format
+                               details:
+                               https://thanos.io/storage.md/#configuration
       --consistency-delay=30m  Minimum age of fresh (non-compacted) blocks
                                before they are being processed. Malformed blocks
                                older than the maximum of consistency-delay and
@@ -71,6 +79,11 @@ Flags:
                                hour) in bucket. 0d - disables this retention
   -w, --wait                   Do not exit after all compactions have been
                                processed and wait for new work.
+      --downsampling.disable   Disables downsampling. This is not recommended as
+                               querying long time ranges without non-downsampled
+                               data is not efficient and useful e.g it is not
+                               possible to render all samples for a human eye
+                               anyway
       --block-sync-concurrency=20
                                Number of goroutines to use when syncing block
                                metadata from object storage.

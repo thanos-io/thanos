@@ -22,6 +22,19 @@ const (
 )
 
 // Prober represents health and readiness status of given component.
+//
+// From Kubernetes documentation https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/ :
+//
+//   liveness: Many applications running for long periods of time eventually transition to broken states,
+//   (healthy) and cannot recover except by being restarted.
+//             Kubernetes provides liveness probes to detect and remedy such situations.
+//
+//   readiness: Sometimes, applications are temporarily unable to serve traffic.
+//   (ready)    For example, an application might need to load large data or configuration files during startup,
+//              or depend on external services after startup. In such cases, you don’t want to kill the application,
+//              but you don’t want to send it requests either. Kubernetes provides readiness probes to detect
+//              and mitigate these situations. A pod with containers reporting that they are not ready
+//              does not receive traffic through Kubernetes Services.
 type Prober struct {
 	logger             log.Logger
 	component          component.Component
@@ -36,7 +49,6 @@ type Prober struct {
 // NewProber returns Prober representing readiness and healthiness of given component.
 func NewProber(component component.Component, logger log.Logger, reg prometheus.Registerer) *Prober {
 	initialErr := fmt.Errorf(initialErrorFmt, component)
-
 	p := &Prober{
 		component:   component,
 		logger:      logger,
@@ -76,7 +88,7 @@ func (p *Prober) writeResponse(w http.ResponseWriter, probeFn func() error, prob
 		http.Error(w, fmt.Sprintf("thanos %v is not %v. Reason: %v", p.component, probeType, err), probeErrorHTTPStatus)
 		return
 	}
-	if _, err := io.WriteString(w, fmt.Sprintf("thanos %v is %v", p.component, probeType)); err == nil {
+	if _, err := io.WriteString(w, fmt.Sprintf("thanos %v is %v", p.component, probeType)); err != nil {
 		level.Error(p.logger).Log("msg", "failed to write probe response", "probe type", probeType, "err", err)
 	}
 }

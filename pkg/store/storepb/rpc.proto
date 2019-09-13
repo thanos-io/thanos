@@ -18,6 +18,11 @@ service Store {
   rpc Info(InfoRequest) returns (InfoResponse);
 
   /// Series streams each Series (Labels and chunk/downsampling chunk) for given label matchers and time range.
+  ///
+  /// Series should strictly stream full series after series, optionally split by time. This means that a single frame can contain
+  /// partition of the single series, but once a new series is started to be streamed it means that no more data will
+  /// be sent for previous one.
+  /// Series has to be sorted.
   rpc Series(SeriesRequest) returns (stream SeriesResponse);
 
   /// LabelNames returns all label names that is available.
@@ -79,7 +84,7 @@ message SeriesRequest {
   // Deprecated. Use partial_response_strategy instead.
   bool partial_response_disabled = 6;
 
-  // TODO(bwplotka): Move Thanos components to use strategy instead. Inlcuding QueryAPI.
+  // TODO(bwplotka): Move Thanos components to use strategy instead. Including QueryAPI.
   PartialResponseStrategy partial_response_strategy = 7;
 }
 
@@ -105,7 +110,7 @@ message SeriesResponse {
 message LabelNamesRequest {
   bool partial_response_disabled = 1;
 
-  // TODO(bwplotka): Move Thanos components to use strategy instead. Inlcuding QueryAPI.
+  // TODO(bwplotka): Move Thanos components to use strategy instead. Including QueryAPI.
   PartialResponseStrategy partial_response_strategy = 2;
 }
 
@@ -119,7 +124,7 @@ message LabelValuesRequest {
 
   bool partial_response_disabled = 2;
 
-  // TODO(bwplotka): Move Thanos components to use strategy instead. Inlcuding QueryAPI.
+  // TODO(bwplotka): Move Thanos components to use strategy instead. Including QueryAPI.
   PartialResponseStrategy partial_response_strategy = 3;
 }
 

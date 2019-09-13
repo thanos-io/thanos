@@ -306,14 +306,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.9999, sum(rate(thanos_query_api_instant_query_duration_seconds_bucket{$labelselector=\"$labelvalue\",kubernetes_pod_name=~\"$pod\"}[$interval])) by (kubernetes_pod_name, le))",
+          "expr": "histogram_quantile(0.9999, sum(rate(http_request_duration_seconds_bucket{$labelselector=\"$labelvalue\",kubernetes_pod_name=~\"$pod\",handler=\"query\"}[$interval])) by (kubernetes_pod_name, le))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "instant_query {{kubernetes_pod_name}}",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.9999, sum(rate(thanos_query_api_range_query_duration_seconds_bucket{$labelselector=\"$labelvalue\",kubernetes_pod_name=~\"$pod\"}[$interval])) by (kubernetes_pod_name, le))",
+          "expr": "histogram_quantile(0.9999, sum(rate(http_request_duration_seconds_bucket{$labelselector=\"$labelvalue\",kubernetes_pod_name=~\"$pod\",handler=\"query_range\"}[$interval])) by (kubernetes_pod_name, le))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "range_query {{kubernetes_pod_name}}",

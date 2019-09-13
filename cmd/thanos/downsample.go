@@ -2,10 +2,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"io/ioutil"
 	"os"
-	"path"
 	"path/filepath"
 	"time"
 
@@ -16,8 +13,8 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
@@ -148,21 +145,9 @@ func downsampleBucket(
 			return nil
 		}
 
-		rc, err := bkt.Get(ctx, path.Join(id.String(), block.MetaFilename))
+		m, err := block.DownloadMeta(ctx, logger, bkt, id)
 		if err != nil {
-			return errors.Wrapf(err, "get meta for block %s", id)
-		}
-		defer runutil.CloseWithLogOnErr(logger, rc, "block reader")
-
-		var m metadata.Meta
-
-		obj, err := ioutil.ReadAll(rc)
-		if err != nil {
-			return errors.Wrap(err, "read meta")
-		}
-
-		if err = json.Unmarshal(obj, &m); err != nil {
-			return errors.Wrap(err, "unmarshal meta")
+			return errors.Wrap(err, "download metadata")
 		}
 
 		metas = append(metas, &m)

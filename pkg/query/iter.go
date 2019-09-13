@@ -7,7 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
@@ -15,17 +15,52 @@ import (
 // promSeriesSet implements the SeriesSet interface of the Prometheus storage
 // package on top of our storepb SeriesSet.
 type promSeriesSet struct {
-	set        storepb.SeriesSet
+	set       storepb.SeriesSet
+	initiated bool
+	done      bool
+
 	mint, maxt int64
 	aggr       resAggr
+
+	currLset   []storepb.Label
+	currChunks []storepb.AggrChunk
 }
 
-func (s promSeriesSet) Next() bool { return s.set.Next() }
-func (s promSeriesSet) Err() error { return s.set.Err() }
+func (s *promSeriesSet) Next() bool {
+	if !s.initiated {
+		s.initiated = true
+		s.done = s.set.Next()
+	}
 
-func (s promSeriesSet) At() storage.Series {
-	lset, chunks := s.set.At()
-	return newChunkSeries(lset, chunks, s.mint, s.maxt, s.aggr)
+	if !s.done {
+		return false
+	}
+
+	// storage.Series are more strict then SeriesSet: It requires storage.Series to iterate over full series.
+	s.currLset, s.currChunks = s.set.At()
+	for {
+		s.done = s.set.Next()
+		if !s.done {
+			break
+		}
+		nextLset, nextChunks := s.set.At()
+		if storepb.CompareLabels(s.currLset, nextLset) != 0 {
+			break
+		}
+		s.currChunks = append(s.currChunks, nextChunks...)
+	}
+	return true
+}
+
+func (s *promSeriesSet) At() storage.Series {
+	if !s.initiated || s.set.Err() != nil {
+		return nil
+	}
+	return newChunkSeries(s.currLset, s.currChunks, s.mint, s.maxt, s.aggr)
+}
+
+func (s *promSeriesSet) Err() error {
+	return s.set.Err()
 }
 
 func translateMatcher(m *labels.Matcher) (storepb.LabelMatcher, error) {
@@ -152,7 +187,7 @@ func (s *chunkSeries) Iterator() storage.SeriesIterator {
 		}
 		sit = newChunkSeriesIterator(its)
 	default:
-		return errSeriesIterator{err: errors.Errorf("unexpected result aggreagte type %v", s.aggr)}
+		return errSeriesIterator{err: errors.Errorf("unexpected result aggregate type %v", s.aggr)}
 	}
 	return newBoundedSeriesIterator(sit, s.mint, s.maxt)
 }
@@ -166,7 +201,7 @@ func getFirstIterator(cs ...*storepb.Chunk) chunkenc.Iterator {
 		if err != nil {
 			return errSeriesIterator{err}
 		}
-		return chk.Iterator()
+		return chk.Iterator(nil)
 	}
 	return errSeriesIterator{errors.New("no valid chunk found")}
 }

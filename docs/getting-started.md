@@ -13,42 +13,73 @@ Thanos provides a global query view, data backup, and historical data access as 
 In this quick-start guide, we will configure Thanos and all components mentioned to work against an object storage cloud provider.
 Thanos is able to use [different storage providers](storage.md), with the ability to add more providers as necessary.
 
-Thanos will work in cloud native environments as well as more traditional ones. Some users run Thanos in Kubernetes while others on bare metal. More deployments examples and stories will be described soon.
+Thanos will work in cloud native environments as well as more traditional ones. Some users run Thanos in Kubernetes while others on bare metal.
 
-## Architecture Overview
+Thanos aims for simple deployment and maintenance model. The only dependencies are:
 
-<img src="img/arch.jpg" class="img-fluid" alt="architecture overview" />
-
-## Requirements
-
-* One or more [Prometheus](https://prometheus.io) v2.2.1+ installations
-* golang 1.12+
-* An object storage bucket (optional)
+* One or more [Prometheus](https://prometheus.io) v2.2.1+ installations with persistent disk
+* Optional object storage 
 
 ## Get Thanos!
 
 You can find the latest Thanos release [here](https://github.com/thanos-io/thanos/releases).
 
+Master should be stable and usable. Every commit to master builds docker image named `master-<data>-<sha>` in 
+[quay.io/thanos/thanos](https://quay.io/repository/thanos/thanos) and [thanosio/thanos dockerhub (mirror)](https://hub.docker.com/r/thanosio/thanos)
 
-If you want to build Thanos from source you would need a working installation of the Go [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`).
+We also perform minor releases every 6 weeks.
+
+During that, we build tarballs for major platforms and release docker images.
+
+See [release process docs](release-process.md) for details.
+
+## Running Thanos 
+
+For detailed, free in-browser interactive tutorial please visit our [Katacoda Thanos Course](https://katacoda.com/bwplotka/courses/thanos)
+
+## Building from source:
+
+Thanos is built purely in [Golang](https://golang.org/), thus allowing to run Thanos on various x64 operating systems. 
+
+If you want to build Thanos from source you would need a working installation of the Go 1.12+ [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`).
 
 Thanos can be downloaded and built by running:
 
 ```bash
-go get -d github.com/thanos-io/thanos/...
-cd ${GOPATH}/src/github.com/thanos-io/thanos
-make
+go get github.com/thanos-io/thanos/cmd/thanos
 ```
 
 The `thanos` binary should now be in your `$PATH` and is the only thing required to deploy any of its components.
 
-## Prometheus
+## Contributing
+
+Contributions are very welcome! See our [CONTRIBUTING.md](/CONTRIBUTING.md) for more information.
+
+## Community
+
+Thanos is an open source project and we value and welcome new contributors and members
+of the community. Here are ways to get in touch with the community:
+
+* Slack: [#thanos](https://slack.cncf.io/)
+* Issue Tracker: [GitHub Issues](https://github.com/thanos-io/thanos/issues)
+
+## Maintainers
+
+See [MAINTAINERS.md](/MAINTAINERS.md)
+
+## Quick Overview 
+
+## Architecture
+
+<img src="img/arch.jpg" class="img-fluid" alt="architecture overview" />
+
+### Prometheus
 
 Thanos bases itself on vanilla [Prometheus](https://prometheus.io/) (v2.2.1+).
 
 To find out the Prometheus' versions Thanos is tested against, look at the value of the `PROM_VERSIONS` variable in the [Makefile](/Makefile).
 
-## Components
+### Components
 
 Following the [KISS](https://en.wikipedia.org/wiki/KISS_principle) and Unix philosophies, Thanos is made of a set of components with each filling a specific role.
 
@@ -234,12 +265,34 @@ _NOTE: The compactor must be run as a **singleton** and must not run when manual
 In case of Prometheus with Thanos sidecar does not have enough retention, or if you want to have alerts or recording rules that requires global view, Thanos has just the component for that: the [Ruler](components/rule.md),
 which does rule and alert evaluation on top of a given Thanos Querier.
 
-### Receiver
-
-TBD
-
 ## Extras
 
-Thanos also has a tutorial on deploying it to Kubernetes. We have a full page describing a standard deployment here.
+See this [talk](https://fosdem.org/2019/schedule/event/thanos_transforming_prometheus_to_a_global_scale_in_a_seven_simple_steps/) to see quick example of running Thanos on Kubernetes. 
 
 We also have example Grafana dashboards [here](/examples/grafana/monitoring.md) and some [alerts](/examples/alerts/alerts.md) to get you started.
+
+## Testing Thanos on Single Host
+
+We don't recommend running Thanos on a single node on production.
+Thanos is designed and built to run as a distributed system.
+Vanilla Prometheus might be totally enough for small setups.
+
+However, in case you want to play and run Thanos components
+on a single node, we recommend following the port layout:
+
+| Component | Interface               | Port  |
+| --------- | ----------------------- | ----- |
+| Sidecar   | gRPC                    | 10901 |
+| Sidecar   | HTTP                    | 10902 |
+| Query     | gRPC                    | 10903 |
+| Query     | HTTP                    | 10904 |
+| Store     | gRPC                    | 10905 |
+| Store     | HTTP                    | 10906 |
+| Receive   | gRPC (store API)        | 10907 |
+| Receive   | HTTP (remote write API) | 10908 |
+| Receive   | HTTP                    | 10909 |
+| Rule      | gRPC                    | 10910 |
+| Rule      | HTTP                    | 10911 |
+| Compact   | HTTP                    | 10912 |
+
+You can see example one-node setup [here](/scripts/quickstart.sh)

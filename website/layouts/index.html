@@ -16,12 +16,22 @@
                 </li>
                 <li class="list-inline-item my-3">
                     <a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}/releases" class="btn btn-outline-secondary">
-                        <i class="fas fa-fw fa-download"></i> Download
+                        <i class="mr-1 fas fa-fw fa-download"></i> Download
+                    </a>
+                </li>
+                <li class="list-inline-item my-3">
+                    <a href="https://quay.io/repository/{{ .Site.Params.QuayIoUser }}/{{ .Site.Params.QuayIoRepository }}" class="btn btn-outline-secondary">
+                        <i class="mr-1 fab fa-fw fa-docker"></i> Quay.io
+                    </a>
+                </li>
+                <li class="list-inline-item my-3">
+                    <a href="https://hub.docker.com/r/{{ .Site.Params.DockerHubUser }}/{{ .Site.Params.DockerHubRepository }}" class="btn btn-outline-secondary">
+                        <i class="mr-1 fab fa-fw fa-docker"></i> DockerHub
                     </a>
                 </li>
                 <li class="list-inline-item my-3">
                     <a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}" class="btn btn-outline-secondary">
-                        <i class="fab fa-fw fa-github"></i> Github
+                        <i class="mr-1 fab fa-fw fa-github"></i> Github
                     </a>
                 </li>
             </ul>
@@ -74,7 +84,7 @@
         {{ end }}
         <div class="col-6 col-sm-6 col-md-3">
             <div class="img-adopter">
-                <a class="text-center text-muted" href="{{ "contributing/how-to-contribute-to-docs.md#logos" | relURL }}">Your Company</a>
+                <a class="text-center text-muted" href="{{ "contributing/how-to-contribute-to-docs.md#adopters-logos" | relURL }}">Your Company</a>
             </div>
         </div>
     </div>

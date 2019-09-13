@@ -1,3 +1,5 @@
+.envrc
+
 /prometheus
 /thanos
 /vendor/
@@ -21,3 +23,5 @@ data/
 website/public/
 website/docs-pre-processed/
 !website/data
+
+tmp/bin

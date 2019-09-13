@@ -35,7 +35,7 @@ type defaultInstrumentationMiddleware struct {
 }
 
 // NewInstrumentationMiddleware provides default InstrumentationMiddleware.
-func NewInstrumentationMiddleware(reg *prometheus.Registry) InstrumentationMiddleware {
+func NewInstrumentationMiddleware(reg prometheus.Registerer) InstrumentationMiddleware {
 	ins := defaultInstrumentationMiddleware{
 		requestDuration: prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{

@@ -16,7 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/storage/tsdb"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
@@ -24,7 +24,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"google.golang.org/grpc"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
@@ -41,7 +40,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application, name stri
 	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").
 		Default("./data").String()
 
-	labelStrs := cmd.Flag("labels", "External labels to announce. This flag will be removed in the future when handling multiple tsdb instances is added.").PlaceHolder("key=\"value\"").Strings()
+	labelStrs := cmd.Flag("label", "External labels to announce. This flag will be removed in the future when handling multiple tsdb instances is added.").PlaceHolder("key=\"value\"").Strings()
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", false)
 
@@ -60,6 +59,8 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application, name stri
 	replicaHeader := cmd.Flag("receive.replica-header", "HTTP header specifying the replica number of a write request.").Default("THANOS-REPLICA").String()
 
 	replicationFactor := cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64()
+
+	tsdbBlockDuration := modelDuration(cmd.Flag("tsdb.block-duration", "Duration for local TSDB blocks").Default("2h").Hidden())
 
 	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
@@ -107,6 +108,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application, name stri
 			*tenantHeader,
 			*replicaHeader,
 			*replicationFactor,
+			*tsdbBlockDuration,
 		)
 	}
 }
@@ -131,6 +133,7 @@ func runReceive(
 	tenantHeader string,
 	replicaHeader string,
 	replicationFactor uint64,
+	tsdbBlockDuration model.Duration,
 ) error {
 	logger = log.With(logger, "component", "receive")
 	level.Warn(logger).Log("msg", "setting up receive; the Thanos receive component is EXPERIMENTAL, it may break significantly without notice")
@@ -138,8 +141,9 @@ func runReceive(
 	tsdbCfg := &tsdb.Options{
 		RetentionDuration: retention,
 		NoLockfile:        true,
-		MinBlockDuration:  model.Duration(time.Hour * 2),
-		MaxBlockDuration:  model.Duration(time.Hour * 2),
+		MinBlockDuration:  tsdbBlockDuration,
+		MaxBlockDuration:  tsdbBlockDuration,
+		WALCompression:    true,
 	}
 
 	localStorage := &tsdb.ReadyStorage{}
@@ -267,12 +271,11 @@ func runReceive(
 			db := localStorage.Get()
 			tsdbStore := store.NewTSDBStore(log.With(logger, "component", "thanos-tsdb-store"), reg, db, component.Receive, lset)
 
-			opts, err := defaultGRPCServerOpts(logger, reg, tracer, cert, key, clientCA)
+			opts, err := defaultGRPCServerOpts(logger, cert, key, clientCA)
 			if err != nil {
 				return errors.Wrap(err, "setup gRPC server")
 			}
-			s = grpc.NewServer(opts...)
-			storepb.RegisterStoreServer(s, tsdbStore)
+			s := newStoreGRPCServer(logger, reg, tracer, tsdbStore, opts)
 
 			level.Info(logger).Log("msg", "listening for StoreAPI gRPC", "address", grpcBindAddr)
 			return errors.Wrap(s.Serve(l), "serve gRPC")

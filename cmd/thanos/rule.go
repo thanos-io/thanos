@@ -31,8 +31,8 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage/tsdb"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/prometheus/prometheus/util/strutil"
-	"github.com/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -50,7 +50,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/ui"
-	"google.golang.org/grpc"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -493,12 +492,11 @@ func runRule(
 
 		store := store.NewTSDBStore(logger, reg, db, component.Rule, lset)
 
-		opts, err := defaultGRPCServerOpts(logger, reg, tracer, cert, key, clientCA)
+		opts, err := defaultGRPCServerOpts(logger, cert, key, clientCA)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC options")
 		}
-		s := grpc.NewServer(opts...)
-		storepb.RegisterStoreServer(s, store)
+		s := newStoreGRPCServer(logger, reg, tracer, store, opts)
 
 		g.Add(func() error {
 			return errors.Wrap(s.Serve(l), "serve gRPC")
@@ -529,9 +527,9 @@ func runRule(
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 
-		ui.NewRuleUI(logger, ruleMgrs, alertQueryURL.String(), flagsMap).Register(router.WithPrefix(webRoutePrefix), ins)
+		ui.NewRuleUI(logger, reg, ruleMgrs, alertQueryURL.String(), flagsMap).Register(router.WithPrefix(webRoutePrefix), ins)
 
-		api := v1.NewAPI(logger, ruleMgrs)
+		api := v1.NewAPI(logger, reg, ruleMgrs)
 		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
 
 		mux := http.NewServeMux()

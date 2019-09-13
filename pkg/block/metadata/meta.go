@@ -13,8 +13,8 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/fileutil"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 

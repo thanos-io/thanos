@@ -1,0 +1,37 @@
+{
+  "title": "Learn Thanos",
+  "description": "Introduction to CNCF Thanos: Global, Scalable and Highly Available Prometheus setup.",
+  "icon": "fa-thanos",
+  "courses": [
+    {
+      "course_id": "1-globalview",
+      "title": "Intro: Global View and seamless HA for Prometheus",
+      "description": "Learn how to easily transform Prometheus into centralized, highly available monitoring using Thanos."
+    },
+    {
+      "course_id": "2-lts",
+      "title": "Intro: Downsampling and unlimited metric retention for Prometheus",
+      "description": "In progress. Stay Tuned!"
+    },
+    {
+      "course_id": "3-meta-monitoring",
+      "title": "Intro: Global and meta alerts with Thanos",
+      "description": "In progress. Stay Tuned!"
+    },
+    {
+      "course_id": "4-cross-cluster-comm",
+      "title": "Advanced: Connecting remote Prometheuses to Thanos using simple Envoy setup.",
+      "description": "In progress. Stay Tuned!"
+    },
+    {
+      "course_id": "5-remote-receiver",
+      "title": "Advanced: Using Prometheus remote write to stream metrics to Thanos",
+      "description": "In progress. Stay Tuned!"
+    },
+    {
+      "course_id": "6-caching",
+      "title": "Advanced: Query low tail latency with low cost: Introducing caching to Thanos",
+      "description": "In progress. Stay Tuned!"
+    }
+  ]
+}

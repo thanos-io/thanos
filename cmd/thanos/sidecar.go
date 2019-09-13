@@ -11,28 +11,28 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/reloader"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"google.golang.org/grpc"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 const waitForExternalLabelsTimeout = 10 * time.Minute
 
-func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "sidecar for Prometheus server")
+func registerSidecar(m map[string]setupFunc, app *kingpin.Application) {
+	cmd := app.Command(component.Sidecar.String(), "sidecar for Prometheus server")
 
 	grpcBindAddr, httpBindAddr, cert, key, clientCA := regCommonServerFlags(cmd)
 
@@ -54,7 +54,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	uploadCompacted := cmd.Flag("shipper.upload-compacted", "[Experimental] If true sidecar will try to upload compacted blocks as well. Useful for migration purposes. Works only if compaction is disabled on Prometheus.").Default("false").Hidden().Bool()
 
-	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
+	m[component.Sidecar.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		rl := reloader.New(
 			log.With(logger, "component", "reloader"),
 			reloader.ReloadURLFromBase(*promURL),
@@ -77,6 +77,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application, name stri
 			objStoreConfig,
 			rl,
 			*uploadCompacted,
+			component.Sidecar,
 		)
 	}
 }
@@ -96,6 +97,7 @@ func runSidecar(
 	objStoreConfig *pathOrContent,
 	reloader *reloader.Reloader,
 	uploadCompacted bool,
+	comp component.Component,
 ) error {
 	var m = &promMetadata{
 		promURL: promURL,
@@ -115,6 +117,12 @@ func runSidecar(
 	if len(confContentYaml) == 0 {
 		level.Info(logger).Log("msg", "no supported bucket was configured, uploads will be disabled")
 		uploads = false
+	}
+
+	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	// Initiate default HTTP listener providing metrics endpoint and readiness/liveness probes.
+	if err := defaultHTTPListener(g, logger, reg, httpBindAddr, statusProber); err != nil {
+		return errors.Wrap(err, "create readiness prober")
 	}
 
 	// Setup all the concurrent groups.
@@ -148,6 +156,7 @@ func runSidecar(
 						"err", err,
 					)
 					promUp.Set(0)
+					statusProber.SetNotReady(err)
 					return err
 				}
 
@@ -156,6 +165,7 @@ func runSidecar(
 					"external_labels", m.Labels().String(),
 				)
 				promUp.Set(1)
+				statusProber.SetReady()
 				lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
 				return nil
 			})
@@ -195,9 +205,7 @@ func runSidecar(
 			cancel()
 		})
 	}
-	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
-		return err
-	}
+
 	{
 		l, err := net.Listen("tcp", grpcBindAddr)
 		if err != nil {
@@ -211,12 +219,11 @@ func runSidecar(
 			return errors.Wrap(err, "create Prometheus store")
 		}
 
-		opts, err := defaultGRPCServerOpts(logger, reg, tracer, cert, key, clientCA)
+		opts, err := defaultGRPCServerOpts(logger, cert, key, clientCA)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}
-		s := grpc.NewServer(opts...)
-		storepb.RegisterStoreServer(s, promStore)
+		s := newStoreGRPCServer(logger, reg, tracer, promStore, opts)
 
 		g.Add(func() error {
 			level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)

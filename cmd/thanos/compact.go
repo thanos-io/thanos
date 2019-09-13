@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -15,18 +13,20 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
+	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 var (
@@ -49,7 +49,7 @@ func (cs compactionSet) String() string {
 	return strings.Join(result, ", ")
 }
 
-// levels returns set of compaction levels not higher than specified max compaction level
+// levels returns set of compaction levels not higher than specified max compaction level.
 func (cs compactionSet) levels(maxLevel int) ([]int64, error) {
 	if maxLevel >= len(cs) {
 		return nil, errors.Errorf("level is bigger then default set of %d", len(cs))
@@ -62,13 +62,13 @@ func (cs compactionSet) levels(maxLevel int) ([]int64, error) {
 	return levels, nil
 }
 
-// maxLevel returns max available compaction level
+// maxLevel returns max available compaction level.
 func (cs compactionSet) maxLevel() int {
 	return len(cs) - 1
 }
 
-func registerCompact(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "continuously compacts blocks in an object store bucket")
+func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
+	cmd := app.Command(component.Compact.String(), "continuously compacts blocks in an object store bucket")
 
 	haltOnError := cmd.Flag("debug.halt-on-error", "Halt the process if a critical compaction error is detected.").
 		Hidden().Default("true").Bool()
@@ -96,10 +96,9 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	generateMissingIndexCacheFiles := cmd.Flag("index.generate-missing-cache-file", "If enabled, on startup compactor runs an on-off job that scans all the blocks to find all blocks with missing index cache file. It generates those if needed and upload.").
 		Hidden().Default("false").Bool()
 
-	// TODO(bplotka): Remove this flag once https://github.com/thanos-io/thanos/issues/297 is fixed.
-	disableDownsampling := cmd.Flag("debug.disable-downsampling", "Disables downsampling. This is not recommended "+
-		"as querying long time ranges without non-downsampled data is not efficient and not useful (is not possible to render all for human eye).").
-		Hidden().Default("false").Bool()
+	disableDownsampling := cmd.Flag("downsampling.disable", "Disables downsampling. This is not recommended "+
+		"as querying long time ranges without non-downsampled data is not efficient and useful e.g it is not possible to render all samples for a human eye anyway").
+		Default("false").Bool()
 
 	maxCompactionLevel := cmd.Flag("debug.max-compaction-level", fmt.Sprintf("Maximum compaction level, default is %d: %s", compactions.maxLevel(), compactions.String())).
 		Hidden().Default(strconv.Itoa(compactions.maxLevel())).Int()
@@ -110,7 +109,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 	compactionConcurrency := cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
 		Default("1").Int()
 
-	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
+	m[component.Compact.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		return runCompact(g, logger, reg,
 			*httpAddr,
 			*dataDir,
@@ -125,7 +124,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application, name stri
 				compact.ResolutionLevel5m:  time.Duration(*retention5m),
 				compact.ResolutionLevel1h:  time.Duration(*retention1h),
 			},
-			name,
+			component.Compact,
 			*disableDownsampling,
 			*maxCompactionLevel,
 			*blockSyncConcurrency,
@@ -147,7 +146,7 @@ func runCompact(
 	wait bool,
 	generateMissingIndexCacheFiles bool,
 	retentionByResolution map[compact.ResolutionLevel]time.Duration,
-	component string,
+	component component.Component,
 	disableDownsampling bool,
 	maxCompactionLevel int,
 	blockSyncConcurrency int,
@@ -168,12 +167,18 @@ func runCompact(
 
 	downsampleMetrics := newDownsampleMetrics(reg)
 
+	statusProber := prober.NewProber(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	// Initiate default HTTP listener providing metrics endpoint and readiness/liveness probes.
+	if err := defaultHTTPListener(g, logger, reg, httpBindAddr, statusProber); err != nil {
+		return errors.Wrap(err, "create readiness prober")
+	}
+
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
 		return err
 	}
 
-	bkt, err := client.NewBucket(logger, confContentYaml, reg, component)
+	bkt, err := client.NewBucket(logger, confContentYaml, reg, component.String())
 	if err != nil {
 		return err
 	}
@@ -318,11 +323,8 @@ func runCompact(
 		cancel()
 	})
 
-	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
-		return err
-	}
-
 	level.Info(logger).Log("msg", "starting compact node")
+	statusProber.SetReady()
 	return nil
 }
 
@@ -351,26 +353,14 @@ func genMissingIndexCacheFiles(ctx context.Context, logger log.Logger, bkt objst
 			return nil
 		}
 
-		rc, err := bkt.Get(ctx, path.Join(id.String(), block.MetaFilename))
+		meta, err := block.DownloadMeta(ctx, logger, bkt, id)
 		if err != nil {
 			// Probably not finished block, skip it.
-			if bkt.IsObjNotFoundErr(err) {
+			if bkt.IsObjNotFoundErr(errors.Cause(err)) {
 				level.Warn(logger).Log("msg", "meta file wasn't found", "block", id.String())
 				return nil
 			}
-			return errors.Wrapf(err, "get meta for block %s", id)
-		}
-		defer runutil.CloseWithLogOnErr(logger, rc, "block reader")
-
-		var meta metadata.Meta
-
-		obj, err := ioutil.ReadAll(rc)
-		if err != nil {
-			return errors.Wrap(err, "read meta")
-		}
-
-		if err = json.Unmarshal(obj, &meta); err != nil {
-			return errors.Wrap(err, "unmarshal meta")
+			return errors.Wrap(err, "download metadata")
 		}
 
 		// New version of compactor pushes index cache along with data block.

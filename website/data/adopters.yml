@@ -36,3 +36,12 @@ adopters:
 - name: Ebay
   url: https://www.ebay.co.uk/
   logo: ebay.png
+- name: Sauce Labs
+  url: https://saucelabs.com/
+  logo: saucelabs.png
+- name: XING
+  url: https://www.xing.com/
+  logo: xing.png
+- name: Untab
+  url: https://www.untab.io/
+  logo: untab.png
