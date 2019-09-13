@@ -35,7 +35,7 @@ func TestIndexCache_AvoidsDeadlock(t *testing.T) {
 		cache.curSize = size
 	})
 	testutil.Ok(t, err)
-	cache.lru = l
+	cache.storage = StorageCache(&SimpleLRU{l: l})
 
 	cache.SetPostings(ulid.MustNew(0, nil), labels.Label{Name: "test2", Value: "1"}, []byte{42, 33, 14, 67, 11})
 
@@ -157,7 +157,7 @@ func TestIndexCache_MaxNumberOfItemsHit(t *testing.T) {
 
 	l, err := simplelru.NewLRU(2, cache.onEvict)
 	testutil.Ok(t, err)
-	cache.lru = l
+	cache.storage = StorageCache(&SimpleLRU{l: l})
 
 	id := ulid.MustNew(0, nil)
 
@@ -299,7 +299,7 @@ func TestIndexCache_Eviction_WithMetrics(t *testing.T) {
 	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypePostings)))
 	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypeSeries)))
 
-	_, _, ok = cache.lru.RemoveOldest()
+	_, _, ok = cache.storage.RemoveOldest()
 	testutil.Assert(t, ok, "something to remove")
 
 	testutil.Equals(t, uint64(0), cache.curSize)
@@ -314,7 +314,7 @@ func TestIndexCache_Eviction_WithMetrics(t *testing.T) {
 	testutil.Equals(t, float64(2), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypePostings)))
 	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(cacheTypeSeries)))
 
-	_, _, ok = cache.lru.RemoveOldest()
+	_, _, ok = cache.storage.RemoveOldest()
 	testutil.Assert(t, !ok, "nothing to remove")
 
 	lbls3 := labels.Label{Name: "test", Value: "124"}

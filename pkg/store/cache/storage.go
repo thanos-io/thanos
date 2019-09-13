@@ -1,12 +1,9 @@
 package storecache
 
 import (
-	"github.com/dgraph-io/ristretto"
 	lru "github.com/hashicorp/golang-lru/simplelru"
 	"math"
 )
-
-var _ = ristretto.Cache{}
 
 // StorageCache is a wrapper around typical Get()/Set() operations
 // of a cache. Some might be a no-op on certain implementations.
