@@ -11,6 +11,10 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+### Fixed
+
+-[1505](https://github.com/thanos-io/thanos/pull/1505) Thanos store now removes invalid local cache blocks.
+
 ## v0.7.0 - 2019.09.02
 
 Accepted into CNCF:
