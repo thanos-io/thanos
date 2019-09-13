@@ -22,7 +22,7 @@ require (
 	github.com/lovoo/gcloud-opentracing v0.3.0
 	github.com/mattn/go-ieproxy v0.0.0-20190805055040-f9202b1cfdeb // indirect; Pinned for FreeBSD support.
 	github.com/mattn/go-runewidth v0.0.4 // indirect
-	github.com/miekg/dns v1.1.15
+	github.com/miekg/dns v1.1.17
 	github.com/minio/minio-go/v6 v6.0.27-0.20190529152532-de69c0e465ed
 	github.com/mozillazg/go-cos v0.12.0
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f
