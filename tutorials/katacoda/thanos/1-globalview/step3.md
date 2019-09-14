@@ -65,7 +65,7 @@ prometheus_tsdb_head_series{cluster="us1",instance="127.0.0.1:9092",job="prometh
 
 ## Handling of Highly Availabile Prometheus
 
-Now, as you rememmber we configured Prometheus 0 US1 and Prometheus 1 US1 to scrape the same things. We also connect Querier
+Now, as you remember we configured Prometheus 0 US1 and Prometheus 1 US1 to scrape the same things. We also connect Querier
 to both, so how Querier knows what is an HA group?
 
 Try to query the same query as before: <a href="https://[[HOST_SUBDOMAIN]]-29090-[[KATACODA_HOST]].environments.katacoda.com/graph?g0.range_input=1h&g0.expr=sum(prometheus_tsdb_head_series)&g0.tab=1&g1.range_input=5m&g1.expr=prometheus_tsdb_head_series&g1.tab=0">`sum(prometheus_tsdb_head_series)`</a>
