@@ -153,10 +153,3 @@ func IsBlockDir(path string) (id ulid.ULID, ok bool) {
 	id, err := ulid.Parse(filepath.Base(path))
 	return id, err == nil
 }
-
-func HasMetaFile(blockPath string) bool {
-	if _, err := os.Stat(path.Join(blockPath, MetaFilename)); os.IsNotExist(err) {
-		return false
-	}
-	return true
-}

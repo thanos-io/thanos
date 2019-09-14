@@ -1189,7 +1189,7 @@ func (b *bucketBlock) indexCacheFilename() string {
 
 func loadMeta(ctx context.Context, logger log.Logger, bucket objstore.BucketReader, dir string, id ulid.ULID) (error, *metadata.Meta) {
 	// If we haven't seen the block before or it is missing the meta.json, download it.
-	if _, err := os.Stat(dir); os.IsNotExist(err) || (err == nil && !block.HasMetaFile(dir)) {
+	if _, err := os.Stat(path.Join(dir, block.MetaFilename)); os.IsNotExist(err) {
 		if err := os.MkdirAll(dir, 0777); err != nil {
 			return errors.Wrap(err, "create dir"), nil
 		}
