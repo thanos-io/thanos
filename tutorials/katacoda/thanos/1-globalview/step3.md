@@ -82,7 +82,7 @@ prometheus_tsdb_head_series{cluster="us1",instance="127.0.0.1:9092",job="prometh
 
 So how Thanos Querier knows how to deduplicate correctly?
 
-If we would look again into Querier configuration we can see that we also set `quey.replica-label` flag. 
+If we would look again into Querier configuration we can see that we also set `query.replica-label` flag. 
 This is exactly the label Querier will try to deduplicate by for HA groups. This means that any metric with exactly
 the same labels *except replica label* will be assumed as the metric from the same HA group, and deduplicated accordingly.
 
