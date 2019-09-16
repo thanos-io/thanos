@@ -327,8 +327,8 @@ func (it *chunkSeriesIterator) Err() error {
 }
 
 type dedupSeriesSet struct {
-	set          storage.SeriesSet
-	replicaLabel string
+	set           storage.SeriesSet
+	replicaLabels map[string]struct{}
 
 	replicas []storage.Series
 	lset     labels.Labels
@@ -336,8 +336,8 @@ type dedupSeriesSet struct {
 	ok       bool
 }
 
-func newDedupSeriesSet(set storage.SeriesSet, replicaLabel string) storage.SeriesSet {
-	s := &dedupSeriesSet{set: set, replicaLabel: replicaLabel}
+func newDedupSeriesSet(set storage.SeriesSet, replicaLabels map[string]struct{}) storage.SeriesSet {
+	s := &dedupSeriesSet{set: set, replicaLabels: replicaLabels}
 	s.ok = s.set.Next()
 	if s.ok {
 		s.peek = s.set.At()
@@ -360,10 +360,18 @@ func (s *dedupSeriesSet) Next() bool {
 // replica label if it exists
 func (s *dedupSeriesSet) peekLset() labels.Labels {
 	lset := s.peek.Labels()
-	if lset[len(lset)-1].Name != s.replicaLabel {
+	if len(s.replicaLabels) == 0 {
 		return lset
 	}
-	return lset[:len(lset)-1]
+	// Check how many replica labels are present so that these are removed.
+	var totalToRemove int
+	for index := 0; index < len(s.replicaLabels); index++ {
+		if _, ok := s.replicaLabels[lset[len(lset)-index-1].Name]; ok {
+			totalToRemove++
+		}
+	}
+	// Strip all present replica labels.
+	return lset[:len(lset)-totalToRemove]
 }
 
 func (s *dedupSeriesSet) next() bool {

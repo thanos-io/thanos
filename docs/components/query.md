@@ -23,10 +23,12 @@ $ thanos query \
 ## Deduplication
 
 The query layer can deduplicate series that were collected from high-availability pairs of data sources such as Prometheus.
-A fixed replica label must be chosen for the entire cluster and can then be passed to query nodes on startup.
+A fixed single or multiple replica labels must be chosen for the entire cluster and can then be passed to query nodes on startup.
 
 Two or more series that are only distinguished by the given replica label, will be merged into a single time series.
-This also hides gaps in collection of a single data source. For example:
+This also hides gaps in collection of a single data source.
+
+### An example with a single replica labels:
 
 * Prometheus + sidecar "A": `cluster=1,env=2,replica=A`
 * Prometheus + sidecar "B": `cluster=1,env=2,replica=B`
@@ -47,11 +49,27 @@ And we query for metric `up{job="prometheus",env="2"}` with this option we will 
   * `up{job="prometheus",env="2",cluster="1"} 1`
   * `up{job="prometheus",env="2",cluster="2"} 1`
 
-WITHOUT this replica flag (so deduplication turned off), we will get 3 results:
+WITHOUT this replica flag (deduplication turned off), we will get 3 results:
 
   * `up{job="prometheus",env="2",cluster="1",replica="A"} 1`
   * `up{job="prometheus",env="2",cluster="1",replica="B"} 1`
   * `up{job="prometheus",env="2",cluster="2",replica="A"} 1`
+
+### The same output will be present for this example with multiple replica labels:
+
+* Prometheus + sidecar "A": `cluster=1,env=2,replica=A,replicaX=A`
+* Prometheus + sidecar "B": `cluster=1,env=2,replica=B,replicaX=B`
+* Prometheus + sidecar "A" in different cluster: `cluster=2,env=2,replica=A,replicaX=A`
+
+```
+$ thanos query \
+    --http-address        "0.0.0.0:9090" \
+    --query.replica-label "replica" \
+    --query.replica-label "replicaX" \
+    --store               "<store-api>:<grpc-port>" \
+    --store               "<store-api2>:<grpc-port>" \
+```
+
 
 This logic can also be controlled via parameter on QueryAPI. More details below.
 
@@ -89,6 +107,15 @@ Querier also allows to configure different timeouts:
 If you prefer availability over accuracy you can set tighter timeout to underlying StoreAPI than overall query timeout. If partial response
 strategy is NOT `abort`, this will "ignore" slower StoreAPIs producing just warning with 200 status code response.
 
+### Deduplication replica labels.
+
+| HTTP URL/FORM parameter | Type | Default | Example |
+|----|----|----|----|
+| `replicaLabels` | `[]string` | `query.replica-label` flag (default: empty). | `replicaLabels=replicaA&replicaLabels=replicaB` |
+|  |  |  |  |
+
+This overwrites the `query.replica-label` cli flag to allow dynamic replica labels at query time.
+
 ### Deduplication Enabled
 
 | HTTP URL/FORM parameter | Type | Default | Example |
@@ -96,7 +123,7 @@ strategy is NOT `abort`, this will "ignore" slower StoreAPIs producing just warn
 | `dedup` | `Boolean` | True, but effect depends on `query.replica` configuration flag. | `1, t, T, TRUE, true, True` for "True" |
 |  |  |  |  |
 
-This controls if query should use `replica` label for deduplication or not.
+This controls if query results should be deduplicated using the replica labels.
 
 ### Auto downsampling
 
@@ -236,8 +263,8 @@ Flags:
       --query.timeout=2m         Maximum time to process query by query node.
       --query.max-concurrent=20  Maximum number of queries processed
                                  concurrently by query node.
-      --query.replica-label=QUERY.REPLICA-LABEL
-                                 Label to treat as a replica indicator along
+      --query.replica-label=QUERY.REPLICA-LABEL ...
+                                 Labels to treat as a replica indicator along
                                  which data is deduplicated. Still you will be
                                  able to query without deduplication using
                                  'dedup=false' parameter.

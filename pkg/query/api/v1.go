@@ -102,6 +102,7 @@ type API struct {
 
 	enableAutodownsampling                 bool
 	enablePartialResponse                  bool
+	replicaLabels                          []string
 	reg                                    prometheus.Registerer
 	defaultInstantQueryMaxSourceResolution time.Duration
 
@@ -116,6 +117,7 @@ func NewAPI(
 	c query.QueryableCreator,
 	enableAutodownsampling bool,
 	enablePartialResponse bool,
+	replicaLabels []string,
 	defaultInstantQueryMaxSourceResolution time.Duration,
 ) *API {
 	return &API{
@@ -124,6 +126,7 @@ func NewAPI(
 		queryableCreate:                        c,
 		enableAutodownsampling:                 enableAutodownsampling,
 		enablePartialResponse:                  enablePartialResponse,
+		replicaLabels:                          replicaLabels,
 		reg:                                    reg,
 		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
 
@@ -185,6 +188,21 @@ func (api *API) parseEnableDedupParam(r *http.Request) (enableDeduplication bool
 	return enableDeduplication, nil
 }
 
+func (api *API) parseReplicaLabelsParam(r *http.Request) (replicaLabels []string, _ *ApiError) {
+	const replicaLabelsParam = "replicaLabels[]"
+	if err := r.ParseForm(); err != nil {
+		return nil, &ApiError{ErrorInternal, errors.Wrap(err, "parse form")}
+	}
+
+	replicaLabels = api.replicaLabels
+	// Overwrite the cli flag when provided as a query parameter.
+	if len(r.Form[replicaLabelsParam]) > 0 {
+		replicaLabels = r.Form[replicaLabelsParam]
+	}
+
+	return replicaLabels, nil
+}
+
 func (api *API) parseDownsamplingParamMillis(r *http.Request, defaultVal time.Duration) (maxResolutionMillis int64, _ *ApiError) {
 	const maxSourceResolutionParam = "max_source_resolution"
 	maxSourceResolution := 0 * time.Second
@@ -212,6 +230,7 @@ func (api *API) parsePartialResponseParam(r *http.Request) (enablePartialRespons
 	const partialResponseParam = "partial_response"
 	enablePartialResponse = api.enablePartialResponse
 
+	// Overwrite the cli flag when provided as a query parameter.
 	if val := r.FormValue(partialResponseParam); val != "" {
 		var err error
 		enablePartialResponse, err = strconv.ParseBool(val)
@@ -255,6 +274,11 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
+	replicaLabels, apiErr := api.parseReplicaLabelsParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
 	enablePartialResponse, apiErr := api.parsePartialResponseParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr
@@ -269,7 +293,7 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
 
-	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDedup, maxSourceResolution, enablePartialResponse), r.FormValue("query"), ts)
+	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDedup, replicaLabels, maxSourceResolution, enablePartialResponse), r.FormValue("query"), ts)
 	if err != nil {
 		return nil, nil, &ApiError{errorBadData, err}
 	}
@@ -341,6 +365,11 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
+	replicaLabels, apiErr := api.parseReplicaLabelsParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
 	// If no max_source_resolution is specified fit at least 5 samples between steps.
 	maxSourceResolution, apiErr := api.parseDownsamplingParamMillis(r, step/5)
 	if apiErr != nil {
@@ -357,7 +386,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 	defer span.Finish()
 
 	qry, err := api.queryEngine.NewRangeQuery(
-		api.queryableCreate(enableDedup, maxSourceResolution, enablePartialResponse),
+		api.queryableCreate(enableDedup, replicaLabels, maxSourceResolution, enablePartialResponse),
 		r.FormValue("query"),
 		start,
 		end,
@@ -397,7 +426,7 @@ func (api *API) labelValues(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	q, err := api.queryableCreate(true, 0, enablePartialResponse).Querier(ctx, math.MinInt64, math.MaxInt64)
+	q, err := api.queryableCreate(true, nil, 0, enablePartialResponse).Querier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
@@ -463,13 +492,18 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
+	replicaLabels, apiErr := api.parseReplicaLabelsParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
 	enablePartialResponse, apiErr := api.parsePartialResponseParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
 
 	// TODO(bwplotka): Support downsampling?
-	q, err := api.queryableCreate(enableDedup, 0, enablePartialResponse).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
+	q, err := api.queryableCreate(enableDedup, replicaLabels, 0, enablePartialResponse).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
@@ -572,7 +606,7 @@ func (api *API) labelNames(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	q, err := api.queryableCreate(true, 0, enablePartialResponse).Querier(ctx, math.MinInt64, math.MaxInt64)
+	q, err := api.queryableCreate(true, nil, 0, enablePartialResponse).Querier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
