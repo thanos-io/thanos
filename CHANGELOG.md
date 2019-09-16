@@ -13,14 +13,15 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Fixed
 
--[1505](https://github.com/thanos-io/thanos/pull/1505) Thanos store now removes invalid local cache blocks.
+-[#1525](https://github.com/thanos-io/thanos/pull/1525) Thanos now deletes block's file in correct order allowing to detect partial blocks without problems. 
+-[#1505](https://github.com/thanos-io/thanos/pull/1505) Thanos store now removes invalid local cache blocks.
 
 ## v0.7.0 - 2019.09.02
 
 Accepted into CNCF:
 - Thanos moved to new repository <https://github.com/thanos-io/thanos>
 - Docker images moved to <https://quay.io/thanos/thanos> and mirrored at <https://hub.docker.com/r/thanosio/thanos>
-- Slack moved to <https://slack.cncf.io> `#thanos`/`#thanos-dev` / `#thanos-prs`
+- Slack moved to <https://slack.cncf.io> `#thanos`/`#thanos-dev`/`#thanos-prs`
 
 ### Added
 

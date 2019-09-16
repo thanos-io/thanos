@@ -66,7 +66,7 @@ func BackupAndDelete(ctx context.Context, logger log.Logger, bkt, backupBkt objs
 
 	// Block uploaded, so we are ok to remove from src bucket.
 	level.Info(logger).Log("msg", "Deleting block", "id", id.String())
-	if err := block.Delete(ctx, bkt, id); err != nil {
+	if err := block.Delete(ctx, logger, bkt, id); err != nil {
 		return errors.Wrap(err, "delete from source")
 	}
 
@@ -95,7 +95,7 @@ func BackupAndDeleteDownloaded(ctx context.Context, logger log.Logger, bdir stri
 
 	// Block uploaded, so we are ok to remove from src bucket.
 	level.Info(logger).Log("msg", "Deleting block", "id", id.String())
-	if err := block.Delete(ctx, bkt, id); err != nil {
+	if err := block.Delete(ctx, logger, bkt, id); err != nil {
 		return errors.Wrap(err, "delete from source")
 	}
 

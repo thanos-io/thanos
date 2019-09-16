@@ -135,7 +135,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 				expFiles[id.String()+"/chunks/0002"] = []byte("chunkcontents2")
 			}
 			if i == 4 {
-				testutil.Ok(t, block.Delete(ctx, bkt, ids[4]))
+				testutil.Ok(t, block.Delete(ctx, log.NewNopLogger(), bkt, ids[4]))
 			}
 			// The shipper meta file should show all blocks as uploaded except the compacted one.
 			shipMeta, err = ReadMetaFile(dir)
@@ -287,7 +287,7 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 				expFiles[id.String()+"/chunks/0002"] = []byte("chunkcontents2")
 			}
 			if i == 4 {
-				testutil.Ok(t, block.Delete(ctx, bkt, ids[4]))
+				testutil.Ok(t, block.Delete(ctx, log.NewNopLogger(), bkt, ids[4]))
 			}
 			// The shipper meta file should show all blocks as uploaded except the compacted one.
 			shipMeta, err = ReadMetaFile(dir)
