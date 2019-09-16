@@ -22,9 +22,11 @@ type Bucket interface {
 	BucketReader
 
 	// Upload the contents of the reader as an object into the bucket.
+	// Upload should be idempotent
 	Upload(ctx context.Context, name string, r io.Reader) error
 
 	// Delete removes the object with the given name.
+	// If object does not exists in the moment of deletion, Delete should throw error.
 	Delete(ctx context.Context, name string) error
 
 	// Name returns the bucket name for the provider.
@@ -86,22 +88,12 @@ func UploadFile(ctx context.Context, logger log.Logger, bkt Bucket, src, dst str
 	if err := bkt.Upload(ctx, dst, r); err != nil {
 		return errors.Wrapf(err, "upload file %s as %s", src, dst)
 	}
+	level.Debug(logger).Log("msg", "uploaded file", "from", src, "dst", dst, "bucket", bkt.Name())
 	return nil
 }
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const DirDelim = "/"
-
-// DeleteDir removes all objects prefixed with dir from the bucket.
-func DeleteDir(ctx context.Context, bkt Bucket, dir string) error {
-	return bkt.Iter(ctx, dir, func(name string) error {
-		// If we hit a directory, call DeleteDir recursively.
-		if strings.HasSuffix(name, DirDelim) {
-			return DeleteDir(ctx, bkt, name)
-		}
-		return bkt.Delete(ctx, name)
-	})
-}
 
 // DownloadFile downloads the src file from the bucket to dst. If dst is an existing
 // directory, a file with the same name as the source is created in dst.

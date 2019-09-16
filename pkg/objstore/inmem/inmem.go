@@ -135,6 +135,9 @@ func (b *Bucket) Upload(_ context.Context, name string, r io.Reader) error {
 
 // Delete removes all data prefixed with the dir.
 func (b *Bucket) Delete(_ context.Context, name string) error {
+	if _, ok := b.objects[name]; !ok {
+		return errNotFound
+	}
 	delete(b.objects, name)
 	return nil
 }

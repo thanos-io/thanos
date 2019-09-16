@@ -296,7 +296,7 @@ func (c *Syncer) removeIfMetaMalformed(ctx context.Context, id ulid.ULID) (remov
 		return true
 	}
 
-	if err := block.Delete(ctx, c.bkt, id); err != nil {
+	if err := block.Delete(ctx, c.logger, c.bkt, id); err != nil {
 		level.Warn(c.logger).Log("msg", "failed to delete malformed block", "block", id, "err", err)
 		return false
 	}
@@ -453,7 +453,7 @@ func (c *Syncer) garbageCollect(ctx context.Context, resolution int64) error {
 
 		level.Info(c.logger).Log("msg", "deleting outdated block", "block", id)
 
-		err := block.Delete(delCtx, c.bkt, id)
+		err := block.Delete(delCtx, c.logger, c.bkt, id)
 		cancel()
 		if err != nil {
 			return retry(errors.Wrapf(err, "delete block %s from bucket", id))
@@ -743,7 +743,7 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	defer cancel()
 
 	// TODO(bplotka): Issue with this will introduce overlap that will halt compactor. Automate that (fix duplicate overlaps caused by this).
-	if err := block.Delete(delCtx, bkt, ie.id); err != nil {
+	if err := block.Delete(delCtx, logger, bkt, ie.id); err != nil {
 		return errors.Wrapf(err, "deleting old block %s failed. You need to delete this block manually", ie.id)
 	}
 
@@ -932,7 +932,7 @@ func (cg *Group) deleteBlock(b string) error {
 	delCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	level.Info(cg.logger).Log("msg", "deleting compacted block", "old_block", id)
-	if err := block.Delete(delCtx, cg.bkt, id); err != nil {
+	if err := block.Delete(delCtx, cg.logger, cg.bkt, id); err != nil {
 		return errors.Wrapf(err, "delete block %s from bucket", id)
 	}
 	return nil
