@@ -448,6 +448,8 @@ github.com/uber/jaeger-client-go v2.16.0+incompatible h1:Q2Pp6v3QYiocMxomCaJuwQG
 github.com/uber/jaeger-client-go v2.16.0+incompatible/go.mod h1:WVhlPFC8FDjOFMMWRy2pZqQJSXxYSwNYOkTr/Z6d3Kk=
 github.com/uber/jaeger-lib v2.0.0+incompatible h1:iMSCV0rmXEogjNWPh2D0xk9YVKvrtGoHJNe9ebLu/pw=
 github.com/uber/jaeger-lib v2.0.0+incompatible/go.mod h1:ComeNDZlWwrWnDv8aPp0Ba6+uUTzImX/AauajbLI56U=
+github.com/uber/jaeger-lib v2.1.1+incompatible h1:VY/6p2WopO09BPnw787RbaCIlfKbCRC/kq3p5D0F168=
+github.com/uber/jaeger-lib v2.1.1+incompatible/go.mod h1:ComeNDZlWwrWnDv8aPp0Ba6+uUTzImX/AauajbLI56U=
 github.com/xlab/treeprint v0.0.0-20180616005107-d6fb6747feb6/go.mod h1:ce1O1j6UtZfjr22oyGxGLbauSBp2YVXpARAosm7dHBg=
 go.elastic.co/apm v1.5.0 h1:arba7i+CVc36Jptww3R1ttW+O10ydvnBtidyd85DLpg=
 go.elastic.co/apm v1.5.0/go.mod h1:OdB9sPtM6Vt7oz3VXt7+KR96i9li74qrxBGHTQygFvk=

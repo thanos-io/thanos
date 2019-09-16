@@ -38,7 +38,7 @@ require (
 	github.com/prometheus/prometheus v1.8.2-0.20190819201610-48b2c9c8eae2 // v1.8.2 is misleading as Prometheus does not have v2 module. This is pointing to one commit after 2.12.0.
 	github.com/uber-go/atomic v1.4.0 // indirect
 	github.com/uber/jaeger-client-go v2.16.0+incompatible
-	github.com/uber/jaeger-lib v2.0.0+incompatible
+	github.com/uber/jaeger-lib v2.1.1+incompatible
 	go.elastic.co/apm v1.5.0
 	go.elastic.co/apm/module/apmot v1.5.0
 	go.uber.org/automaxprocs v1.2.0
