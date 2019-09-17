@@ -121,8 +121,8 @@ func runSidecar(
 
 	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	// Initiate default HTTP listener providing metrics endpoint and readiness/liveness probes.
-	if err := defaultHTTPListener(g, logger, reg, httpBindAddr, statusProber); err != nil {
-		return errors.Wrap(err, "create readiness prober")
+	if err := defaultHTTPListener(comp, g, logger, reg, nil, httpBindAddr, statusProber); err != nil {
+		return errors.Wrap(err, "create default HTTP server with readiness prober")
 	}
 
 	// Setup all the concurrent groups.

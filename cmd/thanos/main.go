@@ -31,6 +31,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/version"
+	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -74,7 +75,7 @@ func main() {
 	cmds := map[string]setupFunc{}
 	registerSidecar(cmds, app)
 	registerStore(cmds, app, "store")
-	registerQuery(cmds, app, "query")
+	registerQuery(cmds, app)
 	registerRule(cmds, app, "rule")
 	registerCompact(cmds, app)
 	registerBucket(cmds, app, "bucket")
@@ -355,11 +356,14 @@ func metricHTTPListenGroup(g *run.Group, logger log.Logger, reg *prometheus.Regi
 
 // defaultHTTPListener starts a run.Group that servers HTTP endpoint with default endpoints providing Prometheus metrics,
 // profiling and liveness/readiness probes.
-func defaultHTTPListener(g *run.Group, logger log.Logger, reg *prometheus.Registry, httpBindAddr string, readinessProber *prober.Prober) error {
+func defaultHTTPListener(comp component.Component, g *run.Group, logger log.Logger, reg *prometheus.Registry, router http.Handler, httpBindAddr string, readinessProber *prober.Prober) error {
 	mux := http.NewServeMux()
 	registerMetrics(mux, reg)
 	registerProfile(mux)
 	readinessProber.RegisterInMux(mux)
+	if router != nil {
+		mux.Handle("/", router)
+	}
 
 	l, err := net.Listen("tcp", httpBindAddr)
 	if err != nil {
@@ -367,12 +371,12 @@ func defaultHTTPListener(g *run.Group, logger log.Logger, reg *prometheus.Regist
 	}
 
 	g.Add(func() error {
-		level.Info(logger).Log("msg", "listening for metrics", "address", httpBindAddr)
+		level.Info(logger).Log("msg", fmt.Sprintf("listening for %s and metrics", comp.String()), "address", httpBindAddr)
 		readinessProber.SetHealthy()
-		return errors.Wrap(http.Serve(l, mux), "serve metrics")
+		return errors.Wrap(http.Serve(l, mux), fmt.Sprintf("serve %s and metrics", comp.String()))
 	}, func(err error) {
 		readinessProber.SetNotHealthy(err)
-		runutil.CloseWithLogOnErr(logger, l, "metric listener")
+		runutil.CloseWithLogOnErr(logger, l, fmt.Sprintf("%s and metric listener", comp.String()))
 	})
 	return nil
 }

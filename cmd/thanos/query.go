@@ -30,6 +30,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/query"
 	v1 "github.com/thanos-io/thanos/pkg/query/api"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -42,8 +43,9 @@ import (
 )
 
 // registerQuery registers a query command.
-func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
+func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
+	comp := component.Query
+	cmd := app.Command(comp.String(), "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
 
 	grpcBindAddr, httpBindAddr, srvCert, srvKey, srvClientCA := regCommonServerFlags(cmd)
 
@@ -99,7 +101,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 
 	storeResponseTimeout := modelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
 
-	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
+	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
 		if err != nil {
 			return errors.Wrap(err, "parse federation labels")
@@ -156,6 +158,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*dnsSDResolver,
 			time.Duration(*unhealthyStoreTimeout),
 			time.Duration(*instantDefaultMaxSourceResolution),
+			component.Query,
 		)
 	}
 }
@@ -274,6 +277,7 @@ func runQuery(
 	dnsSDResolver string,
 	unhealthyStoreTimeout time.Duration,
 	instantDefaultMaxSourceResolution time.Duration,
+	comp component.Component,
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
 	duplicatedStores := prometheus.NewCounter(prometheus.CounterOpts{
@@ -385,6 +389,8 @@ func runQuery(
 		})
 	}
 	// Start query API + UI HTTP server.
+
+	statusProber := prober.NewProber(comp, logger, reg)
 	{
 		router := route.New()
 
@@ -408,29 +414,10 @@ func runQuery(
 
 		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
 
-		router.Get("/-/healthy", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			if _, err := fmt.Fprintf(w, "Thanos Querier is Healthy.\n"); err != nil {
-				level.Error(logger).Log("msg", "Could not write health check response.")
-			}
-		})
-
-		mux := http.NewServeMux()
-		registerMetrics(mux, reg)
-		registerProfile(mux)
-		mux.Handle("/", router)
-
-		l, err := net.Listen("tcp", httpBindAddr)
-		if err != nil {
-			return errors.Wrapf(err, "listen HTTP on address %s", httpBindAddr)
+		// Initiate default HTTP listener providing metrics endpoint and readiness/liveness probes.
+		if err := defaultHTTPListener(comp, g, logger, reg, router, httpBindAddr, statusProber); err != nil {
+			return errors.Wrap(err, "create default HTTP server with readiness prober")
 		}
-
-		g.Add(func() error {
-			level.Info(logger).Log("msg", "Listening for query and metrics", "address", httpBindAddr)
-			return errors.Wrap(http.Serve(l, mux), "serve query")
-		}, func(error) {
-			runutil.CloseWithLogOnErr(logger, l, "query and metric listener")
-		})
 	}
 	// Start query (proxy) gRPC StoreAPI.
 	{
@@ -448,6 +435,7 @@ func runQuery(
 
 		g.Add(func() error {
 			level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)
+			statusProber.SetReady()
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			s.Stop()
