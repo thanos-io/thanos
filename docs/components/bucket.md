@@ -278,5 +278,6 @@ Flags:
                              multiple columns, e.g. '--sort-by FROM --sort-by
                              UNTIL'. I.e., if the 'FROM' value is equal the rows
                              are then further sorted by the 'UNTIL' value.
+      --timeout=5m           Timeout to download metadata from remote storage
 
 ```

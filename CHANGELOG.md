@@ -11,6 +11,9 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+## Added
+-[1533](https://github.com/thanos-io/thanos/pull/1533) Thanos inspect now supports the timeout flag.
+
 ### Fixed
 
 -[#1525](https://github.com/thanos-io/thanos/pull/1525) Thanos now deletes block's file in correct order allowing to detect partial blocks without problems. 
