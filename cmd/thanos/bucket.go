@@ -247,6 +247,7 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 		PlaceHolder("<name>=\\\"<value>\\\"").Strings()
 	sortBy := cmd.Flag("sort-by", "Sort by columns. It's also possible to sort by multiple columns, e.g. '--sort-by FROM --sort-by UNTIL'. I.e., if the 'FROM' value is equal the rows are then further sorted by the 'UNTIL' value.").
 		Default("FROM", "UNTIL").Enums(inspectColumns...)
+	timeout := cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").Duration()
 
 	m[name+" inspect"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
 
@@ -271,7 +272,7 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 
 		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 		defer cancel()
 
 		// Getting Metas.
