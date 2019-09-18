@@ -540,7 +540,7 @@ func runRule(
 
 		// Initiate default HTTP listener providing metrics endpoint and readiness/liveness probes.
 		if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, router, comp); err != nil {
-			return errors.Wrap(err, "create default HTTP server with readiness prober")
+			return errors.Wrap(err, "schedule default HTTP server with probes")
 		}
 	}
 
