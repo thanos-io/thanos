@@ -333,7 +333,7 @@ func newStoreGRPCServer(logger log.Logger, reg *prometheus.Registry, tracer open
 	return s
 }
 
-// TODO Remove once all components are migrated to the new defaultHTTPListener.
+// TODO Remove once all components are migrated to the new scheduleHTTPServer.
 // metricHTTPListenGroup is a run.Group that servers HTTP endpoint with only Prometheus metrics.
 func metricHTTPListenGroup(g *run.Group, logger log.Logger, reg *prometheus.Registry, httpBindAddr string) error {
 	mux := http.NewServeMux()
@@ -354,15 +354,15 @@ func metricHTTPListenGroup(g *run.Group, logger log.Logger, reg *prometheus.Regi
 	return nil
 }
 
-// defaultHTTPListener starts a run.Group that servers HTTP endpoint with default endpoints providing Prometheus metrics,
+// scheduleHTTPServer starts a run.Group that servers HTTP endpoint with default endpoints providing Prometheus metrics,
 // profiling and liveness/readiness probes.
-func defaultHTTPListener(comp component.Component, g *run.Group, logger log.Logger, reg *prometheus.Registry, router http.Handler, httpBindAddr string, readinessProber *prober.Prober) error {
+func scheduleHTTPServer(g *run.Group, logger log.Logger, reg *prometheus.Registry, readinessProber *prober.Prober, httpBindAddr string, handler http.Handler, comp component.Component) error {
 	mux := http.NewServeMux()
 	registerMetrics(mux, reg)
 	registerProfile(mux)
 	readinessProber.RegisterInMux(mux)
-	if router != nil {
-		mux.Handle("/", router)
+	if handler != nil {
+		mux.Handle("/", handler)
 	}
 
 	l, err := net.Listen("tcp", httpBindAddr)
@@ -371,12 +371,12 @@ func defaultHTTPListener(comp component.Component, g *run.Group, logger log.Logg
 	}
 
 	g.Add(func() error {
-		level.Info(logger).Log("msg", fmt.Sprintf("listening for %s and metrics", comp.String()), "address", httpBindAddr)
+		level.Info(logger).Log("msg", "listening for requests and metrics", "component", comp.String(), "address", httpBindAddr)
 		readinessProber.SetHealthy()
-		return errors.Wrap(http.Serve(l, mux), fmt.Sprintf("serve %s and metrics", comp.String()))
+		return errors.Wrapf(http.Serve(l, mux), "serve %s and metrics", comp.String())
 	}, func(err error) {
 		readinessProber.SetNotHealthy(err)
-		runutil.CloseWithLogOnErr(logger, l, fmt.Sprintf("%s and metric listener", comp.String()))
+		runutil.CloseWithLogOnErr(logger, l, "%s and metric listener", comp.String())
 	})
 	return nil
 }

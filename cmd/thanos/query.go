@@ -415,7 +415,7 @@ func runQuery(
 		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
 
 		// Initiate default HTTP listener providing metrics endpoint and readiness/liveness probes.
-		if err := defaultHTTPListener(comp, g, logger, reg, router, httpBindAddr, statusProber); err != nil {
+		if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, router, comp); err != nil {
 			return errors.Wrap(err, "create default HTTP server with readiness prober")
 		}
 	}
@@ -423,13 +423,13 @@ func runQuery(
 	{
 		l, err := net.Listen("tcp", grpcBindAddr)
 		if err != nil {
-			return errors.Wrapf(err, "listen gRPC on address")
+			return errors.Wrap(err, "listen gRPC on address")
 		}
 		logger := log.With(logger, "component", component.Query.String())
 
 		opts, err := defaultGRPCServerOpts(logger, srvCert, srvKey, srvClientCA)
 		if err != nil {
-			return errors.Wrapf(err, "build gRPC server")
+			return errors.Wrap(err, "build gRPC server")
 		}
 		s := newStoreGRPCServer(logger, reg, tracer, proxy, opts)
 

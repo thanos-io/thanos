@@ -169,7 +169,7 @@ func runCompact(
 
 	statusProber := prober.NewProber(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	// Initiate default HTTP listener providing metrics endpoint and readiness/liveness probes.
-	if err := defaultHTTPListener(component, g, logger, reg, nil, httpBindAddr, statusProber); err != nil {
+	if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, nil, component); err != nil {
 		return errors.Wrap(err, "create default HTTP server with readiness prober")
 	}
 
