@@ -3,7 +3,10 @@
     about what components it touches e.g "query:" or ".*:"
 -->
 
-* [] CHANGELOG entry if change is relevant to the end user.
+<!-- Don't forget about CHANGELOG! -->
+
+* [] I added CHANGELOG entry for this change.
+* [] Change is not relevant to the end user.
 
 ## Changes
 
