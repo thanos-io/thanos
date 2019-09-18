@@ -31,6 +31,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/version"
+	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -74,7 +75,7 @@ func main() {
 	cmds := map[string]setupFunc{}
 	registerSidecar(cmds, app)
 	registerStore(cmds, app, "store")
-	registerQuery(cmds, app, "query")
+	registerQuery(cmds, app)
 	registerRule(cmds, app, "rule")
 	registerCompact(cmds, app)
 	registerBucket(cmds, app, "bucket")
@@ -332,7 +333,7 @@ func newStoreGRPCServer(logger log.Logger, reg *prometheus.Registry, tracer open
 	return s
 }
 
-// TODO Remove once all components are migrated to the new defaultHTTPListener.
+// TODO Remove once all components are migrated to the new scheduleHTTPServer.
 // metricHTTPListenGroup is a run.Group that servers HTTP endpoint with only Prometheus metrics.
 func metricHTTPListenGroup(g *run.Group, logger log.Logger, reg *prometheus.Registry, httpBindAddr string) error {
 	mux := http.NewServeMux()
@@ -353,13 +354,16 @@ func metricHTTPListenGroup(g *run.Group, logger log.Logger, reg *prometheus.Regi
 	return nil
 }
 
-// defaultHTTPListener starts a run.Group that servers HTTP endpoint with default endpoints providing Prometheus metrics,
+// scheduleHTTPServer starts a run.Group that servers HTTP endpoint with default endpoints providing Prometheus metrics,
 // profiling and liveness/readiness probes.
-func defaultHTTPListener(g *run.Group, logger log.Logger, reg *prometheus.Registry, httpBindAddr string, readinessProber *prober.Prober) error {
+func scheduleHTTPServer(g *run.Group, logger log.Logger, reg *prometheus.Registry, readinessProber *prober.Prober, httpBindAddr string, handler http.Handler, comp component.Component) error {
 	mux := http.NewServeMux()
 	registerMetrics(mux, reg)
 	registerProfile(mux)
 	readinessProber.RegisterInMux(mux)
+	if handler != nil {
+		mux.Handle("/", handler)
+	}
 
 	l, err := net.Listen("tcp", httpBindAddr)
 	if err != nil {
@@ -367,12 +371,12 @@ func defaultHTTPListener(g *run.Group, logger log.Logger, reg *prometheus.Regist
 	}
 
 	g.Add(func() error {
-		level.Info(logger).Log("msg", "listening for metrics", "address", httpBindAddr)
+		level.Info(logger).Log("msg", "listening for requests and metrics", "component", comp.String(), "address", httpBindAddr)
 		readinessProber.SetHealthy()
-		return errors.Wrap(http.Serve(l, mux), "serve metrics")
+		return errors.Wrapf(http.Serve(l, mux), "serve %s and metrics", comp.String())
 	}, func(err error) {
 		readinessProber.SetNotHealthy(err)
-		runutil.CloseWithLogOnErr(logger, l, "metric listener")
+		runutil.CloseWithLogOnErr(logger, l, "%s and metric listener", comp.String())
 	})
 	return nil
 }
