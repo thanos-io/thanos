@@ -22,12 +22,14 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
-func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "continuously downsamples blocks in an object store bucket")
+func registerDownsample(m map[string]setupFunc, app *kingpin.Application) {
+	comp := component.Downsample
+	cmd := app.Command(comp.String(), "continuously downsamples blocks in an object store bucket")
 
 	httpAddr := regHTTPAddrFlag(cmd)
 
@@ -36,8 +38,8 @@ func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name s
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
 
-	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
-		return runDownsample(g, logger, reg, *httpAddr, *dataDir, objStoreConfig)
+	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
+		return runDownsample(g, logger, reg, *httpAddr, *dataDir, objStoreConfig, comp)
 	}
 }
 
@@ -71,6 +73,7 @@ func runDownsample(
 	httpBindAddr string,
 	dataDir string,
 	objStoreConfig *pathOrContent,
+	comp component.Component,
 ) error {
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
@@ -116,8 +119,10 @@ func runDownsample(
 		})
 	}
 
-	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
-		return err
+	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	// Initiate default HTTP listener providing metrics endpoint and readiness/liveness probes.
+	if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, nil, comp); err != nil {
+		return errors.Wrap(err, "schedule default HTTP server with probe")
 	}
 
 	level.Info(logger).Log("msg", "starting downsample node")
