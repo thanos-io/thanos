@@ -12,10 +12,12 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ## Unreleased
 
 ## Added
+- [#XXX](https://github.com/thanos-io/thanos/pull/XXX) Added `/-/ready` and `/-/healthy` endpoints to Thanos Downsample.
 - [#1538](https://github.com/thanos-io/thanos/pull/1538) Added `/-/ready` and `/-/healthy` endpoints to Thanos Rule.
 - [#1537](https://github.com/thanos-io/thanos/pull/1537) Added `/-/ready` and `/-/healthy` endpoints to Thanos Receive.
 - [#1534](https://github.com/thanos-io/thanos/pull/1534) Added `/-/ready` endpoint to Thanos Query.
 - [#1533](https://github.com/thanos-io/thanos/pull/1533) Thanos inspect now supports the timeout flag.
+-[1533](https://github.com/thanos-io/thanos/pull/1533) Thanos inspect now supports the timeout flag.
 
 ### Fixed
 
