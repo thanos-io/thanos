@@ -76,7 +76,7 @@ func main() {
 	registerSidecar(cmds, app)
 	registerStore(cmds, app, "store")
 	registerQuery(cmds, app)
-	registerRule(cmds, app, "rule")
+	registerRule(cmds, app)
 	registerCompact(cmds, app)
 	registerBucket(cmds, app, "bucket")
 	registerDownsample(cmds, app, "downsample")
