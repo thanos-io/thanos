@@ -93,13 +93,14 @@ func runDownsample(
 	}()
 
 	metrics := newDownsampleMetrics(reg)
-
+	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	// Start cycle of syncing blocks from the bucket and garbage collecting the bucket.
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+			statusProber.SetReady()
 
 			level.Info(logger).Log("msg", "start first pass of downsampling")
 
@@ -119,7 +120,6 @@ func runDownsample(
 		})
 	}
 
-	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
 	if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, nil, comp); err != nil {
 		return errors.Wrap(err, "schedule HTTP server with probe")
