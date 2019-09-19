@@ -41,6 +41,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	thanosrule "github.com/thanos-io/thanos/pkg/rule"
 	v1 "github.com/thanos-io/thanos/pkg/rule/api"
@@ -54,8 +55,9 @@ import (
 )
 
 // registerRule registers a rule command.
-func registerRule(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "ruler evaluating Prometheus rules against given Query nodes, exposing Store API and storing old blocks in bucket")
+func registerRule(m map[string]setupFunc, app *kingpin.Application) {
+	comp := component.Rule
+	cmd := app.Command(comp.String(), "ruler evaluating Prometheus rules against given Query nodes, exposing Store API and storing old blocks in bucket")
 
 	grpcBindAddr, httpBindAddr, cert, key, clientCA := regCommonServerFlags(cmd)
 
@@ -104,7 +106,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 	dnsSDResolver := cmd.Flag("query.sd-dns-resolver", "Resolver to use. Possible options: [golang, miekgdns]").
 		Default("golang").Hidden().String()
 
-	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
+	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
 			return errors.Wrap(err, "parse labels")
@@ -169,6 +171,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application, name string)
 			fileSD,
 			time.Duration(*dnsSDInterval),
 			*dnsSDResolver,
+			comp,
 		)
 	}
 }
@@ -202,6 +205,7 @@ func runRule(
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
 	dnsSDResolver string,
+	comp component.Component,
 ) error {
 	configSuccess := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_rule_config_last_reload_successful",
@@ -482,6 +486,7 @@ func runRule(
 			cancel()
 		})
 	}
+	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	// Start gRPC server.
 	{
 		l, err := net.Listen("tcp", grpcBindAddr)
@@ -499,6 +504,7 @@ func runRule(
 		s := newStoreGRPCServer(logger, reg, tracer, store, opts)
 
 		g.Add(func() error {
+			statusProber.SetReady()
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
 			s.Stop()
@@ -532,22 +538,10 @@ func runRule(
 		api := v1.NewAPI(logger, reg, ruleMgrs)
 		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
 
-		mux := http.NewServeMux()
-		registerMetrics(mux, reg)
-		registerProfile(mux)
-		mux.Handle("/", router)
-
-		l, err := net.Listen("tcp", httpBindAddr)
-		if err != nil {
-			return errors.Wrapf(err, "listen HTTP on address %s", httpBindAddr)
+		// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
+		if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, router, comp); err != nil {
+			return errors.Wrap(err, "schedule HTTP server with probes")
 		}
-
-		g.Add(func() error {
-			level.Info(logger).Log("msg", "Listening for ui requests", "address", httpBindAddr)
-			return errors.Wrap(http.Serve(l, mux), "serve query")
-		}, func(error) {
-			runutil.CloseWithLogOnErr(logger, l, "query and metric listener")
-		})
 	}
 
 	confContentYaml, err := objStoreConfig.Content()
