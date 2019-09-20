@@ -4,13 +4,17 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/ulid"
@@ -25,6 +29,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/objstore"
+	"golang.org/x/sys/unix"
 )
 
 type ResolutionLevel int64
@@ -748,6 +753,56 @@ func (cg *Group) areBlocksOverlapping(include *metadata.Meta, excludeDirs ...str
 	return nil
 }
 
+// spaceHeuristicCheck performs the heuristic check to see if there is enough available space
+// to perform a compaction.
+func spaceHeuristicCheck(blocks map[ulid.ULID]*metadata.Meta, availableBytes uint64) error {
+	var sumTakenByBlocks uint64
+	var smallestBlockBytes uint64 = math.MaxUint64
+
+	for _, m := range blocks {
+		if m.Thanos.SizeInBytes == nil {
+			// If any of the blocks do not have such metadata then we cannot calculate this.
+			return nil
+		}
+		sumTakenByBlocks += *m.Thanos.SizeInBytes
+
+		if *m.Thanos.SizeInBytes < smallestBlockBytes {
+			smallestBlockBytes = *m.Thanos.SizeInBytes
+		}
+	}
+
+	neededBytes := sumTakenByBlocks + smallestBlockBytes
+
+	if availableBytes < neededBytes {
+		return errors.Errorf("needed %v available space, got %v", humanize.Bytes(neededBytes), humanize.Bytes(neededBytes))
+	}
+
+	return nil
+}
+
+// isEnoughDiskSpace checks with a heuristic if there is enough disk space in the compaction group
+// in the specified directory. It adds up the space requirements of all the blocks in the compaction group
+// and then adds the smallest one again. The specified directory needs to have at least that amount of available bytes.
+// Doing this check prevents from downloading a lot of data and only then finding out that there is not
+// enough space.
+func (cg *Group) isEnoughDiskSpace(dir string) error {
+	// Since the following code depends on statfs(2), we only do it on POSIX systems.
+	// TODO(GiedriusS): add support for Windows and other OS.
+	if !(runtime.GOOS == "linux" || runtime.GOOS == "darwin" || strings.Contains(runtime.GOOS, "bsd")) {
+		return nil
+	}
+
+	var stat unix.Statfs_t
+	if err := unix.Statfs(dir, &stat); err != nil {
+		return errors.Wrap(err, "statfs")
+	}
+
+	availableBytes := uint64(stat.Bavail * uint64(stat.Bsize))
+
+	return spaceHeuristicCheck(cg.blocks, availableBytes)
+
+}
+
 // RepairIssue347 repairs the https://github.com/prometheus/tsdb/issues/347 issue when having issue347Error.
 func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket, issue347Err error) error {
 	ie, ok := errors.Cause(issue347Err).(Issue347Error)
@@ -814,6 +869,11 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	// Check for overlapped blocks.
 	if err := cg.areBlocksOverlapping(nil); err != nil {
 		return false, ulid.ULID{}, halt(errors.Wrap(err, "pre compaction overlap check"))
+	}
+
+	// Heuristic check if there is enough disk space.
+	if err := cg.isEnoughDiskSpace(dir); err != nil {
+		return false, ulid.ULID{}, halt(errors.Wrap(err, "pre-emptive disk space check"))
 	}
 
 	// Planning a compaction works purely based on the meta.json files in our future group's dir.

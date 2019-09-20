@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore/inmem"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -145,4 +146,21 @@ func TestGroupKey(t *testing.T) {
 			return
 		}
 	}
+}
+
+func TestHeuristicCheck(t *testing.T) {
+	sizes := []uint64{1000, 1000}
+	m := map[ulid.ULID]*metadata.Meta{
+		ulid.MustNew(0, nil): &metadata.Meta{Thanos: metadata.Thanos{SizeInBytes: &sizes[0]}},
+		ulid.MustNew(1, nil): &metadata.Meta{Thanos: metadata.Thanos{SizeInBytes: &sizes[1]}},
+	}
+
+	err := spaceHeuristicCheck(m, 0)
+	testutil.NotOk(t, err)
+
+	err = spaceHeuristicCheck(m, 3000)
+	testutil.Ok(t, err)
+
+	err = spaceHeuristicCheck(m, 2999)
+	testutil.NotOk(t, err)
 }
