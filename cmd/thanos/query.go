@@ -414,9 +414,9 @@ func runQuery(
 
 		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
 
-		// Initiate default HTTP listener providing metrics endpoint and readiness/liveness probes.
+		// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
 		if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, router, comp); err != nil {
-			return errors.Wrap(err, "create default HTTP server with readiness prober")
+			return errors.Wrap(err, "schedule HTTP server with probes")
 		}
 	}
 	// Start query (proxy) gRPC StoreAPI.
