@@ -12,6 +12,8 @@ import (
 	"path"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/query/adapter"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -411,8 +413,11 @@ func runQuery(
 		ui.NewQueryUI(logger, reg, stores, flagsMap).Register(router.WithPrefix(webRoutePrefix), ins)
 
 		api := v1.NewAPI(logger, reg, engine, queryableCreator, enableAutodownsampling, enablePartialResponse, replicaLabels, instantDefaultMaxSourceResolution)
+		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, ins)
 
-		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
+		// Experimental federate endpoint.
+		promAdapter := adapter.NewPrometheus(logger, queryableCreator(true, replicaLabels, 0, enablePartialResponse))
+		promAdapter.Register(router, tracer, ins)
 
 		// Initiate default HTTP listener providing metrics endpoint and readiness/liveness probes.
 		if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, router, comp); err != nil {
