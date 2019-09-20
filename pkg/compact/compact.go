@@ -759,6 +759,10 @@ func spaceHeuristicCheck(blocks map[ulid.ULID]*metadata.Meta, availableBytes uin
 	var sumTakenByBlocks uint64
 	var smallestBlockBytes uint64 = math.MaxUint64
 
+	if len(blocks) == 0 {
+		return nil
+	}
+
 	for _, m := range blocks {
 		if m.Thanos.SizeInBytes == nil {
 			// If any of the blocks do not have such metadata then we cannot calculate this.
