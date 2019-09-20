@@ -12,7 +12,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ## Unreleased
 
 ## Added
-- [#XXX](https://github.com/thanos-io/thanos/pull/XXX) Added `/-/ready` and `/-/healthy` endpoints to Thanos Downsample.
+- [#1540](https://github.com/thanos-io/thanos/pull/1540) Added `/-/ready` and `/-/healthy` endpoints to Thanos Downsample.
 - [#1538](https://github.com/thanos-io/thanos/pull/1538) Added `/-/ready` and `/-/healthy` endpoints to Thanos Rule.
 - [#1537](https://github.com/thanos-io/thanos/pull/1537) Added `/-/ready` and `/-/healthy` endpoints to Thanos Receive.
 - [#1534](https://github.com/thanos-io/thanos/pull/1534) Added `/-/ready` endpoint to Thanos Query.
