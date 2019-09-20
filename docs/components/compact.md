@@ -28,6 +28,16 @@ config:
 The compactor needs local disk space to store intermediate data for its processing. Generally, about 100GB are recommended for it to keep working as the compacted time ranges grow over time.
 On-disk data is safe to delete between restarts and should be the first attempt to get crash-looping compactors unstuck.
 
+# Resolution and retention
+
+Resolution - distance between data points on your graphs. E.g.
+
+raw - the same as scrape interval at the moment of data ingestion
+5m - data point is every 5 minutes
+1h - data point is every 1h
+
+Keep in mind, that the initial goal of downsampling is not saving a disk space. The goal of downsampling is providing an opportunity to get fast approximate results for range queries of big time intervals like months or years. In other words, if you set `--retention.resolution-raw` less then `--retention.resolution-5m` and `--retention.resolution-1h` - you might run into a problem of not being able to "zoom in" after you queried your data for 1 year interval. To avoid confusion - you might want to think about `raw` data as about "zoom in" opportunity. Considering the values for mentioned options - always think "Will I need to zoom in to the day 1 year ago?" if the answer "yes" - you most likely want to keep raw data for as long as 1h and 5m resolution, otherwise you'll be able to see only approximate representation of how your data looked like.
+
 ## Flags
 
 [embedmd]:# (flags/compact.txt $)
