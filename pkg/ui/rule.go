@@ -8,9 +8,12 @@ import (
 	"html/template"
 	"math"
 	"net/http"
+	"os"
 	"path"
 	"regexp"
 	"time"
+
+	"github.com/prometheus/common/version"
 
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/client_golang/prometheus"
@@ -28,15 +31,24 @@ type Rule struct {
 	ruleManager *thanosrule.Manager
 	queryURL    string
 	reg         prometheus.Registerer
+
+	cwd   string
+	birth time.Time
 }
 
 func NewRuleUI(logger log.Logger, reg prometheus.Registerer, ruleManager *thanosrule.Manager, queryURL string, flagsMap map[string]string) *Rule {
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "<error retrieving current working directory>"
+	}
 	return &Rule{
 		BaseUI:      NewBaseUI(logger, "rule_menu.html", ruleTmplFuncs(queryURL)),
 		flagsMap:    flagsMap,
 		ruleManager: ruleManager,
 		queryURL:    queryURL,
 		reg:         reg,
+		birth:       time.Now(),
+		cwd:         cwd,
 	}
 }
 
@@ -153,6 +165,27 @@ func (ru *Rule) root(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, path.Join(prefix, "/alerts"), http.StatusFound)
 }
 
+func (ru *Rule) status(w http.ResponseWriter, r *http.Request) {
+	prefix := GetWebPrefix(ru.logger, ru.flagsMap, r)
+
+	ru.executeTemplate(w, "status.html", prefix, struct {
+		Birth   time.Time
+		CWD     string
+		Version thanosVersion
+	}{
+		Birth: ru.birth,
+		CWD:   ru.cwd,
+		Version: thanosVersion{
+			Version:   version.Version,
+			Revision:  version.Revision,
+			Branch:    version.Branch,
+			BuildUser: version.BuildUser,
+			BuildDate: version.BuildDate,
+			GoVersion: version.GoVersion,
+		},
+	})
+}
+
 func (ru *Rule) Register(r *route.Router, ins extpromhttp.InstrumentationMiddleware) {
 	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
 		return ins.NewHandler(name, http.HandlerFunc(next))
@@ -161,6 +194,7 @@ func (ru *Rule) Register(r *route.Router, ins extpromhttp.InstrumentationMiddlew
 	r.Get("/", instrf("root", ru.root))
 	r.Get("/alerts", instrf("alerts", ru.alerts))
 	r.Get("/rules", instrf("rules", ru.rules))
+	r.Get("/status", instrf("status", ru.status))
 
 	r.Get("/static/*filepath", instrf("static", ru.serveStaticAsset))
 }
