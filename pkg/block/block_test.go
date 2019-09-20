@@ -148,7 +148,7 @@ func TestUpload(t *testing.T) {
 		testutil.Equals(t, 4, len(bkt.Objects()))
 		testutil.Equals(t, 3751, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]))
 		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
-		testutil.Equals(t, 365, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
+		testutil.Equals(t, 381, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
 	}
 	{
 		// Test Upload is idempotent.
@@ -156,7 +156,7 @@ func TestUpload(t *testing.T) {
 		testutil.Equals(t, 4, len(bkt.Objects()))
 		testutil.Equals(t, 3751, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]))
 		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
-		testutil.Equals(t, 365, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
+		testutil.Equals(t, 381, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
 	}
 	{
 		// Upload with no external labels should be blocked.
