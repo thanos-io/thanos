@@ -20,6 +20,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/shipper"
@@ -28,11 +29,12 @@ import (
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
-func registerReceive(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "Accept Prometheus remote write API requests and write to local tsdb (EXPERIMENTAL, this may change drastically without notice)")
+func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
+	comp := component.Receive
+	cmd := app.Command(comp.String(), "Accept Prometheus remote write API requests and write to local tsdb (EXPERIMENTAL, this may change drastically without notice)")
 
 	grpcBindAddr, cert, key, clientCA := regGRPCFlags(cmd)
-	httpMetricsBindAddr := regHTTPAddrFlag(cmd)
+	httpBindAddr := regHTTPAddrFlag(cmd)
 
 	remoteWriteAddress := cmd.Flag("remote-write.address", "Address to listen on for remote write requests.").
 		Default("0.0.0.0:19291").String()
@@ -62,7 +64,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	tsdbBlockDuration := modelDuration(cmd.Flag("tsdb.block-duration", "Duration for local TSDB blocks").Default("2h").Hidden())
 
-	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
+	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
 			return errors.Wrap(err, "parse labels")
@@ -97,7 +99,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application, name stri
 			*cert,
 			*key,
 			*clientCA,
-			*httpMetricsBindAddr,
+			*httpBindAddr,
 			*remoteWriteAddress,
 			*dataDir,
 			objStoreConfig,
@@ -109,6 +111,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application, name stri
 			*replicaHeader,
 			*replicationFactor,
 			*tsdbBlockDuration,
+			comp,
 		)
 	}
 }
@@ -122,7 +125,7 @@ func runReceive(
 	cert string,
 	key string,
 	clientCA string,
-	httpMetricsBindAddr string,
+	httpBindAddr string,
 	remoteWriteAddress string,
 	dataDir string,
 	objStoreConfig *pathOrContent,
@@ -134,6 +137,7 @@ func runReceive(
 	replicaHeader string,
 	replicationFactor uint64,
 	tsdbBlockDuration model.Duration,
+	comp component.Component,
 ) error {
 	logger = log.With(logger, "component", "receive")
 	level.Warn(logger).Log("msg", "setting up receive; the Thanos receive component is EXPERIMENTAL, it may break significantly without notice")
@@ -158,6 +162,8 @@ func runReceive(
 		ReplicaHeader:     replicaHeader,
 		ReplicationFactor: replicationFactor,
 	})
+
+	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 
 	// Start all components while we wait for TSDB to open but only load
 	// initial config and mark ourselves as ready after it completed.
@@ -198,6 +204,7 @@ func runReceive(
 		)
 	}
 
+	hashringReady := make(chan struct{})
 	level.Debug(logger).Log("msg", "setting up hashring")
 	{
 		updates := make(chan receive.Hashring)
@@ -227,15 +234,20 @@ func runReceive(
 			func() error {
 				select {
 				case h := <-updates:
+					close(hashringReady)
 					webHandler.Hashring(h)
+					statusProber.SetReady()
 				case <-cancel:
+					close(hashringReady)
 					return nil
 				}
 				select {
 				// If any new hashring is received, then mark the handler as unready, but keep it alive.
 				case <-updates:
+					msg := "hashring has changed; server is not ready to receive web requests."
 					webHandler.Hashring(nil)
-					level.Info(logger).Log("msg", "hashring has changed; server is not ready to receive web requests.")
+					statusProber.SetNotReady(errors.New(msg))
+					level.Info(logger).Log("msg", msg)
 				case <-cancel:
 					return nil
 				}
@@ -248,9 +260,10 @@ func runReceive(
 		)
 	}
 
-	level.Debug(logger).Log("msg", "setting up metric http listen-group")
-	if err := metricHTTPListenGroup(g, logger, reg, httpMetricsBindAddr); err != nil {
-		return err
+	level.Debug(logger).Log("msg", "setting up http server")
+	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
+	if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, nil, comp); err != nil {
+		return errors.Wrap(err, "schedule HTTP server with probes")
 	}
 
 	level.Debug(logger).Log("msg", "setting up grpc server")
@@ -277,6 +290,8 @@ func runReceive(
 			}
 			s := newStoreGRPCServer(logger, reg, tracer, tsdbStore, opts)
 
+			// Wait hashring to be ready before start serving metrics
+			<-hashringReady
 			level.Info(logger).Log("msg", "listening for StoreAPI gRPC", "address", grpcBindAddr)
 			return errors.Wrap(s.Serve(l), "serve gRPC")
 		}, func(error) {
@@ -343,6 +358,5 @@ func runReceive(
 	}
 
 	level.Info(logger).Log("msg", "starting receiver")
-
 	return nil
 }
