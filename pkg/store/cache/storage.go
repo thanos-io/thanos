@@ -1,8 +1,9 @@
 package storecache
 
 import (
-	lru "github.com/hashicorp/golang-lru/simplelru"
 	"math"
+
+	lru "github.com/hashicorp/golang-lru/simplelru"
 )
 
 // StorageCache is a wrapper around typical Get()/Set() operations
