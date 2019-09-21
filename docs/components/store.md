@@ -65,6 +65,8 @@ Flags:
                                  verification on server side. (tls.NoClientCert)
       --data-dir="./data"        Data directory in which to cache remote blocks.
       --index-cache-size=250MB   Maximum size of items held in the index cache.
+      --index-cache-algorithm=lru
+                                 Algorithm to use for the index cache.
       --chunk-pool-size=2GB      Maximum size of concurrently allocatable bytes
                                  for chunks.
       --store.grpc.series-sample-limit=0
