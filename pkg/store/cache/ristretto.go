@@ -22,32 +22,23 @@ func (t *TinyLFU) Get(key interface{}) (interface{}, bool) {
 
 // RemoveOldest removes the oldest key.
 func (t *TinyLFU) RemoveOldest() (interface{}, interface{}, bool) {
-	// NOOP
+	// NOOP since TinyLFU is size restricted itself.
 	return nil, nil, false
 }
 
 // Purge purges the LRU.
 func (t *TinyLFU) Purge() {
-	// Recreate the whole cache.
-	cache, err := ristretto.NewCache(&ristretto.Config{
-		NumCounters: 1 * 1024 * 1024 * 100 * 10,
-		MaxCost:     1 * 1024 * 1024 * 100,
-		BufferItems: 64,
-	})
-	// TODO: handle properly.
-	if err != nil {
-		panic(err)
-	}
-	t.l = cache
+	// NOOP since TinyLFU is size restricted itself.
 }
 
 // NewTinyLFU returns a new TinyLFU based cache storage which
 // calls the given onEvict on eviction.
-func NewTinyLFU(onEvict func(key, val interface{})) (StorageCache, error) {
+func NewTinyLFU(onEvict func(key uint64, val interface{}, cost int64), maxSize int64) (StorageCache, error) {
 	cache, err := ristretto.NewCache(&ristretto.Config{
-		NumCounters: 1 * 1024 * 1024 * 100 * 10,
-		MaxCost:     1 * 1024 * 1024 * 100,
+		NumCounters: maxSize * 10,
+		MaxCost:     maxSize,
 		BufferItems: 64,
+		OnEvict:     onEvict,
 	})
 	if err != nil {
 		return nil, err

@@ -31,6 +31,9 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the index cache.").
 		Default("250MB").Bytes()
 
+	indexCacheAlgorithm := cmd.Flag("index-cache-algorithm", "Algorithm to use for the index cache.").
+		Default("lru").Enum("lru", "tinylfu")
+
 	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes for chunks.").
 		Default("2GB").Bytes()
 
@@ -72,6 +75,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 			*clientCA,
 			*httpBindAddr,
 			uint64(*indexCacheSize),
+			*indexCacheAlgorithm,
 			uint64(*chunkPoolSize),
 			uint64(*maxSampleCount),
 			int(*maxConcurrent),
@@ -101,6 +105,7 @@ func runStore(
 	clientCA string,
 	httpBindAddr string,
 	indexCacheSizeBytes uint64,
+	indexCacheAlgorithm string,
 	chunkPoolSizeBytes uint64,
 	maxSampleCount uint64,
 	maxConcurrent int,
@@ -134,6 +139,7 @@ func runStore(
 		indexCache, err := storecache.NewIndexCache(logger, reg, storecache.Opts{
 			MaxSizeBytes:     indexCacheSizeBytes,
 			MaxItemSizeBytes: maxItemSizeBytes,
+			Algorithm:        storecache.CacheAlgorithm(indexCacheAlgorithm),
 		})
 		if err != nil {
 			return errors.Wrap(err, "create index cache")

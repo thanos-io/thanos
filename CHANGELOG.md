@@ -11,6 +11,10 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+### Added
+
+- [#849](https://github.com/thanos-io/thanos/pull/849) Thanos Store got a new experimental feature: you can switch between different algorithms used for the index cache storage! The new algorithm is based on a pretty modern paper and it performs much better under pressure, has a much better hit ratio, and so on. Please test it out with `--index-cache-algorithm` - it can either be `lru` or `tinylfu`. Please report the results on our issue tracker or in our Slack so that we would know!
+
 ## v0.7.0 - 2019.09.02
 
 Accepted into CNCF:

@@ -7,7 +7,7 @@ require (
 	github.com/armon/go-metrics v0.0.0-20190430140413-ec5e00d3c878
 	github.com/cespare/xxhash v1.1.0
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
-	github.com/dgraph-io/ristretto v0.0.0-20190911103809-abe3f183a9fc
+	github.com/dgraph-io/ristretto v0.0.0-20190920234558-024ad72a079a
 	github.com/fatih/structtag v1.0.0
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/fsnotify/fsnotify v1.4.7

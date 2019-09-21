@@ -25,13 +25,14 @@ func TestIndexCache_AvoidsDeadlock(t *testing.T) {
 	cache, err := NewIndexCache(log.NewNopLogger(), metrics, Opts{
 		MaxItemSizeBytes: sliceHeaderSize + 5,
 		MaxSizeBytes:     sliceHeaderSize + 5,
+		Algorithm:        "lru",
 	})
 	testutil.Ok(t, err)
 
 	l, err := simplelru.NewLRU(math.MaxInt64, func(key, val interface{}) {
 		// Hack LRU to simulate broken accounting: evictions do not reduce current size.
 		size := cache.curSize
-		cache.onEvict(key, val)
+		cache.lruOnEvict(key, val)
 		cache.curSize = size
 	})
 	testutil.Ok(t, err)
@@ -77,6 +78,7 @@ func TestIndexCache_UpdateItem(t *testing.T) {
 	cache, err := NewIndexCache(log.NewSyncLogger(errorLogger), metrics, Opts{
 		MaxItemSizeBytes: maxSize,
 		MaxSizeBytes:     maxSize,
+		Algorithm:        "lru",
 	})
 	testutil.Ok(t, err)
 
@@ -152,10 +154,11 @@ func TestIndexCache_MaxNumberOfItemsHit(t *testing.T) {
 	cache, err := NewIndexCache(log.NewNopLogger(), metrics, Opts{
 		MaxItemSizeBytes: 2*sliceHeaderSize + 10,
 		MaxSizeBytes:     2*sliceHeaderSize + 10,
+		Algorithm:        "lru",
 	})
 	testutil.Ok(t, err)
 
-	l, err := simplelru.NewLRU(2, cache.onEvict)
+	l, err := simplelru.NewLRU(2, cache.lruOnEvict)
 	testutil.Ok(t, err)
 	cache.storage = StorageCache(&SimpleLRU{l: l})
 
@@ -185,6 +188,7 @@ func TestIndexCache_Eviction_WithMetrics(t *testing.T) {
 	cache, err := NewIndexCache(log.NewNopLogger(), metrics, Opts{
 		MaxItemSizeBytes: 2*sliceHeaderSize + 5,
 		MaxSizeBytes:     2*sliceHeaderSize + 5,
+		Algorithm:        "lru",
 	})
 	testutil.Ok(t, err)
 
@@ -364,4 +368,29 @@ func TestIndexCache_Eviction_WithMetrics(t *testing.T) {
 	testutil.Equals(t, float64(2), promtest.ToFloat64(cache.requests.WithLabelValues(cacheTypeSeries)))
 	testutil.Equals(t, float64(5), promtest.ToFloat64(cache.hits.WithLabelValues(cacheTypePostings)))
 	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.hits.WithLabelValues(cacheTypeSeries)))
+}
+
+// TestIndexCache_TinyLFU_Smoke runs the smoke tests for TinyLFU.
+func TestIndexCache_TinyLFU_Smoke(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	metrics := prometheus.NewRegistry()
+	cache, err := NewIndexCache(log.NewNopLogger(), metrics, Opts{
+		MaxItemSizeBytes: 2*sliceHeaderSize + 5,
+		MaxSizeBytes:     2*sliceHeaderSize + 5,
+		Algorithm:        "lru",
+	})
+	testutil.Ok(t, err)
+
+	id := ulid.MustNew(0, nil)
+	lbls := labels.Label{Name: "test", Value: "123"}
+
+	_, ok := cache.Postings(id, lbls)
+	testutil.Assert(t, !ok, "no such key")
+
+	cache.SetPostings(id, lbls, []byte{42})
+
+	val, ok := cache.Postings(id, lbls)
+	testutil.Assert(t, ok, "postings not found")
+	testutil.Assert(t, val[0] == 42 && len(val) == 1, "byte slice contains other content")
 }

@@ -65,13 +65,28 @@ type IndexCache struct {
 	currentSize      *prometheus.GaugeVec
 	totalCurrentSize *prometheus.GaugeVec
 	overflow         *prometheus.CounterVec
+
+	// keyData is true if the cache retains the information about the key types.
+	keyData bool
 }
+
+// CacheAlgorithm is the caching algorithm that is used by the index cache.
+type CacheAlgorithm string
+
+const (
+	// LRUCache is the LRU-based cache.
+	LRUCache CacheAlgorithm = "lru"
+	// TinyLFUCache is the TinyLFU-based cache.
+	TinyLFUCache CacheAlgorithm = "tinylfu"
+)
 
 type Opts struct {
 	// MaxSizeBytes represents overall maximum number of bytes cache can contain.
 	MaxSizeBytes uint64
 	// MaxItemSizeBytes represents maximum size of single item.
 	MaxItemSizeBytes uint64
+	// Cache algorithm that will be used.
+	Algorithm CacheAlgorithm
 }
 
 // NewIndexCache creates a new thread-safe LRU cache for index entries and ensures the total cache
@@ -159,24 +174,41 @@ func NewIndexCache(logger log.Logger, reg prometheus.Registerer, opts Opts) (*In
 		reg.MustRegister(c.requests, c.hits, c.added, c.evicted, c.current, c.currentSize, c.totalCurrentSize, c.overflow)
 	}
 
-	// Initialize LRU cache with a high size limit since we will manage evictions ourselves
-	// based on stored size using `RemoveOldest` method.
-	storage, err := NewSimpleLRU(c.onEvict)
-	if err != nil {
-		return nil, err
+	if opts.Algorithm == "" {
+		opts.Algorithm = "tinylfu"
 	}
-	c.storage = storage
+
+	switch opts.Algorithm {
+	case LRUCache:
+		// Initialize the LRU cache with a high size limit since we will manage evictions ourselves
+		// based on stored size using `RemoveOldest` method.
+		storage, err := NewSimpleLRU(c.lruOnEvict)
+		if err != nil {
+			return nil, err
+		}
+		c.storage = storage
+		c.keyData = true
+	default:
+	case TinyLFUCache:
+		storage, err := NewTinyLFU(func(key uint64, val interface{}, cost int64) {
+			entrySize := sliceHeaderSize + cost
+			c.curSize -= uint64(entrySize)
+		}, int64(c.maxSizeBytes))
+		if err != nil {
+			return nil, err
+		}
+		c.storage = storage
+	}
 
 	level.Info(logger).Log(
 		"msg", "created index cache",
 		"maxItemSizeBytes", c.maxItemSizeBytes,
 		"maxSizeBytes", c.maxSizeBytes,
-		"maxItems", "math.MaxInt64",
 	)
 	return c, nil
 }
 
-func (c *IndexCache) onEvict(key, val interface{}) {
+func (c *IndexCache) lruOnEvict(key, val interface{}) {
 	k := key.(cacheKey).keyType()
 	entrySize := sliceHeaderSize + uint64(len(val.([]byte)))
 
@@ -222,15 +254,20 @@ func (c *IndexCache) set(typ string, key cacheKey, val []byte) {
 	v := make([]byte, len(val))
 	copy(v, val)
 	c.storage.Add(key, v)
+	c.curSize += size
+
+	if !c.keyData {
+		return
+	}
 
 	c.added.WithLabelValues(typ).Inc()
 	c.currentSize.WithLabelValues(typ).Add(float64(size))
 	c.totalCurrentSize.WithLabelValues(typ).Add(float64(size + key.size()))
 	c.current.WithLabelValues(typ).Inc()
-	c.curSize += size
+
 }
 
-// ensureFits tries to make sure that the passed slice will fit into the LRU cache.
+// ensureFits tries to make sure that the passed slice will fit into the cache.
 // Returns true if it will fit.
 func (c *IndexCache) ensureFits(size uint64, typ string) bool {
 	if size > c.maxItemSizeBytes {
@@ -243,6 +280,11 @@ func (c *IndexCache) ensureFits(size uint64, typ string) bool {
 			"cacheType", typ,
 		)
 		return false
+	}
+
+	// TinyLFU already manages the capacity restrictions for us.
+	if _, ok := c.storage.(*TinyLFU); ok {
+		return true
 	}
 
 	for c.curSize+size > c.maxSizeBytes {
@@ -275,6 +317,7 @@ func (c *IndexCache) SetPostings(b ulid.ULID, l labels.Label, v []byte) {
 	c.set(cacheTypePostings, cacheKey{b, cacheKeyPostings(l)}, v)
 }
 
+// Postings gets the postings from the index cache as identified by the ulid and labels.
 func (c *IndexCache) Postings(b ulid.ULID, l labels.Label) ([]byte, bool) {
 	return c.get(cacheTypePostings, cacheKey{b, cacheKeyPostings(l)})
 }
@@ -285,6 +328,7 @@ func (c *IndexCache) SetSeries(b ulid.ULID, id uint64, v []byte) {
 	c.set(cacheTypeSeries, cacheKey{b, cacheKeySeries(id)}, v)
 }
 
+// Series gets the series data from the index cache as identified by the ulid and labels.
 func (c *IndexCache) Series(b ulid.ULID, id uint64) ([]byte, bool) {
 	return c.get(cacheTypeSeries, cacheKey{b, cacheKeySeries(id)})
 }
