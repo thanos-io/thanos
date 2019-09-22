@@ -28,6 +28,17 @@ config:
 The compactor needs local disk space to store intermediate data for its processing. Generally, about 100GB are recommended for it to keep working as the compacted time ranges grow over time.
 On-disk data is safe to delete between restarts and should be the first attempt to get crash-looping compactors unstuck.
 
+## Groups
+
+The compactor groups blocks using the [external_labels](https://thanos.io/getting-started.md/#external-labels) added by the 
+Prometheus who produced the block. The labels must be both _unique_ and _persistent_ across different Prometheus instances. 
+
+By _unique_, we mean that the set of labels in a Prometheus instance must be different from all other sets of labels of 
+your Prometheus instances, so that the compactor will be able to group blocks by Prometheus instance. 
+
+By _persistent_, we mean that one Prometheus instance must keep the same labels if it restarts, so that the compactor will keep
+compacting blocks from an instance even when a Prometheus instance goes down for some time.
+
 ## Flags
 
 [embedmd]:# (flags/compact.txt $)
