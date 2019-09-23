@@ -14,6 +14,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
@@ -422,11 +423,11 @@ func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortB
 		timeRange := time.Duration((blockMeta.MaxTime - blockMeta.MinTime) * int64(time.Millisecond))
 		// Calculate how long it takes until the next compaction.
 		untilComp := "-"
-		if blockMeta.Thanos.Downsample.Resolution == 0 { // data currently raw, downsample if range >= 40 hours
-			untilComp = (time.Duration(40*60*60*1000*time.Millisecond) - timeRange).String()
+		if blockMeta.Thanos.Downsample.Resolution == downsample.ResLevel0 { // data currently raw, downsample if range >= 40 hours
+			untilComp = (time.Duration(downsample.DownsampleRange0*time.Millisecond) - timeRange).String()
 		}
-		if blockMeta.Thanos.Downsample.Resolution == 5*60*1000 { // data currently 5m resolution, downsample if range >= 10 days
-			untilComp = (time.Duration(10*24*60*60*1000*time.Millisecond) - timeRange).String()
+		if blockMeta.Thanos.Downsample.Resolution == downsample.ResLevel1 { // data currently 5m resolution, downsample if range >= 10 days
+			untilComp = (time.Duration(downsample.DownsampleRange1*time.Millisecond) - timeRange).String()
 		}
 		var labels []string
 		for _, key := range getKeysAlphabetically(blockMeta.Thanos.Labels) {
