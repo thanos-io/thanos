@@ -74,7 +74,7 @@ func main() {
 
 	cmds := map[string]setupFunc{}
 	registerSidecar(cmds, app)
-	registerStore(cmds, app, "store")
+	registerStore(cmds, app)
 	registerQuery(cmds, app)
 	registerRule(cmds, app)
 	registerCompact(cmds, app)
@@ -331,27 +331,6 @@ func newStoreGRPCServer(logger log.Logger, reg *prometheus.Registry, tracer open
 	met.InitializeMetrics(s)
 
 	return s
-}
-
-// TODO Remove once all components are migrated to the new scheduleHTTPServer.
-// metricHTTPListenGroup is a run.Group that servers HTTP endpoint with only Prometheus metrics.
-func metricHTTPListenGroup(g *run.Group, logger log.Logger, reg *prometheus.Registry, httpBindAddr string) error {
-	mux := http.NewServeMux()
-	registerMetrics(mux, reg)
-	registerProfile(mux)
-
-	l, err := net.Listen("tcp", httpBindAddr)
-	if err != nil {
-		return errors.Wrap(err, "listen metrics address")
-	}
-
-	g.Add(func() error {
-		level.Info(logger).Log("msg", "Listening for metrics", "address", httpBindAddr)
-		return errors.Wrap(http.Serve(l, mux), "serve metrics")
-	}, func(error) {
-		runutil.CloseWithLogOnErr(logger, l, "metric listener")
-	})
-	return nil
 }
 
 // scheduleHTTPServer starts a run.Group that servers HTTP endpoint with default endpoints providing Prometheus metrics,
