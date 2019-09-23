@@ -2,6 +2,7 @@ package receive
 
 import (
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/prompb"
 
@@ -43,7 +44,16 @@ func (r *Writer) Receive(wreq *prompb.WriteRequest) error {
 
 		for _, s := range t.Samples {
 			_, err = app.Add(lset, s.Timestamp, s.Value)
+			switch err {
+			case storage.ErrOutOfOrderSample:
+				level.Debug(r.logger).Log("msg", "Out of order sample", "lset", lset.String(), "sample", s.String())
+			case storage.ErrDuplicateSampleForTimestamp:
+				level.Debug(r.logger).Log("msg", "Duplicate sample for timestamp", "lset", lset.String(), "sample", s.String())
+			case storage.ErrOutOfBounds:
+				level.Debug(r.logger).Log("msg", "Out of bounds metric", "lset", lset.String(), "sample", s.String())
+			}
 			if err != nil {
+				app.Rollback()
 				return errors.Wrap(err, "failed to non-fast add")
 			}
 		}

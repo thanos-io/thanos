@@ -23,6 +23,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/prompb"
+	"github.com/prometheus/prometheus/storage"
 	promtsdb "github.com/prometheus/prometheus/storage/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -221,6 +222,18 @@ func (h *Handler) receive(w http.ResponseWriter, r *http.Request) {
 	// destined for the local node will be written to the receiver.
 	// Time series will be replicated as necessary.
 	if err := h.forward(r.Context(), tenant, rep, &wreq); err != nil {
+		if errs, ok := err.(terrors.MultiError); ok {
+			for _, err := range errs {
+				switch errors.Cause((err)) {
+				case storage.ErrOutOfOrderSample:
+					http.Error(w, err.Error(), http.StatusConflict)
+					return
+				case storage.ErrDuplicateSampleForTimestamp:
+					http.Error(w, err.Error(), http.StatusConflict)
+					return
+				}
+			}
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
