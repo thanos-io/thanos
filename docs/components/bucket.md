@@ -24,7 +24,7 @@ config:
 ```
 
 Bucket can be extended to add more subcommands that will be helpful when working with object storage buckets
-by adding a new command within `/cmd/thanos/bucket.go`
+by adding a new command within `/cmd/thanos/bucket.go`.
 
 
 ## Deployment
@@ -44,7 +44,7 @@ Flags:
       --log.format=logfmt  Log format to use.
       --tracing.config-file=<tracing.config-yaml-path>
                            Path to YAML file that contains tracing
-                           configuration. See fomrat details:
+                           configuration. See format details:
                            https://thanos.io/tracing.md/#configuration
       --tracing.config=<tracing.config-yaml>
                            Alternative to 'tracing.config-file' flag. Tracing
@@ -103,7 +103,7 @@ Flags:
       --log.format=logfmt      Log format to use.
       --tracing.config-file=<tracing.config-yaml-path>
                                Path to YAML file that contains tracing
-                               configuration. See fomrat details:
+                               configuration. See format details:
                                https://thanos.io/tracing.md/#configuration
       --tracing.config=<tracing.config-yaml>
                                Alternative to 'tracing.config-file' flag.
@@ -151,7 +151,7 @@ Flags:
       --log.format=logfmt  Log format to use.
       --tracing.config-file=<tracing.config-yaml-path>
                            Path to YAML file that contains tracing
-                           configuration. See fomrat details:
+                           configuration. See format details:
                            https://thanos.io/tracing.md/#configuration
       --tracing.config=<tracing.config-yaml>
                            Alternative to 'tracing.config-file' flag. Tracing
@@ -213,7 +213,7 @@ Flags:
       --log.format=logfmt  Log format to use.
       --tracing.config-file=<tracing.config-yaml-path>
                            Path to YAML file that contains tracing
-                           configuration. See fomrat details:
+                           configuration. See format details:
                            https://thanos.io/tracing.md/#configuration
       --tracing.config=<tracing.config-yaml>
                            Alternative to 'tracing.config-file' flag. Tracing
@@ -256,7 +256,7 @@ Flags:
       --log.format=logfmt    Log format to use.
       --tracing.config-file=<tracing.config-yaml-path>
                              Path to YAML file that contains tracing
-                             configuration. See fomrat details:
+                             configuration. See format details:
                              https://thanos.io/tracing.md/#configuration
       --tracing.config=<tracing.config-yaml>
                              Alternative to 'tracing.config-file' flag. Tracing
