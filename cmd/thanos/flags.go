@@ -118,7 +118,7 @@ func regCommonTracingFlags(app *kingpin.Application) *pathOrContent {
 	fileFlagName := fmt.Sprintf("tracing.config-file")
 	contentFlagName := fmt.Sprintf("tracing.config")
 
-	help := fmt.Sprintf("Path to YAML file that contains tracing configuration. See fomrat details: https://thanos.io/tracing.md/#configuration ")
+	help := fmt.Sprintf("Path to YAML file that contains tracing configuration. See format details: https://thanos.io/tracing.md/#configuration ")
 	tracingConfFile := app.Flag(fileFlagName, help).PlaceHolder("<tracing.config-yaml-path>").String()
 
 	help = fmt.Sprintf("Alternative to '%s' flag. Tracing configuration in YAML. See format details: https://thanos.io/tracing.md/#configuration", fileFlagName)
