@@ -170,13 +170,13 @@ func downsampleBucket(
 
 	for _, m := range metas {
 		switch m.Thanos.Downsample.Resolution {
-		case 0:
+		case downsample.ResLevel0:
 			continue
-		case 5 * 60 * 1000:
+		case downsample.ResLevel1:
 			for _, id := range m.Compaction.Sources {
 				sources5m[id] = struct{}{}
 			}
-		case 60 * 60 * 1000:
+		case downsample.ResLevel2:
 			for _, id := range m.Compaction.Sources {
 				sources1h[id] = struct{}{}
 			}
@@ -187,7 +187,7 @@ func downsampleBucket(
 
 	for _, m := range metas {
 		switch m.Thanos.Downsample.Resolution {
-		case 0:
+		case downsample.ResLevel0:
 			missing := false
 			for _, id := range m.Compaction.Sources {
 				if _, ok := sources5m[id]; !ok {
@@ -201,16 +201,16 @@ func downsampleBucket(
 			// Only downsample blocks once we are sure to get roughly 2 chunks out of it.
 			// NOTE(fabxc): this must match with at which block size the compactor creates downsampled
 			// blocks. Otherwise we may never downsample some data.
-			if m.MaxTime-m.MinTime < 40*60*60*1000 {
+			if m.MaxTime-m.MinTime < downsample.DownsampleRange0 {
 				continue
 			}
-			if err := processDownsampling(ctx, logger, bkt, m, dir, 5*60*1000); err != nil {
+			if err := processDownsampling(ctx, logger, bkt, m, dir, downsample.ResLevel1); err != nil {
 				metrics.downsampleFailures.WithLabelValues(compact.GroupKey(*m)).Inc()
 				return errors.Wrap(err, "downsampling to 5 min")
 			}
 			metrics.downsamples.WithLabelValues(compact.GroupKey(*m)).Inc()
 
-		case 5 * 60 * 1000:
+		case downsample.ResLevel1:
 			missing := false
 			for _, id := range m.Compaction.Sources {
 				if _, ok := sources1h[id]; !ok {
@@ -224,10 +224,10 @@ func downsampleBucket(
 			// Only downsample blocks once we are sure to get roughly 2 chunks out of it.
 			// NOTE(fabxc): this must match with at which block size the compactor creates downsampled
 			// blocks. Otherwise we may never downsample some data.
-			if m.MaxTime-m.MinTime < 10*24*60*60*1000 {
+			if m.MaxTime-m.MinTime < downsample.DownsampleRange1 {
 				continue
 			}
-			if err := processDownsampling(ctx, logger, bkt, m, dir, 60*60*1000); err != nil {
+			if err := processDownsampling(ctx, logger, bkt, m, dir, downsample.ResLevel2); err != nil {
 				metrics.downsampleFailures.WithLabelValues(compact.GroupKey(*m))
 				return errors.Wrap(err, "downsampling to 60 min")
 			}
