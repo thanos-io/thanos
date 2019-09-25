@@ -9,9 +9,6 @@ import (
 // SimpleLRU is a wrapper around a simple LRU data structure.
 type SimpleLRU struct {
 	l *lru.LRU
-
-	// keyData is true if the cache retains the information about the key types.
-	keyData bool
 }
 
 // Add adds the key with the specified value.
