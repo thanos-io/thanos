@@ -48,6 +48,16 @@ Ideally, you will have equal retention set (or no retention at all) to all resol
 
 In fact, downsampling doesn't save you any space but instead it adds 2 more blocks for each raw block which are only slightly smaller or relatively similar size to raw block. This is required by internal downsampling implementation which to be mathematically correct holds various aggregations. This means that downsampling can increase the size of your storage a bit (~3x), but it gives massive advantage on querying long ranges.
 
+## Groups
+
+The compactor groups blocks using the [external_labels](https://thanos.io/getting-started.md/#external-labels) added by the
+Prometheus who produced the block. The labels must be both _unique_ and _persistent_ across different Prometheus instances.
+
+By _unique_, we mean that the set of labels in a Prometheus instance must be different from all other sets of labels of
+your Prometheus instances, so that the compactor will be able to group blocks by Prometheus instance.
+
+By _persistent_, we mean that one Prometheus instance must keep the same labels if it restarts, so that the compactor will keep
+compacting blocks from an instance even when a Prometheus instance goes down for some time.
 
 ## Flags
 
