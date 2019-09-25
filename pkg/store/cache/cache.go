@@ -65,9 +65,6 @@ type IndexCache struct {
 	currentSize      *prometheus.GaugeVec
 	totalCurrentSize *prometheus.GaugeVec
 	overflow         *prometheus.CounterVec
-
-	// keyData is true if the cache retains the information about the key types.
-	keyData bool
 }
 
 // CacheAlgorithm is the caching algorithm that is used by the index cache.
@@ -187,7 +184,6 @@ func NewIndexCache(logger log.Logger, reg prometheus.Registerer, opts Opts) (*In
 			return nil, err
 		}
 		c.storage = storage
-		c.keyData = true
 	default:
 	case TinyLFUCache:
 		storage, err := NewTinyLFU(func(key uint64, val interface{}, cost int64) {
@@ -256,7 +252,7 @@ func (c *IndexCache) set(typ string, key cacheKey, val []byte) {
 	c.storage.Add(key, v)
 	c.curSize += size
 
-	if !c.keyData {
+	if !c.storage.KeyData() {
 		return
 	}
 

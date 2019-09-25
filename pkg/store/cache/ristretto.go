@@ -32,18 +32,35 @@ func (t *TinyLFU) Purge() {
 	// NOOP since TinyLFU is size restricted itself.
 }
 
+// KeyData returns if the cache retains key data.
+func (t *TinyLFU) KeyData() bool {
+	return true
+}
+
 // NewTinyLFU returns a new TinyLFU based cache storage which
 // calls the given onEvict on eviction.
 func NewTinyLFU(onEvict func(key uint64, val interface{}, cost int64), maxSize int64) (StorageCache, error) {
 	cache, err := ristretto.NewCache(&ristretto.Config{
-		NumCounters: maxSize * 10,
+		NumCounters: 2 * 1000 * 1000, // TODO(GiedriusS): should this be configurable?
 		MaxCost:     maxSize,
-		BufferItems: 64,
+		BufferItems: 64, // Value that should give good enough performance.
 		OnEvict:     onEvict,
 		KeyToHash: func(key interface{}) uint64 {
 			k := key.(cacheKey)
-			s := z.KeyToHash(z.KeyToHash([16]byte(k.block)) + z.KeyToHash(k.key))
-			return s
+			b := [16]byte(k.block)
+
+			var d uint64
+
+			keyType := k.keyType()
+			switch keyType {
+			case cacheTypePostings:
+				datum := k.key.(cacheKeyPostings)
+				d = z.KeyToHash(datum.Name + datum.Value)
+			case cacheTypeSeries:
+				datum := k.key.(cacheKeySeries)
+				d = z.KeyToHash(uint64(datum))
+			}
+			return z.KeyToHash(z.KeyToHash(b[:]) + d)
 		},
 	})
 	if err != nil {

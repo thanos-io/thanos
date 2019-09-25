@@ -7,4 +7,5 @@ type StorageCache interface {
 	Add(key interface{}, val interface{})
 	RemoveOldest() (key interface{}, val interface{}, ok bool)
 	Purge()
+	KeyData() bool // True if it retains exact information about keys.
 }

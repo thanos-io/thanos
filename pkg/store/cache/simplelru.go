@@ -9,6 +9,9 @@ import (
 // SimpleLRU is a wrapper around a simple LRU data structure.
 type SimpleLRU struct {
 	l *lru.LRU
+
+	// keyData is true if the cache retains the information about the key types.
+	keyData bool
 }
 
 // Add adds the key with the specified value.
@@ -29,6 +32,11 @@ func (s *SimpleLRU) RemoveOldest() (interface{}, interface{}, bool) {
 // Purge purges the LRU.
 func (s *SimpleLRU) Purge() {
 	s.l.Purge()
+}
+
+// KeyData returns if the cache retains key data.
+func (s *SimpleLRU) KeyData() bool {
+	return true
 }
 
 // NewSimpleLRU returns a new simple LRU based cache storage which
