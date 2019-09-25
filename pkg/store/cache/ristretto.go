@@ -40,8 +40,9 @@ func (t *TinyLFU) KeyData() bool {
 // NewTinyLFU returns a new TinyLFU based cache storage which
 // calls the given onEvict on eviction.
 func NewTinyLFU(onEvict func(key uint64, val interface{}, cost int64), maxSize int64) (StorageCache, error) {
+	ctrs := maxSize / 1000 // Seems like a good value, ad-hoc calculation of cache size divided by avg. cache item's size.
 	cache, err := ristretto.NewCache(&ristretto.Config{
-		NumCounters: 2 * 1000 * 1000, // TODO(GiedriusS): should this be configurable?
+		NumCounters: ctrs,
 		MaxCost:     maxSize,
 		BufferItems: 64, // Value that should give good enough performance.
 		OnEvict:     onEvict,
