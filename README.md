@@ -3,7 +3,7 @@
 [![CircleCI](https://circleci.com/gh/thanos-io/thanos.svg?style=svg)](https://circleci.com/gh/thanos-io/thanos)
 [![Go Report Card](https://goreportcard.com/badge/github.com/thanos-io/thanos)](https://goreportcard.com/report/github.com/thanos-io/thanos)
 [![GoDoc](https://godoc.org/github.com/thanos-io/thanos?status.svg)](https://godoc.org/github.com/thanos-io/thanos)
-[![Slack](https://img.shields.io/badge/join%20slack-%23thanos-brightgreen.svg)](https://slack.cncf.io/)
+[![Slack](https://img.shields.io/badge/join%20slack-%23thanos-brightgreen.svg)](https://cloud-native.slack.com/messages/CK5RSSC10)
 [![Netlify Status](https://api.netlify.com/api/v1/badges/664a5091-934c-4b0e-a7b6-bc12f822a590/deploy-status)](https://app.netlify.com/sites/thanos-io/deploys)
 
 ## Overview
@@ -78,7 +78,7 @@ Contributions are very welcome! See our [CONTRIBUTING.md](CONTRIBUTING.md) for m
 Thanos is an open source project and we value and welcome new contributors and members
 of the community. Here are ways to get in touch with the community:
 
-* Slack: [#thanos](https://slack.cncf.io/)
+* Slack: [#thanos](https://cloud-native.slack.com/messages/CK5RSSC10)
 * Issue Tracker: [GitHub Issues](https://github.com/thanos-io/thanos/issues)
 
 ## Maintainers
