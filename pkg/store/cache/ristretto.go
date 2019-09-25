@@ -2,6 +2,7 @@ package storecache
 
 import (
 	"github.com/dgraph-io/ristretto"
+	"github.com/dgraph-io/ristretto/z"
 )
 
 // TinyLFU is a wrapper around Ristretto (TinyLFU).
@@ -39,6 +40,11 @@ func NewTinyLFU(onEvict func(key uint64, val interface{}, cost int64), maxSize i
 		MaxCost:     maxSize,
 		BufferItems: 64,
 		OnEvict:     onEvict,
+		KeyToHash: func(key interface{}) uint64 {
+			k := key.(cacheKey)
+			s := z.KeyToHash(z.KeyToHash([16]byte(k.block)) + z.KeyToHash(k.key))
+			return s
+		},
 	})
 	if err != nil {
 		return nil, err
