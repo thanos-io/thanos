@@ -224,7 +224,7 @@ func (h *Handler) receive(w http.ResponseWriter, r *http.Request) {
 	if err := h.forward(r.Context(), tenant, rep, &wreq); err != nil {
 		if errs, ok := err.(terrors.MultiError); ok {
 			for _, err := range errs {
-				switch errors.Cause((err)) {
+				switch errors.Cause(err) {
 				case storage.ErrOutOfOrderSample:
 					http.Error(w, err.Error(), http.StatusConflict)
 					return

@@ -8,6 +8,7 @@ import (
 
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
+	terrors "github.com/prometheus/prometheus/tsdb/errors"
 )
 
 // Appendable returns an Appender.
@@ -29,10 +30,12 @@ func NewWriter(logger log.Logger, app Appendable) *Writer {
 
 func (r *Writer) Receive(wreq *prompb.WriteRequest) error {
 	app, err := r.append.Appender()
+
 	if err != nil {
 		return errors.Wrap(err, "failed to get appender")
 	}
 
+	var errs terrors.MultiError
 	for _, t := range wreq.Timeseries {
 		lset := make(labels.Labels, len(t.Labels))
 		for j := range t.Labels {
@@ -42,9 +45,12 @@ func (r *Writer) Receive(wreq *prompb.WriteRequest) error {
 			}
 		}
 
+		// Append as many valid samples as possible, but keep track of the errors
 		for _, s := range t.Samples {
 			_, err = app.Add(lset, s.Timestamp, s.Value)
 			switch err {
+			case nil:
+				continue
 			case storage.ErrOutOfOrderSample:
 				level.Debug(r.logger).Log("msg", "Out of order sample", "lset", lset.String(), "sample", s.String())
 			case storage.ErrDuplicateSampleForTimestamp:
@@ -52,16 +58,13 @@ func (r *Writer) Receive(wreq *prompb.WriteRequest) error {
 			case storage.ErrOutOfBounds:
 				level.Debug(r.logger).Log("msg", "Out of bounds metric", "lset", lset.String(), "sample", s.String())
 			}
-			if err != nil {
-				app.Rollback()
-				return errors.Wrap(err, "failed to non-fast add")
-			}
+			errs.Add(errors.Wrap(err, "failed to non-fast add"))
 		}
 	}
 
 	if err := app.Commit(); err != nil {
-		return errors.Wrap(err, "failed to commit")
+		errs.Add(errors.Wrap(err, "failed to commit"))
 	}
 
-	return nil
+	return errs.Err()
 }
