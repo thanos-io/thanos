@@ -4,6 +4,6 @@ package testutil
 
 import "syscall"
 
-func sysProcAttr() *syscall.SysProcAttr {
+func SysProcAttr() *syscall.SysProcAttr {
 	return &syscall.SysProcAttr{}
 }

@@ -179,7 +179,7 @@ func (p *Prometheus) start() error {
 	}, extra...)
 
 	p.cmd = exec.Command(prometheusBin(p.version), args...)
-	p.cmd.SysProcAttr = sysProcAttr()
+	p.cmd.SysProcAttr = SysProcAttr()
 
 	go func() {
 		if b, err := p.cmd.CombinedOutput(); err != nil {
