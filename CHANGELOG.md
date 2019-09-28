@@ -27,6 +27,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 - [#1525](https://github.com/thanos-io/thanos/pull/1525) Thanos now deletes block's file in correct order allowing to detect partial blocks without problems.
 - [#1505](https://github.com/thanos-io/thanos/pull/1505) Thanos store now removes invalid local cache blocks.
+- [#1564](https://github.com/thanos-io/thanos/issues/1564) Thanos rule correctly parses Alertmanager URL if there is more `+` in it.
 
 ## v0.7.0 - 2019.09.02
 

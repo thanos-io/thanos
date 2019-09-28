@@ -20,7 +20,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
@@ -51,7 +51,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/ui"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 // registerRule registers a rule command.
@@ -614,22 +614,31 @@ func (s *alertmanagerSet) get() []*url.URL {
 
 const defaultAlertmanagerPort = 9093
 
+func parseAlertmanagerAddress(addr string) (qType dns.QType, parsedUrl *url.URL, err error) {
+	qType = ""
+	parsedUrl, err = url.Parse(addr)
+	if err != nil {
+		return qType, nil, err
+	}
+	// The Scheme might contain DNS resolver type separated by + so we split it a part
+	if schemeParts := strings.Split(parsedUrl.Scheme, "+"); len(schemeParts) > 1 {
+		parsedUrl.Scheme = schemeParts[len(schemeParts)-1]
+		qType = dns.QType(strings.Join(schemeParts[:len(schemeParts)-1], "+"))
+	}
+	return qType, parsedUrl, err
+}
+
 func (s *alertmanagerSet) update(ctx context.Context) error {
 	var result []*url.URL
 	for _, addr := range s.addrs {
 		var (
-			name           = addr
 			qtype          dns.QType
 			resolvedDomain []string
 		)
 
-		if nameQtype := strings.SplitN(addr, "+", 2); len(nameQtype) == 2 {
-			name, qtype = nameQtype[1], dns.QType(nameQtype[0])
-		}
-
-		u, err := url.Parse(name)
+		qtype, u, err := parseAlertmanagerAddress(addr)
 		if err != nil {
-			return errors.Wrapf(err, "parse URL %q", name)
+			return errors.Wrapf(err, "parse URL %q", addr)
 		}
 
 		// Get only the host and resolve it if needed.
