@@ -360,6 +360,10 @@ func externalLabelsFromStore(store *storeRef) string {
 	}
 	sort.Strings(tsdbLabelSetStrings)
 
+	// Append the storeType to the end of list, because the store gateway will be exposed external labels,
+	// we allow the duplicate external labels with different components.
+	tsdbLabelSetStrings = append(tsdbLabelSetStrings, store.storeType.String())
+
 	return strings.Join(tsdbLabelSetStrings, ",")
 }
 
