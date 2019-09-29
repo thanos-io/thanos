@@ -22,6 +22,8 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	prom_labels "github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
@@ -217,7 +219,8 @@ type BucketStore struct {
 	samplesLimiter *Limiter
 	partitioner    partitioner
 
-	filterConfig *FilterConfig
+	filterConfig  *FilterConfig
+	relabelConfig []*relabel.Config
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -234,6 +237,7 @@ func NewBucketStore(
 	debugLogging bool,
 	blockSyncConcurrency int,
 	filterConf *FilterConfig,
+	relabelConfig []*relabel.Config,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -268,6 +272,7 @@ func NewBucketStore(
 		samplesLimiter: NewLimiter(maxSampleCount, metrics.queriesDropped),
 		partitioner:    gapBasedPartitioner{maxGapSize: maxGapSize},
 		filterConfig:   filterConf,
+		relabelConfig:  relabelConfig,
 	}
 	s.metrics = metrics
 
@@ -458,6 +463,16 @@ func (s *BucketStore) addBlock(ctx context.Context, id ulid.ULID) (err error) {
 	lset := labels.FromMap(b.meta.Thanos.Labels)
 	h := lset.Hash()
 
+	// Check tsdb labels by relabel configuration.
+	// If output is empty, the block will be dropped.
+	processedLabels := relabel.Process(prom_labels.FromMap(lset.Map()), s.relabelConfig...)
+	if processedLabels == nil {
+		level.Debug(s.logger).Log("msg", "dropping block(drop in relabeling)", "id", id)
+		return nil
+	}
+	b.labels = labels.FromMap(processedLabels.Map())
+	sort.Sort(b.labels)
+
 	set, ok := s.blockSets[h]
 	if !ok {
 		set = newBucketBlockSet(lset)
@@ -521,12 +536,32 @@ func (s *BucketStore) TimeRange() (mint, maxt int64) {
 // Info implements the storepb.StoreServer interface.
 func (s *BucketStore) Info(context.Context, *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	mint, maxt := s.TimeRange()
-	// Store nodes hold global data and thus have no labels.
-	return &storepb.InfoResponse{
+	res := &storepb.InfoResponse{
 		StoreType: component.Store.ToProto(),
 		MinTime:   mint,
 		MaxTime:   maxt,
-	}, nil
+	}
+
+	labelSets := make(map[uint64][]storepb.Label, len(s.blocks))
+	for _, bs := range s.blocks {
+		ls := map[string]string{}
+		for _, l := range bs.labels {
+			ls[l.Name] = l.Value
+		}
+
+		res := []storepb.Label{}
+		for k, v := range ls {
+			res = append(res, storepb.Label{Name: k, Value: v})
+		}
+		labelSets[bs.labels.Hash()] = res
+	}
+
+	res.LabelSets = make([]storepb.LabelSet, 0, len(labelSets))
+	for _, v := range labelSets {
+		res.LabelSets = append(res.LabelSets, storepb.LabelSet{Labels: v})
+	}
+
+	return res, nil
 }
 
 func (s *BucketStore) limitMinTime(mint int64) int64 {
@@ -1140,6 +1175,8 @@ type bucketBlock struct {
 	pendingReaders sync.WaitGroup
 
 	partitioner partitioner
+
+	labels labels.Labels
 }
 
 func newBucketBlock(
