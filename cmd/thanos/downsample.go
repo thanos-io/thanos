@@ -137,6 +137,13 @@ func downsampleBucket(
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return errors.Wrap(err, "create dir")
 	}
+
+	defer func() {
+		if err := os.RemoveAll(dir); err != nil {
+			level.Error(logger).Log("msg", "failed to remove downsample cache directory", "path", dir, "err", err)
+		}
+	}()
+
 	var metas []*metadata.Meta
 
 	err := bkt.Iter(ctx, "", func(name string) error {

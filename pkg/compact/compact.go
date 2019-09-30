@@ -972,6 +972,11 @@ func NewBucketCompactor(
 
 // Compact runs compaction over bucket.
 func (c *BucketCompactor) Compact(ctx context.Context) error {
+	defer func() {
+		if err := os.RemoveAll(c.compactDir); err != nil {
+			level.Error(c.logger).Log("msg", "failed to remove compaction cache directory", "path", c.compactDir, "err", err)
+		}
+	}()
 	// Loop over bucket and compact until there's no work left.
 	for {
 		var (
