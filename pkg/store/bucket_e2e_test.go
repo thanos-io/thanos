@@ -12,6 +12,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block"
@@ -137,6 +138,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		labels.FromStrings("a", "2", "c", "2"),
 	}
 	extLset := labels.FromStrings("ext1", "value1")
+	relabelConfig := make([]*relabel.Config, 0)
 
 	blocks, minTime, maxTime := prepareTestBlocks(t, time.Now(), 3, dir, bkt,
 		series, extLset)
@@ -150,7 +152,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		maxTime: maxTime,
 	}
 
-	store, err := NewBucketStore(s.logger, nil, bkt, dir, s.cache, 0, maxSampleCount, 20, false, 20, filterConf)
+	store, err := NewBucketStore(s.logger, nil, bkt, dir, s.cache, 0, maxSampleCount, 20, false, 20, filterConf, relabelConfig)
 	testutil.Ok(t, err)
 	s.store = store
 
@@ -474,6 +476,7 @@ func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
 		labels.FromStrings("a", "1", "b", "2"),
 	}
 	extLset := labels.FromStrings("ext1", "value1")
+	relabelConfig := make([]*relabel.Config, 0)
 
 	_, minTime, _ := prepareTestBlocks(t, time.Now(), 3, dir, bkt, series, extLset)
 
@@ -484,7 +487,7 @@ func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
 		&FilterConfig{
 			MinTime: minTimeDuration,
 			MaxTime: filterMaxTime,
-		})
+		}, relabelConfig)
 	testutil.Ok(t, err)
 
 	err = store.SyncBlocks(ctx)

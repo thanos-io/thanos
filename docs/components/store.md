@@ -105,6 +105,17 @@ Flags:
                                  RFC3339 format or time duration relative to
                                  current time, such as -1d or 2h45m. Valid
                                  duration units are ms, s, m, h, d, w, y.
+      --selector.relabel-config-file=<seletor.relabel-config-yaml-path>
+                                 Path to YAML file that contains seletor
+                                 relabeling configuration. It follows native
+                                 Prometheus relabel-config syntax. See format
+                                 details:
+                                 https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+      --selector.relabel-config=<selector.relabel-config-yaml>
+                                 Alternative to 'selector.relabel-config-file'
+                                 flag. Relabeling configuration in YAML. See
+                                 format details:
+                                 https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
 
 ```
 

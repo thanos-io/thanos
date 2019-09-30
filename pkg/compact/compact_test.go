@@ -9,6 +9,7 @@ import (
 
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/relabel"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/thanos-io/thanos/pkg/objstore/inmem"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -75,7 +76,8 @@ func TestSyncer_SyncMetas_HandlesMalformedBlocks(t *testing.T) {
 	defer cancel()
 
 	bkt := inmem.NewBucket()
-	sy, err := NewSyncer(nil, nil, bkt, 10*time.Second, 1, false)
+	relabelConfig := make([]*relabel.Config, 0)
+	sy, err := NewSyncer(nil, nil, bkt, 10*time.Second, 1, false, relabelConfig)
 	testutil.Ok(t, err)
 
 	// Generate 1 block which is older than MinimumAgeForRemoval which has chunk data but no meta.  Compactor should delete it.

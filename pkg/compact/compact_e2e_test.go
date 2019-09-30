@@ -17,6 +17,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/labels"
@@ -32,7 +33,8 @@ func TestSyncer_SyncMetas_e2e(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
-		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false)
+		relabelConfig := make([]*relabel.Config, 0)
+		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false, relabelConfig)
 		testutil.Ok(t, err)
 
 		// Generate 15 blocks. Initially the first 10 are synced into memory and only the last
@@ -85,6 +87,8 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		var metas []*metadata.Meta
 		var ids []ulid.ULID
 
+		relabelConfig := make([]*relabel.Config, 0)
+
 		for i := 0; i < 10; i++ {
 			var m metadata.Meta
 
@@ -134,7 +138,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		}
 
 		// Do one initial synchronization with the bucket.
-		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false)
+		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false, relabelConfig)
 		testutil.Ok(t, err)
 		testutil.Ok(t, sy.SyncMetas(ctx))
 

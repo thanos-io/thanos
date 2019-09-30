@@ -15,6 +15,7 @@ import (
 	"github.com/leanovate/gopter/prop"
 	"github.com/oklog/ulid"
 	prommodel "github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -422,7 +423,8 @@ func TestBucketStore_Info(t *testing.T) {
 	dir, err := ioutil.TempDir("", "bucketstore-test")
 	testutil.Ok(t, err)
 
-	bucketStore, err := NewBucketStore(nil, nil, nil, dir, noopCache{}, 2e5, 0, 0, false, 20, filterConf)
+	relabelConfig := make([]*relabel.Config, 0)
+	bucketStore, err := NewBucketStore(nil, nil, nil, dir, noopCache{}, 2e5, 0, 0, false, 20, filterConf, relabelConfig)
 	testutil.Ok(t, err)
 
 	resp, err := bucketStore.Info(ctx, &storepb.InfoRequest{})
@@ -440,6 +442,7 @@ func TestBucketStore_isBlockInMinMaxRange(t *testing.T) {
 
 	series := []labels.Labels{labels.FromStrings("a", "1", "b", "1")}
 	extLset := labels.FromStrings("ext1", "value1")
+	relabelConfig := make([]*relabel.Config, 0)
 
 	// Create a block in range [-2w, -1w].
 	id1, err := testutil.CreateBlock(ctx, dir, series, 10,
@@ -480,7 +483,7 @@ func TestBucketStore_isBlockInMinMaxRange(t *testing.T) {
 		&FilterConfig{
 			MinTime: minTimeDuration,
 			MaxTime: hourBefore,
-		})
+		}, relabelConfig)
 	testutil.Ok(t, err)
 
 	inRange, err := bucketStore.isBlockInMinMaxRange(context.TODO(), id1)
