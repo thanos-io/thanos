@@ -22,7 +22,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	prom_labels "github.com/prometheus/prometheus/pkg/labels"
+	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
@@ -463,11 +463,11 @@ func (s *BucketStore) addBlock(ctx context.Context, id ulid.ULID) (err error) {
 	lset := labels.FromMap(b.meta.Thanos.Labels)
 	h := lset.Hash()
 
-	// Check tsdb labels by relabel configuration.
+	// Check for block labels by relabeling.
 	// If output is empty, the block will be dropped.
-	processedLabels := relabel.Process(prom_labels.FromMap(lset.Map()), s.relabelConfig...)
+	processedLabels := relabel.Process(promlabels.FromMap(lset.Map()), s.relabelConfig...)
 	if processedLabels == nil {
-		level.Debug(s.logger).Log("msg", "dropping block(drop in relabeling)", "id", id)
+		level.Debug(s.logger).Log("msg", "dropping block(drop in relabeling)", "block", id)
 		return os.RemoveAll(dir)
 	}
 	b.labels = labels.FromMap(processedLabels.Map())

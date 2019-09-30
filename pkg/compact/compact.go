@@ -16,6 +16,8 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	promlables "github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/tsdb/labels"
@@ -36,6 +38,7 @@ const (
 )
 
 var blockTooFreshSentinelError = errors.New("Block too fresh")
+var blockDroppedInRelabelingError = errors.New("Block dropped in Relabeling")
 
 // Syncer syncronizes block metas from a bucket into a local directory.
 // It sorts them into compaction groups based on equal label sets.
@@ -50,6 +53,7 @@ type Syncer struct {
 	blockSyncConcurrency int
 	metrics              *syncerMetrics
 	acceptMalformedIndex bool
+	relabelConfig        []*relabel.Config
 }
 
 type syncerMetrics struct {
@@ -131,7 +135,7 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 
 // NewSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, consistencyDelay time.Duration, blockSyncConcurrency int, acceptMalformedIndex bool) (*Syncer, error) {
+func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, consistencyDelay time.Duration, blockSyncConcurrency int, acceptMalformedIndex bool, relabelConfig []*relabel.Config) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -144,6 +148,7 @@ func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket
 		metrics:              newSyncerMetrics(reg),
 		blockSyncConcurrency: blockSyncConcurrency,
 		acceptMalformedIndex: acceptMalformedIndex,
+		relabelConfig:        relabelConfig,
 	}, nil
 }
 
@@ -205,7 +210,7 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 				}
 
 				meta, err := c.downloadMeta(workCtx, id)
-				if err == blockTooFreshSentinelError {
+				if err == blockTooFreshSentinelError || err == blockDroppedInRelabelingError {
 					continue
 				}
 				if err != nil {
@@ -273,6 +278,15 @@ func (c *Syncer) downloadMeta(ctx context.Context, id ulid.ULID) (*metadata.Meta
 			return nil, blockTooFreshSentinelError
 		}
 		return nil, errors.Wrapf(err, "downloading meta.json for %s", id)
+	}
+
+	// Check for block labels by relabeling.
+	// If output is empty, the block will be dropped.
+	lset := promlables.FromMap(meta.Thanos.Labels)
+	processedLabels := relabel.Process(lset, c.relabelConfig...)
+	if processedLabels == nil {
+		level.Debug(c.logger).Log("msg", "dropping block(drop in relabeling)", "block", id)
+		return nil, blockDroppedInRelabelingError
 	}
 
 	// ULIDs contain a millisecond timestamp. We do not consider blocks that have been created too recently to
