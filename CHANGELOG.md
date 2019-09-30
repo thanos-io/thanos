@@ -20,6 +20,10 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#1534](https://github.com/thanos-io/thanos/pull/1534) Thanos Query Added `/-/ready` and `/-/healthy` endpoints.
 - [#1533](https://github.com/thanos-io/thanos/pull/1533) Thanos inspect now supports the timeout flag.
 - [#1362](https://github.com/thanos-io/thanos/pull/1362) Optional `replicaLabels` param for `/query` and `/query_range` querier endpoints. When provided overwrite the `query.replica-label` cli flags.
+- [#1583](https://github.com/thanos-io/thanos/pull/1583) Thanos sharding:
+  - Add relabel config (`--selector.relabel-config-file` and `selector.relabel-config`) into Thanos
+  - Selecting blocks to serve depends on the result of block labels relabeling.
+  - For store gateway, expose advertise labels after relabeling.
 
 ### Changed
 
