@@ -468,7 +468,7 @@ func (s *BucketStore) addBlock(ctx context.Context, id ulid.ULID) (err error) {
 	processedLabels := relabel.Process(prom_labels.FromMap(lset.Map()), s.relabelConfig...)
 	if processedLabels == nil {
 		level.Debug(s.logger).Log("msg", "dropping block(drop in relabeling)", "id", id)
-		return nil
+		return os.RemoveAll(dir)
 	}
 	b.labels = labels.FromMap(processedLabels.Map())
 	sort.Sort(b.labels)
