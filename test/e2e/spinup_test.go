@@ -91,10 +91,7 @@ func newCmdExec(cmd *exec.Cmd) *cmdExec {
 func (c *cmdExec) Start(stdout io.Writer, stderr io.Writer) error {
 	c.Stderr = stderr
 	c.Stdout = stdout
-	c.SysProcAttr = &syscall.SysProcAttr{
-		// For linux only, kill this if the go test process dies before the cleanup.
-		Pdeathsig: syscall.SIGKILL,
-	}
+	c.SysProcAttr = testutil.SysProcAttr()
 	return c.Cmd.Start()
 }
 
