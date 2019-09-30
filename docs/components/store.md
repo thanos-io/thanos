@@ -42,7 +42,7 @@ Flags:
       --log.format=logfmt        Log format to use.
       --tracing.config-file=<tracing.config-yaml-path>
                                  Path to YAML file that contains tracing
-                                 configuration. See fomrat details:
+                                 configuration. See format details:
                                  https://thanos.io/tracing.md/#configuration
       --tracing.config=<tracing.config-yaml>
                                  Alternative to 'tracing.config-file' flag.

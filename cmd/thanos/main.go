@@ -294,7 +294,7 @@ func defaultGRPCServerOpts(logger log.Logger, cert, key, clientCA string) ([]grp
 	return append(opts, grpc.Creds(credentials.NewTLS(tlsCfg))), nil
 }
 
-func newStoreGRPCServer(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, srv storepb.StoreServer, opts []grpc.ServerOption) *grpc.Server {
+func newStoreGRPCServer(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, srv storepb.StoreServer, opts []grpc.ServerOption) *grpc.Server {
 	met := grpc_prometheus.NewServerMetrics()
 	met.EnableHandlingTimeHistogram(
 		grpc_prometheus.WithHistogramBuckets([]float64{

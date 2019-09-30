@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
-	"sync/atomic"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -24,7 +23,6 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage"
-	promtsdb "github.com/prometheus/prometheus/storage/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -32,10 +30,9 @@ import (
 
 // Options for the web Handler.
 type Options struct {
-	Receiver          *Writer
+	Writer            *Writer
 	ListenAddress     string
 	Registry          prometheus.Registerer
-	ReadyStorage      *promtsdb.ReadyStorage
 	Endpoint          string
 	TenantHeader      string
 	ReplicaHeader     string
@@ -44,21 +41,17 @@ type Options struct {
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
 type Handler struct {
-	readyStorage *promtsdb.ReadyStorage
-	logger       log.Logger
-	receiver     *Writer
-	router       *route.Router
-	options      *Options
-	listener     net.Listener
+	logger   log.Logger
+	writer   *Writer
+	router   *route.Router
+	options  *Options
+	listener net.Listener
 
 	mtx      sync.RWMutex
 	hashring Hashring
 
 	// Metrics
 	forwardRequestsTotal *prometheus.CounterVec
-
-	// These fields are uint32 rather than boolean to be able to use atomic functions.
-	storageReady uint32
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -67,11 +60,10 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	}
 
 	h := &Handler{
-		logger:       logger,
-		readyStorage: o.ReadyStorage,
-		receiver:     o.Receiver,
-		router:       route.New(),
-		options:      o,
+		logger:  logger,
+		writer:  o.Writer,
+		router:  route.New(),
+		options: o,
 		forwardRequestsTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
@@ -96,27 +88,33 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	return h
 }
 
-// StorageReady marks the storage as ready.
-func (h *Handler) StorageReady() {
-	atomic.StoreUint32(&h.storageReady, 1)
+// SetWriter sets the writer.
+// The writer must be set to a non-nil value in order for the
+// handler to be ready and usable.
+// If the writer is nil, then the handler is marked as not ready.
+func (h *Handler) SetWriter(w *Writer) {
+	h.mtx.Lock()
+	defer h.mtx.Unlock()
+	h.writer = w
 }
 
 // Hashring sets the hashring for the handler and marks the hashring as ready.
-// If the hashring is nil, then the hashring is marked as not ready.
+// The hashring must be set to a non-nil value in order for the
+// handler to be ready and usable.
+// If the hashring is nil, then the handler is marked as not ready.
 func (h *Handler) Hashring(hashring Hashring) {
 	h.mtx.Lock()
 	defer h.mtx.Unlock()
-
 	h.hashring = hashring
 }
 
 // Verifies whether the server is ready or not.
 func (h *Handler) isReady() bool {
-	sr := atomic.LoadUint32(&h.storageReady)
 	h.mtx.RLock()
 	hr := h.hashring != nil
+	sr := h.writer != nil
 	h.mtx.RUnlock()
-	return sr > 0 && hr
+	return sr && hr
 }
 
 // Checks if server is ready, calls f if it is, returns 503 if it is not.
@@ -222,17 +220,9 @@ func (h *Handler) receive(w http.ResponseWriter, r *http.Request) {
 	// destined for the local node will be written to the receiver.
 	// Time series will be replicated as necessary.
 	if err := h.forward(r.Context(), tenant, rep, &wreq); err != nil {
-		if errs, ok := err.(terrors.MultiError); ok {
-			for _, err := range errs {
-				switch errors.Cause(err) {
-				case storage.ErrOutOfOrderSample:
-					http.Error(w, err.Error(), http.StatusConflict)
-					return
-				case storage.ErrDuplicateSampleForTimestamp:
-					http.Error(w, err.Error(), http.StatusConflict)
-					return
-				}
-			}
+		if hasCause(err, isConflict) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -315,7 +305,14 @@ func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replic
 		// can be ignored if the replication factor is met.
 		if endpoint == h.options.Endpoint {
 			go func(endpoint string) {
-				err := h.receiver.Receive(wreqs[endpoint])
+				var err error
+				h.mtx.RLock()
+				if h.writer == nil {
+					err = errors.New("storage is not ready")
+				} else {
+					err = h.writer.Write(wreqs[endpoint])
+				}
+				h.mtx.RUnlock()
 				if err != nil {
 					level.Error(h.logger).Log("msg", "storing locally", "err", err, "endpoint", endpoint)
 				}
@@ -360,7 +357,7 @@ func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replic
 				return
 			}
 			if res.StatusCode != http.StatusOK {
-				err = errors.New(res.Status)
+				err = errors.New(strconv.Itoa(res.StatusCode))
 				level.Error(h.logger).Log("msg", "forwarding returned non-200 status", "err", err, "endpoint", endpoint)
 				ec <- err
 				return
@@ -415,8 +412,32 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	err := h.parallelizeRequests(ctx, tenant, replicas, wreqs)
 	if errs, ok := err.(terrors.MultiError); ok {
 		if uint64(len(errs)) >= (h.options.ReplicationFactor+1)/2 {
-			return errors.New("did not meet replication threshold")
+			return errors.Wrap(err, "did not meet replication threshold")
 		}
 	}
 	return errors.Wrap(err, "could not replicate write request")
+}
+
+// hasCause performs a depth-first search of the causes of a nested MultiError
+// to determine if it contains an error that satisfies the given cause.
+func hasCause(err error, f func(error) bool) bool {
+	if err == nil {
+		return false
+	}
+	err = errors.Cause(err)
+	errs, ok := err.(terrors.MultiError)
+	if !ok {
+		return f(err)
+	}
+	for i := range errs {
+		if hasCause(errs[i], f) {
+			return true
+		}
+	}
+	return false
+}
+
+// isConflict returns whether or not the given error represents a conflict.
+func isConflict(err error) bool {
+	return err == storage.ErrOutOfOrderSample || err == storage.ErrOutOfBounds || err.Error() == strconv.Itoa(http.StatusConflict)
 }

@@ -18,12 +18,14 @@ that allows changing `StoreAPI`s on-the-fly.
 
 [Gossip](https://en.wikipedia.org/wiki/Gossip_protocol) protocol (with the [membership](https://github.com/hashicorp/memberlist) implementation)
 was built into Thanos from the very beginning. The main advantages over other solution to connect components were:
+
 * Auto-join and auto-drop of components based on health checks.
 * Propagation of tiny metadata.
 
 After a couple of month of maintaining Thanos project and various discussions with different users, we realized that those advantages
 are not outstanding anymore and are not worth keeping, compared to the issues gossip causes. There are numerous reasons why we should
 deprecate gossip:
+
 * Gossip has been proven to be extremely confusing for the new users. Peer logic and really confusing `cluster.advertise-address` that
 was sometimes able to magically deduce private IP address (and sometimes not!) were leading to lots of questions and issues.
 Something that was made for quick ramp-up into Thanos ("just click the button and it auto-joins everything") created lots of confusion

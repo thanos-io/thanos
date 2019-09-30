@@ -28,7 +28,7 @@ func NewWriter(logger log.Logger, app Appendable) *Writer {
 	}
 }
 
-func (r *Writer) Receive(wreq *prompb.WriteRequest) error {
+func (r *Writer) Write(wreq *prompb.WriteRequest) error {
 	app, err := r.append.Appender()
 
 	if err != nil {

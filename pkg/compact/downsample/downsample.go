@@ -28,6 +28,12 @@ const (
 	ResLevel2 = int64(60 * 60 * 1000) // 1 hour in milliseconds
 )
 
+// Downsampling ranges i.e. after what time we start to downsample blocks (in seconds).
+const (
+	DownsampleRange0 = 40 * 60 * 60 * 1000      // 40 hours
+	DownsampleRange1 = 10 * 24 * 60 * 60 * 1000 // 10 days
+)
+
 // Downsample downsamples the given block. It writes a new block into dir and returns its ID.
 func Downsample(
 	logger log.Logger,
