@@ -12,8 +12,8 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ## Unreleased
 
 ## Added
-- [#1564](https://github.com/thanos-io/thanos/pull/1564) Cleanup all cache dirs after each compaction run.
-- [1533](https://github.com/thanos-io/thanos/pull/1533) Thanos inspect now supports the timeout flag.
+- [#1587](https://github.com/thanos-io/thanos/pull/1587) Cleanup all cache dirs after each compaction run.
+- [#1533](https://github.com/thanos-io/thanos/pull/1533) Thanos inspect now supports the timeout flag.
 
 ### Fixed
 - [#1525](https://github.com/thanos-io/thanos/pull/1525) Thanos now deletes block's file in correct order allowing to detect partial blocks without problems.
