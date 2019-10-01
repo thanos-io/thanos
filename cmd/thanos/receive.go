@@ -370,25 +370,12 @@ func runReceive(
 			return err
 		}
 
-		// Ensure we close up everything properly.
-		defer func() {
-			if err != nil {
-				runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
-			}
-		}()
-
 		s := shipper.New(logger, reg, dataDir, bkt, func() labels.Labels { return lset }, metadata.ReceiveSource)
 
 		// Before starting, ensure any old blocks are uploaded.
 		if uploaded, err := s.Sync(context.Background()); err != nil {
 			level.Warn(logger).Log("err", err, "failed to upload", uploaded)
 		}
-		// Before quitting, ensure all blocks are uploaded.
-		defer func() {
-			if uploaded, err := s.Sync(context.Background()); err != nil {
-				level.Warn(logger).Log("err", err, "failed to upload", uploaded)
-			}
-		}()
 
 		{
 			// Run the uploader in a loop.
@@ -410,6 +397,17 @@ func runReceive(
 			// Upload on demand.
 			ctx, cancel := context.WithCancel(context.Background())
 			g.Add(func() error {
+				// Ensure we clean up everything properly.
+				defer func() {
+					runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+				}()
+				// Before quitting, ensure all blocks are uploaded.
+				defer func() {
+					<-uploadC
+					if uploaded, err := s.Sync(context.Background()); err != nil {
+						level.Warn(logger).Log("err", err, "failed to upload", uploaded)
+					}
+				}()
 				defer close(uploadDone)
 				for {
 					select {
@@ -419,7 +417,6 @@ func runReceive(
 						if uploaded, err := s.Sync(ctx); err != nil {
 							level.Warn(logger).Log("err", err, "failed to upload", uploaded)
 						}
-						cancel()
 						uploadDone <- struct{}{}
 					}
 				}
