@@ -263,9 +263,9 @@ func runReceive(
 				cancel()
 			})
 		} else {
-			defer close(updates)
 			cancel := make(chan struct{})
 			g.Add(func() error {
+				defer close(updates)
 				updates <- receive.SingleNodeHashring(endpoint)
 				<-cancel
 				return nil
@@ -410,7 +410,7 @@ func runReceive(
 			// Upload on demand.
 			ctx, cancel := context.WithCancel(context.Background())
 			g.Add(func() error {
-				defer close(uploadC)
+				defer close(uploadDone)
 				for {
 					select {
 					case <-ctx.Done():
