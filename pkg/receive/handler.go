@@ -414,6 +414,7 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 		if uint64(len(errs)) >= (h.options.ReplicationFactor+1)/2 {
 			return errors.Wrap(err, "did not meet replication threshold")
 		}
+		return nil
 	}
 	return errors.Wrap(err, "could not replicate write request")
 }
