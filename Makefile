@@ -158,9 +158,19 @@ check-docs: $(EMBEDMD) $(LICHE) build
 	@$(LICHE) --recursive docs --exclude "cloud.tencent.com" --document-root .
 	@$(LICHE) --exclude "cloud.tencent.com|goreportcard.com" --document-root . *.md
 
+# checks Go code comments if they have trailing period (excludes protobuffers and vendor files).
+.PHONY: check-comments
+check-comments:
+	@printf ">> checking Go comments trailing periods\n\n\n"
+	@if grep -Przo --color --include \*.go --exclude \*.pb.go --exclude bindata.go --exclude-dir vendor '\n.*\s+//\s{0,3}[^\s][^\n]+[^.?!:]{2}\n[ \t]*[^/\s].*\n' ./; \
+	 then \
+	 	printf "\n\n\n Error: Found comments without trailing period. Please make sure to add them.\n\n\n." \
+	 	&& false; \
+	 fi;
+
 # format formats the code (including imports format).
 .PHONY: format
-format: $(GOIMPORTS)
+format: $(GOIMPORTS) check-comments
 	@echo ">> formatting code"
 	@$(GOIMPORTS) -w $(FILES_TO_FMT)
 
