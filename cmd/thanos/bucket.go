@@ -96,7 +96,7 @@ func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name 
 				return errors.New("repair is specified, so backup client is required")
 			}
 		} else {
-			// nil Prometheus registerer: don't create conflicting metrics
+			// nil Prometheus registerer: don't create conflicting metrics.
 			backupBkt, err = client.NewBucket(logger, backupconfContentYaml, nil, name)
 			if err != nil {
 				return err
@@ -300,7 +300,7 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 	}
 }
 
-// registerBucketWeb exposes a web interface for the state of remote store like `pprof web`
+// registerBucketWeb exposes a web interface for the state of remote store like `pprof web`.
 func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
 	cmd := root.Command("web", "Web interface for remote storage bucket")
 	bind := cmd.Flag("listen", "HTTP host:port to listen on").Default("0.0.0.0:8080").String()
@@ -483,7 +483,7 @@ func getKeysAlphabetically(labels map[string]string) []string {
 }
 
 // matchesSelector checks if blockMeta contains every label from
-// the selector with the correct value
+// the selector with the correct value.
 func matchesSelector(blockMeta *metadata.Meta, selectorLabels labels.Labels) bool {
 	for _, l := range selectorLabels {
 		if v, ok := blockMeta.Thanos.Labels[l.Name]; !ok || v != l.Value {
@@ -493,7 +493,7 @@ func matchesSelector(blockMeta *metadata.Meta, selectorLabels labels.Labels) boo
 	return true
 }
 
-// getIndex calculates the index of s in strs
+// getIndex calculates the index of s in strs.
 func getIndex(strs []string, s string) int {
 	for i, col := range strs {
 		if col == s {

@@ -52,7 +52,7 @@ type ProxyStore struct {
 }
 
 // NewProxyStore returns a new ProxyStore that uses the given clients that implements storeAPI to fan-in all series to the client.
-// Note that there is no deduplication support. Deduplication should be done on the highest level (just before PromQL)
+// Note that there is no deduplication support. Deduplication should be done on the highest level (just before PromQL).
 func NewProxyStore(
 	logger log.Logger,
 	stores func() []Client,
@@ -264,7 +264,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 
 		level.Debug(s.logger).Log("msg", strings.Join(storeDebugMsgs, ";"))
 		if len(seriesSet) == 0 {
-			// This is indicates that configured StoreAPIs are not the ones end user expects
+			// This is indicates that configured StoreAPIs are not the ones end user expects.
 			err := errors.New("No store matched for this query")
 			level.Warn(s.logger).Log("err", err, "stores", strings.Join(storeDebugMsgs, ";"))
 			respSender.send(storepb.NewWarnSeriesResponse(err))

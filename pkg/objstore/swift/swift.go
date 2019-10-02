@@ -160,7 +160,7 @@ func (c *Container) Delete(ctx context.Context, name string) error {
 }
 
 func (*Container) Close() error {
-	// nothing to close
+	// Nothing to close.
 	return nil
 }
 

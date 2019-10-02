@@ -23,15 +23,15 @@ import (
 
 // Standard downsampling resolution levels in Thanos.
 const (
-	ResLevel0 = int64(0)              // raw data
-	ResLevel1 = int64(5 * 60 * 1000)  // 5 minutes in milliseconds
-	ResLevel2 = int64(60 * 60 * 1000) // 1 hour in milliseconds
+	ResLevel0 = int64(0)              // Raw data.
+	ResLevel1 = int64(5 * 60 * 1000)  // 5 minutes in milliseconds.
+	ResLevel2 = int64(60 * 60 * 1000) // 1 hour in milliseconds.
 )
 
 // Downsampling ranges i.e. after what time we start to downsample blocks (in seconds).
 const (
-	DownsampleRange0 = 40 * 60 * 60 * 1000      // 40 hours
-	DownsampleRange1 = 10 * 24 * 60 * 60 * 1000 // 10 days
+	DownsampleRange0 = 40 * 60 * 60 * 1000      // 40 hours.
+	DownsampleRange1 = 10 * 24 * 60 * 60 * 1000 // 10 days.
 )
 
 // Downsample downsamples the given block. It writes a new block into dir and returns its ID.
@@ -199,14 +199,14 @@ func targetChunkCount(mint, maxt, inRes, outRes int64, count int) (x int) {
 
 // aggregator collects cumulative stats for a stream of values.
 type aggregator struct {
-	total   int     // total samples processed
-	count   int     // samples in current window
-	sum     float64 // value sum of current window
-	min     float64 // min of current window
-	max     float64 // max of current window
-	counter float64 // total counter state since beginning
-	resets  int     // number of counter resets since beginning
-	last    float64 // last added value
+	total   int     // Total samples processed.
+	count   int     // Samples in current window.
+	sum     float64 // Value sum of current window.
+	min     float64 // Min of current window.
+	max     float64 // Max of current window.
+	counter float64 // Total counter state since beginning.
+	resets  int     // Number of counter resets since beginning.
+	last    float64 // Last added value.
 }
 
 // reset the stats to start a new aggregation window.
@@ -536,14 +536,14 @@ type sample struct {
 // values as counter reset.
 // Additionally, it can deal with downsampled counter chunks, which set the last value of a chunk
 // to the original last value. The last value can be detected by checking whether the timestamp
-// did not increase w.r.t to the previous sample
+// did not increase w.r.t to the previous sample.
 type CounterSeriesIterator struct {
 	chks   []chunkenc.Iterator
-	i      int     // current chunk
-	total  int     // total number of processed samples
-	lastT  int64   // timestamp of the last sample
-	lastV  float64 // value of the last sample
-	totalV float64 // total counter state since beginning of series
+	i      int     // Current chunk.
+	total  int     // Total number of processed samples.
+	lastT  int64   // Timestamp of the last sample.
+	lastV  float64 // Value of the last sample.
+	totalV float64 // Total counter state since beginning of series.
 }
 
 func NewCounterSeriesIterator(chks ...chunkenc.Iterator) *CounterSeriesIterator {

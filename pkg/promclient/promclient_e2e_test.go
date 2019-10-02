@@ -99,7 +99,7 @@ func TestSnapshot_e2e(t *testing.T) {
 
 		// Prometheus since 2.7.0 don't write empty blocks even if it's head block. So it's no matter passing skip_head true or false here
 		// Pass skipHead = true to support all prometheus versions and assert that snapshot creates only one file
-		// https://github.com/prometheus/tsdb/pull/374
+		// https://github.com/prometheus/tsdb/pull/374 .
 		dir, err := Snapshot(ctx, log.NewNopLogger(), u, true)
 		testutil.Ok(t, err)
 

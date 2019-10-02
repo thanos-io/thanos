@@ -199,7 +199,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 				return errors.Wrap(err, "read file")
 			}
 
-			// detect and extract gzipped file
+			// Detect and extract gzipped file.
 			if bytes.Equal(b[0:3], firstGzipBytes) {
 				zr, err := gzip.NewReader(bytes.NewReader(b))
 				if err != nil {

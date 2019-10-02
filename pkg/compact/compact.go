@@ -280,7 +280,7 @@ func (c *Syncer) downloadMeta(ctx context.Context, id ulid.ULID) (*metadata.Meta
 	// - repair created blocks
 	// - compactor created blocks
 	// NOTE: It is not safe to miss "old" block (even that it is newly created) in sync step. Compactor needs to aware of ALL old blocks.
-	// TODO(bplotka): https://github.com/thanos-io/thanos/issues/377
+	// TODO(bplotka): https://github.com/thanos-io/thanos/issues/377 .
 	if ulid.Now()-id.Time() < uint64(c.consistencyDelay/time.Millisecond) &&
 		meta.Thanos.Source != metadata.BucketRepairSource &&
 		meta.Thanos.Source != metadata.CompactorSource &&
@@ -307,7 +307,7 @@ func (c *Syncer) removeIfMetaMalformed(ctx context.Context, id ulid.ULID) (remov
 	}
 
 	if ulid.Now()-id.Time() <= uint64(MinimumAgeForRemoval/time.Millisecond) {
-		// Minimum delay has not expired, ignore for now
+		// Minimum delay has not expired, ignore for now.
 		return true
 	}
 
@@ -876,7 +876,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 				}
 			}
 		}
-		// Even though this block was empty, there may be more work to do
+		// Even though this block was empty, there may be more work to do.
 		return true, ulid.ULID{}, nil
 	}
 	level.Debug(cg.logger).Log("msg", "compacted blocks",

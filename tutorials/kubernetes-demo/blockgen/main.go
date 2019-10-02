@@ -16,12 +16,12 @@ import (
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/labels"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 // Allow for more realistic output.
 type series struct {
-	Type           string // gauge, counter (if conunter we treat below as rate aim)
+	Type           string // gauge, counter (if conunter we treat below as rate aim).
 	Jitter         float64
 	ChangeInterval string
 	Max            float64
@@ -104,8 +104,6 @@ func main() {
 			for n, v := range r.Metric {
 				lset = append(lset, labels.Label{Name: string(n), Value: string(v)})
 			}
-			//level.Debug(logger).Log("msg", "scheduled generation of series", "lset", lset)
-
 			var chInterval time.Duration
 			if in.ChangeInterval != "" {
 				chInterval, err = time.ParseDuration(in.ChangeInterval)
