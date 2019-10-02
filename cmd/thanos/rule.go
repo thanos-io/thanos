@@ -620,7 +620,7 @@ func parseAlertmanagerAddress(addr string) (qType dns.QType, parsedUrl *url.URL,
 	if err != nil {
 		return qType, nil, err
 	}
-	// The Scheme might contain DNS resolver type separated by + so we split it a part
+	// The Scheme might contain DNS resolver type separated by + so we split it a part.
 	if schemeParts := strings.Split(parsedUrl.Scheme, "+"); len(schemeParts) > 1 {
 		parsedUrl.Scheme = schemeParts[len(schemeParts)-1]
 		qType = dns.QType(strings.Join(schemeParts[:len(schemeParts)-1], "+"))
