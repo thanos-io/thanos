@@ -108,3 +108,38 @@ func (m mockResolver) Resolve(ctx context.Context, name string, qtype dns.QType)
 	}
 	return nil, errors.Errorf("mockResolver not found response for name: %s", name)
 }
+
+func Test_ParseAlertmanagerAddress(t *testing.T) {
+	var tData = []struct {
+		address         string
+		expectQueryType dns.QType
+		expectUrl       *url.URL
+		expectError     error
+	}{
+		{
+			address:         "http://user:pass+word@foo.bar:3289",
+			expectQueryType: dns.QType(""),
+			expectUrl:       &url.URL{Host: "foo.bar:3289", Scheme: "http", User: url.UserPassword("user", "pass+word")},
+			expectError:     nil,
+		},
+		{
+			address:         "dnssrvnoa+http://user:pass+word@foo.bar:3289",
+			expectQueryType: dns.QType("dnssrvnoa"),
+			expectUrl:       &url.URL{Host: "foo.bar:3289", Scheme: "http", User: url.UserPassword("user", "pass+word")},
+			expectError:     nil,
+		},
+		{
+			address:         "foo+bar+http://foo.bar:3289",
+			expectQueryType: dns.QType("foo+bar"),
+			expectUrl:       &url.URL{Host: "foo.bar:3289", Scheme: "http"},
+			expectError:     nil,
+		},
+	}
+
+	for _, d := range tData {
+		q, u, e := parseAlertmanagerAddress(d.address)
+		testutil.Equals(t, d.expectError, e)
+		testutil.Equals(t, d.expectUrl, u)
+		testutil.Equals(t, d.expectQueryType, q)
+	}
+}
