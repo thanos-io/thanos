@@ -17,12 +17,14 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/objstore/inmem"
 	"github.com/thanos-io/thanos/pkg/objstore/objtesting"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -300,6 +302,55 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		})
 		testutil.Ok(t, err)
 	})
+}
+
+func TestCleanupCacheFolder(t *testing.T) {
+	logger := log.NewLogfmtLogger(os.Stderr)
+
+	dir, err := ioutil.TempDir("", "test-compact-cleanup")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	bkt := inmem.NewBucket()
+
+	// Create and upload a single block to the bucker.
+	// The compaction will download the meta block of this block
+	// to plan the compaction groups.
+	{
+		b, err := testutil.CreateBlock(
+			ctx,
+			dir,
+			[]labels.Labels{
+				{{Name: "a", Value: "1"}},
+			},
+			1, 0, 1,
+			labels.Labels{{Name: "e1", Value: "1"}},
+			1)
+		testutil.Ok(t, err)
+		testutil.Ok(t, block.Upload(ctx, logger, bkt, path.Join(dir, b.String())))
+	}
+
+	sy, err := NewSyncer(logger, nil, bkt, 0*time.Second, 1, false)
+	testutil.Ok(t, err)
+	testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.syncMetas))
+
+	comp, err := tsdb.NewLeveledCompactor(ctx, nil, logger, []int64{1}, nil)
+	testutil.Ok(t, err)
+
+	bComp, err := NewBucketCompactor(logger, sy, comp, dir, bkt, 1)
+	testutil.Ok(t, err)
+
+	// Even with with a single uploaded block the bucker compactor needs to
+	// downloads the meta file to plan the compaction groups.
+	testutil.Ok(t, bComp.Compact(ctx))
+	testutil.Equals(t, 1.0, promtest.ToFloat64(sy.metrics.syncMetas))
+
+	_, err = os.Stat(dir)
+	testutil.Assert(t, os.IsNotExist(err), "compaction cache dir shouldn't not exist after a compaction run")
+
 }
 
 // createEmptyBlock produces empty block like it was the case before fix: https://github.com/prometheus/tsdb/pull/374.
