@@ -118,6 +118,42 @@ func TestReceive(t *testing.T) {
 				},
 			}})
 	}
+	{
+		// The replication suite creates a three-node hashring but one of the
+		// receivers is dead. In this case, replication should still
+		// succeed and the time series should be replicated to the other nodes.
+		receiveHTTP1, receiveHTTP2, receiveHTTP3 := a.New(), a.New(), a.New()
+
+		h := receive.HashringConfig{
+			Endpoints: []string{remoteWriteEndpoint(receiveHTTP1), remoteWriteEndpoint(receiveHTTP2), remoteWriteEndpoint(receiveHTTP3)},
+		}
+
+		r1 := receiver(receiveHTTP1, a.New(), a.New(), 3, h)
+		r2 := receiver(receiveHTTP2, a.New(), a.New(), 3, h)
+
+		prom1 := prometheus(a.New(), defaultPromConfig("prom1", 1, remoteWriteEndpoint(r1.HTTP)))
+
+		q1 := querier(a.New(), a.New(), []address{r1.GRPC, r2.GRPC}, nil)
+
+		testCases = append(testCases, receiveTestConfig{
+			name:         "replication with outage",
+			cmds:         []scheduler{q1, prom1, r1, r2},
+			queryAddress: q1.HTTP,
+			metrics: []model.Metric{
+				{
+					"job":        "test",
+					"prometheus": "prom1",
+					"receive":    model.LabelValue(r1.HTTP.Port),
+					"replica":    "1",
+				},
+				{
+					"job":        "test",
+					"prometheus": "prom1",
+					"receive":    model.LabelValue(r2.HTTP.Port),
+					"replica":    "1",
+				},
+			}})
+	}
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			testReceive(t, tt)

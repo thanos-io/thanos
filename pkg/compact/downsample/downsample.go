@@ -28,6 +28,12 @@ const (
 	ResLevel2 = int64(60 * 60 * 1000) // 1 hour in milliseconds
 )
 
+// Downsampling ranges i.e. after what time we start to downsample blocks (in seconds).
+const (
+	DownsampleRange0 = 40 * 60 * 60 * 1000      // 40 hours
+	DownsampleRange1 = 10 * 24 * 60 * 60 * 1000 // 10 days
+)
+
 // Downsample downsamples the given block. It writes a new block into dir and returns its ID.
 func Downsample(
 	logger log.Logger,
@@ -545,47 +551,47 @@ func NewCounterSeriesIterator(chks ...chunkenc.Iterator) *CounterSeriesIterator 
 }
 
 func (it *CounterSeriesIterator) Next() bool {
-	if it.i >= len(it.chks) {
-		return false
-	}
-	if ok := it.chks[it.i].Next(); !ok {
-		it.i++
-		// While iterators are ordered, they are not generally guaranteed to be
-		// non-overlapping. Ensure that the series does not go back in time by seeking at least
-		// to the next timestamp.
-		return it.Seek(it.lastT + 1)
-	}
-	t, v := it.chks[it.i].At()
-
-	if math.IsNaN(v) {
-		return it.Next()
-	}
-	// First sample sets the initial counter state.
-	if it.total == 0 {
-		it.total++
-		it.lastT, it.lastV = t, v
-		it.totalV = v
-		return true
-	}
-	// If the timestamp increased, it is not the special last sample.
-	if t > it.lastT {
-		if v >= it.lastV {
-			it.totalV += v - it.lastV
-		} else {
-			it.totalV += v
+	for {
+		if it.i >= len(it.chks) {
+			return false
 		}
-		it.lastT, it.lastV = t, v
-		it.total++
-		return true
-	}
-	// We hit a sample that indicates what the true last value was. For the
-	// next chunk we use it to determine whether there was a counter reset between them.
-	if t == it.lastT {
-		it.lastV = v
-	}
-	// Otherwise the series went back in time and we just keep moving forward.
+		if ok := it.chks[it.i].Next(); !ok {
+			it.i++
+			// While iterators are ordered, they are not generally guaranteed to be
+			// non-overlapping. Ensure that the series does not go back in time by seeking at least
+			// to the next timestamp.
+			return it.Seek(it.lastT + 1)
+		}
+		t, v := it.chks[it.i].At()
 
-	return it.Next()
+		if math.IsNaN(v) {
+			return it.Next()
+		}
+		// First sample sets the initial counter state.
+		if it.total == 0 {
+			it.total++
+			it.lastT, it.lastV = t, v
+			it.totalV = v
+			return true
+		}
+		// If the timestamp increased, it is not the special last sample.
+		if t > it.lastT {
+			if v >= it.lastV {
+				it.totalV += v - it.lastV
+			} else {
+				it.totalV += v
+			}
+			it.lastT, it.lastV = t, v
+			it.total++
+			return true
+		}
+		// We hit a sample that indicates what the true last value was. For the
+		// next chunk we use it to determine whether there was a counter reset between them.
+		if t == it.lastT {
+			it.lastV = v
+		}
+		// Otherwise the series went back in time and we just keep moving forward.
+	}
 }
 
 func (it *CounterSeriesIterator) At() (t int64, v float64) {

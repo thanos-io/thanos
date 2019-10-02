@@ -28,6 +28,37 @@ config:
 The compactor needs local disk space to store intermediate data for its processing. Generally, about 100GB are recommended for it to keep working as the compacted time ranges grow over time.
 On-disk data is safe to delete between restarts and should be the first attempt to get crash-looping compactors unstuck.
 
+## Downsampling, Resolution and Retention
+
+Resolution - distance between data points on your graphs. E.g.
+
+* raw - the same as scrape interval at the moment of data ingestion
+* 5m - data point is every 5 minutes
+* 1h - data point is every 1h
+
+Keep in mind, that the initial goal of downsampling is not saving disk space (Read further for elaboration on storage space consumption). The goal of downsampling is providing an opportunity to get fast results for range queries of big time intervals like months or years. In other words, if you set `--retention.resolution-raw` less then `--retention.resolution-5m` and `--retention.resolution-1h` - you might run into a problem of not being able to "zoom in" to your historical data.
+
+To avoid confusion - you might want to think about `raw` data as about "zoom in" opportunity. Considering the values for mentioned options - always think "Will I need to zoom in to the day 1 year ago?" if the answer "yes" - you most likely want to keep raw data for as long as 1h and 5m resolution, otherwise you'll be able to see only downsampled representation of how your raw data looked like.
+
+There's also a case when you might want to disable downsampling at all with `debug.disable-downsampling`. You might want to do it when you know for sure that you are not going to request long ranges of data (obviously, because without downsampling those requests are going to be much much more expensive than with it). A valid example of that case if when you only care about the last couple of weeks of your data or use it only for alerting, but if it's your case - you also need to ask yourself if you want to introduce Thanos at all instead of vanilla Prometheus?
+
+Ideally, you will have equal retention set (or no retention at all) to all resolutions which allow both "zoom in" capabilities as well as performant long ranges queries. Since object storages are usually quite cheap, storage size might not matter that much, unless your goal with thanos is somewhat very specific and you know exactly what you're doing.
+
+## Storage space consumption
+
+In fact, downsampling doesn't save you any space but instead it adds 2 more blocks for each raw block which are only slightly smaller or relatively similar size to raw block. This is required by internal downsampling implementation which to be mathematically correct holds various aggregations. This means that downsampling can increase the size of your storage a bit (~3x), but it gives massive advantage on querying long ranges.
+
+## Groups
+
+The compactor groups blocks using the [external_labels](https://thanos.io/getting-started.md/#external-labels) added by the
+Prometheus who produced the block. The labels must be both _unique_ and _persistent_ across different Prometheus instances.
+
+By _unique_, we mean that the set of labels in a Prometheus instance must be different from all other sets of labels of
+your Prometheus instances, so that the compactor will be able to group blocks by Prometheus instance.
+
+By _persistent_, we mean that one Prometheus instance must keep the same labels if it restarts, so that the compactor will keep
+compacting blocks from an instance even when a Prometheus instance goes down for some time.
+
 ## Flags
 
 [embedmd]:# (flags/compact.txt $)
@@ -44,7 +75,7 @@ Flags:
       --log.format=logfmt      Log format to use.
       --tracing.config-file=<tracing.config-yaml-path>
                                Path to YAML file that contains tracing
-                               configuration. See fomrat details:
+                               configuration. See format details:
                                https://thanos.io/tracing.md/#configuration
       --tracing.config=<tracing.config-yaml>
                                Alternative to 'tracing.config-file' flag.

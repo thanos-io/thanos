@@ -162,8 +162,23 @@ func (c *Syncer) SyncMetas(ctx context.Context) error {
 	}
 	c.metrics.syncMetas.Inc()
 	c.metrics.syncMetaDuration.Observe(time.Since(begin).Seconds())
-
 	return err
+}
+
+// UntilNextDownsampling calculates how long it will take until the next downsampling operation.
+// Returns an error if there will be no downsampling.
+func UntilNextDownsampling(m *metadata.Meta) (time.Duration, error) {
+	timeRange := time.Duration((m.MaxTime - m.MinTime) * int64(time.Millisecond))
+	switch m.Thanos.Downsample.Resolution {
+	case downsample.ResLevel2:
+		return time.Duration(0), errors.New("no downsampling")
+	case downsample.ResLevel1:
+		return time.Duration(downsample.DownsampleRange1*time.Millisecond) - timeRange, nil
+	case downsample.ResLevel0:
+		return time.Duration(downsample.DownsampleRange0*time.Millisecond) - timeRange, nil
+	default:
+		panic(fmt.Errorf("invalid resolution %v", m.Thanos.Downsample.Resolution))
+	}
 }
 
 func (c *Syncer) syncMetas(ctx context.Context) error {

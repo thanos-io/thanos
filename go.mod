@@ -22,7 +22,7 @@ require (
 	github.com/lovoo/gcloud-opentracing v0.3.0
 	github.com/mattn/go-ieproxy v0.0.0-20190805055040-f9202b1cfdeb // indirect; Pinned for FreeBSD support.
 	github.com/mattn/go-runewidth v0.0.4 // indirect
-	github.com/miekg/dns v1.1.15
+	github.com/miekg/dns v1.1.19
 	github.com/minio/minio-go/v6 v6.0.27-0.20190529152532-de69c0e465ed
 	github.com/mozillazg/go-cos v0.12.0
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f
@@ -35,10 +35,10 @@ require (
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.1.0
 	github.com/prometheus/common v0.6.0
-	github.com/prometheus/prometheus v1.8.2-0.20190819201610-48b2c9c8eae2 // v1.8.2 is misleading as Prometheus does not have v2 module. This is pointing to one commit after 2.12.0.
+	github.com/prometheus/prometheus v1.8.2-0.20190913102521-8ab628b35467 // v1.8.2 is misleading as Prometheus does not have v2 module.
 	github.com/uber-go/atomic v1.4.0 // indirect
 	github.com/uber/jaeger-client-go v2.16.0+incompatible
-	github.com/uber/jaeger-lib v2.0.0+incompatible
+	github.com/uber/jaeger-lib v2.2.0+incompatible
 	go.elastic.co/apm v1.5.0
 	go.elastic.co/apm/module/apmot v1.5.0
 	go.uber.org/automaxprocs v1.2.0
@@ -65,3 +65,5 @@ replace (
 	k8s.io/klog => k8s.io/klog v0.3.1
 	k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20190228160746-b3a7cee44a30
 )
+
+go 1.13
