@@ -52,6 +52,8 @@ import (
 // Take a look at Figure 6 in this whitepaper http://www.vldb.org/pvldb/vol8/p1816-teller.pdf.
 const maxSamplesPerChunk = 120
 
+const maxChunkSize = 16000
+
 type bucketStoreMetrics struct {
 	blocksLoaded          prometheus.Gauge
 	blockLoads            prometheus.Counter
@@ -241,7 +243,7 @@ func NewBucketStore(
 		return nil, errors.Errorf("max concurrency value cannot be lower than 0 (got %v)", maxConcurrent)
 	}
 
-	chunkPool, err := pool.NewBytesPool(2e5, 50e6, 2, maxChunkPoolBytes)
+	chunkPool, err := pool.NewBytesPool(maxChunkSize, 50e6, 2, maxChunkPoolBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "create chunk pool")
 	}
@@ -1768,8 +1770,6 @@ func (r *bucketChunkReader) addPreload(id uint64) error {
 
 // preload all added chunk IDs. Must be called before the first call to Chunk is made.
 func (r *bucketChunkReader) preload(samplesLimiter *Limiter) error {
-	const maxChunkSize = 16000
-
 	var g run.Group
 
 	numChunks := uint64(0)
