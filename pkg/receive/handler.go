@@ -440,5 +440,5 @@ func hasCause(err error, f func(error) bool) bool {
 
 // isConflict returns whether or not the given error represents a conflict.
 func isConflict(err error) bool {
-	return err == storage.ErrOutOfOrderSample || err == storage.ErrOutOfBounds || err.Error() == strconv.Itoa(http.StatusConflict)
+	return err == storage.ErrDuplicateSampleForTimestamp || err == storage.ErrOutOfOrderSample || err == storage.ErrOutOfBounds || err.Error() == strconv.Itoa(http.StatusConflict)
 }
