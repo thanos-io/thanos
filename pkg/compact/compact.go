@@ -64,13 +64,19 @@ type syncerMetrics struct {
 	compactionFailures        *prometheus.CounterVec
 }
 
+const (
+	MetricSyncMetaName = "thanos_compact_sync_meta_total"
+	MetricSyncMetaHelp = "Total number of sync meta operations."
+)
+
 func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 	var m syncerMetrics
 
 	m.syncMetas = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "thanos_compact_sync_meta_total",
-		Help: "Total number of sync meta operations.",
+		Name: MetricSyncMetaName,
+		Help: MetricSyncMetaHelp,
 	})
+
 	m.syncMetaFailures = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compact_sync_meta_failures_total",
 		Help: "Total number of failed sync meta operations.",

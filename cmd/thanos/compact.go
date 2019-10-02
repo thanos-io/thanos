@@ -275,7 +275,7 @@ func runCompact(
 
 		// Generate index file.
 		if generateMissingIndexCacheFiles {
-			if err := genMissingIndexCacheFiles(ctx, logger, bkt, indexCacheDir); err != nil {
+			if err := genMissingIndexCacheFiles(ctx, logger, reg, bkt, indexCacheDir); err != nil {
 				return err
 			}
 		}
@@ -323,8 +323,19 @@ func runCompact(
 	return nil
 }
 
+const (
+	MetricIndexGenerateName = "thanos_compact_generated_index_total"
+	MetricIndexGenerateHelp = "Total number of generated indexes."
+)
+
 // genMissingIndexCacheFiles scans over all blocks, generates missing index cache files and uploads them to object storage.
-func genMissingIndexCacheFiles(ctx context.Context, logger log.Logger, bkt objstore.Bucket, dir string) error {
+func genMissingIndexCacheFiles(ctx context.Context, logger log.Logger, reg *prometheus.Registry, bkt objstore.Bucket, dir string) error {
+	genIndex := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: MetricIndexGenerateName,
+		Help: MetricIndexGenerateHelp,
+	})
+	reg.MustRegister(genIndex)
+
 	if err := os.RemoveAll(dir); err != nil {
 		return errors.Wrap(err, "clean index cache directory")
 	}
@@ -375,6 +386,7 @@ func genMissingIndexCacheFiles(ctx context.Context, logger log.Logger, bkt objst
 		if err := generateIndexCacheFile(ctx, bkt, logger, dir, meta); err != nil {
 			return err
 		}
+		genIndex.Inc()
 	}
 
 	level.Info(logger).Log("msg", "generating index cache files is done, you can remove startup argument `index.generate-missing-cache-file`")
