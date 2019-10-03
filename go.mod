@@ -16,7 +16,7 @@ require (
 	github.com/googleapis/gax-go v2.0.2+incompatible
 	github.com/gophercloud/gophercloud v0.3.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
-	github.com/grpc-ecosystem/go-grpc-prometheus v0.0.0-20181025070259-68e3a13e4117
+	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.1-0.20191002090509-6af20e3a5340
 	github.com/hashicorp/golang-lru v0.5.3
 	github.com/leanovate/gopter v0.2.4
 	github.com/lovoo/gcloud-opentracing v0.3.0
