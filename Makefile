@@ -159,7 +159,7 @@ check-docs: $(EMBEDMD) $(LICHE) build
 	@$(LICHE) --exclude "cloud.tencent.com|goreportcard.com" --document-root . *.md
 
 # checks Go code comments if they have trailing period (excludes protobuffers and vendor files).
-# Comments with more than 3 spaces at begining are ommited from the check, example: '//    - foo'.
+# Comments with more than 3 spaces at beginning are omitted from the check, example: '//    - foo'.
 .PHONY: check-comments
 check-comments:
 	@printf ">> checking Go comments trailing periods\n\n\n"
