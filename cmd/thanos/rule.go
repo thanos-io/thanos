@@ -17,6 +17,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/extflag"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -197,7 +199,7 @@ func runRule(
 	evalInterval time.Duration,
 	dataDir string,
 	ruleFiles []string,
-	objStoreConfig *pathOrContent,
+	objStoreConfig *extflag.PathOrContent,
 	tsdbOpts *tsdb.Options,
 	alertQueryURL *url.URL,
 	alertExcludeLabels []string,

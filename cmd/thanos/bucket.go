@@ -12,6 +12,8 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/extflag"
+
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
@@ -64,7 +66,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	registerBucketWeb(m, cmd, name, objStoreConfig)
 }
 
-func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
+func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
 	cmd := root.Command("verify", "Verify all blocks in the bucket against specified issues")
 	objStoreBackupConfig := regCommonObjStoreFlags(cmd, "-backup", false, "Used for repair logic to backup blocks before removal.")
 	repair := cmd.Flag("repair", "Attempt to repair blocks for which issues were detected").
@@ -151,7 +153,7 @@ func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name 
 	}
 }
 
-func registerBucketLs(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
+func registerBucketLs(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
 	cmd := root.Command("ls", "List all blocks in the bucket")
 	output := cmd.Flag("output", "Optional format in which to print each block's information. Options are 'json', 'wide' or a custom template.").
 		Short('o').Default("").String()
@@ -242,7 +244,7 @@ func registerBucketLs(m map[string]setupFunc, root *kingpin.CmdClause, name stri
 	}
 }
 
-func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
+func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
 	cmd := root.Command("inspect", "Inspect all blocks in the bucket in detailed, table-like way")
 	selector := cmd.Flag("selector", "Selects blocks based on label, e.g. '-l key1=\\\"value1\\\" -l key2=\\\"value2\\\"'. All key value pairs must match.").Short('l').
 		PlaceHolder("<name>=\\\"<value>\\\"").Strings()
@@ -301,7 +303,7 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 }
 
 // registerBucketWeb exposes a web interface for the state of remote store like `pprof web`.
-func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
+func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
 	cmd := root.Command("web", "Web interface for remote storage bucket")
 	bind := cmd.Flag("listen", "HTTP host:port to listen on").Default("0.0.0.0:8080").String()
 	interval := cmd.Flag("refresh", "Refresh interval to download metadata from remote storage").Default("30m").Duration()
@@ -350,7 +352,7 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 }
 
 // refresh metadata from remote storage periodically and update UI.
-func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, duration time.Duration, timeout time.Duration, name string, reg *prometheus.Registry, objStoreConfig *pathOrContent) error {
+func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, duration time.Duration, timeout time.Duration, name string, reg *prometheus.Registry, objStoreConfig *extflag.PathOrContent) error {
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
 		return err

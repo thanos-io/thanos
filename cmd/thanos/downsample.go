@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/extflag"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -72,7 +74,7 @@ func runDownsample(
 	reg *prometheus.Registry,
 	httpBindAddr string,
 	dataDir string,
-	objStoreConfig *pathOrContent,
+	objStoreConfig *extflag.PathOrContent,
 	comp component.Component,
 ) error {
 	confContentYaml, err := objStoreConfig.Content()

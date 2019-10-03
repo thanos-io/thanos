@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/extflag"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -128,7 +130,7 @@ func runReceive(
 	httpBindAddr string,
 	remoteWriteAddress string,
 	dataDir string,
-	objStoreConfig *pathOrContent,
+	objStoreConfig *extflag.PathOrContent,
 	lset labels.Labels,
 	retention model.Duration,
 	cw *receive.ConfigWatcher,
