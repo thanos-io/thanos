@@ -108,8 +108,8 @@ func bootstrap(t *testing.T) (context.Context, log.Logger, string, ulid.ULID, ob
 	var blckID ulid.ULID
 
 	// Create and upload a single block to the bucker.
-	// The compaction will download the meta block of this block
-	// to plan the compaction groups.
+	// The compaction will download the meta block of
+	// this block to plan the compaction groups.
 	{
 		blckID, err = testutil.CreateBlock(
 			ctx,
