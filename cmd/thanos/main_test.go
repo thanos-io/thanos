@@ -72,7 +72,7 @@ func TestCleanupIndexCacheFolder(t *testing.T) {
 
 	GatherAndCompare(t, expReg, actReg, compact.MetricSyncMetaName)
 
-	genMissingIndexCacheFiles(ctx, logger, actReg, bkt, dir)
+	testutil.Ok(t, genMissingIndexCacheFiles(ctx, logger, actReg, bkt, dir))
 
 	genIndexExp.Inc()
 	GatherAndCompare(t, expReg, actReg, compact.MetricSyncMetaName)
