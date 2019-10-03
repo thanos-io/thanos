@@ -170,7 +170,7 @@ func (p *Prometheus) start() error {
 	}
 	p.addr = fmt.Sprintf("localhost:%d", port)
 	args := append([]string{
-		"--storage.tsdb.retention=2d", // Pass retention cause prometheus since 2.8.0 don't show default value for that flags in web/api: https://github.com/prometheus/prometheus/pull/5433 .
+		"--storage.tsdb.retention=2d", // Pass retention cause prometheus since 2.8.0 don't show default value for that flags in web/api: https://github.com/prometheus/prometheus/pull/5433.
 		"--storage.tsdb.path=" + p.db.Dir(),
 		"--web.listen-address=" + p.addr,
 		"--web.route-prefix=" + p.prefix,

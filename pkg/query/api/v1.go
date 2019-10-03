@@ -12,7 +12,7 @@
 // limitations under the License.
 
 // This package is a modified copy from
-// github.com/prometheus/prometheus/web/api/v1@2121b4628baa7d9d9406aa468712a6a332e77aff .
+// github.com/prometheus/prometheus/web/api/v1@2121b4628baa7d9d9406aa468712a6a332e77aff.
 
 package v1
 

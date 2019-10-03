@@ -454,7 +454,7 @@ type ignoreFnType func(mint, maxt int64, prev *chunks.Meta, curr *chunks.Meta) (
 // - all "complete" outsiders (they will not accessed anyway)
 // - removes all near "complete" outside chunks introduced by https://github.com/prometheus/tsdb/issues/347.
 // Fixable inconsistencies are resolved in the new block.
-// TODO(bplotka): https://github.com/thanos-io/thanos/issues/378 .
+// TODO(bplotka): https://github.com/thanos-io/thanos/issues/378.
 func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceType, ignoreChkFns ...ignoreFnType) (resid ulid.ULID, err error) {
 	if len(ignoreChkFns) == 0 {
 		return resid, errors.New("no ignore chunk function specified")
@@ -518,7 +518,7 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceT
 		return resid, err
 	}
 	// TSDB may rewrite metadata in bdir.
-	// TODO: This is not needed in newer TSDB code. See https://github.com/prometheus/tsdb/pull/637 .
+	// TODO: This is not needed in newer TSDB code. See https://github.com/prometheus/tsdb/pull/637.
 	if err := metadata.Write(logger, bdir, meta); err != nil {
 		return resid, err
 	}

@@ -1437,7 +1437,7 @@ func toPostingGroup(lvalsFn func(name string) []string, m labels.Matcher) *posti
 
 	// If the matcher selects an empty value, it selects all the series which don't
 	// have the label name set too. See: https://github.com/prometheus/prometheus/issues/3575
-	// and https://github.com/prometheus/prometheus/pull/3578#issuecomment-351653555 .
+	// and https://github.com/prometheus/prometheus/pull/3578#issuecomment-351653555.
 	if m.Matches("") {
 		allName, allValue := index.AllPostingsKey()
 

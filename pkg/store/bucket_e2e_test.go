@@ -430,7 +430,7 @@ func (g naivePartitioner) Partition(length int, rng func(int) (uint64, uint64)) 
 
 // Naive partitioner splits the array equally (it does not combine anything).
 // This tests if our, sometimes concurrent, fetches for different parts works.
-// Regression test against: https://github.com/thanos-io/thanos/issues/829 .
+// Regression test against: https://github.com/thanos-io/thanos/issues/829.
 func TestBucketStore_ManyParts_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
 		ctx, cancel := context.WithCancel(context.Background())

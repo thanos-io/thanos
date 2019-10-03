@@ -3,7 +3,7 @@
 //
 // Reloader type is useful when you want to:
 //
-// 	* Watch on changes against certain file e.g (`cfgFile`) .
+// 	* Watch on changes against certain file e.g (`cfgFile`).
 // 	* Optionally, specify different different output file for watched `cfgFile` (`cfgOutputFile`).
 // 	This will also try decompress the `cfgFile` if needed and substitute ALL the envvars using Kubernetes substitution format: (`$(var)`)
 // 	* Watch on changes against certain directories (`ruleDires`).
