@@ -83,9 +83,9 @@ func TestDownsampleAggr(t *testing.T) {
 					{199, 5}, {299, 1}, {399, 10}, {400, -3}, {499, 10}, {699, 0}, {999, 100},
 				},
 				AggrCounter: {
-					{99, 100}, {299, 150}, {499, 210}, {499, 10}, // chunk 1
-					{599, 20}, {799, 50}, {999, 120}, {999, 50}, // chunk 2, no reset
-					{1099, 40}, {1199, 80}, {1299, 110}, // chunk 3, reset
+					{99, 100}, {299, 150}, {499, 210}, {499, 10}, // Chunk 1.
+					{599, 20}, {799, 50}, {999, 120}, {999, 50}, // Chunk 2, no reset.
+					{1099, 40}, {1199, 80}, {1299, 110}, // Chunk 3, reset.
 				},
 			},
 			output: map[AggrType][]sample{
@@ -244,10 +244,10 @@ func TestCounterSeriesIterator(t *testing.T) {
 
 	chunks := [][]sample{
 		{{100, 10}, {200, 20}, {300, 10}, {400, 20}, {400, 5}},
-		{{500, 10}, {600, 20}, {700, 30}, {800, 40}, {800, 10}}, // no actual reset
-		{{900, 5}, {1000, 10}, {1100, 15}},                      // actual reset
-		{{1200, 20}, {1250, staleMarker}, {1300, 40}},           // no special last sample, no reset
-		{{1400, 30}, {1500, 30}, {1600, 50}},                    // no special last sample, reset
+		{{500, 10}, {600, 20}, {700, 30}, {800, 40}, {800, 10}}, // No actual reset.
+		{{900, 5}, {1000, 10}, {1100, 15}},                      // Actual reset.
+		{{1200, 20}, {1250, staleMarker}, {1300, 40}},           // No special last sample, no reset.
+		{{1400, 30}, {1500, 30}, {1600, 50}},                    // No special last sample, reset.
 	}
 	exp := []sample{
 		{100, 10}, {200, 20}, {300, 30}, {400, 40}, {500, 45},

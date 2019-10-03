@@ -211,7 +211,7 @@ func chunkEncoding(e storepb.Chunk_Encoding) chunkenc.Encoding {
 	case storepb.Chunk_XOR:
 		return chunkenc.EncXOR
 	}
-	return 255 // invalid
+	return 255 // Invalid.
 }
 
 type errSeriesIterator struct {
@@ -357,7 +357,7 @@ func (s *dedupSeriesSet) Next() bool {
 }
 
 // peekLset returns the label set of the current peek element stripped from the
-// replica label if it exists
+// replica label if it exists.
 func (s *dedupSeriesSet) peekLset() labels.Labels {
 	lset := s.peek.Labels()
 	if len(s.replicaLabels) == 0 {

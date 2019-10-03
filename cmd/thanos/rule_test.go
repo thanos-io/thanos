@@ -20,27 +20,27 @@ func Test_parseFlagLabels(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			s:         []string{`label-Name="LabelVal"`}, //Unsupported labelname
+			s:         []string{`label-Name="LabelVal"`}, // Unsupported labelname.
 			expectErr: true,
 		},
 		{
-			s:         []string{`label:Name="LabelVal"`}, //Unsupported labelname
+			s:         []string{`label:Name="LabelVal"`}, // Unsupported labelname.
 			expectErr: true,
 		},
 		{
-			s:         []string{`1abelName="LabelVal"`}, //Unsupported labelname
+			s:         []string{`1abelName="LabelVal"`}, // Unsupported labelname.
 			expectErr: true,
 		},
 		{
-			s:         []string{`label_Name"LabelVal"`}, //Missing "=" seprator
+			s:         []string{`label_Name"LabelVal"`}, // Missing "=" seprator.
 			expectErr: true,
 		},
 		{
-			s:         []string{`label_Name= "LabelVal"`}, //Whitespace invalid syntax
+			s:         []string{`label_Name= "LabelVal"`}, // Whitespace invalid syntax.
 			expectErr: true,
 		},
 		{
-			s:         []string{`label_name=LabelVal`}, //Missing quotes invalid syntax
+			s:         []string{`label_name=LabelVal`}, // Missing quotes invalid syntax.
 			expectErr: true,
 		},
 	}

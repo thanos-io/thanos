@@ -1000,12 +1000,12 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 }
 
 // bucketBlockSet holds all blocks of an equal label set. It internally splits
-// them up by downsampling resolution and allows querying
+// them up by downsampling resolution and allows querying.
 type bucketBlockSet struct {
 	labels      labels.Labels
 	mtx         sync.RWMutex
-	resolutions []int64          // available resolution, high to low (in milliseconds)
-	blocks      [][]*bucketBlock // ordered buckets for the existing resolutions
+	resolutions []int64          // Available resolution, high to low (in milliseconds).
+	blocks      [][]*bucketBlock // Ordered buckets for the existing resolutions.
 }
 
 // newBucketBlockSet initializes a new set with the known downsampling windows hard-configured.
@@ -1306,8 +1306,7 @@ func (b *bucketBlock) Close() error {
 	return nil
 }
 
-// bucketIndexReader is a custom index reader (not conforming index.Reader interface) that gets postings
-// by
+// bucketIndexReader is a custom index reader (not conforming index.Reader interface) that gets postings.
 type bucketIndexReader struct {
 	logger log.Logger
 	ctx    context.Context
@@ -1438,7 +1437,7 @@ func toPostingGroup(lvalsFn func(name string) []string, m labels.Matcher) *posti
 
 	// If the matcher selects an empty value, it selects all the series which don't
 	// have the label name set too. See: https://github.com/prometheus/prometheus/issues/3575
-	// and https://github.com/prometheus/prometheus/pull/3578#issuecomment-351653555
+	// and https://github.com/prometheus/prometheus/pull/3578#issuecomment-351653555.
 	if m.Matches("") {
 		allName, allValue := index.AllPostingsKey()
 

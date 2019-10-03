@@ -336,7 +336,7 @@ func runRule(
 		}
 	}
 	{
-		// TODO(bwplotka): https://github.com/thanos-io/thanos/issues/660
+		// TODO(bwplotka): https://github.com/thanos-io/thanos/issues/660.
 		sdr := alert.NewSender(logger, reg, alertmgrs.get, nil, alertmgrsTimeout)
 		ctx, cancel := context.WithCancel(context.Background())
 
@@ -369,7 +369,7 @@ func runRule(
 			cancel()
 		})
 	}
-	// Run File Service Discovery and update the query addresses when the files are modified
+	// Run File Service Discovery and update the query addresses when the files are modified.
 	if fileSD != nil {
 		var fileSDUpdates chan []*targetgroup.Group
 		ctxRun, cancelRun := context.WithCancel(context.Background())
@@ -388,7 +388,7 @@ func runRule(
 			for {
 				select {
 				case update := <-fileSDUpdates:
-					// Discoverers sometimes send nil updates so need to check for it to avoid panics
+					// Discoverers sometimes send nil updates so need to check for it to avoid panics.
 					if update == nil {
 						continue
 					}
@@ -407,7 +407,7 @@ func runRule(
 	reload := make(chan struct{}, 1)
 	{
 		cancel := make(chan struct{})
-		reload <- struct{}{} // initial reload
+		reload <- struct{}{} // Initial reload.
 
 		g.Add(func() error {
 			for {
@@ -514,7 +514,7 @@ func runRule(
 	{
 		router := route.New()
 
-		// redirect from / to /webRoutePrefix
+		// Redirect from / to /webRoutePrefix.
 		if webRoutePrefix != "" {
 			router.Get("/", func(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, webRoutePrefix, http.StatusFound)
@@ -745,7 +745,7 @@ func queryFunc(
 
 	return func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {
 		// Add DNS resolved addresses from static flags and file SD.
-		// TODO(bwplotka): Consider generating addresses in *url.URL
+		// TODO(bwplotka): Consider generating addresses in *url.URL.
 		addrs := dnsProvider.Addresses()
 
 		removeDuplicateQueryAddrs(logger, duplicatedQuery, addrs)

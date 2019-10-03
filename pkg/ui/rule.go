@@ -141,7 +141,7 @@ func (ru *Rule) rules(w http.ResponseWriter, r *http.Request) {
 	ru.executeTemplate(w, "rules.html", prefix, ru.ruleManagers)
 }
 
-// root redirects / requests to /graph, taking into account the path prefix value
+// Root redirects / requests to /graph, taking into account the path prefix value.
 func (ru *Rule) root(w http.ResponseWriter, r *http.Request) {
 	prefix := GetWebPrefix(ru.logger, ru.flagsMap, r)
 

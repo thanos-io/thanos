@@ -262,7 +262,7 @@ func storeGateway(http, grpc address, bucketConfig []byte) *serverScheduler {
 				"--http-address", http.HostPort(),
 				"--log.level", "debug",
 				"--objstore.config", string(bucketConfig),
-				// Accelerated sync time for quicker test (3m by default)
+				// Accelerated sync time for quicker test (3m by default).
 				"--sync-block-duration", "5s",
 			)), nil
 		},

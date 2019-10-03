@@ -255,7 +255,7 @@ type Stats struct {
 	// OutOfOrderSeries represents number of series that have out of order chunks.
 	OutOfOrderSeries int
 
-	// OutOfOrderChunks represents number of chunks that are out of order (older time range is after younger one)
+	// OutOfOrderChunks represents number of chunks that are out of order (older time range is after younger one).
 	OutOfOrderChunks int
 	// DuplicatedChunks represents number of chunks with same time ranges within same series, potential duplicates.
 	DuplicatedChunks int
@@ -454,7 +454,7 @@ type ignoreFnType func(mint, maxt int64, prev *chunks.Meta, curr *chunks.Meta) (
 // - all "complete" outsiders (they will not accessed anyway)
 // - removes all near "complete" outside chunks introduced by https://github.com/prometheus/tsdb/issues/347.
 // Fixable inconsistencies are resolved in the new block.
-// TODO(bplotka): https://github.com/thanos-io/thanos/issues/378
+// TODO(bplotka): https://github.com/thanos-io/thanos/issues/378.
 func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceType, ignoreChkFns ...ignoreFnType) (resid ulid.ULID, err error) {
 	if len(ignoreChkFns) == 0 {
 		return resid, errors.New("no ignore chunk function specified")
@@ -508,8 +508,8 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceT
 	// that has multiple.
 	resmeta := *meta
 	resmeta.ULID = resid
-	resmeta.Stats = tsdb.BlockStats{} // reset stats
-	resmeta.Thanos.Source = source    // update source
+	resmeta.Stats = tsdb.BlockStats{} // Reset stats.
+	resmeta.Thanos.Source = source    // Update source.
 
 	if err := rewrite(logger, indexr, chunkr, indexw, chunkw, &resmeta, ignoreChkFns); err != nil {
 		return resid, errors.Wrap(err, "rewrite block")
@@ -518,8 +518,7 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceT
 		return resid, err
 	}
 	// TSDB may rewrite metadata in bdir.
-	// TODO: This is not needed in newer TSDB code. See
-	// https://github.com/prometheus/tsdb/pull/637
+	// TODO: This is not needed in newer TSDB code. See https://github.com/prometheus/tsdb/pull/637.
 	if err := metadata.Write(logger, bdir, meta); err != nil {
 		return resid, err
 	}

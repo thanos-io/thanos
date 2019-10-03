@@ -234,6 +234,7 @@ func TestStoreSet_StaticStores_NoneAvailable(t *testing.T) {
 	testutil.Assert(t, len(storeSet.stores) == 0, "none of services should respond just fine, so we expect no client to be ready.")
 
 	// Leak test will ensure that we don't keep client connection around.
+
 }
 
 func TestStoreSet_AllAvailable_BlockExtLsetDuplicates(t *testing.T) {

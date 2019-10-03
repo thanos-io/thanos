@@ -206,7 +206,6 @@ func runCompact(
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-
 	// Instantiate the compactor with different time slices. Timestamps in TSDB
 	// are in milliseconds.
 	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool())

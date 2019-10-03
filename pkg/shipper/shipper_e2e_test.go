@@ -125,7 +125,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 
 			testutil.Ok(t, enc.Encode(&meta))
 
-			// We will delete the fifth block and do not expect it to be re-uploaded later
+			// We will delete the fifth block and do not expect it to be re-uploaded later.
 			if i != 4 && i != 5 {
 				expBlocks[id] = struct{}{}
 
@@ -277,7 +277,7 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 
 			testutil.Ok(t, enc.Encode(&meta))
 
-			// We will delete the fifth block and do not expect it to be re-uploaded later
+			// We will delete the fifth block and do not expect it to be re-uploaded later.
 			if i != 4 {
 				expBlocks[id] = struct{}{}
 

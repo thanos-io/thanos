@@ -49,7 +49,7 @@ type Handler struct {
 	mtx      sync.RWMutex
 	hashring Hashring
 
-	// Metrics
+	// Metrics.
 	forwardRequestsTotal *prometheus.CounterVec
 }
 
