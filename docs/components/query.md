@@ -4,14 +4,15 @@ type: docs
 menu: components
 ---
 
-# Query
+# Querier/Query
 
-The query component implements the Prometheus HTTP v1 API to query data in a Thanos cluster via PromQL.
+The Querier component (also known as "Query") implements the [Prometheus HTTP v1 API](https://prometheus.io/docs/prometheus/latest/querying/api/) to query data in a Thanos cluster via PromQL.
 
-It gathers the data needed to evaluate the query from underlying StoreAPIs. See [here](../service-discovery.md)
-on how to connect querier with desired StoreAPIs.
+In short, it gathers the data needed to evaluate the query from underlying [StoreAPIs](../../pkg/store/storepb/rpc.proto), evaluates the query and returns the result.
 
-Querier currently is fully stateless and horizontally scalable.
+Querier is fully stateless and horizontally scalable.
+
+Example command to run Querier:
 
 ```bash
 $ thanos query \
@@ -19,8 +20,51 @@ $ thanos query \
     --store            "<store-api>:<grpc-port>" \
     --store            "<store-api2>:<grpc-port>"
 ```
+## Querier use cases, why do I need this component?
 
-## Deduplication
+Thanos Querier essentially allows to aggregate and optionally deduplicate multiple metrics backends under single Prometheus Query endpoint. 
+
+### Global View
+ 
+Since for Querier "a backend" is anything that implements gRPC StoreAPI we can aggregate data from any number of the different storages like:
+
+* Prometheus (see [Sidecar](sidecar.md))
+* Object Storage (see [Store Gateway](store.md))
+* Global alerting/recording rules evaluations (see [Ruler](rule.md))
+* Metrics received from Prometheus remote write streams (see [Thanos Receiver](../proposals/201812_thanos-remote-receive.md))
+* Another Querier (you can stack Queriers on top of each other)
+* Non-Prometheus systems!
+    * e.g [OpenTSDB](../integrations.md#opentsdb)
+
+Thanks to that, you can run queries (manually, from Grafana or via Alerting rule) that aggregate metrics from mix of those sources.
+
+Some examples:
+
+* `sum(cpu_used{cluster=~"cluster-(eu1|eu2|eu3|us1|us2|us3)", job="service1"})` that will give you sum of CPU used inside all listed clusters for service `service1`. This will work
+even if those clusters runs multiple Prometheus servers each. Querier will know which data sources to query.
+
+* In single cluster you shard Prometheus functionally or have different Prometheus instances for different tenants. You can spin up Querier to have access to both within single Query evaluation.
+
+### Run-time deduplication of HA groups
+
+Prometheus is stateful and does not allow replicating its database. This means that increasing high availability by running multiple Prometheus replicas is not very easy to use.
+Simple loadbalancing will not work as for example after some crash, replica might be up but querying such replica will result in small gap during the period it was down. You have a
+ second replica that maybe was up, but it could be down in other moment (e.g rolling restart), so load balancing on top of those is not working well.
+ 
+Thanos Querier instead pulls the data from both replicas, and deduplicate those signals, filling the gaps if any, transparently to the Querier consumer. 
+
+## Metric Query Flow Overview
+
+<img src="../img/querier.svg" class="img-fluid" alt="querier-steps" />
+
+Overall QueryAPI exposed by Thanos is guaranteed to be compatible with [Prometheus 2.x. API](https://prometheus.io/docs/prometheus/latest/querying/api/).
+The above diagram shows what Querier does for each Prometheus query request.
+
+See [here](../service-discovery.md) on how to connect Querier with desired StoreAPIs.
+
+<!--- TODO explain steps  --->
+
+###  Deduplication
 
 The query layer can deduplicate series that were collected from high-availability pairs of data sources such as Prometheus.
 A fixed single or multiple replica labels must be chosen for the entire cluster and can then be passed to query nodes on startup.
@@ -73,15 +117,16 @@ $ thanos query \
 
 This logic can also be controlled via parameter on QueryAPI. More details below.
 
-## Query API
+## Query API Overview
 
-Overall QueryAPI exposed by Thanos is guaranteed to be compatible with Prometheus 2.x.
-
-However, for additional Thanos features, Thanos, on top of Prometheus adds
+As mentioned, Query API exposed by Thanos is guaranteed to be compatible with [Prometheus 2.x. API](https://prometheus.io/docs/prometheus/latest/querying/api/).
+However for additional Thanos features on top of Prometheus, Thanos adds:
 
 * partial response behaviour
 * several additional parameters listed below
 * custom response fields.
+
+Let's walk through all of those extensions:
 
 ### Partial Response
 
@@ -168,7 +213,6 @@ type queryData struct {
 
 Additional field is `Warnings` that contains every error that occurred that is assumed non critical. `partial_response`
 option controls if storeAPI unavailability is considered critical.
-
 
 ## Expose UI on a sub-path
 
