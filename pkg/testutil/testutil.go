@@ -28,6 +28,10 @@ import (
 	"reflect"
 	"runtime"
 	"testing"
+
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
+	"github.com/prometheus/tsdb/testutil"
 )
 
 // Assert fails the test if the condition is false.
@@ -70,4 +74,26 @@ func Equals(tb testing.TB, exp, act interface{}, v ...interface{}) {
 		fmt.Printf("\033[31m%s:%d:"+msg+"\n\n\texp: %#v\n\n\tgot: %#v\033[39m\n\n", filepath.Base(file), line, exp, act)
 		tb.FailNow()
 	}
+}
+
+// GatherAndCompare compares the metrics of a Gatherers pair.
+func GatherAndCompare(t *testing.T, g1 prometheus.Gatherer, g2 prometheus.Gatherer, filter string) {
+	g1m, err := g1.Gather()
+	testutil.Ok(t, err)
+	g2m, err := g2.Gather()
+	testutil.Ok(t, err)
+
+	var m1 *dto.MetricFamily
+	for _, m := range g1m {
+		if *m.Name == filter {
+			m1 = m
+		}
+	}
+	var m2 *dto.MetricFamily
+	for _, m := range g2m {
+		if *m.Name == filter {
+			m2 = m
+		}
+	}
+	testutil.Equals(t, m1.String(), m2.String())
 }

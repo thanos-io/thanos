@@ -13,7 +13,6 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/prometheus/client_golang/prometheus"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
-	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block"
@@ -38,7 +37,7 @@ func TestCleanupCompactCacheFolder(t *testing.T) {
 	})
 	expReg.MustRegister(syncExp)
 
-	GatherAndCompare(t, expReg, actReg, compact.MetricSyncMetaName)
+	testutil.GatherAndCompare(t, expReg, actReg, compact.MetricSyncMetaName)
 
 	comp, err := tsdb.NewLeveledCompactor(ctx, nil, logger, []int64{1}, nil)
 	testutil.Ok(t, err)
@@ -52,7 +51,7 @@ func TestCleanupCompactCacheFolder(t *testing.T) {
 
 	syncExp.Inc()
 
-	GatherAndCompare(t, expReg, actReg, compact.MetricSyncMetaName)
+	testutil.GatherAndCompare(t, expReg, actReg, compact.MetricSyncMetaName)
 
 	_, err = os.Stat(dir)
 	testutil.Assert(t, os.IsNotExist(err), "index cache dir shouldn't not exist at the end of execution")
@@ -70,12 +69,12 @@ func TestCleanupIndexCacheFolder(t *testing.T) {
 	})
 	expReg.MustRegister(genIndexExp)
 
-	GatherAndCompare(t, expReg, actReg, compact.MetricSyncMetaName)
+	testutil.GatherAndCompare(t, expReg, actReg, compact.MetricSyncMetaName)
 
 	testutil.Ok(t, genMissingIndexCacheFiles(ctx, logger, actReg, bkt, dir))
 
 	genIndexExp.Inc()
-	GatherAndCompare(t, expReg, actReg, compact.MetricSyncMetaName)
+	testutil.GatherAndCompare(t, expReg, actReg, compact.MetricSyncMetaName)
 
 	_, err := os.Stat(dir)
 	testutil.Assert(t, os.IsNotExist(err), "index cache dir shouldn't not exist at the end of execution")
@@ -126,25 +125,4 @@ func bootstrap(t *testing.T) (context.Context, log.Logger, string, ulid.ULID, ob
 	}
 
 	return ctx, logger, dir, blckID, bkt, prometheus.NewRegistry()
-}
-
-func GatherAndCompare(t *testing.T, g1 prometheus.Gatherer, g2 prometheus.Gatherer, filter string) {
-	g1m, err := g1.Gather()
-	testutil.Ok(t, err)
-	g2m, err := g2.Gather()
-	testutil.Ok(t, err)
-
-	var m1 *dto.MetricFamily
-	for _, m := range g1m {
-		if *m.Name == filter {
-			m1 = m
-		}
-	}
-	var m2 *dto.MetricFamily
-	for _, m := range g2m {
-		if *m.Name == filter {
-			m2 = m
-		}
-	}
-	testutil.Equals(t, m1.String(), m2.String())
 }
