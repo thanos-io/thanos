@@ -31,7 +31,6 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
-	"github.com/prometheus/tsdb/testutil"
 )
 
 // Assert fails the test if the condition is false.
@@ -79,9 +78,9 @@ func Equals(tb testing.TB, exp, act interface{}, v ...interface{}) {
 // GatherAndCompare compares the metrics of a Gatherers pair.
 func GatherAndCompare(t *testing.T, g1 prometheus.Gatherer, g2 prometheus.Gatherer, filter string) {
 	g1m, err := g1.Gather()
-	testutil.Ok(t, err)
+	Ok(t, err)
 	g2m, err := g2.Gather()
-	testutil.Ok(t, err)
+	Ok(t, err)
 
 	var m1 *dto.MetricFamily
 	for _, m := range g1m {
@@ -95,5 +94,5 @@ func GatherAndCompare(t *testing.T, g1 prometheus.Gatherer, g2 prometheus.Gather
 			m2 = m
 		}
 	}
-	testutil.Equals(t, m1.String(), m2.String())
+	Equals(t, m1.String(), m2.String())
 }
