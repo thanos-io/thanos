@@ -3,7 +3,14 @@ var graphTemplate;
 
 var INPUT_DEBOUNCE_WAIT = 500; // ms
 var SECOND = 1000;
+// Do not show the metrics selector if there are more than this many metrics.
+const METRIC_SELECTOR_LIMIT = 5000;
+// If there are more than this many metrics do not do fuzzy matching.
+const FUZZY_MATCHING_LIMIT = 10000;
 
+/**
+ * Graph
+*/
 Prometheus.Graph = function(element, options, handleChange, handleRemove) {
   this.el = element;
   this.graphHTML = null;
@@ -164,6 +171,7 @@ Prometheus.Graph.prototype.initialize = function() {
   }
   self.moment.on("dp.change", function() { self.submitQuery(); });
 
+
   var styleStackBtn = function() {
     var icon = self.stackedBtn.find('.glyphicon');
     if (self.isStacked()) {
@@ -288,7 +296,7 @@ Prometheus.Graph.prototype.checkTimeDrift = function() {
             var diff = Math.abs(browserTime - serverTime);
 
             if (diff >= 30) {
-              this.showWarning(
+              self.showWarning(
                   "<div class=\"alert alert-warning\"><strong>Warning!</strong> Detected " +
                   diff.toFixed(2) +
                   " seconds time difference between your browser and the server. Prometheus relies on accurate time and time drift might cause unexpected query results.</div>"
@@ -314,8 +322,12 @@ Prometheus.Graph.prototype.populateInsertableMetrics = function() {
         }
 
         pageConfig.allMetrics = json.data; // todo: do we need self.allMetrics? Or can it just live on the page
-        for (var i = 0; i < pageConfig.allMetrics.length; i++) {
-          self.insertMetric[0].options.add(new Option(pageConfig.allMetrics[i], pageConfig.allMetrics[i]));
+        if (pageConfig.allMetrics.length < METRIC_SELECTOR_LIMIT) {
+          for (var i = 0; i < pageConfig.allMetrics.length; i++) {
+            self.insertMetric[0].options.add(new Option(pageConfig.allMetrics[i], pageConfig.allMetrics[i]));
+          }
+        } else {
+          self.insertMetric.hide();
         }
 
         self.fuzzyResult = {
@@ -332,29 +344,44 @@ Prometheus.Graph.prototype.populateInsertableMetrics = function() {
   });
 };
 
+Prometheus.Graph.prototype.makeFuzzyResult = function(self, query, source) {
+  // If fuzzyResult has already been calculated for this query, don't calculate again
+  if (self.fuzzyResult.query !== query) {
+    self.fuzzyResult.query = query;
+    self.fuzzyResult.map = {};
+    self.fuzzyResult.result = fuzzy.filter(query.replace(/ /g, ""), source, {
+      pre: "<strong>",
+      post: "</strong>"
+    });
+    self.fuzzyResult.result.forEach(function(r) {
+      self.fuzzyResult.map[r.original] = r;
+    });
+  }
+}
+
 Prometheus.Graph.prototype.initTypeahead = function(self) {
-  const source = queryHistory.isEnabled() ? pageConfig.queryHistMetrics.concat(pageConfig.allMetrics) : pageConfig.allMetrics;
   self.expr.typeahead({
     autoSelect: false,
-    source: source,
+    source: function(query, resultsFn) {
+      const source = pageConfig.allMetrics;
+      let history = queryHistory.isEnabled() ? pageConfig.queryHistMetrics : [];
+      let metrics = source;
+
+      // If we have many metrics don't do full fuzzy matching and filter them just on name.
+      // Note the fuzzy matching will still be applied to this afterwards for sorting.
+      if (source.length > FUZZY_MATCHING_LIMIT) {
+        metrics = source.filter(x => x.indexOf(query) != -1);
+        if (metrics.length > METRIC_SELECTOR_LIMIT) {
+          metrics = metrics.slice(0, METRIC_SELECTOR_LIMIT);
+        }
+      }
+      self.makeFuzzyResult(self, this.query, history.concat(metrics));
+      resultsFn(Object.keys(self.fuzzyResult.map))
+    },
     items: 1000,
     matcher: function (item) {
-      // If we have result for current query, skip
-      if (self.fuzzyResult.query !== this.query) {
-        self.fuzzyResult.query = this.query;
-        self.fuzzyResult.map = {};
-        self.fuzzyResult.result = fuzzy.filter(this.query.replace(/ /g, ""), this.source, {
-          pre: "<strong>",
-          post: "</strong>"
-        });
-        self.fuzzyResult.result.forEach(function(r) {
-          self.fuzzyResult.map[r.original] = r;
-        });
-      }
-
       return item in self.fuzzyResult.map;
     },
-
     sorter: function (items) {
       items.sort(function(a,b) {
         var i = self.fuzzyResult.map[b].score - self.fuzzyResult.map[a].score;
@@ -1181,34 +1208,19 @@ const queryHistory = {
 
     localStorage.setItem('history', JSON.stringify(parsedQueryHistory));
     pageConfig.queryHistMetrics = parsedQueryHistory;
-    if (queryHistory.isEnabled()) {
-      this.updateTypeaheadMetricSet(pageConfig.queryHistMetrics.concat(pageConfig.allMetrics));
-    }
   },
 
   toggleOn: function(targetEl) {
-    this.updateTypeaheadMetricSet(pageConfig.queryHistMetrics.concat(pageConfig.allMetrics));
-
     $(targetEl).children('i').removeClass('glyphicon-unchecked').addClass('glyphicon-check');
     targetEl.addClass('is-checked');
     localStorage.setItem('enable-query-history', true);
   },
 
   toggleOff: function(targetEl) {
-    this.updateTypeaheadMetricSet(pageConfig.allMetrics);
-
     $(targetEl).children('i').removeClass('glyphicon-check').addClass('glyphicon-unchecked');
     targetEl.removeClass('is-checked');
     localStorage.setItem('enable-query-history', false);
   },
-
-  updateTypeaheadMetricSet: function(metricSet) {
-    pageConfig.graphs.forEach(function(graph) {
-      if (graph.expr.data('typeahead')) {
-        graph.expr.data('typeahead').source = metricSet;
-      }
-    });
-  }
 };
 
 // Defers invocation of fn for waitPeriod if returned function is called repeatedly
