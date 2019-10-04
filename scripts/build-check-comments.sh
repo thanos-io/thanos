@@ -25,9 +25,9 @@ set -eu
 #   }
 
 
-# Dir of this script
-declare ROOT_DIR=$(cd $(dirname ${BASH_SOURCE}) && pwd)
-declare THIS_SCRIPT="${ROOT_DIR}/$(basename "${BASH_SOURCE}")"
+# Abs path to project dir and this script, should work on all OS's
+declare ROOT_DIR="$(cd $(dirname "${BASH_SOURCE}")/.. && pwd)"
+declare THIS_SCRIPT="$(cd $(dirname "${BASH_SOURCE}") && pwd)/$(basename "${BASH_SOURCE}")"
 
 # Image to use if we do docker-based commands. NB: busybox is no good for this.
 declare IMAGE="debian:9-slim"

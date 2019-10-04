@@ -163,7 +163,7 @@ check-docs: $(EMBEDMD) $(LICHE) build
 .PHONY: check-comments
 check-comments:
 	@printf ">> checking Go comments trailing periods\n\n\n"
-	@./build-check-comments.sh
+	@./scripts/build-check-comments.sh
 
 # format formats the code (including imports format).
 .PHONY: format
