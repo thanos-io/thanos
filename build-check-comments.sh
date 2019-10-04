@@ -7,8 +7,8 @@ set -eu
 # to make sure we work on Linux and OS X and oh even Windows! :)
 # Main issue is minor incompatibies between grep on various platforms.
 #
-# Linux: set USE_DOCKER=yes to force run in docker
-# All other platforms: uses docker by default. Set USE_DOCKER=no to override.
+# Linux: set USE_DOCKER=yes or USE_DOCKER=false to force run in docker
+# All other platforms: uses docker by default. Set USE_DOCKER=no or USE_DOCKER=false to override.
 #
 # Checks Go code comments if they have trailing period (excludes protobuffers and vendor files).
 # Comments with more than 3 spaces at beginning are omitted from the check, example: '//    - foo'.
@@ -29,8 +29,8 @@ set -eu
 declare ROOT_DIR=$(cd $(dirname ${BASH_SOURCE}) && pwd)
 declare THIS_SCRIPT="${ROOT_DIR}/$(basename "${BASH_SOURCE}")"
 
-# Image to use if we do docker-based commands, centos is most stable right?
-declare IMAGE="centos:7"
+# Image to use if we do docker-based commands. NB: busybox is no good for this.
+declare IMAGE="debian:9-slim"
 
 # User can explicitly ask to run in docker
 declare USE_DOCKER=${USE_DOCKER:=""}
@@ -40,13 +40,13 @@ declare USE_DOCKER=${USE_DOCKER:=""}
 if test "Linux" != "$(uname || true)"
 then
   # Allow overriding for non-linux platforms
-  if test "no" != "${USE_DOCKER}"
+  if test "no" != "${USE_DOCKER}" && test "false" != "${USE_DOCKER}"
   then
     USE_DOCKER="yes"
   fi
 fi
 
-if test "yes" == "${USE_DOCKER}"
+if test "yes" == "${USE_DOCKER}" || test "true" == "${USE_DOCKER}"
 then
     # Make sure we only attach TTY if we have it, CI builds won't have it.
     declare TTY_FLAG=""
@@ -66,6 +66,7 @@ then
         USER_FLAG="-u $(id -u):$(id -g)"
     fi
 
+    printf "\n\n\n This will run in Docker. \n If you get an error, ensure Docker is installed. \n\n\n"
     (
       set -x
       docker run \
