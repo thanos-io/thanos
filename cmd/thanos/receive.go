@@ -193,27 +193,26 @@ func runReceive(
 	{
 		// TSDB.
 		cancel := make(chan struct{})
-		// Before actually starting, we need to make sure
-		// the WAL is flushed.
-		startTimeMargin := int64(2 * time.Duration(tsdbCfg.MinBlockDuration).Seconds() * 1000)
-		if err := db.Open(); err != nil {
-			return errors.Wrap(err, "opening storage")
-		}
-		if err := db.Flush(); err != nil {
-			return errors.Wrap(err, "flushing storage")
-		}
 		g.Add(func() error {
 			defer close(dbReady)
 			defer close(uploadC)
 
+			// Before actually starting, we need to make sure the
+			// WAL is flushed. The WAL is flushed after the
+			// hashring ring is loaded
+			startTimeMargin := int64(2 * time.Duration(tsdbCfg.MinBlockDuration).Seconds() * 1000)
+			if err := db.Open(); err != nil {
+				return errors.Wrap(err, "opening storage")
+			}
+
 			// Before quitting, ensure the WAL is flushed and the DB is closed.
 			defer func() {
-				if err := db.Flush(); err != nil {
-					level.Warn(logger).Log("err", err, "msg", "failed to flush storage")
-					return
-				}
 				if err := db.Close(); err != nil {
 					level.Warn(logger).Log("err", err, "msg", "failed to close storage")
+					return
+				}
+				if err := db.Flush(); err != nil {
+					level.Warn(logger).Log("err", err, "msg", "failed to flush storage")
 					return
 				}
 			}()
