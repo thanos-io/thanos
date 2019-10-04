@@ -199,7 +199,7 @@ func runReceive(
 
 			// Before actually starting, we need to make sure the
 			// WAL is flushed. The WAL is flushed after the
-			// hashring ring is loaded
+			// hashring ring is loaded.
 			startTimeMargin := int64(2 * time.Duration(tsdbCfg.MinBlockDuration).Seconds() * 1000)
 			if err := db.Open(); err != nil {
 				return errors.Wrap(err, "opening storage")
