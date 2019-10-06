@@ -163,11 +163,7 @@ check-docs: $(EMBEDMD) $(LICHE) build
 .PHONY: check-comments
 check-comments:
 	@printf ">> checking Go comments trailing periods\n\n\n"
-	@if grep -Przo --color --include \*.go --exclude \*.pb.go --exclude bindata.go --exclude-dir vendor '\n.*\s+//(\s{0,3}[^\s][^\n]+[^.?!:]{2}|[^\s].*)\n[ \t]*[^/\s].*\n' ./; \
-	 then \
-	 	printf "\n\n\n Error: Found comments without trailing period. Comments has to be full sentences.\n\n\n." \
-	 	&& false; \
-	 fi;
+	@./scripts/build-check-comments.sh
 
 # format formats the code (including imports format).
 .PHONY: format
