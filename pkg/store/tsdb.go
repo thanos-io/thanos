@@ -113,7 +113,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 		// limited benefit for now.
 		// NOTE: XOR encoding supports a max size of 2^16 - 1 samples, so we need
 		// to chunk all samples into groups of no more than 2^16 - 1
-		// See: https://github.com/thanos-io/thanos/pull/1038
+		// See: https://github.com/thanos-io/thanos/pull/1038.
 		c, err := s.encodeChunks(series.Iterator(), math.MaxUint16)
 		if err != nil {
 			return status.Errorf(codes.Internal, "encode chunk: %s", err)

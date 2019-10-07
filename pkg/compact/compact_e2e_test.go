@@ -208,7 +208,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		b2, err := createEmptyBlock(prepareDir, 1001, 2000, extLset, 124)
 		testutil.Ok(t, err)
 
-		// blocks" count=3 mint=0 maxt=3000 ulid=01D1RQCRRJM77KQQ4GYDSC50GM sources="[01D1RQCRMNZBVHBPGRPG2M3NZQ 01D1RQCRPJMYN45T65YA1PRWB7 01D1RQCRNMTWJKTN5QQXFNKKH8]"
+		// blocks" count=3 mint=0 maxt=3000 ulid=01D1RQCRRJM77KQQ4GYDSC50GM sources="[01D1RQCRMNZBVHBPGRPG2M3NZQ 01D1RQCRPJMYN45T65YA1PRWB7 01D1RQCRNMTWJKTN5QQXFNKKH8]".
 
 		meta, err = metadata.Read(filepath.Join(prepareDir, b2.String()))
 		testutil.Ok(t, err)
@@ -303,7 +303,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 }
 
 // createEmptyBlock produces empty block like it was the case before fix: https://github.com/prometheus/tsdb/pull/374.
-// (Prometheus pre v2.7.0)
+// (Prometheus pre v2.7.0).
 func createEmptyBlock(dir string, mint int64, maxt int64, extLset labels.Labels, resolution int64) (ulid.ULID, error) {
 	entropy := rand.New(rand.NewSource(time.Now().UnixNano()))
 	uid := ulid.MustNew(ulid.Now(), entropy)

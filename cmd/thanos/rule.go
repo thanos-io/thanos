@@ -17,10 +17,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/extflag"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
@@ -51,7 +53,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/ui"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 // registerRule registers a rule command.
@@ -197,7 +199,7 @@ func runRule(
 	evalInterval time.Duration,
 	dataDir string,
 	ruleFiles []string,
-	objStoreConfig *pathOrContent,
+	objStoreConfig *extflag.PathOrContent,
 	tsdbOpts *tsdb.Options,
 	alertQueryURL *url.URL,
 	alertExcludeLabels []string,
@@ -336,7 +338,7 @@ func runRule(
 		}
 	}
 	{
-		// TODO(bwplotka): https://github.com/thanos-io/thanos/issues/660
+		// TODO(bwplotka): https://github.com/thanos-io/thanos/issues/660.
 		sdr := alert.NewSender(logger, reg, alertmgrs.get, nil, alertmgrsTimeout)
 		ctx, cancel := context.WithCancel(context.Background())
 
@@ -369,7 +371,7 @@ func runRule(
 			cancel()
 		})
 	}
-	// Run File Service Discovery and update the query addresses when the files are modified
+	// Run File Service Discovery and update the query addresses when the files are modified.
 	if fileSD != nil {
 		var fileSDUpdates chan []*targetgroup.Group
 		ctxRun, cancelRun := context.WithCancel(context.Background())
@@ -388,7 +390,7 @@ func runRule(
 			for {
 				select {
 				case update := <-fileSDUpdates:
-					// Discoverers sometimes send nil updates so need to check for it to avoid panics
+					// Discoverers sometimes send nil updates so need to check for it to avoid panics.
 					if update == nil {
 						continue
 					}
@@ -407,7 +409,7 @@ func runRule(
 	reload := make(chan struct{}, 1)
 	{
 		cancel := make(chan struct{})
-		reload <- struct{}{} // initial reload
+		reload <- struct{}{} // Initial reload.
 
 		g.Add(func() error {
 			for {
@@ -514,7 +516,7 @@ func runRule(
 	{
 		router := route.New()
 
-		// redirect from / to /webRoutePrefix
+		// Redirect from / to /webRoutePrefix.
 		if webRoutePrefix != "" {
 			router.Get("/", func(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, webRoutePrefix, http.StatusFound)
@@ -614,22 +616,31 @@ func (s *alertmanagerSet) get() []*url.URL {
 
 const defaultAlertmanagerPort = 9093
 
+func parseAlertmanagerAddress(addr string) (qType dns.QType, parsedUrl *url.URL, err error) {
+	qType = ""
+	parsedUrl, err = url.Parse(addr)
+	if err != nil {
+		return qType, nil, err
+	}
+	// The Scheme might contain DNS resolver type separated by + so we split it a part.
+	if schemeParts := strings.Split(parsedUrl.Scheme, "+"); len(schemeParts) > 1 {
+		parsedUrl.Scheme = schemeParts[len(schemeParts)-1]
+		qType = dns.QType(strings.Join(schemeParts[:len(schemeParts)-1], "+"))
+	}
+	return qType, parsedUrl, err
+}
+
 func (s *alertmanagerSet) update(ctx context.Context) error {
 	var result []*url.URL
 	for _, addr := range s.addrs {
 		var (
-			name           = addr
 			qtype          dns.QType
 			resolvedDomain []string
 		)
 
-		if nameQtype := strings.SplitN(addr, "+", 2); len(nameQtype) == 2 {
-			name, qtype = nameQtype[1], dns.QType(nameQtype[0])
-		}
-
-		u, err := url.Parse(name)
+		qtype, u, err := parseAlertmanagerAddress(addr)
 		if err != nil {
-			return errors.Wrapf(err, "parse URL %q", name)
+			return errors.Wrapf(err, "parse URL %q", addr)
 		}
 
 		// Get only the host and resolve it if needed.
@@ -736,7 +747,7 @@ func queryFunc(
 
 	return func(ctx context.Context, q string, t time.Time) (promql.Vector, error) {
 		// Add DNS resolved addresses from static flags and file SD.
-		// TODO(bwplotka): Consider generating addresses in *url.URL
+		// TODO(bwplotka): Consider generating addresses in *url.URL.
 		addrs := dnsProvider.Addresses()
 
 		removeDuplicateQueryAddrs(logger, duplicatedQuery, addrs)

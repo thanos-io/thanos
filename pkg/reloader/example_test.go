@@ -49,5 +49,5 @@ func ExampleReloadURLFromBase() {
 		log.Fatal(err)
 	}
 	fmt.Println(reloader.ReloadURLFromBase(u))
-	// Output: http://localhost:9090/-/reload
+	//    Output: http://localhost:9090/-/reload
 }

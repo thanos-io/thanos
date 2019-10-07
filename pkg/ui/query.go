@@ -81,11 +81,11 @@ func (q *Query) Register(r *route.Router, ins extpromhttp.InstrumentationMiddlew
 
 	r.Get("/static/*filepath", instrf("static", q.serveStaticAsset))
 	// TODO(bplotka): Consider adding more Thanos related data e.g:
-	// - what store nodes we see currently
-	// - what sidecars we see currently
+	// - What store nodes we see currently.
+	// - What sidecars we see currently.
 }
 
-// root redirects "/" requests to "/graph", taking into account the path prefix value
+// Root redirects "/" requests to "/graph", taking into account the path prefix value.
 func (q *Query) root(w http.ResponseWriter, r *http.Request) {
 	prefix := GetWebPrefix(q.logger, q.flagsMap, r)
 

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/extflag"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -139,7 +141,7 @@ func runCompact(
 	reg *prometheus.Registry,
 	httpBindAddr string,
 	dataDir string,
-	objStoreConfig *pathOrContent,
+	objStoreConfig *extflag.PathOrContent,
 	consistencyDelay time.Duration,
 	haltOnError bool,
 	acceptMalformedIndex bool,
@@ -206,7 +208,6 @@ func runCompact(
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-
 	// Instantiate the compactor with different time slices. Timestamps in TSDB
 	// are in milliseconds.
 	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool())

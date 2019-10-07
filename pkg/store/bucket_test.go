@@ -42,20 +42,20 @@ func TestBucketBlock_Property(t *testing.T) {
 	input := []resBlock{
 		{window: downsample.ResLevel0, mint: 0, maxt: 100},
 		{window: downsample.ResLevel0, mint: 100, maxt: 200},
-		// Compaction level 2 begins but not downsampling (8 hour block length)
+		// Compaction level 2 begins but not downsampling (8 hour block length).
 		{window: downsample.ResLevel0, mint: 200, maxt: 600},
 		{window: downsample.ResLevel0, mint: 600, maxt: 1000},
-		// Compaction level 3 begins, Some of it is downsampled but still retained (48 hour block length)
+		// Compaction level 3 begins, Some of it is downsampled but still retained (48 hour block length).
 		{window: downsample.ResLevel0, mint: 1000, maxt: 1750},
 		{window: downsample.ResLevel1, mint: 1000, maxt: 1750},
-		// Compaction level 4 begins, different downsampling levels cover the same (336 hour block length)
+		// Compaction level 4 begins, different downsampling levels cover the same (336 hour block length).
 		{window: downsample.ResLevel0, mint: 1750, maxt: 7000},
 		{window: downsample.ResLevel1, mint: 1750, maxt: 7000},
 		{window: downsample.ResLevel2, mint: 1750, maxt: 7000},
-		// Compaction level 4 already happened, raw samples have been deleted
+		// Compaction level 4 already happened, raw samples have been deleted.
 		{window: downsample.ResLevel0, mint: 7000, maxt: 14000},
 		{window: downsample.ResLevel1, mint: 7000, maxt: 14000},
-		// Compaction level 4 already happened, raw and downsample res level 1 samples have been deleted
+		// Compaction level 4 already happened, raw and downsample res level 1 samples have been deleted.
 		{window: downsample.ResLevel2, mint: 14000, maxt: 21000},
 	}
 
@@ -77,7 +77,7 @@ func TestBucketBlock_Property(t *testing.T) {
 
 			res := set.getFor(low, high, maxResolution)
 
-			// The data that we get must all encompass our requested range
+			// The data that we get must all encompass our requested range.
 			if len(res) == 1 && (res[0].meta.Thanos.Downsample.Resolution > maxResolution ||
 				res[0].meta.MinTime > low) {
 				return false
@@ -116,7 +116,7 @@ func TestBucketBlock_Property(t *testing.T) {
 			maxResolution := downsample.ResLevel2
 			res := set.getFor(low, high, maxResolution)
 
-			// The data that we get must all encompass our requested range
+			// The data that we get must all encompass our requested range.
 			if len(res) == 1 && (res[0].meta.Thanos.Downsample.Resolution > maxResolution ||
 				res[0].meta.MinTime > low || res[0].meta.MaxTime < high) {
 				return false
@@ -441,21 +441,21 @@ func TestBucketStore_isBlockInMinMaxRange(t *testing.T) {
 	series := []labels.Labels{labels.FromStrings("a", "1", "b", "1")}
 	extLset := labels.FromStrings("ext1", "value1")
 
-	// Create a block in range [-2w, -1w]
+	// Create a block in range [-2w, -1w].
 	id1, err := testutil.CreateBlock(ctx, dir, series, 10,
 		timestamp.FromTime(time.Now().Add(-14*24*time.Hour)),
 		timestamp.FromTime(time.Now().Add(-7*24*time.Hour)),
 		extLset, 0)
 	testutil.Ok(t, err)
 
-	// Create a block in range [-1w, 0w]
+	// Create a block in range [-1w, 0w].
 	id2, err := testutil.CreateBlock(ctx, dir, series, 10,
 		timestamp.FromTime(time.Now().Add(-7*24*time.Hour)),
 		timestamp.FromTime(time.Now().Add(-0*24*time.Hour)),
 		extLset, 0)
 	testutil.Ok(t, err)
 
-	// Create a block in range [+1w, +2w]
+	// Create a block in range [+1w, +2w].
 	id3, err := testutil.CreateBlock(ctx, dir, series, 10,
 		timestamp.FromTime(time.Now().Add(7*24*time.Hour)),
 		timestamp.FromTime(time.Now().Add(14*24*time.Hour)),
@@ -471,11 +471,11 @@ func TestBucketStore_isBlockInMinMaxRange(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, metadata.Write(log.NewNopLogger(), dir2, meta2))
 
-	// Run actual test
+	// Run actual test.
 	hourBeforeDur := prommodel.Duration(-1 * time.Hour)
 	hourBefore := model.TimeOrDurationValue{Dur: &hourBeforeDur}
 
-	// bucketStore accepts blocks in range [0, now-1h]
+	// bucketStore accepts blocks in range [0, now-1h].
 	bucketStore, err := NewBucketStore(nil, nil, inmem.NewBucket(), dir, noopCache{}, 0, 0, 20, false, 20,
 		&FilterConfig{
 			MinTime: minTimeDuration,

@@ -39,7 +39,7 @@ func (b *Bucket) Register(r *route.Router, ins extpromhttp.InstrumentationMiddle
 	r.Get("/static/*filepath", instrf("static", b.serveStaticAsset))
 }
 
-// Handle / of bucket UIs
+// Handle / of bucket UIs.
 func (b *Bucket) root(w http.ResponseWriter, r *http.Request) {
 	b.executeTemplate(w, "bucket.html", "", b)
 }

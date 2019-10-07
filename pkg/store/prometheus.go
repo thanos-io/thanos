@@ -217,7 +217,7 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(s storepb.Store_Series
 
 		// XOR encoding supports a max size of 2^16 - 1 samples, so we need
 		// to chunk all samples into groups of no more than 2^16 - 1
-		// See: https://github.com/thanos-io/thanos/pull/718
+		// See: https://github.com/thanos-io/thanos/pull/718.
 		aggregatedChunks, err := p.chunkSamples(e, math.MaxUint16)
 		if err != nil {
 			return err

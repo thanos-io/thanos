@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/extflag"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -94,7 +96,7 @@ func runSidecar(
 	httpBindAddr string,
 	promURL *url.URL,
 	dataDir string,
-	objStoreConfig *pathOrContent,
+	objStoreConfig *extflag.PathOrContent,
 	reloader *reloader.Reloader,
 	uploadCompacted bool,
 	comp component.Component,

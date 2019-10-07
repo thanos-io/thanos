@@ -111,7 +111,7 @@ type Flags struct {
 func (f *Flags) UnmarshalJSON(b []byte) error {
 	// TODO(bwplotka): Avoid this custom unmarshal by:
 	// - prometheus/common: adding unmarshalJSON to modelDuration
-	// - prometheus/prometheus: flags should return proper JSON. (not bool in string)
+	// - prometheus/prometheus: flags should return proper JSON (not bool in string).
 	parsableFlags := struct {
 		TSDBPath           string        `json:"storage.tsdb.path"`
 		TSDBRetention      modelDuration `json:"storage.tsdb.retention"`
@@ -345,7 +345,7 @@ func QueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query s
 	var vectorResult model.Vector
 
 	// Decode the Result depending on the ResultType
-	// Currently only `vector` and `scalar` types are supported
+	// Currently only `vector` and `scalar` types are supported.
 	switch m.Data.ResultType {
 	case promql.ValueTypeVector:
 		if err = json.Unmarshal(m.Data.Result, &vectorResult); err != nil {

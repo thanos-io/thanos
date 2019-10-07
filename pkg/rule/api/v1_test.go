@@ -65,7 +65,6 @@ func (m rulesRetrieverMock) RuleGroups() []thanosrule.Group {
 	var ar rulesRetrieverMock
 	arules := ar.AlertingRules()
 	storage := newStorage(m.testing)
-	//defer storage.Close()
 
 	engineOpts := promql.EngineOpts{
 		Logger:        nil,

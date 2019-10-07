@@ -22,7 +22,7 @@ type Bucket interface {
 	BucketReader
 
 	// Upload the contents of the reader as an object into the bucket.
-	// Upload should be idempotent
+	// Upload should be idempotent.
 	Upload(ctx context.Context, name string, r io.Reader) error
 
 	// Delete removes the object with the given name.
@@ -77,7 +77,7 @@ func UploadDir(ctx context.Context, logger log.Logger, bkt Bucket, srcdir, dstdi
 }
 
 // UploadFile uploads the file with the given name to the bucket.
-// It is a caller responsibility to clean partial upload in case of failure
+// It is a caller responsibility to clean partial upload in case of failure.
 func UploadFile(ctx context.Context, logger log.Logger, bkt Bucket, src, dst string) error {
 	r, err := os.Open(src)
 	if err != nil {
@@ -295,7 +295,7 @@ func (b *metricBucket) Upload(ctx context.Context, name string, r io.Reader) err
 	if err != nil {
 		b.opsFailures.WithLabelValues(op).Inc()
 	} else {
-		//TODO: Use SetToCurrentTime() once we update the Prometheus client_golang
+		// TODO: Use SetToCurrentTime() once we update the Prometheus client_golang.
 		b.lastSuccessfullUploadTime.WithLabelValues(b.bkt.Name()).Set(float64(time.Now().UnixNano()) / 1e9)
 	}
 	b.ops.WithLabelValues(op).Inc()

@@ -249,7 +249,7 @@ func (c *lazyOverlapChecker) IsOverlapping(ctx context.Context, newMeta tsdb.Blo
 //
 // If uploaded.
 //
-// It is not concurrency-safe, however it is compactor-safe (running concurrently with compactor is ok)
+// It is not concurrency-safe, however it is compactor-safe (running concurrently with compactor is ok).
 func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 	meta, err := ReadMetaFile(s.dir)
 	if err != nil {

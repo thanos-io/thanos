@@ -14,7 +14,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// Config - YAML configuration. For details see to https://github.com/jaegertracing/jaeger-client-go#environment-variables
+// Config - YAML configuration. For details see to https://github.com/jaegertracing/jaeger-client-go#environment-variables.
 type Config struct {
 	ServiceName            string        `yaml:"service_name"`
 	Disabled               bool          `yaml:"disabled"`

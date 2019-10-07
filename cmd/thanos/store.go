@@ -5,6 +5,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/extflag"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -95,7 +97,7 @@ func runStore(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	objStoreConfig *pathOrContent,
+	objStoreConfig *extflag.PathOrContent,
 	dataDir string,
 	grpcBindAddr string,
 	cert string,
