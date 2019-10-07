@@ -151,12 +151,6 @@ func runReceive(
 		MaxBlockDuration:  tsdbBlockDuration,
 		WALCompression:    true,
 	}
-	db := receive.NewFlushableStorage(
-		dataDir,
-		log.With(logger, "component", "tsdb"),
-		reg,
-		tsdbCfg,
-	)
 
 	localStorage := &tsdb.ReadyStorage{}
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
@@ -195,18 +189,24 @@ func runReceive(
 	{
 		// TSDB.
 		cancel := make(chan struct{})
-		// Before actually starting, we need to make sure
-		// the WAL is flushed.
 		startTimeMargin := int64(2 * time.Duration(tsdbCfg.MinBlockDuration).Seconds() * 1000)
-		if err := db.Open(); err != nil {
-			return errors.Wrap(err, "opening storage")
-		}
-		if err := db.Flush(); err != nil {
-			return errors.Wrap(err, "flushing storage")
-		}
 		g.Add(func() error {
 			defer close(dbReady)
 			defer close(uploadC)
+
+			db := receive.NewFlushableStorage(
+				dataDir,
+				log.With(logger, "component", "tsdb"),
+				reg,
+				tsdbCfg,
+			)
+
+			// Before actually starting, we need to make sure the
+			// WAL is flushed. The WAL is flushed after the
+			// hashring ring is loaded.
+			if err := db.Open(); err != nil {
+				return errors.Wrap(err, "opening storage")
+			}
 
 			// Before quitting, ensure the WAL is flushed and the DB is closed.
 			defer func() {
