@@ -25,6 +25,7 @@ import (
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 // Options for the web Handler.
@@ -36,10 +37,12 @@ type Options struct {
 	TenantHeader      string
 	ReplicaHeader     string
 	ReplicationFactor uint64
+	Tracer            opentracing.Tracer
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
 type Handler struct {
+	client   *http.Client
 	logger   log.Logger
 	writer   *Writer
 	router   *route.Router
@@ -58,7 +61,13 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		logger = log.NewNopLogger()
 	}
 
+	client := &http.Client{}
+	if o.Tracer != nil {
+		client.Transport = tracing.HTTPTripperware(logger, http.DefaultTransport)
+	}
+
 	h := &Handler{
+		client:  client,
 		logger:  logger,
 		writer:  o.Writer,
 		router:  route.New(),
@@ -79,6 +88,9 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 
 	readyf := h.testReady
 	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+		if o.Tracer != nil {
+			next = tracing.HTTPMiddleware(o.Tracer, name, logger, http.HandlerFunc(next))
+		}
 		return ins.NewHandler(name, http.HandlerFunc(next))
 	}
 
@@ -342,10 +354,14 @@ func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replic
 				h.forwardRequestsTotal.WithLabelValues("success").Inc()
 			}()
 
+			// Create a span to track the request made to another receive node.
+			span, ctx := tracing.StartSpan(ctx, "thanos_receive_forward")
+			defer span.Finish()
+
 			// Actually make the request against the endpoint
 			// we determined should handle these time series.
 			var res *http.Response
-			res, err = http.DefaultClient.Do(req.WithContext(ctx))
+			res, err = h.client.Do(req.WithContext(ctx))
 			if err != nil {
 				level.Error(h.logger).Log("msg", "forwarding request", "err", err, "endpoint", endpoint)
 				ec <- err

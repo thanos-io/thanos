@@ -160,6 +160,7 @@ func runReceive(
 		TenantHeader:      tenantHeader,
 		ReplicaHeader:     replicaHeader,
 		ReplicationFactor: replicationFactor,
+		Tracer:            tracer,
 	})
 
 	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
