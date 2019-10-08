@@ -73,23 +73,11 @@ func regCommonTracingFlags(app *kingpin.Application) *extflag.PathOrContent {
 	)
 }
 
-func regSelectorRelabelFlags(cmd *kingpin.CmdClause) *pathOrContent {
-	fileFlagName := "selector.relabel-config-file"
-	contentFlagName := "selector.relabel-config"
-	help := "Path to YAML file that contains seletor relabeling configuration. It follows native Prometheus relabel-config syntax. See format details: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config "
-
-	selectorRelabelConfFile := cmd.Flag(fileFlagName, help).PlaceHolder("<seletor.relabel-config-yaml-path>").String()
-
-	help = fmt.Sprintf("Alternative to '%s' flag. Relabeling configuration in YAML. See format details: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config", fileFlagName)
-
-	selectorRelabelConf := cmd.Flag(contentFlagName, help).PlaceHolder("<selector.relabel-config-yaml>").String()
-
-	return &pathOrContent{
-		fileFlagName:    fileFlagName,
-		contentFlagName: contentFlagName,
-		required:        false,
-
-		path:    selectorRelabelConfFile,
-		content: selectorRelabelConf,
-	}
+func regSelectorRelabelFlags(cmd *kingpin.CmdClause) *extflag.PathOrContent {
+	return extflag.RegisterPathOrContent(
+		cmd,
+		"selector.relabel-config",
+		"YAML file that contains seletor relabeling configuration. It follows native Prometheus relabel-config syntax. See format details: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config ",
+		false,
+	)
 }

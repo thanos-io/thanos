@@ -218,7 +218,10 @@ func (s *StoreSet) Update(ctx context.Context) {
 	// Record the number of occurrences of external label combinations for current store slice.
 	externalLabelOccurrencesInStores := map[string]int{}
 	for _, st := range healthyStores {
-		externalLabelOccurrencesInStores[externalLabelsFromStore(st)]++
+		if st.storeType != nil && (st.storeType.ToProto() == storepb.StoreType_QUERY ||
+			st.storeType.ToProto() == storepb.StoreType_SIDECAR) {
+			externalLabelOccurrencesInStores[externalLabelsFromStore(st)]++
+		}
 	}
 	level.Debug(s.logger).Log("msg", "updating healthy stores", "externalLabelOccurrencesInStores", fmt.Sprintf("%#+v", externalLabelOccurrencesInStores))
 
@@ -252,7 +255,11 @@ func (s *StoreSet) Update(ctx context.Context) {
 		// Note: No external labels means strictly store gateway or ruler and it is fine to have access to multiple instances of them.
 		// Any other component will error out if it will be configured with empty external labels.
 		externalLabels := externalLabelsFromStore(store)
-		if len(store.LabelSets()) > 0 && externalLabelOccurrencesInStores[externalLabels] != 1 {
+		if len(store.LabelSets()) > 0 &&
+			store.storeType != nil &&
+			(store.storeType.ToProto() == storepb.StoreType_QUERY ||
+				store.storeType.ToProto() == storepb.StoreType_SIDECAR) &&
+			externalLabelOccurrencesInStores[externalLabels] != 1 {
 			store.close()
 			s.updateStoreStatus(store, errors.New(droppingStoreMessage))
 			level.Warn(s.logger).Log("msg", droppingStoreMessage, "address", addr, "extLset", externalLabels, "duplicates", externalLabelOccurrencesInStores[externalLabels])
@@ -359,12 +366,6 @@ func externalLabelsFromStore(store *storeRef) string {
 		tsdbLabelSetStrings = append(tsdbLabelSetStrings, tsdbLabels.String())
 	}
 	sort.Strings(tsdbLabelSetStrings)
-
-	// Append the storeType to the end of list, because the store gateway will be exposed external labels,
-	// we allow the duplicate external labels with different components.
-	if store.storeType != nil {
-		tsdbLabelSetStrings = append(tsdbLabelSetStrings, store.storeType.String())
-	}
 
 	return strings.Join(tsdbLabelSetStrings, ",")
 }

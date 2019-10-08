@@ -470,7 +470,7 @@ func (s *BucketStore) addBlock(ctx context.Context, id ulid.ULID) (err error) {
 		level.Debug(s.logger).Log("msg", "dropping block(drop in relabeling)", "block", id)
 		return os.RemoveAll(dir)
 	}
-	b.labels = labels.FromMap(processedLabels.Map())
+	b.labels = lset
 	sort.Sort(b.labels)
 
 	set, ok := s.blockSets[h]
@@ -542,25 +542,23 @@ func (s *BucketStore) Info(context.Context, *storepb.InfoRequest) (*storepb.Info
 		MaxTime:   maxt,
 	}
 
-	if len(s.relabelConfig) != 0 {
-		labelSets := make(map[uint64][]storepb.Label, len(s.blocks))
-		for _, bs := range s.blocks {
-			ls := map[string]string{}
-			for _, l := range bs.labels {
-				ls[l.Name] = l.Value
-			}
-
-			res := []storepb.Label{}
-			for k, v := range ls {
-				res = append(res, storepb.Label{Name: k, Value: v})
-			}
-			labelSets[bs.labels.Hash()] = res
+	labelSets := make(map[uint64][]storepb.Label, len(s.blocks))
+	for _, bs := range s.blocks {
+		ls := map[string]string{}
+		for _, l := range bs.labels {
+			ls[l.Name] = l.Value
 		}
 
-		res.LabelSets = make([]storepb.LabelSet, 0, len(labelSets))
-		for _, v := range labelSets {
-			res.LabelSets = append(res.LabelSets, storepb.LabelSet{Labels: v})
+		res := []storepb.Label{}
+		for k, v := range ls {
+			res = append(res, storepb.Label{Name: k, Value: v})
 		}
+		labelSets[bs.labels.Hash()] = res
+	}
+
+	res.LabelSets = make([]storepb.LabelSet, 0, len(labelSets))
+	for _, v := range labelSets {
+		res.LabelSets = append(res.LabelSets, storepb.LabelSet{Labels: v})
 	}
 
 	return res, nil

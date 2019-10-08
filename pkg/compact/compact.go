@@ -38,7 +38,6 @@ const (
 )
 
 var blockTooFreshSentinelError = errors.New("Block too fresh")
-var blockDroppedInRelabelingError = errors.New("Block dropped in Relabeling")
 
 // Syncer syncronizes block metas from a bucket into a local directory.
 // It sorts them into compaction groups based on equal label sets.
@@ -210,14 +209,24 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 				}
 
 				meta, err := c.downloadMeta(workCtx, id)
-				if err == blockTooFreshSentinelError || err == blockDroppedInRelabelingError {
+				if err == blockTooFreshSentinelError {
 					continue
 				}
+
 				if err != nil {
 					if removedOrIgnored := c.removeIfMetaMalformed(workCtx, id); removedOrIgnored {
 						continue
 					}
 					errChan <- err
+					return
+				}
+
+				// Check for block labels by relabeling.
+				// If output is empty, the block will be dropped.
+				lset := promlables.FromMap(meta.Thanos.Labels)
+				processedLabels := relabel.Process(lset, c.relabelConfig...)
+				if processedLabels == nil {
+					level.Warn(c.logger).Log("msg", "dropping block(drop in relabeling)", "block", id)
 					return
 				}
 
@@ -278,15 +287,6 @@ func (c *Syncer) downloadMeta(ctx context.Context, id ulid.ULID) (*metadata.Meta
 			return nil, blockTooFreshSentinelError
 		}
 		return nil, errors.Wrapf(err, "downloading meta.json for %s", id)
-	}
-
-	// Check for block labels by relabeling.
-	// If output is empty, the block will be dropped.
-	lset := promlables.FromMap(meta.Thanos.Labels)
-	processedLabels := relabel.Process(lset, c.relabelConfig...)
-	if processedLabels == nil {
-		level.Debug(c.logger).Log("msg", "dropping block(drop in relabeling)", "block", id)
-		return nil, blockDroppedInRelabelingError
 	}
 
 	// ULIDs contain a millisecond timestamp. We do not consider blocks that have been created too recently to

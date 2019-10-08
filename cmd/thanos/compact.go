@@ -156,7 +156,7 @@ func runCompact(
 	maxCompactionLevel int,
 	blockSyncConcurrency int,
 	concurrency int,
-	selectorRelabelConf *pathOrContent,
+	selectorRelabelConf *extflag.PathOrContent,
 ) error {
 	halted := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compactor_halted",
