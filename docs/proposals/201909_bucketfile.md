@@ -126,27 +126,27 @@ The above sequence diagram shows BucketFile internals:
 ```
 // Range represents a byte range.
 type Range struct {
-		start int    
-		end   int        
+    start int
+    end   int
 }
 
-// BucketFile represents a block index file or 
+// BucketFile represents a block index file or
 // chunks file in remote object storage.
 type BucketFile struct {
-	mtx   sync.RWMutex
-	file  *os.File        // file descriptor
-	data  []byte          // mmap bytes, shared & read only
-	pages *roaring.Bitmap // record pages have been fetched
-	size  int             // file size
+    mtx   sync.RWMutex
+    file  *os.File        // file descriptor
+    data  []byte          // mmap bytes, shared & read only
+    pages *roaring.Bitmap // record pages have been fetched
+    size  int             // file size
 
-	bkt  objstore.BucketReader
-	name string // bucket object name
-	path string // local file path
-	
-	pendingDuration time.Duration    // duration to fetch pending pages
-	pendingPages    *roaring.Bitmap  // pending pages to be fetched
-	pendingReaders  int  	           // record pending callers
-	pendingChan     chan error  	   // chan to notify callers the result of prefetch
+    bkt  objstore.BucketReader
+    name string // bucket object name
+    path string // local file path
+
+    pendingDuration time.Duration   // duration to fetch pending pages
+    pendingPages    *roaring.Bitmap // pending pages to be fetched
+    pendingReaders  int             // record pending callers
+    pendingChan     chan error      // chan to notify callers the result of prefetch
 }
 
 func (f *BucketFile) Fetch(start, end int) ([]byte, error) {...}
@@ -238,11 +238,11 @@ pages.AddRange(minPageID, maxPageID)
 
 ```
 type BucketFile struct {
-	// ...
-	pendingDuration time.Duration    // duration to fetch pending pages
-	pendingPages    *roaring.Bitmap  // pending pages to be fetched
-	pendingReaders  int  	           // record pending callers
-	pendingChan     chan error  	   // chan to notify callers the result of prefetch
+    // ...
+    pendingDuration time.Duration   // duration to fetch pending pages
+    pendingPages    *roaring.Bitmap // pending pages to be fetched
+    pendingReaders  int             // record pending callers
+    pendingChan     chan error      // chan to notify callers the result of prefetch	
 }
 
 func (f *BucketFile) Prefetch(ranges []*Range) (chan error, error) {...}
@@ -267,7 +267,7 @@ Each BucketFile has a `pages` bitmap, but the bitmap uses very small memory.
 
 For inactive IndexReaders, if the inactive duration (`now.Sub(lastQueryTime)`) greats than a configured duration (e.g. 15 mins), then IndexReader will remove in-memory objects and close file descriptor and mmap in IndexFile.  This will reduce memory usage.
 
-Note: The `pages` bitmap in BucketFile should always be kept in memory until the server is closed.
+**NOTE**: The `pages` bitmap in BucketFile should always be kept in memory until the server is closed.
 
 ### Preload blocks on startup
 
@@ -290,17 +290,16 @@ Currently, different provider clients implement byte ranges  differently. We nee
 
  I think byte ranges in [minio-go](https://github.com/minio/minio-go/blob/master/api-get-options.go#L99-L128) is a good example:
 
-1. Fetch last N bytes: 
-     `Range{start:0, end: -N}` ->  Request header`bytes=-N` 
-   Note: will not write to local file because we do not know the offset.
-2. Fetch everything starting from `start`:
-    `Range{start:N, end: 0}	`  ->  Request heade `bytes=N-` 
+1. Fetch last N bytes:     
+     `Range{start:0, end: -N}` ->  Request header`Range: bytes=-N`     
+     **NOTE**: will not write to local file because we do not know the offset.
+2. Fetch everything starting from `start`:    
+    `Range{start:N, end: 0}	`  ->  Request heade `Range: bytes=N-` 
 
-3. Fetch everything starting at `start` till  `end`:
+3. Fetch everything starting at `start` till  `end`:    
+   `Range{start:N, end: M}` -> Request header `Range: bytes=M-N` 
 
-   `Range{start:N, end: M}` -> Request header `bytes=N-M` 
-
-if providers support multiple ranges, likes `bytes=500-700,60000-61000`, we need to implement a `BucketReader.GetRanges` API, then we can query multiple ranges in one request.
+if providers support multiple ranges, likes `Range: bytes=500-700,60000-61000`, we need to implement a `BucketReader.GetRanges` API, then we can query multiple ranges in one request.
 
 See https://tools.ietf.org/html/rfc7233#section-2.1 for reference.
 
@@ -325,5 +324,6 @@ Design a new index file for [postings offset entries](https://github.com/prometh
 
 With the new index file, we can access entries using a mmaped file, instead of loading  [postings offset block](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#postings-offset-table) and [label offset block](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#label-offset-table) into memory. This will reduce memory usage.
 
-Note: the new index file and the `block/index`   file are not the same file.  the new index file should be generated by sidecar and compactor before uploading a block.
+**NOTE**: the new index file and the `block/index`   file are not the same file.  the new index file should be generated by sidecar and compactor before uploading a block.
+
 
