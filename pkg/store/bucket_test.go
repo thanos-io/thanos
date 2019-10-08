@@ -4,6 +4,7 @@ import (
 	"context"
 	"io/ioutil"
 	"math"
+	"path"
 	"path/filepath"
 	"testing"
 	"time"
@@ -18,12 +19,15 @@ import (
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/model"
+	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/inmem"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
+	"gopkg.in/yaml.v2"
 )
 
 func TestBucketBlock_Property(t *testing.T) {
@@ -497,4 +501,74 @@ func TestBucketStore_isBlockInMinMaxRange(t *testing.T) {
 	inRange, err = bucketStore.isBlockInMinMaxRange(context.TODO(), id3)
 	testutil.Ok(t, err)
 	testutil.Equals(t, false, inRange)
+}
+
+func TestBucketStore_selectorBlocks(t *testing.T) {
+	ctx := context.TODO()
+	logger := log.NewNopLogger()
+	dir, err := ioutil.TempDir("", "selector-blocks")
+	testutil.Ok(t, err)
+	bkt := inmem.NewBucket()
+	series := []labels.Labels{labels.FromStrings("a", "1", "b", "1")}
+
+	id1, err := testutil.CreateBlock(ctx, dir, series, 10, 0, 1000, labels.Labels{{Name: "cluster", Value: "A"}}, 0)
+	testutil.Ok(t, err)
+	testutil.Ok(t, objstore.UploadFile(ctx, logger, bkt, filepath.Join(dir, id1.String(), block.MetaFilename), path.Join(id1.String(), block.MetaFilename)))
+	testutil.Ok(t, objstore.UploadFile(ctx, logger, bkt, filepath.Join(dir, id1.String(), block.IndexFilename), path.Join(id1.String(), block.IndexFilename)))
+
+	id2, err := testutil.CreateBlock(ctx, dir, series, 10, 0, 1000, labels.Labels{{Name: "cluster", Value: "B"}}, 0)
+	testutil.Ok(t, err)
+	testutil.Ok(t, objstore.UploadFile(ctx, logger, bkt, filepath.Join(dir, id2.String(), block.MetaFilename), path.Join(id2.String(), block.MetaFilename)))
+	testutil.Ok(t, objstore.UploadFile(ctx, logger, bkt, filepath.Join(dir, id2.String(), block.IndexFilename), path.Join(id2.String(), block.IndexFilename)))
+
+	id3, err := testutil.CreateBlock(ctx, dir, series, 10, 0, 1000, labels.Labels{{Name: "cluster", Value: "A"}}, 0)
+	testutil.Ok(t, err)
+	testutil.Ok(t, objstore.UploadFile(ctx, logger, bkt, filepath.Join(dir, id3.String(), block.MetaFilename), path.Join(id3.String(), block.MetaFilename)))
+	testutil.Ok(t, objstore.UploadFile(ctx, logger, bkt, filepath.Join(dir, id3.String(), block.IndexFilename), path.Join(id3.String(), block.IndexFilename)))
+
+	for _, sc := range []struct {
+		relabelContentYaml string
+		exceptedLength     int
+		exceptedIds        []ulid.ULID
+	}{
+		{
+			relabelContentYaml: `
+            - action: drop
+              regex: "A"
+              source_labels:
+              - cluster
+            `,
+			exceptedLength: 1,
+			exceptedIds:    []ulid.ULID{id2},
+		},
+		{
+			relabelContentYaml: `
+            - action: keep
+              regex: "A"
+              source_labels:
+              - cluster
+            `,
+			exceptedLength: 2,
+			exceptedIds:    []ulid.ULID{id1, id3},
+		},
+	} {
+		var relabelConf []*relabel.Config
+		err = yaml.Unmarshal([]byte(sc.relabelContentYaml), &relabelConf)
+		testutil.Ok(t, err)
+
+		bucketStore, err := NewBucketStore(nil, nil, bkt, dir, noopCache{}, 0, 0, 20, false, 20,
+			filterConf, relabelConf)
+		testutil.Ok(t, err)
+
+		for _, id := range []ulid.ULID{id1, id2, id3} {
+			testutil.Ok(t, bucketStore.addBlock(ctx, id))
+		}
+		testutil.Equals(t, sc.exceptedLength, len(bucketStore.blocks))
+
+		ids := make([]ulid.ULID, 0, len(bucketStore.blocks))
+		for id, _ := range bucketStore.blocks {
+			ids = append(ids, id)
+		}
+		testutil.Equals(t, sc.exceptedIds, ids)
+	}
 }
