@@ -566,7 +566,7 @@ func TestBucketStore_selectorBlocks(t *testing.T) {
 		testutil.Equals(t, sc.exceptedLength, len(bucketStore.blocks))
 
 		ids := make([]ulid.ULID, 0, len(bucketStore.blocks))
-		for id, _ := range bucketStore.blocks {
+		for id := range bucketStore.blocks {
 			ids = append(ids, id)
 		}
 		testutil.Equals(t, sc.exceptedIds, ids)
