@@ -70,7 +70,8 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 
 	ruleFiles := cmd.Flag("rule-file", "Rule files that should be used by rule manager. Can be in glob format (repeated).").
 		Default("rules/").Strings()
-
+	resendDelay := modelDuration(cmd.Flag("resend-delay", "Minimum amount of time to wait before resending an alert to Alertmanager.").
+		Default("1m"))
 	evalInterval := modelDuration(cmd.Flag("eval-interval", "The default evaluation interval to use.").
 		Default("30s"))
 	tsdbBlockDuration := modelDuration(cmd.Flag("tsdb.block-duration", "Block duration for TSDB block.").
@@ -162,6 +163,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			*webRoutePrefix,
 			*webExternalPrefix,
 			*webPrefixHeaderName,
+			time.Duration(*resendDelay),
 			time.Duration(*evalInterval),
 			*dataDir,
 			*ruleFiles,
@@ -196,6 +198,7 @@ func runRule(
 	webRoutePrefix string,
 	webExternalPrefix string,
 	webPrefixHeaderName string,
+	resendDelay time.Duration,
 	evalInterval time.Duration,
 	dataDir string,
 	ruleFiles []string,
@@ -299,6 +302,8 @@ func runRule(
 				}
 				if !alrt.ResolvedAt.IsZero() {
 					a.EndsAt = alrt.ResolvedAt
+				} else {
+					a.EndsAt = alrt.ValidUntil
 				}
 				res = append(res, a)
 			}
@@ -312,6 +317,7 @@ func runRule(
 			Appendable:  st,
 			ExternalURL: nil,
 			TSDB:        st,
+			ResendDelay: resendDelay,
 		}
 
 		for _, strategy := range storepb.PartialResponseStrategy_value {

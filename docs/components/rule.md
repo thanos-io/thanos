@@ -188,6 +188,8 @@ Flags:
       --data-dir="data/"         data directory
       --rule-file=rules/ ...     Rule files that should be used by rule manager.
                                  Can be in glob format (repeated).
+      --resend-delay=1m          Minimum amount of time to wait before resending
+                                 an alert to Alertmanager.
       --eval-interval=30s        The default evaluation interval to use.
       --tsdb.block-duration=2h   Block duration for TSDB block.
       --tsdb.retention=48h       Block retention time on local disk.
