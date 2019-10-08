@@ -6,6 +6,7 @@ import (
 	"math"
 	"path"
 	"path/filepath"
+	"sort"
 	"testing"
 	"time"
 
@@ -569,6 +570,12 @@ func TestBucketStore_selectorBlocks(t *testing.T) {
 		for id := range bucketStore.blocks {
 			ids = append(ids, id)
 		}
+		sort.Slice(sc.exceptedIds, func(i, j int) bool {
+			return sc.exceptedIds[i].Compare(sc.exceptedIds[j]) > 0
+		})
+		sort.Slice(ids, func(i, j int) bool {
+			return ids[i].Compare(ids[j]) > 0
+		})
 		testutil.Equals(t, sc.exceptedIds, ids)
 	}
 }
