@@ -226,8 +226,8 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 				lset := promlables.FromMap(meta.Thanos.Labels)
 				processedLabels := relabel.Process(lset, c.relabelConfig...)
 				if processedLabels == nil {
-					level.Warn(c.logger).Log("msg", "dropping block(drop in relabeling)", "block", id)
-					return
+					level.Debug(c.logger).Log("msg", "dropping block(drop in relabeling)", "block", id)
+					continue
 				}
 
 				c.blocksMtx.Lock()

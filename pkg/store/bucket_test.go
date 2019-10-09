@@ -31,6 +31,8 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+var emptyRelabelConfig = make([]*relabel.Config, 0)
+
 func TestBucketBlock_Property(t *testing.T) {
 	parameters := gopter.DefaultTestParameters()
 	parameters.Rng.Seed(2000)
@@ -428,8 +430,7 @@ func TestBucketStore_Info(t *testing.T) {
 	dir, err := ioutil.TempDir("", "bucketstore-test")
 	testutil.Ok(t, err)
 
-	relabelConfig := make([]*relabel.Config, 0)
-	bucketStore, err := NewBucketStore(nil, nil, nil, dir, noopCache{}, 2e5, 0, 0, false, 20, filterConf, relabelConfig)
+	bucketStore, err := NewBucketStore(nil, nil, nil, dir, noopCache{}, 2e5, 0, 0, false, 20, filterConf, emptyRelabelConfig)
 	testutil.Ok(t, err)
 
 	resp, err := bucketStore.Info(ctx, &storepb.InfoRequest{})
@@ -447,7 +448,6 @@ func TestBucketStore_isBlockInMinMaxRange(t *testing.T) {
 
 	series := []labels.Labels{labels.FromStrings("a", "1", "b", "1")}
 	extLset := labels.FromStrings("ext1", "value1")
-	relabelConfig := make([]*relabel.Config, 0)
 
 	// Create a block in range [-2w, -1w].
 	id1, err := testutil.CreateBlock(ctx, dir, series, 10,
@@ -488,7 +488,7 @@ func TestBucketStore_isBlockInMinMaxRange(t *testing.T) {
 		&FilterConfig{
 			MinTime: minTimeDuration,
 			MaxTime: hourBefore,
-		}, relabelConfig)
+		}, emptyRelabelConfig)
 	testutil.Ok(t, err)
 
 	inRange, err := bucketStore.isBlockInMinMaxRange(context.TODO(), id1)
@@ -578,4 +578,62 @@ func TestBucketStore_selectorBlocks(t *testing.T) {
 		})
 		testutil.Equals(t, sc.exceptedIds, ids)
 	}
+}
+
+func TestBucketStore_InfoWithLabels(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	dir, err := ioutil.TempDir("", "bucketstore-test")
+	testutil.Ok(t, err)
+
+	bkt := inmem.NewBucket()
+	series := []labels.Labels{labels.FromStrings("a", "1", "b", "1")}
+
+	logger := log.NewNopLogger()
+	id1, err := testutil.CreateBlock(ctx, dir, series, 10, 0, 1000, labels.Labels{{Name: "cluster", Value: "A"}}, 0)
+	testutil.Ok(t, err)
+	testutil.Ok(t, objstore.UploadFile(ctx, logger, bkt, filepath.Join(dir, id1.String(), block.IndexFilename), path.Join(id1.String(), block.IndexFilename)))
+
+	id2, err := testutil.CreateBlock(ctx, dir, series, 10, 0, 1000, labels.Labels{{Name: "cluster", Value: "B"}}, 0)
+	testutil.Ok(t, err)
+	testutil.Ok(t, objstore.UploadFile(ctx, logger, bkt, filepath.Join(dir, id2.String(), block.IndexFilename), path.Join(id2.String(), block.IndexFilename)))
+
+	id3, err := testutil.CreateBlock(ctx, dir, series, 10, 0, 1000, labels.Labels{{Name: "cluster", Value: "B"}}, 0)
+	testutil.Ok(t, err)
+	testutil.Ok(t, objstore.UploadFile(ctx, logger, bkt, filepath.Join(dir, id3.String(), block.IndexFilename), path.Join(id3.String(), block.IndexFilename)))
+
+	relabelContentYaml := `
+    - action: drop
+      regex: "A"
+      source_labels:
+      - cluster
+    `
+	var relabelConfig []*relabel.Config
+	err = yaml.Unmarshal([]byte(relabelContentYaml), &relabelConfig)
+	testutil.Ok(t, err)
+	bucketStore, err := NewBucketStore(nil, nil, bkt, dir, noopCache{}, 2e5, 0, 0, false, 20, filterConf, relabelConfig)
+	testutil.Ok(t, err)
+
+	err = bucketStore.SyncBlocks(ctx)
+	testutil.Ok(t, err)
+
+	resp, err := bucketStore.Info(ctx, &storepb.InfoRequest{})
+	testutil.Ok(t, err)
+
+	testutil.Equals(t, storepb.StoreType_STORE, resp.StoreType)
+	testutil.Equals(t, int64(0), resp.MinTime)
+	testutil.Equals(t, int64(1000), resp.MaxTime)
+	testutil.Equals(t, []storepb.LabelSet{
+		storepb.LabelSet{
+			Labels: []storepb.Label{
+				{
+					Name:  "cluster",
+					Value: "B",
+				},
+			},
+		},
+	}, resp.LabelSets)
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/objtesting"
 	"github.com/thanos-io/thanos/pkg/testutil"
+	"gopkg.in/yaml.v2"
 )
 
 func TestSyncer_SyncMetas_e2e(t *testing.T) {
@@ -74,7 +75,6 @@ func TestSyncer_SyncMetas_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Equals(t, ids[5:], groups[0].IDs())
 	})
-
 }
 
 func TestSyncer_GarbageCollect_e2e(t *testing.T) {
@@ -357,4 +357,87 @@ func createEmptyBlock(dir string, mint int64, maxt int64, extLset labels.Labels,
 	}
 
 	return uid, nil
+}
+
+func TestSyncer_SyncMetasFilter_e2e(t *testing.T) {
+	var err error
+
+	relabelContentYaml := `
+    - action: drop
+      regex: "A"
+      source_labels:
+      - cluster
+    `
+	var relabelConfig []*relabel.Config
+	err = yaml.Unmarshal([]byte(relabelContentYaml), &relabelConfig)
+	testutil.Ok(t, err)
+
+	extLsets := []labels.Labels{{{Name: "cluster", Value: "A"}}, {{Name: "cluster", Value: "B"}}}
+
+	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer cancel()
+
+		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false, relabelConfig)
+		testutil.Ok(t, err)
+
+		var ids []ulid.ULID
+		var metas []*metadata.Meta
+
+		for i := 0; i < 16; i++ {
+			id, err := ulid.New(uint64(i), nil)
+			testutil.Ok(t, err)
+
+			var meta metadata.Meta
+			meta.Version = 1
+			meta.ULID = id
+			meta.Thanos = metadata.Thanos{
+				Labels: extLsets[i%2].Map(),
+			}
+
+			ids = append(ids, id)
+			metas = append(metas, &meta)
+		}
+		for _, m := range metas[:10] {
+			var buf bytes.Buffer
+			testutil.Ok(t, json.NewEncoder(&buf).Encode(&m))
+			testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), metadata.MetaFilename), &buf))
+		}
+
+		testutil.Ok(t, sy.SyncMetas(ctx))
+
+		groups, err := sy.Groups()
+		testutil.Ok(t, err)
+		var evenIds []ulid.ULID
+		for i := 0; i < 10; i++ {
+			if i%2 != 0 {
+				evenIds = append(evenIds, ids[i])
+			}
+		}
+		testutil.Equals(t, evenIds, groups[0].IDs())
+
+		// Upload last 6 blocks.
+		for _, m := range metas[10:] {
+			var buf bytes.Buffer
+			testutil.Ok(t, json.NewEncoder(&buf).Encode(&m))
+			testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), metadata.MetaFilename), &buf))
+		}
+
+		// Delete first 4 blocks.
+		for _, m := range metas[:4] {
+			testutil.Ok(t, block.Delete(ctx, log.NewNopLogger(), bkt, m.ULID))
+		}
+
+		testutil.Ok(t, sy.SyncMetas(ctx))
+
+		groups, err = sy.Groups()
+		testutil.Ok(t, err)
+		evenIds = make([]ulid.ULID, 0)
+		for i := 4; i < 16; i++ {
+			if i%2 != 0 {
+				evenIds = append(evenIds, ids[i])
+			}
+		}
+		testutil.Equals(t, evenIds, groups[0].IDs())
+	})
 }
