@@ -29,6 +29,9 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
+// conflictErr is returned whenever an operation fails due to any conflict-type error.
+var conflictErr = errors.New("conflict")
+
 // Options for the web Handler.
 type Options struct {
 	Writer            *Writer
@@ -232,7 +235,7 @@ func (h *Handler) receive(w http.ResponseWriter, r *http.Request) {
 	// destined for the local node will be written to the receiver.
 	// Time series will be replicated as necessary.
 	if err := h.forward(r.Context(), tenant, rep, &wreq); err != nil {
-		if hasCause(err, isConflict) {
+		if countCause(err, isConflict) > 0 {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
@@ -427,6 +430,9 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 
 	err := h.parallelizeRequests(ctx, tenant, replicas, wreqs)
 	if errs, ok := err.(terrors.MultiError); ok {
+		if uint64(countCause(errs, isConflict)) >= (h.options.ReplicationFactor+1)/2 {
+			return errors.Wrap(conflictErr, "did not meet replication threshold")
+		}
 		if uint64(len(errs)) >= (h.options.ReplicationFactor+1)/2 {
 			return errors.Wrap(err, "did not meet replication threshold")
 		}
@@ -435,26 +441,28 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	return errors.Wrap(err, "could not replicate write request")
 }
 
-// hasCause performs a depth-first search of the causes of a nested MultiError
-// to determine if it contains an error that satisfies the given cause.
-func hasCause(err error, f func(error) bool) bool {
-	if err == nil {
-		return false
-	}
-	err = errors.Cause(err)
+// countCause counts the number of errors within the given error
+// whose causes satisfy the given function.
+// countCause will inspect the error's cause or, if the error is a MultiError,
+// the cause of each contained error but will not traverse any deeper.
+func countCause(err error, f func(error) bool) int {
 	errs, ok := err.(terrors.MultiError)
 	if !ok {
-		return f(err)
+		errs = []error{err}
 	}
+	var n int
 	for i := range errs {
-		if hasCause(errs[i], f) {
-			return true
+		if f(errors.Cause(errs[i])) {
+			n++
 		}
 	}
-	return false
+	return n
 }
 
 // isConflict returns whether or not the given error represents a conflict.
 func isConflict(err error) bool {
-	return err == storage.ErrDuplicateSampleForTimestamp || err == storage.ErrOutOfOrderSample || err == storage.ErrOutOfBounds || err.Error() == strconv.Itoa(http.StatusConflict)
+	if err == nil {
+		return false
+	}
+	return err == conflictErr || err == storage.ErrDuplicateSampleForTimestamp || err == storage.ErrOutOfOrderSample || err == storage.ErrOutOfBounds || err.Error() == strconv.Itoa(http.StatusConflict)
 }

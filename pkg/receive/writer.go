@@ -51,7 +51,7 @@ func (r *Writer) Write(wreq *prompb.WriteRequest) error {
 			}
 		}
 
-		// Append as many valid samples as possible, but keep track of the errors
+		// Append as many valid samples as possible, but keep track of the errors.
 		for _, s := range t.Samples {
 			_, err = app.Add(lset, s.Timestamp, s.Value)
 			switch err {

@@ -10,23 +10,34 @@ import (
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
 )
 
-func TestHasCause(t *testing.T) {
+func TestCountCause(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		err  error
 		f    func(error) bool
-		out  bool
+		out  int
 	}{
 		{
 			name: "nil",
 			f:    isConflict,
-			out:  false,
+			out:  0,
 		},
 		{
 			name: "nil multierror",
 			err:  terrors.MultiError([]error{}),
 			f:    isConflict,
-			out:  false,
+			out:  0,
+		},
+		{
+			name: "matching nil",
+			f:    func(err error) bool { return err == nil },
+			out:  1,
+		},
+		{
+			name: "matching simple",
+			err:  conflictErr,
+			f:    isConflict,
+			out:  1,
 		},
 		{
 			name: "non-matching multierror",
@@ -35,7 +46,7 @@ func TestHasCause(t *testing.T) {
 				errors.New("bar"),
 			}),
 			f:   isConflict,
-			out: false,
+			out: 0,
 		},
 		{
 			name: "nested non-matching multierror",
@@ -44,7 +55,7 @@ func TestHasCause(t *testing.T) {
 				errors.New("bar"),
 			}), "baz"),
 			f:   isConflict,
-			out: false,
+			out: 0,
 		},
 		{
 			name: "deep nested non-matching multierror",
@@ -56,7 +67,7 @@ func TestHasCause(t *testing.T) {
 				}),
 			}), "baz"),
 			f:   isConflict,
-			out: false,
+			out: 0,
 		},
 		{
 			name: "matching multierror",
@@ -66,7 +77,19 @@ func TestHasCause(t *testing.T) {
 				errors.New("bar"),
 			}),
 			f:   isConflict,
-			out: true,
+			out: 1,
+		},
+		{
+			name: "matching multierror many",
+			err: terrors.MultiError([]error{
+				storage.ErrOutOfOrderSample,
+				conflictErr,
+				errors.New(strconv.Itoa(http.StatusConflict)),
+				errors.New("foo"),
+				errors.New("bar"),
+			}),
+			f:   isConflict,
+			out: 3,
 		},
 		{
 			name: "nested matching multierror",
@@ -76,7 +99,7 @@ func TestHasCause(t *testing.T) {
 				errors.New("bar"),
 			}), "baz"),
 			f:   isConflict,
-			out: true,
+			out: 0,
 		},
 		{
 			name: "deep nested matching multierror",
@@ -89,11 +112,11 @@ func TestHasCause(t *testing.T) {
 				errors.New("bar"),
 			}), "baz"),
 			f:   isConflict,
-			out: true,
+			out: 0,
 		},
 	} {
-		if hasCause(tc.err, tc.f) != tc.out {
-			t.Errorf("test case %s: expected %t, got %t", tc.name, tc.out, !tc.out)
+		if n := countCause(tc.err, tc.f); n != tc.out {
+			t.Errorf("test case %s: expected %d, got %d", tc.name, tc.out, n)
 		}
 	}
 }
