@@ -10,6 +10,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 We use *breaking* word for marking changes that are not backward compatible (relates only to v0.y.z releases.)
 
 ## Unreleased
+- [#1618](https://github.com/thanos-io/thanos/pull/1618) Add new metric `thanos_store_status` for query component which represents the status of the stores API that this query needs to talk to as shows on `/store` endpoint.
 
 ## [v0.8.1](https://github.com/thanos-io/thanos/releases/tag/v0.8.1) - 2019.10.14
 
