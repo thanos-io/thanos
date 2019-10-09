@@ -22,6 +22,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/prompb"
+	"github.com/prometheus/prometheus/storage"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -231,6 +232,10 @@ func (h *Handler) receive(w http.ResponseWriter, r *http.Request) {
 	// destined for the local node will be written to the receiver.
 	// Time series will be replicated as necessary.
 	if err := h.forward(r.Context(), tenant, rep, &wreq); err != nil {
+		if hasCause(err, isConflict) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -368,7 +373,7 @@ func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replic
 				return
 			}
 			if res.StatusCode != http.StatusOK {
-				err = errors.New(res.Status)
+				err = errors.New(strconv.Itoa(res.StatusCode))
 				level.Error(h.logger).Log("msg", "forwarding returned non-200 status", "err", err, "endpoint", endpoint)
 				ec <- err
 				return
@@ -423,9 +428,33 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	err := h.parallelizeRequests(ctx, tenant, replicas, wreqs)
 	if errs, ok := err.(terrors.MultiError); ok {
 		if uint64(len(errs)) >= (h.options.ReplicationFactor+1)/2 {
-			return errors.New("did not meet replication threshold")
+			return errors.Wrap(err, "did not meet replication threshold")
 		}
 		return nil
 	}
 	return errors.Wrap(err, "could not replicate write request")
+}
+
+// hasCause performs a depth-first search of the causes of a nested MultiError
+// to determine if it contains an error that satisfies the given cause.
+func hasCause(err error, f func(error) bool) bool {
+	if err == nil {
+		return false
+	}
+	err = errors.Cause(err)
+	errs, ok := err.(terrors.MultiError)
+	if !ok {
+		return f(err)
+	}
+	for i := range errs {
+		if hasCause(errs[i], f) {
+			return true
+		}
+	}
+	return false
+}
+
+// isConflict returns whether or not the given error represents a conflict.
+func isConflict(err error) bool {
+	return err == storage.ErrDuplicateSampleForTimestamp || err == storage.ErrOutOfOrderSample || err == storage.ErrOutOfBounds || err.Error() == strconv.Itoa(http.StatusConflict)
 }
