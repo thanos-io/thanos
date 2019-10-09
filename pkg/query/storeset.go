@@ -164,7 +164,9 @@ type StoreSet struct {
 	storesMetric *storeSetNodeCollector
 
 	// Map of statuses used only by UI.
-	storeStatuses         map[string]*StoreStatus
+	storeStatuses map[string]*StoreStatus
+	storeStatus   *prometheus.GaugeVec
+
 	unhealthyStoreTimeout time.Duration
 }
 
@@ -177,8 +179,17 @@ func NewStoreSet(
 	unhealthyStoreTimeout time.Duration,
 ) *StoreSet {
 	storesMetric := newStoreSetNodeCollector()
+	storeStatus := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "thanos_store_status",
+		Help: "The status of stores as indicated on the /stores page. 1 is UP 0 is DOWN",
+	},
+		[]string{
+			"address",
+		},
+	)
 	if reg != nil {
 		reg.MustRegister(storesMetric)
+		reg.MustRegister(storeStatus)
 	}
 
 	if logger == nil {
@@ -193,6 +204,7 @@ func NewStoreSet(
 		storeSpecs:            storeSpecs,
 		dialOpts:              dialOpts,
 		storesMetric:          storesMetric,
+		storeStatus:           storeStatus,
 		gRPCInfoCallTimeout:   10 * time.Second,
 		stores:                make(map[string]*storeRef),
 		storeStatuses:         make(map[string]*StoreStatus),
@@ -455,6 +467,7 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 
 	status.LastError = err
 	status.LastCheck = time.Now()
+	s.storeStatus.WithLabelValues(store.addr).Set(0)
 
 	if err == nil {
 
@@ -463,6 +476,7 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 		status.StoreType = store.StoreType()
 		status.MinTime = mint
 		status.MaxTime = maxt
+		s.storeStatus.WithLabelValues(store.addr).Set(1)
 	}
 
 	s.storeStatuses[store.addr] = &status
