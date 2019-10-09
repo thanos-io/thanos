@@ -106,17 +106,18 @@ Flags:
                                  current time, such as -1d or 2h45m. Valid
                                  duration units are ms, s, m, h, d, w, y.
       --selector.relabel-config-file=<file-path>
-                                 Path to YAML file that contains seletor
-                                 relabeling configuration. It follows native
-                                 Prometheus relabel-config syntax. See format
-                                 details:
+                                 Path to YAML file that contains relabeling
+                                 configuration that allows selecting blocks. It
+                                 follows native Prometheus relabel-config
+                                 syntax. See format details:
                                  https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
       --selector.relabel-config=<content>
                                  Alternative to 'selector.relabel-config-file'
                                  flag (lower priority). Content of YAML file
-                                 that contains seletor relabeling configuration.
-                                 It follows native Prometheus relabel-config
-                                 syntax. See format details:
+                                 that contains relabeling configuration that
+                                 allows selecting blocks. It follows native
+                                 Prometheus relabel-config syntax. See format
+                                 details:
                                  https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
 
 ```

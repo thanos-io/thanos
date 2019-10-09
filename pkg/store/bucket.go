@@ -221,6 +221,8 @@ type BucketStore struct {
 
 	filterConfig  *FilterConfig
 	relabelConfig []*relabel.Config
+
+	labelSets map[uint64]labels.Labels
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -367,6 +369,14 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 		s.metrics.blockDrops.Inc()
 	}
 
+	// Sync advertise labels.
+	s.mtx.Lock()
+	s.labelSets = make(map[uint64]labels.Labels, len(s.blocks))
+	for _, bs := range s.blocks {
+		s.labelSets[bs.labels.Hash()] = append(labels.Labels(nil), bs.labels...)
+	}
+	s.mtx.Unlock()
+
 	return nil
 }
 
@@ -465,8 +475,7 @@ func (s *BucketStore) addBlock(ctx context.Context, id ulid.ULID) (err error) {
 
 	// Check for block labels by relabeling.
 	// If output is empty, the block will be dropped.
-	processedLabels := relabel.Process(promlabels.FromMap(lset.Map()), s.relabelConfig...)
-	if processedLabels == nil {
+	if processedLabels := relabel.Process(promlabels.FromMap(lset.Map()), s.relabelConfig...); processedLabels == nil {
 		level.Debug(s.logger).Log("msg", "dropping block(drop in relabeling)", "block", id)
 		return os.RemoveAll(dir)
 	}
@@ -542,24 +551,16 @@ func (s *BucketStore) Info(context.Context, *storepb.InfoRequest) (*storepb.Info
 		MaxTime:   maxt,
 	}
 
-	labelSets := make(map[uint64][]storepb.Label, len(s.blocks))
-	for _, bs := range s.blocks {
-		ls := map[string]string{}
-		for _, l := range bs.labels {
-			ls[l.Name] = l.Value
+	s.mtx.RLock()
+	res.LabelSets = make([]storepb.LabelSet, 0, len(s.labelSets))
+	for _, ls := range s.labelSets {
+		lset := []storepb.Label{}
+		for _, l := range ls {
+			lset = append(lset, storepb.Label{Name: l.Name, Value: l.Value})
 		}
-
-		res := []storepb.Label{}
-		for k, v := range ls {
-			res = append(res, storepb.Label{Name: k, Value: v})
-		}
-		labelSets[bs.labels.Hash()] = res
+		res.LabelSets = append(res.LabelSets, storepb.LabelSet{Labels: lset})
 	}
-
-	res.LabelSets = make([]storepb.LabelSet, 0, len(labelSets))
-	for _, v := range labelSets {
-		res.LabelSets = append(res.LabelSets, storepb.LabelSet{Labels: v})
-	}
+	s.mtx.RUnlock()
 
 	return res, nil
 }

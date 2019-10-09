@@ -218,10 +218,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 	// Record the number of occurrences of external label combinations for current store slice.
 	externalLabelOccurrencesInStores := map[string]int{}
 	for _, st := range healthyStores {
-		if st.storeType != nil && (st.storeType.ToProto() == storepb.StoreType_QUERY ||
-			st.storeType.ToProto() == storepb.StoreType_SIDECAR) {
-			externalLabelOccurrencesInStores[externalLabelsFromStore(st)]++
-		}
+		externalLabelOccurrencesInStores[externalLabelsFromStore(st)]++
 	}
 	level.Debug(s.logger).Log("msg", "updating healthy stores", "externalLabelOccurrencesInStores", fmt.Sprintf("%#+v", externalLabelOccurrencesInStores))
 
@@ -257,8 +254,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 		externalLabels := externalLabelsFromStore(store)
 		if len(store.LabelSets()) > 0 &&
 			store.storeType != nil &&
-			(store.storeType.ToProto() == storepb.StoreType_QUERY ||
-				store.storeType.ToProto() == storepb.StoreType_SIDECAR) &&
+			store.storeType.ToProto() != storepb.StoreType_STORE &&
 			externalLabelOccurrencesInStores[externalLabels] != 1 {
 			store.close()
 			s.updateStoreStatus(store, errors.New(droppingStoreMessage))
