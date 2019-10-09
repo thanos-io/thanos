@@ -16,6 +16,8 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	promlables "github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/tsdb/labels"
@@ -50,6 +52,7 @@ type Syncer struct {
 	blockSyncConcurrency int
 	metrics              *syncerMetrics
 	acceptMalformedIndex bool
+	relabelConfig        []*relabel.Config
 }
 
 type syncerMetrics struct {
@@ -131,7 +134,7 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 
 // NewSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, consistencyDelay time.Duration, blockSyncConcurrency int, acceptMalformedIndex bool) (*Syncer, error) {
+func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, consistencyDelay time.Duration, blockSyncConcurrency int, acceptMalformedIndex bool, relabelConfig []*relabel.Config) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -144,6 +147,7 @@ func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket
 		metrics:              newSyncerMetrics(reg),
 		blockSyncConcurrency: blockSyncConcurrency,
 		acceptMalformedIndex: acceptMalformedIndex,
+		relabelConfig:        relabelConfig,
 	}, nil
 }
 
@@ -208,12 +212,22 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 				if err == blockTooFreshSentinelError {
 					continue
 				}
+
 				if err != nil {
 					if removedOrIgnored := c.removeIfMetaMalformed(workCtx, id); removedOrIgnored {
 						continue
 					}
 					errChan <- err
 					return
+				}
+
+				// Check for block labels by relabeling.
+				// If output is empty, the block will be dropped.
+				lset := promlables.FromMap(meta.Thanos.Labels)
+				processedLabels := relabel.Process(lset, c.relabelConfig...)
+				if processedLabels == nil {
+					level.Debug(c.logger).Log("msg", "dropping block(drop in relabeling)", "block", id)
+					continue
 				}
 
 				c.blocksMtx.Lock()

@@ -14,6 +14,7 @@ import (
 	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"google.golang.org/grpc"
@@ -25,6 +26,11 @@ var testGRPCOpts = []grpc.DialOption{
 	grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32)),
 	grpc.WithInsecure(),
 }
+
+var (
+	emptyStoresExtLabels [][]storepb.Label
+	emptyStoresTypes     []component.StoreAPI
+)
 
 type testStore struct {
 	info storepb.InfoResponse
@@ -54,7 +60,7 @@ type testStores struct {
 	srvs map[string]*grpc.Server
 }
 
-func newTestStores(numStores int, storesExtLabels ...[]storepb.Label) (*testStores, error) {
+func newTestStores(numStores int, storesExtLabels [][]storepb.Label, storesTypes []component.StoreAPI) (*testStores, error) {
 	st := &testStores{
 		srvs: map[string]*grpc.Server{},
 	}
@@ -79,7 +85,15 @@ func newTestStores(numStores int, storesExtLabels ...[]storepb.Label) (*testStor
 			return []storepb.LabelSet{{Labels: storesExtLabels[i]}}
 		}
 
-		srv, addr, err := startStore(lsetFn)
+		storeTypeFn := func() storepb.StoreType {
+			if len(storesTypes) != numStores {
+				return component.Sidecar.ToProto()
+			}
+			st := storesTypes[i]
+			return st.ToProto()
+		}
+
+		srv, addr, err := startStore(lsetFn, storeTypeFn)
 		if err != nil {
 			// Close so far started servers.
 			st.Close()
@@ -92,14 +106,14 @@ func newTestStores(numStores int, storesExtLabels ...[]storepb.Label) (*testStor
 	return st, nil
 }
 
-func startStore(lsetFn func(addr string) []storepb.LabelSet) (*grpc.Server, string, error) {
+func startStore(lsetFn func(addr string) []storepb.LabelSet, storeTypeFn func() storepb.StoreType) (*grpc.Server, string, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, "", err
 	}
 
 	srv := grpc.NewServer()
-	storepb.RegisterStoreServer(srv, &testStore{info: storepb.InfoResponse{LabelSets: lsetFn(listener.Addr().String())}})
+	storepb.RegisterStoreServer(srv, &testStore{info: storepb.InfoResponse{LabelSets: lsetFn(listener.Addr().String()), StoreType: storeTypeFn()}})
 	go func() {
 		_ = srv.Serve(listener)
 	}()
@@ -144,7 +158,7 @@ func specsFromAddrFunc(addrs []string) func() []StoreSpec {
 func TestStoreSet_AllAvailable_ThenDown(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
-	st, err := newTestStores(2)
+	st, err := newTestStores(2, emptyStoresExtLabels, emptyStoresTypes)
 	testutil.Ok(t, err)
 	defer st.Close()
 
@@ -188,7 +202,7 @@ func TestStoreSet_AllAvailable_ThenDown(t *testing.T) {
 func TestStoreSet_StaticStores_OneAvailable(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
-	st, err := newTestStores(2)
+	st, err := newTestStores(2, emptyStoresExtLabels, emptyStoresTypes)
 	testutil.Ok(t, err)
 	defer st.Close()
 
@@ -217,7 +231,7 @@ func TestStoreSet_StaticStores_OneAvailable(t *testing.T) {
 func TestStoreSet_StaticStores_NoneAvailable(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
-	st, err := newTestStores(2)
+	st, err := newTestStores(2, emptyStoresExtLabels, emptyStoresTypes)
 	testutil.Ok(t, err)
 	defer st.Close()
 
@@ -263,7 +277,16 @@ func TestStoreSet_AllAvailable_BlockExtLsetDuplicates(t *testing.T) {
 		},
 	}
 
-	st, err := newTestStores(6, storeExtLabels...)
+	storeTypes := []component.StoreAPI{
+		component.Query,
+		component.Sidecar,
+		component.Query,
+		component.Store,
+		component.Store,
+		component.Sidecar,
+	}
+
+	st, err := newTestStores(6, storeExtLabels, storeTypes)
 	testutil.Ok(t, err)
 	defer st.Close()
 

@@ -120,5 +120,18 @@ Flags:
                                metadata from object storage.
       --compact.concurrency=1  Number of goroutines to use when compacting
                                groups.
+      --selector.relabel-config-file=<file-path>
+                               Path to YAML file that contains relabeling
+                               configuration that allows selecting blocks. It
+                               follows native Prometheus relabel-config syntax.
+                               See format details:
+                               https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+      --selector.relabel-config=<content>
+                               Alternative to 'selector.relabel-config-file'
+                               flag (lower priority). Content of YAML file that
+                               contains relabeling configuration that allows
+                               selecting blocks. It follows native Prometheus
+                               relabel-config syntax. See format details:
+                               https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
 
 ```
