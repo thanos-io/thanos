@@ -80,7 +80,7 @@ jobs:
   publish_release:
     docker:
       # Available from https://hub.docker.com/r/circleci/golang/
-      - image: circleci/golang:1.12.5
+      - image: circleci/golang:1.13.1
     working_directory: /go/src/github.com/thanos-io/thanos
     environment:
       GOBIN: "/go/bin"
