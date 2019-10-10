@@ -67,13 +67,19 @@ type syncerMetrics struct {
 	compactionFailures        *prometheus.CounterVec
 }
 
+const (
+	MetricSyncMetaName = "thanos_compact_sync_meta_total"
+	MetricSyncMetaHelp = "Total number of sync meta operations."
+)
+
 func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 	var m syncerMetrics
 
 	m.syncMetas = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "thanos_compact_sync_meta_total",
-		Help: "Total number of sync meta operations.",
+		Name: MetricSyncMetaName,
+		Help: MetricSyncMetaHelp,
 	})
+
 	m.syncMetaFailures = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compact_sync_meta_failures_total",
 		Help: "Total number of failed sync meta operations.",
@@ -1001,6 +1007,11 @@ func NewBucketCompactor(
 
 // Compact runs compaction over bucket.
 func (c *BucketCompactor) Compact(ctx context.Context) error {
+	defer func() {
+		if err := os.RemoveAll(c.compactDir); err != nil {
+			level.Error(c.logger).Log("msg", "failed to remove compaction cache directory", "path", c.compactDir, "err", err)
+		}
+	}()
 	// Loop over bucket and compact until there's no work left.
 	for {
 		var (
