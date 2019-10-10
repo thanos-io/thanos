@@ -221,6 +221,11 @@ func runCompact(
 		indexCacheDir   = path.Join(dataDir, "index_cache")
 	)
 
+	if err := os.RemoveAll(downsamplingDir); err != nil {
+		cancel()
+		return errors.Wrap(err, "clean working downsample directory")
+	}
+
 	compactor, err := compact.NewBucketCompactor(logger, sy, comp, compactDir, bkt, concurrency)
 	if err != nil {
 		cancel()
