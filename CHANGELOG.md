@@ -22,6 +22,9 @@ Lot's of improvements this release! Outstanding items:
 - Sidecar exposed data from Prometheus can be now limited to given `min-time` (e.g 3h only).
 - Numerous Thanos Receive improvements.
 
+Make sure you check out Prometheus 2.13.0 as well. New release drastically improves usage and resource consumption of
+both Prometheus and sidecar with Thanos: https://prometheus.io/blog/2019/10/10/remote-read-meets-streaming/
+
 ### Added
 
 - [#1619](https://github.com/thanos-io/thanos/pull/1619) Thanos sidecar allows to limit min time range for data it exposes from Prometheus.
@@ -48,7 +51,7 @@ Selecting blocks to serve depends on the result of block labels relabeling.
 - [#1362](https://github.com/thanos-io/thanos/pull/1362) `query.replica-label` configuration can be provided more than
 once for multiple deduplication labels like: `--query.replica-label=prometheus_replica --query.replica-label=service`.
 - [#1581](https://github.com/thanos-io/thanos/pull/1581) Thanos Store now can use smaller buffer sizes for Bytes pool; reducing memory for some requests.
-- [#1622](https://github.com/thanos-io/thanos/pull/1622) & [#1590](https://github.com/thanos-io/thanos/pull/1590) Updated Go to 2.13.1
+- [#1622](https://github.com/thanos-io/thanos/pull/1622) & [#1590](https://github.com/thanos-io/thanos/pull/1590) Updated to Go 1.13.1
 - [#1498](https://github.com/thanos-io/thanos/pull/1498) Thanos Receive change flag `labels` to `label` to be consistent with other commands.
 
 ### Fixed
