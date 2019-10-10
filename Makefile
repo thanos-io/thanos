@@ -3,6 +3,7 @@ FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print
 
 DOCKER_IMAGE_REPO ?= quay.io/thanos/thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
+DOCKER_CI_TAG     ?= test
 
 TMP_GOPATH        ?= /tmp/thanos-go
 GOBIN             ?= $(firstword $(subst :, ,${GOPATH}))/bin
@@ -45,8 +46,8 @@ ME                ?= $(shell whoami)
 # Referenced by github.com/thanos-io/thanos/blob/master/docs/getting_started.md#prometheus
 
 # Limited prom version, because testing was not possible. This should fix it: https://github.com/thanos-io/thanos/issues/758
-PROM_VERSIONS           ?= v2.4.3 v2.5.0 v2.8.1 v2.9.2
-PROMS ?= $(GOBIN)/prometheus-v2.4.3 $(GOBIN)/prometheus-v2.5.0 $(GOBIN)/prometheus-v2.8.1 $(GOBIN)/prometheus-v2.9.2
+PROM_VERSIONS           ?= v2.4.3 v2.5.0 v2.8.1 v2.9.2 v2.13.0
+PROMS ?= $(GOBIN)/prometheus-v2.4.3 $(GOBIN)/prometheus-v2.5.0 $(GOBIN)/prometheus-v2.8.1 $(GOBIN)/prometheus-v2.9.2 $(GOBIN)/prometheus-v2.13.0
 
 ALERTMANAGER_VERSION    ?= v0.15.2
 ALERTMANAGER            ?= $(GOBIN)/alertmanager-$(ALERTMANAGER_VERSION)
@@ -234,8 +235,8 @@ docker-ci: install-deps
 	@cp -r $(GOBIN)/* ./tmp/bin
 	@docker build -t thanos-ci -f Dockerfile.thanos-ci .
 	@echo ">> pushing thanos-ci image"
-	@docker tag "thanos-ci" "quay.io/thanos/thanos-ci:v0.1.0"
-	@docker push "quay.io/thanos/thanos-ci:v0.1.0"
+	@docker tag "thanos-ci" "quay.io/thanos/thanos-ci:$(DOCKER_CI_TAG)"
+	@docker push "quay.io/thanos/thanos-ci:$(DOCKER_CI_TAG)"
 
 # tooling deps. TODO(bwplotka): Pin them all to certain version!
 .PHONY: check-git

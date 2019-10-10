@@ -125,5 +125,12 @@ Flags:
                                  contains object store configuration. See format
                                  details:
                                  https://thanos.io/storage.md/#configuration
+      --min-time=0000-01-01T00:00:00Z
+                                 Start of time range limit to serve. Thanos
+                                 sidecar will serve only metrics, which happened
+                                 later than this value. Option can be a constant
+                                 time in RFC3339 format or time duration
+                                 relative to current time, such as -1d or 2h45m.
+                                 Valid duration units are ms, s, m, h, d, w, y.
 
 ```
