@@ -11,33 +11,58 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+## [v0.8.0](https://github.com/thanos-io/thanos/releases/tag/v0.8.0) - 2019.10.10
+
+Lot's of improvements this release! Outstanding items:
+- First Katacoda tutorial! 🐱
+- Fixed Deletion order causing Compactor to produce not needed 👻 blocks with missing random files. 
+- Store GW memory improvements (more to come!).
+- Querier allows multiple deduplication labels.
+- Both Compactor and Store Gateway can be **sharded** within the same bucket using relabelling!
+- Sidecar exposed data from Prometheus can be now limited to given `min-time` (e.g 3h only).
+- Numerous Thanos Receive improvements.
+
 ### Added
 
 - [#1619](https://github.com/thanos-io/thanos/pull/1619) Thanos sidecar allows to limit min time range for data it exposes from Prometheus.
+- [#1583](https://github.com/thanos-io/thanos/pull/1583) Thanos sharding:
+  - Add relabel config (`--selector.relabel-config-file` and `selector.relabel-config`) into Thanos Store and Compact components. 
+Selecting blocks to serve depends on the result of block labels relabeling.
+  - For store gateway, advertise labels from "approved" blocks.
 - [#1540](https://github.com/thanos-io/thanos/pull/1540) Thanos Downsample added `/-/ready` and `/-/healthy` endpoints.
 - [#1538](https://github.com/thanos-io/thanos/pull/1538) Thanos Rule added `/-/ready` and `/-/healthy` endpoints.
 - [#1537](https://github.com/thanos-io/thanos/pull/1537) Thanos Receive added `/-/ready` and `/-/healthy` endpoints.
 - [#1460](https://github.com/thanos-io/thanos/pull/1460) Thanos Store Added `/-/ready` and `/-/healthy` endpoints.
 - [#1534](https://github.com/thanos-io/thanos/pull/1534) Thanos Query Added `/-/ready` and `/-/healthy` endpoints.
 - [#1533](https://github.com/thanos-io/thanos/pull/1533) Thanos inspect now supports the timeout flag.
-- [#1362](https://github.com/thanos-io/thanos/pull/1362) Optional `replicaLabels` param for `/query` and `/query_range` querier endpoints. When provided overwrite the `query.replica-label` cli flags.
-- [#1583](https://github.com/thanos-io/thanos/pull/1583) Thanos sharding:
-  - Add relabel config (`--selector.relabel-config-file` and `selector.relabel-config`) into Thanos Store and Compact components.
-  - For store gateway, advertise labels from "approved" blocks.
-  - Selecting blocks to serve depends on the result of block labels relabeling.
+- [#1496](https://github.com/thanos-io/thanos/pull/1496) Thanos Receive now supports setting block duration.
+- [#1362](https://github.com/thanos-io/thanos/pull/1362) Optional `replicaLabels` param for `/query` and
+`/query_range` querier endpoints. When provided overwrite the `query.replica-label` cli flags.
+- [#1482](https://github.com/thanos-io/thanos/pull/1482) Thanos now supports Elastic APM as tracing provider.
+- [#1612](https://github.com/thanos-io/thanos/pull/1612) Thanos Rule added `resendDelay` flag. 
+- [#1480](https://github.com/thanos-io/thanos/pull/1480) Thanos Receive flushes storage on hashring change. 
+- [#1613](https://github.com/thanos-io/thanos/pull/1613) Thanos Receive now traces forwarded requests.
 
 ### Changed
 
-- [#1362](https://github.com/thanos-io/thanos/pull/1362) `query.replica-label` configuration can be provided more than once for multiple deduplication labels like: `--query.replica-label=prometheus_replica --query.replica-label=service`.
+- [#1362](https://github.com/thanos-io/thanos/pull/1362) `query.replica-label` configuration can be provided more than
+once for multiple deduplication labels like: `--query.replica-label=prometheus_replica --query.replica-label=service`.
+- [#1581](https://github.com/thanos-io/thanos/pull/1581) Thanos Store now can use smaller buffer sizes for Bytes pool; reducing memory for some requests.
+- [#1622](https://github.com/thanos-io/thanos/pull/1622) & [#1590](https://github.com/thanos-io/thanos/pull/1590) Updated Go to 2.13.1
+- [#1498](https://github.com/thanos-io/thanos/pull/1498) Thanos Receive change flag `labels` to `label` to be consistent with other commands.
 
 ### Fixed
 
 - [#1525](https://github.com/thanos-io/thanos/pull/1525) Thanos now deletes block's file in correct order allowing to detect partial blocks without problems.
-- [#1505](https://github.com/thanos-io/thanos/pull/1505) Thanos store now removes invalid local cache blocks.
-- [#1587](https://github.com/thanos-io/thanos/pull/1587) Cleanup all cache dirs after each compaction run.
-- [#1582](https://github.com/thanos-io/thanos/pull/1582) Thanos rule correctly parses Alertmanager URL if there is more `+` in it.
+- [#1505](https://github.com/thanos-io/thanos/pull/1505) Thanos Store now removes invalid local cache blocks.
+- [#1587](https://github.com/thanos-io/thanos/pull/1587) Thanos Sidecar cleanups all cache dirs after each compaction run.
+- [#1582](https://github.com/thanos-io/thanos/pull/1582) Thanos Rule correctly parses Alertmanager URL if there is more `+` in it.
+- [#1544](https://github.com/thanos-io/thanos/pull/1544) Iterating over object store is resilient to the edge case for some providers.
+- [#1469](https://github.com/thanos-io/thanos/pull/1469) Fixed Azure potential failures (EOF) when requesting more data then blob has.
+- [#1512](https://github.com/thanos-io/thanos/pull/1512) Thanos Store fixed memory leak for chunk pool.
+- [#1488](https://github.com/thanos-io/thanos/pull/1488) Thanos Rule now now correctly links to query URL from rules and alerts. 
 
-## v0.7.0 - 2019.09.02
+## [v0.7.0](https://github.com/thanos-io/thanos/releases/tag/v0.7.0) - 2019.09.02
 
 Accepted into CNCF:
 - Thanos moved to new repository <https://github.com/thanos-io/thanos>
