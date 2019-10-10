@@ -27,7 +27,7 @@ func TestCleanupCompactCacheFolder(t *testing.T) {
 	ctx, logger, dir, _, bkt, actReg := bootstrap(t)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-	sy, err := compact.NewSyncer(logger, actReg, bkt, 0*time.Second, 1, false)
+	sy, err := compact.NewSyncer(logger, actReg, bkt, 0*time.Second, 1, false, nil)
 	testutil.Ok(t, err)
 
 	expReg := prometheus.NewRegistry()
