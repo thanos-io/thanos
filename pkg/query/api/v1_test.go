@@ -490,7 +490,7 @@ func TestEndpoints(t *testing.T) {
 			},
 			errType: errorBadData,
 		},
-		// Bad dedup parameter
+		// Bad dedup parameter.
 		{
 			endpoint: api.queryRange,
 			query: url.Values{

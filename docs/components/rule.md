@@ -157,14 +157,14 @@ Flags:
       --version                  Show application version.
       --log.level=info           Log filtering level.
       --log.format=logfmt        Log format to use.
-      --tracing.config-file=<tracing.config-yaml-path>
-                                 Path to YAML file that contains tracing
-                                 configuration. See format details:
+      --tracing.config-file=<file-path>
+                                 Path to YAML file with tracing configuration.
+                                 See format details:
                                  https://thanos.io/tracing.md/#configuration
-      --tracing.config=<tracing.config-yaml>
-                                 Alternative to 'tracing.config-file' flag.
-                                 Tracing configuration in YAML. See format
-                                 details:
+      --tracing.config=<content>
+                                 Alternative to 'tracing.config-file' flag
+                                 (lower priority). Content of YAML file with
+                                 tracing configuration. See format details:
                                  https://thanos.io/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
@@ -188,6 +188,8 @@ Flags:
       --data-dir="data/"         data directory
       --rule-file=rules/ ...     Rule files that should be used by rule manager.
                                  Can be in glob format (repeated).
+      --resend-delay=1m          Minimum amount of time to wait before resending
+                                 an alert to Alertmanager.
       --eval-interval=30s        The default evaluation interval to use.
       --tsdb.block-duration=2h   Block duration for TSDB block.
       --tsdb.retention=48h       Block retention time on local disk.
@@ -234,13 +236,14 @@ Flags:
                                  stripped prefix value in X-Forwarded-Prefix
                                  header. This allows thanos UI to be served on a
                                  sub-path.
-      --objstore.config-file=<bucket.config-yaml-path>
+      --objstore.config-file=<file-path>
                                  Path to YAML file that contains object store
                                  configuration. See format details:
                                  https://thanos.io/storage.md/#configuration
-      --objstore.config=<bucket.config-yaml>
-                                 Alternative to 'objstore.config-file' flag.
-                                 Object store configuration in YAML. See format
+      --objstore.config=<content>
+                                 Alternative to 'objstore.config-file' flag
+                                 (lower priority). Content of YAML file that
+                                 contains object store configuration. See format
                                  details:
                                  https://thanos.io/storage.md/#configuration
       --query=<query> ...        Addresses of statically configured query API

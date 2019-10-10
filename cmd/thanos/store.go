@@ -5,12 +5,15 @@ import (
 	"net"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/extflag"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
@@ -19,6 +22,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"gopkg.in/alecthomas/kingpin.v2"
+	yaml "gopkg.in/yaml.v2"
 )
 
 // registerStore registers a store command.
@@ -50,11 +54,13 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing blocks from object storage.").
 		Default("20").Int()
 
-	minTime := model.TimeOrDuration(cmd.Flag("min-time", "Start of time range limit to serve. Thanos Store serves only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+	minTime := model.TimeOrDuration(cmd.Flag("min-time", "Start of time range limit to serve. Thanos Store will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("0000-01-01T00:00:00Z"))
 
-	maxTime := model.TimeOrDuration(cmd.Flag("max-time", "End of time range limit to serve. Thanos Store serves only blocks, which happened eariler than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+	maxTime := model.TimeOrDuration(cmd.Flag("max-time", "End of time range limit to serve. Thanos Store will serve only blocks, which happened eariler than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("9999-12-31T23:59:59Z"))
+
+	selectorRelabelConf := regSelectorRelabelFlags(cmd)
 
 	m[component.Store.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
 		if minTime.PrometheusTimestamp() > maxTime.PrometheusTimestamp() {
@@ -85,6 +91,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 				MinTime: *minTime,
 				MaxTime: *maxTime,
 			},
+			selectorRelabelConf,
 		)
 	}
 }
@@ -95,7 +102,7 @@ func runStore(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
-	objStoreConfig *pathOrContent,
+	objStoreConfig *extflag.PathOrContent,
 	dataDir string,
 	grpcBindAddr string,
 	cert string,
@@ -111,6 +118,7 @@ func runStore(
 	syncInterval time.Duration,
 	blockSyncConcurrency int,
 	filterConf *store.FilterConfig,
+	selectorRelabelConf *extflag.PathOrContent,
 ) error {
 	statusProber := prober.NewProber(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 
@@ -122,6 +130,16 @@ func runStore(
 	bkt, err := client.NewBucket(logger, confContentYaml, reg, component.String())
 	if err != nil {
 		return errors.Wrap(err, "create bucket client")
+	}
+
+	relabelContentYaml, err := selectorRelabelConf.Content()
+	if err != nil {
+		return errors.Wrap(err, "get content of relabel configuration")
+	}
+
+	relabelConfig, err := parseRelabelConfig(relabelContentYaml)
+	if err != nil {
+		return err
 	}
 
 	// Ensure we close up everything properly.
@@ -154,6 +172,7 @@ func runStore(
 		verbose,
 		blockSyncConcurrency,
 		filterConf,
+		relabelConfig,
 	)
 	if err != nil {
 		return errors.Wrap(err, "create object storage store")
@@ -208,4 +227,13 @@ func runStore(
 
 	level.Info(logger).Log("msg", "starting store node")
 	return nil
+}
+
+func parseRelabelConfig(contentYaml []byte) ([]*relabel.Config, error) {
+	var relabelConfig []*relabel.Config
+	if err := yaml.Unmarshal(contentYaml, &relabelConfig); err != nil {
+		return nil, errors.Wrap(err, "parsing relabel configuration")
+	}
+
+	return relabelConfig, nil
 }

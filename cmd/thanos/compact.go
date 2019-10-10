@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/extflag"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -109,6 +111,8 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 	compactionConcurrency := cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
 		Default("1").Int()
 
+	selectorRelabelConf := regSelectorRelabelFlags(cmd)
+
 	m[component.Compact.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		return runCompact(g, logger, reg,
 			*httpAddr,
@@ -129,6 +133,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 			*maxCompactionLevel,
 			*blockSyncConcurrency,
 			*compactionConcurrency,
+			selectorRelabelConf,
 		)
 	}
 }
@@ -139,7 +144,7 @@ func runCompact(
 	reg *prometheus.Registry,
 	httpBindAddr string,
 	dataDir string,
-	objStoreConfig *pathOrContent,
+	objStoreConfig *extflag.PathOrContent,
 	consistencyDelay time.Duration,
 	haltOnError bool,
 	acceptMalformedIndex bool,
@@ -151,6 +156,7 @@ func runCompact(
 	maxCompactionLevel int,
 	blockSyncConcurrency int,
 	concurrency int,
+	selectorRelabelConf *extflag.PathOrContent,
 ) error {
 	halted := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compactor_halted",
@@ -183,6 +189,16 @@ func runCompact(
 		return err
 	}
 
+	relabelContentYaml, err := selectorRelabelConf.Content()
+	if err != nil {
+		return errors.Wrap(err, "get content of relabel configuration")
+	}
+
+	relabelConfig, err := parseRelabelConfig(relabelContentYaml)
+	if err != nil {
+		return err
+	}
+
 	// Ensure we close up everything properly.
 	defer func() {
 		if err != nil {
@@ -191,7 +207,7 @@ func runCompact(
 	}()
 
 	sy, err := compact.NewSyncer(logger, reg, bkt, consistencyDelay,
-		blockSyncConcurrency, acceptMalformedIndex)
+		blockSyncConcurrency, acceptMalformedIndex, relabelConfig)
 	if err != nil {
 		return errors.Wrap(err, "create syncer")
 	}
@@ -206,7 +222,6 @@ func runCompact(
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-
 	// Instantiate the compactor with different time slices. Timestamps in TSDB
 	// are in milliseconds.
 	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool())

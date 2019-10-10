@@ -252,7 +252,10 @@ func (s *StoreSet) Update(ctx context.Context) {
 		// Note: No external labels means strictly store gateway or ruler and it is fine to have access to multiple instances of them.
 		// Any other component will error out if it will be configured with empty external labels.
 		externalLabels := externalLabelsFromStore(store)
-		if len(store.LabelSets()) > 0 && externalLabelOccurrencesInStores[externalLabels] != 1 {
+		if len(store.LabelSets()) > 0 &&
+			store.storeType != nil &&
+			store.storeType.ToProto() != storepb.StoreType_STORE &&
+			externalLabelOccurrencesInStores[externalLabels] != 1 {
 			store.close()
 			s.updateStoreStatus(store, errors.New(droppingStoreMessage))
 			level.Warn(s.logger).Log("msg", droppingStoreMessage, "address", addr, "extLset", externalLabels, "duplicates", externalLabelOccurrencesInStores[externalLabels])

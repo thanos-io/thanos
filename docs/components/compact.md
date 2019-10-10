@@ -73,27 +73,27 @@ Flags:
       --version                Show application version.
       --log.level=info         Log filtering level.
       --log.format=logfmt      Log format to use.
-      --tracing.config-file=<tracing.config-yaml-path>
-                               Path to YAML file that contains tracing
-                               configuration. See format details:
+      --tracing.config-file=<file-path>
+                               Path to YAML file with tracing configuration. See
+                               format details:
                                https://thanos.io/tracing.md/#configuration
-      --tracing.config=<tracing.config-yaml>
-                               Alternative to 'tracing.config-file' flag.
-                               Tracing configuration in YAML. See format
-                               details:
+      --tracing.config=<content>
+                               Alternative to 'tracing.config-file' flag (lower
+                               priority). Content of YAML file with tracing
+                               configuration. See format details:
                                https://thanos.io/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                Listen host:port for HTTP endpoints.
       --data-dir="./data"      Data directory in which to cache blocks and
                                process compactions.
-      --objstore.config-file=<bucket.config-yaml-path>
+      --objstore.config-file=<file-path>
                                Path to YAML file that contains object store
                                configuration. See format details:
                                https://thanos.io/storage.md/#configuration
-      --objstore.config=<bucket.config-yaml>
-                               Alternative to 'objstore.config-file' flag.
-                               Object store configuration in YAML. See format
-                               details:
+      --objstore.config=<content>
+                               Alternative to 'objstore.config-file' flag (lower
+                               priority). Content of YAML file that contains
+                               object store configuration. See format details:
                                https://thanos.io/storage.md/#configuration
       --consistency-delay=30m  Minimum age of fresh (non-compacted) blocks
                                before they are being processed. Malformed blocks
@@ -120,5 +120,18 @@ Flags:
                                metadata from object storage.
       --compact.concurrency=1  Number of goroutines to use when compacting
                                groups.
+      --selector.relabel-config-file=<file-path>
+                               Path to YAML file that contains relabeling
+                               configuration that allows selecting blocks. It
+                               follows native Prometheus relabel-config syntax.
+                               See format details:
+                               https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+      --selector.relabel-config=<content>
+                               Alternative to 'selector.relabel-config-file'
+                               flag (lower priority). Content of YAML file that
+                               contains relabeling configuration that allows
+                               selecting blocks. It follows native Prometheus
+                               relabel-config syntax. See format details:
+                               https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
 
 ```

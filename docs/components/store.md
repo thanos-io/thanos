@@ -40,14 +40,14 @@ Flags:
       --version                  Show application version.
       --log.level=info           Log filtering level.
       --log.format=logfmt        Log format to use.
-      --tracing.config-file=<tracing.config-yaml-path>
-                                 Path to YAML file that contains tracing
-                                 configuration. See format details:
+      --tracing.config-file=<file-path>
+                                 Path to YAML file with tracing configuration.
+                                 See format details:
                                  https://thanos.io/tracing.md/#configuration
-      --tracing.config=<tracing.config-yaml>
-                                 Alternative to 'tracing.config-file' flag.
-                                 Tracing configuration in YAML. See format
-                                 details:
+      --tracing.config=<content>
+                                 Alternative to 'tracing.config-file' flag
+                                 (lower priority). Content of YAML file with
+                                 tracing configuration. See format details:
                                  https://thanos.io/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
@@ -76,13 +76,14 @@ Flags:
                                  even though the maximum could be hit.
       --store.grpc.series-max-concurrency=20
                                  Maximum number of concurrent Series calls.
-      --objstore.config-file=<bucket.config-yaml-path>
+      --objstore.config-file=<file-path>
                                  Path to YAML file that contains object store
                                  configuration. See format details:
                                  https://thanos.io/storage.md/#configuration
-      --objstore.config=<bucket.config-yaml>
-                                 Alternative to 'objstore.config-file' flag.
-                                 Object store configuration in YAML. See format
+      --objstore.config=<content>
+                                 Alternative to 'objstore.config-file' flag
+                                 (lower priority). Content of YAML file that
+                                 contains object store configuration. See format
                                  details:
                                  https://thanos.io/storage.md/#configuration
       --sync-block-duration=3m   Repeat interval for syncing the blocks between
@@ -92,18 +93,32 @@ Flags:
                                  from object storage.
       --min-time=0000-01-01T00:00:00Z
                                  Start of time range limit to serve. Thanos
-                                 Store serves only metrics, which happened later
+                                 Store will serve only metrics, which happened
+                                 later than this value. Option can be a constant
+                                 time in RFC3339 format or time duration
+                                 relative to current time, such as -1d or 2h45m.
+                                 Valid duration units are ms, s, m, h, d, w, y.
+      --max-time=9999-12-31T23:59:59Z
+                                 End of time range limit to serve. Thanos Store
+                                 will serve only blocks, which happened eariler
                                  than this value. Option can be a constant time
                                  in RFC3339 format or time duration relative to
                                  current time, such as -1d or 2h45m. Valid
                                  duration units are ms, s, m, h, d, w, y.
-      --max-time=9999-12-31T23:59:59Z
-                                 End of time range limit to serve. Thanos Store
-                                 serves only blocks, which happened eariler than
-                                 this value. Option can be a constant time in
-                                 RFC3339 format or time duration relative to
-                                 current time, such as -1d or 2h45m. Valid
-                                 duration units are ms, s, m, h, d, w, y.
+      --selector.relabel-config-file=<file-path>
+                                 Path to YAML file that contains relabeling
+                                 configuration that allows selecting blocks. It
+                                 follows native Prometheus relabel-config
+                                 syntax. See format details:
+                                 https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
+      --selector.relabel-config=<content>
+                                 Alternative to 'selector.relabel-config-file'
+                                 flag (lower priority). Content of YAML file
+                                 that contains relabeling configuration that
+                                 allows selecting blocks. It follows native
+                                 Prometheus relabel-config syntax. See format
+                                 details:
+                                 https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
 
 ```
 

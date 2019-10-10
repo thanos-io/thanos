@@ -322,7 +322,7 @@ func runQuery(
 				Logger:        logger,
 				Reg:           reg,
 				MaxConcurrent: maxConcurrentQueries,
-				// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703
+				// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
 				MaxSamples: math.MaxInt32,
 				Timeout:    queryTimeout,
 			},
@@ -394,7 +394,7 @@ func runQuery(
 	{
 		router := route.New()
 
-		// redirect from / to /webRoutePrefix
+		// Redirect from / to /webRoutePrefix.
 		if webRoutePrefix != "" {
 			router.Get("/", func(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, webRoutePrefix, http.StatusFound)

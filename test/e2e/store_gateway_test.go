@@ -42,7 +42,13 @@ func TestStoreGateway(t *testing.T) {
 	config, err := yaml.Marshal(bucketConfig)
 	testutil.Ok(t, err)
 
-	s := storeGateway(a.New(), a.New(), config)
+	relabelContentYaml := `
+    - action: drop
+      regex: "value2"
+      source_labels:
+      - ext1
+    `
+	s := storeGateway(a.New(), a.New(), config, []byte(relabelContentYaml))
 	q := querier(a.New(), a.New(), []address{s.GRPC}, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 
@@ -67,12 +73,16 @@ func TestStoreGateway(t *testing.T) {
 	}
 	extLset := labels.FromStrings("ext1", "value1", "replica", "1")
 	extLset2 := labels.FromStrings("ext1", "value1", "replica", "2")
+	extLset3 := labels.FromStrings("ext1", "value2", "replica", "3")
 
 	now := time.Now()
 	id1, err := testutil.CreateBlock(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset, 0)
 	testutil.Ok(t, err)
 
 	id2, err := testutil.CreateBlock(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset2, 0)
+	testutil.Ok(t, err)
+
+	id3, err := testutil.CreateBlock(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset3, 0)
 	testutil.Ok(t, err)
 
 	l := log.NewLogfmtLogger(os.Stdout)
@@ -82,6 +92,7 @@ func TestStoreGateway(t *testing.T) {
 
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id1.String()), id1.String()))
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id2.String()), id2.String()))
+	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id3.String()), id3.String()))
 
 	var res model.Vector
 

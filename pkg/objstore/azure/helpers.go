@@ -46,7 +46,7 @@ func getContainer(ctx context.Context, conf Config) (blob.ContainerURL, error) {
 	if err != nil {
 		return blob.ContainerURL{}, err
 	}
-	// Getting container properties to check if it exists or not. Returns error which will be parsed further
+	// Getting container properties to check if it exists or not. Returns error which will be parsed further.
 	_, err = c.GetProperties(ctx, blob.LeaseAccessConditions{})
 	return c, err
 }

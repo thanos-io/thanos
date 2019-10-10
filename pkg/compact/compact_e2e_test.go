@@ -17,6 +17,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/labels"
@@ -25,6 +26,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/objtesting"
 	"github.com/thanos-io/thanos/pkg/testutil"
+	"gopkg.in/yaml.v2"
 )
 
 func TestSyncer_SyncMetas_e2e(t *testing.T) {
@@ -32,7 +34,8 @@ func TestSyncer_SyncMetas_e2e(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
-		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false)
+		relabelConfig := make([]*relabel.Config, 0)
+		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false, relabelConfig)
 		testutil.Ok(t, err)
 
 		// Generate 15 blocks. Initially the first 10 are synced into memory and only the last
@@ -72,7 +75,6 @@ func TestSyncer_SyncMetas_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Equals(t, ids[5:], groups[0].IDs())
 	})
-
 }
 
 func TestSyncer_GarbageCollect_e2e(t *testing.T) {
@@ -84,6 +86,8 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		// that are higher compactions of them.
 		var metas []*metadata.Meta
 		var ids []ulid.ULID
+
+		relabelConfig := make([]*relabel.Config, 0)
 
 		for i := 0; i < 10; i++ {
 			var m metadata.Meta
@@ -134,7 +138,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		}
 
 		// Do one initial synchronization with the bucket.
-		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false)
+		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false, relabelConfig)
 		testutil.Ok(t, err)
 		testutil.Ok(t, sy.SyncMetas(ctx))
 
@@ -208,7 +212,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		b2, err := createEmptyBlock(prepareDir, 1001, 2000, extLset, 124)
 		testutil.Ok(t, err)
 
-		// blocks" count=3 mint=0 maxt=3000 ulid=01D1RQCRRJM77KQQ4GYDSC50GM sources="[01D1RQCRMNZBVHBPGRPG2M3NZQ 01D1RQCRPJMYN45T65YA1PRWB7 01D1RQCRNMTWJKTN5QQXFNKKH8]"
+		// blocks" count=3 mint=0 maxt=3000 ulid=01D1RQCRRJM77KQQ4GYDSC50GM sources="[01D1RQCRMNZBVHBPGRPG2M3NZQ 01D1RQCRPJMYN45T65YA1PRWB7 01D1RQCRNMTWJKTN5QQXFNKKH8]".
 
 		meta, err = metadata.Read(filepath.Join(prepareDir, b2.String()))
 		testutil.Ok(t, err)
@@ -303,7 +307,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 }
 
 // createEmptyBlock produces empty block like it was the case before fix: https://github.com/prometheus/tsdb/pull/374.
-// (Prometheus pre v2.7.0)
+// (Prometheus pre v2.7.0).
 func createEmptyBlock(dir string, mint int64, maxt int64, extLset labels.Labels, resolution int64) (ulid.ULID, error) {
 	entropy := rand.New(rand.NewSource(time.Now().UnixNano()))
 	uid := ulid.MustNew(ulid.Now(), entropy)
@@ -353,4 +357,87 @@ func createEmptyBlock(dir string, mint int64, maxt int64, extLset labels.Labels,
 	}
 
 	return uid, nil
+}
+
+func TestSyncer_SyncMetasFilter_e2e(t *testing.T) {
+	var err error
+
+	relabelContentYaml := `
+    - action: drop
+      regex: "A"
+      source_labels:
+      - cluster
+    `
+	var relabelConfig []*relabel.Config
+	err = yaml.Unmarshal([]byte(relabelContentYaml), &relabelConfig)
+	testutil.Ok(t, err)
+
+	extLsets := []labels.Labels{{{Name: "cluster", Value: "A"}}, {{Name: "cluster", Value: "B"}}}
+
+	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
+		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer cancel()
+
+		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false, relabelConfig)
+		testutil.Ok(t, err)
+
+		var ids []ulid.ULID
+		var metas []*metadata.Meta
+
+		for i := 0; i < 16; i++ {
+			id, err := ulid.New(uint64(i), nil)
+			testutil.Ok(t, err)
+
+			var meta metadata.Meta
+			meta.Version = 1
+			meta.ULID = id
+			meta.Thanos = metadata.Thanos{
+				Labels: extLsets[i%2].Map(),
+			}
+
+			ids = append(ids, id)
+			metas = append(metas, &meta)
+		}
+		for _, m := range metas[:10] {
+			var buf bytes.Buffer
+			testutil.Ok(t, json.NewEncoder(&buf).Encode(&m))
+			testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), metadata.MetaFilename), &buf))
+		}
+
+		testutil.Ok(t, sy.SyncMetas(ctx))
+
+		groups, err := sy.Groups()
+		testutil.Ok(t, err)
+		var evenIds []ulid.ULID
+		for i := 0; i < 10; i++ {
+			if i%2 != 0 {
+				evenIds = append(evenIds, ids[i])
+			}
+		}
+		testutil.Equals(t, evenIds, groups[0].IDs())
+
+		// Upload last 6 blocks.
+		for _, m := range metas[10:] {
+			var buf bytes.Buffer
+			testutil.Ok(t, json.NewEncoder(&buf).Encode(&m))
+			testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), metadata.MetaFilename), &buf))
+		}
+
+		// Delete first 4 blocks.
+		for _, m := range metas[:4] {
+			testutil.Ok(t, block.Delete(ctx, log.NewNopLogger(), bkt, m.ULID))
+		}
+
+		testutil.Ok(t, sy.SyncMetas(ctx))
+
+		groups, err = sy.Groups()
+		testutil.Ok(t, err)
+		evenIds = make([]ulid.ULID, 0)
+		for i := 4; i < 16; i++ {
+			if i%2 != 0 {
+				evenIds = append(evenIds, ids[i])
+			}
+		}
+		testutil.Equals(t, evenIds, groups[0].IDs())
+	})
 }

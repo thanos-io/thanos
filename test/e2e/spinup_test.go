@@ -243,7 +243,7 @@ func querier(http, grpc address, storeAddresses []address, fileSDStoreAddresses 
 	}
 }
 
-func storeGateway(http, grpc address, bucketConfig []byte) *serverScheduler {
+func storeGateway(http, grpc address, bucketConfig []byte, relabelConfig []byte) *serverScheduler {
 	return &serverScheduler{
 		HTTP: http,
 		GRPC: grpc,
@@ -262,8 +262,9 @@ func storeGateway(http, grpc address, bucketConfig []byte) *serverScheduler {
 				"--http-address", http.HostPort(),
 				"--log.level", "debug",
 				"--objstore.config", string(bucketConfig),
-				// Accelerated sync time for quicker test (3m by default)
+				// Accelerated sync time for quicker test (3m by default).
 				"--sync-block-duration", "5s",
+				"--selector.relabel-config", string(relabelConfig),
 			)), nil
 		},
 	}

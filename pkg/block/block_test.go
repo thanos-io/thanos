@@ -104,7 +104,7 @@ func TestUpload(t *testing.T) {
 		testutil.Equals(t, "not a block dir: ulid: bad data size when unmarshaling", err.Error())
 	}
 	{
-		// Empty block dir
+		// Empty block dir.
 		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()))
 		testutil.NotOk(t, err)
 		testutil.Assert(t, strings.HasSuffix(err.Error(), "/meta.json: no such file or directory"), "")
@@ -143,7 +143,7 @@ func TestUpload(t *testing.T) {
 	}
 	testutil.Ok(t, cpy(path.Join(tmpDir, b1.String(), MetaFilename), path.Join(tmpDir, "test", b1.String(), MetaFilename)))
 	{
-		// Full block
+		// Full block.
 		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String())))
 		testutil.Equals(t, 4, len(bkt.Objects()))
 		testutil.Equals(t, 3751, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]))

@@ -26,7 +26,7 @@ type tracer struct {
 // GetTraceIDFromSpanContext return TraceID from span.Context.
 func (t *tracer) GetTraceIDFromSpanContext(ctx opentracing.SpanContext) (string, bool) {
 	if c, ok := ctx.(basictracer.SpanContext); ok {
-		// "%016x%016x" - ugly hack for gcloud find traces by ID https://console.cloud.google.com/traces/traces?project=<project_id>&tid=<62119f61b7c2663962119f61b7c26639>
+		// "%016x%016x" - ugly hack for gcloud find traces by ID https://console.cloud.google.com/traces/traces?project=<project_id>&tid=<62119f61b7c2663962119f61b7c26639>.
 		return fmt.Sprintf("%016x%016x", c.TraceID, c.TraceID), true
 	}
 	return "", false

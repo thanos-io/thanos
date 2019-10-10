@@ -22,6 +22,8 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	promlabels "github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
@@ -217,7 +219,10 @@ type BucketStore struct {
 	samplesLimiter *Limiter
 	partitioner    partitioner
 
-	filterConfig *FilterConfig
+	filterConfig  *FilterConfig
+	relabelConfig []*relabel.Config
+
+	labelSets map[uint64]labels.Labels
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -234,6 +239,7 @@ func NewBucketStore(
 	debugLogging bool,
 	blockSyncConcurrency int,
 	filterConf *FilterConfig,
+	relabelConfig []*relabel.Config,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -268,6 +274,7 @@ func NewBucketStore(
 		samplesLimiter: NewLimiter(maxSampleCount, metrics.queriesDropped),
 		partitioner:    gapBasedPartitioner{maxGapSize: maxGapSize},
 		filterConfig:   filterConf,
+		relabelConfig:  relabelConfig,
 	}
 	s.metrics = metrics
 
@@ -361,6 +368,14 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 		}
 		s.metrics.blockDrops.Inc()
 	}
+
+	// Sync advertise labels.
+	s.mtx.Lock()
+	s.labelSets = make(map[uint64]labels.Labels, len(s.blocks))
+	for _, bs := range s.blocks {
+		s.labelSets[bs.labels.Hash()] = append(labels.Labels(nil), bs.labels...)
+	}
+	s.mtx.Unlock()
 
 	return nil
 }
@@ -458,6 +473,15 @@ func (s *BucketStore) addBlock(ctx context.Context, id ulid.ULID) (err error) {
 	lset := labels.FromMap(b.meta.Thanos.Labels)
 	h := lset.Hash()
 
+	// Check for block labels by relabeling.
+	// If output is empty, the block will be dropped.
+	if processedLabels := relabel.Process(promlabels.FromMap(lset.Map()), s.relabelConfig...); processedLabels == nil {
+		level.Debug(s.logger).Log("msg", "dropping block(drop in relabeling)", "block", id)
+		return os.RemoveAll(dir)
+	}
+	b.labels = lset
+	sort.Sort(b.labels)
+
 	set, ok := s.blockSets[h]
 	if !ok {
 		set = newBucketBlockSet(lset)
@@ -521,12 +545,24 @@ func (s *BucketStore) TimeRange() (mint, maxt int64) {
 // Info implements the storepb.StoreServer interface.
 func (s *BucketStore) Info(context.Context, *storepb.InfoRequest) (*storepb.InfoResponse, error) {
 	mint, maxt := s.TimeRange()
-	// Store nodes hold global data and thus have no labels.
-	return &storepb.InfoResponse{
+	res := &storepb.InfoResponse{
 		StoreType: component.Store.ToProto(),
 		MinTime:   mint,
 		MaxTime:   maxt,
-	}, nil
+	}
+
+	s.mtx.RLock()
+	res.LabelSets = make([]storepb.LabelSet, 0, len(s.labelSets))
+	for _, ls := range s.labelSets {
+		lset := []storepb.Label{}
+		for _, l := range ls {
+			lset = append(lset, storepb.Label{Name: l.Name, Value: l.Value})
+		}
+		res.LabelSets = append(res.LabelSets, storepb.LabelSet{Labels: lset})
+	}
+	s.mtx.RUnlock()
+
+	return res, nil
 }
 
 func (s *BucketStore) limitMinTime(mint int64) int64 {
@@ -1000,12 +1036,12 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 }
 
 // bucketBlockSet holds all blocks of an equal label set. It internally splits
-// them up by downsampling resolution and allows querying
+// them up by downsampling resolution and allows querying.
 type bucketBlockSet struct {
 	labels      labels.Labels
 	mtx         sync.RWMutex
-	resolutions []int64          // available resolution, high to low (in milliseconds)
-	blocks      [][]*bucketBlock // ordered buckets for the existing resolutions
+	resolutions []int64          // Available resolution, high to low (in milliseconds).
+	blocks      [][]*bucketBlock // Ordered buckets for the existing resolutions.
 }
 
 // newBucketBlockSet initializes a new set with the known downsampling windows hard-configured.
@@ -1140,6 +1176,8 @@ type bucketBlock struct {
 	pendingReaders sync.WaitGroup
 
 	partitioner partitioner
+
+	labels labels.Labels
 }
 
 func newBucketBlock(
@@ -1306,8 +1344,7 @@ func (b *bucketBlock) Close() error {
 	return nil
 }
 
-// bucketIndexReader is a custom index reader (not conforming index.Reader interface) that gets postings
-// by
+// bucketIndexReader is a custom index reader (not conforming index.Reader interface) that gets postings.
 type bucketIndexReader struct {
 	logger log.Logger
 	ctx    context.Context
@@ -1438,7 +1475,7 @@ func toPostingGroup(lvalsFn func(name string) []string, m labels.Matcher) *posti
 
 	// If the matcher selects an empty value, it selects all the series which don't
 	// have the label name set too. See: https://github.com/prometheus/prometheus/issues/3575
-	// and https://github.com/prometheus/prometheus/pull/3578#issuecomment-351653555
+	// and https://github.com/prometheus/prometheus/pull/3578#issuecomment-351653555.
 	if m.Matches("") {
 		allName, allValue := index.AllPostingsKey()
 

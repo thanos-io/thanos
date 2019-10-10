@@ -147,7 +147,6 @@ For example, rule sets can be divided across multiple HA pairs of rule nodes. St
 
 Overall, first-class horizontal sharding is possible but will not be considered for the time being since there's no evidence that it is required in practical setups.
 
-
 ## Cost
 
 The only extra cost Thanos adds to an existing Prometheus setup is essentially the price of storing and querying data from the object storage and running of the store node.
