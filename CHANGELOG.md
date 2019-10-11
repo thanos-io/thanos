@@ -22,6 +22,9 @@ Lot's of improvements this release! Outstanding items:
 - Sidecar exposed data from Prometheus can be now limited to given `min-time` (e.g 3h only).
 - Numerous Thanos Receive improvements.
 
+Make sure you check out Prometheus 2.13.0 as well. New release drastically improves usage and resource consumption of
+both Prometheus and sidecar with Thanos: https://prometheus.io/blog/2019/10/10/remote-read-meets-streaming/
+
 ### Added
 
 - [#1619](https://github.com/thanos-io/thanos/pull/1619) Thanos sidecar allows to limit min time range for data it exposes from Prometheus.
