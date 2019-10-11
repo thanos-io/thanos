@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -181,6 +182,31 @@ func (s ctxRespSender) send(r *storepb.SeriesResponse) {
 // Series returns all series for a requested time range and label matcher. Requested series are taken from other
 // stores and proxied to RPC client. NOTE: Resulted data are not trimmed exactly to min and max time range.
 func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+	// TODO(ppanyukov): hardcoded mem limit for now, where is best place to plug config for this?
+	const maxMem = uint64(2 * 1024 * 1024 * 1024) // 2GB
+
+	// checkMem returns an error if the current memory allocations exceeded max.
+	checkMem := func() error {
+		var nowMem uint64
+		{
+			// TODO(ppanyukov): ReadMemStats does stopTheWorld. Is this acceptable?
+			currentM := &runtime.MemStats{}
+			runtime.ReadMemStats(currentM)
+			nowMem = currentM.HeapAlloc
+		}
+
+		if nowMem >= maxMem {
+			// format in MB.
+			maxMemS := fmt.Sprintf("%.2fM", float64(maxMem)/1024.0/1024.0)
+			nowMemS := fmt.Sprintf("%.2fM", float64(nowMem)/1024.0/1024.0)
+			err := fmt.Errorf("OOM preventor: exceeded max memory. Max: %s; Current: %s", maxMemS, nowMemS)
+			level.Error(s.logger).Log("err", err)
+			return err
+		}
+
+		return nil
+	}
+
 	match, newMatchers, err := matchesExternalLabels(r.Matchers, s.selectorLabels)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
@@ -280,9 +306,21 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		return mergedSet.Err()
 	})
 
+	// All code above is fast and light on memory.
+	// The real work is in the loop that follows.
+	// Before we do anything expense, check we should even start.
+	if err := checkMem(); err != nil {
+		return err
+	}
+
 	for resp := range respRecv {
 		if err := srv.Send(resp); err != nil {
 			return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+		}
+
+		// bail if exceeded mem.
+		if err := checkMem(); err != nil {
+			return err
 		}
 	}
 
@@ -479,6 +517,8 @@ func labelSetMatches(ls storepb.LabelSet, matchers []storepb.LabelMatcher) (bool
 	}
 	return true, nil
 }
+
+// TODO:
 
 // LabelNames returns all known label names.
 func (s *ProxyStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (
