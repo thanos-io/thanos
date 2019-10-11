@@ -6,12 +6,12 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/chunkenc"
-	"github.com/prometheus/tsdb/chunks"
-	tsdberrors "github.com/prometheus/tsdb/errors"
-	"github.com/prometheus/tsdb/index"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/chunks"
+	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
+	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 )
 
@@ -216,7 +216,6 @@ func (ss *SampleSeries) toChunk(at downsample.AggrType, minTime, maxTime int64) 
 	}, nil
 }
 
-
 func (ss *SampleSeries) toChunks(at downsample.AggrType) ([]chunks.Meta, error) {
 	samples := ss.data[at]
 	if len(samples) == 0 {
@@ -337,7 +336,7 @@ func (r *SampleReader) readDownSamples(tr *tsdb.TimeRange) (map[downsample.AggrT
 
 func (r *SampleReader) parseSamples(c chunkenc.Chunk, tr *tsdb.TimeRange) []*Sample {
 	samples := make([]*Sample, 0)
-	iterator := c.Iterator()
+	iterator := c.Iterator(nil)
 	for iterator.Next() {
 		timestamp, value := iterator.At()
 		if timestamp < tr.Min {

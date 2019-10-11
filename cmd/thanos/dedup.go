@@ -10,6 +10,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/thanos/pkg/compact/dedup"
+	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -38,7 +39,7 @@ func registerDedup(m map[string]setupFunc, app *kingpin.Application, name string
 }
 
 func runDedup(g *run.Group, logger log.Logger, reg *prometheus.Registry, dataDir string, replicaLabel string,
-	consistencyDelay time.Duration, blockSyncConcurrency int, objStoreConfig *pathOrContent, component string) error {
+	consistencyDelay time.Duration, blockSyncConcurrency int, objStoreConfig *extflag.PathOrContent, component string) error {
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
 		return err

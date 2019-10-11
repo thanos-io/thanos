@@ -12,11 +12,11 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/chunkenc"
-	"github.com/prometheus/tsdb/chunks"
-	"github.com/prometheus/tsdb/index"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/chunks"
+	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -135,7 +135,7 @@ func getBlockSampleSeries(t *testing.T, logger log.Logger, blockDir string) map[
 		var samples []*Sample
 		for _, c := range chks {
 			chk, _ := cr.Chunk(c.Ref)
-			iterator := chk.Iterator()
+			iterator := chk.Iterator(nil)
 			for iterator.Next() {
 				timestamp, value := iterator.At()
 				samples = append(samples, &Sample{
