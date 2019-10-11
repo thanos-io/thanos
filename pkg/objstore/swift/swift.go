@@ -2,6 +2,7 @@
 package swift
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -19,7 +20,7 @@ import (
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/objstore"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
@@ -149,7 +150,15 @@ func (c *Container) IsObjNotFoundErr(err error) bool {
 
 // Upload writes the contents of the reader as an object into the container.
 func (c *Container) Upload(ctx context.Context, name string, r io.Reader) error {
-	options := &objects.CreateOpts{Content: r}
+	// to avoid file already closed error pass a Reader that supports seek
+	buf := new(bytes.Buffer)
+	_, err := buf.ReadFrom(r)
+	if err != nil {
+		return err
+	}
+	readSeeker := strings.NewReader(buf.String())
+
+	options := &objects.CreateOpts{Content: readSeeker}
 	res := objects.Create(c.client, c.name, name, options)
 	return res.Err
 }

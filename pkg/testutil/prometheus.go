@@ -181,7 +181,7 @@ func (p *Prometheus) start() error {
 	p.cmd = exec.Command(prometheusBin(p.version), args...)
 	p.cmd.SysProcAttr = &syscall.SysProcAttr{
 		// For linux only, kill this if the go test process dies before the cleanup.
-		Pdeathsig: syscall.SIGKILL,
+		//Pdeathsig: syscall.SIGKILL,
 	}
 	go func() {
 		if b, err := p.cmd.CombinedOutput(); err != nil {
