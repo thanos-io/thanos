@@ -60,6 +60,9 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 	maxTime := model.TimeOrDuration(cmd.Flag("max-time", "End of time range limit to serve. Thanos Store will serve only blocks, which happened eariler than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("9999-12-31T23:59:59Z"))
 
+	advertiseCompatibilityLabel := cmd.Flag("debug.advertise-compatibility-label", "If true, Store Gateway in addition to other labels, will advertise special \"@thanos_compatibility_store_type=store\" label set. This makes store Gateway compatible with Querier before 0.8.0").
+		Hidden().Default("true").Bool()
+
 	selectorRelabelConf := regSelectorRelabelFlags(cmd)
 
 	m[component.Store.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
@@ -92,6 +95,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 				MaxTime: *maxTime,
 			},
 			selectorRelabelConf,
+			*advertiseCompatibilityLabel,
 		)
 	}
 }
@@ -119,6 +123,7 @@ func runStore(
 	blockSyncConcurrency int,
 	filterConf *store.FilterConfig,
 	selectorRelabelConf *extflag.PathOrContent,
+	advertiseCompatibilityLabel bool,
 ) error {
 	statusProber := prober.NewProber(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 
@@ -173,6 +178,7 @@ func runStore(
 		blockSyncConcurrency,
 		filterConf,
 		relabelConfig,
+		advertiseCompatibilityLabel,
 	)
 	if err != nil {
 		return errors.Wrap(err, "create object storage store")
