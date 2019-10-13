@@ -13,7 +13,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## [v0.8.0](https://github.com/thanos-io/thanos/releases/tag/v0.8.0) - 2019.10.10
 
-Lot's of improvements this release! Outstanding items:
+Lot's of improvements this release! Noteworthy items:
 - First Katacoda tutorial! 🐱
 - Fixed Deletion order causing Compactor to produce not needed 👻 blocks with missing random files. 
 - Store GW memory improvements (more to come!).
@@ -51,7 +51,7 @@ Selecting blocks to serve depends on the result of block labels relabeling.
 - [#1362](https://github.com/thanos-io/thanos/pull/1362) `query.replica-label` configuration can be provided more than
 once for multiple deduplication labels like: `--query.replica-label=prometheus_replica --query.replica-label=service`.
 - [#1581](https://github.com/thanos-io/thanos/pull/1581) Thanos Store now can use smaller buffer sizes for Bytes pool; reducing memory for some requests.
-- [#1622](https://github.com/thanos-io/thanos/pull/1622) & [#1590](https://github.com/thanos-io/thanos/pull/1590) Updated Go to 2.13.1
+- [#1622](https://github.com/thanos-io/thanos/pull/1622) & [#1590](https://github.com/thanos-io/thanos/pull/1590) Updated to Go 1.13.1
 - [#1498](https://github.com/thanos-io/thanos/pull/1498) Thanos Receive change flag `labels` to `label` to be consistent with other commands.
 
 ### Fixed
