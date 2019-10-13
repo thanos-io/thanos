@@ -67,6 +67,15 @@ config:
   bucket: example-bucket
 ```
 
+## Upload compacted blocks (EXPERIMENTAL)
+
+If you want to migrate from a pure Prometheus setup to Thanos and have to keep the historical data, you can use the flag `--shipper.upload-compacted`. This will also upload blocks that were compacted by Prometheus.
+
+To use this, the Prometheus compaction needs to be disabled. This can be done by setting the following flags for Prometheus:
+
+- `--storage.tsdb.min-block-duration=2h`
+- `--storage.tsdb.max-block-duration=2h`
+
 ## Flags
 
 [embedmd]:# (flags/sidecar.txt $)
@@ -134,12 +143,3 @@ Flags:
                                  Valid duration units are ms, s, m, h, d, w, y.
 
 ```
-
-## Upload compacted blocks (EXPERIMENTAL)
-
-If you want to migrate from a pure Prometheus setup to Thanos and have to keep the historical data, you can use the flag `--shipper.upload-compacted`. This will also upload blocks that were compacted by Prometheus.
-
-To use this, the Prometheus compaction needs to be disabled. This can be done by setting the following flags for Prometheus:
-
-- `--storage.tsdb.min-block-duration=2h`
-- `--storage.tsdb.max-block-duration=2h`
