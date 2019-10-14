@@ -430,7 +430,21 @@ func TestBucketStore_Info(t *testing.T) {
 	dir, err := ioutil.TempDir("", "bucketstore-test")
 	testutil.Ok(t, err)
 
-	bucketStore, err := NewBucketStore(nil, nil, nil, dir, noopCache{}, 2e5, 0, 0, false, 20, filterConf, emptyRelabelConfig)
+	bucketStore, err := NewBucketStore(
+		nil,
+		nil,
+		nil,
+		dir,
+		noopCache{},
+		2e5,
+		0,
+		0,
+		false,
+		20,
+		filterConf,
+		emptyRelabelConfig,
+		true,
+	)
 	testutil.Ok(t, err)
 
 	resp, err := bucketStore.Info(ctx, &storepb.InfoRequest{})
@@ -439,6 +453,8 @@ func TestBucketStore_Info(t *testing.T) {
 	testutil.Equals(t, storepb.StoreType_STORE, resp.StoreType)
 	testutil.Equals(t, int64(math.MaxInt64), resp.MinTime)
 	testutil.Equals(t, int64(math.MinInt64), resp.MaxTime)
+	testutil.Equals(t, []storepb.LabelSet{}, resp.LabelSets)
+	testutil.Equals(t, []storepb.Label(nil), resp.Labels)
 }
 
 func TestBucketStore_isBlockInMinMaxRange(t *testing.T) {
@@ -488,7 +504,7 @@ func TestBucketStore_isBlockInMinMaxRange(t *testing.T) {
 		&FilterConfig{
 			MinTime: minTimeDuration,
 			MaxTime: hourBefore,
-		}, emptyRelabelConfig)
+		}, emptyRelabelConfig, true)
 	testutil.Ok(t, err)
 
 	inRange, err := bucketStore.isBlockInMinMaxRange(context.TODO(), id1)
@@ -558,7 +574,7 @@ func TestBucketStore_selectorBlocks(t *testing.T) {
 		testutil.Ok(t, err)
 
 		bucketStore, err := NewBucketStore(nil, nil, bkt, dir, noopCache{}, 0, 0, 20, false, 20,
-			filterConf, relabelConf)
+			filterConf, relabelConf, true)
 		testutil.Ok(t, err)
 
 		for _, id := range []ulid.ULID{id1, id2, id3} {
@@ -614,7 +630,21 @@ func TestBucketStore_InfoWithLabels(t *testing.T) {
 	var relabelConfig []*relabel.Config
 	err = yaml.Unmarshal([]byte(relabelContentYaml), &relabelConfig)
 	testutil.Ok(t, err)
-	bucketStore, err := NewBucketStore(nil, nil, bkt, dir, noopCache{}, 2e5, 0, 0, false, 20, filterConf, relabelConfig)
+	bucketStore, err := NewBucketStore(
+		nil,
+		nil,
+		bkt,
+		dir,
+		noopCache{},
+		2e5,
+		0,
+		0,
+		false,
+		20,
+		filterConf,
+		relabelConfig,
+		true,
+	)
 	testutil.Ok(t, err)
 
 	err = bucketStore.SyncBlocks(ctx)
@@ -626,13 +656,16 @@ func TestBucketStore_InfoWithLabels(t *testing.T) {
 	testutil.Equals(t, storepb.StoreType_STORE, resp.StoreType)
 	testutil.Equals(t, int64(0), resp.MinTime)
 	testutil.Equals(t, int64(1000), resp.MaxTime)
+	testutil.Equals(t, []storepb.Label(nil), resp.Labels)
 	testutil.Equals(t, []storepb.LabelSet{
-		storepb.LabelSet{
+		{
 			Labels: []storepb.Label{
-				{
-					Name:  "cluster",
-					Value: "B",
-				},
+				{Name: "cluster", Value: "B"},
+			},
+		},
+		{
+			Labels: []storepb.Label{
+				{Name: CompatibilityTypeLabelName, Value: "store"},
 			},
 		},
 	}, resp.LabelSets)

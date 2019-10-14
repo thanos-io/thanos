@@ -151,7 +151,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		maxTime: maxTime,
 	}
 
-	store, err := NewBucketStore(s.logger, nil, bkt, dir, s.cache, 0, maxSampleCount, 20, false, 20, filterConf, relabelConfig)
+	store, err := NewBucketStore(s.logger, nil, bkt, dir, s.cache, 0, maxSampleCount, 20, false, 20, filterConf, relabelConfig, true)
 	testutil.Ok(t, err)
 	s.store = store
 
@@ -485,7 +485,7 @@ func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
 		&FilterConfig{
 			MinTime: minTimeDuration,
 			MaxTime: filterMaxTime,
-		}, emptyRelabelConfig)
+		}, emptyRelabelConfig, true)
 	testutil.Ok(t, err)
 
 	err = store.SyncBlocks(ctx)

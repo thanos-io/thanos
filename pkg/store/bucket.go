@@ -46,15 +46,29 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// maxSamplesPerChunk is approximately the max number of samples that we may have in any given chunk. This is needed
-// for precalculating the number of samples that we may have to retrieve and decode for any given query
-// without downloading them. Please take a look at https://github.com/prometheus/tsdb/pull/397 to know
-// where this number comes from. Long story short: TSDB is made in such a way, and it is made in such a way
-// because you barely get any improvements in compression when the number of samples is beyond this.
-// Take a look at Figure 6 in this whitepaper http://www.vldb.org/pvldb/vol8/p1816-teller.pdf.
-const maxSamplesPerChunk = 120
+const (
+	// maxSamplesPerChunk is approximately the max number of samples that we may have in any given chunk. This is needed
+	// for precalculating the number of samples that we may have to retrieve and decode for any given query
+	// without downloading them. Please take a look at https://github.com/prometheus/tsdb/pull/397 to know
+	// where this number comes from. Long story short: TSDB is made in such a way, and it is made in such a way
+	// because you barely get any improvements in compression when the number of samples is beyond this.
+	// Take a look at Figure 6 in this whitepaper http://www.vldb.org/pvldb/vol8/p1816-teller.pdf.
+	maxSamplesPerChunk = 120
 
-const maxChunkSize = 16000
+	maxChunkSize = 16000
+
+	// CompatibilityTypeLabelName is an artificial label that Store Gateway can optionally advertise. This is required for compatibility
+	// with pre v0.8.0 Querier. Previous Queriers was strict about duplicated external labels of all StoreAPIs that had any labels.
+	// Now with newer Store Gateway advertising all the external labels it has access to, there was simple case where
+	// Querier was blocking Store Gateway as duplicate with sidecar.
+	//
+	// Newer Queriers are not strict, no duplicated external labels check is there anymore.
+	// Additionally newer Queriers removes/ignore this exact labels from UI and querying.
+	//
+	// This label name is intentionally against Prometheus label style.
+	// TODO(bwplotka): Remove it at some point.
+	CompatibilityTypeLabelName = "@thanos_compatibility_store_type"
+)
 
 type bucketStoreMetrics struct {
 	blocksLoaded          prometheus.Gauge
@@ -222,7 +236,8 @@ type BucketStore struct {
 	filterConfig  *FilterConfig
 	relabelConfig []*relabel.Config
 
-	labelSets map[uint64]labels.Labels
+	labelSets                map[uint64]labels.Labels
+	enableCompatibilityLabel bool
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -240,6 +255,7 @@ func NewBucketStore(
 	blockSyncConcurrency int,
 	filterConf *FilterConfig,
 	relabelConfig []*relabel.Config,
+	enableCompatibilityLabel bool,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -271,10 +287,11 @@ func NewBucketStore(
 			maxConcurrent,
 			extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg),
 		),
-		samplesLimiter: NewLimiter(maxSampleCount, metrics.queriesDropped),
-		partitioner:    gapBasedPartitioner{maxGapSize: maxGapSize},
-		filterConfig:   filterConf,
-		relabelConfig:  relabelConfig,
+		samplesLimiter:           NewLimiter(maxSampleCount, metrics.queriesDropped),
+		partitioner:              gapBasedPartitioner{maxGapSize: maxGapSize},
+		filterConfig:             filterConf,
+		relabelConfig:            relabelConfig,
+		enableCompatibilityLabel: enableCompatibilityLabel,
 	}
 	s.metrics = metrics
 
@@ -554,7 +571,7 @@ func (s *BucketStore) Info(context.Context, *storepb.InfoRequest) (*storepb.Info
 	s.mtx.RLock()
 	res.LabelSets = make([]storepb.LabelSet, 0, len(s.labelSets))
 	for _, ls := range s.labelSets {
-		lset := []storepb.Label{}
+		lset := make([]storepb.Label, 0, len(ls))
 		for _, l := range ls {
 			lset = append(lset, storepb.Label{Name: l.Name, Value: l.Value})
 		}
@@ -562,6 +579,11 @@ func (s *BucketStore) Info(context.Context, *storepb.InfoRequest) (*storepb.Info
 	}
 	s.mtx.RUnlock()
 
+	if s.enableCompatibilityLabel && len(res.LabelSets) > 0 {
+		// This is for compatibility with Querier v0.7.0.
+		// See query.StoreCompatibilityTypeLabelName comment for details.
+		res.LabelSets = append(res.LabelSets, storepb.LabelSet{Labels: []storepb.Label{{Name: CompatibilityTypeLabelName, Value: "store"}}})
+	}
 	return res, nil
 }
 
