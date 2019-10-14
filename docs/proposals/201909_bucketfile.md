@@ -297,19 +297,23 @@ Currently, different provider clients implement byte ranges differently. We need
 3. Fetch everything starting at `start` till  `end`:    
    `Range{start:N, end: M}` -> Request header `Range: bytes=M-N` 
 
+Now all providers (Azure, COS, GCS, S3, Swift) support `Fetch last N bytes`, `Fetch everything starting from offset` and `Fetch everything starting at start till end`.
+
+In order to support `Fetch last N bytes` in client side, there are some required changes:
+
+1. Upgrade GCS client package to version [v0.45.0+](https://github.com/googleapis/google-cloud-go/blob/master/CHANGES.md#v0450)
+2. reimplement Swift [GetRange](https://github.com/thanos-io/thanos/blob/master/pkg/objstore/swift/swift.go#L121)
+   
+
 if providers support multiple ranges, likes `Range: bytes=500-700,60000-61000`, we need to implement a `BucketReader.GetRanges` API, then we can query multiple ranges in one request.
 
 See https://tools.ietf.org/html/rfc7233#section-2.1 for reference.
 
-## Risks
-
-Ensure all providers support `fetch last N bytes` and `fetch everything starting from offset`. Otherwise, we need to know the size of remote index file before fetching TOC block. We may get the size by fetching metadata from object storage.
-
 ### Work plan
 
-- A) Investigate and Implement `BucketReader.GetRange` and `BucketReader.GetRanges`
-  - we have implemented `BucketReader.GetRange` , check if it has the ability to fetch last N bytes
-  - implement `BucketReader.GetRanges` if providers support
+- A) Implement `BucketReader.GetRange` and `BucketReader.GetRanges`
+  - Upgrade GCS client package and reimplement Swift `GetRange` 
+  - Implement `BucketReader.GetRanges` if providers support
 - B) Implement `BucketFile`
   
 - C) Use `BucketFile` for `BucketIndexReader` and `BucketchunkReader`
