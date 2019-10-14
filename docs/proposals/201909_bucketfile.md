@@ -22,7 +22,7 @@ Our goals here are:
 
 ## Motivation
 
-Currently, the store gateway loads all [index.cache.json](https://github.com/thanos-io/thanos/blob/865d5ec710b5651ead08a7dc73864a6f5dbeeaa9/pkg/block/index.go#L40)  files into memory on startup, which easily hits OOM situations. On the other hand, some indexes are rarely or never queried, so we don't have to keep these indexes in memory.
+Currently, the store gateway loads all [index.cache.json](https://github.com/thanos-io/thanos/blob/865d5ec710b5651ead08a7dc73864a6f5dbeeaa9/pkg/block/index.go#L40) files into memory on startup, which easily hits OOM situations. On the other hand, some indexes are rarely or never queried, so we don't have to keep these indexes in memory.
 
 The store gateway fetches chunks from object storage for each query request. but fetched chunks are not reused for next requests.
 
@@ -30,7 +30,7 @@ The store gateway fetches chunks from object storage for each query request. but
 
 Add a helper struct to wrapper remote object storage file. We can temporarily name it `BucketFile`.
 
-`BucketFile`   looks like `ByteSlice` in  prometheus/tsdb, but with some download-with-cache functions. It fetches part or all of file content from object storage, writes content to local file, and records data have been fetched by a bitmap.
+`BucketFile` looks like `ByteSlice` in prometheus/tsdb, but with some download-with-cache functions. It fetches part or all of file content from object storage, writes content to local file, and records data have been fetched by a bitmap.
 
 `BucketFile` always returns a slice of the mmaped file. This is to reduce coping file data from kernel space to user space. 
 
@@ -44,22 +44,22 @@ The above sequence diagram shows how the BucketFile works with IndexReader and C
 
 (BucketIndexFile and BucketChunksFile are represented by `BucketFile` )
 
-1. BucketStore calls `blockSeries`  method to retrieve series from a block.
-2. BucketBlock calls `ExpendedPostings`  method to retrieve expended postings from BucketIndexReader.
-3. BucketIndexReader fetches [TOC](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#toc) block (last 52 bytes) from BucketBlockIndexFile.  
+1. BucketStore calls `blockSeries` method to retrieve series from a block.
+2. BucketBlock calls `ExpendedPostings` method to retrieve expended postings from BucketIndexReader.
+3. BucketIndexReader fetches [TOC](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#toc) block (last 52 bytes) from BucketBlockIndexFile.
 4. BucketBlockIndexFile returns TOC block bytes.
 5. BucketIndexReader decodes TOC bytes into memory `toc` obj.
-6. BucketIndexReader gets the offset to postings offset block from `toc`, and fetches [postings offsets](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#postings-offset-table) block.    
+6. BucketIndexReader gets the offset to postings offset block from `toc`, and fetches [postings offsets](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#postings-offset-table) block.     
    // Fetch everything starting from the offset
 7. BucketBlockIndexFile returns postings offsets block. 
 8. BucketIndexReader decodes bytes into memory `postingsOffsets` obj.    
    // `postingsOffsets` `map[labels.Label]int64` , maps label to offset.
 9. BucketIndexReader gets matched postings offsets from `postingsOffsets` obj.
-10. BucketIndexReader converts  matched postings offsets to ranges. 
+10. BucketIndexReader converts matched postings offsets to ranges. 
 11. BucketIndexReader calls BucketIndexFile to prefetch ranges.
 12. BucketIndexFile notifies BucketIndexReader prefetch done.
-13. BucketIndexReader iterates matched postings offsets,  retrieves each postings entry bytes by offset.
-14. BucketIndexFile returns [postings entry](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#postings)  bytes.
+13. BucketIndexReader iterates matched postings offsets, retrieves each postings entry bytes by offset.
+14. BucketIndexFile returns [postings entry](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#postings) bytes.
 15. BucketIndexReader decodes bytes into expended postings.
 16. BucketIndexReader merges postings.
 17. BucketIndexReader returns expended postings.
@@ -69,12 +69,12 @@ The above sequence diagram shows how the BucketFile works with IndexReader and C
 21. BucketIndexReader calls BucketBlockIndexFile to prefetch ranges.
 22. BucketBlockIndexFile notifies BucketIndexReader prefetch done. 
 23. BucketIndexReader iterates postings, retrieves each series entry bytes by posting.
-24. BucketBlockIndexFile returns  [series entry](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#series) bytes.
+24. BucketBlockIndexFile returns [series entry](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#series) bytes.
 25. BucketIndexReader decodes bytes into label set and chunk metas.    
     //  [Decoder.Series(b, lset, chks)](https://github.com/prometheus/prometheus/blob/master/tsdb/index/index.go#L1070)
 26. BucketIndexReader returns chunk metas.
 27. BucketBlock calls BucketBlockChunksReader to prefetch by chunk metas.
-28. BucketBlockChunksReader splits metas to multi partitions, metas in one partition belong to the same chunks file.  
+28. BucketBlockChunksReader splits metas to multi partitions, metas in one partition belong to the same chunks file.
 29. For each partition, BucketBlockChunksReader converts chunk metas to ranges.
 
 30. BucketBlockChunksReader calls BucketBlockChunksFile to prefetch ranges.
@@ -98,7 +98,7 @@ The above sequence diagram shows how the BucketFile works with IndexReader and C
 
 The above sequence diagram shows BucketFile internals:
 
-1. The  `Fetch`  method is called.
+1. The `Fetch` method is called.
 2. BucketFile mmaps local file if not exists.
 3. BucketFile creates the pages bitmap if not exists.
 4. BucketFile creates the file descriptor if not exists.
@@ -111,7 +111,7 @@ The above sequence diagram shows BucketFile internals:
 11. BucketClient retrieves bytes from ObjectStorage.
 12. ObjectStorage returns a `io.ReadCloser`.
 13. BucketClient returns the `io.ReadCloser` to BucketFile.
-14. BucketFile reader bytes from  `io.ReadCloser` and write to FileDescriptor.
+14. BucketFile reader bytes from `io.ReadCloser` and write to FileDescriptor.
 15. FileDescriptor writes bytes into PageCache.
 16. Bytes are wrote successfully. 
 17. Bytes are wrote successfully.
@@ -164,7 +164,7 @@ exported methods:
 
   `Fetch` returns a slice of mmaped file (`f.data[start:end]`). If some pages in the range have not been fetched, It will fetch those pages from object storage, write those pages to local file and update the pages (f.pages) bitmap.
 
-  `Fetch`  will not combine object storage requests.
+  `Fetch` will not combine object storage requests.
 
   It will split big range request to multiple small requests if needed.
 
@@ -208,7 +208,7 @@ exported methods:
 
   `Range` internals:
 
-  - convert range to page ids  
+  - convert range to page ids 
   - if all page ids have been fetched
     - return a slice of mmaped file
 
@@ -216,7 +216,7 @@ exported methods:
 
 * CloseMmap: `CloseMmap` unmmaps `f.data` .
 
-* CloseFile: `CloseFile` closes  `f.file`. 
+* CloseFile: `CloseFile` closes `f.file`. 
 
 * Close: `Close` closes `f.file`, unmmaps `f.data` and set `f.pages` to nil.
 
@@ -248,45 +248,45 @@ type BucketFile struct {
 func (f *BucketFile) Prefetch(ranges []*Range) (chan error, error) {...}
 ```
 
-BucketFile appends new pages to `pendingPages`, waits for next  time to fetch. So that we can combine multiple queries to ones.
+BucketFile appends new pages to `pendingPages`, waits for next time to fetch. So that we can combine multiple queries to ones.
 
-When fetching combined  pages,
+When fetching combined pages,
 if an error occurs, BucketFile will send the error to callers via the `pendingChan` channel,
 if no error occurs, BucketFile will close the `pendingChan` channel.
 
 If callers receive an error from the channel, then prefetch failed. 
 If callers receive nil (zero value of error, after channel closed) from the channel, then prefetch done. 
 
-Each time to fetch pending pages，BucketFile will reset  `pendingPages`, `pendingReaders` and `pendingChan`.
+Each time to fetch pending pages，BucketFile will reset `pendingPages`, `pendingReaders` and `pendingChan`.
 
 ### In-memory object
 
-Each IndexReader decodes [postings offset block](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#postings-offset-table) and [label offset block](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#label-offset-table) into memory object for sequential and  random accesses.  
+Each IndexReader decodes [postings offset block](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#postings-offset-table) and [label offset block](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#label-offset-table) into memory object for sequential and random accesses.
 
 Each BucketFile has a `pages` bitmap, but the bitmap uses very small memory. 
 
-For inactive IndexReaders, if the inactive duration (`now.Sub(lastQueryTime)`) greats than a configured duration (e.g. 15 mins), then IndexReader will remove in-memory objects and close file descriptor and mmap in IndexFile.  This will reduce memory usage.
+For inactive IndexReaders, if the inactive duration (`now.Sub(lastQueryTime)`) is greater than a configured duration (e.g. 15 mins), then IndexReader will remove in-memory objects and close file descriptor and mmap in IndexFile. This will reduce memory usage.
 
 **NOTE**: The `pages` bitmap in BucketFile should always be kept in memory until the server is closed.
 
 ### Preload blocks on startup
 
-The latest blocks will be queried mostly. 
+The latest blocks will be queried the most. 
 
 Preload `the last N hours` (configurable) blocks on startup.
 This will fetch index files from object storage and decode bytes into in-memory objects.
 
 ### Local Files
 
-Because the max size of a index file is 64 GiB, and  the max size of a chunks file is 128 MiB.
+Because the max size of a index file is 64 GiB, and the max size of a chunks file is 128 MiB.
 
-So we can set the size of a local index file to 64 GiB, set  the size of a local chunks file to 128 MiB
+So we can set the size of a local index file to 64 GiB, set the size of a local chunks file to 128 MiB
 
 The size is used to create a sparse file and mmap a file.
 
 ### Object storage byte ranges
 
-Currently, different provider clients implement byte ranges  differently. We need to wrap their implementations and export the same api.
+Currently, different provider clients implement byte ranges differently. We need to wrap their implementations and export the same api.
 
  I think byte ranges in [minio-go](https://github.com/minio/minio-go/blob/master/api-get-options.go#L99-L128) is a good example:
 
@@ -309,8 +309,8 @@ Ensure all providers support `fetch last N bytes` and `fetch everything starting
 
 ### Work plan
 
-- A) Investigate and Implement `BucketReader.GetRange`  and  `BucketReader.GetRanges`
-  - we have implemented  `BucketReader.GetRange` , check if it has the ability to fetch last N bytes
+- A) Investigate and Implement `BucketReader.GetRange` and `BucketReader.GetRanges`
+  - we have implemented `BucketReader.GetRange` , check if it has the ability to fetch last N bytes
   - implement `BucketReader.GetRanges` if providers support
 - B) Implement `BucketFile`
   
@@ -320,10 +320,8 @@ Ensure all providers support `fetch last N bytes` and `fetch everything starting
 
 ### Future work
 
-Design a new index file for [postings offset entries](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#postings-offset-table) and [label offset entries](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#label-offset-table) for sequential and  random accesses.
+Design a new index file for [postings offset entries](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#postings-offset-table) and [label offset entries](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#label-offset-table) for sequential and random accesses.
 
-With the new index file, we can access entries using a mmaped file, instead of loading  [postings offset block](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#postings-offset-table) and [label offset block](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#label-offset-table) into memory. This will reduce memory usage.
+With the new index file, we can access entries using a mmaped file, instead of loading [postings offset block](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#postings-offset-table) and [label offset block](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#label-offset-table) into memory. This will reduce memory usage.
 
-**NOTE**: the new index file and the `block/index`   file are not the same file.  the new index file should be generated by sidecar and compactor before uploading a block.
-
-
+**NOTE**: the new index file and the `block/index` file are not the same file. the new index file should be generated by sidecar and compactor before uploading a block.
