@@ -178,6 +178,7 @@ func registerBucketLs(m map[string]setupFunc, root *kingpin.CmdClause, name stri
 
 		var (
 			format     = *output
+			objects    = 0
 			printBlock func(id ulid.ULID) error
 		)
 
@@ -234,13 +235,18 @@ func registerBucketLs(m map[string]setupFunc, root *kingpin.CmdClause, name stri
 			}
 		}
 
-		return bkt.Iter(ctx, "", func(name string) error {
+		if err := bkt.Iter(ctx, "", func(name string) error {
 			id, ok := block.IsBlockDir(name)
 			if !ok {
 				return nil
 			}
+			objects++
 			return printBlock(id)
-		})
+		}); err != nil {
+			return errors.Wrap(err, "iter")
+		}
+		level.Info(logger).Log("msg", "ls done", "objects", objects)
+		return nil
 	}
 }
 

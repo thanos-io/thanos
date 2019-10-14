@@ -202,13 +202,11 @@ test: check-git install-deps
 	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS='true' or/and THANOS_SKIP_S3_AWS_TESTS='true' or/and THANOS_SKIP_AZURE_TESTS='true' and/or THANOS_SKIP_SWIFT_TESTS='true' and/or THANOS_SKIP_TENCENT_COS_TESTS='true' if you want to skip e2e tests against real store buckets"
 	@go test $(shell go list ./... | grep -v /vendor/);
 
-.PHONY: test-only-gcs
-test-only-gcs: export THANOS_SKIP_S3_AWS_TESTS = true
-test-only-gcs: export THANOS_SKIP_AZURE_TESTS = true
-test-only-gcs: export THANOS_SKIP_SWIFT_TESTS = true
-test-only-gcs: export THANOS_SKIP_TENCENT_COS_TESTS = true
-test-only-gcs:
-	@echo ">> Skipping S3 tests"
+.PHONY: test-ci
+test-ci: export THANOS_SKIP_AZURE_TESTS = true
+test-ci: export THANOS_SKIP_SWIFT_TESTS = true
+test-ci: export THANOS_SKIP_TENCENT_COS_TESTS = true
+test-ci:
 	@echo ">> Skipping AZURE tests"
 	@echo ">> Skipping SWIFT tests"
 	@echo ">> Skipping TENCENT tests"
@@ -216,9 +214,11 @@ test-only-gcs:
 
 .PHONY: test-local
 test-local: export THANOS_SKIP_GCS_TESTS = true
+test-local: export THANOS_SKIP_S3_AWS_TESTS = true
 test-local:
 	@echo ">> Skipping GCE tests"
-	$(MAKE) test-only-gcs
+	@echo ">> Skipping S3 tests"
+	$(MAKE) test-ci
 
 # install-deps installs dependencies for e2e tetss.
 # It installs supported versions of Prometheus and alertmanager to test against in e2e.
