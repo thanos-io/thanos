@@ -206,6 +206,8 @@ github.com/googleapis/gnostic v0.3.0/go.mod h1:sJBsCZ4ayReDTBIg8b9dl28c5xFWyhBTV
 github.com/gophercloud/gophercloud v0.0.0-20190126172459-c818fa66e4c8/go.mod h1:3WdhXV3rUYy9p6AUW8d94kr+HS62Y4VL9mBnFxsD8q4=
 github.com/gophercloud/gophercloud v0.3.0 h1:6sjpKIpVwRIIwmcEGp+WwNovNsem+c+2vm6oxshRpL8=
 github.com/gophercloud/gophercloud v0.3.0/go.mod h1:vxM41WHh5uqHVBMZHzuwNOHh8XEoIEcSTewFxm1c5g8=
+github.com/gophercloud/gophercloud v0.5.0 h1:uM4HalWpEdxORniBrzicAtpYNTk45p5QLLS7zwc1uAU=
+github.com/gophercloud/gophercloud v0.5.0/go.mod h1:b1k/BkBA9smzYde6p6zYLIe5JNAEoJzUWaIRh+9A/j0=
 github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1 h1:EGx4pi6eqNxGaHF6qqu48+N2wcFQ5qg5FXgOdqsJ5d8=
 github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1/go.mod h1:wJfORRmW1u3UXTncJ5qlYoELFm8eSnnEO6hX4iZ3EWY=
 github.com/gregjones/httpcache v0.0.0-20170728041850-787624de3eb7/go.mod h1:FecbI9+v66THATjSRHfNgh1IVFe/9kFxbXtjV0ctIMA=
@@ -572,6 +574,7 @@ golang.org/x/tools v0.0.0-20190628153133-6cdbf07be9d0/go.mod h1:/rFqwRUd4F7ZHNgw
 golang.org/x/tools v0.0.0-20190813034749-528a2984e271/go.mod h1:b+2E5dAYhXwXZwtnZ6UAqBI28+e2cm9otk0dWdXHAEo=
 golang.org/x/tools v0.0.0-20190907020128-2ca718005c18 h1:xFbv3LvlvQAmbNJFCBKRv1Ccvnh9FVsW0FX2kTWWowE=
 golang.org/x/tools v0.0.0-20190907020128-2ca718005c18/go.mod h1:b+2E5dAYhXwXZwtnZ6UAqBI28+e2cm9otk0dWdXHAEo=
+golang.org/x/tools v0.0.0-20191004055002-72853e10c5a3/go.mod h1:b+2E5dAYhXwXZwtnZ6UAqBI28+e2cm9otk0dWdXHAEo=
 golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 google.golang.org/api v0.4.0/go.mod h1:8k5glujaEP+g9n7WNsDg8QP6cUVNI86fCNMcbazEtwE=
 google.golang.org/api v0.7.0/go.mod h1:WtwebWUNSVBH/HAw79HIFXZNqEvBhG+Ra+ax0hx3E3M=

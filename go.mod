@@ -14,7 +14,7 @@ require (
 	github.com/gogo/protobuf v1.2.2-0.20190730201129-28a6bbf47e48
 	github.com/golang/snappy v0.0.1
 	github.com/googleapis/gax-go v2.0.2+incompatible
-	github.com/gophercloud/gophercloud v0.3.0
+	github.com/gophercloud/gophercloud v0.5.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.1-0.20191002090509-6af20e3a5340
 	github.com/hashicorp/golang-lru v0.5.3
