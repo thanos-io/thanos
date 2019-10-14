@@ -29,6 +29,13 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
+const (
+	// DefaultTenantHeader is the default header used to designate the tenant making a write request.
+	DefaultTenantHeader = "THANOS-TENANT"
+	// DefaultReplicaHeader is the default header used to designate the replica count of a write request.
+	DefaultReplicaHeader = "THANOS-REPLICA"
+)
+
 // conflictErr is returned whenever an operation fails due to any conflict-type error.
 var conflictErr = errors.New("conflict")
 
@@ -326,6 +333,15 @@ func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replic
 					err = errors.New("storage is not ready")
 				} else {
 					err = h.writer.Write(wreqs[endpoint])
+					// When a MultiError is added to another MultiError, the error slices are concatenated, not nested.
+					// To avoid breaking the counting logic, we need to flatten the error.
+					if errs, ok := err.(terrors.MultiError); ok {
+						if countCause(errs, isConflict) > 0 {
+							err = errors.Wrap(conflictErr, errs.Error())
+						} else {
+							err = errors.New(errs.Error())
+						}
+					}
 				}
 				h.mtx.RUnlock()
 				if err != nil {

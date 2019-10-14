@@ -1,6 +1,8 @@
 package receive
 
 import (
+	"sync"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
@@ -36,9 +38,8 @@ func (r *Writer) Write(wreq *prompb.WriteRequest) error {
 	)
 
 	app, err := r.append.Appender()
-
 	if err != nil {
-		return errors.Wrap(err, "failed to get appender")
+		return errors.Wrap(err, "get appender")
 	}
 
 	var errs terrors.MultiError
@@ -84,8 +85,82 @@ func (r *Writer) Write(wreq *prompb.WriteRequest) error {
 	}
 
 	if err := app.Commit(); err != nil {
-		errs.Add(errors.Wrap(err, "failed to commit"))
+		errs.Add(errors.Wrap(err, "commit samples"))
 	}
 
 	return errs.Err()
+}
+
+type fakeAppendable struct {
+	appender    storage.Appender
+	appenderErr func() error
+}
+
+var _ Appendable = &fakeAppendable{}
+
+func nilErrFn() error {
+	return nil
+}
+
+func (f *fakeAppendable) Appender() (storage.Appender, error) {
+	errf := f.appenderErr
+	if errf == nil {
+		errf = nilErrFn
+	}
+	return f.appender, errf()
+}
+
+type fakeAppender struct {
+	sync.Mutex
+	samples     map[string][]prompb.Sample
+	addErr      func() error
+	addFastErr  func() error
+	commitErr   func() error
+	rollbackErr func() error
+}
+
+var _ storage.Appender = &fakeAppender{}
+
+func newFakeAppender(addErr, addFastErr, commitErr, rollbackErr func() error) *fakeAppender {
+	if addErr == nil {
+		addErr = nilErrFn
+	}
+	if addFastErr == nil {
+		addFastErr = nilErrFn
+	}
+	if commitErr == nil {
+		commitErr = nilErrFn
+	}
+	if rollbackErr == nil {
+		rollbackErr = nilErrFn
+	}
+	return &fakeAppender{
+		samples:     make(map[string][]prompb.Sample),
+		addErr:      addErr,
+		addFastErr:  addFastErr,
+		commitErr:   commitErr,
+		rollbackErr: rollbackErr,
+	}
+}
+
+func (f *fakeAppender) Add(l labels.Labels, t int64, v float64) (uint64, error) {
+	f.Lock()
+	defer f.Unlock()
+	f.samples[l.String()] = append(f.samples[l.String()], prompb.Sample{Value: v, Timestamp: t})
+	return 0, f.addErr()
+}
+
+func (f *fakeAppender) AddFast(l labels.Labels, ref uint64, t int64, v float64) error {
+	f.Lock()
+	defer f.Unlock()
+	f.samples[l.String()] = append(f.samples[l.String()], prompb.Sample{Value: v, Timestamp: t})
+	return f.addFastErr()
+}
+
+func (f *fakeAppender) Commit() error {
+	return f.commitErr()
+}
+
+func (f *fakeAppender) Rollback() error {
+	return f.rollbackErr()
 }
