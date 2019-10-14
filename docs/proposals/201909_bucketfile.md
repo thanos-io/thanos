@@ -274,11 +274,11 @@ The latest blocks will be queried the most.
 Preload `the last N hours` (configurable) blocks on startup.
 This will fetch index files from object storage and decode bytes into in-memory objects.
 
-### Local Files
+### Local files
 
-Because the max size of a index file is 64 GiB, and the max size of a chunks file is 128 MiB.
+Because the max size of a index file is 64 GiB, and the default size of a chunks file is 512 MiB.
 
-So we can set the size of a local index file to 64 GiB, set the size of a local chunks file to 128 MiB
+So we can set the size of a local index file to 64 GiB, set the size of a local chunks file to 768 (512*1.5) MiB.
 
 The size is used to create a sparse file and mmap a file.
 
