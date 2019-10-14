@@ -18,7 +18,7 @@ This document describes the motivation and design of the `BucketFile` of the sto
 Our goals here are:
 
 - A) Reduce memory usage
-- B) Reuse chunks fetched from object storage
+- B) Reuse chunks and pieces of index fetched from object storage
 
 ## Motivation
 
@@ -257,17 +257,15 @@ if no error occurs, BucketFile will close the `pendingChan` channel.
 If callers receive an error from the channel, then prefetch failed. 
 If callers receive nil (zero value of error, after channel closed) from the channel, then prefetch done. 
 
-Each time to fetch pending pages，BucketFile will reset `pendingPages`, `pendingReaders` and `pendingChan`.
+Each time to fetch pending pages, BucketFile will reset `pendingPages`, `pendingReaders` and `pendingChan`.
 
-### In-memory object
+### In-memory objects
 
-Each IndexReader decodes [postings offset block](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#postings-offset-table) and [label offset block](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#label-offset-table) into memory object for sequential and random accesses.
+Each IndexReader decodes [postings offset block](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#postings-offset-table) and [label offset block](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#label-offset-table) into in-memory object for sequential and random accesses.
 
-Each BucketFile has a `pages` bitmap, but the bitmap uses very small memory. 
+Each BucketFile has a `pages` bitmap, but the bitmap uses small memory. 
 
-For inactive IndexReaders, if the inactive duration (`now.Sub(lastQueryTime)`) is greater than a configured duration (e.g. 15 mins), then IndexReader will remove in-memory objects and close file descriptor and mmap in IndexFile. This will reduce memory usage.
-
-**NOTE**: The `pages` bitmap in BucketFile should always be kept in memory until the server is closed.
+For inactive IndexReaders and BucketFiles, if the inactive duration (`now.Sub(lastQueryTime)`) is greater than a configured duration (e.g. 15 mins), then IndexReaders will remove in-memory objects, and BucketFiles will remove in-memory bitmaps, close file descriptors and unmmap local files. This will reduce memory usage.
 
 ### Preload blocks on startup
 
