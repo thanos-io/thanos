@@ -11,9 +11,16 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+### Fixed
+
+- [#1632](https://github.com/thanos-io/thanos/issues/1632) Removes the duplicated external labels detection on Thanos Querier; warning only; Made Store Gateway compatible with older Querier versions.
+ NOTE: `thanos_store_nodes_grpc_connections` metric is now per `external_labels` and `store_type`. It is a recommended  metric for Querier storeAPIs. `thanos_store_node_info` is marked as obsolete and will be removed in next release.
+ NOTE2: Store Gateway is not advertising artificial: `"@thanos_compatibility_store_type=store"` label. This is to have current Store Gateway compatible with Querier pre v0.8.0. 
+This label can be disabled by hidden `debug.advertise-compatibility-label=false` flag on Store Gateway.
+ 
 ## [v0.8.0](https://github.com/thanos-io/thanos/releases/tag/v0.8.0) - 2019.10.10
 
-Lot's of improvements this release! Outstanding items:
+Lot's of improvements this release! Noteworthy items:
 - First Katacoda tutorial! 🐱
 - Fixed Deletion order causing Compactor to produce not needed 👻 blocks with missing random files. 
 - Store GW memory improvements (more to come!).
@@ -21,6 +28,9 @@ Lot's of improvements this release! Outstanding items:
 - Both Compactor and Store Gateway can be **sharded** within the same bucket using relabelling!
 - Sidecar exposed data from Prometheus can be now limited to given `min-time` (e.g 3h only).
 - Numerous Thanos Receive improvements.
+
+Make sure you check out Prometheus 2.13.0 as well. New release drastically improves usage and resource consumption of
+both Prometheus and sidecar with Thanos: https://prometheus.io/blog/2019/10/10/remote-read-meets-streaming/
 
 ### Added
 
@@ -48,7 +58,7 @@ Selecting blocks to serve depends on the result of block labels relabeling.
 - [#1362](https://github.com/thanos-io/thanos/pull/1362) `query.replica-label` configuration can be provided more than
 once for multiple deduplication labels like: `--query.replica-label=prometheus_replica --query.replica-label=service`.
 - [#1581](https://github.com/thanos-io/thanos/pull/1581) Thanos Store now can use smaller buffer sizes for Bytes pool; reducing memory for some requests.
-- [#1622](https://github.com/thanos-io/thanos/pull/1622) & [#1590](https://github.com/thanos-io/thanos/pull/1590) Updated Go to 2.13.1
+- [#1622](https://github.com/thanos-io/thanos/pull/1622) & [#1590](https://github.com/thanos-io/thanos/pull/1590) Upgraded to Go 1.13.1
 - [#1498](https://github.com/thanos-io/thanos/pull/1498) Thanos Receive change flag `labels` to `label` to be consistent with other commands.
 
 ### Fixed
