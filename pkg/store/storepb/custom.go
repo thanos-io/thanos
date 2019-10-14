@@ -1,6 +1,8 @@
 package storepb
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"strings"
 
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -181,9 +183,16 @@ func LabelsToString(lset []Label) string {
 }
 
 func LabelSetsToString(lsets []LabelSet) string {
-	s := []string{}
+	var s []string
 	for _, ls := range lsets {
 		s = append(s, LabelsToString(ls.Labels))
 	}
 	return strings.Join(s, "")
+}
+
+func LabelSetsToHash(lsets []LabelSet) string {
+	h := sha1.New()
+	h.Write([]byte(LabelSetsToString(lsets)))
+
+	return hex.EncodeToString(h.Sum(nil))
 }

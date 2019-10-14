@@ -184,7 +184,8 @@ func NewStoreSet(
 		Help: "The status of stores as indicated on the /stores page. 1 is UP 0 is DOWN",
 	},
 		[]string{
-			"address",
+			"labelset",
+			"labelset_hash",
 		},
 	)
 	if reg != nil {
@@ -467,7 +468,10 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 
 	status.LastError = err
 	status.LastCheck = time.Now()
-	s.storeStatus.WithLabelValues(store.addr).Set(0)
+	s.storeStatus.WithLabelValues(
+		storepb.LabelSetsToString(store.labelSets),
+		storepb.LabelSetsToHash(store.labelSets),
+	).Set(0)
 
 	if err == nil {
 
@@ -476,7 +480,10 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 		status.StoreType = store.StoreType()
 		status.MinTime = mint
 		status.MaxTime = maxt
-		s.storeStatus.WithLabelValues(store.addr).Set(1)
+		s.storeStatus.WithLabelValues(
+			storepb.LabelSetsToString(store.labelSets),
+			storepb.LabelSetsToHash(store.labelSets),
+		).Set(1)
 	}
 
 	s.storeStatuses[store.addr] = &status
