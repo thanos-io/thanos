@@ -5,6 +5,10 @@ DOCKER_IMAGE_REPO ?= quay.io/thanos/thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
 DOCKER_CI_TAG     ?= test
 
+# Ensure everything works even if GOPATH is not set, which is often the case.
+# The `go env GOPATH` will work for all cases for Go 1.8+.
+GOPATH            ?= $(shell go env GOPATH)
+
 TMP_GOPATH        ?= /tmp/thanos-go
 GOBIN             ?= $(firstword $(subst :, ,${GOPATH}))/bin
 GO111MODULE       ?= on
