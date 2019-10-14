@@ -456,7 +456,7 @@ func (s *StoreSet) getHealthyStores(ctx context.Context, stores map[string]*stor
 	return healthyStores
 }
 
-func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
+func (s *StoreSet) updateStoreStatus(store *storeRef, storeUnhealthyReasonError error) {
 	s.storesStatusesMtx.Lock()
 	defer s.storesStatusesMtx.Unlock()
 
@@ -466,14 +466,19 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 		status = *prev
 	}
 
-	status.LastError = err
+	storeLabelsSetHash, err := storepb.LabelSetsToHash(store.labelSets)
+	if err != nil {
+		level.Error(s.logger).Log("msg", "create hash from label sets failed", "err", err)
+	}
+
+	status.LastError = storeUnhealthyReasonError
 	status.LastCheck = time.Now()
 	s.storeStatus.WithLabelValues(
 		storepb.LabelSetsToString(store.labelSets),
-		storepb.LabelSetsToHash(store.labelSets),
+		storeLabelsSetHash,
 	).Set(0)
 
-	if err == nil {
+	if storeUnhealthyReasonError == nil {
 
 		mint, maxt := store.TimeRange()
 		status.LabelSets = store.LabelSets()
@@ -482,7 +487,7 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 		status.MaxTime = maxt
 		s.storeStatus.WithLabelValues(
 			storepb.LabelSetsToString(store.labelSets),
-			storepb.LabelSetsToHash(store.labelSets),
+			storeLabelsSetHash,
 		).Set(1)
 	}
 

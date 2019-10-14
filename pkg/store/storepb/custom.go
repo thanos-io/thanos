@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"strings"
 
+	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 )
 
@@ -190,9 +191,12 @@ func LabelSetsToString(lsets []LabelSet) string {
 	return strings.Join(s, "")
 }
 
-func LabelSetsToHash(lsets []LabelSet) string {
+func LabelSetsToHash(lsets []LabelSet) (string, error) {
 	h := sha1.New()
-	h.Write([]byte(LabelSetsToString(lsets)))
+	_, err := h.Write([]byte(LabelSetsToString(lsets)))
+	if err != nil {
+		return "", errors.Wrap(err, "hashing label sets failed")
+	}
 
-	return hex.EncodeToString(h.Sum(nil))
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
