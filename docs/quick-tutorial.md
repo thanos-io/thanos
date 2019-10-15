@@ -214,7 +214,7 @@ thanos compact \
     --http-address         0.0.0.0:19191          # HTTP endpoint for collecting metrics on the Compactor
 ```
 
-The compactor is not in the critical path of querying or data backup. It can either be run as a periodic batch job or be left running to always compact data as soon as possible. It is recommended to provide 100-300GB of local disk space for data processing. It is recommended to provide 100-300GB of local disk space for data processing.
+The compactor is not in the critical path of querying or data backup. It can either be run as a periodic batch job or be left running to always compact data as soon as possible. It is recommended to provide 100-300GB of local disk space for data processing.
 
 _NOTE: The compactor must be run as a **singleton** and must not run when manually modifying data in the bucket._
 
