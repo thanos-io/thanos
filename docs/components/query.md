@@ -336,6 +336,7 @@ Flags:
                                  if no max_source_resolution param is specified.
       --query.partial-response   Enable partial response for queries if no
                                  partial_response param is specified.
+				 (--no-query.partial-response for disabling)
       --query.default-evaluation-interval=1m
                                  Set default evaluation interval for sub
                                  queries.
