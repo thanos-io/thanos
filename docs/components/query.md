@@ -22,10 +22,10 @@ $ thanos query \
 ```
 ## Querier use cases, why do I need this component?
 
-Thanos Querier essentially allows to aggregate and optionally deduplicate multiple metrics backends under single Prometheus Query endpoint. 
+Thanos Querier essentially allows to aggregate and optionally deduplicate multiple metrics backends under single Prometheus Query endpoint.
 
 ### Global View
- 
+
 Since for Querier "a backend" is anything that implements gRPC StoreAPI we can aggregate data from any number of the different storages like:
 
 * Prometheus (see [Sidecar](sidecar.md))
@@ -50,8 +50,8 @@ even if those clusters runs multiple Prometheus servers each. Querier will know 
 Prometheus is stateful and does not allow replicating its database. This means that increasing high availability by running multiple Prometheus replicas is not very easy to use.
 Simple loadbalancing will not work as for example after some crash, replica might be up but querying such replica will result in small gap during the period it was down. You have a
  second replica that maybe was up, but it could be down in other moment (e.g rolling restart), so load balancing on top of those is not working well.
- 
-Thanos Querier instead pulls the data from both replicas, and deduplicate those signals, filling the gaps if any, transparently to the Querier consumer. 
+
+Thanos Querier instead pulls the data from both replicas, and deduplicate those signals, filling the gaps if any, transparently to the Querier consumer.
 
 ## Metric Query Flow Overview
 
@@ -336,6 +336,7 @@ Flags:
                                  if no max_source_resolution param is specified.
       --query.partial-response   Enable partial response for queries if no
                                  partial_response param is specified.
+                                 --no-query.partial-response for disabling.
       --query.default-evaluation-interval=1m
                                  Set default evaluation interval for sub
                                  queries.
