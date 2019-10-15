@@ -37,7 +37,8 @@ const waitForExternalLabelsTimeout = 10 * time.Minute
 func registerSidecar(m map[string]setupFunc, app *kingpin.Application) {
 	cmd := app.Command(component.Sidecar.String(), "sidecar for Prometheus server")
 
-	grpcBindAddr, httpBindAddr, cert, key, clientCA := regCommonServerFlags(cmd)
+	httpBindAddr := regHTTPAddrFlag(cmd)
+	grpcBindAddr, cert, key, clientCA := regGRPCFlags(cmd)
 
 	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API. For better performance use local network.").
 		Default("http://localhost:9090").URL()

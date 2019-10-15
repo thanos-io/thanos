@@ -29,23 +29,6 @@ func regGRPCFlags(cmd *kingpin.CmdClause) (
 		grpcTLSSrvClientCA
 }
 
-// TODO(povilasv): we don't need this anymore.
-func regCommonServerFlags(cmd *kingpin.CmdClause) (
-	grpcBindAddr *string,
-	httpBindAddr *string,
-	grpcTLSSrvCert *string,
-	grpcTLSSrvKey *string,
-	grpcTLSSrvClientCA *string) {
-	httpBindAddr = regHTTPAddrFlag(cmd)
-	grpcBindAddr, grpcTLSSrvCert, grpcTLSSrvKey, grpcTLSSrvClientCA = regGRPCFlags(cmd)
-
-	return grpcBindAddr,
-		httpBindAddr,
-		grpcTLSSrvCert,
-		grpcTLSSrvKey,
-		grpcTLSSrvClientCA
-}
-
 func regHTTPAddrFlag(cmd *kingpin.CmdClause) *string {
 	return cmd.Flag("http-address", "Listen host:port for HTTP endpoints.").Default("0.0.0.0:10902").String()
 }
