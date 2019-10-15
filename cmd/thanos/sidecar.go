@@ -231,7 +231,7 @@ func runSidecar(
 			return errors.Wrap(err, "create Prometheus store")
 		}
 
-		opts, err := defaultGRPCServerOpts(logger, cert, key, clientCA)
+		opts, err := defaultGRPCTLSServerOpts(logger, cert, key, clientCA)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}

@@ -35,11 +35,18 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 	comp := component.Receive
 	cmd := app.Command(comp.String(), "Accept Prometheus remote write API requests and write to local tsdb (EXPERIMENTAL, this may change drastically without notice)")
 
-	grpcBindAddr, cert, key, clientCA := regGRPCFlags(cmd)
 	httpBindAddr := regHTTPAddrFlag(cmd)
+	grpcBindAddr, grpcCert, grpcKey, grpcClientCA := regGRPCFlags(cmd)
 
-	remoteWriteAddress := cmd.Flag("remote-write.address", "Address to listen on for remote write requests.").
+	rwAddress := cmd.Flag("remote-write.address", "Address to listen on for remote write requests.").
 		Default("0.0.0.0:19291").String()
+	rwServerCert := cmd.Flag("remote-write.server-tls-cert", "TLS Certificate for HTTP server, leave blank to disable TLS").Default("").String()
+	rwServerKey := cmd.Flag("remote-write.server-tls-key", "TLS Key for the HTTP server, leave blank to disable TLS").Default("").String()
+	rwServerClientCA := cmd.Flag("remote-write.server-tls-client-ca", "TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").Default("").String()
+	rwClientCert := cmd.Flag("remote-write.client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").String()
+	rwClientKey := cmd.Flag("remote-write.client-tls-key", "TLS Key for the client's certificate").Default("").String()
+	rwClientServerCA := cmd.Flag("remote-write.client-tls-ca", "TLS CA Certificates to use to verify servers").Default("").String()
+	rwClientServerName := cmd.Flag("remote-write.client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").String()
 
 	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").
 		Default("./data").String()
@@ -87,7 +94,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			if hostname == "" || err != nil {
 				return errors.New("--receive.local-endpoint is empty and host could not be determined.")
 			}
-			parts := strings.Split(*remoteWriteAddress, ":")
+			parts := strings.Split(*rwAddress, ":")
 			port := parts[len(parts)-1]
 			*local = fmt.Sprintf("http://%s:%s/api/v1/receive", hostname, port)
 		}
@@ -98,11 +105,18 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			reg,
 			tracer,
 			*grpcBindAddr,
-			*cert,
-			*key,
-			*clientCA,
+			*grpcCert,
+			*grpcKey,
+			*grpcClientCA,
 			*httpBindAddr,
-			*remoteWriteAddress,
+			*rwAddress,
+			*rwServerCert,
+			*rwServerKey,
+			*rwServerClientCA,
+			*rwClientCert,
+			*rwClientKey,
+			*rwClientServerCA,
+			*rwClientServerName,
 			*dataDir,
 			objStoreConfig,
 			lset,
@@ -124,11 +138,18 @@ func runReceive(
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	grpcBindAddr string,
-	cert string,
-	key string,
-	clientCA string,
+	grpcCert string,
+	grpcKey string,
+	grpcClientCA string,
 	httpBindAddr string,
-	remoteWriteAddress string,
+	rwAddress string,
+	rwServerCert string,
+	rwServerKey string,
+	rwServerClientCA string,
+	rwClientCert string,
+	rwClientKey string,
+	rwClientServerCA string,
+	rwClientServerName string,
 	dataDir string,
 	objStoreConfig *extflag.PathOrContent,
 	lset labels.Labels,
@@ -153,14 +174,24 @@ func runReceive(
 	}
 
 	localStorage := &tsdb.ReadyStorage{}
+	rwTLSConfig, err := defaultTLSServerOpts(log.With(logger, "protocol", "HTTP"), rwServerCert, rwServerKey, rwServerClientCA)
+	if err != nil {
+		return err
+	}
+	rwTLSClientConfig, err := defaultTLSClientOpts(logger, rwClientCert, rwClientKey, rwClientServerCA, rwClientServerName)
+	if err != nil {
+		return err
+	}
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
-		ListenAddress:     remoteWriteAddress,
+		ListenAddress:     rwAddress,
 		Registry:          reg,
 		Endpoint:          endpoint,
 		TenantHeader:      tenantHeader,
 		ReplicaHeader:     replicaHeader,
 		ReplicationFactor: replicationFactor,
 		Tracer:            tracer,
+		TLSConfig:         rwTLSConfig,
+		TLSClientConfig:   rwTLSClientConfig,
 	})
 
 	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
@@ -317,7 +348,7 @@ func runReceive(
 		startGRPC := make(chan struct{})
 		g.Add(func() error {
 			defer close(startGRPC)
-			opts, err := defaultGRPCServerOpts(logger, cert, key, clientCA)
+			opts, err := defaultGRPCTLSServerOpts(logger, grpcCert, grpcKey, grpcClientCA)
 			if err != nil {
 				return errors.Wrap(err, "setup gRPC server")
 			}

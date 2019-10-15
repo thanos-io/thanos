@@ -246,17 +246,29 @@ func registerMetrics(mux *http.ServeMux, g prometheus.Gatherer) {
 	mux.Handle("/metrics", promhttp.HandlerFor(g, promhttp.HandlerOpts{}))
 }
 
-func defaultGRPCServerOpts(logger log.Logger, cert, key, clientCA string) ([]grpc.ServerOption, error) {
+func defaultGRPCTLSServerOpts(logger log.Logger, cert, key, clientCA string) ([]grpc.ServerOption, error) {
 	opts := []grpc.ServerOption{}
+	tlsCfg, err := defaultTLSServerOpts(log.With(logger, "protocol", "gRPC"), cert, key, clientCA)
+	if err != nil {
+		return opts, err
+	}
+	if tlsCfg != nil {
+		opts = append(opts, grpc.Creds(credentials.NewTLS(tlsCfg)))
+	}
+	return opts, nil
+}
 
+func defaultTLSServerOpts(logger log.Logger, cert, key, clientCA string) (*tls.Config, error) {
 	if key == "" && cert == "" {
 		if clientCA != "" {
 			return nil, errors.New("when a client CA is used a server key and certificate must also be provided")
 		}
 
 		level.Info(logger).Log("msg", "disabled TLS, key and cert must be set to enable")
-		return opts, nil
+		return nil, nil
 	}
+
+	level.Info(logger).Log("msg", "enabling server side TLS")
 
 	if key == "" || cert == "" {
 		return nil, errors.New("both server key and certificate must be provided")
@@ -270,8 +282,6 @@ func defaultGRPCServerOpts(logger log.Logger, cert, key, clientCA string) ([]grp
 	if err != nil {
 		return nil, errors.Wrap(err, "server credentials")
 	}
-
-	level.Info(logger).Log("msg", "enabled gRPC server side TLS")
 
 	tlsCfg.Certificates = []tls.Certificate{tlsCert}
 
@@ -288,10 +298,55 @@ func defaultGRPCServerOpts(logger log.Logger, cert, key, clientCA string) ([]grp
 		tlsCfg.ClientCAs = certPool
 		tlsCfg.ClientAuth = tls.RequireAndVerifyClientCert
 
-		level.Info(logger).Log("msg", "gRPC server TLS client verification enabled")
+		level.Info(logger).Log("msg", "server TLS client verification enabled")
 	}
 
-	return append(opts, grpc.Creds(credentials.NewTLS(tlsCfg))), nil
+	return tlsCfg, nil
+}
+
+func defaultTLSClientOpts(logger log.Logger, cert, key, caCert, serverName string) (*tls.Config, error) {
+	var certPool *x509.CertPool
+	if caCert != "" {
+		caPEM, err := ioutil.ReadFile(caCert)
+		if err != nil {
+			return nil, errors.Wrap(err, "reading client CA")
+		}
+
+		certPool = x509.NewCertPool()
+		if !certPool.AppendCertsFromPEM(caPEM) {
+			return nil, errors.Wrap(err, "building client CA")
+		}
+		level.Info(logger).Log("msg", "TLS client using provided certificate pool")
+	} else {
+		var err error
+		certPool, err = x509.SystemCertPool()
+		if err != nil {
+			return nil, errors.Wrap(err, "reading system certificate pool")
+		}
+		level.Info(logger).Log("msg", "TLS client using system certificate pool")
+	}
+
+	tlsCfg := &tls.Config{
+		RootCAs: certPool,
+	}
+
+	if serverName != "" {
+		tlsCfg.ServerName = serverName
+	}
+
+	if (key != "") != (cert != "") {
+		return nil, errors.New("both client key and certificate must be provided")
+	}
+
+	if cert != "" {
+		cert, err := tls.LoadX509KeyPair(cert, key)
+		if err != nil {
+			return nil, errors.Wrap(err, "client credentials")
+		}
+		tlsCfg.Certificates = []tls.Certificate{cert}
+		level.Info(logger).Log("msg", "TLS client authentication enabled")
+	}
+	return tlsCfg, nil
 }
 
 func newStoreGRPCServer(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, srv storepb.StoreServer, opts []grpc.ServerOption) *grpc.Server {
