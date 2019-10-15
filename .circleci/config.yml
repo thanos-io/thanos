@@ -26,7 +26,7 @@ jobs:
           command: |
             if ! [ -z ${GCP_PROJECT} ]; then
               echo $GOOGLE_APPLICATION_CREDENTIALS_CONTENT > $GOOGLE_APPLICATION_CREDENTIALS
-              echo "Awesome! GCS integration tests are enabled."
+              echo "Awesome! GCS and S3 AWS integration tests are enabled."
             fi
       - run: make deps
       - run: make lint
@@ -34,14 +34,13 @@ jobs:
       - run: make format
       - run:
           name: "Run all tests"
-          # TODO(bwplotka): Setup some S3 tests for CI.
           # taskset sets CPU affinity to 2 (current CPU limit).
           command: |
             if [ -z ${GCP_PROJECT} ]; then
               taskset 2 make test-local
               exit
             fi
-            taskset 2 make test-only-gcs
+            taskset 2 make test-ci
 
   # Cross build is needed for publish_release but needs to be done outside of docker.
   cross_build:

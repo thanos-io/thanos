@@ -55,11 +55,11 @@ Current object storage client implementations:
 
 | Provider             | Maturity | Auto-tested on CI | Maintainers |
 |----------------------|-------------------|-----------|---------------|
-| [Google Cloud Storage](#gcs) | Stable  (production usage)             | yes       | @bwplotka   |
-| [AWS/S3](#s3) | Stable  (production usage)               | yes        | @bwplotka          |
-| [Azure Storage Account](#azure) | Stable  (production usage) | yes       | @vglafirov   |
-| [OpenStack Swift](#openstack-swift)      | Beta  (working PoCs, testing usage)               | no        | @sudhi-vm   |
-| [Tencent COS](#tencent-cos)          | Beta  (testing usage)                   | no        | @jojohappy          |
+| [Google Cloud Storage](./storage.md#gcs) | Stable  (production usage)             | yes       | @bwplotka   |
+| [AWS/S3](./storage.md#s3) | Stable  (production usage)               | yes        | @bwplotka          |
+| [Azure Storage Account](./storage.md#azure) | Stable  (production usage) | yes       | @vglafirov   |
+| [OpenStack Swift](./storage.md#openstack-swift)      | Beta  (working PoCs, testing usage)               | no        | @sudhi-vm   |
+| [Tencent COS](./storage.md#tencent-cos)          | Beta  (testing usage)                   | no        | @jojohappy          |
 
 NOTE: Currently Thanos requires strong consistency (write-read) for object store implementation.
 
@@ -85,12 +85,12 @@ config:
   secret_key: ""
   put_user_metadata: {}
   http_config:
-    idle_conn_timeout: 0s
-    response_header_timeout: 0s
+    idle_conn_timeout: 90s
+    response_header_timeout: 2m
     insecure_skip_verify: false
   trace:
     enable: false
-  part_size: 0
+  part_size: 134217728
 ```
 
 At a minimum, you will need to provide a value for the `bucket`, `endpoint`, `access_key`, and `secret_key` keys. The rest of the keys are optional.

@@ -30,7 +30,7 @@ var (
 	bucketConfigs = map[client.ObjProvider]interface{}{
 		client.AZURE: azure.Config{},
 		client.GCS:   gcs.Config{},
-		client.S3:    s3.Config{},
+		client.S3:    s3.DefaultConfig,
 		client.SWIFT: swift.SwiftConfig{},
 		client.COS:   cos.Config{},
 	}

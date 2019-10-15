@@ -37,7 +37,7 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 		testutil.Ok(t, err)
 
 		ok := t.Run("gcs", func(t *testing.T) {
-			// TODO(bplotka): Add leaktest when https://github.com/GoogleCloudPlatform/google-cloud-go/issues/1025 is resolved.
+			// TODO(bwplotka): Add leaktest when https://github.com/GoogleCloudPlatform/google-cloud-go/issues/1025 is resolved.
 			testFn(t, bkt)
 		})
 		closeFn()
@@ -48,11 +48,10 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 		t.Log("THANOS_SKIP_GCS_TESTS envvar present. Skipping test against GCS.")
 	}
 
-	// Optional S3 AWS.
-	// TODO(bwplotka): Prepare environment & CI to run it automatically.
+	// Optional S3.
 	if _, ok := os.LookupEnv("THANOS_SKIP_S3_AWS_TESTS"); !ok {
 		// TODO(bwplotka): Allow taking location from envvar.
-		bkt, closeFn, err := s3.NewTestBucket(t, "eu-west-1")
+		bkt, closeFn, err := s3.NewTestBucket(t, "us-west-2")
 		testutil.Ok(t, err)
 
 		ok := t.Run("aws s3", func(t *testing.T) {
