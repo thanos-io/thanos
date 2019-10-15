@@ -85,12 +85,12 @@ config:
   secret_key: ""
   put_user_metadata: {}
   http_config:
-    idle_conn_timeout: 0s
-    response_header_timeout: 0s
+    idle_conn_timeout: 90s
+    response_header_timeout: 2m
     insecure_skip_verify: false
   trace:
     enable: false
-  part_size: 0
+  part_size: 134217728
 ```
 
 At a minimum, you will need to provide a value for the `bucket`, `endpoint`, `access_key`, and `secret_key` keys. The rest of the keys are optional.

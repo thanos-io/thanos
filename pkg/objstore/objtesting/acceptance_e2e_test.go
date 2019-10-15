@@ -98,7 +98,8 @@ func TestObjStore_AcceptanceTest_e2e(t *testing.T) {
 
 		testutil.Ok(t, bkt.Delete(ctx, "id1/obj_2.some"))
 		// Delete is expected to fail on non existing object.
-		testutil.NotOk(t, bkt.Delete(ctx, "id1/obj_2.some"))
+		// NOTE: Don't rely on this. S3 is not complying with this as GCS is.
+		// testutil.NotOk(t, bkt.Delete(ctx, "id1/obj_2.some"))
 
 		// Can we iter over items from id1/ dir and see obj2 being deleted?
 		seen = []string{}

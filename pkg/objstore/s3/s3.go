@@ -32,9 +32,16 @@ import (
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const DirDelim = "/"
 
-// Minimum file size after which an HTTP multipart request should be used to upload objects to storage.
-// Set to 128 MiB as in the minio client.
-const defaultMinPartSize = 1024 * 1024 * 128
+var DefaultConfig = Config{
+	PutUserMetadata: map[string]string{},
+	HTTPConfig: HTTPConfig{
+		IdleConnTimeout:       model.Duration(90 * time.Second),
+		ResponseHeaderTimeout: model.Duration(2 * time.Minute),
+	},
+	// Minimum file size after which an HTTP multipart request should be used to upload objects to storage.
+	// Set to 128 MiB as in the minio client.
+	PartSize: 1024 * 1024 * 128,
+}
 
 // Config stores the configuration for s3 bucket.
 type Config struct {
@@ -49,7 +56,8 @@ type Config struct {
 	PutUserMetadata map[string]string `yaml:"put_user_metadata"`
 	HTTPConfig      HTTPConfig        `yaml:"http_config"`
 	TraceConfig     TraceConfig       `yaml:"trace"`
-	PartSize        uint64            `yaml:"part_size"`
+	// PartSize used for multipart upload. Only used if uploaded object size is known and larger than configured PartSize.
+	PartSize uint64 `yaml:"part_size"`
 }
 
 type TraceConfig struct {
@@ -75,21 +83,9 @@ type Bucket struct {
 
 // parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
 func parseConfig(conf []byte) (Config, error) {
-	defaultHTTPConfig := HTTPConfig{
-		IdleConnTimeout:       model.Duration(90 * time.Second),
-		ResponseHeaderTimeout: model.Duration(2 * time.Minute),
-	}
-	config := Config{HTTPConfig: defaultHTTPConfig}
+	config := DefaultConfig
 	if err := yaml.Unmarshal(conf, &config); err != nil {
 		return Config{}, err
-	}
-
-	if config.PutUserMetadata == nil {
-		config.PutUserMetadata = make(map[string]string)
-	}
-
-	if config.PartSize == 0 {
-		config.PartSize = defaultMinPartSize
 	}
 
 	return config, nil
@@ -314,16 +310,21 @@ func (b *Bucket) guessFileSize(name string, r io.Reader) int64 {
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	// TODO(https://github.com/thanos-io/thanos/issues/678): Remove guessing length when minio provider will support multipart upload without this.
-	fileSize := b.guessFileSize(name, r)
+	size := b.guessFileSize(name, r)
 
+	// partSize cannot be larger than object size.
+	partSize := b.partSize
+	if size < int64(partSize) {
+		partSize = 0
+	}
 	if _, err := b.client.PutObjectWithContext(
 		ctx,
 		b.name,
 		name,
 		r,
-		fileSize,
+		size,
 		minio.PutObjectOptions{
-			PartSize:             b.partSize,
+			PartSize:             partSize,
 			ServerSideEncryption: b.sse,
 			UserMetadata:         b.putUserMetadata,
 		},
