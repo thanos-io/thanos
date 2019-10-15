@@ -1,6 +1,8 @@
 package receive
 
 import (
+	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/go-kit/kit/log"
@@ -85,6 +87,9 @@ func (f *FlushableStorage) Flush() error {
 	}
 	if err := ro.FlushWAL(f.Dir()); err != nil {
 		return errors.Wrap(err, "flushing WAL")
+	}
+	if err := os.RemoveAll(filepath.Join(f.Dir(), "wal")); err != nil {
+		return errors.Wrap(err, "removing stale WAL")
 	}
 	if reopen {
 		return errors.Wrap(f.open(), "re-starting storage")
