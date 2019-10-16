@@ -59,8 +59,6 @@ The above sequence diagram shows how the BucketFile works with IndexReader and C
 
 ### BucketFile internals
 
-
-
 ![BucketFile](./img/bucketfile_internals.jpg)
 
 The above sequence diagram shows BucketFile internals:
@@ -217,12 +215,7 @@ func (f *BucketFile) Prefetch(ranges []*Range) (chan error, error) {...}
 
 BucketFile appends new pages to `pendingPages`, waits for next time to fetch. So that we can combine multiple queries to ones.
 
-When fetching combined pages,
-if an error occurs, BucketFile will send the error to callers via the `pendingChan` channel,
-if no error occurs, BucketFile will close the `pendingChan` channel.
-
-If callers receive an error from the channel, then prefetch failed. 
-If callers receive nil (zero value of error, after channel closed) from the channel, then prefetch done. 
+If the combined prefetch fails, all sub prefetches will fail. There must be error handling for failed prefetches.
 
 Each time to fetch pending pages, BucketFile will reset `pendingPages`, `pendingReaders` and `pendingChan`.
 
