@@ -265,15 +265,13 @@ In order to support `Fetch last N bytes` in client side, there are some required
 2. reimplement Swift [GetRange](https://github.com/thanos-io/thanos/blob/master/pkg/objstore/swift/swift.go#L121)
   
 
-if providers support multiple ranges, likes `Range: bytes=500-700,60000-61000`, we need to implement a `BucketReader.GetRanges` API, then we can query multiple ranges in one request.
-
 See https://tools.ietf.org/html/rfc7233#section-2.1 for reference.
 
 ### Work plan
 
-- A) Implement `BucketReader.GetRange` and `BucketReader.GetRanges`
-  - Upgrade GCS client package and reimplement Swift `GetRange` 
-  - Implement `BucketReader.GetRanges` if providers support
+- A) Reimplement `BucketReader.GetRange` 
+  - Upgrade GCS client package
+  - Reimplement Swift `GetRange` 
 - B) Implement `BucketFile`
   
 - C) Use `BucketFile` for `BucketIndexReader` and `BucketchunkReader`
