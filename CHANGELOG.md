@@ -15,6 +15,10 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 - [#1660](https://github.com/thanos-io/thanos/pull/1660) Add a new `--prometheus.ready_timeout` CLI option to the sidecar to set how long to wait until Prometheus starts up.
 
+### Fixed
+
+- [#1656](https://github.com/thanos-io/thanos/pull/1656) Thanos components now starts metric and status probe HTTP server earlier in their start-up sequence.
+
 ## [v0.8.1](https://github.com/thanos-io/thanos/releases/tag/v0.8.1) - 2019.10.14
 
 ### Fixed
@@ -23,12 +27,12 @@ We use *breaking* word for marking changes that are not backward compatible (rel
   * NOTE: `thanos_store_nodes_grpc_connections` metric is now per `external_labels` and `store_type`. It is a recommended  metric for Querier storeAPIs. `thanos_store_node_info` is marked as obsolete and will be removed in next release.
   * NOTE2: Store Gateway is now advertising artificial: `"@thanos_compatibility_store_type=store"` label. This is to have the current Store Gateway compatible with Querier pre v0.8.0.
   This label can be disabled by hidden `debug.advertise-compatibility-label=false` flag on Store Gateway.
- 
+
 ## [v0.8.0](https://github.com/thanos-io/thanos/releases/tag/v0.8.0) - 2019.10.10
 
 Lot's of improvements this release! Noteworthy items:
 - First Katacoda tutorial! 🐱
-- Fixed Deletion order causing Compactor to produce not needed 👻 blocks with missing random files. 
+- Fixed Deletion order causing Compactor to produce not needed 👻 blocks with missing random files.
 - Store GW memory improvements (more to come!).
 - Querier allows multiple deduplication labels.
 - Both Compactor and Store Gateway can be **sharded** within the same bucket using relabelling!
@@ -42,7 +46,7 @@ both Prometheus and sidecar with Thanos: https://prometheus.io/blog/2019/10/10/r
 
 - [#1619](https://github.com/thanos-io/thanos/pull/1619) Thanos sidecar allows to limit min time range for data it exposes from Prometheus.
 - [#1583](https://github.com/thanos-io/thanos/pull/1583) Thanos sharding:
-  - Add relabel config (`--selector.relabel-config-file` and `selector.relabel-config`) into Thanos Store and Compact components. 
+  - Add relabel config (`--selector.relabel-config-file` and `selector.relabel-config`) into Thanos Store and Compact components.
 Selecting blocks to serve depends on the result of block labels relabeling.
   - For store gateway, advertise labels from "approved" blocks.
 - [#1540](https://github.com/thanos-io/thanos/pull/1540) Thanos Downsample added `/-/ready` and `/-/healthy` endpoints.
@@ -55,8 +59,8 @@ Selecting blocks to serve depends on the result of block labels relabeling.
 - [#1362](https://github.com/thanos-io/thanos/pull/1362) Optional `replicaLabels` param for `/query` and
 `/query_range` querier endpoints. When provided overwrite the `query.replica-label` cli flags.
 - [#1482](https://github.com/thanos-io/thanos/pull/1482) Thanos now supports Elastic APM as tracing provider.
-- [#1612](https://github.com/thanos-io/thanos/pull/1612) Thanos Rule added `resendDelay` flag. 
-- [#1480](https://github.com/thanos-io/thanos/pull/1480) Thanos Receive flushes storage on hashring change. 
+- [#1612](https://github.com/thanos-io/thanos/pull/1612) Thanos Rule added `resendDelay` flag.
+- [#1480](https://github.com/thanos-io/thanos/pull/1480) Thanos Receive flushes storage on hashring change.
 - [#1613](https://github.com/thanos-io/thanos/pull/1613) Thanos Receive now traces forwarded requests.
 
 ### Changed
@@ -76,7 +80,7 @@ once for multiple deduplication labels like: `--query.replica-label=prometheus_r
 - [#1544](https://github.com/thanos-io/thanos/pull/1544) Iterating over object store is resilient to the edge case for some providers.
 - [#1469](https://github.com/thanos-io/thanos/pull/1469) Fixed Azure potential failures (EOF) when requesting more data then blob has.
 - [#1512](https://github.com/thanos-io/thanos/pull/1512) Thanos Store fixed memory leak for chunk pool.
-- [#1488](https://github.com/thanos-io/thanos/pull/1488) Thanos Rule now now correctly links to query URL from rules and alerts. 
+- [#1488](https://github.com/thanos-io/thanos/pull/1488) Thanos Rule now now correctly links to query URL from rules and alerts.
 
 ## [v0.7.0](https://github.com/thanos-io/thanos/releases/tag/v0.7.0) - 2019.09.02
 
