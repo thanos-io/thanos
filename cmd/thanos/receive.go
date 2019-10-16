@@ -163,7 +163,13 @@ func runReceive(
 		Tracer:            tracer,
 	})
 
+	level.Debug(logger).Log("msg", "setting up http server")
 	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
+	if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, nil, comp); err != nil {
+		return errors.Wrap(err, "schedule HTTP server with probes")
+	}
+
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
 		return err
@@ -300,12 +306,6 @@ func runReceive(
 			close(cancel)
 		},
 		)
-	}
-
-	level.Debug(logger).Log("msg", "setting up http server")
-	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-	if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, nil, comp); err != nil {
-		return errors.Wrap(err, "schedule HTTP server with probes")
 	}
 
 	level.Debug(logger).Log("msg", "setting up grpc server")

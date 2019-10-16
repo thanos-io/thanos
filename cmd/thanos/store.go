@@ -126,7 +126,12 @@ func runStore(
 	selectorRelabelConf *extflag.PathOrContent,
 	advertiseCompatibilityLabel bool,
 ) error {
+	level.Debug(logger).Log("msg", "setting up http server")
+	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
 	statusProber := prober.NewProber(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, nil, component); err != nil {
+		return errors.Wrap(err, "schedule HTTP server")
+	}
 
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
@@ -227,10 +232,6 @@ func runStore(
 	}, func(error) {
 		s.Stop()
 	})
-
-	if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, nil, component); err != nil {
-		return errors.Wrap(err, "schedule HTTP server")
-	}
 
 	level.Info(logger).Log("msg", "starting store node")
 	return nil

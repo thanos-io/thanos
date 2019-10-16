@@ -134,6 +134,7 @@ func runSidecar(
 		uploads = false
 	}
 
+	level.Debug(logger).Log("msg", "setting up http server")
 	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
 	if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, nil, comp); err != nil {

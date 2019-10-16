@@ -483,43 +483,9 @@ func runRule(
 			close(cancel)
 		})
 	}
-	// Periodically update the addresses from static flags and file SD by resolving them using DNS SD if necessary.
-	{
-		ctx, cancel := context.WithCancel(context.Background())
-		g.Add(func() error {
-			return runutil.Repeat(dnsSDInterval, ctx.Done(), func() error {
-				dnsProvider.Resolve(ctx, append(fileSDCache.Addresses(), queryAddrs...))
-				return nil
-			})
-		}, func(error) {
-			cancel()
-		})
-	}
+	// Start query API + UI, metrics and status probe HTTP server.
+	level.Debug(logger).Log("msg", "setting up http server")
 	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
-	// Start gRPC server.
-	{
-		l, err := net.Listen("tcp", grpcBindAddr)
-		if err != nil {
-			return errors.Wrap(err, "listen API address")
-		}
-		logger := log.With(logger, "component", component.Rule.String())
-
-		store := store.NewTSDBStore(logger, reg, db, component.Rule, lset)
-
-		opts, err := defaultGRPCServerOpts(logger, cert, key, clientCA)
-		if err != nil {
-			return errors.Wrap(err, "setup gRPC options")
-		}
-		s := newStoreGRPCServer(logger, reg, tracer, store, opts)
-
-		g.Add(func() error {
-			statusProber.SetReady()
-			return errors.Wrap(s.Serve(l), "serve gRPC")
-		}, func(error) {
-			s.Stop()
-		})
-	}
-	// Start UI & metrics HTTP server.
 	{
 		router := route.New()
 
@@ -551,6 +517,41 @@ func runRule(
 		if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, router, comp); err != nil {
 			return errors.Wrap(err, "schedule HTTP server with probes")
 		}
+	}
+	// Periodically update the addresses from static flags and file SD by resolving them using DNS SD if necessary.
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			return runutil.Repeat(dnsSDInterval, ctx.Done(), func() error {
+				dnsProvider.Resolve(ctx, append(fileSDCache.Addresses(), queryAddrs...))
+				return nil
+			})
+		}, func(error) {
+			cancel()
+		})
+	}
+	// Start gRPC server.
+	{
+		l, err := net.Listen("tcp", grpcBindAddr)
+		if err != nil {
+			return errors.Wrap(err, "listen API address")
+		}
+		logger := log.With(logger, "component", component.Rule.String())
+
+		store := store.NewTSDBStore(logger, reg, db, component.Rule, lset)
+
+		opts, err := defaultGRPCServerOpts(logger, cert, key, clientCA)
+		if err != nil {
+			return errors.Wrap(err, "setup gRPC options")
+		}
+		s := newStoreGRPCServer(logger, reg, tracer, store, opts)
+
+		g.Add(func() error {
+			statusProber.SetReady()
+			return errors.Wrap(s.Serve(l), "serve gRPC")
+		}, func(error) {
+			s.Stop()
+		})
 	}
 
 	confContentYaml, err := objStoreConfig.Content()

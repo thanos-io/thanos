@@ -173,6 +173,7 @@ func runCompact(
 
 	downsampleMetrics := newDownsampleMetrics(reg)
 
+	level.Debug(logger).Log("msg", "setting up http server")
 	statusProber := prober.NewProber(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
 	if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, nil, component); err != nil {
