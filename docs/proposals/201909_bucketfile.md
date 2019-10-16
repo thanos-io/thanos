@@ -36,9 +36,7 @@ Add a helper struct to wrapper remote object storage file. We can temporarily na
 
 ### BucketFile in a block
 
-
-
-![BucketBlock](./img/bucketfile_in_block.jpg)
+![BucketBlock](./img/bucketfile_in_a_block.jpg)
 
 The above sequence diagram shows how the BucketFile works with IndexReader and ChunksReader in a block:
 
@@ -46,49 +44,18 @@ The above sequence diagram shows how the BucketFile works with IndexReader and C
 
 1. BucketStore calls `blockSeries` method to retrieve series from a block.
 2. BucketBlock calls `ExpendedPostings` method to retrieve expended postings from BucketIndexReader.
-3. BucketIndexReader fetches [TOC](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#toc) block (last 52 bytes) from BucketBlockIndexFile.
-4. BucketBlockIndexFile returns TOC block bytes.
-5. BucketIndexReader decodes TOC bytes into memory `toc` obj.
-6. BucketIndexReader gets the offset to postings offset block from `toc`, and fetches [postings offsets](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#postings-offset-table) block.     
-   // Fetch everything starting from the offset
-7. BucketBlockIndexFile returns postings offsets block. 
-8. BucketIndexReader decodes bytes into memory `postingsOffsets` obj.    
-   // `postingsOffsets` `map[labels.Label]int64` , maps label to offset.
-9. BucketIndexReader gets matched postings offsets from `postingsOffsets` obj.
-10. BucketIndexReader converts matched postings offsets to ranges. 
-11. BucketIndexReader calls BucketIndexFile to prefetch ranges.
-12. BucketIndexFile notifies BucketIndexReader prefetch done.
-13. BucketIndexReader iterates matched postings offsets, retrieves each postings entry bytes by offset.
-14. BucketIndexFile returns [postings entry](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#postings) bytes.
-15. BucketIndexReader decodes bytes into expended postings.
-16. BucketIndexReader merges postings.
-17. BucketIndexReader returns expended postings.
-18. BucketBlock returns `emptySeriesSet` if no postings.
-19. BucketBlock retrieves chunk metas and label set by postings from BucketIndexReader.
-20. BucketIndexReader converts postings to ranges.
-21. BucketIndexReader calls BucketBlockIndexFile to prefetch ranges.
-22. BucketBlockIndexFile notifies BucketIndexReader prefetch done. 
-23. BucketIndexReader iterates postings, retrieves each series entry bytes by posting.
-24. BucketBlockIndexFile returns [series entry](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md#series) bytes.
-25. BucketIndexReader decodes bytes into label set and chunk metas.    
-    //  [Decoder.Series(b, lset, chks)](https://github.com/prometheus/prometheus/blob/master/tsdb/index/index.go#L1070)
-26. BucketIndexReader returns chunk metas.
-27. BucketBlock calls BucketBlockChunksReader to prefetch by chunk metas.
-28. BucketBlockChunksReader splits metas to multi partitions, metas in one partition belong to the same chunks file.
-29. For each partition, BucketBlockChunksReader converts chunk metas to ranges.
-
-30. BucketBlockChunksReader calls BucketBlockChunksFile to prefetch ranges.
-31. BucketBlockChunksFile notifies BucketBlockChunksReader prefetch done. 
-32. BucketBlockChunksReader notifies BucketBlock prefetch done After all partitions prefetch done.
-33. BucketBlock iterates chunk metas, retrieves chunk obj by meta from BucketBlockChunksReader.    
-    // BucketBlockChunksReader.Chunk(ref)
-34. BucketBlockChunksReader retrieves chunk bytes from BucketBlockChunksFile.
-35. BucketBlockChunksFile returns [chunk](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/chunks.md#chunk) bytes.
-36. BucketBlockChunksReader decodes bytes into chunk obj.
-    // Decode to [`rawChunk`](https://github.com/thanos-io/thanos/blob/master/pkg/store/bucket.go#L1861)
-37. BucketBlockChunksReader returns chunk obj.
-38. BucketBlock converts chunks and labels to [`bucketSeriesSet`](https://github.com/thanos-io/thanos/blob/master/pkg/store/bucket.go#L556)
-39. BucketBlock returns `bucketSeriesSet`.
+3. BucketIndexReader fetches posting entries from BucketIndexFile.
+4. BucketIndexFile returns posting entries.
+5. BucketIndexReader decodes posting entries into postings and returns expended postings.
+6. BucketBlock retrieves chunk metas from BucketIndexReader.
+7. BucketIndexReader returns chunk metas.
+8. BucketBlock calls BucketBlockChunksReader to prefetch chunks by chunk metas.
+9. BucketBlockChunksReader calls BucketBlockChunksFile to prefetch ranges.
+10. BucketBlockChunksFile notifies BucketBlockChunksReader prefetch done. 
+11. BucketBlockChunksReader notifies BucketBlock prefetch done.
+12. BucketBlock retrieves chunks by metas.    
+13. BucketBlockChunksReader returns chunks.
+14. BucketBlock converts chunks to `bucketSeriesSet` and returns `bucketSeriesSet`.
 
 ### BucketFile internals
 
@@ -303,7 +270,7 @@ In order to support `Fetch last N bytes` in client side, there are some required
 
 1. Upgrade GCS client package to version [v0.45.0+](https://github.com/googleapis/google-cloud-go/blob/master/CHANGES.md#v0450)
 2. reimplement Swift [GetRange](https://github.com/thanos-io/thanos/blob/master/pkg/objstore/swift/swift.go#L121)
-   
+  
 
 if providers support multiple ranges, likes `Range: bytes=500-700,60000-61000`, we need to implement a `BucketReader.GetRanges` API, then we can query multiple ranges in one request.
 
