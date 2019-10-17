@@ -333,7 +333,7 @@ func newStoreGRPCServer(logger log.Logger, reg prometheus.Registerer, tracer ope
 	return s
 }
 
-// scheduleHTTPServer starts a goroutine that servers HTTP endpoint with default endpoints providing Prometheus metrics,
+// scheduleHTTPServer starts a run.Group that servers HTTP endpoint with default endpoints providing Prometheus metrics,
 // profiling and liveness/readiness probes.
 func scheduleHTTPServer(g *run.Group, logger log.Logger, reg *prometheus.Registry, readinessProber *prober.Prober, httpBindAddr string, handler http.Handler, comp component.Component) error {
 	mux := http.NewServeMux()
