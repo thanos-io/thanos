@@ -207,11 +207,10 @@ func (api *API) parseDownsamplingParamMillis(r *http.Request, defaultVal time.Du
 	const maxSourceResolutionParam = "max_source_resolution"
 	maxSourceResolution := 0 * time.Second
 
-	if api.enableAutodownsampling {
+	val := r.FormValue(maxSourceResolutionParam)
+	if api.enableAutodownsampling || (val == "auto") {
 		maxSourceResolution = defaultVal
-	}
-
-	if val := r.FormValue(maxSourceResolutionParam); val != "" {
+	} else if val != "" {
 		var err error
 		maxSourceResolution, err = parseDuration(val)
 		if err != nil {

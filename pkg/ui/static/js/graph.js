@@ -531,10 +531,6 @@ Prometheus.Graph.prototype.submitQuery = function() {
   var rangeSeconds = self.parseDuration(self.rangeInput.val());
   var resolution = parseInt(self.queryForm.find("input[name=step_input]").val()) || Math.max(Math.floor(rangeSeconds / 250), 1);
   var maxSourceResolution = self.maxSourceResolutionInput.val()
-  // normalize max_source_resolution parameter
-  if ( maxSourceResolution == "auto") {
-	  maxSourceResolution = ""
-  }
   var endDate = self.getEndDate() / 1000;
   var moment = self.getMoment() / 1000;
 
