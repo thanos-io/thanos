@@ -192,12 +192,12 @@ func runStore(
 	// bucketStoreReady signals when bucket store is ready.
 	bucketStoreReady := make(chan struct{})
 	{
-		begin := time.Now()
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
 			level.Info(logger).Log("msg", "initializing bucket store")
+			begin := time.Now()
 			if err := bs.InitialSync(ctx); err != nil {
 				close(bucketStoreReady)
 				return errors.Wrap(err, "bucket store initial sync")

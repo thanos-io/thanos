@@ -143,5 +143,7 @@ Filtering is done on a Chunk level, so Thanos Store might still return Samples w
 ## Probes
 
 - Thanos Store exposes two endpoints for probing.
-  * `/-/healthy` starts as soon as initial setup completed.
-  * `/-/ready` starts after all the bootstrapping completed (e.g initial index building) and ready to serve traffic.
+  - `/-/healthy` starts as soon as initial setup completed.
+  - `/-/ready` starts after all the bootstrapping completed (e.g initial index building) and ready to serve traffic.
+
+> NOTE: Metric endpoint starts immediately so, make sure you set up readiness probe on designated HTTP `/-/ready` path.
