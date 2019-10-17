@@ -17,7 +17,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Fixed
 
-- [#1656](https://github.com/thanos-io/thanos/pull/1656) Thanos Store now starts metric and status probe HTTP server earlier in its start-up sequence. `/-/healthy` now endpoint starts to respond with success earlier. `/metrics` endpoint now starts serving earlier as well, as a result for your readiness probes you should rely on  `/-/ready` rather than `/metrics`.
+- [#1656](https://github.com/thanos-io/thanos/pull/1656) Thanos Store now starts metric and status probe HTTP server earlier in its start-up sequence. `/-/healthy` endpoint now starts to respond with success earlier. `/metrics` endpoint starts serving metrics earlier as well. Make sure to point your readiness probes to the `/-/ready` endpoint rather than `/metrics`.
 
 ## [v0.8.1](https://github.com/thanos-io/thanos/releases/tag/v0.8.1) - 2019.10.14
 
