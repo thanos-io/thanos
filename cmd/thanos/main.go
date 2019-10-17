@@ -355,7 +355,6 @@ func scheduleHTTPServer(g *run.Group, logger log.Logger, reg *prometheus.Registr
 		return errors.Wrapf(http.Serve(l, mux), "serve %s and metrics", comp.String())
 	}, func(err error) {
 		readinessProber.SetNotHealthy(err)
-		l.Close()
 		runutil.CloseWithLogOnErr(logger, l, "%s and metric listener", comp.String())
 	})
 	return nil

@@ -195,6 +195,8 @@ func runStore(
 		begin := time.Now()
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
+			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+
 			level.Info(logger).Log("msg", "initializing bucket store")
 			if err := bs.InitialSync(ctx); err != nil {
 				close(bucketStoreReady)
@@ -202,18 +204,6 @@ func runStore(
 			}
 			level.Info(logger).Log("msg", "bucket store ready", "init_duration", time.Since(begin).String())
 			close(bucketStoreReady)
-			<-ctx.Done()
-			return ctx.Err()
-		}, func(error) {
-			cancel()
-		})
-	}
-
-	{
-		ctx, cancel := context.WithCancel(context.Background())
-		g.Add(func() error {
-			<-bucketStoreReady
-			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
 			err := runutil.Repeat(syncInterval, ctx.Done(), func() error {
 				if err := bs.SyncBlocks(ctx); err != nil {
