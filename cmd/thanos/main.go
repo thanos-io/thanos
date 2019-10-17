@@ -349,29 +349,14 @@ func scheduleHTTPServer(g *run.Group, logger log.Logger, reg *prometheus.Registr
 		return errors.Wrap(err, "listen metrics address")
 	}
 
-	srv := http.Server{Handler: mux}
-	// This spawns a goroutine independent from rungroup to start Server as soon as it's scheduled.
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		readinessProber.SetHealthy()
-		level.Info(logger).Log("msg", "listening for requests and metrics", "component", comp.String(), "address", httpBindAddr)
-		if err := srv.Serve(l); err != http.ErrServerClosed {
-			level.Error(logger).Log(err, "serve %s and metrics", comp.String())
-		}
-		cancel()
-	}()
-
-	// Synchronize with rungroup to catch interrupts.
 	g.Add(func() error {
-		<-ctx.Done()
-		return ctx.Err()
+		level.Info(logger).Log("msg", "listening for requests and metrics", "component", comp.String(), "address", httpBindAddr)
+		readinessProber.SetHealthy()
+		return errors.Wrapf(http.Serve(l, mux), "serve %s and metrics", comp.String())
 	}, func(err error) {
 		readinessProber.SetNotHealthy(err)
+		l.Close()
 		runutil.CloseWithLogOnErr(logger, l, "%s and metric listener", comp.String())
-		if err := srv.Shutdown(context.Background()); err != nil {
-			level.Error(logger).Log(err, "HTTP server Shutdown: %v", comp.String())
-		}
-		cancel()
 	})
 	return nil
 }

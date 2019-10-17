@@ -280,7 +280,6 @@ func runRule(
 		extprom.WrapRegistererWithPrefix("thanos_ruler_query_apis_", reg),
 		dns.ResolverType(dnsSDResolver),
 	)
-
 	// Run rule evaluation and alert notifications.
 	var (
 		alertmgrs = newAlertmanagerSet(logger, alertmgrURLs, dns.ResolverType(dnsSDResolver))
@@ -484,7 +483,6 @@ func runRule(
 		})
 	}
 	// Start query API + UI, metrics and status probe HTTP server.
-	level.Debug(logger).Log("msg", "setting up http server")
 	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	{
 		router := route.New()

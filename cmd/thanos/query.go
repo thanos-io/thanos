@@ -343,7 +343,6 @@ func runQuery(
 		})
 	}
 	// Start query API + UI, metrics and status probe HTTP server.
-	level.Debug(logger).Log("msg", "setting up http server")
 	statusProber := prober.NewProber(comp, logger, reg)
 	{
 		router := route.New()

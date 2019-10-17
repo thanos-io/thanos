@@ -112,6 +112,16 @@ func runSidecar(
 	comp component.Component,
 	limitMinTime thanosmodel.TimeOrDurationValue,
 ) error {
+	promUp := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_sidecar_prometheus_up",
+		Help: "Boolean indicator whether the sidecar can reach its Prometheus peer.",
+	})
+	lastHeartbeat := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "thanos_sidecar_last_heartbeat_success_time_seconds",
+		Help: "Second timestamp of the last successful heartbeat.",
+	})
+	reg.MustRegister(promUp, lastHeartbeat)
+
 	var m = &promMetadata{
 		promURL: promURL,
 
@@ -134,7 +144,6 @@ func runSidecar(
 		uploads = false
 	}
 
-	level.Debug(logger).Log("msg", "setting up http server")
 	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
 	if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, nil, comp); err != nil {
@@ -143,16 +152,6 @@ func runSidecar(
 
 	// Setup all the concurrent groups.
 	{
-		promUp := prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "thanos_sidecar_prometheus_up",
-			Help: "Boolean indicator whether the sidecar can reach its Prometheus peer.",
-		})
-		lastHeartbeat := prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "thanos_sidecar_last_heartbeat_success_time_seconds",
-			Help: "Second timestamp of the last successful heartbeat.",
-		})
-		reg.MustRegister(promUp, lastHeartbeat)
-
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
 			// Only check Prometheus's flags when upload is enabled.
@@ -221,7 +220,6 @@ func runSidecar(
 			cancel()
 		})
 	}
-
 	{
 		l, err := net.Listen("tcp", grpcBindAddr)
 		if err != nil {
