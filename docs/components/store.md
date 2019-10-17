@@ -122,11 +122,11 @@ Flags:
 
 ```
 
-## Time based partioning
+## Time based partitioning
 
 By default Thanos Store Gateway looks at all the data in Object Store and returns it based on query's time range.
 
-Thanos Store `--min-time`, `--max-time` flags allows you to shard Thanos Store based on constant time or time duration relative to current time. 
+Thanos Store `--min-time`, `--max-time` flags allows you to shard Thanos Store based on constant time or time duration relative to current time.
 
 For example setting: `--min-time=-6w` & `--max-time==-2w` will make Thanos Store Gateway return metrics that fall within `now - 6 weeks` up to `now - 2 weeks` time range.
 
@@ -136,6 +136,12 @@ Thanos Store Gateway might not get new blocks immediately, as Time partitioning 
 
 We recommend having overlapping time ranges with Thanos Sidecar and other Thanos Store gateways as this will improve your resiliency to failures.
 
-Thanos Querier deals with overlapping time series by merging them together. 
+Thanos Querier deals with overlapping time series by merging them together.
 
 Filtering is done on a Chunk level, so Thanos Store might still return Samples which are outside of `--min-time` & `--max-time`.
+
+## Probes
+
+- Thanos Store exposes two endpoints for probing.
+  * `/-/healthy` starts as soon as initial setup completed.
+  * `/-/ready` starts after all the bootstrapping completed (e.g initial index building) and ready to serve traffic.
