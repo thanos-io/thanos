@@ -342,36 +342,6 @@ func runQuery(
 			stores.Close()
 		})
 	}
-	// Start query API + UI, metrics and status probe HTTP server.
-	statusProber := prober.NewProber(comp, logger, reg)
-	{
-		router := route.New()
-
-		// Redirect from / to /webRoutePrefix.
-		if webRoutePrefix != "" {
-			router.Get("/", func(w http.ResponseWriter, r *http.Request) {
-				http.Redirect(w, r, webRoutePrefix, http.StatusFound)
-			})
-		}
-
-		flagsMap := map[string]string{
-			// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
-			"web.external-prefix": webExternalPrefix,
-			"web.prefix-header":   webPrefixHeaderName,
-		}
-
-		ins := extpromhttp.NewInstrumentationMiddleware(reg)
-		ui.NewQueryUI(logger, reg, stores, flagsMap).Register(router.WithPrefix(webRoutePrefix), ins)
-
-		api := v1.NewAPI(logger, reg, engine, queryableCreator, enableAutodownsampling, enablePartialResponse, replicaLabels, instantDefaultMaxSourceResolution)
-
-		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
-
-		// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-		if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, router, comp); err != nil {
-			return errors.Wrap(err, "schedule HTTP server with probes")
-		}
-	}
 	// Run File Service Discovery and update the store set when the files are modified.
 	if fileSD != nil {
 		var fileSDUpdates chan []*targetgroup.Group
@@ -418,6 +388,37 @@ func runQuery(
 		}, func(error) {
 			cancel()
 		})
+	}
+	// Start query API + UI HTTP server.
+
+	statusProber := prober.NewProber(comp, logger, reg)
+	{
+		router := route.New()
+
+		// Redirect from / to /webRoutePrefix.
+		if webRoutePrefix != "" {
+			router.Get("/", func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, webRoutePrefix, http.StatusFound)
+			})
+		}
+
+		flagsMap := map[string]string{
+			// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
+			"web.external-prefix": webExternalPrefix,
+			"web.prefix-header":   webPrefixHeaderName,
+		}
+
+		ins := extpromhttp.NewInstrumentationMiddleware(reg)
+		ui.NewQueryUI(logger, reg, stores, flagsMap).Register(router.WithPrefix(webRoutePrefix), ins)
+
+		api := v1.NewAPI(logger, reg, engine, queryableCreator, enableAutodownsampling, enablePartialResponse, replicaLabels, instantDefaultMaxSourceResolution)
+
+		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
+
+		// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
+		if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, router, comp); err != nil {
+			return errors.Wrap(err, "schedule HTTP server with probes")
+		}
 	}
 	// Start query (proxy) gRPC StoreAPI.
 	{

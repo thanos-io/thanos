@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/thanos-io/thanos/pkg/extflag"
-	"github.com/thanos-io/thanos/pkg/prober"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -23,6 +22,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/shipper"
@@ -163,6 +163,7 @@ func runReceive(
 		Tracer:            tracer,
 	})
 
+	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
 		return err
@@ -171,12 +172,6 @@ func runReceive(
 	if len(confContentYaml) == 0 {
 		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
 		upload = false
-	}
-
-	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
-	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-	if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, nil, comp); err != nil {
-		return errors.Wrap(err, "schedule HTTP server with probes")
 	}
 
 	// Start all components while we wait for TSDB to open but only load
@@ -305,6 +300,12 @@ func runReceive(
 			close(cancel)
 		},
 		)
+	}
+
+	level.Debug(logger).Log("msg", "setting up http server")
+	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
+	if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, nil, comp); err != nil {
+		return errors.Wrap(err, "schedule HTTP server with probes")
 	}
 
 	level.Debug(logger).Log("msg", "setting up grpc server")
