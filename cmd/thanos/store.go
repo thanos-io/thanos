@@ -126,7 +126,11 @@ func runStore(
 	selectorRelabelConf *extflag.PathOrContent,
 	advertiseCompatibilityLabel bool,
 ) error {
+	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
 	statusProber := prober.NewProber(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, nil, component); err != nil {
+		return errors.Wrap(err, "schedule HTTP server")
+	}
 
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
@@ -185,29 +189,35 @@ func runStore(
 		return errors.Wrap(err, "create object storage store")
 	}
 
-	begin := time.Now()
-	level.Debug(logger).Log("msg", "initializing bucket store")
-	if err := bs.InitialSync(context.Background()); err != nil {
-		return errors.Wrap(err, "bucket store initial sync")
-	}
-	level.Debug(logger).Log("msg", "bucket store ready", "init_duration", time.Since(begin).String())
+	// bucketStoreReady signals when bucket store is ready.
+	bucketStoreReady := make(chan struct{})
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
-	ctx, cancel := context.WithCancel(context.Background())
-	g.Add(func() error {
-		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
-
-		err := runutil.Repeat(syncInterval, ctx.Done(), func() error {
-			if err := bs.SyncBlocks(ctx); err != nil {
-				level.Warn(logger).Log("msg", "syncing blocks failed", "err", err)
+			level.Info(logger).Log("msg", "initializing bucket store")
+			begin := time.Now()
+			if err := bs.InitialSync(ctx); err != nil {
+				close(bucketStoreReady)
+				return errors.Wrap(err, "bucket store initial sync")
 			}
-			return nil
-		})
+			level.Info(logger).Log("msg", "bucket store ready", "init_duration", time.Since(begin).String())
+			close(bucketStoreReady)
 
-		runutil.CloseWithLogOnErr(logger, bs, "bucket store")
-		return err
-	}, func(error) {
-		cancel()
-	})
+			err := runutil.Repeat(syncInterval, ctx.Done(), func() error {
+				if err := bs.SyncBlocks(ctx); err != nil {
+					level.Warn(logger).Log("msg", "syncing blocks failed", "err", err)
+				}
+				return nil
+			})
+
+			runutil.CloseWithLogOnErr(logger, bs, "bucket store")
+			return err
+		}, func(error) {
+			cancel()
+		})
+	}
 
 	l, err := net.Listen("tcp", grpcBindAddr)
 	if err != nil {
@@ -221,16 +231,13 @@ func runStore(
 	s := newStoreGRPCServer(logger, reg, tracer, bs, opts)
 
 	g.Add(func() error {
-		level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)
+		<-bucketStoreReady
+		level.Info(logger).Log("msg", "listening for StoreAPI gRPC", "address", grpcBindAddr)
 		statusProber.SetReady()
 		return errors.Wrap(s.Serve(l), "serve gRPC")
 	}, func(error) {
 		s.Stop()
 	})
-
-	if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, nil, component); err != nil {
-		return errors.Wrap(err, "schedule HTTP server")
-	}
 
 	level.Info(logger).Log("msg", "starting store node")
 	return nil
