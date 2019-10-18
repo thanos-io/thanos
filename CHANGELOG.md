@@ -22,7 +22,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ### Changed
 
 - [#1666](https://github.com/thanos-io/thanos/pull/1666) `thanos_compact_group_compactions_total` now counts block compactions, so operation that resulted in compacted block. The old behaviour
-is now exposed by new metric: `thanos_compact_group_compaction_runs_total` which counts compaction runs overall.
+is now exposed by new metric: `thanos_compact_group_compaction_runs_started_total` and `thanos_compact_group_compaction_runs_completed_total` which counts compaction runs overall.
 
 ## [v0.8.1](https://github.com/thanos-io/thanos/releases/tag/v0.8.1) - 2019.10.14
 

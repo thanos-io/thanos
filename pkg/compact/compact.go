@@ -64,7 +64,8 @@ type syncerMetrics struct {
 	garbageCollectionFailures prometheus.Counter
 	garbageCollectionDuration prometheus.Histogram
 	compactions               *prometheus.CounterVec
-	compactionsRuns           *prometheus.CounterVec
+	compactionRunsStarted     *prometheus.CounterVec
+	compactionRunsCompleted   *prometheus.CounterVec
 	compactionFailures        *prometheus.CounterVec
 }
 
@@ -111,9 +112,13 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 		Name: "thanos_compact_group_compactions_total",
 		Help: "Total number of group compactions attempts, resulted with new block.",
 	}, []string{"group"})
-	m.compactionsRuns = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "thanos_compact_group_compaction_runs_total",
-		Help: "Total number of group compactions run attempts. This also includes compactor group runs that resulted with no compaction.",
+	m.compactionRunsStarted = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_compact_group_compaction_runs_started_total",
+		Help: "Total number of group compactions run attempts.",
+	}, []string{"group"})
+	m.compactionRunsCompleted = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_compact_group_compaction_runs_completed_total",
+		Help: "Total number of group compactions run completed. This also includes compactor group runs that resulted with no compaction.",
 	}, []string{"group"})
 	m.compactionFailures = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_group_compactions_failures_total",
@@ -130,7 +135,8 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 			m.garbageCollectionFailures,
 			m.garbageCollectionDuration,
 			m.compactions,
-			m.compactionsRuns,
+			m.compactionRunsStarted,
+			m.compactionRunsCompleted,
 			m.compactionFailures,
 		)
 	}
@@ -366,7 +372,8 @@ func (c *Syncer) Groups() (res []*Group, err error) {
 				m.Thanos.Downsample.Resolution,
 				c.acceptMalformedIndex,
 				c.metrics.compactions.WithLabelValues(GroupKey(m.Thanos)),
-				c.metrics.compactionsRuns.WithLabelValues(GroupKey(m.Thanos)),
+				c.metrics.compactionRunsStarted.WithLabelValues(GroupKey(m.Thanos)),
+				c.metrics.compactionRunsCompleted.WithLabelValues(GroupKey(m.Thanos)),
 				c.metrics.compactionFailures.WithLabelValues(GroupKey(m.Thanos)),
 				c.metrics.garbageCollectedBlocks,
 			)
@@ -513,7 +520,8 @@ type Group struct {
 	blocks                      map[ulid.ULID]*metadata.Meta
 	acceptMalformedIndex        bool
 	compactions                 prometheus.Counter
-	compactionRuns              prometheus.Counter
+	compactionRunsStarted       prometheus.Counter
+	compactionRunsCompleted     prometheus.Counter
 	compactionFailures          prometheus.Counter
 	groupGarbageCollectedBlocks prometheus.Counter
 }
@@ -526,7 +534,8 @@ func newGroup(
 	resolution int64,
 	acceptMalformedIndex bool,
 	compactions prometheus.Counter,
-	compactionRuns prometheus.Counter,
+	compactionRunsStarted prometheus.Counter,
+	compactionRunsCompleted prometheus.Counter,
 	compactionFailures prometheus.Counter,
 	groupGarbageCollectedBlocks prometheus.Counter,
 ) (*Group, error) {
@@ -541,7 +550,8 @@ func newGroup(
 		blocks:                      map[ulid.ULID]*metadata.Meta{},
 		acceptMalformedIndex:        acceptMalformedIndex,
 		compactions:                 compactions,
-		compactionRuns:              compactionRuns,
+		compactionRunsStarted:       compactionRunsStarted,
+		compactionRunsCompleted:     compactionRunsCompleted,
 		compactionFailures:          compactionFailures,
 		groupGarbageCollectedBlocks: groupGarbageCollectedBlocks,
 	}
@@ -595,7 +605,7 @@ func (cg *Group) Resolution() int64 {
 // Compact plans and runs a single compaction against the group. The compacted result
 // is uploaded into the bucket the blocks were retrieved from.
 func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor) (bool, ulid.ULID, error) {
-	cg.compactionRuns.Inc()
+	cg.compactionRunsStarted.Inc()
 
 	subDir := filepath.Join(dir, cg.Key())
 
@@ -615,8 +625,10 @@ func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	shouldRerun, compID, err := cg.compact(ctx, subDir, comp)
 	if err != nil {
 		cg.compactionFailures.Inc()
+		return false, ulid.ULID{}, err
 	}
-	return shouldRerun, compID, err
+	cg.compactionRunsCompleted.Inc()
+	return shouldRerun, compID, nil
 }
 
 // Issue347Error is a type wrapper for errors that should invoke repair process for broken block.
