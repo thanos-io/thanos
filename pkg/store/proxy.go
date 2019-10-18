@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -181,6 +182,18 @@ func (s ctxRespSender) send(r *storepb.SeriesResponse) {
 // Series returns all series for a requested time range and label matcher. Requested series are taken from other
 // stores and proxied to RPC client. NOTE: Resulted data are not trimmed exactly to min and max time range.
 func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+	if os.Getenv("CHUNKED") != "" {
+		level.Info(s.logger).Log("msg", "func (s *ProxyStore) Series -> CHUNKED")
+		return s.SeriesChunked(r, srv)
+	}
+
+	level.Info(s.logger).Log("msg", "func (s *ProxyStore) Series -> ORIG")
+	return s.SeriesOrig(r, srv)
+}
+
+// Series returns all series for a requested time range and label matcher. Requested series are taken from other
+// stores and proxied to RPC client. NOTE: Resulted data are not trimmed exactly to min and max time range.
+func (s *ProxyStore) SeriesOrig(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	match, newMatchers, err := matchesExternalLabels(r.Matchers, s.selectorLabels)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
@@ -291,6 +304,90 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		return err
 	}
 	return nil
+}
+
+// Series returns all series for a requested time range and label matcher. Requested series are taken from other
+// stores and proxied to RPC client. NOTE: Resulted data are not trimmed exactly to min and max time range.
+func (s *ProxyStore) SeriesChunked(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+	match, newMatchers, err := matchesExternalLabels(r.Matchers, s.selectorLabels)
+	if err != nil {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
+	if !match {
+		return nil
+	}
+
+	if len(newMatchers) == 0 {
+		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding external labels)").Error())
+	}
+
+	ctx := srv.Context()
+	times := chopTime(ctx, interval{r.MinTime, r.MaxTime}, 1*time.Hour)
+	var mergedSets []storepb.SeriesSet
+
+	for t := range times {
+		level.Info(s.logger).Log("msg", "chunk", "mint", t.MinTime, "maxt", t.MaxTime)
+
+		slotR := *r
+		slotR.MinTime = t.MinTime
+		slotR.MaxTime = t.MaxTime
+
+		set, err := s.SeriesStream(ctx, &slotR)
+		if err != nil {
+			return err
+		}
+
+		mergedSets = append(mergedSets, set)
+	}
+
+	level.Info(s.logger).Log("msg", "starting send")
+
+	result := storepb.MergeSeriesSets(mergedSets...)
+	for result.Next() {
+		var series storepb.Series
+		series.Labels, series.Chunks = result.At()
+		if err := srv.Send(storepb.NewSeriesResponse(&series)); err != nil {
+			return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
+		}
+	}
+	return result.Err()
+}
+
+// Series returns all series for a requested time range and label matcher. Requested series are taken from other
+// stores and proxied to RPC client. NOTE: Resulted data are not trimmed exactly to min and max time range.
+func (s *ProxyStore) SeriesStream(ctx context.Context, r *storepb.SeriesRequest) (storepb.SeriesSet, error) {
+	match, newMatchers, err := matchesExternalLabels(r.Matchers, s.selectorLabels)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if !match {
+		return storepb.EmptySeriesSet(), nil
+	}
+
+	if len(newMatchers) == 0 {
+		return nil, status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding external labels)").Error())
+	}
+
+	var (
+		seriesSet []storepb.SeriesSet
+	)
+
+	for _, st := range s.stores() {
+		sc, err := st.Series(ctx, r)
+		if err != nil {
+			return nil, errors.Wrap(err, "st.Series(ctx, r)")
+		}
+
+		series, err := startStreamSeriesSet2(ctx, s.logger, sc)
+		if err != nil {
+			return nil, errors.Wrap(err, "startStreamSeriesSet2(ctx, s.logger, sc)")
+		}
+
+		seriesSet = append(seriesSet, series)
+	}
+
+	mergedSet := storepb.MergeSeriesSets(seriesSet...)
+	return mergedSet, mergedSet.Err()
 }
 
 type warnSender interface {
