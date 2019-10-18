@@ -343,7 +343,7 @@ In order to use AliYun OSS object storage, you should first create a bucket with
 
 To use AliYun OSS object storage, please specify following yaml configuration file in `objstore.config*` flag.
 
-[embedmd]:# (flags/config_aliyunoss.txt $)
+[embedmd]:# (flags/config_bucket_aliyunoss.txt $)
 ```$
 type: ALIYUNOSS
 config:
