@@ -232,7 +232,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 
 		// Test label name with slash, regression: https://github.com/thanos-io/thanos/issues/1661.
 		extLabels := labels.Labels{{Name: "e1", Value: "1/weird"}}
-		extLabels2 := labels.Labels{{Name: "e2", Value: "1"}}
+		extLabels2 := labels.Labels{{Name: "e1", Value: "1"}}
 		metas := createAndUpload(t, bkt, []blockgenSpec{
 			{
 				numSamples: 100, mint: 0, maxt: 1000, extLset: extLabels, res: 124,
@@ -313,21 +313,21 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		testutil.Equals(t, 5.0, promtest.ToFloat64(sy.metrics.garbageCollectedBlocks))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectionFailures))
 		testutil.Equals(t, 4, MetricCount(sy.metrics.compactions))
-		testutil.Equals(t, 1.0, promtest.ToFloat64(sy.metrics.compactions.WithLabelValues(GroupKey(*metas[0]))))
-		testutil.Equals(t, 1.0, promtest.ToFloat64(sy.metrics.compactions.WithLabelValues(GroupKey(*metas[7]))))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactions.WithLabelValues(GroupKey(*metas[4]))))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactions.WithLabelValues(GroupKey(*metas[5]))))
+		testutil.Equals(t, 1.0, promtest.ToFloat64(sy.metrics.compactions.WithLabelValues(GroupKey(metas[0].Thanos))))
+		testutil.Equals(t, 1.0, promtest.ToFloat64(sy.metrics.compactions.WithLabelValues(GroupKey(metas[7].Thanos))))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactions.WithLabelValues(GroupKey(metas[4].Thanos))))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactions.WithLabelValues(GroupKey(metas[5].Thanos))))
 		testutil.Equals(t, 4, MetricCount(sy.metrics.compactionsRuns))
-		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionsRuns.WithLabelValues(GroupKey(*metas[0]))))
-		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionsRuns.WithLabelValues(GroupKey(*metas[7]))))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionsRuns.WithLabelValues(GroupKey(metas[0].Thanos))))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionsRuns.WithLabelValues(GroupKey(metas[7].Thanos))))
 		// TODO(bwplotka): Looks like we do some unnecessary loops. Not a major problem but investigate.
-		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionsRuns.WithLabelValues(GroupKey(*metas[4]))))
-		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionsRuns.WithLabelValues(GroupKey(*metas[5]))))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionsRuns.WithLabelValues(GroupKey(metas[4].Thanos))))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionsRuns.WithLabelValues(GroupKey(metas[5].Thanos))))
 		testutil.Equals(t, 4, MetricCount(sy.metrics.compactionFailures))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactionFailures.WithLabelValues(GroupKey(*metas[0]))))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactionFailures.WithLabelValues(GroupKey(*metas[7]))))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactionFailures.WithLabelValues(GroupKey(*metas[4]))))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactionFailures.WithLabelValues(GroupKey(*metas[5]))))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactionFailures.WithLabelValues(GroupKey(metas[0].Thanos))))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactionFailures.WithLabelValues(GroupKey(metas[7].Thanos))))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactionFailures.WithLabelValues(GroupKey(metas[4].Thanos))))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactionFailures.WithLabelValues(GroupKey(metas[5].Thanos))))
 
 		_, err = os.Stat(dir)
 		testutil.Assert(t, os.IsNotExist(err), "dir %s should be remove after compaction.", dir)
@@ -357,7 +357,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 				return err
 			}
 
-			others[GroupKey(meta)] = meta
+			others[GroupKey(meta.Thanos)] = meta
 			return nil
 		}))
 

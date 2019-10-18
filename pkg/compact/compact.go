@@ -341,12 +341,12 @@ func (c *Syncer) removeIfMetaMalformed(ctx context.Context, id ulid.ULID) (remov
 
 // GroupKey returns a unique identifier for the group the block belongs to. It considers
 // the downsampling resolution and the block's labels.
-func GroupKey(meta metadata.Meta) string {
-	return groupKey(meta.Thanos.Downsample.Resolution, labels.FromMap(meta.Thanos.Labels))
+func GroupKey(meta metadata.Thanos) string {
+	return groupKey(meta.Downsample.Resolution, labels.FromMap(meta.Labels))
 }
 
 func groupKey(res int64, lbls labels.Labels) string {
-	return fmt.Sprintf("%d@%s", res, lbls)
+	return fmt.Sprintf("%d@%s", res, fmt.Sprintf("%v", lbls.Hash()))
 }
 
 // Groups returns the compaction groups for all blocks currently known to the syncer.
@@ -357,23 +357,23 @@ func (c *Syncer) Groups() (res []*Group, err error) {
 
 	groups := map[string]*Group{}
 	for _, m := range c.blocks {
-		g, ok := groups[GroupKey(*m)]
+		g, ok := groups[GroupKey(m.Thanos)]
 		if !ok {
 			g, err = newGroup(
-				log.With(c.logger, "compactionGroup", GroupKey(*m)),
+				log.With(c.logger, "compactionGroup", GroupKey(m.Thanos)),
 				c.bkt,
 				labels.FromMap(m.Thanos.Labels),
 				m.Thanos.Downsample.Resolution,
 				c.acceptMalformedIndex,
-				c.metrics.compactions.WithLabelValues(GroupKey(*m)),
-				c.metrics.compactionsRuns.WithLabelValues(GroupKey(*m)),
-				c.metrics.compactionFailures.WithLabelValues(GroupKey(*m)),
+				c.metrics.compactions.WithLabelValues(GroupKey(m.Thanos)),
+				c.metrics.compactionsRuns.WithLabelValues(GroupKey(m.Thanos)),
+				c.metrics.compactionFailures.WithLabelValues(GroupKey(m.Thanos)),
 				c.metrics.garbageCollectedBlocks,
 			)
 			if err != nil {
 				return nil, errors.Wrap(err, "create compaction group")
 			}
-			groups[GroupKey(*m)] = g
+			groups[GroupKey(m.Thanos)] = g
 			res = append(res, g)
 		}
 		if err := g.Add(m); err != nil {
@@ -839,8 +839,8 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 			return false, ulid.ULID{}, errors.Wrapf(err, "read meta from %s", pdir)
 		}
 
-		if cg.Key() != GroupKey(*meta) {
-			return false, ulid.ULID{}, halt(errors.Wrapf(err, "compact planned compaction for mixed groups. group: %s, planned block's group: %s", cg.Key(), GroupKey(*meta)))
+		if cg.Key() != GroupKey(meta.Thanos) {
+			return false, ulid.ULID{}, halt(errors.Wrapf(err, "compact planned compaction for mixed groups. group: %s, planned block's group: %s", cg.Key(), GroupKey(meta.Thanos)))
 		}
 
 		for _, s := range meta.Compaction.Sources {

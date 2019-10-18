@@ -214,10 +214,10 @@ func downsampleBucket(
 				continue
 			}
 			if err := processDownsampling(ctx, logger, bkt, m, dir, downsample.ResLevel1); err != nil {
-				metrics.downsampleFailures.WithLabelValues(compact.GroupKey(*m)).Inc()
+				metrics.downsampleFailures.WithLabelValues(compact.GroupKey(m.Thanos)).Inc()
 				return errors.Wrap(err, "downsampling to 5 min")
 			}
-			metrics.downsamples.WithLabelValues(compact.GroupKey(*m)).Inc()
+			metrics.downsamples.WithLabelValues(compact.GroupKey(m.Thanos)).Inc()
 
 		case downsample.ResLevel1:
 			missing := false
@@ -237,10 +237,10 @@ func downsampleBucket(
 				continue
 			}
 			if err := processDownsampling(ctx, logger, bkt, m, dir, downsample.ResLevel2); err != nil {
-				metrics.downsampleFailures.WithLabelValues(compact.GroupKey(*m))
+				metrics.downsampleFailures.WithLabelValues(compact.GroupKey(m.Thanos))
 				return errors.Wrap(err, "downsampling to 60 min")
 			}
-			metrics.downsamples.WithLabelValues(compact.GroupKey(*m))
+			metrics.downsamples.WithLabelValues(compact.GroupKey(m.Thanos))
 		}
 	}
 	return nil
