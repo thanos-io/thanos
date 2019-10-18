@@ -10,6 +10,7 @@ type interval struct {
 	MaxTime int64
 }
 
+// chopTime splits interval into chunks of given duration.
 func chopTime(ctx context.Context, i interval, chopDuration time.Duration) <-chan interval {
 	res := make(chan interval)
 

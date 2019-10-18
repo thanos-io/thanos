@@ -184,16 +184,18 @@ func (s ctxRespSender) send(r *storepb.SeriesResponse) {
 func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	if os.Getenv("CHUNKED") != "" {
 		level.Info(s.logger).Log("msg", "func (s *ProxyStore) Series -> CHUNKED")
-		return s.SeriesChunked(r, srv)
+		return s.seriesChunked(r, srv)
 	}
 
 	level.Info(s.logger).Log("msg", "func (s *ProxyStore) Series -> ORIG")
-	return s.SeriesOrig(r, srv)
+	return s.seriesOrig(r, srv)
 }
 
-// Series returns all series for a requested time range and label matcher. Requested series are taken from other
+// seriesOrig returns all series for a requested time range and label matcher. Requested series are taken from other
 // stores and proxied to RPC client. NOTE: Resulted data are not trimmed exactly to min and max time range.
-func (s *ProxyStore) SeriesOrig(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+//
+// The original implementation.
+func (s *ProxyStore) seriesOrig(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	match, newMatchers, err := matchesExternalLabels(r.Matchers, s.selectorLabels)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
@@ -306,9 +308,10 @@ func (s *ProxyStore) SeriesOrig(r *storepb.SeriesRequest, srv storepb.Store_Seri
 	return nil
 }
 
-// Series returns all series for a requested time range and label matcher. Requested series are taken from other
-// stores and proxied to RPC client. NOTE: Resulted data are not trimmed exactly to min and max time range.
-func (s *ProxyStore) SeriesChunked(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+// seriesChunked returns all series for a requested time range and label matcher in a chunked way.
+// The requested time interval is shopped into smaller pieces and each is requested from Store Gateway.
+// Everything is then assembled here.
+func (s *ProxyStore) seriesChunked(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	match, newMatchers, err := matchesExternalLabels(r.Matchers, s.selectorLabels)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
@@ -332,7 +335,7 @@ func (s *ProxyStore) SeriesChunked(r *storepb.SeriesRequest, srv storepb.Store_S
 		slotR.MinTime = t.MinTime
 		slotR.MaxTime = t.MaxTime
 
-		set, err := s.SeriesStream(ctx, &slotR)
+		set, err := s.seriesForTimeInterval(ctx, &slotR)
 		if err != nil {
 			return err
 		}
@@ -353,9 +356,8 @@ func (s *ProxyStore) SeriesChunked(r *storepb.SeriesRequest, srv storepb.Store_S
 	return result.Err()
 }
 
-// Series returns all series for a requested time range and label matcher. Requested series are taken from other
-// stores and proxied to RPC client. NOTE: Resulted data are not trimmed exactly to min and max time range.
-func (s *ProxyStore) SeriesStream(ctx context.Context, r *storepb.SeriesRequest) (storepb.SeriesSet, error) {
+// seriesForTimeInterval returns SeriesSet for the time interval given in SeriesRequest.
+func (s *ProxyStore) seriesForTimeInterval(ctx context.Context, r *storepb.SeriesRequest) (storepb.SeriesSet, error) {
 	match, newMatchers, err := matchesExternalLabels(r.Matchers, s.selectorLabels)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
