@@ -599,6 +599,12 @@ func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 
 	subDir := filepath.Join(dir, cg.Key())
 
+	defer func() {
+		if err := os.RemoveAll(subDir); err != nil {
+			level.Error(cg.logger).Log("msg", "failed to remove compaction group work directory", "path", subDir, "err", err)
+		}
+	}()
+
 	if err := os.RemoveAll(subDir); err != nil {
 		return false, ulid.ULID{}, errors.Wrap(err, "clean compaction group dir")
 	}
