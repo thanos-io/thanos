@@ -13,6 +13,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/azure"
 	"github.com/thanos-io/thanos/pkg/objstore/cos"
 	"github.com/thanos-io/thanos/pkg/objstore/gcs"
+	"github.com/thanos-io/thanos/pkg/objstore/oss"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/objstore/swift"
 	yaml "gopkg.in/yaml.v2"
@@ -21,11 +22,12 @@ import (
 type ObjProvider string
 
 const (
-	GCS   ObjProvider = "GCS"
-	S3    ObjProvider = "S3"
-	AZURE ObjProvider = "AZURE"
-	SWIFT ObjProvider = "SWIFT"
-	COS   ObjProvider = "COS"
+	GCS       ObjProvider = "GCS"
+	S3        ObjProvider = "S3"
+	AZURE     ObjProvider = "AZURE"
+	SWIFT     ObjProvider = "SWIFT"
+	COS       ObjProvider = "COS"
+	ALIYUNOSS ObjProvider = "ALIYUNOSS"
 )
 
 type BucketConfig struct {
@@ -59,6 +61,8 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 		bucket, err = swift.NewContainer(logger, config)
 	case string(COS):
 		bucket, err = cos.NewBucket(logger, config, component)
+	case string(ALIYUNOSS):
+		bucket, err = oss.NewBucket(logger, config, component)
 	default:
 		return nil, errors.Errorf("bucket with type %s is not supported", bucketConf.Type)
 	}
