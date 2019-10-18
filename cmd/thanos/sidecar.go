@@ -32,8 +32,6 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
-const waitForExternalLabelsTimeout = 10 * time.Minute
-
 func registerSidecar(m map[string]setupFunc, app *kingpin.Application) {
 	cmd := app.Command(component.Sidecar.String(), "sidecar for Prometheus server")
 
@@ -42,6 +40,9 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application) {
 
 	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API. For better performance use local network.").
 		Default("http://localhost:9090").URL()
+
+	promReadyTimeout := cmd.Flag("prometheus.ready_timeout", "Maximum time to wait for the Prometheus instance to start up").
+		Default("10m").Duration()
 
 	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").
 		Default("./data").String()
@@ -81,6 +82,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application) {
 			*clientCA,
 			*httpBindAddr,
 			*promURL,
+			*promReadyTimeout,
 			*dataDir,
 			objStoreConfig,
 			rl,
@@ -102,6 +104,7 @@ func runSidecar(
 	clientCA string,
 	httpBindAddr string,
 	promURL *url.URL,
+	promReadyTimeout time.Duration,
 	dataDir string,
 	objStoreConfig *extflag.PathOrContent,
 	reloader *reloader.Reloader,
@@ -268,7 +271,7 @@ func runSidecar(
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
-			extLabelsCtx, cancel := context.WithTimeout(ctx, waitForExternalLabelsTimeout)
+			extLabelsCtx, cancel := context.WithTimeout(ctx, promReadyTimeout)
 			defer cancel()
 
 			if err := runutil.Retry(2*time.Second, extLabelsCtx.Done(), func() error {
@@ -277,7 +280,7 @@ func runSidecar(
 				}
 				return nil
 			}); err != nil {
-				return errors.Wrapf(err, "aborting as no external labels found after waiting %s", waitForExternalLabelsTimeout)
+				return errors.Wrapf(err, "aborting as no external labels found after waiting %s", promReadyTimeout)
 			}
 
 			var s *shipper.Shipper
