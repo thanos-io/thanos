@@ -109,7 +109,7 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 
 	rc, err := bkt.Get(ctx, src)
 	if err != nil {
-		return errors.Wrap(err, "get file")
+		return errors.Wrapf(err, "get file %s", src)
 	}
 	defer runutil.CloseWithLogOnErr(logger, rc, "download block's file reader")
 
