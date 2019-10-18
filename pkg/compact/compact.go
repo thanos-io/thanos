@@ -64,22 +64,17 @@ type syncerMetrics struct {
 	garbageCollectionFailures prometheus.Counter
 	garbageCollectionDuration prometheus.Histogram
 	compactions               *prometheus.CounterVec
+	compactionsRuns           *prometheus.CounterVec
 	compactionFailures        *prometheus.CounterVec
 }
-
-const (
-	MetricSyncMetaName = "thanos_compact_sync_meta_total"
-	MetricSyncMetaHelp = "Total number of sync meta operations."
-)
 
 func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 	var m syncerMetrics
 
 	m.syncMetas = prometheus.NewCounter(prometheus.CounterOpts{
-		Name: MetricSyncMetaName,
-		Help: MetricSyncMetaHelp,
+		Name: "thanos_compact_sync_meta_total",
+		Help: "Total number of sync meta operations.",
 	})
-
 	m.syncMetaFailures = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compact_sync_meta_failures_total",
 		Help: "Total number of failed sync meta operations.",
@@ -96,7 +91,6 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 		Name: "thanos_compact_garbage_collected_blocks_total",
 		Help: "Total number of deleted blocks by compactor.",
 	})
-
 	m.garbageCollections = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compact_garbage_collection_total",
 		Help: "Total number of garbage collection operations.",
@@ -115,7 +109,11 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 
 	m.compactions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_group_compactions_total",
-		Help: "Total number of group compactions attempts.",
+		Help: "Total number of group compactions attempts, resulted with new block.",
+	}, []string{"group"})
+	m.compactionsRuns = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_compact_group_compaction_runs_total",
+		Help: "Total number of group compactions run attempts. This also includes compactor group runs that resulted with no compaction.",
 	}, []string{"group"})
 	m.compactionFailures = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_group_compactions_failures_total",
@@ -132,6 +130,7 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 			m.garbageCollectionFailures,
 			m.garbageCollectionDuration,
 			m.compactions,
+			m.compactionsRuns,
 			m.compactionFailures,
 		)
 	}
@@ -367,6 +366,7 @@ func (c *Syncer) Groups() (res []*Group, err error) {
 				m.Thanos.Downsample.Resolution,
 				c.acceptMalformedIndex,
 				c.metrics.compactions.WithLabelValues(GroupKey(*m)),
+				c.metrics.compactionsRuns.WithLabelValues(GroupKey(*m)),
 				c.metrics.compactionFailures.WithLabelValues(GroupKey(*m)),
 				c.metrics.garbageCollectedBlocks,
 			)
@@ -513,6 +513,7 @@ type Group struct {
 	blocks                      map[ulid.ULID]*metadata.Meta
 	acceptMalformedIndex        bool
 	compactions                 prometheus.Counter
+	compactionRuns              prometheus.Counter
 	compactionFailures          prometheus.Counter
 	groupGarbageCollectedBlocks prometheus.Counter
 }
@@ -525,6 +526,7 @@ func newGroup(
 	resolution int64,
 	acceptMalformedIndex bool,
 	compactions prometheus.Counter,
+	compactionRuns prometheus.Counter,
 	compactionFailures prometheus.Counter,
 	groupGarbageCollectedBlocks prometheus.Counter,
 ) (*Group, error) {
@@ -539,6 +541,7 @@ func newGroup(
 		blocks:                      map[ulid.ULID]*metadata.Meta{},
 		acceptMalformedIndex:        acceptMalformedIndex,
 		compactions:                 compactions,
+		compactionRuns:              compactionRuns,
 		compactionFailures:          compactionFailures,
 		groupGarbageCollectedBlocks: groupGarbageCollectedBlocks,
 	}
@@ -592,6 +595,8 @@ func (cg *Group) Resolution() int64 {
 // Compact plans and runs a single compaction against the group. The compacted result
 // is uploaded into the bucket the blocks were retrieved from.
 func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor) (bool, ulid.ULID, error) {
+	cg.compactionRuns.Inc()
+
 	subDir := filepath.Join(dir, cg.Key())
 
 	if err := os.RemoveAll(subDir); err != nil {
@@ -605,7 +610,6 @@ func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	if err != nil {
 		cg.compactionFailures.Inc()
 	}
-	cg.compactions.Inc()
 	return shouldRerun, compID, err
 }
 
@@ -899,6 +903,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		// Even though this block was empty, there may be more work to do.
 		return true, ulid.ULID{}, nil
 	}
+	cg.compactions.Inc()
 	level.Debug(cg.logger).Log("msg", "compacted blocks",
 		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin))
 
@@ -1009,9 +1014,10 @@ func NewBucketCompactor(
 func (c *BucketCompactor) Compact(ctx context.Context) error {
 	defer func() {
 		if err := os.RemoveAll(c.compactDir); err != nil {
-			level.Error(c.logger).Log("msg", "failed to remove compaction cache directory", "path", c.compactDir, "err", err)
+			level.Error(c.logger).Log("msg", "failed to remove compaction work directory", "path", c.compactDir, "err", err)
 		}
 	}()
+
 	// Loop over bucket and compact until there's no work left.
 	for {
 		var (
@@ -1068,6 +1074,8 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 
 		level.Info(c.logger).Log("msg", "start of GC")
 
+		// Blocks that were compacted are garbage collected after each Compaction.
+		// However if compactor crashes we need to resolve those on startup.
 		if err := c.sy.GarbageCollect(ctx); err != nil {
 			return errors.Wrap(err, "garbage")
 		}

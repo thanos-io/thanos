@@ -344,15 +344,15 @@ func runCompact(
 }
 
 const (
-	MetricIndexGenerateName = "thanos_compact_generated_index_total"
-	MetricIndexGenerateHelp = "Total number of generated indexes."
+	metricIndexGenerateName = "thanos_compact_generated_index_total"
+	metricIndexGenerateHelp = "Total number of generated indexes."
 )
 
 // genMissingIndexCacheFiles scans over all blocks, generates missing index cache files and uploads them to object storage.
 func genMissingIndexCacheFiles(ctx context.Context, logger log.Logger, reg *prometheus.Registry, bkt objstore.Bucket, dir string) error {
 	genIndex := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: MetricIndexGenerateName,
-		Help: MetricIndexGenerateHelp,
+		Name: metricIndexGenerateName,
+		Help: metricIndexGenerateHelp,
 	})
 	reg.MustRegister(genIndex)
 
