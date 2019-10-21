@@ -17,6 +17,8 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/index"
@@ -164,146 +166,280 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		groups, err := sy.Groups()
 		testutil.Ok(t, err)
 
-		testutil.Equals(t, "0@{}", groups[0].Key())
+		testutil.Equals(t, "0@17241709254077376921", groups[0].Key())
 		testutil.Equals(t, []ulid.ULID{metas[9].ULID, m3.ULID}, groups[0].IDs())
-		testutil.Equals(t, "1000@{}", groups[1].Key())
+		testutil.Equals(t, "1000@17241709254077376921", groups[1].Key())
 		testutil.Equals(t, []ulid.ULID{m4.ULID}, groups[1].IDs())
 	})
 }
 
+func MetricCount(c prometheus.Collector) int {
+	var (
+		mCount int
+		mChan  = make(chan prometheus.Metric)
+		done   = make(chan struct{})
+	)
+
+	go func() {
+		for range mChan {
+			mCount++
+		}
+		close(done)
+	}()
+
+	c.Collect(mChan)
+	close(mChan)
+	<-done
+
+	return mCount
+}
+
 func TestGroup_Compact_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
-		prepareDir, err := ioutil.TempDir("", "test-compact-prepare")
-		testutil.Ok(t, err)
-		defer func() { testutil.Ok(t, os.RemoveAll(prepareDir)) }()
-
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
-
-		var metas []*metadata.Meta
-		extLset := labels.Labels{{Name: "e1", Value: "1"}}
-		b1, err := testutil.CreateBlock(ctx, prepareDir, []labels.Labels{
-			{{Name: "a", Value: "1"}},
-			{{Name: "a", Value: "2"}, {Name: "a", Value: "2"}},
-			{{Name: "a", Value: "3"}},
-			{{Name: "a", Value: "4"}},
-		}, 100, 0, 1000, extLset, 124)
-		testutil.Ok(t, err)
-
-		meta, err := metadata.Read(filepath.Join(prepareDir, b1.String()))
-		testutil.Ok(t, err)
-		metas = append(metas, meta)
-
-		b3, err := testutil.CreateBlock(ctx, prepareDir, []labels.Labels{
-			{{Name: "a", Value: "3"}},
-			{{Name: "a", Value: "4"}},
-			{{Name: "a", Value: "5"}},
-			{{Name: "a", Value: "6"}},
-		}, 100, 2001, 3000, extLset, 124)
-		testutil.Ok(t, err)
-
-		// Mix order to make sure compact is able to deduct min time / max time.
-		meta, err = metadata.Read(filepath.Join(prepareDir, b3.String()))
-		testutil.Ok(t, err)
-		metas = append(metas, meta)
-
-		// Currently TSDB does not produces empty blocks (see: https://github.com/prometheus/tsdb/pull/374). However before v2.7.0 it was
-		// so we still want to mimick this case as close as possible.
-		b2, err := createEmptyBlock(prepareDir, 1001, 2000, extLset, 124)
-		testutil.Ok(t, err)
-
-		// blocks" count=3 mint=0 maxt=3000 ulid=01D1RQCRRJM77KQQ4GYDSC50GM sources="[01D1RQCRMNZBVHBPGRPG2M3NZQ 01D1RQCRPJMYN45T65YA1PRWB7 01D1RQCRNMTWJKTN5QQXFNKKH8]".
-
-		meta, err = metadata.Read(filepath.Join(prepareDir, b2.String()))
-		testutil.Ok(t, err)
-		metas = append(metas, meta)
-
-		// Due to TSDB compaction delay (not compacting fresh block), we need one more block to be pushed to trigger compaction.
-		freshB, err := testutil.CreateBlock(ctx, prepareDir, []labels.Labels{
-			{{Name: "a", Value: "2"}},
-			{{Name: "a", Value: "3"}},
-			{{Name: "a", Value: "4"}},
-			{{Name: "a", Value: "5"}},
-		}, 100, 3001, 4000, extLset, 124)
-		testutil.Ok(t, err)
-
-		meta, err = metadata.Read(filepath.Join(prepareDir, freshB.String()))
-		testutil.Ok(t, err)
-		metas = append(metas, meta)
-
-		// Upload and forget about tmp dir with all blocks. We want to ensure same state we will have on compactor.
-		testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(prepareDir, b1.String())))
-		testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(prepareDir, b2.String())))
-		testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(prepareDir, b3.String())))
-		testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(prepareDir, freshB.String())))
 
 		// Create fresh, empty directory for actual test.
 		dir, err := ioutil.TempDir("", "test-compact")
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-		metrics := newSyncerMetrics(nil)
-		g, err := newGroup(
-			nil,
-			bkt,
-			extLset,
-			124,
-			false,
-			metrics.compactions.WithLabelValues(""),
-			metrics.compactionFailures.WithLabelValues(""),
-			metrics.garbageCollectedBlocks,
-		)
+		logger := log.NewLogfmtLogger(os.Stderr)
+
+		reg := prometheus.NewRegistry()
+
+		sy, err := NewSyncer(logger, reg, bkt, 0*time.Second, 5, false, nil)
 		testutil.Ok(t, err)
 
-		comp, err := tsdb.NewLeveledCompactor(ctx, nil, log.NewLogfmtLogger(os.Stderr), []int64{1000, 3000}, nil)
+		comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, []int64{1000, 3000}, nil)
 		testutil.Ok(t, err)
 
-		shouldRerun, id, err := g.Compact(ctx, dir, comp)
+		bComp, err := NewBucketCompactor(logger, sy, comp, dir, bkt, 2)
 		testutil.Ok(t, err)
-		testutil.Assert(t, !shouldRerun, "group should be empty, but compactor did a compaction and told us to rerun")
 
-		// Add all metas that would be gathered by syncMetas.
-		for _, m := range metas {
-			testutil.Ok(t, g.Add(m))
+		// Compaction on empty should not fail.
+		testutil.Ok(t, bComp.Compact(ctx))
+		testutil.Equals(t, 1.0, promtest.ToFloat64(sy.metrics.syncMetas))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.syncMetaFailures))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectedBlocks))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectionFailures))
+		testutil.Equals(t, 0, MetricCount(sy.metrics.compactions))
+		testutil.Equals(t, 0, MetricCount(sy.metrics.compactionRunsStarted))
+		testutil.Equals(t, 0, MetricCount(sy.metrics.compactionRunsCompleted))
+		testutil.Equals(t, 0, MetricCount(sy.metrics.compactionFailures))
+
+		_, err = os.Stat(dir)
+		testutil.Assert(t, os.IsNotExist(err), "dir %s should be remove after compaction.", dir)
+
+		// Test label name with slash, regression: https://github.com/thanos-io/thanos/issues/1661.
+		extLabels := labels.Labels{{Name: "e1", Value: "1/weird"}}
+		extLabels2 := labels.Labels{{Name: "e1", Value: "1"}}
+		metas := createAndUpload(t, bkt, []blockgenSpec{
+			{
+				numSamples: 100, mint: 0, maxt: 1000, extLset: extLabels, res: 124,
+				series: []labels.Labels{
+					{{Name: "a", Value: "1"}},
+					{{Name: "a", Value: "2"}, {Name: "a", Value: "2"}},
+					{{Name: "a", Value: "3"}},
+					{{Name: "a", Value: "4"}},
+				},
+			},
+			{
+				numSamples: 100, mint: 2000, maxt: 3000, extLset: extLabels, res: 124,
+				series: []labels.Labels{
+					{{Name: "a", Value: "3"}},
+					{{Name: "a", Value: "4"}},
+					{{Name: "a", Value: "5"}},
+					{{Name: "a", Value: "6"}},
+				},
+			},
+			// Mix order to make sure compact is able to deduct min time / max time.
+			// Currently TSDB does not produces empty blocks (see: https://github.com/prometheus/tsdb/pull/374). However before v2.7.0 it was
+			// so we still want to mimick this case as close as possible.
+			{
+				mint: 1000, maxt: 2000, extLset: extLabels, res: 124,
+				// Empty block.
+			},
+			// Due to TSDB compaction delay (not compacting fresh block), we need one more block to be pushed to trigger compaction.
+			{
+				numSamples: 100, mint: 3000, maxt: 4000, extLset: extLabels, res: 124,
+				series: []labels.Labels{
+					{{Name: "a", Value: "7"}},
+				},
+			},
+			// Extra block for "distraction" for different resolution and one for different labels.
+			{
+				numSamples: 100, mint: 5000, maxt: 6000, extLset: labels.Labels{{Name: "e1", Value: "2"}}, res: 124,
+				series: []labels.Labels{
+					{{Name: "a", Value: "7"}},
+				},
+			},
+			// Extra block for "distraction" for different resolution and one for different labels.
+			{
+				numSamples: 100, mint: 4000, maxt: 5000, extLset: extLabels, res: 0,
+				series: []labels.Labels{
+					{{Name: "a", Value: "7"}},
+				},
+			},
+			// Second group (extLabels2).
+			{
+				numSamples: 100, mint: 2000, maxt: 3000, extLset: extLabels2, res: 124,
+				series: []labels.Labels{
+					{{Name: "a", Value: "3"}},
+					{{Name: "a", Value: "4"}},
+					{{Name: "a", Value: "6"}},
+				},
+			},
+			{
+				numSamples: 100, mint: 0, maxt: 1000, extLset: extLabels2, res: 124,
+				series: []labels.Labels{
+					{{Name: "a", Value: "1"}},
+					{{Name: "a", Value: "2"}, {Name: "a", Value: "2"}},
+					{{Name: "a", Value: "3"}},
+					{{Name: "a", Value: "4"}},
+				},
+			},
+			// Due to TSDB compaction delay (not compacting fresh block), we need one more block to be pushed to trigger compaction.
+			{
+				numSamples: 100, mint: 3000, maxt: 4000, extLset: extLabels2, res: 124,
+				series: []labels.Labels{
+					{{Name: "a", Value: "7"}},
+				},
+			},
+		})
+
+		testutil.Ok(t, bComp.Compact(ctx))
+		testutil.Equals(t, 3.0, promtest.ToFloat64(sy.metrics.syncMetas))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.syncMetaFailures))
+		testutil.Equals(t, 5.0, promtest.ToFloat64(sy.metrics.garbageCollectedBlocks))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectionFailures))
+		testutil.Equals(t, 4, MetricCount(sy.metrics.compactions))
+		testutil.Equals(t, 1.0, promtest.ToFloat64(sy.metrics.compactions.WithLabelValues(GroupKey(metas[0].Thanos))))
+		testutil.Equals(t, 1.0, promtest.ToFloat64(sy.metrics.compactions.WithLabelValues(GroupKey(metas[7].Thanos))))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactions.WithLabelValues(GroupKey(metas[4].Thanos))))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactions.WithLabelValues(GroupKey(metas[5].Thanos))))
+		testutil.Equals(t, 4, MetricCount(sy.metrics.compactionRunsStarted))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionRunsStarted.WithLabelValues(GroupKey(metas[0].Thanos))))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionRunsStarted.WithLabelValues(GroupKey(metas[7].Thanos))))
+		// TODO(bwplotka): Looks like we do some unnecessary loops. Not a major problem but investigate.
+		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionRunsStarted.WithLabelValues(GroupKey(metas[4].Thanos))))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionRunsStarted.WithLabelValues(GroupKey(metas[5].Thanos))))
+		testutil.Equals(t, 4, MetricCount(sy.metrics.compactionRunsCompleted))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionRunsCompleted.WithLabelValues(GroupKey(metas[0].Thanos))))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionRunsCompleted.WithLabelValues(GroupKey(metas[7].Thanos))))
+		// TODO(bwplotka): Looks like we do some unnecessary loops. Not a major problem but investigate.
+		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionRunsCompleted.WithLabelValues(GroupKey(metas[4].Thanos))))
+		testutil.Equals(t, 2.0, promtest.ToFloat64(sy.metrics.compactionRunsCompleted.WithLabelValues(GroupKey(metas[5].Thanos))))
+		testutil.Equals(t, 4, MetricCount(sy.metrics.compactionFailures))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactionFailures.WithLabelValues(GroupKey(metas[0].Thanos))))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactionFailures.WithLabelValues(GroupKey(metas[7].Thanos))))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactionFailures.WithLabelValues(GroupKey(metas[4].Thanos))))
+		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.compactionFailures.WithLabelValues(GroupKey(metas[5].Thanos))))
+
+		_, err = os.Stat(dir)
+		testutil.Assert(t, os.IsNotExist(err), "dir %s should be remove after compaction.", dir)
+
+		// Check object storage. All blocks that were included in new compacted one should be removed. New compacted ones
+		// are present and looks as expected.
+		nonCompactedExpected := map[ulid.ULID]bool{
+			metas[3].ULID: false,
+			metas[4].ULID: false,
+			metas[5].ULID: false,
+			metas[8].ULID: false,
 		}
-
-		shouldRerun, id, err = g.Compact(ctx, dir, comp)
-		testutil.Ok(t, err)
-		testutil.Assert(t, shouldRerun, "there should be compactible data, but the compactor reported there was not")
-
-		resDir := filepath.Join(dir, id.String())
-		testutil.Ok(t, block.Download(ctx, log.NewNopLogger(), bkt, id, resDir))
-
-		meta, err = metadata.Read(resDir)
-		testutil.Ok(t, err)
-
-		testutil.Equals(t, int64(0), meta.MinTime)
-		testutil.Equals(t, int64(3000), meta.MaxTime)
-		testutil.Equals(t, uint64(6), meta.Stats.NumSeries)
-		testutil.Equals(t, uint64(2*4*100), meta.Stats.NumSamples) // Only 2 times 4*100 because one block was empty.
-		testutil.Equals(t, 2, meta.Compaction.Level)
-		testutil.Equals(t, []ulid.ULID{b1, b3, b2}, meta.Compaction.Sources)
-
-		// Check thanos meta.
-		testutil.Assert(t, extLset.Equals(labels.FromMap(meta.Thanos.Labels)), "ext labels does not match")
-		testutil.Equals(t, int64(124), meta.Thanos.Downsample.Resolution)
-
-		// Check object storage. All blocks that were included in new compacted one should be removed.
-		err = bkt.Iter(ctx, "", func(n string) error {
+		others := map[string]metadata.Meta{}
+		testutil.Ok(t, bkt.Iter(ctx, "", func(n string) error {
 			id, ok := block.IsBlockDir(n)
 			if !ok {
 				return nil
 			}
 
-			for _, source := range meta.Compaction.Sources {
-				if id.Compare(source) == 0 {
-					return errors.Errorf("Unexpectedly found %s block in bucket", source.String())
-				}
+			if _, ok := nonCompactedExpected[id]; ok {
+				nonCompactedExpected[id] = true
+				return nil
 			}
+
+			meta, err := block.DownloadMeta(ctx, logger, bkt, id)
+			if err != nil {
+				return err
+			}
+
+			others[GroupKey(meta.Thanos)] = meta
 			return nil
-		})
-		testutil.Ok(t, err)
+		}))
+
+		for id, found := range nonCompactedExpected {
+			testutil.Assert(t, found, "not found expected block %s", id.String())
+		}
+
+		// We expect two compacted blocks only outside of what we expected in `nonCompactedExpected`.
+		testutil.Equals(t, 2, len(others))
+		{
+			meta, ok := others[groupKey(124, extLabels)]
+			testutil.Assert(t, ok, "meta not found")
+
+			testutil.Equals(t, int64(0), meta.MinTime)
+			testutil.Equals(t, int64(3000), meta.MaxTime)
+			testutil.Equals(t, uint64(6), meta.Stats.NumSeries)
+			testutil.Equals(t, uint64(2*4*100), meta.Stats.NumSamples) // Only 2 times 4*100 because one block was empty.
+			testutil.Equals(t, 2, meta.Compaction.Level)
+			testutil.Equals(t, []ulid.ULID{metas[0].ULID, metas[1].ULID, metas[2].ULID}, meta.Compaction.Sources)
+
+			// Check thanos meta.
+			testutil.Assert(t, extLabels.Equals(labels.FromMap(meta.Thanos.Labels)), "ext labels does not match")
+			testutil.Equals(t, int64(124), meta.Thanos.Downsample.Resolution)
+		}
+		{
+			meta, ok := others[groupKey(124, extLabels2)]
+			testutil.Assert(t, ok, "meta not found")
+
+			testutil.Equals(t, int64(0), meta.MinTime)
+			testutil.Equals(t, int64(3000), meta.MaxTime)
+			testutil.Equals(t, uint64(5), meta.Stats.NumSeries)
+			testutil.Equals(t, uint64(2*4*100-100), meta.Stats.NumSamples)
+			testutil.Equals(t, 2, meta.Compaction.Level)
+			testutil.Equals(t, []ulid.ULID{metas[6].ULID, metas[7].ULID}, meta.Compaction.Sources)
+
+			// Check thanos meta.
+			testutil.Assert(t, extLabels2.Equals(labels.FromMap(meta.Thanos.Labels)), "ext labels does not match")
+			testutil.Equals(t, int64(124), meta.Thanos.Downsample.Resolution)
+		}
 	})
+}
+
+type blockgenSpec struct {
+	mint, maxt int64
+	series     []labels.Labels
+	numSamples int
+	extLset    labels.Labels
+	res        int64
+}
+
+func createAndUpload(t testing.TB, bkt objstore.Bucket, blocks []blockgenSpec) (metas []*metadata.Meta) {
+	prepareDir, err := ioutil.TempDir("", "test-compact-prepare")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(prepareDir)) }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	for _, b := range blocks {
+		var id ulid.ULID
+		var err error
+		if b.numSamples == 0 {
+			id, err = createEmptyBlock(prepareDir, b.mint, b.maxt, b.extLset, b.res)
+		} else {
+			id, err = testutil.CreateBlock(ctx, prepareDir, b.series, b.numSamples, b.mint, b.maxt, b.extLset, b.res)
+		}
+		testutil.Ok(t, err)
+
+		meta, err := metadata.Read(filepath.Join(prepareDir, id.String()))
+		testutil.Ok(t, err)
+		metas = append(metas, meta)
+
+		testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(prepareDir, id.String())))
+	}
+	return metas
 }
 
 // createEmptyBlock produces empty block like it was the case before fix: https://github.com/prometheus/tsdb/pull/374.

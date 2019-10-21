@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"sort"
+	"sync"
 
 	"bytes"
 	"io/ioutil"
@@ -16,7 +17,9 @@ import (
 var errNotFound = errors.New("inmem: object not found")
 
 // Bucket implements the store.Bucket and shipper.Bucket interfaces against local memory.
+// methods from Bucket interface are thread-safe. Object are assumed to be immutable.
 type Bucket struct {
+	mtx     sync.RWMutex
 	objects map[string][]byte
 }
 
@@ -45,6 +48,8 @@ func (b *Bucket) Iter(_ context.Context, dir string, f func(string) error) error
 		}
 		dirPartsCount++
 	}
+
+	b.mtx.RLock()
 	for filename := range b.objects {
 		if !strings.HasPrefix(filename, dir) || dir == filename {
 			continue
@@ -53,6 +58,7 @@ func (b *Bucket) Iter(_ context.Context, dir string, f func(string) error) error
 		parts := strings.SplitAfter(filename, objstore.DirDelim)
 		unique[strings.Join(parts[:dirPartsCount+1], "")] = struct{}{}
 	}
+	b.mtx.RUnlock()
 
 	var keys []string
 	for n := range unique {
@@ -86,7 +92,9 @@ func (b *Bucket) Get(_ context.Context, name string) (io.ReadCloser, error) {
 		return nil, errors.New("inmem: object name is empty")
 	}
 
+	b.mtx.RLock()
 	file, ok := b.objects[name]
+	b.mtx.RUnlock()
 	if !ok {
 		return nil, errNotFound
 	}
@@ -100,7 +108,9 @@ func (b *Bucket) GetRange(_ context.Context, name string, off, length int64) (io
 		return nil, errors.New("inmem: object name is empty")
 	}
 
+	b.mtx.RLock()
 	file, ok := b.objects[name]
+	b.mtx.RUnlock()
 	if !ok {
 		return nil, errNotFound
 	}
@@ -119,12 +129,16 @@ func (b *Bucket) GetRange(_ context.Context, name string, off, length int64) (io
 
 // Exists checks if the given directory exists in memory.
 func (b *Bucket) Exists(_ context.Context, name string) (bool, error) {
+	b.mtx.RLock()
+	defer b.mtx.RUnlock()
 	_, ok := b.objects[name]
 	return ok, nil
 }
 
 // Upload writes the file specified in src to into the memory.
 func (b *Bucket) Upload(_ context.Context, name string, r io.Reader) error {
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
 	body, err := ioutil.ReadAll(r)
 	if err != nil {
 		return err
@@ -135,6 +149,8 @@ func (b *Bucket) Upload(_ context.Context, name string, r io.Reader) error {
 
 // Delete removes all data prefixed with the dir.
 func (b *Bucket) Delete(_ context.Context, name string) error {
+	b.mtx.Lock()
+	defer b.mtx.Unlock()
 	if _, ok := b.objects[name]; !ok {
 		return errNotFound
 	}
