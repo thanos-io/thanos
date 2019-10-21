@@ -291,7 +291,7 @@ func NewTestBucket(t testing.TB, component string) (objstore.Bucket, func(), err
 	conf := &Config{
 		StorageAccountName: os.Getenv("AZURE_STORAGE_ACCOUNT"),
 		StorageAccountKey:  os.Getenv("AZURE_STORAGE_ACCESS_KEY"),
-		ContainerName:      "thanos-e2e-test",
+		ContainerName:      objstore.CreateTemporaryTestBucketName(t),
 	}
 
 	bc, err := yaml.Marshal(conf)

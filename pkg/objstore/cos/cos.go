@@ -4,19 +4,17 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/go-kit/kit/log"
-	cos "github.com/mozillazg/go-cos"
+	"github.com/mozillazg/go-cos"
 	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
@@ -311,14 +309,7 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 		t.Log("WARNING. Reusing", c.Bucket, "COS bucket for COS tests. Manual cleanup afterwards is required")
 		return b, func() {}, nil
 	}
-
-	src := rand.NewSource(time.Now().UnixNano())
-
-	tmpBucketName := strings.Replace(fmt.Sprintf("test_%x", src.Int63()), "_", "-", -1)
-	if len(tmpBucketName) >= 31 {
-		tmpBucketName = tmpBucketName[:31]
-	}
-	c.Bucket = tmpBucketName
+	c.Bucket = objstore.CreateTemporaryTestBucketName(t)
 
 	bc, err := yaml.Marshal(c)
 	if err != nil {
@@ -333,12 +324,12 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 	if _, err := b.client.Bucket.Put(context.Background(), nil); err != nil {
 		return nil, nil, err
 	}
-	t.Log("created temporary COS bucket for COS tests with name", tmpBucketName)
+	t.Log("created temporary COS bucket for COS tests with name", c.Bucket)
 
 	return b, func() {
 		objstore.EmptyBucket(t, context.Background(), b)
 		if _, err := b.client.Bucket.Delete(context.Background()); err != nil {
-			t.Logf("deleting bucket %s failed: %s", tmpBucketName, err)
+			t.Logf("deleting bucket %s failed: %s", c.Bucket, err)
 		}
 	}, nil
 }
