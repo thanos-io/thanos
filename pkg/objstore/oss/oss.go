@@ -112,7 +112,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 			}
 			var parts []alioss.UploadPart
 			for ; chunk < chunksnum; chunk++ {
-				part, err := uploadEveryPart(alioss.MaxPartSize, chunk+1)
+				part, err := uploadEveryPart(PartSize, chunk+1)
 				if err != nil {
 					return errors.Wrap(err, "failed to upload every part")
 				}
