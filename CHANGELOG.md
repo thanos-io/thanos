@@ -13,6 +13,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Added
 
+- [#1678](https://github.com/thanos-io/thanos/pull/1678) Add Lightstep as a tracing provider.
 - [#1660](https://github.com/thanos-io/thanos/pull/1660) Add a new `--prometheus.ready_timeout` CLI option to the sidecar to set how long to wait until Prometheus starts up.
 - [#1573](https://github.com/thanos-io/thanos/pull/1573) `AliYun OSS` object storage, see [documents](docs/storage.md#aliyun-oss-configuration) for further information.
 - [#1680](https://github.com/thanos-io/thanos/pull/1680) Add a new `--http-grace-period` CLI option to components which serve HTTP to set how long to wait until HTTP Server shuts down.

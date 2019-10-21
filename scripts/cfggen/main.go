@@ -22,6 +22,7 @@ import (
 	trclient "github.com/thanos-io/thanos/pkg/tracing/client"
 	"github.com/thanos-io/thanos/pkg/tracing/elasticapm"
 	"github.com/thanos-io/thanos/pkg/tracing/jaeger"
+	"github.com/thanos-io/thanos/pkg/tracing/lightstep"
 	"github.com/thanos-io/thanos/pkg/tracing/stackdriver"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 	yaml "gopkg.in/yaml.v2"
@@ -40,6 +41,7 @@ var (
 		trclient.JAEGER:      jaeger.Config{},
 		trclient.STACKDRIVER: stackdriver.Config{},
 		trclient.ELASTIC_APM: elasticapm.Config{},
+		trclient.LIGHTSTEP:   lightstep.Config{},
 	}
 )
 

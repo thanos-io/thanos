@@ -21,6 +21,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.1-0.20191002090509-6af20e3a5340
 	github.com/hashicorp/golang-lru v0.5.3
 	github.com/leanovate/gopter v0.2.4
+	github.com/lightstep/lightstep-tracer-go v0.17.1
 	github.com/lovoo/gcloud-opentracing v0.3.0
 	github.com/mattn/go-ieproxy v0.0.0-20190805055040-f9202b1cfdeb // indirect; Pinned for FreeBSD support.
 	github.com/mattn/go-runewidth v0.0.4 // indirect
