@@ -23,6 +23,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// Part size for multi part upload
+const PartSize = 1024 * 1024 * 128
+
+// Config stores the configuration for oss bucket.
 type Config struct {
 	Endpoint        string `yaml:"endpoint"`
 	Bucket          string `yaml:"bucket"`
@@ -30,6 +34,7 @@ type Config struct {
 	AccessKeySecret string `yaml:"access_key_secret"`
 }
 
+// Bucket implements the store.Bucket interface.
 type Bucket struct {
 	name   string
 	logger log.Logger
@@ -39,21 +44,16 @@ type Bucket struct {
 }
 
 func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
-	c := configFromEnv()
-	err := func(conf Config) error {
-		if conf.Endpoint == "" {
-			return errors.New("no aliyun oss endpoint in config file")
-		}
-		if conf.AccessKeyID == "" {
-			return errors.New("access_key_id is not present in config file")
-		}
-		if conf.AccessKeySecret == "" {
-			return errors.New("access_key_secret is not present in config file")
-		}
-		return nil
-	}(c)
-	if err != nil {
-		return nil, nil, err
+	c := Config{
+		Endpoint:        os.Getenv("ALIYUNOSS_ENDPOINT"),
+		Bucket:          os.Getenv("ALIYUNOSS_BUCKET"),
+		AccessKeyID:     os.Getenv("ALIYUNOSS_ACCESS_KEY_ID"),
+		AccessKeySecret: os.Getenv("ALIYUNOSS_ACCESS_KEY_SECRET"),
+	}
+
+	if c.Endpoint == "" || c.AccessKeyID == "" || c.AccessKeySecret == "" {
+		return nil, nil, errors.New("aliyun oss endpoint or access_key_id or access_key_secret " +
+			"is not present in config file")
 	}
 	if c.Bucket != "" && os.Getenv("THANOS_ALLOW_EXISTING_BUCKET_USE") == "true" {
 		t.Log("ALIYUNOSS_BUCKET is defined. Normally this tests will create temporary bucket " +
@@ -70,11 +70,11 @@ func calculateChunks(name string, r io.Reader) (int, int64, error) {
 		f, _ := r.(*os.File)
 		if fileInfo, err := f.Stat(); err == nil {
 			s := fileInfo.Size()
-			return int(math.Floor(float64(s) / alioss.MaxPartSize)), s % alioss.MaxPartSize, nil
+			return int(math.Floor(float64(s) / PartSize)), s % PartSize, nil
 		}
 	case *strings.Reader:
 		f, _ := r.(*strings.Reader)
-		return int(math.Floor(float64(f.Size()) / alioss.MaxPartSize)), f.Size() % alioss.MaxPartSize, nil
+		return int(math.Floor(float64(f.Size()) / PartSize)), f.Size() % PartSize, nil
 	}
 	return -1, 0, errors.New("unsupported implement of io.Reader")
 }
@@ -103,8 +103,10 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 				prt, err := b.bucket.UploadPart(init, ncloser, everypartsize, cnk)
 				if err != nil {
 					if err := b.bucket.AbortMultipartUpload(init); err != nil {
-						return prt, errors.Wrap(err, "failed to upload multi-part chunk")
+						return prt, errors.Wrap(err, "failed to abort multi-part upload")
 					}
+
+					return prt, errors.Wrap(err, "failed to upload multi-part chunk")
 				}
 				return prt, nil
 			}
@@ -112,7 +114,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 			for ; chunk < chunksnum; chunk++ {
 				part, err := uploadEveryPart(alioss.MaxPartSize, chunk+1)
 				if err != nil {
-					return err
+					return errors.Wrap(err,"failed to upload every part")
 				}
 				parts = append(parts, part)
 			}
@@ -140,31 +142,16 @@ func (b *Bucket) Delete(ctx context.Context, name string) error {
 	return nil
 }
 
-func configFromEnv() Config {
-	c := Config{
-		Endpoint:        os.Getenv("ALIYUNOSS_ENDPOINT"),
-		Bucket:          os.Getenv("ALIYUNOSS_BUCKET"),
-		AccessKeyID:     os.Getenv("ALIYUNOSS_ACCESS_KEY_ID"),
-		AccessKeySecret: os.Getenv("ALIYUNOSS_ACCESS_KEY_SECRET"),
-	}
-	return c
-}
-
+// NewBucket returns a new Bucket using the provided oss config values.
 func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
-	config, err := func(conf []byte) (Config, error) {
-		var config Config
-		if err := yaml.Unmarshal(conf, &config); err != nil {
-			return Config{}, err
-		}
-
-		return config, nil
-	}(conf)
-
-	if err != nil {
+	var config Config
+	if err := yaml.Unmarshal(conf, &config); err != nil {
 		return nil, errors.Wrap(err, "parse aliyun oss config file failed")
 	}
-	if err := validate(config); err != nil {
-		return nil, errors.Wrap(err, "validate aliyun oss config file failed")
+
+	if config.Endpoint == "" || config.Bucket == "" || config.AccessKeyID == "" || config.AccessKeySecret == "" {
+		return nil, errors.New("aliyun oss endpoint or bucket or access_key_id or access_key_secret " +
+			"is not present in config file")
 	}
 
 	client, err := alioss.New(config.Endpoint, config.AccessKeyID, config.AccessKeySecret)
@@ -225,24 +212,6 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 
 func (b *Bucket) Name() string {
 	return b.name
-}
-
-// validate checks to see the config options are set.
-func validate(conf Config) error {
-	if conf.Endpoint == "" {
-		return errors.New("no aliyun oss endpoint in config file")
-	}
-	if conf.Bucket == "" {
-		return errors.New("no aliyun oss bucket in config file")
-	}
-
-	if conf.AccessKeyID == "" {
-		return errors.New("access_key_id is not present in config file")
-	}
-	if conf.AccessKeySecret == "" {
-		return errors.New("access_key_secret is not present in config file")
-	}
-	return nil
 }
 
 func NewTestBucketFromConfig(t testing.TB, c Config, reuseBucket bool) (objstore.Bucket, func(), error) {
