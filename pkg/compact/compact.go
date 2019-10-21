@@ -110,15 +110,15 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 
 	m.compactions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_group_compactions_total",
-		Help: "Total number of group compactions attempts, resulted with new block.",
+		Help: "Total number of group compaction attempts that resulted in a new block.",
 	}, []string{"group"})
 	m.compactionRunsStarted = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_group_compaction_runs_started_total",
-		Help: "Total number of group compactions run attempts.",
+		Help: "Total number of group compaction attempts.",
 	}, []string{"group"})
 	m.compactionRunsCompleted = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_group_compaction_runs_completed_total",
-		Help: "Total number of group compactions run completed. This also includes compactor group runs that resulted with no compaction.",
+		Help: "Total number of group completed compaction runs. This also includes compactor group runs that resulted with no compaction.",
 	}, []string{"group"})
 	m.compactionFailures = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_group_compactions_failures_total",
@@ -352,7 +352,7 @@ func GroupKey(meta metadata.Thanos) string {
 }
 
 func groupKey(res int64, lbls labels.Labels) string {
-	return fmt.Sprintf("%d@%s", res, fmt.Sprintf("%v", lbls.Hash()))
+	return fmt.Sprintf("%d@%v", res, lbls.Hash())
 }
 
 // Groups returns the compaction groups for all blocks currently known to the syncer.

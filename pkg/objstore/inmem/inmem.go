@@ -17,7 +17,7 @@ import (
 var errNotFound = errors.New("inmem: object not found")
 
 // Bucket implements the store.Bucket and shipper.Bucket interfaces against local memory.
-// methods from Bucket interface are thread-save. Object are assumed immutable.
+// methods from Bucket interface are thread-safe. Object are assumed to be immutable.
 type Bucket struct {
 	mtx     sync.RWMutex
 	objects map[string][]byte
@@ -93,8 +93,8 @@ func (b *Bucket) Get(_ context.Context, name string) (io.ReadCloser, error) {
 	}
 
 	b.mtx.RLock()
-	defer b.mtx.RUnlock()
 	file, ok := b.objects[name]
+	b.mtx.RUnlock()
 	if !ok {
 		return nil, errNotFound
 	}
@@ -109,8 +109,8 @@ func (b *Bucket) GetRange(_ context.Context, name string, off, length int64) (io
 	}
 
 	b.mtx.RLock()
-	defer b.mtx.RUnlock()
 	file, ok := b.objects[name]
+	b.mtx.RUnlock()
 	if !ok {
 		return nil, errNotFound
 	}
