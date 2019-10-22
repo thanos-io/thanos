@@ -165,7 +165,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 
 		if err := runutil.Repeat(100*time.Millisecond, ctx.Done(), func() error {
 			return store.SyncBlocks(ctx)
-		}); err != nil && errors.Cause(err) != context.Canceled {
+		}); err != nil && ctx.Err() == nil {
 			t.Fatal(err)
 		}
 	}()
