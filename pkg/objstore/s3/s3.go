@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -18,7 +17,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	minio "github.com/minio/minio-go/v6"
+	"github.com/minio/minio-go/v6"
 	"github.com/minio/minio-go/v6/pkg/credentials"
 	"github.com/minio/minio-go/v6/pkg/encrypt"
 	"github.com/pkg/errors"
@@ -26,7 +25,7 @@ import (
 	"github.com/prometheus/common/version"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
@@ -403,13 +402,7 @@ func NewTestBucketFromConfig(t testing.TB, location string, c Config, reuseBucke
 	}
 
 	if c.Bucket == "" {
-		src := rand.NewSource(time.Now().UnixNano())
-
-		// Bucket name need to conform: https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-s3-bucket-naming-requirements.html.
-		bktToCreate = strings.Replace(fmt.Sprintf("test_%s_%x", strings.ToLower(t.Name()), src.Int63()), "_", "-", -1)
-		if len(bktToCreate) >= 63 {
-			bktToCreate = bktToCreate[:63]
-		}
+		bktToCreate = objstore.CreateTemporaryTestBucketName(t)
 	}
 
 	if err := b.client.MakeBucket(bktToCreate, location); err != nil {

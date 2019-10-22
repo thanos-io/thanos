@@ -2,10 +2,13 @@ package objstore
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -109,7 +112,7 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 
 	rc, err := bkt.Get(ctx, src)
 	if err != nil {
-		return errors.Wrap(err, "get file")
+		return errors.Wrapf(err, "get file %s", src)
 	}
 	defer runutil.CloseWithLogOnErr(logger, rc, "download block's file reader")
 
@@ -371,4 +374,15 @@ func (rc *timingReadCloser) Read(b []byte) (n int, err error) {
 		rc.ok = false
 	}
 	return n, err
+}
+
+func CreateTemporaryTestBucketName(t testing.TB) string {
+	src := rand.NewSource(time.Now().UnixNano())
+
+	// Bucket name need to conform: https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-s3-bucket-naming-requirements.html.
+	name := strings.Replace(strings.Replace(fmt.Sprintf("test_%x_%s", src.Int63(), strings.ToLower(t.Name())), "_", "-", -1), "/", "-", -1)
+	if len(name) >= 63 {
+		name = name[:63]
+	}
+	return name
 }

@@ -5,11 +5,9 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math/rand"
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"cloud.google.com/go/storage"
 	"github.com/go-kit/kit/log"
@@ -19,7 +17,7 @@ import (
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
@@ -169,9 +167,8 @@ func (b *Bucket) Close() error {
 func NewTestBucket(t testing.TB, project string) (objstore.Bucket, func(), error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	src := rand.NewSource(time.Now().UnixNano())
 	gTestConfig := Config{
-		Bucket: fmt.Sprintf("test_%s_%x", strings.ToLower(t.Name()), src.Int63()),
+		Bucket: objstore.CreateTemporaryTestBucketName(t),
 	}
 
 	bc, err := yaml.Marshal(gTestConfig)
