@@ -18,7 +18,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/oklog/run"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -851,11 +850,12 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	req.MaxTime = s.limitMaxTime(req.MaxTime)
 
 	var (
-		stats = &queryStats{}
-		g     run.Group
-		res   []storepb.SeriesSet
-		mtx   sync.Mutex
+		stats  = &queryStats{}
+		res    []storepb.SeriesSet
+		mtx    sync.Mutex
+		g, ctx = errgroup.WithContext(srv.Context())
 	)
+
 	s.mtx.RLock()
 
 	for _, bs := range s.blockSets {
@@ -873,7 +873,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			stats.blocksQueried++
 
 			b := b
-			ctx, cancel := context.WithCancel(srv.Context())
 
 			// We must keep the readers open until all their data has been sent.
 			indexr := b.indexReader(ctx)
@@ -883,7 +882,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "series block")
 			defer runutil.CloseWithLogOnErr(s.logger, chunkr, "series block")
 
-			g.Add(func() error {
+			g.Go(func() error {
 				part, pstats, err := blockSeries(ctx,
 					b.meta.ULID,
 					b.meta.Thanos.Labels,
@@ -903,10 +902,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				mtx.Unlock()
 
 				return nil
-			}, func(err error) {
-				if err != nil {
-					cancel()
-				}
 			})
 		}
 	}
@@ -936,7 +931,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	{
 		span, _ := tracing.StartSpan(srv.Context(), "bucket_store_preload_all")
 		begin := time.Now()
-		err := g.Run()
+		err := g.Wait()
 		span.Finish()
 
 		if err != nil {
@@ -1583,9 +1578,8 @@ func (r *bucketIndexReader) fetchPostings(groups []*postingGroup) error {
 		return uint64(ptrs[i].ptr.Start), uint64(ptrs[i].ptr.End)
 	})
 
-	var g run.Group
+	g, ctx := errgroup.WithContext(r.ctx)
 	for _, part := range parts {
-		ctx, cancel := context.WithCancel(r.ctx)
 		i, j := part.elemRng[0], part.elemRng[1]
 
 		start := int64(part.start)
@@ -1593,7 +1587,7 @@ func (r *bucketIndexReader) fetchPostings(groups []*postingGroup) error {
 		length := int64(part.end) - start
 
 		// Fetch from object storage concurrently and update stats and posting list.
-		g.Add(func() error {
+		g.Go(func() error {
 			begin := time.Now()
 
 			b, err := r.block.readIndexRange(ctx, start, length)
@@ -1627,14 +1621,10 @@ func (r *bucketIndexReader) fetchPostings(groups []*postingGroup) error {
 				r.stats.postingsTouchedSizeSum += len(c)
 			}
 			return nil
-		}, func(err error) {
-			if err != nil {
-				cancel()
-			}
 		})
 	}
 
-	return g.Run()
+	return g.Wait()
 }
 
 func (r *bucketIndexReader) PreloadSeries(ids []uint64) error {
@@ -1654,22 +1644,16 @@ func (r *bucketIndexReader) PreloadSeries(ids []uint64) error {
 	parts := r.block.partitioner.Partition(len(ids), func(i int) (start, end uint64) {
 		return ids[i], ids[i] + maxSeriesSize
 	})
-	var g run.Group
-
+	g, ctx := errgroup.WithContext(r.ctx)
 	for _, p := range parts {
-		ctx, cancel := context.WithCancel(r.ctx)
 		s, e := p.start, p.end
 		i, j := p.elemRng[0], p.elemRng[1]
 
-		g.Add(func() error {
+		g.Go(func() error {
 			return r.loadSeries(ctx, ids[i:j], s, e)
-		}, func(err error) {
-			if err != nil {
-				cancel()
-			}
 		})
 	}
-	return g.Run()
+	return g.Wait()
 }
 
 func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []uint64, start, end uint64) error {
@@ -1829,7 +1813,7 @@ func (r *bucketChunkReader) addPreload(id uint64) error {
 
 // preload all added chunk IDs. Must be called before the first call to Chunk is made.
 func (r *bucketChunkReader) preload(samplesLimiter *Limiter) error {
-	var g run.Group
+	g, ctx := errgroup.WithContext(r.ctx)
 
 	numChunks := uint64(0)
 	for _, offsets := range r.preloads {
@@ -1853,20 +1837,15 @@ func (r *bucketChunkReader) preload(samplesLimiter *Limiter) error {
 		offsets := offsets
 
 		for _, p := range parts {
-			ctx, cancel := context.WithCancel(r.ctx)
 			s, e := uint32(p.start), uint32(p.end)
 			m, n := p.elemRng[0], p.elemRng[1]
 
-			g.Add(func() error {
+			g.Go(func() error {
 				return r.loadChunks(ctx, offsets[m:n], seq, s, e)
-			}, func(err error) {
-				if err != nil {
-					cancel()
-				}
 			})
 		}
 	}
-	return g.Run()
+	return g.Wait()
 }
 
 func (r *bucketChunkReader) loadChunks(ctx context.Context, offs []uint32, seq int, start, end uint32) error {
