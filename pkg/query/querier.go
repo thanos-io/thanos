@@ -169,12 +169,18 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 		return nil, nil, errors.Wrap(err, "convert matchers")
 	}
 
+	if params == nil {
+		params = &storage.SelectParams{
+			Start: q.mint,
+			End:   q.maxt,
+		}
+	}
 	queryAggrs, resAggr := aggrsFromFunc(params.Func)
 
 	resp := &seriesServer{ctx: ctx}
 	if err := q.proxy.Series(&storepb.SeriesRequest{
-		MinTime:                 q.mint,
-		MaxTime:                 q.maxt,
+		MinTime:                 params.Start,
+		MaxTime:                 params.End,
 		Matchers:                sms,
 		MaxResolutionWindow:     q.maxResolutionMillis,
 		Aggregates:              queryAggrs,
