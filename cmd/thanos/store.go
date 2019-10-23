@@ -224,7 +224,7 @@ func runStore(
 		return errors.Wrap(err, "listen API address")
 	}
 
-	opts, err := defaultGRPCServerOpts(logger, cert, key, clientCA)
+	opts, err := defaultGRPCTLSServerOpts(logger, cert, key, clientCA)
 	if err != nil {
 		return errors.Wrap(err, "grpc server options")
 	}

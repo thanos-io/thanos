@@ -2,10 +2,7 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"net"
 	"net/http"
@@ -164,7 +161,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 	}
 }
 
-func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, secure bool, cert, key, caCert string, serverName string) ([]grpc.DialOption, error) {
+func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, secure bool, cert, key, caCert, serverName string) ([]grpc.DialOption, error) {
 	grpcMets := grpc_prometheus.NewClientMetrics()
 	grpcMets.EnableClientHandlingTimeHistogram(
 		grpc_prometheus.WithHistogramBuckets([]float64{
@@ -199,50 +196,13 @@ func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer ope
 		return append(dialOpts, grpc.WithInsecure()), nil
 	}
 
-	level.Info(logger).Log("msg", "Enabling client to server TLS")
+	level.Info(logger).Log("msg", "enabling client to server TLS")
 
-	var certPool *x509.CertPool
-
-	if caCert != "" {
-		caPEM, err := ioutil.ReadFile(caCert)
-		if err != nil {
-			return nil, errors.Wrap(err, "reading client CA")
-		}
-
-		certPool = x509.NewCertPool()
-		if !certPool.AppendCertsFromPEM(caPEM) {
-			return nil, errors.Wrap(err, "building client CA")
-		}
-		level.Info(logger).Log("msg", "TLS Client using provided certificate pool")
-	} else {
-		var err error
-		certPool, err = x509.SystemCertPool()
-		if err != nil {
-			return nil, errors.Wrap(err, "reading system certificate pool")
-		}
-		level.Info(logger).Log("msg", "TLS Client using system certificate pool")
+	tlsCfg, err := defaultTLSClientOpts(logger, cert, key, caCert, serverName)
+	if err != nil {
+		return nil, err
 	}
-
-	tlsCfg := &tls.Config{
-		RootCAs: certPool,
-	}
-
-	if serverName != "" {
-		tlsCfg.ServerName = serverName
-	}
-
-	if cert != "" {
-		cert, err := tls.LoadX509KeyPair(cert, key)
-		if err != nil {
-			return nil, errors.Wrap(err, "client credentials")
-		}
-		tlsCfg.Certificates = []tls.Certificate{cert}
-		level.Info(logger).Log("msg", "TLS Client authentication enabled")
-	}
-
-	creds := credentials.NewTLS(tlsCfg)
-
-	return append(dialOpts, grpc.WithTransportCredentials(creds)), nil
+	return append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg))), nil
 }
 
 // runQuery starts a server that exposes PromQL Query API. It is responsible for querying configured
@@ -428,7 +388,7 @@ func runQuery(
 		}
 		logger := log.With(logger, "component", component.Query.String())
 
-		opts, err := defaultGRPCServerOpts(logger, srvCert, srvKey, srvClientCA)
+		opts, err := defaultGRPCTLSServerOpts(logger, srvCert, srvKey, srvClientCA)
 		if err != nil {
 			return errors.Wrap(err, "build gRPC server")
 		}

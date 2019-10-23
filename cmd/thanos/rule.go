@@ -506,7 +506,7 @@ func runRule(
 
 		store := store.NewTSDBStore(logger, reg, db, component.Rule, lset)
 
-		opts, err := defaultGRPCServerOpts(logger, cert, key, clientCA)
+		opts, err := defaultGRPCTLSServerOpts(logger, cert, key, clientCA)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC options")
 		}
