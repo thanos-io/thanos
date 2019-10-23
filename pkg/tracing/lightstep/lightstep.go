@@ -10,6 +10,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// Config - YAML configuration.
 type Config struct {
 	// AccessToken is the unique API key for your LightStep project.  It is
 	// available on your account page at https://app.lightstep.com/account
@@ -20,11 +21,13 @@ type Config struct {
 	Collector lightstep.Endpoint `yaml:"collector"`
 }
 
+// Tracer wraps the Lightstep tracer and the context.
 type Tracer struct {
 	lightstep.Tracer
 	ctx context.Context
 }
 
+// Close synchronously flushes the Lightstep tracer, then terminates it.
 func (t *Tracer) Close() error {
 	lightstepTracer := t.Tracer
 	lightstepTracer.Close(t.ctx)
@@ -32,6 +35,7 @@ func (t *Tracer) Close() error {
 	return nil
 }
 
+// NewTracer creates a Tracer with the options present in the YAML config.
 func NewTracer(ctx context.Context, yamlConfig []byte) (opentracing.Tracer, io.Closer, error) {
 	config := Config{}
 	if err := yaml.Unmarshal(yamlConfig, &config); err != nil {
