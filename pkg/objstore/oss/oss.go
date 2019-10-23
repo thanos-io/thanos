@@ -15,7 +15,6 @@ import (
 	"time"
 
 	alioss "github.com/aliyun/aliyun-oss-go-sdk/oss"
-
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -23,7 +22,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// Part size for multi part upload
+// Part size for multi part upload.
 const PartSize = 1024 * 1024 * 128
 
 // Config stores the configuration for oss bucket.
@@ -125,8 +124,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 				}
 				parts = append(parts, part)
 			}
-			_, err = b.bucket.CompleteMultipartUpload(init, parts)
-			if err != nil {
+			if _, err := b.bucket.CompleteMultipartUpload(init, parts); err != nil {
 				return errors.Wrap(err, "failed to set multi-part upload completive")
 			}
 		}
@@ -304,7 +302,7 @@ func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (
 
 	resp, err := b.bucket.GetObject(name, opts...)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "get object failed")
 	}
 
 	if _, err := resp.Read(nil); err != nil {
