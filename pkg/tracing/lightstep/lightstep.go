@@ -21,12 +21,12 @@ type Config struct {
 }
 
 type Tracer struct {
-	opentracing.Tracer
+	lightstep.Tracer
 	ctx context.Context
 }
 
 func (t *Tracer) Close() error {
-	lightstepTracer := t.Tracer.(lightstep.Tracer)
+	lightstepTracer := t.Tracer
 	lightstepTracer.Close(t.ctx)
 
 	return nil
