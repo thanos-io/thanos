@@ -302,7 +302,7 @@ func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (
 
 	resp, err := b.bucket.GetObject(name, opts...)
 	if err != nil {
-		return nil, errors.Wrap(err, "get object failed")
+		return nil, err
 	}
 
 	if _, err := resp.Read(nil); err != nil {
