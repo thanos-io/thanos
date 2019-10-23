@@ -7,12 +7,12 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/chunks"
-	tsdberrors "github.com/prometheus/tsdb/errors"
-	"github.com/prometheus/tsdb/fileutil"
-	"github.com/prometheus/tsdb/index"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/chunks"
+	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
+	"github.com/prometheus/prometheus/tsdb/fileutil"
+	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -49,9 +49,9 @@ func (lv labelsValues) add(labelSet labels.Labels) {
 // sealed afterwards, when there aren't more series to process.
 type streamedBlockWriter struct {
 	blockDir       string
-	finalized      bool // set to true, if Close was called
+	finalized      bool // Set to true, if Close was called.
 	logger         log.Logger
-	ignoreFinalize bool // if true Close does not finalize block due to internal error.
+	ignoreFinalize bool // If true Close does not finalize block due to internal error.
 	meta           metadata.Meta
 	totalChunks    uint64
 	totalSamples   uint64

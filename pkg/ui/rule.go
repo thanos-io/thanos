@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/rules"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -25,14 +26,16 @@ type Rule struct {
 
 	ruleManagers thanosrule.Managers
 	queryURL     string
+	reg          prometheus.Registerer
 }
 
-func NewRuleUI(logger log.Logger, ruleManagers map[storepb.PartialResponseStrategy]*rules.Manager, queryURL string, flagsMap map[string]string) *Rule {
+func NewRuleUI(logger log.Logger, reg prometheus.Registerer, ruleManagers map[storepb.PartialResponseStrategy]*rules.Manager, queryURL string, flagsMap map[string]string) *Rule {
 	return &Rule{
 		BaseUI:       NewBaseUI(logger, "rule_menu.html", ruleTmplFuncs(queryURL)),
 		flagsMap:     flagsMap,
 		ruleManagers: ruleManagers,
 		queryURL:     queryURL,
+		reg:          reg,
 	}
 }
 
@@ -95,7 +98,7 @@ func ruleTmplFuncs(queryURL string) template.FuncMap {
 				if minutes != 0 {
 					return fmt.Sprintf("%s%dm %ds", sign, minutes, seconds)
 				}
-				// For seconds, we display 4 significant digts.
+				// For seconds, we display 4 significant digits.
 				return fmt.Sprintf("%s%.4gs", sign, v)
 			}
 			prefix := ""
@@ -138,7 +141,7 @@ func (ru *Rule) rules(w http.ResponseWriter, r *http.Request) {
 	ru.executeTemplate(w, "rules.html", prefix, ru.ruleManagers)
 }
 
-// root redirects / requests to /graph, taking into account the path prefix value
+// Root redirects / requests to /graph, taking into account the path prefix value.
 func (ru *Rule) root(w http.ResponseWriter, r *http.Request) {
 	prefix := GetWebPrefix(ru.logger, ru.flagsMap, r)
 

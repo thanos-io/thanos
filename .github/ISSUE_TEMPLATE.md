@@ -9,7 +9,7 @@ about what components it touches e.g "query:" or ".*:"
 In case of issues related to exact bucket implementation, please ping corresponded maintainer from list here: https://github.com/thanos-io/thanos/blob/master/docs/storage.md
 -->
 
-**Thanos, Prometheus and Golang version used**
+**Thanos, Prometheus and Golang version used**:
 
 <!--
 Output of "thanos --version" or docker image:tag used.
@@ -18,13 +18,15 @@ Output of "thanos --version" or docker image:tag used.
 If you are using custom build from master branch, have you checked out the tip of the master?
 -->
 
-**What happened**
+**Object Storage Provider**:
 
-**What you expected to happen**
+**What happened**:
+
+**What you expected to happen**:
 
 **How to reproduce it (as minimally and precisely as possible)**:
 
-**Full logs to relevant components**
+**Full logs to relevant components**:
 
 <!--
 Uncomment if you would like to post collapsible logs:
@@ -39,7 +41,7 @@ Uncomment if you would like to post collapsible logs:
 </details>
 -->
 
-**Anything else we need to know**
+**Anything else we need to know**:
 
 <!--
 Uncomment and fill if you use not casual environment or if it might be relevant.

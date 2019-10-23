@@ -9,11 +9,13 @@ import (
 	trace "cloud.google.com/go/trace/apiv1"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/googleapis/gax-go"
 	gcloudtracer "github.com/lovoo/gcloud-opentracing"
 	"github.com/opentracing/basictracer-go"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/common/version"
 	"github.com/thanos-io/thanos/pkg/tracing"
+	pb "google.golang.org/genproto/googleapis/devtools/cloudtrace/v1"
 )
 
 type tracer struct {
@@ -24,7 +26,7 @@ type tracer struct {
 // GetTraceIDFromSpanContext return TraceID from span.Context.
 func (t *tracer) GetTraceIDFromSpanContext(ctx opentracing.SpanContext) (string, bool) {
 	if c, ok := ctx.(basictracer.SpanContext); ok {
-		// "%016x%016x" - ugly hack for gcloud find traces by ID https://console.cloud.google.com/traces/traces?project=<project_id>&tid=<62119f61b7c2663962119f61b7c26639>
+		// "%016x%016x" - ugly hack for gcloud find traces by ID https://console.cloud.google.com/traces/traces?project=<project_id>&tid=<62119f61b7c2663962119f61b7c26639>.
 		return fmt.Sprintf("%016x%016x", c.TraceID, c.TraceID), true
 	}
 	return "", false
@@ -85,19 +87,34 @@ func (l *gcloudRecorderLogger) Errorf(format string, args ...interface{}) {
 	level.Error(l.logger).Log("msg", fmt.Sprintf(format, args...))
 }
 
+// TODO(bwplotka): gcloudtracer is archived. Find replacement. For now wrap traceClient for compatibility.
+type compTraceWrapper struct {
+	cl *trace.Client
+}
+
+func (w *compTraceWrapper) PatchTraces(ctx context.Context, r *pb.PatchTracesRequest, _ ...gax.CallOption) error {
+	// Opts are never used in `gcloudtracer.NewRecorder`.
+	return w.cl.PatchTraces(ctx, r)
+}
+
+func (w *compTraceWrapper) Close() error {
+	return w.cl.Close()
+}
+
 func newGCloudTracer(ctx context.Context, logger log.Logger, gcloudTraceProjectID string, sampleFactor uint64, serviceName string) (opentracing.Tracer, io.Closer, error) {
 	traceClient, err := trace.NewClient(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	// TODO(bwplotka): gcloudtracer is archived. Find replacement. For now wrap traceClient for compatibility.
 	r, err := gcloudtracer.NewRecorder(
 		ctx,
 		gcloudTraceProjectID,
-		traceClient,
+		&compTraceWrapper{cl: traceClient},
 		gcloudtracer.WithLogger(&gcloudRecorderLogger{logger: logger}))
 	if err != nil {
-		return nil, traceClient, err
+		return nil, nil, err
 	}
 
 	shouldSample := func(traceID uint64) bool {

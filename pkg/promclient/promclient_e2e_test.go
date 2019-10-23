@@ -14,7 +14,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -22,7 +22,6 @@ import (
 func TestIsWALFileAccesible_e2e(t *testing.T) {
 	testutil.ForeachPrometheus(t, func(t testing.TB, p *testutil.Prometheus) {
 		testutil.Ok(t, p.Start())
-		defer func() { testutil.Ok(t, p.Stop()) }()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 		defer cancel()
@@ -43,7 +42,6 @@ global:
 `))
 
 		testutil.Ok(t, p.Start())
-		defer func() { testutil.Ok(t, p.Stop()) }()
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
@@ -60,7 +58,6 @@ global:
 func TestConfiguredFlags_e2e(t *testing.T) {
 	testutil.ForeachPrometheus(t, func(t testing.TB, p *testutil.Prometheus) {
 		testutil.Ok(t, p.Start())
-		defer func() { testutil.Ok(t, p.Stop()) }()
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
@@ -96,14 +93,13 @@ func TestSnapshot_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 
 		testutil.Ok(t, p.Start())
-		defer func() { testutil.Ok(t, p.Stop()) }()
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
 
 		// Prometheus since 2.7.0 don't write empty blocks even if it's head block. So it's no matter passing skip_head true or false here
 		// Pass skipHead = true to support all prometheus versions and assert that snapshot creates only one file
-		// https://github.com/prometheus/tsdb/pull/374
+		// https://github.com/prometheus/tsdb/pull/374.
 		dir, err := Snapshot(ctx, log.NewNopLogger(), u, true)
 		testutil.Ok(t, err)
 
@@ -125,7 +121,7 @@ func TestSnapshot_e2e(t *testing.T) {
 func TestRule_UnmarshalScalarResponse(t *testing.T) {
 	var (
 		scalarJSONResult              = []byte(`[1541196373.677,"1"]`)
-		invalidLengthScalarJSONResult = []byte(`[1541196373.677,"1", "nonsence"]`)
+		invalidLengthScalarJSONResult = []byte(`[1541196373.677,"1", "nonsense"]`)
 		invalidDataScalarJSONResult   = []byte(`["foo","bar"]`)
 
 		vectorResult   model.Vector

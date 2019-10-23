@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -18,7 +17,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	minio "github.com/minio/minio-go/v6"
+	"github.com/minio/minio-go/v6"
 	"github.com/minio/minio-go/v6/pkg/credentials"
 	"github.com/minio/minio-go/v6/pkg/encrypt"
 	"github.com/pkg/errors"
@@ -26,15 +25,22 @@ import (
 	"github.com/prometheus/common/version"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const DirDelim = "/"
 
-// Minimum file size after which an HTTP multipart request should be used to upload objects to storage.
-// Set to 128 MiB as in the minio client.
-const defaultMinPartSize = 1024 * 1024 * 128
+var DefaultConfig = Config{
+	PutUserMetadata: map[string]string{},
+	HTTPConfig: HTTPConfig{
+		IdleConnTimeout:       model.Duration(90 * time.Second),
+		ResponseHeaderTimeout: model.Duration(2 * time.Minute),
+	},
+	// Minimum file size after which an HTTP multipart request should be used to upload objects to storage.
+	// Set to 128 MiB as in the minio client.
+	PartSize: 1024 * 1024 * 128,
+}
 
 // Config stores the configuration for s3 bucket.
 type Config struct {
@@ -49,8 +55,9 @@ type Config struct {
 	PutUserMetadata map[string]string `yaml:"put_user_metadata"`
 	HTTPConfig      HTTPConfig        `yaml:"http_config"`
 	TraceConfig     TraceConfig       `yaml:"trace"`
-	PartSize        uint64            `yaml:"part_size"`
 	Prefix          string            `yaml:"prefix"`
+	// PartSize used for multipart upload. Only used if uploaded object size is known and larger than configured PartSize.
+	PartSize uint64 `yaml:"part_size"`
 }
 
 type TraceConfig struct {
@@ -77,11 +84,7 @@ type Bucket struct {
 
 // parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
 func parseConfig(conf []byte) (Config, error) {
-	defaultHTTPConfig := HTTPConfig{
-		IdleConnTimeout:       model.Duration(90 * time.Second),
-		ResponseHeaderTimeout: model.Duration(2 * time.Minute),
-	}
-	config := Config{HTTPConfig: defaultHTTPConfig}
+	config := DefaultConfig
 	if err := yaml.Unmarshal(conf, &config); err != nil {
 		return Config{}, err
 	}
@@ -170,8 +173,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		// doesn't try to auto decode the body of objects with
 		// content-encoding set to `gzip`.
 		//
-		// Refer:
-		//    https://golang.org/src/net/http/transport.go?h=roundTrip#L1843
+		// Refer: https://golang.org/src/net/http/transport.go?h=roundTrip#L1843.
 		DisableCompression: true,
 		TLSClientConfig:    &tls.Config{InsecureSkipVerify: config.HTTPConfig.InsecureSkipVerify},
 	})
@@ -254,6 +256,10 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		if keyName == "" {
 			continue
 		}
+		// The s3 client can also return the directory itself in the ListObjects call above.
+		if keyName == dir {
+			continue
+		}
 		if err := f(keyName); err != nil {
 			return err
 		}
@@ -326,16 +332,21 @@ func (b *Bucket) guessFileSize(name string, r io.Reader) int64 {
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	// TODO(https://github.com/thanos-io/thanos/issues/678): Remove guessing length when minio provider will support multipart upload without this.
-	fileSize := b.guessFileSize(name, r)
+	size := b.guessFileSize(name, r)
 
+	// partSize cannot be larger than object size.
+	partSize := b.partSize
+	if size < int64(partSize) {
+		partSize = 0
+	}
 	if _, err := b.client.PutObjectWithContext(
 		ctx,
 		b.name,
 		b.objectPrefix+name,
 		r,
-		fileSize,
+		size,
 		minio.PutObjectOptions{
-			PartSize:             b.partSize,
+			PartSize:             partSize,
 			ServerSideEncryption: b.sse,
 			UserMetadata:         b.putUserMetadata,
 		},
@@ -414,13 +425,7 @@ func NewTestBucketFromConfig(t testing.TB, location string, c Config, reuseBucke
 	}
 
 	if c.Bucket == "" {
-		src := rand.NewSource(time.Now().UnixNano())
-
-		// Bucket name need to conform: https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-s3-bucket-naming-requirements.html
-		bktToCreate = strings.Replace(fmt.Sprintf("test_%s_%x", strings.ToLower(t.Name()), src.Int63()), "_", "-", -1)
-		if len(bktToCreate) >= 63 {
-			bktToCreate = bktToCreate[:63]
-		}
+		bktToCreate = objstore.CreateTemporaryTestBucketName(t)
 	}
 
 	if err := b.client.MakeBucket(bktToCreate, location); err != nil {

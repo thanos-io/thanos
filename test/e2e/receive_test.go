@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/receive"
+
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -12,97 +14,147 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-var (
-	// The hashring suite creates three receivers, each with a Prometheus
-	// remote-writing data to it. However, due to the hashing of the labels,
-	// the time series from the Prometheus is forwarded to a different
-	// receiver in the hashring than the one handling the request.
-	// The querier queries all the receivers and the test verifies
-	// the time series are forwarded to the correct receive node.
-	receiveHashringSuite = newSpinupSuite().
-				Add(querierWithStoreFlags(1, "replica", remoteWriteReceiveGRPC(1), remoteWriteReceiveGRPC(2), remoteWriteReceiveGRPC(3))).
-				Add(receiver(1, defaultPromRemoteWriteConfig(nodeExporterHTTP(1), remoteWriteEndpoint(1)), 1, remoteWriteEndpoint(1), remoteWriteEndpoint(2), remoteWriteEndpoint(3))).
-				Add(receiver(2, defaultPromRemoteWriteConfig(nodeExporterHTTP(2), remoteWriteEndpoint(2)), 1, remoteWriteEndpoint(1), remoteWriteEndpoint(2), remoteWriteEndpoint(3))).
-				Add(receiver(3, defaultPromRemoteWriteConfig(nodeExporterHTTP(3), remoteWriteEndpoint(3)), 1, remoteWriteEndpoint(1), remoteWriteEndpoint(2), remoteWriteEndpoint(3)))
-	receiveHashringMetrics = []model.Metric{
-		{
-			"__name__": "up",
-			"instance": model.LabelValue(nodeExporterHTTP(1)),
-			"job":      "node",
-			"receive":  "true",
-			"replica":  model.LabelValue("2"),
-		},
-		{
-			"__name__": "up",
-			"instance": model.LabelValue(nodeExporterHTTP(2)),
-			"job":      "node",
-			"receive":  "true",
-			"replica":  model.LabelValue("3"),
-		},
-		{
-			"__name__": "up",
-			"instance": model.LabelValue(nodeExporterHTTP(3)),
-			"job":      "node",
-			"receive":  "true",
-			"replica":  model.LabelValue("1"),
-		},
-	}
-	// The replication suite creates three receivers but only one
-	// Prometheus that remote-writes data. The querier queries all
-	// receivers and the test verifies that the time series are
-	// replicated to all of the nodes.
-	receiveReplicationSuite = newSpinupSuite().
-				Add(querierWithStoreFlags(1, "replica", remoteWriteReceiveGRPC(1), remoteWriteReceiveGRPC(2), remoteWriteReceiveGRPC(3))).
-				Add(receiver(1, defaultPromRemoteWriteConfig(nodeExporterHTTP(1), remoteWriteEndpoint(1)), 3, remoteWriteEndpoint(1), remoteWriteEndpoint(2), remoteWriteEndpoint(3))).
-				Add(receiver(2, defaultPromConfig("no-remote-write", 2), 3, remoteWriteEndpoint(1), remoteWriteEndpoint(2), remoteWriteEndpoint(3))).
-				Add(receiver(3, defaultPromConfig("no-remote-write", 3), 3, remoteWriteEndpoint(1), remoteWriteEndpoint(2), remoteWriteEndpoint(3)))
-	receiveReplicationMetrics = []model.Metric{
-		{
-			"__name__": "up",
-			"instance": model.LabelValue(nodeExporterHTTP(1)),
-			"job":      "node",
-			"receive":  "true",
-			"replica":  model.LabelValue("1"),
-		},
-		{
-			"__name__": "up",
-			"instance": model.LabelValue(nodeExporterHTTP(1)),
-			"job":      "node",
-			"receive":  "true",
-			"replica":  model.LabelValue("2"),
-		},
-		{
-			"__name__": "up",
-			"instance": model.LabelValue(nodeExporterHTTP(1)),
-			"job":      "node",
-			"receive":  "true",
-			"replica":  model.LabelValue("3"),
-		},
-	}
-)
-
 type receiveTestConfig struct {
-	testConfig
+	name    string
+	cmds    []scheduler
 	metrics []model.Metric
+
+	queryAddress address
 }
 
 func TestReceive(t *testing.T) {
-	for _, tt := range []receiveTestConfig{
-		{
-			testConfig{
-				"hashring",
-				receiveHashringSuite,
-			},
-			receiveHashringMetrics,
-		},
-		{
-			testConfig{
-				"replication",
-				receiveReplicationSuite,
-			},
-			receiveReplicationMetrics,
-		},
-	} {
+	var testCases []receiveTestConfig
+
+	a := newLocalAddresser()
+	{
+		// The hashring suite creates three receivers, each with a Prometheus
+		// remote-writing data to it. However, due to the hashing of the labels,
+		// the time series from the Prometheus is forwarded to a different
+		// receiver in the hashring than the one handling the request.
+		// The querier queries all the receivers and the test verifies
+		// the time series are forwarded to the correct receive node.
+		receiveHTTP1, receiveHTTP2, receiveHTTP3 := a.New(), a.New(), a.New()
+
+		h := receive.HashringConfig{
+			Endpoints: []string{remoteWriteEndpoint(receiveHTTP1), remoteWriteEndpoint(receiveHTTP2), remoteWriteEndpoint(receiveHTTP3)},
+		}
+
+		r1 := receiver(receiveHTTP1, a.New(), a.New(), 1, h)
+		r2 := receiver(receiveHTTP2, a.New(), a.New(), 1, h)
+		r3 := receiver(receiveHTTP3, a.New(), a.New(), 1, h)
+
+		prom1 := prometheus(a.New(), defaultPromConfig("prom1", 1, remoteWriteEndpoint(r1.HTTP)))
+		prom2 := prometheus(a.New(), defaultPromConfig("prom2", 1, remoteWriteEndpoint(r2.HTTP)))
+		prom3 := prometheus(a.New(), defaultPromConfig("prom3", 1, remoteWriteEndpoint(r3.HTTP)))
+
+		q1 := querier(a.New(), a.New(), []address{r1.GRPC, r2.GRPC, r3.GRPC}, nil)
+
+		testCases = append(testCases, receiveTestConfig{
+			name:         "hashring",
+			cmds:         []scheduler{q1, prom1, prom2, prom3, r1, r2, r3},
+			queryAddress: q1.HTTP,
+			metrics: []model.Metric{
+				{
+					"job":        "test",
+					"prometheus": "prom1",
+					"receive":    model.LabelValue(r1.HTTP.Port),
+					"replica":    "1",
+				},
+				{
+					"job":        "test",
+					"prometheus": "prom2",
+					"receive":    model.LabelValue(r2.HTTP.Port),
+					"replica":    "1",
+				},
+				{
+					"job":        "test",
+					"prometheus": "prom3",
+					"receive":    model.LabelValue(r2.HTTP.Port),
+					"replica":    "1",
+				},
+			}})
+	}
+	{
+		// The replication suite creates three receivers but only one
+		// receives Prometheus remote-written data. The querier queries all
+		// receivers and the test verifies that the time series are
+		// replicated to all of the nodes.
+		receiveHTTP1, receiveHTTP2, receiveHTTP3 := a.New(), a.New(), a.New()
+
+		h := receive.HashringConfig{
+			Endpoints: []string{remoteWriteEndpoint(receiveHTTP1), remoteWriteEndpoint(receiveHTTP2), remoteWriteEndpoint(receiveHTTP3)},
+		}
+
+		r1 := receiver(receiveHTTP1, a.New(), a.New(), 3, h)
+		r2 := receiver(receiveHTTP2, a.New(), a.New(), 3, h)
+		r3 := receiver(receiveHTTP3, a.New(), a.New(), 3, h)
+
+		prom1 := prometheus(a.New(), defaultPromConfig("prom1", 1, remoteWriteEndpoint(r1.HTTP)))
+
+		q1 := querier(a.New(), a.New(), []address{r1.GRPC, r2.GRPC, r3.GRPC}, nil)
+
+		testCases = append(testCases, receiveTestConfig{
+			name:         "replication",
+			cmds:         []scheduler{q1, prom1, r1, r2, r3},
+			queryAddress: q1.HTTP,
+			metrics: []model.Metric{
+				{
+					"job":        "test",
+					"prometheus": "prom1",
+					"receive":    model.LabelValue(r1.HTTP.Port),
+					"replica":    "1",
+				},
+				{
+					"job":        "test",
+					"prometheus": "prom1",
+					"receive":    model.LabelValue(r2.HTTP.Port),
+					"replica":    "1",
+				},
+				{
+					"job":        "test",
+					"prometheus": "prom1",
+					"receive":    model.LabelValue(r3.HTTP.Port),
+					"replica":    "1",
+				},
+			}})
+	}
+	{
+		// The replication suite creates a three-node hashring but one of the
+		// receivers is dead. In this case, replication should still
+		// succeed and the time series should be replicated to the other nodes.
+		receiveHTTP1, receiveHTTP2, receiveHTTP3 := a.New(), a.New(), a.New()
+
+		h := receive.HashringConfig{
+			Endpoints: []string{remoteWriteEndpoint(receiveHTTP1), remoteWriteEndpoint(receiveHTTP2), remoteWriteEndpoint(receiveHTTP3)},
+		}
+
+		r1 := receiver(receiveHTTP1, a.New(), a.New(), 3, h)
+		r2 := receiver(receiveHTTP2, a.New(), a.New(), 3, h)
+
+		prom1 := prometheus(a.New(), defaultPromConfig("prom1", 1, remoteWriteEndpoint(r1.HTTP)))
+
+		q1 := querier(a.New(), a.New(), []address{r1.GRPC, r2.GRPC}, nil)
+
+		testCases = append(testCases, receiveTestConfig{
+			name:         "replication with outage",
+			cmds:         []scheduler{q1, prom1, r1, r2},
+			queryAddress: q1.HTTP,
+			metrics: []model.Metric{
+				{
+					"job":        "test",
+					"prometheus": "prom1",
+					"receive":    model.LabelValue(r1.HTTP.Port),
+					"replica":    "1",
+				},
+				{
+					"job":        "test",
+					"prometheus": "prom1",
+					"receive":    model.LabelValue(r2.HTTP.Port),
+					"replica":    "1",
+				},
+			}})
+	}
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			testReceive(t, tt)
 		})
@@ -114,7 +166,7 @@ func TestReceive(t *testing.T) {
 func testReceive(t *testing.T, conf receiveTestConfig) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 
-	exit, err := conf.suite.Exec(t, ctx, conf.name)
+	exit, err := e2eSpinup(t, ctx, conf.cmds...)
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)
 		cancel()
@@ -142,7 +194,7 @@ func testReceive(t *testing.T, conf receiveTestConfig) {
 			err      error
 			warnings []string
 		)
-		res, warnings, err = promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "up", time.Now(), promclient.QueryOptions{
+		res, warnings, err = promclient.QueryInstant(ctx, nil, urlParse(t, conf.queryAddress.URL()), queryUpWithoutInstance, time.Now(), promclient.QueryOptions{
 			Deduplicate: false,
 		})
 		if err != nil {
@@ -154,14 +206,20 @@ func testReceive(t *testing.T, conf receiveTestConfig) {
 			return errors.Errorf("unexpected warnings %s", warnings)
 		}
 
-		expectedRes := len(conf.metrics)
-		if len(res) != expectedRes {
-			return errors.Errorf("unexpected result size %d, expected %d", len(res), expectedRes)
+		if len(res) != len(conf.metrics) {
+			return errors.Errorf("unexpected result size, expected %d; result: %v", len(conf.metrics), res)
 		}
 
 		return nil
 	}))
 
+	select {
+	case <-exit:
+		return
+	default:
+	}
+
+	sortResults(res)
 	for i, metric := range conf.metrics {
 		testutil.Equals(t, metric, res[i].Metric)
 	}

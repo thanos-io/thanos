@@ -7,7 +7,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/thanos-io/thanos/pkg/store/prompb"
+	"github.com/prometheus/prometheus/prompb"
 
 	"github.com/cespare/xxhash"
 )
@@ -165,8 +165,10 @@ func newMultiHashring(cfg []HashringConfig) Hashring {
 // Hashrings are returned on the updates channel.
 // Which hashring to use for a tenant is determined
 // by the tenants field of the hashring configuration.
+// The updates chan is closed before exiting.
 func HashringFromConfig(ctx context.Context, updates chan<- Hashring, cw *ConfigWatcher) {
 	go cw.Run(ctx)
+	defer close(updates)
 
 	for {
 		select {

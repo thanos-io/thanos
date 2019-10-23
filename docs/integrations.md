@@ -18,4 +18,3 @@ Below you can find some public integrations with other systems through StoreAPI:
 [Geras](https://github.com/G-Research/geras) is an OpenTSDB integration service which can connect your OpenTSDB cluster to Thanos. Geras exposes the Thanos Storage  API, thus other Thanos components can query OpenTSDB via Geras, providing a unified  query interface over OpenTSDB and Prometheus.
 
 Although OpenTSDB is able to aggregte the data, it's not supported by Geras at the moment. 
-

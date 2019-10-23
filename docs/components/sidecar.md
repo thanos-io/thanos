@@ -21,7 +21,7 @@ In details:
 Prometheus servers connected to the Thanos cluster via the sidecar are subject to a few limitations and recommendations for safe operations:
 
 * The recommended Prometheus version is 2.2.1 or greater (including newest releases). This is due to Prometheus instability in previous versions as well as lack of `flags` endpoint.
-* (!) The Prometheus `external_labels` section of the Prometheus configuration file has unique labels in the overall Thanos system. Those external labels will be used by sidecar and then Thanos in many places:
+* (!) The Prometheus `external_labels` section of the Prometheus configuration file has unique labels in the overall Thanos system. Those external labels will be used by the sidecar and then Thanos in many places:
   
   * [Querier](./query.md) to filter out store APIs to touch during query requests.
   * Many object storage readers like [compactor](./compact.md) and [store gateway](./store.md) which groups the blocks by Prometheus source. Each produced TSDB block by Prometheus is labelled with external label by sidecar before upload to object storage.
@@ -31,7 +31,7 @@ Prometheus servers connected to the Thanos cluster via the sidecar are subject t
 If you choose to use the sidecar to also upload to object storage:
 
 * The `--storage.tsdb.min-block-duration` and `--storage.tsdb.max-block-duration` must be set to equal values to disable local compaction on order to use Thanos sidecar upload, otherwise leave local compaction on if sidecar just exposes StoreAPI and your retention is normal. The default of `2h` is recommended. 
-  Mentioned parameters set to equal values disable the internal Prometheus compaction, which is needed to avoid the uploaded data corruption when Thanos compactor does its job, this is critical for data consistency and should not be ignored if you plan to use Thanos compactor. Even though you set mentioned parameters equal, you might observe Prometheus internal metric `prometheus_tsdb_compactions_total` being incremented, don't be confused by that: Prometheus writes initial head block to filesytem via internal compaction mechanism, but if you have followed recommendations - data won't be modified by Prometheus before sidecar uploads it. Thanos sidecar will also check sanity of the flags set to Prometheus on the startup and log errors or warning if they have been configured improperly (#838).
+  Mentioned parameters set to equal values disable the internal Prometheus compaction, which is needed to avoid the uploaded data corruption when Thanos compactor does its job, this is critical for data consistency and should not be ignored if you plan to use Thanos compactor. Even though you set mentioned parameters equal, you might observe Prometheus internal metric `prometheus_tsdb_compactions_total` being incremented, don't be confused by that: Prometheus writes initial head block to filesytem via its internal compaction mechanism, but if you have followed recommendations - data won't be modified by Prometheus before the sidecar uploads it. Thanos sidecar will also check sanity of the flags set to Prometheus on the startup and log errors or warning if they have been configured improperly (#838).
 * The retention is recommended to not be lower than three times the min block duration, so 6 hours. This achieves resilience in the face of connectivity issues to the object storage since all local data will remain available within the Thanos cluster. If connectivity gets restored the backlog of blocks gets uploaded to the object storage.
 
 ## Reloader Configuration
@@ -40,7 +40,7 @@ Thanos can watch changes in Prometheus configuration and refresh Prometheus conf
 
 You can configure watching for changes in directory via `--reloader.rule-dir=DIR_NAME` flag.
 
-Thanos sidecar can watch `--reloader.config-file=CONFIG_FILE` configuration file, evaluate environment variables found in there and produce generated config in `--reloader.config-envsubst-file=OUT_CONFIG_FILE` file.
+Thanos sidecar can watch `--reloader.config-file=CONFIG_FILE` configuration file, evaluate environment variables found in there, and produce generated config in `--reloader.config-envsubst-file=OUT_CONFIG_FILE` file.
 
 
 ## Example basic deployment
@@ -67,6 +67,15 @@ config:
   bucket: example-bucket
 ```
 
+## Upload compacted blocks (EXPERIMENTAL)
+
+If you want to migrate from a pure Prometheus setup to Thanos and have to keep the historical data, you can use the flag `--shipper.upload-compacted`. This will also upload blocks that were compacted by Prometheus.
+
+To use this, the Prometheus compaction needs to be disabled. This can be done by setting the following flags for Prometheus:
+
+- `--storage.tsdb.min-block-duration=2h`
+- `--storage.tsdb.max-block-duration=2h`
+
 ## Flags
 
 [embedmd]:# (flags/sidecar.txt $)
@@ -81,12 +90,15 @@ Flags:
       --version                  Show application version.
       --log.level=info           Log filtering level.
       --log.format=logfmt        Log format to use.
-      --tracing.config-file=<tracing.config-yaml-path>
-                                 Path to YAML file that contains tracing
-                                 configuration.
-      --tracing.config=<tracing.config-yaml>
-                                 Alternative to 'tracing.config-file' flag.
-                                 Tracing configuration in YAML.
+      --tracing.config-file=<file-path>
+                                 Path to YAML file with tracing configuration.
+                                 See format details:
+                                 https://thanos.io/tracing.md/#configuration
+      --tracing.config=<content>
+                                 Alternative to 'tracing.config-file' flag
+                                 (lower priority). Content of YAML file with
+                                 tracing configuration. See format details:
+                                 https://thanos.io/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --grpc-address="0.0.0.0:10901"
@@ -104,6 +116,9 @@ Flags:
       --prometheus.url=http://localhost:9090
                                  URL at which to reach Prometheus's API. For
                                  better performance use local network.
+      --prometheus.ready_timeout=10m
+                                 Maximum time to wait for the Prometheus
+                                 instance to start up
       --tsdb.path="./data"       Data directory of TSDB.
       --reloader.config-file=""  Config file watched by the reloader.
       --reloader.config-envsubst-file=""
@@ -112,11 +127,22 @@ Flags:
       --reloader.rule-dir=RELOADER.RULE-DIR ...
                                  Rule directories for the reloader to refresh
                                  (repeated field).
-      --objstore.config-file=<bucket.config-yaml-path>
+      --objstore.config-file=<file-path>
                                  Path to YAML file that contains object store
-                                 configuration.
-      --objstore.config=<bucket.config-yaml>
-                                 Alternative to 'objstore.config-file' flag.
-                                 Object store configuration in YAML.
+                                 configuration. See format details:
+                                 https://thanos.io/storage.md/#configuration
+      --objstore.config=<content>
+                                 Alternative to 'objstore.config-file' flag
+                                 (lower priority). Content of YAML file that
+                                 contains object store configuration. See format
+                                 details:
+                                 https://thanos.io/storage.md/#configuration
+      --min-time=0000-01-01T00:00:00Z
+                                 Start of time range limit to serve. Thanos
+                                 sidecar will serve only metrics, which happened
+                                 later than this value. Option can be a constant
+                                 time in RFC3339 format or time duration
+                                 relative to current time, such as -1d or 2h45m.
+                                 Valid duration units are ms, s, m, h, d, w, y.
 
 ```

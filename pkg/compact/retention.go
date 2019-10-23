@@ -11,7 +11,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
-// Apply removes blocks depending on the specified retentionByResolution based on blocks MaxTime.
+// ApplyRetentionPolicyByResolution removes blocks depending on the specified retentionByResolution based on blocks MaxTime.
 // A value of 0 disables the retention for its resolution.
 func ApplyRetentionPolicyByResolution(ctx context.Context, logger log.Logger, bkt objstore.Bucket, retentionByResolution map[ResolutionLevel]time.Duration) error {
 	level.Info(logger).Log("msg", "start optional retention")
@@ -32,8 +32,8 @@ func ApplyRetentionPolicyByResolution(ctx context.Context, logger log.Logger, bk
 
 		maxTime := time.Unix(m.MaxTime/1000, 0)
 		if time.Now().After(maxTime.Add(retentionDuration)) {
-			level.Info(logger).Log("msg", "deleting block", "id", id, "maxTime", maxTime.String())
-			if err := block.Delete(ctx, bkt, id); err != nil {
+			level.Info(logger).Log("msg", "applying retention: deleting block", "id", id, "maxTime", maxTime.String())
+			if err := block.Delete(ctx, logger, bkt, id); err != nil {
 				return errors.Wrap(err, "delete block")
 			}
 		}

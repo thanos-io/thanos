@@ -12,7 +12,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store"
@@ -22,7 +22,6 @@ import (
 
 const (
 	unhealthyStoreMessage = "removing store because it's unhealthy or does not exist"
-	droppingStoreMessage  = "dropping store, external labels are not unique"
 )
 
 type StoreSpec interface {
@@ -33,7 +32,7 @@ type StoreSpec interface {
 	// If metadata call fails we assume that store is no longer accessible and we should not use it.
 	// NOTE: It is implementation responsibility to retry until context timeout, but a caller responsibility to manage
 	// given store connection.
-	Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []storepb.LabelSet, mint int64, maxt int64, err error)
+	Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []storepb.LabelSet, mint int64, maxt int64, storeType component.StoreAPI, err error)
 }
 
 type StoreStatus struct {
@@ -63,16 +62,86 @@ func (s *grpcStoreSpec) Addr() string {
 
 // Metadata method for gRPC store API tries to reach host Info method until context timeout. If we are unable to get metadata after
 // that time, we assume that the host is unhealthy and return error.
-func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []storepb.LabelSet, mint int64, maxt int64, err error) {
+func (s *grpcStoreSpec) Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []storepb.LabelSet, mint int64, maxt int64, storeType component.StoreAPI, err error) {
 	resp, err := client.Info(ctx, &storepb.InfoRequest{}, grpc.WaitForReady(true))
 	if err != nil {
-		return nil, 0, 0, errors.Wrapf(err, "fetching store info from %s", s.addr)
+		return nil, 0, 0, nil, errors.Wrapf(err, "fetching store info from %s", s.addr)
 	}
 	if len(resp.LabelSets) == 0 && len(resp.Labels) > 0 {
 		resp.LabelSets = []storepb.LabelSet{{Labels: resp.Labels}}
 	}
 
-	return resp.LabelSets, resp.MinTime, resp.MaxTime, nil
+	return resp.LabelSets, resp.MinTime, resp.MaxTime, component.FromProto(resp.StoreType), nil
+}
+
+// storeSetNodeCollector is metric collector for Guge indicated number of available storeAPIs for Querier.
+// Collector is requires as we want atomic updates for all 'thanos_store_nodes_grpc_connections' series.
+type storeSetNodeCollector struct {
+	mtx             sync.Mutex
+	storeNodes      map[component.StoreAPI]map[string]int
+	storePerExtLset map[string]int
+
+	metricDesc  *prometheus.Desc
+	metricDesc2 *prometheus.Desc
+}
+
+func newStoreSetNodeCollector() *storeSetNodeCollector {
+	return &storeSetNodeCollector{
+		storeNodes: map[component.StoreAPI]map[string]int{},
+		metricDesc: prometheus.NewDesc(
+			"thanos_store_nodes_grpc_connections",
+			"Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.",
+			[]string{"external_labels", "store_type"}, nil,
+		),
+		// TODO(bwplotka): Obsolete; Replaced by thanos_store_nodes_grpc_connections.
+		// Remove in next minor release.
+		metricDesc2: prometheus.NewDesc(
+			"thanos_store_node_info",
+			"Deprecated, use thanos_store_node_info instead.",
+			[]string{"external_labels"}, nil,
+		),
+	}
+}
+
+func (c *storeSetNodeCollector) Update(nodes map[component.StoreAPI]map[string]int) {
+	storeNodes := make(map[component.StoreAPI]map[string]int, len(nodes))
+	storePerExtLset := map[string]int{}
+
+	for k, v := range nodes {
+		storeNodes[k] = make(map[string]int, len(v))
+		for kk, vv := range v {
+			storePerExtLset[kk] += vv
+			storeNodes[k][kk] = vv
+		}
+	}
+
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	c.storeNodes = storeNodes
+	c.storePerExtLset = storePerExtLset
+}
+
+func (c *storeSetNodeCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- c.metricDesc
+	ch <- c.metricDesc2
+}
+
+func (c *storeSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+
+	for storeType, occurrencesPerExtLset := range c.storeNodes {
+		for externalLabels, occurrences := range occurrencesPerExtLset {
+			var storeTypeStr string
+			if storeType != nil {
+				storeTypeStr = storeType.String()
+			}
+			ch <- prometheus.MustNewConstMetric(c.metricDesc, prometheus.GaugeValue, float64(occurrences), externalLabels, storeTypeStr)
+		}
+	}
+	for externalLabels, occur := range c.storePerExtLset {
+		ch <- prometheus.MustNewConstMetric(c.metricDesc2, prometheus.GaugeValue, float64(occur), externalLabels)
+	}
 }
 
 // StoreSet maintains a set of active stores. It is backed up by Store Specifications that are dynamically fetched on
@@ -86,34 +155,17 @@ type StoreSet struct {
 	dialOpts            []grpc.DialOption
 	gRPCInfoCallTimeout time.Duration
 
-	mtx                              sync.RWMutex
-	storesStatusesMtx                sync.RWMutex
-	stores                           map[string]*storeRef
-	storeNodeConnections             prometheus.Gauge
-	externalLabelOccurrencesInStores map[string]int
-	storeStatuses                    map[string]*StoreStatus
-	unhealthyStoreTimeout            time.Duration
-}
+	updateMtx         sync.Mutex
+	storesMtx         sync.RWMutex
+	storesStatusesMtx sync.RWMutex
 
-type storeSetNodeCollector struct {
-	externalLabelOccurrences func() map[string]int
-}
+	// Main map of stores currently used for fanout.
+	stores       map[string]*storeRef
+	storesMetric *storeSetNodeCollector
 
-var nodeInfoDesc = prometheus.NewDesc(
-	"thanos_store_node_info",
-	"Number of nodes with the same external labels identified by their hash. If any time-series is larger than 1, external label uniqueness is not true",
-	[]string{"external_labels"}, nil,
-)
-
-func (c *storeSetNodeCollector) Describe(ch chan<- *prometheus.Desc) {
-	ch <- nodeInfoDesc
-}
-
-func (c *storeSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
-	externalLabelOccurrences := c.externalLabelOccurrences()
-	for externalLabels, occurrences := range externalLabelOccurrences {
-		ch <- prometheus.MustNewConstMetric(nodeInfoDesc, prometheus.GaugeValue, float64(occurrences), externalLabels)
-	}
+	// Map of statuses used only by UI.
+	storeStatuses         map[string]*StoreStatus
+	unhealthyStoreTimeout time.Duration
 }
 
 // NewStoreSet returns a new set of stores from cluster peers and statically configured ones.
@@ -124,38 +176,28 @@ func NewStoreSet(
 	dialOpts []grpc.DialOption,
 	unhealthyStoreTimeout time.Duration,
 ) *StoreSet {
-	storeNodeConnections := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "thanos_store_nodes_grpc_connections",
-		Help: "Number indicating current number of gRPC connection to store nodes. This indicates also to how many stores query node have access to.",
-	})
+	storesMetric := newStoreSetNodeCollector()
+	if reg != nil {
+		reg.MustRegister(storesMetric)
+	}
 
 	if logger == nil {
 		logger = log.NewNopLogger()
-	}
-	if reg != nil {
-		reg.MustRegister(storeNodeConnections)
 	}
 	if storeSpecs == nil {
 		storeSpecs = func() []StoreSpec { return nil }
 	}
 
 	ss := &StoreSet{
-		logger:                           log.With(logger, "component", "storeset"),
-		storeSpecs:                       storeSpecs,
-		dialOpts:                         dialOpts,
-		storeNodeConnections:             storeNodeConnections,
-		gRPCInfoCallTimeout:              10 * time.Second,
-		externalLabelOccurrencesInStores: map[string]int{},
-		stores:                           make(map[string]*storeRef),
-		storeStatuses:                    make(map[string]*StoreStatus),
-		unhealthyStoreTimeout:            unhealthyStoreTimeout,
+		logger:                log.With(logger, "component", "storeset"),
+		storeSpecs:            storeSpecs,
+		dialOpts:              dialOpts,
+		storesMetric:          storesMetric,
+		gRPCInfoCallTimeout:   10 * time.Second,
+		stores:                make(map[string]*storeRef),
+		storeStatuses:         make(map[string]*StoreStatus),
+		unhealthyStoreTimeout: unhealthyStoreTimeout,
 	}
-
-	storeNodeCollector := &storeSetNodeCollector{externalLabelOccurrences: ss.externalLabelOccurrences}
-	if reg != nil {
-		reg.MustRegister(storeNodeCollector)
-	}
-
 	return ss
 }
 
@@ -175,22 +217,78 @@ type storeRef struct {
 	logger log.Logger
 }
 
-func (s *storeRef) Update(labelSets []storepb.LabelSet, minTime int64, maxTime int64) {
+func (s *storeRef) Update(labelSets []storepb.LabelSet, minTime int64, maxTime int64, storeType component.StoreAPI) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
+	s.storeType = storeType
 	s.labelSets = labelSets
 	s.minTime = minTime
 	s.maxTime = maxTime
 }
 
+func (s *storeRef) StoreType() component.StoreAPI {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	return s.storeType
+}
+
 func (s *storeRef) LabelSets() []storepb.LabelSet {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
-	return s.labelSets
+
+	labelSet := make([]storepb.LabelSet, 0, len(s.labelSets))
+	for _, ls := range s.labelSets {
+		if len(ls.Labels) == 0 {
+			continue
+		}
+		// Compatibility label for Queriers pre 0.8.1. Filter it out now.
+		if ls.Labels[0].Name == store.CompatibilityTypeLabelName {
+			continue
+		}
+
+		lbls := make([]storepb.Label, 0, len(ls.Labels))
+		for _, l := range ls.Labels {
+			lbls = append(lbls, storepb.Label{
+				Name:  l.Name,
+				Value: l.Value,
+			})
+		}
+		labelSet = append(labelSet, storepb.LabelSet{Labels: lbls})
+	}
+	return labelSet
 }
 
-func (s *storeRef) TimeRange() (int64, int64) {
+func (s *storeRef) LabelSetsString() string {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	labelSet := make([]string, 0, len(s.labelSets))
+	for _, ls := range s.labelSets {
+		if len(ls.Labels) == 0 {
+			continue
+		}
+		// Compatibility label for Queriers pre 0.8.1. Filter it out now.
+		if ls.Labels[0].Name == store.CompatibilityTypeLabelName {
+			continue
+		}
+
+		lbls := labels.Labels(make([]labels.Label, 0, len(ls.Labels)))
+		for _, l := range ls.Labels {
+			lbls = append(lbls, labels.Label{
+				Name:  l.Name,
+				Value: l.Value,
+			})
+		}
+		sort.Sort(lbls)
+		labelSet = append(labelSet, lbls.String())
+	}
+	sort.Strings(labelSet)
+	return strings.Join(labelSet, ",")
+}
+
+func (s *storeRef) TimeRange() (mint int64, maxt int64) {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 
@@ -206,76 +304,87 @@ func (s *storeRef) Addr() string {
 	return s.addr
 }
 
-func (s *storeRef) close() {
+func (s *storeRef) Close() {
 	runutil.CloseWithLogOnErr(s.logger, s.cc, fmt.Sprintf("store %v connection close", s.addr))
+}
+
+func newStoreAPIStats() map[component.StoreAPI]map[string]int {
+	nodes := make(map[component.StoreAPI]map[string]int, len(storepb.StoreType_name))
+	for i := range storepb.StoreType_name {
+		nodes[component.FromProto(storepb.StoreType(i))] = map[string]int{}
+	}
+	return nodes
 }
 
 // Update updates the store set. It fetches current list of store specs from function and updates the fresh metadata
 // from all stores.
 func (s *StoreSet) Update(ctx context.Context) {
-	healthyStores := s.getHealthyStores(ctx)
+	s.updateMtx.Lock()
+	defer s.updateMtx.Unlock()
 
-	// Record the number of occurrences of external label combinations for current store slice.
-	externalLabelOccurrencesInStores := map[string]int{}
-	for _, st := range healthyStores {
-		externalLabelOccurrencesInStores[externalLabelsFromStore(st)]++
+	s.storesMtx.RLock()
+	stores := make(map[string]*storeRef, len(s.stores))
+	for addr, st := range s.stores {
+		stores[addr] = st
 	}
-	level.Debug(s.logger).Log("msg", "updating healthy stores", "externalLabelOccurrencesInStores", fmt.Sprintf("%#+v", externalLabelOccurrencesInStores))
+	s.storesMtx.RUnlock()
 
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
+	level.Debug(s.logger).Log("msg", "starting updating storeAPIs", "cachedStores", len(stores))
+
+	healthyStores := s.getHealthyStores(ctx, stores)
+	level.Debug(s.logger).Log("msg", "checked requested storeAPIs", "healthyStores", len(healthyStores), "cachedStores", len(stores))
+
+	stats := newStoreAPIStats()
 
 	// Close stores that where not healthy this time (are not in healthy stores map).
-	for addr, store := range s.stores {
+	for addr, st := range stores {
 		if _, ok := healthyStores[addr]; ok {
+			stats[st.StoreType()][st.LabelSetsString()]++
 			continue
 		}
 
-		// Peer does not exists anymore.
-		store.close()
-		delete(s.stores, addr)
-		s.updateStoreStatus(store, errors.New(unhealthyStoreMessage))
-		level.Info(s.logger).Log("msg", unhealthyStoreMessage, "address", addr)
+		st.Close()
+		delete(stores, addr)
+		s.updateStoreStatus(st, errors.New(unhealthyStoreMessage))
+		level.Info(s.logger).Log("msg", unhealthyStoreMessage, "address", addr, "extLset", st.LabelSetsString())
 	}
 
-	// Add stores that are not yet in s.stores.
-	for addr, store := range healthyStores {
-		if _, ok := s.stores[addr]; ok {
-			s.updateStoreStatus(store, nil)
+	// Add stores that are not yet in stores.
+	for addr, st := range healthyStores {
+		if _, ok := stores[addr]; ok {
 			continue
 		}
 
-		// Check if the store has some external labels specified and if any if there are duplicates.
-		// We warn and exclude duplicates because it unnecessarily puts additional load on querier, network and underlying StoreAPIs and
-		// it indicates misconfiguration.
-		//
-		// Note: No external labels means strictly store gateway or ruler and it is fine to have access to multiple instances of them.
-		// Any other component will error out if it will be configured with empty external labels.
-		externalLabels := externalLabelsFromStore(store)
-		if len(store.LabelSets()) > 0 && externalLabelOccurrencesInStores[externalLabels] != 1 {
-			store.close()
-			s.updateStoreStatus(store, errors.New(droppingStoreMessage))
-			level.Warn(s.logger).Log("msg", droppingStoreMessage, "address", addr, "extLset", externalLabels, "duplicates", externalLabelOccurrencesInStores[externalLabels])
-			// We don't want to block all of them. Leave one to not disrupt in terms of migration.
-			externalLabelOccurrencesInStores[externalLabels]--
-			continue
-		}
+		extLset := st.LabelSetsString()
 
-		s.stores[addr] = store
-		s.updateStoreStatus(store, nil)
-		level.Info(s.logger).Log("msg", "adding new store to query storeset", "address", addr)
+		// All producers should have unique external labels. While this does not check only StoreAPIs connected to
+		// this querier this allows to notify early user about misconfiguration. Warn only. This is also detectable from metric.
+		if st.StoreType() != nil &&
+			(st.StoreType() == component.Sidecar || st.StoreType() == component.Rule) &&
+			stats[component.Sidecar][extLset]+stats[component.Rule][extLset] > 0 {
+
+			level.Warn(s.logger).Log("msg", "found duplicate storeAPI producer (sidecar or ruler). This is not advices as it will malform data in in the same bucket",
+				"address", addr, "extLset", extLset, "duplicates", fmt.Sprintf("%v", stats[component.Sidecar][extLset]+stats[component.Rule][extLset]+1))
+		}
+		stats[st.StoreType()][st.LabelSetsString()]++
+
+		stores[addr] = st
+		s.updateStoreStatus(st, nil)
+		level.Info(s.logger).Log("msg", "adding new storeAPI to query storeset", "address", addr, "extLset", extLset)
 	}
 
-	s.externalLabelOccurrencesInStores = externalLabelOccurrencesInStores
-	s.storeNodeConnections.Set(float64(len(s.stores)))
-	s.cleanUpStoreStatuses()
+	s.storesMetric.Update(stats)
+	s.storesMtx.Lock()
+	s.stores = stores
+	s.storesMtx.Unlock()
+
+	s.cleanUpStoreStatuses(stores)
 }
 
-func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
+func (s *StoreSet) getHealthyStores(ctx context.Context, stores map[string]*storeRef) map[string]*storeRef {
 	var (
-		unique = make(map[string]struct{})
-
-		healthyStores = make(map[string]*storeRef, len(s.stores))
+		unique        = make(map[string]struct{})
+		healthyStores = make(map[string]*storeRef, len(stores))
 		mtx           sync.Mutex
 		wg            sync.WaitGroup
 	)
@@ -297,18 +406,8 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 			ctx, cancel := context.WithTimeout(ctx, s.gRPCInfoCallTimeout)
 			defer cancel()
 
-			store, ok := s.stores[addr]
-			if ok {
-				// Check existing store. Is it healthy? What are current metadata?
-				labelSets, minTime, maxTime, err := spec.Metadata(ctx, store.StoreClient)
-				if err != nil {
-					// Peer unhealthy. Do not include in healthy stores.
-					s.updateStoreStatus(store, err)
-					level.Warn(s.logger).Log("msg", "update of store node failed", "err", err, "address", addr)
-					return
-				}
-				store.Update(labelSets, minTime, maxTime)
-			} else {
+			st, seenAlready := stores[addr]
+			if !seenAlready {
 				// New store or was unhealthy and was removed in the past - create new one.
 				conn, err := grpc.DialContext(ctx, addr, s.dialOpts...)
 				if err != nil {
@@ -316,51 +415,32 @@ func (s *StoreSet) getHealthyStores(ctx context.Context) map[string]*storeRef {
 					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "dialing connection"), "address", addr)
 					return
 				}
-				store = &storeRef{StoreClient: storepb.NewStoreClient(conn), cc: conn, addr: addr, logger: s.logger}
-
-				// Initial info call for all types of stores to check gRPC StoreAPI.
-				resp, err := store.StoreClient.Info(ctx, &storepb.InfoRequest{}, grpc.WaitForReady(true))
-				if err != nil {
-					store.close()
-					s.updateStoreStatus(store, err)
-					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "initial store client info fetch"), "address", addr)
-					return
-				}
-				if len(resp.LabelSets) == 0 && len(resp.Labels) > 0 {
-					resp.LabelSets = []storepb.LabelSet{{Labels: resp.Labels}}
-				}
-				store.storeType = component.FromProto(resp.StoreType)
-				store.Update(resp.LabelSets, resp.MinTime, resp.MaxTime)
+				st = &storeRef{StoreClient: storepb.NewStoreClient(conn), cc: conn, addr: addr, logger: s.logger}
 			}
+
+			// Check existing or new store. Is it healthy? What are current metadata?
+			labelSets, minTime, maxTime, storeType, err := spec.Metadata(ctx, st.StoreClient)
+			if err != nil {
+				if !seenAlready {
+					// Close only if new. Unhealthy `s.stores` will be closed later on.
+					st.Close()
+				}
+				s.updateStoreStatus(st, err)
+				level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "getting metadata"), "address", addr)
+				return
+			}
+			s.updateStoreStatus(st, nil)
+			st.Update(labelSets, minTime, maxTime, storeType)
 
 			mtx.Lock()
 			defer mtx.Unlock()
 
-			healthyStores[addr] = store
+			healthyStores[addr] = st
 		}(storeSpec)
 	}
-
 	wg.Wait()
 
 	return healthyStores
-}
-
-func externalLabelsFromStore(store *storeRef) string {
-	tsdbLabelSetStrings := make([]string, 0, len(store.labelSets))
-	for _, ls := range store.labelSets {
-		tsdbLabels := labels.Labels{}
-		for _, l := range ls.Labels {
-			tsdbLabels = append(tsdbLabels, labels.Label{
-				Name:  l.Name,
-				Value: l.Value,
-			})
-		}
-		sort.Sort(tsdbLabels)
-		tsdbLabelSetStrings = append(tsdbLabelSetStrings, tsdbLabels.String())
-	}
-	sort.Strings(tsdbLabelSetStrings)
-
-	return strings.Join(tsdbLabelSetStrings, ",")
 }
 
 func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
@@ -377,10 +457,12 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 	status.LastCheck = time.Now()
 
 	if err == nil {
-		status.LabelSets = store.labelSets
-		status.StoreType = store.storeType
-		status.MinTime = store.minTime
-		status.MaxTime = store.maxTime
+
+		mint, maxt := store.TimeRange()
+		status.LabelSets = store.LabelSets()
+		status.StoreType = store.StoreType()
+		status.MinTime = mint
+		status.MaxTime = maxt
 	}
 
 	s.storeStatuses[store.addr] = &status
@@ -401,22 +483,10 @@ func (s *StoreSet) GetStoreStatus() []StoreStatus {
 	return statuses
 }
 
-func (s *StoreSet) externalLabelOccurrences() map[string]int {
-	s.mtx.RLock()
-	defer s.mtx.RUnlock()
-
-	r := make(map[string]int, len(s.externalLabelOccurrencesInStores))
-	for k, v := range s.externalLabelOccurrencesInStores {
-		r[k] = v
-	}
-
-	return r
-}
-
 // Get returns a list of all active stores.
 func (s *StoreSet) Get() []store.Client {
-	s.mtx.RLock()
-	defer s.mtx.RUnlock()
+	s.storesMtx.RLock()
+	defer s.storesMtx.RUnlock()
 
 	stores := make([]store.Client, 0, len(s.stores))
 	for _, st := range s.stores {
@@ -426,21 +496,27 @@ func (s *StoreSet) Get() []store.Client {
 }
 
 func (s *StoreSet) Close() {
+	s.storesMtx.Lock()
+	defer s.storesMtx.Unlock()
+
 	for _, st := range s.stores {
-		st.close()
+		st.Close()
 	}
+	s.stores = map[string]*storeRef{}
 }
 
-func (s *StoreSet) cleanUpStoreStatuses() {
+func (s *StoreSet) cleanUpStoreStatuses(stores map[string]*storeRef) {
 	s.storesStatusesMtx.Lock()
 	defer s.storesStatusesMtx.Unlock()
 
 	now := time.Now()
 	for addr, status := range s.storeStatuses {
-		if _, ok := s.stores[addr]; !ok {
-			if now.Sub(status.LastCheck) >= s.unhealthyStoreTimeout {
-				delete(s.storeStatuses, addr)
-			}
+		if _, ok := stores[addr]; ok {
+			continue
+		}
+
+		if now.Sub(status.LastCheck) >= s.unhealthyStoreTimeout {
+			delete(s.storeStatuses, addr)
 		}
 	}
 }

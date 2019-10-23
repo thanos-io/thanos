@@ -7,7 +7,7 @@
     </div>
     <div class="row py-3 pb-lg-5">
         <div class="col text-center">
-            <h3 class="mb-3">Highly available Prometheus setup with long term storage capabilities.</h3>
+            <h3 class="mb-3">Open source, highly available Prometheus setup with long term storage capabilities.</h3>
             <ul class="list-inline mb-0">
                 <li class="list-inline-item my-3">
                     <a href="{{ "getting-started.md" | relURL }}" class="btn btn-outline-secondary">
@@ -16,12 +16,22 @@
                 </li>
                 <li class="list-inline-item my-3">
                     <a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}/releases" class="btn btn-outline-secondary">
-                        <i class="fas fa-fw fa-download"></i> Download
+                        <i class="mr-1 fas fa-fw fa-download"></i> Download
+                    </a>
+                </li>
+                <li class="list-inline-item my-3">
+                    <a href="https://quay.io/repository/{{ .Site.Params.QuayIoUser }}/{{ .Site.Params.QuayIoRepository }}" class="btn btn-outline-secondary">
+                        <i class="mr-1 fab fa-fw fa-docker"></i> Quay.io
+                    </a>
+                </li>
+                <li class="list-inline-item my-3">
+                    <a href="https://hub.docker.com/r/{{ .Site.Params.DockerHubUser }}/{{ .Site.Params.DockerHubRepository }}" class="btn btn-outline-secondary">
+                        <i class="mr-1 fab fa-fw fa-docker"></i> DockerHub
                     </a>
                 </li>
                 <li class="list-inline-item my-3">
                     <a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}" class="btn btn-outline-secondary">
-                        <i class="fab fa-fw fa-github"></i> Github
+                        <i class="mr-1 fab fa-fw fa-github"></i> Github
                     </a>
                 </li>
             </ul>
@@ -76,6 +86,16 @@
             <div class="img-adopter">
                 <a class="text-center text-muted" href="{{ "contributing/how-to-contribute-to-docs.md#adopters-logos" | relURL }}">Your Company</a>
             </div>
+        </div>
+    </div>
+</div>
+<div class="container-fluid bg-light">
+    <div class="row py-5">
+        <div class="col text-center">
+            <div class="col col-sm-1 col-md-6 offset-md-3 col-lg-4 offset-lg-4 text-center">
+                <img class="img-fluid" style="max-width: 60%" src="cloud-native-computing.svg" alt="CNCF"/>
+            </div>
+            <p>We are <a href="https://cncf.io">Cloud Native Computing Foundation</a> Sandbox project.</p>
         </div>
     </div>
 </div>

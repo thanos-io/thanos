@@ -21,8 +21,8 @@ import (
 // HashringConfig represents the configuration for a hashring
 // a receive node knows about.
 type HashringConfig struct {
-	Hashring  string   `json:"hashring"`
-	Tenants   []string `json:"tenants"`
+	Hashring  string   `json:"hashring,omitempty"`
+	Tenants   []string `json:"tenants,omitempty"`
 	Endpoints []string `json:"endpoints"`
 }
 
@@ -147,8 +147,9 @@ func (cw *ConfigWatcher) Run(ctx context.Context) {
 			if len(event.Name) == 0 {
 				break
 			}
-			// Everything but a chmod requires rereading.
-			if event.Op^fsnotify.Chmod == 0 {
+			// Everything but a CHMOD requires rereading.
+			// If the file was removed, we can't read it, so skip.
+			if event.Op^(fsnotify.Chmod|fsnotify.Remove) == 0 {
 				break
 			}
 			// Changes to a file can spawn various sequences of events with
@@ -231,6 +232,7 @@ func (cw *ConfigWatcher) refresh(ctx context.Context) {
 		cw.hashringTenantsGauge.WithLabelValues(c.Hashring).Set(float64(len(c.Tenants)))
 	}
 
+	level.Debug(cw.logger).Log("msg", "refreshed hashring config")
 	select {
 	case <-ctx.Done():
 		return

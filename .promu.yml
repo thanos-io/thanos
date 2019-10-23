@@ -1,5 +1,5 @@
 go:
-    version: 1.12.5
+    version: 1.13.1
 repository:
     path: github.com/thanos-io/thanos
 build:
@@ -19,3 +19,4 @@ crossbuild:
         - darwin/amd64
         - linux/arm64
         - windows/amd64
+        - freebsd/amd64

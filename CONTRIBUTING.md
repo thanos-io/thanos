@@ -64,7 +64,7 @@ CI runs GCS and inmem tests only for now. Not having these variables will produc
 6. If your change affects users (adds or removes feature) consider adding the item to [CHANGELOG](CHANGELOG.md)
 7. You may merge the Pull Request in once you have the sign-off of at least one developers with write access, or if you
    do not have permission to do that, you may request the second reviewer to merge it for you.
-8. If you feel like your PR waits too long for a review, feel free to ping [`#thanos-dev`](https://slack.cncf.io/) channel on our slack for review!
+8. If you feel like your PR waits too long for a review, feel free to ping [`#thanos-prs`](https://slack.cncf.io/) channel on our slack for review!
 
 ## Dependency management
 
@@ -83,7 +83,7 @@ go get example.com/some/module/pkg@vX.Y.Z
 Tidy up the `go.mod` and `go.sum` files:
 
 ```bash
-make go-mod-tidy
+make deps
 git add go.mod go.sum
 git commit
 ```

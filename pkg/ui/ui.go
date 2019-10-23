@@ -115,7 +115,7 @@ func SanitizePrefix(prefix string) (string, error) {
 		return "", err
 	}
 
-	// remove double slashes, convert to absolute path
+	// Remove double slashes, convert to absolute path.
 	sanitizedPrefix := strings.TrimPrefix(path.Clean(u.Path), ".")
 
 	if strings.HasSuffix(sanitizedPrefix, "/") {

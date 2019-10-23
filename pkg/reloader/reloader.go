@@ -3,7 +3,7 @@
 //
 // Reloader type is useful when you want to:
 //
-// 	* Watch on changes against certain file e.g (`cfgFile`) .
+// 	* Watch on changes against certain file e.g (`cfgFile`).
 // 	* Optionally, specify different different output file for watched `cfgFile` (`cfgOutputFile`).
 // 	This will also try decompress the `cfgFile` if needed and substitute ALL the envvars using Kubernetes substitution format: (`$(var)`)
 // 	* Watch on changes against certain directories (`ruleDires`).
@@ -199,7 +199,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 				return errors.Wrap(err, "read file")
 			}
 
-			// detect and extract gzipped file
+			// Detect and extract gzipped file.
 			if bytes.Equal(b[0:3], firstGzipBytes) {
 				zr, err := gzip.NewReader(bytes.NewReader(b))
 				if err != nil {
@@ -301,6 +301,7 @@ func hashFile(h hash.Hash, fn string) error {
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 
 	if _, err := h.Write([]byte{'\xff'}); err != nil {
 		return err

@@ -12,7 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
@@ -22,14 +22,15 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
-func TestStoreGatewayQuery(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func TestStoreGateway(t *testing.T) {
+	a := newLocalAddresser()
+	minioAddr := a.New()
 
 	s3Config := s3.Config{
 		Bucket:    "test-storegateway-query",
 		AccessKey: "abc",
 		SecretKey: "mightysecret",
-		Endpoint:  minioHTTP(1),
+		Endpoint:  minioAddr.HostPort(),
 		Insecure:  true,
 	}
 
@@ -41,11 +42,17 @@ func TestStoreGatewayQuery(t *testing.T) {
 	config, err := yaml.Marshal(bucketConfig)
 	testutil.Ok(t, err)
 
-	exit, err := newSpinupSuite().
-		WithPreStartedMinio(s3Config).
-		Add(storeGateway(1, config)).
-		Add(querierWithStoreFlags(1, "replica", storeGatewayGRPC(1))).
-		Exec(t, ctx, "test_store_gateway_query")
+	relabelContentYaml := `
+    - action: drop
+      regex: "value2"
+      source_labels:
+      - ext1
+    `
+	s := storeGateway(a.New(), a.New(), config, []byte(relabelContentYaml))
+	q := querier(a.New(), a.New(), []address{s.GRPC}, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+
+	exit, err := e2eSpinupWithS3ObjStorage(t, ctx, minioAddr, &s3Config, s, q)
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)
 		cancel()
@@ -66,12 +73,16 @@ func TestStoreGatewayQuery(t *testing.T) {
 	}
 	extLset := labels.FromStrings("ext1", "value1", "replica", "1")
 	extLset2 := labels.FromStrings("ext1", "value1", "replica", "2")
+	extLset3 := labels.FromStrings("ext1", "value2", "replica", "3")
 
 	now := time.Now()
 	id1, err := testutil.CreateBlock(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset, 0)
 	testutil.Ok(t, err)
 
 	id2, err := testutil.CreateBlock(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset2, 0)
+	testutil.Ok(t, err)
+
+	id3, err := testutil.CreateBlock(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), extLset3, 0)
 	testutil.Ok(t, err)
 
 	l := log.NewLogfmtLogger(os.Stdout)
@@ -81,6 +92,7 @@ func TestStoreGatewayQuery(t *testing.T) {
 
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id1.String()), id1.String()))
 	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id2.String()), id2.String()))
+	testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id3.String()), id3.String()))
 
 	var res model.Vector
 
@@ -97,7 +109,7 @@ func TestStoreGatewayQuery(t *testing.T) {
 			err      error
 			warnings []string
 		)
-		res, warnings, err = promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "{a=\"1\"}", time.Now(), promclient.QueryOptions{
+		res, warnings, err = promclient.QueryInstant(ctx, nil, urlParse(t, q.HTTP.URL()), "{a=\"1\"}", time.Now(), promclient.QueryOptions{
 			Deduplicate: false,
 		})
 		if err != nil {
@@ -142,7 +154,7 @@ func TestStoreGatewayQuery(t *testing.T) {
 			err      error
 			warnings []string
 		)
-		res, warnings, err = promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "{a=\"1\"}", time.Now(), promclient.QueryOptions{
+		res, warnings, err = promclient.QueryInstant(ctx, nil, urlParse(t, q.HTTP.URL()), "{a=\"1\"}", time.Now(), promclient.QueryOptions{
 			Deduplicate: true,
 		})
 		if err != nil {

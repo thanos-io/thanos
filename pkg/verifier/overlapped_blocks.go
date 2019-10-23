@@ -8,7 +8,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
-	"github.com/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -58,7 +58,7 @@ func fetchOverlaps(ctx context.Context, logger log.Logger, bkt objstore.Bucket) 
 			return err
 		}
 
-		metas[compact.GroupKey(m)] = append(metas[compact.GroupKey(m)], m.BlockMeta)
+		metas[compact.GroupKey(m.Thanos)] = append(metas[compact.GroupKey(m.Thanos)], m.BlockMeta)
 		return nil
 	})
 	if err != nil {

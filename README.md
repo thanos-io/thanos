@@ -12,6 +12,8 @@ Thanos is a set of components that can be composed into a highly available metri
 system with unlimited storage capacity, which can be added seamlessly on top of existing
 Prometheus deployments.
 
+Thanos is a [CNCF](https://www.cncf.io/) Sandbox project.
+
 Thanos leverages the Prometheus 2.0 storage format to cost-efficiently store historical metric
 data in any object storage while retaining fast query latencies. Additionally, it provides
 a global query view across all Prometheus installations and can merge data from Prometheus
@@ -23,17 +25,12 @@ Concretely the aims of the project are:
 1. Unlimited retention of metrics.
 1. High availability of components, including Prometheus.
 
-## Architecture Overview
-
-![architecture_overview](docs/img/arch.jpg)
-
 ## Getting Started
 
 * **[Getting Started](https://thanos.io/getting-started.md/)**
 * [Design](https://thanos.io/design.md/)
-* [Prom Meetup Slides](https://www.slideshare.net/BartomiejPotka/thanos-global-durable-prometheus-monitoring)
-* [Introduction blog post](https://improbable.io/games/blog/thanos-prometheus-at-scale)
-* [Benchmarks](https://github.com/thanos-io/thanos/tree/master/benchmark)
+* [Blog posts](docs/getting-started.md#blog-posts)
+* [Talks](docs/getting-started.md#talks)
 * [Proposals](docs/proposals)
 * [Integrations](docs/integrations.md)
 
@@ -49,6 +46,10 @@ Concretely the aims of the project are:
 * Simple gRPC "Store API" for unified data access across all metric data
 * Easy integration points for custom metric providers
 
+## Architecture Overview
+
+![architecture_overview](docs/img/arch.jpg)
+
 ## Thanos Philosophy
 
 The philosophy of Thanos and our community is borrowing much from UNIX philosophy and the golang programming language.
@@ -62,10 +63,11 @@ The philosophy of Thanos and our community is borrowing much from UNIX philosoph
 
 ## Releases
 
-Master should be stable and usable. Every commit to master builds docker image named `master-<data>-<sha>`.
+Master should be stable and usable. Every commit to master builds docker image named `master-<data>-<sha>` in [quay.io/thanos/thanos](https://quay.io/repository/thanos/thanos) and [thanosio/thanos dockerhub (mirror)](https://hub.docker.com/r/thanosio/thanos)
 
-We also perform minor releases every 6 weeks. 
-During that, we build tarballs for major platforms and docker image.
+We also perform minor releases every 6 weeks.
+
+During that, we build tarballs for major platforms and release docker images.
 
 See [release process docs](docs/release-process.md) for details.
 

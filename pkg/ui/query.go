@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/common/version"
@@ -26,6 +27,7 @@ type Query struct {
 
 	cwd   string
 	birth time.Time
+	reg   prometheus.Registerer
 	now   func() model.Time
 }
 
@@ -38,7 +40,7 @@ type thanosVersion struct {
 	GoVersion string `json:"goVersion"`
 }
 
-func NewQueryUI(logger log.Logger, storeSet *query.StoreSet, flagsMap map[string]string) *Query {
+func NewQueryUI(logger log.Logger, reg prometheus.Registerer, storeSet *query.StoreSet, flagsMap map[string]string) *Query {
 	cwd, err := os.Getwd()
 	if err != nil {
 		cwd = "<error retrieving current working directory>"
@@ -49,6 +51,7 @@ func NewQueryUI(logger log.Logger, storeSet *query.StoreSet, flagsMap map[string
 		flagsMap: flagsMap,
 		cwd:      cwd,
 		birth:    time.Now(),
+		reg:      reg,
 		now:      model.Now,
 	}
 }
@@ -78,11 +81,11 @@ func (q *Query) Register(r *route.Router, ins extpromhttp.InstrumentationMiddlew
 
 	r.Get("/static/*filepath", instrf("static", q.serveStaticAsset))
 	// TODO(bplotka): Consider adding more Thanos related data e.g:
-	// - what store nodes we see currently
-	// - what sidecars we see currently
+	// - What store nodes we see currently.
+	// - What sidecars we see currently.
 }
 
-// root redirects "/" requests to "/graph", taking into account the path prefix value
+// Root redirects "/" requests to "/graph", taking into account the path prefix value.
 func (q *Query) root(w http.ResponseWriter, r *http.Request) {
 	prefix := GetWebPrefix(q.logger, q.flagsMap, r)
 

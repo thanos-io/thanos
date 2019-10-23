@@ -39,3 +39,18 @@ adopters:
 - name: Sauce Labs
   url: https://saucelabs.com/
   logo: saucelabs.png
+- name: XING
+  url: https://www.xing.com/
+  logo: xing.png
+- name: Untab
+  url: https://www.untab.io/
+  logo: untab.png
+- name: Hotstar
+  url: https://www.hotstar.com/
+  logo: hotstar.jpg
+- name: UBIO
+  url: https://ub.io/
+  logo: ubio.png
+- name: Softonic
+  url: https://www.softonic.com
+  logo: softonic.png

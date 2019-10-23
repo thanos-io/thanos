@@ -50,8 +50,12 @@ spec:
           containerPort: 10901
         livenessProbe:
           httpGet:
-            path: /-/healthy
             port: http
+            path: /-/healthy
+        readinessProbe:
+          httpGet:
+            port: http
+            path: /-/ready
 ---
 apiVersion: v1
 kind: Service

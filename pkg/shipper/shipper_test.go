@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
-	"github.com/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -27,7 +27,7 @@ func TestShipperTimestamps(t *testing.T) {
 	_, _, err = s.Timestamps()
 	testutil.NotOk(t, err)
 
-	meta := &Meta{Version: 1}
+	meta := &Meta{Version: MetaVersion1}
 	testutil.Ok(t, WriteMetaFile(log.NewNopLogger(), dir, meta))
 
 	// Nothing uploaded, nothing in the filesystem. We assume that
@@ -68,7 +68,7 @@ func TestShipperTimestamps(t *testing.T) {
 	testutil.Equals(t, int64(math.MinInt64), maxt)
 
 	meta = &Meta{
-		Version:  1,
+		Version:  MetaVersion1,
 		Uploaded: []ulid.ULID{id1},
 	}
 	testutil.Ok(t, WriteMetaFile(log.NewNopLogger(), dir, meta))

@@ -14,17 +14,19 @@ import (
 )
 
 // QueryableCreator returns implementation of promql.Queryable that fetches data from the proxy store API endpoints.
-// If deduplication is enabled, all data retrieved from it will be deduplicated along the replicaLabel by default.
+// If deduplication is enabled, all data retrieved from it will be deduplicated along all replicaLabels by default.
+// When the replicaLabels argument is not empty it overwrites the global replicaLabels flag. This allows specifying
+// replicaLabels at query time.
 // maxResolutionMillis controls downsampling resolution that is allowed (specified in milliseconds).
 // partialResponse controls `partialResponseDisabled` option of StoreAPI and partial response behaviour of proxy.
-type QueryableCreator func(deduplicate bool, maxResolutionMillis int64, partialResponse bool) storage.Queryable
+type QueryableCreator func(deduplicate bool, replicaLabels []string, maxResolutionMillis int64, partialResponse bool) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
-func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLabel string) QueryableCreator {
-	return func(deduplicate bool, maxResolutionMillis int64, partialResponse bool) storage.Queryable {
+func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer) QueryableCreator {
+	return func(deduplicate bool, replicaLabels []string, maxResolutionMillis int64, partialResponse bool) storage.Queryable {
 		return &queryable{
 			logger:              logger,
-			replicaLabel:        replicaLabel,
+			replicaLabels:       replicaLabels,
 			proxy:               proxy,
 			deduplicate:         deduplicate,
 			maxResolutionMillis: maxResolutionMillis,
@@ -35,7 +37,7 @@ func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer, replicaLa
 
 type queryable struct {
 	logger              log.Logger
-	replicaLabel        string
+	replicaLabels       []string
 	proxy               storepb.StoreServer
 	deduplicate         bool
 	maxResolutionMillis int64
@@ -44,7 +46,7 @@ type queryable struct {
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabel, q.proxy, q.deduplicate, int64(q.maxResolutionMillis), q.partialResponse), nil
+	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.proxy, q.deduplicate, int64(q.maxResolutionMillis), q.partialResponse), nil
 }
 
 type querier struct {
@@ -52,7 +54,7 @@ type querier struct {
 	logger              log.Logger
 	cancel              func()
 	mint, maxt          int64
-	replicaLabel        string
+	replicaLabels       map[string]struct{}
 	proxy               storepb.StoreServer
 	deduplicate         bool
 	maxResolutionMillis int64
@@ -65,7 +67,7 @@ func newQuerier(
 	ctx context.Context,
 	logger log.Logger,
 	mint, maxt int64,
-	replicaLabel string,
+	replicaLabels []string,
 	proxy storepb.StoreServer,
 	deduplicate bool,
 	maxResolutionMillis int64,
@@ -75,13 +77,18 @@ func newQuerier(
 		logger = log.NewNopLogger()
 	}
 	ctx, cancel := context.WithCancel(ctx)
+
+	rl := make(map[string]struct{})
+	for _, replicaLabel := range replicaLabels {
+		rl[replicaLabel] = struct{}{}
+	}
 	return &querier{
 		ctx:                 ctx,
 		logger:              logger,
 		cancel:              cancel,
 		mint:                mint,
 		maxt:                maxt,
-		replicaLabel:        replicaLabel,
+		replicaLabels:       rl,
 		proxy:               proxy,
 		deduplicate:         deduplicate,
 		maxResolutionMillis: maxResolutionMillis,
@@ -90,7 +97,7 @@ func newQuerier(
 }
 
 func (q *querier) isDedupEnabled() bool {
-	return q.deduplicate && q.replicaLabel != ""
+	return q.deduplicate && len(q.replicaLabels) > 0
 }
 
 type seriesServer struct {
@@ -142,7 +149,7 @@ func aggrsFromFunc(f string) ([]storepb.Aggr, resAggr) {
 	if f == "count" || strings.HasPrefix(f, "count_") {
 		return []storepb.Aggr{storepb.Aggr_COUNT}, resAggrCount
 	}
-	// f == "sum" falls through here since we want the actual samples
+	// f == "sum" falls through here since we want the actual samples.
 	if strings.HasPrefix(f, "sum_") {
 		return []storepb.Aggr{storepb.Aggr_SUM}, resAggrSum
 	}
@@ -162,12 +169,18 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 		return nil, nil, errors.Wrap(err, "convert matchers")
 	}
 
+	if params == nil {
+		params = &storage.SelectParams{
+			Start: q.mint,
+			End:   q.maxt,
+		}
+	}
 	queryAggrs, resAggr := aggrsFromFunc(params.Func)
 
 	resp := &seriesServer{ctx: ctx}
 	if err := q.proxy.Series(&storepb.SeriesRequest{
-		MinTime:                 q.mint,
-		MaxTime:                 q.maxt,
+		MinTime:                 params.Start,
+		MaxTime:                 params.End,
 		Matchers:                sms,
 		MaxResolutionWindow:     q.maxResolutionMillis,
 		Aggregates:              queryAggrs,
@@ -183,7 +196,7 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 
 	if !q.isDedupEnabled() {
 		// Return data without any deduplication.
-		return promSeriesSet{
+		return &promSeriesSet{
 			mint: q.mint,
 			maxt: q.maxt,
 			set:  newStoreSeriesSet(resp.seriesSet),
@@ -193,9 +206,9 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 
 	// TODO(fabxc): this could potentially pushed further down into the store API
 	// to make true streaming possible.
-	sortDedupLabels(resp.seriesSet, q.replicaLabel)
+	sortDedupLabels(resp.seriesSet, q.replicaLabels)
 
-	set := promSeriesSet{
+	set := &promSeriesSet{
 		mint: q.mint,
 		maxt: q.maxt,
 		set:  newStoreSeriesSet(resp.seriesSet),
@@ -205,19 +218,19 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 	// The merged series set assembles all potentially-overlapping time ranges
 	// of the same series into a single one. The series are ordered so that equal series
 	// from different replicas are sequential. We can now deduplicate those.
-	return newDedupSeriesSet(set, q.replicaLabel), warns, nil
+	return newDedupSeriesSet(set, q.replicaLabels), warns, nil
 }
 
-// sortDedupLabels resorts the set so that the same series with different replica
+// sortDedupLabels re-sorts the set so that the same series with different replica
 // labels are coming right after each other.
-func sortDedupLabels(set []storepb.Series, replicaLabel string) {
+func sortDedupLabels(set []storepb.Series, replicaLabels map[string]struct{}) {
 	for _, s := range set {
-		// Move the replica label to the very end.
+		// Move the replica labels to the very end.
 		sort.Slice(s.Labels, func(i, j int) bool {
-			if s.Labels[i].Name == replicaLabel {
+			if _, ok := replicaLabels[s.Labels[i].Name]; ok {
 				return false
 			}
-			if s.Labels[j].Name == replicaLabel {
+			if _, ok := replicaLabels[s.Labels[j].Name]; ok {
 				return true
 			}
 			return s.Labels[i].Name < s.Labels[j].Name

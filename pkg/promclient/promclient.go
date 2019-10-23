@@ -28,7 +28,7 @@ import (
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/prometheus/promql"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -37,7 +37,7 @@ import (
 
 var ErrFlagEndpointNotFound = errors.New("no flag endpoint found")
 
-// IsWALFileAccesible returns no error if WAL dir can be found. This helps to tell
+// IsWALDirAccesible returns no error if WAL dir can be found. This helps to tell
 // if we have access to Prometheus TSDB directory.
 func IsWALDirAccesible(dir string) error {
 	const errMsg = "WAL dir is not accessible. Is this dir a TSDB directory? If yes it is shared with TSDB?"
@@ -111,7 +111,7 @@ type Flags struct {
 func (f *Flags) UnmarshalJSON(b []byte) error {
 	// TODO(bwplotka): Avoid this custom unmarshal by:
 	// - prometheus/common: adding unmarshalJSON to modelDuration
-	// - prometheus/prometheus: flags should return proper JSON. (not bool in string)
+	// - prometheus/prometheus: flags should return proper JSON (not bool in string).
 	parsableFlags := struct {
 		TSDBPath           string        `json:"storage.tsdb.path"`
 		TSDBRetention      modelDuration `json:"storage.tsdb.retention"`
@@ -345,7 +345,7 @@ func QueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query s
 	var vectorResult model.Vector
 
 	// Decode the Result depending on the ResultType
-	// Currently only `vector` and `scalar` types are supported
+	// Currently only `vector` and `scalar` types are supported.
 	switch m.Data.ResultType {
 	case promql.ValueTypeVector:
 		if err = json.Unmarshal(m.Data.Result, &vectorResult); err != nil {
@@ -403,7 +403,7 @@ func PromqlQueryInstant(ctx context.Context, logger log.Logger, base *url.URL, q
 func convertScalarJSONToVector(scalarJSONResult json.RawMessage) (model.Vector, error) {
 	var (
 		// Do not specify exact length of the expected slice since JSON unmarshaling
-		// would make the leght fit the size and we won't be able to check the length afterwards.
+		// would make the length fit the size and we won't be able to check the length afterwards.
 		resultPointSlice []json.RawMessage
 		resultTime       model.Time
 		resultValue      model.SampleValue

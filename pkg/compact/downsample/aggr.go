@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 
 	"github.com/pkg/errors"
-	"github.com/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 )
 
 // ChunkEncAggr is the top level encoding byte for the AggrChunk.
@@ -46,7 +46,7 @@ func (c AggrChunk) Appender() (chunkenc.Appender, error) {
 	return nil, errors.New("not implemented")
 }
 
-func (c AggrChunk) Iterator() chunkenc.Iterator {
+func (c AggrChunk) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
 	return chunkenc.NewNopIterator()
 }
 

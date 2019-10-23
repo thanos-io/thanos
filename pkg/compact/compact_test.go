@@ -7,9 +7,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
-	terrors "github.com/prometheus/tsdb/errors"
+	"github.com/prometheus/prometheus/pkg/relabel"
+	terrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/thanos-io/thanos/pkg/objstore/inmem"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -75,7 +78,8 @@ func TestSyncer_SyncMetas_HandlesMalformedBlocks(t *testing.T) {
 	defer cancel()
 
 	bkt := inmem.NewBucket()
-	sy, err := NewSyncer(nil, nil, bkt, 10*time.Second, 1, false)
+	relabelConfig := make([]*relabel.Config, 0)
+	sy, err := NewSyncer(nil, nil, bkt, 10*time.Second, 1, false, relabelConfig)
 	testutil.Ok(t, err)
 
 	// Generate 1 block which is older than MinimumAgeForRemoval which has chunk data but no meta.  Compactor should delete it.
@@ -102,4 +106,43 @@ func TestSyncer_SyncMetas_HandlesMalformedBlocks(t *testing.T) {
 	exists, err = bkt.Exists(ctx, path.Join(shouldIgnoreId.String(), "chunks", "000001"))
 	testutil.Ok(t, err)
 	testutil.Equals(t, true, exists)
+}
+
+func TestGroupKey(t *testing.T) {
+	for _, tcase := range []struct {
+		input    metadata.Thanos
+		expected string
+	}{
+		{
+			input:    metadata.Thanos{},
+			expected: "0@17241709254077376921",
+		},
+		{
+			input: metadata.Thanos{
+				Labels:     map[string]string{},
+				Downsample: metadata.ThanosDownsample{Resolution: 0},
+			},
+			expected: "0@17241709254077376921",
+		},
+		{
+			input: metadata.Thanos{
+				Labels:     map[string]string{"foo": "bar", "foo1": "bar2"},
+				Downsample: metadata.ThanosDownsample{Resolution: 0},
+			},
+			expected: "0@2124638872457683483",
+		},
+		{
+			input: metadata.Thanos{
+				Labels:     map[string]string{`foo/some..thing/some.thing/../`: `a_b_c/bar-something-a\metric/a\x`},
+				Downsample: metadata.ThanosDownsample{Resolution: 0},
+			},
+			expected: "0@16590761456214576373",
+		},
+	} {
+		if ok := t.Run("", func(t *testing.T) {
+			testutil.Equals(t, tcase.expected, GroupKey(tcase.input))
+		}); !ok {
+			return
+		}
+	}
 }

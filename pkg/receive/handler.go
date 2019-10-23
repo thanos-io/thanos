@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
-	"sync/atomic"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -21,46 +20,51 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/route"
-	promtsdb "github.com/prometheus/prometheus/storage/tsdb"
-	terrors "github.com/prometheus/tsdb/errors"
+	"github.com/prometheus/prometheus/prompb"
+	"github.com/prometheus/prometheus/storage"
+	terrors "github.com/prometheus/prometheus/tsdb/errors"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/runutil"
-	"github.com/thanos-io/thanos/pkg/store/prompb"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
+
+const (
+	// DefaultTenantHeader is the default header used to designate the tenant making a write request.
+	DefaultTenantHeader = "THANOS-TENANT"
+	// DefaultReplicaHeader is the default header used to designate the replica count of a write request.
+	DefaultReplicaHeader = "THANOS-REPLICA"
+)
+
+// conflictErr is returned whenever an operation fails due to any conflict-type error.
+var conflictErr = errors.New("conflict")
 
 // Options for the web Handler.
 type Options struct {
-	Receiver          *Writer
+	Writer            *Writer
 	ListenAddress     string
 	Registry          prometheus.Registerer
-	ReadyStorage      *promtsdb.ReadyStorage
 	Endpoint          string
 	TenantHeader      string
 	ReplicaHeader     string
 	ReplicationFactor uint64
+	Tracer            opentracing.Tracer
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
 type Handler struct {
-	readyStorage *promtsdb.ReadyStorage
-	logger       log.Logger
-	receiver     *Writer
-	router       *route.Router
-	options      *Options
-	listener     net.Listener
+	client   *http.Client
+	logger   log.Logger
+	writer   *Writer
+	router   *route.Router
+	options  *Options
+	listener net.Listener
 
 	mtx      sync.RWMutex
 	hashring Hashring
 
-	// Metrics
-	requestDuration      *prometheus.HistogramVec
-	requestsTotal        *prometheus.CounterVec
-	responseSize         *prometheus.HistogramVec
+	// Metrics.
 	forwardRequestsTotal *prometheus.CounterVec
-
-	// These fields are uint32 rather than boolean to be able to use atomic functions.
-	storageReady uint32
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -68,33 +72,17 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		logger = log.NewNopLogger()
 	}
 
+	client := &http.Client{}
+	if o.Tracer != nil {
+		client.Transport = tracing.HTTPTripperware(logger, http.DefaultTransport)
+	}
+
 	h := &Handler{
-		logger:       logger,
-		readyStorage: o.ReadyStorage,
-		receiver:     o.Receiver,
-		options:      o,
-		requestDuration: prometheus.NewHistogramVec(
-			prometheus.HistogramOpts{
-				Name:    "thanos_http_request_duration_seconds",
-				Help:    "Histogram of latencies for HTTP requests.",
-				Buckets: []float64{.1, .2, .4, 1, 3, 8, 20, 60, 120},
-			},
-			[]string{"handler"},
-		),
-		requestsTotal: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "thanos_http_requests_total",
-				Help: "Tracks the number of HTTP requests.",
-			}, []string{"code", "handler", "method"},
-		),
-		responseSize: prometheus.NewHistogramVec(
-			prometheus.HistogramOpts{
-				Name:    "thanos_http_response_size_bytes",
-				Help:    "Histogram of response size for HTTP requests.",
-				Buckets: prometheus.ExponentialBuckets(100, 10, 8),
-			},
-			[]string{"handler"},
-		),
+		client:  client,
+		logger:  logger,
+		writer:  o.Writer,
+		router:  route.New(),
+		options: o,
 		forwardRequestsTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
@@ -103,58 +91,52 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		),
 	}
 
-	router := route.New().WithInstrumentation(h.instrumentHandler)
-	h.router = router
+	ins := extpromhttp.NewNopInstrumentationMiddleware()
+	if o.Registry != nil {
+		ins = extpromhttp.NewInstrumentationMiddleware(o.Registry)
+		o.Registry.MustRegister(h.forwardRequestsTotal)
+	}
 
 	readyf := h.testReady
-	router.Post("/api/v1/receive", readyf(h.receive))
-
-	if o.Registry != nil {
-		o.Registry.MustRegister(
-			h.requestDuration,
-			h.requestsTotal,
-			h.responseSize,
-			h.forwardRequestsTotal,
-		)
+	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+		if o.Tracer != nil {
+			next = tracing.HTTPMiddleware(o.Tracer, name, logger, http.HandlerFunc(next))
+		}
+		return ins.NewHandler(name, http.HandlerFunc(next))
 	}
+
+	h.router.Post("/api/v1/receive", instrf("receive", readyf(h.receive)))
 
 	return h
 }
 
-func (h *Handler) instrumentHandler(handlerName string, handler http.HandlerFunc) http.HandlerFunc {
-	return promhttp.InstrumentHandlerDuration(
-		h.requestDuration.MustCurryWith(prometheus.Labels{"handler": handlerName}),
-		promhttp.InstrumentHandlerResponseSize(
-			h.responseSize.MustCurryWith(prometheus.Labels{"handler": handlerName}),
-			promhttp.InstrumentHandlerCounter(
-				h.requestsTotal.MustCurryWith(prometheus.Labels{"handler": handlerName}),
-				handler,
-			),
-		),
-	)
-}
-
-// StorageReady marks the storage as ready.
-func (h *Handler) StorageReady() {
-	atomic.StoreUint32(&h.storageReady, 1)
+// SetWriter sets the writer.
+// The writer must be set to a non-nil value in order for the
+// handler to be ready and usable.
+// If the writer is nil, then the handler is marked as not ready.
+func (h *Handler) SetWriter(w *Writer) {
+	h.mtx.Lock()
+	defer h.mtx.Unlock()
+	h.writer = w
 }
 
 // Hashring sets the hashring for the handler and marks the hashring as ready.
-// If the hashring is nil, then the hashring is marked as not ready.
+// The hashring must be set to a non-nil value in order for the
+// handler to be ready and usable.
+// If the hashring is nil, then the handler is marked as not ready.
 func (h *Handler) Hashring(hashring Hashring) {
 	h.mtx.Lock()
 	defer h.mtx.Unlock()
-
 	h.hashring = hashring
 }
 
 // Verifies whether the server is ready or not.
 func (h *Handler) isReady() bool {
-	sr := atomic.LoadUint32(&h.storageReady)
 	h.mtx.RLock()
 	hr := h.hashring != nil
+	sr := h.writer != nil
 	h.mtx.RUnlock()
-	return sr > 0 && hr
+	return sr && hr
 }
 
 // Checks if server is ready, calls f if it is, returns 503 if it is not.
@@ -240,7 +222,7 @@ func (h *Handler) receive(w http.ResponseWriter, r *http.Request) {
 
 	var rep replica
 	replicaRaw := r.Header.Get(h.options.ReplicaHeader)
-	// If the header is emtpy, we assume the request is not yet replicated.
+	// If the header is empty, we assume the request is not yet replicated.
 	if replicaRaw != "" {
 		if rep.n, err = strconv.ParseUint(replicaRaw, 10, 64); err != nil {
 			http.Error(w, "could not parse replica header", http.StatusBadRequest)
@@ -260,6 +242,10 @@ func (h *Handler) receive(w http.ResponseWriter, r *http.Request) {
 	// destined for the local node will be written to the receiver.
 	// Time series will be replicated as necessary.
 	if err := h.forward(r.Context(), tenant, rep, &wreq); err != nil {
+		if countCause(err, isConflict) > 0 {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -341,7 +327,23 @@ func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replic
 		// can be ignored if the replication factor is met.
 		if endpoint == h.options.Endpoint {
 			go func(endpoint string) {
-				err := h.receiver.Receive(wreqs[endpoint])
+				var err error
+				h.mtx.RLock()
+				if h.writer == nil {
+					err = errors.New("storage is not ready")
+				} else {
+					err = h.writer.Write(wreqs[endpoint])
+					// When a MultiError is added to another MultiError, the error slices are concatenated, not nested.
+					// To avoid breaking the counting logic, we need to flatten the error.
+					if errs, ok := err.(terrors.MultiError); ok {
+						if countCause(errs, isConflict) > 0 {
+							err = errors.Wrap(conflictErr, errs.Error())
+						} else {
+							err = errors.New(errs.Error())
+						}
+					}
+				}
+				h.mtx.RUnlock()
 				if err != nil {
 					level.Error(h.logger).Log("msg", "storing locally", "err", err, "endpoint", endpoint)
 				}
@@ -376,17 +378,21 @@ func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replic
 				h.forwardRequestsTotal.WithLabelValues("success").Inc()
 			}()
 
+			// Create a span to track the request made to another receive node.
+			span, ctx := tracing.StartSpan(ctx, "thanos_receive_forward")
+			defer span.Finish()
+
 			// Actually make the request against the endpoint
 			// we determined should handle these time series.
 			var res *http.Response
-			res, err = http.DefaultClient.Do(req.WithContext(ctx))
+			res, err = h.client.Do(req.WithContext(ctx))
 			if err != nil {
 				level.Error(h.logger).Log("msg", "forwarding request", "err", err, "endpoint", endpoint)
 				ec <- err
 				return
 			}
 			if res.StatusCode != http.StatusOK {
-				err = errors.New(res.Status)
+				err = errors.New(strconv.Itoa(res.StatusCode))
 				level.Error(h.logger).Log("msg", "forwarding returned non-200 status", "err", err, "endpoint", endpoint)
 				ec <- err
 				return
@@ -440,9 +446,39 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 
 	err := h.parallelizeRequests(ctx, tenant, replicas, wreqs)
 	if errs, ok := err.(terrors.MultiError); ok {
-		if uint64(len(errs)) >= (h.options.ReplicationFactor+1)/2 {
-			return errors.New("did not meet replication threshhold")
+		if uint64(countCause(errs, isConflict)) >= (h.options.ReplicationFactor+1)/2 {
+			return errors.Wrap(conflictErr, "did not meet replication threshold")
 		}
+		if uint64(len(errs)) >= (h.options.ReplicationFactor+1)/2 {
+			return errors.Wrap(err, "did not meet replication threshold")
+		}
+		return nil
 	}
 	return errors.Wrap(err, "could not replicate write request")
+}
+
+// countCause counts the number of errors within the given error
+// whose causes satisfy the given function.
+// countCause will inspect the error's cause or, if the error is a MultiError,
+// the cause of each contained error but will not traverse any deeper.
+func countCause(err error, f func(error) bool) int {
+	errs, ok := err.(terrors.MultiError)
+	if !ok {
+		errs = []error{err}
+	}
+	var n int
+	for i := range errs {
+		if f(errors.Cause(errs[i])) {
+			n++
+		}
+	}
+	return n
+}
+
+// isConflict returns whether or not the given error represents a conflict.
+func isConflict(err error) bool {
+	if err == nil {
+		return false
+	}
+	return err == conflictErr || err == storage.ErrDuplicateSampleForTimestamp || err == storage.ErrOutOfOrderSample || err == storage.ErrOutOfBounds || err.Error() == strconv.Itoa(http.StatusConflict)
 }

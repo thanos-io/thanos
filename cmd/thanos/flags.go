@@ -2,12 +2,12 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"strings"
 
-	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/extflag"
+
 	"github.com/prometheus/common/model"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 func regGRPCFlags(cmd *kingpin.CmdClause) (
@@ -29,23 +29,6 @@ func regGRPCFlags(cmd *kingpin.CmdClause) (
 		grpcTLSSrvClientCA
 }
 
-// TODO(povilasv): we don't need this anymore.
-func regCommonServerFlags(cmd *kingpin.CmdClause) (
-	grpcBindAddr *string,
-	httpBindAddr *string,
-	grpcTLSSrvCert *string,
-	grpcTLSSrvKey *string,
-	grpcTLSSrvClientCA *string) {
-	httpBindAddr = regHTTPAddrFlag(cmd)
-	grpcBindAddr, grpcTLSSrvCert, grpcTLSSrvKey, grpcTLSSrvClientCA = regGRPCFlags(cmd)
-
-	return grpcBindAddr,
-		httpBindAddr,
-		grpcTLSSrvCert,
-		grpcTLSSrvKey,
-		grpcTLSSrvClientCA
-}
-
 func regHTTPAddrFlag(cmd *kingpin.CmdClause) *string {
 	return cmd.Flag("http-address", "Listen host:port for HTTP endpoints.").Default("0.0.0.0:10902").String()
 }
@@ -57,79 +40,27 @@ func modelDuration(flags *kingpin.FlagClause) *model.Duration {
 	return value
 }
 
-type pathOrContent struct {
-	fileFlagName    string
-	contentFlagName string
-
-	required bool
-	path     *string
-	content  *string
-}
-
-// Content returns content of the file. Flag that specifies path has priority.
-// It returns error if the content is empty and required flag is set to true.
-func (p *pathOrContent) Content() ([]byte, error) {
-	if len(*p.path) > 0 && len(*p.content) > 0 {
-		return nil, errors.Errorf("Both %s and %s flags set.", p.fileFlagName, p.contentFlagName)
-	}
-
-	var content []byte
-	if len(*p.path) > 0 {
-		c, err := ioutil.ReadFile(*p.path)
-		if err != nil {
-			return nil, errors.Wrapf(err, "loading YAML file %s for %s", *p.path, p.fileFlagName)
-		}
-		content = c
-	} else {
-		content = []byte(*p.content)
-	}
-
-	if len(content) == 0 && p.required {
-		return nil, errors.Errorf("flag %s or %s is required for running this command and content cannot be empty.", p.fileFlagName, p.contentFlagName)
-	}
-
-	return content, nil
-}
-
-func regCommonObjStoreFlags(cmd *kingpin.CmdClause, suffix string, required bool, extraDesc ...string) *pathOrContent {
-	fileFlagName := fmt.Sprintf("objstore%s.config-file", suffix)
-	contentFlagName := fmt.Sprintf("objstore%s.config", suffix)
-
-	help := fmt.Sprintf("Path to YAML file that contains object store%s configuration.", suffix)
+func regCommonObjStoreFlags(cmd *kingpin.CmdClause, suffix string, required bool, extraDesc ...string) *extflag.PathOrContent {
+	help := fmt.Sprintf("YAML file that contains object store%s configuration. See format details: https://thanos.io/storage.md/#configuration ", suffix)
 	help = strings.Join(append([]string{help}, extraDesc...), " ")
-	bucketConfFile := cmd.Flag(fileFlagName, help).PlaceHolder("<bucket.config-yaml-path>").String()
 
-	help = fmt.Sprintf("Alternative to '%s' flag. Object store%s configuration in YAML.", fileFlagName, suffix)
-	help = strings.Join(append([]string{help}, extraDesc...), " ")
-	bucketConf := cmd.Flag(contentFlagName, help).
-		PlaceHolder("<bucket.config-yaml>").String()
-
-	return &pathOrContent{
-		fileFlagName:    fileFlagName,
-		contentFlagName: contentFlagName,
-		required:        required,
-
-		path:    bucketConfFile,
-		content: bucketConf,
-	}
+	return extflag.RegisterPathOrContent(cmd, fmt.Sprintf("objstore%s.config", suffix), help, required)
 }
 
-func regCommonTracingFlags(app *kingpin.Application) *pathOrContent {
-	fileFlagName := fmt.Sprintf("tracing.config-file")
-	contentFlagName := fmt.Sprintf("tracing.config")
+func regCommonTracingFlags(app *kingpin.Application) *extflag.PathOrContent {
+	return extflag.RegisterPathOrContent(
+		app,
+		"tracing.config",
+		fmt.Sprintf("YAML file with tracing configuration. See format details: https://thanos.io/tracing.md/#configuration "),
+		false,
+	)
+}
 
-	help := fmt.Sprintf("Path to YAML file that contains tracing configuration.")
-	tracingConfFile := app.Flag(fileFlagName, help).PlaceHolder("<tracing.config-yaml-path>").String()
-
-	help = fmt.Sprintf("Alternative to '%s' flag. Tracing configuration in YAML.", fileFlagName)
-	tracingConf := app.Flag(contentFlagName, help).PlaceHolder("<tracing.config-yaml>").String()
-
-	return &pathOrContent{
-		fileFlagName:    fileFlagName,
-		contentFlagName: contentFlagName,
-		required:        false,
-
-		path:    tracingConfFile,
-		content: tracingConf,
-	}
+func regSelectorRelabelFlags(cmd *kingpin.CmdClause) *extflag.PathOrContent {
+	return extflag.RegisterPathOrContent(
+		cmd,
+		"selector.relabel-config",
+		"YAML file that contains relabeling configuration that allows selecting blocks. It follows native Prometheus relabel-config syntax. See format details: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config ",
+		false,
+	)
 }

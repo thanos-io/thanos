@@ -13,8 +13,8 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/tsdb/chunkenc"
-	tlabels "github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	tlabels "github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -152,8 +152,8 @@ func TestProxyStore_Series(t *testing.T) {
 			},
 			expectedSeries: []rawSeries{
 				{
-					lset:    []storepb.Label{{Name: "a", Value: "a"}},
-					samples: []sample{{0, 0}, {2, 1}, {3, 2}},
+					lset:   []storepb.Label{{Name: "a", Value: "a"}},
+					chunks: [][]sample{{{0, 0}, {2, 1}, {3, 2}}},
 				},
 			},
 		},
@@ -163,7 +163,7 @@ func TestProxyStore_Series(t *testing.T) {
 				&testClient{
 					StoreClient: &mockedStoreAPI{
 						RespSeries: []*storepb.SeriesResponse{
-							storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+							storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{4, 3}}, []sample{{0, 0}, {2, 1}, {3, 2}}),
 						},
 					},
 					minTime: 1,
@@ -177,8 +177,8 @@ func TestProxyStore_Series(t *testing.T) {
 			},
 			expectedSeries: []rawSeries{
 				{
-					lset:    []storepb.Label{{Name: "a", Value: "a"}},
-					samples: []sample{{0, 0}, {2, 1}, {3, 2}},
+					lset:   []storepb.Label{{Name: "a", Value: "a"}},
+					chunks: [][]sample{{{4, 3}}, {{0, 0}, {2, 1}, {3, 2}}}, // No sort merge.
 				},
 			},
 		},
@@ -223,8 +223,8 @@ func TestProxyStore_Series(t *testing.T) {
 			expectedSeries: []rawSeries{
 				{
 					// We did not ask for a=a, but we trust StoreAPI will match correctly, so proxy does check any of this.
-					lset:    []storepb.Label{{Name: "a", Value: "a"}},
-					samples: []sample{{0, 0}, {2, 1}, {3, 2}},
+					lset:   []storepb.Label{{Name: "a", Value: "a"}},
+					chunks: [][]sample{{{0, 0}, {2, 1}, {3, 2}}},
 				},
 			},
 		},
@@ -234,7 +234,8 @@ func TestProxyStore_Series(t *testing.T) {
 				&testClient{
 					StoreClient: &mockedStoreAPI{
 						RespSeries: []*storepb.SeriesResponse{
-							storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+							storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}, []sample{{4, 3}}),
+							storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 4}}), // Continuations of the same series.
 							storepb.NewWarnSeriesResponse(errors.New("warning")),
 							storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{2, 2}, {3, 3}, {4, 4}}),
 						},
@@ -287,16 +288,20 @@ func TestProxyStore_Series(t *testing.T) {
 			},
 			expectedSeries: []rawSeries{
 				{
-					lset:    []storepb.Label{{Name: "a", Value: "a"}},
-					samples: []sample{{0, 0}, {2, 1}, {3, 2}},
+					lset:   []storepb.Label{{Name: "a", Value: "a"}},
+					chunks: [][]sample{{{0, 0}, {2, 1}, {3, 2}}, {{4, 3}}},
 				},
 				{
-					lset:    []storepb.Label{{Name: "a", Value: "b"}},
-					samples: []sample{{2, 2}, {3, 3}, {4, 4}, {1, 1}, {2, 2}, {3, 3}}, // No sort merge.
+					lset:   []storepb.Label{{Name: "a", Value: "a"}},
+					chunks: [][]sample{{{5, 4}}},
 				},
 				{
-					lset:    []storepb.Label{{Name: "a", Value: "c"}},
-					samples: []sample{{100, 1}, {300, 3}, {400, 4}},
+					lset:   []storepb.Label{{Name: "a", Value: "b"}},
+					chunks: [][]sample{{{2, 2}, {3, 3}, {4, 4}}, {{1, 1}, {2, 2}, {3, 3}}}, // No sort merge.
+				},
+				{
+					lset:   []storepb.Label{{Name: "a", Value: "c"}},
+					chunks: [][]sample{{{100, 1}, {300, 3}, {400, 4}}},
 				},
 			},
 			expectedWarningsLen: 2,
@@ -332,8 +337,8 @@ func TestProxyStore_Series(t *testing.T) {
 			},
 			expectedSeries: []rawSeries{
 				{
-					lset:    []storepb.Label{{Name: "a", Value: "b"}},
-					samples: []sample{{1, 1}, {2, 2}, {3, 3}, {1, 11}, {2, 22}, {3, 33}},
+					lset:   []storepb.Label{{Name: "a", Value: "b"}},
+					chunks: [][]sample{{{1, 1}, {2, 2}, {3, 3}}, {{1, 11}, {2, 22}, {3, 33}}},
 				},
 			},
 		},
@@ -367,8 +372,8 @@ func TestProxyStore_Series(t *testing.T) {
 			},
 			expectedSeries: []rawSeries{
 				{
-					lset:    []storepb.Label{{Name: "a", Value: "b"}},
-					samples: []sample{{1, 1}, {2, 2}, {3, 3}},
+					lset:   []storepb.Label{{Name: "a", Value: "b"}},
+					chunks: [][]sample{{{1, 1}, {2, 2}, {3, 3}}},
 				},
 			},
 			expectedWarningsLen: 2,
@@ -425,7 +430,7 @@ func TestProxyStore_Series(t *testing.T) {
 
 			testutil.Ok(t, err)
 
-			seriesEqual(t, tc.expectedSeries, s.SeriesSet)
+			seriesEquals(t, tc.expectedSeries, s.SeriesSet)
 			testutil.Equals(t, tc.expectedWarningsLen, len(s.Warnings), "got %v", s.Warnings)
 		}); !ok {
 			return
@@ -521,8 +526,8 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 			},
 			expectedSeries: []rawSeries{
 				{
-					lset:    []storepb.Label{{Name: "a", Value: "b"}},
-					samples: []sample{{1, 1}, {2, 2}, {3, 3}},
+					lset:   []storepb.Label{{Name: "a", Value: "b"}},
+					chunks: [][]sample{{{1, 1}, {2, 2}, {3, 3}}},
 				},
 			},
 			expectedWarningsLen: 2,
@@ -547,7 +552,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 
 			testutil.Ok(t, err)
 
-			seriesEqual(t, tc.expectedSeries, s.SeriesSet)
+			seriesEquals(t, tc.expectedSeries, s.SeriesSet)
 			testutil.Equals(t, tc.expectedWarningsLen, len(s.Warnings), "got %v", s.Warnings)
 		}); !ok {
 			return
@@ -796,32 +801,33 @@ func TestProxyStore_LabelNames(t *testing.T) {
 }
 
 type rawSeries struct {
-	lset    []storepb.Label
-	samples []sample
+	lset   []storepb.Label
+	chunks [][]sample
 }
 
-func seriesEqual(t *testing.T, expected []rawSeries, got []storepb.Series) {
+func seriesEquals(t *testing.T, expected []rawSeries, got []storepb.Series) {
 	testutil.Equals(t, len(expected), len(got), "got: %v", got)
 
 	for i, series := range got {
 		testutil.Equals(t, expected[i].lset, series.Labels)
+		testutil.Equals(t, len(expected[i].chunks), len(series.Chunks), "unexpected number of chunks for series %v", series.Labels)
 
-		k := 0
-		for _, chk := range series.Chunks {
+		for k, chk := range series.Chunks {
 			c, err := chunkenc.FromData(chunkenc.EncXOR, chk.Raw.Data)
 			testutil.Ok(t, err)
 
-			iter := c.Iterator()
+			j := 0
+			iter := c.Iterator(nil)
 			for iter.Next() {
-				testutil.Assert(t, k < len(expected[i].samples), "more samples than expected")
+				testutil.Assert(t, j < len(expected[i].chunks[k]), "more samples than expected for %v chunk %d", series.Labels, k)
 
 				tv, v := iter.At()
-				testutil.Equals(t, expected[i].samples[k], sample{tv, v})
-				k++
+				testutil.Equals(t, expected[i].chunks[k][j], sample{tv, v})
+				j++
 			}
 			testutil.Ok(t, iter.Err())
+			testutil.Equals(t, len(expected[i].chunks[k]), j)
 		}
-		testutil.Equals(t, len(expected[i].samples), k)
 	}
 }
 
@@ -1029,24 +1035,30 @@ func (c *StoreSeriesClient) Context() context.Context {
 }
 
 // storeSeriesResponse creates test storepb.SeriesResponse that includes series with single chunk that stores all the given samples.
-func storeSeriesResponse(t testing.TB, lset labels.Labels, smpls []sample) *storepb.SeriesResponse {
+func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sample) *storepb.SeriesResponse {
 	var s storepb.Series
 
 	for _, l := range lset {
 		s.Labels = append(s.Labels, storepb.Label{Name: l.Name, Value: l.Value})
 	}
-	c := chunkenc.NewXORChunk()
-	a, err := c.Appender()
-	testutil.Ok(t, err)
 
-	for _, smpl := range smpls {
-		a.Append(smpl.t, smpl.v)
+	for _, smpls := range smplChunks {
+		c := chunkenc.NewXORChunk()
+		a, err := c.Appender()
+		testutil.Ok(t, err)
+
+		for _, smpl := range smpls {
+			a.Append(smpl.t, smpl.v)
+		}
+
+		ch := storepb.AggrChunk{
+			MinTime: smpls[0].t,
+			MaxTime: smpls[len(smpls)-1].t,
+			Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR, Data: c.Bytes()},
+		}
+
+		s.Chunks = append(s.Chunks, ch)
 	}
-	s.Chunks = append(s.Chunks, storepb.AggrChunk{
-		MinTime: smpls[0].t,
-		MaxTime: smpls[len(smpls)-1].t,
-		Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR, Data: c.Bytes()},
-	})
 	return storepb.NewSeriesResponse(&s)
 }
 

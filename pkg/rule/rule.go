@@ -12,7 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/rulefmt"
 	"github.com/prometheus/prometheus/rules"
-	tsdberrors "github.com/prometheus/tsdb/errors"
+	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"gopkg.in/yaml.v2"
 )
@@ -175,6 +175,7 @@ func (m *Managers) Update(dataDir string, evalInterval time.Duration, files []st
 			continue
 		}
 		// We add external labels in `pkg/alert.Queue`.
+		// TODO(bwplotka): Investigate if we should put ext labels here or not.
 		if err := updater.Update(evalInterval, fs, nil); err != nil {
 			errs = append(errs, err)
 			continue

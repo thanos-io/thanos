@@ -10,7 +10,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb/labels"
 )
 
 const (
@@ -41,7 +41,7 @@ func (c cacheKey) size() uint64 {
 		// ULID + 2 slice headers + number of chars in value and name.
 		return 16 + 2*sliceHeaderSize + uint64(len(k.Value)+len(k.Name))
 	case cacheKeySeries:
-		return 16 + 8 // ULID + uint64
+		return 16 + 8 // ULID + uint64.
 	}
 	return 0
 }

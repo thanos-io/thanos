@@ -7,7 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
-	"github.com/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
@@ -15,17 +15,52 @@ import (
 // promSeriesSet implements the SeriesSet interface of the Prometheus storage
 // package on top of our storepb SeriesSet.
 type promSeriesSet struct {
-	set        storepb.SeriesSet
+	set       storepb.SeriesSet
+	initiated bool
+	done      bool
+
 	mint, maxt int64
 	aggr       resAggr
+
+	currLset   []storepb.Label
+	currChunks []storepb.AggrChunk
 }
 
-func (s promSeriesSet) Next() bool { return s.set.Next() }
-func (s promSeriesSet) Err() error { return s.set.Err() }
+func (s *promSeriesSet) Next() bool {
+	if !s.initiated {
+		s.initiated = true
+		s.done = s.set.Next()
+	}
 
-func (s promSeriesSet) At() storage.Series {
-	lset, chunks := s.set.At()
-	return newChunkSeries(lset, chunks, s.mint, s.maxt, s.aggr)
+	if !s.done {
+		return false
+	}
+
+	// storage.Series are more strict then SeriesSet: It requires storage.Series to iterate over full series.
+	s.currLset, s.currChunks = s.set.At()
+	for {
+		s.done = s.set.Next()
+		if !s.done {
+			break
+		}
+		nextLset, nextChunks := s.set.At()
+		if storepb.CompareLabels(s.currLset, nextLset) != 0 {
+			break
+		}
+		s.currChunks = append(s.currChunks, nextChunks...)
+	}
+	return true
+}
+
+func (s *promSeriesSet) At() storage.Series {
+	if !s.initiated || s.set.Err() != nil {
+		return nil
+	}
+	return newChunkSeries(s.currLset, s.currChunks, s.mint, s.maxt, s.aggr)
+}
+
+func (s *promSeriesSet) Err() error {
+	return s.set.Err()
 }
 
 func translateMatcher(m *labels.Matcher) (storepb.LabelMatcher, error) {
@@ -166,7 +201,7 @@ func getFirstIterator(cs ...*storepb.Chunk) chunkenc.Iterator {
 		if err != nil {
 			return errSeriesIterator{err}
 		}
-		return chk.Iterator()
+		return chk.Iterator(nil)
 	}
 	return errSeriesIterator{errors.New("no valid chunk found")}
 }
@@ -176,7 +211,7 @@ func chunkEncoding(e storepb.Chunk_Encoding) chunkenc.Encoding {
 	case storepb.Chunk_XOR:
 		return chunkenc.EncXOR
 	}
-	return 255 // invalid
+	return 255 // Invalid.
 }
 
 type errSeriesIterator struct {
@@ -292,8 +327,8 @@ func (it *chunkSeriesIterator) Err() error {
 }
 
 type dedupSeriesSet struct {
-	set          storage.SeriesSet
-	replicaLabel string
+	set           storage.SeriesSet
+	replicaLabels map[string]struct{}
 
 	replicas []storage.Series
 	lset     labels.Labels
@@ -301,8 +336,8 @@ type dedupSeriesSet struct {
 	ok       bool
 }
 
-func newDedupSeriesSet(set storage.SeriesSet, replicaLabel string) storage.SeriesSet {
-	s := &dedupSeriesSet{set: set, replicaLabel: replicaLabel}
+func newDedupSeriesSet(set storage.SeriesSet, replicaLabels map[string]struct{}) storage.SeriesSet {
+	s := &dedupSeriesSet{set: set, replicaLabels: replicaLabels}
 	s.ok = s.set.Next()
 	if s.ok {
 		s.peek = s.set.At()
@@ -322,13 +357,21 @@ func (s *dedupSeriesSet) Next() bool {
 }
 
 // peekLset returns the label set of the current peek element stripped from the
-// replica label if it exists
+// replica label if it exists.
 func (s *dedupSeriesSet) peekLset() labels.Labels {
 	lset := s.peek.Labels()
-	if lset[len(lset)-1].Name != s.replicaLabel {
+	if len(s.replicaLabels) == 0 {
 		return lset
 	}
-	return lset[:len(lset)-1]
+	// Check how many replica labels are present so that these are removed.
+	var totalToRemove int
+	for index := 0; index < len(s.replicaLabels); index++ {
+		if _, ok := s.replicaLabels[lset[len(lset)-index-1].Name]; ok {
+			totalToRemove++
+		}
+	}
+	// Strip all present replica labels.
+	return lset[:len(lset)-totalToRemove]
 }
 
 func (s *dedupSeriesSet) next() bool {
