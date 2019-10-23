@@ -18,7 +18,6 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/runutil"
 	"gopkg.in/yaml.v2"
 )
 
@@ -302,11 +301,6 @@ func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (
 
 	resp, err := b.bucket.GetObject(name, opts...)
 	if err != nil {
-		return nil, err
-	}
-
-	if _, err := resp.Read(nil); err != nil {
-		runutil.CloseWithLogOnErr(b.logger, resp, "oss get range obj close")
 		return nil, err
 	}
 
