@@ -89,14 +89,6 @@ func parseConfig(conf []byte) (Config, error) {
 		return Config{}, err
 	}
 
-	if config.PutUserMetadata == nil {
-		config.PutUserMetadata = make(map[string]string)
-	}
-
-	if config.PartSize == 0 {
-		config.PartSize = defaultMinPartSize
-	}
-
 	// here for testing
 	if config.Prefix != "" {
 		config.Prefix = strings.TrimSuffix(config.Prefix, DirDelim) + DirDelim
