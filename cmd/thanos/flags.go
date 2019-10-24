@@ -10,6 +10,13 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
+func modelDuration(flags *kingpin.FlagClause) *model.Duration {
+	value := new(model.Duration)
+	flags.SetValue(value)
+
+	return value
+}
+
 func regGRPCFlags(cmd *kingpin.CmdClause) (
 	grpcBindAddr *string,
 	grpcTLSSrvCert *string,
@@ -33,11 +40,8 @@ func regHTTPAddrFlag(cmd *kingpin.CmdClause) *string {
 	return cmd.Flag("http-address", "Listen host:port for HTTP endpoints.").Default("0.0.0.0:10902").String()
 }
 
-func modelDuration(flags *kingpin.FlagClause) *model.Duration {
-	value := new(model.Duration)
-	flags.SetValue(value)
-
-	return value
+func regHTTPGracePeriodFlag(cmd *kingpin.CmdClause) *model.Duration {
+	return modelDuration(cmd.Flag("http-grace-period", "The time to wait after an interrupt received.").Default("5s"))
 }
 
 func regCommonObjStoreFlags(cmd *kingpin.CmdClause, suffix string, required bool, extraDesc ...string) *extflag.PathOrContent {

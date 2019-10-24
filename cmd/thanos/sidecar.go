@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/server"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -36,6 +37,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application) {
 	cmd := app.Command(component.Sidecar.String(), "sidecar for Prometheus server")
 
 	httpBindAddr := regHTTPAddrFlag(cmd)
+	httpGracePeriod := regHTTPGracePeriodFlag(cmd)
 	grpcBindAddr, cert, key, clientCA := regGRPCFlags(cmd)
 
 	promURL := cmd.Flag("prometheus.url", "URL at which to reach Prometheus's API. For better performance use local network.").
@@ -81,6 +83,7 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application) {
 			*key,
 			*clientCA,
 			*httpBindAddr,
+			time.Duration(*httpGracePeriod),
 			*promURL,
 			*promReadyTimeout,
 			*dataDir,
@@ -103,6 +106,7 @@ func runSidecar(
 	key string,
 	clientCA string,
 	httpBindAddr string,
+	httpGracePeriod time.Duration,
 	promURL *url.URL,
 	promReadyTimeout time.Duration,
 	dataDir string,
@@ -134,11 +138,14 @@ func runSidecar(
 		uploads = false
 	}
 
-	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-	if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, nil, comp); err != nil {
-		return errors.Wrap(err, "schedule HTTP server with probes")
-	}
+	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	srv := server.New(logger, reg, comp, statusProber,
+		server.WithListen(httpBindAddr),
+		server.WithGracePeriod(httpGracePeriod),
+	)
+
+	g.Add(srv.ListenAndServe, srv.Shutdown)
 
 	// Setup all the concurrent groups.
 	{
