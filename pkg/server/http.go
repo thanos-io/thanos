@@ -29,7 +29,7 @@ type Server struct {
 	opts options
 }
 
-func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, prober *prober.Prober, opts ...Option) Server {
+func NewHTTP(logger log.Logger, reg *prometheus.Registry, comp component.Component, prober *prober.Prober, opts ...Option) Server {
 	options := options{
 		gracePeriod: 5 * time.Second,
 		listen:      "0.0.0.0:10902",
