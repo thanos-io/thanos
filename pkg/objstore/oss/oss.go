@@ -269,7 +269,7 @@ func (b *Bucket) setRange(start, end int64, name string) (alioss.Option, error) 
 			return nil, err
 		}
 
-		size, err := strconv.ParseInt(header["Content-Length"][0], 10, 0)
+		size, err := strconv.ParseInt(header["Content-Length"][0], 10, 64)
 		if err != nil {
 			return nil, err
 		}
