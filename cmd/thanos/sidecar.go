@@ -140,7 +140,7 @@ func runSidecar(
 
 	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
 	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
-	srv := server.New(logger, reg, comp, statusProber,
+	srv := server.NewHTTP(logger, reg, comp, statusProber,
 		server.WithListen(httpBindAddr),
 		server.WithGracePeriod(httpGracePeriod),
 	)

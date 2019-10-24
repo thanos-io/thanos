@@ -339,7 +339,7 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up http server")
 	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-	srv := server.New(logger, reg, comp, statusProber,
+	srv := server.NewHTTP(logger, reg, comp, statusProber,
 		server.WithListen(httpBindAddr),
 		server.WithGracePeriod(httpGracePeriod),
 	)
