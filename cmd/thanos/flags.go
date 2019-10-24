@@ -41,7 +41,7 @@ func regHTTPAddrFlag(cmd *kingpin.CmdClause) *string {
 }
 
 func regHTTPGracePeriodFlag(cmd *kingpin.CmdClause) *model.Duration {
-	return modelDuration(cmd.Flag("http-grace-period", "The time to wait after an interrupt received.").Default("5s"))
+	return modelDuration(cmd.Flag("http-grace-period", "Time to wait after an interrupt received for HTTP Server.").Default("5s"))
 }
 
 func regCommonObjStoreFlags(cmd *kingpin.CmdClause, suffix string, required bool, extraDesc ...string) *extflag.PathOrContent {
