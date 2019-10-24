@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/server"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -79,6 +80,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 		Hidden().Default("false").Bool()
 
 	httpAddr := regHTTPAddrFlag(cmd)
+	httpGracePeriod := regHTTPGracePeriodFlag(cmd)
 
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process compactions.").
 		Default("./data").String()
@@ -116,6 +118,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 	m[component.Compact.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		return runCompact(g, logger, reg,
 			*httpAddr,
+			time.Duration(*httpGracePeriod),
 			*dataDir,
 			objStoreConfig,
 			time.Duration(*consistencyDelay),
@@ -143,6 +146,7 @@ func runCompact(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	httpBindAddr string,
+	httpGracePeriod time.Duration,
 	dataDir string,
 	objStoreConfig *extflag.PathOrContent,
 	consistencyDelay time.Duration,
@@ -175,9 +179,12 @@ func runCompact(
 
 	statusProber := prober.NewProber(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-	if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, nil, component); err != nil {
-		return errors.Wrap(err, "schedule HTTP server with probes")
-	}
+	srv := server.NewHTTP(logger, reg, component, statusProber,
+		server.WithListen(httpBindAddr),
+		server.WithGracePeriod(httpGracePeriod),
+	)
+
+	g.Add(srv.ListenAndServe, srv.Shutdown)
 
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {

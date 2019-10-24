@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/server"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -36,6 +37,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 	cmd := app.Command(comp.String(), "Accept Prometheus remote write API requests and write to local tsdb (EXPERIMENTAL, this may change drastically without notice)")
 
 	httpBindAddr := regHTTPAddrFlag(cmd)
+	httpGracePeriod := regHTTPGracePeriodFlag(cmd)
 	grpcBindAddr, grpcCert, grpcKey, grpcClientCA := regGRPCFlags(cmd)
 
 	rwAddress := cmd.Flag("remote-write.address", "Address to listen on for remote write requests.").
@@ -109,6 +111,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			*grpcKey,
 			*grpcClientCA,
 			*httpBindAddr,
+			time.Duration(*httpGracePeriod),
 			*rwAddress,
 			*rwServerCert,
 			*rwServerKey,
@@ -142,6 +145,7 @@ func runReceive(
 	grpcKey string,
 	grpcClientCA string,
 	httpBindAddr string,
+	httpGracePeriod time.Duration,
 	rwAddress string,
 	rwServerCert string,
 	rwServerKey string,
@@ -335,9 +339,11 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up http server")
 	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-	if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, nil, comp); err != nil {
-		return errors.Wrap(err, "schedule HTTP server with probes")
-	}
+	srv := server.NewHTTP(logger, reg, comp, statusProber,
+		server.WithListen(httpBindAddr),
+		server.WithGracePeriod(httpGracePeriod),
+	)
+	g.Add(srv.ListenAndServe, srv.Shutdown)
 
 	level.Debug(logger).Log("msg", "setting up grpc server")
 	{

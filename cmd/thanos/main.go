@@ -8,9 +8,6 @@ import (
 	"io"
 	"io/ioutil"
 	"math"
-	"net"
-	"net/http"
-	"net/http/pprof"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -29,11 +26,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/version"
-	"github.com/thanos-io/thanos/pkg/component"
-	"github.com/thanos-io/thanos/pkg/prober"
-	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/tracing/client"
@@ -230,18 +223,6 @@ func interrupt(logger log.Logger, cancel <-chan struct{}) error {
 	}
 }
 
-func registerProfile(mux *http.ServeMux) {
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-}
-
-func registerMetrics(mux *http.ServeMux, g prometheus.Gatherer) {
-	mux.Handle("/metrics", promhttp.HandlerFor(g, promhttp.HandlerOpts{}))
-}
-
 func defaultGRPCTLSServerOpts(logger log.Logger, cert, key, clientCA string) ([]grpc.ServerOption, error) {
 	opts := []grpc.ServerOption{}
 	tlsCfg, err := defaultTLSServerOpts(log.With(logger, "protocol", "gRPC"), cert, key, clientCA)
@@ -382,31 +363,4 @@ func newStoreGRPCServer(logger log.Logger, reg prometheus.Registerer, tracer ope
 	met.InitializeMetrics(s)
 
 	return s
-}
-
-// scheduleHTTPServer starts a run.Group that servers HTTP endpoint with default endpoints providing Prometheus metrics,
-// profiling and liveness/readiness probes.
-func scheduleHTTPServer(g *run.Group, logger log.Logger, reg *prometheus.Registry, readinessProber *prober.Prober, httpBindAddr string, handler http.Handler, comp component.Component) error {
-	mux := http.NewServeMux()
-	registerMetrics(mux, reg)
-	registerProfile(mux)
-	readinessProber.RegisterInMux(mux)
-	if handler != nil {
-		mux.Handle("/", handler)
-	}
-
-	l, err := net.Listen("tcp", httpBindAddr)
-	if err != nil {
-		return errors.Wrap(err, "listen metrics address")
-	}
-
-	g.Add(func() error {
-		level.Info(logger).Log("msg", "listening for requests and metrics", "component", comp.String(), "address", httpBindAddr)
-		readinessProber.SetHealthy()
-		return errors.Wrapf(http.Serve(l, mux), "serve %s and metrics", comp.String())
-	}, func(err error) {
-		readinessProber.SetNotHealthy(err)
-		runutil.CloseWithLogOnErr(logger, l, "%s and metric listener", comp.String())
-	})
-	return nil
 }

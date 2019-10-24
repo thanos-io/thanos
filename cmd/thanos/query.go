@@ -31,6 +31,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/query"
 	v1 "github.com/thanos-io/thanos/pkg/query/api"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/server"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/ui"
@@ -45,6 +46,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 	cmd := app.Command(comp.String(), "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
 
 	httpBindAddr := regHTTPAddrFlag(cmd)
+	httpGracePeriod := regHTTPGracePeriodFlag(cmd)
 	grpcBindAddr, srvCert, srvKey, srvClientCA := regGRPCFlags(cmd)
 
 	secure := cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").Bool()
@@ -140,6 +142,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			*caCert,
 			*serverName,
 			*httpBindAddr,
+			time.Duration(*httpGracePeriod),
 			*webRoutePrefix,
 			*webExternalPrefix,
 			*webPrefixHeaderName,
@@ -222,6 +225,7 @@ func runQuery(
 	caCert string,
 	serverName string,
 	httpBindAddr string,
+	httpGracePeriod time.Duration,
 	webRoutePrefix string,
 	webExternalPrefix string,
 	webPrefixHeaderName string,
@@ -376,9 +380,13 @@ func runQuery(
 		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
 
 		// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-		if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, router, comp); err != nil {
-			return errors.Wrap(err, "schedule HTTP server with probes")
-		}
+		srv := server.NewHTTP(logger, reg, comp, statusProber,
+			server.WithListen(httpBindAddr),
+			server.WithGracePeriod(httpGracePeriod),
+		)
+		srv.Handle("/", router)
+
+		g.Add(srv.ListenAndServe, srv.Shutdown)
 	}
 	// Start query (proxy) gRPC StoreAPI.
 	{

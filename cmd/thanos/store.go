@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/server"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -30,6 +31,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 	cmd := app.Command(component.Store.String(), "store node giving access to blocks in a bucket provider. Now supported GCS, S3, Azure, Swift and Tencent COS.")
 
 	httpBindAddr := regHTTPAddrFlag(cmd)
+	httpGracePeriod := regHTTPGracePeriodFlag(cmd)
 	grpcBindAddr, cert, key, clientCA := regGRPCFlags(cmd)
 
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache remote blocks.").
@@ -83,6 +85,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 			*key,
 			*clientCA,
 			*httpBindAddr,
+			time.Duration(*httpGracePeriod),
 			uint64(*indexCacheSize),
 			uint64(*chunkPoolSize),
 			uint64(*maxSampleCount),
@@ -114,6 +117,7 @@ func runStore(
 	key string,
 	clientCA string,
 	httpBindAddr string,
+	httpGracePeriod time.Duration,
 	indexCacheSizeBytes uint64,
 	chunkPoolSizeBytes uint64,
 	maxSampleCount uint64,
@@ -128,9 +132,12 @@ func runStore(
 ) error {
 	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
 	statusProber := prober.NewProber(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
-	if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, nil, component); err != nil {
-		return errors.Wrap(err, "schedule HTTP server")
-	}
+	srv := server.NewHTTP(logger, reg, component, statusProber,
+		server.WithListen(httpBindAddr),
+		server.WithGracePeriod(httpGracePeriod),
+	)
+
+	g.Add(srv.ListenAndServe, srv.Shutdown)
 
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/server"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -62,6 +63,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 	cmd := app.Command(comp.String(), "ruler evaluating Prometheus rules against given Query nodes, exposing Store API and storing old blocks in bucket")
 
 	httpBindAddr := regHTTPAddrFlag(cmd)
+	httpGracePeriod := regHTTPGracePeriodFlag(cmd)
 	grpcBindAddr, cert, key, clientCA := regGRPCFlags(cmd)
 
 	labelStrs := cmd.Flag("label", "Labels to be applied to all generated metrics (repeated). Similar to external labels for Prometheus, used to identify ruler and its blocks as unique source.").
@@ -161,6 +163,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			*key,
 			*clientCA,
 			*httpBindAddr,
+			time.Duration(*httpGracePeriod),
 			*webRoutePrefix,
 			*webExternalPrefix,
 			*webPrefixHeaderName,
@@ -196,6 +199,7 @@ func runRule(
 	key string,
 	clientCA string,
 	httpBindAddr string,
+	httpGracePeriod time.Duration,
 	webRoutePrefix string,
 	webExternalPrefix string,
 	webPrefixHeaderName string,
@@ -548,9 +552,13 @@ func runRule(
 		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
 
 		// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-		if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, router, comp); err != nil {
-			return errors.Wrap(err, "schedule HTTP server with probes")
-		}
+		srv := server.NewHTTP(logger, reg, comp, statusProber,
+			server.WithListen(httpBindAddr),
+			server.WithGracePeriod(httpGracePeriod),
+		)
+		srv.Handle("/", router)
+
+		g.Add(srv.ListenAndServe, srv.Shutdown)
 	}
 
 	confContentYaml, err := objStoreConfig.Content()
