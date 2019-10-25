@@ -12,8 +12,8 @@ import (
 
 // Config - YAML configuration.
 type Config struct {
-	// AccessToken is the unique API key for your LightStep project.  It is
-	// available on your account page at https://app.lightstep.com/account
+	// AccessToken is the unique API key for your LightStep project. It is
+	// available on your account page at https://app.lightstep.com/account.
 	AccessToken string `yaml:"access_token"`
 
 	// Collector is the host, port, and plaintext option to use
