@@ -29,8 +29,7 @@ type Tracer struct {
 
 // Close synchronously flushes the Lightstep tracer, then terminates it.
 func (t *Tracer) Close() error {
-	lightstepTracer := t.Tracer
-	lightstepTracer.Close(t.ctx)
+	t.Tracer.Close(t.ctx)
 
 	return nil
 }
