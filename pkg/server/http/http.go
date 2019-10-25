@@ -1,4 +1,4 @@
-package server
+package http
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-type Server struct {
+type HTTPServer struct {
 	logger log.Logger
 	comp   component.Component
 	prober *prober.Prober
@@ -27,7 +27,7 @@ type Server struct {
 	opts options
 }
 
-func NewHTTP(logger log.Logger, reg *prometheus.Registry, comp component.Component, prober *prober.Prober, opts ...Option) Server {
+func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, prober *prober.Prober, opts ...Option) *HTTPServer {
 	options := options{
 		gracePeriod: 5 * time.Second,
 		listen:      "0.0.0.0:10902",
@@ -42,8 +42,8 @@ func NewHTTP(logger log.Logger, reg *prometheus.Registry, comp component.Compone
 	registerProfiler(mux)
 	prober.RegisterInMux(mux)
 
-	return Server{
-		logger: log.With(logger, "service", "http/server"),
+	return &HTTPServer{
+		logger: log.With(logger, "service", "http/server", "component", comp.String()),
 		comp:   comp,
 		prober: prober,
 		mux:    mux,
@@ -52,13 +52,13 @@ func NewHTTP(logger log.Logger, reg *prometheus.Registry, comp component.Compone
 	}
 }
 
-func (s *Server) ListenAndServe() error {
+func (s *HTTPServer) ListenAndServe() error {
 	s.prober.SetHealthy()
-	level.Info(s.logger).Log("msg", "listening for requests and metrics", "component", s.comp.String(), "address", s.opts.listen)
-	return errors.Wrapf(s.srv.ListenAndServe(), "serve %s and metrics", s.comp.String())
+	level.Info(s.logger).Log("msg", "listening for requests and metrics", "address", s.opts.listen)
+	return errors.Wrap(s.srv.ListenAndServe(), "serve HTTP and metrics")
 }
 
-func (s *Server) Shutdown(err error) {
+func (s *HTTPServer) Shutdown(err error) {
 	s.prober.SetNotReady(err)
 	defer s.prober.SetNotHealthy(err)
 
@@ -73,11 +73,11 @@ func (s *Server) Shutdown(err error) {
 	level.Info(s.logger).Log("msg", "server shut down internal server")
 
 	if err := s.srv.Shutdown(ctx); err != nil {
-		level.Error(s.logger).Log("msg", "server shut down failed", "err", err, "component", s.comp.String())
+		level.Error(s.logger).Log("msg", "server shut down failed", "err", err)
 	}
 }
 
-func (s *Server) Handle(pattern string, handler http.Handler) {
+func (s *HTTPServer) Handle(pattern string, handler http.Handler) {
 	s.mux.Handle(pattern, handler)
 }
 

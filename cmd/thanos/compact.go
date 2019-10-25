@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/thanos-io/thanos/pkg/extflag"
-	"github.com/thanos-io/thanos/pkg/server"
+	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -79,8 +79,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 		"Compaction index verification will ignore out of order label names.").
 		Hidden().Default("false").Bool()
 
-	httpAddr := regHTTPAddrFlag(cmd)
-	httpGracePeriod := regHTTPGracePeriodFlag(cmd)
+	httpAddr, httpGracePeriod := regHTTPFlags(cmd)
 
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process compactions.").
 		Default("./data").String()
@@ -179,9 +178,9 @@ func runCompact(
 
 	statusProber := prober.NewProber(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-	srv := server.NewHTTP(logger, reg, component, statusProber,
-		server.WithListen(httpBindAddr),
-		server.WithGracePeriod(httpGracePeriod),
+	srv := httpserver.New(logger, reg, component, statusProber,
+		httpserver.WithListen(httpBindAddr),
+		httpserver.WithGracePeriod(httpGracePeriod),
 	)
 
 	g.Add(srv.ListenAndServe, srv.Shutdown)
