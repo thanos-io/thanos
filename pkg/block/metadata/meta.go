@@ -51,9 +51,10 @@ type Meta struct {
 
 // Thanos holds block meta information specific to Thanos.
 type Thanos struct {
-	Labels      map[string]string `json:"labels"`
-	Downsample  ThanosDownsample  `json:"downsample"`
-	SizeInBytes *uint64           `json:"size"`
+	Labels     map[string]string `json:"labels"`
+	Downsample ThanosDownsample  `json:"downsample"`
+	// Size of the block in bytes of the original block (before compaction and/or 1st upload).
+	SizeInBytes *uint64 `json:"size"`
 
 	// Source is a real upload source of the block.
 	Source SourceType `json:"source"`
