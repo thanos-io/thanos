@@ -105,14 +105,15 @@ func (s *GRPCServer) ListenAndServe() error {
 }
 
 func (s *GRPCServer) Shutdown(err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), s.opts.gracePeriod)
-
 	stopped := make(chan struct{})
 	go func() {
 		level.Info(s.logger).Log("msg", "gracefully stoping server")
 		s.srv.GracefulStop() // Also closes s.listener.
 		close(stopped)
 	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), s.opts.gracePeriod)
+	defer cancel()
 
 	select {
 	case <-ctx.Done():
