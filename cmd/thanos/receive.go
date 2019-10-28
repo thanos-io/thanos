@@ -348,7 +348,7 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up grpc server")
 	{
-		var s *grpcserver.GRPCServer
+		var s *grpcserver.Server
 		startGRPC := make(chan struct{})
 		g.Add(func() error {
 			defer close(startGRPC)

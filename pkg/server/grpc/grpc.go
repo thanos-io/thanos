@@ -25,7 +25,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type GRPCServer struct {
+type Server struct {
 	logger log.Logger
 	comp   component.Component
 
@@ -35,10 +35,9 @@ type GRPCServer struct {
 	opts options
 }
 
-func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, storeSrv storepb.StoreServer, opts ...Option) *GRPCServer {
+func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, storeSrv storepb.StoreServer, opts ...Option) *Server {
 	options := options{
 		gracePeriod: 5 * time.Second,
-		listen:      "0.0.0.0:10901",
 	}
 
 	for _, o := range opts {
@@ -86,14 +85,14 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	storepb.RegisterStoreServer(s, storeSrv)
 	met.InitializeMetrics(s)
 
-	return &GRPCServer{
+	return &Server{
 		logger: log.With(logger, "service", "gRPC/server", "component", comp.String()),
 		comp:   comp,
 		srv:    s,
 	}
 }
 
-func (s *GRPCServer) ListenAndServe() error {
+func (s *Server) ListenAndServe() error {
 	l, err := net.Listen("tcp", s.opts.listen)
 	if err != nil {
 		return errors.Wrap(err, "listen gRPC on address")
@@ -101,10 +100,10 @@ func (s *GRPCServer) ListenAndServe() error {
 	s.listener = l
 
 	level.Info(s.logger).Log("msg", "Listening for StoreAPI gRPC", "address", s.opts.listen)
-	return errors.Wrap(s.srv.Serve(l), "serve gRPC")
+	return errors.Wrap(s.srv.Serve(s.listener), "serve gRPC")
 }
 
-func (s *GRPCServer) Shutdown(err error) {
+func (s *Server) Shutdown(err error) {
 	stopped := make(chan struct{})
 	go func() {
 		level.Info(s.logger).Log("msg", "gracefully stoping server")

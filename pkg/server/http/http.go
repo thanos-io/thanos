@@ -16,7 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-type HTTPServer struct {
+type Server struct {
 	logger log.Logger
 	comp   component.Component
 	prober *prober.Prober
@@ -27,7 +27,7 @@ type HTTPServer struct {
 	opts options
 }
 
-func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, prober *prober.Prober, opts ...Option) *HTTPServer {
+func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, prober *prober.Prober, opts ...Option) *Server {
 	options := options{
 		gracePeriod: 5 * time.Second,
 		listen:      "0.0.0.0:10902",
@@ -42,7 +42,7 @@ func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, 
 	registerProfiler(mux)
 	prober.RegisterInMux(mux)
 
-	return &HTTPServer{
+	return &Server{
 		logger: log.With(logger, "service", "http/server", "component", comp.String()),
 		comp:   comp,
 		prober: prober,
@@ -52,13 +52,13 @@ func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, 
 	}
 }
 
-func (s *HTTPServer) ListenAndServe() error {
+func (s *Server) ListenAndServe() error {
 	s.prober.SetHealthy()
 	level.Info(s.logger).Log("msg", "listening for requests and metrics", "address", s.opts.listen)
-	return errors.Wrap(s.srv.ListenAndServe(), "serve HTTP and metrics")
+	return errors.Wrap(http.Serve(l, s.mux), "serve HTTP and metrics")
 }
 
-func (s *HTTPServer) Shutdown(err error) {
+func (s *Server) Shutdown(err error) {
 	s.prober.SetNotReady(err)
 	defer s.prober.SetNotHealthy(err)
 
@@ -77,7 +77,7 @@ func (s *HTTPServer) Shutdown(err error) {
 	}
 }
 
-func (s *HTTPServer) Handle(pattern string, handler http.Handler) {
+func (s *Server) Handle(pattern string, handler http.Handler) {
 	s.mux.Handle(pattern, handler)
 }
 
