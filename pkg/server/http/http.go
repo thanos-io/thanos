@@ -55,7 +55,7 @@ func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, 
 func (s *Server) ListenAndServe() error {
 	s.prober.SetHealthy()
 	level.Info(s.logger).Log("msg", "listening for requests and metrics", "address", s.opts.listen)
-	return errors.Wrap(http.Serve(l, s.mux), "serve HTTP and metrics")
+	return errors.Wrap(s.srv.ListenAndServe(), "serve HTTP and metrics")
 }
 
 func (s *Server) Shutdown(err error) {
@@ -67,10 +67,15 @@ func (s *Server) Shutdown(err error) {
 		return
 	}
 
+	defer level.Info(s.logger).Log("msg", "server shut down internal server")
+
+	if s.opts.gracePeriod == 0 {
+		s.srv.Close()
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), s.opts.gracePeriod)
 	defer cancel()
-
-	level.Info(s.logger).Log("msg", "server shut down internal server")
 
 	if err := s.srv.Shutdown(ctx); err != nil {
 		level.Error(s.logger).Log("msg", "server shut down failed", "err", err)

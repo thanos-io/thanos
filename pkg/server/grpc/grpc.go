@@ -89,6 +89,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 		logger: log.With(logger, "service", "gRPC/server", "component", comp.String()),
 		comp:   comp,
 		srv:    s,
+		opts:   options,
 	}
 }
 
@@ -104,15 +105,22 @@ func (s *Server) ListenAndServe() error {
 }
 
 func (s *Server) Shutdown(err error) {
+	defer level.Info(s.logger).Log("msg", "server shut down internal server", "err", err)
+
+	if s.opts.gracePeriod == 0 {
+		s.srv.Stop()
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), s.opts.gracePeriod)
+	defer cancel()
+
 	stopped := make(chan struct{})
 	go func() {
 		level.Info(s.logger).Log("msg", "gracefully stoping server")
 		s.srv.GracefulStop() // Also closes s.listener.
 		close(stopped)
 	}()
-
-	ctx, cancel := context.WithTimeout(context.Background(), s.opts.gracePeriod)
-	defer cancel()
 
 	select {
 	case <-ctx.Done():
@@ -121,6 +129,4 @@ func (s *Server) Shutdown(err error) {
 	case <-stopped:
 		cancel()
 	}
-
-	level.Info(s.logger).Log("msg", "server shut down internal server", "err", err)
 }

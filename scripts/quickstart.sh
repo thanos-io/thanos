@@ -23,8 +23,7 @@ fi
 # Start local object storage, if desired.
 # NOTE: If you would like to use an actual S3-compatible API with this setup
 #       set the S3_* environment variables set in the Minio example.
-if [ -n "${MINIO_ENABLED}" ]
-then
+if [ -n "${MINIO_ENABLED}" ]; then
   if [ ! $(command -v $MINIO_EXECUTABLE) ]; then
     echo "Cannot find or execute Minio binary $MINIO_EXECUTABLE, you can override it by setting the MINIO_EXECUTABLE env variable"
     exit 1
@@ -49,14 +48,14 @@ then
   mkdir -p data/minio
 
   ${MINIO_EXECUTABLE} server ./data/minio \
-      --address ${MINIO_ENDPOINT} &
+    --address ${MINIO_ENDPOINT} &
   sleep 3
   # create the bucket
   ${MC_EXECUTABLE} config host add tmp http://${MINIO_ENDPOINT} ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY}
   ${MC_EXECUTABLE} mb tmp/${MINIO_BUCKET}
   ${MC_EXECUTABLE} config host rm tmp
 
-  cat <<EOF > data/bucket.yml
+  cat <<EOF >data/bucket.yml
 type: S3
 config:
   bucket: $S3_BUCKET
@@ -71,12 +70,11 @@ fi
 STORES=""
 
 # Start three Prometheus servers monitoring themselves.
-for i in `seq 0 2`
-do
+for i in $(seq 0 2); do
   rm -rf data/prom${i}
   mkdir -p data/prom${i}/
 
-  cat > data/prom${i}/prometheus.yml <<- EOF
+  cat >data/prom${i}/prometheus.yml <<-EOF
 global:
   external_labels:
     prometheus: prom-${i}
@@ -110,13 +108,13 @@ scrape_configs:
 EOF
 
   ${PROMETHEUS_EXECUTABLE} \
-    --config.file         data/prom${i}/prometheus.yml \
-    --storage.tsdb.path   data/prom${i} \
-    --log.level           warn \
+    --config.file data/prom${i}/prometheus.yml \
+    --storage.tsdb.path data/prom${i} \
+    --log.level warn \
     --web.enable-lifecycle \
     --storage.tsdb.min-block-duration=2h \
     --storage.tsdb.max-block-duration=2h \
-    --web.listen-address  0.0.0.0:909${i} &
+    --web.listen-address 0.0.0.0:909${i} &
 
   sleep 0.25
 done
@@ -124,20 +122,21 @@ done
 sleep 0.5
 
 OBJSTORECFG=""
-if [ -n "${MINIO_ENABLED}" ]
-then
-OBJSTORECFG="--objstore.config-file      data/bucket.yml"
+if [ -n "${MINIO_ENABLED}" ]; then
+  OBJSTORECFG="--objstore.config-file      data/bucket.yml"
 fi
 
 # Start one sidecar for each Prometheus server.
-for i in `seq 0 2`
-do
+for i in $(seq 0 2); do
   ${THANOS_EXECUTABLE} sidecar \
-    --debug.name                sidecar-${i} \
-    --grpc-address              0.0.0.0:109${i}1 \
-    --http-address              0.0.0.0:109${i}2 \
-    --prometheus.url            http://localhost:909${i} \
-    --tsdb.path                 data/prom${i} \
+    --debug.name sidecar-${i} \
+    --log.level debug \
+    --grpc-address 0.0.0.0:109${i}1 \
+    --grpc-grace-period 1s \
+    --http-address 0.0.0.0:109${i}2 \
+    --http-grace-period 1s \
+    --prometheus.url http://localhost:909${i} \
+    --tsdb.path data/prom${i} \
     ${OBJSTORECFG} &
 
   STORES="${STORES} --store 127.0.0.1:109${i}1"
@@ -147,14 +146,15 @@ done
 
 sleep 0.5
 
-if [ -n "${GCS_BUCKET}" -o -n "${S3_ENDPOINT}" ]
-then
+if [ -n "${GCS_BUCKET}" -o -n "${S3_ENDPOINT}" ]; then
   ${THANOS_EXECUTABLE} store \
-    --debug.name                store \
-    --log.level                 debug \
-    --grpc-address              0.0.0.0:10905 \
-    --http-address              0.0.0.0:10906 \
-    --data-dir                  data/store \
+    --debug.name store \
+    --log.level debug \
+    --grpc-address 0.0.0.0:10905 \
+    --grpc-grace-period 1s \
+    --http-address 0.0.0.0:10906 \
+    --http-grace-period 1s \
+    --data-dir data/store \
     ${OBJSTORECFG} &
 
   STORES="${STORES} --store 127.0.0.1:10905"
@@ -162,20 +162,22 @@ fi
 
 sleep 0.5
 
-if [ -n "${REMOTE_WRITE_ENABLED}" ]
-then
+if [ -n "${REMOTE_WRITE_ENABLED}" ]; then
   ${THANOS_EXECUTABLE} receive \
-    --debug.name                receive \
-    --log.level                 debug \
-    --tsdb.path                 "./data/remote-write-receive-data" \
-    --grpc-address              0.0.0.0:10907 \
-    --http-address              0.0.0.0:10909 \
-    --label                     "receive=\"true\"" \
+    --debug.name receive \
+    --log.level debug \
+    --log.level debug \
+    --tsdb.path "./data/remote-write-receive-data" \
+    --grpc-address 0.0.0.0:10907 \
+    --grpc-grace-period 1s \
+    --http-address 0.0.0.0:10909 \
+    --http-grace-period 1s \
+    --label "receive=\"true\"" \
     ${OBJSTORECFG} \
-    --remote-write.address      0.0.0.0:10908 &
+    --remote-write.address 0.0.0.0:10908 &
 
   mkdir -p "data/local-prometheus-data/"
-  cat <<EOF > data/local-prometheus-data/prometheus.yml
+  cat <<EOF >data/local-prometheus-data/prometheus.yml
 # When the Thanos remote-write-receive component is started,
 # this is an example configuration of a Prometheus server that
 # would scrape a local node-exporter and replicate its data to
@@ -198,15 +200,16 @@ fi
 sleep 0.5
 
 # Start two query nodes.
-for i in `seq 0 1`
-do
+for i in $(seq 0 1); do
   ${THANOS_EXECUTABLE} query \
-    --debug.name                query-${i} \
-    --grpc-address              0.0.0.0:109${i}3 \
-    --http-address              0.0.0.0:109${i}4 \
-    --query.replica-label       prometheus \
+    --debug.name query-${i} \
+    --log.level debug \
+    --grpc-address 0.0.0.0:109${i}3 \
+    --grpc-grace-period 1s \
+    --http-address 0.0.0.0:109${i}4 \
+    --http-grace-period 1s \
+    --query.replica-label prometheus \
     ${STORES} &
 done
 
 wait
-
