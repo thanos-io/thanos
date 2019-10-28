@@ -16,8 +16,8 @@ import (
 
 var errNotFound = errors.New("inmem: object not found")
 
-// Bucket implements the store.Bucket and shipper.Bucket interfaces against local memory.
-// methods from Bucket interface are thread-safe. Object are assumed to be immutable.
+// Bucket implements the objstore.Bucket interfaces against local memory.
+// Methods from Bucket interface are thread-safe. Objects are assumed to be immutable.
 type Bucket struct {
 	mtx     sync.RWMutex
 	objects map[string][]byte
@@ -116,7 +116,11 @@ func (b *Bucket) GetRange(_ context.Context, name string, off, length int64) (io
 	}
 
 	if int64(len(file)) < off {
-		return nil, errors.Errorf("inmem: offset larger than content length. Len %d. Offset: %v", len(file), off)
+		return ioutil.NopCloser(bytes.NewReader(nil)), nil
+	}
+
+	if length == -1 {
+		return ioutil.NopCloser(bytes.NewReader(file[off:])), nil
 	}
 
 	if int64(len(file)) <= off+length {

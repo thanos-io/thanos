@@ -42,12 +42,35 @@ func TestObjStore_AcceptanceTest_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Equals(t, "@test-data@", string(content))
 
+		rcUnspecifiedLen, err := bkt.GetRange(ctx, "id1/obj_1.some", 1, -1)
+		testutil.Ok(t, err)
+		defer func() { testutil.Ok(t, rcUnspecifiedLen.Close()) }()
+		content, err = ioutil.ReadAll(rcUnspecifiedLen)
+		testutil.Ok(t, err)
+		testutil.Equals(t, "test-data@", string(content))
+
 		rc2, err := bkt.GetRange(ctx, "id1/obj_1.some", 1, 3)
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, rc2.Close()) }()
 		content, err = ioutil.ReadAll(rc2)
 		testutil.Ok(t, err)
 		testutil.Equals(t, "tes", string(content))
+
+		// Out of band offset. We expect to read nothing.
+		rcOffset, err := bkt.GetRange(ctx, "id1/obj_1.some", 124141, 3)
+		testutil.Ok(t, err)
+		defer func() { testutil.Ok(t, rcOffset.Close()) }()
+		content, err = ioutil.ReadAll(rcOffset)
+		testutil.Ok(t, err)
+		testutil.Equals(t, "", string(content))
+
+		// Out of band length. We expect to read file fully.
+		rcLength, err := bkt.GetRange(ctx, "id1/obj_1.some", 3, 9999)
+		testutil.Ok(t, err)
+		defer func() { testutil.Ok(t, rcLength.Close()) }()
+		content, err = ioutil.ReadAll(rcLength)
+		testutil.Ok(t, err)
+		testutil.Equals(t, "st-data@", string(content))
 
 		ok, err = bkt.Exists(ctx, "id1/obj_1.some")
 		testutil.Ok(t, err)

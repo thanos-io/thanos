@@ -57,10 +57,11 @@ Current object storage client implementations:
 |----------------------|-------------------|-----------|---------------|
 | [Google Cloud Storage](./storage.md#gcs) | Stable  (production usage)             | yes       | @bwplotka   |
 | [AWS/S3](./storage.md#s3) | Stable  (production usage)               | yes        | @bwplotka          |
-| [Azure Storage Account](./storage.md#azure) | Stable  (production usage) | yes       | @vglafirov   |
+| [Azure Storage Account](./storage.md#azure) | Stable  (production usage) | no       | @vglafirov   |
 | [OpenStack Swift](./storage.md#openstack-swift)      | Beta  (working PoCs, testing usage)               | no        | @sudhi-vm   |
 | [Tencent COS](./storage.md#tencent-cos)          | Beta  (testing usage)                   | no        | @jojohappy          |
 | [AliYun OSS](./storage.md#aliyun-oss)           | Beta  (testing usage)                   | no        | @shaulboozhiao,@wujinhu      |
+| [Local Filesystem](./storage.md#filesystem) | Beta  (testing usage)             | yes       | @bwplotka   |
 
 NOTE: Currently Thanos requires strong consistency (write-read) for object store implementation.
 
@@ -354,3 +355,18 @@ config:
 ```
 
 Use --objstore.config-file to reference to this configuration file.
+
+### Filesystem
+
+This storage type is used when user wants to store and access the bucket in the local filesystem.
+We treat filesystem the same way we would treat object storage, so all optimization for remote bucket applies even though, 
+we might have the files locally.
+
+NOTE: This is storage type is experimental and might be inefficient. This is mainly useful for testing.
+
+[embedmd]:# (flags/config_bucket_filesystem.txt yaml)
+```yaml
+type: FILESYSTEM
+config:
+  directory: ""
+```
