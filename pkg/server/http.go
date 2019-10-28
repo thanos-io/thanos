@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"net"
 	"net/http"
 	"net/http/pprof"
 	"time"
@@ -22,9 +21,8 @@ type Server struct {
 	comp   component.Component
 	prober *prober.Prober
 
-	mux      *http.ServeMux
-	srv      *http.Server
-	listener net.Listener
+	mux *http.ServeMux
+	srv *http.Server
 
 	opts options
 }
@@ -55,15 +53,9 @@ func NewHTTP(logger log.Logger, reg *prometheus.Registry, comp component.Compone
 }
 
 func (s *Server) ListenAndServe() error {
-	l, err := net.Listen("tcp", s.opts.listen)
-	if err != nil {
-		return errors.Wrap(err, "listen metrics address")
-	}
-	s.listener = l
 	s.prober.SetHealthy()
 	level.Info(s.logger).Log("msg", "listening for requests and metrics", "component", s.comp.String(), "address", s.opts.listen)
-
-	return errors.Wrapf(http.Serve(l, s.mux), "serve %s and metrics", s.comp.String())
+	return errors.Wrapf(s.srv.ListenAndServe(), "serve %s and metrics", s.comp.String())
 }
 
 func (s *Server) Shutdown(err error) {
