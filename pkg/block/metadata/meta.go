@@ -82,29 +82,23 @@ func dirSize(path string) (uint64, error) {
 
 // InjectThanos sets Thanos meta to the block meta JSON and saves it to the disk.
 // NOTE: It should be used after writing any block by any Thanos component, otherwise we will miss crucial metadata.
-func InjectThanos(logger log.Logger, bdir string, meta Thanos, downsampledMeta *tsdb.BlockMeta) (*Meta, error) {
-	newMeta, err := Read(bdir)
-	if err != nil {
-		return nil, errors.Wrap(err, "read new meta")
-	}
-	newMeta.Thanos = meta
-
+func InjectThanos(logger log.Logger, bdir string, meta *Meta, downsampledMeta *tsdb.BlockMeta) (*Meta, error) {
 	sz, err := dirSize(bdir)
 	if err != nil {
 		return nil, errors.Wrap(err, "get block directory size")
 	}
-	newMeta.Thanos.SizeInBytes = &sz
+	meta.Thanos.SizeInBytes = &sz
 
 	// While downsampling we need to copy original compaction.
 	if downsampledMeta != nil {
-		newMeta.Compaction = downsampledMeta.Compaction
+		meta.Compaction = downsampledMeta.Compaction
 	}
 
-	if err := Write(logger, bdir, newMeta); err != nil {
+	if err := Write(logger, bdir, meta); err != nil {
 		return nil, errors.Wrap(err, "write new meta")
 	}
 
-	return newMeta, nil
+	return meta, nil
 }
 
 // Write writes the given meta into <dir>/meta.json.

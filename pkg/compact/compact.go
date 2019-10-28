@@ -993,11 +993,17 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	index := filepath.Join(bdir, block.IndexFilename)
 	indexCache := filepath.Join(bdir, block.IndexCacheFilename)
 
-	newMeta, err := metadata.InjectThanos(cg.logger, bdir, metadata.Thanos{
+	meta, err := metadata.Read(bdir)
+	if err != nil {
+		return false, ulid.ULID{}, errors.Wrapf(err, "read meta from %s", bdir)
+	}
+	meta.Thanos = metadata.Thanos{
 		Labels:     cg.labels.Map(),
 		Downsample: metadata.ThanosDownsample{Resolution: cg.resolution},
 		Source:     metadata.CompactorSource,
-	}, nil)
+	}
+
+	newMeta, err := metadata.InjectThanos(cg.logger, bdir, meta, nil)
 	if err != nil {
 		return false, ulid.ULID{}, errors.Wrapf(err, "failed to finalize the block %s", bdir)
 	}

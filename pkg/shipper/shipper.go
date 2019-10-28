@@ -374,7 +374,7 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 		meta.Thanos.Labels = lset.Map()
 	}
 	meta.Thanos.Source = s.source
-	if _, err := metadata.InjectThanos(s.logger, updir, meta.Thanos, nil); err != nil {
+	if _, err := metadata.InjectThanos(s.logger, updir, meta, nil); err != nil {
 		return errors.Wrap(err, "write meta file")
 	}
 
