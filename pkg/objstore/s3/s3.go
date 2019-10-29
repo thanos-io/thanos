@@ -251,6 +251,10 @@ func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (
 		if err := opts.SetRange(off, off+length-1); err != nil {
 			return nil, err
 		}
+	} else if off > 0 {
+		if err := opts.SetRange(off, 0); err != nil {
+			return nil, err
+		}
 	}
 	r, err := b.client.GetObjectWithContext(ctx, b.name, name, *opts)
 	if err != nil {
