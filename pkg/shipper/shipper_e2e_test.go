@@ -56,7 +56,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 			tmp := bdir + ".tmp"
 
 			testutil.Ok(t, os.Mkdir(tmp, 0777))
-			sizeBytes := uint64(271)
+			sizeBytes := uint64(270)
 
 			meta := metadata.Meta{
 				BlockMeta: tsdb.BlockMeta{
@@ -215,7 +215,7 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 			tmp := bdir + ".tmp"
 
 			testutil.Ok(t, os.Mkdir(tmp, 0777))
-			sizeBytes := uint64(271)
+			sizeBytes := uint64(270)
 
 			meta := metadata.Meta{
 				BlockMeta: tsdb.BlockMeta{
