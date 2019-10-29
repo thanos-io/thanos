@@ -132,13 +132,19 @@ func runStore(
 	advertiseCompatibilityLabel bool,
 ) error {
 	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-	statusProber := prober.NewProber(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	statusProber := prober.New(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	srv := httpserver.New(logger, reg, component, statusProber,
 		httpserver.WithListen(httpBindAddr),
 		httpserver.WithGracePeriod(httpGracePeriod),
 	)
 
-	g.Add(srv.ListenAndServe, srv.Shutdown)
+	g.Add(func() error {
+		statusProber.Healthy()
+		return srv.ListenAndServe()
+	}, func(err error) {
+		statusProber.NotReady(err)
+		srv.Shutdown(err)
+	})
 
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
@@ -241,10 +247,10 @@ func runStore(
 
 		g.Add(func() error {
 			<-bucketStoreReady
-			statusProber.SetReady()
+			statusProber.Ready()
 			return s.ListenAndServe()
 		}, func(err error) {
-			statusProber.SetNotReady(err)
+			statusProber.NotReady(err)
 			s.Shutdown(err)
 		})
 	}

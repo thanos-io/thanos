@@ -140,13 +140,19 @@ func runSidecar(
 	}
 
 	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	statusProber := prober.New(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	srv := httpserver.New(logger, reg, comp, statusProber,
 		httpserver.WithListen(httpBindAddr),
 		httpserver.WithGracePeriod(httpGracePeriod),
 	)
 
-	g.Add(srv.ListenAndServe, srv.Shutdown)
+	g.Add(func() error {
+		statusProber.Healthy()
+		return srv.ListenAndServe()
+	}, func(err error) {
+		statusProber.NotReady(err)
+		srv.Shutdown(err)
+	})
 
 	// Setup all the concurrent groups.
 	{
@@ -179,7 +185,7 @@ func runSidecar(
 						"err", err,
 					)
 					promUp.Set(0)
-					statusProber.SetNotReady(err)
+					statusProber.NotReady(err)
 					return err
 				}
 
@@ -188,7 +194,7 @@ func runSidecar(
 					"external_labels", m.Labels().String(),
 				)
 				promUp.Set(1)
-				statusProber.SetReady()
+				statusProber.Ready()
 				lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
 				return nil
 			})
@@ -247,10 +253,10 @@ func runSidecar(
 			grpcserver.WithTLSConfig(tlsCfg),
 		)
 		g.Add(func() error {
-			statusProber.SetReady()
+			statusProber.Ready()
 			return s.ListenAndServe()
 		}, func(err error) {
-			statusProber.SetNotReady(err)
+			statusProber.NotReady(err)
 			s.Shutdown(err)
 		})
 	}

@@ -7,19 +7,18 @@ import (
 	"net/http"
 	"path"
 	"testing"
-	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/run"
-	"github.com/pkg/errors"
-	"github.com/prometheus/common/route"
-	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-func queryHTTPGetEndpoint(ctx context.Context, t *testing.T, logger log.Logger, url string) (*http.Response, error) {
+func doGet(ctx context.Context, url string) (*http.Response, error) {
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s", url), nil)
-	testutil.Ok(t, err)
+	if err != nil {
+		return nil, err
+	}
+
 	return http.DefaultClient.Do(req.WithContext(ctx))
 }
 
@@ -32,141 +31,109 @@ func (c TestComponent) String() string {
 }
 
 func TestProberHealthInitialState(t *testing.T) {
-	component := TestComponent{name: "test"}
-	expectedErrorMessage := fmt.Sprintf(initialErrorFmt, component)
-	p := NewProber(component, log.NewNopLogger(), nil)
+	p := New(TestComponent{name: "test"}, log.NewNopLogger(), nil)
 
-	err := p.IsHealthy()
-	testutil.NotOk(t, err)
-	testutil.Equals(t, err.Error(), expectedErrorMessage)
+	testutil.Assert(t, !p.isHealthy(), "initially should not be healthy")
 }
 
 func TestProberReadinessInitialState(t *testing.T) {
-	component := TestComponent{name: "test"}
-	expectedErrorMessage := fmt.Sprintf(initialErrorFmt, component)
-	p := NewProber(component, log.NewNopLogger(), nil)
+	p := New(TestComponent{name: "test"}, log.NewNopLogger(), nil)
 
-	err := p.IsReady()
-	testutil.NotOk(t, err)
-	testutil.Equals(t, err.Error(), expectedErrorMessage)
+	testutil.Assert(t, !p.isReady(), "initially should not be ready")
+}
+
+func TestProberHealthyStatusSetting(t *testing.T) {
+	testError := fmt.Errorf("test error")
+	p := New(TestComponent{name: "test"}, log.NewNopLogger(), nil)
+
+	p.Healthy()
+
+	testutil.Assert(t, p.isHealthy(), "should be healthy")
+
+	p.NotHealthy(testError)
+
+	testutil.Assert(t, !p.isHealthy(), "should not be healthy")
 }
 
 func TestProberReadyStatusSetting(t *testing.T) {
-	component := TestComponent{name: "test"}
 	testError := fmt.Errorf("test error")
-	p := NewProber(component, log.NewNopLogger(), nil)
+	p := New(TestComponent{name: "test"}, log.NewNopLogger(), nil)
 
-	p.SetReady()
-	err := p.IsReady()
-	testutil.Equals(t, err, nil)
-	p.SetNotReady(testError)
-	err = p.IsReady()
-	testutil.NotOk(t, err)
-}
+	p.Ready()
 
-func TestProberHeatlthyStatusSetting(t *testing.T) {
-	component := TestComponent{name: "test"}
-	testError := fmt.Errorf("test error")
-	p := NewProber(component, log.NewNopLogger(), nil)
+	testutil.Assert(t, p.isReady(), "should be ready")
 
-	p.SetHealthy()
-	err := p.IsHealthy()
-	testutil.Equals(t, err, nil)
-	p.SetNotHealthy(testError)
-	err = p.IsHealthy()
-	testutil.NotOk(t, err)
+	p.NotReady(testError)
+
+	testutil.Assert(t, !p.isReady(), "should not be ready")
 }
 
 func TestProberMuxRegistering(t *testing.T) {
-	component := TestComponent{name: "test"}
-	ctx := context.Background()
-	var g run.Group
-	mux := http.NewServeMux()
-
-	freePort, err := testutil.FreePort()
-	testutil.Ok(t, err)
-	serverAddress := fmt.Sprintf("localhost:%d", freePort)
+	serverAddress := fmt.Sprintf("localhost:%d", 8081)
 
 	l, err := net.Listen("tcp", serverAddress)
 	testutil.Ok(t, err)
-	g.Add(func() error {
-		return errors.Wrap(http.Serve(l, mux), "serve probes")
-	}, func(error) {})
 
-	p := NewProber(component, log.NewNopLogger(), nil)
-	p.RegisterInMux(mux)
+	p := New(TestComponent{name: "test"}, log.NewNopLogger(), nil)
 
-	go func() { _ = g.Run() }()
+	healthyEndpointPath := "/-/healthy"
+	readyEndpointPath := "/-/ready"
 
-	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
-		resp, err := queryHTTPGetEndpoint(ctx, t, log.NewNopLogger(), path.Join(serverAddress, healthyEndpointPath))
-		testutil.Ok(t, err)
-		testutil.Equals(t, probeErrorHTTPStatus, resp.StatusCode)
-		return err
-	}))
-
-	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
-		resp, err := queryHTTPGetEndpoint(ctx, t, log.NewNopLogger(), path.Join(serverAddress, readyEndpointPath))
-		testutil.Ok(t, err)
-		testutil.Equals(t, probeErrorHTTPStatus, resp.StatusCode)
-		return err
-	}))
-
-	p.SetHealthy()
-
-	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
-		resp, err := queryHTTPGetEndpoint(ctx, t, log.NewNopLogger(), path.Join(serverAddress, healthyEndpointPath))
-		testutil.Ok(t, err)
-		testutil.Equals(t, 200, resp.StatusCode)
-		return err
-	}))
-
-}
-
-func TestProberRouterRegistering(t *testing.T) {
-	component := TestComponent{name: "test"}
-	router := route.New()
-	ctx := context.Background()
-	var g run.Group
 	mux := http.NewServeMux()
+	mux.HandleFunc(healthyEndpointPath, p.HealthyHandler())
+	mux.HandleFunc(readyEndpointPath, p.ReadyHandler())
 
-	freePort, err := testutil.FreePort()
-	testutil.Ok(t, err)
-	serverAddress := fmt.Sprintf("localhost:%d", freePort)
-
-	l, err := net.Listen("tcp", serverAddress)
-	testutil.Ok(t, err)
+	var g run.Group
 	g.Add(func() error {
-		return errors.Wrap(http.Serve(l, mux), "serve probes")
-	}, func(error) {})
-
-	p := NewProber(component, log.NewNopLogger(), nil)
-	p.RegisterInRouter(router)
-	mux.Handle("/", router)
+		return fmt.Errorf("serve probes %w", http.Serve(l, mux))
+	}, func(err error) {
+		t.Fatalf("server failed: %v", err)
+	})
 
 	go func() { _ = g.Run() }()
 
-	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
-		resp, err := queryHTTPGetEndpoint(ctx, t, log.NewNopLogger(), path.Join(serverAddress, healthyEndpointPath))
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		resp, err := doGet(ctx, path.Join(serverAddress, healthyEndpointPath))
 		testutil.Ok(t, err)
-		testutil.Equals(t, probeErrorHTTPStatus, resp.StatusCode)
-		return err
-	}))
+		defer resp.Body.Close()
 
-	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
-		resp, err := queryHTTPGetEndpoint(ctx, t, log.NewNopLogger(), path.Join(serverAddress, readyEndpointPath))
+		testutil.Equals(t, resp.StatusCode, http.StatusServiceUnavailable, "should not be healthy, response code: %d", resp.StatusCode)
+	}
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		resp, err := doGet(ctx, path.Join(serverAddress, readyEndpointPath))
 		testutil.Ok(t, err)
-		testutil.Equals(t, probeErrorHTTPStatus, resp.StatusCode)
-		return err
-	}))
+		defer resp.Body.Close()
 
-	p.SetHealthy()
+		testutil.Equals(t, resp.StatusCode, http.StatusServiceUnavailable, "should not be ready, response code: %d", resp.StatusCode)
+	}
+	{
+		p.Healthy()
 
-	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
-		resp, err := queryHTTPGetEndpoint(ctx, t, log.NewNopLogger(), path.Join(serverAddress, healthyEndpointPath))
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		resp, err := doGet(ctx, path.Join(serverAddress, healthyEndpointPath))
 		testutil.Ok(t, err)
-		testutil.Equals(t, 200, resp.StatusCode)
-		return err
-	}))
+		defer resp.Body.Close()
 
+		testutil.Equals(t, resp.StatusCode, http.StatusOK, "should be healthy, response code: %d", resp.StatusCode)
+	}
+	{
+		p.Ready()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		resp, err := doGet(ctx, path.Join(serverAddress, readyEndpointPath))
+		testutil.Ok(t, err)
+		defer resp.Body.Close()
+
+		testutil.Equals(t, resp.StatusCode, http.StatusOK, "should be ready, response code: %d", resp.StatusCode)
+	}
 }

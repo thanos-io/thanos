@@ -501,7 +501,7 @@ func runRule(
 			cancel()
 		})
 	}
-	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	statusProber := prober.New(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	// Start gRPC server.
 	{
 		store := store.NewTSDBStore(logger, reg, db, component.Rule, lset)
@@ -516,11 +516,12 @@ func runRule(
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),
 		)
+
 		g.Add(func() error {
-			statusProber.SetReady()
+			statusProber.Ready()
 			return s.ListenAndServe()
 		}, func(err error) {
-			statusProber.SetNotReady(err)
+			statusProber.NotReady(err)
 			s.Shutdown(err)
 		})
 	}
@@ -559,7 +560,13 @@ func runRule(
 		)
 		srv.Handle("/", router)
 
-		g.Add(srv.ListenAndServe, srv.Shutdown)
+		g.Add(func() error {
+			statusProber.Healthy()
+			return srv.ListenAndServe()
+		}, func(err error) {
+			statusProber.NotReady(err)
+			srv.Shutdown(err)
+		})
 	}
 
 	confContentYaml, err := objStoreConfig.Content()

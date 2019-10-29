@@ -198,7 +198,7 @@ func runReceive(
 		TLSClientConfig:   rwTLSClientConfig,
 	})
 
-	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	statusProber := prober.New(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
 		return err
@@ -268,7 +268,7 @@ func runReceive(
 					level.Info(logger).Log("msg", "tsdb started")
 					localStorage.Set(db.Get(), startTimeMargin)
 					webHandler.SetWriter(receive.NewWriter(log.With(logger, "component", "receive-writer"), localStorage))
-					statusProber.SetReady()
+					statusProber.Ready()
 					level.Info(logger).Log("msg", "server is ready to receive web requests.")
 					dbReady <- struct{}{}
 				}
@@ -318,7 +318,7 @@ func runReceive(
 					webHandler.SetWriter(nil)
 					webHandler.Hashring(h)
 					msg := "hashring has changed; server is not ready to receive web requests."
-					statusProber.SetNotReady(errors.New(msg))
+					statusProber.NotReady(errors.New(msg))
 					level.Info(logger).Log("msg", msg)
 					updateDB <- struct{}{}
 				case <-cancel:
@@ -337,7 +337,13 @@ func runReceive(
 		httpserver.WithListen(httpBindAddr),
 		httpserver.WithGracePeriod(httpGracePeriod),
 	)
-	g.Add(srv.ListenAndServe, srv.Shutdown)
+	g.Add(func() error {
+		statusProber.Healthy()
+		return srv.ListenAndServe()
+	}, func(err error) {
+		statusProber.NotReady(err)
+		srv.Shutdown(err)
+	})
 
 	level.Debug(logger).Log("msg", "setting up grpc server")
 	{

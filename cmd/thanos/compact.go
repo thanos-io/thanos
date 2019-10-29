@@ -180,14 +180,20 @@ func runCompact(
 
 	downsampleMetrics := newDownsampleMetrics(reg)
 
-	statusProber := prober.NewProber(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	statusProber := prober.New(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
 	srv := httpserver.New(logger, reg, component, statusProber,
 		httpserver.WithListen(httpBindAddr),
 		httpserver.WithGracePeriod(httpGracePeriod),
 	)
 
-	g.Add(srv.ListenAndServe, srv.Shutdown)
+	g.Add(func() error {
+		statusProber.Healthy()
+		return srv.ListenAndServe()
+	}, func(err error) {
+		statusProber.NotReady(err)
+		srv.Shutdown(err)
+	})
 
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
@@ -350,7 +356,7 @@ func runCompact(
 	})
 
 	level.Info(logger).Log("msg", "starting compact node")
-	statusProber.SetReady()
+	statusProber.Ready()
 	return nil
 }
 
