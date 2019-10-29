@@ -12,11 +12,12 @@ This document describes the rules and governance of the project. It is a slightl
 
 It is meant to be followed by all the developers of the Thanos project and the Thanos community. Common terminology used in this governance document are listed below:
 
-* **Maintainers Team**: A core Thanos team that have owner access to http://github.com/thanos-io organization and all projects within it. Current list is available [here][maintainers-doc]
+* **Maintainers Team**: A core Thanos team that have owner access to http://github.com/thanos-io organization and all projects within it. Current list is available [here][maintainers-doc].
 
-* **Triage Team**: Contributors who does not belong to Maintainer's team, but has `Triage` Github role on [Thanos](https://github.com/thanos-io/thanos) repository allowing to change Github issues and PRs statuses and labels. They are listed [here](https://thanos.io/maintainers/#triage)
+* **Triage Team**: Contributors who does not belong to Maintainer's team, but has `Triage` GitHub role on [Thanos](https://github.com/thanos-io/thanos) repository allowing to change GitHub issues and PRs statuses and labels.
+They are listed [here](https://thanos.io/maintainers/#triage).
 
-* **The Thanos project**: The sum of all activities performed under this governance, concerning one or more repositories or the community.
+* **The Thanos project**: The sum of all activities performed under the [thanos-io organization on GitHub][gh], concerning one or more repositories or the community.
 
 Both Triage and Maintainers have are part of [`thanos-io@googlegroups.com`][team] email list.
 
@@ -63,12 +64,12 @@ This email will also be CC'd to [thanos-io@googlegroups.com][team] for record-ke
 
 If they choose to accept, the following steps are taken:
 
-* Triage member is added to the [Thanos project][http://github.com/thanos-io/thanos] with `Triage` access.
+* Triage member is added to the [Thanos project](http://github.com/thanos-io/thanos) with `Triage` access.
 * Triage member is added to the [thanos-io][team].
-* Triage member is added to the list of Triage members [here][maintainers-doc]
+* Triage member is added to the list of Triage members [here][maintainers-doc].
 * New team Triage member are announced on the [Thanos Twitter][twitter] by an existing team member.
 
-Triage member may retire at any time by emailing [thanos-io@googlegroups.com][team]. It can be proposed to ste up as Maintainer in any time as well.
+Triage member may retire at any time by emailing [thanos-io@googlegroups.com][team]. It can be proposed to step up as Maintainer in any time as well.
 
 Triage member can be removed by [majority vote](#majority-vote) on [thanos-io@googlegroups.com][team]. For this vote, the member in question is not eligible to vote and does not count towards the quorum. 
 Only Maintainers team has right to vote.
@@ -78,19 +79,19 @@ Upon death of a member, their Triage team membership ends automatically.
 ### Technical decisions
 
 Smaller technical decisions are made informally and [lazy consensus](#consensus) is assumed. Technical decisions that span multiple parts of the Thanos project
-should be discussed and made on the [Github issues][issues] and in most cases followed by proposal as described [here](https://thanos.io/contributing/#adding-new-features-components)
+should be discussed and made on the [GitHub issues][issues] and in most cases followed by proposal as described [here](https://thanos.io/contributing/#adding-new-features-components).
 
 Decisions are usually made by [lazy consensus](#consensus). If no consensus can be reached, the matter may be resolved by [majority vote](#majority-vote).
 
 ### Governance changes
 
-Material changes to this document are discussed publicly on the the [Thanos Github](http://github.com/thanos-io/thanos).
+Material changes to this document are discussed publicly on the the [Thanos GitHub](http://github.com/thanos-io/thanos).
 Any change requires a [supermajority](#supermajority-vote) in favor. Editorial changes may be made by [lazy consensus](#consensus) unless challenged.
 
 ### Other matters
 
 Any matter that needs a decision, including but not limited to financial matters, may be called to a vote by any Maintainer if they deem it necessary. 
-For financial, private, or personnel matters, discussion and voting takes place on the [thanos-io@googlegroups.com][team]; Otherwise discussion and votes are held in public on the Github issues or #thanos-dev CNCF slack channel.
+For financial, private, or personnel matters, discussion and voting takes place on the [thanos-io@googlegroups.com][team]; Otherwise discussion and votes are held in public on the GitHub issues or #thanos-dev CNCF slack channel.
 
 ## Voting
 
@@ -103,15 +104,15 @@ A vote may be called and closed early if enough votes have come in one way so th
 
 In all cases, all and only [Maintainers](#maintainers-team) are eligible to vote, with the sole exception of the forced removal of a team member, in which said member is not eligible to vote.
 
-Discussion and votes on personnel matters (including but not limited to team membership and maintainership) are held in private on the [thanos-io@googlegroups.com][team]. All other discussion and votes are held in public on the Github issues or #thanos-dev CNCF slack channel.
+Discussion and votes on personnel matters (including but not limited to team membership and maintainership) are held in private on the [thanos-io@googlegroups.com][team]. All other discussion and votes are held in public on the GitHub issues or #thanos-dev CNCF slack channel.
 
-For public discussions, anyone interested is encouraged to participate. Formal power to object or vote is limited to [Maintainers Team](#maintainers-team)
+For public discussions, anyone interested is encouraged to participate. Formal power to object or vote is limited to [Maintainers Team](#maintainers-team).
 
 ### Governance
 
 It's important for the project to stay independent and focused on shared interest instead of single use case of one company or organization.
 
-We value open source values and freedom, that's why we limit Maintainers Team votes to maximum two from single organization or company.
+We value open source values and freedom, that's why we limit Maintainers Team votes to maximum two from a single organization or company.
 
 We also encourage any other company interested in helping maintaining Thanos to join us to make sure we stay independent.
 
@@ -170,7 +171,7 @@ Should the decision be in favor, your new membership will also be announced on t
 
 ### How do I add a project?
 
-As a team member, propose the new project on the [Thanos Github Issue][issues]. However, currently to maintain project in our organization you have to become Thanos Maintainers.
+As a team member, propose the new project on the [Thanos GitHub Issue][issues]. However, currently to maintain project in our organization you have to become Thanos Maintainers.
 
 All are encourage to start their own project related to Thanos. Thanos team is happy to link to your poject in appriopriate page e.g https://thanos.io/integrations.md/
 
@@ -179,7 +180,7 @@ All are encourage to start their own project related to Thanos. Thanos team is h
 All members may resign by notifying the [thanos-io@googlegroups.com][team]. If you think a team member should be removed against their will, propose this to the [thanos-io@googlegroups.com][team]. 
 Discussions will be held there in private.
 
-### Can majority/suprmajority vote be done on Github PR by just approving PR?
+### Can majority/supermajority vote be done on GitHub PR by just approving PR?
 
 No,`[VOTE]` email has to be created.
 
