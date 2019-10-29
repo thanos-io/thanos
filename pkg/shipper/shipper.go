@@ -296,7 +296,22 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 			return errors.Wrap(err, "check exists")
 		}
 		if ok {
-			return nil
+			// Check that same number of chunk files match meta file, this will cause partially failed transfers to re-upload
+			seqFiles, err := ioutil.ReadDir(path.Join(s.dir, m.ULID.String(), block.ChunksDirname))
+			if err != nil {
+				return errors.Wrap(err, "counting local chunk files")
+			}
+			if err = s.bucket.Iter(ctx, path.Join(m.ULID.String(), block.ChunksDirname), func(string) error {
+				if len(seqFiles) > 0 {
+					seqFiles = seqFiles[1:]
+				}
+				return nil
+			}); err != nil {
+				return errors.Wrap(err, "counting remote chunk files")
+			}
+			if len(seqFiles) == 0 {
+				return nil
+			}
 		}
 
 		// We only ship of the first compacted block level as normal flow.
