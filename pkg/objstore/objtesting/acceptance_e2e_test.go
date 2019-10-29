@@ -42,13 +42,6 @@ func TestObjStore_AcceptanceTest_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Equals(t, "@test-data@", string(content))
 
-		rcUnspecifiedLen, err := bkt.GetRange(ctx, "id1/obj_1.some", 1, -1)
-		testutil.Ok(t, err)
-		defer func() { testutil.Ok(t, rcUnspecifiedLen.Close()) }()
-		content, err = ioutil.ReadAll(rcUnspecifiedLen)
-		testutil.Ok(t, err)
-		testutil.Equals(t, "test-data@", string(content))
-
 		rc2, err := bkt.GetRange(ctx, "id1/obj_1.some", 1, 3)
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, rc2.Close()) }()
@@ -56,13 +49,20 @@ func TestObjStore_AcceptanceTest_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Equals(t, "tes", string(content))
 
-		// Out of band offset. We expect to read nothing.
-		rcOffset, err := bkt.GetRange(ctx, "id1/obj_1.some", 124141, 3)
+		// Unspecified range with offset.
+		rcUnspecifiedLen, err := bkt.GetRange(ctx, "id1/obj_1.some", 1, -1)
 		testutil.Ok(t, err)
-		defer func() { testutil.Ok(t, rcOffset.Close()) }()
-		content, err = ioutil.ReadAll(rcOffset)
+		defer func() { testutil.Ok(t, rcUnspecifiedLen.Close()) }()
+		content, err = ioutil.ReadAll(rcUnspecifiedLen)
 		testutil.Ok(t, err)
-		testutil.Equals(t, "", string(content))
+		testutil.Equals(t, "test-data@", string(content))
+
+		// Out of band offset. Do not rely on outcome.
+		// NOTE: For various providers we have different outcome.
+		// * GCS is giving 416 status code
+		// * S3 errors immdiately with invalid range error.
+		// * inmem and filesystem are returning 0 bytes.
+		//rcOffset, err := bkt.GetRange(ctx, "id1/obj_1.some", 124141, 3)
 
 		// Out of band length. We expect to read file fully.
 		rcLength, err := bkt.GetRange(ctx, "id1/obj_1.some", 3, 9999)
@@ -120,6 +120,7 @@ func TestObjStore_AcceptanceTest_e2e(t *testing.T) {
 		}))
 
 		testutil.Ok(t, bkt.Delete(ctx, "id1/obj_2.some"))
+
 		// Delete is expected to fail on non existing object.
 		// NOTE: Don't rely on this. S3 is not complying with this as GCS is.
 		// testutil.NotOk(t, bkt.Delete(ctx, "id1/obj_2.some"))
