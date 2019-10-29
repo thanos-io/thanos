@@ -362,7 +362,9 @@ This storage type is used when user wants to store and access the bucket in the 
 We treat filesystem the same way we would treat object storage, so all optimization for remote bucket applies even though, 
 we might have the files locally.
 
-NOTE: This is storage type is experimental and might be inefficient. This is mainly useful for testing.
+NOTE: This storage type is experimental and might be inefficient. It is NOT advised to use it as the main storage for metrics
+in production environment. Particularly there is no planned support for distributed filesystems like NFS.
+This is mainly useful for testing and demos.
 
 [embedmd]:# (flags/config_bucket_filesystem.txt yaml)
 ```yaml

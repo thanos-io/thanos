@@ -131,5 +131,17 @@ func TestObjStore_AcceptanceTest_e2e(t *testing.T) {
 			return nil
 		}))
 		testutil.Equals(t, []string{"id1/obj_1.some", "id1/obj_3.some"}, seen)
+
+		testutil.Ok(t, bkt.Delete(ctx, "id2/obj_4.some"))
+
+		seen = []string{}
+		testutil.Ok(t, bkt.Iter(ctx, "", func(fn string) error {
+			seen = append(seen, fn)
+			return nil
+		}))
+		expected = []string{"obj_5.some", "id1/"}
+		sort.Strings(expected)
+		sort.Strings(seen)
+		testutil.Equals(t, expected, seen)
 	})
 }

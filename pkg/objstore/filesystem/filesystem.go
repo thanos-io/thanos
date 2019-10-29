@@ -37,27 +37,34 @@ func NewBucketFromConfig(conf []byte) (*Bucket, error) {
 	if c.Directory == "" {
 		return nil, errors.New("missing directory for filesystem bucket")
 	}
-
-	return NewBucket(c.Directory), nil
+	return NewBucket(c.Directory)
 }
 
 // NewBucket returns a new filesystem.Bucket.
-func NewBucket(rootDir string) *Bucket {
-	return &Bucket{rootDir: rootDir}
+func NewBucket(rootDir string) (*Bucket, error) {
+	absDir, err := filepath.Abs(rootDir)
+	if err != nil {
+		return nil, err
+	}
+	return &Bucket{rootDir: absDir}, nil
 }
 
 // Iter calls f for each entry in the given directory. The argument to f is the full
 // object name including the prefix of the inspected directory.
 func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) error {
-	exists, err := b.Exists(ctx, dir)
+	absDir := filepath.Join(b.rootDir, dir)
+	info, err := os.Stat(absDir)
 	if err != nil {
-		return err
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return errors.Wrapf(err, "stat %s", absDir)
 	}
-	if !exists {
+	if !info.IsDir() {
 		return nil
 	}
 
-	files, err := ioutil.ReadDir(filepath.Join(b.rootDir, dir))
+	files, err := ioutil.ReadDir(absDir)
 	if err != nil {
 		return err
 	}
@@ -65,6 +72,15 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		name := filepath.Join(dir, file.Name())
 
 		if file.IsDir() {
+			empty, err := isDirEmpty(filepath.Join(absDir, file.Name()))
+			if err != nil {
+				return err
+			}
+
+			if empty {
+				// Skip empty directories.
+				continue
+			}
 			name += objstore.DirDelim
 		}
 		if err := f(name); err != nil {
@@ -120,14 +136,14 @@ func (b *Bucket) GetRange(_ context.Context, name string, off, length int64) (io
 
 // Exists checks if the given directory exists in memory.
 func (b *Bucket) Exists(_ context.Context, name string) (bool, error) {
-	_, err := os.Stat(filepath.Join(b.rootDir, name))
+	info, err := os.Stat(filepath.Join(b.rootDir, name))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
 		}
 		return false, errors.Wrapf(err, "stat %s", filepath.Join(b.rootDir, name))
 	}
-	return true, nil
+	return !info.IsDir(), nil
 }
 
 // Upload writes the file specified in src to into the memory.
@@ -149,10 +165,34 @@ func (b *Bucket) Upload(_ context.Context, name string, r io.Reader) (err error)
 	return nil
 }
 
+func isDirEmpty(name string) (ok bool, err error) {
+	f, err := os.Open(name)
+	if err != nil {
+		return false, err
+	}
+	defer runutil.CloseWithErrCapture(&err, f, "dir open")
+
+	if _, err = f.Readdir(1); err == io.EOF {
+		return true, nil
+	}
+	return false, err
+}
+
 // Delete removes all data prefixed with the dir.
 func (b *Bucket) Delete(_ context.Context, name string) error {
-	if err := os.RemoveAll(filepath.Join(b.rootDir, name)); err != nil {
-		return errors.Wrapf(err, "rm %s", filepath.Join(b.rootDir, name))
+	file := filepath.Join(b.rootDir, name)
+	for file != b.rootDir {
+		if err := os.RemoveAll(file); err != nil {
+			return errors.Wrapf(err, "rm %s", file)
+		}
+		file = filepath.Dir(file)
+		empty, err := isDirEmpty(file)
+		if err != nil {
+			return err
+		}
+		if !empty {
+			break
+		}
 	}
 	return nil
 }

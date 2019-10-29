@@ -156,6 +156,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		sort.Slice(rem, func(i, j int) bool {
 			return rem[i].Compare(rem[j]) < 0
 		})
+
 		// Only the level 3 block, the last source block in both resolutions should be left.
 		testutil.Equals(t, []ulid.ULID{metas[9].ULID, m3.ULID, m4.ULID}, rem)
 

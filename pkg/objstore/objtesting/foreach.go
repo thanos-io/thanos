@@ -41,7 +41,9 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 		testutil.Ok(t, err)
 		defer testutil.Ok(t, os.RemoveAll(dir))
 
-		testFn(t, filesystem.NewBucket(dir))
+		b, err := filesystem.NewBucket(dir)
+		testutil.Ok(t, err)
+		testFn(t, b)
 	}); !ok {
 		return
 	}
