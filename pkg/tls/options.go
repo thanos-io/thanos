@@ -10,7 +10,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-func DefaultServerOpts(logger log.Logger, cert, key, clientCA string) (*tls.Config, error) {
+// NewServerConfig provides new server TLS configuration.
+func NewServerConfig(logger log.Logger, cert, key, clientCA string) (*tls.Config, error) {
 	if key == "" && cert == "" {
 		if clientCA != "" {
 			return nil, errors.New("when a client CA is used a server key and certificate must also be provided")
@@ -56,7 +57,8 @@ func DefaultServerOpts(logger log.Logger, cert, key, clientCA string) (*tls.Conf
 	return tlsCfg, nil
 }
 
-func DefaultClientOpts(logger log.Logger, cert, key, caCert, serverName string) (*tls.Config, error) {
+// NewClientConfig provides new client TLS configuration.
+func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string) (*tls.Config, error) {
 	var certPool *x509.CertPool
 	if caCert != "" {
 		caPEM, err := ioutil.ReadFile(caCert)

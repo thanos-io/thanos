@@ -67,7 +67,7 @@ func (s *Server) Shutdown(err error) {
 		return
 	}
 
-	defer level.Info(s.logger).Log("msg", "server shut down internal server")
+	defer level.Info(s.logger).Log("msg", "internal server shut down")
 
 	if s.opts.gracePeriod == 0 {
 		s.srv.Close()
@@ -78,7 +78,7 @@ func (s *Server) Shutdown(err error) {
 	defer cancel()
 
 	if err := s.srv.Shutdown(ctx); err != nil {
-		level.Error(s.logger).Log("msg", "server shut down failed", "err", err)
+		level.Error(s.logger).Log("msg", "internal server shut down failed", "err", err)
 	}
 }
 

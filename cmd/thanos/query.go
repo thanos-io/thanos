@@ -203,7 +203,7 @@ func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer ope
 
 	level.Info(logger).Log("msg", "enabling client to server TLS")
 
-	tlsCfg, err := tls.DefaultClientOpts(logger, cert, key, caCert, serverName)
+	tlsCfg, err := tls.NewClientConfig(logger, cert, key, caCert, serverName)
 	if err != nil {
 		return nil, err
 	}
@@ -393,7 +393,7 @@ func runQuery(
 	}
 	// Start query (proxy) gRPC StoreAPI.
 	{
-		tlsCfg, err := tls.DefaultServerOpts(log.With(logger, "protocol", "gRPC"), grpcCert, grpcKey, grpcClientCA)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcCert, grpcKey, grpcClientCA)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}

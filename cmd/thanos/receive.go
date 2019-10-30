@@ -179,11 +179,11 @@ func runReceive(
 	}
 
 	localStorage := &tsdb.ReadyStorage{}
-	rwTLSConfig, err := tls.DefaultServerOpts(log.With(logger, "protocol", "HTTP"), rwServerCert, rwServerKey, rwServerClientCA)
+	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), rwServerCert, rwServerKey, rwServerClientCA)
 	if err != nil {
 		return err
 	}
-	rwTLSClientConfig, err := tls.DefaultClientOpts(logger, rwClientCert, rwClientKey, rwClientServerCA, rwClientServerName)
+	rwTLSClientConfig, err := tls.NewClientConfig(logger, rwClientCert, rwClientKey, rwClientServerCA, rwClientServerName)
 	if err != nil {
 		return err
 	}
@@ -353,7 +353,7 @@ func runReceive(
 		g.Add(func() error {
 			defer close(startGRPC)
 
-			tlsCfg, err := tls.DefaultServerOpts(log.With(logger, "protocol", "gRPC"), grpcCert, grpcKey, grpcClientCA)
+			tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcCert, grpcKey, grpcClientCA)
 			if err != nil {
 				return errors.Wrap(err, "setup gRPC server")
 			}

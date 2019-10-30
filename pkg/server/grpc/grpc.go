@@ -96,16 +96,16 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 func (s *Server) ListenAndServe() error {
 	l, err := net.Listen("tcp", s.opts.listen)
 	if err != nil {
-		return errors.Wrap(err, "listen gRPC on address")
+		return errors.Wrapf(err, "listen gRPC on address %s", s.opts.listen)
 	}
 	s.listener = l
 
-	level.Info(s.logger).Log("msg", "Listening for StoreAPI gRPC", "address", s.opts.listen)
+	level.Info(s.logger).Log("msg", "listening for StoreAPI gRPC", "address", s.opts.listen)
 	return errors.Wrap(s.srv.Serve(s.listener), "serve gRPC")
 }
 
 func (s *Server) Shutdown(err error) {
-	defer level.Info(s.logger).Log("msg", "server shut down internal server", "err", err)
+	defer level.Info(s.logger).Log("msg", "internal server shut down", "err", err)
 
 	if s.opts.gracePeriod == 0 {
 		s.srv.Stop()
@@ -117,14 +117,14 @@ func (s *Server) Shutdown(err error) {
 
 	stopped := make(chan struct{})
 	go func() {
-		level.Info(s.logger).Log("msg", "gracefully stoping server")
+		level.Info(s.logger).Log("msg", "gracefully stoping internal server")
 		s.srv.GracefulStop() // Also closes s.listener.
 		close(stopped)
 	}()
 
 	select {
 	case <-ctx.Done():
-		level.Info(s.logger).Log("msg", "timeout, grace period exceeded")
+		level.Info(s.logger).Log("msg", "grace period exceeded enforcing shut down")
 		s.srv.Stop()
 	case <-stopped:
 		cancel()
