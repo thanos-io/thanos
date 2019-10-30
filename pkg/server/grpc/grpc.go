@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// A Server defines parameters to serve RPC requests, a wrapper around grpc.Server.
 type Server struct {
 	logger log.Logger
 	comp   component.Component
@@ -35,6 +36,7 @@ type Server struct {
 	opts options
 }
 
+// New creates a new Server.
 func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, storeSrv storepb.StoreServer, opts ...Option) *Server {
 	options := options{
 		gracePeriod: 5 * time.Second,
@@ -93,6 +95,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	}
 }
 
+// ListenAndServe listens on the TCP network address and handles requests on incoming connections.
 func (s *Server) ListenAndServe() error {
 	l, err := net.Listen("tcp", s.opts.listen)
 	if err != nil {
@@ -104,8 +107,10 @@ func (s *Server) ListenAndServe() error {
 	return errors.Wrap(s.srv.Serve(s.listener), "serve gRPC")
 }
 
+// Shutdown gracefully shuts down the server by waiting,
+// for specified amount of time (by gracePeriod) for connections to return to idle and then shut down.
 func (s *Server) Shutdown(err error) {
-	defer level.Info(s.logger).Log("msg", "internal server shut down", "err", err)
+	defer level.Info(s.logger).Log("msg", "internal server shutdown", "err", err)
 
 	if s.opts.gracePeriod == 0 {
 		s.srv.Stop()
@@ -117,14 +122,14 @@ func (s *Server) Shutdown(err error) {
 
 	stopped := make(chan struct{})
 	go func() {
-		level.Info(s.logger).Log("msg", "gracefully stoping internal server")
+		level.Info(s.logger).Log("msg", "gracefully stopping internal server")
 		s.srv.GracefulStop() // Also closes s.listener.
 		close(stopped)
 	}()
 
 	select {
 	case <-ctx.Done():
-		level.Info(s.logger).Log("msg", "grace period exceeded enforcing shut down")
+		level.Info(s.logger).Log("msg", "grace period exceeded enforcing shutdown")
 		s.srv.Stop()
 	case <-stopped:
 		cancel()

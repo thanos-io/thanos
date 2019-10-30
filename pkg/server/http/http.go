@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+// A Server defines parameters for serve HTTP requests, a wrapper around http.Server.
 type Server struct {
 	logger log.Logger
 	comp   component.Component
@@ -27,6 +28,7 @@ type Server struct {
 	opts options
 }
 
+// New creates a new Server.
 func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, prober *prober.Prober, opts ...Option) *Server {
 	options := options{
 		gracePeriod: 5 * time.Second,
@@ -52,12 +54,15 @@ func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, 
 	}
 }
 
+// ListenAndServe listens on the TCP network address and handles requests on incoming connections.
 func (s *Server) ListenAndServe() error {
 	s.prober.SetHealthy()
 	level.Info(s.logger).Log("msg", "listening for requests and metrics", "address", s.opts.listen)
 	return errors.Wrap(s.srv.ListenAndServe(), "serve HTTP and metrics")
 }
 
+// Shutdown gracefully shuts down the server by waiting,
+// for specified amount of time (by gracePeriod) for connections to return to idle and then shut down.
 func (s *Server) Shutdown(err error) {
 	s.prober.SetNotReady(err)
 	defer s.prober.SetNotHealthy(err)
@@ -67,7 +72,7 @@ func (s *Server) Shutdown(err error) {
 		return
 	}
 
-	defer level.Info(s.logger).Log("msg", "internal server shut down")
+	defer level.Info(s.logger).Log("msg", "internal server shutdown")
 
 	if s.opts.gracePeriod == 0 {
 		s.srv.Close()
@@ -82,6 +87,7 @@ func (s *Server) Shutdown(err error) {
 	}
 }
 
+// Handle registers the handler for the given pattern.
 func (s *Server) Handle(pattern string, handler http.Handler) {
 	s.mux.Handle(pattern, handler)
 }
