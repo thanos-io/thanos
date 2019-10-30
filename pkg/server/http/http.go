@@ -4,16 +4,14 @@ import (
 	"context"
 	"net/http"
 	"net/http/pprof"
-	"time"
-
-	"github.com/thanos-io/thanos/pkg/component"
-	"github.com/thanos-io/thanos/pkg/prober"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/prober"
 )
 
 // A Server defines parameters for serve HTTP requests, a wrapper around http.Server.
@@ -30,11 +28,7 @@ type Server struct {
 
 // New creates a new Server.
 func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, prober *prober.Prober, opts ...Option) *Server {
-	options := options{
-		gracePeriod: 5 * time.Second,
-		listen:      "0.0.0.0:10902",
-	}
-
+	options := options{}
 	for _, o := range opts {
 		o.apply(&options)
 	}
@@ -72,7 +66,7 @@ func (s *Server) Shutdown(err error) {
 		return
 	}
 
-	defer level.Info(s.logger).Log("msg", "internal server shutdown")
+	defer level.Info(s.logger).Log("msg", "internal server shutdown", "err", err)
 
 	if s.opts.gracePeriod == 0 {
 		s.srv.Close()

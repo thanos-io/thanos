@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
-	"github.com/thanos-io/thanos/pkg/server"
+	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 )
 
 // Bucket is a web UI representing state of buckets as a timeline.
@@ -30,7 +30,7 @@ func NewBucketUI(logger log.Logger, label string) *Bucket {
 }
 
 // Register registers http routes for bucket UI.
-func (b *Bucket) Register(s server.Server, ins extpromhttp.InstrumentationMiddleware) {
+func (b *Bucket) Register(s *httpserver.Server, ins extpromhttp.InstrumentationMiddleware) {
 	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
 		return ins.NewHandler(name, http.HandlerFunc(next))
 	}

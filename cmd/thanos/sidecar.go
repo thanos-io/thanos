@@ -7,6 +7,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
+	"github.com/oklog/run"
+	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
@@ -22,15 +30,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tls"
-
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
-	"github.com/oklog/run"
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/tsdb/labels"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -248,8 +247,10 @@ func runSidecar(
 			grpcserver.WithTLSConfig(tlsCfg),
 		)
 		g.Add(func() error {
+			statusProber.SetReady()
 			return s.ListenAndServe()
 		}, func(err error) {
+			statusProber.SetNotReady(err)
 			s.Shutdown(err)
 		})
 	}
