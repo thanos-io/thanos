@@ -84,7 +84,7 @@ Flags:
                                https://thanos.io/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                Listen host:port for HTTP endpoints.
-      --http-grace-period=5s   Time to wait after an interrupt received for HTTP
+      --http-grace-period=2m   Time to wait after an interrupt received for HTTP
                                Server.
       --data-dir="./data"      Data directory in which to cache blocks and
                                process compactions.
