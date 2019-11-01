@@ -85,7 +85,7 @@ Decisions are usually made by [lazy consensus](#consensus). If no consensus can 
 
 ### Governance changes
 
-Material changes to this document are discussed publicly on the the [Thanos GitHub](http://github.com/thanos-io/thanos).
+Material changes to this document are discussed publicly on the [Thanos GitHub](http://github.com/thanos-io/thanos).
 Any change requires a [supermajority](#supermajority-vote) in favor. Editorial changes may be made by [lazy consensus](#consensus) unless challenged.
 
 ### Other matters
@@ -112,7 +112,7 @@ For public discussions, anyone interested is encouraged to participate. Formal p
 
 It's important for the project to stay independent and focused on shared interest instead of single use case of one company or organization.
 
-We value open source values and freedom, that's why we limit Maintainers Team votes to maximum two from a single organization or company.
+We value open source values and freedom, that's why we limit Maintainers Team **votes to maximum two from a single organization or company.**
 
 We also encourage any other company interested in helping maintaining Thanos to join us to make sure we stay independent.
 
@@ -157,6 +157,17 @@ A vote on multiple alternatives is considered decided in favor of one alternativ
 
 This section is informational. In case of disagreement, the rules above overrule any FAQ.
 
+### For majority vote, what if there is even number of maintainers and an equal amount of votes in favor than against?
+
+It has to be majority so the vote will be declined.
+
+### So what's the TLDR difference between majority vs supermajority?
+
+It's about number of up votes to agree on the decision.
+
+* majority: Majority of voters has to agree.
+* supermajority: 2/3 voters has to agree.
+
 ### How do I propose a decision?
 
 See [Contributor doc](https://thanos.io/contributing/#adding-new-features-components)
@@ -175,7 +186,7 @@ As a team member, propose the new project on the [Thanos GitHub Issue][issues]. 
 
 All are encourage to start their own project related to Thanos. Thanos team is happy to link to your poject in appriopriate page e.g https://thanos.io/integrations.md/
 
-### How do I remove a Maintainer of Triage member?
+### How do I remove a Maintainer or Triage member?
 
 All members may resign by notifying the [thanos-io@googlegroups.com][team]. If you think a team member should be removed against their will, propose this to the [thanos-io@googlegroups.com][team]. 
 Discussions will be held there in private.
