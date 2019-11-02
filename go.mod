@@ -62,6 +62,8 @@ require (
 // so that we don't get errors about being incompatible with the Go proxies.
 // See https://github.com/thanos-io/thanos/issues/1415
 replace (
+	// TODO(bwplotka): Remove once https://github.com/grpc-ecosystem/go-grpc-middleware/pull/223 is merged.
+	github.com/grpc-ecosystem/go-grpc-middleware => github.com/adrien-f/go-grpc-middleware v1.0.1-0.20191028100951-6e27dcfbe5fe
 	golang.org/x/sys => golang.org/x/sys v0.0.0-20190412213103-97732733099d // v0.0.0-20190425145619-16072639606e (multiple-value "golang.org/x/sys/windows".GetCurrentProcess() in single-value context) Required to build properly on windows for github.com/elastic/go-sysinfo.
 	k8s.io/api => k8s.io/api v0.0.0-20190620084959-7cf5895f2711
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.0.0-20190620085554-14e95df34f1f

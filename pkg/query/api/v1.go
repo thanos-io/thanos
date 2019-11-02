@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/grpc-ecosystem/go-grpc-middleware/logging/kit"
 	"math"
 	"net/http"
 	"strconv"
@@ -139,7 +140,10 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 	instr := func(name string, f ApiFunc) http.HandlerFunc {
 		hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			SetCORS(w)
-			if data, warnings, err := f(r); err != nil {
+
+
+			kit.WithCodes()
+			if data, warnings, err := f(r.WithContext()); err != nil {
 				RespondError(w, err, data)
 			} else if data != nil {
 				Respond(w, data, warnings)

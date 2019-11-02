@@ -50,3 +50,17 @@ func StartSpan(ctx context.Context, operationName string, opts ...opentracing.St
 	span = tracer.StartSpan(operationName, opts...)
 	return span, opentracing.ContextWithSpan(ctx, span)
 }
+
+// GetTraceID returns trace ID if the tracer is specified and span is started.
+func GetTraceID(ctx context.Context) (string, bool) {
+	tracer := tracerFromContext(ctx)
+	if t, ok := tracer.(Tracer); ok {
+		span := opentracing.SpanFromContext(ctx)
+		if span == nil {
+			return "", false
+		}
+
+		return  t.GetTraceIDFromSpanContext(span.Context())
+	}
+	return "", false
+}

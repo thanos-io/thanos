@@ -8,6 +8,8 @@ import (
 	"path"
 	"time"
 
+	"github.com/grpc-ecosystem/go-grpc-middleware/logging/kit"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -181,12 +183,14 @@ func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer ope
 		grpc.WithUnaryInterceptor(
 			grpc_middleware.ChainUnaryClient(
 				grpcMets.UnaryClientInterceptor(),
+				kit.UnaryClientInterceptor(logger),
 				tracing.UnaryClientInterceptor(tracer),
 			),
 		),
 		grpc.WithStreamInterceptor(
 			grpc_middleware.ChainStreamClient(
 				grpcMets.StreamClientInterceptor(),
+				kit.StreamClientInterceptor(logger),
 				tracing.StreamClientInterceptor(tracer),
 			),
 		),

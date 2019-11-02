@@ -6,6 +6,8 @@ import (
 	"net"
 	"runtime/debug"
 
+	"github.com/grpc-ecosystem/go-grpc-middleware/logging/kit"
+
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -59,16 +61,19 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 		return status.Errorf(codes.Internal, "%s", p)
 	}
 
+	// TODO(bwplotka): Customise logger codes, deciders based on some configuration.
 	grpcOpts := []grpc.ServerOption{}
 	grpcOpts = append(grpcOpts,
 		grpc.MaxSendMsgSize(math.MaxInt32),
 		grpc_middleware.WithUnaryServerChain(
 			met.UnaryServerInterceptor(),
+			kit.UnaryServerInterceptor(logger),
 			tracing.UnaryServerInterceptor(tracer),
 			grpc_recovery.UnaryServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 		),
 		grpc_middleware.WithStreamServerChain(
 			met.StreamServerInterceptor(),
+			kit.StreamServerInterceptor(logger),
 			tracing.StreamServerInterceptor(tracer),
 			grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 		),
