@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/thanos-io/thanos/pkg/extflag"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -22,10 +20,12 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -33,7 +33,7 @@ func registerDownsample(m map[string]setupFunc, app *kingpin.Application) {
 	comp := component.Downsample
 	cmd := app.Command(comp.String(), "continuously downsamples blocks in an object store bucket")
 
-	httpAddr := regHTTPAddrFlag(cmd)
+	httpAddr, httpGracePeriod := regHTTPFlags(cmd)
 
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
 		Default("./data").String()
@@ -41,7 +41,7 @@ func registerDownsample(m map[string]setupFunc, app *kingpin.Application) {
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
 
 	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
-		return runDownsample(g, logger, reg, *httpAddr, *dataDir, objStoreConfig, comp)
+		return runDownsample(g, logger, reg, *httpAddr, time.Duration(*httpGracePeriod), *dataDir, objStoreConfig, comp)
 	}
 }
 
@@ -73,6 +73,7 @@ func runDownsample(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	httpBindAddr string,
+	httpGracePeriod time.Duration,
 	dataDir string,
 	objStoreConfig *extflag.PathOrContent,
 	comp component.Component,
@@ -123,9 +124,11 @@ func runDownsample(
 	}
 
 	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-	if err := scheduleHTTPServer(g, logger, reg, statusProber, httpBindAddr, nil, comp); err != nil {
-		return errors.Wrap(err, "schedule HTTP server with probe")
-	}
+	srv := httpserver.New(logger, reg, comp, statusProber,
+		httpserver.WithListen(httpBindAddr),
+		httpserver.WithGracePeriod(httpGracePeriod),
+	)
+	g.Add(srv.ListenAndServe, srv.Shutdown)
 
 	level.Info(logger).Log("msg", "starting downsample node")
 	return nil

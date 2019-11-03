@@ -122,6 +122,10 @@ Flags:
                                object store configuration. See format details:
                                https://thanos.io/storage.md/#configuration
       --listen="0.0.0.0:8080"  HTTP host:port to listen on
+      --http-address="0.0.0.0:10902"
+                               Listen host:port for HTTP endpoints.
+      --http-grace-period=2m   Time to wait after an interrupt received for HTTP
+                               Server.
       --refresh=30m            Refresh interval to download metadata from remote
                                storage
       --timeout=5m             Timeout to download metadata from remote storage
