@@ -289,7 +289,13 @@ func (b *aggrChunkBuilder) add(t int64, aggr *aggregator) {
 	b.added++
 }
 
-func (b *aggrChunkBuilder) finalizeChunk(lastT int64, trueSample float64) {
+func (b *aggrChunkBuilder) firstRawSample(firstT int64, trueSample float64) {
+	// This must be the first sample given to the counter appender.
+	b.apps[AggrCounter].Append(firstT, trueSample)
+}
+
+func (b *aggrChunkBuilder) lastRawSample(lastT int64, trueSample float64) {
+	// This must be the last sample given to the counter appender.
 	b.apps[AggrCounter].Append(lastT, trueSample)
 }
 
@@ -306,14 +312,17 @@ func downsampleRaw(data []sample, resolution int64) []chunks.Meta {
 	if len(data) == 0 {
 		return nil
 	}
-	var (
-		mint, maxt = data[0].t, data[len(data)-1].t
-		// We assume a raw resolution of 1 minute. In practice it will often be lower
-		// but this is sufficient for our heuristic to produce well-sized chunks.
-		numChunks = targetChunkCount(mint, maxt, 1*60*1000, resolution, len(data))
-		chks      = make([]chunks.Meta, 0, numChunks)
-		batchSize = (len(data) / numChunks) + 1
-	)
+
+	mint, maxt := data[0].t, data[len(data)-1].t
+	// We assume a raw resolution of 1 minute. In practice it will often be lower
+	// but this is sufficient for our heuristic to produce well-sized chunks.
+	numChunks := targetChunkCount(mint, maxt, 1*60*1000, resolution, len(data))
+	return downsampleRawLoop(data, resolution, numChunks)
+}
+
+func downsampleRawLoop(data []sample, resolution int64, numChunks int) []chunks.Meta {
+	batchSize := (len(data) / numChunks) + 1
+	chks := make([]chunks.Meta, 0, numChunks)
 
 	for len(data) > 0 {
 		j := batchSize
@@ -327,14 +336,16 @@ func downsampleRaw(data []sample, resolution int64) []chunks.Meta {
 		for ; j < len(data) && data[j].t <= curW; j++ {
 		}
 
-		ab := newAggrChunkBuilder()
 		batch := data[:j]
 		data = data[j:]
 
+		ab := newAggrChunkBuilder()
+
+		ab.firstRawSample(batch[0].t, batch[0].v)
+
 		lastT := downsampleBatch(batch, resolution, ab.add)
 
-		// InjectThanosMeta the chunk's counter aggregate with the last true sample.
-		ab.finalizeChunk(lastT, batch[len(batch)-1].v)
+		ab.lastRawSample(lastT, batch[len(batch)-1].v)
 
 		chks = append(chks, ab.encode())
 	}
@@ -379,18 +390,20 @@ func downsampleBatch(data []sample, resolution int64, add func(int64, *aggregato
 
 // downsampleAggr downsamples a sequence of aggregation chunks to the given resolution.
 func downsampleAggr(chks []*AggrChunk, buf *[]sample, mint, maxt, inRes, outRes int64) ([]chunks.Meta, error) {
-	// We downsample aggregates only along chunk boundaries. This is required for counters
-	// to be downsampled correctly since a chunks' last counter value is the true last value
-	// of the original series. We need to preserve it even across multiple aggregation iterations.
 	var numSamples int
 	for _, c := range chks {
 		numSamples += c.NumSamples()
 	}
-	var (
-		numChunks = targetChunkCount(mint, maxt, inRes, outRes, numSamples)
-		res       = make([]chunks.Meta, 0, numChunks)
-		batchSize = len(chks) / numChunks
-	)
+	numChunks := targetChunkCount(mint, maxt, inRes, outRes, numSamples)
+	return downsampleAggrLoop(chks, buf, outRes, numChunks)
+}
+
+func downsampleAggrLoop(chks []*AggrChunk, buf *[]sample, resolution int64, numChunks int) ([]chunks.Meta, error) {
+	// We downsample aggregates only along chunk boundaries. This is required for counters
+	// to be downsampled correctly since a chunks' last counter value is the true last value
+	// of the original series. We need to preserve it even across multiple aggregation iterations.
+	res := make([]chunks.Meta, 0, numChunks)
+	batchSize := len(chks) / numChunks
 
 	for len(chks) > 0 {
 		j := batchSize
@@ -400,12 +413,13 @@ func downsampleAggr(chks []*AggrChunk, buf *[]sample, mint, maxt, inRes, outRes 
 		part := chks[:j]
 		chks = chks[j:]
 
-		chk, err := downsampleAggrBatch(part, buf, outRes)
+		chk, err := downsampleAggrBatch(part, buf, resolution)
 		if err != nil {
 			return nil, err
 		}
 		res = append(res, chk)
 	}
+
 	return res, nil
 }
 
@@ -512,6 +526,8 @@ func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (ch
 	ab.chunks[AggrCounter] = chunkenc.NewXORChunk()
 	ab.apps[AggrCounter], _ = ab.chunks[AggrCounter].Appender()
 
+	ab.firstRawSample((*buf)[0].t, (*buf)[0].v)
+
 	lastT := downsampleBatch(*buf, resolution, func(t int64, a *aggregator) {
 		if t < mint {
 			mint = t
@@ -520,7 +536,8 @@ func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (ch
 		}
 		ab.apps[AggrCounter].Append(t, a.counter)
 	})
-	ab.apps[AggrCounter].Append(lastT, it.lastV)
+
+	ab.lastRawSample(lastT, it.lastV)
 
 	ab.mint = mint
 	ab.maxt = maxt

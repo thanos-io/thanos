@@ -23,6 +23,124 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
+func TestDownsampleCounterBoundaryReset(t *testing.T) {
+
+	toAggrChunks := func(t *testing.T, cm []chunks.Meta) (res []*AggrChunk) {
+		for i := range cm {
+			achk, ok := cm[i].Chunk.(*AggrChunk)
+			testutil.Assert(t, ok, "expected *AggrChunk")
+			res = append(res, achk)
+		}
+		return
+	}
+
+	counterSamples := func(t *testing.T, achks []*AggrChunk) (res []sample) {
+		for _, achk := range achks {
+			chk, err := achk.Get(AggrCounter)
+			testutil.Ok(t, err)
+
+			iter := chk.Iterator(nil)
+			for iter.Next() {
+				t, v := iter.At()
+				res = append(res, sample{t, v})
+			}
+		}
+		return
+	}
+
+	counterIterate := func(t *testing.T, achks []*AggrChunk) (res []sample) {
+		var iters []chunkenc.Iterator
+		for _, achk := range achks {
+			chk, err := achk.Get(AggrCounter)
+			testutil.Ok(t, err)
+			iters = append(iters, chk.Iterator(nil))
+		}
+
+		citer := NewCounterSeriesIterator(iters...)
+		for citer.Next() {
+			t, v := citer.At()
+			res = append(res, sample{t: t, v: v})
+		}
+		return
+	}
+
+	type test struct {
+		raw                   []sample
+		rawAggrResolution     int64
+		expectedRawAggrChunks int
+		rawCounterSamples     []sample
+		rawCounterIterate     []sample
+		aggrAggrResolution    int64
+		aggrChunks            int
+		aggrCounterSamples    []sample
+		aggrCounterIterate    []sample
+	}
+
+	tests := []test{
+		{
+			// In this test case, counter resets occur at the
+			// boundaries between the t=49,t=99 and t=99,t=149
+			// windows, and the values in the t=49, t=99, and
+			// t=149 windows are high enough that the resets
+			// will only be accounted for if the first raw value
+			// of a chunk is maintained during aggregation.
+			// See #1568 for more details.
+			[]sample{
+				{t: 10, v: 1}, {t: 20, v: 3}, {t: 30, v: 5},
+				{t: 50, v: 1}, {t: 60, v: 8}, {t: 70, v: 10},
+				{t: 120, v: 1}, {t: 130, v: 18}, {t: 140, v: 20},
+				{t: 160, v: 21}, {t: 170, v: 38}, {t: 180, v: 40},
+			},
+			50,
+			4,
+			[]sample{
+				{t: 10, v: 1}, {t: 30, v: 5}, {t: 30, v: 5},
+				{t: 50, v: 1}, {t: 70, v: 10}, {t: 70, v: 10},
+				{t: 120, v: 1}, {t: 140, v: 20}, {t: 140, v: 20},
+				{t: 160, v: 21}, {t: 180, v: 40}, {t: 180, v: 40},
+			},
+			[]sample{
+				{t: 10, v: 1}, {t: 30, v: 5},
+				{t: 50, v: 6}, {t: 70, v: 15},
+				{t: 120, v: 16}, {t: 140, v: 35},
+				{t: 160, v: 36}, {t: 180, v: 55},
+			},
+			2 * 50,
+			2,
+			[]sample{
+				{t: 10, v: 1}, {t: 70, v: 15}, {t: 70, v: 10},
+				{t: 120, v: 1}, {t: 180, v: 40}, {t: 180, v: 40},
+			},
+			[]sample{
+				{t: 10, v: 1}, {t: 70, v: 15},
+				{t: 120, v: 16}, {t: 180, v: 55},
+			},
+		},
+	}
+
+	doTest := func(t *testing.T, test *test) {
+		// Asking for more chunks than raw samples ensures that downsampleRawLoop
+		// will create chunks with samples from a single window.
+		cm := downsampleRawLoop(test.raw, test.rawAggrResolution, len(test.raw)+1)
+		testutil.Equals(t, test.expectedRawAggrChunks, len(cm))
+
+		rawAggrChunks := toAggrChunks(t, cm)
+		testutil.Equals(t, test.rawCounterSamples, counterSamples(t, rawAggrChunks))
+		testutil.Equals(t, test.rawCounterIterate, counterIterate(t, rawAggrChunks))
+
+		var buf []sample
+		acm, err := downsampleAggrLoop(rawAggrChunks, &buf, test.aggrAggrResolution, test.aggrChunks)
+		testutil.Ok(t, err)
+		testutil.Equals(t, test.aggrChunks, len(acm))
+
+		aggrAggrChunks := toAggrChunks(t, acm)
+		testutil.Equals(t, test.aggrCounterSamples, counterSamples(t, aggrAggrChunks))
+		testutil.Equals(t, test.aggrCounterIterate, counterIterate(t, aggrAggrChunks))
+	}
+
+	doTest(t, &tests[0])
+}
+
 func TestExpandChunkIterator(t *testing.T) {
 	// Validate that expanding the chunk iterator filters out-of-order samples
 	// and staleness markers.
