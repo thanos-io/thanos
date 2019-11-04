@@ -18,6 +18,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -324,8 +325,10 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 			httpserver.WithGracePeriod(time.Duration(*httpGracePeriod)),
 		)
 
+		router := route.New()
 		bucketUI := ui.NewBucketUI(logger, *label)
-		bucketUI.Register(srv, extpromhttp.NewInstrumentationMiddleware(reg))
+		bucketUI.Register(router, extpromhttp.NewInstrumentationMiddleware(reg))
+		srv.Handle("/", router)
 
 		if *interval < 5*time.Minute {
 			level.Warn(logger).Log("msg", "Refreshing more often than 5m could lead to large data transfers")
