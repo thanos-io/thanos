@@ -388,9 +388,12 @@ func runQuery(
 
 		g.Add(func() error {
 			statusProber.Healthy()
+
 			return srv.ListenAndServe()
 		}, func(err error) {
 			statusProber.NotReady(err)
+			defer statusProber.NotHealthy(err)
+
 			srv.Shutdown(err)
 		})
 	}
