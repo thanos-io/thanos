@@ -309,8 +309,7 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 // registerBucketWeb exposes a web interface for the state of remote store like `pprof web`.
 func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
 	cmd := root.Command("web", "Web interface for remote storage bucket")
-	bind := cmd.Flag("listen", "HTTP host:port to listen on").Default("0.0.0.0:8080").String()
-	_, httpGracePeriod := regHTTPFlags(cmd)
+	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
 	interval := cmd.Flag("refresh", "Refresh interval to download metadata from remote storage").Default("30m").Duration()
 	timeout := cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").Duration()
 	label := cmd.Flag("label", "Prometheus label to use as timeline title").String()
@@ -321,7 +320,7 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 		statusProber := prober.NewProber(component.Bucket, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 		// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
 		srv := httpserver.New(logger, reg, component.Bucket, statusProber,
-			httpserver.WithListen(*bind),
+			httpserver.WithListen(*httpBindAddr),
 			httpserver.WithGracePeriod(time.Duration(*httpGracePeriod)),
 		)
 
