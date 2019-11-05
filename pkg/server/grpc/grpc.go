@@ -59,8 +59,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 		return status.Errorf(codes.Internal, "%s", p)
 	}
 
-	grpcOpts := []grpc.ServerOption{}
-	grpcOpts = append(grpcOpts,
+	grpcOpts := []grpc.ServerOption{
 		grpc.MaxSendMsgSize(math.MaxInt32),
 		grpc_middleware.WithUnaryServerChain(
 			met.UnaryServerInterceptor(),
@@ -72,7 +71,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 			tracing.StreamServerInterceptor(tracer),
 			grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 		),
-	)
+	}
 
 	if options.tlsConfig != nil {
 		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(options.tlsConfig)))
