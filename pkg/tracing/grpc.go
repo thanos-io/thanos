@@ -21,17 +21,21 @@ func StreamClientInterceptor(tracer opentracing.Tracer) grpc.StreamClientInterce
 
 // UnaryServerInterceptor returns a new unary server interceptor for OpenTracing and injects given tracer.
 func UnaryServerInterceptor(tracer opentracing.Tracer) grpc.UnaryServerInterceptor {
+	interceptor := grpc_opentracing.UnaryServerInterceptor(grpc_opentracing.WithTracer(tracer))
 	return func(parentCtx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		return grpc_opentracing.UnaryServerInterceptor(grpc_opentracing.WithTracer(tracer))(ContextWithTracer(parentCtx, tracer), req, info, handler)
+		// Add our own tracer.
+		return interceptor(ContextWithTracer(parentCtx, tracer), req, info, handler)
 	}
 }
 
 // StreamServerInterceptor returns a new streaming server interceptor for OpenTracing and injects given tracer.
 func StreamServerInterceptor(tracer opentracing.Tracer) grpc.StreamServerInterceptor {
+	interceptor := grpc_opentracing.StreamServerInterceptor(grpc_opentracing.WithTracer(tracer))
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		// Add our own tracer.
 		wrappedStream := grpc_middleware.WrapServerStream(stream)
 		wrappedStream.WrappedContext = ContextWithTracer(stream.Context(), tracer)
 
-		return grpc_opentracing.StreamServerInterceptor(grpc_opentracing.WithTracer(tracer))(srv, wrappedStream, info, handler)
+		return interceptor(srv, wrappedStream, info, handler)
 	}
 }
