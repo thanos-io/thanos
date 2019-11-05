@@ -17,7 +17,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	conntrack "github.com/mwitkow/go-conntrack"
-	"github.com/opentracing-contrib/go-stdlib/nethttp"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -182,16 +181,10 @@ func (h *Handler) Run() error {
 		conntrack.TrackWithName("http"),
 		conntrack.TrackWithTracing())
 
-	operationName := nethttp.OperationNameFunc(func(r *http.Request) string {
-		return fmt.Sprintf("%s %s", r.Method, r.URL.Path)
-	})
-	mux := http.NewServeMux()
-	mux.Handle("/", h.router)
-
 	errlog := stdlog.New(log.NewStdlibAdapter(level.Error(h.logger)), "", 0)
 
 	httpSrv := &http.Server{
-		Handler:   nethttp.Middleware(opentracing.GlobalTracer(), mux, operationName),
+		Handler:   h.router,
 		ErrorLog:  errlog,
 		TLSConfig: h.options.TLSConfig,
 	}
