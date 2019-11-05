@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"crypto/tls"
+	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	"time"
 )
 
@@ -10,6 +11,8 @@ type options struct {
 	listen      string
 
 	tlsConfig *tls.Config
+
+	tracingMethodFilter grpc_opentracing.FilterFunc
 }
 
 // Option overrides behavior of Server.
@@ -45,3 +48,11 @@ func WithTLSConfig(cfg *tls.Config) Option {
 		o.tlsConfig = cfg
 	})
 }
+
+// WithTracingMethodFilter sets method filter to use for tracing interceptors.
+func WithTracingMethodFilter(f grpc_opentracing.FilterFunc) Option {
+	return optionFunc(func(o *options) {
+		o.tracingMethodFilter = f
+	})
+}
+
