@@ -289,16 +289,6 @@ func (b *aggrChunkBuilder) add(t int64, aggr *aggregator) {
 	b.added++
 }
 
-func (b *aggrChunkBuilder) firstRawSample(firstT int64, trueSample float64) {
-	// This must be the first sample given to the counter appender.
-	b.apps[AggrCounter].Append(firstT, trueSample)
-}
-
-func (b *aggrChunkBuilder) lastRawSample(lastT int64, trueSample float64) {
-	// This must be the last sample given to the counter appender.
-	b.apps[AggrCounter].Append(lastT, trueSample)
-}
-
 func (b *aggrChunkBuilder) encode() chunks.Meta {
 	return chunks.Meta{
 		MinTime: b.mint,
@@ -341,11 +331,13 @@ func downsampleRawLoop(data []sample, resolution int64, numChunks int) []chunks.
 
 		ab := newAggrChunkBuilder()
 
-		ab.firstRawSample(batch[0].t, batch[0].v)
+		// Encode first raw value; see CounterSeriesIterator.
+		ab.apps[AggrCounter].Append(batch[0].t, batch[0].v)
 
 		lastT := downsampleBatch(batch, resolution, ab.add)
 
-		ab.lastRawSample(lastT, batch[len(batch)-1].v)
+		// Encode last raw value; see CounterSeriesIterator.
+		ab.apps[AggrCounter].Append(lastT, batch[len(batch)-1].v)
 
 		chks = append(chks, ab.encode())
 	}
@@ -399,9 +391,10 @@ func downsampleAggr(chks []*AggrChunk, buf *[]sample, mint, maxt, inRes, outRes 
 }
 
 func downsampleAggrLoop(chks []*AggrChunk, buf *[]sample, resolution int64, numChunks int) ([]chunks.Meta, error) {
-	// We downsample aggregates only along chunk boundaries. This is required for counters
-	// to be downsampled correctly since a chunks' last counter value is the true last value
-	// of the original series. We need to preserve it even across multiple aggregation iterations.
+	// We downsample aggregates only along chunk boundaries. This is required
+	// for counters to be downsampled correctly since a chunk's first and last
+	// counter values are the true values of the original series. We need
+	// to preserve them even across multiple aggregation iterations.
 	res := make([]chunks.Meta, 0, numChunks)
 	batchSize := len(chks) / numChunks
 
@@ -526,7 +519,8 @@ func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (ch
 	ab.chunks[AggrCounter] = chunkenc.NewXORChunk()
 	ab.apps[AggrCounter], _ = ab.chunks[AggrCounter].Appender()
 
-	ab.firstRawSample((*buf)[0].t, (*buf)[0].v)
+	// Retain first raw value; see CounterSeriesIterator.
+	ab.apps[AggrCounter].Append((*buf)[0].t, (*buf)[0].v)
 
 	lastT := downsampleBatch(*buf, resolution, func(t int64, a *aggregator) {
 		if t < mint {
@@ -537,7 +531,8 @@ func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (ch
 		ab.apps[AggrCounter].Append(t, a.counter)
 	})
 
-	ab.lastRawSample(lastT, it.lastV)
+	// Retain last raw value; see CounterSeriesIterator.
+	ab.apps[AggrCounter].Append(lastT, it.lastV)
 
 	ab.mint = mint
 	ab.maxt = maxt
@@ -549,11 +544,18 @@ type sample struct {
 	v float64
 }
 
-// CounterSeriesIterator iterates over an ordered sequence of chunks and treats decreasing
-// values as counter reset.
-// Additionally, it can deal with downsampled counter chunks, which set the last value of a chunk
-// to the original last value. The last value can be detected by checking whether the timestamp
-// did not increase w.r.t to the previous sample.
+// CounterSeriesIterator generates monotonically increasing values by iterating
+// over an ordered sequence of chunks, which should be raw or aggregated chunks
+// of counter values.  The generated samples can be used by PromQL functions
+// like 'rate' that calculate differences between counter values.
+//
+// Counter aggregation chunks must have the first and last values from their
+// original raw series: the first raw value should be the first value encoded
+// in the chunk, and the last raw value is encoded by the duplication of the
+// previous sample's timestamp.  As iteration occurs between chunks, the
+// comparison between the last raw value of the earlier chunk and the first raw
+// value of the later chunk ensures that counter resets between chunks are
+// recognized and that the correct value delta is calculated.
 type CounterSeriesIterator struct {
 	chks   []chunkenc.Iterator
 	i      int     // Current chunk.

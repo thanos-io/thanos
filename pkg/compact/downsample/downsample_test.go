@@ -85,33 +85,33 @@ func TestDownsampleCounterBoundaryReset(t *testing.T) {
 			// will only be accounted for if the first raw value
 			// of a chunk is maintained during aggregation.
 			// See #1568 for more details.
-			[]sample{
+			raw: []sample{
 				{t: 10, v: 1}, {t: 20, v: 3}, {t: 30, v: 5},
 				{t: 50, v: 1}, {t: 60, v: 8}, {t: 70, v: 10},
 				{t: 120, v: 1}, {t: 130, v: 18}, {t: 140, v: 20},
 				{t: 160, v: 21}, {t: 170, v: 38}, {t: 180, v: 40},
 			},
-			50,
-			4,
-			[]sample{
+			rawAggrResolution:     50,
+			expectedRawAggrChunks: 4,
+			rawCounterSamples: []sample{
 				{t: 10, v: 1}, {t: 30, v: 5}, {t: 30, v: 5},
 				{t: 50, v: 1}, {t: 70, v: 10}, {t: 70, v: 10},
 				{t: 120, v: 1}, {t: 140, v: 20}, {t: 140, v: 20},
 				{t: 160, v: 21}, {t: 180, v: 40}, {t: 180, v: 40},
 			},
-			[]sample{
+			rawCounterIterate: []sample{
 				{t: 10, v: 1}, {t: 30, v: 5},
 				{t: 50, v: 6}, {t: 70, v: 15},
 				{t: 120, v: 16}, {t: 140, v: 35},
 				{t: 160, v: 36}, {t: 180, v: 55},
 			},
-			2 * 50,
-			2,
-			[]sample{
+			aggrAggrResolution: 2 * 50,
+			aggrChunks:         2,
+			aggrCounterSamples: []sample{
 				{t: 10, v: 1}, {t: 70, v: 15}, {t: 70, v: 10},
 				{t: 120, v: 1}, {t: 180, v: 40}, {t: 180, v: 40},
 			},
-			[]sample{
+			aggrCounterIterate: []sample{
 				{t: 10, v: 1}, {t: 70, v: 15},
 				{t: 120, v: 16}, {t: 180, v: 55},
 			},
