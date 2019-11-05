@@ -671,7 +671,8 @@ func blockSeries(
 	// Transform all series into the response types and mark their relevant chunks
 	// for preloading.
 	var (
-		res  []seriesEntry
+		// Optimistically preallocate result slice to avoid reallocs and overallocs later during append.
+		res  = make([]seriesEntry, 0, len(ps))
 		lset labels.Labels
 		chks []chunks.Meta
 	)
