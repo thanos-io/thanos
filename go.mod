@@ -51,7 +51,7 @@ require (
 	golang.org/x/text v0.3.2
 	google.golang.org/api v0.11.0
 	google.golang.org/genproto v0.0.0-20190819201941-24fa4b261c55
-	google.golang.org/grpc v1.22.1
+	google.golang.org/grpc v1.25.0
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/fsnotify.v1 v1.4.7
 	gopkg.in/yaml.v2 v2.2.2
