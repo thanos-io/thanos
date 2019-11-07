@@ -230,6 +230,9 @@ func runReceive(
 			defer close(dbReady)
 			defer close(uploadC)
 
+			// Before actually starting, we need to make sure the
+			// WAL is flushed. The WAL is flushed after the
+			// hashring is loaded.
 			db := receive.NewFlushableStorage(
 				dataDir,
 				log.With(logger, "component", "tsdb"),
@@ -237,21 +240,10 @@ func runReceive(
 				tsdbCfg,
 			)
 
-			// Before actually starting, we need to make sure the
-			// WAL is flushed. The WAL is flushed after the
-			// hashring ring is loaded.
-			if err := db.Open(); err != nil {
-				return errors.Wrap(err, "opening storage")
-			}
-
 			// Before quitting, ensure the WAL is flushed and the DB is closed.
 			defer func() {
 				if err := db.Flush(); err != nil {
 					level.Warn(logger).Log("err", err, "msg", "failed to flush storage")
-				}
-				if err := db.Close(); err != nil {
-					level.Warn(logger).Log("err", err, "msg", "failed to close storage")
-					return
 				}
 			}()
 
@@ -265,6 +257,9 @@ func runReceive(
 					}
 					if err := db.Flush(); err != nil {
 						return errors.Wrap(err, "flushing storage")
+					}
+					if err := db.Open(); err != nil {
+						return errors.Wrap(err, "opening storage")
 					}
 					if upload {
 						uploadC <- struct{}{}
