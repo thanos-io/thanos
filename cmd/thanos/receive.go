@@ -248,7 +248,6 @@ func runReceive(
 			defer func() {
 				if err := db.Flush(); err != nil {
 					level.Warn(logger).Log("err", err, "msg", "failed to flush storage")
-					return
 				}
 				if err := db.Close(); err != nil {
 					level.Warn(logger).Log("err", err, "msg", "failed to close storage")
@@ -449,6 +448,11 @@ func runReceive(
 				}()
 				defer close(uploadDone)
 				for {
+					select {
+					case <-ctx.Done():
+						return nil
+					default:
+					}
 					select {
 					case <-ctx.Done():
 						return nil
