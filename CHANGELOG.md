@@ -28,6 +28,7 @@ We use _breaking :warning:_ to mark changes that are not backward compatible (re
 ### Changed
 
 - [#3705](https://github.com/thanos-io/thanos/pull/3705) Store: Fix race condition leading to failing queries or possibly incorrect query results.
+- [#3284](https://github.com/thanos-io/thanos/pull/3284) Retention policies are now applied at the start of the compactor loop. Retention policies that break downsampling are now logged as warnings.
 
 ## [v0.18.0](https://github.com/thanos-io/thanos/releases/tag/v0.18.0) - 2021.01.27
 
@@ -153,6 +154,14 @@ Highlights:
 - [#3122](https://github.com/thanos-io/thanos/pull/3122) \*: All Thanos components have now `/debug/fgprof` endpoint on HTTP port allowing to get [off-CPU profiles as well](https://github.com/felixge/fgprof).
 - [#3109](https://github.com/thanos-io/thanos/pull/3109) Query Frontend: Added support for `Cache-Control` HTTP response header which controls caching behaviour. So far `no-store` value is supported and it makes the response skip cache.
 - [#3092](https://github.com/thanos-io/thanos/pull/3092) Tools: Added `tools bucket cleanup` CLI tool that deletes all blocks marked to be deleted.
+||||||| parent of 4dc4ac45... Move retention at the start of the compactor loop.
+- [#3184](https://github.com/thanos-io/thanos/pull/3184) Compact: Fix web.prefix-header to use &wc.prefixHeaderName
+- [#3181](https://github.com/thanos-io/thanos/pull/3181) Logging: Add debug level logging for responses between 300-399
+- [#3133](https://github.com/thanos-io/thanos/pull/3133) Query: Allow passing a `storeMatch[]` to Labels APIs. Also time range metadata based store filtering is supported on Labels APIs.
+- [#3154](https://github.com/thanos-io/thanos/pull/3154) Query Frontend: Add metric `thanos_memcached_getmulti_gate_queries_max`.
+- [#3146](https://github.com/thanos-io/thanos/pull/3146) Sidecar: Add `thanos_sidecar_prometheus_store_received_frames` histogram metric.
+- [#3147](https://github.com/thanos-io/thanos/pull/3147) Querier: Add `query.metadata.default-time-range` flag to specify the default metadata time range duration for retrieving labels through Labels and Series API when the range parameters are not specified. The zero value means range covers the time since the beginning.
+- [#3207](https://github.com/thanos-io/thanos/pull/3207) Query Frontend: Add `cache-compression-type` flag to use compression in the query frontend cache.
 
 ### Changed
 

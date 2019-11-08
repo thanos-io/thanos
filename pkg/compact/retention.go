@@ -6,6 +6,7 @@ package compact
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -17,6 +18,9 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
+
+// RetentionPolicy is a map of retention durations by resolution level.
+type RetentionPolicy map[ResolutionLevel]time.Duration
 
 // ApplyRetentionPolicyByResolution removes blocks depending on the specified retentionByResolution based on blocks MaxTime.
 // A value of 0 disables the retention for its resolution.
@@ -45,4 +49,26 @@ func ApplyRetentionPolicyByResolution(
 	}
 	level.Info(logger).Log("msg", "optional retention apply done")
 	return nil
+}
+
+// InitialRetentionPolicy calculates a RetentionPolicy that is safe to apply
+// before compatction and downsampling take place.
+func (rp RetentionPolicy) InitialRetentionPolicy() RetentionPolicy {
+	retention := time.Duration(0)
+
+	if rp[ResolutionLevelRaw] != 0 && rp[ResolutionLevel5m] != 0 && rp[ResolutionLevel1h] != 0 {
+		retention = time.Duration(
+			math.Max(
+				math.Max(
+					float64(rp[ResolutionLevelRaw]), float64(rp[ResolutionLevel5m])),
+				float64(rp[ResolutionLevel1h]),
+			),
+		)
+	}
+	return RetentionPolicy{
+		ResolutionLevelRaw: retention,
+		ResolutionLevel5m:  retention,
+		ResolutionLevel1h:  retention,
+	}
+
 }
