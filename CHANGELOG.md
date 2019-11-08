@@ -81,6 +81,8 @@ anymore.
 - [#2450](https://github.com/thanos-io/thanos/pull/2450) Store: regex-set optimization for `label=~"a|b|c"` matchers.
 - [#2475](https://github.com/thanos-io/thanos/pull/2475) Store: remove incorrect optimizations for queries with `=~".*"` and `!=~".*"` matchers.
 
+- [#1735](https://github.com/thanos-io/thanos/pull/1735) Retention policies are now applied at the start of the compactor loop. Retentions policies that break downsampling are now logged as warnings.
+
 ## [v0.12.0](https://github.com/thanos-io/thanos/releases/tag/v0.12.0) - 2020.04.15
 
 ### Fixed
@@ -198,6 +200,7 @@ Compactor now properly handles partial block uploads for all operation like rete
 
 - [#1852](https://github.com/thanos-io/thanos/pull/1852) Add support for `AWS_CONTAINER_CREDENTIALS_FULL_URI` by upgrading to minio-go v6.0.44
 - [#1854](https://github.com/thanos-io/thanos/pull/1854) Update Rule UI to support alerts count displaying and filtering.
+<<<<<<< HEAD
 - [#1838](https://github.com/thanos-io/thanos/pull/1838) Ruler: Add TLS and authentication support for Alertmanager with the `--alertmanagers.config` and `--alertmanagers.config-file` CLI flags. See [documentation](docs/components/rule.md/#configuration) for further information.
 - [#1838](https://github.com/thanos-io/thanos/pull/1838) Ruler: Add a new `--alertmanagers.sd-dns-interval` CLI option to specify the interval between DNS resolutions of Alertmanager hosts.
 - [#1881](https://github.com/thanos-io/thanos/pull/1881) Store Gateway: memcached support for index cache. See [documentation](docs/components/store.md/#index-cache) for further information.
