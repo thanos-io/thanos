@@ -46,7 +46,7 @@ func NewQueryUI(logger log.Logger, reg prometheus.Registerer, storeSet *query.St
 		cwd = "<error retrieving current working directory>"
 	}
 	return &Query{
-		BaseUI:   NewBaseUI(logger, "query_menu.html", queryTmplFuncs()),
+		BaseUI:   NewBaseUI(logger, component.Query, "query_menu.html", queryTmplFuncs()),
 		storeSet: storeSet,
 		flagsMap: flagsMap,
 		cwd:      cwd,

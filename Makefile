@@ -121,6 +121,11 @@ react-app-lint:
 	@echo ">> running React app linting"
 	cd $(REACT_APP_PATH) && yarn lint:ci
 
+.PHONY: react-app-start
+react-app-start:
+	@echo ">> running React app"
+	cd $(REACT_APP_PATH) && yarn start
+
 .PHONY: react-app-lint-fix
 react-app-lint-fix:
 	@echo ">> running React app linting and fixing errors where possibe"

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/thanos-io/thanos/pkg/component"
 	"html/template"
 	"math"
 	"net/http"
@@ -31,7 +32,7 @@ type Rule struct {
 
 func NewRuleUI(logger log.Logger, reg prometheus.Registerer, ruleManagers map[storepb.PartialResponseStrategy]*rules.Manager, queryURL string, flagsMap map[string]string) *Rule {
 	return &Rule{
-		BaseUI:       NewBaseUI(logger, "rule_menu.html", ruleTmplFuncs(queryURL)),
+		BaseUI:       NewBaseUI(logger, component.Rule,  "rule_menu.html", ruleTmplFuncs(queryURL)),
 		flagsMap:     flagsMap,
 		ruleManagers: ruleManagers,
 		queryURL:     queryURL,

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/thanos-io/thanos/pkg/component"
 	"html/template"
 	"net/http"
 	"time"
@@ -23,7 +24,7 @@ type Bucket struct {
 
 func NewBucketUI(logger log.Logger, label string) *Bucket {
 	return &Bucket{
-		BaseUI: NewBaseUI(logger, "bucket_menu.html", queryTmplFuncs()),
+		BaseUI: NewBaseUI(logger, component.Bucket, "bucket_menu.html", queryTmplFuncs()),
 		Blocks: "[]",
 		Label:  label,
 	}

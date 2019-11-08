@@ -3,10 +3,11 @@ package ui
 import (
 	"bytes"
 	"fmt"
+	"github.com/thanos-io/thanos/pkg/component"
 	"html/template"
-	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -21,6 +22,7 @@ type BaseUI struct {
 	logger    log.Logger
 	menuTmpl  string
 	tmplFuncs template.FuncMap
+	component component.Component
 }
 
 var (
@@ -38,11 +40,11 @@ var (
 	}
 )
 
-func NewBaseUI(logger log.Logger, menuTmpl string, funcMap template.FuncMap) *BaseUI {
+func NewBaseUI(logger log.Logger, component component.Component, menuTmpl string, funcMap template.FuncMap) *BaseUI {
 	funcMap["pathPrefix"] = func() string { return "" }
 	funcMap["buildVersion"] = func() string { return version.Revision }
 
-	return &BaseUI{logger: logger, menuTmpl: menuTmpl, tmplFuncs: funcMap}
+	return &BaseUI{logger: logger, component: component, menuTmpl: menuTmpl, tmplFuncs: funcMap}
 }
 
 func (bu *BaseUI) serveStaticAssets(w http.ResponseWriter, req *http.Request) {
@@ -54,27 +56,45 @@ func (bu *BaseUI) serveStaticAssets(w http.ResponseWriter, req *http.Request) {
 func (bu *BaseUI) serveReactUI(w http.ResponseWriter, req *http.Request) {
 	fp := route.Param(req.Context(), "filepath")
 	for _, rp := range reactAppPaths {
-		if fp == rp {
-			fp = "index.html"
-			break
+		if fp != rp {
+			continue
 		}
+		bu.serveReactIndex("pkg/ui/static/react/index.html", w, req)
+		return
 	}
 	fp = filepath.Join("pkg/ui/static/react/", fp)
 	bu.serveAsset(fp, w, req)
 }
 
-func (bu *BaseUI) serveAsset(fp string, w http.ResponseWriter, req *http.Request) {
-	info, err := AssetInfo(fp)
+func (bu *BaseUI) serveReactIndex(index string, w http.ResponseWriter, req *http.Request) {
+	info, file, err := bu.getAssetFile(index)
 	if err != nil {
-		level.Warn(bu.logger).Log("msg", "Could not get file info", "err", err, "file", fp)
+		level.Warn(bu.logger).Log("msg", "Could not get file", "err", err, "file", index)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	file, err := Asset(fp)
+	// TODO: Use go template instead?
+	file = bytes.ReplaceAll(file, []byte("PATH_PREFIX_PLACEHOLDER"), []byte("/"))
+	file = bytes.ReplaceAll(file, []byte("THANOS_APP_PLACEHOLDER"), []byte(bu.component.String()))
+	http.ServeContent(w, req, info.Name(), info.ModTime(), bytes.NewReader(file))
+}
+
+func (bu *BaseUI) getAssetFile(filename string) (os.FileInfo, []byte, error) {
+	info, err := AssetInfo(filename)
 	if err != nil {
-		if err != io.EOF {
-			level.Warn(bu.logger).Log("msg", "Could not get file", "err", err, "file", fp)
-		}
+		return nil, nil, err
+	}
+	file, err := Asset(filename)
+	if err != nil {
+		return nil, nil, err
+	}
+	return info, file, nil
+}
+
+func (bu *BaseUI) serveAsset(fp string, w http.ResponseWriter, req *http.Request) {
+	info, file, err := bu.getAssetFile(fp)
+	if err != nil {
+		level.Warn(bu.logger).Log("msg", "Could not get file", "err", err, "file", fp)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
