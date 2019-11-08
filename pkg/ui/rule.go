@@ -157,7 +157,8 @@ func (ru *Rule) Register(r *route.Router, ins extpromhttp.InstrumentationMiddlew
 	r.Get("/alerts", instrf("alerts", ru.alerts))
 	r.Get("/rules", instrf("rules", ru.rules))
 
-	r.Get("/static/*filepath", instrf("static", ru.serveStaticAsset))
+	r.Get("/static/*filepath", instrf("static", ru.serveStaticAssets))
+	r.Get("/new/*filepath", instrf("react", ru.serveReactUI))
 }
 
 // AlertStatus bundles alerting rules and the mapping of alert states to row classes.

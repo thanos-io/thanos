@@ -41,6 +41,7 @@ jobs:
               exit
             fi
             taskset 2 make test-ci
+            taskset 2 make react-app-test
 
   # Cross build is needed for publish_release but needs to be done outside of docker.
   cross_build:

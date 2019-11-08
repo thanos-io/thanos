@@ -79,7 +79,9 @@ func (q *Query) Register(r *route.Router, ins extpromhttp.InstrumentationMiddlew
 	r.Get("/stores", instrf("stores", q.stores))
 	r.Get("/status", instrf("status", q.status))
 
-	r.Get("/static/*filepath", instrf("static", q.serveStaticAsset))
+	r.Get("/static/*filepath", instrf("static", q.serveStaticAssets))
+	r.Get("/new/*filepath", instrf("react", q.serveReactUI))
+
 	// TODO(bplotka): Consider adding more Thanos related data e.g:
 	// - What store nodes we see currently.
 	// - What sidecars we see currently.

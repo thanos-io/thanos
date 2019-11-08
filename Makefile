@@ -59,6 +59,11 @@ ALERTMANAGER            ?= $(GOBIN)/alertmanager-$(ALERTMANAGER_VERSION)
 MINIO_SERVER_VERSION    ?= RELEASE.2018-10-06T00-15-16Z
 MINIO_SERVER            ?=$(GOBIN)/minio-$(MINIO_SERVER_VERSION)
 
+REACT_APP_PATH = pkg/ui/react-app
+REACT_APP_SOURCE_FILES = $(wildcard $(REACT_APP_PATH)/public/* $(REACT_APP_PATH)/src/* $(REACT_APP_PATH)/tsconfig.json)
+REACT_APP_OUTPUT_DIR = pkg/ui/static/react
+REACT_APP_NODE_MODULES_PATH = $(REACT_APP_PATH)/node_modules
+
 # fetch_go_bin_version downloads (go gets) the binary from specific version and installs it in $(GOBIN)/<bin>-<version>
 # arguments:
 # $(1): Install path. (e.g github.com/campoy/embedmd)
@@ -104,15 +109,36 @@ endef
 .PHONY: all
 all: format build
 
+$(REACT_APP_NODE_MODULES_PATH): $(REACT_APP_PATH)/package.json $(REACT_APP_PATH)/yarn.lock
+	cd $(REACT_APP_PATH) && yarn --frozen-lockfile
+
+$(REACT_APP_OUTPUT_DIR): $(REACT_APP_NODE_MODULES_PATH) $(REACT_APP_SOURCE_FILES)
+	@echo ">> building React app"
+	@./scripts/build_react_app.sh
+
+.PHONY: react-app-lint
+react-app-lint:
+	@echo ">> running React app linting"
+	cd $(REACT_APP_PATH) && yarn lint:ci
+
+.PHONY: react-app-lint-fix
+react-app-lint-fix:
+	@echo ">> running React app linting and fixing errors where possibe"
+	cd $(REACT_APP_PATH) && yarn lint
+
+.PHONY: react-app-test
+react-app-test: | $(REACT_APP_NODE_MODULES_PATH) react-app-lint
+	@echo ">> running React app tests"
+	cd $(REACT_APP_PATH) && yarn test --no-watch --coverage
+
 # assets repacks all statis assets into go file for easier deploy.
 .PHONY: assets
-assets: $(GOBINDATA)
+assets: $(GOBINDATA) $(REACT_APP_OUTPUT_DIR)
 	@echo ">> deleting asset file"
 	@rm pkg/ui/bindata.go || true
 	@echo ">> writing assets"
 	@$(GOBINDATA) $(bindata_flags) -pkg ui -o pkg/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  pkg/ui/templates/... pkg/ui/static/...
 	@go fmt ./pkg/ui
-
 
 # build builds Thanos binary using `promu`.
 .PHONY: build
@@ -264,18 +290,22 @@ web: web-pre-process $(HUGO)
 	# TODO(bwplotka): Make it --gc
 	@cd $(WEB_DIR) && HUGO_ENV=production $(HUGO) --config hugo.yaml --minify -v -b $(WEBSITE_BASE_URL)
 
-.PHONY: lint
+
+.PHONY: go-lint
 # PROTIP:
 # Add
 #      --cpu-profile-path string   Path to CPU profile output file
 #      --mem-profile-path string   Path to memory profile output file
 #
 # to debug big allocations during linting.
-lint: check-git $(GOLANGCILINT) $(MISSPELL)
+go-lint: check-git $(GOLANGCILINT) $(MISSPELL)
 	@echo ">> linting all of the Go files GOGC=${GOGC}"
 	@$(GOLANGCILINT) run --enable goimports --enable goconst --skip-dirs vendor
 	@echo ">> detecting misspells"
-	@find . -type f | grep -v vendor/ | grep -vE '\./\..*' | xargs $(MISSPELL) -error
+	@find . -type f | grep -v vendor/ | grep -v pkg/ui/react-app/node_modules | grep -v pkg/ui/static | grep -vE '\./\..*' | xargs $(MISSPELL) -error
+
+.PHONY:lint
+lint: go-lint react-app-lint
 
 .PHONY: web-serve
 web-serve: web-pre-process $(HUGO)

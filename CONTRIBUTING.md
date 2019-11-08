@@ -24,6 +24,7 @@ Adding large new features and components to Thanos should be done by first creat
 ## Prerequisites
 
 * It is strongly recommended that you use OSX or popular Linux distributions systems e.g. Ubuntu, Redhat, or OpenSUSE for development.
+* You will need a working NodeJS environment and the Yarn package manager to compile the Web UI assets
 
 ## Pull Request Process
 

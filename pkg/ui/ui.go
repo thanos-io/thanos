@@ -23,6 +23,21 @@ type BaseUI struct {
 	tmplFuncs template.FuncMap
 }
 
+var (
+	reactAppPaths = []string{
+		"/",
+		"/alerts",
+		"/config",
+		"/flags",
+		"/graph",
+		"/rules",
+		"/service-discovery",
+		"/status",
+		"/targets",
+		"/version",
+	}
+)
+
 func NewBaseUI(logger log.Logger, menuTmpl string, funcMap template.FuncMap) *BaseUI {
 	funcMap["pathPrefix"] = func() string { return "" }
 	funcMap["buildVersion"] = func() string { return version.Revision }
@@ -30,10 +45,25 @@ func NewBaseUI(logger log.Logger, menuTmpl string, funcMap template.FuncMap) *Ba
 	return &BaseUI{logger: logger, menuTmpl: menuTmpl, tmplFuncs: funcMap}
 }
 
-func (bu *BaseUI) serveStaticAsset(w http.ResponseWriter, req *http.Request) {
+func (bu *BaseUI) serveStaticAssets(w http.ResponseWriter, req *http.Request) {
 	fp := route.Param(req.Context(), "filepath")
 	fp = filepath.Join("pkg/ui/static", fp)
+	bu.serveAsset(fp, w, req)
+}
 
+func (bu *BaseUI) serveReactUI(w http.ResponseWriter, req *http.Request) {
+	fp := route.Param(req.Context(), "filepath")
+	for _, rp := range reactAppPaths {
+		if fp == rp {
+			fp = "index.html"
+			break
+		}
+	}
+	fp = filepath.Join("pkg/ui/static/react/", fp)
+	bu.serveAsset(fp, w, req)
+}
+
+func (bu *BaseUI) serveAsset(fp string, w http.ResponseWriter, req *http.Request) {
 	info, err := AssetInfo(fp)
 	if err != nil {
 		level.Warn(bu.logger).Log("msg", "Could not get file info", "err", err, "file", fp)
@@ -48,7 +78,6 @@ func (bu *BaseUI) serveStaticAsset(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-
 	http.ServeContent(w, req, info.Name(), info.ModTime(), bytes.NewReader(file))
 }
 

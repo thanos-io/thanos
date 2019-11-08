@@ -36,7 +36,8 @@ func (b *Bucket) Register(r *route.Router, ins extpromhttp.InstrumentationMiddle
 	}
 
 	r.Get("/", instrf("root", b.root))
-	r.Get("/static/*filepath", instrf("static", b.serveStaticAsset))
+	r.Get("/static/*filepath", instrf("static", b.serveStaticAssets))
+	r.Get("/new/*filepath", instrf("react", b.serveReactUI))
 }
 
 // Handle / of bucket UIs.

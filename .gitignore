@@ -23,5 +23,6 @@ data/
 website/public/
 website/docs-pre-processed/
 !website/data
+pkg/ui/static/react
 
 tmp/bin
