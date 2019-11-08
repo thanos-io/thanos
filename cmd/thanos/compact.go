@@ -176,7 +176,7 @@ func runCompact(
 
 	reg.MustRegister(halted)
 	reg.MustRegister(retried)
-	if wait != false {
+	if wait {
 		reg.MustRegister(iterations)
 	}
 
