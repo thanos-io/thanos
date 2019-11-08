@@ -176,9 +176,7 @@ func runCompact(
 
 	reg.MustRegister(halted)
 	reg.MustRegister(retried)
-	if wait {
-		reg.MustRegister(iterations)
-	}
+	reg.MustRegister(iterations)
 
 	downsampleMetrics := newDownsampleMetrics(reg)
 
