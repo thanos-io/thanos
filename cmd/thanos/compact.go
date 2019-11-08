@@ -254,15 +254,25 @@ func runCompact(
 
 	if retentionByResolution[compact.ResolutionLevelRaw].Seconds() != 0 {
 		level.Info(logger).Log("msg", "retention policy of raw samples is enabled", "duration", retentionByResolution[compact.ResolutionLevelRaw])
+		if retentionByResolution[compact.ResolutionLevelRaw].Seconds() <= downsample.DownsampleRange0 {
+			level.Warn(logger).Log("msg", "retention policy of raw samples is too low to generate 5 min aggregated samples", "duration", retentionByResolution[compact.ResolutionLevelRaw])
+		}
 	}
 	if retentionByResolution[compact.ResolutionLevel5m].Seconds() != 0 {
 		level.Info(logger).Log("msg", "retention policy of 5 min aggregated samples is enabled", "duration", retentionByResolution[compact.ResolutionLevel5m])
+		if retentionByResolution[compact.ResolutionLevel5m].Seconds() <= downsample.DownsampleRange1 {
+			level.Warn(logger).Log("msg", "retention policy of 5 min aggregated samples is too low to generate 1h aggregated samples", "duration", retentionByResolution[compact.ResolutionLevel5m])
+		}
 	}
 	if retentionByResolution[compact.ResolutionLevel1h].Seconds() != 0 {
 		level.Info(logger).Log("msg", "retention policy of 1 hour aggregated samples is enabled", "duration", retentionByResolution[compact.ResolutionLevel1h])
 	}
 
 	f := func() error {
+		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, retentionByResolution); err != nil {
+			return errors.Wrap(err, fmt.Sprintf("retention failed"))
+		}
+
 		if err := compactor.Compact(ctx); err != nil {
 			return errors.Wrap(err, "compaction failed")
 		}
@@ -289,9 +299,6 @@ func runCompact(
 			level.Warn(logger).Log("msg", "downsampling was explicitly disabled")
 		}
 
-		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, retentionByResolution); err != nil {
-			return errors.Wrap(err, fmt.Sprintf("retention failed"))
-		}
 		return nil
 	}
 

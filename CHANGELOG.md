@@ -29,6 +29,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 - [#1666](https://github.com/thanos-io/thanos/pull/1666) `thanos_compact_group_compactions_total` now counts block compactions, so operations that resulted in a compacted block. The old behaviour
 is now exposed by new metric: `thanos_compact_group_compaction_runs_started_total` and `thanos_compact_group_compaction_runs_completed_total` which counts compaction runs overall.
+- [#1735](https://github.com/thanos-io/thanos/pull/1735) Retention policies are now applied at the start of the compactor loop. Retentions policies that break downsampling are now logged as warnings.
 
 ## [v0.8.1](https://github.com/thanos-io/thanos/releases/tag/v0.8.1) - 2019.10.14
 
