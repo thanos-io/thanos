@@ -35,17 +35,17 @@ func TestSampleSeries_ToChunkSeries(t *testing.T) {
 	}
 
 	input := []struct {
-		series *SampleSeries
+		series *sampleSeries
 	}{
 		{
-			&SampleSeries{
+			&sampleSeries{
 				lset: lset,
 				data: rawData,
 				res:  0,
 			},
 		},
 		{
-			&SampleSeries{
+			&sampleSeries{
 				lset: lset,
 				data: downsampleData,
 				res:  300000,
@@ -94,7 +94,7 @@ func TestBlockReader_Close(t *testing.T) {
 	testutil.Ok(t, err)
 }
 
-func createBlockReader(t *testing.T) *BlockReader {
+func createBlockReader(t *testing.T) *blockReader {
 	dataDir, err := ioutil.TempDir("", "thanos-dedup-streamed-block-reader")
 	testutil.Ok(t, err)
 	id := createBlock(t, context.Background(), dataDir, "r0")

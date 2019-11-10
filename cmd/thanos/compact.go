@@ -288,7 +288,7 @@ func runCompact(
 	deduper := dedup.NewBucketDeduper(logger, reg, bkt, dedupDir, dedupReplicaLabel, consistencyDelay, blockSyncConcurrency)
 
 	f := func() error {
-		if isEnableDedup(enableDedup, dedupReplicaLabel) {
+		if enableDedup && len(dedupReplicaLabel) > 0 {
 			if err := deduper.Dedup(ctx); err != nil {
 				return errors.Wrap(err, "dedup failed")
 			}
@@ -498,8 +498,4 @@ func generateIndexCacheFile(
 		return errors.Wrap(err, "upload index cache")
 	}
 	return nil
-}
-
-func isEnableDedup(enableDedup bool, dedupReplicaLabel string) bool {
-	return enableDedup && len(dedupReplicaLabel) > 0
 }

@@ -92,21 +92,23 @@ func (s *SampleIterator) Seek(t int64) bool {
 	}
 }
 
-type SampleSeries struct {
+type sampleSeries struct {
 	lset labels.Labels
 	data map[downsample.AggrType][]*Sample
 	res  int64
 }
 
-func NewSampleSeries(lset labels.Labels, data map[downsample.AggrType][]*Sample, res int64) *SampleSeries {
-	return &SampleSeries{
+// NewSampleSeries return a new sampleSeries with given samples and type
+func NewSampleSeries(lset labels.Labels, data map[downsample.AggrType][]*Sample, res int64) *sampleSeries {
+	return &sampleSeries{
 		lset: lset,
 		data: data,
 		res:  res,
 	}
 }
 
-func (ss *SampleSeries) ToChunkSeries() (*ChunkSeries, error) {
+// create raw or downsampling ChunkSeries based on given resolution
+func (ss *sampleSeries) ToChunkSeries() (*ChunkSeries, error) {
 	if len(ss.data) == 0 {
 		return nil, nil
 	}
@@ -116,7 +118,7 @@ func (ss *SampleSeries) ToChunkSeries() (*ChunkSeries, error) {
 	return ss.toDownsampleChunkSeries()
 }
 
-func (ss *SampleSeries) toRawChunkSeries() (*ChunkSeries, error) {
+func (ss *sampleSeries) toRawChunkSeries() (*ChunkSeries, error) {
 	chks, err := ss.toChunks(rawType)
 	if err != nil {
 		return nil, err
@@ -130,7 +132,7 @@ func (ss *SampleSeries) toRawChunkSeries() (*ChunkSeries, error) {
 	}, nil
 }
 
-func (ss *SampleSeries) toDownsampleChunkSeries() (*ChunkSeries, error) {
+func (ss *sampleSeries) toDownsampleChunkSeries() (*ChunkSeries, error) {
 	countChks, err := ss.toChunks(downsample.AggrCount)
 	if err != nil {
 		return nil, err
@@ -181,7 +183,7 @@ func (ss *SampleSeries) toDownsampleChunkSeries() (*ChunkSeries, error) {
 	}, nil
 }
 
-func (ss *SampleSeries) toChunk(at downsample.AggrType, minTime, maxTime int64) (*chunks.Meta, error) {
+func (ss *sampleSeries) toChunk(at downsample.AggrType, minTime, maxTime int64) (*chunks.Meta, error) {
 	samples := ss.data[at]
 	if len(samples) == 0 {
 		return nil, nil
@@ -216,7 +218,7 @@ func (ss *SampleSeries) toChunk(at downsample.AggrType, minTime, maxTime int64) 
 	}, nil
 }
 
-func (ss *SampleSeries) toChunks(at downsample.AggrType) ([]chunks.Meta, error) {
+func (ss *sampleSeries) toChunks(at downsample.AggrType) ([]chunks.Meta, error) {
 	samples := ss.data[at]
 	if len(samples) == 0 {
 		return nil, nil
@@ -250,7 +252,7 @@ func (ss *SampleSeries) toChunks(at downsample.AggrType) ([]chunks.Meta, error) 
 	return chks, nil
 }
 
-type SampleReader struct {
+type sampleReader struct {
 	logger log.Logger
 	cr     tsdb.ChunkReader
 	lset   labels.Labels
@@ -258,8 +260,9 @@ type SampleReader struct {
 	res    int64
 }
 
-func NewSampleReader(logger log.Logger, cr tsdb.ChunkReader, lset labels.Labels, chks []chunks.Meta, res int64) *SampleReader {
-	return &SampleReader{
+// NewSampleReader return a new sampleReader with given chunks and resolution
+func NewSampleReader(logger log.Logger, cr tsdb.ChunkReader, lset labels.Labels, chks []chunks.Meta, res int64) *sampleReader {
+	return &sampleReader{
 		logger: logger,
 		cr:     cr,
 		lset:   lset,
@@ -268,7 +271,8 @@ func NewSampleReader(logger log.Logger, cr tsdb.ChunkReader, lset labels.Labels,
 	}
 }
 
-func (r *SampleReader) Read(tr *tsdb.TimeRange) (map[downsample.AggrType][]*Sample, error) {
+// read samples with specified time range from chunks
+func (r *sampleReader) Read(tr *tsdb.TimeRange) (map[downsample.AggrType][]*Sample, error) {
 	if len(r.chks) == 0 {
 		return nil, nil
 	}
@@ -278,7 +282,7 @@ func (r *SampleReader) Read(tr *tsdb.TimeRange) (map[downsample.AggrType][]*Samp
 	return r.readDownSamples(tr)
 }
 
-func (r *SampleReader) readRawSamples(tr *tsdb.TimeRange) (map[downsample.AggrType][]*Sample, error) {
+func (r *sampleReader) readRawSamples(tr *tsdb.TimeRange) (map[downsample.AggrType][]*Sample, error) {
 	samples := make([]*Sample, 0)
 	for _, c := range r.chks {
 		chk, err := r.cr.Chunk(c.Ref)
@@ -303,7 +307,7 @@ func (r *SampleReader) readRawSamples(tr *tsdb.TimeRange) (map[downsample.AggrTy
 	return result, nil
 }
 
-func (r *SampleReader) readDownSamples(tr *tsdb.TimeRange) (map[downsample.AggrType][]*Sample, error) {
+func (r *sampleReader) readDownSamples(tr *tsdb.TimeRange) (map[downsample.AggrType][]*Sample, error) {
 	result := make(map[downsample.AggrType][]*Sample)
 	result[downsample.AggrCount] = make([]*Sample, 0)
 	result[downsample.AggrSum] = make([]*Sample, 0)
@@ -334,7 +338,7 @@ func (r *SampleReader) readDownSamples(tr *tsdb.TimeRange) (map[downsample.AggrT
 	return result, nil
 }
 
-func (r *SampleReader) parseSamples(c chunkenc.Chunk, tr *tsdb.TimeRange) []*Sample {
+func (r *sampleReader) parseSamples(c chunkenc.Chunk, tr *tsdb.TimeRange) []*Sample {
 	samples := make([]*Sample, 0)
 	iterator := c.Iterator(nil)
 	for iterator.Next() {
@@ -355,7 +359,7 @@ func (r *SampleReader) parseSamples(c chunkenc.Chunk, tr *tsdb.TimeRange) []*Sam
 	return samples
 }
 
-type BlockReader struct {
+type blockReader struct {
 	logger  log.Logger
 	closers []io.Closer
 
@@ -365,8 +369,9 @@ type BlockReader struct {
 	postings index.Postings
 }
 
-func NewBlockReader(logger log.Logger, resolution int64, blockDir string) (*BlockReader, error) {
-	reader := &BlockReader{
+// NewBlockReader return a new blockReader with given resolution and directory
+func NewBlockReader(logger log.Logger, resolution int64, blockDir string) (*blockReader, error) {
+	reader := &blockReader{
 		logger:  logger,
 		closers: make([]io.Closer, 0, 3),
 	}
@@ -407,11 +412,12 @@ func NewBlockReader(logger log.Logger, resolution int64, blockDir string) (*Bloc
 	return reader, nil
 }
 
-func (r *BlockReader) Symbols() (map[string]struct{}, error) {
+// return all symbols for current block
+func (r *blockReader) Symbols() (map[string]struct{}, error) {
 	return r.ir.Symbols()
 }
 
-func (r *BlockReader) Close() error {
+func (r *blockReader) Close() error {
 	var merr tsdberrors.MultiError
 	for i := len(r.closers) - 1; i >= 0; i-- {
 		merr.Add(r.closers[i].Close())

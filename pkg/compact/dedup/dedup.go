@@ -12,7 +12,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
-type BucketDeduper struct {
+type bucketDeduper struct {
 	logger           log.Logger
 	dedupDir         string
 	replicaLabelName string
@@ -20,14 +20,15 @@ type BucketDeduper struct {
 
 	metrics *DedupMetrics
 
-	syncer *ReplicaSyncer
-	merger *ReplicaMerger
+	syncer *replicaSyncer
+	merger *replicaMerger
 }
 
+// NewBucketDeduper return a new bucketDeduper for the given bucket, replica label and directory.
 func NewBucketDeduper(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, dedupDir, replicaLabelName string,
-	consistencyDelay time.Duration, blockSyncConcurrency int) *BucketDeduper {
+	consistencyDelay time.Duration, blockSyncConcurrency int) *bucketDeduper {
 	metrics := NewDedupMetrics(reg)
-	return &BucketDeduper{
+	return &bucketDeduper{
 		logger:           logger,
 		dedupDir:         dedupDir,
 		replicaLabelName: replicaLabelName,
@@ -38,7 +39,10 @@ func NewBucketDeduper(logger log.Logger, reg prometheus.Registerer, bkt objstore
 	}
 }
 
-func (d *BucketDeduper) Dedup(ctx context.Context) error {
+// Dedup groups the blocks based on replica label from their metadata information
+// and merge different replica's blocks under same time range into one block.
+// The dedup process start from oldest blocks to earliest blocks.
+func (d *bucketDeduper) Dedup(ctx context.Context) error {
 	level.Info(d.logger).Log("msg", "start of deduplication")
 	start := time.Now()
 	if err := os.RemoveAll(d.dedupDir); err != nil {

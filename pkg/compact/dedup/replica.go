@@ -32,6 +32,7 @@ type Replica struct {
 	Blocks []*metadata.Meta  // the underlying blocks
 }
 
+// NewReplica return a new Replica with given blocks' metadata information
 func NewReplica(name string, labels map[string]string, blocks []*metadata.Meta) *Replica {
 	sort.Slice(blocks, func(i, j int) bool {
 		return blocks[i].MinTime < blocks[j].MinTime
@@ -43,6 +44,7 @@ func NewReplica(name string, labels map[string]string, blocks []*metadata.Meta) 
 	}
 }
 
+// choose minimum MinTime of all blocks' MinTime as replica's MinTime
 func (r *Replica) MinTime() int64 {
 	if len(r.Blocks) == 0 {
 		return -1
@@ -50,6 +52,7 @@ func (r *Replica) MinTime() int64 {
 	return r.Blocks[0].MinTime
 }
 
+// choose maximum MaxTime of all blocks' MaxTime as replica's MaxTime
 func (r *Replica) MaxTime() int64 {
 	if len(r.Blocks) == 0 {
 		return -1
@@ -57,6 +60,8 @@ func (r *Replica) MaxTime() int64 {
 	return r.Blocks[len(r.Blocks)-1].MaxTime
 }
 
+// string key to represent the group
+// ex, group="cluster=prod,shard=0,resolution=0"
 func (r *Replica) Group() string {
 	return replicaGroup(r.Labels)
 }
@@ -136,7 +141,7 @@ func replicaGroup(labels map[string]string) string {
 	return b.String()
 }
 
-type ReplicaSyncer struct {
+type replicaSyncer struct {
 	logger               log.Logger
 	metrics              *DedupMetrics
 	bkt                  objstore.Bucket
@@ -148,9 +153,10 @@ type ReplicaSyncer struct {
 	blocksMtx sync.Mutex
 }
 
+// NewReplicaSyncer return a new replicaSyncer with given bucket and replica label.
 func NewReplicaSyncer(logger log.Logger, metrics *DedupMetrics, bkt objstore.Bucket, labelName string,
-	consistencyDelay time.Duration, blockSyncConcurrency int) *ReplicaSyncer {
-	return &ReplicaSyncer{
+	consistencyDelay time.Duration, blockSyncConcurrency int) *replicaSyncer {
+	return &replicaSyncer{
 		logger:               logger,
 		metrics:              metrics,
 		bkt:                  bkt,
@@ -160,7 +166,8 @@ func NewReplicaSyncer(logger log.Logger, metrics *DedupMetrics, bkt objstore.Buc
 	}
 }
 
-func (s *ReplicaSyncer) Sync(ctx context.Context) (Replicas, error) {
+// Sync downloads all the blocks' metadata information and group them into different replicas.
+func (s *replicaSyncer) Sync(ctx context.Context) (Replicas, error) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -243,7 +250,7 @@ func (s *ReplicaSyncer) Sync(ctx context.Context) (Replicas, error) {
 	return NewReplicas(s.labelName, result)
 }
 
-func (s *ReplicaSyncer) download(ctx context.Context, id ulid.ULID) (*metadata.Meta, error) {
+func (s *replicaSyncer) download(ctx context.Context, id ulid.ULID) (*metadata.Meta, error) {
 	meta, err := block.DownloadMeta(ctx, s.logger, s.bkt, id)
 	if err != nil {
 		s.metrics.operateRemoteStorageFailures.WithLabelValues("get", s.bkt.Name(), id.String()).Inc()
