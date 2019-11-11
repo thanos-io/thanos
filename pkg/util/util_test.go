@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/run"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestRungroupRecover(t *testing.T) {

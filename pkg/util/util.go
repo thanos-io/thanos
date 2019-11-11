@@ -21,7 +21,7 @@ func RecoverGoroutine(logger log.Logger, f func() error, extrafields ...interfac
 				for _, f := range extrafields {
 					level.Error(logger).Log("extra", f)
 				}
-				level.Error(logger).Log("msg", "please fill a new issue with this message in https://github.com/improbable-eng/thanos")
+				level.Error(logger).Log("msg", "please fill a new issue with this message in https://github.com/thanos-io/thanos")
 				err = errors.Errorf("goroutine encountered %s", p)
 			}
 		}()
