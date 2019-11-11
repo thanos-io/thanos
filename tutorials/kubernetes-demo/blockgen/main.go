@@ -9,21 +9,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/prometheus/prometheus/promql"
-
-	"github.com/prometheus/common/model"
-	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/prometheus/tsdb/labels"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/prometheus/tsdb"
+	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/labels"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 // Allow for more realistic output.
 type series struct {
-	Type           string // gauge, counter (if conunter we treat below as rate aim)
+	Type           string // gauge, counter (if conunter we treat below as rate aim).
 	Jitter         float64
 	ChangeInterval string
 	Max            float64
@@ -43,7 +41,7 @@ func main() {
 	outputDir := app.Flag("output-dir", "Output directory for generated TSDB data.").Required().String()
 	scrapeInterval := app.Flag("scrape-interval", "Interval for to generate samples with.").Default("15s").Duration()
 
-	retention := app.Flag("retention", "Defines the the max time in relation to current time for generated samples.").Required().Duration()
+	retention := app.Flag("retention", "Defines the max time in relation to current time for generated samples.").Required().Duration()
 
 	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
 	_, err := app.Parse(os.Args[1:])
@@ -106,8 +104,6 @@ func main() {
 			for n, v := range r.Metric {
 				lset = append(lset, labels.Label{Name: string(n), Value: string(v)})
 			}
-			//level.Debug(logger).Log("msg", "scheduled generation of series", "lset", lset)
-
 			var chInterval time.Duration
 			if in.ChangeInterval != "" {
 				chInterval, err = time.ParseDuration(in.ChangeInterval)

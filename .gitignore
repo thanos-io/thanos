@@ -1,6 +1,8 @@
+.envrc
+
 /prometheus
 /thanos
-vendor/
+/vendor/
 
 # Ignore minikube setup working dirs.
 kube/bin
@@ -17,3 +19,9 @@ data/
 
 /.idea
 /*.iml
+
+website/public/
+website/docs-pre-processed/
+!website/data
+
+tmp/bin

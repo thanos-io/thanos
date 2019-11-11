@@ -6,25 +6,24 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"math/rand"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/objstore/inmem"
+	"github.com/thanos-io/thanos/pkg/objstore/inmem"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
-	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/objstore/objtesting"
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/objstore/objtesting"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestShipper_SyncBlocks_e2e(t *testing.T) {
@@ -59,7 +58,6 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 			testutil.Ok(t, os.Mkdir(tmp, 0777))
 
 			meta := metadata.Meta{
-				Version: 1,
 				BlockMeta: tsdb.BlockMeta{
 					Version: 1,
 					ULID:    id,
@@ -99,7 +97,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 			if len(shipMeta.Uploaded) == 0 {
 				shipMeta.Uploaded = []ulid.ULID{}
 			}
-			testutil.Equals(t, &Meta{Version: 1, Uploaded: ids}, shipMeta)
+			testutil.Equals(t, &Meta{Version: MetaVersion1, Uploaded: ids}, shipMeta)
 
 			testutil.Ok(t, os.MkdirAll(tmp+"/chunks", 0777))
 			testutil.Ok(t, ioutil.WriteFile(tmp+"/chunks/0001", []byte("chunkcontents1"), 0666))
@@ -127,7 +125,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 
 			testutil.Ok(t, enc.Encode(&meta))
 
-			// We will delete the fifth block and do not expect it to be re-uploaded later
+			// We will delete the fifth block and do not expect it to be re-uploaded later.
 			if i != 4 && i != 5 {
 				expBlocks[id] = struct{}{}
 
@@ -137,12 +135,12 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 				expFiles[id.String()+"/chunks/0002"] = []byte("chunkcontents2")
 			}
 			if i == 4 {
-				testutil.Ok(t, block.Delete(ctx, bkt, ids[4]))
+				testutil.Ok(t, block.Delete(ctx, log.NewNopLogger(), bkt, ids[4]))
 			}
 			// The shipper meta file should show all blocks as uploaded except the compacted one.
 			shipMeta, err = ReadMetaFile(dir)
 			testutil.Ok(t, err)
-			testutil.Equals(t, &Meta{Version: 1, Uploaded: ids}, shipMeta)
+			testutil.Equals(t, &Meta{Version: MetaVersion1, Uploaded: ids}, shipMeta)
 
 			// Verify timestamps were updated correctly.
 			minTotal, maxSync, err := shipper.Timestamps()
@@ -191,12 +189,6 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 		defer upcancel()
 		testutil.Ok(t, p.WaitPrometheusUp(upctx))
 
-		addr, err := url.Parse(p.Addr())
-		testutil.Ok(t, err)
-
-		shipper, err := NewWithCompacted(ctx, log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource, addr)
-		testutil.NotOk(t, err) // Compaction not disabled!
-
 		p.DisableCompaction()
 		testutil.Ok(t, p.Restart())
 
@@ -204,11 +196,7 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 		defer upcancel2()
 		testutil.Ok(t, p.WaitPrometheusUp(upctx2))
 
-		addr, err = url.Parse("http://" + p.Addr())
-		testutil.Ok(t, err)
-
-		shipper, err = NewWithCompacted(ctx, log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource, addr)
-		testutil.Ok(t, err)
+		shipper := NewWithCompacted(log.NewLogfmtLogger(os.Stderr), nil, dir, bkt, func() labels.Labels { return extLset }, metadata.TestSource)
 
 		// Create 10 new blocks. 9 of them (non compacted) should be actually uploaded.
 		var (
@@ -227,7 +215,6 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 			testutil.Ok(t, os.Mkdir(tmp, 0777))
 
 			meta := metadata.Meta{
-				Version: 1,
 				BlockMeta: tsdb.BlockMeta{
 					Version: 1,
 					ULID:    id,
@@ -267,7 +254,7 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 			if len(shipMeta.Uploaded) == 0 {
 				shipMeta.Uploaded = []ulid.ULID{}
 			}
-			testutil.Equals(t, &Meta{Version: 1, Uploaded: ids}, shipMeta)
+			testutil.Equals(t, &Meta{Version: MetaVersion1, Uploaded: ids}, shipMeta)
 
 			testutil.Ok(t, os.MkdirAll(tmp+"/chunks", 0777))
 			testutil.Ok(t, ioutil.WriteFile(tmp+"/chunks/0001", []byte("chunkcontents1"), 0666))
@@ -290,7 +277,7 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 
 			testutil.Ok(t, enc.Encode(&meta))
 
-			// We will delete the fifth block and do not expect it to be re-uploaded later
+			// We will delete the fifth block and do not expect it to be re-uploaded later.
 			if i != 4 {
 				expBlocks[id] = struct{}{}
 
@@ -300,12 +287,12 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 				expFiles[id.String()+"/chunks/0002"] = []byte("chunkcontents2")
 			}
 			if i == 4 {
-				testutil.Ok(t, block.Delete(ctx, bkt, ids[4]))
+				testutil.Ok(t, block.Delete(ctx, log.NewNopLogger(), bkt, ids[4]))
 			}
 			// The shipper meta file should show all blocks as uploaded except the compacted one.
 			shipMeta, err = ReadMetaFile(dir)
 			testutil.Ok(t, err)
-			testutil.Equals(t, &Meta{Version: 1, Uploaded: ids}, shipMeta)
+			testutil.Equals(t, &Meta{Version: MetaVersion1, Uploaded: ids}, shipMeta)
 
 			// Verify timestamps were updated correctly.
 			minTotal, maxSync, err := shipper.Timestamps()

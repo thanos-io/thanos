@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta http-equiv="content-type" content="text/html;charset=utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.2.1/css/bootstrap.min.css" integrity="sha384-GJzZqFGwb1QTTN6wy59ffF1BuGJpLSa9DkKMp0DgiMDm4iYMj70gZWKYbI706tWS"
+        crossorigin="anonymous">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.1/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr"
+        crossorigin="anonymous">
+    <link rel="stylesheet" href="{{ "/main.css" | relURL }}" />
+    <link rel="stylesheet" href="{{ "/syntax.css" | relURL }}" />
+    <link rel="icon" href="{{ "/icon-light.png" | relURL }}" />
+    <title>{{ block "title" . }}{{ .Site.Title }}{{ end }}</title>
+    <meta name="description" content="{{ .Site.Params.Description }}"></meta>
+    <meta property="og:image" content="{{ "/icon-light.png" | absURL }}" />
+    <meta property="og:type" content="object" />
+    <meta property="og:title" content="Thanos" />
+    <meta property="og:description" content="{{ .Site.Title }}" />
+    <meta name="twitter:card" content="summary_large_image"></meta>
+    <meta name="twitter:site" content="@{{ .Site.Params.TwitterHandle }}"></meta>
+    <meta name="twitter:title" content="Thanos Metrics"></meta>
+    <meta name="twitter:description" content="{{ .Site.Params.Description }}"></meta>
+    <meta name="twitter:image" content="{{ "/thanos-twitter.png" | absURL }}"></meta>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-purple">
+        <a href="{{ "/" | relURL }}" class="navbar-brand"><img src="{{ "/icon-dark.png" | relURL }}" alt="Thanos logo" /> Thanos</a>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarSupportedContent">
+            <ul class="navbar-nav ml-auto">
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ "/getting-started.md" | relURL }}">Documentation</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}/releases">Download</a>
+                </li>
+                <li class="nav-item">
+                    <a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}" class="nav-link"><i class="fab fa-fw fa-github"></i> GitHub</a>
+                </li>
+                <li class="nav-item">
+                    <a href="https://twitter.com/{{ .Site.Params.TwitterHandle }}" class="nav-link"><i class="fab fa-fw fa-twitter"></i> Twitter</a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+    {{ block "main" . }}{{ end }}
+    <footer class="bg-dark text-light">
+        <div class="container text-center text-md-left">
+            <div class="row py-5">
+                <div class="col-12 col-md-6 col-lg mb-3 mb-lg-0">
+                    <img src="{{ "icon-dark.png" | relURL }}" alt="Thanos" width="45%">
+                </div>
+                <div class="col-12 col-md-6 col-lg">
+                    <h6 class="font-weight-bold">Documentation</h6>
+                    <ul class="list-unstyled">
+                        <li><a class="text-reset" href="{{ "/getting-started.md" | relURL }}">Getting Started</a></li>
+                        <li><a class="text-reset" href="{{ "/design.md" | relURL }}">Design</a></li>
+                        <li><a class="text-reset" href="{{ "/storage.md" | relURL }}">Storage</a></li>
+                        <li><a class="text-reset" href="{{ "/service-discovery.md" | relURL }}">Service Discovery</a></li>
+                        <li><a class="text-reset" href="{{ "/maintainers" | relURL }}">Maintainers</a></li>
+                    </ul>
+                </div>
+                <div class="col-12 col-md-6 col-lg">
+                    <h6 class="font-weight-bold">Community</h6>
+                    <ul class="list-unstyled">
+                        <li><a href="{{ .Site.Params.SlackInvite }}" class="text-reset"><i class="fab fa-fw fa-slack"></i> Slack</a></li>
+                        <li><a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}" class="text-reset"><i class="fab fa-fw fa-github"></i> GitHub</a></li>
+                        <li><a href="https://twitter.com/{{ .Site.Params.TwitterHandle }}" class="text-reset"><i class="fab fa-fw fa-twitter"></i> Twitter</a></li>
+                    </ul>
+                </div>
+                <div class="col col-md-6 col-lg">
+                    <h6 class="font-weight-bold">About</h6>
+                    <p>Thanos is an OSS licensed project as Apache License 2.0</p>
+                    <p>Founded by <a href="https://improbable.io" class="text-reset">Improbable ❤️</a></p>
+                </div>
+                <div class="col col-md-6 col-lg">
+                     <a href="https://www.netlify.com">
+                        <img src="https://www.netlify.com/img/global/badges/netlify-light.svg"/>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </footer>
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.6/umd/popper.min.js" integrity="sha384-wHAiFfRlMFy6i5SRaxvfOCifBUQy1xHdJ/yoi7FRNXMRBu5WHdZYu1hA6ZOblgut"
+        crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.2.1/js/bootstrap.min.js" integrity="sha384-B0UglyR+jN6CkvvICOB2joaf5I4l3gm9GU6Hc1og6Ls7i6U/mkkaduKaBhlAXv9k"
+        crossorigin="anonymous"></script>
+    {{ if eq ( getenv "HUGO_ENV" ) "production" }}
+        {{ template "_internal/google_analytics_async.html" . }}
+    {{ end }}
+</body>
+</html>

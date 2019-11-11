@@ -3,26 +3,28 @@ package compact
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"sync"
 	"time"
 
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
-
-	"io/ioutil"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/compact/downsample"
-	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/labels"
+	promlables "github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/relabel"
+	"github.com/prometheus/prometheus/tsdb"
+	terrors "github.com/prometheus/prometheus/tsdb/errors"
+	"github.com/prometheus/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/compact/downsample"
+	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
 type ResolutionLevel int64
@@ -31,6 +33,8 @@ const (
 	ResolutionLevelRaw = ResolutionLevel(downsample.ResLevel0)
 	ResolutionLevel5m  = ResolutionLevel(downsample.ResLevel1)
 	ResolutionLevel1h  = ResolutionLevel(downsample.ResLevel2)
+
+	MinimumAgeForRemoval = time.Duration(30 * time.Minute)
 )
 
 var blockTooFreshSentinelError = errors.New("Block too fresh")
@@ -41,12 +45,14 @@ type Syncer struct {
 	logger               log.Logger
 	reg                  prometheus.Registerer
 	bkt                  objstore.Bucket
-	syncDelay            time.Duration
+	consistencyDelay     time.Duration
 	mtx                  sync.Mutex
 	blocks               map[ulid.ULID]*metadata.Meta
 	blocksMtx            sync.Mutex
 	blockSyncConcurrency int
 	metrics              *syncerMetrics
+	acceptMalformedIndex bool
+	relabelConfig        []*relabel.Config
 }
 
 type syncerMetrics struct {
@@ -58,6 +64,8 @@ type syncerMetrics struct {
 	garbageCollectionFailures prometheus.Counter
 	garbageCollectionDuration prometheus.Histogram
 	compactions               *prometheus.CounterVec
+	compactionRunsStarted     *prometheus.CounterVec
+	compactionRunsCompleted   *prometheus.CounterVec
 	compactionFailures        *prometheus.CounterVec
 }
 
@@ -84,7 +92,6 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 		Name: "thanos_compact_garbage_collected_blocks_total",
 		Help: "Total number of deleted blocks by compactor.",
 	})
-
 	m.garbageCollections = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compact_garbage_collection_total",
 		Help: "Total number of garbage collection operations.",
@@ -103,7 +110,15 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 
 	m.compactions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_group_compactions_total",
-		Help: "Total number of group compactions attempts.",
+		Help: "Total number of group compaction attempts that resulted in a new block.",
+	}, []string{"group"})
+	m.compactionRunsStarted = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_compact_group_compaction_runs_started_total",
+		Help: "Total number of group compaction attempts.",
+	}, []string{"group"})
+	m.compactionRunsCompleted = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_compact_group_compaction_runs_completed_total",
+		Help: "Total number of group completed compaction runs. This also includes compactor group runs that resulted with no compaction.",
 	}, []string{"group"})
 	m.compactionFailures = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "thanos_compact_group_compactions_failures_total",
@@ -120,6 +135,8 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 			m.garbageCollectionFailures,
 			m.garbageCollectionDuration,
 			m.compactions,
+			m.compactionRunsStarted,
+			m.compactionRunsCompleted,
 			m.compactionFailures,
 		)
 	}
@@ -128,23 +145,26 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 
 // NewSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, syncDelay time.Duration, blockSyncConcurrency int) (*Syncer, error) {
+func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, consistencyDelay time.Duration, blockSyncConcurrency int, acceptMalformedIndex bool, relabelConfig []*relabel.Config) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	return &Syncer{
 		logger:               logger,
 		reg:                  reg,
-		syncDelay:            syncDelay,
+		consistencyDelay:     consistencyDelay,
 		blocks:               map[ulid.ULID]*metadata.Meta{},
 		bkt:                  bkt,
 		metrics:              newSyncerMetrics(reg),
 		blockSyncConcurrency: blockSyncConcurrency,
+		acceptMalformedIndex: acceptMalformedIndex,
+		relabelConfig:        relabelConfig,
 	}, nil
 }
 
 // SyncMetas synchronizes all meta files from blocks in the bucket into
-// the memory.
+// the memory.  It removes any partial blocks older than the max of
+// consistencyDelay and MinimumAgeForRemoval from the bucket.
 func (c *Syncer) SyncMetas(ctx context.Context) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
@@ -157,8 +177,23 @@ func (c *Syncer) SyncMetas(ctx context.Context) error {
 	}
 	c.metrics.syncMetas.Inc()
 	c.metrics.syncMetaDuration.Observe(time.Since(begin).Seconds())
-
 	return err
+}
+
+// UntilNextDownsampling calculates how long it will take until the next downsampling operation.
+// Returns an error if there will be no downsampling.
+func UntilNextDownsampling(m *metadata.Meta) (time.Duration, error) {
+	timeRange := time.Duration((m.MaxTime - m.MinTime) * int64(time.Millisecond))
+	switch m.Thanos.Downsample.Resolution {
+	case downsample.ResLevel2:
+		return time.Duration(0), errors.New("no downsampling")
+	case downsample.ResLevel1:
+		return time.Duration(downsample.DownsampleRange1*time.Millisecond) - timeRange, nil
+	case downsample.ResLevel0:
+		return time.Duration(downsample.DownsampleRange0*time.Millisecond) - timeRange, nil
+	default:
+		panic(fmt.Errorf("invalid resolution %v", m.Thanos.Downsample.Resolution))
+	}
 }
 
 func (c *Syncer) syncMetas(ctx context.Context) error {
@@ -188,9 +223,22 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 				if err == blockTooFreshSentinelError {
 					continue
 				}
+
 				if err != nil {
+					if removedOrIgnored := c.removeIfMetaMalformed(workCtx, id); removedOrIgnored {
+						continue
+					}
 					errChan <- err
 					return
+				}
+
+				// Check for block labels by relabeling.
+				// If output is empty, the block will be dropped.
+				lset := promlables.FromMap(meta.Thanos.Labels)
+				processedLabels := relabel.Process(lset, c.relabelConfig...)
+				if processedLabels == nil {
+					level.Debug(c.logger).Log("msg", "dropping block(drop in relabeling)", "block", id)
+					continue
 				}
 
 				c.blocksMtx.Lock()
@@ -245,6 +293,10 @@ func (c *Syncer) downloadMeta(ctx context.Context, id ulid.ULID) (*metadata.Meta
 
 	meta, err := block.DownloadMeta(ctx, c.logger, c.bkt, id)
 	if err != nil {
+		if ulid.Now()-id.Time() < uint64(c.consistencyDelay/time.Millisecond) {
+			level.Debug(c.logger).Log("msg", "block is too fresh for now", "block", id)
+			return nil, blockTooFreshSentinelError
+		}
 		return nil, errors.Wrapf(err, "downloading meta.json for %s", id)
 	}
 
@@ -253,8 +305,8 @@ func (c *Syncer) downloadMeta(ctx context.Context, id ulid.ULID) (*metadata.Meta
 	// - repair created blocks
 	// - compactor created blocks
 	// NOTE: It is not safe to miss "old" block (even that it is newly created) in sync step. Compactor needs to aware of ALL old blocks.
-	// TODO(bplotka): https://github.com/improbable-eng/thanos/issues/377
-	if ulid.Now()-id.Time() < uint64(c.syncDelay/time.Millisecond) &&
+	// TODO(bplotka): https://github.com/thanos-io/thanos/issues/377.
+	if ulid.Now()-id.Time() < uint64(c.consistencyDelay/time.Millisecond) &&
 		meta.Thanos.Source != metadata.BucketRepairSource &&
 		meta.Thanos.Source != metadata.CompactorSource &&
 		meta.Thanos.Source != metadata.CompactorRepairSource {
@@ -266,14 +318,41 @@ func (c *Syncer) downloadMeta(ctx context.Context, id ulid.ULID) (*metadata.Meta
 	return &meta, nil
 }
 
+// removeIfMalformed removes a block from the bucket if that block does not have a meta file.  It ignores blocks that
+// are younger than MinimumAgeForRemoval.
+func (c *Syncer) removeIfMetaMalformed(ctx context.Context, id ulid.ULID) (removedOrIgnored bool) {
+	metaExists, err := c.bkt.Exists(ctx, path.Join(id.String(), block.MetaFilename))
+	if err != nil {
+		level.Warn(c.logger).Log("msg", "failed to check meta exists for block", "block", id, "err", err)
+		return false
+	}
+	if metaExists {
+		// Meta exists, block is not malformed.
+		return false
+	}
+
+	if ulid.Now()-id.Time() <= uint64(MinimumAgeForRemoval/time.Millisecond) {
+		// Minimum delay has not expired, ignore for now.
+		return true
+	}
+
+	if err := block.Delete(ctx, c.logger, c.bkt, id); err != nil {
+		level.Warn(c.logger).Log("msg", "failed to delete malformed block", "block", id, "err", err)
+		return false
+	}
+	level.Info(c.logger).Log("msg", "deleted malformed block", "block", id)
+
+	return true
+}
+
 // GroupKey returns a unique identifier for the group the block belongs to. It considers
 // the downsampling resolution and the block's labels.
-func GroupKey(meta metadata.Meta) string {
-	return groupKey(meta.Thanos.Downsample.Resolution, labels.FromMap(meta.Thanos.Labels))
+func GroupKey(meta metadata.Thanos) string {
+	return groupKey(meta.Downsample.Resolution, labels.FromMap(meta.Labels))
 }
 
 func groupKey(res int64, lbls labels.Labels) string {
-	return fmt.Sprintf("%d@%s", res, lbls)
+	return fmt.Sprintf("%d@%v", res, lbls.Hash())
 }
 
 // Groups returns the compaction groups for all blocks currently known to the syncer.
@@ -284,21 +363,24 @@ func (c *Syncer) Groups() (res []*Group, err error) {
 
 	groups := map[string]*Group{}
 	for _, m := range c.blocks {
-		g, ok := groups[GroupKey(*m)]
+		g, ok := groups[GroupKey(m.Thanos)]
 		if !ok {
 			g, err = newGroup(
-				log.With(c.logger, "compactionGroup", GroupKey(*m)),
+				log.With(c.logger, "compactionGroup", GroupKey(m.Thanos)),
 				c.bkt,
 				labels.FromMap(m.Thanos.Labels),
 				m.Thanos.Downsample.Resolution,
-				c.metrics.compactions.WithLabelValues(GroupKey(*m)),
-				c.metrics.compactionFailures.WithLabelValues(GroupKey(*m)),
+				c.acceptMalformedIndex,
+				c.metrics.compactions.WithLabelValues(GroupKey(m.Thanos)),
+				c.metrics.compactionRunsStarted.WithLabelValues(GroupKey(m.Thanos)),
+				c.metrics.compactionRunsCompleted.WithLabelValues(GroupKey(m.Thanos)),
+				c.metrics.compactionFailures.WithLabelValues(GroupKey(m.Thanos)),
 				c.metrics.garbageCollectedBlocks,
 			)
 			if err != nil {
 				return nil, errors.Wrap(err, "create compaction group")
 			}
-			groups[GroupKey(*m)] = g
+			groups[GroupKey(m.Thanos)] = g
 			res = append(res, g)
 		}
 		if err := g.Add(m); err != nil {
@@ -413,14 +495,14 @@ func (c *Syncer) garbageCollect(ctx context.Context, resolution int64) error {
 
 		level.Info(c.logger).Log("msg", "deleting outdated block", "block", id)
 
-		err := block.Delete(delCtx, c.bkt, id)
+		err := block.Delete(delCtx, c.logger, c.bkt, id)
 		cancel()
 		if err != nil {
 			return retry(errors.Wrapf(err, "delete block %s from bucket", id))
 		}
 
 		// Immediately update our in-memory state so no further call to SyncMetas is needed
-		/// after running garbage collection.
+		// after running garbage collection.
 		delete(c.blocks, id)
 		c.metrics.garbageCollectedBlocks.Inc()
 	}
@@ -436,7 +518,10 @@ type Group struct {
 	resolution                  int64
 	mtx                         sync.Mutex
 	blocks                      map[ulid.ULID]*metadata.Meta
+	acceptMalformedIndex        bool
 	compactions                 prometheus.Counter
+	compactionRunsStarted       prometheus.Counter
+	compactionRunsCompleted     prometheus.Counter
 	compactionFailures          prometheus.Counter
 	groupGarbageCollectedBlocks prometheus.Counter
 }
@@ -447,7 +532,10 @@ func newGroup(
 	bkt objstore.Bucket,
 	lset labels.Labels,
 	resolution int64,
+	acceptMalformedIndex bool,
 	compactions prometheus.Counter,
+	compactionRunsStarted prometheus.Counter,
+	compactionRunsCompleted prometheus.Counter,
 	compactionFailures prometheus.Counter,
 	groupGarbageCollectedBlocks prometheus.Counter,
 ) (*Group, error) {
@@ -460,7 +548,10 @@ func newGroup(
 		labels:                      lset,
 		resolution:                  resolution,
 		blocks:                      map[ulid.ULID]*metadata.Meta{},
+		acceptMalformedIndex:        acceptMalformedIndex,
 		compactions:                 compactions,
+		compactionRunsStarted:       compactionRunsStarted,
+		compactionRunsCompleted:     compactionRunsCompleted,
 		compactionFailures:          compactionFailures,
 		groupGarbageCollectedBlocks: groupGarbageCollectedBlocks,
 	}
@@ -514,7 +605,15 @@ func (cg *Group) Resolution() int64 {
 // Compact plans and runs a single compaction against the group. The compacted result
 // is uploaded into the bucket the blocks were retrieved from.
 func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor) (bool, ulid.ULID, error) {
+	cg.compactionRunsStarted.Inc()
+
 	subDir := filepath.Join(dir, cg.Key())
+
+	defer func() {
+		if err := os.RemoveAll(subDir); err != nil {
+			level.Error(cg.logger).Log("msg", "failed to remove compaction group work directory", "path", subDir, "err", err)
+		}
+	}()
 
 	if err := os.RemoveAll(subDir); err != nil {
 		return false, ulid.ULID{}, errors.Wrap(err, "clean compaction group dir")
@@ -526,10 +625,10 @@ func (cg *Group) Compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	shouldRerun, compID, err := cg.compact(ctx, subDir, comp)
 	if err != nil {
 		cg.compactionFailures.Inc()
+		return false, ulid.ULID{}, err
 	}
-	cg.compactions.Inc()
-
-	return shouldRerun, compID, err
+	cg.compactionRunsCompleted.Inc()
+	return shouldRerun, compID, nil
 }
 
 // Issue347Error is a type wrapper for errors that should invoke repair process for broken block.
@@ -547,7 +646,7 @@ func (e Issue347Error) Error() string {
 	return e.err.Error()
 }
 
-// Issue347Error returns true if the base error is a Issue347Error.
+// IsIssue347Error returns true if the base error is a Issue347Error.
 func IsIssue347Error(err error) bool {
 	_, ok := errors.Cause(err).(Issue347Error)
 	return ok
@@ -567,7 +666,17 @@ func (e HaltError) Error() string {
 }
 
 // IsHaltError returns true if the base error is a HaltError.
+// If a multierror is passed, any halt error will return true.
 func IsHaltError(err error) bool {
+	if multiErr, ok := err.(terrors.MultiError); ok {
+		for _, err := range multiErr {
+			if _, ok := errors.Cause(err).(HaltError); ok {
+				return true
+			}
+		}
+		return false
+	}
+
 	_, ok := errors.Cause(err).(HaltError)
 	return ok
 }
@@ -590,7 +699,17 @@ func (e RetryError) Error() string {
 }
 
 // IsRetryError returns true if the base error is a RetryError.
+// If a multierror is passed, all errors must be retriable.
 func IsRetryError(err error) bool {
+	if multiErr, ok := err.(terrors.MultiError); ok {
+		for _, err := range multiErr {
+			if _, ok := errors.Cause(err).(RetryError); !ok {
+				return false
+			}
+		}
+		return true
+	}
+
 	_, ok := errors.Cause(err).(RetryError)
 	return ok
 }
@@ -681,7 +800,7 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	defer cancel()
 
 	// TODO(bplotka): Issue with this will introduce overlap that will halt compactor. Automate that (fix duplicate overlaps caused by this).
-	if err := block.Delete(delCtx, bkt, ie.id); err != nil {
+	if err := block.Delete(delCtx, logger, bkt, ie.id); err != nil {
 		return errors.Wrapf(err, "deleting old block %s failed. You need to delete this block manually", ie.id)
 	}
 
@@ -732,8 +851,8 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 			return false, ulid.ULID{}, errors.Wrapf(err, "read meta from %s", pdir)
 		}
 
-		if cg.Key() != GroupKey(*meta) {
-			return false, ulid.ULID{}, halt(errors.Wrapf(err, "compact planned compaction for mixed groups. group: %s, planned block's group: %s", cg.Key(), GroupKey(*meta)))
+		if cg.Key() != GroupKey(meta.Thanos) {
+			return false, ulid.ULID{}, halt(errors.Wrapf(err, "compact planned compaction for mixed groups. group: %s, planned block's group: %s", cg.Key(), GroupKey(meta.Thanos)))
 		}
 
 		for _, s := range meta.Compaction.Sources {
@@ -769,6 +888,11 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		if err := stats.Issue347OutsideChunksErr(); err != nil {
 			return false, ulid.ULID{}, issue347Error(errors.Wrapf(err, "invalid, but reparable block %s", pdir), meta.ULID)
 		}
+
+		if err := stats.PrometheusIssue5372Err(); !cg.acceptMalformedIndex && err != nil {
+			return false, ulid.ULID{}, errors.Wrapf(err,
+				"block id %s, try running with --debug.accept-malformed-index", id)
+		}
 	}
 	level.Debug(cg.logger).Log("msg", "downloaded and verified blocks",
 		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin))
@@ -794,13 +918,16 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 				}
 			}
 		}
-		// Even though this block was empty, there may be more work to do
+		// Even though this block was empty, there may be more work to do.
 		return true, ulid.ULID{}, nil
 	}
+	cg.compactions.Inc()
 	level.Debug(cg.logger).Log("msg", "compacted blocks",
 		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin))
 
 	bdir := filepath.Join(dir, compID.String())
+	index := filepath.Join(bdir, block.IndexFilename)
+	indexCache := filepath.Join(bdir, block.IndexCacheFilename)
 
 	newMeta, err := metadata.InjectThanos(cg.logger, bdir, metadata.Thanos{
 		Labels:     cg.labels.Map(),
@@ -816,13 +943,17 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	}
 
 	// Ensure the output block is valid.
-	if err := block.VerifyIndex(cg.logger, filepath.Join(bdir, block.IndexFilename), newMeta.MinTime, newMeta.MaxTime); err != nil {
+	if err := block.VerifyIndex(cg.logger, index, newMeta.MinTime, newMeta.MaxTime); !cg.acceptMalformedIndex && err != nil {
 		return false, ulid.ULID{}, halt(errors.Wrapf(err, "invalid result block %s", bdir))
 	}
 
 	// Ensure the output block is not overlapping with anything else.
 	if err := cg.areBlocksOverlapping(newMeta, plan...); err != nil {
 		return false, ulid.ULID{}, halt(errors.Wrapf(err, "resulted compacted block %s overlaps with something", bdir))
+	}
+
+	if err := block.WriteIndexCache(cg.logger, index, indexCache); err != nil {
+		return false, ulid.ULID{}, errors.Wrap(err, "write index cache")
 	}
 
 	begin = time.Now()
@@ -859,7 +990,7 @@ func (cg *Group) deleteBlock(b string) error {
 	delCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	level.Info(cg.logger).Log("msg", "deleting compacted block", "old_block", id)
-	if err := block.Delete(delCtx, cg.bkt, id); err != nil {
+	if err := block.Delete(delCtx, cg.logger, cg.bkt, id); err != nil {
 		return errors.Wrapf(err, "delete block %s from bucket", id)
 	}
 	return nil
@@ -867,28 +998,87 @@ func (cg *Group) deleteBlock(b string) error {
 
 // BucketCompactor compacts blocks in a bucket.
 type BucketCompactor struct {
-	logger     log.Logger
-	sy         *Syncer
-	comp       tsdb.Compactor
-	compactDir string
-	bkt        objstore.Bucket
+	logger      log.Logger
+	sy          *Syncer
+	comp        tsdb.Compactor
+	compactDir  string
+	bkt         objstore.Bucket
+	concurrency int
 }
 
 // NewBucketCompactor creates a new bucket compactor.
-func NewBucketCompactor(logger log.Logger, sy *Syncer, comp tsdb.Compactor, compactDir string, bkt objstore.Bucket) *BucketCompactor {
-	return &BucketCompactor{
-		logger:     logger,
-		sy:         sy,
-		comp:       comp,
-		compactDir: compactDir,
-		bkt:        bkt,
+func NewBucketCompactor(
+	logger log.Logger,
+	sy *Syncer,
+	comp tsdb.Compactor,
+	compactDir string,
+	bkt objstore.Bucket,
+	concurrency int,
+) (*BucketCompactor, error) {
+	if concurrency <= 0 {
+		return nil, errors.Errorf("invalid concurrency level (%d), concurrency level must be > 0", concurrency)
 	}
+	return &BucketCompactor{
+		logger:      logger,
+		sy:          sy,
+		comp:        comp,
+		compactDir:  compactDir,
+		bkt:         bkt,
+		concurrency: concurrency,
+	}, nil
 }
 
 // Compact runs compaction over bucket.
 func (c *BucketCompactor) Compact(ctx context.Context) error {
+	defer func() {
+		if err := os.RemoveAll(c.compactDir); err != nil {
+			level.Error(c.logger).Log("msg", "failed to remove compaction work directory", "path", c.compactDir, "err", err)
+		}
+	}()
+
 	// Loop over bucket and compact until there's no work left.
 	for {
+		var (
+			wg                     sync.WaitGroup
+			workCtx, workCtxCancel = context.WithCancel(ctx)
+			groupChan              = make(chan *Group)
+			errChan                = make(chan error, c.concurrency)
+			finishedAllGroups      = true
+			mtx                    sync.Mutex
+		)
+		defer workCtxCancel()
+
+		// Set up workers who will compact the groups when the groups are ready.
+		// They will compact available groups until they encounter an error, after which they will stop.
+		for i := 0; i < c.concurrency; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for g := range groupChan {
+					shouldRerunGroup, _, err := g.Compact(workCtx, c.compactDir, c.comp)
+					if err == nil {
+						if shouldRerunGroup {
+							mtx.Lock()
+							finishedAllGroups = false
+							mtx.Unlock()
+						}
+						continue
+					}
+
+					if IsIssue347Error(err) {
+						if err := RepairIssue347(workCtx, c.logger, c.bkt, err); err == nil {
+							mtx.Lock()
+							finishedAllGroups = false
+							mtx.Unlock()
+							continue
+						}
+					}
+					errChan <- errors.Wrap(err, fmt.Sprintf("compaction failed for group %s", g.Key()))
+					return
+				}
+			}()
+		}
+
 		// Clean up the compaction temporary directory at the beginning of every compaction loop.
 		if err := os.RemoveAll(c.compactDir); err != nil {
 			return errors.Wrap(err, "clean up the compaction temporary directory")
@@ -902,6 +1092,8 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 
 		level.Info(c.logger).Log("msg", "start of GC")
 
+		// Blocks that were compacted are garbage collected after each Compaction.
+		// However if compactor crashes we need to resolve those on startup.
 		if err := c.sy.GarbageCollect(ctx); err != nil {
 			return errors.Wrap(err, "garbage")
 		}
@@ -912,24 +1104,30 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 		if err != nil {
 			return errors.Wrap(err, "build compaction groups")
 		}
-		finishedAllGroups := true
-		for _, g := range groups {
-			shouldRerunGroup, _, err := g.Compact(ctx, c.compactDir, c.comp)
-			if err == nil {
-				if shouldRerunGroup {
-					finishedAllGroups = false
-				}
-				continue
-			}
 
-			if IsIssue347Error(err) {
-				if err := RepairIssue347(ctx, c.logger, c.bkt, err); err == nil {
-					finishedAllGroups = false
-					continue
-				}
+		// Send all groups found during this pass to the compaction workers.
+	groupLoop:
+		for _, g := range groups {
+			select {
+			case err = <-errChan:
+				break groupLoop
+			case groupChan <- g:
 			}
-			return errors.Wrap(err, "compaction")
 		}
+		close(groupChan)
+		wg.Wait()
+
+		close(errChan)
+		workCtxCancel()
+		if err != nil {
+			errs := terrors.MultiError{err}
+			// Collect any other errors reported by the workers.
+			for e := range errChan {
+				errs.Add(e)
+			}
+			return errs
+		}
+
 		if finishedAllGroups {
 			break
 		}

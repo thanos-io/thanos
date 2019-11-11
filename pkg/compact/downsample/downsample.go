@@ -8,23 +8,30 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
-	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/value"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/chunkenc"
-	"github.com/prometheus/tsdb/chunks"
-	"github.com/prometheus/tsdb/index"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/chunks"
+	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
+	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/prometheus/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
 // Standard downsampling resolution levels in Thanos.
 const (
-	ResLevel0 = int64(0)              // raw data
-	ResLevel1 = int64(5 * 60 * 1000)  // 5 minutes in milliseconds
-	ResLevel2 = int64(60 * 60 * 1000) // 1 hour in milliseconds
+	ResLevel0 = int64(0)              // Raw data.
+	ResLevel1 = int64(5 * 60 * 1000)  // 5 minutes in milliseconds.
+	ResLevel2 = int64(60 * 60 * 1000) // 1 hour in milliseconds.
+)
+
+// Downsampling ranges i.e. after what time we start to downsample blocks (in seconds).
+const (
+	DownsampleRange0 = 40 * 60 * 60 * 1000      // 40 hours.
+	DownsampleRange1 = 10 * 24 * 60 * 60 * 1000 // 10 days.
 )
 
 // Downsample downsamples the given block. It writes a new block into dir and returns its ID.
@@ -43,13 +50,13 @@ func Downsample(
 	if err != nil {
 		return id, errors.Wrap(err, "open index reader")
 	}
-	defer runutil.CloseWithErrCapture(logger, &err, indexr, "downsample index reader")
+	defer runutil.CloseWithErrCapture(&err, indexr, "downsample index reader")
 
 	chunkr, err := b.Chunks()
 	if err != nil {
 		return id, errors.Wrap(err, "open chunk reader")
 	}
-	defer runutil.CloseWithErrCapture(logger, &err, chunkr, "downsample chunk reader")
+	defer runutil.CloseWithErrCapture(&err, chunkr, "downsample chunk reader")
 
 	// Generate new block id.
 	uid := ulid.MustNew(ulid.Now(), rand.New(rand.NewSource(time.Now().UnixNano())))
@@ -63,7 +70,7 @@ func Downsample(
 	// Remove blockDir in case of errors.
 	defer func() {
 		if err != nil {
-			var merr tsdb.MultiError
+			var merr tsdberrors.MultiError
 			merr.Add(err)
 			merr.Add(os.RemoveAll(blockDir))
 			err = merr.Err()
@@ -81,17 +88,19 @@ func Downsample(
 	if err != nil {
 		return id, errors.Wrap(err, "get streamed block writer")
 	}
-	defer runutil.CloseWithErrCapture(logger, &err, streamedBlockWriter, "close stream block writer")
+	defer runutil.CloseWithErrCapture(&err, streamedBlockWriter, "close stream block writer")
 
 	postings, err := indexr.Postings(index.AllPostingsKey())
 	if err != nil {
 		return id, errors.Wrap(err, "get all postings list")
 	}
+
 	var (
 		aggrChunks []*AggrChunk
 		all        []sample
 		chks       []chunks.Meta
 		lset       labels.Labels
+		reuseIt    chunkenc.Iterator
 	)
 	for postings.Next() {
 		lset = lset[:0]
@@ -117,7 +126,7 @@ func Downsample(
 		// Raw and already downsampled data need different processing.
 		if origMeta.Thanos.Downsample.Resolution == 0 {
 			for _, c := range chks {
-				if err := expandChunkIterator(c.Chunk.Iterator(), &all); err != nil {
+				if err := expandChunkIterator(c.Chunk.Iterator(reuseIt), &all); err != nil {
 					return id, errors.Wrapf(err, "expand chunk %d, series %d", c.Ref, postings.At())
 				}
 			}
@@ -188,16 +197,16 @@ func targetChunkCount(mint, maxt, inRes, outRes int64, count int) (x int) {
 	return x
 }
 
-// aggregator collects commulative stats for a stream of values.
+// aggregator collects cumulative stats for a stream of values.
 type aggregator struct {
-	total   int     // total samples processed
-	count   int     // samples in current window
-	sum     float64 // value sum of current window
-	min     float64 // min of current window
-	max     float64 // max of current window
-	counter float64 // total counter state since beginning
-	resets  int     // number of counter resests since beginning
-	last    float64 // last added value
+	total   int     // Total samples processed.
+	count   int     // Samples in current window.
+	sum     float64 // Value sum of current window.
+	min     float64 // Min of current window.
+	max     float64 // Max of current window.
+	counter float64 // Total counter state since beginning.
+	resets  int     // Number of counter resets since beginning.
+	last    float64 // Last added value.
 }
 
 // reset the stats to start a new aggregation window.
@@ -239,7 +248,6 @@ func (a *aggregator) add(v float64) {
 // aggrChunkBuilder builds chunks for multiple different aggregates.
 type aggrChunkBuilder struct {
 	mint, maxt int64
-	isCounter  bool
 	added      int
 
 	chunks [5]chunkenc.Chunk
@@ -424,6 +432,7 @@ func expandChunkIterator(it chunkenc.Iterator, buf *[]sample) error {
 func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (chk chunks.Meta, err error) {
 	ab := &aggrChunkBuilder{}
 	mint, maxt := int64(math.MaxInt64), int64(math.MinInt64)
+	var reuseIt chunkenc.Iterator
 
 	// do does a generic aggregation for count, sum, min, and max aggregates.
 	// Counters need special treatment.
@@ -437,7 +446,7 @@ func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (ch
 			} else if err != nil {
 				return err
 			}
-			if err := expandChunkIterator(c.Iterator(), buf); err != nil {
+			if err := expandChunkIterator(c.Iterator(reuseIt), buf); err != nil {
 				return err
 			}
 		}
@@ -487,7 +496,7 @@ func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (ch
 		} else if err != nil {
 			return chk, err
 		}
-		acs = append(acs, c.Iterator())
+		acs = append(acs, c.Iterator(reuseIt))
 	}
 	*buf = (*buf)[:0]
 	it := NewCounterSeriesIterator(acs...)
@@ -527,14 +536,14 @@ type sample struct {
 // values as counter reset.
 // Additionally, it can deal with downsampled counter chunks, which set the last value of a chunk
 // to the original last value. The last value can be detected by checking whether the timestamp
-// did not increase w.r.t to the previous sample
+// did not increase w.r.t to the previous sample.
 type CounterSeriesIterator struct {
 	chks   []chunkenc.Iterator
-	i      int     // current chunk
-	total  int     // total number of processed samples
-	lastT  int64   // timestamp of the last sample
-	lastV  float64 // value of the last sample
-	totalV float64 // total counter state since beginning of series
+	i      int     // Current chunk.
+	total  int     // Total number of processed samples.
+	lastT  int64   // Timestamp of the last sample.
+	lastV  float64 // Value of the last sample.
+	totalV float64 // Total counter state since beginning of series.
 }
 
 func NewCounterSeriesIterator(chks ...chunkenc.Iterator) *CounterSeriesIterator {
@@ -542,47 +551,47 @@ func NewCounterSeriesIterator(chks ...chunkenc.Iterator) *CounterSeriesIterator 
 }
 
 func (it *CounterSeriesIterator) Next() bool {
-	if it.i >= len(it.chks) {
-		return false
-	}
-	if ok := it.chks[it.i].Next(); !ok {
-		it.i++
-		// While iterators are ordered, they are not generally guaranteed to be
-		// non-overlapping. Ensure that the series does not go back in time by seeking at least
-		// to the next timestamp.
-		return it.Seek(it.lastT + 1)
-	}
-	t, v := it.chks[it.i].At()
-
-	if math.IsNaN(v) {
-		return it.Next()
-	}
-	// First sample sets the initial counter state.
-	if it.total == 0 {
-		it.total++
-		it.lastT, it.lastV = t, v
-		it.totalV = v
-		return true
-	}
-	// If the timestamp increased, it is not the special last sample.
-	if t > it.lastT {
-		if v >= it.lastV {
-			it.totalV += v - it.lastV
-		} else {
-			it.totalV += v
+	for {
+		if it.i >= len(it.chks) {
+			return false
 		}
-		it.lastT, it.lastV = t, v
-		it.total++
-		return true
-	}
-	// We hit a sample that indicates what the true last value was. For the
-	// next chunk we use it to determine whether there was a counter reset between them.
-	if t == it.lastT {
-		it.lastV = v
-	}
-	// Otherwise the series went back in time and we just keep moving forward.
+		if ok := it.chks[it.i].Next(); !ok {
+			it.i++
+			// While iterators are ordered, they are not generally guaranteed to be
+			// non-overlapping. Ensure that the series does not go back in time by seeking at least
+			// to the next timestamp.
+			return it.Seek(it.lastT + 1)
+		}
+		t, v := it.chks[it.i].At()
 
-	return it.Next()
+		if math.IsNaN(v) {
+			return it.Next()
+		}
+		// First sample sets the initial counter state.
+		if it.total == 0 {
+			it.total++
+			it.lastT, it.lastV = t, v
+			it.totalV = v
+			return true
+		}
+		// If the timestamp increased, it is not the special last sample.
+		if t > it.lastT {
+			if v >= it.lastV {
+				it.totalV += v - it.lastV
+			} else {
+				it.totalV += v
+			}
+			it.lastT, it.lastV = t, v
+			it.total++
+			return true
+		}
+		// We hit a sample that indicates what the true last value was. For the
+		// next chunk we use it to determine whether there was a counter reset between them.
+		if t == it.lastT {
+			it.lastV = v
+		}
+		// Otherwise the series went back in time and we just keep moving forward.
+	}
 }
 
 func (it *CounterSeriesIterator) At() (t int64, v float64) {

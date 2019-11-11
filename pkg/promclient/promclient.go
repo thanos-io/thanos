@@ -3,9 +3,13 @@
 package promclient
 
 import (
+	"bufio"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -18,17 +22,22 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/improbable-eng/thanos/pkg/tracing"
+	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/prometheus/promql"
-	"github.com/prometheus/tsdb/labels"
-	"gopkg.in/yaml.v2"
+	"github.com/prometheus/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/tracing"
+	yaml "gopkg.in/yaml.v2"
 )
 
-// IsWALFileAccesible returns no error if WAL dir can be found. This helps to tell
+var ErrFlagEndpointNotFound = errors.New("no flag endpoint found")
+
+// IsWALDirAccesible returns no error if WAL dir can be found. This helps to tell
 // if we have access to Prometheus TSDB directory.
 func IsWALDirAccesible(dir string) error {
 	const errMsg = "WAL dir is not accessible. Is this dir a TSDB directory? If yes it is shared with TSDB?"
@@ -59,15 +68,15 @@ func ExternalLabels(ctx context.Context, logger log.Logger, base *url.URL) (labe
 	if err != nil {
 		return nil, errors.Wrapf(err, "request flags against %s", u.String())
 	}
-	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
+	defer runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "query body")
 
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, errors.Errorf("failed to read body")
+		return nil, errors.New("failed to read body")
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, errors.Errorf("is 'web.enable-admin-api' flag enabled? got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
+		return nil, errors.Errorf("got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
 	}
 
 	var d struct {
@@ -102,7 +111,7 @@ type Flags struct {
 func (f *Flags) UnmarshalJSON(b []byte) error {
 	// TODO(bwplotka): Avoid this custom unmarshal by:
 	// - prometheus/common: adding unmarshalJSON to modelDuration
-	// - prometheus/prometheus: flags should return proper JSON. (not bool in string)
+	// - prometheus/prometheus: flags should return proper JSON (not bool in string).
 	parsableFlags := struct {
 		TSDBPath           string        `json:"storage.tsdb.path"`
 		TSDBRetention      modelDuration `json:"storage.tsdb.retention"`
@@ -171,29 +180,35 @@ func ConfiguredFlags(ctx context.Context, logger log.Logger, base *url.URL) (Fla
 	if err != nil {
 		return Flags{}, errors.Wrap(err, "create request")
 	}
+
 	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
 	if err != nil {
 		return Flags{}, errors.Wrapf(err, "request config against %s", u.String())
 	}
-	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
+	defer runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "query body")
 
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return Flags{}, errors.Errorf("failed to read body")
+		return Flags{}, errors.New("failed to read body")
 	}
 
-	if resp.StatusCode != 200 {
+	switch resp.StatusCode {
+	case 404:
+		return Flags{}, ErrFlagEndpointNotFound
+	case 200:
+		var d struct {
+			Data Flags `json:"data"`
+		}
+
+		if err := json.Unmarshal(b, &d); err != nil {
+			return Flags{}, errors.Wrapf(err, "unmarshal response: %v", string(b))
+		}
+
+		return d.Data, nil
+	default:
 		return Flags{}, errors.Errorf("got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
 	}
 
-	var d struct {
-		Data Flags `json:"data"`
-	}
-	if err := json.Unmarshal(b, &d); err != nil {
-		return Flags{}, errors.Wrapf(err, "unmarshal response: %v", string(b))
-	}
-
-	return d.Data, nil
 }
 
 // Snapshot will request Prometheus to perform snapshot in directory returned by this function.
@@ -219,15 +234,15 @@ func Snapshot(ctx context.Context, logger log.Logger, base *url.URL, skipHead bo
 	if err != nil {
 		return "", errors.Wrapf(err, "request snapshot against %s", u.String())
 	}
-	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
+	defer runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "query body")
 
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return "", errors.Errorf("failed to read body")
+		return "", errors.New("failed to read body")
 	}
 
 	if resp.StatusCode != 200 {
-		return "", errors.Errorf("got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
+		return "", errors.Errorf("is 'web.enable-admin-api' flag enabled? got non-200 response code: %v, response: %v", resp.StatusCode, string(b))
 	}
 
 	var d struct {
@@ -242,24 +257,55 @@ func Snapshot(ctx context.Context, logger log.Logger, base *url.URL, skipHead bo
 	return path.Join("snapshots", d.Data.Name), nil
 }
 
+type QueryOptions struct {
+	Deduplicate             bool
+	PartialResponseStrategy storepb.PartialResponseStrategy
+}
+
+func (p *QueryOptions) AddTo(values url.Values) error {
+	values.Add("dedup", fmt.Sprintf("%v", p.Deduplicate))
+
+	var partialResponseValue string
+	switch p.PartialResponseStrategy {
+	case storepb.PartialResponseStrategy_WARN:
+		partialResponseValue = strconv.FormatBool(true)
+	case storepb.PartialResponseStrategy_ABORT:
+		partialResponseValue = strconv.FormatBool(false)
+	default:
+		return errors.Errorf("unknown partial response strategy %v", p.PartialResponseStrategy)
+	}
+
+	// TODO(bwplotka): Apply change from bool to strategy in Query API as well.
+	values.Add("partial_response", partialResponseValue)
+
+	return nil
+}
+
 // QueryInstant performs instant query and returns results in model.Vector type.
-func QueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query string, t time.Time, dedup bool) (model.Vector, error) {
+func QueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query string, t time.Time, opts QueryOptions) (model.Vector, []string, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 
-	u := *base
-	u.Path = path.Join(u.Path, "/api/v1/query")
-
-	params := url.Values{}
+	params, err := url.ParseQuery(base.RawQuery)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "parse raw query %s", base.RawQuery)
+	}
 	params.Add("query", query)
 	params.Add("time", t.Format(time.RFC3339Nano))
-	params.Add("dedup", fmt.Sprintf("%v", dedup))
+	if err := opts.AddTo(params); err != nil {
+		return nil, nil, errors.Wrap(err, "add thanos opts query params")
+	}
+
+	u := *base
+	u.Path = path.Join(u.Path, "/api/v1/query")
 	u.RawQuery = params.Encode()
+
+	level.Debug(logger).Log("msg", "querying instant", "url", u.String())
 
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, errors.Wrap(err, "create GET request")
 	}
 
 	req = req.WithContext(ctx)
@@ -269,9 +315,9 @@ func QueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query s
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, errors.Wrapf(err, "perform GET request against %s", u.String())
 	}
-	defer runutil.CloseWithLogOnErr(logger, resp.Body, "query body")
+	defer runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "query body")
 
 	// Decode only ResultType and load Result only as RawJson since we don't know
 	// structure of the Result yet.
@@ -280,37 +326,54 @@ func QueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query s
 			ResultType string          `json:"resultType"`
 			Result     json.RawMessage `json:"result"`
 		} `json:"data"`
+
+		Error     string `json:"error,omitempty"`
+		ErrorType string `json:"errorType,omitempty"`
+		// Extra field supported by Thanos Querier.
+		Warnings []string `json:"warnings"`
 	}
 
-	if err = json.NewDecoder(resp.Body).Decode(&m); err != nil {
-		return nil, err
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "read query instant response")
+	}
+
+	if err = json.Unmarshal(body, &m); err != nil {
+		return nil, nil, errors.Wrap(err, "unmarshal query instant response")
 	}
 
 	var vectorResult model.Vector
 
 	// Decode the Result depending on the ResultType
-	// Currently only `vector` and `scalar` types are supported
+	// Currently only `vector` and `scalar` types are supported.
 	switch m.Data.ResultType {
 	case promql.ValueTypeVector:
 		if err = json.Unmarshal(m.Data.Result, &vectorResult); err != nil {
-			return nil, err
+			return nil, nil, errors.Wrap(err, "decode result into ValueTypeVector")
 		}
 	case promql.ValueTypeScalar:
 		vectorResult, err = convertScalarJSONToVector(m.Data.Result)
 		if err != nil {
-			return nil, err
+			return nil, nil, errors.Wrap(err, "decode result into ValueTypeScalar")
 		}
 	default:
-		return nil, errors.Errorf("unknown response type: '%q'", m.Data.ResultType)
+		if m.Warnings != nil {
+			return nil, nil, errors.Errorf("error: %s, type: %s, warning: %s", m.Error, m.ErrorType, strings.Join(m.Warnings, ", "))
+		}
+		if m.Error != "" {
+			return nil, nil, errors.Errorf("error: %s, type: %s", m.Error, m.ErrorType)
+		}
+
+		return nil, nil, errors.Errorf("received status code: %d, unknown response type: '%q'", resp.StatusCode, m.Data.ResultType)
 	}
-	return vectorResult, nil
+	return vectorResult, m.Warnings, nil
 }
 
 // PromqlQueryInstant performs instant query and returns results in promql.Vector type that is compatible with promql package.
-func PromqlQueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query string, t time.Time, dedup bool) (promql.Vector, error) {
-	vectorResult, err := QueryInstant(ctx, logger, base, query, t, dedup)
+func PromqlQueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query string, t time.Time, opts QueryOptions) (promql.Vector, []string, error) {
+	vectorResult, warnings, err := QueryInstant(ctx, logger, base, query, t, opts)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	vec := make(promql.Vector, 0, len(vectorResult))
@@ -332,7 +395,7 @@ func PromqlQueryInstant(ctx context.Context, logger log.Logger, base *url.URL, q
 		})
 	}
 
-	return vec, nil
+	return vec, warnings, nil
 }
 
 // Scalar response consists of array with mixed types so it needs to be
@@ -340,7 +403,7 @@ func PromqlQueryInstant(ctx context.Context, logger log.Logger, base *url.URL, q
 func convertScalarJSONToVector(scalarJSONResult json.RawMessage) (model.Vector, error) {
 	var (
 		// Do not specify exact length of the expected slice since JSON unmarshaling
-		// would make the leght fit the size and we won't be able to check the length afterwards.
+		// would make the length fit the size and we won't be able to check the length afterwards.
 		resultPointSlice []json.RawMessage
 		resultTime       model.Time
 		resultValue      model.SampleValue
@@ -361,4 +424,79 @@ func convertScalarJSONToVector(scalarJSONResult json.RawMessage) (model.Vector, 
 		Metric:    model.Metric{},
 		Value:     resultValue,
 		Timestamp: resultTime}}, nil
+}
+
+// MetricValues returns current value of  instant query and returns results in model.Vector type.
+func MetricValues(ctx context.Context, logger log.Logger, base *url.URL, perMetricFn func(metric promlabels.Labels, val float64) error) error {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
+
+	u := *base
+	u.Path = path.Join(u.Path, "/metrics")
+
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return errors.Wrap(err, "create GET request")
+	}
+
+	req.Header.Add("Accept", `application/openmetrics-text; version=0.0.1,text/plain;version=0.0.4;q=0.5,*/*;q=0.1`)
+	req.Header.Add("Accept-Encoding", "gzip")
+
+	req = req.WithContext(ctx)
+
+	client := &http.Client{
+		Transport: tracing.HTTPTripperware(logger, http.DefaultTransport),
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return errors.Wrapf(err, "perform GET request against %s", u.String())
+	}
+	defer runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "metrics body")
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.Errorf("server returned HTTP status %s", resp.Status)
+	}
+
+	b := &bytes.Buffer{}
+	if resp.Header.Get("Content-Encoding") != "gzip" {
+		_, err = io.Copy(b, resp.Body)
+		if err != nil {
+			return err
+		}
+	} else {
+		buf := bufio.NewReader(resp.Body)
+		gzipr, err := gzip.NewReader(buf)
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(b, gzipr)
+		_ = gzipr.Close()
+		if err != nil {
+			return err
+		}
+	}
+
+	p := textparse.New(b.Bytes(), resp.Header.Get("Content-Type"))
+	for {
+		var et textparse.Entry
+		if et, err = p.Next(); err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+
+		if et != textparse.EntrySeries {
+			continue
+		}
+
+		var lset promlabels.Labels
+		_ = p.Metric(&lset)
+		_, _, v := p.Series()
+
+		if err := perMetricFn(lset, v); err != nil {
+			return err
+		}
+	}
 }

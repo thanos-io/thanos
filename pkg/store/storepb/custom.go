@@ -6,6 +6,14 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 )
 
+var PartialResponseStrategyValues = func() []string {
+	var s []string
+	for k := range PartialResponseStrategy_value {
+		s = append(s, k)
+	}
+	return s
+}()
+
 func NewWarnSeriesResponse(err error) *SeriesResponse {
 	return &SeriesResponse{
 		Result: &SeriesResponse_Warning{
@@ -68,7 +76,7 @@ func MergeSeriesSets(all ...SeriesSet) SeriesSet {
 }
 
 // SeriesSet is a set of series and their corresponding chunks.
-// The set is sorted by the label sets. Chunks may be overlapping or out of order.
+// The set is sorted by the label sets. Chunks may be overlapping or expected of order.
 type SeriesSet interface {
 	Next() bool
 	At() ([]Label, []AggrChunk)
@@ -87,6 +95,8 @@ type mergedSeriesSet struct {
 // newMergedSeriesSet takes two series sets as a single series set.
 // Series that occur in both sets should have disjoint time ranges.
 // If the ranges overlap b samples are appended to a samples.
+// If the single SeriesSet returns same series within many iterations,
+// merge series set will not try to merge those.
 func newMergedSeriesSet(a, b SeriesSet) *mergedSeriesSet {
 	s := &mergedSeriesSet{a: a, b: b}
 	// Initialize first elements of both sets as Next() needs
@@ -135,7 +145,7 @@ func (s *mergedSeriesSet) Next() bool {
 		s.lset, s.chunks = s.a.At()
 		s.adone = !s.a.Next()
 	} else {
-		// Concatenate chunks from both series sets. They may be out of order
+		// Concatenate chunks from both series sets. They may be expected of order
 		// w.r.t to their time range. This must be accounted for later.
 		lset, chksA := s.a.At()
 		_, chksB := s.b.At()
@@ -154,7 +164,7 @@ func (s *mergedSeriesSet) Next() bool {
 }
 
 func LabelsToPromLabels(lset []Label) labels.Labels {
-	ret := make(labels.Labels, len(lset), len(lset))
+	ret := make(labels.Labels, len(lset))
 	for i, l := range lset {
 		ret[i] = labels.Label{Name: l.Name, Value: l.Value}
 	}
@@ -168,4 +178,12 @@ func LabelsToString(lset []Label) string {
 		s = append(s, l.String())
 	}
 	return "[" + strings.Join(s, ",") + "]"
+}
+
+func LabelSetsToString(lsets []LabelSet) string {
+	s := []string{}
+	for _, ls := range lsets {
+		s = append(s, LabelsToString(ls.Labels))
+	}
+	return strings.Join(s, "")
 }

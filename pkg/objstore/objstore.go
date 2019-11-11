@@ -2,17 +2,20 @@ package objstore
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
 // Bucket provides read and write access to an object storage bucket.
@@ -22,9 +25,11 @@ type Bucket interface {
 	BucketReader
 
 	// Upload the contents of the reader as an object into the bucket.
+	// Upload should be idempotent.
 	Upload(ctx context.Context, name string, r io.Reader) error
 
 	// Delete removes the object with the given name.
+	// If object does not exists in the moment of deletion, Delete should throw error.
 	Delete(ctx context.Context, name string) error
 
 	// Name returns the bucket name for the provider.
@@ -75,7 +80,7 @@ func UploadDir(ctx context.Context, logger log.Logger, bkt Bucket, srcdir, dstdi
 }
 
 // UploadFile uploads the file with the given name to the bucket.
-// It is a caller responsibility to clean partial upload in case of failure
+// It is a caller responsibility to clean partial upload in case of failure.
 func UploadFile(ctx context.Context, logger log.Logger, bkt Bucket, src, dst string) error {
 	r, err := os.Open(src)
 	if err != nil {
@@ -86,27 +91,17 @@ func UploadFile(ctx context.Context, logger log.Logger, bkt Bucket, src, dst str
 	if err := bkt.Upload(ctx, dst, r); err != nil {
 		return errors.Wrapf(err, "upload file %s as %s", src, dst)
 	}
+	level.Debug(logger).Log("msg", "uploaded file", "from", src, "dst", dst, "bucket", bkt.Name())
 	return nil
 }
 
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const DirDelim = "/"
 
-// DeleteDir removes all objects prefixed with dir from the bucket.
-func DeleteDir(ctx context.Context, bkt Bucket, dir string) error {
-	return bkt.Iter(ctx, dir, func(name string) error {
-		// If we hit a directory, call DeleteDir recursively.
-		if strings.HasSuffix(name, DirDelim) {
-			return DeleteDir(ctx, bkt, name)
-		}
-		return bkt.Delete(ctx, name)
-	})
-}
-
 // DownloadFile downloads the src file from the bucket to dst. If dst is an existing
 // directory, a file with the same name as the source is created in dst.
 // If destination file is already existing, download file will overwrite it.
-func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src, dst string) error {
+func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src, dst string) (err error) {
 	if fi, err := os.Stat(dst); err == nil {
 		if fi.IsDir() {
 			dst = filepath.Join(dst, filepath.Base(src))
@@ -117,7 +112,7 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 
 	rc, err := bkt.Get(ctx, src)
 	if err != nil {
-		return errors.Wrap(err, "get file")
+		return errors.Wrapf(err, "get file %s", src)
 	}
 	defer runutil.CloseWithLogOnErr(logger, rc, "download block's file reader")
 
@@ -125,8 +120,6 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 	if err != nil {
 		return errors.Wrap(err, "create file")
 	}
-	defer runutil.CloseWithLogOnErr(logger, f, "download block's output file")
-
 	defer func() {
 		if err != nil {
 			if rerr := os.Remove(dst); rerr != nil {
@@ -134,6 +127,8 @@ func DownloadFile(ctx context.Context, logger log.Logger, bkt BucketReader, src,
 			}
 		}
 	}()
+	defer runutil.CloseWithLogOnErr(logger, f, "download block's output file")
+
 	if _, err = io.Copy(f, rc); err != nil {
 		return errors.Wrap(err, "copy object to file")
 	}
@@ -168,6 +163,23 @@ func DownloadDir(ctx context.Context, logger log.Logger, bkt BucketReader, src, 
 	}
 
 	return nil
+}
+
+// Exists returns true, if file exists, otherwise false and nil error if presence IsObjNotFoundErr, otherwise false with
+// returning error.
+func Exists(ctx context.Context, bkt Bucket, src string) (bool, error) {
+	rc, err := bkt.Get(ctx, src)
+	if rc != nil {
+		_ = rc.Close()
+	}
+	if err != nil {
+		if bkt.IsObjNotFoundErr(err) {
+			return false, nil
+		}
+		return false, errors.Wrap(err, "stat object")
+	}
+
+	return true, nil
 }
 
 // BucketWithMetrics takes a bucket and registers metrics with the given registry for
@@ -286,7 +298,7 @@ func (b *metricBucket) Upload(ctx context.Context, name string, r io.Reader) err
 	if err != nil {
 		b.opsFailures.WithLabelValues(op).Inc()
 	} else {
-		//TODO: Use SetToCurrentTime() once we update the Prometheus client_golang
+		// TODO: Use SetToCurrentTime() once we update the Prometheus client_golang.
 		b.lastSuccessfullUploadTime.WithLabelValues(b.bkt.Name()).Set(float64(time.Now().UnixNano()) / 1e9)
 	}
 	b.ops.WithLabelValues(op).Inc()
@@ -362,4 +374,15 @@ func (rc *timingReadCloser) Read(b []byte) (n int, err error) {
 		rc.ok = false
 	}
 	return n, err
+}
+
+func CreateTemporaryTestBucketName(t testing.TB) string {
+	src := rand.NewSource(time.Now().UnixNano())
+
+	// Bucket name need to conform: https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-s3-bucket-naming-requirements.html.
+	name := strings.Replace(strings.Replace(fmt.Sprintf("test_%x_%s", src.Int63(), strings.ToLower(t.Name())), "_", "-", -1), "/", "-", -1)
+	if len(name) >= 63 {
+		name = name[:63]
+	}
+	return name
 }

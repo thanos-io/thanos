@@ -11,16 +11,16 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/value"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/chunkenc"
-	"github.com/prometheus/tsdb/chunks"
-	"github.com/prometheus/tsdb/index"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/chunks"
+	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/prometheus/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestExpandChunkIterator(t *testing.T) {
@@ -83,9 +83,9 @@ func TestDownsampleAggr(t *testing.T) {
 					{199, 5}, {299, 1}, {399, 10}, {400, -3}, {499, 10}, {699, 0}, {999, 100},
 				},
 				AggrCounter: {
-					{99, 100}, {299, 150}, {499, 210}, {499, 10}, // chunk 1
-					{599, 20}, {799, 50}, {999, 120}, {999, 50}, // chunk 2, no reset
-					{1099, 40}, {1199, 80}, {1299, 110}, // chunk 3, reset
+					{99, 100}, {299, 150}, {499, 210}, {499, 10}, // Chunk 1.
+					{599, 20}, {799, 50}, {999, 120}, {999, 50}, // Chunk 2, no reset.
+					{1099, 40}, {1199, 80}, {1299, 110}, // Chunk 3, reset.
 				},
 			},
 			output: map[AggrType][]sample{
@@ -163,6 +163,9 @@ func testDownsample(t *testing.T, data []*downsampleTestSet, meta *metadata.Meta
 	id, err := Downsample(log.NewNopLogger(), meta, mb, dir, resolution)
 	testutil.Ok(t, err)
 
+	_, err = metadata.Read(filepath.Join(dir, id.String()))
+	testutil.Ok(t, err)
+
 	exp := map[uint64]map[AggrType][]sample{}
 	got := map[uint64]map[AggrType][]sample{}
 
@@ -202,7 +205,7 @@ func testDownsample(t *testing.T, data []*downsampleTestSet, meta *metadata.Meta
 				testutil.Ok(t, err)
 
 				buf := m[at]
-				testutil.Ok(t, expandChunkIterator(c.Iterator(), &buf))
+				testutil.Ok(t, expandChunkIterator(c.Iterator(nil), &buf))
 				m[at] = buf
 			}
 		}
@@ -241,10 +244,10 @@ func TestCounterSeriesIterator(t *testing.T) {
 
 	chunks := [][]sample{
 		{{100, 10}, {200, 20}, {300, 10}, {400, 20}, {400, 5}},
-		{{500, 10}, {600, 20}, {700, 30}, {800, 40}, {800, 10}}, // no actual reset
-		{{900, 5}, {1000, 10}, {1100, 15}},                      // actual reset
-		{{1200, 20}, {1250, staleMarker}, {1300, 40}},           // no special last sample, no reset
-		{{1400, 30}, {1500, 30}, {1600, 50}},                    // no special last sample, reset
+		{{500, 10}, {600, 20}, {700, 30}, {800, 40}, {800, 10}}, // No actual reset.
+		{{900, 5}, {1000, 10}, {1100, 15}},                      // Actual reset.
+		{{1200, 20}, {1250, staleMarker}, {1300, 40}},           // No special last sample, no reset.
+		{{1400, 30}, {1500, 30}, {1600, 50}},                    // No special last sample, reset.
 	}
 	exp := []sample{
 		{100, 10}, {200, 20}, {300, 30}, {400, 40}, {500, 45},
@@ -390,6 +393,8 @@ type memBlock struct {
 	chunks   []chunkenc.Chunk
 
 	numberOfChunks uint64
+
+	minTime, maxTime int64
 }
 
 type series struct {
@@ -398,7 +403,7 @@ type series struct {
 }
 
 func newMemBlock() *memBlock {
-	return &memBlock{symbols: map[string]struct{}{}}
+	return &memBlock{symbols: map[string]struct{}{}, minTime: -1, maxTime: -1}
 }
 
 func (b *memBlock) addSeries(s *series) {
@@ -412,10 +417,36 @@ func (b *memBlock) addSeries(s *series) {
 	}
 
 	for i, cm := range s.chunks {
+		if b.minTime == -1 || cm.MinTime < b.minTime {
+			b.minTime = cm.MinTime
+		}
+		if b.maxTime == -1 || cm.MaxTime < b.maxTime {
+			b.maxTime = cm.MaxTime
+		}
 		s.chunks[i].Ref = b.numberOfChunks
 		b.chunks = append(b.chunks, cm.Chunk)
 		b.numberOfChunks++
 	}
+}
+
+func (b *memBlock) MinTime() int64 {
+	if b.minTime == -1 {
+		return 0
+	}
+
+	return b.minTime
+}
+
+func (b *memBlock) MaxTime() int64 {
+	if b.maxTime == -1 {
+		return 0
+	}
+
+	return b.maxTime
+}
+
+func (b *memBlock) Meta() tsdb.BlockMeta {
+	return tsdb.BlockMeta{}
 }
 
 func (b *memBlock) Postings(name, val string) (index.Postings, error) {

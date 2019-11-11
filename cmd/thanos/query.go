@@ -2,12 +2,8 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"math"
-	"net"
 	"net/http"
 	"path"
 	"time"
@@ -16,40 +12,42 @@ import (
 	"github.com/go-kit/kit/log/level"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
-	"github.com/improbable-eng/thanos/pkg/cluster"
-	"github.com/improbable-eng/thanos/pkg/component"
-	"github.com/improbable-eng/thanos/pkg/discovery/cache"
-	"github.com/improbable-eng/thanos/pkg/discovery/dns"
-	"github.com/improbable-eng/thanos/pkg/extprom"
-	"github.com/improbable-eng/thanos/pkg/query"
-	v1 "github.com/improbable-eng/thanos/pkg/query/api"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/improbable-eng/thanos/pkg/store"
-	"github.com/improbable-eng/thanos/pkg/store/storepb"
-	"github.com/improbable-eng/thanos/pkg/tracing"
-	"github.com/improbable-eng/thanos/pkg/ui"
 	"github.com/oklog/run"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/promql"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/discovery/cache"
+	"github.com/thanos-io/thanos/pkg/discovery/dns"
+	"github.com/thanos-io/thanos/pkg/extprom"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/prober"
+	"github.com/thanos-io/thanos/pkg/query"
+	v1 "github.com/thanos-io/thanos/pkg/query/api"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
+	httpserver "github.com/thanos-io/thanos/pkg/server/http"
+	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/tls"
+	"github.com/thanos-io/thanos/pkg/tracing"
+	"github.com/thanos-io/thanos/pkg/ui"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"gopkg.in/alecthomas/kingpin.v2"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 // registerQuery registers a query command.
-func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
+func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
+	comp := component.Query
+	cmd := app.Command(comp.String(), "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
 
-	grpcBindAddr, httpBindAddr, srvCert, srvKey, srvClientCA, newPeerFn := regCommonServerFlags(cmd)
-
-	httpAdvertiseAddr := cmd.Flag("http-advertise-address", "Explicit (external) host:port address to advertise for HTTP QueryAPI in gossip cluster. If empty, 'http-address' will be used.").
-		String()
+	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
+	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := regGRPCFlags(cmd)
 
 	secure := cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").Bool()
 	cert := cmd.Flag("grpc-client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").String()
@@ -67,8 +65,10 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
 		Default("20").Int()
 
-	replicaLabel := cmd.Flag("query.replica-label", "Label to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter.").
-		String()
+	replicaLabels := cmd.Flag("query.replica-label", "Labels to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter.").
+		Strings()
+
+	instantDefaultMaxSourceResolution := modelDuration(cmd.Flag("query.instant.default.max_source_resolution", "default value for max_source_resolution for instant queries. If not set, defaults to 0s only taking raw resolution into account. 1h can be a good value if you use instant queries over time ranges that incorporate times outside of your raw-retention.").Default("0s").Hidden())
 
 	selectorLabels := cmd.Flag("selector-label", "Query selector labels that will be exposed in info endpoint (repeated).").
 		PlaceHolder("<name>=\"<value>\"").Strings()
@@ -82,20 +82,26 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	fileSDInterval := modelDuration(cmd.Flag("store.sd-interval", "Refresh interval to re-read file SD files. It is used as a resync fallback.").
 		Default("5m"))
 
+	// TODO(bwplotka): Grab this from TTL at some point.
 	dnsSDInterval := modelDuration(cmd.Flag("store.sd-dns-interval", "Interval between DNS resolutions.").
 		Default("30s"))
 
-	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified. ").
+	dnsSDResolver := cmd.Flag("store.sd-dns-resolver", fmt.Sprintf("Resolver to use. Possible options: [%s, %s]", dns.GolangResolverType, dns.MiekgdnsResolverType)).
+		Default(string(dns.GolangResolverType)).Hidden().String()
+
+	unhealthyStoreTimeout := modelDuration(cmd.Flag("store.unhealthy-timeout", "Timeout before an unhealthy store is cleaned from the store UI page.").Default("5m"))
+
+	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified.").
 		Default("false").Bool()
 
-	enablePartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified.").
+	enablePartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified. --no-query.partial-response for disabling.").
 		Default("true").Bool()
 
-	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
-		peer, err := newPeerFn(logger, reg, true, *httpAdvertiseAddr, true)
-		if err != nil {
-			return errors.Wrap(err, "new cluster peer")
-		}
+	defaultEvaluationInterval := modelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
+
+	storeResponseTimeout := modelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
+
+	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
 		if err != nil {
 			return errors.Wrap(err, "parse federation labels")
@@ -119,39 +125,47 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			fileSD = file.NewDiscovery(conf, logger)
 		}
 
+		promql.SetDefaultEvaluationInterval(time.Duration(*defaultEvaluationInterval))
+
 		return runQuery(
 			g,
 			logger,
 			reg,
 			tracer,
 			*grpcBindAddr,
-			*srvCert,
-			*srvKey,
-			*srvClientCA,
+			time.Duration(*grpcGracePeriod),
+			*grpcCert,
+			*grpcKey,
+			*grpcClientCA,
 			*secure,
 			*cert,
 			*key,
 			*caCert,
 			*serverName,
 			*httpBindAddr,
+			time.Duration(*httpGracePeriod),
 			*webRoutePrefix,
 			*webExternalPrefix,
 			*webPrefixHeaderName,
 			*maxConcurrentQueries,
 			time.Duration(*queryTimeout),
-			*replicaLabel,
-			peer,
+			time.Duration(*storeResponseTimeout),
+			*replicaLabels,
 			selectorLset,
 			*stores,
 			*enableAutodownsampling,
 			*enablePartialResponse,
 			fileSD,
 			time.Duration(*dnsSDInterval),
+			*dnsSDResolver,
+			time.Duration(*unhealthyStoreTimeout),
+			time.Duration(*instantDefaultMaxSourceResolution),
+			component.Query,
 		)
 	}
 }
 
-func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, secure bool, cert, key, caCert string, serverName string) ([]grpc.DialOption, error) {
+func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, secure bool, cert, key, caCert, serverName string) ([]grpc.DialOption, error) {
 	grpcMets := grpc_prometheus.NewClientMetrics()
 	grpcMets.EnableClientHandlingTimeHistogram(
 		grpc_prometheus.WithHistogramBuckets([]float64{
@@ -186,50 +200,13 @@ func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer ope
 		return append(dialOpts, grpc.WithInsecure()), nil
 	}
 
-	level.Info(logger).Log("msg", "Enabling client to server TLS")
+	level.Info(logger).Log("msg", "enabling client to server TLS")
 
-	var certPool *x509.CertPool
-
-	if caCert != "" {
-		caPEM, err := ioutil.ReadFile(caCert)
-		if err != nil {
-			return nil, errors.Wrap(err, "reading client CA")
-		}
-
-		certPool = x509.NewCertPool()
-		if !certPool.AppendCertsFromPEM(caPEM) {
-			return nil, errors.Wrap(err, "building client CA")
-		}
-		level.Info(logger).Log("msg", "TLS Client using provided certificate pool")
-	} else {
-		var err error
-		certPool, err = x509.SystemCertPool()
-		if err != nil {
-			return nil, errors.Wrap(err, "reading system certificate pool")
-		}
-		level.Info(logger).Log("msg", "TLS Client using system certificate pool")
+	tlsCfg, err := tls.NewClientConfig(logger, cert, key, caCert, serverName)
+	if err != nil {
+		return nil, err
 	}
-
-	tlsCfg := &tls.Config{
-		RootCAs: certPool,
-	}
-
-	if serverName != "" {
-		tlsCfg.ServerName = serverName
-	}
-
-	if cert != "" {
-		cert, err := tls.LoadX509KeyPair(cert, key)
-		if err != nil {
-			return nil, errors.Wrap(err, "client credentials")
-		}
-		tlsCfg.Certificates = []tls.Certificate{cert}
-		level.Info(logger).Log("msg", "TLS Client authentication enabled")
-	}
-
-	creds := credentials.NewTLS(tlsCfg)
-
-	return append(dialOpts, grpc.WithTransportCredentials(creds)), nil
+	return append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg))), nil
 }
 
 // runQuery starts a server that exposes PromQL Query API. It is responsible for querying configured
@@ -240,28 +217,34 @@ func runQuery(
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	grpcBindAddr string,
-	srvCert string,
-	srvKey string,
-	srvClientCA string,
+	grpcGracePeriod time.Duration,
+	grpcCert string,
+	grpcKey string,
+	grpcClientCA string,
 	secure bool,
 	cert string,
 	key string,
 	caCert string,
 	serverName string,
 	httpBindAddr string,
+	httpGracePeriod time.Duration,
 	webRoutePrefix string,
 	webExternalPrefix string,
 	webPrefixHeaderName string,
 	maxConcurrentQueries int,
 	queryTimeout time.Duration,
-	replicaLabel string,
-	peer cluster.Peer,
+	storeResponseTimeout time.Duration,
+	replicaLabels []string,
 	selectorLset labels.Labels,
 	storeAddrs []string,
 	enableAutodownsampling bool,
 	enablePartialResponse bool,
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
+	dnsSDResolver string,
+	unhealthyStoreTimeout time.Duration,
+	instantDefaultMaxSourceResolution time.Duration,
+	comp component.Component,
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
 	duplicatedStores := prometheus.NewCounter(prometheus.CounterOpts{
@@ -276,23 +259,17 @@ func runQuery(
 	}
 
 	fileSDCache := cache.New()
-	dnsProvider := dns.NewProvider(logger, extprom.NewSubsystem(reg, "query_store_api"))
+	dnsProvider := dns.NewProvider(
+		logger,
+		extprom.WrapRegistererWithPrefix("thanos_querier_store_apis_", reg),
+		dns.ResolverType(dnsSDResolver),
+	)
 
 	var (
 		stores = query.NewStoreSet(
 			logger,
 			reg,
 			func() (specs []query.StoreSpec) {
-				// Add store specs from gossip.
-				for id, ps := range peer.PeerStates(cluster.PeerTypesStoreAPIs()...) {
-					if ps.StoreAPIAddr == "" {
-						level.Error(logger).Log("msg", "Gossip found peer that propagates empty address, ignoring.", "lset", fmt.Sprintf("%v", ps.Metadata.Labels))
-						continue
-					}
-
-					specs = append(specs, &gossipSpec{id: id, addr: ps.StoreAPIAddr, stateFetcher: peer})
-				}
-
 				// Add DNS resolved addresses from static flags and file SD.
 				for _, addr := range dnsProvider.Addresses() {
 					specs = append(specs, query.NewGRPCStoreSpec(addr))
@@ -303,15 +280,16 @@ func runQuery(
 				return specs
 			},
 			dialOpts,
+			unhealthyStoreTimeout,
 		)
-		proxy            = store.NewProxyStore(logger, stores.Get, component.Query, selectorLset)
-		queryableCreator = query.NewQueryableCreator(logger, proxy, replicaLabel)
+		proxy            = store.NewProxyStore(logger, stores.Get, component.Query, selectorLset, storeResponseTimeout)
+		queryableCreator = query.NewQueryableCreator(logger, proxy)
 		engine           = promql.NewEngine(
 			promql.EngineOpts{
 				Logger:        logger,
 				Reg:           reg,
 				MaxConcurrent: maxConcurrentQueries,
-				// TODO(bwplotka): Expose this as a flag: https://github.com/improbable-eng/thanos/issues/703
+				// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
 				MaxSamples: math.MaxInt32,
 				Timeout:    queryTimeout,
 			},
@@ -355,6 +333,7 @@ func runQuery(
 					}
 					fileSDCache.Update(update)
 					stores.Update(ctxUpdate)
+					dnsProvider.Resolve(ctxUpdate, append(fileSDCache.Addresses(), storeAddrs...))
 				case <-ctxUpdate.Done():
 					return nil
 				}
@@ -362,21 +341,6 @@ func runQuery(
 		}, func(error) {
 			cancelUpdate()
 			close(fileSDUpdates)
-		})
-	}
-	{
-		ctx, cancel := context.WithCancel(context.Background())
-		g.Add(func() error {
-			// New gossip cluster.
-			if err := peer.Join(cluster.PeerTypeQuery, cluster.PeerMetadata{}); err != nil {
-				return errors.Wrap(err, "join cluster")
-			}
-
-			<-ctx.Done()
-			return nil
-		}, func(error) {
-			cancel()
-			peer.Close(5 * time.Second)
 		})
 	}
 	// Periodically update the addresses from static flags and file SD by resolving them using DNS SD if necessary.
@@ -392,10 +356,12 @@ func runQuery(
 		})
 	}
 	// Start query API + UI HTTP server.
+
+	statusProber := prober.NewProber(comp, logger, reg)
 	{
 		router := route.New()
 
-		// redirect from / to /webRoutePrefix
+		// Redirect from / to /webRoutePrefix.
 		if webRoutePrefix != "" {
 			router.Get("/", func(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, webRoutePrefix, http.StatusFound)
@@ -408,58 +374,41 @@ func runQuery(
 			"web.prefix-header":   webPrefixHeaderName,
 		}
 
-		ui.NewQueryUI(logger, stores, flagsMap).Register(router.WithPrefix(webRoutePrefix))
+		ins := extpromhttp.NewInstrumentationMiddleware(reg)
+		ui.NewQueryUI(logger, reg, stores, flagsMap).Register(router.WithPrefix(webRoutePrefix), ins)
 
-		api := v1.NewAPI(logger, reg, engine, queryableCreator, enableAutodownsampling, enablePartialResponse)
+		api := v1.NewAPI(logger, reg, engine, queryableCreator, enableAutodownsampling, enablePartialResponse, replicaLabels, instantDefaultMaxSourceResolution)
 
-		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger)
+		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
 
-		router.Get("/-/healthy", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			if _, err := fmt.Fprintf(w, "Thanos Querier is Healthy.\n"); err != nil {
-				level.Error(logger).Log("msg", "Could not write health check response.")
-			}
-		})
+		// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
+		srv := httpserver.New(logger, reg, comp, statusProber,
+			httpserver.WithListen(httpBindAddr),
+			httpserver.WithGracePeriod(httpGracePeriod),
+		)
+		srv.Handle("/", router)
 
-		mux := http.NewServeMux()
-		registerMetrics(mux, reg)
-		registerProfile(mux)
-		mux.Handle("/", router)
-
-		l, err := net.Listen("tcp", httpBindAddr)
-		if err != nil {
-			return errors.Wrapf(err, "listen HTTP on address %s", httpBindAddr)
-		}
-
-		g.Add(func() error {
-			level.Info(logger).Log("msg", "Listening for query and metrics", "address", httpBindAddr)
-			return errors.Wrap(http.Serve(l, mux), "serve query")
-		}, func(error) {
-			runutil.CloseWithLogOnErr(logger, l, "query and metric listener")
-		})
+		g.Add(srv.ListenAndServe, srv.Shutdown)
 	}
 	// Start query (proxy) gRPC StoreAPI.
 	{
-		l, err := net.Listen("tcp", grpcBindAddr)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcCert, grpcKey, grpcClientCA)
 		if err != nil {
-			return errors.Wrapf(err, "listen gRPC on address")
-		}
-		logger := log.With(logger, "component", component.Query.String())
-
-		opts, err := defaultGRPCServerOpts(logger, reg, tracer, srvCert, srvKey, srvClientCA)
-		if err != nil {
-			return errors.Wrapf(err, "build gRPC server")
+			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		s := grpc.NewServer(opts...)
-		storepb.RegisterStoreServer(s, proxy)
+		s := grpcserver.New(logger, reg, tracer, comp, proxy,
+			grpcserver.WithListen(grpcBindAddr),
+			grpcserver.WithGracePeriod(grpcGracePeriod),
+			grpcserver.WithTLSConfig(tlsCfg),
+		)
 
 		g.Add(func() error {
-			level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)
-			return errors.Wrap(s.Serve(l), "serve gRPC")
-		}, func(error) {
-			s.Stop()
-			runutil.CloseWithLogOnErr(logger, l, "store gRPC listener")
+			statusProber.SetReady()
+			return s.ListenAndServe()
+		}, func(err error) {
+			statusProber.SetNotReady(err)
+			s.Shutdown(err)
 		})
 	}
 
@@ -482,24 +431,4 @@ func removeDuplicateStoreSpecs(logger log.Logger, duplicatedStores prometheus.Co
 		deduplicated = append(deduplicated, value)
 	}
 	return deduplicated
-}
-
-type gossipSpec struct {
-	id   string
-	addr string
-
-	stateFetcher cluster.PeerStateFetcher
-}
-
-func (s *gossipSpec) Addr() string {
-	return s.addr
-}
-
-// Metadata method for gossip store tries get current peer state.
-func (s *gossipSpec) Metadata(_ context.Context, _ storepb.StoreClient) (labels []storepb.Label, mint int64, maxt int64, err error) {
-	state, ok := s.stateFetcher.PeerState(s.id)
-	if !ok {
-		return nil, 0, 0, errors.Errorf("peer %s is no longer in gossip cluster", s.id)
-	}
-	return state.Metadata.Labels, state.Metadata.MinTime, state.Metadata.MaxTime, nil
 }

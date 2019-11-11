@@ -75,9 +75,9 @@ func (bu *BaseUI) executeTemplate(w http.ResponseWriter, name string, prefix str
 		return
 	}
 
-	bu.tmplFuncs["pathPrefix"] = func() string { return prefix }
-
-	t, err := template.New("").Funcs(bu.tmplFuncs).Parse(text)
+	t, err := template.New("").Funcs(bu.tmplFuncs).
+		Funcs(template.FuncMap{"pathPrefix": func() string { return prefix }}).
+		Parse(text)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -115,7 +115,7 @@ func SanitizePrefix(prefix string) (string, error) {
 		return "", err
 	}
 
-	// remove double slashes, convert to absolute path
+	// Remove double slashes, convert to absolute path.
 	sanitizedPrefix := strings.TrimPrefix(path.Clean(u.Path), ".")
 
 	if strings.HasSuffix(sanitizedPrefix, "/") {

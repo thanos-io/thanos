@@ -12,7 +12,7 @@
 // limitations under the License.
 
 // This package is a modified copy from
-// github.com/prometheus/prometheus/web/api/v1@2121b4628baa7d9d9406aa468712a6a332e77aff
+// github.com/prometheus/prometheus/web/api/v1@2121b4628baa7d9d9406aa468712a6a332e77aff.
 
 package v1
 
@@ -23,15 +23,10 @@ import (
 	"math"
 	"net/http"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/NYTimes/gziphandler"
-
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/query"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/improbable-eng/thanos/pkg/tracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -41,24 +36,28 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/query"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 type status string
 
 const (
 	statusSuccess status = "success"
-	statusError          = "error"
+	statusError   status = "error"
 )
 
 type ErrorType string
 
 const (
 	errorNone     ErrorType = ""
-	errorTimeout            = "timeout"
-	errorCanceled           = "canceled"
-	errorExec               = "execution"
-	errorBadData            = "bad_data"
-	ErrorInternal           = "internal"
+	errorTimeout  ErrorType = "timeout"
+	errorCanceled ErrorType = "canceled"
+	errorExec     ErrorType = "execution"
+	errorBadData  ErrorType = "bad_data"
+	ErrorInternal ErrorType = "internal"
 )
 
 var corsHeaders = map[string]string{
@@ -80,7 +79,7 @@ func (e *ApiError) Error() string {
 type response struct {
 	Status    status      `json:"status"`
 	Data      interface{} `json:"data,omitempty"`
-	ErrorType ErrorType   `json:"ErrorType,omitempty"`
+	ErrorType ErrorType   `json:"errorType,omitempty"`
 	Error     string      `json:"error,omitempty"`
 	Warnings  []string    `json:"warnings,omitempty"`
 }
@@ -101,11 +100,13 @@ type API struct {
 	queryableCreate query.QueryableCreator
 	queryEngine     *promql.Engine
 
-	instantQueryDuration   prometheus.Histogram
-	rangeQueryDuration     prometheus.Histogram
-	enableAutodownsampling bool
-	enablePartialResponse  bool
-	now                    func() time.Time
+	enableAutodownsampling                 bool
+	enablePartialResponse                  bool
+	replicaLabels                          []string
+	reg                                    prometheus.Registerer
+	defaultInstantQueryMaxSourceResolution time.Duration
+
+	now func() time.Time
 }
 
 // NewAPI returns an initialized API type.
@@ -116,41 +117,25 @@ func NewAPI(
 	c query.QueryableCreator,
 	enableAutodownsampling bool,
 	enablePartialResponse bool,
+	replicaLabels []string,
+	defaultInstantQueryMaxSourceResolution time.Duration,
 ) *API {
-	instantQueryDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name: "thanos_query_api_instant_query_duration_seconds",
-		Help: "Time it takes to perform instant query on promEngine backed up with thanos querier.",
-		Buckets: []float64{
-			0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 20,
-		},
-	})
-	rangeQueryDuration := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name: "thanos_query_api_range_query_duration_seconds",
-		Help: "Time it takes to perform range query on promEngine backed up with thanos querier.",
-		Buckets: []float64{
-			0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 20,
-		},
-	})
-
-	reg.MustRegister(
-		instantQueryDuration,
-		rangeQueryDuration,
-	)
 	return &API{
-		logger:                 logger,
-		queryEngine:            qe,
-		queryableCreate:        c,
-		instantQueryDuration:   instantQueryDuration,
-		rangeQueryDuration:     rangeQueryDuration,
-		enableAutodownsampling: enableAutodownsampling,
-		enablePartialResponse:  enablePartialResponse,
+		logger:                                 logger,
+		queryEngine:                            qe,
+		queryableCreate:                        c,
+		enableAutodownsampling:                 enableAutodownsampling,
+		enablePartialResponse:                  enablePartialResponse,
+		replicaLabels:                          replicaLabels,
+		reg:                                    reg,
+		defaultInstantQueryMaxSourceResolution: defaultInstantQueryMaxSourceResolution,
 
 		now: time.Now,
 	}
 }
 
 // Register the API's endpoints in the given router.
-func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger) {
+func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger, ins extpromhttp.InstrumentationMiddleware) {
 	instr := func(name string, f ApiFunc) http.HandlerFunc {
 		hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			SetCORS(w)
@@ -162,17 +147,23 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 				w.WriteHeader(http.StatusNoContent)
 			}
 		})
-		return prometheus.InstrumentHandler(name, tracing.HTTPMiddleware(tracer, name, logger, gziphandler.GzipHandler(hf)))
+		return ins.NewHandler(name, tracing.HTTPMiddleware(tracer, name, logger, gziphandler.GzipHandler(hf)))
 	}
 
 	r.Options("/*path", instr("options", api.options))
 
 	r.Get("/query", instr("query", api.query))
+	r.Post("/query", instr("query", api.query))
+
 	r.Get("/query_range", instr("query_range", api.queryRange))
+	r.Post("/query_range", instr("query_range", api.queryRange))
 
 	r.Get("/label/:name/values", instr("label_values", api.labelValues))
 
 	r.Get("/series", instr("series", api.series))
+	r.Post("/series", instr("series", api.series))
+
+	r.Get("/labels", instr("label_names", api.labelNames))
 }
 
 type queryData struct {
@@ -197,15 +188,29 @@ func (api *API) parseEnableDedupParam(r *http.Request) (enableDeduplication bool
 	return enableDeduplication, nil
 }
 
-func (api *API) parseDownsamplingParam(r *http.Request, step time.Duration) (maxSourceResolution time.Duration, _ *ApiError) {
-	const maxSourceResolutionParam = "max_source_resolution"
-	maxSourceResolution = 0 * time.Second
-
-	if api.enableAutodownsampling {
-		// If no max_source_resolution is specified fit at least 5 samples between steps.
-		maxSourceResolution = step / 5
+func (api *API) parseReplicaLabelsParam(r *http.Request) (replicaLabels []string, _ *ApiError) {
+	const replicaLabelsParam = "replicaLabels[]"
+	if err := r.ParseForm(); err != nil {
+		return nil, &ApiError{ErrorInternal, errors.Wrap(err, "parse form")}
 	}
-	if val := r.FormValue(maxSourceResolutionParam); val != "" {
+
+	replicaLabels = api.replicaLabels
+	// Overwrite the cli flag when provided as a query parameter.
+	if len(r.Form[replicaLabelsParam]) > 0 {
+		replicaLabels = r.Form[replicaLabelsParam]
+	}
+
+	return replicaLabels, nil
+}
+
+func (api *API) parseDownsamplingParamMillis(r *http.Request, defaultVal time.Duration) (maxResolutionMillis int64, _ *ApiError) {
+	const maxSourceResolutionParam = "max_source_resolution"
+	maxSourceResolution := 0 * time.Second
+
+	val := r.FormValue(maxSourceResolutionParam)
+	if api.enableAutodownsampling || (val == "auto") {
+		maxSourceResolution = defaultVal
+	} else if val != "" {
 		var err error
 		maxSourceResolution, err = parseDuration(val)
 		if err != nil {
@@ -217,13 +222,14 @@ func (api *API) parseDownsamplingParam(r *http.Request, step time.Duration) (max
 		return 0, &ApiError{errorBadData, errors.Errorf("negative '%s' is not accepted. Try a positive integer", maxSourceResolutionParam)}
 	}
 
-	return maxSourceResolution, nil
+	return int64(maxSourceResolution / time.Millisecond), nil
 }
 
 func (api *API) parsePartialResponseParam(r *http.Request) (enablePartialResponse bool, _ *ApiError) {
 	const partialResponseParam = "partial_response"
 	enablePartialResponse = api.enablePartialResponse
 
+	// Overwrite the cli flag when provided as a query parameter.
 	if val := r.FormValue(partialResponseParam); val != "" {
 		var err error
 		enablePartialResponse, err = strconv.ParseBool(val)
@@ -267,27 +273,26 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
+	replicaLabels, apiErr := api.parseReplicaLabelsParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
 	enablePartialResponse, apiErr := api.parsePartialResponseParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
 
-	var (
-		warnmtx  sync.Mutex
-		warnings []error
-	)
-	warningReporter := func(err error) {
-		warnmtx.Lock()
-		warnings = append(warnings, err)
-		warnmtx.Unlock()
+	maxSourceResolution, apiErr := api.parseDownsamplingParamMillis(r, api.defaultInstantQueryMaxSourceResolution)
+	if apiErr != nil {
+		return nil, nil, apiErr
 	}
 
 	// We are starting promQL tracing span here, because we have no control over promQL code.
-	span, ctx := tracing.StartSpan(r.Context(), "promql_instant_query")
+	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
 
-	begin := api.now()
-	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDedup, 0, enablePartialResponse, warningReporter), r.FormValue("query"), ts)
+	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDedup, replicaLabels, maxSourceResolution, enablePartialResponse), r.FormValue("query"), ts)
 	if err != nil {
 		return nil, nil, &ApiError{errorBadData, err}
 	}
@@ -304,12 +309,11 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 		}
 		return nil, nil, &ApiError{errorExec, res.Err}
 	}
-	api.instantQueryDuration.Observe(time.Since(begin).Seconds())
 
 	return &queryData{
 		ResultType: res.Value.Type(),
 		Result:     res.Value,
-	}, warnings, nil
+	}, res.Warnings, nil
 }
 
 func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
@@ -360,7 +364,13 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	maxSourceResolution, apiErr := api.parseDownsamplingParam(r, step)
+	replicaLabels, apiErr := api.parseReplicaLabelsParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
+	// If no max_source_resolution is specified fit at least 5 samples between steps.
+	maxSourceResolution, apiErr := api.parseDownsamplingParamMillis(r, step/5)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
@@ -370,23 +380,12 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	var (
-		warnmtx  sync.Mutex
-		warnings []error
-	)
-	warningReporter := func(err error) {
-		warnmtx.Lock()
-		warnings = append(warnings, err)
-		warnmtx.Unlock()
-	}
-
 	// We are starting promQL tracing span here, because we have no control over promQL code.
-	span, ctx := tracing.StartSpan(r.Context(), "promql_range_query")
+	span, ctx := tracing.StartSpan(ctx, "promql_range_query")
 	defer span.Finish()
 
-	begin := api.now()
 	qry, err := api.queryEngine.NewRangeQuery(
-		api.queryableCreate(enableDedup, maxSourceResolution, enablePartialResponse, warningReporter),
+		api.queryableCreate(enableDedup, replicaLabels, maxSourceResolution, enablePartialResponse),
 		r.FormValue("query"),
 		start,
 		end,
@@ -406,12 +405,11 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 		}
 		return nil, nil, &ApiError{errorExec, res.Err}
 	}
-	api.rangeQueryDuration.Observe(time.Since(begin).Seconds())
 
 	return &queryData{
 		ResultType: res.Value.Type(),
 		Result:     res.Value,
-	}, warnings, nil
+	}, res.Warnings, nil
 }
 
 func (api *API) labelValues(r *http.Request) (interface{}, []error, *ApiError) {
@@ -427,17 +425,7 @@ func (api *API) labelValues(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	var (
-		warnmtx  sync.Mutex
-		warnings []error
-	)
-	warningReporter := func(err error) {
-		warnmtx.Lock()
-		warnings = append(warnings, err)
-		warnmtx.Unlock()
-	}
-
-	q, err := api.queryableCreate(true, 0, enablePartialResponse, warningReporter).Querier(ctx, math.MinInt64, math.MaxInt64)
+	q, err := api.queryableCreate(true, nil, 0, enablePartialResponse).Querier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
@@ -445,7 +433,7 @@ func (api *API) labelValues(r *http.Request) (interface{}, []error, *ApiError) {
 
 	// TODO(fabxc): add back request context.
 
-	vals, err := q.LabelValues(name)
+	vals, warnings, err := q.LabelValues(name)
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
@@ -503,47 +491,45 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
+	replicaLabels, apiErr := api.parseReplicaLabelsParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
 	enablePartialResponse, apiErr := api.parsePartialResponseParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr
 	}
 
-	var (
-		warnmtx  sync.Mutex
-		warnings []error
-	)
-	warningReporter := func(err error) {
-		warnmtx.Lock()
-		warnings = append(warnings, err)
-		warnmtx.Unlock()
-	}
-
 	// TODO(bwplotka): Support downsampling?
-	q, err := api.queryableCreate(enableDedup, 0, enablePartialResponse, warningReporter).Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
+	q, err := api.queryableCreate(enableDedup, replicaLabels, 0, enablePartialResponse).
+		Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
 	defer runutil.CloseWithLogOnErr(api.logger, q, "queryable series")
 
-	var sets []storage.SeriesSet
+	var (
+		warnings []error
+		metrics  = []labels.Labels{}
+		sets     []storage.SeriesSet
+	)
 	for _, mset := range matcherSets {
-		s, _, err := q.Select(&storage.SelectParams{}, mset...)
+		s, warns, err := q.Select(nil, mset...)
 		if err != nil {
 			return nil, nil, &ApiError{errorExec, err}
 		}
+		warnings = append(warnings, warns...)
 		sets = append(sets, s)
 	}
 
 	set := storage.NewMergeSeriesSet(sets, nil)
-
-	var metrics []labels.Labels
 	for set.Next() {
 		metrics = append(metrics, set.At().Labels())
 	}
 	if set.Err() != nil {
 		return nil, nil, &ApiError{errorExec, set.Err()}
 	}
-
 	return metrics, warnings, nil
 }
 
@@ -610,4 +596,26 @@ func parseDuration(s string) (time.Duration, error) {
 		return time.Duration(d), nil
 	}
 	return 0, fmt.Errorf("cannot parse %q to a valid duration", s)
+}
+
+func (api *API) labelNames(r *http.Request) (interface{}, []error, *ApiError) {
+	ctx := r.Context()
+
+	enablePartialResponse, apiErr := api.parsePartialResponseParam(r)
+	if apiErr != nil {
+		return nil, nil, apiErr
+	}
+
+	q, err := api.queryableCreate(true, nil, 0, enablePartialResponse).Querier(ctx, math.MinInt64, math.MaxInt64)
+	if err != nil {
+		return nil, nil, &ApiError{errorExec, err}
+	}
+	defer runutil.CloseWithLogOnErr(api.logger, q, "queryable labelNames")
+
+	names, warnings, err := q.LabelNames()
+	if err != nil {
+		return nil, nil, &ApiError{errorExec, err}
+	}
+
+	return names, warnings, nil
 }

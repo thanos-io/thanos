@@ -2,15 +2,16 @@ package verifier
 
 import (
 	"context"
+	"sort"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/compact"
-	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
-	"github.com/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/compact"
+	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
 const OverlappedBlocksIssueID = "overlapped_blocks"
@@ -57,7 +58,7 @@ func fetchOverlaps(ctx context.Context, logger log.Logger, bkt objstore.Bucket) 
 			return err
 		}
 
-		metas[compact.GroupKey(m)] = append(metas[compact.GroupKey(m)], m.BlockMeta)
+		metas[compact.GroupKey(m.Thanos)] = append(metas[compact.GroupKey(m.Thanos)], m.BlockMeta)
 		return nil
 	})
 	if err != nil {
@@ -66,6 +67,11 @@ func fetchOverlaps(ctx context.Context, logger log.Logger, bkt objstore.Bucket) 
 
 	overlaps := map[string]tsdb.Overlaps{}
 	for k, groupMetas := range metas {
+
+		sort.Slice(groupMetas, func(i, j int) bool {
+			return groupMetas[i].MinTime < groupMetas[j].MinTime
+		})
+
 		o := tsdb.OverlappingBlocks(groupMetas)
 		if len(o) > 0 {
 			overlaps[k] = o

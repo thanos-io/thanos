@@ -8,11 +8,15 @@ import (
 	"path"
 	"regexp"
 	"sort"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/rules"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	thanosrule "github.com/thanos-io/thanos/pkg/rule"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 type Rule struct {
@@ -20,21 +24,26 @@ type Rule struct {
 
 	flagsMap map[string]string
 
-	ruleManager *rules.Manager
-	queryURL    string
+	ruleManagers thanosrule.Managers
+	queryURL     string
+	reg          prometheus.Registerer
 }
 
-func NewRuleUI(logger log.Logger, ruleManager *rules.Manager, queryURL string, flagsMap map[string]string) *Rule {
+func NewRuleUI(logger log.Logger, reg prometheus.Registerer, ruleManagers map[storepb.PartialResponseStrategy]*rules.Manager, queryURL string, flagsMap map[string]string) *Rule {
 	return &Rule{
-		BaseUI:      NewBaseUI(logger, "rule_menu.html", ruleTmplFuncs(queryURL)),
-		flagsMap:    flagsMap,
-		ruleManager: ruleManager,
-		queryURL:    queryURL,
+		BaseUI:       NewBaseUI(logger, "rule_menu.html", ruleTmplFuncs(queryURL)),
+		flagsMap:     flagsMap,
+		ruleManagers: ruleManagers,
+		queryURL:     queryURL,
+		reg:          reg,
 	}
 }
 
 func ruleTmplFuncs(queryURL string) template.FuncMap {
 	return template.FuncMap{
+		"since": func(t time.Time) time.Duration {
+			return time.Since(t) / time.Millisecond * time.Millisecond
+		},
 		"alertStateToClass": func(as rules.AlertState) string {
 			switch as {
 			case rules.StateInactive:
@@ -45,6 +54,16 @@ func ruleTmplFuncs(queryURL string) template.FuncMap {
 				return "danger"
 			default:
 				panic("unknown alert state")
+			}
+		},
+		"ruleHealthToClass": func(rh rules.RuleHealth) string {
+			switch rh {
+			case rules.HealthUnknown:
+				return "warning"
+			case rules.HealthGood:
+				return "success"
+			default:
+				return "danger"
 			}
 		},
 		"queryURL": func() string { return queryURL },
@@ -79,7 +98,7 @@ func ruleTmplFuncs(queryURL string) template.FuncMap {
 				if minutes != 0 {
 					return fmt.Sprintf("%s%dm %ds", sign, minutes, seconds)
 				}
-				// For seconds, we display 4 significant digts.
+				// For seconds, we display 4 significant digits.
 				return fmt.Sprintf("%s%.4gs", sign, v)
 			}
 			prefix := ""
@@ -96,7 +115,7 @@ func ruleTmplFuncs(queryURL string) template.FuncMap {
 }
 
 func (ru *Rule) alerts(w http.ResponseWriter, r *http.Request) {
-	alerts := ru.ruleManager.AlertingRules()
+	alerts := ru.ruleManagers.AlertingRules()
 	alertsSorter := byAlertStateAndNameSorter{alerts: alerts}
 	sort.Sort(alertsSorter)
 
@@ -111,24 +130,28 @@ func (ru *Rule) alerts(w http.ResponseWriter, r *http.Request) {
 
 	prefix := GetWebPrefix(ru.logger, ru.flagsMap, r)
 
+	// TODO(bwplotka): Update HTML to include partial response.
 	ru.executeTemplate(w, "alerts.html", prefix, alertStatus)
 }
 
 func (ru *Rule) rules(w http.ResponseWriter, r *http.Request) {
 	prefix := GetWebPrefix(ru.logger, ru.flagsMap, r)
 
-	ru.executeTemplate(w, "rules.html", prefix, ru.ruleManager)
+	// TODO(bwplotka): Update HTML to include partial response.
+	ru.executeTemplate(w, "rules.html", prefix, ru.ruleManagers)
 }
 
-// root redirects / requests to /graph, taking into account the path prefix value
+// Root redirects / requests to /graph, taking into account the path prefix value.
 func (ru *Rule) root(w http.ResponseWriter, r *http.Request) {
 	prefix := GetWebPrefix(ru.logger, ru.flagsMap, r)
 
 	http.Redirect(w, r, path.Join(prefix, "/alerts"), http.StatusFound)
 }
 
-func (ru *Rule) Register(r *route.Router) {
-	instrf := prometheus.InstrumentHandlerFunc
+func (ru *Rule) Register(r *route.Router, ins extpromhttp.InstrumentationMiddleware) {
+	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+		return ins.NewHandler(name, http.HandlerFunc(next))
+	}
 
 	r.Get("/", instrf("root", ru.root))
 	r.Get("/alerts", instrf("alerts", ru.alerts))
@@ -139,12 +162,12 @@ func (ru *Rule) Register(r *route.Router) {
 
 // AlertStatus bundles alerting rules and the mapping of alert states to row classes.
 type AlertStatus struct {
-	AlertingRules        []*rules.AlertingRule
+	AlertingRules        []thanosrule.AlertingRule
 	AlertStateToRowClass map[rules.AlertState]string
 }
 
 type byAlertStateAndNameSorter struct {
-	alerts []*rules.AlertingRule
+	alerts []thanosrule.AlertingRule
 }
 
 func (s byAlertStateAndNameSorter) Len() int {

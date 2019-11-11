@@ -5,77 +5,77 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/promclient"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
+	"github.com/thanos-io/thanos/pkg/promclient"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-type testConfig struct {
-	name  string
-	suite *spinupSuite
+// NOTE: by using aggregation all results are now unsorted.
+const queryUpWithoutInstance = "sum(up) without (instance)"
+
+// defaultPromConfig returns Prometheus config that sets Prometheus to:
+// * expose 2 external labels, source and replica.
+// * scrape fake target. This will produce up == 0 metric which we can assert on.
+// * optionally remote write endpoint to write into.
+func defaultPromConfig(name string, replica int, remoteWriteEndpoint string) string {
+	config := fmt.Sprintf(`
+global:
+  external_labels:
+    prometheus: %v
+    replica: %v
+scrape_configs:
+- job_name: 'test'
+  static_configs:
+  - targets: ['fake']
+`, name, replica)
+
+	if remoteWriteEndpoint != "" {
+		config = fmt.Sprintf(`
+%s
+remote_write:
+- url: "%s"
+`, config, remoteWriteEndpoint)
+	}
+	return config
 }
 
-var (
-	firstPromPort       = promHTTPPort(1)
-	remoteWriteEndpoint = fmt.Sprintf("http://%s/api/v1/receive", remoteWriteReceiveHTTP(1))
-
-	queryGossipSuite = newSpinupSuite().
-				Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0), true)).
-				Add(scraper(2, defaultPromConfig("prom-ha", 0), true)).
-				Add(scraper(3, defaultPromConfig("prom-ha", 1), true)).
-				Add(querier(1, "replica"), queryCluster(1)).
-				Add(querier(2, "replica"), queryCluster(2))
-
-	queryStaticFlagsSuite = newSpinupSuite().
-				Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0), false)).
-				Add(scraper(2, defaultPromConfig("prom-ha", 0), false)).
-				Add(scraper(3, defaultPromConfig("prom-ha", 1), false)).
-				Add(querierWithStoreFlags(1, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3), remoteWriteReceiveGRPC(1)), "").
-				Add(querierWithStoreFlags(2, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3), remoteWriteReceiveGRPC(1)), "").
-				Add(receiver(1, defaultPromRemoteWriteConfig(remoteWriteEndpoint)), "")
-
-	queryFileSDSuite = newSpinupSuite().
-				Add(scraper(1, defaultPromConfig("prom-"+firstPromPort, 0), false)).
-				Add(scraper(2, defaultPromConfig("prom-ha", 0), false)).
-				Add(scraper(3, defaultPromConfig("prom-ha", 1), false)).
-				Add(querierWithFileSD(1, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3), remoteWriteReceiveGRPC(1)), "").
-				Add(querierWithFileSD(2, "replica", sidecarGRPC(1), sidecarGRPC(2), sidecarGRPC(3), remoteWriteReceiveGRPC(1)), "").
-				Add(receiver(1, defaultPromRemoteWriteConfig(remoteWriteEndpoint)), "")
-)
+func sortResults(res model.Vector) {
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].String() < res[j].String()
+	})
+}
 
 func TestQuery(t *testing.T) {
-	for _, tt := range []testConfig{
-		{
-			"gossip",
-			queryGossipSuite,
-		},
-		{
-			"staticFlag",
-			queryStaticFlagsSuite,
-		},
-		{
-			"fileSD",
-			queryFileSDSuite,
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			testQuerySimple(t, tt)
-		})
-	}
-}
+	a := newLocalAddresser()
 
-// testQuerySimple runs a setup of Prometheus servers, sidecars, and query nodes and verifies that
-// queries return data merged from all Prometheus servers. Additionally it verifies if deduplication works for query.
-func testQuerySimple(t *testing.T, conf testConfig) {
+	// Thanos Receive.
+	r := receiver(a.New(), a.New(), a.New(), 1)
+
+	// Prometheus-es.
+	prom1 := prometheus(a.New(), defaultPromConfig("prom-alone", 0, ""))
+	prom2 := prometheus(a.New(), defaultPromConfig("prom-both-remote-write-and-sidecar", 1234, remoteWriteEndpoint(r.HTTP)))
+	prom3 := prometheus(a.New(), defaultPromConfig("prom-ha", 0, ""))
+	prom4 := prometheus(a.New(), defaultPromConfig("prom-ha", 1, ""))
+
+	// Sidecars per each Prometheus.
+	s1 := sidecar(a.New(), a.New(), prom1)
+	s2 := sidecar(a.New(), a.New(), prom2)
+	s3 := sidecar(a.New(), a.New(), prom3)
+	s4 := sidecar(a.New(), a.New(), prom4)
+
+	// Querier. Both fileSD and directly by flags.
+	q := querier(a.New(), a.New(), []address{s1.GRPC, s2.GRPC, r.GRPC}, []address{s3.GRPC, s4.GRPC})
+
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 
-	exit, err := conf.suite.Exec(t, ctx, conf.name)
+	exit, err := e2eSpinup(t, ctx, r, prom1, prom2, prom3, prom4, s1, s2, s3, s4, q)
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)
 		cancel()
@@ -91,64 +91,74 @@ func testQuerySimple(t *testing.T, conf testConfig) {
 
 	w := log.NewSyncWriter(os.Stderr)
 	l := log.NewLogfmtLogger(w)
-	l = log.With(l, "conf-name", conf.name)
 
 	// Try query without deduplication.
 	testutil.Ok(t, runutil.RetryWithLog(l, time.Second, ctx.Done(), func() error {
 		select {
 		case <-exit:
 			cancel()
-			return errors.Errorf("exiting test, possibly due to timeout")
+			return nil
 		default:
 		}
 
-		var err error
-		res, err = promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "up", time.Now(), false)
+		var (
+			err      error
+			warnings []string
+		)
+		res, warnings, err = promclient.QueryInstant(ctx, nil, urlParse(t, q.HTTP.URL()), queryUpWithoutInstance, time.Now(), promclient.QueryOptions{
+			Deduplicate: false,
+		})
 		if err != nil {
 			return err
 		}
-		expectedRes := 4
-		if conf.name == "gossip" {
-			expectedRes = 3
+
+		if len(warnings) > 0 {
+			// we don't expect warnings.
+			return errors.Errorf("unexpected warnings %s", warnings)
 		}
+
+		expectedRes := 5
 		if len(res) != expectedRes {
-			return errors.Errorf("unexpected result size %d, expected %d", len(res), expectedRes)
+			return errors.Errorf("unexpected result size, expected %d; result: %v", expectedRes, res)
 		}
 		return nil
 	}))
 
-	// In our model result are always sorted.
-	testutil.Equals(t, model.Metric{
-		"__name__":   "up",
-		"instance":   model.LabelValue(promHTTP(1)),
-		"job":        "prometheus",
-		"prometheus": model.LabelValue("prom-" + promHTTPPort(1)),
-		"replica":    model.LabelValue("0"),
-	}, res[0].Metric)
-	testutil.Equals(t, model.Metric{
-		"__name__":   "up",
-		"instance":   model.LabelValue(promHTTP(1)),
-		"job":        "prometheus",
-		"prometheus": "prom-ha",
-		"replica":    model.LabelValue("0"),
-	}, res[1].Metric)
-	testutil.Equals(t, model.Metric{
-		"__name__":   "up",
-		"instance":   model.LabelValue(promHTTP(1)),
-		"job":        "prometheus",
-		"prometheus": "prom-ha",
-		"replica":    model.LabelValue("1"),
-	}, res[2].Metric)
-
-	if conf.name != "gossip" {
-		testutil.Equals(t, model.Metric{
-			"__name__": "up",
-			"instance": model.LabelValue("localhost:9100"),
-			"job":      "node",
-		}, res[3].Metric)
+	select {
+	case <-exit:
+		return
+	default:
 	}
 
-	// Try query with deduplication.
+	sortResults(res)
+	testutil.Equals(t, model.Metric{
+		"job":        "test",
+		"prometheus": "prom-alone",
+		"replica":    "0",
+	}, res[0].Metric)
+	testutil.Equals(t, model.Metric{
+		"job":        "test",
+		"prometheus": "prom-both-remote-write-and-sidecar",
+		"receive":    model.LabelValue(r.HTTP.Port),
+		"replica":    model.LabelValue("1234"),
+	}, res[1].Metric)
+	testutil.Equals(t, model.Metric{
+		"job":        "test",
+		"prometheus": "prom-both-remote-write-and-sidecar",
+		"replica":    model.LabelValue("1234"),
+	}, res[2].Metric)
+	testutil.Equals(t, model.Metric{
+		"job":        "test",
+		"prometheus": "prom-ha",
+		"replica":    model.LabelValue("0"),
+	}, res[3].Metric)
+	testutil.Equals(t, model.Metric{
+		"job":        "test",
+		"prometheus": "prom-ha",
+		"replica":    model.LabelValue("1"),
+	}, res[4].Metric)
+
+	// With deduplication.
 	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
 		select {
 		case <-exit:
@@ -157,41 +167,54 @@ func testQuerySimple(t *testing.T, conf testConfig) {
 		default:
 		}
 
-		var err error
-		res, err = promclient.QueryInstant(ctx, nil, urlParse(t, "http://"+queryHTTP(1)), "up", time.Now(), true)
+		var (
+			err      error
+			warnings []string
+		)
+		res, warnings, err = promclient.QueryInstant(ctx, nil, urlParse(t, q.HTTP.URL()), queryUpWithoutInstance, time.Now(), promclient.QueryOptions{
+			Deduplicate: true,
+		})
 		if err != nil {
 			return err
 		}
-		expectedRes := 3
-		if conf.name == "gossip" {
-			expectedRes = 2
+
+		if len(warnings) > 0 {
+			// we don't expect warnings.
+			return errors.Errorf("unexpected warnings %s", warnings)
 		}
+
+		expectedRes := 4
 		if len(res) != expectedRes {
-			return errors.Errorf("unexpected result size %d, expected %d", len(res), expectedRes)
+			return errors.Errorf("unexpected result size, expected %d; result: %v", expectedRes, res)
 		}
 
 		return nil
 	}))
 
+	select {
+	case <-exit:
+		return
+	default:
+	}
+
+	sortResults(res)
 	testutil.Equals(t, model.Metric{
-		"__name__":   "up",
-		"instance":   model.LabelValue(promHTTP(1)),
-		"job":        "prometheus",
-		"prometheus": model.LabelValue("prom-" + promHTTPPort(1)),
+		"job":        "test",
+		"prometheus": "prom-alone",
 	}, res[0].Metric)
 	testutil.Equals(t, model.Metric{
-		"__name__":   "up",
-		"instance":   model.LabelValue(promHTTP(1)),
-		"job":        "prometheus",
-		"prometheus": "prom-ha",
+		"job":        "test",
+		"prometheus": "prom-both-remote-write-and-sidecar",
+		"receive":    model.LabelValue(r.HTTP.Port),
 	}, res[1].Metric)
-	if conf.name != "gossip" {
-		testutil.Equals(t, model.Metric{
-			"__name__": "up",
-			"instance": model.LabelValue("localhost:9100"),
-			"job":      "node",
-		}, res[2].Metric)
-	}
+	testutil.Equals(t, model.Metric{
+		"job":        "test",
+		"prometheus": "prom-both-remote-write-and-sidecar",
+	}, res[2].Metric)
+	testutil.Equals(t, model.Metric{
+		"job":        "test",
+		"prometheus": "prom-ha",
+	}, res[3].Metric)
 }
 
 func urlParse(t *testing.T, addr string) *url.URL {
@@ -199,30 +222,4 @@ func urlParse(t *testing.T, addr string) *url.URL {
 	testutil.Ok(t, err)
 
 	return u
-}
-
-func defaultPromConfig(name string, replicas int) string {
-	return fmt.Sprintf(`
-global:
-  external_labels:
-    prometheus: %s
-    replica: %v
-scrape_configs:
-- job_name: prometheus
-  scrape_interval: 1s
-  static_configs:
-  - targets:
-    - "localhost:%s"
-`, name, replicas, firstPromPort)
-}
-
-func defaultPromRemoteWriteConfig(remoteWriteEndpoint string) string {
-	return fmt.Sprintf(`
-scrape_configs:
-- job_name: 'node'
-  static_configs:
-  - targets: ['localhost:9100']
-remote_write:
-- url: "%s"
-`, remoteWriteEndpoint)
 }

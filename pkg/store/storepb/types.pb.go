@@ -3,12 +3,15 @@
 
 package storepb
 
-import proto "github.com/gogo/protobuf/proto"
-import fmt "fmt"
-import math "math"
-import _ "github.com/gogo/protobuf/gogoproto"
+import (
+	fmt "fmt"
+	io "io"
+	math "math"
+	math_bits "math/bits"
 
-import io "io"
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+)
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -30,6 +33,7 @@ const (
 var Chunk_Encoding_name = map[int32]string{
 	0: "XOR",
 }
+
 var Chunk_Encoding_value = map[string]int32{
 	"XOR": 0,
 }
@@ -37,8 +41,9 @@ var Chunk_Encoding_value = map[string]int32{
 func (x Chunk_Encoding) String() string {
 	return proto.EnumName(Chunk_Encoding_name, int32(x))
 }
+
 func (Chunk_Encoding) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_types_60e135d4a4f03620, []int{1, 0}
+	return fileDescriptor_d938547f84707355, []int{1, 0}
 }
 
 type LabelMatcher_Type int32
@@ -56,6 +61,7 @@ var LabelMatcher_Type_name = map[int32]string{
 	2: "RE",
 	3: "NRE",
 }
+
 var LabelMatcher_Type_value = map[string]int32{
 	"EQ":  0,
 	"NEQ": 1,
@@ -66,8 +72,9 @@ var LabelMatcher_Type_value = map[string]int32{
 func (x LabelMatcher_Type) String() string {
 	return proto.EnumName(LabelMatcher_Type_name, int32(x))
 }
+
 func (LabelMatcher_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_types_60e135d4a4f03620, []int{4, 0}
+	return fileDescriptor_d938547f84707355, []int{4, 0}
 }
 
 type Label struct {
@@ -82,7 +89,7 @@ func (m *Label) Reset()         { *m = Label{} }
 func (m *Label) String() string { return proto.CompactTextString(m) }
 func (*Label) ProtoMessage()    {}
 func (*Label) Descriptor() ([]byte, []int) {
-	return fileDescriptor_types_60e135d4a4f03620, []int{0}
+	return fileDescriptor_d938547f84707355, []int{0}
 }
 func (m *Label) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -92,15 +99,15 @@ func (m *Label) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return xxx_messageInfo_Label.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
 		return b[:n], nil
 	}
 }
-func (dst *Label) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Label.Merge(dst, src)
+func (m *Label) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Label.Merge(m, src)
 }
 func (m *Label) XXX_Size() int {
 	return m.Size()
@@ -123,7 +130,7 @@ func (m *Chunk) Reset()         { *m = Chunk{} }
 func (m *Chunk) String() string { return proto.CompactTextString(m) }
 func (*Chunk) ProtoMessage()    {}
 func (*Chunk) Descriptor() ([]byte, []int) {
-	return fileDescriptor_types_60e135d4a4f03620, []int{1}
+	return fileDescriptor_d938547f84707355, []int{1}
 }
 func (m *Chunk) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -133,15 +140,15 @@ func (m *Chunk) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return xxx_messageInfo_Chunk.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
 		return b[:n], nil
 	}
 }
-func (dst *Chunk) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Chunk.Merge(dst, src)
+func (m *Chunk) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Chunk.Merge(m, src)
 }
 func (m *Chunk) XXX_Size() int {
 	return m.Size()
@@ -153,8 +160,8 @@ func (m *Chunk) XXX_DiscardUnknown() {
 var xxx_messageInfo_Chunk proto.InternalMessageInfo
 
 type Series struct {
-	Labels               []Label     `protobuf:"bytes,1,rep,name=labels" json:"labels"`
-	Chunks               []AggrChunk `protobuf:"bytes,2,rep,name=chunks" json:"chunks"`
+	Labels               []Label     `protobuf:"bytes,1,rep,name=labels,proto3" json:"labels"`
+	Chunks               []AggrChunk `protobuf:"bytes,2,rep,name=chunks,proto3" json:"chunks"`
 	XXX_NoUnkeyedLiteral struct{}    `json:"-"`
 	XXX_unrecognized     []byte      `json:"-"`
 	XXX_sizecache        int32       `json:"-"`
@@ -164,7 +171,7 @@ func (m *Series) Reset()         { *m = Series{} }
 func (m *Series) String() string { return proto.CompactTextString(m) }
 func (*Series) ProtoMessage()    {}
 func (*Series) Descriptor() ([]byte, []int) {
-	return fileDescriptor_types_60e135d4a4f03620, []int{2}
+	return fileDescriptor_d938547f84707355, []int{2}
 }
 func (m *Series) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -174,15 +181,15 @@ func (m *Series) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return xxx_messageInfo_Series.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
 		return b[:n], nil
 	}
 }
-func (dst *Series) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Series.Merge(dst, src)
+func (m *Series) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Series.Merge(m, src)
 }
 func (m *Series) XXX_Size() int {
 	return m.Size()
@@ -196,12 +203,12 @@ var xxx_messageInfo_Series proto.InternalMessageInfo
 type AggrChunk struct {
 	MinTime              int64    `protobuf:"varint,1,opt,name=min_time,json=minTime,proto3" json:"min_time,omitempty"`
 	MaxTime              int64    `protobuf:"varint,2,opt,name=max_time,json=maxTime,proto3" json:"max_time,omitempty"`
-	Raw                  *Chunk   `protobuf:"bytes,3,opt,name=raw" json:"raw,omitempty"`
-	Count                *Chunk   `protobuf:"bytes,4,opt,name=count" json:"count,omitempty"`
-	Sum                  *Chunk   `protobuf:"bytes,5,opt,name=sum" json:"sum,omitempty"`
-	Min                  *Chunk   `protobuf:"bytes,6,opt,name=min" json:"min,omitempty"`
-	Max                  *Chunk   `protobuf:"bytes,7,opt,name=max" json:"max,omitempty"`
-	Counter              *Chunk   `protobuf:"bytes,8,opt,name=counter" json:"counter,omitempty"`
+	Raw                  *Chunk   `protobuf:"bytes,3,opt,name=raw,proto3" json:"raw,omitempty"`
+	Count                *Chunk   `protobuf:"bytes,4,opt,name=count,proto3" json:"count,omitempty"`
+	Sum                  *Chunk   `protobuf:"bytes,5,opt,name=sum,proto3" json:"sum,omitempty"`
+	Min                  *Chunk   `protobuf:"bytes,6,opt,name=min,proto3" json:"min,omitempty"`
+	Max                  *Chunk   `protobuf:"bytes,7,opt,name=max,proto3" json:"max,omitempty"`
+	Counter              *Chunk   `protobuf:"bytes,8,opt,name=counter,proto3" json:"counter,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -211,7 +218,7 @@ func (m *AggrChunk) Reset()         { *m = AggrChunk{} }
 func (m *AggrChunk) String() string { return proto.CompactTextString(m) }
 func (*AggrChunk) ProtoMessage()    {}
 func (*AggrChunk) Descriptor() ([]byte, []int) {
-	return fileDescriptor_types_60e135d4a4f03620, []int{3}
+	return fileDescriptor_d938547f84707355, []int{3}
 }
 func (m *AggrChunk) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -221,15 +228,15 @@ func (m *AggrChunk) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return xxx_messageInfo_AggrChunk.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
 		return b[:n], nil
 	}
 }
-func (dst *AggrChunk) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_AggrChunk.Merge(dst, src)
+func (m *AggrChunk) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AggrChunk.Merge(m, src)
 }
 func (m *AggrChunk) XXX_Size() int {
 	return m.Size()
@@ -254,7 +261,7 @@ func (m *LabelMatcher) Reset()         { *m = LabelMatcher{} }
 func (m *LabelMatcher) String() string { return proto.CompactTextString(m) }
 func (*LabelMatcher) ProtoMessage()    {}
 func (*LabelMatcher) Descriptor() ([]byte, []int) {
-	return fileDescriptor_types_60e135d4a4f03620, []int{4}
+	return fileDescriptor_d938547f84707355, []int{4}
 }
 func (m *LabelMatcher) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -264,15 +271,15 @@ func (m *LabelMatcher) XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
 		return xxx_messageInfo_LabelMatcher.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
-		n, err := m.MarshalTo(b)
+		n, err := m.MarshalToSizedBuffer(b)
 		if err != nil {
 			return nil, err
 		}
 		return b[:n], nil
 	}
 }
-func (dst *LabelMatcher) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_LabelMatcher.Merge(dst, src)
+func (m *LabelMatcher) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_LabelMatcher.Merge(m, src)
 }
 func (m *LabelMatcher) XXX_Size() int {
 	return m.Size()
@@ -284,18 +291,52 @@ func (m *LabelMatcher) XXX_DiscardUnknown() {
 var xxx_messageInfo_LabelMatcher proto.InternalMessageInfo
 
 func init() {
+	proto.RegisterEnum("thanos.Chunk_Encoding", Chunk_Encoding_name, Chunk_Encoding_value)
+	proto.RegisterEnum("thanos.LabelMatcher_Type", LabelMatcher_Type_name, LabelMatcher_Type_value)
 	proto.RegisterType((*Label)(nil), "thanos.Label")
 	proto.RegisterType((*Chunk)(nil), "thanos.Chunk")
 	proto.RegisterType((*Series)(nil), "thanos.Series")
 	proto.RegisterType((*AggrChunk)(nil), "thanos.AggrChunk")
 	proto.RegisterType((*LabelMatcher)(nil), "thanos.LabelMatcher")
-	proto.RegisterEnum("thanos.Chunk_Encoding", Chunk_Encoding_name, Chunk_Encoding_value)
-	proto.RegisterEnum("thanos.LabelMatcher_Type", LabelMatcher_Type_name, LabelMatcher_Type_value)
 }
+
+func init() { proto.RegisterFile("types.proto", fileDescriptor_d938547f84707355) }
+
+var fileDescriptor_d938547f84707355 = []byte{
+	// 432 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x92, 0xdd, 0x6e, 0xd3, 0x30,
+	0x14, 0xc7, 0xeb, 0x7c, 0x76, 0x67, 0x03, 0x05, 0x33, 0x21, 0x97, 0x8b, 0xae, 0x0a, 0x17, 0x54,
+	0x20, 0x32, 0x31, 0x9e, 0x80, 0xa1, 0xdc, 0xf1, 0xa1, 0x99, 0x5d, 0x20, 0x84, 0x84, 0xdc, 0xce,
+	0xa4, 0x11, 0x8d, 0x5d, 0xc5, 0x0e, 0x74, 0x8f, 0x81, 0x78, 0xa9, 0x5e, 0xf2, 0x04, 0x08, 0xfa,
+	0x24, 0xc8, 0x27, 0x0d, 0x5b, 0xa5, 0xdc, 0x1d, 0x9f, 0xff, 0xef, 0x7c, 0xc8, 0xe7, 0x0f, 0x87,
+	0xf6, 0x7a, 0x25, 0x4d, 0xb6, 0xaa, 0xb5, 0xd5, 0x34, 0xb2, 0x0b, 0xa1, 0xb4, 0x79, 0x78, 0x5c,
+	0xe8, 0x42, 0x63, 0xea, 0xd4, 0x45, 0xad, 0x9a, 0x3e, 0x87, 0xf0, 0xb5, 0x98, 0xc9, 0x25, 0xa5,
+	0x10, 0x28, 0x51, 0x49, 0x46, 0x26, 0x64, 0x7a, 0xc0, 0x31, 0xa6, 0xc7, 0x10, 0x7e, 0x13, 0xcb,
+	0x46, 0x32, 0x0f, 0x93, 0xed, 0x23, 0xfd, 0x04, 0xe1, 0xab, 0x45, 0xa3, 0xbe, 0xd2, 0x27, 0x10,
+	0xb8, 0x41, 0x58, 0x72, 0xf7, 0xec, 0x41, 0xd6, 0x0e, 0xca, 0x50, 0xcc, 0x72, 0x35, 0xd7, 0x57,
+	0xa5, 0x2a, 0x38, 0x32, 0xae, 0xfd, 0x95, 0xb0, 0x02, 0x3b, 0x1d, 0x71, 0x8c, 0xd3, 0xfb, 0x30,
+	0xec, 0x28, 0x1a, 0x83, 0xff, 0xe1, 0x1d, 0x4f, 0x06, 0xe9, 0x17, 0x88, 0xde, 0xcb, 0xba, 0x94,
+	0x86, 0x3e, 0x85, 0x68, 0xe9, 0x56, 0x33, 0x8c, 0x4c, 0xfc, 0xe9, 0xe1, 0xd9, 0x9d, 0x6e, 0x00,
+	0x2e, 0x7c, 0x1e, 0x6c, 0x7e, 0x9f, 0x0c, 0xf8, 0x0e, 0xa1, 0xa7, 0x10, 0xcd, 0xdd, 0x5c, 0xc3,
+	0x3c, 0x84, 0xef, 0x75, 0xf0, 0xcb, 0xa2, 0xa8, 0x71, 0xa3, 0xae, 0xa0, 0xc5, 0xd2, 0x9f, 0x1e,
+	0x1c, 0xfc, 0xd7, 0xe8, 0x08, 0x86, 0x55, 0xa9, 0x3e, 0xdb, 0x72, 0xf7, 0x03, 0x3e, 0x8f, 0xab,
+	0x52, 0x5d, 0x96, 0x95, 0x44, 0x49, 0xac, 0x5b, 0xc9, 0xdb, 0x49, 0x62, 0x8d, 0xd2, 0x09, 0xf8,
+	0xb5, 0xf8, 0xce, 0xfc, 0x09, 0xb9, 0xbd, 0x1e, 0x76, 0xe4, 0x4e, 0xa1, 0x8f, 0x20, 0x9c, 0xeb,
+	0x46, 0x59, 0x16, 0xf4, 0x21, 0xad, 0xe6, 0xba, 0x98, 0xa6, 0x62, 0x61, 0x6f, 0x17, 0xd3, 0x54,
+	0x0e, 0xa8, 0x4a, 0xc5, 0xa2, 0x5e, 0xa0, 0x2a, 0x15, 0x02, 0x62, 0xcd, 0xe2, 0x7e, 0x40, 0xac,
+	0xe9, 0x63, 0x88, 0x71, 0x96, 0xac, 0xd9, 0xb0, 0x0f, 0xea, 0xd4, 0xf4, 0x07, 0x81, 0x23, 0xfc,
+	0xde, 0x37, 0xc2, 0xce, 0x17, 0xb2, 0xa6, 0xcf, 0xf6, 0x6e, 0x3c, 0xda, 0x3b, 0xc1, 0x8e, 0xc9,
+	0x2e, 0xaf, 0x57, 0xf2, 0xe6, 0xcc, 0xe8, 0x22, 0xaf, 0xcf, 0x45, 0xfe, 0x6d, 0x17, 0x4d, 0x21,
+	0x70, 0x75, 0x34, 0x02, 0x2f, 0xbf, 0x48, 0x06, 0xce, 0x00, 0x6f, 0xf3, 0x8b, 0x84, 0xb8, 0x04,
+	0xcf, 0x13, 0x0f, 0x13, 0x3c, 0x4f, 0xfc, 0xf3, 0xd1, 0xe6, 0xef, 0x78, 0xb0, 0xd9, 0x8e, 0xc9,
+	0xaf, 0xed, 0x98, 0xfc, 0xd9, 0x8e, 0xc9, 0xc7, 0xd8, 0x58, 0x5d, 0xcb, 0xd5, 0x6c, 0x16, 0xa1,
+	0x89, 0x5f, 0xfc, 0x0b, 0x00, 0x00, 0xff, 0xff, 0x46, 0x5a, 0xe2, 0x68, 0xf1, 0x02, 0x00, 0x00,
+}
+
 func (m *Label) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -303,32 +344,40 @@ func (m *Label) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *Label) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Label) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.Name) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintTypes(dAtA, i, uint64(len(m.Name)))
-		i += copy(dAtA[i:], m.Name)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if len(m.Value) > 0 {
-		dAtA[i] = 0x12
-		i++
+		i -= len(m.Value)
+		copy(dAtA[i:], m.Value)
 		i = encodeVarintTypes(dAtA, i, uint64(len(m.Value)))
-		i += copy(dAtA[i:], m.Value)
+		i--
+		dAtA[i] = 0x12
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if len(m.Name) > 0 {
+		i -= len(m.Name)
+		copy(dAtA[i:], m.Name)
+		i = encodeVarintTypes(dAtA, i, uint64(len(m.Name)))
+		i--
+		dAtA[i] = 0xa
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *Chunk) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -336,31 +385,38 @@ func (m *Chunk) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *Chunk) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Chunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Type != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintTypes(dAtA, i, uint64(m.Type))
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if len(m.Data) > 0 {
-		dAtA[i] = 0x12
-		i++
+		i -= len(m.Data)
+		copy(dAtA[i:], m.Data)
 		i = encodeVarintTypes(dAtA, i, uint64(len(m.Data)))
-		i += copy(dAtA[i:], m.Data)
+		i--
+		dAtA[i] = 0x12
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.Type != 0 {
+		i = encodeVarintTypes(dAtA, i, uint64(m.Type))
+		i--
+		dAtA[i] = 0x8
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *Series) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -368,44 +424,54 @@ func (m *Series) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *Series) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Series) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.Labels) > 0 {
-		for _, msg := range m.Labels {
-			dAtA[i] = 0xa
-			i++
-			i = encodeVarintTypes(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if len(m.Chunks) > 0 {
-		for _, msg := range m.Chunks {
-			dAtA[i] = 0x12
-			i++
-			i = encodeVarintTypes(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
+		for iNdEx := len(m.Chunks) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Chunks[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintTypes(dAtA, i, uint64(size))
 			}
-			i += n
+			i--
+			dAtA[i] = 0x12
 		}
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if len(m.Labels) > 0 {
+		for iNdEx := len(m.Labels) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Labels[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintTypes(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0xa
+		}
 	}
-	return i, nil
+	return len(dAtA) - i, nil
 }
 
 func (m *AggrChunk) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -413,90 +479,108 @@ func (m *AggrChunk) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *AggrChunk) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *AggrChunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.MinTime != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintTypes(dAtA, i, uint64(m.MinTime))
-	}
-	if m.MaxTime != 0 {
-		dAtA[i] = 0x10
-		i++
-		i = encodeVarintTypes(dAtA, i, uint64(m.MaxTime))
-	}
-	if m.Raw != nil {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintTypes(dAtA, i, uint64(m.Raw.Size()))
-		n1, err := m.Raw.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n1
-	}
-	if m.Count != nil {
-		dAtA[i] = 0x22
-		i++
-		i = encodeVarintTypes(dAtA, i, uint64(m.Count.Size()))
-		n2, err := m.Count.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n2
-	}
-	if m.Sum != nil {
-		dAtA[i] = 0x2a
-		i++
-		i = encodeVarintTypes(dAtA, i, uint64(m.Sum.Size()))
-		n3, err := m.Sum.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n3
-	}
-	if m.Min != nil {
-		dAtA[i] = 0x32
-		i++
-		i = encodeVarintTypes(dAtA, i, uint64(m.Min.Size()))
-		n4, err := m.Min.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n4
-	}
-	if m.Max != nil {
-		dAtA[i] = 0x3a
-		i++
-		i = encodeVarintTypes(dAtA, i, uint64(m.Max.Size()))
-		n5, err := m.Max.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n5
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if m.Counter != nil {
-		dAtA[i] = 0x42
-		i++
-		i = encodeVarintTypes(dAtA, i, uint64(m.Counter.Size()))
-		n6, err := m.Counter.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
+		{
+			size, err := m.Counter.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTypes(dAtA, i, uint64(size))
 		}
-		i += n6
+		i--
+		dAtA[i] = 0x42
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if m.Max != nil {
+		{
+			size, err := m.Max.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTypes(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x3a
 	}
-	return i, nil
+	if m.Min != nil {
+		{
+			size, err := m.Min.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTypes(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x32
+	}
+	if m.Sum != nil {
+		{
+			size, err := m.Sum.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTypes(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x2a
+	}
+	if m.Count != nil {
+		{
+			size, err := m.Count.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTypes(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x22
+	}
+	if m.Raw != nil {
+		{
+			size, err := m.Raw.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTypes(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x1a
+	}
+	if m.MaxTime != 0 {
+		i = encodeVarintTypes(dAtA, i, uint64(m.MaxTime))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.MinTime != 0 {
+		i = encodeVarintTypes(dAtA, i, uint64(m.MinTime))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func (m *LabelMatcher) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
 	if err != nil {
 		return nil, err
 	}
@@ -504,43 +588,56 @@ func (m *LabelMatcher) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *LabelMatcher) MarshalTo(dAtA []byte) (int, error) {
-	var i int
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *LabelMatcher) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if m.Type != 0 {
-		dAtA[i] = 0x8
-		i++
-		i = encodeVarintTypes(dAtA, i, uint64(m.Type))
-	}
-	if len(m.Name) > 0 {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintTypes(dAtA, i, uint64(len(m.Name)))
-		i += copy(dAtA[i:], m.Name)
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
 	}
 	if len(m.Value) > 0 {
-		dAtA[i] = 0x1a
-		i++
+		i -= len(m.Value)
+		copy(dAtA[i:], m.Value)
 		i = encodeVarintTypes(dAtA, i, uint64(len(m.Value)))
-		i += copy(dAtA[i:], m.Value)
+		i--
+		dAtA[i] = 0x1a
 	}
-	if m.XXX_unrecognized != nil {
-		i += copy(dAtA[i:], m.XXX_unrecognized)
+	if len(m.Name) > 0 {
+		i -= len(m.Name)
+		copy(dAtA[i:], m.Name)
+		i = encodeVarintTypes(dAtA, i, uint64(len(m.Name)))
+		i--
+		dAtA[i] = 0x12
 	}
-	return i, nil
+	if m.Type != 0 {
+		i = encodeVarintTypes(dAtA, i, uint64(m.Type))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
 }
 
 func encodeVarintTypes(dAtA []byte, offset int, v uint64) int {
+	offset -= sovTypes(v)
+	base := offset
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
 		v >>= 7
 		offset++
 	}
 	dAtA[offset] = uint8(v)
-	return offset + 1
+	return base
 }
 func (m *Label) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	l = len(m.Name)
@@ -558,6 +655,9 @@ func (m *Label) Size() (n int) {
 }
 
 func (m *Chunk) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Type != 0 {
@@ -574,6 +674,9 @@ func (m *Chunk) Size() (n int) {
 }
 
 func (m *Series) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if len(m.Labels) > 0 {
@@ -595,6 +698,9 @@ func (m *Series) Size() (n int) {
 }
 
 func (m *AggrChunk) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.MinTime != 0 {
@@ -634,6 +740,9 @@ func (m *AggrChunk) Size() (n int) {
 }
 
 func (m *LabelMatcher) Size() (n int) {
+	if m == nil {
+		return 0
+	}
 	var l int
 	_ = l
 	if m.Type != 0 {
@@ -654,14 +763,7 @@ func (m *LabelMatcher) Size() (n int) {
 }
 
 func sovTypes(x uint64) (n int) {
-	for {
-		n++
-		x >>= 7
-		if x == 0 {
-			break
-		}
-	}
-	return n
+	return (math_bits.Len64(x|1) + 6) / 7
 }
 func sozTypes(x uint64) (n int) {
 	return sovTypes(uint64((x << 1) ^ uint64((int64(x) >> 63))))
@@ -681,7 +783,7 @@ func (m *Label) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -709,7 +811,7 @@ func (m *Label) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -719,6 +821,9 @@ func (m *Label) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTypes
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -738,7 +843,7 @@ func (m *Label) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -748,6 +853,9 @@ func (m *Label) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTypes
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -760,6 +868,9 @@ func (m *Label) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTypes
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTypes
 			}
 			if (iNdEx + skippy) > l {
@@ -790,7 +901,7 @@ func (m *Chunk) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -818,7 +929,7 @@ func (m *Chunk) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Type |= (Chunk_Encoding(b) & 0x7F) << shift
+				m.Type |= Chunk_Encoding(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -837,7 +948,7 @@ func (m *Chunk) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				byteLen |= (int(b) & 0x7F) << shift
+				byteLen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -846,6 +957,9 @@ func (m *Chunk) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTypes
 			}
 			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -861,6 +975,9 @@ func (m *Chunk) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTypes
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTypes
 			}
 			if (iNdEx + skippy) > l {
@@ -891,7 +1008,7 @@ func (m *Series) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -919,7 +1036,7 @@ func (m *Series) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -928,6 +1045,9 @@ func (m *Series) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTypes
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -950,7 +1070,7 @@ func (m *Series) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -959,6 +1079,9 @@ func (m *Series) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTypes
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -974,6 +1097,9 @@ func (m *Series) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTypes
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTypes
 			}
 			if (iNdEx + skippy) > l {
@@ -1004,7 +1130,7 @@ func (m *AggrChunk) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1032,7 +1158,7 @@ func (m *AggrChunk) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.MinTime |= (int64(b) & 0x7F) << shift
+				m.MinTime |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1051,7 +1177,7 @@ func (m *AggrChunk) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.MaxTime |= (int64(b) & 0x7F) << shift
+				m.MaxTime |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1070,7 +1196,7 @@ func (m *AggrChunk) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1079,6 +1205,9 @@ func (m *AggrChunk) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTypes
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1103,7 +1232,7 @@ func (m *AggrChunk) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1112,6 +1241,9 @@ func (m *AggrChunk) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTypes
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1136,7 +1268,7 @@ func (m *AggrChunk) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1145,6 +1277,9 @@ func (m *AggrChunk) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTypes
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1169,7 +1304,7 @@ func (m *AggrChunk) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1178,6 +1313,9 @@ func (m *AggrChunk) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTypes
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1202,7 +1340,7 @@ func (m *AggrChunk) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1211,6 +1349,9 @@ func (m *AggrChunk) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTypes
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1235,7 +1376,7 @@ func (m *AggrChunk) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1244,6 +1385,9 @@ func (m *AggrChunk) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTypes
 			}
 			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1261,6 +1405,9 @@ func (m *AggrChunk) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTypes
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTypes
 			}
 			if (iNdEx + skippy) > l {
@@ -1291,7 +1438,7 @@ func (m *LabelMatcher) Unmarshal(dAtA []byte) error {
 			}
 			b := dAtA[iNdEx]
 			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
+			wire |= uint64(b&0x7F) << shift
 			if b < 0x80 {
 				break
 			}
@@ -1319,7 +1466,7 @@ func (m *LabelMatcher) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Type |= (LabelMatcher_Type(b) & 0x7F) << shift
+				m.Type |= LabelMatcher_Type(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1338,7 +1485,7 @@ func (m *LabelMatcher) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1348,6 +1495,9 @@ func (m *LabelMatcher) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTypes
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1367,7 +1517,7 @@ func (m *LabelMatcher) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				stringLen |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1377,6 +1527,9 @@ func (m *LabelMatcher) Unmarshal(dAtA []byte) error {
 				return ErrInvalidLengthTypes
 			}
 			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
@@ -1389,6 +1542,9 @@ func (m *LabelMatcher) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			if skippy < 0 {
+				return ErrInvalidLengthTypes
+			}
+			if (iNdEx + skippy) < 0 {
 				return ErrInvalidLengthTypes
 			}
 			if (iNdEx + skippy) > l {
@@ -1458,8 +1614,11 @@ func skipTypes(dAtA []byte) (n int, err error) {
 					break
 				}
 			}
-			iNdEx += length
 			if length < 0 {
+				return 0, ErrInvalidLengthTypes
+			}
+			iNdEx += length
+			if iNdEx < 0 {
 				return 0, ErrInvalidLengthTypes
 			}
 			return iNdEx, nil
@@ -1490,6 +1649,9 @@ func skipTypes(dAtA []byte) (n int, err error) {
 					return 0, err
 				}
 				iNdEx = start + next
+				if iNdEx < 0 {
+					return 0, ErrInvalidLengthTypes
+				}
 			}
 			return iNdEx, nil
 		case 4:
@@ -1508,36 +1670,3 @@ var (
 	ErrInvalidLengthTypes = fmt.Errorf("proto: negative length found during unmarshaling")
 	ErrIntOverflowTypes   = fmt.Errorf("proto: integer overflow")
 )
-
-func init() { proto.RegisterFile("types.proto", fileDescriptor_types_60e135d4a4f03620) }
-
-var fileDescriptor_types_60e135d4a4f03620 = []byte{
-	// 432 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x92, 0xdd, 0x6e, 0xd3, 0x30,
-	0x14, 0xc7, 0xeb, 0x7c, 0x76, 0x67, 0x03, 0x05, 0x33, 0x21, 0x97, 0x8b, 0xae, 0x0a, 0x17, 0x54,
-	0x20, 0x32, 0x31, 0x9e, 0x80, 0xa1, 0xdc, 0xf1, 0xa1, 0x99, 0x5d, 0x20, 0x84, 0x84, 0xdc, 0xce,
-	0xa4, 0x11, 0x8d, 0x5d, 0xc5, 0x0e, 0x74, 0x8f, 0x81, 0x78, 0xa9, 0x5e, 0xf2, 0x04, 0x08, 0xfa,
-	0x24, 0xc8, 0x27, 0x0d, 0x5b, 0xa5, 0xdc, 0x1d, 0x9f, 0xff, 0xef, 0x7c, 0xc8, 0xe7, 0x0f, 0x87,
-	0xf6, 0x7a, 0x25, 0x4d, 0xb6, 0xaa, 0xb5, 0xd5, 0x34, 0xb2, 0x0b, 0xa1, 0xb4, 0x79, 0x78, 0x5c,
-	0xe8, 0x42, 0x63, 0xea, 0xd4, 0x45, 0xad, 0x9a, 0x3e, 0x87, 0xf0, 0xb5, 0x98, 0xc9, 0x25, 0xa5,
-	0x10, 0x28, 0x51, 0x49, 0x46, 0x26, 0x64, 0x7a, 0xc0, 0x31, 0xa6, 0xc7, 0x10, 0x7e, 0x13, 0xcb,
-	0x46, 0x32, 0x0f, 0x93, 0xed, 0x23, 0xfd, 0x04, 0xe1, 0xab, 0x45, 0xa3, 0xbe, 0xd2, 0x27, 0x10,
-	0xb8, 0x41, 0x58, 0x72, 0xf7, 0xec, 0x41, 0xd6, 0x0e, 0xca, 0x50, 0xcc, 0x72, 0x35, 0xd7, 0x57,
-	0xa5, 0x2a, 0x38, 0x32, 0xae, 0xfd, 0x95, 0xb0, 0x02, 0x3b, 0x1d, 0x71, 0x8c, 0xd3, 0xfb, 0x30,
-	0xec, 0x28, 0x1a, 0x83, 0xff, 0xe1, 0x1d, 0x4f, 0x06, 0xe9, 0x17, 0x88, 0xde, 0xcb, 0xba, 0x94,
-	0x86, 0x3e, 0x85, 0x68, 0xe9, 0x56, 0x33, 0x8c, 0x4c, 0xfc, 0xe9, 0xe1, 0xd9, 0x9d, 0x6e, 0x00,
-	0x2e, 0x7c, 0x1e, 0x6c, 0x7e, 0x9f, 0x0c, 0xf8, 0x0e, 0xa1, 0xa7, 0x10, 0xcd, 0xdd, 0x5c, 0xc3,
-	0x3c, 0x84, 0xef, 0x75, 0xf0, 0xcb, 0xa2, 0xa8, 0x71, 0xa3, 0xae, 0xa0, 0xc5, 0xd2, 0x9f, 0x1e,
-	0x1c, 0xfc, 0xd7, 0xe8, 0x08, 0x86, 0x55, 0xa9, 0x3e, 0xdb, 0x72, 0xf7, 0x03, 0x3e, 0x8f, 0xab,
-	0x52, 0x5d, 0x96, 0x95, 0x44, 0x49, 0xac, 0x5b, 0xc9, 0xdb, 0x49, 0x62, 0x8d, 0xd2, 0x09, 0xf8,
-	0xb5, 0xf8, 0xce, 0xfc, 0x09, 0xb9, 0xbd, 0x1e, 0x76, 0xe4, 0x4e, 0xa1, 0x8f, 0x20, 0x9c, 0xeb,
-	0x46, 0x59, 0x16, 0xf4, 0x21, 0xad, 0xe6, 0xba, 0x98, 0xa6, 0x62, 0x61, 0x6f, 0x17, 0xd3, 0x54,
-	0x0e, 0xa8, 0x4a, 0xc5, 0xa2, 0x5e, 0xa0, 0x2a, 0x15, 0x02, 0x62, 0xcd, 0xe2, 0x7e, 0x40, 0xac,
-	0xe9, 0x63, 0x88, 0x71, 0x96, 0xac, 0xd9, 0xb0, 0x0f, 0xea, 0xd4, 0xf4, 0x07, 0x81, 0x23, 0xfc,
-	0xde, 0x37, 0xc2, 0xce, 0x17, 0xb2, 0xa6, 0xcf, 0xf6, 0x6e, 0x3c, 0xda, 0x3b, 0xc1, 0x8e, 0xc9,
-	0x2e, 0xaf, 0x57, 0xf2, 0xe6, 0xcc, 0xe8, 0x22, 0xaf, 0xcf, 0x45, 0xfe, 0x6d, 0x17, 0x4d, 0x21,
-	0x70, 0x75, 0x34, 0x02, 0x2f, 0xbf, 0x48, 0x06, 0xce, 0x00, 0x6f, 0xf3, 0x8b, 0x84, 0xb8, 0x04,
-	0xcf, 0x13, 0x0f, 0x13, 0x3c, 0x4f, 0xfc, 0xf3, 0xd1, 0xe6, 0xef, 0x78, 0xb0, 0xd9, 0x8e, 0xc9,
-	0xaf, 0xed, 0x98, 0xfc, 0xd9, 0x8e, 0xc9, 0xc7, 0xd8, 0x58, 0x5d, 0xcb, 0xd5, 0x6c, 0x16, 0xa1,
-	0x89, 0x5f, 0xfc, 0x0b, 0x00, 0x00, 0xff, 0xff, 0x46, 0x5a, 0xe2, 0x68, 0xf1, 0x02, 0x00, 0x00,
-}

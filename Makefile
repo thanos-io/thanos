@@ -1,54 +1,72 @@
 PREFIX            ?= $(shell pwd)
-FILES             ?= $(shell find . -type f -name '*.go' -not -path "./vendor/*")
-DOCKER_IMAGE_NAME ?= thanos
+FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print)
+
+DOCKER_IMAGE_REPO ?= quay.io/thanos/thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
-# $GOPATH/bin might not be in $PATH, so we can't assume `which` would give use
-# the path of promu et al. As for selecting the first GOPATH, we assume:
-# - most people only have one GOPATH at a time;
-# - if you don't have one or any of those tools installed, running `go get`
-#   would place them in the first GOPATH.
-# It's possible that any of the tools would be installed in the other GOPATHs,
-# but for simplicity sake we just make sure they exist in the first one, and
-# then keep using those.
-FIRST_GOPATH      ?= $(firstword $(subst :, ,$(shell go env GOPATH)))
+DOCKER_CI_TAG     ?= test
+
+# Ensure everything works even if GOPATH is not set, which is often the case.
+# The `go env GOPATH` will work for all cases for Go 1.8+.
+GOPATH            ?= $(shell go env GOPATH)
+
 TMP_GOPATH        ?= /tmp/thanos-go
-BIN_DIR           ?= $(FIRST_GOPATH)/bin
+GOBIN             ?= $(firstword $(subst :, ,${GOPATH}))/bin
 GO111MODULE       ?= on
 export GO111MODULE
+GOPROXY           ?= https://proxy.golang.org
+export GOPROXY
 
 # Tools.
-EMBEDMD           ?= $(BIN_DIR)/embedmd-$(EMBEDMD_VERSION)
+EMBEDMD           ?= $(GOBIN)/embedmd-$(EMBEDMD_VERSION)
 # v2.0.0
 EMBEDMD_VERSION   ?= 97c13d6e41602fc6e397eb51c45f38069371a969
-ERRCHECK          ?= $(BIN_DIR)/errcheck-$(ERRCHECK_VERSION)
-# v1.2.0
-ERRCHECK_VERSION  ?= e14f8d59a22d460d56c5ee92507cd94c78fbf274
-LICHE             ?= $(BIN_DIR)/liche-$(LICHE_VERSION)
+LICHE             ?= $(GOBIN)/liche-$(LICHE_VERSION)
 LICHE_VERSION     ?= 2a2e6e56f6c615c17b2e116669c4cdb31b5453f3
-GOIMPORTS         ?= $(BIN_DIR)/goimports-$(GOIMPORTS_VERSION)
-GOIMPORTS_VERSION ?= 1c3d964395ce8f04f3b03b30aaed0b096c08c3c6
-PROMU             ?= $(BIN_DIR)/promu-$(PROMU_VERSION)
-# v0.2.0
-PROMU_VERSION     ?= 264dc36af9ea3103255063497636bd5713e3e9c1
-PROTOC            ?= $(BIN_DIR)/protoc-$(PROTOC_VERSION)
+GOIMPORTS         ?= $(GOBIN)/goimports-$(GOIMPORTS_VERSION)
+GOIMPORTS_VERSION ?= 9d4d845e86f14303813298ede731a971dd65b593
+PROMU             ?= $(GOBIN)/promu-$(PROMU_VERSION)
+PROMU_VERSION     ?= 9583e5a6448f97c6294dca72dd1d173e28f8d4a4
+PROTOC            ?= $(GOBIN)/protoc-$(PROTOC_VERSION)
 PROTOC_VERSION    ?= 3.4.0
+# v0.55.3 This needs to match with version in netlify.toml
+HUGO_VERSION      ?= 993b84333cd75faa224d02618f312a0e96b53372
+HUGO              ?= $(GOBIN)/hugo-$(HUGO_VERSION)
+# v3.1.1
+GOBINDATA_VERSION ?= a9c83481b38ebb1c4eb8f0168fd4b10ca1d3c523
+GOBINDATA         ?= $(GOBIN)/go-bindata-$(GOBINDATA_VERSION)
 GIT               ?= $(shell which git)
-BZR               ?= $(shell which bzr)
+
+GOLANGCILINT_VERSION ?= d2b1eea2c6171a1a1141a448a745335ce2e928a1
+GOLANGCILINT         ?= $(GOBIN)/golangci-lint-$(GOLANGCILINT_VERSION)
+MISSPELL_VERSION     ?= c0b55c8239520f6b5aa15a0207ca8b28027ba49e
+MISSPELL             ?= $(GOBIN)/misspell-$(MISSPELL_VERSION)
+
+WEB_DIR           ?= website
+WEBSITE_BASE_URL  ?= https://thanos.io
+PUBLIC_DIR        ?= $(WEB_DIR)/public
+ME                ?= $(shell whoami)
 
 # E2e test deps.
-# Referenced by github.com/improbable-eng/thanos/blob/master/docs/getting_started.md#prometheus
+# Referenced by github.com/thanos-io/thanos/blob/master/docs/getting_started.md#prometheus
 
-# Limitied prom version, because testing was not possibe. This should fix it: https://github.com/improbable-eng/thanos/issues/758
-PROM_VERSIONS           ?=v2.4.3 v2.5.0
-ALERTMANAGER_VERSION    ?=v0.15.2
-MINIO_SERVER_VERSION    ?=RELEASE.2018-10-06T00-15-16Z
+# Limited prom version, because testing was not possible. This should fix it: https://github.com/thanos-io/thanos/issues/758
+PROM_VERSIONS           ?= v2.4.3 v2.5.0 v2.8.1 v2.9.2 v2.13.0
+PROMS ?= $(GOBIN)/prometheus-v2.4.3 $(GOBIN)/prometheus-v2.5.0 $(GOBIN)/prometheus-v2.8.1 $(GOBIN)/prometheus-v2.9.2 $(GOBIN)/prometheus-v2.13.0
 
-# fetch_go_bin_version downloads (go gets) the binary from specific version and installs it in $(BIN_DIR)/<bin>-<version>
+ALERTMANAGER_VERSION    ?= v0.15.2
+ALERTMANAGER            ?= $(GOBIN)/alertmanager-$(ALERTMANAGER_VERSION)
+
+MINIO_SERVER_VERSION    ?= RELEASE.2018-10-06T00-15-16Z
+MINIO_SERVER            ?=$(GOBIN)/minio-$(MINIO_SERVER_VERSION)
+
+# fetch_go_bin_version downloads (go gets) the binary from specific version and installs it in $(GOBIN)/<bin>-<version>
 # arguments:
 # $(1): Install path. (e.g github.com/campoy/embedmd)
 # $(2): Tag or revision for checkout.
+# TODO(bwplotka): Move to just using modules, however make sure to not use or edit Thanos go.mod file!
 define fetch_go_bin_version
-	@mkdir -p $(BIN_DIR)
+	@mkdir -p $(GOBIN)
+	@mkdir -p $(TMP_GOPATH)
 
 	@echo ">> fetching $(1)@$(2) revision/version"
 	@if [ ! -d '$(TMP_GOPATH)/src/$(1)' ]; then \
@@ -59,8 +77,27 @@ define fetch_go_bin_version
 	@CDPATH='' cd -- '$(TMP_GOPATH)/src/$(1)' && git checkout -f -q '$(2)'
 	@echo ">> installing $(1)@$(2)"
 	@GOBIN='$(TMP_GOPATH)/bin' GOPATH='$(TMP_GOPATH)' GO111MODULE='off' go install '$(1)'
-	@mv -- '$(TMP_GOPATH)/bin/$(shell basename $(1))' '$(BIN_DIR)/$(shell basename $(1))-$(2)'
-	@echo ">> produced $(BIN_DIR)/$(shell basename $(1))-$(2)"
+	@mv -- '$(TMP_GOPATH)/bin/$(shell basename $(1))' '$(GOBIN)/$(shell basename $(1))-$(2)'
+	@echo ">> produced $(GOBIN)/$(shell basename $(1))-$(2)"
+
+endef
+
+define require_clean_work_tree
+	@git update-index -q --ignore-submodules --refresh
+
+    @if ! git diff-files --quiet --ignore-submodules --; then \
+        echo >&2 "cannot $1: you have unstaged changes."; \
+        git diff-files --name-status -r --ignore-submodules -- >&2; \
+        echo >&2 "Please commit or stash them."; \
+        exit 1; \
+    fi
+
+    @if ! git diff-index --cached --quiet HEAD --ignore-submodules --; then \
+        echo >&2 "cannot $1: your index contains uncommitted changes."; \
+        git diff-index --cached --name-status -r --ignore-submodules HEAD -- >&2; \
+        echo >&2 "Please commit or stash them."; \
+        exit 1; \
+    fi
 
 endef
 
@@ -69,45 +106,50 @@ all: format build
 
 # assets repacks all statis assets into go file for easier deploy.
 .PHONY: assets
-assets:
+assets: $(GOBINDATA)
 	@echo ">> deleting asset file"
 	@rm pkg/ui/bindata.go || true
 	@echo ">> writing assets"
-	@go get -u github.com/jteeuwen/go-bindata/...
-	@go-bindata $(bindata_flags) -pkg ui -o pkg/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  pkg/ui/templates/... pkg/ui/static/...
+	@$(GOBINDATA) $(bindata_flags) -pkg ui -o pkg/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  pkg/ui/templates/... pkg/ui/static/...
 	@go fmt ./pkg/ui
 
 
 # build builds Thanos binary using `promu`.
 .PHONY: build
-build: check-git check-bzr go-mod-tidy $(PROMU)
-	@echo ">> building binaries"
+build: check-git deps $(PROMU)
+	@echo ">> building binaries $(GOBIN)"
 	@$(PROMU) build --prefix $(PREFIX)
 
 # crossbuild builds all binaries for all platforms.
 .PHONY: crossbuild
-crossbuild: check-git check-bzr go-mod-tidy $(PROMU)
+crossbuild: $(PROMU)
 	@echo ">> crossbuilding all binaries"
 	$(PROMU) crossbuild -v
+
+# deps ensures fresh go.mod and go.sum.
+.PHONY: deps
+deps:
+	@go mod tidy
+	@go mod verify
 
 # docker builds docker with no tag.
 .PHONY: docker
 docker: build
-	@echo ">> building docker image '${DOCKER_IMAGE_NAME}'"
-	@docker build -t "${DOCKER_IMAGE_NAME}" .
+	@echo ">> building docker image 'thanos'"
+	@docker build -t "thanos" .
 
 #docker-multi-stage builds docker image using multi-stage.
 .PHONY: docker-multi-stage
 docker-multi-stage:
-	@echo ">> building docker image '${DOCKER_IMAGE_NAME}' with Dockerfile.multi-stage"
-	@docker build -f Dockerfile.multi-stage -t "${DOCKER_IMAGE_NAME}" .
+	@echo ">> building docker image 'thanos' with Dockerfile.multi-stage"
+	@docker build -f Dockerfile.multi-stage -t "thanos" .
 
-# docker-push pushes docker image build under `${DOCKER_IMAGE_NAME}` to improbable/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
+# docker-push pushes docker image build under `thanos` to "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)"
 .PHONY: docker-push
 docker-push:
 	@echo ">> pushing image"
-	@docker tag "${DOCKER_IMAGE_NAME}" improbable/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
-	@docker push improbable/"$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)"
+	@docker tag "thanos" "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)"
+	@docker push "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)"
 
 # docs regenerates flags in docs for all thanos commands.
 .PHONY: docs
@@ -118,73 +160,89 @@ docs: $(EMBEDMD) build
 .PHONY: check-docs
 check-docs: $(EMBEDMD) $(LICHE) build
 	@EMBEDMD_BIN="$(EMBEDMD)" scripts/genflagdocs.sh check
-	@$(LICHE) --recursive docs --document-root .
+	@$(LICHE) --recursive docs --exclude "(cloud.tencent.com|alibabacloud.com)" --document-root .
+	@$(LICHE) --exclude "(cloud.tencent.com|goreportcard.com|alibabacloud.com)" --document-root . *.md
 
-# errcheck performs static analysis and returns error if any of the errors is not checked.
-.PHONY: errcheck
-errcheck: $(ERRCHECK)
-	@echo ">> errchecking the code"
-	$(ERRCHECK) -verbose -exclude .errcheck_excludes.txt ./cmd/... ./pkg/... ./test/...
+# checks Go code comments if they have trailing period (excludes protobuffers and vendor files).
+# Comments with more than 3 spaces at beginning are omitted from the check, example: '//    - foo'.
+.PHONY: check-comments
+check-comments:
+	@printf ">> checking Go comments trailing periods\n\n\n"
+	@./scripts/build-check-comments.sh
 
 # format formats the code (including imports format).
-# NOTE: format requires deps to not remove imports that are used, just not resolved.
-# This is not encoded, because it is often used in IDE onSave logic.
 .PHONY: format
-format: $(GOIMPORTS)
+format: $(GOIMPORTS) check-comments
 	@echo ">> formatting code"
-	@$(GOIMPORTS) -w $(FILES)
+	@$(GOIMPORTS) -w $(FILES_TO_FMT)
 
 # proto generates golang files from Thanos proto files.
 .PHONY: proto
-proto: check-git check-bzr $(GOIMPORTS) $(PROTOC)
-	@go install ./vendor/github.com/gogo/protobuf/protoc-gen-gogofast
+proto: check-git  $(GOIMPORTS) $(PROTOC)
 	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" scripts/genproto.sh
 
 .PHONY: promu
 promu: $(PROMU)
 
-# tarball builds release tarball.
-.PHONY: tarball
-tarball: $(PROMU)
-	@echo ">> building release tarball"
-	$(PROMU) tarball --prefix $(PREFIX) $(BIN_DIR)
-
 .PHONY: tarballs-release
 tarballs-release: $(PROMU)
 	@echo ">> Publishing tarballs"
-	$(PROMU) crossbuild tarballs
-	$(PROMU) checksum .tarballs
-	$(PROMU) release .tarballs
+	$(PROMU) crossbuild -v tarballs
+	$(PROMU) checksum -v .tarballs
+	$(PROMU) release -v .tarballs
 
 # test runs all Thanos golang tests against each supported version of Prometheus.
 .PHONY: test
-test: check-git check-bzr test-deps
-	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS='true' or/and THANOS_SKIP_S3_AWS_TESTS='true' or/and THANOS_SKIP_AZURE_TESTS='true' and/or THANOS_SKIP_SWIFT_TESTS='true' and/or THANOS_SKIP_TENCENT_COS_TESTS='true' if you want to skip e2e tests against real store buckets"
-	THANOS_TEST_PROMETHEUS_VERSIONS="$(PROM_VERSIONS)" THANOS_TEST_ALERTMANAGER_PATH="alertmanager-$(ALERTMANAGER_VERSION)" go test $(shell go list ./... | grep -v /vendor/ | grep -v /benchmark/);
+test: export GOCACHE= $(TMP_GOPATH)/gocache
+test: export THANOS_TEST_MINIO_PATH= $(MINIO_SERVER)
+test: export THANOS_TEST_PROMETHEUS_VERSIONS= $(PROM_VERSIONS)
+test: export THANOS_TEST_ALERTMANAGER_PATH= $(ALERTMANAGER)
+test: check-git install-deps
+	@echo ">> install thanos GOOPTS=${GOOPTS}"
+	# Thanos binary is required by e2e tests.
+	@go install github.com/thanos-io/thanos/cmd/thanos
+	# Be careful on GOCACHE. Those tests are sometimes using built Thanos/Prometheus binaries directly. Don't cache those.
+	@rm -rf ${GOCACHE}
+	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS='true' or/and THANOS_SKIP_S3_AWS_TESTS='true' or/and THANOS_SKIP_AZURE_TESTS='true' and/or THANOS_SKIP_SWIFT_TESTS='true' and/or THANOS_SKIP_ALIYUN_OSS_TESTS='true' and/or THANOS_SKIP_TENCENT_COS_TESTS='true' if you want to skip e2e tests against real store buckets"
+	@go test $(shell go list ./... | grep -v /vendor/);
 
-# test-deps installs dependency for e2e tets.
-# It installs current Thanos, supported versions of Prometheus and alertmanager to test against in e2e.
-.PHONY: test-deps
-test-deps:
-	@go install github.com/improbable-eng/thanos/cmd/thanos
-	$(foreach ver,$(PROM_VERSIONS),$(call fetch_go_bin_version,github.com/prometheus/prometheus/cmd/prometheus,$(ver)))
-	$(call fetch_go_bin_version,github.com/prometheus/alertmanager/cmd/alertmanager,$(ALERTMANAGER_VERSION))
-	$(call fetch_go_bin_version,github.com/minio/minio,$(MINIO_SERVER_VERSION))
+.PHONY: test-ci
+test-ci: export THANOS_SKIP_AZURE_TESTS = true
+test-ci: export THANOS_SKIP_SWIFT_TESTS = true
+test-ci: export THANOS_SKIP_TENCENT_COS_TESTS = true
+test-ci: export THANOS_SKIP_ALIYUN_OSS_TESTS = true
+test-ci:
+	@echo ">> Skipping AZURE tests"
+	@echo ">> Skipping SWIFT tests"
+	@echo ">> Skipping TENCENT tests"
+	@echo ">> Skipping ALIYUN tests"
+	$(MAKE) test
 
-# vet vets the code.
-.PHONY: vet
-vet: check-git check-bzr
-	@echo ">> vetting code"
-	@go vet ./...
+.PHONY: test-local
+test-local: export THANOS_SKIP_GCS_TESTS = true
+test-local: export THANOS_SKIP_S3_AWS_TESTS = true
+test-local:
+	@echo ">> Skipping GCE tests"
+	@echo ">> Skipping S3 tests"
+	$(MAKE) test-ci
 
-# go mod related
-.PHONY: go-mod-tidy
-go-mod-tidy: check-git check-bzr
-	@go mod tidy
+# install-deps installs dependencies for e2e tetss.
+# It installs supported versions of Prometheus and alertmanager to test against in e2e.
+.PHONY: install-deps
+install-deps: $(ALERTMANAGER) $(MINIO_SERVER) $(PROMS)
+	@echo ">>GOBIN=$(GOBIN)"
 
-.PHONY: check-go-mod
-check-go-mod: go-mod-tidy
-	@git diff --exit-code go.mod go.sum > /dev/null || echo >&2 "go.mod and/or go.sum have uncommited changes. See CONTRIBUTING.md."
+.PHONY: docker-ci
+# To be run by Thanos maintainer.
+docker-ci: install-deps
+	# Copy all to tmp local dir as this is required by docker.
+	@rm -rf ./tmp/bin
+	@mkdir -p ./tmp/bin
+	@cp -r $(GOBIN)/* ./tmp/bin
+	@docker build -t thanos-ci -f Dockerfile.thanos-ci .
+	@echo ">> pushing thanos-ci image"
+	@docker tag "thanos-ci" "quay.io/thanos/thanos-ci:$(DOCKER_CI_TAG)"
+	@docker push "quay.io/thanos/thanos-ci:$(DOCKER_CI_TAG)"
 
 # tooling deps. TODO(bwplotka): Pin them all to certain version!
 .PHONY: check-git
@@ -195,20 +253,38 @@ else
 	@echo >&2 "No git binary found."; exit 1
 endif
 
-.PHONY: check-bzr
-check-bzr:
-ifneq ($(BZR),)
-	@test -x $(BZR) || (echo >&2 "No bzr exectuable binary found at $(BZR)."; exit 1)
-else
-	@echo >&2 "No bzr binary found."; exit 1
-endif
+.PHONY: web-pre-process
+web-pre-process:
+	@echo ">> running documentation website pre processing"
+	@bash scripts/websitepreprocess.sh
+
+.PHONY: web
+web: web-pre-process $(HUGO)
+	@echo ">> building documentation website"
+	# TODO(bwplotka): Make it --gc
+	@cd $(WEB_DIR) && HUGO_ENV=production $(HUGO) --config hugo.yaml --minify -v -b $(WEBSITE_BASE_URL)
+
+.PHONY: lint
+# PROTIP:
+# Add
+#      --cpu-profile-path string   Path to CPU profile output file
+#      --mem-profile-path string   Path to memory profile output file
+#
+# to debug big allocations during linting.
+lint: check-git $(GOLANGCILINT) $(MISSPELL)
+	@echo ">> linting all of the Go files GOGC=${GOGC}"
+	@$(GOLANGCILINT) run --enable goimports --enable goconst --skip-dirs vendor
+	@echo ">> detecting misspells"
+	@find . -type f | grep -v vendor/ | grep -vE '\./\..*' | xargs $(MISSPELL) -error
+
+.PHONY: web-serve
+web-serve: web-pre-process $(HUGO)
+	@echo ">> serving documentation website"
+	@cd $(WEB_DIR) && $(HUGO) --config hugo.yaml -v server
 
 # non-phony targets
 $(EMBEDMD):
 	$(call fetch_go_bin_version,github.com/campoy/embedmd,$(EMBEDMD_VERSION))
-
-$(ERRCHECK):
-	$(call fetch_go_bin_version,github.com/kisielk/errcheck,$(ERRCHECK_VERSION))
 
 $(GOIMPORTS):
 	$(call fetch_go_bin_version,golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VERSION))
@@ -219,10 +295,33 @@ $(LICHE):
 $(PROMU):
 	$(call fetch_go_bin_version,github.com/prometheus/promu,$(PROMU_VERSION))
 
+$(HUGO):
+	@go get github.com/gohugoio/hugo@$(HUGO_VERSION)
+	@mv $(GOBIN)/hugo $(HUGO)
+	@go mod tidy
+
+$(GOBINDATA):
+	$(call fetch_go_bin_version,github.com/go-bindata/go-bindata/go-bindata,$(GOBINDATA_VERSION))
+
+$(GOLANGCILINT):
+	$(call fetch_go_bin_version,github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCILINT_VERSION))
+
+$(MISSPELL):
+	$(call fetch_go_bin_version,github.com/client9/misspell/cmd/misspell,$(MISSPELL_VERSION))
+
+$(ALERTMANAGER):
+	$(call fetch_go_bin_version,github.com/prometheus/alertmanager/cmd/alertmanager,$(ALERTMANAGER_VERSION))
+
+$(MINIO_SERVER):
+	$(call fetch_go_bin_version,github.com/minio/minio,$(MINIO_SERVER_VERSION))
+
+$(PROMS):
+	$(foreach ver,$(PROM_VERSIONS),$(call fetch_go_bin_version,github.com/prometheus/prometheus/cmd/prometheus,$(ver)))
+
 $(PROTOC):
 	@mkdir -p $(TMP_GOPATH)
 	@echo ">> fetching protoc@${PROTOC_VERSION}"
 	@PROTOC_VERSION="$(PROTOC_VERSION)" TMP_GOPATH="$(TMP_GOPATH)" scripts/installprotoc.sh
 	@echo ">> installing protoc@${PROTOC_VERSION}"
-	@mv -- "$(TMP_GOPATH)/bin/protoc" "$(BIN_DIR)/protoc-$(PROTOC_VERSION)"
-	@echo ">> produced $(BIN_DIR)/protoc-$(PROTOC_VERSION)"
+	@mv -- "$(TMP_GOPATH)/bin/protoc" "$(GOBIN)/protoc-$(PROTOC_VERSION)"
+	@echo ">> produced $(GOBIN)/protoc-$(PROTOC_VERSION)"

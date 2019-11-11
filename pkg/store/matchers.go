@@ -1,9 +1,9 @@
 package store
 
 import (
-	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/pkg/errors"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 func translateMatcher(m storepb.LabelMatcher) (labels.Matcher, error) {

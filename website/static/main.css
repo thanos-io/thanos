@@ -1,0 +1,73 @@
+.bg-purple {
+    background-color: #6D41FF;
+}
+
+.color-purple {
+    color: #6D41FF;
+}
+
+.navbar-brand img {
+    height: 32px;
+    margin-right: 10px;
+    max-width: 100%;
+}
+
+.navbar-dark .navbar-nav .nav-link {
+    color: #fff;
+}
+
+.nav-link:hover {
+    color: rgba(255,255,255,.5)
+}
+
+.btn-outline-secondary {
+    color: #6D41FF;
+    border-color: #6D41FF;
+}
+
+.btn-outline-secondary:hover, .btn-outline-secondary:active {
+    color: #fff;
+    background-color: #6D41FF !important;
+    border-color: #6D41FF !important;
+}
+
+a {
+    color: #6D41FF;
+}
+
+pre {
+    padding: 1rem;
+}
+
+.list-group-item-thanos {
+    color: #6D41FF;
+    border: 0;
+    padding: 0.5rem;
+    background-color: transparent;
+    text-indent: 1rem;
+}
+
+.list-group-item-thanos:hover {
+    color: #6D41FF;
+}
+
+.img-adopter {
+    padding: 25px;
+    background-color: #fff;
+    box-shadow: 0 2px 4px rgba(0,0,0,.1);
+    border: 1px solid #dee2e6;
+    margin: 15px 0 15px;
+    border-radius: .25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100px;
+}
+
+.img-adopter img {
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.header-anchor { font-size: 100%; visibility: hidden;}
+h1:hover a, h2:hover a, h3:hover a, h4:hover a { visibility: visible}

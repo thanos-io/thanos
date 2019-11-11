@@ -11,22 +11,31 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/block"
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
-	"github.com/improbable-eng/thanos/pkg/objstore"
-	"github.com/improbable-eng/thanos/pkg/objstore/client"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/improbable-eng/thanos/pkg/verifier"
+	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
 	"github.com/oklog/ulid"
 	"github.com/olekukonko/tablewriter"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/compact"
+	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/extflag"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/prober"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	httpserver "github.com/thanos-io/thanos/pkg/server/http"
+	"github.com/thanos-io/thanos/pkg/ui"
+	"github.com/thanos-io/thanos/pkg/verifier"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
-	"gopkg.in/alecthomas/kingpin.v2"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 var (
@@ -43,7 +52,7 @@ var (
 		sort.Strings(s)
 		return s
 	}
-	inspectColumns = []string{"ULID", "FROM", "UNTIL", "RANGE", "UNTIL-COMP", "#SERIES", "#SAMPLES", "#CHUNKS", "COMP-LEVEL", "COMP-FAILED", "LABELS", "RESOLUTION", "SOURCE"}
+	inspectColumns = []string{"ULID", "FROM", "UNTIL", "RANGE", "UNTIL-DOWN", "#SERIES", "#SAMPLES", "#CHUNKS", "COMP-LEVEL", "COMP-FAILED", "LABELS", "RESOLUTION", "SOURCE"}
 )
 
 func registerBucket(m map[string]setupFunc, app *kingpin.Application, name string) {
@@ -53,10 +62,10 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	registerBucketVerify(m, cmd, name, objStoreConfig)
 	registerBucketLs(m, cmd, name, objStoreConfig)
 	registerBucketInspect(m, cmd, name, objStoreConfig)
-	return
+	registerBucketWeb(m, cmd, name, objStoreConfig)
 }
 
-func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
+func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
 	cmd := root.Command("verify", "Verify all blocks in the bucket against specified issues")
 	objStoreBackupConfig := regCommonObjStoreFlags(cmd, "-backup", false, "Used for repair logic to backup blocks before removal.")
 	repair := cmd.Flag("repair", "Attempt to repair blocks for which issues were detected").
@@ -85,10 +94,11 @@ func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name 
 		var backupBkt objstore.Bucket
 		if len(backupconfContentYaml) == 0 {
 			if *repair {
-				return errors.Wrap(err, "repair is specified, so backup client is required")
+				return errors.New("repair is specified, so backup client is required")
 			}
 		} else {
-			backupBkt, err = client.NewBucket(logger, backupconfContentYaml, reg, name)
+			// nil Prometheus registerer: don't create conflicting metrics.
+			backupBkt, err = client.NewBucket(logger, backupconfContentYaml, nil, name)
 			if err != nil {
 				return err
 			}
@@ -142,7 +152,7 @@ func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name 
 	}
 }
 
-func registerBucketLs(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
+func registerBucketLs(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
 	cmd := root.Command("ls", "List all blocks in the bucket")
 	output := cmd.Flag("output", "Optional format in which to print each block's information. Options are 'json', 'wide' or a custom template.").
 		Short('o').Default("").String()
@@ -167,6 +177,7 @@ func registerBucketLs(m map[string]setupFunc, root *kingpin.CmdClause, name stri
 
 		var (
 			format     = *output
+			objects    = 0
 			printBlock func(id ulid.ULID) error
 		)
 
@@ -223,22 +234,28 @@ func registerBucketLs(m map[string]setupFunc, root *kingpin.CmdClause, name stri
 			}
 		}
 
-		return bkt.Iter(ctx, "", func(name string) error {
+		if err := bkt.Iter(ctx, "", func(name string) error {
 			id, ok := block.IsBlockDir(name)
 			if !ok {
 				return nil
 			}
+			objects++
 			return printBlock(id)
-		})
+		}); err != nil {
+			return errors.Wrap(err, "iter")
+		}
+		level.Info(logger).Log("msg", "ls done", "objects", objects)
+		return nil
 	}
 }
 
-func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *pathOrContent) {
+func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
 	cmd := root.Command("inspect", "Inspect all blocks in the bucket in detailed, table-like way")
-	selector := cmd.Flag("selector", "Selects blocks based on label, e.g. '-l key1=\"value1\" -l key2=\"value2\"'. All key value pairs must match.").Short('l').
-		PlaceHolder("<name>=\"<value>\"").Strings()
+	selector := cmd.Flag("selector", "Selects blocks based on label, e.g. '-l key1=\\\"value1\\\" -l key2=\\\"value2\\\"'. All key value pairs must match.").Short('l').
+		PlaceHolder("<name>=\\\"<value>\\\"").Strings()
 	sortBy := cmd.Flag("sort-by", "Sort by columns. It's also possible to sort by multiple columns, e.g. '--sort-by FROM --sort-by UNTIL'. I.e., if the 'FROM' value is equal the rows are then further sorted by the 'UNTIL' value.").
 		Default("FROM", "UNTIL").Enums(inspectColumns...)
+	timeout := cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").Duration()
 
 	m[name+" inspect"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
 
@@ -263,7 +280,7 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 
 		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 		defer cancel()
 
 		// Getting Metas.
@@ -290,6 +307,113 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 	}
 }
 
+// registerBucketWeb exposes a web interface for the state of remote store like `pprof web`.
+func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
+	cmd := root.Command("web", "Web interface for remote storage bucket")
+	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
+	interval := cmd.Flag("refresh", "Refresh interval to download metadata from remote storage").Default("30m").Duration()
+	timeout := cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").Duration()
+	label := cmd.Flag("label", "Prometheus label to use as timeline title").String()
+
+	m[name+" web"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
+		ctx, cancel := context.WithCancel(context.Background())
+
+		statusProber := prober.NewProber(component.Bucket, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+		// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
+		srv := httpserver.New(logger, reg, component.Bucket, statusProber,
+			httpserver.WithListen(*httpBindAddr),
+			httpserver.WithGracePeriod(time.Duration(*httpGracePeriod)),
+		)
+
+		router := route.New()
+		bucketUI := ui.NewBucketUI(logger, *label)
+		bucketUI.Register(router, extpromhttp.NewInstrumentationMiddleware(reg))
+		srv.Handle("/", router)
+
+		if *interval < 5*time.Minute {
+			level.Warn(logger).Log("msg", "Refreshing more often than 5m could lead to large data transfers")
+		}
+
+		if *timeout < time.Minute {
+			level.Warn(logger).Log("msg", "Timeout less than 1m could lead to frequent failures")
+		}
+
+		if *interval < (*timeout * 2) {
+			level.Warn(logger).Log("msg", "Refresh interval should be at least 2 times the timeout")
+		}
+
+		g.Add(func() error {
+			return refresh(ctx, logger, bucketUI, *interval, *timeout, name, reg, objStoreConfig)
+		}, func(error) {
+			cancel()
+		})
+
+		g.Add(srv.ListenAndServe, srv.Shutdown)
+
+		return nil
+	}
+}
+
+// refresh metadata from remote storage periodically and update UI.
+func refresh(ctx context.Context, logger log.Logger, bucketUI *ui.Bucket, duration time.Duration, timeout time.Duration, name string, reg *prometheus.Registry, objStoreConfig *extflag.PathOrContent) error {
+	confContentYaml, err := objStoreConfig.Content()
+	if err != nil {
+		return err
+	}
+
+	bkt, err := client.NewBucket(logger, confContentYaml, reg, name)
+	if err != nil {
+		return errors.Wrap(err, "bucket client")
+	}
+
+	defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+	return runutil.Repeat(duration, ctx.Done(), func() error {
+		return runutil.RetryWithLog(logger, time.Minute, ctx.Done(), func() error {
+			iterCtx, iterCancel := context.WithTimeout(ctx, timeout)
+			defer iterCancel()
+
+			blocks, err := download(iterCtx, logger, bkt)
+			if err != nil {
+				bucketUI.Set("[]", err)
+				return err
+			}
+
+			data, err := json.Marshal(blocks)
+			if err != nil {
+				bucketUI.Set("[]", err)
+				return err
+			}
+			bucketUI.Set(string(data), nil)
+			return nil
+		})
+	})
+}
+
+func download(ctx context.Context, logger log.Logger, bkt objstore.Bucket) (blocks []metadata.Meta, err error) {
+	level.Info(logger).Log("msg", "synchronizing block metadata")
+
+	if err = bkt.Iter(ctx, "", func(name string) error {
+		id, ok := block.IsBlockDir(name)
+		if !ok {
+			return nil
+		}
+
+		meta, err := block.DownloadMeta(ctx, logger, bkt, id)
+		if err != nil {
+			return err
+		}
+
+		blocks = append(blocks, meta)
+		return nil
+	}); err != nil {
+		level.Error(logger).Log("err", err, "msg", "Failed to downloaded block metadata")
+		return blocks, err
+	}
+
+	level.Info(logger).Log("msg", "downloaded blocks meta.json", "num", len(blocks))
+	return blocks, nil
+}
+
 func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortBy []string) error {
 	header := inspectColumns
 
@@ -302,13 +426,10 @@ func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortB
 		}
 
 		timeRange := time.Duration((blockMeta.MaxTime - blockMeta.MinTime) * int64(time.Millisecond))
-		// Calculate how long it takes until the next compaction.
-		untilComp := "-"
-		if blockMeta.Thanos.Downsample.Resolution == 0 { // data currently raw, downsample if range >= 40 hours
-			untilComp = (time.Duration(40*60*60*1000*time.Millisecond) - timeRange).String()
-		}
-		if blockMeta.Thanos.Downsample.Resolution == 5*60*1000 { // data currently 5m resolution, downsample if range >= 10 days
-			untilComp = (time.Duration(10*24*60*60*1000*time.Millisecond) - timeRange).String()
+
+		untilDown := "-"
+		if until, err := compact.UntilNextDownsampling(blockMeta); err == nil {
+			untilDown = until.String()
 		}
 		var labels []string
 		for _, key := range getKeysAlphabetically(blockMeta.Thanos.Labels) {
@@ -320,7 +441,7 @@ func printTable(blockMetas []*metadata.Meta, selectorLabels labels.Labels, sortB
 		line = append(line, time.Unix(blockMeta.MinTime/1000, 0).Format("02-01-2006 15:04:05"))
 		line = append(line, time.Unix(blockMeta.MaxTime/1000, 0).Format("02-01-2006 15:04:05"))
 		line = append(line, timeRange.String())
-		line = append(line, untilComp)
+		line = append(line, untilDown)
 		line = append(line, p.Sprintf("%d", blockMeta.Stats.NumSeries))
 		line = append(line, p.Sprintf("%d", blockMeta.Stats.NumSamples))
 		line = append(line, p.Sprintf("%d", blockMeta.Stats.NumChunks))
@@ -367,7 +488,7 @@ func getKeysAlphabetically(labels map[string]string) []string {
 }
 
 // matchesSelector checks if blockMeta contains every label from
-// the selector with the correct value
+// the selector with the correct value.
 func matchesSelector(blockMeta *metadata.Meta, selectorLabels labels.Labels) bool {
 	for _, l := range selectorLabels {
 		if v, ok := blockMeta.Thanos.Labels[l.Name]; !ok || v != l.Value {
@@ -377,7 +498,7 @@ func matchesSelector(blockMeta *metadata.Meta, selectorLabels labels.Labels) boo
 	return true
 }
 
-// getIndex calculates the index of s in strs
+// getIndex calculates the index of s in strs.
 func getIndex(strs []string, s string) int {
 	for i, col := range strs {
 		if col == s {

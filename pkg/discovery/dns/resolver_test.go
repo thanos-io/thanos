@@ -6,8 +6,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 type mockHostnameResolver struct {
@@ -185,10 +185,10 @@ func testDnsSd(t *testing.T, tt DNSSDTest) {
 
 	result, err := dnsSD.Resolve(ctx, tt.addr, tt.qtype)
 	if tt.expectedErr != nil {
-		testutil.Assert(t, err != nil, "expected error but none was returned")
+		testutil.NotOk(t, err)
 		testutil.Assert(t, tt.expectedErr.Error() == err.Error(), "expected error '%v', but got '%v'", tt.expectedErr.Error(), err.Error())
 	} else {
-		testutil.Assert(t, err == nil, "expected no error but got %v", err)
+		testutil.Ok(t, err)
 	}
 	sort.Strings(result)
 	testutil.Equals(t, tt.expectedResult, result)

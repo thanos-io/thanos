@@ -10,15 +10,15 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/improbable-eng/thanos/pkg/objstore"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
-	"github.com/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
 const DuplicatedCompactionIssueID = "duplicated_compaction"
 
-// DuplicatedCompactionIssue was a bug fixed in https://github.com/improbable-eng/thanos/commit/94e26c63e52ba45b713fd998638d0e7b2492664f.
+// DuplicatedCompactionIssue was a bug fixed in https://github.com/thanos-io/thanos/commit/94e26c63e52ba45b713fd998638d0e7b2492664f.
 // Bug resulted in source block not being removed immediately after compaction, so we were compacting again and again same sources
 // until sync-delay passes.
 // The expected print of this are same overlapped blocks with exactly the same sources, time ranges and stats.
@@ -80,7 +80,7 @@ func DuplicatedCompactionIssue(ctx context.Context, logger log.Logger, bkt objst
 	}
 
 	for i, id := range toKill {
-		if err := SafeDelete(ctx, logger, bkt, backupBkt, id); err != nil {
+		if err := BackupAndDelete(ctx, logger, bkt, backupBkt, id); err != nil {
 			return err
 		}
 		level.Info(logger).Log("msg", "Removed duplicated block", "id", id, "to-be-removed", len(toKill)-(i+1), "removed", i+1, "issue", DuplicatedCompactionIssueID)

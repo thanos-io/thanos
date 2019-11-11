@@ -12,8 +12,8 @@ import (
 	"github.com/opentracing/opentracing-go/ext"
 )
 
-// HTTPMiddleware returns HTTP handler that injects given tracer and starts new server span. If any client span is fetched
-// wire we include that as our parent.
+// HTTPMiddleware returns an HTTP handler that injects the given tracer and starts a new server span.
+// If any client span is fetched from the wire, we include that as our parent.
 func HTTPMiddleware(tracer opentracing.Tracer, name string, logger log.Logger, next http.Handler) http.HandlerFunc {
 	operationName := fmt.Sprintf("/%s HTTP[server]", name)
 
@@ -34,9 +34,14 @@ func HTTPMiddleware(tracer opentracing.Tracer, name string, logger log.Logger, n
 		// If client specified ForceTracingBaggageKey header, ensure span includes it to force tracing.
 		span.SetBaggageItem(ForceTracingBaggageKey, r.Header.Get(ForceTracingBaggageKey))
 
+		if t, ok := tracer.(Tracer); ok {
+			if traceID, ok := t.GetTraceIDFromSpanContext(span.Context()); ok {
+				w.Header().Set(traceIDResponseHeader, traceID)
+			}
+		}
+
 		next.ServeHTTP(w, r.WithContext(opentracing.ContextWithSpan(ContextWithTracer(r.Context(), tracer), span)))
 		span.Finish()
-		return
 	}
 }
 

@@ -2,14 +2,14 @@ package dns
 
 import (
 	"context"
+	"net"
 	"strings"
 	"sync"
-
-	"github.com/improbable-eng/thanos/pkg/extprom"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/thanos-io/thanos/pkg/discovery/dns/miekgdns"
 )
 
 // Provider is a stateful cache for asynchronous DNS resolutions. It provides a way to resolve addresses and obtain them.
@@ -20,33 +20,57 @@ type Provider struct {
 	resolved map[string][]string
 	logger   log.Logger
 
+	resolverAddrs         *prometheus.GaugeVec
 	resolverLookupsCount  prometheus.Counter
 	resolverFailuresCount prometheus.Counter
 }
 
-// NewProvider returns a new empty provider with a default resolver.
-func NewProvider(logger log.Logger, reg *extprom.SubsystemRegisterer) *Provider {
+type ResolverType string
+
+const (
+	GolangResolverType   ResolverType = "golang"
+	MiekgdnsResolverType ResolverType = "miekgdns"
+)
+
+func (t ResolverType) ToResolver(logger log.Logger) ipLookupResolver {
+	var r ipLookupResolver
+	switch t {
+	case GolangResolverType:
+		r = net.DefaultResolver
+	case MiekgdnsResolverType:
+		r = &miekgdns.Resolver{ResolvConf: miekgdns.DefaultResolvConfPath}
+	default:
+		level.Warn(logger).Log("msg", "no such resolver type, defaulting to golang", "type", t)
+		r = net.DefaultResolver
+	}
+	return r
+}
+
+// NewProvider returns a new empty provider with a given resolver type.
+// If empty resolver type is net.DefaultResolver.w
+func NewProvider(logger log.Logger, reg prometheus.Registerer, resolverType ResolverType) *Provider {
 	p := &Provider{
-		resolver: NewResolver(),
+		resolver: NewResolver(resolverType.ToResolver(logger)),
 		resolved: make(map[string][]string),
 		logger:   logger,
+		resolverAddrs: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "dns_provider_results",
+			Help: "The number of resolved endpoints for each configured address",
+		}, []string{"addr"}),
 		resolverLookupsCount: prometheus.NewCounter(prometheus.CounterOpts{
-			Namespace: "thanos",
-			Subsystem: reg.Subsystem(),
-			Name:      "dns_lookups_total",
-			Help:      "The number of DNS lookups resolutions attempts",
+			Name: "dns_lookups_total",
+			Help: "The number of DNS lookups resolutions attempts",
 		}),
 		resolverFailuresCount: prometheus.NewCounter(prometheus.CounterOpts{
-			Namespace: "thanos",
-			Subsystem: reg.Subsystem(),
-			Name:      "dns_failures_total",
-			Help:      "The number of DNS lookup failures",
+			Name: "dns_failures_total",
+			Help: "The number of DNS lookup failures",
 		}),
 	}
 
-	if r := reg.Registerer(); r != nil {
-		r.MustRegister(p.resolverLookupsCount)
-		r.MustRegister(p.resolverFailuresCount)
+	if reg != nil {
+		reg.MustRegister(p.resolverAddrs)
+		reg.MustRegister(p.resolverLookupsCount)
+		reg.MustRegister(p.resolverFailuresCount)
 	}
 
 	return p
@@ -81,14 +105,13 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string) {
 	}
 
 	// Remove stored addresses that are no longer requested.
-	var entriesToDelete []string
 	for existingAddr := range p.resolved {
 		if !contains(addrs, existingAddr) {
-			entriesToDelete = append(entriesToDelete, existingAddr)
+			delete(p.resolved, existingAddr)
+			p.resolverAddrs.DeleteLabelValues(existingAddr)
+		} else {
+			p.resolverAddrs.WithLabelValues(existingAddr).Set(float64(len(p.resolved[existingAddr])))
 		}
-	}
-	for _, toDelete := range entriesToDelete {
-		delete(p.resolved, toDelete)
 	}
 }
 

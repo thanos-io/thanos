@@ -1,0 +1,14 @@
+{{ define "main" }}
+    <div class="container">
+        <div class="row py-3 py-lg-5">
+            <div class="col-12 col-lg-3">
+                {{ partial "_default/sidemenu.html" . }}
+            </div>
+            <div class="col-12 col-lg-9">
+                {{ $content := replace .Content "<table>" "<table class='table table-striped'>" }}
+                {{ $content = $content | replaceRE "(<h[1-4] id=\"([^\"]+)\".+)(</h[1-9]+>)" `${1} <a href="#${2}" class="header-anchor" aria-label="Header Anchor">#</a> ${3}` }}
+                {{ $content | safeHTML}}
+            </div>
+        </div>
+    </div>
+{{ end }}

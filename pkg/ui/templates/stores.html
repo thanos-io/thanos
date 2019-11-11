@@ -4,9 +4,9 @@
 
 {{define "content"}}
 <div class="container-fluid">
-    {{range $storeType, $stores := .}}
+    {{range $storeType := .Sources}}
     {{if $storeType}}
-    <h2>{{$storeType.String}}</h2>
+    <h2>{{title $storeType.String}}</h2>
     {{else}}
     <h2>Unknown Type</h2>
     {{end}}
@@ -15,7 +15,7 @@
         <tr>
             <th>Endpoint</th>
             <th>Status</th>
-            <th>Announced Labels</th>
+            <th>Announced LabelSets</th>
             <th>Min Time</th>
             <th>Max Time</th>
             <th>Last Health Check</th>
@@ -23,7 +23,7 @@
         </tr>
         </thead>
         <tbody>
-        {{range $store := $stores}}
+        {{range $store := index $.Stores $storeType}}
         <tr>
             <td>{{$store.Name}}</td>
             <td class="state">
@@ -38,8 +38,10 @@
                 {{end}}
             </td>
             <td>
-            {{range $label := $store.Labels}}
-                <span class="label label-primary">{{$label.Name}}="{{$label.Value}}"</span>
+            {{range $labelSets := $store.LabelSets}}
+                {{range $label := $labelSets.Labels}}
+                    <span class="badge badge-primary">{{$label.Name}}="{{$label.Value}}"</span>
+                {{end}}
             {{end}}
             </td>
             <td>{{formatTimestamp $store.MinTime}}</td>

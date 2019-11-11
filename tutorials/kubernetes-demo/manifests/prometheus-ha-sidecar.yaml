@@ -129,6 +129,14 @@ spec:
             containerPort: 10902
           - name: grpc
             containerPort: 10901
+        livenessProbe:
+            httpGet:
+              port: 10902
+              path: /-/healthy
+        readinessProbe:
+          httpGet:
+            port: 10902
+            path: /-/ready
         volumeMounts:
           - name: prometheus
             mountPath: /var/prometheus

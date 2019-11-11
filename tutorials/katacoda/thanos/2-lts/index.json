@@ -1,0 +1,19 @@
+{
+  "title": "Intro: Downsampling and unlimited metric retention for Prometheus",
+  "description": "Learn how to extend you metric retention in a cheap way with Thanos.",
+  "details": {
+    "steps": [
+    ],
+    "intro": {
+      "text": "intro.md",
+      "courseData": "courseBase.sh"
+    }
+  },
+  "environment": {
+    "uilayout": "editor-terminal",
+    "uisettings": "yaml"
+  },
+  "backend": {
+    "imageid": "docker-direct"
+  }
+}

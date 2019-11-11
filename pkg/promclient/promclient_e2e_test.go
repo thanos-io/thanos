@@ -11,18 +11,17 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/runutil"
-	"github.com/improbable-eng/thanos/pkg/testutil"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func TestIsWALFileAccesible_e2e(t *testing.T) {
 	testutil.ForeachPrometheus(t, func(t testing.TB, p *testutil.Prometheus) {
 		testutil.Ok(t, p.Start())
-		defer func() { testutil.Ok(t, p.Stop()) }()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 		defer cancel()
@@ -43,7 +42,6 @@ global:
 `))
 
 		testutil.Ok(t, p.Start())
-		defer func() { testutil.Ok(t, p.Stop()) }()
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
@@ -60,7 +58,6 @@ global:
 func TestConfiguredFlags_e2e(t *testing.T) {
 	testutil.ForeachPrometheus(t, func(t testing.TB, p *testutil.Prometheus) {
 		testutil.Ok(t, p.Start())
-		defer func() { testutil.Ok(t, p.Stop()) }()
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
@@ -72,8 +69,8 @@ func TestConfiguredFlags_e2e(t *testing.T) {
 		testutil.Assert(t, !flags.WebEnableLifecycle, "")
 		testutil.Equals(t, p.Dir(), flags.TSDBPath)
 		testutil.Equals(t, int64(2*time.Hour), int64(flags.TSDBMinTime))
-		testutil.Equals(t, int64(36*time.Hour), int64(flags.TSDBMaxTime))
-		testutil.Equals(t, int64(15*24*time.Hour), int64(flags.TSDBRetention))
+		testutil.Equals(t, int64(4.8*float64(time.Hour)), int64(flags.TSDBMaxTime))
+		testutil.Equals(t, int64(2*24*time.Hour), int64(flags.TSDBRetention))
 	})
 }
 
@@ -81,8 +78,10 @@ func TestSnapshot_e2e(t *testing.T) {
 	testutil.ForeachPrometheus(t, func(t testing.TB, p *testutil.Prometheus) {
 		now := time.Now()
 
+		ctx := context.Background()
 		// Create artificial block.
 		id, err := testutil.CreateBlockWithTombstone(
+			ctx,
 			p.Dir(),
 			[]labels.Labels{labels.FromStrings("a", "b")},
 			10,
@@ -94,12 +93,14 @@ func TestSnapshot_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 
 		testutil.Ok(t, p.Start())
-		defer func() { testutil.Ok(t, p.Stop()) }()
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 		testutil.Ok(t, err)
 
-		dir, err := Snapshot(context.Background(), log.NewNopLogger(), u, false)
+		// Prometheus since 2.7.0 don't write empty blocks even if it's head block. So it's no matter passing skip_head true or false here
+		// Pass skipHead = true to support all prometheus versions and assert that snapshot creates only one file
+		// https://github.com/prometheus/tsdb/pull/374.
+		dir, err := Snapshot(ctx, log.NewNopLogger(), u, true)
 		testutil.Ok(t, err)
 
 		_, err = os.Stat(path.Join(p.Dir(), dir, id.String()))
@@ -113,14 +114,14 @@ func TestSnapshot_e2e(t *testing.T) {
 			testutil.Ok(t, err)
 		}
 
-		testutil.Equals(t, 2, len(files))
+		testutil.Equals(t, 1, len(files))
 	})
 }
 
 func TestRule_UnmarshalScalarResponse(t *testing.T) {
 	var (
 		scalarJSONResult              = []byte(`[1541196373.677,"1"]`)
-		invalidLengthScalarJSONResult = []byte(`[1541196373.677,"1", "nonsence"]`)
+		invalidLengthScalarJSONResult = []byte(`[1541196373.677,"1", "nonsense"]`)
 		invalidDataScalarJSONResult   = []byte(`["foo","bar"]`)
 
 		vectorResult   model.Vector
@@ -135,10 +136,10 @@ func TestRule_UnmarshalScalarResponse(t *testing.T) {
 	testutil.Equals(t, vectorResult.String(), expectedVector.String())
 
 	// Test invalid length of scalar data structure.
-	vectorResult, err = convertScalarJSONToVector(invalidLengthScalarJSONResult)
+	_, err = convertScalarJSONToVector(invalidLengthScalarJSONResult)
 	testutil.NotOk(t, err)
 
 	// Test invalid format of scalar data.
-	vectorResult, err = convertScalarJSONToVector(invalidDataScalarJSONResult)
+	_, err = convertScalarJSONToVector(invalidDataScalarJSONResult)
 	testutil.NotOk(t, err)
 }

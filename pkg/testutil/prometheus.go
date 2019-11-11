@@ -17,18 +17,17 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/improbable-eng/thanos/pkg/block/metadata"
-	"github.com/improbable-eng/thanos/pkg/runutil"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/labels"
-	"github.com/prometheus/tsdb/testutil"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"golang.org/x/sync/errgroup"
 )
 
 const (
-	defaultPrometheusVersion   = "v2.4.3"
+	defaultPrometheusVersion   = "v2.13.0"
 	defaultAlertmanagerVersion = "v0.15.2"
 	defaultMinioVersion        = "RELEASE.2018-10-06T00-15-16Z"
 
@@ -96,9 +95,10 @@ func ForeachPrometheus(t *testing.T, testFn func(t testing.TB, p *Prometheus)) {
 	for _, ver := range strings.Split(vers, " ") {
 		if ok := t.Run(ver, func(t *testing.T) {
 			p, err := newPrometheus(ver, "")
-			testutil.Ok(t, err)
+			Ok(t, err)
 
 			testFn(t, p)
+			Ok(t, p.Stop())
 		}); !ok {
 			return
 		}
@@ -106,12 +106,12 @@ func ForeachPrometheus(t *testing.T, testFn func(t testing.TB, p *Prometheus)) {
 }
 
 // NewPrometheus creates a new test Prometheus instance that will listen on local address.
-// DEPRECARED: Use ForeachPrometheus instead.
+// DEPRECATED: Use ForeachPrometheus instead.
 func NewPrometheus() (*Prometheus, error) {
 	return newPrometheus("", "")
 }
 
-// NewPrometheus creates a new test Prometheus instance that will listen on local address and given prefix path.
+// NewPrometheusOnPath creates a new test Prometheus instance that will listen on local address and given prefix path.
 func NewPrometheusOnPath(prefix string) (*Prometheus, error) {
 	return newPrometheus("", prefix)
 }
@@ -143,11 +143,17 @@ func newPrometheus(version string, prefix string) (*Prometheus, error) {
 
 // Start running the Prometheus instance and return.
 func (p *Prometheus) Start() error {
-	if !p.running {
-		if err := p.db.Close(); err != nil {
-			return err
-		}
+	if p.running {
+		return errors.New("Already started")
 	}
+
+	if err := p.db.Close(); err != nil {
+		return err
+	}
+	return p.start()
+}
+
+func (p *Prometheus) start() error {
 	p.running = true
 
 	port, err := FreePort()
@@ -163,16 +169,18 @@ func (p *Prometheus) Start() error {
 		)
 	}
 	p.addr = fmt.Sprintf("localhost:%d", port)
-	p.cmd = exec.Command(
-		prometheusBin(p.version),
-		append([]string{
-			"--storage.tsdb.path=" + p.db.Dir(),
-			"--web.listen-address=" + p.addr,
-			"--web.route-prefix=" + p.prefix,
-			"--web.enable-admin-api",
-			"--config.file=" + filepath.Join(p.db.Dir(), "prometheus.yml"),
-		}, extra...)...,
-	)
+	args := append([]string{
+		"--storage.tsdb.retention=2d", // Pass retention cause prometheus since 2.8.0 don't show default value for that flags in web/api: https://github.com/prometheus/prometheus/pull/5433.
+		"--storage.tsdb.path=" + p.db.Dir(),
+		"--web.listen-address=" + p.addr,
+		"--web.route-prefix=" + p.prefix,
+		"--web.enable-admin-api",
+		"--config.file=" + filepath.Join(p.db.Dir(), "prometheus.yml"),
+	}, extra...)
+
+	p.cmd = exec.Command(prometheusBin(p.version), args...)
+	p.cmd.SysProcAttr = SysProcAttr()
+
 	go func() {
 		if b, err := p.cmd.CombinedOutput(); err != nil {
 			fmt.Fprintln(os.Stderr, "running Prometheus failed", err)
@@ -205,10 +213,8 @@ func (p *Prometheus) Restart() error {
 	if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		return errors.Wrap(err, "failed to kill Prometheus. Kill it manually")
 	}
-
 	_ = p.cmd.Wait()
-
-	return p.Start()
+	return p.start()
 }
 
 // Dir returns TSDB dir.
@@ -231,7 +237,7 @@ func (p *Prometheus) SetConfig(s string) (err error) {
 	if err != nil {
 		return err
 	}
-	defer runutil.CloseWithErrCapture(nil, &err, f, "prometheus config")
+	defer runutil.CloseWithErrCapture(&err, f, "prometheus config")
 
 	_, err = f.Write([]byte(s))
 	return err
@@ -239,15 +245,19 @@ func (p *Prometheus) SetConfig(s string) (err error) {
 
 // Stop terminates Prometheus and clean up its data directory.
 func (p *Prometheus) Stop() error {
+	if !p.running {
+		return nil
+	}
+
 	if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		return errors.Wrapf(err, "failed to Prometheus. Kill it manually and clean %s dir", p.db.Dir())
 	}
-
 	time.Sleep(time.Second / 2)
 	return p.cleanup()
 }
 
 func (p *Prometheus) cleanup() error {
+	p.running = false
 	return os.RemoveAll(p.db.Dir())
 }
 
@@ -264,6 +274,7 @@ func (p *Prometheus) Appender() tsdb.Appender {
 // CreateBlock writes a block with the given series and numSamples samples each.
 // Samples will be in the time range [mint, maxt).
 func CreateBlock(
+	ctx context.Context,
 	dir string,
 	series []labels.Labels,
 	numSamples int,
@@ -271,11 +282,12 @@ func CreateBlock(
 	extLset labels.Labels,
 	resolution int64,
 ) (id ulid.ULID, err error) {
-	return createBlock(dir, series, numSamples, mint, maxt, extLset, resolution, false)
+	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, false)
 }
 
 // CreateBlockWithTombstone is same as CreateBlock but leaves tombstones which mimics the Prometheus local block.
 func CreateBlockWithTombstone(
+	ctx context.Context,
 	dir string,
 	series []labels.Labels,
 	numSamples int,
@@ -283,10 +295,11 @@ func CreateBlockWithTombstone(
 	extLset labels.Labels,
 	resolution int64,
 ) (id ulid.ULID, err error) {
-	return createBlock(dir, series, numSamples, mint, maxt, extLset, resolution, true)
+	return createBlock(ctx, dir, series, numSamples, mint, maxt, extLset, resolution, true)
 }
 
 func createBlock(
+	ctx context.Context,
 	dir string,
 	series []labels.Labels,
 	numSamples int,
@@ -299,7 +312,7 @@ func createBlock(
 	if err != nil {
 		return id, errors.Wrap(err, "create head block")
 	}
-	defer runutil.CloseWithErrCapture(log.NewNopLogger(), &err, h, "TSDB Head")
+	defer runutil.CloseWithErrCapture(&err, h, "TSDB Head")
 
 	var g errgroup.Group
 	var timeStepSize = (maxt - mint) / int64(numSamples+1)
@@ -340,7 +353,7 @@ func createBlock(
 	if err := g.Wait(); err != nil {
 		return id, err
 	}
-	c, err := tsdb.NewLeveledCompactor(nil, log.NewNopLogger(), []int64{maxt - mint}, nil)
+	c, err := tsdb.NewLeveledCompactor(ctx, nil, log.NewNopLogger(), []int64{maxt - mint}, nil)
 	if err != nil {
 		return id, errors.Wrap(err, "create compactor")
 	}
