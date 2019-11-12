@@ -125,6 +125,11 @@ Flags:
                                metadata from object storage.
       --compact.concurrency=1  Number of goroutines to use when compacting
                                groups.
+      --enable-dedup           Enable dedup function, but effect depends on
+                               'dedup.replica-label' config
+      --dedup.replica-label=DEDUP.REPLICA-LABEL
+                               Label to treat as a replica indicator along which
+                               data is deduplicated.
       --selector.relabel-config-file=<file-path>
                                Path to YAML file that contains relabeling
                                configuration that allows selecting blocks. It
@@ -138,9 +143,5 @@ Flags:
                                selecting blocks. It follows native Prometheus
                                relabel-config syntax. See format details:
                                https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
-      --enable-dedup           Enable dedup function, but effect depends on
-                               'dedup.replica-label' config
-      --dedup.replica-label=DEDUP.REPLICA-LABEL
-                               Label to treat as a replica indicator along which
-                               data is deduplicated.
+
 ```
