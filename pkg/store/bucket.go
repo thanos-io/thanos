@@ -14,12 +14,14 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/ppanyukov/go-dump/dump"
 	"github.com/prometheus/client_golang/prometheus"
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
@@ -642,6 +644,22 @@ func (s *bucketSeriesSet) Err() error {
 	return s.err
 }
 
+// TODO(ppanyukov): remove instrumentation
+var sgBlockSeriesCallCount = int64(0)
+func instrumentSGBlockSeries() func() {
+	thisCallNumber := atomic.AddInt64(&sgBlockSeriesCallCount, 1)
+	dump.WriteHeapDump(fmt.Sprintf("heap-sg-blockSeries-%d-before", thisCallNumber))
+	memProf := dump.NewMemProf("sg-blockSeries")
+	memStats := dump.NewMemStats("sg-blockSeries")
+
+	return func() {
+		memStats.PrintDiff()
+		memProf.PrintDiff()
+		dump.WriteHeapDump(fmt.Sprintf("heap-sg-blockSeries-%d-after", thisCallNumber))
+	}
+}
+// TODO(ppanyukov): remove instrumentation - END
+
 func blockSeries(
 	ctx context.Context,
 	ulid ulid.ULID,
@@ -652,6 +670,11 @@ func blockSeries(
 	req *storepb.SeriesRequest,
 	samplesLimiter *Limiter,
 ) (storepb.SeriesSet, *queryStats, error) {
+	// TODO(ppanyukov): remove instrumentation
+	instrumentEnd := instrumentSGBlockSeries()
+	defer instrumentEnd()
+	// TODO(ppanyukov): remove instrumentation - END
+
 	ps, err := indexr.ExpandedPostings(matchers)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "expanded matching posting")
@@ -831,6 +854,22 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt, maxResolutionMill
 	level.Debug(logger).Log("msg", "Blocks source resolutions", "blocks", len(bs), "Maximum Resolution", maxResolutionMillis, "mint", mint, "maxt", maxt, "lset", lset.String(), "spans", strings.Join(parts, "\n"))
 }
 
+// TODO(ppanyukov): remove instrumentation
+var sgSeriesCallCount = int64(0)
+func instrumentSGSeries() func() {
+	thisCallNumber := atomic.AddInt64(&sgSeriesCallCount, 1)
+	dump.WriteHeapDump(fmt.Sprintf("heap-sg-Series-%d-before", thisCallNumber))
+	memProf := dump.NewMemProf("sg-Series")
+	memStats := dump.NewMemStats("sg-Series")
+
+	return func() {
+		memStats.PrintDiff()
+		memProf.PrintDiff()
+		dump.WriteHeapDump(fmt.Sprintf("heap-sg-Series-%d-after", thisCallNumber))
+	}
+}
+// TODO(ppanyukov): remove instrumentation - END
+
 // Series implements the storepb.StoreServer interface.
 func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) (err error) {
 	{
@@ -859,6 +898,10 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 	s.mtx.RLock()
 
+	// TODO(ppanyukov): remove instrumentation
+	instrumentEnd := instrumentSGSeries()
+	// TODO(ppanyukov): remove instrumentation - END
+
 	for _, bs := range s.blockSets {
 		blockMatchers, ok := bs.labelMatchers(matchers...)
 		if !ok {
@@ -883,7 +926,29 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "series block")
 			defer runutil.CloseWithLogOnErr(s.logger, chunkr, "series block")
 
-			g.Go(func() error {
+			// TODO(ppanyukov): remove instrumentation
+			//g.Go(func() error {
+			//	part, pstats, err := blockSeries(ctx,
+			//		b.meta.ULID,
+			//		b.meta.Thanos.Labels,
+			//		indexr,
+			//		chunkr,
+			//		blockMatchers,
+			//		req,
+			//		s.samplesLimiter,
+			//	)
+			//	if err != nil {
+			//		return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
+			//	}
+			//
+			//	mtx.Lock()
+			//	res = append(res, part)
+			//	stats = stats.merge(pstats)
+			//	mtx.Unlock()
+			//
+			//	return nil
+			//})
+			err := func() error {
 				part, pstats, err := blockSeries(ctx,
 					b.meta.ULID,
 					b.meta.Thanos.Labels,
@@ -903,9 +968,17 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				mtx.Unlock()
 
 				return nil
-			})
+			}()
+			if err != nil {
+				return err
+			}
+			// TODO(ppanyukov): remove instrumentation - END
 		}
 	}
+
+	// TODO(ppanyukov): remove instrumentation
+	instrumentEnd()
+	// TODO(ppanyukov): remove instrumentation - END
 
 	s.mtx.RUnlock()
 

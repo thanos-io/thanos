@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -15,6 +16,7 @@ import (
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"github.com/ppanyukov/go-dump/dump"
 	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -178,9 +180,32 @@ func (s ctxRespSender) send(r *storepb.SeriesResponse) {
 	}
 }
 
+// TODO(ppanyukov): remove instrumentation
+var qSeriesCallCount = int64(0)
+
+func instrumentQSeries() func() {
+	thisCallNumber := atomic.AddInt64(&qSeriesCallCount, 1)
+	dump.WriteHeapDump(fmt.Sprintf("heap-q-Series-%d-before", thisCallNumber))
+	memProf := dump.NewMemProf("q-Series")
+	memStats := dump.NewMemStats("q-Series")
+
+	return func() {
+		memStats.PrintDiff()
+		memProf.PrintDiff()
+		dump.WriteHeapDump(fmt.Sprintf("heap-q-Series-%d-after", thisCallNumber))
+	}
+}
+
+// TODO(ppanyukov): remove instrumentation - END
+
 // Series returns all series for a requested time range and label matcher. Requested series are taken from other
 // stores and proxied to RPC client. NOTE: Resulted data are not trimmed exactly to min and max time range.
 func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+	// TODO(ppanyukov): remove instrumentation
+	instrumentEnd := instrumentQSeries()
+	defer instrumentEnd()
+	// TODO(ppanyukov): remove instrumentation - END
+
 	match, newMatchers, err := matchesExternalLabels(r.Matchers, s.selectorLabels)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
