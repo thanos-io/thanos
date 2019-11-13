@@ -1,7 +1,7 @@
 module github.com/thanos-io/thanos
 
 require (
-	cloud.google.com/go v0.44.1
+	cloud.google.com/go v0.48.0
 	github.com/Azure/azure-storage-blob-go v0.7.0
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/aliyun/aliyun-oss-go-sdk v2.0.1+incompatible
