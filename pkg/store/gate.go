@@ -26,7 +26,7 @@ func NewGate(maxConcurrent int, reg prometheus.Registerer) *Gate {
 		gateTiming: prometheus.NewHistogram(prometheus.HistogramOpts{
 			Name:    "gate_duration_seconds",
 			Help:    "How many seconds it took for queries to wait at the gate.",
-			Buckets: prometheus.ExponentialBuckets(0.001, 2, 15),
+			Buckets: prometheus.ExponentialBuckets(0.1, 2, 15),
 		}),
 	}
 

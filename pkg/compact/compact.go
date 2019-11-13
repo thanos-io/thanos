@@ -101,7 +101,7 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 	m.garbageCollectionDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name:    "thanos_compact_garbage_collection_duration_seconds",
 		Help:    "Time it took to perform garbage collection iteration.",
-		Buckets: prometheus.ExponentialBuckets(0.05, 2.5, 12),
+		Buckets: prometheus.ExponentialBuckets(0.001, 2, 15),
 	})
 
 	m.compactions = prometheus.NewCounterVec(prometheus.CounterOpts{
