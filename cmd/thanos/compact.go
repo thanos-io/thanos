@@ -168,10 +168,15 @@ func runCompact(
 		Name: "thanos_compactor_retries_total",
 		Help: "Total number of retries after retriable compactor error",
 	})
+	iterations := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compactor_iterations_total",
+		Help: "Total number of iterations that were executed successfully",
+	})
 	halted.Set(0)
 
 	reg.MustRegister(halted)
 	reg.MustRegister(retried)
+	reg.MustRegister(iterations)
 
 	downsampleMetrics := newDownsampleMetrics(reg)
 
@@ -313,6 +318,7 @@ func runCompact(
 		return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
 			err := f()
 			if err == nil {
+				iterations.Inc()
 				return nil
 			}
 
