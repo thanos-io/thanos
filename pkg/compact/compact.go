@@ -83,7 +83,7 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 	m.syncMetaDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name:    "thanos_compact_sync_meta_duration_seconds",
 		Help:    "Time it took to sync meta files.",
-		Buckets: prometheus.ExponentialBuckets(0.01, 2.5, 12),
+		Buckets: prometheus.ExponentialBuckets(0.001, 2, 15),
 	})
 
 	m.garbageCollectedBlocks = prometheus.NewCounter(prometheus.CounterOpts{
