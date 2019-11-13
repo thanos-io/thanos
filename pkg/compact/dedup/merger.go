@@ -325,8 +325,10 @@ func (rm *replicaMerger) write(readers []*blockReader, blockDir string, meta *me
 			continue
 		}
 
-		if err := writer.WriteSeries(cs.lset, cs.chks); err != nil {
-			return err
+		if len(cs.chks) > 0 {
+			if err := writer.WriteSeries(cs.lset, cs.chks); err != nil {
+				return err
+			}
 		}
 
 		for i, v := range buf {
