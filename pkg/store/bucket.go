@@ -16,6 +16,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -35,6 +36,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/limit"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/pool"
@@ -669,11 +671,69 @@ func blockSeries(
 	matchers []labels.Matcher,
 	req *storepb.SeriesRequest,
 	samplesLimiter *Limiter,
+	queryTotalSizeRef *int64,
 ) (storepb.SeriesSet, *queryStats, error) {
+	queryLocalSize := int64(0)
+	queryTotalSize := atomic.LoadInt64(queryTotalSizeRef)
+
+	defer func() {
+		fmt.Printf("queryLocalSize: %.2fMB\n", float64(queryLocalSize)/float64(1000000))
+	}()
+
 	// TODO(ppanyukov): remove instrumentation
 	instrumentEnd := instrumentSGBlockSeries()
 	defer instrumentEnd()
 	// TODO(ppanyukov): remove instrumentation - END
+
+	addSize := func(n int64) {
+		queryLocalSize += n
+		queryTotalSize = atomic.AddInt64(queryTotalSizeRef, n)
+	}
+
+	checkLimit := func() error {
+		if err := limit.CheckQueryPipeLimit(queryLocalSize); err != nil {
+			return err
+		}
+
+		return limit.CheckQueryTotalLimit(queryTotalSize)
+	}
+
+	labelSize := func(label *storepb.Label) int64 {
+		size := int64(0)
+		size += int64(unsafe.Sizeof(*label))
+		size += int64(len(label.Name))
+		size += int64(len(label.Value))
+		return size
+	}
+
+	aggrChunkSize := func(aggrChunk *storepb.AggrChunk) int64 {
+
+		chunkSize := func(chunk *storepb.Chunk) int64 {
+			if chunk == nil {
+				return 0
+			}
+			size := int64(0)
+			size += int64(unsafe.Sizeof(*chunk))
+			size += int64(len(chunk.Data))
+			return size
+		}
+
+		size := int64(0)
+		size += int64(unsafe.Sizeof(*aggrChunk))
+		size += chunkSize(aggrChunk.Raw)
+		size += chunkSize(aggrChunk.Count)
+		size += chunkSize(aggrChunk.Sum)
+		size += chunkSize(aggrChunk.Min)
+		size += chunkSize(aggrChunk.Max)
+		size += chunkSize(aggrChunk.Counter)
+		return size
+	}
+
+	postingsSize := func(postings []uint64) int64 {
+		size := int64(0)
+		size += int64(unsafe.Sizeof(uint64(0))) * int64(len(postings))
+		return size
+	}
 
 	ps, err := indexr.ExpandedPostings(matchers)
 	if err != nil {
@@ -682,6 +742,11 @@ func blockSeries(
 
 	if len(ps) == 0 {
 		return storepb.EmptySeriesSet(), indexr.stats, nil
+	}
+
+	// limiter: postingsSize
+	{
+		addSize(postingsSize(ps))
 	}
 
 	// Preload all series index data.
@@ -699,6 +764,10 @@ func blockSeries(
 		chks []chunks.Meta
 	)
 	for _, id := range ps {
+		// Collect query size at a coarser level of posting to avoid
+		// hammering the queryLocalLimiter with loads of calls.
+		querySize := int64(0)
+
 		if err := indexr.LoadedSeries(id, &lset, &chks); err != nil {
 			return nil, nil, errors.Wrap(err, "read series")
 		}
@@ -713,16 +782,28 @@ func blockSeries(
 			if extLset[l.Name] != "" {
 				continue
 			}
-			s.lset = append(s.lset, storepb.Label{
+			label := storepb.Label{
 				Name:  l.Name,
 				Value: l.Value,
-			})
+			}
+			s.lset = append(s.lset, label)
+
+			// limiter: s.lset
+			{
+				querySize += labelSize(&label)
+			}
 		}
 		for ln, lv := range extLset {
-			s.lset = append(s.lset, storepb.Label{
+			label := storepb.Label{
 				Name:  ln,
 				Value: lv,
-			})
+			}
+			s.lset = append(s.lset, label)
+
+			// limiter: s.lset
+			{
+				querySize += labelSize(&label)
+			}
 		}
 		sort.Slice(s.lset, func(i, j int) bool {
 			return s.lset[i].Name < s.lset[j].Name
@@ -744,9 +825,30 @@ func blockSeries(
 				MaxTime: meta.MaxTime,
 			})
 			s.refs = append(s.refs, meta.Ref)
+
 		}
+
+		// limiter: s.refs
+		{
+			refSize := postingsSize(s.refs)
+			querySize += refSize
+		}
+
 		if len(s.chks) > 0 {
 			res = append(res, s)
+
+			// limiter: res
+			{
+				querySize += int64(unsafe.Sizeof(s))
+			}
+		}
+
+		// limiter: check
+		{
+			addSize(querySize)
+			if err := checkLimit(); err != nil {
+				return nil, nil, err
+			}
 		}
 	}
 
@@ -757,6 +859,8 @@ func blockSeries(
 
 	// Transform all chunks into the response format.
 	for _, s := range res {
+		querySize := int64(0)
+
 		for i, ref := range s.refs {
 			chk, err := chunkr.Chunk(ref)
 			if err != nil {
@@ -765,7 +869,20 @@ func blockSeries(
 			if err := populateChunk(&s.chks[i], chk, req.Aggregates); err != nil {
 				return nil, nil, errors.Wrap(err, "populate chunk")
 			}
+			// queryLocalLimiter: s.chks
+			{
+				querySize += aggrChunkSize(&s.chks[i])
+			}
 		}
+
+		// limit: check
+		{
+			addSize(querySize)
+			if err := checkLimit(); err != nil {
+				return nil, nil, err
+			}
+		}
+
 	}
 
 	return newBucketSeriesSet(res), indexr.stats.merge(chunkr.stats), nil
@@ -872,6 +989,12 @@ func instrumentSGSeries() func() {
 
 // Series implements the storepb.StoreServer interface.
 func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) (err error) {
+	queryTotalSize := int64(0)
+	defer func() {
+		fmt.Printf("queryTotalSize: %.2fMB\n", float64(queryTotalSize)/float64(1000000))
+	}()
+
+
 	{
 		span, _ := tracing.StartSpan(srv.Context(), "store_query_gate_ismyturn")
 		err := s.queryGate.IsMyTurn(srv.Context())
@@ -957,6 +1080,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					blockMatchers,
 					req,
 					s.samplesLimiter,
+					&queryTotalSize,
 				)
 				if err != nil {
 					return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)

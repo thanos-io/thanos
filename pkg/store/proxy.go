@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -19,6 +20,7 @@ import (
 	"github.com/ppanyukov/go-dump/dump"
 	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/limit"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/strutil"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -201,6 +203,11 @@ func instrumentQSeries() func() {
 // Series returns all series for a requested time range and label matcher. Requested series are taken from other
 // stores and proxied to RPC client. NOTE: Resulted data are not trimmed exactly to min and max time range.
 func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+	queryTotalSize := int64(0)
+	defer func() {
+		fmt.Printf("queryTotalSize: %.2fMB\n", float64(queryTotalSize)/float64(1000000))
+	}()
+
 	// TODO(ppanyukov): remove instrumentation
 	instrumentEnd := instrumentQSeries()
 	defer instrumentEnd()
@@ -284,7 +291,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			// Schedule streamSeriesSet that translates gRPC streamed response
 			// into seriesSet (if series) or respCh if warnings.
 			seriesSet = append(seriesSet, startStreamSeriesSet(seriesCtx, s.logger, closeSeries,
-				wg, sc, respSender, st.String(), !r.PartialResponseDisabled, s.responseTimeout))
+				wg, sc, respSender, st.String(), !r.PartialResponseDisabled, s.responseTimeout, &queryTotalSize))
 		}
 
 		level.Debug(s.logger).Log("msg", strings.Join(storeDebugMsgs, ";"))
@@ -354,6 +361,7 @@ func startStreamSeriesSet(
 	name string,
 	partialResponse bool,
 	responseTimeout time.Duration,
+	queryTotalSizeRef *int64,
 ) *streamSeriesSet {
 	s := &streamSeriesSet{
 		ctx:             ctx,
@@ -369,6 +377,47 @@ func startStreamSeriesSet(
 
 	wg.Add(1)
 	go func() {
+		queryLocalSize := int64(0)
+		queryTotalSize := atomic.LoadInt64(queryTotalSizeRef)
+
+		defer func() {
+			fmt.Printf("queryLocalSize: %.2fMB\n", float64(queryLocalSize)/float64(1000000))
+		}()
+
+		addSize := func(n int64) {
+			queryLocalSize += n
+			queryTotalSize = atomic.AddInt64(queryTotalSizeRef, n)
+		}
+
+		checkLimit := func() error {
+			if err := limit.CheckQueryPipeLimit(queryLocalSize); err != nil {
+				return err
+			}
+
+			return limit.CheckQueryTotalLimit(queryTotalSize)
+		}
+
+		frameSize := func(frame *storepb.SeriesResponse) int64 {
+			size := int64(0)
+			size += int64(unsafe.Sizeof(storepb.SeriesResponse{}))
+			size += int64(len(frame.GetWarning()))
+
+			series := frame.GetSeries()
+			size += int64(unsafe.Sizeof(storepb.Series{}))
+			size += int64(len(series.Chunks)) * int64(unsafe.Sizeof(storepb.AggrChunk{}))
+			size += int64(len(series.Labels)) * int64(unsafe.Sizeof(storepb.Label{}))
+
+			// approximate the length of each label being about 20 chars, e.g. "k8s_app_metric0"
+			const approxLabelLen = int64(10)
+			size += approxLabelLen * int64(len(series.Labels))
+
+			// approximate the size if chunks by having 120 bytes in each?
+			const approxChunkLen = int64(120)
+			size += approxChunkLen * int64(len(series.Chunks))
+
+			return size
+		}
+
 		defer wg.Done()
 		defer close(s.recvCh)
 
@@ -377,6 +426,11 @@ func startStreamSeriesSet(
 
 			if err == io.EOF {
 				return
+			}
+
+			if err == nil {
+				addSize(frameSize(r))
+				err = checkLimit()
 			}
 
 			if err != nil {
