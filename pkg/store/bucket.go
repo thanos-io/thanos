@@ -135,18 +135,14 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Help: "Number of blocks in a bucket store that were touched to satisfy a query.",
 	})
 	m.seriesGetAllDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name: "thanos_bucket_store_series_get_all_duration_seconds",
-		Help: "Time it takes until all per-block prepares and preloads for a query are finished.",
-		Buckets: []float64{
-			0.01, 0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 30, 60,
-		},
+		Name:    "thanos_bucket_store_series_get_all_duration_seconds",
+		Help:    "Time it takes until all per-block prepares and preloads for a query are finished.",
+		Buckets: prometheus.ExponentialBuckets(0.01, 2, 15),
 	})
 	m.seriesMergeDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name: "thanos_bucket_store_series_merge_duration_seconds",
-		Help: "Time it takes to merge sub-results from all queried blocks into a single result.",
-		Buckets: []float64{
-			0.01, 0.05, 0.1, 0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 30, 60,
-		},
+		Name:    "thanos_bucket_store_series_merge_duration_seconds",
+		Help:    "Time it takes to merge sub-results from all queried blocks into a single result.",
+		Buckets: prometheus.ExponentialBuckets(0.01, 2, 15),
 	})
 	m.resultSeriesCount = prometheus.NewSummary(prometheus.SummaryOpts{
 		Name: "thanos_bucket_store_series_result_series",
