@@ -648,6 +648,7 @@ func (s *bucketSeriesSet) Err() error {
 
 // TODO(ppanyukov): remove instrumentation
 var sgBlockSeriesCallCount = int64(0)
+
 func instrumentSGBlockSeries() func() {
 	thisCallNumber := atomic.AddInt64(&sgBlockSeriesCallCount, 1)
 	dump.WriteHeapDump(fmt.Sprintf("heap-sg-blockSeries-%d-before", thisCallNumber))
@@ -660,6 +661,7 @@ func instrumentSGBlockSeries() func() {
 		dump.WriteHeapDump(fmt.Sprintf("heap-sg-blockSeries-%d-after", thisCallNumber))
 	}
 }
+
 // TODO(ppanyukov): remove instrumentation - END
 
 func blockSeries(
@@ -973,6 +975,7 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt, maxResolutionMill
 
 // TODO(ppanyukov): remove instrumentation
 var sgSeriesCallCount = int64(0)
+
 func instrumentSGSeries() func() {
 	thisCallNumber := atomic.AddInt64(&sgSeriesCallCount, 1)
 	dump.WriteHeapDump(fmt.Sprintf("heap-sg-Series-%d-before", thisCallNumber))
@@ -985,6 +988,7 @@ func instrumentSGSeries() func() {
 		dump.WriteHeapDump(fmt.Sprintf("heap-sg-Series-%d-after", thisCallNumber))
 	}
 }
+
 // TODO(ppanyukov): remove instrumentation - END
 
 // Series implements the storepb.StoreServer interface.
@@ -993,7 +997,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	defer func() {
 		fmt.Printf("queryTotalSize: %.2fMB\n", float64(queryTotalSize)/float64(1000000))
 	}()
-
 
 	{
 		span, _ := tracing.StartSpan(srv.Context(), "store_query_gate_ismyturn")
