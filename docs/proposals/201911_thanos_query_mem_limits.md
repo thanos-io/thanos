@@ -95,11 +95,11 @@ func startStreamSeriesSet(..., queryTotalLimiter) {
     // Have local limiter for this source
     localLimiter limit.Limiter = limit.NewLimiterNoLock(limit.QueryPipeLimit())
 
-    // Recieve frames
+    // Receive frames
     for {
         r, err := s.stream.Recv()
 
-        // get the size of the recieved frame
+        // get the size of the received frame
         frameSize := getApproxSize(r)
 
         // check with local limiter first
@@ -283,7 +283,7 @@ aggrChunkSize := func(aggrChunk *storepb.AggrChunk) int64 {
 }
 ```
 
-In addition to the above, ther are many small additions to account for various array sizes. These are not shown for brevity. The `labelSize` and `aggrChunkSize` are the main things.
+In addition to the above, there are many small additions to account for various array sizes. These are not shown for brevity. The `labelSize` and `aggrChunkSize` are the main things.
 
 
 ## Conclusion
