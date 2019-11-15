@@ -155,6 +155,8 @@ func runStore(
 		return errors.Wrap(err, "create bucket client")
 	}
 
+	// TODO(bwplotka): Add as a flag?
+	maxItemSizeBytes := indexCacheSizeBytes / 2
 	indexCache, err := storecache.NewIndexCache(logger, reg, storecache.Opts{
 		MaxSizeBytes:     indexCacheSizeBytes,
 		MaxItemSizeBytes: maxItemSizeBytes,
@@ -163,6 +165,7 @@ func runStore(
 	if err != nil {
 		return errors.Wrap(err, "create index cache")
 	}
+
 	relabelContentYaml, err := selectorRelabelConf.Content()
 	if err != nil {
 		return errors.Wrap(err, "get content of relabel configuration")
@@ -179,17 +182,6 @@ func runStore(
 			runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 		}
 	}()
-
-	// TODO(bwplotka): Add as a flag?
-	maxItemSizeBytes := indexCacheSizeBytes / 2
-
-	indexCache, err := storecache.NewIndexCache(logger, reg, storecache.Opts{
-		MaxSizeBytes:     indexCacheSizeBytes,
-		MaxItemSizeBytes: maxItemSizeBytes,
-	})
-	if err != nil {
-		return errors.Wrap(err, "create index cache")
-	}
 
 	bs, err := store.NewBucketStore(
 		logger,
