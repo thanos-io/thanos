@@ -7,7 +7,7 @@ require (
 	github.com/armon/go-metrics v0.0.0-20190430140413-ec5e00d3c878
 	github.com/cespare/xxhash v1.1.0
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
-	github.com/dgraph-io/ristretto v0.0.0-20190924012251-ae326c3348e8
+	github.com/dgraph-io/ristretto v0.0.0-20191114170855-99d1bbbf28e6
 	github.com/fatih/structtag v1.0.0
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/fsnotify/fsnotify v1.4.7
@@ -67,3 +67,5 @@ replace (
 	k8s.io/klog => k8s.io/klog v0.3.1
 	k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20190228160746-b3a7cee44a30
 )
+
+go 1.13

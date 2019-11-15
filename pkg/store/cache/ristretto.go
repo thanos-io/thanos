@@ -39,14 +39,14 @@ func (t *TinyLFU) KeyData() bool {
 
 // NewTinyLFU returns a new TinyLFU based cache storage which
 // calls the given onEvict on eviction.
-func NewTinyLFU(onEvict func(key uint64, val interface{}, cost int64), maxSize int64) (StorageCache, error) {
+func NewTinyLFU(onEvict func(key uint64, conflict uint64, val interface{}, cost int64), maxSize int64) (StorageCache, error) {
 	ctrs := maxSize / 1000 // Seems like a good value, ad-hoc calculation of cache size divided by avg. cache item's size.
 	cache, err := ristretto.NewCache(&ristretto.Config{
 		NumCounters: ctrs,
 		MaxCost:     maxSize,
 		BufferItems: 64, // Value that should give good enough performance.
 		OnEvict:     onEvict,
-		KeyToHash: func(key interface{}) uint64 {
+		KeyToHash: func(key interface{}) (uint64, uint64) {
 			k := key.(cacheKey)
 			b := [16]byte(k.block)
 
@@ -56,12 +56,13 @@ func NewTinyLFU(onEvict func(key uint64, val interface{}, cost int64), maxSize i
 			switch keyType {
 			case cacheTypePostings:
 				datum := k.key.(cacheKeyPostings)
-				d = z.KeyToHash(datum.Name + datum.Value)
+				d, _ = z.KeyToHash(datum.Name + datum.Value)
 			case cacheTypeSeries:
 				datum := k.key.(cacheKeySeries)
-				d = z.KeyToHash(uint64(datum))
+				d, _ = z.KeyToHash(uint64(datum))
 			}
-			return z.KeyToHash(z.KeyToHash(b[:]) + d)
+			hashedBlock, _ := z.KeyToHash(b[:])
+			return z.KeyToHash(hashedBlock + d)
 		},
 	})
 	if err != nil {

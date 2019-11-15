@@ -32,7 +32,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application, name string
 		Default("250MB").Bytes()
 
 	indexCacheAlgorithm := cmd.Flag("index-cache-algorithm", "Algorithm to use for the index cache.").
-		Default("lru").Enum("lru", "tinylfu")
+		Default("lru").Hidden().Enum("lru", "tinylfu")
 
 	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes for chunks.").
 		Default("2GB").Bytes()

@@ -186,7 +186,7 @@ func NewIndexCache(logger log.Logger, reg prometheus.Registerer, opts Opts) (*In
 		c.storage = storage
 	default:
 	case TinyLFUCache:
-		storage, err := NewTinyLFU(func(key uint64, val interface{}, cost int64) {
+		storage, err := NewTinyLFU(func(key uint64, conflict uint64, val interface{}, cost int64) {
 			entrySize := sliceHeaderSize + cost
 			c.curSize -= uint64(entrySize)
 		}, int64(c.maxSizeBytes))

@@ -68,8 +68,8 @@ github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd/go.mod h1:sE
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/dgraph-io/ristretto v0.0.0-20190924012251-ae326c3348e8 h1:cg3kuXalA5TK0xWwanrvayAzN9Yg6xawalxESTGN7UM=
-github.com/dgraph-io/ristretto v0.0.0-20190924012251-ae326c3348e8/go.mod h1:jg4yDfbNNmxP2Nq5Z7MbyQrXyl/syIRF2LnbbxqViho=
+github.com/dgraph-io/ristretto v0.0.0-20191114170855-99d1bbbf28e6 h1:liDEMz8LbPxfuI8e/noprwccn6gZGv2rN1AgucbxjHs=
+github.com/dgraph-io/ristretto v0.0.0-20191114170855-99d1bbbf28e6/go.mod h1:T40EBc7CJke8TkpiYfGGKAeFjSaxuFXhuXRyumBd6RE=
 github.com/dgrijalva/jwt-go v0.0.0-20160705203006-01aeca54ebda h1:NyywMz59neOoVRFDz+ccfKWxn784fiHMDnZSy6T+JXY=
 github.com/dgrijalva/jwt-go v0.0.0-20160705203006-01aeca54ebda/go.mod h1:E3ru+11k8xSBh+hMPgOLZmtrrCbhqsmaPHjLKYnJCaQ=
 github.com/dgryski/go-farm v0.0.0-20190423205320-6a90982ecee2 h1:tdlZCpZ/P9DhczCTSixgIKmwPv6+wP5DGjqLYw5SUiA=
