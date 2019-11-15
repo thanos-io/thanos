@@ -29,12 +29,12 @@ func (t *TinyLFU) RemoveOldest() (interface{}, interface{}, bool) {
 
 // Purge purges the LRU.
 func (t *TinyLFU) Purge() {
-	// NOOP since TinyLFU is size restricted itself.
+	t.l.Clear()
 }
 
 // KeyData returns if the cache retains key data.
 func (t *TinyLFU) KeyData() bool {
-	return true
+	return false
 }
 
 // NewTinyLFU returns a new TinyLFU based cache storage which
