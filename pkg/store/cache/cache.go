@@ -172,7 +172,7 @@ func NewIndexCache(logger log.Logger, reg prometheus.Registerer, opts Opts) (*In
 	}
 
 	if opts.Algorithm == "" {
-		opts.Algorithm = "tinylfu"
+		opts.Algorithm = "lru"
 	}
 
 	switch opts.Algorithm {
@@ -188,7 +188,25 @@ func NewIndexCache(logger log.Logger, reg prometheus.Registerer, opts Opts) (*In
 	case TinyLFUCache:
 		storage, err := NewTinyLFU(func(key uint64, conflict uint64, val interface{}, cost int64) {
 			entrySize := sliceHeaderSize + cost
+
+			// Extract the key's type encoded as the last byte.
+			v := val.([]byte)
+			k := v[len(v)-1]
+			var keyType string
+			switch k {
+			case 0:
+				keyType = cacheTypeSeries
+			case 1:
+				keyType = cacheTypePostings
+			default:
+				panic("unhandled key type")
+			}
+
 			c.curSize -= uint64(entrySize)
+			c.evicted.WithLabelValues(keyType).Inc()
+			c.current.WithLabelValues(keyType).Dec()
+			c.currentSize.WithLabelValues(keyType).Sub(float64(entrySize))
+			c.totalCurrentSize.WithLabelValues(keyType).Sub(float64(entrySize + 8))
 		}, int64(c.maxSizeBytes))
 		if err != nil {
 			return nil, err
@@ -245,20 +263,35 @@ func (c *IndexCache) set(typ string, key cacheKey, val []byte) {
 		return
 	}
 
+	var keySize uint64
 	// The caller may be passing in a sub-slice of a huge array. Copy the data
 	// to ensure we don't waste huge amounts of space for something small.
-	v := make([]byte, len(val))
-	copy(v, val)
+	var v []byte
+	if !c.storage.KeyData() {
+		v = make([]byte, len(val)+1)
+		copy(v, val)
+		// Encode the key's type inside of the value.
+		switch typ {
+		case cacheTypeSeries:
+			v = append(v, byte(0))
+		case cacheTypePostings:
+			v = append(v, byte(1))
+		default:
+			panic("unhandled index cache item type")
+		}
+		size++
+		keySize = 8
+	} else {
+		v = make([]byte, len(val))
+		copy(v, val)
+		keySize = key.size()
+	}
 	c.storage.Add(key, v)
 	c.curSize += size
 
-	if !c.storage.KeyData() {
-		return
-	}
-
 	c.added.WithLabelValues(typ).Inc()
 	c.currentSize.WithLabelValues(typ).Add(float64(size))
-	c.totalCurrentSize.WithLabelValues(typ).Add(float64(size + key.size()))
+	c.totalCurrentSize.WithLabelValues(typ).Add(float64(size + keySize))
 	c.current.WithLabelValues(typ).Inc()
 
 }
