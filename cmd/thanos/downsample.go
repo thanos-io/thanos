@@ -20,24 +20,28 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
-func registerDownsample(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "continuously downsamples blocks in an object store bucket")
+func registerDownsample(m map[string]setupFunc, app *kingpin.Application) {
+	comp := component.Downsample
+	cmd := app.Command(comp.String(), "continuously downsamples blocks in an object store bucket")
 
-	httpAddr := regHTTPAddrFlag(cmd)
+	httpAddr, httpGracePeriod := regHTTPFlags(cmd)
 
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
 		Default("./data").String()
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
 
-	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
-		return runDownsample(g, logger, reg, *httpAddr, *dataDir, objStoreConfig)
+	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
+		return runDownsample(g, logger, reg, *httpAddr, time.Duration(*httpGracePeriod), *dataDir, objStoreConfig, comp)
 	}
 }
 
@@ -69,8 +73,10 @@ func runDownsample(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	httpBindAddr string,
+	httpGracePeriod time.Duration,
 	dataDir string,
-	objStoreConfig *pathOrContent,
+	objStoreConfig *extflag.PathOrContent,
+	comp component.Component,
 ) error {
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
@@ -90,13 +96,14 @@ func runDownsample(
 	}()
 
 	metrics := newDownsampleMetrics(reg)
-
+	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	// Start cycle of syncing blocks from the bucket and garbage collecting the bucket.
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+			statusProber.SetReady()
 
 			level.Info(logger).Log("msg", "start first pass of downsampling")
 
@@ -116,9 +123,12 @@ func runDownsample(
 		})
 	}
 
-	if err := metricHTTPListenGroup(g, logger, reg, httpBindAddr); err != nil {
-		return err
-	}
+	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
+	srv := httpserver.New(logger, reg, comp, statusProber,
+		httpserver.WithListen(httpBindAddr),
+		httpserver.WithGracePeriod(httpGracePeriod),
+	)
+	g.Add(srv.ListenAndServe, srv.Shutdown)
 
 	level.Info(logger).Log("msg", "starting downsample node")
 	return nil
@@ -137,6 +147,13 @@ func downsampleBucket(
 	if err := os.MkdirAll(dir, 0777); err != nil {
 		return errors.Wrap(err, "create dir")
 	}
+
+	defer func() {
+		if err := os.RemoveAll(dir); err != nil {
+			level.Error(logger).Log("msg", "failed to remove downsample cache directory", "path", dir, "err", err)
+		}
+	}()
+
 	var metas []*metadata.Meta
 
 	err := bkt.Iter(ctx, "", func(name string) error {
@@ -165,13 +182,13 @@ func downsampleBucket(
 
 	for _, m := range metas {
 		switch m.Thanos.Downsample.Resolution {
-		case 0:
+		case downsample.ResLevel0:
 			continue
-		case 5 * 60 * 1000:
+		case downsample.ResLevel1:
 			for _, id := range m.Compaction.Sources {
 				sources5m[id] = struct{}{}
 			}
-		case 60 * 60 * 1000:
+		case downsample.ResLevel2:
 			for _, id := range m.Compaction.Sources {
 				sources1h[id] = struct{}{}
 			}
@@ -182,7 +199,7 @@ func downsampleBucket(
 
 	for _, m := range metas {
 		switch m.Thanos.Downsample.Resolution {
-		case 0:
+		case downsample.ResLevel0:
 			missing := false
 			for _, id := range m.Compaction.Sources {
 				if _, ok := sources5m[id]; !ok {
@@ -196,16 +213,16 @@ func downsampleBucket(
 			// Only downsample blocks once we are sure to get roughly 2 chunks out of it.
 			// NOTE(fabxc): this must match with at which block size the compactor creates downsampled
 			// blocks. Otherwise we may never downsample some data.
-			if m.MaxTime-m.MinTime < 40*60*60*1000 {
+			if m.MaxTime-m.MinTime < downsample.DownsampleRange0 {
 				continue
 			}
-			if err := processDownsampling(ctx, logger, bkt, m, dir, 5*60*1000); err != nil {
-				metrics.downsampleFailures.WithLabelValues(compact.GroupKey(*m)).Inc()
+			if err := processDownsampling(ctx, logger, bkt, m, dir, downsample.ResLevel1); err != nil {
+				metrics.downsampleFailures.WithLabelValues(compact.GroupKey(m.Thanos)).Inc()
 				return errors.Wrap(err, "downsampling to 5 min")
 			}
-			metrics.downsamples.WithLabelValues(compact.GroupKey(*m)).Inc()
+			metrics.downsamples.WithLabelValues(compact.GroupKey(m.Thanos)).Inc()
 
-		case 5 * 60 * 1000:
+		case downsample.ResLevel1:
 			missing := false
 			for _, id := range m.Compaction.Sources {
 				if _, ok := sources1h[id]; !ok {
@@ -219,14 +236,14 @@ func downsampleBucket(
 			// Only downsample blocks once we are sure to get roughly 2 chunks out of it.
 			// NOTE(fabxc): this must match with at which block size the compactor creates downsampled
 			// blocks. Otherwise we may never downsample some data.
-			if m.MaxTime-m.MinTime < 10*24*60*60*1000 {
+			if m.MaxTime-m.MinTime < downsample.DownsampleRange1 {
 				continue
 			}
-			if err := processDownsampling(ctx, logger, bkt, m, dir, 60*60*1000); err != nil {
-				metrics.downsampleFailures.WithLabelValues(compact.GroupKey(*m))
+			if err := processDownsampling(ctx, logger, bkt, m, dir, downsample.ResLevel2); err != nil {
+				metrics.downsampleFailures.WithLabelValues(compact.GroupKey(m.Thanos))
 				return errors.Wrap(err, "downsampling to 60 min")
 			}
-			metrics.downsamples.WithLabelValues(compact.GroupKey(*m))
+			metrics.downsamples.WithLabelValues(compact.GroupKey(m.Thanos))
 		}
 	}
 	return nil

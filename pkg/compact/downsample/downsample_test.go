@@ -18,10 +18,129 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb/tombstones"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
+
+func TestDownsampleCounterBoundaryReset(t *testing.T) {
+
+	toAggrChunks := func(t *testing.T, cm []chunks.Meta) (res []*AggrChunk) {
+		for i := range cm {
+			achk, ok := cm[i].Chunk.(*AggrChunk)
+			testutil.Assert(t, ok, "expected *AggrChunk")
+			res = append(res, achk)
+		}
+		return
+	}
+
+	counterSamples := func(t *testing.T, achks []*AggrChunk) (res []sample) {
+		for _, achk := range achks {
+			chk, err := achk.Get(AggrCounter)
+			testutil.Ok(t, err)
+
+			iter := chk.Iterator(nil)
+			for iter.Next() {
+				t, v := iter.At()
+				res = append(res, sample{t, v})
+			}
+		}
+		return
+	}
+
+	counterIterate := func(t *testing.T, achks []*AggrChunk) (res []sample) {
+		var iters []chunkenc.Iterator
+		for _, achk := range achks {
+			chk, err := achk.Get(AggrCounter)
+			testutil.Ok(t, err)
+			iters = append(iters, chk.Iterator(nil))
+		}
+
+		citer := NewCounterSeriesIterator(iters...)
+		for citer.Next() {
+			t, v := citer.At()
+			res = append(res, sample{t: t, v: v})
+		}
+		return
+	}
+
+	type test struct {
+		raw                   []sample
+		rawAggrResolution     int64
+		expectedRawAggrChunks int
+		rawCounterSamples     []sample
+		rawCounterIterate     []sample
+		aggrAggrResolution    int64
+		aggrChunks            int
+		aggrCounterSamples    []sample
+		aggrCounterIterate    []sample
+	}
+
+	tests := []test{
+		{
+			// In this test case, counter resets occur at the
+			// boundaries between the t=49,t=99 and t=99,t=149
+			// windows, and the values in the t=49, t=99, and
+			// t=149 windows are high enough that the resets
+			// will only be accounted for if the first raw value
+			// of a chunk is maintained during aggregation.
+			// See #1568 for more details.
+			raw: []sample{
+				{t: 10, v: 1}, {t: 20, v: 3}, {t: 30, v: 5},
+				{t: 50, v: 1}, {t: 60, v: 8}, {t: 70, v: 10},
+				{t: 120, v: 1}, {t: 130, v: 18}, {t: 140, v: 20},
+				{t: 160, v: 21}, {t: 170, v: 38}, {t: 180, v: 40},
+			},
+			rawAggrResolution:     50,
+			expectedRawAggrChunks: 4,
+			rawCounterSamples: []sample{
+				{t: 10, v: 1}, {t: 30, v: 5}, {t: 30, v: 5},
+				{t: 50, v: 1}, {t: 70, v: 10}, {t: 70, v: 10},
+				{t: 120, v: 1}, {t: 140, v: 20}, {t: 140, v: 20},
+				{t: 160, v: 21}, {t: 180, v: 40}, {t: 180, v: 40},
+			},
+			rawCounterIterate: []sample{
+				{t: 10, v: 1}, {t: 30, v: 5},
+				{t: 50, v: 6}, {t: 70, v: 15},
+				{t: 120, v: 16}, {t: 140, v: 35},
+				{t: 160, v: 36}, {t: 180, v: 55},
+			},
+			aggrAggrResolution: 2 * 50,
+			aggrChunks:         2,
+			aggrCounterSamples: []sample{
+				{t: 10, v: 1}, {t: 70, v: 15}, {t: 70, v: 10},
+				{t: 120, v: 1}, {t: 180, v: 40}, {t: 180, v: 40},
+			},
+			aggrCounterIterate: []sample{
+				{t: 10, v: 1}, {t: 70, v: 15},
+				{t: 120, v: 16}, {t: 180, v: 55},
+			},
+		},
+	}
+
+	doTest := func(t *testing.T, test *test) {
+		// Asking for more chunks than raw samples ensures that downsampleRawLoop
+		// will create chunks with samples from a single window.
+		cm := downsampleRawLoop(test.raw, test.rawAggrResolution, len(test.raw)+1)
+		testutil.Equals(t, test.expectedRawAggrChunks, len(cm))
+
+		rawAggrChunks := toAggrChunks(t, cm)
+		testutil.Equals(t, test.rawCounterSamples, counterSamples(t, rawAggrChunks))
+		testutil.Equals(t, test.rawCounterIterate, counterIterate(t, rawAggrChunks))
+
+		var buf []sample
+		acm, err := downsampleAggrLoop(rawAggrChunks, &buf, test.aggrAggrResolution, test.aggrChunks)
+		testutil.Ok(t, err)
+		testutil.Equals(t, test.aggrChunks, len(acm))
+
+		aggrAggrChunks := toAggrChunks(t, acm)
+		testutil.Equals(t, test.aggrCounterSamples, counterSamples(t, aggrAggrChunks))
+		testutil.Equals(t, test.aggrCounterIterate, counterIterate(t, aggrAggrChunks))
+	}
+
+	doTest(t, &tests[0])
+}
 
 func TestExpandChunkIterator(t *testing.T) {
 	// Validate that expanding the chunk iterator filters out-of-order samples
@@ -56,7 +175,7 @@ func TestDownsampleRaw(t *testing.T) {
 				AggrSum:     {{99, 7}, {199, 17}, {250, 1}},
 				AggrMin:     {{99, 1}, {199, 2}, {250, 1}},
 				AggrMax:     {{99, 3}, {199, 10}, {250, 1}},
-				AggrCounter: {{99, 4}, {199, 13}, {250, 14}, {250, 1}},
+				AggrCounter: {{20, 1}, {99, 4}, {199, 13}, {250, 14}, {250, 1}},
 			},
 		},
 	}
@@ -83,9 +202,9 @@ func TestDownsampleAggr(t *testing.T) {
 					{199, 5}, {299, 1}, {399, 10}, {400, -3}, {499, 10}, {699, 0}, {999, 100},
 				},
 				AggrCounter: {
-					{99, 100}, {299, 150}, {499, 210}, {499, 10}, // chunk 1
-					{599, 20}, {799, 50}, {999, 120}, {999, 50}, // chunk 2, no reset
-					{1099, 40}, {1199, 80}, {1299, 110}, // chunk 3, reset
+					{99, 100}, {299, 150}, {499, 210}, {499, 10}, // Chunk 1.
+					{599, 20}, {799, 50}, {999, 120}, {999, 50}, // Chunk 2, no reset.
+					{1099, 40}, {1199, 80}, {1299, 110}, // Chunk 3, reset.
 				},
 			},
 			output: map[AggrType][]sample{
@@ -93,7 +212,7 @@ func TestDownsampleAggr(t *testing.T) {
 				AggrSum:     {{499, 29}, {999, 100}},
 				AggrMin:     {{499, -3}, {999, 0}},
 				AggrMax:     {{499, 10}, {999, 100}},
-				AggrCounter: {{499, 210}, {999, 320}, {1299, 430}, {1299, 110}},
+				AggrCounter: {{99, 100}, {499, 210}, {999, 320}, {1299, 430}, {1299, 110}},
 			},
 		},
 	}
@@ -244,10 +363,10 @@ func TestCounterSeriesIterator(t *testing.T) {
 
 	chunks := [][]sample{
 		{{100, 10}, {200, 20}, {300, 10}, {400, 20}, {400, 5}},
-		{{500, 10}, {600, 20}, {700, 30}, {800, 40}, {800, 10}}, // no actual reset
-		{{900, 5}, {1000, 10}, {1100, 15}},                      // actual reset
-		{{1200, 20}, {1250, staleMarker}, {1300, 40}},           // no special last sample, no reset
-		{{1400, 30}, {1500, 30}, {1600, 50}},                    // no special last sample, reset
+		{{500, 10}, {600, 20}, {700, 30}, {800, 40}, {800, 10}}, // No actual reset.
+		{{900, 5}, {1000, 10}, {1100, 15}},                      // Actual reset.
+		{{1200, 20}, {1250, staleMarker}, {1300, 40}},           // No special last sample, no reset.
+		{{1400, 30}, {1500, 30}, {1600, 50}},                    // No special last sample, reset.
 	}
 	exp := []sample{
 		{100, 10}, {200, 20}, {300, 30}, {400, 40}, {500, 45},
@@ -497,7 +616,7 @@ func (b *memBlock) Chunks() (tsdb.ChunkReader, error) {
 	return b, nil
 }
 
-func (b *memBlock) Tombstones() (tsdb.TombstoneReader, error) {
+func (b *memBlock) Tombstones() (tombstones.Reader, error) {
 	return emptyTombstoneReader{}, nil
 }
 
@@ -507,7 +626,7 @@ func (b *memBlock) Close() error {
 
 type emptyTombstoneReader struct{}
 
-func (emptyTombstoneReader) Get(ref uint64) (tsdb.Intervals, error)        { return nil, nil }
-func (emptyTombstoneReader) Iter(func(uint64, tsdb.Intervals) error) error { return nil }
-func (emptyTombstoneReader) Total() uint64                                 { return 0 }
-func (emptyTombstoneReader) Close() error                                  { return nil }
+func (emptyTombstoneReader) Get(ref uint64) (tombstones.Intervals, error)        { return nil, nil }
+func (emptyTombstoneReader) Iter(func(uint64, tombstones.Intervals) error) error { return nil }
+func (emptyTombstoneReader) Total() uint64                                       { return 0 }
+func (emptyTombstoneReader) Close() error                                        { return nil }

@@ -91,10 +91,7 @@ func newCmdExec(cmd *exec.Cmd) *cmdExec {
 func (c *cmdExec) Start(stdout io.Writer, stderr io.Writer) error {
 	c.Stderr = stderr
 	c.Stdout = stdout
-	c.SysProcAttr = &syscall.SysProcAttr{
-		// For linux only, kill this if the go test process dies before the cleanup.
-		Pdeathsig: syscall.SIGKILL,
-	}
+	c.SysProcAttr = testutil.SysProcAttr()
 	return c.Cmd.Start()
 }
 
@@ -159,6 +156,7 @@ func sidecar(http, grpc address, prom *prometheusScheduler) *serverScheduler {
 			return newCmdExec(exec.Command("thanos", "sidecar",
 				"--debug.name", fmt.Sprintf("sidecar-%s", http.Port),
 				"--grpc-address", grpc.HostPort(),
+				"--grpc-grace-period", "0s",
 				"--http-address", http.HostPort(),
 				"--prometheus.url", prom.HTTP.URL(),
 				"--tsdb.path", promDir,
@@ -193,6 +191,7 @@ func receiver(http, grpc, metric address, replicationFactor int, hashring ...rec
 			return newCmdExec(exec.Command("thanos", "receive",
 				"--debug.name", fmt.Sprintf("receive-%s", http.Port),
 				"--grpc-address", grpc.HostPort(),
+				"--grpc-grace-period", "0s",
 				"--http-address", metric.HostPort(),
 				"--remote-write.address", http.HostPort(),
 				"--label", fmt.Sprintf(`receive="%s"`, http.Port),
@@ -216,6 +215,7 @@ func querier(http, grpc address, storeAddresses []address, fileSDStoreAddresses 
 				"query",
 				"--debug.name", fmt.Sprintf("querier-%s", http.Port),
 				"--grpc-address", grpc.HostPort(),
+				"--grpc-grace-period", "0s",
 				"--http-address", http.HostPort(),
 				"--log.level", "debug",
 				"--query.replica-label", replicaLabel,
@@ -246,7 +246,7 @@ func querier(http, grpc address, storeAddresses []address, fileSDStoreAddresses 
 	}
 }
 
-func storeGateway(http, grpc address, bucketConfig []byte) *serverScheduler {
+func storeGateway(http, grpc address, bucketConfig []byte, relabelConfig []byte) *serverScheduler {
 	return &serverScheduler{
 		HTTP: http,
 		GRPC: grpc,
@@ -262,11 +262,13 @@ func storeGateway(http, grpc address, bucketConfig []byte) *serverScheduler {
 				"--debug.name", fmt.Sprintf("store-gw-%s", http.Port),
 				"--data-dir", dbDir,
 				"--grpc-address", grpc.HostPort(),
+				"--grpc-grace-period", "0s",
 				"--http-address", http.HostPort(),
 				"--log.level", "debug",
 				"--objstore.config", string(bucketConfig),
-				// Accelerated sync time for quicker test (3m by default)
+				// Accelerated sync time for quicker test (3m by default).
 				"--sync-block-duration", "5s",
+				"--selector.relabel-config", string(relabelConfig),
 			)), nil
 		},
 	}
@@ -334,6 +336,7 @@ func ruleWithDir(http, grpc address, dir string, rules []string, am address, que
 				"--eval-interval", "1s",
 				"--alertmanagers.url", am.URL(),
 				"--grpc-address", grpc.HostPort(),
+				"--grpc-grace-period", "0s",
 				"--http-address", http.HostPort(),
 				"--log.level", "debug",
 				"--query.sd-dns-interval", "5s",

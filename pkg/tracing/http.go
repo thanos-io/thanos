@@ -12,8 +12,8 @@ import (
 	"github.com/opentracing/opentracing-go/ext"
 )
 
-// HTTPMiddleware returns HTTP handler that injects given tracer and starts new server span. If any client span is fetched
-// wire we include that as our parent.
+// HTTPMiddleware returns an HTTP handler that injects the given tracer and starts a new server span.
+// If any client span is fetched from the wire, we include that as our parent.
 func HTTPMiddleware(tracer opentracing.Tracer, name string, logger log.Logger, next http.Handler) http.HandlerFunc {
 	operationName := fmt.Sprintf("/%s HTTP[server]", name)
 

@@ -20,27 +20,27 @@ func Test_parseFlagLabels(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			s:         []string{`label-Name="LabelVal"`}, //Unsupported labelname
+			s:         []string{`label-Name="LabelVal"`}, // Unsupported labelname.
 			expectErr: true,
 		},
 		{
-			s:         []string{`label:Name="LabelVal"`}, //Unsupported labelname
+			s:         []string{`label:Name="LabelVal"`}, // Unsupported labelname.
 			expectErr: true,
 		},
 		{
-			s:         []string{`1abelName="LabelVal"`}, //Unsupported labelname
+			s:         []string{`1abelName="LabelVal"`}, // Unsupported labelname.
 			expectErr: true,
 		},
 		{
-			s:         []string{`label_Name"LabelVal"`}, //Missing "=" seprator
+			s:         []string{`label_Name"LabelVal"`}, // Missing "=" seprator.
 			expectErr: true,
 		},
 		{
-			s:         []string{`label_Name= "LabelVal"`}, //Whitespace invalid syntax
+			s:         []string{`label_Name= "LabelVal"`}, // Whitespace invalid syntax.
 			expectErr: true,
 		},
 		{
-			s:         []string{`label_name=LabelVal`}, //Missing quotes invalid syntax
+			s:         []string{`label_name=LabelVal`}, // Missing quotes invalid syntax.
 			expectErr: true,
 		},
 	}
@@ -107,4 +107,39 @@ func (m mockResolver) Resolve(ctx context.Context, name string, qtype dns.QType)
 		return res, nil
 	}
 	return nil, errors.Errorf("mockResolver not found response for name: %s", name)
+}
+
+func Test_ParseAlertmanagerAddress(t *testing.T) {
+	var tData = []struct {
+		address         string
+		expectQueryType dns.QType
+		expectUrl       *url.URL
+		expectError     error
+	}{
+		{
+			address:         "http://user:pass+word@foo.bar:3289",
+			expectQueryType: dns.QType(""),
+			expectUrl:       &url.URL{Host: "foo.bar:3289", Scheme: "http", User: url.UserPassword("user", "pass+word")},
+			expectError:     nil,
+		},
+		{
+			address:         "dnssrvnoa+http://user:pass+word@foo.bar:3289",
+			expectQueryType: dns.QType("dnssrvnoa"),
+			expectUrl:       &url.URL{Host: "foo.bar:3289", Scheme: "http", User: url.UserPassword("user", "pass+word")},
+			expectError:     nil,
+		},
+		{
+			address:         "foo+bar+http://foo.bar:3289",
+			expectQueryType: dns.QType("foo+bar"),
+			expectUrl:       &url.URL{Host: "foo.bar:3289", Scheme: "http"},
+			expectError:     nil,
+		},
+	}
+
+	for _, d := range tData {
+		q, u, e := parseAlertmanagerAddress(d.address)
+		testutil.Equals(t, d.expectError, e)
+		testutil.Equals(t, d.expectUrl, u)
+		testutil.Equals(t, d.expectQueryType, q)
+	}
 }

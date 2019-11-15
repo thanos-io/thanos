@@ -50,6 +50,8 @@ type PrometheusStore struct {
 	component      component.StoreAPI
 	externalLabels func() labels.Labels
 	timestamps     func() (mint int64, maxt int64)
+
+	remoteReadAcceptableResponses []prompb.ReadRequest_ResponseType
 }
 
 // NewPrometheusStore returns a new PrometheusStore that uses the given HTTP client
@@ -72,12 +74,13 @@ func NewPrometheusStore(
 		}
 	}
 	p := &PrometheusStore{
-		logger:         logger,
-		base:           baseURL,
-		client:         client,
-		component:      component,
-		externalLabels: externalLabels,
-		timestamps:     timestamps,
+		logger:                        logger,
+		base:                          baseURL,
+		client:                        client,
+		component:                     component,
+		externalLabels:                externalLabels,
+		timestamps:                    timestamps,
+		remoteReadAcceptableResponses: []prompb.ReadRequest_ResponseType{prompb.ReadRequest_STREAMED_XOR_CHUNKS, prompb.ReadRequest_SAMPLES},
 	}
 	return p, nil
 }
@@ -141,6 +144,12 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 
 	if len(newMatchers) == 0 {
 		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding external labels)").Error())
+	}
+
+	// Don't ask for more than available time. This includes potential `minTime` flag limit.
+	availableMinTime, _ := p.timestamps()
+	if r.MinTime < availableMinTime {
+		r.MinTime = availableMinTime
 	}
 
 	q := &prompb.Query{StartTimestampMs: r.MinTime, EndTimestampMs: r.MaxTime}
@@ -217,7 +226,7 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(s storepb.Store_Series
 
 		// XOR encoding supports a max size of 2^16 - 1 samples, so we need
 		// to chunk all samples into groups of no more than 2^16 - 1
-		// See: https://github.com/thanos-io/thanos/pull/718
+		// See: https://github.com/thanos-io/thanos/pull/718.
 		aggregatedChunks, err := p.chunkSamples(e, math.MaxUint16)
 		if err != nil {
 			return err
@@ -375,7 +384,7 @@ func (p *PrometheusStore) chunkSamples(series *prompb.TimeSeries, maxSamplesPerC
 func (p *PrometheusStore) startPromSeries(ctx context.Context, q *prompb.Query) (*http.Response, error) {
 	reqb, err := proto.Marshal(&prompb.ReadRequest{
 		Queries:               []*prompb.Query{q},
-		AcceptedResponseTypes: []prompb.ReadRequest_ResponseType{prompb.ReadRequest_STREAMED_XOR_CHUNKS},
+		AcceptedResponseTypes: p.remoteReadAcceptableResponses,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal read request")

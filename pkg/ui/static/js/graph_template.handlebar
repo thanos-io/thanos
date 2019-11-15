@@ -114,8 +114,8 @@
 
                         <div class="prometheus_input_group pull-left">
                            <select name="max_source_resolution_input" title="Downsampling option" id="max_source_resolution_input{{id}}">
-                              <option value="">Auto downsampling</option>
-                              <option selected="selected" value="0s">Only raw data</option>
+                              <option value="auto">Auto downsampling</option>
+                              <option value="0s">Only raw data</option>
                               <option value="5m">Max 5m downsampling</option>
                               <option value="1h">Max 1h downsampling</option>
                            </select>

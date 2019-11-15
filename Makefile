@@ -3,6 +3,11 @@ FILES_TO_FMT      ?= $(shell find . -path ./vendor -prune -o -name '*.go' -print
 
 DOCKER_IMAGE_REPO ?= quay.io/thanos/thanos
 DOCKER_IMAGE_TAG  ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)
+DOCKER_CI_TAG     ?= test
+
+# Ensure everything works even if GOPATH is not set, which is often the case.
+# The `go env GOPATH` will work for all cases for Go 1.8+.
+GOPATH            ?= $(shell go env GOPATH)
 
 TMP_GOPATH        ?= /tmp/thanos-go
 GOBIN             ?= $(firstword $(subst :, ,${GOPATH}))/bin
@@ -45,8 +50,8 @@ ME                ?= $(shell whoami)
 # Referenced by github.com/thanos-io/thanos/blob/master/docs/getting_started.md#prometheus
 
 # Limited prom version, because testing was not possible. This should fix it: https://github.com/thanos-io/thanos/issues/758
-PROM_VERSIONS           ?= v2.4.3 v2.5.0 v2.8.1 v2.9.2
-PROMS ?= $(GOBIN)/prometheus-v2.4.3 $(GOBIN)/prometheus-v2.5.0 $(GOBIN)/prometheus-v2.8.1 $(GOBIN)/prometheus-v2.9.2
+PROM_VERSIONS           ?= v2.4.3 v2.5.0 v2.8.1 v2.9.2 v2.13.0
+PROMS ?= $(GOBIN)/prometheus-v2.4.3 $(GOBIN)/prometheus-v2.5.0 $(GOBIN)/prometheus-v2.8.1 $(GOBIN)/prometheus-v2.9.2 $(GOBIN)/prometheus-v2.13.0
 
 ALERTMANAGER_VERSION    ?= v0.15.2
 ALERTMANAGER            ?= $(GOBIN)/alertmanager-$(ALERTMANAGER_VERSION)
@@ -155,12 +160,19 @@ docs: $(EMBEDMD) build
 .PHONY: check-docs
 check-docs: $(EMBEDMD) $(LICHE) build
 	@EMBEDMD_BIN="$(EMBEDMD)" scripts/genflagdocs.sh check
-	@$(LICHE) --recursive docs --exclude "cloud.tencent.com" --document-root .
-	@$(LICHE) --exclude "cloud.tencent.com|goreportcard.com" --document-root . *.md
+	@$(LICHE) --recursive docs --exclude "(cloud.tencent.com|alibabacloud.com)" --document-root .
+	@$(LICHE) --exclude "(cloud.tencent.com|goreportcard.com|alibabacloud.com)" --document-root . *.md
+
+# checks Go code comments if they have trailing period (excludes protobuffers and vendor files).
+# Comments with more than 3 spaces at beginning are omitted from the check, example: '//    - foo'.
+.PHONY: check-comments
+check-comments:
+	@printf ">> checking Go comments trailing periods\n\n\n"
+	@./scripts/build-check-comments.sh
 
 # format formats the code (including imports format).
 .PHONY: format
-format: $(GOIMPORTS)
+format: $(GOIMPORTS) check-comments
 	@echo ">> formatting code"
 	@$(GOIMPORTS) -w $(FILES_TO_FMT)
 
@@ -191,26 +203,28 @@ test: check-git install-deps
 	@go install github.com/thanos-io/thanos/cmd/thanos
 	# Be careful on GOCACHE. Those tests are sometimes using built Thanos/Prometheus binaries directly. Don't cache those.
 	@rm -rf ${GOCACHE}
-	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS='true' or/and THANOS_SKIP_S3_AWS_TESTS='true' or/and THANOS_SKIP_AZURE_TESTS='true' and/or THANOS_SKIP_SWIFT_TESTS='true' and/or THANOS_SKIP_TENCENT_COS_TESTS='true' if you want to skip e2e tests against real store buckets"
+	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS='true' or/and THANOS_SKIP_S3_AWS_TESTS='true' or/and THANOS_SKIP_AZURE_TESTS='true' and/or THANOS_SKIP_SWIFT_TESTS='true' and/or THANOS_SKIP_ALIYUN_OSS_TESTS='true' and/or THANOS_SKIP_TENCENT_COS_TESTS='true' if you want to skip e2e tests against real store buckets"
 	@go test $(shell go list ./... | grep -v /vendor/);
 
-.PHONY: test-only-gcs
-test-only-gcs: export THANOS_SKIP_S3_AWS_TESTS = true
-test-only-gcs: export THANOS_SKIP_AZURE_TESTS = true
-test-only-gcs: export THANOS_SKIP_SWIFT_TESTS = true
-test-only-gcs: export THANOS_SKIP_TENCENT_COS_TESTS = true
-test-only-gcs:
-	@echo ">> Skipping S3 tests"
+.PHONY: test-ci
+test-ci: export THANOS_SKIP_AZURE_TESTS = true
+test-ci: export THANOS_SKIP_SWIFT_TESTS = true
+test-ci: export THANOS_SKIP_TENCENT_COS_TESTS = true
+test-ci: export THANOS_SKIP_ALIYUN_OSS_TESTS = true
+test-ci:
 	@echo ">> Skipping AZURE tests"
 	@echo ">> Skipping SWIFT tests"
 	@echo ">> Skipping TENCENT tests"
+	@echo ">> Skipping ALIYUN tests"
 	$(MAKE) test
 
 .PHONY: test-local
 test-local: export THANOS_SKIP_GCS_TESTS = true
+test-local: export THANOS_SKIP_S3_AWS_TESTS = true
 test-local:
 	@echo ">> Skipping GCE tests"
-	$(MAKE) test-only-gcs
+	@echo ">> Skipping S3 tests"
+	$(MAKE) test-ci
 
 # install-deps installs dependencies for e2e tetss.
 # It installs supported versions of Prometheus and alertmanager to test against in e2e.
@@ -227,8 +241,8 @@ docker-ci: install-deps
 	@cp -r $(GOBIN)/* ./tmp/bin
 	@docker build -t thanos-ci -f Dockerfile.thanos-ci .
 	@echo ">> pushing thanos-ci image"
-	@docker tag "thanos-ci" "quay.io/thanos/thanos-ci:v0.1.0"
-	@docker push "quay.io/thanos/thanos-ci:v0.1.0"
+	@docker tag "thanos-ci" "quay.io/thanos/thanos-ci:$(DOCKER_CI_TAG)"
+	@docker push "quay.io/thanos/thanos-ci:$(DOCKER_CI_TAG)"
 
 # tooling deps. TODO(bwplotka): Pin them all to certain version!
 .PHONY: check-git

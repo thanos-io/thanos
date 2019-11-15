@@ -135,7 +135,7 @@ Based on the metadata of store and source nodes, they attempt to minimize the re
 
 The compactor is a singleton process that does not participate in the Thanos cluster. Instead it is only pointed at an object storage bucket and continuously consolidates multiple smaller blocks into larger ones. This significantly reduces total storage size in the bucket, the load on store nodes and the amount of requests required to fetch data for a query from the bucket.
 
-In the future, the compactor may do additional batch processing such as down-sampling and applying retention policies.
+The compactor also does additional batch processing such as down-sampling and applying retention policies.
 
 ## Scaling
 
@@ -146,7 +146,6 @@ Store, rule, and compactor nodes are all expected to scale significantly within 
 For example, rule sets can be divided across multiple HA pairs of rule nodes. Store nodes likely are subject to functional sharding regardless by assigning dedicated buckets per region/datacenter.
 
 Overall, first-class horizontal sharding is possible but will not be considered for the time being since there's no evidence that it is required in practical setups.
-
 
 ## Cost
 

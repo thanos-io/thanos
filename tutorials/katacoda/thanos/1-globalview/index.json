@@ -1,5 +1,5 @@
 {
-  "title": "Intro: Global View and seemless HA for Prometheus",
+  "title": "Intro: Global View and seamless HA for Prometheus",
   "description": "Learn how to easily transform Prometheus into centralized, highly available monitoring using Thanos.",
   "difficulty": "Beginner",
   "time": "10-15 Minutes",

@@ -5,15 +5,12 @@ import (
 	"fmt"
 	"math"
 	"net"
-	"os"
 	"testing"
 	"time"
 
-	"sort"
-
 	"github.com/fortytw2/leaktest"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"google.golang.org/grpc"
@@ -50,68 +47,54 @@ func (s *testStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
-type testStores struct {
-	srvs map[string]*grpc.Server
+type testStoreMeta struct {
+	extlsetFn func(addr string) []storepb.LabelSet
+	storeType component.StoreAPI
 }
 
-func newTestStores(numStores int, storesExtLabels ...[]storepb.Label) (*testStores, error) {
+type testStores struct {
+	srvs       map[string]*grpc.Server
+	orderAddrs []string
+}
+
+func startTestStores(storeMetas []testStoreMeta) (*testStores, error) {
 	st := &testStores{
 		srvs: map[string]*grpc.Server{},
 	}
 
-	for i := 0; i < numStores; i++ {
-		lsetFn := func(addr string) []storepb.LabelSet {
-			if len(storesExtLabels) != numStores {
-				return []storepb.LabelSet{{
-					Labels: []storepb.Label{
-						{
-							Name:  "addr",
-							Value: addr,
-						},
-					},
-				}}
-			}
-			ls := storesExtLabels[i]
-			if len(ls) == 0 {
-				return []storepb.LabelSet{}
-			}
-
-			return []storepb.LabelSet{{Labels: storesExtLabels[i]}}
-		}
-
-		srv, addr, err := startStore(lsetFn)
+	for _, meta := range storeMetas {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			// Close so far started servers.
 			st.Close()
 			return nil, err
 		}
 
-		st.srvs[addr] = srv
+		srv := grpc.NewServer()
+
+		storeSrv := &testStore{
+			info: storepb.InfoResponse{
+				LabelSets: meta.extlsetFn(listener.Addr().String()),
+			},
+		}
+		if meta.storeType != nil {
+			storeSrv.info.StoreType = meta.storeType.ToProto()
+		}
+		storepb.RegisterStoreServer(srv, storeSrv)
+		go func() {
+			_ = srv.Serve(listener)
+		}()
+
+		st.srvs[listener.Addr().String()] = srv
+		st.orderAddrs = append(st.orderAddrs, listener.Addr().String())
 	}
 
 	return st, nil
 }
 
-func startStore(lsetFn func(addr string) []storepb.LabelSet) (*grpc.Server, string, error) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return nil, "", err
-	}
-
-	srv := grpc.NewServer()
-	storepb.RegisterStoreServer(srv, &testStore{info: storepb.InfoResponse{LabelSets: lsetFn(listener.Addr().String())}})
-	go func() {
-		_ = srv.Serve(listener)
-	}()
-
-	return srv, listener.Addr().String(), nil
-}
-
 func (s *testStores) StoreAddresses() []string {
 	var stores []string
-	for addr := range s.srvs {
-		stores = append(stores, addr)
-	}
+	stores = append(stores, s.orderAddrs...)
 	return stores
 }
 
@@ -132,92 +115,402 @@ func (s *testStores) CloseOne(addr string) {
 	delete(s.srvs, addr)
 }
 
-func specsFromAddrFunc(addrs []string) func() []StoreSpec {
-	return func() (specs []StoreSpec) {
-		for _, addr := range addrs {
+func TestStoreSet_Update(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	stores, err := startTestStores([]testStoreMeta{
+		{
+			storeType: component.Sidecar,
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{
+					{
+						Labels: []storepb.Label{
+							{Name: "addr", Value: addr},
+						},
+					},
+					{
+						Labels: []storepb.Label{
+							{Name: "a", Value: "b"},
+						},
+					},
+				}
+			},
+		},
+		{
+			storeType: component.Sidecar,
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{
+					{
+						Labels: []storepb.Label{
+							{Name: "addr", Value: addr},
+						},
+					},
+					{
+						Labels: []storepb.Label{
+							{Name: "a", Value: "b"},
+						},
+					},
+				}
+			},
+		},
+		{
+			storeType: component.Query,
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{
+					{
+						Labels: []storepb.Label{
+							{Name: "a", Value: "broken"},
+						},
+					},
+				}
+			},
+		},
+	})
+	testutil.Ok(t, err)
+	defer stores.Close()
+
+	discoveredStoreAddr := stores.StoreAddresses()
+
+	// Start with one not available.
+	stores.CloseOne(discoveredStoreAddr[2])
+
+	// Testing if duplicates can cause weird results.
+	discoveredStoreAddr = append(discoveredStoreAddr, discoveredStoreAddr[0])
+	storeSet := NewStoreSet(nil, nil, func() (specs []StoreSpec) {
+		for _, addr := range discoveredStoreAddr {
 			specs = append(specs, NewGRPCStoreSpec(addr))
 		}
 		return specs
-	}
-}
-
-func TestStoreSet_AllAvailable_ThenDown(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
-	st, err := newTestStores(2)
-	testutil.Ok(t, err)
-	defer st.Close()
-
-	initialStoreAddr := st.StoreAddresses()
-
-	// Testing if duplicates can cause weird results.
-	initialStoreAddr = append(initialStoreAddr, initialStoreAddr[0])
-	storeSet := NewStoreSet(nil, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts, time.Minute)
+	}, testGRPCOpts, time.Minute)
 	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 	defer storeSet.Close()
 
 	// Should not matter how many of these we run.
 	storeSet.Update(context.Background())
 	storeSet.Update(context.Background())
+	testutil.Equals(t, 2, len(storeSet.stores))
+	testutil.Equals(t, 3, len(storeSet.storeStatuses))
 
-	testutil.Assert(t, len(storeSet.stores) == 2, "all services should respond just fine, so we expect all clients to be ready.")
+	for addr, st := range storeSet.stores {
+		testutil.Equals(t, addr, st.addr)
 
-	for addr, store := range storeSet.stores {
-		testutil.Equals(t, addr, store.addr)
-		testutil.Equals(t, 1, len(store.labelSets))
-		testutil.Equals(t, "addr", store.labelSets[0].Labels[0].Name)
-		testutil.Equals(t, addr, store.labelSets[0].Labels[0].Value)
+		lset := st.LabelSets()
+		testutil.Equals(t, 2, len(lset))
+		testutil.Equals(t, "addr", lset[0].Labels[0].Name)
+		testutil.Equals(t, addr, lset[0].Labels[0].Value)
+		testutil.Equals(t, "a", lset[1].Labels[0].Name)
+		testutil.Equals(t, "b", lset[1].Labels[0].Value)
 	}
 
-	st.CloseOne(initialStoreAddr[0])
+	// Check stats.
+	expected := newStoreAPIStats()
+	expected[component.Sidecar] = map[string]int{
+		fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredStoreAddr[0]): 1,
+		fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredStoreAddr[1]): 1,
+	}
+	testutil.Equals(t, expected, storeSet.storesMetric.storeNodes)
+
+	// Remove address from discovered and reset last check, which should ensure cleanup of status on next update.
+	storeSet.storeStatuses[discoveredStoreAddr[2]].LastCheck = time.Now().Add(-4 * time.Minute)
+	discoveredStoreAddr = discoveredStoreAddr[:len(discoveredStoreAddr)-2]
+	storeSet.Update(context.Background())
+	testutil.Equals(t, 2, len(storeSet.storeStatuses))
+
+	stores.CloseOne(discoveredStoreAddr[0])
+	delete(expected[component.Sidecar], fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredStoreAddr[0]))
 
 	// We expect Update to tear down store client for closed store server.
 	storeSet.Update(context.Background())
+	testutil.Equals(t, 1, len(storeSet.stores), "only one service should respond just fine, so we expect one client to be ready.")
+	testutil.Equals(t, 2, len(storeSet.storeStatuses))
 
-	testutil.Assert(t, len(storeSet.stores) == 1, "only one service should respond just fine, so we expect one client to be ready.")
-
-	addr := initialStoreAddr[1]
-	store, ok := storeSet.stores[addr]
+	addr := discoveredStoreAddr[1]
+	st, ok := storeSet.stores[addr]
 	testutil.Assert(t, ok, "addr exist")
-	testutil.Equals(t, addr, store.addr)
-	testutil.Equals(t, 1, len(store.labelSets))
-	testutil.Equals(t, "addr", store.labelSets[0].Labels[0].Name)
-	testutil.Equals(t, addr, store.labelSets[0].Labels[0].Value)
-}
+	testutil.Equals(t, addr, st.addr)
 
-func TestStoreSet_StaticStores_OneAvailable(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
+	lset := st.LabelSets()
+	testutil.Equals(t, 2, len(lset))
+	testutil.Equals(t, "addr", lset[0].Labels[0].Name)
+	testutil.Equals(t, addr, lset[0].Labels[0].Value)
+	testutil.Equals(t, "a", lset[1].Labels[0].Name)
+	testutil.Equals(t, "b", lset[1].Labels[0].Value)
+	testutil.Equals(t, expected, storeSet.storesMetric.storeNodes)
 
-	st, err := newTestStores(2)
+	// New big batch of storeAPIs.
+	stores2, err := startTestStores([]testStoreMeta{
+		{
+			storeType: component.Query,
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{
+					{
+						Labels: []storepb.Label{
+							{Name: "l1", Value: "v2"},
+							{Name: "l2", Value: "v3"},
+						},
+					},
+					{
+						Labels: []storepb.Label{
+							{Name: "l3", Value: "v4"},
+						},
+					},
+				}
+			},
+		},
+		{
+			// Duplicated Querier, in previous versions it would be deduplicated. Now it should be not.
+			storeType: component.Query,
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{
+					{
+						Labels: []storepb.Label{
+							{Name: "l1", Value: "v2"},
+							{Name: "l2", Value: "v3"},
+						},
+					},
+					{
+						Labels: []storepb.Label{
+							{Name: "l3", Value: "v4"},
+						},
+					},
+				}
+			},
+		},
+		{
+			storeType: component.Sidecar,
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{
+					{
+						Labels: []storepb.Label{
+							{Name: "l1", Value: "v2"},
+							{Name: "l2", Value: "v3"},
+						},
+					},
+				}
+			},
+		},
+		{
+			// Duplicated Sidecar, in previous versions it would be deduplicated. Now it should be not.
+			storeType: component.Sidecar,
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{
+					{
+						Labels: []storepb.Label{
+							{Name: "l1", Value: "v2"},
+							{Name: "l2", Value: "v3"},
+						},
+					},
+				}
+			},
+		},
+		{
+			// Querier that duplicates with sidecar, in previous versions it would be deduplicated. Now it should be not.
+			storeType: component.Query,
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{
+					{
+						Labels: []storepb.Label{
+							{Name: "l1", Value: "v2"},
+							{Name: "l2", Value: "v3"},
+						},
+					},
+				}
+			},
+		},
+		{
+			// Ruler that duplicates with sidecar, in previous versions it would be deduplicated. Now it should be not.
+			// Warning should be produced.
+			storeType: component.Rule,
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{
+					{
+						Labels: []storepb.Label{
+							{Name: "l1", Value: "v2"},
+							{Name: "l2", Value: "v3"},
+						},
+					},
+				}
+			},
+		},
+		{
+			// Duplicated Rule, in previous versions it would be deduplicated. Now it should be not. Warning should be produced.
+			storeType: component.Rule,
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{
+					{
+						Labels: []storepb.Label{
+							{Name: "l1", Value: "v2"},
+							{Name: "l2", Value: "v3"},
+						},
+					},
+				}
+			},
+		},
+		{
+			// No storeType.
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{
+					{
+						Labels: []storepb.Label{
+							{Name: "l1", Value: "no-store-type"},
+							{Name: "l2", Value: "v3"},
+						},
+					},
+				}
+			},
+		},
+		// Two pre v0.8.0 store gateway nodes, they don't have ext labels set.
+		{
+			storeType: component.Store,
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{}
+			},
+		},
+		{
+			storeType: component.Store,
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{}
+			},
+		},
+		// Regression tests against https://github.com/thanos-io/thanos/issues/1632: From v0.8.0 stores advertise labels.
+		// If the object storage handled by store gateway has only one sidecar we used to hitting issue.
+		{
+			storeType: component.Store,
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{
+					{
+						Labels: []storepb.Label{
+							{Name: "l1", Value: "v2"},
+							{Name: "l2", Value: "v3"},
+						},
+					},
+					{
+						Labels: []storepb.Label{
+							{Name: "l3", Value: "v4"},
+						},
+					},
+				}
+			},
+		},
+		// Stores v0.8.1 has compatibility labels. Check if they are correctly removed.
+		{
+			storeType: component.Store,
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{
+					{
+						Labels: []storepb.Label{
+							{Name: "l1", Value: "v2"},
+							{Name: "l2", Value: "v3"},
+						},
+					},
+					{
+						Labels: []storepb.Label{
+							{Name: "l3", Value: "v4"},
+						},
+					},
+					{
+						Labels: []storepb.Label{
+							{Name: store.CompatibilityTypeLabelName, Value: "store"},
+						},
+					},
+				}
+			},
+		},
+		// Duplicated store, in previous versions it would be deduplicated. Now it should be not.
+		{
+			storeType: component.Store,
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{
+					{
+						Labels: []storepb.Label{
+							{Name: "l1", Value: "v2"},
+							{Name: "l2", Value: "v3"},
+						},
+					},
+					{
+						Labels: []storepb.Label{
+							{Name: "l3", Value: "v4"},
+						},
+					},
+					{
+						Labels: []storepb.Label{
+							{Name: store.CompatibilityTypeLabelName, Value: "store"},
+						},
+					},
+				}
+			},
+		},
+	})
 	testutil.Ok(t, err)
-	defer st.Close()
+	defer stores2.Close()
 
-	initialStoreAddr := st.StoreAddresses()
-	st.CloseOne(initialStoreAddr[0])
+	discoveredStoreAddr = append(discoveredStoreAddr, stores2.StoreAddresses()...)
 
-	storeSet := NewStoreSet(nil, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts, time.Minute)
-	storeSet.gRPCInfoCallTimeout = 2 * time.Second
-	defer storeSet.Close()
-
-	// Should not matter how many of these we run.
+	// New stores should be loaded.
 	storeSet.Update(context.Background())
-	storeSet.Update(context.Background())
+	testutil.Equals(t, 1+len(stores2.srvs), len(storeSet.stores))
 
-	testutil.Assert(t, len(storeSet.stores) == 1, "only one service should respond just fine, so we expect one client to be ready.")
+	// Check stats.
+	expected = newStoreAPIStats()
+	expected[component.StoreAPI(nil)] = map[string]int{
+		"{l1=\"no-store-type\",l2=\"v3\"}": 1,
+	}
+	expected[component.Query] = map[string]int{
+		"{l1=\"v2\",l2=\"v3\"}":             1,
+		"{l1=\"v2\",l2=\"v3\"},{l3=\"v4\"}": 2,
+	}
+	expected[component.Rule] = map[string]int{
+		"{l1=\"v2\",l2=\"v3\"}": 2,
+	}
+	expected[component.Sidecar] = map[string]int{
+		fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredStoreAddr[1]): 1,
+		"{l1=\"v2\",l2=\"v3\"}": 2,
+	}
+	expected[component.Store] = map[string]int{
+		"":                                  2,
+		"{l1=\"v2\",l2=\"v3\"},{l3=\"v4\"}": 3,
+	}
+	testutil.Equals(t, expected, storeSet.storesMetric.storeNodes)
 
-	addr := initialStoreAddr[1]
-	store, ok := storeSet.stores[addr]
-	testutil.Assert(t, ok, "addr exist")
-	testutil.Equals(t, addr, store.addr)
-	testutil.Equals(t, 1, len(store.labelSets))
-	testutil.Equals(t, "addr", store.labelSets[0].Labels[0].Name)
-	testutil.Equals(t, addr, store.labelSets[0].Labels[0].Value)
+	// Check statuses.
+	testutil.Equals(t, 2+len(stores2.srvs), len(storeSet.storeStatuses))
 }
 
-func TestStoreSet_StaticStores_NoneAvailable(t *testing.T) {
+func TestStoreSet_Update_NoneAvailable(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
-	st, err := newTestStores(2)
+	st, err := startTestStores([]testStoreMeta{
+		{
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{
+					{
+						Labels: []storepb.Label{
+							{
+								Name:  "addr",
+								Value: addr,
+							},
+						},
+					},
+				}
+			},
+			storeType: component.Sidecar,
+		},
+		{
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{
+					{
+						Labels: []storepb.Label{
+							{
+								Name:  "addr",
+								Value: addr,
+							},
+						},
+					},
+				}
+			},
+			storeType: component.Sidecar,
+		},
+	})
 	testutil.Ok(t, err)
 	defer st.Close()
 
@@ -225,7 +518,12 @@ func TestStoreSet_StaticStores_NoneAvailable(t *testing.T) {
 	st.CloseOne(initialStoreAddr[0])
 	st.CloseOne(initialStoreAddr[1])
 
-	storeSet := NewStoreSet(nil, nil, specsFromAddrFunc(initialStoreAddr), testGRPCOpts, time.Minute)
+	storeSet := NewStoreSet(nil, nil, func() (specs []StoreSpec) {
+		for _, addr := range initialStoreAddr {
+			specs = append(specs, NewGRPCStoreSpec(addr))
+		}
+		return specs
+	}, testGRPCOpts, time.Minute)
 	storeSet.gRPCInfoCallTimeout = 2 * time.Second
 
 	// Should not matter how many of these we run.
@@ -234,71 +532,7 @@ func TestStoreSet_StaticStores_NoneAvailable(t *testing.T) {
 	testutil.Assert(t, len(storeSet.stores) == 0, "none of services should respond just fine, so we expect no client to be ready.")
 
 	// Leak test will ensure that we don't keep client connection around.
-}
 
-func TestStoreSet_AllAvailable_BlockExtLsetDuplicates(t *testing.T) {
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
-
-	storeExtLabels := [][]storepb.Label{
-		{
-			{Name: "l1", Value: "v1"},
-		},
-		{
-			{Name: "l1", Value: "v2"},
-			{Name: "l2", Value: "v3"},
-		},
-		{
-			// Duplicate with above.
-			{Name: "l1", Value: "v2"},
-			{Name: "l2", Value: "v3"},
-		},
-		// Two store nodes, they don't have ext labels set.
-		nil,
-		nil,
-		{
-			// Duplicate with two others.
-			{Name: "l1", Value: "v2"},
-			{Name: "l2", Value: "v3"},
-		},
-	}
-
-	st, err := newTestStores(6, storeExtLabels...)
-	testutil.Ok(t, err)
-	defer st.Close()
-
-	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
-	logger = level.NewFilter(logger, level.AllowDebug())
-	logger = log.With(logger, "ts", log.DefaultTimestampUTC, "caller", log.DefaultCaller)
-	storeSet := NewStoreSet(logger, nil, specsFromAddrFunc(st.StoreAddresses()), testGRPCOpts, time.Minute)
-	storeSet.gRPCInfoCallTimeout = 2 * time.Second
-	defer storeSet.Close()
-
-	// Should not matter how many of these we run.
-	storeSet.Update(context.Background())
-	storeSet.Update(context.Background())
-	storeSet.Update(context.Background())
-	storeSet.Update(context.Background())
-
-	testutil.Assert(t, len(storeSet.stores) == 4, fmt.Sprintf("all services should respond just fine, but we expect duplicates being blocked. Expected %d stores, got %d", 4, len(storeSet.stores)))
-
-	// Sort result to be able to compare.
-	var existingStoreLabels [][]storepb.Label
-	for _, store := range storeSet.stores {
-		for _, ls := range store.LabelSets() {
-			existingStoreLabels = append(existingStoreLabels, ls.Labels)
-		}
-	}
-	sort.Slice(existingStoreLabels, func(i, j int) bool {
-		return len(existingStoreLabels[i]) > len(existingStoreLabels[j])
-	})
-
-	testutil.Equals(t, [][]storepb.Label{
-		{
-			{Name: "l1", Value: "v2"},
-			{Name: "l2", Value: "v3"},
-		},
-		{
-			{Name: "l1", Value: "v1"},
-		},
-	}, existingStoreLabels)
+	expected := newStoreAPIStats()
+	testutil.Equals(t, expected, storeSet.storesMetric.storeNodes)
 }

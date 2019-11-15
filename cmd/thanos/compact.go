@@ -22,10 +22,12 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -76,7 +78,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 		"Compaction index verification will ignore out of order label names.").
 		Hidden().Default("false").Bool()
 
-	httpAddr := regHTTPAddrFlag(cmd)
+	httpAddr, httpGracePeriod := regHTTPFlags(cmd)
 
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process compactions.").
 		Default("./data").String()
@@ -109,9 +111,12 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 	compactionConcurrency := cmd.Flag("compact.concurrency", "Number of goroutines to use when compacting groups.").
 		Default("1").Int()
 
+	selectorRelabelConf := regSelectorRelabelFlags(cmd)
+
 	m[component.Compact.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		return runCompact(g, logger, reg,
 			*httpAddr,
+			time.Duration(*httpGracePeriod),
 			*dataDir,
 			objStoreConfig,
 			time.Duration(*consistencyDelay),
@@ -129,6 +134,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 			*maxCompactionLevel,
 			*blockSyncConcurrency,
 			*compactionConcurrency,
+			selectorRelabelConf,
 		)
 	}
 }
@@ -138,8 +144,9 @@ func runCompact(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	httpBindAddr string,
+	httpGracePeriod time.Duration,
 	dataDir string,
-	objStoreConfig *pathOrContent,
+	objStoreConfig *extflag.PathOrContent,
 	consistencyDelay time.Duration,
 	haltOnError bool,
 	acceptMalformedIndex bool,
@@ -151,6 +158,7 @@ func runCompact(
 	maxCompactionLevel int,
 	blockSyncConcurrency int,
 	concurrency int,
+	selectorRelabelConf *extflag.PathOrContent,
 ) error {
 	halted := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compactor_halted",
@@ -160,18 +168,26 @@ func runCompact(
 		Name: "thanos_compactor_retries_total",
 		Help: "Total number of retries after retriable compactor error",
 	})
+	iterations := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compactor_iterations_total",
+		Help: "Total number of iterations that were executed successfully",
+	})
 	halted.Set(0)
 
 	reg.MustRegister(halted)
 	reg.MustRegister(retried)
+	reg.MustRegister(iterations)
 
 	downsampleMetrics := newDownsampleMetrics(reg)
 
 	statusProber := prober.NewProber(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
-	// Initiate default HTTP listener providing metrics endpoint and readiness/liveness probes.
-	if err := defaultHTTPListener(g, logger, reg, httpBindAddr, statusProber); err != nil {
-		return errors.Wrap(err, "create readiness prober")
-	}
+	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
+	srv := httpserver.New(logger, reg, component, statusProber,
+		httpserver.WithListen(httpBindAddr),
+		httpserver.WithGracePeriod(httpGracePeriod),
+	)
+
+	g.Add(srv.ListenAndServe, srv.Shutdown)
 
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
@@ -179,6 +195,16 @@ func runCompact(
 	}
 
 	bkt, err := client.NewBucket(logger, confContentYaml, reg, component.String())
+	if err != nil {
+		return err
+	}
+
+	relabelContentYaml, err := selectorRelabelConf.Content()
+	if err != nil {
+		return errors.Wrap(err, "get content of relabel configuration")
+	}
+
+	relabelConfig, err := parseRelabelConfig(relabelContentYaml)
 	if err != nil {
 		return err
 	}
@@ -191,7 +217,7 @@ func runCompact(
 	}()
 
 	sy, err := compact.NewSyncer(logger, reg, bkt, consistencyDelay,
-		blockSyncConcurrency, acceptMalformedIndex)
+		blockSyncConcurrency, acceptMalformedIndex, relabelConfig)
 	if err != nil {
 		return errors.Wrap(err, "create syncer")
 	}
@@ -206,7 +232,6 @@ func runCompact(
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-
 	// Instantiate the compactor with different time slices. Timestamps in TSDB
 	// are in milliseconds.
 	comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, levels, downsample.NewPool())
@@ -280,7 +305,7 @@ func runCompact(
 
 		// Generate index file.
 		if generateMissingIndexCacheFiles {
-			if err := genMissingIndexCacheFiles(ctx, logger, bkt, indexCacheDir); err != nil {
+			if err := genMissingIndexCacheFiles(ctx, logger, reg, bkt, indexCacheDir); err != nil {
 				return err
 			}
 		}
@@ -293,6 +318,7 @@ func runCompact(
 		return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
 			err := f()
 			if err == nil {
+				iterations.Inc()
 				return nil
 			}
 
@@ -328,8 +354,19 @@ func runCompact(
 	return nil
 }
 
+const (
+	metricIndexGenerateName = "thanos_compact_generated_index_total"
+	metricIndexGenerateHelp = "Total number of generated indexes."
+)
+
 // genMissingIndexCacheFiles scans over all blocks, generates missing index cache files and uploads them to object storage.
-func genMissingIndexCacheFiles(ctx context.Context, logger log.Logger, bkt objstore.Bucket, dir string) error {
+func genMissingIndexCacheFiles(ctx context.Context, logger log.Logger, reg *prometheus.Registry, bkt objstore.Bucket, dir string) error {
+	genIndex := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: metricIndexGenerateName,
+		Help: metricIndexGenerateHelp,
+	})
+	reg.MustRegister(genIndex)
+
 	if err := os.RemoveAll(dir); err != nil {
 		return errors.Wrap(err, "clean index cache directory")
 	}
@@ -380,6 +417,7 @@ func genMissingIndexCacheFiles(ctx context.Context, logger log.Logger, bkt objst
 		if err := generateIndexCacheFile(ctx, bkt, logger, dir, meta); err != nil {
 			return err
 		}
+		genIndex.Inc()
 	}
 
 	level.Info(logger).Log("msg", "generating index cache files is done, you can remove startup argument `index.generate-missing-cache-file`")

@@ -147,8 +147,9 @@ func (cw *ConfigWatcher) Run(ctx context.Context) {
 			if len(event.Name) == 0 {
 				break
 			}
-			// Everything but a chmod requires rereading.
-			if event.Op^fsnotify.Chmod == 0 {
+			// Everything but a CHMOD requires rereading.
+			// If the file was removed, we can't read it, so skip.
+			if event.Op^(fsnotify.Chmod|fsnotify.Remove) == 0 {
 				break
 			}
 			// Changes to a file can spawn various sequences of events with

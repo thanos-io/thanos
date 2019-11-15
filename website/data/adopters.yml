@@ -45,3 +45,18 @@ adopters:
 - name: Untab
   url: https://www.untab.io/
   logo: untab.png
+- name: Hotstar
+  url: https://www.hotstar.com/
+  logo: hotstar.jpg
+- name: UBIO
+  url: https://ub.io/
+  logo: ubio.png
+- name: Softonic
+  url: https://www.softonic.com
+  logo: softonic.png
+- name: BlaBlaCar
+  url: https://www.blablacar.com
+  logo: blablacar.png
+- name: FREE NOW
+  url: https://free-now.com
+  logo: free-now.png

@@ -24,7 +24,7 @@ config:
 ```
 
 Bucket can be extended to add more subcommands that will be helpful when working with object storage buckets
-by adding a new command within `/cmd/thanos/bucket.go`
+by adding a new command within `/cmd/thanos/bucket.go`.
 
 
 ## Deployment
@@ -42,21 +42,23 @@ Flags:
       --version            Show application version.
       --log.level=info     Log filtering level.
       --log.format=logfmt  Log format to use.
-      --tracing.config-file=<tracing.config-yaml-path>
-                           Path to YAML file that contains tracing
-                           configuration. See fomrat details:
+      --tracing.config-file=<file-path>
+                           Path to YAML file with tracing configuration. See
+                           format details:
                            https://thanos.io/tracing.md/#configuration
-      --tracing.config=<tracing.config-yaml>
-                           Alternative to 'tracing.config-file' flag. Tracing
-                           configuration in YAML. See format details:
+      --tracing.config=<content>
+                           Alternative to 'tracing.config-file' flag (lower
+                           priority). Content of YAML file with tracing
+                           configuration. See format details:
                            https://thanos.io/tracing.md/#configuration
-      --objstore.config-file=<bucket.config-yaml-path>
+      --objstore.config-file=<file-path>
                            Path to YAML file that contains object store
                            configuration. See format details:
                            https://thanos.io/storage.md/#configuration
-      --objstore.config=<bucket.config-yaml>
-                           Alternative to 'objstore.config-file' flag. Object
-                           store configuration in YAML. See format details:
+      --objstore.config=<content>
+                           Alternative to 'objstore.config-file' flag (lower
+                           priority). Content of YAML file that contains object
+                           store configuration. See format details:
                            https://thanos.io/storage.md/#configuration
 
 Subcommands:
@@ -96,34 +98,37 @@ usage: thanos bucket web [<flags>]
 Web interface for remote storage bucket
 
 Flags:
-  -h, --help                   Show context-sensitive help (also try --help-long
-                               and --help-man).
-      --version                Show application version.
-      --log.level=info         Log filtering level.
-      --log.format=logfmt      Log format to use.
-      --tracing.config-file=<tracing.config-yaml-path>
-                               Path to YAML file that contains tracing
-                               configuration. See fomrat details:
-                               https://thanos.io/tracing.md/#configuration
-      --tracing.config=<tracing.config-yaml>
-                               Alternative to 'tracing.config-file' flag.
-                               Tracing configuration in YAML. See format
-                               details:
-                               https://thanos.io/tracing.md/#configuration
-      --objstore.config-file=<bucket.config-yaml-path>
-                               Path to YAML file that contains object store
-                               configuration. See format details:
-                               https://thanos.io/storage.md/#configuration
-      --objstore.config=<bucket.config-yaml>
-                               Alternative to 'objstore.config-file' flag.
-                               Object store configuration in YAML. See format
-                               details:
-                               https://thanos.io/storage.md/#configuration
-      --listen="0.0.0.0:8080"  HTTP host:port to listen on
-      --refresh=30m            Refresh interval to download metadata from remote
-                               storage
-      --timeout=5m             Timeout to download metadata from remote storage
-      --label=LABEL            Prometheus label to use as timeline title
+  -h, --help                  Show context-sensitive help (also try --help-long
+                              and --help-man).
+      --version               Show application version.
+      --log.level=info        Log filtering level.
+      --log.format=logfmt     Log format to use.
+      --tracing.config-file=<file-path>
+                              Path to YAML file with tracing configuration. See
+                              format details:
+                              https://thanos.io/tracing.md/#configuration
+      --tracing.config=<content>
+                              Alternative to 'tracing.config-file' flag (lower
+                              priority). Content of YAML file with tracing
+                              configuration. See format details:
+                              https://thanos.io/tracing.md/#configuration
+      --objstore.config-file=<file-path>
+                              Path to YAML file that contains object store
+                              configuration. See format details:
+                              https://thanos.io/storage.md/#configuration
+      --objstore.config=<content>
+                              Alternative to 'objstore.config-file' flag (lower
+                              priority). Content of YAML file that contains
+                              object store configuration. See format details:
+                              https://thanos.io/storage.md/#configuration
+      --http-address="0.0.0.0:10902"
+                              Listen host:port for HTTP endpoints.
+      --http-grace-period=2m  Time to wait after an interrupt received for HTTP
+                              Server.
+      --refresh=30m           Refresh interval to download metadata from remote
+                              storage
+      --timeout=5m            Timeout to download metadata from remote storage
+      --label=LABEL           Prometheus label to use as timeline title
 
 ```
 
@@ -149,30 +154,33 @@ Flags:
       --version            Show application version.
       --log.level=info     Log filtering level.
       --log.format=logfmt  Log format to use.
-      --tracing.config-file=<tracing.config-yaml-path>
-                           Path to YAML file that contains tracing
-                           configuration. See fomrat details:
+      --tracing.config-file=<file-path>
+                           Path to YAML file with tracing configuration. See
+                           format details:
                            https://thanos.io/tracing.md/#configuration
-      --tracing.config=<tracing.config-yaml>
-                           Alternative to 'tracing.config-file' flag. Tracing
-                           configuration in YAML. See format details:
+      --tracing.config=<content>
+                           Alternative to 'tracing.config-file' flag (lower
+                           priority). Content of YAML file with tracing
+                           configuration. See format details:
                            https://thanos.io/tracing.md/#configuration
-      --objstore.config-file=<bucket.config-yaml-path>
+      --objstore.config-file=<file-path>
                            Path to YAML file that contains object store
                            configuration. See format details:
                            https://thanos.io/storage.md/#configuration
-      --objstore.config=<bucket.config-yaml>
-                           Alternative to 'objstore.config-file' flag. Object
-                           store configuration in YAML. See format details:
+      --objstore.config=<content>
+                           Alternative to 'objstore.config-file' flag (lower
+                           priority). Content of YAML file that contains object
+                           store configuration. See format details:
                            https://thanos.io/storage.md/#configuration
-      --objstore-backup.config-file=<bucket.config-yaml-path>
+      --objstore-backup.config-file=<file-path>
                            Path to YAML file that contains object store-backup
                            configuration. See format details:
                            https://thanos.io/storage.md/#configuration Used for
                            repair logic to backup blocks before removal.
-      --objstore-backup.config=<bucket.config-yaml>
-                           Alternative to 'objstore-backup.config-file' flag.
-                           Object store-backup configuration in YAML. See format
+      --objstore-backup.config=<content>
+                           Alternative to 'objstore-backup.config-file' flag
+                           (lower priority). Content of YAML file that contains
+                           object store-backup configuration. See format
                            details: https://thanos.io/storage.md/#configuration
                            Used for repair logic to backup blocks before
                            removal.
@@ -211,21 +219,23 @@ Flags:
       --version            Show application version.
       --log.level=info     Log filtering level.
       --log.format=logfmt  Log format to use.
-      --tracing.config-file=<tracing.config-yaml-path>
-                           Path to YAML file that contains tracing
-                           configuration. See fomrat details:
+      --tracing.config-file=<file-path>
+                           Path to YAML file with tracing configuration. See
+                           format details:
                            https://thanos.io/tracing.md/#configuration
-      --tracing.config=<tracing.config-yaml>
-                           Alternative to 'tracing.config-file' flag. Tracing
-                           configuration in YAML. See format details:
+      --tracing.config=<content>
+                           Alternative to 'tracing.config-file' flag (lower
+                           priority). Content of YAML file with tracing
+                           configuration. See format details:
                            https://thanos.io/tracing.md/#configuration
-      --objstore.config-file=<bucket.config-yaml-path>
+      --objstore.config-file=<file-path>
                            Path to YAML file that contains object store
                            configuration. See format details:
                            https://thanos.io/storage.md/#configuration
-      --objstore.config=<bucket.config-yaml>
-                           Alternative to 'objstore.config-file' flag. Object
-                           store configuration in YAML. See format details:
+      --objstore.config=<content>
+                           Alternative to 'objstore.config-file' flag (lower
+                           priority). Content of YAML file that contains object
+                           store configuration. See format details:
                            https://thanos.io/storage.md/#configuration
   -o, --output=""          Optional format in which to print each block's
                            information. Options are 'json', 'wide' or a custom
@@ -254,21 +264,23 @@ Flags:
       --version              Show application version.
       --log.level=info       Log filtering level.
       --log.format=logfmt    Log format to use.
-      --tracing.config-file=<tracing.config-yaml-path>
-                             Path to YAML file that contains tracing
-                             configuration. See fomrat details:
+      --tracing.config-file=<file-path>
+                             Path to YAML file with tracing configuration. See
+                             format details:
                              https://thanos.io/tracing.md/#configuration
-      --tracing.config=<tracing.config-yaml>
-                             Alternative to 'tracing.config-file' flag. Tracing
-                             configuration in YAML. See format details:
+      --tracing.config=<content>
+                             Alternative to 'tracing.config-file' flag (lower
+                             priority). Content of YAML file with tracing
+                             configuration. See format details:
                              https://thanos.io/tracing.md/#configuration
-      --objstore.config-file=<bucket.config-yaml-path>
+      --objstore.config-file=<file-path>
                              Path to YAML file that contains object store
                              configuration. See format details:
                              https://thanos.io/storage.md/#configuration
-      --objstore.config=<bucket.config-yaml>
-                             Alternative to 'objstore.config-file' flag. Object
-                             store configuration in YAML. See format details:
+      --objstore.config=<content>
+                             Alternative to 'objstore.config-file' flag (lower
+                             priority). Content of YAML file that contains
+                             object store configuration. See format details:
                              https://thanos.io/storage.md/#configuration
   -l, --selector=<name>=\"<value>\" ...
                              Selects blocks based on label, e.g. '-l
@@ -278,5 +290,6 @@ Flags:
                              multiple columns, e.g. '--sort-by FROM --sort-by
                              UNTIL'. I.e., if the 'FROM' value is equal the rows
                              are then further sorted by the 'UNTIL' value.
+      --timeout=5m           Timeout to download metadata from remote storage
 
 ```

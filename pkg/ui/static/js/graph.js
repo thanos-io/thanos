@@ -44,6 +44,9 @@ Prometheus.Graph.prototype.initialize = function() {
   if (self.options.tab === undefined) {
     self.options.tab = 1;
   }
+  if (self.options.max_source_resolution === undefined) {
+	  self.options.max_source_resolution = "0s";
+  }
 
   // Draw graph controls and container from Handlebars template.
 
@@ -93,6 +96,8 @@ Prometheus.Graph.prototype.initialize = function() {
   self.stacked = self.queryForm.find("input[name=stacked]");
   self.insertMetric = self.queryForm.find("select[name=insert_metric]");
   self.refreshInterval = self.queryForm.find("select[name=refresh]");
+  self.maxSourceResolutionInput = self.queryForm.find("select[name=max_source_resolution_input]");
+
 
   self.consoleTab = graphWrapper.find(".console");
   self.graphTab   = graphWrapper.find(".graph_container");
@@ -230,6 +235,8 @@ Prometheus.Graph.prototype.initialize = function() {
     self.partialResponse.val(self.isPartialResponseEnabled() ? '0' : '1');
     stylePartialResponseBtn();
   });
+
+  self.maxSourceResolutionInput.val(self.options.max_source_resolution);
 
   self.queryForm.submit(function() {
     self.consoleTab.addClass("reload");
@@ -377,7 +384,6 @@ Prometheus.Graph.prototype.getOptions = function() {
     "range_input",
     "end_input",
     "step_input",
-    "downsample_input",
     "stacked",
     "moment_input"
   ];
@@ -390,6 +396,9 @@ Prometheus.Graph.prototype.getOptions = function() {
       }
     }
   });
+
+  options.max_source_resolution = self.maxSourceResolutionInput.val();
+
   options.expr = self.expr.val();
   options.tab = self.options.tab;
   return options;
@@ -521,7 +530,7 @@ Prometheus.Graph.prototype.submitQuery = function() {
   var startTime = new Date().getTime();
   var rangeSeconds = self.parseDuration(self.rangeInput.val());
   var resolution = parseInt(self.queryForm.find("input[name=step_input]").val()) || Math.max(Math.floor(rangeSeconds / 250), 1);
-  var maxSourceResolution = self.queryForm.find("select[name=max_source_resolution_input]").val();
+  var maxSourceResolution = self.maxSourceResolutionInput.val()
   var endDate = self.getEndDate() / 1000;
   var moment = self.getMoment() / 1000;
 

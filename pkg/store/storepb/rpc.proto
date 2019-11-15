@@ -11,6 +11,12 @@ option (gogoproto.marshaler_all) = true;
 option (gogoproto.unmarshaler_all) = true;
 option (gogoproto.goproto_getters_all) = false;
 
+// Do not generate XXX fields to reduce memory footprint and opening a door
+// for zero-copy casts to/from prometheus data types.
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
+
 /// Store reprents API against instance that stores XOR encoded values with label set metadata (e.g Prometheus metrics).
 service Store {
   /// Info returns meta information about a store e.g labels that makes that store unique as well as time range that is

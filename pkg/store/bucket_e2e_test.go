@@ -12,6 +12,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block"
@@ -125,7 +126,7 @@ func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt o
 	return
 }
 
-func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, manyParts bool, maxSampleCount uint64) *storeSuite {
+func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, manyParts bool, maxSampleCount uint64, relabelConfig []*relabel.Config) *storeSuite {
 	series := []labels.Labels{
 		labels.FromStrings("a", "1", "b", "1"),
 		labels.FromStrings("a", "1", "b", "2"),
@@ -150,7 +151,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		maxTime: maxTime,
 	}
 
-	store, err := NewBucketStore(s.logger, nil, bkt, dir, s.cache, 0, maxSampleCount, 20, false, 20, filterConf)
+	store, err := NewBucketStore(s.logger, nil, bkt, dir, s.cache, 0, maxSampleCount, 20, false, 20, filterConf, relabelConfig, true)
 	testutil.Ok(t, err)
 	s.store = store
 
@@ -164,7 +165,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 
 		if err := runutil.Repeat(100*time.Millisecond, ctx.Done(), func() error {
 			return store.SyncBlocks(ctx)
-		}); err != nil && errors.Cause(err) != context.Canceled {
+		}); err != nil && ctx.Err() == nil {
 			t.Fatal(err)
 		}
 	}()
@@ -391,7 +392,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-		s := prepareStoreWithTestBlocks(t, dir, bkt, false, 0)
+		s := prepareStoreWithTestBlocks(t, dir, bkt, false, 0, emptyRelabelConfig)
 		defer s.Close()
 
 		t.Log("Test with no index cache")
@@ -430,7 +431,7 @@ func (g naivePartitioner) Partition(length int, rng func(int) (uint64, uint64)) 
 
 // Naive partitioner splits the array equally (it does not combine anything).
 // This tests if our, sometimes concurrent, fetches for different parts works.
-// Regression test against: https://github.com/thanos-io/thanos/issues/829
+// Regression test against: https://github.com/thanos-io/thanos/issues/829.
 func TestBucketStore_ManyParts_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -440,7 +441,7 @@ func TestBucketStore_ManyParts_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-		s := prepareStoreWithTestBlocks(t, dir, bkt, true, 0)
+		s := prepareStoreWithTestBlocks(t, dir, bkt, true, 0, emptyRelabelConfig)
 		defer s.Close()
 
 		indexCache, err := storecache.NewIndexCache(s.logger, nil, storecache.Opts{
@@ -484,7 +485,7 @@ func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
 		&FilterConfig{
 			MinTime: minTimeDuration,
 			MaxTime: filterMaxTime,
-		})
+		}, emptyRelabelConfig, true)
 	testutil.Ok(t, err)
 
 	err = store.SyncBlocks(ctx)

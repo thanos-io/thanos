@@ -27,7 +27,7 @@ import (
 )
 
 const (
-	defaultPrometheusVersion   = "v2.9.2"
+	defaultPrometheusVersion   = "v2.13.0"
 	defaultAlertmanagerVersion = "v0.15.2"
 	defaultMinioVersion        = "RELEASE.2018-10-06T00-15-16Z"
 
@@ -170,7 +170,7 @@ func (p *Prometheus) start() error {
 	}
 	p.addr = fmt.Sprintf("localhost:%d", port)
 	args := append([]string{
-		"--storage.tsdb.retention=2d", // Pass retention cause prometheus since 2.8.0 don't show default value for that flags in web/api: https://github.com/prometheus/prometheus/pull/5433
+		"--storage.tsdb.retention=2d", // Pass retention cause prometheus since 2.8.0 don't show default value for that flags in web/api: https://github.com/prometheus/prometheus/pull/5433.
 		"--storage.tsdb.path=" + p.db.Dir(),
 		"--web.listen-address=" + p.addr,
 		"--web.route-prefix=" + p.prefix,
@@ -179,10 +179,8 @@ func (p *Prometheus) start() error {
 	}, extra...)
 
 	p.cmd = exec.Command(prometheusBin(p.version), args...)
-	p.cmd.SysProcAttr = &syscall.SysProcAttr{
-		// For linux only, kill this if the go test process dies before the cleanup.
-		Pdeathsig: syscall.SIGKILL,
-	}
+	p.cmd.SysProcAttr = SysProcAttr()
+
 	go func() {
 		if b, err := p.cmd.CombinedOutput(); err != nil {
 			fmt.Fprintln(os.Stderr, "running Prometheus failed", err)

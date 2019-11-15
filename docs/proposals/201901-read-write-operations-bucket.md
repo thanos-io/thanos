@@ -26,12 +26,14 @@ every X minutes instead of watch and react to changes immediately)
 ## Motivation
 
 Thanos performs similar operations as Prometheus do on TSDB blocks with the following differences:
+
 * It operates on Object Storage API instead of local filesystem.
 * Operations are done from multiple processes that lack coordination.
 
 Moving from lock-based logic to coordination free and from strongly consistent local filesystem to potentially eventually
 consistent remote simplified "filesystem" in form of Object Storage API, causes additional cases that we need to consider
 in Thanos system, like:
+
 * Thanos sidecar or compactor crashes during the process of uploading the block. It uploaded index, 2 chunk files and crashed. How to ensure readers (e.g compactor, store gateway) will handle this gracefully?
 * Thanos compactor uploads compacted block and deletes source blocks. After next sync iteration it does not see a new block (read after write eventual consistency). It sees gap, wrongly plans next compaction and causes non-resolvable overlap.
 * Thanos compactor uploads compacted block and deletes source blocks. Thanos Store Gateway syncs every 3m so it missed that fact. Next query that hits store gateway tries to fetch deleted source blocks and fails.

@@ -4,14 +4,15 @@ type: docs
 menu: components
 ---
 
-# Query
+# Querier/Query
 
-The query component implements the Prometheus HTTP v1 API to query data in a Thanos cluster via PromQL.
+The Querier component (also known as "Query") implements the [Prometheus HTTP v1 API](https://prometheus.io/docs/prometheus/latest/querying/api/) to query data in a Thanos cluster via PromQL.
 
-It gathers the data needed to evaluate the query from underlying StoreAPIs. See [here](../service-discovery.md)
-on how to connect querier with desired StoreAPIs.
+In short, it gathers the data needed to evaluate the query from underlying [StoreAPIs](../../pkg/store/storepb/rpc.proto), evaluates the query and returns the result.
 
-Querier currently is fully stateless and horizontally scalable.
+Querier is fully stateless and horizontally scalable.
+
+Example command to run Querier:
 
 ```bash
 $ thanos query \
@@ -19,14 +20,59 @@ $ thanos query \
     --store            "<store-api>:<grpc-port>" \
     --store            "<store-api2>:<grpc-port>"
 ```
+## Querier use cases, why do I need this component?
 
-## Deduplication
+Thanos Querier essentially allows to aggregate and optionally deduplicate multiple metrics backends under single Prometheus Query endpoint.
+
+### Global View
+
+Since for Querier "a backend" is anything that implements gRPC StoreAPI we can aggregate data from any number of the different storages like:
+
+* Prometheus (see [Sidecar](sidecar.md))
+* Object Storage (see [Store Gateway](store.md))
+* Global alerting/recording rules evaluations (see [Ruler](rule.md))
+* Metrics received from Prometheus remote write streams (see [Thanos Receiver](../proposals/201812_thanos-remote-receive.md))
+* Another Querier (you can stack Queriers on top of each other)
+* Non-Prometheus systems!
+    * e.g [OpenTSDB](../integrations.md#opentsdb)
+
+Thanks to that, you can run queries (manually, from Grafana or via Alerting rule) that aggregate metrics from mix of those sources.
+
+Some examples:
+
+* `sum(cpu_used{cluster=~"cluster-(eu1|eu2|eu3|us1|us2|us3)", job="service1"})` that will give you sum of CPU used inside all listed clusters for service `service1`. This will work
+even if those clusters runs multiple Prometheus servers each. Querier will know which data sources to query.
+
+* In single cluster you shard Prometheus functionally or have different Prometheus instances for different tenants. You can spin up Querier to have access to both within single Query evaluation.
+
+### Run-time deduplication of HA groups
+
+Prometheus is stateful and does not allow replicating its database. This means that increasing high availability by running multiple Prometheus replicas is not very easy to use.
+Simple loadbalancing will not work as for example after some crash, replica might be up but querying such replica will result in small gap during the period it was down. You have a
+ second replica that maybe was up, but it could be down in other moment (e.g rolling restart), so load balancing on top of those is not working well.
+
+Thanos Querier instead pulls the data from both replicas, and deduplicate those signals, filling the gaps if any, transparently to the Querier consumer.
+
+## Metric Query Flow Overview
+
+<img src="../img/querier.svg" class="img-fluid" alt="querier-steps" />
+
+Overall QueryAPI exposed by Thanos is guaranteed to be compatible with [Prometheus 2.x. API](https://prometheus.io/docs/prometheus/latest/querying/api/).
+The above diagram shows what Querier does for each Prometheus query request.
+
+See [here](../service-discovery.md) on how to connect Querier with desired StoreAPIs.
+
+<!--- TODO explain steps  --->
+
+###  Deduplication
 
 The query layer can deduplicate series that were collected from high-availability pairs of data sources such as Prometheus.
-A fixed replica label must be chosen for the entire cluster and can then be passed to query nodes on startup.
+A fixed single or multiple replica labels must be chosen for the entire cluster and can then be passed to query nodes on startup.
 
 Two or more series that are only distinguished by the given replica label, will be merged into a single time series.
-This also hides gaps in collection of a single data source. For example:
+This also hides gaps in collection of a single data source.
+
+### An example with a single replica labels:
 
 * Prometheus + sidecar "A": `cluster=1,env=2,replica=A`
 * Prometheus + sidecar "B": `cluster=1,env=2,replica=B`
@@ -47,23 +93,40 @@ And we query for metric `up{job="prometheus",env="2"}` with this option we will 
   * `up{job="prometheus",env="2",cluster="1"} 1`
   * `up{job="prometheus",env="2",cluster="2"} 1`
 
-WITHOUT this replica flag (so deduplication turned off), we will get 3 results:
+WITHOUT this replica flag (deduplication turned off), we will get 3 results:
 
   * `up{job="prometheus",env="2",cluster="1",replica="A"} 1`
   * `up{job="prometheus",env="2",cluster="1",replica="B"} 1`
   * `up{job="prometheus",env="2",cluster="2",replica="A"} 1`
 
+### The same output will be present for this example with multiple replica labels:
+
+* Prometheus + sidecar "A": `cluster=1,env=2,replica=A,replicaX=A`
+* Prometheus + sidecar "B": `cluster=1,env=2,replica=B,replicaX=B`
+* Prometheus + sidecar "A" in different cluster: `cluster=2,env=2,replica=A,replicaX=A`
+
+```
+$ thanos query \
+    --http-address        "0.0.0.0:9090" \
+    --query.replica-label "replica" \
+    --query.replica-label "replicaX" \
+    --store               "<store-api>:<grpc-port>" \
+    --store               "<store-api2>:<grpc-port>" \
+```
+
+
 This logic can also be controlled via parameter on QueryAPI. More details below.
 
-## Query API
+## Query API Overview
 
-Overall QueryAPI exposed by Thanos is guaranteed to be compatible with Prometheus 2.x.
-
-However, for additional Thanos features, Thanos, on top of Prometheus adds
+As mentioned, Query API exposed by Thanos is guaranteed to be compatible with [Prometheus 2.x. API](https://prometheus.io/docs/prometheus/latest/querying/api/).
+However for additional Thanos features on top of Prometheus, Thanos adds:
 
 * partial response behaviour
 * several additional parameters listed below
 * custom response fields.
+
+Let's walk through all of those extensions:
 
 ### Partial Response
 
@@ -89,6 +152,15 @@ Querier also allows to configure different timeouts:
 If you prefer availability over accuracy you can set tighter timeout to underlying StoreAPI than overall query timeout. If partial response
 strategy is NOT `abort`, this will "ignore" slower StoreAPIs producing just warning with 200 status code response.
 
+### Deduplication replica labels.
+
+| HTTP URL/FORM parameter | Type | Default | Example |
+|----|----|----|----|
+| `replicaLabels` | `[]string` | `query.replica-label` flag (default: empty). | `replicaLabels=replicaA&replicaLabels=replicaB` |
+|  |  |  |  |
+
+This overwrites the `query.replica-label` cli flag to allow dynamic replica labels at query time.
+
 ### Deduplication Enabled
 
 | HTTP URL/FORM parameter | Type | Default | Example |
@@ -96,7 +168,7 @@ strategy is NOT `abort`, this will "ignore" slower StoreAPIs producing just warn
 | `dedup` | `Boolean` | True, but effect depends on `query.replica` configuration flag. | `1, t, T, TRUE, true, True` for "True" |
 |  |  |  |  |
 
-This controls if query should use `replica` label for deduplication or not.
+This controls if query results should be deduplicated using the replica labels.
 
 ### Auto downsampling
 
@@ -142,7 +214,6 @@ type queryData struct {
 Additional field is `Warnings` that contains every error that occurred that is assumed non critical. `partial_response`
 option controls if storeAPI unavailability is considered critical.
 
-
 ## Expose UI on a sub-path
 
 It is possible to expose thanos-query UI and optionally API on a sub-path.
@@ -177,21 +248,25 @@ Flags:
       --version                  Show application version.
       --log.level=info           Log filtering level.
       --log.format=logfmt        Log format to use.
-      --tracing.config-file=<tracing.config-yaml-path>
-                                 Path to YAML file that contains tracing
-                                 configuration. See fomrat details:
+      --tracing.config-file=<file-path>
+                                 Path to YAML file with tracing configuration.
+                                 See format details:
                                  https://thanos.io/tracing.md/#configuration
-      --tracing.config=<tracing.config-yaml>
-                                 Alternative to 'tracing.config-file' flag.
-                                 Tracing configuration in YAML. See format
-                                 details:
+      --tracing.config=<content>
+                                 Alternative to 'tracing.config-file' flag
+                                 (lower priority). Content of YAML file with
+                                 tracing configuration. See format details:
                                  https://thanos.io/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
+      --http-grace-period=2m     Time to wait after an interrupt received for
+                                 HTTP Server.
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
                                  from other components.
+      --grpc-grace-period=2m     Time to wait after an interrupt received for
+                                 GRPC Server.
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
@@ -236,8 +311,8 @@ Flags:
       --query.timeout=2m         Maximum time to process query by query node.
       --query.max-concurrent=20  Maximum number of queries processed
                                  concurrently by query node.
-      --query.replica-label=QUERY.REPLICA-LABEL
-                                 Label to treat as a replica indicator along
+      --query.replica-label=QUERY.REPLICA-LABEL ...
+                                 Labels to treat as a replica indicator along
                                  which data is deduplicated. Still you will be
                                  able to query without deduplication using
                                  'dedup=false' parameter.
@@ -265,6 +340,7 @@ Flags:
                                  if no max_source_resolution param is specified.
       --query.partial-response   Enable partial response for queries if no
                                  partial_response param is specified.
+                                 --no-query.partial-response for disabling.
       --query.default-evaluation-interval=1m
                                  Set default evaluation interval for sub
                                  queries.

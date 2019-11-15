@@ -190,15 +190,19 @@ func (b *Bucket) getBlobReader(ctx context.Context, name string, offset, length 
 	}
 
 	var size int64
-	if length > 0 {
+	// If a length is specified and it won't go past the end of the file,
+	// then set it as the size.
+	if length > 0 && length <= props.ContentLength()-offset {
 		size = length
+		level.Debug(b.logger).Log("msg", "set size to length", "size", size, "length", length, "offset", offset, "name", name)
 	} else {
 		size = props.ContentLength() - offset
+		level.Debug(b.logger).Log("msg", "set size to go to EOF", "contentlength", props.ContentLength(), "size", size, "length", length, "offset", offset, "name", name)
 	}
 
 	destBuffer := make([]byte, size)
 
-	if err := blob.DownloadBlobToBuffer(context.Background(), blobURL.BlobURL, offset, length,
+	if err := blob.DownloadBlobToBuffer(context.Background(), blobURL.BlobURL, offset, size,
 		destBuffer, blob.DownloadFromBlobOptions{
 			BlockSize:   blob.BlobDefaultDownloadBlockSize,
 			Parallelism: uint16(3),
@@ -287,7 +291,7 @@ func NewTestBucket(t testing.TB, component string) (objstore.Bucket, func(), err
 	conf := &Config{
 		StorageAccountName: os.Getenv("AZURE_STORAGE_ACCOUNT"),
 		StorageAccountKey:  os.Getenv("AZURE_STORAGE_ACCESS_KEY"),
-		ContainerName:      "thanos-e2e-test",
+		ContainerName:      objstore.CreateTemporaryTestBucketName(t),
 	}
 
 	bc, err := yaml.Marshal(conf)

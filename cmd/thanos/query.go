@@ -2,12 +2,8 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"math"
-	"net"
 	"net/http"
 	"path"
 	"time"
@@ -30,10 +26,14 @@ import (
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/query"
 	v1 "github.com/thanos-io/thanos/pkg/query/api"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
+	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/ui"
 	"google.golang.org/grpc"
@@ -42,10 +42,12 @@ import (
 )
 
 // registerQuery registers a query command.
-func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string) {
-	cmd := app.Command(name, "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
+func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
+	comp := component.Query
+	cmd := app.Command(comp.String(), "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
 
-	grpcBindAddr, httpBindAddr, srvCert, srvKey, srvClientCA := regCommonServerFlags(cmd)
+	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
+	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := regGRPCFlags(cmd)
 
 	secure := cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").Bool()
 	cert := cmd.Flag("grpc-client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").String()
@@ -63,8 +65,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
 		Default("20").Int()
 
-	replicaLabel := cmd.Flag("query.replica-label", "Label to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter.").
-		String()
+	replicaLabels := cmd.Flag("query.replica-label", "Labels to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter.").
+		Strings()
 
 	instantDefaultMaxSourceResolution := modelDuration(cmd.Flag("query.instant.default.max_source_resolution", "default value for max_source_resolution for instant queries. If not set, defaults to 0s only taking raw resolution into account. 1h can be a good value if you use instant queries over time ranges that incorporate times outside of your raw-retention.").Default("0s").Hidden())
 
@@ -92,14 +94,14 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	enableAutodownsampling := cmd.Flag("query.auto-downsampling", "Enable automatic adjustment (step / 5) to what source of data should be used in store gateways if no max_source_resolution param is specified.").
 		Default("false").Bool()
 
-	enablePartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified.").
+	enablePartialResponse := cmd.Flag("query.partial-response", "Enable partial response for queries if no partial_response param is specified. --no-query.partial-response for disabling.").
 		Default("true").Bool()
 
 	defaultEvaluationInterval := modelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
 
 	storeResponseTimeout := modelDuration(cmd.Flag("store.response-timeout", "If a Store doesn't send any data in this specified duration then a Store will be ignored and partial data will be returned if it's enabled. 0 disables timeout.").Default("0ms"))
 
-	m[name] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
+	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		selectorLset, err := parseFlagLabels(*selectorLabels)
 		if err != nil {
 			return errors.Wrap(err, "parse federation labels")
@@ -131,22 +133,24 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			reg,
 			tracer,
 			*grpcBindAddr,
-			*srvCert,
-			*srvKey,
-			*srvClientCA,
+			time.Duration(*grpcGracePeriod),
+			*grpcCert,
+			*grpcKey,
+			*grpcClientCA,
 			*secure,
 			*cert,
 			*key,
 			*caCert,
 			*serverName,
 			*httpBindAddr,
+			time.Duration(*httpGracePeriod),
 			*webRoutePrefix,
 			*webExternalPrefix,
 			*webPrefixHeaderName,
 			*maxConcurrentQueries,
 			time.Duration(*queryTimeout),
 			time.Duration(*storeResponseTimeout),
-			*replicaLabel,
+			*replicaLabels,
 			selectorLset,
 			*stores,
 			*enableAutodownsampling,
@@ -156,16 +160,15 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 			*dnsSDResolver,
 			time.Duration(*unhealthyStoreTimeout),
 			time.Duration(*instantDefaultMaxSourceResolution),
+			component.Query,
 		)
 	}
 }
 
-func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, secure bool, cert, key, caCert string, serverName string) ([]grpc.DialOption, error) {
+func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, secure bool, cert, key, caCert, serverName string) ([]grpc.DialOption, error) {
 	grpcMets := grpc_prometheus.NewClientMetrics()
 	grpcMets.EnableClientHandlingTimeHistogram(
-		grpc_prometheus.WithHistogramBuckets([]float64{
-			0.001, 0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1.6, 3.2, 6.4,
-		}),
+		grpc_prometheus.WithHistogramBuckets(prometheus.ExponentialBuckets(0.001, 2, 15)),
 	)
 	dialOpts := []grpc.DialOption{
 		// We want to make sure that we can receive huge gRPC messages from storeAPI.
@@ -195,50 +198,13 @@ func storeClientGRPCOpts(logger log.Logger, reg *prometheus.Registry, tracer ope
 		return append(dialOpts, grpc.WithInsecure()), nil
 	}
 
-	level.Info(logger).Log("msg", "Enabling client to server TLS")
+	level.Info(logger).Log("msg", "enabling client to server TLS")
 
-	var certPool *x509.CertPool
-
-	if caCert != "" {
-		caPEM, err := ioutil.ReadFile(caCert)
-		if err != nil {
-			return nil, errors.Wrap(err, "reading client CA")
-		}
-
-		certPool = x509.NewCertPool()
-		if !certPool.AppendCertsFromPEM(caPEM) {
-			return nil, errors.Wrap(err, "building client CA")
-		}
-		level.Info(logger).Log("msg", "TLS Client using provided certificate pool")
-	} else {
-		var err error
-		certPool, err = x509.SystemCertPool()
-		if err != nil {
-			return nil, errors.Wrap(err, "reading system certificate pool")
-		}
-		level.Info(logger).Log("msg", "TLS Client using system certificate pool")
+	tlsCfg, err := tls.NewClientConfig(logger, cert, key, caCert, serverName)
+	if err != nil {
+		return nil, err
 	}
-
-	tlsCfg := &tls.Config{
-		RootCAs: certPool,
-	}
-
-	if serverName != "" {
-		tlsCfg.ServerName = serverName
-	}
-
-	if cert != "" {
-		cert, err := tls.LoadX509KeyPair(cert, key)
-		if err != nil {
-			return nil, errors.Wrap(err, "client credentials")
-		}
-		tlsCfg.Certificates = []tls.Certificate{cert}
-		level.Info(logger).Log("msg", "TLS Client authentication enabled")
-	}
-
-	creds := credentials.NewTLS(tlsCfg)
-
-	return append(dialOpts, grpc.WithTransportCredentials(creds)), nil
+	return append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg))), nil
 }
 
 // runQuery starts a server that exposes PromQL Query API. It is responsible for querying configured
@@ -249,22 +215,24 @@ func runQuery(
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	grpcBindAddr string,
-	srvCert string,
-	srvKey string,
-	srvClientCA string,
+	grpcGracePeriod time.Duration,
+	grpcCert string,
+	grpcKey string,
+	grpcClientCA string,
 	secure bool,
 	cert string,
 	key string,
 	caCert string,
 	serverName string,
 	httpBindAddr string,
+	httpGracePeriod time.Duration,
 	webRoutePrefix string,
 	webExternalPrefix string,
 	webPrefixHeaderName string,
 	maxConcurrentQueries int,
 	queryTimeout time.Duration,
 	storeResponseTimeout time.Duration,
-	replicaLabel string,
+	replicaLabels []string,
 	selectorLset labels.Labels,
 	storeAddrs []string,
 	enableAutodownsampling bool,
@@ -274,6 +242,7 @@ func runQuery(
 	dnsSDResolver string,
 	unhealthyStoreTimeout time.Duration,
 	instantDefaultMaxSourceResolution time.Duration,
+	comp component.Component,
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
 	duplicatedStores := prometheus.NewCounter(prometheus.CounterOpts{
@@ -312,13 +281,13 @@ func runQuery(
 			unhealthyStoreTimeout,
 		)
 		proxy            = store.NewProxyStore(logger, stores.Get, component.Query, selectorLset, storeResponseTimeout)
-		queryableCreator = query.NewQueryableCreator(logger, proxy, replicaLabel)
+		queryableCreator = query.NewQueryableCreator(logger, proxy)
 		engine           = promql.NewEngine(
 			promql.EngineOpts{
 				Logger:        logger,
 				Reg:           reg,
 				MaxConcurrent: maxConcurrentQueries,
-				// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703
+				// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
 				MaxSamples: math.MaxInt32,
 				Timeout:    queryTimeout,
 			},
@@ -385,10 +354,12 @@ func runQuery(
 		})
 	}
 	// Start query API + UI HTTP server.
+
+	statusProber := prober.NewProber(comp, logger, reg)
 	{
 		router := route.New()
 
-		// redirect from / to /webRoutePrefix
+		// Redirect from / to /webRoutePrefix.
 		if webRoutePrefix != "" {
 			router.Get("/", func(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, webRoutePrefix, http.StatusFound)
@@ -404,53 +375,38 @@ func runQuery(
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 		ui.NewQueryUI(logger, reg, stores, flagsMap).Register(router.WithPrefix(webRoutePrefix), ins)
 
-		api := v1.NewAPI(logger, reg, engine, queryableCreator, enableAutodownsampling, enablePartialResponse, instantDefaultMaxSourceResolution)
+		api := v1.NewAPI(logger, reg, engine, queryableCreator, enableAutodownsampling, enablePartialResponse, replicaLabels, instantDefaultMaxSourceResolution)
 
 		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
 
-		router.Get("/-/healthy", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			if _, err := fmt.Fprintf(w, "Thanos Querier is Healthy.\n"); err != nil {
-				level.Error(logger).Log("msg", "Could not write health check response.")
-			}
-		})
+		// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
+		srv := httpserver.New(logger, reg, comp, statusProber,
+			httpserver.WithListen(httpBindAddr),
+			httpserver.WithGracePeriod(httpGracePeriod),
+		)
+		srv.Handle("/", router)
 
-		mux := http.NewServeMux()
-		registerMetrics(mux, reg)
-		registerProfile(mux)
-		mux.Handle("/", router)
-
-		l, err := net.Listen("tcp", httpBindAddr)
-		if err != nil {
-			return errors.Wrapf(err, "listen HTTP on address %s", httpBindAddr)
-		}
-
-		g.Add(func() error {
-			level.Info(logger).Log("msg", "Listening for query and metrics", "address", httpBindAddr)
-			return errors.Wrap(http.Serve(l, mux), "serve query")
-		}, func(error) {
-			runutil.CloseWithLogOnErr(logger, l, "query and metric listener")
-		})
+		g.Add(srv.ListenAndServe, srv.Shutdown)
 	}
 	// Start query (proxy) gRPC StoreAPI.
 	{
-		l, err := net.Listen("tcp", grpcBindAddr)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcCert, grpcKey, grpcClientCA)
 		if err != nil {
-			return errors.Wrapf(err, "listen gRPC on address")
+			return errors.Wrap(err, "setup gRPC server")
 		}
-		logger := log.With(logger, "component", component.Query.String())
 
-		opts, err := defaultGRPCServerOpts(logger, srvCert, srvKey, srvClientCA)
-		if err != nil {
-			return errors.Wrapf(err, "build gRPC server")
-		}
-		s := newStoreGRPCServer(logger, reg, tracer, proxy, opts)
+		s := grpcserver.New(logger, reg, tracer, comp, proxy,
+			grpcserver.WithListen(grpcBindAddr),
+			grpcserver.WithGracePeriod(grpcGracePeriod),
+			grpcserver.WithTLSConfig(tlsCfg),
+		)
 
 		g.Add(func() error {
-			level.Info(logger).Log("msg", "Listening for StoreAPI gRPC", "address", grpcBindAddr)
-			return errors.Wrap(s.Serve(l), "serve gRPC")
-		}, func(error) {
-			s.Stop()
+			statusProber.SetReady()
+			return s.ListenAndServe()
+		}, func(err error) {
+			statusProber.SetNotReady(err)
+			s.Shutdown(err)
 		})
 	}
 

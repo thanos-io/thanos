@@ -57,6 +57,7 @@ $ git push origin <your_branch_for_new_pr>
 - THANOS_SKIP_AZURE_TESTS to skip Azure tests.
 - THANOS_SKIP_SWIFT_TESTS to skip SWIFT tests.
 - THANOS_SKIP_TENCENT_COS_TESTS to skip Tencent COS tests.
+- THANOS_SKIP_ALIYUN_OSS_TESTS to skip Aliyun OSS tests.
 
 If you skip all of these, the store specific tests will be run against memory object storage only.
 CI runs GCS and inmem tests only for now. Not having these variables will produce auth errors against GCS, AWS, Azure or COS tests.

@@ -90,10 +90,16 @@ An example using this lookup with a static flag:
 --store=dns+stores.thanos.mycompany.org:9090
 ```
 
-* `dnssrv+` - the domain name after this prefix will be looked up as a SRV query. You do not need to specify a port as the
-one from the query results will be used. An example:
+* `dnssrv+` - the domain name after this prefix will be looked up as a SRV query, and then each SRV record will be looked up as an A/AAAA query. You do not need to specify a port as the one from the query results will be used. An example:
+
 ```
 --store=dnssrv+_thanosstores._tcp.mycompany.org
+```
+
+* `dnssrvnoa+` - the domain name after this prefix will be looked up as a SRV query, with no A/AAAA lookup made after that. Similar to the `dnssrv+` case, you do not need to specify a port. An example:
+
+```
+--store=dnssrvnoa+_thanosstores._tcp.mycompany.org
 ```
 
 The default interval between DNS lookups is 30s. You can change it using the `store.sd-dns-interval` flag for `StoreAPI`

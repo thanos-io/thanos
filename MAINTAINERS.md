@@ -1,16 +1,18 @@
 # Core Maintainers of this repository
 
-| Name                  | Email                  | Slack                    | GitHub                                                     |
-|-----------------------|------------------------|--------------------------|------------------------------------------------------------|
-| Bartłomiej Płotka     | bwplotka@gmail.com     | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)                   |
-| Dominic Green         | dom@improbable.io      | `@domgreen`              | [@domgreen](https://github.com/domgreen)                   |
-| Frederic Branczyk     | fbranczyk@gmail.com    | `@brancz`                | [@brancz](https://github.com/brancz)                       |
-| Giedrius Statkevičius | giedriuswork@gmail.com | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)                 |
-| Povilas Versockas     | p.versockas@gmail.com  | `@povilasv`              | [@povilasv](https://github.com/povilasv)                   |
+| Name                  | Email                  | Slack                    | GitHub                                      | Company           |
+|-----------------------|------------------------|--------------------------|---------------------------------------------|-------------------|
+| Bartłomiej Płotka     | bwplotka@gmail.com     | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)    | Red Hat           |
+| Dominic Green         | dom@improbable.io      | `@domgreen`              | [@domgreen](https://github.com/domgreen)    | Improbable        |
+| Frederic Branczyk     | fbranczyk@gmail.com    | `@brancz`                | [@brancz](https://github.com/brancz)        | Red Hat           |
+| Giedrius Statkevičius | giedriuswork@gmail.com | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)  | AdForm            |
+| Povilas Versockas     | p.versockas@gmail.com  | `@povilasv`              | [@povilasv](https://github.com/povilasv)    | Utility Warehouse |
+| Matthias Loibl        | mail@matthiasloibl.com | `@metalmatze`            | [@metalmatze](https://github.com/metalmatze)| Red Hat           |
+| Lucas Servén Marín    | lserven@gmail.com      |  `@squat`                  | [@squat](https://github.com/squat)          | Red Hat           |
 
 We are bunch of people from different companies with various interests and skills.
 We are from different parts of Europe: Germany, Lithuania, Poland and UK. 
-We have something in common though: We all share the love for OpenSource, Golang, Prometheus, :coffee: and Observability topics.
+We have something in common though: We all share the love for OpenSource, Go, Prometheus, :coffee: and Observability topics.
 
 As either Software Developers or SRE (or both!) we've chosen to maintain (mostly in our free time) Thanos, the de facto way to scale awesome [Prometheus](https://prometheus.io) project.
 
@@ -97,3 +99,4 @@ maintainer team.
 ## Initial authors
 
 Fabian Reinartz @fabxc and Bartłomiej Płotka @bwplotka
+

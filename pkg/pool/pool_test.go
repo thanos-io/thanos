@@ -66,7 +66,7 @@ func TestRacePutGet(t *testing.T) {
 
 	// Start two goroutines: they always Get and Put two byte slices
 	// to which they write 'foo' / 'barbazbaz' and check if the data is still
-	// there after writing it, before putting it back
+	// there after writing it, before putting it back.
 	errs := make(chan error, 2)
 	stop := make(chan bool, 2)
 

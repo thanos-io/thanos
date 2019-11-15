@@ -23,9 +23,15 @@ import (
 
 // Standard downsampling resolution levels in Thanos.
 const (
-	ResLevel0 = int64(0)              // raw data
-	ResLevel1 = int64(5 * 60 * 1000)  // 5 minutes in milliseconds
-	ResLevel2 = int64(60 * 60 * 1000) // 1 hour in milliseconds
+	ResLevel0 = int64(0)              // Raw data.
+	ResLevel1 = int64(5 * 60 * 1000)  // 5 minutes in milliseconds.
+	ResLevel2 = int64(60 * 60 * 1000) // 1 hour in milliseconds.
+)
+
+// Downsampling ranges i.e. after what time we start to downsample blocks (in seconds).
+const (
+	DownsampleRange0 = 40 * 60 * 60 * 1000      // 40 hours.
+	DownsampleRange1 = 10 * 24 * 60 * 60 * 1000 // 10 days.
 )
 
 // Downsample downsamples the given block. It writes a new block into dir and returns its ID.
@@ -193,14 +199,14 @@ func targetChunkCount(mint, maxt, inRes, outRes int64, count int) (x int) {
 
 // aggregator collects cumulative stats for a stream of values.
 type aggregator struct {
-	total   int     // total samples processed
-	count   int     // samples in current window
-	sum     float64 // value sum of current window
-	min     float64 // min of current window
-	max     float64 // max of current window
-	counter float64 // total counter state since beginning
-	resets  int     // number of counter resets since beginning
-	last    float64 // last added value
+	total   int     // Total samples processed.
+	count   int     // Samples in current window.
+	sum     float64 // Value sum of current window.
+	min     float64 // Min of current window.
+	max     float64 // Max of current window.
+	counter float64 // Total counter state since beginning.
+	resets  int     // Number of counter resets since beginning.
+	last    float64 // Last added value.
 }
 
 // reset the stats to start a new aggregation window.
@@ -283,10 +289,6 @@ func (b *aggrChunkBuilder) add(t int64, aggr *aggregator) {
 	b.added++
 }
 
-func (b *aggrChunkBuilder) finalizeChunk(lastT int64, trueSample float64) {
-	b.apps[AggrCounter].Append(lastT, trueSample)
-}
-
 func (b *aggrChunkBuilder) encode() chunks.Meta {
 	return chunks.Meta{
 		MinTime: b.mint,
@@ -300,14 +302,17 @@ func downsampleRaw(data []sample, resolution int64) []chunks.Meta {
 	if len(data) == 0 {
 		return nil
 	}
-	var (
-		mint, maxt = data[0].t, data[len(data)-1].t
-		// We assume a raw resolution of 1 minute. In practice it will often be lower
-		// but this is sufficient for our heuristic to produce well-sized chunks.
-		numChunks = targetChunkCount(mint, maxt, 1*60*1000, resolution, len(data))
-		chks      = make([]chunks.Meta, 0, numChunks)
-		batchSize = (len(data) / numChunks) + 1
-	)
+
+	mint, maxt := data[0].t, data[len(data)-1].t
+	// We assume a raw resolution of 1 minute. In practice it will often be lower
+	// but this is sufficient for our heuristic to produce well-sized chunks.
+	numChunks := targetChunkCount(mint, maxt, 1*60*1000, resolution, len(data))
+	return downsampleRawLoop(data, resolution, numChunks)
+}
+
+func downsampleRawLoop(data []sample, resolution int64, numChunks int) []chunks.Meta {
+	batchSize := (len(data) / numChunks) + 1
+	chks := make([]chunks.Meta, 0, numChunks)
 
 	for len(data) > 0 {
 		j := batchSize
@@ -321,14 +326,18 @@ func downsampleRaw(data []sample, resolution int64) []chunks.Meta {
 		for ; j < len(data) && data[j].t <= curW; j++ {
 		}
 
-		ab := newAggrChunkBuilder()
 		batch := data[:j]
 		data = data[j:]
 
+		ab := newAggrChunkBuilder()
+
+		// Encode first raw value; see CounterSeriesIterator.
+		ab.apps[AggrCounter].Append(batch[0].t, batch[0].v)
+
 		lastT := downsampleBatch(batch, resolution, ab.add)
 
-		// InjectThanosMeta the chunk's counter aggregate with the last true sample.
-		ab.finalizeChunk(lastT, batch[len(batch)-1].v)
+		// Encode last raw value; see CounterSeriesIterator.
+		ab.apps[AggrCounter].Append(lastT, batch[len(batch)-1].v)
 
 		chks = append(chks, ab.encode())
 	}
@@ -373,18 +382,21 @@ func downsampleBatch(data []sample, resolution int64, add func(int64, *aggregato
 
 // downsampleAggr downsamples a sequence of aggregation chunks to the given resolution.
 func downsampleAggr(chks []*AggrChunk, buf *[]sample, mint, maxt, inRes, outRes int64) ([]chunks.Meta, error) {
-	// We downsample aggregates only along chunk boundaries. This is required for counters
-	// to be downsampled correctly since a chunks' last counter value is the true last value
-	// of the original series. We need to preserve it even across multiple aggregation iterations.
 	var numSamples int
 	for _, c := range chks {
 		numSamples += c.NumSamples()
 	}
-	var (
-		numChunks = targetChunkCount(mint, maxt, inRes, outRes, numSamples)
-		res       = make([]chunks.Meta, 0, numChunks)
-		batchSize = len(chks) / numChunks
-	)
+	numChunks := targetChunkCount(mint, maxt, inRes, outRes, numSamples)
+	return downsampleAggrLoop(chks, buf, outRes, numChunks)
+}
+
+func downsampleAggrLoop(chks []*AggrChunk, buf *[]sample, resolution int64, numChunks int) ([]chunks.Meta, error) {
+	// We downsample aggregates only along chunk boundaries. This is required
+	// for counters to be downsampled correctly since a chunk's first and last
+	// counter values are the true values of the original series. We need
+	// to preserve them even across multiple aggregation iterations.
+	res := make([]chunks.Meta, 0, numChunks)
+	batchSize := len(chks) / numChunks
 
 	for len(chks) > 0 {
 		j := batchSize
@@ -394,12 +406,13 @@ func downsampleAggr(chks []*AggrChunk, buf *[]sample, mint, maxt, inRes, outRes 
 		part := chks[:j]
 		chks = chks[j:]
 
-		chk, err := downsampleAggrBatch(part, buf, outRes)
+		chk, err := downsampleAggrBatch(part, buf, resolution)
 		if err != nil {
 			return nil, err
 		}
 		res = append(res, chk)
 	}
+
 	return res, nil
 }
 
@@ -506,6 +519,9 @@ func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (ch
 	ab.chunks[AggrCounter] = chunkenc.NewXORChunk()
 	ab.apps[AggrCounter], _ = ab.chunks[AggrCounter].Appender()
 
+	// Retain first raw value; see CounterSeriesIterator.
+	ab.apps[AggrCounter].Append((*buf)[0].t, (*buf)[0].v)
+
 	lastT := downsampleBatch(*buf, resolution, func(t int64, a *aggregator) {
 		if t < mint {
 			mint = t
@@ -514,6 +530,8 @@ func downsampleAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64) (ch
 		}
 		ab.apps[AggrCounter].Append(t, a.counter)
 	})
+
+	// Retain last raw value; see CounterSeriesIterator.
 	ab.apps[AggrCounter].Append(lastT, it.lastV)
 
 	ab.mint = mint
@@ -526,18 +544,25 @@ type sample struct {
 	v float64
 }
 
-// CounterSeriesIterator iterates over an ordered sequence of chunks and treats decreasing
-// values as counter reset.
-// Additionally, it can deal with downsampled counter chunks, which set the last value of a chunk
-// to the original last value. The last value can be detected by checking whether the timestamp
-// did not increase w.r.t to the previous sample
+// CounterSeriesIterator generates monotonically increasing values by iterating
+// over an ordered sequence of chunks, which should be raw or aggregated chunks
+// of counter values.  The generated samples can be used by PromQL functions
+// like 'rate' that calculate differences between counter values.
+//
+// Counter aggregation chunks must have the first and last values from their
+// original raw series: the first raw value should be the first value encoded
+// in the chunk, and the last raw value is encoded by the duplication of the
+// previous sample's timestamp.  As iteration occurs between chunks, the
+// comparison between the last raw value of the earlier chunk and the first raw
+// value of the later chunk ensures that counter resets between chunks are
+// recognized and that the correct value delta is calculated.
 type CounterSeriesIterator struct {
 	chks   []chunkenc.Iterator
-	i      int     // current chunk
-	total  int     // total number of processed samples
-	lastT  int64   // timestamp of the last sample
-	lastV  float64 // value of the last sample
-	totalV float64 // total counter state since beginning of series
+	i      int     // Current chunk.
+	total  int     // Total number of processed samples.
+	lastT  int64   // Timestamp of the last sample.
+	lastV  float64 // Value of the last sample.
+	totalV float64 // Total counter state since beginning of series.
 }
 
 func NewCounterSeriesIterator(chks ...chunkenc.Iterator) *CounterSeriesIterator {
@@ -545,47 +570,47 @@ func NewCounterSeriesIterator(chks ...chunkenc.Iterator) *CounterSeriesIterator 
 }
 
 func (it *CounterSeriesIterator) Next() bool {
-	if it.i >= len(it.chks) {
-		return false
-	}
-	if ok := it.chks[it.i].Next(); !ok {
-		it.i++
-		// While iterators are ordered, they are not generally guaranteed to be
-		// non-overlapping. Ensure that the series does not go back in time by seeking at least
-		// to the next timestamp.
-		return it.Seek(it.lastT + 1)
-	}
-	t, v := it.chks[it.i].At()
-
-	if math.IsNaN(v) {
-		return it.Next()
-	}
-	// First sample sets the initial counter state.
-	if it.total == 0 {
-		it.total++
-		it.lastT, it.lastV = t, v
-		it.totalV = v
-		return true
-	}
-	// If the timestamp increased, it is not the special last sample.
-	if t > it.lastT {
-		if v >= it.lastV {
-			it.totalV += v - it.lastV
-		} else {
-			it.totalV += v
+	for {
+		if it.i >= len(it.chks) {
+			return false
 		}
-		it.lastT, it.lastV = t, v
-		it.total++
-		return true
-	}
-	// We hit a sample that indicates what the true last value was. For the
-	// next chunk we use it to determine whether there was a counter reset between them.
-	if t == it.lastT {
-		it.lastV = v
-	}
-	// Otherwise the series went back in time and we just keep moving forward.
+		if ok := it.chks[it.i].Next(); !ok {
+			it.i++
+			// While iterators are ordered, they are not generally guaranteed to be
+			// non-overlapping. Ensure that the series does not go back in time by seeking at least
+			// to the next timestamp.
+			return it.Seek(it.lastT + 1)
+		}
+		t, v := it.chks[it.i].At()
 
-	return it.Next()
+		if math.IsNaN(v) {
+			return it.Next()
+		}
+		// First sample sets the initial counter state.
+		if it.total == 0 {
+			it.total++
+			it.lastT, it.lastV = t, v
+			it.totalV = v
+			return true
+		}
+		// If the timestamp increased, it is not the special last sample.
+		if t > it.lastT {
+			if v >= it.lastV {
+				it.totalV += v - it.lastV
+			} else {
+				it.totalV += v
+			}
+			it.lastT, it.lastV = t, v
+			it.total++
+			return true
+		}
+		// We hit a sample that indicates what the true last value was. For the
+		// next chunk we use it to determine whether there was a counter reset between them.
+		if t == it.lastT {
+			it.lastV = v
+		}
+		// Otherwise the series went back in time and we just keep moving forward.
+	}
 }
 
 func (it *CounterSeriesIterator) At() (t int64, v float64) {

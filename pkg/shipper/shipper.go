@@ -247,9 +247,9 @@ func (c *lazyOverlapChecker) IsOverlapping(ctx context.Context, newMeta tsdb.Blo
 // Sync performs a single synchronization, which ensures all non-compacted local blocks have been uploaded
 // to the object bucket once.
 //
-// If updload
+// If uploaded.
 //
-// It is not concurrency-safe, however it is compactor-safe (running concurrently with compactor is ok)
+// It is not concurrency-safe, however it is compactor-safe (running concurrently with compactor is ok).
 func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 	meta, err := ReadMetaFile(s.dir)
 	if err != nil {
@@ -380,10 +380,12 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 	return block.Upload(ctx, s.logger, s.bucket, updir)
 }
 
-// iterBlockMetas calls f with the block meta for each block found in dir. It logs
-// an error and continues if it cannot access a meta.json file.
+// iterBlockMetas calls f with the block meta for each block found in dir
+// sorted by minTime asc. It logs an error and continues if it cannot access a
+// meta.json file.
 // If f returns an error, the function returns with the same error.
 func (s *Shipper) iterBlockMetas(f func(m *metadata.Meta) error) error {
+	var metas []*metadata.Meta
 	names, err := fileutil.ReadDir(s.dir)
 	if err != nil {
 		return errors.Wrap(err, "read dir")
@@ -407,6 +409,13 @@ func (s *Shipper) iterBlockMetas(f func(m *metadata.Meta) error) error {
 			level.Warn(s.logger).Log("msg", "reading meta file failed", "err", err)
 			continue
 		}
+		metas = append(metas, m)
+	}
+	sort.Slice(metas, func(i, j int) bool {
+		return metas[i].BlockMeta.MinTime < metas[j].BlockMeta.MinTime
+	})
+	for _, m := range metas {
+
 		if err := f(m); err != nil {
 			return err
 		}
