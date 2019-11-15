@@ -206,7 +206,8 @@ func NewIndexCache(logger log.Logger, reg prometheus.Registerer, opts Opts) (*In
 			c.evicted.WithLabelValues(keyType).Inc()
 			c.current.WithLabelValues(keyType).Dec()
 			c.currentSize.WithLabelValues(keyType).Sub(float64(entrySize))
-			c.totalCurrentSize.WithLabelValues(keyType).Sub(float64(entrySize + 8))
+			// uint64 keys are used and uint64 hashes for checking conflicts.
+			c.totalCurrentSize.WithLabelValues(keyType).Sub(float64(entrySize + 8 + 8))
 		}, int64(c.maxSizeBytes))
 		if err != nil {
 			return nil, err
@@ -280,7 +281,8 @@ func (c *IndexCache) set(typ string, key cacheKey, val []byte) {
 			panic("unhandled index cache item type")
 		}
 		size++
-		keySize = 8
+		// 2 uint64 hashes.
+		keySize = 8 + 8
 	} else {
 		v = make([]byte, len(val))
 		copy(v, val)
