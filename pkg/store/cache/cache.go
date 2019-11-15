@@ -194,9 +194,9 @@ func NewIndexCache(logger log.Logger, reg prometheus.Registerer, opts Opts) (*In
 			k := v[len(v)-1]
 			var keyType string
 			switch k {
-			case 0:
+			case keyTypePostings:
 				keyType = cacheTypeSeries
-			case 1:
+			case keyTypeSeries:
 				keyType = cacheTypePostings
 			default:
 				panic("unhandled key type")
@@ -273,9 +273,9 @@ func (c *IndexCache) set(typ string, key cacheKey, val []byte) {
 		// Encode the key's type inside of the value.
 		switch typ {
 		case cacheTypeSeries:
-			v = append(v, byte(0))
+			v = append(v, keyTypeSeries)
 		case cacheTypePostings:
-			v = append(v, byte(1))
+			v = append(v, keyTypePostings)
 		default:
 			panic("unhandled index cache item type")
 		}

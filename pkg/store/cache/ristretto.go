@@ -5,6 +5,12 @@ import (
 	"github.com/dgraph-io/ristretto/z"
 )
 
+// Values used for encoding the key's type.
+const (
+	keyTypePostings byte = iota
+	keyTypeSeries
+)
+
 // TinyLFU is a wrapper around Ristretto (TinyLFU).
 type TinyLFU struct {
 	l *ristretto.Cache
