@@ -18,6 +18,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb/tombstones"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -615,7 +616,7 @@ func (b *memBlock) Chunks() (tsdb.ChunkReader, error) {
 	return b, nil
 }
 
-func (b *memBlock) Tombstones() (tsdb.TombstoneReader, error) {
+func (b *memBlock) Tombstones() (tombstones.Reader, error) {
 	return emptyTombstoneReader{}, nil
 }
 
@@ -625,7 +626,7 @@ func (b *memBlock) Close() error {
 
 type emptyTombstoneReader struct{}
 
-func (emptyTombstoneReader) Get(ref uint64) (tsdb.Intervals, error)        { return nil, nil }
-func (emptyTombstoneReader) Iter(func(uint64, tsdb.Intervals) error) error { return nil }
-func (emptyTombstoneReader) Total() uint64                                 { return 0 }
-func (emptyTombstoneReader) Close() error                                  { return nil }
+func (emptyTombstoneReader) Get(ref uint64) (tombstones.Intervals, error)        { return nil, nil }
+func (emptyTombstoneReader) Iter(func(uint64, tombstones.Intervals) error) error { return nil }
+func (emptyTombstoneReader) Total() uint64                                       { return 0 }
+func (emptyTombstoneReader) Close() error                                        { return nil }
