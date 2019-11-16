@@ -54,6 +54,16 @@ enum StoreType {
 message InfoResponse {
   // Deprecated. Use label_sets instead.
   repeated Label labels = 1 [(gogoproto.nullable) = false];
+  // min_time and max_time represent minimum and maximum time of the data that the store API holds.
+  // Caller can filter the store before calling Series based on this.
+  // int64 boundaries or value combinations can be used as sentinels for UI purposes.
+  // Cases:
+  //    [min_time, max_time]
+  //    -------------------
+  //    min_time >= max_time: No data available.
+  //    [       T, maxInt64]: T -  now
+  //    [minInt64, maxInt64]: Unknown - now
+  //    [minInt64,        T]: Unknown - T
   int64 min_time = 2;
   int64 max_time = 3;
   StoreType storeType  = 4;

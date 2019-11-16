@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"html/template"
+	"math"
 	"net/http"
 	"os"
 	"path"
@@ -61,14 +63,24 @@ func queryTmplFuncs() template.FuncMap {
 		"since": func(t time.Time) time.Duration {
 			return time.Since(t) / time.Millisecond * time.Millisecond
 		},
-		"formatTimestamp": func(timestamp int64) string {
-			return time.Unix(timestamp/1000, 0).Format(time.RFC3339)
+		"formatTimeRange": func(mint int64, maxt int64) string {
+			if mint >= maxt {
+				return "no data"
+			}
+			if mint == math.MinInt64 && maxt == math.MaxInt64 {
+				return "unknown"
+			}
+			if maxt == math.MaxInt64 {
+				return time.Unix(mint/1000, 0).Format(time.RFC3339) + " - now"
+			}
+
+			return time.Unix(mint/1000, 0).Format(time.RFC3339) + " - " + time.Unix(maxt/1000, 0).Format(time.RFC3339)
 		},
 		"title": strings.Title,
 	}
 }
 
-// Register registers new GET routes for subpages and retirects from / to /graph.
+// Register registers new GET routes for subpages and redirects from / to /graph.
 func (q *Query) Register(r *route.Router, ins extpromhttp.InstrumentationMiddleware) {
 	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
 		return ins.NewHandler(name, http.HandlerFunc(next))
@@ -80,9 +92,6 @@ func (q *Query) Register(r *route.Router, ins extpromhttp.InstrumentationMiddlew
 	r.Get("/status", instrf("status", q.status))
 
 	r.Get("/static/*filepath", instrf("static", q.serveStaticAsset))
-	// TODO(bplotka): Consider adding more Thanos related data e.g:
-	// - What store nodes we see currently.
-	// - What sidecars we see currently.
 }
 
 // Root redirects "/" requests to "/graph", taking into account the path prefix value.
@@ -125,6 +134,43 @@ func (q *Query) stores(w http.ResponseWriter, r *http.Request) {
 	for _, status := range q.storeSet.GetStoreStatus() {
 		statuses[status.StoreType] = append(statuses[status.StoreType], status)
 	}
+
+	// Fake for test.
+	statuses[component.Store] = append(statuses[component.Store], query.StoreStatus{
+		MinTime: math.MinInt64,
+		MaxTime: math.MaxInt64,
+		LabelSets: []storepb.LabelSet{
+			{
+				Labels: []storepb.Label{
+					{Name: "label1", Value: "value1"}, {Name: "label2", Value: "value3"},
+				},
+			},
+		},
+	})
+
+	statuses[component.Store] = append(statuses[component.Store], query.StoreStatus{
+		MinTime: math.MaxInt64,
+		MaxTime: math.MinInt64,
+		LabelSets: []storepb.LabelSet{
+			{
+				Labels: []storepb.Label{
+					{Name: "label1", Value: "value1"}, {Name: "label2", Value: "value3"},
+				},
+			},
+		},
+	})
+
+	statuses[component.Store] = append(statuses[component.Store], query.StoreStatus{
+		MinTime: 0,
+		MaxTime: math.MaxInt64,
+		LabelSets: []storepb.LabelSet{
+			{
+				Labels: []storepb.Label{
+					{Name: "label1", Value: "value1"}, {Name: "label2", Value: "value3"},
+				},
+			},
+		},
+	})
 
 	sources := make([]component.StoreAPI, 0, len(statuses))
 	for k := range statuses {

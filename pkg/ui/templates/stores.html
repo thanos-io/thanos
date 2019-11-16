@@ -16,8 +16,7 @@
             <th>Endpoint</th>
             <th>Status</th>
             <th>Announced LabelSets</th>
-            <th>Min Time</th>
-            <th>Max Time</th>
+            <th>Time Range </th>
             <th>Last Health Check</th>
             <th>Last Message</th>
         </tr>
@@ -44,8 +43,7 @@
                 {{end}}
             {{end}}
             </td>
-            <td>{{formatTimestamp $store.MinTime}}</td>
-            <td>{{formatTimestamp $store.MaxTime}}</td>
+            <td>{{formatTimeRange $store.MinTime $store.MaxTime}}</td>
             <td>{{since $store.LastCheck}} ago</td>
             <td>
                 {{if $store.LastError}}
