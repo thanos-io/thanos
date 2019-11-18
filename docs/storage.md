@@ -62,6 +62,7 @@ Current object storage client implementations:
 | [Tencent COS](./storage.md#tencent-cos)          | Beta  (testing usage)                   | no        | @jojohappy          |
 | [AliYun OSS](./storage.md#aliyun-oss)           | Beta  (testing usage)                   | no        | @shaulboozhiao,@wujinhu      |
 | [Local Filesystem](./storage.md#filesystem) | Beta  (testing usage)             | yes       | @bwplotka   |
+| [BAIDU BOS](./storage.md#baidu-bos) | Beta (testing usage) | yes | @tianyuansun |
 
 NOTE: Currently Thanos requires strong consistency (write-read) for object store implementation.
 
@@ -373,7 +374,7 @@ config:
   directory: ""
 ```
 
-## Baidu BOS Configuration
+### Baidu BOS
 
 To use Baidu BOS as storage store, you should create a Baidu Account to create an object storage bucket first. Follow the instructions from Baidu Cloud Documents: [https://cloud.baidu.com/doc/BOS/index.html](https://cloud.baidu.com/doc/BOS/index.html)
 

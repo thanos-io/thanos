@@ -211,6 +211,7 @@ test-ci: export THANOS_SKIP_AZURE_TESTS = true
 test-ci: export THANOS_SKIP_SWIFT_TESTS = true
 test-ci: export THANOS_SKIP_TENCENT_COS_TESTS = true
 test-ci: export THANOS_SKIP_ALIYUN_OSS_TESTS = true
+test-ci: export THANOS_SKIP_BAIDU_BOS_TESTS = true
 test-ci:
 	@echo ">> Skipping AZURE tests"
 	@echo ">> Skipping SWIFT tests"

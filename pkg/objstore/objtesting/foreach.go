@@ -135,22 +135,6 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 		t.Log("THANOS_SKIP_BAIDU_BOS_TESTS envvar present. Skipping test against Baidu BOS")
 	}
 
-	// Optional BOS
-	if _, ok := os.LookupEnv("THANOS_SKIP_BAIDU_BOS_TESTS"); !ok {
-		bkt, closeFn, err := bos.NewTestBucket(t)
-		testutil.Ok(t, err)
-
-		ok := t.Run("Baidu bos", func(t *testing.T) {
-			testFn(t, bkt)
-		})
-		closeFn()
-		if !ok {
-			return
-		}
-	} else {
-		t.Log("THANOS_SKIP_BAIDU_BOS_TESTS envvar present. Skipping test against Baidu BOS")
-	}
-
 	// Optional COS.
 	if _, ok := os.LookupEnv("THANOS_SKIP_TENCENT_COS_TESTS"); !ok {
 		t.Run("Tencent cos", func(t *testing.T) {
