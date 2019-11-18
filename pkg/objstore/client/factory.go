@@ -9,6 +9,8 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"gopkg.in/yaml.v2"
+
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/azure"
 	"github.com/thanos-io/thanos/pkg/objstore/bos"
@@ -18,7 +20,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/oss"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/objstore/swift"
-	yaml "gopkg.in/yaml.v2"
 )
 
 type ObjProvider string
@@ -31,7 +32,7 @@ const (
 	SWIFT      ObjProvider = "SWIFT"
 	COS        ObjProvider = "COS"
 	ALIYUNOSS  ObjProvider = "ALIYUNOSS"
-	BOS   ObjProvider = "BOS"
+	BOS        ObjProvider = "BOS"
 )
 
 type BucketConfig struct {
