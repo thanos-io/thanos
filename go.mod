@@ -17,6 +17,7 @@ require (
 	github.com/aliyun/aliyun-oss-go-sdk v2.0.4+incompatible
 	github.com/armon/go-metrics v0.3.0
 	github.com/aws/aws-sdk-go v1.25.35 // indirect
+	github.com/baidubce/bce-sdk-go v0.0.0-20190612031215-9245260b0d93
 	github.com/baiyubin/aliyun-sts-go-sdk v0.0.0-20180326062324-cfa1a18b161f // indirect
 	github.com/cespare/xxhash v1.1.0
 	github.com/cespare/xxhash/v2 v2.1.1 // indirect

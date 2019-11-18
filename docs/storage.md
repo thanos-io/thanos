@@ -16,18 +16,7 @@ All clients are configured using `--objstore.config-file` to reference to the co
 You can either pass YAML file defined below in `--objstore.config-file` or pass the YAML content directly using `--objstore.config`. 
 We recommend the latter as it gives an explicit static view of configuration for each component. It also saves you the fuss of creating and managing additional file.
 
-<<<<<<< HEAD
 Don't be afraid of multiline flags!
-=======
-| Provider             | Maturity | Auto-tested on CI | Maintainers |
-|----------------------|-------------------|-----------|---------------|
-| Google Cloud Storage | Stable  (production usage)             | yes       | @bwplotka   |
-| AWS S3               | Stable  (production usage)               | yes        | @bwplotka          |
-| Azure Storage Account | Stable  (production usage) | yes       | @vglafirov   |
-| Baidu BOS            | Beta  (testing usage)                   | no      | @tianyuansun          |
-| OpenStack Swift      | Beta  (working PoCs, testing usage)               | no        | @sudhi-vm   |
-| Tencent COS          | Beta  (testing usage)                   | no        | @jojohappy          |
->>>>>>> feat: add Baidu BOS support
 
 In Kubernetes it is as easy as (on Thanos sidecar example)::
 
@@ -73,6 +62,7 @@ Current object storage client implementations:
 | [Tencent COS](./storage.md#tencent-cos)          | Beta  (testing usage)                   | no        | @jojohappy          |
 | [AliYun OSS](./storage.md#aliyun-oss)           | Beta  (testing usage)                   | no        | @shaulboozhiao,@wujinhu      |
 | [Local Filesystem](./storage.md#filesystem) | Beta  (testing usage)             | yes       | @bwplotka   |
+| [BAIDU BOS](./storage.md#baidu-bos) | Beta (testing usage) | yes | @tianyuansun |
 
 NOTE: Currently Thanos requires strong consistency (write-read) for object store implementation.
 
@@ -384,7 +374,7 @@ config:
   directory: ""
 ```
 
-## Baidu BOS Configuration
+### Baidu BOS
 
 To use Baidu BOS as storage store, you should create a Baidu Account to create an object storage bucket first. Follow the instructions from Baidu Cloud Documents: [https://cloud.baidu.com/doc/BOS/index.html](https://cloud.baidu.com/doc/BOS/index.html)
 
