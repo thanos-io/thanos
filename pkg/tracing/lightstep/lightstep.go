@@ -45,9 +45,9 @@ func NewTracer(ctx context.Context, yamlConfig []byte) (opentracing.Tracer, io.C
 		AccessToken: config.AccessToken,
 		Collector:   config.Collector,
 	}
-	lighstepTracer := lightstep.NewTracer(options)
-	if lighstepTracer == nil { // lightstep.NewTracer returns nil when there is an error
-		return nil, nil, errors.New("error creating Lightstep tracer")
+	lighstepTracer, err := lightstep.CreateTracer(options)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	t := &Tracer{

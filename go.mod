@@ -49,7 +49,7 @@ require (
 	github.com/jstemmer/go-junit-report v0.9.1 // indirect
 	github.com/julienschmidt/httprouter v1.3.0 // indirect
 	github.com/leanovate/gopter v0.2.4
-	github.com/lightstep/lightstep-tracer-go v0.17.1
+	github.com/lightstep/lightstep-tracer-go v0.18.0
 	github.com/lovoo/gcloud-opentracing v0.3.0
 	github.com/mattn/go-ieproxy v0.0.0-20191113090002-7c0f6868bffe // indirect
 	github.com/mattn/go-runewidth v0.0.6 // indirect
