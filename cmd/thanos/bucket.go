@@ -4,25 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
-	"net/http"
 	"os"
 	"sort"
 	"strings"
 	"text/template"
 	"time"
-
-	"github.com/thanos-io/thanos/pkg/extflag"
-
-	"github.com/thanos-io/thanos/pkg/block"
-	"github.com/thanos-io/thanos/pkg/block/metadata"
-	"github.com/thanos-io/thanos/pkg/compact"
-	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
-	"github.com/thanos-io/thanos/pkg/objstore"
-	"github.com/thanos-io/thanos/pkg/objstore/client"
-	"github.com/thanos-io/thanos/pkg/runutil"
-	"github.com/thanos-io/thanos/pkg/ui"
-	"github.com/thanos-io/thanos/pkg/verifier"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -34,6 +20,19 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/tsdb/labels"
+	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/compact"
+	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/extflag"
+	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/objstore/client"
+	"github.com/thanos-io/thanos/pkg/prober"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	httpserver "github.com/thanos-io/thanos/pkg/server/http"
+	"github.com/thanos-io/thanos/pkg/ui"
+	"github.com/thanos-io/thanos/pkg/verifier"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
@@ -311,7 +310,7 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 // registerBucketWeb exposes a web interface for the state of remote store like `pprof web`.
 func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
 	cmd := root.Command("web", "Web interface for remote storage bucket")
-	bind := cmd.Flag("listen", "HTTP host:port to listen on").Default("0.0.0.0:8080").String()
+	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
 	interval := cmd.Flag("refresh", "Refresh interval to download metadata from remote storage").Default("30m").Duration()
 	timeout := cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").Duration()
 	label := cmd.Flag("label", "Prometheus label to use as timeline title").String()
@@ -319,9 +318,17 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 	m[name+" web"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
 		ctx, cancel := context.WithCancel(context.Background())
 
+		statusProber := prober.NewProber(component.Bucket, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+		// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
+		srv := httpserver.New(logger, reg, component.Bucket, statusProber,
+			httpserver.WithListen(*httpBindAddr),
+			httpserver.WithGracePeriod(time.Duration(*httpGracePeriod)),
+		)
+
 		router := route.New()
 		bucketUI := ui.NewBucketUI(logger, *label)
 		bucketUI.Register(router, extpromhttp.NewInstrumentationMiddleware(reg))
+		srv.Handle("/", router)
 
 		if *interval < 5*time.Minute {
 			level.Warn(logger).Log("msg", "Refreshing more often than 5m could lead to large data transfers")
@@ -341,17 +348,7 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 			cancel()
 		})
 
-		l, err := net.Listen("tcp", *bind)
-		if err != nil {
-			return errors.Wrapf(err, "listen HTTP on address %s", *bind)
-		}
-
-		g.Add(func() error {
-			level.Info(logger).Log("msg", "Listening for query and metrics", "address", *bind)
-			return errors.Wrap(http.Serve(l, router), "serve web")
-		}, func(error) {
-			runutil.CloseWithLogOnErr(logger, l, "http listener")
-		})
+		g.Add(srv.ListenAndServe, srv.Shutdown)
 
 		return nil
 	}

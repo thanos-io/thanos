@@ -81,11 +81,9 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 		Help: "Total number of failed sync meta operations.",
 	})
 	m.syncMetaDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name: "thanos_compact_sync_meta_duration_seconds",
-		Help: "Time it took to sync meta files.",
-		Buckets: []float64{
-			0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 30, 60, 100, 200, 500,
-		},
+		Name:    "thanos_compact_sync_meta_duration_seconds",
+		Help:    "Time it took to sync meta files.",
+		Buckets: prometheus.ExponentialBuckets(0.001, 2, 15),
 	})
 
 	m.garbageCollectedBlocks = prometheus.NewCounter(prometheus.CounterOpts{
@@ -101,11 +99,9 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 		Help: "Total number of failed garbage collection operations.",
 	})
 	m.garbageCollectionDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name: "thanos_compact_garbage_collection_duration_seconds",
-		Help: "Time it took to perform garbage collection iteration.",
-		Buckets: []float64{
-			0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 30, 60, 100, 200, 500,
-		},
+		Name:    "thanos_compact_garbage_collection_duration_seconds",
+		Help:    "Time it took to perform garbage collection iteration.",
+		Buckets: prometheus.ExponentialBuckets(0.001, 2, 15),
 	})
 
 	m.compactions = prometheus.NewCounterVec(prometheus.CounterOpts{

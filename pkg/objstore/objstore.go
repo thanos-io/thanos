@@ -204,7 +204,7 @@ func BucketWithMetrics(name string, b Bucket, r prometheus.Registerer) Bucket {
 			Name:        "thanos_objstore_bucket_operation_duration_seconds",
 			Help:        "Duration of operations against the bucket",
 			ConstLabels: prometheus.Labels{"bucket": name},
-			Buckets:     []float64{0.005, 0.01, 0.02, 0.04, 0.08, 0.15, 0.3, 0.6, 1, 1.5, 2.5, 5, 10, 20, 30},
+			Buckets:     prometheus.ExponentialBuckets(0.001, 2, 17),
 		}, []string{"operation"}),
 		lastSuccessfullUploadTime: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "thanos_objstore_bucket_last_successful_upload_time",

@@ -17,9 +17,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/thanos-io/thanos/pkg/extflag"
-	"github.com/thanos-io/thanos/pkg/server"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -41,6 +38,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
+	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
@@ -49,9 +47,12 @@ import (
 	thanosrule "github.com/thanos-io/thanos/pkg/rule"
 	v1 "github.com/thanos-io/thanos/pkg/rule/api"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
+	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/ui"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -62,9 +63,8 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 	comp := component.Rule
 	cmd := app.Command(comp.String(), "ruler evaluating Prometheus rules against given Query nodes, exposing Store API and storing old blocks in bucket")
 
-	httpBindAddr := regHTTPAddrFlag(cmd)
-	httpGracePeriod := regHTTPGracePeriodFlag(cmd)
-	grpcBindAddr, cert, key, clientCA := regGRPCFlags(cmd)
+	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
+	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := regGRPCFlags(cmd)
 
 	labelStrs := cmd.Flag("label", "Labels to be applied to all generated metrics (repeated). Similar to external labels for Prometheus, used to identify ruler and its blocks as unique source.").
 		PlaceHolder("<name>=\"<value>\"").Strings()
@@ -159,9 +159,10 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			*alertmgrs,
 			*alertmgrsTimeout,
 			*grpcBindAddr,
-			*cert,
-			*key,
-			*clientCA,
+			time.Duration(*grpcGracePeriod),
+			*grpcCert,
+			*grpcKey,
+			*grpcClientCA,
 			*httpBindAddr,
 			time.Duration(*httpGracePeriod),
 			*webRoutePrefix,
@@ -195,9 +196,10 @@ func runRule(
 	alertmgrURLs []string,
 	alertmgrsTimeout time.Duration,
 	grpcBindAddr string,
-	cert string,
-	key string,
-	clientCA string,
+	grpcGracePeriod time.Duration,
+	grpcCert string,
+	grpcKey string,
+	grpcClientCA string,
 	httpBindAddr string,
 	httpGracePeriod time.Duration,
 	webRoutePrefix string,
@@ -502,25 +504,24 @@ func runRule(
 	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	// Start gRPC server.
 	{
-		l, err := net.Listen("tcp", grpcBindAddr)
-		if err != nil {
-			return errors.Wrap(err, "listen API address")
-		}
-		logger := log.With(logger, "component", component.Rule.String())
-
 		store := store.NewTSDBStore(logger, reg, db, component.Rule, lset)
 
-		opts, err := defaultGRPCTLSServerOpts(logger, cert, key, clientCA)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcCert, grpcKey, grpcClientCA)
 		if err != nil {
-			return errors.Wrap(err, "setup gRPC options")
+			return errors.Wrap(err, "setup gRPC server")
 		}
-		s := newStoreGRPCServer(logger, reg, tracer, store, opts)
 
+		s := grpcserver.New(logger, reg, tracer, comp, store,
+			grpcserver.WithListen(grpcBindAddr),
+			grpcserver.WithGracePeriod(grpcGracePeriod),
+			grpcserver.WithTLSConfig(tlsCfg),
+		)
 		g.Add(func() error {
 			statusProber.SetReady()
-			return errors.Wrap(s.Serve(l), "serve gRPC")
-		}, func(error) {
-			s.Stop()
+			return s.ListenAndServe()
+		}, func(err error) {
+			statusProber.SetNotReady(err)
+			s.Shutdown(err)
 		})
 	}
 	// Start UI & metrics HTTP server.
@@ -552,9 +553,9 @@ func runRule(
 		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
 
 		// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-		srv := server.NewHTTP(logger, reg, comp, statusProber,
-			server.WithListen(httpBindAddr),
-			server.WithGracePeriod(httpGracePeriod),
+		srv := httpserver.New(logger, reg, comp, statusProber,
+			httpserver.WithListen(httpBindAddr),
+			httpserver.WithGracePeriod(httpGracePeriod),
 		)
 		srv.Handle("/", router)
 

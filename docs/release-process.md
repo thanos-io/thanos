@@ -62,6 +62,12 @@ Process of releasing a *minor* Thanos version:
     1. *In case of version after `v1+.y.z`*, double check if none of the changes break API compatibility. This should be done in PR review process, but double check is good to have.
     1. In case of `v0.y.z`, document all incompatibilities in changelog.
 
+1. Update tutorials:
+    1. Update the Thanos version used in the [tutorials](../tutorials) manifests.
+    1. In case of any breaking changes or necessary updates adjust the manifests
+       so the tutorial stays up to date.
+    1. Update the [scripts/quickstart.sh](../scripts/quickstart.sh) script if needed.
+
 1. After review, merge the PR and immediately after this tag a version:
 
     ```bash

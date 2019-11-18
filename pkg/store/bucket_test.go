@@ -433,6 +433,8 @@ func TestBucketStore_Info(t *testing.T) {
 	dir, err := ioutil.TempDir("", "bucketstore-test")
 	testutil.Ok(t, err)
 
+	defer testutil.Ok(t, os.RemoveAll(dir))
+
 	bucketStore, err := NewBucketStore(
 		nil,
 		nil,

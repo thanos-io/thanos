@@ -2,11 +2,7 @@ package main
 
 import (
 	"context"
-	"net"
 	"time"
-
-	"github.com/thanos-io/thanos/pkg/extflag"
-	"github.com/thanos-io/thanos/pkg/server"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -16,12 +12,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
+	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/store"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
+	"github.com/thanos-io/thanos/pkg/tls"
 	"gopkg.in/alecthomas/kingpin.v2"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -30,9 +30,8 @@ import (
 func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 	cmd := app.Command(component.Store.String(), "store node giving access to blocks in a bucket provider. Now supported GCS, S3, Azure, Swift and Tencent COS.")
 
-	httpBindAddr := regHTTPAddrFlag(cmd)
-	httpGracePeriod := regHTTPGracePeriodFlag(cmd)
-	grpcBindAddr, cert, key, clientCA := regGRPCFlags(cmd)
+	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
+	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := regGRPCFlags(cmd)
 
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache remote blocks.").
 		Default("./data").String()
@@ -81,9 +80,10 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 			objStoreConfig,
 			*dataDir,
 			*grpcBindAddr,
-			*cert,
-			*key,
-			*clientCA,
+			time.Duration(*grpcGracePeriod),
+			*grpcCert,
+			*grpcKey,
+			*grpcClientCA,
 			*httpBindAddr,
 			time.Duration(*httpGracePeriod),
 			uint64(*indexCacheSize),
@@ -113,9 +113,10 @@ func runStore(
 	objStoreConfig *extflag.PathOrContent,
 	dataDir string,
 	grpcBindAddr string,
-	cert string,
-	key string,
-	clientCA string,
+	grpcGracePeriod time.Duration,
+	grpcCert string,
+	grpcKey string,
+	grpcClientCA string,
 	httpBindAddr string,
 	httpGracePeriod time.Duration,
 	indexCacheSizeBytes uint64,
@@ -132,9 +133,9 @@ func runStore(
 ) error {
 	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
 	statusProber := prober.NewProber(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
-	srv := server.NewHTTP(logger, reg, component, statusProber,
-		server.WithListen(httpBindAddr),
-		server.WithGracePeriod(httpGracePeriod),
+	srv := httpserver.New(logger, reg, component, statusProber,
+		httpserver.WithListen(httpBindAddr),
+		httpserver.WithGracePeriod(httpGracePeriod),
 	)
 
 	g.Add(srv.ListenAndServe, srv.Shutdown)
@@ -225,26 +226,28 @@ func runStore(
 			cancel()
 		})
 	}
+	// Start query (proxy) gRPC StoreAPI.
+	{
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcCert, grpcKey, grpcClientCA)
+		if err != nil {
+			return errors.Wrap(err, "setup gRPC server")
+		}
 
-	l, err := net.Listen("tcp", grpcBindAddr)
-	if err != nil {
-		return errors.Wrap(err, "listen API address")
+		s := grpcserver.New(logger, reg, tracer, component, bs,
+			grpcserver.WithListen(grpcBindAddr),
+			grpcserver.WithGracePeriod(grpcGracePeriod),
+			grpcserver.WithTLSConfig(tlsCfg),
+		)
+
+		g.Add(func() error {
+			<-bucketStoreReady
+			statusProber.SetReady()
+			return s.ListenAndServe()
+		}, func(err error) {
+			statusProber.SetNotReady(err)
+			s.Shutdown(err)
+		})
 	}
-
-	opts, err := defaultGRPCTLSServerOpts(logger, cert, key, clientCA)
-	if err != nil {
-		return errors.Wrap(err, "grpc server options")
-	}
-	s := newStoreGRPCServer(logger, reg, tracer, bs, opts)
-
-	g.Add(func() error {
-		<-bucketStoreReady
-		level.Info(logger).Log("msg", "listening for StoreAPI gRPC", "address", grpcBindAddr)
-		statusProber.SetReady()
-		return errors.Wrap(s.Serve(l), "serve gRPC")
-	}, func(error) {
-		s.Stop()
-	})
 
 	level.Info(logger).Log("msg", "starting store node")
 	return nil
