@@ -315,7 +315,7 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 	webPrefixHeaderName := cmd.Flag("web.prefix-header", "Name of HTTP request header used for dynamic prefixing of UI links and redirects. This option is ignored if web.external-prefix argument is set. Security risk: enable this option only if a reverse proxy in front of thanos is resetting the header. The --web.prefix-header=X-Forwarded-Prefix option can be useful, for example, if Thanos UI is served via Traefik reverse proxy with PathPrefixStrip option enabled, which sends the stripped prefix value in X-Forwarded-Prefix header. This allows thanos UI to be served on a sub-path.").Default("").String()
 	interval := cmd.Flag("refresh", "Refresh interval to download metadata from remote storage").Default("30m").Duration()
 	timeout := cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").Duration()
-	label := cmd.Flag("label", "Prometheus label to use as timeline title").String()
+	label := cmd.Flag("label", "Prometheus label to use as timeline title").Default("prometheus").String()
 
 	m[name+" web"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
 		ctx, cancel := context.WithCancel(context.Background())
