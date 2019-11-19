@@ -103,26 +103,26 @@ Flags:
       --version                 Show application version.
       --log.level=info          Log filtering level.
       --log.format=logfmt       Log format to use.
-      --tracing.config-file=<file-path>  
+      --tracing.config-file=<file-path>
                                 Path to YAML file with tracing configuration.
                                 See format details:
                                 https://thanos.io/tracing.md/#configuration
-      --tracing.config=<content>  
+      --tracing.config=<content>
                                 Alternative to 'tracing.config-file' flag (lower
                                 priority). Content of YAML file with tracing
                                 configuration. See format details:
                                 https://thanos.io/tracing.md/#configuration
-      --objstore.config-file=<file-path>  
+      --objstore.config-file=<file-path>
                                 Path to YAML file that contains object store
                                 configuration. See format details:
                                 https://thanos.io/storage.md/#configuration
-      --objstore.config=<content>  
+      --objstore.config=<content>
                                 Alternative to 'objstore.config-file' flag
                                 (lower priority). Content of YAML file that
                                 contains object store configuration. See format
                                 details:
                                 https://thanos.io/storage.md/#configuration
-      --http-address="0.0.0.0:10902"  
+      --http-address="0.0.0.0:10902"
                                 Listen host:port for HTTP endpoints.
       --http-grace-period=2m    Time to wait after an interrupt received for
                                 HTTP Server.
