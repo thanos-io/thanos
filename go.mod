@@ -3,7 +3,7 @@ module github.com/thanos-io/thanos
 require (
 	cloud.google.com/go v0.48.0
 	cloud.google.com/go/bigquery v1.3.0 // indirect
-	cloud.google.com/go/storage v1.3.0
+	cloud.google.com/go/storage v1.4.0
 	github.com/Azure/azure-pipeline-go v0.2.2 // indirect
 	github.com/Azure/azure-sdk-for-go v36.1.0+incompatible // indirect
 	github.com/Azure/azure-storage-blob-go v0.8.0
