@@ -327,7 +327,6 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 		)
 
 		flagsMap := map[string]string{
-			// TODO(bplotka in PR #513 review): pass all flags, not only the flags needed by prefix rewriting.
 			"web.external-prefix": *webExternalPrefix,
 		}
 
