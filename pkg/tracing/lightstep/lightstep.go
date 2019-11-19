@@ -2,7 +2,6 @@ package lightstep
 
 import (
 	"context"
-	"errors"
 	"io"
 
 	"github.com/lightstep/lightstep-tracer-go"
