@@ -19,14 +19,14 @@ type Bucket struct {
 	Blocks      template.JS
 	RefreshedAt time.Time
 	Err         error
-	flagsMap map[string]string
+	flagsMap    map[string]string
 }
 
 func NewBucketUI(logger log.Logger, label string, flagsMap map[string]string) *Bucket {
 	return &Bucket{
-		BaseUI: NewBaseUI(logger, "bucket_menu.html", queryTmplFuncs()),
-		Blocks: "[]",
-		Label:  label,
+		BaseUI:   NewBaseUI(logger, "bucket_menu.html", queryTmplFuncs()),
+		Blocks:   "[]",
+		Label:    label,
 		flagsMap: flagsMap,
 	}
 }
