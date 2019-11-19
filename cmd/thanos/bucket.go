@@ -311,7 +311,7 @@ func registerBucketInspect(m map[string]setupFunc, root *kingpin.CmdClause, name
 func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
 	cmd := root.Command("web", "Web interface for remote storage bucket")
 	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
-	externalPrefix := cmd.Flag("external-prefix", "Static prefix for all HTML links and redirect URLs in the UI bucket web interface.").Default("").String()
+	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI bucket web interface.").Default("").String()
 	interval := cmd.Flag("refresh", "Refresh interval to download metadata from remote storage").Default("30m").Duration()
 	timeout := cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").Duration()
 	label := cmd.Flag("label", "Prometheus label to use as timeline title").String()
@@ -328,7 +328,7 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 
 		router := route.New()
 		bucketUI := ui.NewBucketUI(logger, *label)
-		bucketUI.Register(router.WithPrefix(*externalPrefix), extpromhttp.NewInstrumentationMiddleware(reg))
+		bucketUI.Register(router.WithPrefix(*webExternalPrefix), extpromhttp.NewInstrumentationMiddleware(reg))
 		srv.Handle("/", router)
 
 		if *interval < 5*time.Minute {
