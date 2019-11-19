@@ -98,37 +98,44 @@ usage: thanos bucket web [<flags>]
 Web interface for remote storage bucket
 
 Flags:
-  -h, --help                  Show context-sensitive help (also try --help-long
-                              and --help-man).
-      --version               Show application version.
-      --log.level=info        Log filtering level.
-      --log.format=logfmt     Log format to use.
-      --tracing.config-file=<file-path>
-                              Path to YAML file with tracing configuration. See
-                              format details:
-                              https://thanos.io/tracing.md/#configuration
-      --tracing.config=<content>
-                              Alternative to 'tracing.config-file' flag (lower
-                              priority). Content of YAML file with tracing
-                              configuration. See format details:
-                              https://thanos.io/tracing.md/#configuration
-      --objstore.config-file=<file-path>
-                              Path to YAML file that contains object store
-                              configuration. See format details:
-                              https://thanos.io/storage.md/#configuration
-      --objstore.config=<content>
-                              Alternative to 'objstore.config-file' flag (lower
-                              priority). Content of YAML file that contains
-                              object store configuration. See format details:
-                              https://thanos.io/storage.md/#configuration
-      --http-address="0.0.0.0:10902"
-                              Listen host:port for HTTP endpoints.
-      --http-grace-period=2m  Time to wait after an interrupt received for HTTP
-                              Server.
-      --refresh=30m           Refresh interval to download metadata from remote
-                              storage
-      --timeout=5m            Timeout to download metadata from remote storage
-      --label=LABEL           Prometheus label to use as timeline title
+  -h, --help                    Show context-sensitive help (also try
+                                --help-long and --help-man).
+      --version                 Show application version.
+      --log.level=info          Log filtering level.
+      --log.format=logfmt       Log format to use.
+      --tracing.config-file=<file-path>  
+                                Path to YAML file with tracing configuration.
+                                See format details:
+                                https://thanos.io/tracing.md/#configuration
+      --tracing.config=<content>  
+                                Alternative to 'tracing.config-file' flag (lower
+                                priority). Content of YAML file with tracing
+                                configuration. See format details:
+                                https://thanos.io/tracing.md/#configuration
+      --objstore.config-file=<file-path>  
+                                Path to YAML file that contains object store
+                                configuration. See format details:
+                                https://thanos.io/storage.md/#configuration
+      --objstore.config=<content>  
+                                Alternative to 'objstore.config-file' flag
+                                (lower priority). Content of YAML file that
+                                contains object store configuration. See format
+                                details:
+                                https://thanos.io/storage.md/#configuration
+      --http-address="0.0.0.0:10902"  
+                                Listen host:port for HTTP endpoints.
+      --http-grace-period=2m    Time to wait after an interrupt received for
+                                HTTP Server.
+      --refresh=30m             Refresh interval to download metadata from
+                                remote storage
+      --timeout=5m              Timeout to download metadata from remote storage
+      --label=LABEL             Prometheus label to use as timeline title
+      --web.external-prefix=""  Static prefix for all HTML links and redirect
+                                URLs in the UI query web interface. Actual
+                                endpoints are still served on / or the
+                                web.route-prefix. This allows thanos UI to be
+                                served behind a reverse proxy that strips a URL
+                                sub-path.
 
 ```
 
