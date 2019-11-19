@@ -1,0 +1,1 @@
+(import 'mixin.libsonnet').prometheusRules

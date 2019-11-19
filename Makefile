@@ -41,6 +41,17 @@ GOLANGCILINT         ?= $(GOBIN)/golangci-lint-$(GOLANGCILINT_VERSION)
 MISSPELL_VERSION     ?= c0b55c8239520f6b5aa15a0207ca8b28027ba49e
 MISSPELL             ?= $(GOBIN)/misspell-$(MISSPELL_VERSION)
 
+GOJSONTOYAML_VERSION    ?= e8bd32d46b3d764bef60f12b3bada1c132c4be55
+GOJSONTOYAML            ?= $(GOBIN)/gojsontoyaml-$(GOJSONTOYAML_VERSION)
+# v0.14.0
+JSONNET_VERSION         ?= fbde25be2182caa4345b03f1532450911ac7d1f3
+JSONNET                 ?= $(GOBIN)/jsonnet-$(JSONNET_VERSION)
+JSONNET_BUNDLER_VERSION ?= d7829f6c7e632e954c0e5db8b3eece8f111f9461
+JSONNET_BUNDLER         ?= $(GOBIN)/jsonnet-bundler-$(JSONNET_BUNDLER_VERSION)
+# Prometheus v2.14.0
+PROMTOOL_VERSION        ?= edeb7a44cbf745f1d8be4ea6f215e79e651bfe19
+PROMTOOL                ?= $(GOBIN)/promtool-$(PROMTOOL_VERSION)
+
 WEB_DIR           ?= website
 WEBSITE_BASE_URL  ?= https://thanos.io
 PUBLIC_DIR        ?= $(WEB_DIR)/public
@@ -282,6 +293,66 @@ web-serve: web-pre-process $(HUGO)
 	@echo ">> serving documentation website"
 	@cd $(WEB_DIR) && $(HUGO) --config hugo.yaml -v server
 
+JSONNET_CONTAINER_CMD:=docker run --rm \
+		-u="$(shell id -u):$(shell id -g)" \
+		-v "$(shell go env GOCACHE):/.cache/go-build" \
+		-v "$(PWD):/go/src/github.com/thanos-io/thanos:Z" \
+		-w "/go/src/github.com/thanos-io/thanos" \
+		-e USER=deadbeef \
+		-e GO111MODULE=on \
+		quay.io/coreos/jsonnet-ci
+
+.PHONY: mixin-generate-in-container
+mixin-generate-in-container:
+	@echo ">> Compiling and generating thanos-mixin"
+	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) jsonnet-vendor
+	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) jsonnet-format
+	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) examples
+
+.PHONY: examples
+examples: examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards
+
+examples/dashboards: $(JSONNET) jsonnet/thanos-mixin/mixin.libsonnet jsonnet/thanos-mixin/config.libsonnet jsonnet/thanos-mixin/dashboards/*
+	rm -rf examples/dashboards/*.json
+	-mkdir -p examples/dashboards/
+	$(JSONNET) -J jsonnet/vendor -m examples/dashboards jsonnet/thanos-mixin/dashboards.jsonnet
+
+examples/alerts/alerts.yaml: $(JSONNET) $(GOJSONTOYAML) jsonnet/thanos-mixin/mixin.libsonnet jsonnet/thanos-mixin/config.libsonnet jsonnet/thanos-mixin/alerts/*
+	$(JSONNET) jsonnet/thanos-mixin/alerts.jsonnet | $(GOJSONTOYAML) > $@
+
+examples/alerts/rules.yaml: $(JSONNET) $(GOJSONTOYAML) jsonnet/thanos-mixin/mixin.libsonnet jsonnet/thanos-mixin/config.libsonnet jsonnet/thanos-mixin/rules/*
+	$(JSONNET) jsonnet/thanos-mixin/rules.jsonnet | $(GOJSONTOYAML) > $@
+
+.PHONY: jsonnet-vendor
+jsonnet-vendor: $(JSONNET_BUNDLER) jsonnetfile.json jsonnetfile.lock.json
+	rm -rf jsonnet/vendor
+	$(JSONNET_BUNDLER) install --jsonnetpkg-home="jsonnet/vendor"
+
+JSONNET_FMT := jsonnetfmt -n 2 --max-blank-lines 2 --string-style s --comment-style s
+
+.PHONY: jsonnet-format
+jsonnet-format:
+	find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
+		xargs -n 1 -- $(JSONNET_FMT) -i
+
+.PHONY: jsonnet-format-in-container
+jsonnet-format-in-container:
+	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) jsonnet-format
+
+.PHONY: rules-lint
+rules-lint: $(PROMTOOL) examples/alerts/alerts.yaml examples/alerts/rules.yaml
+	$(PROMTOOL) check rules examples/alerts/alerts.yaml examples/alerts/rules.yaml
+
+.PHONY: alerts-test
+alerts-test: rules-lint
+	$(PROMTOOL) test rules examples/alerts/tests.yaml
+
+.PHONY: examples-clean
+examples-clean:
+	rm -f examples/alerts/alerts.yaml
+	rm -f examples/alerts/rules.yaml
+	rm -f examples/dashboards/*.json
+
 # non-phony targets
 $(EMBEDMD):
 	$(call fetch_go_bin_version,github.com/campoy/embedmd,$(EMBEDMD_VERSION))
@@ -325,3 +396,15 @@ $(PROTOC):
 	@echo ">> installing protoc@${PROTOC_VERSION}"
 	@mv -- "$(TMP_GOPATH)/bin/protoc" "$(GOBIN)/protoc-$(PROTOC_VERSION)"
 	@echo ">> produced $(GOBIN)/protoc-$(PROTOC_VERSION)"
+
+$(JSONNET):
+	$(call fetch_go_bin_version,github.com/google/go-jsonnet/cmd/jsonnet,$(JSONNET_VERSION))
+
+$(GOJSONTOYAML):
+	$(call fetch_go_bin_version,github.com/brancz/gojsontoyaml,$(GOJSONTOYAML_VERSION))
+
+$(JSONNET_BUNDLER):
+	$(call fetch_go_bin_version,github.com/jsonnet-bundler/jsonnet-bundler,$(JSONNET_BUNDLER_VERSION))
+
+$(PROMTOOL):
+	$(call fetch_go_bin_version,github.com/prometheus/prometheus/cmd/promtool,$(PROMTOOL_VERSION))
