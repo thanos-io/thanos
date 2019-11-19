@@ -33,7 +33,6 @@ const (
 	BOS        ObjProvider = "BOS"
 	COS        ObjProvider = "COS"
 	ALIYUNOSS  ObjProvider = "ALIYUNOSS"
-	BOS   ObjProvider = "BOS"
 )
 
 type BucketConfig struct {
