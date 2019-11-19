@@ -327,7 +327,12 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 		)
 
 		router := route.New()
-		bucketUI := ui.NewBucketUI(logger, *label)
+
+		flagsMap := map[string]string{
+			"web.external-prefix": *webExternalPrefix,
+		}
+
+		bucketUI := ui.NewBucketUI(logger, *label, flagsMap)
 		bucketUI.Register(router.WithPrefix(*webExternalPrefix), extpromhttp.NewInstrumentationMiddleware(reg))
 		srv.Handle("/", router)
 
