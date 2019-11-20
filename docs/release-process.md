@@ -30,7 +30,7 @@ Release shepherd responsibilities:
 
 | Release   | Time of first RC         | Shepherd (Github handle) |
 |-----------|--------------------------|--------------------------|
-| v0.10.0   | (planned) 8,01,2019      | TBD                      |
+| v0.10.0   | (planned) 8.01.2019      | TBD                      |
 | v0.9.0    | (planned) 21.11.2019     | `@bwplotka`              |
 | v0.8.0    | (planned) 9.10.2019      | `@bwplotka`              |
 | v0.7.0    | (planned) 28.08.2019     | `@domgreen`              |
