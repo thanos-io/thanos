@@ -567,13 +567,7 @@ func runRule(
 		return err
 	}
 
-	uploads := true
-	if len(confContentYaml) == 0 {
-		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
-		uploads = false
-	}
-
-	if uploads {
+	if len(confContentYaml) > 0 {
 		// The background shipper continuously scans the data directory and uploads
 		// new blocks to Google Cloud Storage or an S3-compatible storage service.
 		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Rule.String())
@@ -604,6 +598,8 @@ func runRule(
 		}, func(error) {
 			cancel()
 		})
+	} else {
+		level.Info(logger).Log("msg", "no supported bucket was configured, uploads will be disabled")
 	}
 
 	level.Info(logger).Log("msg", "starting rule node")
@@ -727,7 +723,7 @@ func removeDuplicateQueryAddrs(logger log.Logger, duplicatedQueriers prometheus.
 	set := make(map[string]struct{})
 	for _, addr := range addrs {
 		if _, ok := set[addr]; ok {
-			level.Warn(logger).Log("msg", "Duplicate query address is provided - %v", addr)
+			level.Warn(logger).Log("msg", "duplicate query address is provided - %v", addr)
 			duplicatedQueriers.Inc()
 		}
 		set[addr] = struct{}{}
