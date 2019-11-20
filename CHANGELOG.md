@@ -21,7 +21,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#1712](https://github.com/thanos-io/thanos/pull/1712) Rename flag on bucket web component from `--listen` to `--http-address` to match other components.
 - [#1733](https://github.com/thanos-io/thanos/pull/1733) New metric `thanos_compactor_iterations_total` on Thanos Compactor which shows the number of successful iterations.
 - [#1758](https://github.com/thanos-io/thanos/pull/1758) `thanos bucket web` now supports `--web.external-prefix` for proxying on a subpath.
-- [#1762](https://github.com/thanos-io/thanos/pull/1762) Add `--web.prefix-header` flags to allow for bucket UI to be accessible behind a reverse proxy.
+- [#1770](https://github.com/thanos-io/thanos/pull/1770) Add `--web.prefix-header` flags to allow for bucket UI to be accessible behind a reverse proxy.
 
 ### Fixed
 
@@ -29,7 +29,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#1669](https://github.com/thanos-io/thanos/pull/1669) Fixed store sharding. Now it does not load excluded meta.jsons and load/fetch index-cache.json files.
 - [#1670](https://github.com/thanos-io/thanos/pull/1670) Fixed un-ordered blocks upload. Sidecar now uploads the oldest blocks first.
 - [#1568](https://github.com/thanos-io/thanos/pull/1709) Thanos Store now retains the first raw value of a chunk during downsampling to avoid losing some counter resets that occur on an aggregation boundary.
-- [#1762](https://github.com/thanos-io/thanos/pull/1762) Fix `--web.external-prefix` 404s for static resources.
+- [#1770](https://github.com/thanos-io/thanos/pull/1770) Fix `--web.external-prefix` 404s for static resources.
 
 ### Changed
 
