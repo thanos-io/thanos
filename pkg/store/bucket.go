@@ -1112,6 +1112,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				return nil
 			}()
 			if err != nil {
+				s.mtx.RUnlock()
 				return err
 			}
 			// TODO(ppanyukov): remove instrumentation - END
