@@ -118,7 +118,7 @@ Flags:
                                 https://thanos.io/storage.md/#configuration
       --objstore.config=<content>
                                 Alternative to 'objstore.config-file' flag
-                                (lower priority). Content of YAML file tha
+                                (lower priority). Content of YAML file that
                                 contains object store configuration. See format
                                 details:
                                 https://thanos.io/storage.md/#configuration
@@ -130,7 +130,7 @@ Flags:
                                 URLs in the bucket web UI interface. Actual
                                 endpoints are still served on / or the
                                 web.route-prefix. This allows thanos bucket web
-                                UI to be served behind a reverse proxy tha
+                                UI to be served behind a reverse proxy that
                                 strips a URL sub-path.
       --web.prefix-header=""    Name of HTTP request header used for dynamic
                                 prefixing of UI links and redirects. This option
