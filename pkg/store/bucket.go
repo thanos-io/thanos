@@ -22,7 +22,6 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
-	"github.com/ppanyukov/go-dump/dump"
 	"github.com/prometheus/client_golang/prometheus"
 	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
@@ -646,26 +645,6 @@ func (s *bucketSeriesSet) Err() error {
 	return s.err
 }
 
-// TODO(ppanyukov): remove instrumentation
-var sgBlockSeriesCallCount = int64(0)
-
-func instrumentSGBlockSeries() func() {
-	//thisCallNumber := atomic.AddInt64(&sgBlockSeriesCallCount, 1)
-	//dump.WriteHeapDump(fmt.Sprintf("heap-sg-blockSeries-%d-before", thisCallNumber))
-	memProf := dump.NewMemProf("sg-blockSeries")
-	memStats := dump.NewMemStats("sg-blockSeries")
-
-	return func() {
-		memStats.PrintDiff()
-		memProf.PrintDiff()
-		//dump.WriteHeapDump(fmt.Sprintf("heap-sg-blockSeries-%d-after", thisCallNumber))
-	}
-}
-
-// TODO(ppanyukov): remove instrumentation - END
-
-var blockSeriesAddSizeCounter = int64(0)
-
 func blockSeries(
 	ctx context.Context,
 	ulid ulid.ULID,
@@ -675,24 +654,21 @@ func blockSeries(
 	matchers []labels.Matcher,
 	req *storepb.SeriesRequest,
 	samplesLimiter *Limiter,
+	logger log.Logger,
 	queryTotalSizeRef *int64,
 ) (storepb.SeriesSet, *queryStats, error) {
 	queryLocalSize := int64(0)
 	queryTotalSize := atomic.LoadInt64(queryTotalSizeRef)
 
 	defer func() {
-		fmt.Printf("queryLocalSize: %.2fMB\n", float64(queryLocalSize)/float64(1000000))
+		totalSizeMsg := fmt.Sprintf("%.2fMB\n", float64(queryTotalSize)/float64(1000000))
+		localSizeMsg := fmt.Sprintf("%.2fMB\n", float64(queryLocalSize)/float64(1000000))
+		_ = level.Debug(logger).Log("QueryTotalSize", totalSizeMsg, "QueryLocalSize", localSizeMsg)
 	}()
-
-	// TODO(ppanyukov): remove instrumentation
-	instrumentEnd := instrumentSGBlockSeries()
-	defer instrumentEnd()
-	// TODO(ppanyukov): remove instrumentation - END
 
 	addSize := func(n int64) {
 		queryLocalSize += n
 		queryTotalSize = atomic.AddInt64(queryTotalSizeRef, n)
-		atomic.AddInt64(&blockSeriesAddSizeCounter, 1)
 	}
 
 	checkLimit := func() error {
@@ -984,33 +960,12 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt, maxResolutionMill
 	level.Debug(logger).Log("msg", "Blocks source resolutions", "blocks", len(bs), "Maximum Resolution", maxResolutionMillis, "mint", mint, "maxt", maxt, "lset", lset.String(), "spans", strings.Join(parts, "\n"))
 }
 
-// TODO(ppanyukov): remove instrumentation
-var sgSeriesCallCount = int64(0)
-
-func instrumentSGSeries() func() {
-	//thisCallNumber := atomic.AddInt64(&sgSeriesCallCount, 1)
-	//dump.WriteHeapDump(fmt.Sprintf("heap-sg-Series-%d-before", thisCallNumber))
-	memProf := dump.NewMemProf("sg-Series")
-	memStats := dump.NewMemStats("sg-Series")
-
-	return func() {
-		memStats.PrintDiff()
-		memProf.PrintDiff()
-		//dump.WriteHeapDump(fmt.Sprintf("heap-sg-Series-%d-after", thisCallNumber))
-	}
-}
-
-// TODO(ppanyukov): remove instrumentation - END
-
 // Series implements the storepb.StoreServer interface.
 func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) (err error) {
 	queryTotalSize := int64(0)
 	defer func() {
-		fmt.Printf("queryTotalSize: %.2fMB\n", float64(queryTotalSize)/float64(1000000))
-	}()
-
-	defer func() {
-		fmt.Printf("ZZZ blockSeriesAddSizeCounter: %d\n", blockSeriesAddSizeCounter)
+		totalSizeMsg := fmt.Sprintf("%.2fMB\n", float64(queryTotalSize)/float64(1000000))
+		_ = level.Debug(s.logger).Log("QueryTotalSize", totalSizeMsg)
 	}()
 
 	{
@@ -1039,10 +994,6 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 
 	s.mtx.RLock()
 
-	// TODO(ppanyukov): remove instrumentation
-	instrumentEnd := instrumentSGSeries()
-	// TODO(ppanyukov): remove instrumentation - END
-
 	for _, bs := range s.blockSets {
 		blockMatchers, ok := bs.labelMatchers(matchers...)
 		if !ok {
@@ -1067,29 +1018,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "series block")
 			defer runutil.CloseWithLogOnErr(s.logger, chunkr, "series block")
 
-			// TODO(ppanyukov): remove instrumentation
-			//g.Go(func() error {
-			//	part, pstats, err := blockSeries(ctx,
-			//		b.meta.ULID,
-			//		b.meta.Thanos.Labels,
-			//		indexr,
-			//		chunkr,
-			//		blockMatchers,
-			//		req,
-			//		s.samplesLimiter,
-			//	)
-			//	if err != nil {
-			//		return errors.Wrapf(err, "fetch series for block %s", b.meta.ULID)
-			//	}
-			//
-			//	mtx.Lock()
-			//	res = append(res, part)
-			//	stats = stats.merge(pstats)
-			//	mtx.Unlock()
-			//
-			//	return nil
-			//})
-			err := func() error {
+			g.Go(func() error {
 				part, pstats, err := blockSeries(ctx,
 					b.meta.ULID,
 					b.meta.Thanos.Labels,
@@ -1098,6 +1027,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 					blockMatchers,
 					req,
 					s.samplesLimiter,
+					s.logger,
 					&queryTotalSize,
 				)
 				if err != nil {
@@ -1110,18 +1040,9 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 				mtx.Unlock()
 
 				return nil
-			}()
-			if err != nil {
-				s.mtx.RUnlock()
-				return err
-			}
-			// TODO(ppanyukov): remove instrumentation - END
+			})
 		}
 	}
-
-	// TODO(ppanyukov): remove instrumentation
-	instrumentEnd()
-	// TODO(ppanyukov): remove instrumentation - END
 
 	s.mtx.RUnlock()
 

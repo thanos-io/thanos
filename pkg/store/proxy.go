@@ -17,7 +17,6 @@ import (
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"github.com/ppanyukov/go-dump/dump"
 	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/limit"
@@ -182,36 +181,14 @@ func (s ctxRespSender) send(r *storepb.SeriesResponse) {
 	}
 }
 
-// TODO(ppanyukov): remove instrumentation
-var qSeriesCallCount = int64(0)
-
-func instrumentQSeries() func() {
-	//thisCallNumber := atomic.AddInt64(&qSeriesCallCount, 1)
-	//dump.WriteHeapDump(fmt.Sprintf("heap-q-Series-%d-before", thisCallNumber))
-	memProf := dump.NewMemProf("q-Series")
-	memStats := dump.NewMemStats("q-Series")
-
-	return func() {
-		memStats.PrintDiff()
-		memProf.PrintDiff()
-		//dump.WriteHeapDump(fmt.Sprintf("heap-q-Series-%d-after", thisCallNumber))
-	}
-}
-
-// TODO(ppanyukov): remove instrumentation - END
-
 // Series returns all series for a requested time range and label matcher. Requested series are taken from other
 // stores and proxied to RPC client. NOTE: Resulted data are not trimmed exactly to min and max time range.
 func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	queryTotalSize := int64(0)
 	defer func() {
-		fmt.Printf("queryTotalSize: %.2fMB\n", float64(queryTotalSize)/float64(1000000))
+		totalSizeMsg := fmt.Sprintf("%.2fMB\n", float64(queryTotalSize)/float64(1000000))
+		_ = level.Debug(s.logger).Log("QueryTotalSize", totalSizeMsg)
 	}()
-
-	// TODO(ppanyukov): remove instrumentation
-	instrumentEnd := instrumentQSeries()
-	defer instrumentEnd()
-	// TODO(ppanyukov): remove instrumentation - END
 
 	match, newMatchers, err := matchesExternalLabels(r.Matchers, s.selectorLabels)
 	if err != nil {
@@ -381,7 +358,9 @@ func startStreamSeriesSet(
 		queryTotalSize := atomic.LoadInt64(queryTotalSizeRef)
 
 		defer func() {
-			fmt.Printf("queryLocalSize: %.2fMB\n", float64(queryLocalSize)/float64(1000000))
+			totalSizeMsg := fmt.Sprintf("%.2fMB\n", float64(queryTotalSize)/float64(1000000))
+			localSizeMsg := fmt.Sprintf("%.2fMB\n", float64(queryLocalSize)/float64(1000000))
+			_ = level.Debug(s.logger).Log("QueryTotalSize", totalSizeMsg, "QueryLocalSize", localSizeMsg)
 		}()
 
 		addSize := func(n int64) {
