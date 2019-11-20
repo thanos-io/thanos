@@ -137,7 +137,7 @@ Flags:
                                 is ignored if web.external-prefix argument is
                                 set. Security risk: enable this option only if a
                                 reverse proxy in front of thanos is resetting
-                                the header.
+                                the header. The
                                 --web.prefix-header=X-Forwarded-Prefix option
                                 can be useful, for example, if Thanos UI is
                                 served via Traefik reverse proxy with
