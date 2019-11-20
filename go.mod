@@ -99,7 +99,7 @@ require (
 	gopkg.in/fsnotify.v1 v1.4.7
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.51.0 // indirect
-	gopkg.in/yaml.v2 v2.2.5
+	gopkg.in/yaml.v2 v2.2.7
 	k8s.io/api v0.0.0-20191115095533-47f6de673b26 // indirect
 	k8s.io/apimachinery v0.0.0-20191115015347-3c7067801da2 // indirect
 	k8s.io/klog v1.0.0 // indirect
