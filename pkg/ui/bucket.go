@@ -20,7 +20,6 @@ type Bucket struct {
 	Blocks      template.JS
 	RefreshedAt time.Time
 	Err         error
-	flagsMap    map[string]string
 }
 
 func NewBucketUI(logger log.Logger, label string, flagsMap map[string]string) *Bucket {

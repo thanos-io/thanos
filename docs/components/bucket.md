@@ -57,7 +57,7 @@ Flags:
                            https://thanos.io/storage.md/#configuration
       --objstore.config=<content>  
                            Alternative to 'objstore.config-file' flag (lower
-                           priority). Content of YAML file that contains objec
+                           priority). Content of YAML file that contains object
                            store configuration. See format details:
                            https://thanos.io/storage.md/#configuration
 
@@ -119,7 +119,7 @@ Flags:
       --objstore.config=<content>  
                                 Alternative to 'objstore.config-file' flag
                                 (lower priority). Content of YAML file tha
-                                contains object store configuration. See forma
+                                contains object store configuration. See format
                                 details:
                                 https://thanos.io/storage.md/#configuration
       --http-address="0.0.0.0:10902"  
@@ -137,7 +137,7 @@ Flags:
                                 is ignored if web.external-prefix argument is
                                 set. Security risk: enable this option only if a
                                 reverse proxy in front of thanos is resetting
-                                the header. The
+                                the header.
                                 --web.prefix-header=X-Forwarded-Prefix option
                                 can be useful, for example, if Thanos UI is
                                 served via Traefik reverse proxy with
@@ -189,7 +189,7 @@ Flags:
                            https://thanos.io/storage.md/#configuration
       --objstore.config=<content>  
                            Alternative to 'objstore.config-file' flag (lower
-                           priority). Content of YAML file that contains objec
+                           priority). Content of YAML file that contains object
                            store configuration. See format details:
                            https://thanos.io/storage.md/#configuration
       --objstore-backup.config-file=<file-path>  
@@ -200,7 +200,7 @@ Flags:
       --objstore-backup.config=<content>  
                            Alternative to 'objstore-backup.config-file' flag
                            (lower priority). Content of YAML file that contains
-                           object store-backup configuration. See forma
+                           object store-backup configuration. See format
                            details: https://thanos.io/storage.md/#configuration
                            Used for repair logic to backup blocks before
                            removal.
@@ -254,7 +254,7 @@ Flags:
                            https://thanos.io/storage.md/#configuration
       --objstore.config=<content>  
                            Alternative to 'objstore.config-file' flag (lower
-                           priority). Content of YAML file that contains objec
+                           priority). Content of YAML file that contains object
                            store configuration. See format details:
                            https://thanos.io/storage.md/#configuration
   -o, --output=""          Optional format in which to print each block's
