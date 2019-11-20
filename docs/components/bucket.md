@@ -42,20 +42,20 @@ Flags:
       --version            Show application version.
       --log.level=info     Log filtering level.
       --log.format=logfmt  Log format to use.
-      --tracing.config-file=<file-path>  
+      --tracing.config-file=<file-path>
                            Path to YAML file with tracing configuration. See
                            format details:
                            https://thanos.io/tracing.md/#configuration
-      --tracing.config=<content>  
+      --tracing.config=<content>
                            Alternative to 'tracing.config-file' flag (lower
                            priority). Content of YAML file with tracing
                            configuration. See format details:
                            https://thanos.io/tracing.md/#configuration
-      --objstore.config-file=<file-path>  
+      --objstore.config-file=<file-path>
                            Path to YAML file that contains object store
                            configuration. See format details:
                            https://thanos.io/storage.md/#configuration
-      --objstore.config=<content>  
+      --objstore.config=<content>
                            Alternative to 'objstore.config-file' flag (lower
                            priority). Content of YAML file that contains object
                            store configuration. See format details:
@@ -112,21 +112,21 @@ Flags:
                                 priority). Content of YAML file with tracing
                                 configuration. See format details:
                                 https://thanos.io/tracing.md/#configuration
-      --objstore.config-file=<file-path>  
+      --objstore.config-file=<file-path>
                                 Path to YAML file that contains object store
                                 configuration. See format details:
                                 https://thanos.io/storage.md/#configuration
-      --objstore.config=<content>  
+      --objstore.config=<content>
                                 Alternative to 'objstore.config-file' flag
                                 (lower priority). Content of YAML file tha
                                 contains object store configuration. See format
                                 details:
                                 https://thanos.io/storage.md/#configuration
-      --http-address="0.0.0.0:10902"  
+      --http-address="0.0.0.0:10902"
                                 Listen host:port for HTTP endpoints.
       --http-grace-period=2m    Time to wait after an interrupt received for
                                 HTTP Server.
-      --web.external-prefix=""  Static prefix for all HTML links and redirec
+      --web.external-prefix=""  Static prefix for all HTML links and redirect
                                 URLs in the bucket web UI interface. Actual
                                 endpoints are still served on / or the
                                 web.route-prefix. This allows thanos bucket web
@@ -174,30 +174,30 @@ Flags:
       --version            Show application version.
       --log.level=info     Log filtering level.
       --log.format=logfmt  Log format to use.
-      --tracing.config-file=<file-path>  
+      --tracing.config-file=<file-path>
                            Path to YAML file with tracing configuration. See
                            format details:
                            https://thanos.io/tracing.md/#configuration
-      --tracing.config=<content>  
+      --tracing.config=<content>
                            Alternative to 'tracing.config-file' flag (lower
                            priority). Content of YAML file with tracing
                            configuration. See format details:
                            https://thanos.io/tracing.md/#configuration
-      --objstore.config-file=<file-path>  
+      --objstore.config-file=<file-path>
                            Path to YAML file that contains object store
                            configuration. See format details:
                            https://thanos.io/storage.md/#configuration
-      --objstore.config=<content>  
+      --objstore.config=<content>
                            Alternative to 'objstore.config-file' flag (lower
                            priority). Content of YAML file that contains object
                            store configuration. See format details:
                            https://thanos.io/storage.md/#configuration
-      --objstore-backup.config-file=<file-path>  
+      --objstore-backup.config-file=<file-path>
                            Path to YAML file that contains object store-backup
                            configuration. See format details:
                            https://thanos.io/storage.md/#configuration Used for
                            repair logic to backup blocks before removal.
-      --objstore-backup.config=<content>  
+      --objstore-backup.config=<content>
                            Alternative to 'objstore-backup.config-file' flag
                            (lower priority). Content of YAML file that contains
                            object store-backup configuration. See format
@@ -206,11 +206,11 @@ Flags:
                            removal.
   -r, --repair             Attempt to repair blocks for which issues were
                            detected
-  -i, --issues=index_issue... ...  
+  -i, --issues=index_issue... ...
                            Issues to verify (and optionally repair). Possible
                            values: [duplicated_compaction index_issue
                            overlapped_blocks]
-      --id-whitelist=ID-WHITELIST ...  
+      --id-whitelist=ID-WHITELIST ...
                            Block IDs to verify (and optionally repair) only. If
                            none is specified, all blocks will be verified.
                            Repeated field
@@ -239,20 +239,20 @@ Flags:
       --version            Show application version.
       --log.level=info     Log filtering level.
       --log.format=logfmt  Log format to use.
-      --tracing.config-file=<file-path>  
+      --tracing.config-file=<file-path>
                            Path to YAML file with tracing configuration. See
                            format details:
                            https://thanos.io/tracing.md/#configuration
-      --tracing.config=<content>  
+      --tracing.config=<content>
                            Alternative to 'tracing.config-file' flag (lower
                            priority). Content of YAML file with tracing
                            configuration. See format details:
                            https://thanos.io/tracing.md/#configuration
-      --objstore.config-file=<file-path>  
+      --objstore.config-file=<file-path>
                            Path to YAML file that contains object store
                            configuration. See format details:
                            https://thanos.io/storage.md/#configuration
-      --objstore.config=<content>  
+      --objstore.config=<content>
                            Alternative to 'objstore.config-file' flag (lower
                            priority). Content of YAML file that contains object
                            store configuration. See format details:
@@ -284,25 +284,25 @@ Flags:
       --version              Show application version.
       --log.level=info       Log filtering level.
       --log.format=logfmt    Log format to use.
-      --tracing.config-file=<file-path>  
+      --tracing.config-file=<file-path>
                              Path to YAML file with tracing configuration. See
                              format details:
                              https://thanos.io/tracing.md/#configuration
-      --tracing.config=<content>  
+      --tracing.config=<content>
                              Alternative to 'tracing.config-file' flag (lower
                              priority). Content of YAML file with tracing
                              configuration. See format details:
                              https://thanos.io/tracing.md/#configuration
-      --objstore.config-file=<file-path>  
+      --objstore.config-file=<file-path>
                              Path to YAML file that contains object store
                              configuration. See format details:
                              https://thanos.io/storage.md/#configuration
-      --objstore.config=<content>  
+      --objstore.config=<content>
                              Alternative to 'objstore.config-file' flag (lower
                              priority). Content of YAML file that contains
                              object store configuration. See format details:
                              https://thanos.io/storage.md/#configuration
-  -l, --selector=<name>=\"<value>\" ...  
+  -l, --selector=<name>=\"<value>\" ...
                              Selects blocks based on label, e.g. '-l
                              key1=\"value1\" -l key2=\"value2\"'. All key value
                              pairs must match.
