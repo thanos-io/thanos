@@ -13,6 +13,7 @@ import (
 // Bucket is a web UI representing state of buckets as a timeline.
 type Bucket struct {
 	*BaseUI
+	flagsMap map[string]string
 	// Unique Prometheus label that identifies each shard, used as the title. If
 	// not present, all labels are displayed externally as a legend.
 	Label       string
@@ -44,6 +45,10 @@ func (b *Bucket) Register(r *route.Router, ins extpromhttp.InstrumentationMiddle
 // Handle / of bucket UIs.
 func (b *Bucket) root(w http.ResponseWriter, r *http.Request) {
 	prefix := GetWebPrefix(b.logger, b.flagsMap, r)
+<<<<<<< HEAD
+=======
+
+>>>>>>> 146bd34e... Add externalPrefix base path.
 	b.executeTemplate(w, "bucket.html", prefix, b)
 }
 

@@ -21,6 +21,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#1712](https://github.com/thanos-io/thanos/pull/1712) Rename flag on bucket web component from `--listen` to `--http-address` to match other components.
 - [#1733](https://github.com/thanos-io/thanos/pull/1733) New metric `thanos_compactor_iterations_total` on Thanos Compactor which shows the number of successful iterations.
 - [#1758](https://github.com/thanos-io/thanos/pull/1758) `thanos bucket web` now supports `--web.external-prefix` for proxying on a subpath.
+- [#1762](https://github.com/thanos-io/thanos/pull/1762) Fix `--web.external-prefix` and add `--web.prefix-header` flags to allow for bucket UI to be accessible behind a reverse proxy.
 
 ### Fixed
 
