@@ -41,7 +41,7 @@ func NewInstrumentationMiddleware(reg prometheus.Registerer) InstrumentationMidd
 			prometheus.HistogramOpts{
 				Name:    "http_request_duration_seconds",
 				Help:    "Tracks the latencies for HTTP requests.",
-				Buckets: prometheus.ExponentialBuckets(0.001, 2, 17),
+				Buckets: []float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120},
 			},
 			[]string{"code", "handler", "method"},
 		),
