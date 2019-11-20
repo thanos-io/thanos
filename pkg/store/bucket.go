@@ -650,19 +650,21 @@ func (s *bucketSeriesSet) Err() error {
 var sgBlockSeriesCallCount = int64(0)
 
 func instrumentSGBlockSeries() func() {
-	thisCallNumber := atomic.AddInt64(&sgBlockSeriesCallCount, 1)
-	dump.WriteHeapDump(fmt.Sprintf("heap-sg-blockSeries-%d-before", thisCallNumber))
+	//thisCallNumber := atomic.AddInt64(&sgBlockSeriesCallCount, 1)
+	//dump.WriteHeapDump(fmt.Sprintf("heap-sg-blockSeries-%d-before", thisCallNumber))
 	memProf := dump.NewMemProf("sg-blockSeries")
 	memStats := dump.NewMemStats("sg-blockSeries")
 
 	return func() {
 		memStats.PrintDiff()
 		memProf.PrintDiff()
-		dump.WriteHeapDump(fmt.Sprintf("heap-sg-blockSeries-%d-after", thisCallNumber))
+		//dump.WriteHeapDump(fmt.Sprintf("heap-sg-blockSeries-%d-after", thisCallNumber))
 	}
 }
 
 // TODO(ppanyukov): remove instrumentation - END
+
+var blockSeriesAddSizeCounter = int64(0)
 
 func blockSeries(
 	ctx context.Context,
@@ -690,6 +692,7 @@ func blockSeries(
 	addSize := func(n int64) {
 		queryLocalSize += n
 		queryTotalSize = atomic.AddInt64(queryTotalSizeRef, n)
+		atomic.AddInt64(&blockSeriesAddSizeCounter, 1)
 	}
 
 	checkLimit := func() error {
@@ -758,6 +761,10 @@ func blockSeries(
 		return nil, nil, errors.Wrap(err, "preload series")
 	}
 
+	// Collect query size at a coarser level here to avoid hammering the
+	// shared total limiter with many calls.
+	querySize := int64(0)
+
 	// Transform all series into the response types and mark their relevant chunks
 	// for preloading.
 	var (
@@ -766,10 +773,6 @@ func blockSeries(
 		chks []chunks.Meta
 	)
 	for _, id := range ps {
-		// Collect query size at a coarser level of posting to avoid
-		// hammering the queryLocalLimiter with loads of calls.
-		querySize := int64(0)
-
 		if err := indexr.LoadedSeries(id, &lset, &chks); err != nil {
 			return nil, nil, errors.Wrap(err, "read series")
 		}
@@ -845,9 +848,10 @@ func blockSeries(
 			}
 		}
 
-		// limiter: check
-		{
+		// limiter: check, every 20MB or so
+		if querySize > (20 * 1000 * 1000) {
 			addSize(querySize)
+			querySize = 0
 			if err := checkLimit(); err != nil {
 				return nil, nil, err
 			}
@@ -861,8 +865,6 @@ func blockSeries(
 
 	// Transform all chunks into the response format.
 	for _, s := range res {
-		querySize := int64(0)
-
 		for i, ref := range s.refs {
 			chk, err := chunkr.Chunk(ref)
 			if err != nil {
@@ -878,13 +880,22 @@ func blockSeries(
 		}
 
 		// limit: check
-		{
+		if querySize > (20 * 1000 * 1000) {
 			addSize(querySize)
+			querySize = 0
 			if err := checkLimit(); err != nil {
 				return nil, nil, err
 			}
 		}
+	}
 
+	// last check
+	{
+		addSize(querySize)
+		querySize = 0
+		if err := checkLimit(); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	return newBucketSeriesSet(res), indexr.stats.merge(chunkr.stats), nil
@@ -977,15 +988,15 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt, maxResolutionMill
 var sgSeriesCallCount = int64(0)
 
 func instrumentSGSeries() func() {
-	thisCallNumber := atomic.AddInt64(&sgSeriesCallCount, 1)
-	dump.WriteHeapDump(fmt.Sprintf("heap-sg-Series-%d-before", thisCallNumber))
+	//thisCallNumber := atomic.AddInt64(&sgSeriesCallCount, 1)
+	//dump.WriteHeapDump(fmt.Sprintf("heap-sg-Series-%d-before", thisCallNumber))
 	memProf := dump.NewMemProf("sg-Series")
 	memStats := dump.NewMemStats("sg-Series")
 
 	return func() {
 		memStats.PrintDiff()
 		memProf.PrintDiff()
-		dump.WriteHeapDump(fmt.Sprintf("heap-sg-Series-%d-after", thisCallNumber))
+		//dump.WriteHeapDump(fmt.Sprintf("heap-sg-Series-%d-after", thisCallNumber))
 	}
 }
 
@@ -996,6 +1007,10 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	queryTotalSize := int64(0)
 	defer func() {
 		fmt.Printf("queryTotalSize: %.2fMB\n", float64(queryTotalSize)/float64(1000000))
+	}()
+
+	defer func() {
+		fmt.Printf("ZZZ blockSeriesAddSizeCounter: %d\n", blockSeriesAddSizeCounter)
 	}()
 
 	{

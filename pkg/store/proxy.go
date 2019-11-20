@@ -186,15 +186,15 @@ func (s ctxRespSender) send(r *storepb.SeriesResponse) {
 var qSeriesCallCount = int64(0)
 
 func instrumentQSeries() func() {
-	thisCallNumber := atomic.AddInt64(&qSeriesCallCount, 1)
-	dump.WriteHeapDump(fmt.Sprintf("heap-q-Series-%d-before", thisCallNumber))
+	//thisCallNumber := atomic.AddInt64(&qSeriesCallCount, 1)
+	//dump.WriteHeapDump(fmt.Sprintf("heap-q-Series-%d-before", thisCallNumber))
 	memProf := dump.NewMemProf("q-Series")
 	memStats := dump.NewMemStats("q-Series")
 
 	return func() {
 		memStats.PrintDiff()
 		memProf.PrintDiff()
-		dump.WriteHeapDump(fmt.Sprintf("heap-q-Series-%d-after", thisCallNumber))
+		//dump.WriteHeapDump(fmt.Sprintf("heap-q-Series-%d-after", thisCallNumber))
 	}
 }
 
