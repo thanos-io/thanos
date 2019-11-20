@@ -5,13 +5,11 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
-	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/tsdb/labels"
@@ -21,7 +19,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/inmem"
 	"github.com/thanos-io/thanos/pkg/objstore/objtesting"
-	"github.com/thanos-io/thanos/pkg/runutil"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -70,19 +67,11 @@ func (c *swappableCache) Series(b ulid.ULID, id uint64) ([]byte, bool) {
 }
 
 type storeSuite struct {
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
-
 	store            *BucketStore
 	minTime, maxTime int64
 	cache            *swappableCache
 
 	logger log.Logger
-}
-
-func (s *storeSuite) Close() {
-	s.cancel()
-	s.wg.Wait()
 }
 
 func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt objstore.Bucket,
@@ -142,9 +131,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	blocks, minTime, maxTime := prepareTestBlocks(t, time.Now(), 3, dir, bkt,
 		series, extLset)
 
-	ctx, cancel := context.WithCancel(context.Background())
 	s := &storeSuite{
-		cancel:  cancel,
 		logger:  log.NewLogfmtLogger(os.Stderr),
 		cache:   &swappableCache{},
 		minTime: minTime,
@@ -159,27 +146,14 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		s.store.partitioner = naivePartitioner{}
 	}
 
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-		if err := runutil.Repeat(100*time.Millisecond, ctx.Done(), func() error {
-			return store.SyncBlocks(ctx)
-		}); err != nil && ctx.Err() == nil {
-			t.Fatal(err)
-		}
-	}()
+	testutil.Ok(t, store.SyncBlocks(ctx))
 
-	rctx, rcancel := context.WithTimeout(ctx, 30*time.Second)
-	defer rcancel()
-
-	testutil.Ok(t, runutil.Retry(100*time.Millisecond, rctx.Done(), func() error {
-		if store.numBlocks() < blocks {
-			return errors.New("not all blocks loaded")
-		}
-		return nil
-	}))
-
+	if store.numBlocks() < blocks {
+		t.Fatalf("not all blocks loaded got %v, expected %v", store.numBlocks(), blocks)
+	}
 	return s
 }
 
@@ -393,7 +367,6 @@ func TestBucketStore_e2e(t *testing.T) {
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
 		s := prepareStoreWithTestBlocks(t, dir, bkt, false, 0, emptyRelabelConfig)
-		defer s.Close()
 
 		t.Log("Test with no index cache")
 		s.cache.SwapWith(noopCache{})
@@ -442,7 +415,6 @@ func TestBucketStore_ManyParts_e2e(t *testing.T) {
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
 		s := prepareStoreWithTestBlocks(t, dir, bkt, true, 0, emptyRelabelConfig)
-		defer s.Close()
 
 		indexCache, err := storecache.NewIndexCache(s.logger, nil, storecache.Opts{
 			MaxItemSizeBytes: 1e5,
