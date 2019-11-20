@@ -1,7 +1,7 @@
 module github.com/thanos-io/thanos
 
 require (
-	cloud.google.com/go v0.48.0
+	cloud.google.com/go v0.49.0
 	cloud.google.com/go/bigquery v1.3.0 // indirect
 	cloud.google.com/go/storage v1.3.0
 	github.com/Azure/azure-pipeline-go v0.2.2 // indirect
