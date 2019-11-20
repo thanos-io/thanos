@@ -316,7 +316,6 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 	interval := cmd.Flag("refresh", "Refresh interval to download metadata from remote storage").Default("30m").Duration()
 	timeout := cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").Duration()
 	label := cmd.Flag("label", "Prometheus label to use as timeline title").String()
-	webExternalPrefix := cmd.Flag("web.external-prefix", "Static prefix for all HTML links and redirect URLs in the UI query web interface. Actual endpoints are still served on / or the web.route-prefix. This allows thanos UI to be served behind a reverse proxy that strips a URL sub-path.").Default("").String()
 
 	m[name+" web"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -330,14 +329,10 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 
 		flagsMap := map[string]string{
 			"web.external-prefix": *webExternalPrefix,
+			"web.prefix-header":   *webPrefixHeaderName,
 		}
 
 		router := route.New()
-
-		flagsMap := map[string]string{
-			"web.external-prefix": *webExternalPrefix,
-			"web.prefix-header":   *webPrefixHeaderName,
-		}
 
 		bucketUI := ui.NewBucketUI(logger, *label, flagsMap)
 		bucketUI.Register(router.WithPrefix(*webExternalPrefix), extpromhttp.NewInstrumentationMiddleware(reg))
