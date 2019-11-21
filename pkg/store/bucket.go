@@ -751,25 +751,22 @@ func blockSeries(
 			refs: make([]uint64, 0, len(chks)),
 			chks: make([]storepb.AggrChunk, 0, len(chks)),
 		}
-
 		for _, l := range lset {
 			// Skip if the external labels of the block overrule the series' label.
 			// NOTE(fabxc): maybe move it to a prefixed version to still ensure uniqueness of series?
 			if extLset[l.Name] != "" {
 				continue
 			}
-			label := storepb.Label{
+			s.lset = append(s.lset, storepb.Label{
 				Name:  l.Name,
 				Value: l.Value,
-			}
-			s.lset = append(s.lset, label)
+			})
 		}
 		for ln, lv := range extLset {
-			label := storepb.Label{
+			s.lset = append(s.lset, storepb.Label{
 				Name:  ln,
 				Value: lv,
-			}
-			s.lset = append(s.lset, label)
+			})
 		}
 		sort.Slice(s.lset, func(i, j int) bool {
 			return s.lset[i].Name < s.lset[j].Name
@@ -792,14 +789,8 @@ func blockSeries(
 			})
 			s.refs = append(s.refs, meta.Ref)
 		}
-
 		if len(s.chks) > 0 {
 			res = append(res, s)
-
-			// limiter: res
-			{
-				querySizeBuffer += int64(unsafe.Sizeof(s))
-			}
 		}
 	}
 
