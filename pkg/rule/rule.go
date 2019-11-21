@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -21,7 +21,12 @@ const tmpRuleDir = ".tmp-rules"
 
 type Group struct {
 	*rules.Group
+	originalFile            string
 	PartialResponseStrategy storepb.PartialResponseStrategy
+}
+
+func (g Group) OriginalFile() string {
+	return g.originalFile
 }
 
 type AlertingRule struct {
@@ -38,21 +43,45 @@ type RuleGroup struct {
 	PartialResponseStrategy *storepb.PartialResponseStrategy
 }
 
-type Managers map[storepb.PartialResponseStrategy]*rules.Manager
+type Manager struct {
+	workDir string
+	mgrs    map[storepb.PartialResponseStrategy]*rules.Manager
 
-func (m Managers) RuleGroups() []Group {
+	mtx       sync.RWMutex
+	ruleFiles map[string]string
+}
+
+func NewManager(dataDir string) *Manager {
+	return &Manager{
+		workDir:   filepath.Join(dataDir, tmpRuleDir),
+		mgrs:      make(map[storepb.PartialResponseStrategy]*rules.Manager),
+		ruleFiles: make(map[string]string),
+	}
+}
+
+func (m *Manager) SetRuleManager(s storepb.PartialResponseStrategy, mgr *rules.Manager) {
+	m.mgrs[s] = mgr
+}
+
+func (m *Manager) RuleGroups() []Group {
+	m.mtx.RLock()
+	defer m.mtx.RUnlock()
 	var res []Group
-	for s, r := range m {
+	for s, r := range m.mgrs {
 		for _, group := range r.RuleGroups() {
-			res = append(res, Group{Group: group, PartialResponseStrategy: s})
+			res = append(res, Group{
+				Group:                   group,
+				PartialResponseStrategy: s,
+				originalFile:            m.ruleFiles[group.File()],
+			})
 		}
 	}
 	return res
 }
 
-func (m Managers) AlertingRules() []AlertingRule {
+func (m *Manager) AlertingRules() []AlertingRule {
 	var res []AlertingRule
-	for s, r := range m {
+	for s, r := range m.mgrs {
 		for _, r := range r.AlertingRules() {
 			res = append(res, AlertingRule{AlertingRule: r, PartialResponseStrategy: s})
 		}
@@ -67,12 +96,12 @@ func (r *RuleGroup) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 	errMsg := fmt.Sprintf("failed to unmarshal 'partial_response_strategy'. Possible values are %s", strings.Join(storepb.PartialResponseStrategyValues, ","))
 	if err := unmarshal(&rs); err != nil {
-		return errors.Wrapf(err, errMsg)
+		return errors.Wrap(err, errMsg)
 	}
 
 	rg := rulefmt.RuleGroup{}
 	if err := unmarshal(&rg); err != nil {
-		return errors.Wrapf(err, errMsg)
+		return errors.Wrap(err, "failed to unmarshal rulefmt.RuleGroup")
 	}
 
 	p, ok := storepb.PartialResponseStrategy_value[strings.ToUpper(rs.String)]
@@ -110,17 +139,18 @@ func (r RuleGroup) MarshalYAML() (interface{}, error) {
 
 // Update updates rules from given files to all managers we hold. We decide which groups should go where, based on
 // special field in RuleGroup file.
-func (m *Managers) Update(dataDir string, evalInterval time.Duration, files []string) error {
+func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 	var (
-		errs            = tsdberrors.MultiError{}
+		errs            tsdberrors.MultiError
 		filesByStrategy = map[storepb.PartialResponseStrategy][]string{}
+		ruleFiles       = map[string]string{}
 	)
 
-	if err := os.RemoveAll(path.Join(dataDir, tmpRuleDir)); err != nil {
-		return errors.Wrapf(err, "rm %s", path.Join(dataDir, tmpRuleDir))
+	if err := os.RemoveAll(m.workDir); err != nil {
+		return errors.Wrapf(err, "failed to remove %s", m.workDir)
 	}
-	if err := os.MkdirAll(path.Join(dataDir, tmpRuleDir), os.ModePerm); err != nil {
-		return errors.Wrapf(err, "mkdir %s", path.Join(dataDir, tmpRuleDir))
+	if err := os.MkdirAll(m.workDir, os.ModePerm); err != nil {
+		return errors.Wrapf(err, "failed to create %s", m.workDir)
 	}
 
 	for _, fn := range files {
@@ -132,7 +162,7 @@ func (m *Managers) Update(dataDir string, evalInterval time.Duration, files []st
 
 		var rg RuleGroups
 		if err := yaml.Unmarshal(b, &rg); err != nil {
-			errs = append(errs, err)
+			errs = append(errs, errors.Wrap(err, fn))
 			continue
 		}
 
@@ -153,33 +183,37 @@ func (m *Managers) Update(dataDir string, evalInterval time.Duration, files []st
 		for s, rg := range groupsByStrategy {
 			b, err := yaml.Marshal(rg)
 			if err != nil {
-				errs = append(errs, err)
+				errs = append(errs, errors.Wrapf(err, "%s: failed to marshal rule groups", fn))
 				continue
 			}
 
-			newFn := path.Join(dataDir, tmpRuleDir, filepath.Base(fn)+"."+s.String())
+			newFn := filepath.Join(m.workDir, filepath.Base(fn)+"."+s.String())
 			if err := ioutil.WriteFile(newFn, b, os.ModePerm); err != nil {
-				errs = append(errs, err)
+				errs = append(errs, errors.Wrap(err, newFn))
 				continue
 			}
 
 			filesByStrategy[s] = append(filesByStrategy[s], newFn)
+			ruleFiles[newFn] = fn
 		}
 	}
 
+	m.mtx.Lock()
 	for s, fs := range filesByStrategy {
-		mgr, ok := (*m)[s]
+		mgr, ok := m.mgrs[s]
 		if !ok {
-			errs = append(errs, errors.Errorf("no updater found for %v", s))
+			errs = append(errs, errors.Errorf("no manager found for %v", s))
 			continue
 		}
 		// We add external labels in `pkg/alert.Queue`.
 		// TODO(bwplotka): Investigate if we should put ext labels here or not.
 		if err := mgr.Update(evalInterval, fs, nil); err != nil {
-			errs = append(errs, err)
+			errs = append(errs, errors.Wrapf(err, "strategy %s", s))
 			continue
 		}
 	}
+	m.ruleFiles = ruleFiles
+	m.mtx.Unlock()
 
 	return errs.Err()
 }

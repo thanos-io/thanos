@@ -16,7 +16,6 @@ import (
 	"github.com/prometheus/prometheus/rules"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	thanosrule "github.com/thanos-io/thanos/pkg/rule"
-	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 type Rule struct {
@@ -24,18 +23,18 @@ type Rule struct {
 
 	flagsMap map[string]string
 
-	ruleManagers thanosrule.Managers
-	queryURL     string
-	reg          prometheus.Registerer
+	ruleManager *thanosrule.Manager
+	queryURL    string
+	reg         prometheus.Registerer
 }
 
-func NewRuleUI(logger log.Logger, reg prometheus.Registerer, ruleManagers map[storepb.PartialResponseStrategy]*rules.Manager, queryURL string, flagsMap map[string]string) *Rule {
+func NewRuleUI(logger log.Logger, reg prometheus.Registerer, ruleManager *thanosrule.Manager, queryURL string, flagsMap map[string]string) *Rule {
 	return &Rule{
-		BaseUI:       NewBaseUI(logger, "rule_menu.html", ruleTmplFuncs(queryURL)),
-		flagsMap:     flagsMap,
-		ruleManagers: ruleManagers,
-		queryURL:     queryURL,
-		reg:          reg,
+		BaseUI:      NewBaseUI(logger, "rule_menu.html", ruleTmplFuncs(queryURL)),
+		flagsMap:    flagsMap,
+		ruleManager: ruleManager,
+		queryURL:    queryURL,
+		reg:         reg,
 	}
 }
 
@@ -115,7 +114,7 @@ func ruleTmplFuncs(queryURL string) template.FuncMap {
 }
 
 func (ru *Rule) alerts(w http.ResponseWriter, r *http.Request) {
-	alerts := ru.ruleManagers.AlertingRules()
+	alerts := ru.ruleManager.AlertingRules()
 	alertsSorter := byAlertStateAndNameSorter{alerts: alerts}
 	sort.Sort(alertsSorter)
 
@@ -138,7 +137,7 @@ func (ru *Rule) rules(w http.ResponseWriter, r *http.Request) {
 	prefix := GetWebPrefix(ru.logger, ru.flagsMap, r)
 
 	// TODO(bwplotka): Update HTML to include partial response.
-	ru.executeTemplate(w, "rules.html", prefix, ru.ruleManagers)
+	ru.executeTemplate(w, "rules.html", prefix, ru.ruleManager)
 }
 
 // Root redirects / requests to /graph, taking into account the path prefix value.

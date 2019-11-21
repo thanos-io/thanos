@@ -69,7 +69,7 @@ func (api *API) rules(r *http.Request) (interface{}, []error, *qapi.ApiError) {
 	for _, grp := range api.ruleRetriever.RuleGroups() {
 		apiRuleGroup := &RuleGroup{
 			Name:                    grp.Name(),
-			File:                    grp.File(),
+			File:                    grp.OriginalFile(),
 			Interval:                grp.Interval().Seconds(),
 			Rules:                   []rule{},
 			PartialResponseStrategy: grp.PartialResponseStrategy.String(),

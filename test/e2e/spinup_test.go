@@ -10,7 +10,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"path"
+	"path/filepath"
 	"strconv"
 	"syscall"
 	"testing"
@@ -120,13 +120,13 @@ type prometheusScheduler struct {
 
 func prometheus(http address, config string) *prometheusScheduler {
 	s := &prometheusScheduler{
-		RelDir: path.Join("data", "prom", http.Port),
+		RelDir: filepath.Join("data", "prom", http.Port),
 	}
 
 	s.serverScheduler = serverScheduler{
 		HTTP: http,
 		schedule: func(workDir string) (execs Exec, e error) {
-			promDir := path.Join(workDir, s.RelDir)
+			promDir := filepath.Join(workDir, s.RelDir)
 			if err := os.MkdirAll(promDir, 0777); err != nil {
 				return nil, errors.Wrap(err, "create prom dir failed")
 			}
@@ -152,7 +152,7 @@ func sidecar(http, grpc address, prom *prometheusScheduler) *serverScheduler {
 		HTTP: http,
 		GRPC: grpc,
 		schedule: func(workDir string) (Exec, error) {
-			promDir := path.Join(workDir, prom.RelDir)
+			promDir := filepath.Join(workDir, prom.RelDir)
 			return newCmdExec(exec.Command("thanos", "sidecar",
 				"--debug.name", fmt.Sprintf("sidecar-%s", http.Port),
 				"--grpc-address", grpc.HostPort(),
@@ -174,7 +174,7 @@ func receiver(http, grpc, metric address, replicationFactor int, hashring ...rec
 		HTTP: http,
 		GRPC: grpc,
 		schedule: func(workDir string) (Exec, error) {
-			receiveDir := path.Join(workDir, "data", "receive", http.Port)
+			receiveDir := filepath.Join(workDir, "data", "receive", http.Port)
 			if err := os.MkdirAll(receiveDir, 0777); err != nil {
 				return nil, errors.Wrap(err, "create receive dir")
 			}
@@ -184,7 +184,7 @@ func receiver(http, grpc, metric address, replicationFactor int, hashring ...rec
 				return nil, errors.Wrapf(err, "generate hashring file: %v", hashring)
 			}
 
-			if err := ioutil.WriteFile(path.Join(receiveDir, "hashrings.json"), b, 0666); err != nil {
+			if err := ioutil.WriteFile(filepath.Join(receiveDir, "hashrings.json"), b, 0666); err != nil {
 				return nil, errors.Wrap(err, "creating receive config")
 			}
 
@@ -195,11 +195,11 @@ func receiver(http, grpc, metric address, replicationFactor int, hashring ...rec
 				"--http-address", metric.HostPort(),
 				"--remote-write.address", http.HostPort(),
 				"--label", fmt.Sprintf(`receive="%s"`, http.Port),
-				"--tsdb.path", path.Join(receiveDir, "tsdb"),
+				"--tsdb.path", filepath.Join(receiveDir, "tsdb"),
 				"--log.level", "debug",
 				"--receive.replication-factor", strconv.Itoa(replicationFactor),
 				"--receive.local-endpoint", remoteWriteEndpoint(http),
-				"--receive.hashrings-file", path.Join(receiveDir, "hashrings.json"),
+				"--receive.hashrings-file", filepath.Join(receiveDir, "hashrings.json"),
 				"--receive.hashrings-file-refresh-interval", "5s")), nil
 		},
 	}
@@ -226,7 +226,7 @@ func querier(http, grpc address, storeAddresses []address, fileSDStoreAddresses 
 			}
 
 			if len(fileSDStoreAddresses) > 0 {
-				queryFileSDDir := path.Join(workDir, "data", "querier", http.Port)
+				queryFileSDDir := filepath.Join(workDir, "data", "querier", http.Port)
 				if err := os.MkdirAll(queryFileSDDir, 0777); err != nil {
 					return nil, errors.Wrap(err, "create query dir failed")
 				}
@@ -236,7 +236,7 @@ func querier(http, grpc address, storeAddresses []address, fileSDStoreAddresses 
 				}
 
 				args = append(args,
-					"--store.sd-files", path.Join(queryFileSDDir, "filesd.json"),
+					"--store.sd-files", filepath.Join(queryFileSDDir, "filesd.json"),
 					"--store.sd-interval", "5s",
 				)
 			}
@@ -251,7 +251,7 @@ func storeGateway(http, grpc address, bucketConfig []byte, relabelConfig []byte)
 		HTTP: http,
 		GRPC: grpc,
 		schedule: func(workDir string) (Exec, error) {
-			dbDir := path.Join(workDir, "data", "store-gateway", http.Port)
+			dbDir := filepath.Join(workDir, "data", "store-gateway", http.Port)
 
 			if err := os.MkdirAll(dbDir, 0777); err != nil {
 				return nil, errors.Wrap(err, "creating store gateway dir failed")
@@ -278,7 +278,7 @@ func alertManager(http address) *serverScheduler {
 	return &serverScheduler{
 		HTTP: http,
 		schedule: func(workDir string) (Exec, error) {
-			dir := path.Join(workDir, "data", "alertmanager", http.Port)
+			dir := filepath.Join(workDir, "data", "alertmanager", http.Port)
 
 			if err := os.MkdirAll(dir, 0777); err != nil {
 				return nil, errors.Wrap(err, "creating alertmanager dir failed")
@@ -304,35 +304,17 @@ receivers:
 	}
 }
 
-func rule(http, grpc address, rules []string, am address, queryAddresses []address, queryFileSDAddresses []address) *serverScheduler {
-	return ruleWithDir(http, grpc, "", rules, am, queryAddresses, queryFileSDAddresses)
-}
-
-func ruleWithDir(http, grpc address, dir string, rules []string, am address, queryAddresses []address, queryFileSDAddresses []address) *serverScheduler {
+func rule(http, grpc address, ruleDir string, am address, queryAddresses []address, queryFileSDAddresses []address) *serverScheduler {
 	return &serverScheduler{
 		HTTP: http,
 		GRPC: grpc,
 		schedule: func(workDir string) (Exec, error) {
-			ruleDir := path.Join(workDir, "data", "rule", http.Port)
-			if dir != "" {
-				ruleDir = dir
-			}
-
-			if err := os.MkdirAll(ruleDir, 0777); err != nil {
-				return nil, errors.Wrap(err, "creating ruler dir")
-			}
-			for i, rule := range rules {
-				if err := ioutil.WriteFile(path.Join(ruleDir, fmt.Sprintf("/rules-%d.yaml", i)), []byte(rule), 0666); err != nil {
-					return nil, errors.Wrapf(err, "writing rule %s", path.Join(ruleDir, fmt.Sprintf("/rules-%d.yaml", i)))
-				}
-			}
-
 			args := []string{
 				"rule",
 				"--debug.name", fmt.Sprintf("rule-%s", http.Port),
 				"--label", fmt.Sprintf(`replica="%s"`, http.Port),
-				"--data-dir", path.Join(ruleDir, "data"),
-				"--rule-file", path.Join(ruleDir, "*.yaml"),
+				"--data-dir", filepath.Join(workDir, "data"),
+				"--rule-file", filepath.Join(ruleDir, "*.yaml"),
 				"--eval-interval", "1s",
 				"--alertmanagers.url", am.URL(),
 				"--grpc-address", grpc.HostPort(),
@@ -347,10 +329,10 @@ func ruleWithDir(http, grpc address, dir string, rules []string, am address, que
 			}
 
 			if len(queryFileSDAddresses) > 0 {
-				if err := ioutil.WriteFile(path.Join(ruleDir, "filesd.json"), []byte(generateFileSD(queryFileSDAddresses)), 0666); err != nil {
+				if err := ioutil.WriteFile(filepath.Join(workDir, "filesd.json"), []byte(generateFileSD(queryFileSDAddresses)), 0666); err != nil {
 					return nil, errors.Wrap(err, "creating ruler filesd config")
 				}
-				args = append(args, "--query.sd-files", path.Join(ruleDir, "filesd.json"))
+				args = append(args, "--query.sd-files", filepath.Join(workDir, "filesd.json"))
 			}
 			return newCmdExec(exec.Command("thanos", args...)), nil
 		},
@@ -430,7 +412,7 @@ func minio(http address, config s3.Config) *serverScheduler {
 	return &serverScheduler{
 		HTTP: http,
 		schedule: func(workDir string) (Exec, error) {
-			dbDir := path.Join(workDir, "data", "minio", http.Port)
+			dbDir := filepath.Join(workDir, "data", "minio", http.Port)
 			if err := os.MkdirAll(dbDir, 0777); err != nil {
 				return nil, errors.Wrap(err, "creating minio dir failed")
 			}

@@ -291,7 +291,7 @@ func runRule(
 	var (
 		alertmgrs = newAlertmanagerSet(logger, alertmgrURLs, dns.ResolverType(dnsSDResolver))
 		alertQ    = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(lset), alertExcludeLabels)
-		ruleMgrs  = thanosrule.Managers{}
+		ruleMgr   = thanosrule.NewManager(dataDir)
 	)
 	{
 		notify := func(ctx context.Context, expr string, alerts ...*rules.Alert) {
@@ -338,15 +338,16 @@ func runRule(
 			opts.Context = ctx
 			opts.QueryFunc = queryFunc(logger, dnsProvider, duplicatedQuery, ruleEvalWarnings, s)
 
-			ruleMgrs[s] = rules.NewManager(&opts)
+			mgr := rules.NewManager(&opts)
+			ruleMgr.SetRuleManager(s, mgr)
 			g.Add(func() error {
-				ruleMgrs[s].Run()
+				mgr.Run()
 				<-ctx.Done()
 
 				return nil
 			}, func(error) {
 				cancel()
-				ruleMgrs[s].Stop()
+				mgr.Stop()
 			})
 		}
 	}
@@ -447,7 +448,7 @@ func runRule(
 
 				level.Info(logger).Log("msg", "reload rule files", "numFiles", len(files))
 
-				if err := ruleMgrs.Update(dataDir, evalInterval, files); err != nil {
+				if err := ruleMgr.Update(evalInterval, files); err != nil {
 					configSuccess.Set(0)
 					level.Error(logger).Log("msg", "reloading rules failed", "err", err)
 					continue
@@ -457,10 +458,8 @@ func runRule(
 				configSuccessTime.Set(float64(time.Now().UnixNano()) / 1e9)
 
 				rulesLoaded.Reset()
-				for s, mgr := range ruleMgrs {
-					for _, group := range mgr.RuleGroups() {
-						rulesLoaded.WithLabelValues(s.String(), group.File(), group.Name()).Set(float64(len(group.Rules())))
-					}
+				for _, group := range ruleMgr.RuleGroups() {
+					rulesLoaded.WithLabelValues(group.PartialResponseStrategy.String(), group.File(), group.Name()).Set(float64(len(group.Rules())))
 				}
 
 			}
@@ -547,9 +546,9 @@ func runRule(
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 
-		ui.NewRuleUI(logger, reg, ruleMgrs, alertQueryURL.String(), flagsMap).Register(router.WithPrefix(webRoutePrefix), ins)
+		ui.NewRuleUI(logger, reg, ruleMgr, alertQueryURL.String(), flagsMap).Register(router.WithPrefix(webRoutePrefix), ins)
 
-		api := v1.NewAPI(logger, reg, ruleMgrs)
+		api := v1.NewAPI(logger, reg, ruleMgr)
 		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
 
 		// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
