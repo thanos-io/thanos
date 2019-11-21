@@ -84,7 +84,7 @@ func (api *API) rules(r *http.Request) (interface{}, []error, *qapi.ApiError) {
 			}
 
 			switch rule := r.(type) {
-			case thanosrule.AlertingRule:
+			case *rules.AlertingRule:
 				enrichedRule = alertingRule{
 					Name:                    rule.Name(),
 					Query:                   rule.Query().String(),
@@ -95,7 +95,7 @@ func (api *API) rules(r *http.Request) (interface{}, []error, *qapi.ApiError) {
 					Health:                  rule.Health(),
 					LastError:               lastError,
 					Type:                    "alerting",
-					PartialResponseStrategy: rule.PartialResponseStrategy.String(),
+					PartialResponseStrategy: grp.PartialResponseStrategy.String(),
 				}
 			case *rules.RecordingRule:
 				enrichedRule = recordingRule{
@@ -107,7 +107,7 @@ func (api *API) rules(r *http.Request) (interface{}, []error, *qapi.ApiError) {
 					Type:      "recording",
 				}
 			default:
-				err := fmt.Errorf("failed to assert type of rule '%v'", rule.Name())
+				err := fmt.Errorf("rule %q: unsupported type %T", r.Name(), rule)
 				return nil, nil, &qapi.ApiError{Typ: qapi.ErrorInternal, Err: err}
 			}
 
