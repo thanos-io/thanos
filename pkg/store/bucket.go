@@ -912,6 +912,7 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt, maxResolutionMill
 
 // Series implements the storepb.StoreServer interface.
 func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) (err error) {
+	limit.LogInfo(s.logger)
 	queryTotalSize := int64(0)
 	defer func() {
 		totalSizeMsg := fmt.Sprintf("%.2fMB", float64(queryTotalSize)/float64(1000000))

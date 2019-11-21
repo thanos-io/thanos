@@ -184,6 +184,7 @@ func (s ctxRespSender) send(r *storepb.SeriesResponse) {
 // Series returns all series for a requested time range and label matcher. Requested series are taken from other
 // stores and proxied to RPC client. NOTE: Resulted data are not trimmed exactly to min and max time range.
 func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+	limit.LogInfo(s.logger)
 	queryTotalSize := int64(0)
 	defer func() {
 		totalSizeMsg := fmt.Sprintf("%.2fMB", float64(queryTotalSize)/float64(1000000))
