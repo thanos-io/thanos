@@ -354,6 +354,14 @@ func startStreamSeriesSet(
 
 	wg.Add(1)
 	go func() {
+		const (
+			// approximate the length of each label being about 20 chars, e.g. "k8s_app_metric0"
+			approxLabelLen = int64(10)
+
+			// approximate the size if chunks by having 120 bytes in each?
+			approxChunkLen = int64(120)
+		)
+
 		queryLocalSize := int64(0)
 		queryTotalSize := atomic.LoadInt64(queryTotalSizeRef)
 
@@ -376,27 +384,6 @@ func startStreamSeriesSet(
 			return limit.CheckQueryTotalLimit(queryTotalSize)
 		}
 
-		frameSize := func(frame *storepb.SeriesResponse) int64 {
-			size := int64(0)
-			size += int64(unsafe.Sizeof(storepb.SeriesResponse{}))
-			size += int64(len(frame.GetWarning()))
-
-			series := frame.GetSeries()
-			size += int64(unsafe.Sizeof(storepb.Series{}))
-			size += int64(len(series.Chunks)) * int64(unsafe.Sizeof(storepb.AggrChunk{}))
-			size += int64(len(series.Labels)) * int64(unsafe.Sizeof(storepb.Label{}))
-
-			// approximate the length of each label being about 20 chars, e.g. "k8s_app_metric0"
-			const approxLabelLen = int64(10)
-			size += approxLabelLen * int64(len(series.Labels))
-
-			// approximate the size if chunks by having 120 bytes in each?
-			const approxChunkLen = int64(120)
-			size += approxChunkLen * int64(len(series.Chunks))
-
-			return size
-		}
-
 		defer wg.Done()
 		defer close(s.recvCh)
 
@@ -412,8 +399,18 @@ func startStreamSeriesSet(
 				return
 			}
 
+			series := r.GetSeries()
+
+			// limiter: series size
 			if err == nil {
-				querySizeBuffer += frameSize(r)
+				querySizeBuffer += int64(unsafe.Sizeof(storepb.SeriesResponse{}))
+				querySizeBuffer += int64(len(r.GetWarning()))
+				querySizeBuffer += int64(unsafe.Sizeof(storepb.Series{}))
+				querySizeBuffer += int64(len(series.Chunks)) * int64(unsafe.Sizeof(storepb.AggrChunk{}))
+				querySizeBuffer += int64(len(series.Labels)) * int64(unsafe.Sizeof(storepb.Label{}))
+				querySizeBuffer += approxLabelLen * int64(len(series.Labels))
+				querySizeBuffer += approxChunkLen * int64(len(series.Chunks))
+
 				if querySizeBuffer > querySizeBufferSize {
 					addSize(querySizeBuffer)
 					querySizeBuffer = 0
@@ -440,7 +437,7 @@ func startStreamSeriesSet(
 			}
 
 			select {
-			case s.recvCh <- r.GetSeries():
+			case s.recvCh <- series:
 				continue
 			case <-ctx.Done():
 				// flush query size but don't check errors as we already done, it'd
