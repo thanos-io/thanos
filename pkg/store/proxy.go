@@ -187,7 +187,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 	queryTotalSize := int64(0)
 	defer func() {
 		totalSizeMsg := fmt.Sprintf("%.2fMB", float64(queryTotalSize)/float64(1000000))
-		_ = level.Debug(s.logger).Log("QueryTotalSize", totalSizeMsg)
+		_ = level.Debug(s.logger).Log("queryTotalSize", totalSizeMsg)
 	}()
 
 	match, newMatchers, err := matchesExternalLabels(r.Matchers, s.selectorLabels)
@@ -360,7 +360,7 @@ func startStreamSeriesSet(
 		defer func() {
 			totalSizeMsg := fmt.Sprintf("%.2fMB", float64(queryTotalSize)/float64(1000000))
 			localSizeMsg := fmt.Sprintf("%.2fMB", float64(queryLocalSize)/float64(1000000))
-			_ = level.Debug(s.logger).Log("QueryTotalSize", totalSizeMsg, "QueryLocalSize", localSizeMsg)
+			_ = level.Debug(s.logger).Log("queryTotalSize", totalSizeMsg, "queryLocalSize", localSizeMsg)
 		}()
 
 		addSize := func(n int64) {

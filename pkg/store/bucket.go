@@ -657,13 +657,21 @@ func blockSeries(
 	logger log.Logger,
 	queryTotalSizeRef *int64,
 ) (storepb.SeriesSet, *queryStats, error) {
+	const (
+		// approximate the length of each label being about 20 chars, e.g. "k8s_app_metric0"
+		approxLabelLen = int64(10)
+
+		// approximate the size if chunks by having 120 bytes in each?
+		approxChunkLen = int64(120)
+	)
+
 	queryLocalSize := int64(0)
-	queryTotalSize := atomic.LoadInt64(queryTotalSizeRef)
+	queryTotalSize := *queryTotalSizeRef
 
 	defer func() {
 		totalSizeMsg := fmt.Sprintf("%.2fMB", float64(queryTotalSize)/float64(1000000))
 		localSizeMsg := fmt.Sprintf("%.2fMB", float64(queryLocalSize)/float64(1000000))
-		_ = level.Debug(logger).Log("QueryTotalSize", totalSizeMsg, "QueryLocalSize", localSizeMsg)
+		_ = level.Debug(logger).Log("queryTotalSize", totalSizeMsg, "queryLocalSize", localSizeMsg)
 	}()
 
 	addSize := func(n int64) {
@@ -679,41 +687,10 @@ func blockSeries(
 		return limit.CheckQueryTotalLimit(queryTotalSize)
 	}
 
-	labelSize := func(label *storepb.Label) int64 {
-		size := int64(0)
-		size += int64(unsafe.Sizeof(*label))
-		size += int64(len(label.Name))
-		size += int64(len(label.Value))
-		return size
-	}
-
-	aggrChunkSize := func(aggrChunk *storepb.AggrChunk) int64 {
-		chunkSize := func(chunk *storepb.Chunk) int64 {
-			if chunk == nil {
-				return 0
-			}
-			size := int64(0)
-			size += int64(unsafe.Sizeof(*chunk))
-			size += int64(len(chunk.Data))
-			return size
-		}
-
-		size := int64(0)
-		size += int64(unsafe.Sizeof(*aggrChunk))
-		size += chunkSize(aggrChunk.Raw)
-		size += chunkSize(aggrChunk.Count)
-		size += chunkSize(aggrChunk.Sum)
-		size += chunkSize(aggrChunk.Min)
-		size += chunkSize(aggrChunk.Max)
-		size += chunkSize(aggrChunk.Counter)
-		return size
-	}
-
-	postingsSize := func(postings []uint64) int64 {
-		size := int64(0)
-		size += int64(unsafe.Sizeof(uint64(0))) * int64(len(postings))
-		return size
-	}
+	// Buffer query sizes and process in chunks of 20MB or so
+	// to avoid hammering cache lines with atomic increments.
+	const querySizeBufferSize = 20 * 1000 * 1000
+	querySizeBuffer := int64(0)
 
 	ps, err := indexr.ExpandedPostings(matchers)
 	if err != nil {
@@ -726,7 +703,7 @@ func blockSeries(
 
 	// limiter: postingsSize
 	{
-		addSize(postingsSize(ps))
+		querySizeBuffer += int64(unsafe.Sizeof(uint64(0))) * int64(len(ps))
 	}
 
 	// Preload all series index data.
@@ -735,11 +712,6 @@ func blockSeries(
 	if err := indexr.PreloadSeries(ps); err != nil {
 		return nil, nil, errors.Wrap(err, "preload series")
 	}
-
-	// Buffer query sizes and process in chunks of 20MB or so
-	// to avoid hammering cache lines with atomic increments.
-	const querySizeBufferSize = 20 * 1000 * 1000
-	querySizeBuffer := int64(0)
 
 	// Transform all series into the response types and mark their relevant chunks
 	// for preloading.
@@ -752,11 +724,38 @@ func blockSeries(
 		if err := indexr.LoadedSeries(id, &lset, &chks); err != nil {
 			return nil, nil, errors.Wrap(err, "read series")
 		}
+
+		// limiter: approximate calculations based on:
+		//  - number of labels * approx label size
+		//  - number of chunks * approx chunk size
+		//  - number of refs   * sizeof(uint64)
+		// These numbers correlate well with those we get from pprof heap dumps.
+		// Otherwise for more precise figures we'd need to make too many
+		// calculations in inner loops.
+		{
+			querySizeBuffer += int64(unsafe.Sizeof(storepb.Label{})) * int64(len(lset)+len(extLset))
+			querySizeBuffer += approxLabelLen * int64(len(lset)+len(extLset))
+
+			querySizeBuffer += int64(unsafe.Sizeof(storepb.AggrChunk{})) * int64(len(chks))
+			querySizeBuffer += approxChunkLen * int64(len(chks))
+
+			querySizeBuffer += int64(unsafe.Sizeof(uint64(0))) * int64(len(chks))
+
+			if querySizeBuffer > querySizeBufferSize {
+				addSize(querySizeBuffer)
+				querySizeBuffer = 0
+				if err := checkLimit(); err != nil {
+					return nil, nil, err
+				}
+			}
+		}
+
 		s := seriesEntry{
 			lset: make([]storepb.Label, 0, len(lset)+len(extLset)),
 			refs: make([]uint64, 0, len(chks)),
 			chks: make([]storepb.AggrChunk, 0, len(chks)),
 		}
+
 		for _, l := range lset {
 			// Skip if the external labels of the block overrule the series' label.
 			// NOTE(fabxc): maybe move it to a prefixed version to still ensure uniqueness of series?
@@ -768,11 +767,6 @@ func blockSeries(
 				Value: l.Value,
 			}
 			s.lset = append(s.lset, label)
-
-			// limiter: s.lset
-			{
-				querySizeBuffer += labelSize(&label)
-			}
 		}
 		for ln, lv := range extLset {
 			label := storepb.Label{
@@ -780,11 +774,6 @@ func blockSeries(
 				Value: lv,
 			}
 			s.lset = append(s.lset, label)
-
-			// limiter: s.lset
-			{
-				querySizeBuffer += labelSize(&label)
-			}
 		}
 		sort.Slice(s.lset, func(i, j int) bool {
 			return s.lset[i].Name < s.lset[j].Name
@@ -808,27 +797,12 @@ func blockSeries(
 			s.refs = append(s.refs, meta.Ref)
 		}
 
-		// limiter: s.refs
-		{
-			refSize := postingsSize(s.refs)
-			querySizeBuffer += refSize
-		}
-
 		if len(s.chks) > 0 {
 			res = append(res, s)
 
 			// limiter: res
 			{
 				querySizeBuffer += int64(unsafe.Sizeof(s))
-			}
-		}
-
-		// limiter: check
-		if querySizeBuffer > querySizeBufferSize {
-			addSize(querySizeBuffer)
-			querySizeBuffer = 0
-			if err := checkLimit(); err != nil {
-				return nil, nil, err
 			}
 		}
 	}
@@ -847,19 +821,6 @@ func blockSeries(
 			}
 			if err := populateChunk(&s.chks[i], chk, req.Aggregates); err != nil {
 				return nil, nil, errors.Wrap(err, "populate chunk")
-			}
-			// queryLocalLimiter: s.chks
-			{
-				querySizeBuffer += aggrChunkSize(&s.chks[i])
-			}
-		}
-
-		// limiter: check
-		if querySizeBuffer > querySizeBufferSize {
-			addSize(querySizeBuffer)
-			querySizeBuffer = 0
-			if err := checkLimit(); err != nil {
-				return nil, nil, err
 			}
 		}
 	}
@@ -961,7 +922,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 	queryTotalSize := int64(0)
 	defer func() {
 		totalSizeMsg := fmt.Sprintf("%.2fMB", float64(queryTotalSize)/float64(1000000))
-		_ = level.Debug(s.logger).Log("QueryTotalSize", totalSizeMsg)
+		_ = level.Debug(s.logger).Log("queryTotalSize", totalSizeMsg)
 	}()
 
 	{
