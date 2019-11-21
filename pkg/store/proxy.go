@@ -362,6 +362,10 @@ func startStreamSeriesSet(
 			approxChunkLen = int64(120)
 		)
 
+		// buffer query sizes and process in chunks of 20MB or so
+		// to avoid hammering cache lines with atomic increments.
+		const querySizeBufferSize = 20 * 1000 * 1000
+		querySizeBuffer := int64(0)
 		queryLocalSize := int64(0)
 		queryTotalSize := atomic.LoadInt64(queryTotalSizeRef)
 
@@ -371,12 +375,11 @@ func startStreamSeriesSet(
 			_ = level.Debug(s.logger).Log("queryTotalSize", totalSizeMsg, "queryLocalSize", localSizeMsg)
 		}()
 
-		addSize := func(n int64) {
-			queryLocalSize += n
-			queryTotalSize = atomic.AddInt64(queryTotalSizeRef, n)
-		}
+		addSizeAndCheck := func() error {
+			queryLocalSize += querySizeBuffer
+			queryTotalSize = atomic.AddInt64(queryTotalSizeRef, querySizeBuffer)
+			querySizeBuffer = 0
 
-		checkLimit := func() error {
 			if err := limit.CheckQueryPipeLimit(queryLocalSize); err != nil {
 				return err
 			}
@@ -386,11 +389,6 @@ func startStreamSeriesSet(
 
 		defer wg.Done()
 		defer close(s.recvCh)
-
-		// buffer query sizes and process in chunks of 20MB or so
-		// to avoid hammering cache lines with atomic increments.
-		const querySizeBufferSize = 20 * 1000 * 1000
-		querySizeBuffer := int64(0)
 
 		for {
 			r, err := s.stream.Recv()
@@ -412,9 +410,7 @@ func startStreamSeriesSet(
 				querySizeBuffer += approxChunkLen * int64(len(series.Chunks))
 
 				if querySizeBuffer > querySizeBufferSize {
-					addSize(querySizeBuffer)
-					querySizeBuffer = 0
-					err = checkLimit()
+					err = addSizeAndCheck()
 				}
 			}
 
@@ -442,10 +438,7 @@ func startStreamSeriesSet(
 			case <-ctx.Done():
 				// flush query size but don't check errors as we already done, it'd
 				// be silly to kill this part of query at this point
-				if querySizeBuffer > 0 {
-					addSize(querySizeBuffer)
-					querySizeBuffer = 0
-				}
+				_ = addSizeAndCheck()
 				return
 			}
 		}

@@ -665,6 +665,10 @@ func blockSeries(
 		approxChunkLen = int64(120)
 	)
 
+	// Buffer query sizes and process in chunks of 20MB or so
+	// to avoid hammering cache lines with atomic increments.
+	const querySizeBufferSize = 20 * 1000 * 1000
+	querySizeBuffer := int64(0)
 	queryLocalSize := int64(0)
 	queryTotalSize := *queryTotalSizeRef
 
@@ -674,23 +678,17 @@ func blockSeries(
 		_ = level.Debug(logger).Log("queryTotalSize", totalSizeMsg, "queryLocalSize", localSizeMsg)
 	}()
 
-	addSize := func(n int64) {
-		queryLocalSize += n
-		queryTotalSize = atomic.AddInt64(queryTotalSizeRef, n)
-	}
+	addSizeAndCheck := func() error {
+		queryLocalSize += querySizeBuffer
+		queryTotalSize = atomic.AddInt64(queryTotalSizeRef, querySizeBuffer)
+		querySizeBuffer = 0
 
-	checkLimit := func() error {
 		if err := limit.CheckQueryPipeLimit(queryLocalSize); err != nil {
 			return err
 		}
 
 		return limit.CheckQueryTotalLimit(queryTotalSize)
 	}
-
-	// Buffer query sizes and process in chunks of 20MB or so
-	// to avoid hammering cache lines with atomic increments.
-	const querySizeBufferSize = 20 * 1000 * 1000
-	querySizeBuffer := int64(0)
 
 	ps, err := indexr.ExpandedPostings(matchers)
 	if err != nil {
@@ -742,9 +740,7 @@ func blockSeries(
 			querySizeBuffer += int64(unsafe.Sizeof(uint64(0))) * int64(len(chks))
 
 			if querySizeBuffer > querySizeBufferSize {
-				addSize(querySizeBuffer)
-				querySizeBuffer = 0
-				if err := checkLimit(); err != nil {
+				if err := addSizeAndCheck(); err != nil {
 					return nil, nil, err
 				}
 			}
@@ -825,11 +821,8 @@ func blockSeries(
 		}
 	}
 
-	// limiter: last update
-	if querySizeBuffer > 0 {
-		addSize(querySizeBuffer)
-		querySizeBuffer = 0
-	}
+	// limiter: last update, don't care for errors at this late stage
+	_ = addSizeAndCheck()
 
 	return newBucketSeriesSet(res), indexr.stats.merge(chunkr.stats), nil
 }
