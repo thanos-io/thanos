@@ -404,11 +404,14 @@ func startStreamSeriesSet(
 			if err == nil {
 				querySizeBuffer += int64(unsafe.Sizeof(storepb.SeriesResponse{}))
 				querySizeBuffer += int64(len(r.GetWarning()))
-				querySizeBuffer += int64(unsafe.Sizeof(storepb.Series{}))
-				querySizeBuffer += int64(len(series.Chunks)) * int64(unsafe.Sizeof(storepb.AggrChunk{}))
-				querySizeBuffer += int64(len(series.Labels)) * int64(unsafe.Sizeof(storepb.Label{}))
-				querySizeBuffer += approxLabelLen * int64(len(series.Labels))
-				querySizeBuffer += approxChunkLen * int64(len(series.Chunks))
+
+				if series != nil {
+					querySizeBuffer += int64(unsafe.Sizeof(storepb.Series{}))
+					querySizeBuffer += int64(len(series.Chunks)) * int64(unsafe.Sizeof(storepb.AggrChunk{}))
+					querySizeBuffer += int64(len(series.Labels)) * int64(unsafe.Sizeof(storepb.Label{}))
+					querySizeBuffer += approxLabelLen * int64(len(series.Labels))
+					querySizeBuffer += approxChunkLen * int64(len(series.Chunks))
+				}
 
 				if querySizeBuffer > querySizeBufferSize {
 					err = addSizeAndCheck()
