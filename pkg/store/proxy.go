@@ -382,10 +382,16 @@ func startStreamSeriesSet(
 			querySizeBuffer = 0
 
 			if err := limit.CheckQueryPipeLimit(queryLocalSize); err != nil {
+				_ = level.Debug(logger).Log("msg", err)
 				return err
 			}
 
-			return limit.CheckQueryTotalLimit(queryTotalSize)
+			if err := limit.CheckQueryTotalLimit(queryTotalSize); err != nil {
+				_ = level.Debug(logger).Log("msg", err)
+				return err
+			}
+
+			return nil
 		}
 
 		defer wg.Done()
