@@ -661,8 +661,8 @@ func blockSeries(
 	queryTotalSize := atomic.LoadInt64(queryTotalSizeRef)
 
 	defer func() {
-		totalSizeMsg := fmt.Sprintf("%.2fMB\n", float64(queryTotalSize)/float64(1000000))
-		localSizeMsg := fmt.Sprintf("%.2fMB\n", float64(queryLocalSize)/float64(1000000))
+		totalSizeMsg := fmt.Sprintf("%.2fMB", float64(queryTotalSize)/float64(1000000))
+		localSizeMsg := fmt.Sprintf("%.2fMB", float64(queryLocalSize)/float64(1000000))
 		_ = level.Debug(logger).Log("QueryTotalSize", totalSizeMsg, "QueryLocalSize", localSizeMsg)
 	}()
 
@@ -688,7 +688,6 @@ func blockSeries(
 	}
 
 	aggrChunkSize := func(aggrChunk *storepb.AggrChunk) int64 {
-
 		chunkSize := func(chunk *storepb.Chunk) int64 {
 			if chunk == nil {
 				return 0
@@ -737,9 +736,10 @@ func blockSeries(
 		return nil, nil, errors.Wrap(err, "preload series")
 	}
 
-	// Collect query size at a coarser level here to avoid hammering the
-	// shared total limiter with many calls.
-	querySize := int64(0)
+	// Buffer query sizes and process in chunks of 20MB or so
+	// to avoid hammering cache lines with atomic increments.
+	const querySizeBufferSize = 20 * 1000 * 1000
+	querySizeBuffer := int64(0)
 
 	// Transform all series into the response types and mark their relevant chunks
 	// for preloading.
@@ -771,7 +771,7 @@ func blockSeries(
 
 			// limiter: s.lset
 			{
-				querySize += labelSize(&label)
+				querySizeBuffer += labelSize(&label)
 			}
 		}
 		for ln, lv := range extLset {
@@ -783,7 +783,7 @@ func blockSeries(
 
 			// limiter: s.lset
 			{
-				querySize += labelSize(&label)
+				querySizeBuffer += labelSize(&label)
 			}
 		}
 		sort.Slice(s.lset, func(i, j int) bool {
@@ -806,13 +806,12 @@ func blockSeries(
 				MaxTime: meta.MaxTime,
 			})
 			s.refs = append(s.refs, meta.Ref)
-
 		}
 
 		// limiter: s.refs
 		{
 			refSize := postingsSize(s.refs)
-			querySize += refSize
+			querySizeBuffer += refSize
 		}
 
 		if len(s.chks) > 0 {
@@ -820,14 +819,14 @@ func blockSeries(
 
 			// limiter: res
 			{
-				querySize += int64(unsafe.Sizeof(s))
+				querySizeBuffer += int64(unsafe.Sizeof(s))
 			}
 		}
 
-		// limiter: check, every 20MB or so
-		if querySize > (20 * 1000 * 1000) {
-			addSize(querySize)
-			querySize = 0
+		// limiter: check
+		if querySizeBuffer > querySizeBufferSize {
+			addSize(querySizeBuffer)
+			querySizeBuffer = 0
 			if err := checkLimit(); err != nil {
 				return nil, nil, err
 			}
@@ -851,27 +850,24 @@ func blockSeries(
 			}
 			// queryLocalLimiter: s.chks
 			{
-				querySize += aggrChunkSize(&s.chks[i])
+				querySizeBuffer += aggrChunkSize(&s.chks[i])
 			}
 		}
 
-		// limit: check
-		if querySize > (20 * 1000 * 1000) {
-			addSize(querySize)
-			querySize = 0
+		// limiter: check
+		if querySizeBuffer > querySizeBufferSize {
+			addSize(querySizeBuffer)
+			querySizeBuffer = 0
 			if err := checkLimit(); err != nil {
 				return nil, nil, err
 			}
 		}
 	}
 
-	// last check
-	{
-		addSize(querySize)
-		querySize = 0
-		if err := checkLimit(); err != nil {
-			return nil, nil, err
-		}
+	// limiter: last update
+	if querySizeBuffer > 0 {
+		addSize(querySizeBuffer)
+		querySizeBuffer = 0
 	}
 
 	return newBucketSeriesSet(res), indexr.stats.merge(chunkr.stats), nil
@@ -964,7 +960,7 @@ func debugFoundBlockSetOverview(logger log.Logger, mint, maxt, maxResolutionMill
 func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) (err error) {
 	queryTotalSize := int64(0)
 	defer func() {
-		totalSizeMsg := fmt.Sprintf("%.2fMB\n", float64(queryTotalSize)/float64(1000000))
+		totalSizeMsg := fmt.Sprintf("%.2fMB", float64(queryTotalSize)/float64(1000000))
 		_ = level.Debug(s.logger).Log("QueryTotalSize", totalSizeMsg)
 	}()
 

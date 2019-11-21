@@ -186,7 +186,7 @@ func (s ctxRespSender) send(r *storepb.SeriesResponse) {
 func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	queryTotalSize := int64(0)
 	defer func() {
-		totalSizeMsg := fmt.Sprintf("%.2fMB\n", float64(queryTotalSize)/float64(1000000))
+		totalSizeMsg := fmt.Sprintf("%.2fMB", float64(queryTotalSize)/float64(1000000))
 		_ = level.Debug(s.logger).Log("QueryTotalSize", totalSizeMsg)
 	}()
 
@@ -358,8 +358,8 @@ func startStreamSeriesSet(
 		queryTotalSize := atomic.LoadInt64(queryTotalSizeRef)
 
 		defer func() {
-			totalSizeMsg := fmt.Sprintf("%.2fMB\n", float64(queryTotalSize)/float64(1000000))
-			localSizeMsg := fmt.Sprintf("%.2fMB\n", float64(queryLocalSize)/float64(1000000))
+			totalSizeMsg := fmt.Sprintf("%.2fMB", float64(queryTotalSize)/float64(1000000))
+			localSizeMsg := fmt.Sprintf("%.2fMB", float64(queryLocalSize)/float64(1000000))
 			_ = level.Debug(s.logger).Log("QueryTotalSize", totalSizeMsg, "QueryLocalSize", localSizeMsg)
 		}()
 
@@ -400,6 +400,11 @@ func startStreamSeriesSet(
 		defer wg.Done()
 		defer close(s.recvCh)
 
+		// buffer query sizes and process in chunks of 20MB or so
+		// to avoid hammering cache lines with atomic increments.
+		const querySizeBufferSize = 20 * 1000 * 1000
+		querySizeBuffer := int64(0)
+
 		for {
 			r, err := s.stream.Recv()
 
@@ -408,8 +413,12 @@ func startStreamSeriesSet(
 			}
 
 			if err == nil {
-				addSize(frameSize(r))
-				err = checkLimit()
+				querySizeBuffer += frameSize(r)
+				if querySizeBuffer > querySizeBufferSize {
+					addSize(querySizeBuffer)
+					querySizeBuffer = 0
+					err = checkLimit()
+				}
 			}
 
 			if err != nil {
@@ -434,9 +443,14 @@ func startStreamSeriesSet(
 			case s.recvCh <- r.GetSeries():
 				continue
 			case <-ctx.Done():
+				// flush query size but don't check errors as we already done, it'd
+				// be silly to kill this part of query at this point
+				if querySizeBuffer > 0 {
+					addSize(querySizeBuffer)
+					querySizeBuffer = 0
+				}
 				return
 			}
-
 		}
 	}()
 	return s
