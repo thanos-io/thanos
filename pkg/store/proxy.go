@@ -367,7 +367,7 @@ func startStreamSeriesSet(
 		const querySizeBufferSize = 20 * 1000 * 1000
 		querySizeBuffer := int64(0)
 		queryLocalSize := int64(0)
-		queryTotalSize := atomic.LoadInt64(queryTotalSizeRef)
+		queryTotalSize := *queryTotalSizeRef
 
 		defer func() {
 			totalSizeMsg := fmt.Sprintf("%.2fMB", float64(queryTotalSize)/float64(1000000))
