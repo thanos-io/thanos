@@ -43,7 +43,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 
 	met := grpc_prometheus.NewServerMetrics()
 	met.EnableHandlingTimeHistogram(
-		grpc_prometheus.WithHistogramBuckets(prometheus.ExponentialBuckets(0.001, 2, 15)),
+		grpc_prometheus.WithHistogramBuckets([]float64{0.001, 0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120}),
 	)
 	panicsTotal := prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "thanos_grpc_req_panics_recovered_total",
