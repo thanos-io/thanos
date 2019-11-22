@@ -148,7 +148,7 @@ Flags:
       --refresh=30m             Refresh interval to download metadata from
                                 remote storage
       --timeout=5m              Timeout to download metadata from remote storage
-      --label=LABEL             Prometheus label to use as timeline title
+      --label="prometheus"      Prometheus label to use as timeline title
 
 ```
 
