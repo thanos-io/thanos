@@ -81,7 +81,7 @@ func (m rulesRetrieverMock) RuleGroups() []thanosrule.Group {
 	}
 
 	var r []rules.Rule
-	for _, ar := range alertingRules() {
+	for _, ar := range alertingRules(m.testing) {
 		r = append(r, ar)
 	}
 
@@ -98,20 +98,20 @@ func (m rulesRetrieverMock) RuleGroups() []thanosrule.Group {
 
 func (m rulesRetrieverMock) AlertingRules() []thanosrule.AlertingRule {
 	var ars []thanosrule.AlertingRule
-	for _, ar := range alertingRules() {
+	for _, ar := range alertingRules(m.testing) {
 		ars = append(ars, thanosrule.AlertingRule{AlertingRule: ar})
 	}
 	return ars
 }
 
-func alertingRules() []*rules.AlertingRule {
+func alertingRules(t *testing.T) []*rules.AlertingRule {
 	expr1, err := promql.ParseExpr(`absent(test_metric3) != 1`)
 	if err != nil {
-		panic(fmt.Sprintf("unable to parse alert expression: %s", err))
+		t.Fatalf("unable to parse alert expression: %s", err)
 	}
 	expr2, err := promql.ParseExpr(`up == 1`)
 	if err != nil {
-		panic(fmt.Sprintf("unable to parse alert expression: %s", err))
+		t.Fatalf("unable to parse alert expression: %s", err)
 	}
 
 	return []*rules.AlertingRule{

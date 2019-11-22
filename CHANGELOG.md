@@ -27,7 +27,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#1669](https://github.com/thanos-io/thanos/pull/1669) Fixed store sharding. Now it does not load excluded meta.jsons and load/fetch index-cache.json files.
 - [#1670](https://github.com/thanos-io/thanos/pull/1670) Fixed un-ordered blocks upload. Sidecar now uploads the oldest blocks first.
 - [#1568](https://github.com/thanos-io/thanos/pull/1709) Thanos Store now retains the first raw value of a chunk during downsampling to avoid losing some counter resets that occur on an aggregation boundary.
-- [#1773](https://github.com/thanos-io/thanos/pull/1773) Thanos Ruler: fixed the /api/v1/rules endpoint.
+- [#1773](https://github.com/thanos-io/thanos/pull/1773) Thanos Ruler: fixed the /api/v1/rules endpoint that returned 500 status code with `failed to assert type of rule ...` message.
 
 ### Changed
 
