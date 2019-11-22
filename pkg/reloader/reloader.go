@@ -63,6 +63,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -84,6 +85,7 @@ type Reloader struct {
 	watchInterval time.Duration
 	retryInterval time.Duration
 
+	lastCfgInode uint64
 	lastCfgHash  []byte
 	lastRuleHash []byte
 }
@@ -135,6 +137,12 @@ func (r *Reloader) Watch(ctx context.Context) error {
 			return errors.Wrapf(err, "add config file %s to watcher", r.cfgFile)
 		}
 
+		if inode, err := getFileInode(r.cfgFile); err != nil {
+			return err
+		} else {
+			r.lastCfgInode = inode
+		}
+
 		if err := r.apply(ctx); err != nil {
 			return err
 		}
@@ -166,6 +174,27 @@ func (r *Reloader) Watch(ctx context.Context) error {
 			// TODO(bwplotka): Add metric if we are not cycling CPU here too much.
 			if _, ok := watchables[filepath.Dir(event.Name)]; !ok {
 				continue
+			}
+
+			// When the file's inode changed, watcher will received an 'op=CHMOD' event.
+			// Watcher will never receive any events again because the original file inode is invalid.
+			// This will happen when you using 'mv' command to overwrite config file.
+			// Also, when secret updated on kubernetes. It will generate new files with new inode.
+			// Config file should restart watching in this case.
+			if event.Op == fsnotify.Chmod {
+				if inode, err := getFileInode(r.cfgFile); err != nil {
+					return err
+				} else if r.lastCfgInode == inode {
+					continue
+				} else {
+					if err := watcher.Add(r.cfgFile); err != nil {
+						level.Error(r.logger).Log("msg", "failed to start watching config file", "err", err, "op", event.Op, "name", event.Name, "lastInode", r.lastCfgInode, "currentInode", inode)
+						return err
+					}
+
+					level.Debug(r.logger).Log("msg", "restarted watching config file in case of inode changed", "op", event.Op, "name", event.Name, "lastIno", r.lastCfgInode, "currentIno", inode)
+					r.lastCfgInode = inode
+				}
 			}
 		case err := <-watcher.Errors:
 			level.Error(r.logger).Log("msg", "watch error", "err", err)
@@ -362,4 +391,18 @@ func expandEnv(b []byte) (r []byte, err error) {
 		return []byte(v)
 	})
 	return r, err
+}
+
+func getFileInode(filepath string) (uint64, error) {
+	fileinfo, err := os.Stat(filepath)
+	if err != nil {
+		return 0, err
+	}
+
+	stat, ok := fileinfo.Sys().(*syscall.Stat_t)
+	if !ok {
+		return 0, errors.New("Not a syscall.Stat_t")
+	}
+
+	return stat.Ino, nil
 }
