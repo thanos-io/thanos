@@ -112,8 +112,8 @@ func (r RuleGroup) MarshalYAML() (interface{}, error) {
 // special field in RuleGroup file.
 func (m *Managers) Update(dataDir string, evalInterval time.Duration, files []string) error {
 	var (
-		errs     = tsdberrors.MultiError{}
-		filesMap = map[storepb.PartialResponseStrategy][]string{}
+		errs            = tsdberrors.MultiError{}
+		filesByStrategy = map[storepb.PartialResponseStrategy][]string{}
 	)
 
 	if err := os.RemoveAll(path.Join(dataDir, tmpRuleDir)); err != nil {
@@ -138,19 +138,19 @@ func (m *Managers) Update(dataDir string, evalInterval time.Duration, files []st
 
 		// NOTE: This is very ugly, but we need to reparse it into tmp dir without the field to have to reuse
 		// rules.Manager. The problem is that it uses yaml.UnmarshalStrict for some reasons.
-		mapped := map[storepb.PartialResponseStrategy]*rulefmt.RuleGroups{}
+		groupsByStrategy := map[storepb.PartialResponseStrategy]*rulefmt.RuleGroups{}
 		for _, rg := range rg.Groups {
-			if _, ok := mapped[*rg.PartialResponseStrategy]; !ok {
-				mapped[*rg.PartialResponseStrategy] = &rulefmt.RuleGroups{}
+			if _, ok := groupsByStrategy[*rg.PartialResponseStrategy]; !ok {
+				groupsByStrategy[*rg.PartialResponseStrategy] = &rulefmt.RuleGroups{}
 			}
 
-			mapped[*rg.PartialResponseStrategy].Groups = append(
-				mapped[*rg.PartialResponseStrategy].Groups,
+			groupsByStrategy[*rg.PartialResponseStrategy].Groups = append(
+				groupsByStrategy[*rg.PartialResponseStrategy].Groups,
 				rg.RuleGroup,
 			)
 		}
 
-		for s, rg := range mapped {
+		for s, rg := range groupsByStrategy {
 			b, err := yaml.Marshal(rg)
 			if err != nil {
 				errs = append(errs, err)
@@ -163,20 +163,19 @@ func (m *Managers) Update(dataDir string, evalInterval time.Duration, files []st
 				continue
 			}
 
-			filesMap[s] = append(filesMap[s], newFn)
+			filesByStrategy[s] = append(filesByStrategy[s], newFn)
 		}
-
 	}
 
-	for s, fs := range filesMap {
-		updater, ok := (*m)[s]
+	for s, fs := range filesByStrategy {
+		mgr, ok := (*m)[s]
 		if !ok {
 			errs = append(errs, errors.Errorf("no updater found for %v", s))
 			continue
 		}
 		// We add external labels in `pkg/alert.Queue`.
 		// TODO(bwplotka): Investigate if we should put ext labels here or not.
-		if err := updater.Update(evalInterval, fs, nil); err != nil {
+		if err := mgr.Update(evalInterval, fs, nil); err != nil {
 			errs = append(errs, err)
 			continue
 		}

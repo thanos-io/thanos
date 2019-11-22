@@ -189,7 +189,7 @@ func TestRule(t *testing.T) {
 		return nil
 	}))
 
-	// checks counter ensures we are not missing metrics.
+	// The checks counter ensures that we are not missing metrics.
 	checks := 0
 	// Check metrics to make sure we report correct ones that allow handling the AlwaysFiring not being triggered because of query issue.
 	testutil.Ok(t, promclient.MetricValues(ctx, nil, urlParse(t, r1.HTTP.URL()), func(lset labels.Labels, val float64) error {
@@ -204,6 +204,15 @@ func TestRule(t *testing.T) {
 		return nil
 	}))
 	testutil.Equals(t, 2, checks)
+
+	// Verify API endpoints.
+	for _, endpoint := range []string{"/api/v1/rules", "/api/v1/alerts"} {
+		for _, r := range []*serverScheduler{r1, r2} {
+			code, _, err := getAPIEndpoint(ctx, r.HTTP.URL()+endpoint)
+			testutil.Ok(t, err)
+			testutil.Equals(t, 200, code)
+		}
+	}
 }
 
 type failingStoreAPI struct{}
@@ -438,27 +447,17 @@ func TestRulePartialResponse(t *testing.T) {
 
 // TODO(bwplotka): Move to promclient.
 func queryAlertmanagerAlerts(ctx context.Context, url string) ([]*model.Alert, error) {
-	req, err := http.NewRequest("GET", url+"/api/v1/alerts", nil)
+	code, body, err := getAPIEndpoint(ctx, url+"/api/v1/alerts")
 	if err != nil {
 		return nil, err
 	}
-	req = req.WithContext(ctx)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
+	if code != 200 {
+		return nil, errors.Errorf("expected 200 response, got %d", code)
 	}
-	defer runutil.CloseWithLogOnErr(nil, resp.Body, "close body query alertmanager")
 
 	var v struct {
 		Data []*model.Alert `json:"data"`
 	}
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
 	if err = json.Unmarshal(body, &v); err != nil {
 		return nil, err
 	}
@@ -467,4 +466,23 @@ func queryAlertmanagerAlerts(ctx context.Context, url string) ([]*model.Alert, e
 		return v.Data[i].Labels.Before(v.Data[j].Labels)
 	})
 	return v.Data, nil
+}
+
+func getAPIEndpoint(ctx context.Context, url string) (int, []byte, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return 0, nil, err
+	}
+	req = req.WithContext(ctx)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer runutil.CloseWithLogOnErr(nil, resp.Body, "%s: close body", req.URL.String())
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return 0, nil, err
+	}
+	return resp.StatusCode, body, nil
 }
