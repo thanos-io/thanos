@@ -126,16 +126,29 @@ Flags:
                                 Listen host:port for HTTP endpoints.
       --http-grace-period=2m    Time to wait after an interrupt received for
                                 HTTP Server.
+      --web.external-prefix=""  Static prefix for all HTML links and redirect
+                                URLs in the bucket web UI interface. Actual
+                                endpoints are still served on / or the
+                                web.route-prefix. This allows thanos bucket web
+                                UI to be served behind a reverse proxy that
+                                strips a URL sub-path.
+      --web.prefix-header=""    Name of HTTP request header used for dynamic
+                                prefixing of UI links and redirects. This option
+                                is ignored if web.external-prefix argument is
+                                set. Security risk: enable this option only if a
+                                reverse proxy in front of thanos is resetting
+                                the header. The
+                                --web.prefix-header=X-Forwarded-Prefix option
+                                can be useful, for example, if Thanos UI is
+                                served via Traefik reverse proxy with
+                                PathPrefixStrip option enabled, which sends the
+                                stripped prefix value in X-Forwarded-Prefix
+                                header. This allows thanos UI to be served on a
+                                sub-path.
       --refresh=30m             Refresh interval to download metadata from
                                 remote storage
       --timeout=5m              Timeout to download metadata from remote storage
       --label=LABEL             Prometheus label to use as timeline title
-      --web.external-prefix=""  Static prefix for all HTML links and redirect
-                                URLs in the UI query web interface. Actual
-                                endpoints are still served on / or the
-                                web.route-prefix. This allows thanos UI to be
-                                served behind a reverse proxy that strips a URL
-                                sub-path.
 
 ```
 

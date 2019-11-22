@@ -13,13 +13,13 @@ import (
 // Bucket is a web UI representing state of buckets as a timeline.
 type Bucket struct {
 	*BaseUI
+	flagsMap map[string]string
 	// Unique Prometheus label that identifies each shard, used as the title. If
 	// not present, all labels are displayed externally as a legend.
 	Label       string
 	Blocks      template.JS
 	RefreshedAt time.Time
 	Err         error
-	flagsMap    map[string]string
 }
 
 func NewBucketUI(logger log.Logger, label string, flagsMap map[string]string) *Bucket {
