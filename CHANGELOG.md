@@ -22,6 +22,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#1733](https://github.com/thanos-io/thanos/pull/1733) New metric `thanos_compactor_iterations_total` on Thanos Compactor which shows the number of successful iterations.
 - [#1758](https://github.com/thanos-io/thanos/pull/1758) `thanos bucket web` now supports `--web.external-prefix` for proxying on a subpath.
 - [#1770](https://github.com/thanos-io/thanos/pull/1770) Add `--web.prefix-header` flags to allow for bucket UI to be accessible behind a reverse proxy.
+- [#1756](https://github.com/thanos-io/thanos/pull/1756) Thanos Bucket Web now uses a default label of `prometheus`.
 
 ### Fixed
 
