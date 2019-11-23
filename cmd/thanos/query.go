@@ -26,6 +26,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/limit"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/query"
 	v1 "github.com/thanos-io/thanos/pkg/query/api"
@@ -290,7 +291,9 @@ func runQuery(
 				Reg:           reg,
 				MaxConcurrent: maxConcurrentQueries,
 				// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
-				MaxSamples: math.MaxInt32,
+				// TODO(ppanyukov): this is now exposed as THANOS_LIMIT_PROMQL_MAX_SAMPLES env var in limits package.
+				// If we still need this as a flag, we can make it so.
+				MaxSamples: limit.PromqlMaxSamples(),
 				Timeout:    queryTimeout,
 			},
 		)
