@@ -63,15 +63,13 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 }
 
 func calculateChunks(name string, r io.Reader) (int, int64, error) {
-	switch r.(type) {
+	switch f := r.(type) {
 	case *os.File:
-		f, _ := r.(*os.File)
 		if fileInfo, err := f.Stat(); err == nil {
 			s := fileInfo.Size()
 			return int(math.Floor(float64(s) / PartSize)), s % PartSize, nil
 		}
 	case *strings.Reader:
-		f, _ := r.(*strings.Reader)
 		return int(math.Floor(float64(f.Size()) / PartSize)), f.Size() % PartSize, nil
 	}
 	return -1, 0, errors.New("unsupported implement of io.Reader")
