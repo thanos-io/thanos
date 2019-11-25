@@ -8,7 +8,7 @@ import (
 	"math"
 	"net/http"
 	"os"
-	"path"
+	"path/filepath"
 	"sort"
 	"testing"
 	"time"
@@ -18,6 +18,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/thanos-io/thanos/pkg/promclient"
+	rapi "github.com/thanos-io/thanos/pkg/rule/api"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -52,9 +53,14 @@ groups:
 `
 )
 
-var (
-	alertsToTest = []string{testAlertRuleAbortOnPartialResponse, testAlertRuleWarnOnPartialResponse}
-)
+func createRuleFiles(t *testing.T, dir string) {
+	t.Helper()
+
+	for i, rule := range []string{testAlertRuleAbortOnPartialResponse, testAlertRuleWarnOnPartialResponse} {
+		err := ioutil.WriteFile(filepath.Join(dir, fmt.Sprintf("rules-%d.yaml", i)), []byte(rule), 0666)
+		testutil.Ok(t, err)
+	}
+}
 
 func TestRule(t *testing.T) {
 	a := newLocalAddresser()
@@ -62,8 +68,13 @@ func TestRule(t *testing.T) {
 	am := alertManager(a.New())
 	qAddr := a.New()
 
-	r1 := rule(a.New(), a.New(), alertsToTest, am.HTTP, []address{qAddr}, nil)
-	r2 := rule(a.New(), a.New(), alertsToTest, am.HTTP, nil, []address{qAddr})
+	rulesDir, err := ioutil.TempDir("", "rules")
+	defer os.RemoveAll(rulesDir)
+	testutil.Ok(t, err)
+	createRuleFiles(t, rulesDir)
+
+	r1 := rule(a.New(), a.New(), rulesDir, am.HTTP, []address{qAddr}, nil)
+	r2 := rule(a.New(), a.New(), rulesDir, am.HTTP, nil, []address{qAddr})
 
 	q := querier(qAddr, a.New(), []address{r1.GRPC, r2.GRPC}, nil)
 
@@ -205,13 +216,22 @@ func TestRule(t *testing.T) {
 	}))
 	testutil.Equals(t, 2, checks)
 
-	// Verify API endpoints.
-	for _, endpoint := range []string{"/api/v1/rules", "/api/v1/alerts"} {
-		for _, r := range []*serverScheduler{r1, r2} {
-			code, _, err := getAPIEndpoint(ctx, r.HTTP.URL()+endpoint)
-			testutil.Ok(t, err)
-			testutil.Equals(t, 200, code)
+	// Verify the rules API endpoint.
+	for _, r := range []*serverScheduler{r1, r2} {
+		rgs, err := queryRules(ctx, r.HTTP.URL())
+		testutil.Ok(t, err)
+		testutil.Equals(t, 2, len(rgs))
+		for i := range rgs {
+			testutil.Equals(t, filepath.Join(rulesDir, fmt.Sprintf("rules-%d.yaml", i)), rgs[i].File)
+			testutil.Equals(t, "example", rgs[i].Name)
 		}
+	}
+
+	// Verify the alerts API endpoint.
+	for _, r := range []*serverScheduler{r1, r2} {
+		code, _, err := getAPIEndpoint(ctx, r.HTTP.URL()+"/api/v1/alerts")
+		testutil.Ok(t, err)
+		testutil.Equals(t, 200, code)
 	}
 }
 
@@ -271,7 +291,10 @@ func TestRulePartialResponse(t *testing.T) {
 
 	f := fakeStoreAPI(a.New(), &failingStoreAPI{})
 	am := alertManager(a.New())
-	r := ruleWithDir(a.New(), a.New(), dir, nil, am.HTTP, []address{qAddr}, nil)
+	rulesDir, err := ioutil.TempDir("", "rules")
+	defer os.RemoveAll(rulesDir)
+	testutil.Ok(t, err)
+	r := rule(a.New(), a.New(), rulesDir, am.HTTP, []address{qAddr}, nil)
 	q := querier(qAddr, a.New(), []address{r.GRPC, f.GRPC}, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -316,9 +339,7 @@ func TestRulePartialResponse(t *testing.T) {
 	}))
 
 	// Add alerts to ruler, we want to add it only when Querier is rdy, otherwise we will get "no store match the query".
-	for i, rule := range alertsToTest {
-		testutil.Ok(t, ioutil.WriteFile(path.Join(dir, fmt.Sprintf("rules-%d.yaml", i)), []byte(rule), 0666))
-	}
+	createRuleFiles(t, rulesDir)
 
 	resp, err := http.Post(r.HTTP.URL()+"/-/reload", "", nil)
 	testutil.Ok(t, err)
@@ -466,6 +487,27 @@ func queryAlertmanagerAlerts(ctx context.Context, url string) ([]*model.Alert, e
 		return v.Data[i].Labels.Before(v.Data[j].Labels)
 	})
 	return v.Data, nil
+}
+
+func queryRules(ctx context.Context, url string) ([]*rapi.RuleGroup, error) {
+	code, body, err := getAPIEndpoint(ctx, url+"/api/v1/rules")
+	if err != nil {
+		return nil, err
+	}
+	if code != 200 {
+		return nil, errors.Errorf("expected 200 response, got %d", code)
+	}
+
+	var resp struct {
+		Data rapi.RuleDiscovery
+	}
+	if err = json.Unmarshal(body, &resp); err != nil {
+		return nil, err
+	}
+	sort.Slice(resp.Data.RuleGroups, func(i, j int) bool {
+		return resp.Data.RuleGroups[i].File < resp.Data.RuleGroups[j].File
+	})
+	return resp.Data.RuleGroups, nil
 }
 
 func getAPIEndpoint(ctx context.Context, url string) (int, []byte, error) {

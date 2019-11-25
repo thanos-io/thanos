@@ -23,6 +23,7 @@ import (
 	"github.com/prometheus/prometheus/storage/tsdb"
 	qapi "github.com/thanos-io/thanos/pkg/query/api"
 	thanosrule "github.com/thanos-io/thanos/pkg/rule"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 // NewStorage returns a new storage for testing purposes
@@ -92,8 +93,12 @@ func (m rulesRetrieverMock) RuleGroups() []thanosrule.Group {
 	recordingRule := rules.NewRecordingRule("recording-rule-1", recordingExpr, labels.Labels{})
 	r = append(r, recordingRule)
 
-	group := rules.NewGroup("grp", "/path/to/file", time.Second, r, false, opts)
-	return []thanosrule.Group{thanosrule.Group{Group: group}}
+	return []thanosrule.Group{
+		thanosrule.Group{
+			Group:                   rules.NewGroup("grp", "/path/to/file", time.Second, r, false, opts),
+			PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
+		},
+	}
 }
 
 func (m rulesRetrieverMock) AlertingRules() []thanosrule.AlertingRule {
@@ -189,7 +194,7 @@ func testEndpoints(t *testing.T, api *API) {
 				RuleGroups: []*RuleGroup{
 					{
 						Name:                    "grp",
-						File:                    "/path/to/file",
+						File:                    "",
 						Interval:                1,
 						PartialResponseStrategy: "WARN",
 						Rules: []rule{
@@ -263,13 +268,14 @@ func testEndpoints(t *testing.T, api *API) {
 }
 
 func assertAPIError(t *testing.T, got *qapi.ApiError) {
+	t.Helper()
 	if got != nil {
 		t.Fatalf("Unexpected error: %s", got)
-		return
 	}
 }
 
 func assertAPIResponse(t *testing.T, got interface{}, exp interface{}) {
+	t.Helper()
 	if !reflect.DeepEqual(exp, got) {
 		respJSON, err := json.Marshal(got)
 		if err != nil {

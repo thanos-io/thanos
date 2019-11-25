@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -70,59 +71,76 @@ groups:
   - alert: "some"
     expr: "up"
 `), os.ModePerm))
-	testutil.Ok(t, ioutil.WriteFile(path.Join(dir, "combined-wrong.yaml"), []byte(`
-groups:
-- name: "something8"
-  partial_response_strategy: "warn"
-  rules:
-  - alert: "some"
-    expr: "up"
-- name: "something9"
-  partial_response_strategy: "adad" # Err 2
-  rules:
-  - alert: "some"
-    expr: "up"
-`), os.ModePerm))
 
 	opts := rules.ManagerOptions{
 		Logger: log.NewLogfmtLogger(os.Stderr),
 	}
-	m := Managers{
-		storepb.PartialResponseStrategy_ABORT: rules.NewManager(&opts),
-		storepb.PartialResponseStrategy_WARN:  rules.NewManager(&opts),
-	}
+	m := NewManager(dir)
+	m.SetRuleManager(storepb.PartialResponseStrategy_ABORT, rules.NewManager(&opts))
+	m.SetRuleManager(storepb.PartialResponseStrategy_WARN, rules.NewManager(&opts))
 
-	err = m.Update(dir, 10*time.Second, []string{
+	err = m.Update(10*time.Second, []string{
 		path.Join(dir, "no_strategy.yaml"),
 		path.Join(dir, "abort.yaml"),
 		path.Join(dir, "warn.yaml"),
 		path.Join(dir, "wrong.yaml"),
 		path.Join(dir, "combined.yaml"),
-		path.Join(dir, "combined_wrong.yaml"),
+		path.Join(dir, "non_existing.yaml"),
 	})
 
 	testutil.NotOk(t, err)
-	testutil.Assert(t, strings.HasPrefix(err.Error(), "2 errors: failed to unmarshal 'partial_response_strategy'"), err.Error())
+	testutil.Assert(t, strings.Contains(err.Error(), "wrong.yaml: failed to unmarshal 'partial_response_strategy'"), err.Error())
+	testutil.Assert(t, strings.Contains(err.Error(), "non_existing.yaml: no such file or directory"), err.Error())
 
-	g := m[storepb.PartialResponseStrategy_WARN].RuleGroups()
-	testutil.Equals(t, 2, len(g))
-
+	g := m.RuleGroups()
 	sort.Slice(g, func(i, j int) bool {
 		return g[i].Name() < g[j].Name()
 	})
-	testutil.Equals(t, "something3", g[0].Name())
-	testutil.Equals(t, "something5", g[1].Name())
 
-	g = m[storepb.PartialResponseStrategy_ABORT].RuleGroups()
-	testutil.Equals(t, 4, len(g))
-
-	sort.Slice(g, func(i, j int) bool {
-		return g[i].Name() < g[j].Name()
-	})
-	testutil.Equals(t, "something1", g[0].Name())
-	testutil.Equals(t, "something2", g[1].Name())
-	testutil.Equals(t, "something6", g[2].Name())
-	testutil.Equals(t, "something7", g[3].Name())
+	exp := []struct {
+		name     string
+		file     string
+		strategy storepb.PartialResponseStrategy
+	}{
+		{
+			name:     "something1",
+			file:     filepath.Join(dir, "no_strategy.yaml"),
+			strategy: storepb.PartialResponseStrategy_ABORT,
+		},
+		{
+			name:     "something2",
+			file:     filepath.Join(dir, "abort.yaml"),
+			strategy: storepb.PartialResponseStrategy_ABORT,
+		},
+		{
+			name:     "something3",
+			file:     filepath.Join(dir, "warn.yaml"),
+			strategy: storepb.PartialResponseStrategy_WARN,
+		},
+		{
+			name:     "something5",
+			file:     filepath.Join(dir, "combined.yaml"),
+			strategy: storepb.PartialResponseStrategy_WARN,
+		},
+		{
+			name:     "something6",
+			file:     filepath.Join(dir, "combined.yaml"),
+			strategy: storepb.PartialResponseStrategy_ABORT,
+		},
+		{
+			name:     "something7",
+			file:     filepath.Join(dir, "combined.yaml"),
+			strategy: storepb.PartialResponseStrategy_ABORT,
+		},
+	}
+	testutil.Equals(t, len(exp), len(g))
+	for i := range exp {
+		t.Run(exp[i].name, func(t *testing.T) {
+			testutil.Equals(t, exp[i].strategy, g[i].PartialResponseStrategy)
+			testutil.Equals(t, exp[i].name, g[i].Name())
+			testutil.Equals(t, exp[i].file, g[i].OriginalFile())
+		})
+	}
 }
 
 func TestRuleGroupMarshalYAML(t *testing.T) {
