@@ -298,6 +298,7 @@ receivers:
 			return newCmdExec(exec.Command(testutil.AlertmanagerBinary(),
 				"--config.file", dir+"/config.yaml",
 				"--web.listen-address", http.HostPort(),
+				"--cluster.listen-address", "",
 				"--log.level", "debug",
 			)), nil
 		},
