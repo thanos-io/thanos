@@ -32,6 +32,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#1773](https://github.com/thanos-io/thanos/pull/1773) Thanos Ruler: fixed the /api/v1/rules endpoint that returned 500 status code with `failed to assert type of rule ...` message.
 - [#1770](https://github.com/thanos-io/thanos/pull/1770) Fix `--web.external-prefix` 404s for static resources.
 - [#1785](https://github.com/thanos-io/thanos/pull/1785) Thanos Ruler: the /api/v1/rules endpoints now returns the original rule filenames.
+- [#1791](https://github.com/thanos-io/thanos/pull/1791) Thanos Ruler now supports identical rule filenames in different directories.
 
 ### Changed
 

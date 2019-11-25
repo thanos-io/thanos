@@ -3,7 +3,6 @@ package thanosrule
 import (
 	"io/ioutil"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -22,15 +21,17 @@ func TestUpdate(t *testing.T) {
 	dir, err := ioutil.TempDir("", "test_rule_rule_groups")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+	err = os.MkdirAll(filepath.Join(dir, "subdir"), 0775)
+	testutil.Ok(t, err)
 
-	testutil.Ok(t, ioutil.WriteFile(path.Join(dir, "no_strategy.yaml"), []byte(`
+	testutil.Ok(t, ioutil.WriteFile(filepath.Join(dir, "no_strategy.yaml"), []byte(`
 groups:
 - name: "something1"
   rules:
   - alert: "some"
     expr: "up"
 `), os.ModePerm))
-	testutil.Ok(t, ioutil.WriteFile(path.Join(dir, "abort.yaml"), []byte(`
+	testutil.Ok(t, ioutil.WriteFile(filepath.Join(dir, "abort.yaml"), []byte(`
 groups:
 - name: "something2"
   partial_response_strategy: "abort"
@@ -38,7 +39,7 @@ groups:
   - alert: "some"
     expr: "up"
 `), os.ModePerm))
-	testutil.Ok(t, ioutil.WriteFile(path.Join(dir, "warn.yaml"), []byte(`
+	testutil.Ok(t, ioutil.WriteFile(filepath.Join(dir, "warn.yaml"), []byte(`
 groups:
 - name: "something3"
   partial_response_strategy: "warn"
@@ -46,7 +47,7 @@ groups:
   - alert: "some"
     expr: "up"
 `), os.ModePerm))
-	testutil.Ok(t, ioutil.WriteFile(path.Join(dir, "wrong.yaml"), []byte(`
+	testutil.Ok(t, ioutil.WriteFile(filepath.Join(dir, "wrong.yaml"), []byte(`
 groups:
 - name: "something4"
   partial_response_strategy: "afafsdgsdgs" # Err 1
@@ -54,7 +55,7 @@ groups:
   - alert: "some"
     expr: "up"
 `), os.ModePerm))
-	testutil.Ok(t, ioutil.WriteFile(path.Join(dir, "combined.yaml"), []byte(`
+	testutil.Ok(t, ioutil.WriteFile(filepath.Join(dir, "combined.yaml"), []byte(`
 groups:
 - name: "something5"
   partial_response_strategy: "warn"
@@ -71,6 +72,14 @@ groups:
   - alert: "some"
     expr: "up"
 `), os.ModePerm))
+	// Same filename as the first rule file but different path.
+	testutil.Ok(t, ioutil.WriteFile(filepath.Join(dir, "subdir", "no_strategy.yaml"), []byte(`
+groups:
+- name: "something8"
+  rules:
+  - alert: "some"
+    expr: "up"
+`), os.ModePerm))
 
 	opts := rules.ManagerOptions{
 		Logger: log.NewLogfmtLogger(os.Stderr),
@@ -80,12 +89,13 @@ groups:
 	m.SetRuleManager(storepb.PartialResponseStrategy_WARN, rules.NewManager(&opts))
 
 	err = m.Update(10*time.Second, []string{
-		path.Join(dir, "no_strategy.yaml"),
-		path.Join(dir, "abort.yaml"),
-		path.Join(dir, "warn.yaml"),
-		path.Join(dir, "wrong.yaml"),
-		path.Join(dir, "combined.yaml"),
-		path.Join(dir, "non_existing.yaml"),
+		filepath.Join(dir, "no_strategy.yaml"),
+		filepath.Join(dir, "abort.yaml"),
+		filepath.Join(dir, "warn.yaml"),
+		filepath.Join(dir, "wrong.yaml"),
+		filepath.Join(dir, "combined.yaml"),
+		filepath.Join(dir, "non_existing.yaml"),
+		filepath.Join(dir, "subdir", "no_strategy.yaml"),
 	})
 
 	testutil.NotOk(t, err)
@@ -130,6 +140,11 @@ groups:
 		{
 			name:     "something7",
 			file:     filepath.Join(dir, "combined.yaml"),
+			strategy: storepb.PartialResponseStrategy_ABORT,
+		},
+		{
+			name:     "something8",
+			file:     filepath.Join(dir, "subdir", "no_strategy.yaml"),
 			strategy: storepb.PartialResponseStrategy_ABORT,
 		},
 	}

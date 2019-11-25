@@ -1,6 +1,7 @@
 package thanosrule
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -187,7 +188,7 @@ func (m *Manager) Update(evalInterval time.Duration, files []string) error {
 				continue
 			}
 
-			newFn := filepath.Join(m.workDir, filepath.Base(fn)+"."+s.String())
+			newFn := filepath.Join(m.workDir, fmt.Sprintf("%s.%x.%s", filepath.Base(fn), sha256.Sum256([]byte(fn)), s.String()))
 			if err := ioutil.WriteFile(newFn, b, os.ModePerm); err != nil {
 				errs = append(errs, errors.Wrap(err, newFn))
 				continue
