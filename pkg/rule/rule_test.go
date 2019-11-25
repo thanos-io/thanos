@@ -1,22 +1,87 @@
 package thanosrule
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/prometheus/storage"
 
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/prometheus/pkg/rulefmt"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
+
+type nopAppendable struct{}
+
+func (n nopAppendable) Add(l labels.Labels, t int64, v float64) (uint64, error)       { return 0, nil }
+func (n nopAppendable) AddFast(l labels.Labels, ref uint64, t int64, v float64) error { return nil }
+func (n nopAppendable) Commit() error                                                 { return nil }
+func (n nopAppendable) Rollback() error                                               { return nil }
+func (n nopAppendable) Appender() (storage.Appender, error)                           { return n, nil }
+
+// Regression test against https://github.com/thanos-io/thanos/issues/1779.
+func TestRun(t *testing.T) {
+	dir, err := ioutil.TempDir("", "test_rule_run")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+
+	testutil.Ok(t, ioutil.WriteFile(path.Join(dir, "rule.yaml"), []byte(`
+groups:
+- name: "rule with subquery"
+  partial_response_strategy: "warn"
+  rules:
+  - record: "test"
+    expr: "rate(some_metric[1h:5m] offset 1d)"
+`), os.ModePerm))
+
+	var (
+		queryDone = make(chan struct{})
+		queryOnce sync.Once
+		query     string
+	)
+	opts := rules.ManagerOptions{
+		Logger:  log.NewLogfmtLogger(os.Stderr),
+		Context: context.Background(),
+		QueryFunc: func(ctx context.Context, q string, t time.Time) (vectors promql.Vector, e error) {
+			queryOnce.Do(func() {
+				query = q
+				close(queryDone)
+			})
+			return promql.Vector{}, nil
+		},
+		Appendable: nopAppendable{},
+	}
+	thanosRuleMgr := NewManager(dir)
+	ruleMgr := rules.NewManager(&opts)
+	thanosRuleMgr.SetRuleManager(storepb.PartialResponseStrategy_ABORT, ruleMgr)
+	thanosRuleMgr.SetRuleManager(storepb.PartialResponseStrategy_WARN, ruleMgr)
+
+	testutil.Ok(t, thanosRuleMgr.Update(10*time.Second, []string{path.Join(dir, "rule.yaml")}))
+
+	ruleMgr.Run()
+	defer ruleMgr.Stop()
+
+	select {
+	case <-time.After(2 * time.Minute):
+		t.Fatal("timeout while waiting on rule manager query evaluation")
+	case <-queryDone:
+	}
+
+	testutil.Equals(t, "rate(some_metric[1h:5m] offset 1d)", query)
+}
 
 func TestUpdate(t *testing.T) {
 	dir, err := ioutil.TempDir("", "test_rule_rule_groups")
@@ -152,7 +217,7 @@ func TestRuleGroupMarshalYAML(t *testing.T) {
 - name: something2
   rules:
   - alert: some
-    expr: up
+    expr: rate(some_metric[1h:5m] offset 1d)
   partial_response_strategy: ABORT
 `
 
@@ -176,7 +241,7 @@ func TestRuleGroupMarshalYAML(t *testing.T) {
 					Rules: []rulefmt.Rule{
 						{
 							Alert: "some",
-							Expr:  "up",
+							Expr:  "rate(some_metric[1h:5m] offset 1d)",
 						},
 					},
 				},

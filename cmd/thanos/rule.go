@@ -326,6 +326,7 @@ func runRule(
 			ResendDelay: resendDelay,
 		}
 
+		// TODO(bwplotka): Hide this behind thanos rules.Manager.
 		for _, strategy := range storepb.PartialResponseStrategy_value {
 			s := storepb.PartialResponseStrategy(strategy)
 
