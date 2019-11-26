@@ -42,6 +42,11 @@ func TestObjStore_AcceptanceTest_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Equals(t, "@test-data@", string(content))
 
+		// Check if we can get the correct size.
+		sz, err := bkt.ObjectSize(ctx, "id1/obj_1.some")
+		testutil.Ok(t, err)
+		testutil.Assert(t, sz == 11, "expected size to be equal to 11")
+
 		rc2, err := bkt.GetRange(ctx, "id1/obj_1.some", 1, 3)
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, rc2.Close()) }()
