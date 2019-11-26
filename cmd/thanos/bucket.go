@@ -320,7 +320,7 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 	m[name+" web"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
 		ctx, cancel := context.WithCancel(context.Background())
 
-		statusProber := prober.NewProber(component.Bucket, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+		statusProber := prober.New(component.Bucket, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 		// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
 		srv := httpserver.New(logger, reg, component.Bucket, statusProber,
 			httpserver.WithListen(*httpBindAddr),
@@ -356,7 +356,16 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 			cancel()
 		})
 
-		g.Add(srv.ListenAndServe, srv.Shutdown)
+		g.Add(func() error {
+			statusProber.Healthy()
+
+			return srv.ListenAndServe()
+		}, func(err error) {
+			statusProber.NotReady(err)
+			defer statusProber.NotHealthy(err)
+
+			srv.Shutdown(err)
+		})
 
 		return nil
 	}

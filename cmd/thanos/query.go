@@ -355,7 +355,7 @@ func runQuery(
 	}
 	// Start query API + UI HTTP server.
 
-	statusProber := prober.NewProber(comp, logger, reg)
+	statusProber := prober.New(comp, logger, reg)
 	{
 		router := route.New()
 
@@ -386,7 +386,16 @@ func runQuery(
 		)
 		srv.Handle("/", router)
 
-		g.Add(srv.ListenAndServe, srv.Shutdown)
+		g.Add(func() error {
+			statusProber.Healthy()
+
+			return srv.ListenAndServe()
+		}, func(err error) {
+			statusProber.NotReady(err)
+			defer statusProber.NotHealthy(err)
+
+			srv.Shutdown(err)
+		})
 	}
 	// Start query (proxy) gRPC StoreAPI.
 	{
@@ -402,10 +411,10 @@ func runQuery(
 		)
 
 		g.Add(func() error {
-			statusProber.SetReady()
+			statusProber.Ready()
 			return s.ListenAndServe()
-		}, func(err error) {
-			statusProber.SetNotReady(err)
+		}, func(error) {
+			statusProber.NotReady(err)
 			s.Shutdown(err)
 		})
 	}

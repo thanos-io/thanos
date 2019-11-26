@@ -35,8 +35,8 @@ func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, 
 
 	mux := http.NewServeMux()
 	registerMetrics(mux, reg)
+	registerProbes(mux, prober)
 	registerProfiler(mux)
-	prober.RegisterInMux(mux)
 
 	return &Server{
 		logger: log.With(logger, "service", "http/server", "component", comp.String()),
@@ -50,7 +50,6 @@ func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, 
 
 // ListenAndServe listens on the TCP network address and handles requests on incoming connections.
 func (s *Server) ListenAndServe() error {
-	s.prober.SetHealthy()
 	level.Info(s.logger).Log("msg", "listening for requests and metrics", "address", s.opts.listen)
 	return errors.Wrap(s.srv.ListenAndServe(), "serve HTTP and metrics")
 }
@@ -58,9 +57,6 @@ func (s *Server) ListenAndServe() error {
 // Shutdown gracefully shuts down the server by waiting,
 // for specified amount of time (by gracePeriod) for connections to return to idle and then shut down.
 func (s *Server) Shutdown(err error) {
-	s.prober.SetNotReady(err)
-	defer s.prober.SetNotHealthy(err)
-
 	if err == http.ErrServerClosed {
 		level.Warn(s.logger).Log("msg", "internal server closed unexpectedly")
 		return
@@ -95,5 +91,14 @@ func registerProfiler(mux *http.ServeMux) {
 }
 
 func registerMetrics(mux *http.ServeMux, g prometheus.Gatherer) {
-	mux.Handle("/metrics", promhttp.HandlerFor(g, promhttp.HandlerOpts{}))
+	if g != nil {
+		mux.Handle("/metrics", promhttp.HandlerFor(g, promhttp.HandlerOpts{}))
+	}
+}
+
+func registerProbes(mux *http.ServeMux, p *prober.Prober) {
+	if p != nil {
+		mux.Handle("/-/healthy", p.HealthyHandler())
+		mux.Handle("/-/ready", p.ReadyHandler())
+	}
 }
