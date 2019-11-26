@@ -11,13 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/promql"
-	"github.com/prometheus/prometheus/storage"
-
 	"github.com/go-kit/kit/log"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/rulefmt"
+	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
 	"gopkg.in/yaml.v2"
@@ -37,7 +36,7 @@ func TestRun(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-	testutil.Ok(t, ioutil.WriteFile(path.Join(dir, "rule.yaml"), []byte(`
+	testutil.Ok(t, ioutil.WriteFile(filepath.Join(dir, "rule.yaml"), []byte(`
 groups:
 - name: "rule with subquery"
   partial_response_strategy: "warn"
@@ -68,7 +67,7 @@ groups:
 	thanosRuleMgr.SetRuleManager(storepb.PartialResponseStrategy_ABORT, ruleMgr)
 	thanosRuleMgr.SetRuleManager(storepb.PartialResponseStrategy_WARN, ruleMgr)
 
-	testutil.Ok(t, thanosRuleMgr.Update(10*time.Second, []string{path.Join(dir, "rule.yaml")}))
+	testutil.Ok(t, thanosRuleMgr.Update(10*time.Second, []string{filepath.Join(dir, "rule.yaml")}))
 
 	ruleMgr.Run()
 	defer ruleMgr.Stop()
