@@ -27,11 +27,10 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
-	promlabels "github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage/tsdb"
-	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/prometheus/prometheus/util/strutil"
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -327,6 +326,7 @@ func runRule(
 			ResendDelay: resendDelay,
 		}
 
+		// TODO(bwplotka): Hide this behind thanos rules.Manager.
 		for _, strategy := range storepb.PartialResponseStrategy_value {
 			s := storepb.PartialResponseStrategy(strategy)
 
@@ -718,9 +718,9 @@ func parseFlagLabels(s []string) (labels.Labels, error) {
 	return lset, nil
 }
 
-func labelsTSDBToProm(lset labels.Labels) (res promlabels.Labels) {
+func labelsTSDBToProm(lset labels.Labels) (res labels.Labels) {
 	for _, l := range lset {
-		res = append(res, promlabels.Label{
+		res = append(res, labels.Label{
 			Name:  l.Name,
 			Value: l.Value,
 		})

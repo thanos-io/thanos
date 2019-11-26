@@ -21,13 +21,12 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	promlabels "github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/index"
-	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
@@ -359,7 +358,7 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 
 		// Check for block labels by relabeling.
 		// If output is empty, the block will be dropped.
-		if processedLabels := relabel.Process(promlabels.FromMap(meta.Thanos.Labels), s.relabelConfig...); processedLabels == nil {
+		if processedLabels := relabel.Process(labels.FromMap(meta.Thanos.Labels), s.relabelConfig...); processedLabels == nil {
 			level.Debug(s.logger).Log("msg", "ignoring block (drop in relabeling)", "block", id)
 			return os.RemoveAll(bdir)
 		}
@@ -644,7 +643,7 @@ func blockSeries(
 	extLset map[string]string,
 	indexr *bucketIndexReader,
 	chunkr *bucketChunkReader,
-	matchers []labels.Matcher,
+	matchers []*labels.Matcher,
 	req *storepb.SeriesRequest,
 	samplesLimiter *Limiter,
 ) (storepb.SeriesSet, *queryStats, error) {
@@ -1069,7 +1068,7 @@ func newBucketBlockSet(lset labels.Labels) *bucketBlockSet {
 }
 
 func (s *bucketBlockSet) add(b *bucketBlock) error {
-	if !s.labels.Equals(labels.FromMap(b.meta.Thanos.Labels)) {
+	if !labels.Equal(s.labels, labels.FromMap(b.meta.Thanos.Labels)) {
 		return errors.New("block's label set does not match set")
 	}
 	s.mtx.Lock()
@@ -1153,11 +1152,11 @@ func (s *bucketBlockSet) getFor(mint, maxt, maxResolutionMillis int64) (bs []*bu
 
 // labelMatchers verifies whether the block set matches the given matchers and returns a new
 // set of matchers that is equivalent when querying data within the block.
-func (s *bucketBlockSet) labelMatchers(matchers ...labels.Matcher) ([]labels.Matcher, bool) {
-	res := make([]labels.Matcher, 0, len(matchers))
+func (s *bucketBlockSet) labelMatchers(matchers ...*labels.Matcher) ([]*labels.Matcher, bool) {
+	res := make([]*labels.Matcher, 0, len(matchers))
 
 	for _, m := range matchers {
-		v := s.labels.Get(m.Name())
+		v := s.labels.Get(m.Name)
 		if v == "" {
 			res = append(res, m)
 			continue
@@ -1397,7 +1396,7 @@ func (r *bucketIndexReader) lookupSymbol(o uint32) (string, error) {
 // Reminder: A posting is a reference (represented as a uint64) to a series reference, which in turn points to the first
 // chunk where the series contains the matching label-value pair for a given block of data. Postings can be fetched by
 // single label name=value.
-func (r *bucketIndexReader) ExpandedPostings(ms []labels.Matcher) ([]uint64, error) {
+func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, error) {
 	var postingGroups []*postingGroup
 
 	// NOTE: Derived from tsdb.PostingsForMatchers.
@@ -1478,7 +1477,7 @@ func allWithout(p []index.Postings) index.Postings {
 }
 
 // NOTE: Derived from tsdb.postingsForMatcher. index.Merge is equivalent to map duplication.
-func toPostingGroup(lvalsFn func(name string) []string, m labels.Matcher) *postingGroup {
+func toPostingGroup(lvalsFn func(name string) []string, m *labels.Matcher) *postingGroup {
 	var matchingLabels labels.Labels
 
 	// If the matcher selects an empty value, it selects all the series which don't
@@ -1488,9 +1487,9 @@ func toPostingGroup(lvalsFn func(name string) []string, m labels.Matcher) *posti
 		allName, allValue := index.AllPostingsKey()
 
 		matchingLabels = append(matchingLabels, labels.Label{Name: allName, Value: allValue})
-		for _, val := range lvalsFn(m.Name()) {
+		for _, val := range lvalsFn(m.Name) {
 			if !m.Matches(val) {
-				matchingLabels = append(matchingLabels, labels.Label{Name: m.Name(), Value: val})
+				matchingLabels = append(matchingLabels, labels.Label{Name: m.Name, Value: val})
 			}
 		}
 
@@ -1505,13 +1504,13 @@ func toPostingGroup(lvalsFn func(name string) []string, m labels.Matcher) *posti
 	}
 
 	// Fast-path for equal matching.
-	if em, ok := m.(*labels.EqualMatcher); ok {
-		return newPostingGroup(labels.Labels{{Name: em.Name(), Value: em.Value()}}, merge)
+	if m.Type == labels.MatchEqual {
+		return newPostingGroup(labels.Labels{{Name: m.Name, Value: m.Value}}, merge)
 	}
 
-	for _, val := range lvalsFn(m.Name()) {
+	for _, val := range lvalsFn(m.Name) {
 		if m.Matches(val) {
-			matchingLabels = append(matchingLabels, labels.Label{Name: m.Name(), Value: val})
+			matchingLabels = append(matchingLabels, labels.Label{Name: m.Name, Value: val})
 		}
 	}
 
