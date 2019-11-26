@@ -26,7 +26,7 @@
       "name": "thanos-mixin",
       "source": {
         "local": {
-          "directory": "jsonnet/thanos-mixin"
+          "directory": "mixin/thanos-mixin"
         }
       },
       "version": ""

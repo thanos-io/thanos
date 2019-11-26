@@ -312,21 +312,21 @@ mixin-generate-in-container:
 .PHONY: examples
 examples: examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards
 
-examples/dashboards: $(JSONNET) jsonnet/thanos-mixin/mixin.libsonnet jsonnet/thanos-mixin/config.libsonnet jsonnet/thanos-mixin/dashboards/*
-	rm -rf examples/dashboards/*.json
+examples/dashboards: $(JSONNET) mixin/thanos-mixin/mixin.libsonnet mixin/thanos-mixin/config.libsonnet mixin/thanos-mixin/dashboards/*
+	-rm -rf examples/dashboards/*.json
 	-mkdir -p examples/dashboards/
-	$(JSONNET) -J jsonnet/vendor -m examples/dashboards jsonnet/thanos-mixin/dashboards.jsonnet
+	$(JSONNET) -J mixin/vendor -m examples/dashboards mixin/thanos-mixin/dashboards.jsonnet
 
-examples/alerts/alerts.yaml: $(JSONNET) $(GOJSONTOYAML) jsonnet/thanos-mixin/mixin.libsonnet jsonnet/thanos-mixin/config.libsonnet jsonnet/thanos-mixin/alerts/*
-	$(JSONNET) jsonnet/thanos-mixin/alerts.jsonnet | $(GOJSONTOYAML) > $@
+examples/alerts/alerts.yaml: $(JSONNET) $(GOJSONTOYAML) mixin/thanos-mixin/mixin.libsonnet mixin/thanos-mixin/config.libsonnet mixin/thanos-mixin/alerts/*
+	$(JSONNET) mixin/thanos-mixin/alerts.jsonnet | $(GOJSONTOYAML) > $@
 
-examples/alerts/rules.yaml: $(JSONNET) $(GOJSONTOYAML) jsonnet/thanos-mixin/mixin.libsonnet jsonnet/thanos-mixin/config.libsonnet jsonnet/thanos-mixin/rules/*
-	$(JSONNET) jsonnet/thanos-mixin/rules.jsonnet | $(GOJSONTOYAML) > $@
+examples/alerts/rules.yaml: $(JSONNET) $(GOJSONTOYAML) mixin/thanos-mixin/mixin.libsonnet mixin/thanos-mixin/config.libsonnet mixin/thanos-mixin/rules/*
+	$(JSONNET) mixin/thanos-mixin/rules.jsonnet | $(GOJSONTOYAML) > $@
 
 .PHONY: jsonnet-vendor
 jsonnet-vendor: $(JSONNET_BUNDLER) jsonnetfile.json jsonnetfile.lock.json
-	rm -rf jsonnet/vendor
-	$(JSONNET_BUNDLER) install --jsonnetpkg-home="jsonnet/vendor"
+	rm -rf mixin/vendor
+	$(JSONNET_BUNDLER) install --jsonnetpkg-home="mixin/vendor"
 
 JSONNET_FMT := jsonnetfmt -n 2 --max-blank-lines 2 --string-style s --comment-style s
 
