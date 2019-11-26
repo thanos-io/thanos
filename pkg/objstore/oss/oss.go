@@ -145,7 +145,7 @@ func (b *Bucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
 		return 0, errors.Wrap(err, "get oss meta")
 	}
 	if v, ok := m["Content-Length"]; ok {
-		if v == nil || len(v) == 0 {
+		if len(v) == 0 {
 			return 0, errors.New("content-length header has no values")
 		}
 		ret, err := strconv.ParseUint(v[0], 10, 64)
