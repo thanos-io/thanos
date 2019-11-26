@@ -14,7 +14,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
-	tlabels "github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -73,7 +72,7 @@ func TestProxyStore_Series(t *testing.T) {
 	for _, tc := range []struct {
 		title          string
 		storeAPIs      []Client
-		selectorLabels tlabels.Labels
+		selectorLabels labels.Labels
 
 		req *storepb.SeriesRequest
 
@@ -195,7 +194,7 @@ func TestProxyStore_Series(t *testing.T) {
 					maxTime: 300,
 				},
 			},
-			selectorLabels: tlabels.FromStrings("ext", "2"),
+			selectorLabels: labels.FromStrings("ext", "2"),
 			req: &storepb.SeriesRequest{
 				MinTime:  1,
 				MaxTime:  300,
@@ -449,7 +448,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 	for _, tc := range []struct {
 		title          string
 		storeAPIs      []Client
-		selectorLabels tlabels.Labels
+		selectorLabels labels.Labels
 
 		req *storepb.SeriesRequest
 
@@ -638,7 +637,7 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 	q := NewProxyStore(nil,
 		func() []Client { return cls },
 		component.Query,
-		tlabels.FromStrings("fed", "a"),
+		labels.FromStrings("fed", "a"),
 		0*time.Second,
 	)
 
@@ -1064,7 +1063,7 @@ func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sampl
 
 func TestMergeLabels(t *testing.T) {
 	ls := []storepb.Label{{Name: "a", Value: "b"}, {Name: "b", Value: "c"}}
-	selector := tlabels.Labels{{Name: "a", Value: "c"}, {Name: "c", Value: "d"}}
+	selector := labels.Labels{{Name: "a", Value: "c"}, {Name: "c", Value: "d"}}
 	expected := labels.Labels{{Name: "a", Value: "c"}, {Name: "b", Value: "c"}, {Name: "c", Value: "d"}}
 
 	res := mergeLabels(ls, selector)

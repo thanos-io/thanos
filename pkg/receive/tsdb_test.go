@@ -9,8 +9,8 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage/tsdb"
-	"github.com/prometheus/prometheus/tsdb/labels"
 
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -63,7 +63,7 @@ func TestFlushableStorage(t *testing.T) {
 		defer func() { testutil.Ok(t, querier.Close()) }()
 
 		// Sum the values.
-		seriesSet, err := querier.Select(labels.NewEqualMatcher("thanos", "flush"))
+		seriesSet, err := querier.Select(&labels.Matcher{Type: labels.MatchEqual, Name: "thanos", Value: "flush"})
 		testutil.Ok(t, err)
 		sum := 0.0
 		for seriesSet.Next() {

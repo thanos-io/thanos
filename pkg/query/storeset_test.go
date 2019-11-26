@@ -453,22 +453,22 @@ func TestStoreSet_Update(t *testing.T) {
 	// Check stats.
 	expected = newStoreAPIStats()
 	expected[component.StoreAPI(nil)] = map[string]int{
-		"{l1=\"no-store-type\",l2=\"v3\"}": 1,
+		"{l1=\"no-store-type\", l2=\"v3\"}": 1,
 	}
 	expected[component.Query] = map[string]int{
-		"{l1=\"v2\",l2=\"v3\"}":             1,
-		"{l1=\"v2\",l2=\"v3\"},{l3=\"v4\"}": 2,
+		"{l1=\"v2\", l2=\"v3\"}":             1,
+		"{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}": 2,
 	}
 	expected[component.Rule] = map[string]int{
-		"{l1=\"v2\",l2=\"v3\"}": 2,
+		"{l1=\"v2\", l2=\"v3\"}": 2,
 	}
 	expected[component.Sidecar] = map[string]int{
 		fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredStoreAddr[1]): 1,
-		"{l1=\"v2\",l2=\"v3\"}": 2,
+		"{l1=\"v2\", l2=\"v3\"}": 2,
 	}
 	expected[component.Store] = map[string]int{
-		"":                                  2,
-		"{l1=\"v2\",l2=\"v3\"},{l3=\"v4\"}": 3,
+		"":                                   2,
+		"{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}": 3,
 	}
 	testutil.Equals(t, expected, storeSet.storesMetric.storeNodes)
 
