@@ -41,32 +41,10 @@
             },
           },
           {
-            record: ':query_duration_seconds:p99:histogram_quantile',
-            expr: |||
-              histogram_quantile(0.99,
-                sum(http_request_duration_seconds_bucket{%(thanosQuerierSelector)s, handler="query"}) by (le)
-              )
-            ||| % $._config,
-            labels: {
-              quantile: '0.99',
-            },
-          },
-          {
             record: ':query_duration_seconds:histogram_quantile',
             expr: |||
               histogram_quantile(0.99,
                 sum(rate(http_request_duration_seconds_bucket{%(thanosQuerierSelector)s, handler="query"}[5m])) by (le)
-              )
-            ||| % $._config,
-            labels: {
-              quantile: '0.99',
-            },
-          },
-          {
-            record: ':api_range_query_duration_seconds:histogram_quantile',
-            expr: |||
-              histogram_quantile(0.99,
-                sum(http_request_duration_seconds_bucket{%(thanosQuerierSelector)s, handler="query_range"}) by (le)
               )
             ||| % $._config,
             labels: {

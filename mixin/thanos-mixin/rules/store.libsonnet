@@ -44,17 +44,6 @@
             record: ':thanos_objstore_bucket_operation_duration_seconds:histogram_quantile',
             expr: |||
               histogram_quantile(0.99,
-                sum(thanos_objstore_bucket_operation_duration_seconds_bucket{%(thanosStoreSelector)s}) by (le)
-              )
-            ||| % $._config,
-            labels: {
-              quantile: '0.99',
-            },
-          },
-          {
-            record: ':thanos_objstore_bucket_operation_duration_seconds:histogram_quantile',
-            expr: |||
-              histogram_quantile(0.99,
                 sum(rate(thanos_objstore_bucket_operation_duration_seconds_bucket{%(thanosStoreSelector)s}[5m])) by (le)
               )
             ||| % $._config,

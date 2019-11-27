@@ -44,17 +44,6 @@
             record: ':http_request_duration_seconds:histogram_quantile',
             expr: |||
               histogram_quantile(0.99,
-                sum(http_request_duration_seconds_bucket{handler="receive", %(thanosReceiveSelector)s}) by (le)
-              )
-            ||| % $._config,
-            labels: {
-              quantile: '0.99',
-            },
-          },
-          {
-            record: ':http_request_duration_seconds:histogram_quantile',
-            expr: |||
-              histogram_quantile(0.99,
                 sum(rate(http_request_duration_seconds_bucket{handler="receive", %(thanosReceiveSelector)s}[5m])) by (le)
               )
             ||| % $._config,
