@@ -50,8 +50,8 @@ In fact, downsampling doesn't save you any space but instead it adds 2 more bloc
 
 ## Groups
 
-The compactor groups blocks using the [external_labels](https://thanos.io/getting-started.md/#external-labels) added by the
-Prometheus who produced the block. The labels must be both _unique_ and _persistent_ across different Prometheus instances.
+The compactor groups blocks using the external_labels added by the Prometheus who produced the block.
+The labels must be both _unique_ and _persistent_ across different Prometheus instances.
 
 By _unique_, we mean that the set of labels in a Prometheus instance must be different from all other sets of labels of
 your Prometheus instances, so that the compactor will be able to group blocks by Prometheus instance.
