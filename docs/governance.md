@@ -8,7 +8,7 @@ slug: /governance.md
 
 # Governance
 
-This document describes the rules and governance of the project. It is a slightly modified version of the [Prometheus Governance](https://prometheus.io/governance/#governance-changes). 
+This document describes the rules and governance of the project. It is a slightly modified version of the [Prometheus Governance](https://prometheus.io/governance/#governance-changes).
 
 It is meant to be followed by all the developers of the Thanos project and the Thanos community. Common terminology used in this governance document are listed below:
 
@@ -28,10 +28,10 @@ Furthermore, the Thanos community strives for kindness, giving feedback effectiv
 
 ## Decision making
 
-### Maintainers Team 
+### Maintainers Team
 
 Team member status may be given to those who have made ongoing contributions to the Thanos project for at least 3 months.
-This is usually in the form of code improvements and/or notable work on documentation, but organizing events or user support could also be taken into account. 
+This is usually in the form of code improvements and/or notable work on documentation, but organizing events or user support could also be taken into account.
 
 New members may be proposed by any existing Maintainer by email to [thanos-io][team]. It is highly desirable to reach consensus about acceptance of a new member.
 However, the proposal is ultimately voted on by a formal [supermajority vote](#supermajority-vote) of Team Maintainers.
@@ -71,7 +71,7 @@ If they choose to accept, the following steps are taken:
 
 Triage member may retire at any time by emailing [thanos-io@googlegroups.com][team]. It can be proposed to step up as Maintainer in any time as well.
 
-Triage member can be removed by [majority vote](#majority-vote) on [thanos-io@googlegroups.com][team]. For this vote, the member in question is not eligible to vote and does not count towards the quorum. 
+Triage member can be removed by [majority vote](#majority-vote) on [thanos-io@googlegroups.com][team]. For this vote, the member in question is not eligible to vote and does not count towards the quorum.
 Only Maintainers team has right to vote.
 
 Upon death of a member, their Triage team membership ends automatically.
@@ -90,7 +90,7 @@ Any change requires a [supermajority](#supermajority-vote) in favor. Editorial c
 
 ### Other matters
 
-Any matter that needs a decision, including but not limited to financial matters, may be called to a vote by any Maintainer if they deem it necessary. 
+Any matter that needs a decision, including but not limited to financial matters, may be called to a vote by any Maintainer if they deem it necessary.
 For financial, private, or personnel matters, discussion and voting takes place on the [thanos-io@googlegroups.com][team]; Otherwise discussion and votes are held in public on the GitHub issues or #thanos-dev CNCF slack channel.
 
 ## Voting
@@ -188,7 +188,7 @@ All are encourage to start their own project related to Thanos. Thanos team is h
 
 ### How do I remove a Maintainer or Triage member?
 
-All members may resign by notifying the [thanos-io@googlegroups.com][team]. If you think a team member should be removed against their will, propose this to the [thanos-io@googlegroups.com][team]. 
+All members may resign by notifying the [thanos-io@googlegroups.com][team]. If you think a team member should be removed against their will, propose this to the [thanos-io@googlegroups.com][team].
 Discussions will be held there in private.
 
 ### Can majority/supermajority vote be done on GitHub PR by just approving PR?

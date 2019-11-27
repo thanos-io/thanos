@@ -12,7 +12,7 @@ owner: bwplotka
 * https://github.com/thanos-io/thanos/pull/1245 (attempt on compactor)
 * https://github.com/thanos-io/thanos/pull/1059 (attempt on store)
 * https://github.com/thanos-io/thanos/issues/1318 (subpaths, multitenancy)
-* Store issues because of large bucket: 
+* Store issues because of large bucket:
   * https://github.com/thanos-io/thanos/issues/814
   * https://github.com/thanos-io/thanos/issues/1455
 
@@ -23,23 +23,23 @@ Additionally we touch possibility for smarter pre-filtering of shards on the Que
 
 ## Motivation
 
-Currently all components that read from object store assume that all the operations and functionality should be done based 
-on **all** the available blocks that are present in the certain bucket's root directory. 
+Currently all components that read from object store assume that all the operations and functionality should be done based
+on **all** the available blocks that are present in the certain bucket's root directory.
 
-This is in most cases totally fine, however with time and allowance of storing blocks from multiple `Sources` into the same bucket, 
+This is in most cases totally fine, however with time and allowance of storing blocks from multiple `Sources` into the same bucket,
 the number of objects in a bucket can grow drastically.
 
 This means that with time you might want to scale out certain components e.g:
 
-* Compactor: Larger number of objects does not matter much, however compactor has to scale (CPU, network) with number of Sources pushing blocks to the object storage. 
+* Compactor: Larger number of objects does not matter much, however compactor has to scale (CPU, network) with number of Sources pushing blocks to the object storage.
 If you have multiple sources handled by the same compactor, with slower network and CPU you might not compact/downsample quick enough to cope with incoming blocks.
     * This happens a lot if no compactor is deployed for longer periods and thus has to quickly catch up with large number of blocks (e.g couple of months).
 * Store Gateway: Queries against store gateway which are touching large number of Sources might be expensive, so it has to scale up with number of Sources if we assume those queries.
-    * Orthogonally we did not advertise any labels on Store Gateway's Info. This means that querier was not able to do any pre-filtering, so all store gateways in system are always touched for each query. 
+    * Orthogonally we did not advertise any labels on Store Gateway's Info. This means that querier was not able to do any pre-filtering, so all store gateways in system are always touched for each query.
 
-### Reminder: What is a Source 
+### Reminder: What is a Source
 
-`Source` is a any component that creates new metrics in a form of Thanos TSDB blocks uploaded to the object storage. We differentiate Sources by `external labels`. 
+`Source` is a any component that creates new metrics in a form of Thanos TSDB blocks uploaded to the object storage. We differentiate Sources by `external labels`.
 Having unique sources has several benefits:
 
  * Sources does not need to inject "global" source labels to all metrics (like `cluster, env, replica`). Those all the same for all metrics produced by source, we can assume that whole block has those.
@@ -57,8 +57,8 @@ We can then define couple of use cases (some of them where already reported by u
 * Allowing pre-filtering of queries inside the Querier - thanks to labels advertised in Info call for all StoreAPIs (!).
 * Filtering out portion of data: This is useful if you want to ignore suddenly some blocks in case of error/investigation/security.
 * Different priority for different Sources.
-    * Some Sources might be more important then others. This might mean different availability and performance SLOs. 
-    Being able to split object storage operations across different components helps with that. NOTE: We mean here a per process priority (e.g one Store Gateway being more important then other). 
+    * Some Sources might be more important then others. This might mean different availability and performance SLOs.
+    Being able to split object storage operations across different components helps with that. NOTE: We mean here a per process priority (e.g one Store Gateway being more important then other).
 
 ## Goals of this design
 
@@ -66,11 +66,11 @@ Our goals for this design it to find and implement solution for:
 
 * Sharding browsing metrics from the object storage:
   * e.g Selecting what blocks Store Gateway should expose.
-* Minimal pre-filtering which shards Querier should touch during query. 
-* Sharding compaction/downsampling of metrics in the object storage. 
-  * NOTE: We need to be really careful to not have 2 compactors working on the same Source. 
+* Minimal pre-filtering which shards Querier should touch during query.
+* Sharding compaction/downsampling of metrics in the object storage.
+  * NOTE: We need to be really careful to not have 2 compactors working on the same Source.
   This means careful upgrades/configuration changes. There must be documentation for that at least.
-    
+
 ## No Goals
 
 * Time partitioning:
@@ -83,7 +83,7 @@ Our goals for this design it to find and implement solution for:
     * User uses any mix of object storages for sources. They put all in different subdirs/subpaths.
 * Add coordination or reconciliation in case of multi Compactor run on the same "sources" or any form of Compactor HA (e.g active passive)
     * Requires separate design.
-** multi-buckets/multi-prefix support. This is orthogonal. 
+** multi-buckets/multi-prefix support. This is orthogonal.
 
 ## Proposal
 
@@ -104,14 +104,14 @@ We will allow potentially manipulating with several of inputs:
 
 * `__block_id`
 * External labels:
-  * `<name>` 
-* `__block_objstore_bucket_endpoint` 
+  * `<name>`
+* `__block_objstore_bucket_endpoint`
 * `__block_objstore_bucket_name`
 * `__block_objstore_bucket_path`
 
 Output:
 
-* If output is empty, drop block. 
+* If output is empty, drop block.
 
 By default, on empty relabel-config, all external labels are assumed.
 Intuitively blocks without any external labels will be ignored.
@@ -161,7 +161,7 @@ For example:
 ```yaml
 - action: labeldrop
   regex: "^cluster$"
-  
+
 ```
 
 * Add `datacenter=ABC` external label to the result.

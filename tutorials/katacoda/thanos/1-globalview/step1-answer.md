@@ -1,6 +1,6 @@
 ## Answer
 
-**How many series (metrics) we collect overall on all Prometheus instances we have?**  
+**How many series (metrics) we collect overall on all Prometheus instances we have?**
 
 How to get this information? As you probably guess it's not straightforward. The current step would be:
 
@@ -11,7 +11,7 @@ Both holds the same data (number of series for each replica) so we just need to 
 
 As you can see this is not very convenient for both human as well as automation on top of metrics (e.g Alerting).
 
-The feature we are missing here is called **Global View** and it might be necessary once you scale out Prometheus to multiple instances. 
+The feature we are missing here is called **Global View** and it might be necessary once you scale out Prometheus to multiple instances.
 
 Great! We have now running 3 Prometheus instances.
 

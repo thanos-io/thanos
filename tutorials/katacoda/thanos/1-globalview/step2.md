@@ -2,12 +2,12 @@
 
 Let's take the setup from the previous step and seamlessly install Thanos to add Global View with HA handling feature.
 
-## Thanos Components 
+## Thanos Components
 
 Thanos is a single Go binary capable to run in different modes. Each mode represents a different
 component and can be invoked in a single command.
 
-Let's take a look at all the Thanos commands: 
+Let's take a look at all the Thanos commands:
 
 ```
 docker run --rm quay.io/thanos/thanos:v0.7.0 --help
@@ -26,13 +26,13 @@ In this step we will focus on `thanos sidecar`:
 
 Sidecar as the name suggests should be deployed together with Prometheus. Sidecar has multiple features:
 
-* It exposes Prometheus metrics as a common Thanos [StoreAPI](https://thanos.io/integrations.md/#storeapi). StoreAPI 
+* It exposes Prometheus metrics as a common Thanos [StoreAPI](https://thanos.io/integrations.md/#storeapi). StoreAPI
 is a generic gRPC API allowing Thanos components to fetch metrics from various systems and backends.
 * It is essentially in further long term storage options described in [next]() courses.
 * It is capable to watch for configuration and Prometheus rules (alerting or recording) and notify Prometheus for dynamic reloads:
   * optionally substitute with environment variables
   * optionally decompress if gzipp-ed
-   
+
 You can read more about sidecar [here](https://thanos.io/components/sidecar.md/)
 
 ## Installation
@@ -92,11 +92,11 @@ docker run -d --net=host --rm \
 ## Verification
 
 Now, to check if sidecars are running well, let's modify Prometheus scrape configuration to include our added sidecars.
- 
-As always click `Copy To Editor` for each config to propagate the configs to each file. 
+
+As always click `Copy To Editor` for each config to propagate the configs to each file.
 
 Note that only thanks to the sidecar, all those changes will be immediately reloaded and updated in Prometheus!
- 
+
 <pre class="file" data-filename="prometheus0_eu1.yml" data-target="replace">
 global:
   scrape_interval: 15s
@@ -149,12 +149,12 @@ scrape_configs:
 </pre>
 
 Now you should see new, updated configuration on each Prometheus. For example here in [Prometheus 0 EU1 /config](https://[[HOST_SUBDOMAIN]]-9090-[[KATACODA_HOST]].environments.katacoda.com/config).
-In the same time [`up`](https://[[HOST_SUBDOMAIN]]-9090-[[KATACODA_HOST]].environments.katacoda.com/graph?g0.expr=up&g0.tab=1) should show `job=sidecar` metrics. 
+In the same time [`up`](https://[[HOST_SUBDOMAIN]]-9090-[[KATACODA_HOST]].environments.katacoda.com/graph?g0.expr=up&g0.tab=1) should show `job=sidecar` metrics.
 
 Since now Prometheus has access to sidecar metrics we can query for [`thanos_sidecar_prometheus_up`](https://[[HOST_SUBDOMAIN]]-9090-[[KATACODA_HOST]].environments.katacoda.com/graph?g0.expr=thanos_sidecar_prometheus_up&g0.tab=1)
 to check if sidecar has access to Prometheus.
 
-## Next 
+## Next
 
 Great! Now you should have setup deployed as in the presented image:
 

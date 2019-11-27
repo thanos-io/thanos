@@ -5,7 +5,7 @@ Thanos is meant to scale and extend vanilla Prometheus. This means that you can 
 Let's start our tutorial by spinning up three Prometheus servers. Why three?
 The real advantage of Thanos is when you need to scale out Prometheus from a single replica. Some reason for scale-out might be:
 
-* Adding functional sharding because of metrics high cardinality 
+* Adding functional sharding because of metrics high cardinality
 * Need for high availability of Prometheus e.g: Rolling upgrades
 * Aggregating queries from multiple clusters
 
@@ -21,9 +21,9 @@ Let's start this initial Prometheus setup for now.
 ## Prometheus Configuration Files
 
 Now, we will prepare configuration files for all Prometheus instances.
- 
+
 Click `Copy To Editor` for each config to propagate the configs to each file.
- 
+
 First, for the EU Prometheus server that scrapes itself:
 
 <pre class="file" data-filename="prometheus0_eu1.yml" data-target="replace">
@@ -103,7 +103,7 @@ docker run -d --net=host --rm \
     --web.enable-admin-api && echo "Prometheus EU1 started!"
 ```{{execute}}
 
-NOTE: We are using the latest Prometheus image so we can take profit from the latest remote read protocol. 
+NOTE: We are using the latest Prometheus image so we can take profit from the latest remote read protocol.
 
 ### Deploying "US1"
 
@@ -151,12 +151,12 @@ Why would one need multiple Prometheus instances?
 
 * High Availability (multiple replicas)
 * Scaling ingestion: Functional Sharding
-* Multi cluster/environment architecture  
+* Multi cluster/environment architecture
 
 ## Problem statement: Global view challenge
 
-Let's try to play with this setup a bit. You are free to query any metrics, however, let's try to fetch some certain information from 
-our multi-cluster setup: **How many series (metrics) we collect overall on all Prometheus instances we have?**  
+Let's try to play with this setup a bit. You are free to query any metrics, however, let's try to fetch some certain information from
+our multi-cluster setup: **How many series (metrics) we collect overall on all Prometheus instances we have?**
 
 Tip: Look for `prometheus_tsdb_head_series` metric.
 
@@ -164,7 +164,7 @@ Tip: Look for `prometheus_tsdb_head_series` metric.
 
 Try to get this information from the current setup!
 
-To see the answer to this question click SHOW SOLUTION below. 
+To see the answer to this question click SHOW SOLUTION below.
 
 ## Next
 

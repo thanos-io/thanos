@@ -11,19 +11,19 @@
 | Lucas Servén Marín    | lserven@gmail.com      |  `@squat`                  | [@squat](https://github.com/squat)          | Red Hat           |
 
 We are bunch of people from different companies with various interests and skills.
-We are from different parts of Europe: Germany, Lithuania, Poland and UK. 
+We are from different parts of Europe: Germany, Lithuania, Poland and UK.
 We have something in common though: We all share the love for OpenSource, Go, Prometheus, :coffee: and Observability topics.
 
 As either Software Developers or SRE (or both!) we've chosen to maintain (mostly in our free time) Thanos, the de facto way to scale awesome [Prometheus](https://prometheus.io) project.
 
 Feel free to contact us (preferably on Slack) anytime for feedback, questions or :beers:/:coffee:/:tea:.
 
-Especially feedback, please share if you have ideas what we can do better! 
+Especially feedback, please share if you have ideas what we can do better!
 
 ## Triage
 
-We also have some nice souls that help triaging issues and PRs. See [here](https://help.github.com/en/articles/repository-permission-levels-for-an-organization#permission-levels-for-repositories-owned-by-an-organization) 
-for details about the role's permission. 
+We also have some nice souls that help triaging issues and PRs. See [here](https://help.github.com/en/articles/repository-permission-levels-for-an-organization#permission-levels-for-repositories-owned-by-an-organization)
+for details about the role's permission.
 
 Full list of triage persons is displayed below:
 
@@ -40,7 +40,7 @@ Please reach any of the maintainer on slack or email if you want to help as well
 To improve navigating through issues and PRs we introduce various [labels](https://github.com/thanos-io/thanos/issues/labels). Part of triaging process for Triage and Maintainers
 is to adjust those labels if needed manual. The `Prow` system can automate a portion of this in future.
 
-The main labels are: 
+The main labels are:
 
 #### Component
 

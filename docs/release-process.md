@@ -13,7 +13,7 @@ NOTE: As [Semantic Versioning](http://semver.org/spec/v2.0.0.html) states all 0.
 
 ## Cadence
 
-We aim for regular and strict one release per *6 weeks*. 6 weeks is counter from first release candidate to another. 
+We aim for regular and strict one release per *6 weeks*. 6 weeks is counter from first release candidate to another.
 This means that there is no *code freeze* or anything like that. We plan to stick to the exact 6 weeks, so there is no rush
 into being within release (except bug fixes).
 
@@ -21,7 +21,7 @@ No feature should block release.
 
 Additionally we (obviously) aim for `master` branch being stable.
 
-We are assigning a release shepherd for each minor release. 
+We are assigning a release shepherd for each minor release.
 
 Release shepherd responsibilities:
 
@@ -37,7 +37,7 @@ Release shepherd responsibilities:
 | v0.6.0    | (planned) 12.07.2019     | `@GiedriusS`             |
 | v0.5.0    | 31.06.2019               | `@bwplotka`              |
 
-# For maintainers: Cutting individual release 
+# For maintainers: Cutting individual release
 
 Process of releasing a *minor* Thanos version:
 1. Release `v<major>.<minor+1>.0-rc.0`
@@ -48,14 +48,14 @@ Process of releasing a *minor* Thanos version:
 ## How to release a version
 
 1. Add PR on branch `release-<major>.<minor>` that will start minor release branch and prepare changes to cut release.
-    
+
   For release candidate just reuse same branch and rebase it on every candidate until the actual release happens.
-        
+
 1. Update [CHANGELOG file](/CHANGELOG.md)
 
   Note that `CHANGELOG.md` should only document changes relevant to users of Thanos, including external API changes, performance improvements, and new features. Do not document changes of internal interfaces, code refactorings and clean-ups, changes to the build process, etc. People interested in these are asked to refer to the git history.
   Format is described in `CHANGELOG.md`.
-  
+
   The whole release from release candidate `rc.0` to actual release should have exactly the same section. We don't separate
   what have changed between release candidates.
 

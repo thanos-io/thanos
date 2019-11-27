@@ -1,6 +1,6 @@
 # Step 3 - Adding Thanos Querier
 
-Thanks to the previous step we have three running Prometheus instances with a sidecar each. In this step we will install 
+Thanks to the previous step we have three running Prometheus instances with a sidecar each. In this step we will install
 Thanos Querier which will use sidecars and allow querying all metrics from the single place as presented below:
 
 ![with querier](https://docs.google.com/drawings/d/e/2PACX-1vSB9gN82px0lxk9vN6wNw3eXr8Z0EVROW3xubsq7tgjbx_nXsoZ02ElzvxeDevyjGPWv-f9Gie0NeNz/pub?w=926&h=539)
@@ -13,7 +13,7 @@ The Querier component (also called "Query") is essentially a vanilla PromQL Prom
 that implements Thanos [StoreAPI](https://thanos.io/integrations.md/#storeapi). This means that Querier exposes the Prometheus HTTP v1 API to query the data in a common PromQL language.
 This allows compatibility with Grafana or other consumers of Prometheus' API.
 
-Additionally, Querier is capable of deduplicating StoreAPIs that are in the same HA group. We will see how it 
+Additionally, Querier is capable of deduplicating StoreAPIs that are in the same HA group. We will see how it
 looks in practice later on.
 
 You can read more about Thanos Querier [here](https://thanos.io/components/query.md/)
@@ -34,22 +34,22 @@ docker run -d --net=host --rm \
     --query.replica-label replica \
     --store 127.0.0.1:19190 \
     --store 127.0.0.1:19191 \
-    --store 127.0.0.1:19192 && echo "Started Thanos Querier" 
+    --store 127.0.0.1:19192 && echo "Started Thanos Querier"
 ```{{execute}}
 
 ## Setup verification
 
 Thanos Querier exposes very similar UI to the Prometheus, but on top of many `StoreAPIs you wish to connect to.
 
-To check if the Querier works as intended let's look on [Querier UI `Store` page](https://[[HOST_SUBDOMAIN]]-29090-[[KATACODA_HOST]].environments.katacoda.com/stores). 
+To check if the Querier works as intended let's look on [Querier UI `Store` page](https://[[HOST_SUBDOMAIN]]-29090-[[KATACODA_HOST]].environments.katacoda.com/stores).
 
 This should list all our three sidecars, including their external labels.
-  
+
 ## Global view - Not challenging anymore?
 
-Now, let's get back to our challenge from step 1, so finding the answer to  **How many series (metrics) we collect overall on all Prometheus instances we have?**  
+Now, let's get back to our challenge from step 1, so finding the answer to  **How many series (metrics) we collect overall on all Prometheus instances we have?**
 
-With the querier this is now super simple. 
+With the querier this is now super simple.
 
 It's just enough to query Querier for <a href="https://[[HOST_SUBDOMAIN]]-29090-[[KATACODA_HOST]].environments.katacoda.com/graph?g0.range_input=1h&g0.expr=sum(prometheus_tsdb_head_series)&g0.tab=1&g1.range_input=5m&g1.expr=prometheus_tsdb_head_series&g1.tab=0">`sum(prometheus_tsdb_head_series)`</a>
 
@@ -82,7 +82,7 @@ prometheus_tsdb_head_series{cluster="us1",instance="127.0.0.1:9092",job="prometh
 
 So how Thanos Querier knows how to deduplicate correctly?
 
-If we would look again into Querier configuration we can see that we also set `query.replica-label` flag. 
+If we would look again into Querier configuration we can see that we also set `query.replica-label` flag.
 This is exactly the label Querier will try to deduplicate by for HA groups. This means that any metric with exactly
 the same labels *except replica label* will be assumed as the metric from the same HA group, and deduplicated accordingly.
 
@@ -103,7 +103,7 @@ Now if we compare to `prometheus0_us1.yaml`:
     replica: 0
 ```
 
-We can see that since those two replicas scrape the same targets, any metric will be produced twice. 
+We can see that since those two replicas scrape the same targets, any metric will be produced twice.
 Once by `replica=1, cluster=us1` Prometheus and once by `replica=0, cluster=us1` Prometheus. If we configure Querier to
 deduplicate by `replica` we can transparently handle this High Available pair of Prometheus instances to the user.
 
