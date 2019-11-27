@@ -343,7 +343,7 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 		bdir := path.Join(s.dir, id.String())
 		meta, err := loadMeta(ctx, s.logger, s.bucket, bdir, id)
 		if err != nil {
-			return errors.Wrap(err, "load meta")
+			return errors.Wrap(os.RemoveAll(bdir), "load meta")
 		}
 
 		inRange, err := s.isBlockInMinMaxRange(ctx, meta)

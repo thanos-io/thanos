@@ -805,3 +805,44 @@ func expectedTouchedBlockOps(all []ulid.ULID, expected []ulid.ULID, cached []uli
 	sort.Strings(ops)
 	return ops
 }
+
+func TestFailureToLoadMeta(t *testing.T) {
+
+	ctx := context.Background()
+	logger := log.NewNopLogger()
+
+	dir, err := ioutil.TempDir("", "test-failure-to-load-meta")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+
+	syncdir, err := ioutil.TempDir("", "test-failure-to-load-meta")
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
+
+	bkt := inmem.NewBucket()
+	series := []labels.Labels{labels.FromStrings("a", "1", "b", "1")}
+
+	id1, err := testutil.CreateBlock(ctx, dir, series, 10, 0, 1000, labels.Labels{{Name: "cluster", Value: "a"}, {Name: "region", Value: "r1"}}, 0)
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, block.Upload(ctx, logger, bkt, filepath.Join(dir, id1.String())))
+
+	ok, err := bkt.Exists(ctx, filepath.Join(id1.String(), "meta.json"))
+	testutil.Ok(t, err)
+	testutil.Equals(t, true, ok)
+
+	// Delete the meta.json file
+	testutil.Ok(t, bkt.Delete(ctx, filepath.Join(id1.String(), "meta.json")))
+
+	rec := &recorder{Bucket: bkt}
+	var relabelConf []*relabel.Config
+	bucketStore, err := NewBucketStore(logger, nil, rec, syncdir, noopCache{}, 0, 0, 99, false, 20,
+		filterConf, relabelConf, true)
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, bucketStore.SyncBlocks(context.Background()))
+
+	// Ensure the directory does not exist (cleaned up on load meta error)
+	_, err = os.Stat(filepath.Join(syncdir, id1.String()))
+	testutil.Equals(t, true, os.IsNotExist(err))
+}
