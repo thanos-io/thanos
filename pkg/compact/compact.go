@@ -17,7 +17,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
-	promlables "github.com/prometheus/prometheus/pkg/labels"
+	promlabels "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
@@ -230,7 +230,7 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 
 				// Check for block labels by relabeling.
 				// If output is empty, the block will be dropped.
-				lset := promlables.FromMap(meta.Thanos.Labels)
+				lset := promlabels.FromMap(meta.Thanos.Labels)
 				processedLabels := relabel.Process(lset, c.relabelConfig...)
 				if processedLabels == nil {
 					level.Debug(c.logger).Log("msg", "dropping block(drop in relabeling)", "block", id)
