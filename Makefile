@@ -310,8 +310,16 @@ mixin-generate-in-container:
 	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) examples
 
 .PHONY: examples
-examples: examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards
+examples: examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards examples/tmp
+	$(EMBEDMD) -w examples/alerts/alerts.md
 
+.PHONY: examples/tmp
+examples/tmp:
+	-rm -rf examples/tmp/
+	-mkdir -p examples/tmp/
+	$(JSONNET) -J mixin/vendor -m examples/tmp/ mixin/thanos-mixin/separated_alerts.jsonnet | xargs -I{} sh -c 'cat {} | $(GOJSONTOYAML) > {}.yaml; rm -f {}' -- {}
+
+.PHONY: examples/dashboards
 examples/dashboards: $(JSONNET) mixin/thanos-mixin/mixin.libsonnet mixin/thanos-mixin/config.libsonnet mixin/thanos-mixin/dashboards/*
 	-rm -rf examples/dashboards/*.json
 	-mkdir -p examples/dashboards/
@@ -352,6 +360,7 @@ examples-clean:
 	rm -f examples/alerts/alerts.yaml
 	rm -f examples/alerts/rules.yaml
 	rm -f examples/dashboards/*.json
+	rm -f examples/tmp/*.yaml
 
 # non-phony targets
 $(EMBEDMD):

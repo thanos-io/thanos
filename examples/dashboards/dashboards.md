@@ -1,5 +1,3 @@
-[//]: # "TODO(kakkoyun): Improve documentation."
-
 # Dashboards
 
 There exists Grafana dashboards for each component (not all of them complete) targeted for environments running Kubernetes:
@@ -17,4 +15,4 @@ These dashboards require Grafana 5 or above, importing them in older versions ar
 
 ## Configuration
 
-All dashboards are generated using [`thanos-mixin`](../../jsonnet/thanos-mixin) and can be configured via editing [jsonnet configuration file](../../jsonnet/thanos-mixin/config.libsonnet), which are used to pinpoint Thanos components.
+All dashboards are generated using [`thanos-mixin`](../../jsonnet/thanos-mixin) and check out [README](../../jsonnet/thanos-mixin/README.md) for further information.

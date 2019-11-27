@@ -26,3 +26,4 @@ website/docs-pre-processed/
 !website/data
 
 tmp/bin
+examples/tmp/
