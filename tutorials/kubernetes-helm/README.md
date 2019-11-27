@@ -64,7 +64,8 @@ server:
   sidecarContainers:
   - name: thanos-sidecar
     # Always use explicit image tags (release or master-<date>-sha) instead of ambigous `latest` or `master`.
-    image: improbable/thanos:v0.3.2
+    # Check https://quay.io/repository/thanos/thanos?tab=tags to get latest tag.
+    image: quay.io/thanos/thanos:master-2019-11-26-82c005d9
     resources:
       requests:
         memory: "4Gi"
@@ -80,7 +81,6 @@ server:
     - "--log.level=debug"
     - "--tsdb.path=/data/"
     - "--prometheus.url=http://127.0.0.1:9090"
-    - "--cluster.disable"
     - "--objstore.config={type: GCS, config: {bucket: BUCKET_REPLACE_ME}}"
     - "--reloader.config-file=/etc/prometheus-config/prometheus.yml"
     - "--reloader.config-envsubst-file=/etc/prometheus-shared/prometheus.yml"
