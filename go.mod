@@ -112,7 +112,6 @@ require (
 replace (
 	// Mitigation for: https://github.com/Azure/go-autorest/issues/414
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v12.3.0+incompatible
-	golang.org/x/sys => golang.org/x/sys v0.0.0-20190412213103-97732733099d // v0.0.0-20190425145619-16072639606e (multiple-value "golang.org/x/sys/windows".GetCurrentProcess() in single-value context) Required to build properly on windows for github.com/elastic/go-sysinfo.
 	k8s.io/api => k8s.io/api v0.0.0-20190620084959-7cf5895f2711
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.0.0-20190620085554-14e95df34f1f
 	k8s.io/apimachinery => k8s.io/apimachinery v0.0.0-20190612205821-1799e75a0719

@@ -1,25 +1,77 @@
 name: CI
 on: [pull_request]
+
 jobs:
   cross-build-check:
     name: Cross build check
     runs-on: ubuntu-latest
-    # Build by Thanos make docker-ci
-    container: quay.io/thanos/thanos-ci:v0.2.0
     steps:
-    - name: Check out code into the Go module directory
-      uses: actions/checkout@v1
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v1
 
-    - name: Get dependencies
-      run: make deps
+      - uses: actions/cache@v1
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
 
-    - name: Cross build check
-      run: make crossbuild
+      - name: Get dependencies
+        run: make deps
+
+      - name: Cross build check
+        run: make crossbuild
   lint:
-    name: Build2
+    name: Lint check
     runs-on: ubuntu-latest
     # Build by Thanos make docker-ci
     container: quay.io/thanos/thanos-ci:v0.2.0
+    env:
+      GOBIN: "/go/bin"
     steps:
-    - name: Linting
-      run: make lint
+      - name: Init
+        run: |
+          sh -c "sudo chown -R circleci /github"
+          sh -c "sudo chmod -R 777 /github"
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v1
+
+      - uses: actions/cache@v1
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+
+      - name: Get dependencies
+        run: make deps
+
+      ## Standard setup above.
+
+      - name: Linting
+        run: make lint
+  check-docs:
+    name: Docs check
+    runs-on: ubuntu-latest
+    # Build by Thanos make docker-ci
+    container: quay.io/thanos/thanos-ci:v0.2.0
+    env:
+      GOBIN: "/go/bin"
+    steps:
+      - name: Init
+        run: |
+          sh -c "sudo chown -R circleci /github"
+          sh -c "sudo chmod -R 777 /github"
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v1
+
+      - uses: actions/cache@v1
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+
+      - name: Get dependencies
+        run: make deps
+
+      ## Standard setup above.
+
+      - name: Docs checking
+        run: make docs
