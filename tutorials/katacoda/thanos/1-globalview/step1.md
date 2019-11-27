@@ -99,6 +99,7 @@ docker run -d --net=host --rm \
     --config.file=/etc/prometheus/prometheus.yml \
     --storage.tsdb.path=/prometheus \
     --web.listen-address=:9090 \
+    --web.external-url=https://[[HOST_SUBDOMAIN]]-9090-[[KATACODA_HOST]].environments.katacoda.com \
     --web.enable-lifecycle \
     --web.enable-admin-api && echo "Prometheus EU1 started!"
 ```{{execute}}
@@ -117,6 +118,7 @@ docker run -d --net=host --rm \
     --config.file=/etc/prometheus/prometheus.yml \
     --storage.tsdb.path=/prometheus \
     --web.listen-address=:9091 \
+    --web.external-url=https://[[HOST_SUBDOMAIN]]-9091-[[KATACODA_HOST]].environments.katacoda.com \
     --web.enable-lifecycle \
     --web.enable-admin-api && echo "Prometheus 0 US1 started!"
 ```{{execute}}
@@ -133,6 +135,7 @@ docker run -d --net=host --rm \
     --config.file=/etc/prometheus/prometheus.yml \
     --storage.tsdb.path=/prometheus \
     --web.listen-address=:9092 \
+    --web.external-url=https://[[HOST_SUBDOMAIN]]-9092-[[KATACODA_HOST]].environments.katacoda.com \
     --web.enable-lifecycle \
     --web.enable-admin-api && echo "Prometheus 1 US1 started!"
 ```{{execute}}
