@@ -1,6 +1,6 @@
 rule_files:
-  - examples/alerts/alerts.yaml
-  - examples/alerts/rules.yaml
+  - alerts.yaml
+  - rules.yaml
 
 evaluation_interval: 1m
 
