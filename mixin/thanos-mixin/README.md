@@ -113,7 +113,7 @@ You validate your structural correctness of your Prometheus [alerting rules](htt
 $ make rules-lint
 ```
 
-Check out [test.yaml](examples/alerts/tests.yaml) to add/modify tests for the mixin. To learn more about how to write test for Promethues, check out [official documentation](https://www.prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/).
+Check out [test.yaml](examples/alerts/tests.yaml) to add/modify tests for the mixin. To learn more about how to write test for Prometheus, check out [official documentation](https://www.prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/).
 
 You test alerts with:
 
