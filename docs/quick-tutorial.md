@@ -20,7 +20,7 @@ Prometheus always stays as integral foundation for *collecting metrics* and aler
 
 Thanos bases itself on vanilla [Prometheus](https://prometheus.io/) (v2.2.1+). We plan to support *all* Prometheus version beyond this version.
 
-NOTE: It is highly recommended to use Prometheus 2.13 (available in next Prometheus release) due to Prometheus remote read improvements.
+NOTE: It is highly recommended to use Prometheus v2.13+ due to Prometheus remote read improvements.
 
 Always make sure to run Prometheus as recommended by Prometheus team, so:
 
