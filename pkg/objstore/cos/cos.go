@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -86,6 +87,25 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 // Name returns the bucket name for COS.
 func (b *Bucket) Name() string {
 	return b.name
+}
+
+// ObjectSize returns the size of the specified object.
+func (b *Bucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
+	resp, err := b.client.Object.Head(ctx, name, nil)
+	if err != nil {
+		return 0, err
+	}
+	if v, ok := resp.Header["Content-Length"]; ok {
+		if len(v) == 0 {
+			return 0, errors.New("content-length header has no values")
+		}
+		ret, err := strconv.ParseUint(v[0], 10, 64)
+		if err != nil {
+			return 0, errors.Wrap(err, "convert content-length")
+		}
+		return ret, nil
+	}
+	return 0, errors.New("content-length header not found")
 }
 
 // Upload the contents of the reader as an object into the bucket.

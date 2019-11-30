@@ -139,6 +139,17 @@ func (b *Bucket) Exists(_ context.Context, name string) (bool, error) {
 	return ok, nil
 }
 
+// ObjectSize returns the size of the specified object.
+func (b *Bucket) ObjectSize(_ context.Context, name string) (uint64, error) {
+	b.mtx.RLock()
+	file, ok := b.objects[name]
+	b.mtx.RUnlock()
+	if !ok {
+		return 0, errNotFound
+	}
+	return uint64(len(file)), nil
+}
+
 // Upload writes the file specified in src to into the memory.
 func (b *Bucket) Upload(_ context.Context, name string, r io.Reader) error {
 	b.mtx.Lock()

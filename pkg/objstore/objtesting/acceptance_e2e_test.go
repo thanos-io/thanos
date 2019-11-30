@@ -31,6 +31,10 @@ func TestObjStore_AcceptanceTest_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Assert(t, !ok, "expected not exits")
 
+		_, err = bkt.ObjectSize(ctx, "id1/obj_1.some")
+		testutil.NotOk(t, err)
+		testutil.Assert(t, bkt.IsObjNotFoundErr(err), "expected not found error but got %s", err)
+
 		// Upload first object.
 		testutil.Ok(t, bkt.Upload(ctx, "id1/obj_1.some", strings.NewReader("@test-data@")))
 
@@ -41,6 +45,11 @@ func TestObjStore_AcceptanceTest_e2e(t *testing.T) {
 		content, err := ioutil.ReadAll(rc1)
 		testutil.Ok(t, err)
 		testutil.Equals(t, "@test-data@", string(content))
+
+		// Check if we can get the correct size.
+		sz, err := bkt.ObjectSize(ctx, "id1/obj_1.some")
+		testutil.Ok(t, err)
+		testutil.Assert(t, sz == 11, "expected size to be equal to 11")
 
 		rc2, err := bkt.GetRange(ctx, "id1/obj_1.some", 1, 3)
 		testutil.Ok(t, err)
