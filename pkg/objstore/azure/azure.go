@@ -232,12 +232,12 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 func (b *Bucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
 	blobURL, err := getBlobURL(ctx, *b.config, name)
 	if err != nil {
-		return 0, errors.Wrapf(err, "cannot get Azure blob URL, address: %s", name)
+		return 0, errors.Wrapf(err, "cannot get Azure blob URL, blob: %s", name)
 	}
 	var props *blob.BlobGetPropertiesResponse
 	props, err = blobURL.GetProperties(ctx, blob.BlobAccessConditions{})
 	if err != nil {
-		return 0, errors.Wrapf(err, "cannot get properties for container: %s", name)
+		return 0, err
 	}
 	return uint64(props.ContentLength()), nil
 }
