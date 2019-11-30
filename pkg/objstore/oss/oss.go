@@ -142,7 +142,7 @@ func (b *Bucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
 	// https://github.com/aliyun/aliyun-oss-go-sdk/blob/cee409f5b4d75d7ad077cacb7e6f4590a7f2e172/oss/bucket.go#L668
 	m, err := b.bucket.GetObjectMeta(name)
 	if err != nil {
-		return 0, errors.Wrap(err, "get oss meta")
+		return 0, err
 	}
 	if v, ok := m["Content-Length"]; ok {
 		if len(v) == 0 {

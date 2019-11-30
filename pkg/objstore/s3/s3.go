@@ -342,7 +342,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 func (b *Bucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
 	objInfo, err := b.client.StatObject(b.name, name, minio.StatObjectOptions{})
 	if err != nil {
-		return 0, errors.Wrap(err, "stat s3 object")
+		return 0, err
 	}
 	return uint64(objInfo.Size), nil
 }

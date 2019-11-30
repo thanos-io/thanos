@@ -126,7 +126,7 @@ func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (
 func (b *Bucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
 	obj, err := b.bkt.Object(name).Attrs(ctx)
 	if err != nil {
-		return 0, errors.Wrap(err, "gcs get attrs")
+		return 0, err
 	}
 	return uint64(obj.Size), nil
 }

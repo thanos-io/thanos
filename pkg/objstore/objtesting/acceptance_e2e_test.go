@@ -31,6 +31,10 @@ func TestObjStore_AcceptanceTest_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Assert(t, !ok, "expected not exits")
 
+		_, err = bkt.ObjectSize(ctx, "id1/obj_1.some")
+		testutil.NotOk(t, err)
+		testutil.Assert(t, bkt.IsObjNotFoundErr(err), "expected not found error but got %s", err)
+
 		// Upload first object.
 		testutil.Ok(t, bkt.Upload(ctx, "id1/obj_1.some", strings.NewReader("@test-data@")))
 

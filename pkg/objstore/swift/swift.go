@@ -130,7 +130,7 @@ func (c *Container) ObjectSize(ctx context.Context, name string) (uint64, error)
 	response := objects.Get(c.client, c.name, name, nil)
 	headers, err := response.Extract()
 	if err != nil {
-		return 0, errors.Wrap(err, "extract get headers")
+		return 0, err
 	}
 	return uint64(headers.ContentLength), nil
 }

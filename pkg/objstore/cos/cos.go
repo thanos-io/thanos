@@ -93,7 +93,7 @@ func (b *Bucket) Name() string {
 func (b *Bucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
 	resp, err := b.client.Object.Head(ctx, name, nil)
 	if err != nil {
-		return 0, errors.Wrap(err, "cos head object")
+		return 0, err
 	}
 	if v, ok := resp.Header["Content-Length"]; ok {
 		if len(v) == 0 {
