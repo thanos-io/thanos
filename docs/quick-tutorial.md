@@ -130,7 +130,7 @@ Go to the configured HTTP address that should now show a UI similar to that of P
 
 #### Deduplicating Data from Prometheus HA pairs
 
-The Query component is also capable of deduplicating data collected from Prometheus HA pairs. This requires configuring Prometheus's `global.external_labels` configuration block (as mentioned in the [External Labels section](getting-started.md#external-labels)) to identify the role of a given Prometheus instance.
+The Query component is also capable of deduplicating data collected from Prometheus HA pairs. This requires configuring Prometheus's `global.external_labels` configuration block to identify the role of a given Prometheus instance.
 
 A typical choice is simply the label name "replica" while letting the value be whatever you wish. For example, you might set up the following in Prometheus's configuration file:
 
