@@ -111,6 +111,8 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 	dnsSDResolver := cmd.Flag("query.sd-dns-resolver", "Resolver to use. Possible options: [golang, miekgdns]").
 		Default("golang").Hidden().String()
 
+	evalInPast := cmd.Flag("eval-in-past-duration", "If non 0 ruler will run in special mode which evaluates queries 'T-durationInPast'. Alerts are not supported in this mode and this option applies to all rules evaluated by this ruler instance.").Hidden().Duration()
+
 	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
@@ -180,6 +182,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			time.Duration(*dnsSDInterval),
 			*dnsSDResolver,
 			comp,
+			*evalInPast,
 		)
 	}
 }
@@ -217,6 +220,7 @@ func runRule(
 	dnsSDInterval time.Duration,
 	dnsSDResolver string,
 	comp component.Component,
+	evalInPast time.Duration,
 ) error {
 	configSuccess := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_rule_config_last_reload_successful",
@@ -286,6 +290,13 @@ func runRule(
 		dns.ResolverType(dnsSDResolver),
 	)
 
+	if evalInPast > 0*time.Minute {
+		if len(alertmgrURLs) > 0 {
+			return errors.Wrap(err, "eval in Past option is set, do not set `alertmanagers.url` flag as alerts in this mode are not supported")
+		}
+		level.Info(logger).Log("ruler running in evalInPast mode", "evalInPast", evalInPast.String())
+	}
+
 	// Run rule evaluation and alert notifications.
 	var (
 		alertmgrs = newAlertmanagerSet(logger, alertmgrURLs, dns.ResolverType(dnsSDResolver))
@@ -336,7 +347,7 @@ func runRule(
 			opts := opts
 			opts.Registerer = extprom.WrapRegistererWith(prometheus.Labels{"strategy": strings.ToLower(s.String())}, reg)
 			opts.Context = ctx
-			opts.QueryFunc = queryFunc(logger, dnsProvider, duplicatedQuery, ruleEvalWarnings, s)
+			opts.QueryFunc = queryFunc(logger, dnsProvider, duplicatedQuery, ruleEvalWarnings, s, evalInPast)
 
 			mgr := rules.NewManager(&opts)
 			ruleMgr.SetRuleManager(s, mgr)
@@ -753,6 +764,7 @@ func queryFunc(
 	duplicatedQuery prometheus.Counter,
 	ruleEvalWarnings *prometheus.CounterVec,
 	partialResponseStrategy storepb.PartialResponseStrategy,
+	durationInPast time.Duration,
 ) rules.QueryFunc {
 	var spanID string
 
@@ -780,7 +792,7 @@ func queryFunc(
 			}
 
 			span, ctx := tracing.StartSpan(ctx, spanID)
-			v, warns, err := promclient.PromqlQueryInstant(ctx, logger, u, q, t, promclient.QueryOptions{
+			v, warns, err := promclient.PromqlQueryInstant(ctx, logger, u, q, t.Add(-durationInPast), promclient.QueryOptions{
 				Deduplicate:             true,
 				PartialResponseStrategy: partialResponseStrategy,
 			})
