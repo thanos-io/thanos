@@ -184,6 +184,10 @@ format: $(GOIMPORTS) check-comments
 	@echo ">> formatting code"
 	@$(GOIMPORTS) -w $(FILES_TO_FMT)
 	@scripts/cleanup-white-noise.sh $(FILES_TO_FMT)
+	@if [[ ! git diff-files --quiet --ignore-submodules -- ]]; then \
+		echo >&2 "please clean up white noise in all go files"; \
+		exit 1; \
+	fi
 
 # proto generates golang files from Thanos proto files.
 .PHONY: proto
