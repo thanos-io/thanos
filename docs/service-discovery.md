@@ -13,7 +13,7 @@ SD is currently used in the following places within Thanos:
 
 * `Thanos Query` needs to know about [StoreAPI](https://github.com/thanos-io/thanos/blob/d3fb337da94d11c78151504b1fccb1d7e036f394/pkg/store/storepb/rpc.proto#L14) servers in order to query metrics from them.
 * `Thanos Rule` needs to know about `QueryAPI` servers in order to evaluate recording and alerting rules.
-* `Thanos Rule` needs to know about `Alertmanagers` HA replicas in order to send alerts; only static option with DNS discovery.
+* `Thanos Rule` needs to know about `Alertmanagers` HA replicas in order to send alerts.
 
 There are currently several ways to configure SD, described below in more detail:
 
@@ -33,7 +33,7 @@ The repeatable flag `--store=<store>` can be used to specify a `StoreAPI` that `
 
 The repeatable flag `--query=<query>` can be used to specify a `QueryAPI` that `Thanos Rule` should use.
 
-The repeatable flag `--alertmanager.url=<alertmanager>` can be used to specify a `Alertmanager API` that `Thanos Rule` should use.
+The repeatable flag `--alertmanagers.url=<alertmanager>` can be used to specify a `Alertmanager API` that `Thanos Rule` should use.
 
 ## File Service Discovery
 
@@ -76,6 +76,8 @@ The repeatable flag `--query.sd-files=<path>` can be used to specify the path to
 Again, the `<path>` can be a glob pattern.
 
 The flag `--query.sd-interval=<5m>` can be used to change the fallback re-read interval.
+
+`Thanos Rule` also supports the configuration of Alertmanager endpoints using YAML with the `--alertmanagers.config=<content>` and `--alertmanagers.config-file=<path>` flags.
 
 ## DNS Service Discovery
 

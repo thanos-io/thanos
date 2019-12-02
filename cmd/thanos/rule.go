@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,7 +12,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -83,8 +81,8 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 
 	alertmgrs := cmd.Flag("alertmanagers.url", "Alertmanager replica URLs to push firing alerts. Ruler claims success if push to at least one alertmanager from discovered succeeds. The scheme should not be empty e.g `http` might be used. The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Alertmanager IPs through respective DNS lookups. The port defaults to 9093 or the SRV record's value. The URL path is used as a prefix for the regular Alertmanager API path.").
 		Strings()
-
-	alertmgrsTimeout := cmd.Flag("alertmanagers.send-timeout", "Timeout for sending alerts to alertmanager").Default("10s").Duration()
+	alertmgrsTimeout := cmd.Flag("alertmanagers.send-timeout", "Timeout for sending alerts to Alertmanager").Default("10s").Duration()
+	alertmgrsConfig := extflag.RegisterPathOrContent(cmd, "alertmanagers.config", "YAML file that contains alerting configuration. See format details: https://thanos.io/components/rule.md/#configuration. If defined, it takes precedence over the '--alertmanagers.url' and '--alertmanagers.send-timeout' flags.", false)
 
 	alertQueryURL := cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field").String()
 
@@ -157,6 +155,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			lset,
 			*alertmgrs,
 			*alertmgrsTimeout,
+			alertmgrsConfig,
 			*grpcBindAddr,
 			time.Duration(*grpcGracePeriod),
 			*grpcCert,
@@ -194,6 +193,7 @@ func runRule(
 	lset labels.Labels,
 	alertmgrURLs []string,
 	alertmgrsTimeout time.Duration,
+	alertmgrsConfig *extflag.PathOrContent,
 	grpcBindAddr string,
 	grpcGracePeriod time.Duration,
 	grpcCert string,
@@ -286,11 +286,48 @@ func runRule(
 		dns.ResolverType(dnsSDResolver),
 	)
 
+	// Build the Alertmanager clients.
+	alertmgrsConfigYAML, err := alertmgrsConfig.Content()
+	if err != nil {
+		return err
+	}
+	var (
+		alertingcfg alert.AlertingConfig
+		alertmgrs   []*alert.Alertmanager
+	)
+	if len(alertmgrsConfigYAML) > 0 {
+		if len(alertmgrURLs) != 0 {
+			level.Warn(logger).Log("msg", "ignoring --alertmanagers.url flag because --alertmanagers.config* flag is also defined")
+		}
+		alertingcfg, err = alert.LoadAlertingConfig(alertmgrsConfigYAML)
+		if err != nil {
+			return err
+		}
+	} else {
+		// Build the Alertmanager configuration from the legacy flags.
+		for _, addr := range alertmgrURLs {
+			cfg, err := alert.BuildAlertmanagerConfig(logger, addr, alertmgrsTimeout)
+			if err != nil {
+				return err
+			}
+			alertingcfg.Alertmanagers = append(alertingcfg.Alertmanagers, cfg)
+		}
+	}
+	if len(alertingcfg.Alertmanagers) == 0 {
+		level.Warn(logger).Log("msg", "no alertmanager configured")
+	}
+	for _, cfg := range alertingcfg.Alertmanagers {
+		am, err := alert.NewAlertmanager(logger, cfg)
+		if err != nil {
+			return err
+		}
+		alertmgrs = append(alertmgrs, am)
+	}
+
 	// Run rule evaluation and alert notifications.
 	var (
-		alertmgrs = newAlertmanagerSet(logger, alertmgrURLs, dns.ResolverType(dnsSDResolver))
-		alertQ    = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(lset), alertExcludeLabels)
-		ruleMgr   = thanosrule.NewManager(dataDir)
+		alertQ  = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(lset), alertExcludeLabels)
+		ruleMgr = thanosrule.NewManager(dataDir)
 	)
 	{
 		notify := func(ctx context.Context, expr string, alerts ...*rules.Alert) {
@@ -351,9 +388,40 @@ func runRule(
 			})
 		}
 	}
+	// Discover and resolve Alertmanager addresses.
 	{
-		// TODO(bwplotka): https://github.com/thanos-io/thanos/issues/660.
-		sdr := alert.NewSender(logger, reg, alertmgrs.get, nil, alertmgrsTimeout)
+		resolver := dns.NewResolver(dns.ResolverType(dnsSDResolver).ToResolver(logger))
+
+		for i := range alertmgrs {
+			am := alertmgrs[i]
+			ctx, cancel := context.WithCancel(context.Background())
+			g.Add(func() error {
+				am.Discover(ctx)
+				return nil
+			}, func(error) {
+				cancel()
+			})
+
+			g.Add(func() error {
+				return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+					if err := am.Update(ctx, resolver); err != nil {
+						level.Error(logger).Log("msg", "refreshing alertmanagers failed", "err", err)
+						alertMngrAddrResolutionErrors.Inc()
+					}
+					return nil
+				})
+			}, func(error) {
+				cancel()
+			})
+		}
+	}
+	// Run the alert sender.
+	{
+		doers := make([]alert.AlertmanagerDoer, len(alertmgrs))
+		for i := range alertmgrs {
+			doers[i] = alertmgrs[i]
+		}
+		sdr := alert.NewSender(logger, reg, doers)
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
@@ -366,21 +434,6 @@ func runRule(
 				default:
 				}
 			}
-		}, func(error) {
-			cancel()
-		})
-	}
-	{
-		ctx, cancel := context.WithCancel(context.Background())
-
-		g.Add(func() error {
-			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
-				if err := alertmgrs.update(ctx); err != nil {
-					level.Error(logger).Log("msg", "refreshing alertmanagers failed", "err", err)
-					alertMngrAddrResolutionErrors.Inc()
-				}
-				return nil
-			})
 		}, func(error) {
 			cancel()
 		})
@@ -612,90 +665,6 @@ func runRule(
 	}
 
 	level.Info(logger).Log("msg", "starting rule node")
-	return nil
-}
-
-type alertmanagerSet struct {
-	resolver dns.Resolver
-	addrs    []string
-	mtx      sync.Mutex
-	current  []*url.URL
-}
-
-func newAlertmanagerSet(logger log.Logger, addrs []string, dnsSDResolver dns.ResolverType) *alertmanagerSet {
-	return &alertmanagerSet{
-		resolver: dns.NewResolver(dnsSDResolver.ToResolver(logger)),
-		addrs:    addrs,
-	}
-}
-
-func (s *alertmanagerSet) get() []*url.URL {
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
-	return s.current
-}
-
-const defaultAlertmanagerPort = 9093
-
-func parseAlertmanagerAddress(addr string) (qType dns.QType, parsedUrl *url.URL, err error) {
-	qType = ""
-	parsedUrl, err = url.Parse(addr)
-	if err != nil {
-		return qType, nil, err
-	}
-	// The Scheme might contain DNS resolver type separated by + so we split it a part.
-	if schemeParts := strings.Split(parsedUrl.Scheme, "+"); len(schemeParts) > 1 {
-		parsedUrl.Scheme = schemeParts[len(schemeParts)-1]
-		qType = dns.QType(strings.Join(schemeParts[:len(schemeParts)-1], "+"))
-	}
-	return qType, parsedUrl, err
-}
-
-func (s *alertmanagerSet) update(ctx context.Context) error {
-	var result []*url.URL
-	for _, addr := range s.addrs {
-		var (
-			qtype          dns.QType
-			resolvedDomain []string
-		)
-
-		qtype, u, err := parseAlertmanagerAddress(addr)
-		if err != nil {
-			return errors.Wrapf(err, "parse URL %q", addr)
-		}
-
-		// Get only the host and resolve it if needed.
-		host := u.Host
-		if qtype != "" {
-			if qtype == dns.A {
-				_, _, err = net.SplitHostPort(host)
-				if err != nil {
-					// The host could be missing a port. Append the defaultAlertmanagerPort.
-					host = host + ":" + strconv.Itoa(defaultAlertmanagerPort)
-				}
-			}
-			resolvedDomain, err = s.resolver.Resolve(ctx, host, qtype)
-			if err != nil {
-				return errors.Wrap(err, "alertmanager resolve")
-			}
-		} else {
-			resolvedDomain = []string{host}
-		}
-
-		for _, resolved := range resolvedDomain {
-			result = append(result, &url.URL{
-				Scheme: u.Scheme,
-				Host:   resolved,
-				Path:   u.Path,
-				User:   u.User,
-			})
-		}
-	}
-
-	s.mtx.Lock()
-	s.current = result
-	s.mtx.Unlock()
-
 	return nil
 }
 

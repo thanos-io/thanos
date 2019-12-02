@@ -209,7 +209,23 @@ Flags:
                                  record's value. The URL path is used as a
                                  prefix for the regular Alertmanager API path.
       --alertmanagers.send-timeout=10s
-                                 Timeout for sending alerts to alertmanager
+                                 Timeout for sending alerts to Alertmanager
+      --alertmanagers.config-file=<file-path>
+                                 Path to YAML file that contains alerting
+                                 configuration. See format details:
+                                 https://thanos.io/components/rule.md/#configuration.
+                                 If defined, it takes precedence over the
+                                 '--alertmanagers.url' and
+                                 '--alertmanagers.send-timeout' flags.
+      --alertmanagers.config=<content>
+                                 Alternative to 'alertmanagers.config-file' flag
+                                 (lower priority). Content of YAML file that
+                                 contains alerting configuration. See format
+                                 details:
+                                 https://thanos.io/components/rule.md/#configuration.
+                                 If defined, it takes precedence over the
+                                 '--alertmanagers.url' and
+                                 '--alertmanagers.send-timeout' flags.
       --alert.query-url=ALERT.QUERY-URL
                                  The external Thanos Query URL that would be set
                                  in all alerts 'Source' field
@@ -265,4 +281,36 @@ Flags:
       --query.sd-dns-interval=30s
                                  Interval between DNS resolutions.
 
+```
+
+## Configuration
+
+### Alertmanager
+
+The configuration format supported by the `--alertmanagers.config` and `--alertmanagers.config-file` flags is the following:
+
+[embedmd]:# (../flags/config_rule_alerting.txt yaml)
+```yaml
+alertmanagers:
+- http_config:
+    basic_auth:
+      username: ""
+      password: ""
+      password_file: ""
+    bearer_token: ""
+    bearer_token_file: ""
+    proxy_url: ""
+    tls_config:
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      server_name: ""
+      insecure_skip_verify: false
+  static_configs: []
+  file_sd_configs:
+  - files: []
+    refresh_interval: 0s
+  scheme: http
+  path_prefix: ""
+  timeout: 10s
 ```
