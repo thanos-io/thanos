@@ -36,6 +36,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/pool"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/strutil"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -188,13 +189,6 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	return &m
 }
 
-type indexCache interface {
-	SetPostings(b ulid.ULID, l labels.Label, v []byte)
-	Postings(b ulid.ULID, l labels.Label) ([]byte, bool)
-	SetSeries(b ulid.ULID, id uint64, v []byte)
-	Series(b ulid.ULID, id uint64) ([]byte, bool)
-}
-
 // FilterConfig is a configuration, which Store uses for filtering metrics.
 type FilterConfig struct {
 	MinTime, MaxTime model.TimeOrDurationValue
@@ -207,7 +201,7 @@ type BucketStore struct {
 	metrics    *bucketStoreMetrics
 	bucket     objstore.BucketReader
 	dir        string
-	indexCache indexCache
+	indexCache storecache.IndexCache
 	chunkPool  *pool.BytesPool
 
 	// Sets of blocks that have the same labels. They are indexed by a hash over their label set.
@@ -241,7 +235,7 @@ func NewBucketStore(
 	reg prometheus.Registerer,
 	bucket objstore.BucketReader,
 	dir string,
-	indexCache indexCache,
+	indexCache storecache.IndexCache,
 	maxChunkPoolBytes uint64,
 	maxSampleCount uint64,
 	maxConcurrent int,
@@ -1175,7 +1169,7 @@ type bucketBlock struct {
 	bucket     objstore.BucketReader
 	meta       *metadata.Meta
 	dir        string
-	indexCache indexCache
+	indexCache storecache.IndexCache
 	chunkPool  *pool.BytesPool
 
 	indexVersion int
@@ -1196,7 +1190,7 @@ func newBucketBlock(
 	meta *metadata.Meta,
 	bkt objstore.BucketReader,
 	dir string,
-	indexCache indexCache,
+	indexCache storecache.IndexCache,
 	chunkPool *pool.BytesPool,
 	p partitioner,
 ) (b *bucketBlock, err error) {
@@ -1358,13 +1352,13 @@ type bucketIndexReader struct {
 	block  *bucketBlock
 	dec    *index.Decoder
 	stats  *queryStats
-	cache  indexCache
+	cache  storecache.IndexCache
 
 	mtx          sync.Mutex
 	loadedSeries map[uint64][]byte
 }
 
-func newBucketIndexReader(ctx context.Context, logger log.Logger, block *bucketBlock, cache indexCache) *bucketIndexReader {
+func newBucketIndexReader(ctx context.Context, logger log.Logger, block *bucketBlock, cache storecache.IndexCache) *bucketIndexReader {
 	r := &bucketIndexReader{
 		logger:       logger,
 		ctx:          ctx,
@@ -1527,13 +1521,21 @@ type postingPtr struct {
 func (r *bucketIndexReader) fetchPostings(groups []*postingGroup) error {
 	var ptrs []postingPtr
 
+	// Fetch postings from the cache with a single call.
+	keys := make([]labels.Label, 0)
+	for _, g := range groups {
+		keys = append(keys, g.keys...)
+	}
+
+	fromCache, _ := r.cache.FetchMultiPostings(r.block.meta.ULID, keys)
+
 	// Iterate over all groups and fetch posting from cache.
 	// If we have a miss, mark key to be fetched in `ptrs` slice.
 	// Overlaps are well handled by partitioner, so we don't need to deduplicate keys.
 	for i, g := range groups {
 		for j, key := range g.keys {
 			// Get postings for the given key from cache first.
-			if b, ok := r.cache.Postings(r.block.meta.ULID, key); ok {
+			if b, ok := fromCache[key]; ok {
 				r.stats.postingsTouched++
 				r.stats.postingsTouchedSizeSum += len(b)
 
@@ -1604,7 +1606,7 @@ func (r *bucketIndexReader) fetchPostings(groups []*postingGroup) error {
 
 				// Return postings and fill LRU cache.
 				groups[p.groupID].Fill(p.keyID, fetchedPostings)
-				r.cache.SetPostings(r.block.meta.ULID, groups[p.groupID].keys[p.keyID], c)
+				r.cache.StorePostings(r.block.meta.ULID, groups[p.groupID].keys[p.keyID], c)
 
 				// If we just fetched it we still have to update the stats for touched postings.
 				r.stats.postingsTouched++
@@ -1620,16 +1622,12 @@ func (r *bucketIndexReader) fetchPostings(groups []*postingGroup) error {
 func (r *bucketIndexReader) PreloadSeries(ids []uint64) error {
 	const maxSeriesSize = 64 * 1024
 
-	var newIDs []uint64
-
-	for _, id := range ids {
-		if b, ok := r.cache.Series(r.block.meta.ULID, id); ok {
-			r.loadedSeries[id] = b
-			continue
-		}
-		newIDs = append(newIDs, id)
+	// Load series from cache, overwriting the list of ids to preload
+	// with the missing ones.
+	fromCache, ids := r.cache.FetchMultiSeries(r.block.meta.ULID, ids)
+	for id, b := range fromCache {
+		r.loadedSeries[id] = b
 	}
-	ids = newIDs
 
 	parts := r.block.partitioner.Partition(len(ids), func(i int) (start, end uint64) {
 		return ids[i], ids[i] + maxSeriesSize
@@ -1674,7 +1672,7 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []uint64, start,
 		}
 		c = c[n : n+int(l)]
 		r.loadedSeries[id] = c
-		r.cache.SetSeries(r.block.meta.ULID, id, c)
+		r.cache.StoreSeries(r.block.meta.ULID, id, c)
 	}
 	return nil
 }

@@ -49,7 +49,7 @@ func (c cacheKey) size() uint64 {
 type cacheKeyPostings labels.Label
 type cacheKeySeries uint64
 
-type IndexCache struct {
+type InMemoryIndexCache struct {
 	mtx sync.Mutex
 
 	logger           log.Logger
@@ -76,14 +76,14 @@ type Opts struct {
 	MaxItemSizeBytes uint64
 }
 
-// NewIndexCache creates a new thread-safe LRU cache for index entries and ensures the total cache
+// NewInMemoryIndexCache creates a new thread-safe LRU cache for index entries and ensures the total cache
 // size approximately does not exceed maxBytes.
-func NewIndexCache(logger log.Logger, reg prometheus.Registerer, opts Opts) (*IndexCache, error) {
+func NewInMemoryIndexCache(logger log.Logger, reg prometheus.Registerer, opts Opts) (*InMemoryIndexCache, error) {
 	if opts.MaxItemSizeBytes > opts.MaxSizeBytes {
 		return nil, errors.Errorf("max item size (%v) cannot be bigger than overall cache size (%v)", opts.MaxItemSizeBytes, opts.MaxSizeBytes)
 	}
 
-	c := &IndexCache{
+	c := &InMemoryIndexCache{
 		logger:           logger,
 		maxSizeBytes:     opts.MaxSizeBytes,
 		maxItemSizeBytes: opts.MaxItemSizeBytes,
@@ -178,7 +178,7 @@ func NewIndexCache(logger log.Logger, reg prometheus.Registerer, opts Opts) (*In
 	return c, nil
 }
 
-func (c *IndexCache) onEvict(key, val interface{}) {
+func (c *InMemoryIndexCache) onEvict(key, val interface{}) {
 	k := key.(cacheKey).keyType()
 	entrySize := sliceHeaderSize + uint64(len(val.([]byte)))
 
@@ -190,7 +190,7 @@ func (c *IndexCache) onEvict(key, val interface{}) {
 	c.curSize -= entrySize
 }
 
-func (c *IndexCache) get(typ string, key cacheKey) ([]byte, bool) {
+func (c *InMemoryIndexCache) get(typ string, key cacheKey) ([]byte, bool) {
 	c.requests.WithLabelValues(typ).Inc()
 
 	c.mtx.Lock()
@@ -204,7 +204,7 @@ func (c *IndexCache) get(typ string, key cacheKey) ([]byte, bool) {
 	return v.([]byte), true
 }
 
-func (c *IndexCache) set(typ string, key cacheKey, val []byte) {
+func (c *InMemoryIndexCache) set(typ string, key cacheKey, val []byte) {
 	var size = sliceHeaderSize + uint64(len(val))
 
 	c.mtx.Lock()
@@ -234,7 +234,7 @@ func (c *IndexCache) set(typ string, key cacheKey, val []byte) {
 
 // ensureFits tries to make sure that the passed slice will fit into the LRU cache.
 // Returns true if it will fit.
-func (c *IndexCache) ensureFits(size uint64, typ string) bool {
+func (c *InMemoryIndexCache) ensureFits(size uint64, typ string) bool {
 	if size > c.maxItemSizeBytes {
 		level.Debug(c.logger).Log(
 			"msg", "item bigger than maxItemSizeBytes. Ignoring..",
@@ -263,7 +263,7 @@ func (c *IndexCache) ensureFits(size uint64, typ string) bool {
 	return true
 }
 
-func (c *IndexCache) reset() {
+func (c *InMemoryIndexCache) reset() {
 	c.lru.Purge()
 	c.current.Reset()
 	c.currentSize.Reset()
@@ -271,22 +271,44 @@ func (c *IndexCache) reset() {
 	c.curSize = 0
 }
 
-// SetPostings sets the postings identfied by the ulid and label to the value v,
+// StorePostings sets the postings identified by the ulid and label to the value v,
 // if the postings already exists in the cache it is not mutated.
-func (c *IndexCache) SetPostings(b ulid.ULID, l labels.Label, v []byte) {
-	c.set(cacheTypePostings, cacheKey{b, cacheKeyPostings(l)}, v)
+func (c *InMemoryIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte) {
+	c.set(cacheTypePostings, cacheKey{blockID, cacheKeyPostings(l)}, v)
 }
 
-func (c *IndexCache) Postings(b ulid.ULID, l labels.Label) ([]byte, bool) {
-	return c.get(cacheTypePostings, cacheKey{b, cacheKeyPostings(l)})
+func (c *InMemoryIndexCache) FetchMultiPostings(blockID ulid.ULID, keys []labels.Label) (hits map[labels.Label][]byte, misses []labels.Label) {
+	hits = map[labels.Label][]byte{}
+
+	for _, key := range keys {
+		if b, ok := c.get(cacheTypePostings, cacheKey{blockID, cacheKeyPostings(key)}); ok {
+			hits[key] = b
+			continue
+		}
+
+		misses = append(misses, key)
+	}
+
+	return hits, misses
 }
 
-// SetSeries sets the series identfied by the ulid and id to the value v,
+// StoreSeries sets the series identified by the ulid and id to the value v,
 // if the series already exists in the cache it is not mutated.
-func (c *IndexCache) SetSeries(b ulid.ULID, id uint64, v []byte) {
-	c.set(cacheTypeSeries, cacheKey{b, cacheKeySeries(id)}, v)
+func (c *InMemoryIndexCache) StoreSeries(blockID ulid.ULID, id uint64, v []byte) {
+	c.set(cacheTypeSeries, cacheKey{blockID, cacheKeySeries(id)}, v)
 }
 
-func (c *IndexCache) Series(b ulid.ULID, id uint64) ([]byte, bool) {
-	return c.get(cacheTypeSeries, cacheKey{b, cacheKeySeries(id)})
+func (c *InMemoryIndexCache) FetchMultiSeries(blockID ulid.ULID, ids []uint64) (hits map[uint64][]byte, misses []uint64) {
+	hits = map[uint64][]byte{}
+
+	for _, id := range ids {
+		if b, ok := c.get(cacheTypeSeries, cacheKey{blockID, cacheKeySeries(id)}); ok {
+			hits[id] = b
+			continue
+		}
+
+		misses = append(misses, id)
+	}
+
+	return hits, misses
 }
