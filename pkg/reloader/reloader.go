@@ -291,6 +291,7 @@ func (r *Reloader) apply(ctx context.Context) error {
 		return nil
 	}); err != nil {
 		level.Error(r.logger).Log("msg", "Failed to trigger reload. Retrying.", "err", err)
+		return err
 	}
 
 	return nil
