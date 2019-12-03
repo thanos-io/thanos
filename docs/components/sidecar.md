@@ -72,7 +72,7 @@ config:
 
 ## Upload compacted blocks (EXPERIMENTAL)
 
-If you want to migrate from a pure Prometheus setup to Thanos and have to keep the historical data, you can use the flag `--shipper.upload-compacted`. This will also upload blocks that were compacted by Prometheus. Values greater than 1 in the `compaction.level` field of a Prometheus block’s `meta.json` file indicate compaction.
+If you want to migrate from a pure Prometheus setup to Thanos and have to keep the historical data, you can use the flag `--shipper.upload-compacted`. This will also upload blocks that were compacted by Prometheus. Values greater than 1 in the `compaction.level` field of a Prometheus block’s `meta.json` file indicates level of compaction.
 
 To use this, the Prometheus compaction needs to be disabled. This can be done by setting the following flags for Prometheus:
 
