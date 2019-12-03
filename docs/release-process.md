@@ -50,7 +50,7 @@ Process of releasing a *minor* Thanos version:
 Release is happening on separate `release-<major>.<minor>` branch.
 
 1. Prepare PR to branch `release-<major>.<minor>` that will start minor release branch and prepare changes to cut release.
-    
+
   For release candidate just reuse same branch and rebase it on every candidate until the actual release happens.
 
 1. Update [CHANGELOG file](/CHANGELOG.md)
@@ -90,7 +90,7 @@ Release is happening on separate `release-<major>.<minor>` branch.
  1. Once tarballs are published on release page, you can click `Publish` and release is complete.
 
  1. Announce `#thanos` slack channel.
- 
+
  1. Pull commits from release branch to master branch for non `rc` releases.
 
 ## Pre-releases (release candidates)
