@@ -179,7 +179,7 @@ func runStore(
 	// TODO(bwplotka): Add as a flag?
 	maxItemSizeBytes := indexCacheSizeBytes / 2
 
-	indexCache, err := storecache.NewIndexCache(logger, reg, storecache.Opts{
+	indexCache, err := storecache.NewInMemoryIndexCache(logger, reg, storecache.Opts{
 		MaxSizeBytes:     indexCacheSizeBytes,
 		MaxItemSizeBytes: maxItemSizeBytes,
 	})
