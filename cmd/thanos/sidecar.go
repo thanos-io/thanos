@@ -223,6 +223,10 @@ func runSidecar(
 					lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
 				}
 
+				if len(m.Labels()) == 0 {
+					return errors.New("no external labels configured on Prometheus server, uniquely identifying external labels must be configured")
+				}
+
 				return nil
 			})
 		}, func(error) {
