@@ -201,12 +201,13 @@ Flags:
                                  Alertmanager replica URLs to push firing
                                  alerts. Ruler claims success if push to at
                                  least one alertmanager from discovered
-                                 succeeds. The scheme may be prefixed with
-                                 'dns+' or 'dnssrv+' to detect Alertmanager IPs
-                                 through respective DNS lookups. The port
-                                 defaults to 9093 or the SRV record's value. The
-                                 URL path is used as a prefix for the regular
-                                 Alertmanager API path.
+                                 succeeds. The scheme should not be empty e.g
+                                 `http` might be used. The scheme may be
+                                 prefixed with 'dns+' or 'dnssrv+' to detect
+                                 Alertmanager IPs through respective DNS
+                                 lookups. The port defaults to 9093 or the SRV
+                                 record's value. The URL path is used as a
+                                 prefix for the regular Alertmanager API path.
       --alertmanagers.send-timeout=10s
                                  Timeout for sending alerts to alertmanager
       --alert.query-url=ALERT.QUERY-URL
