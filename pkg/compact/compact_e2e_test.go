@@ -19,10 +19,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/index"
-	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -156,6 +156,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		sort.Slice(rem, func(i, j int) bool {
 			return rem[i].Compare(rem[j]) < 0
 		})
+
 		// Only the level 3 block, the last source block in both resolutions should be left.
 		testutil.Equals(t, []ulid.ULID{metas[9].ULID, m3.ULID, m4.ULID}, rem)
 
@@ -386,7 +387,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 			testutil.Equals(t, []ulid.ULID{metas[0].ULID, metas[1].ULID, metas[2].ULID}, meta.Compaction.Sources)
 
 			// Check thanos meta.
-			testutil.Assert(t, extLabels.Equals(labels.FromMap(meta.Thanos.Labels)), "ext labels does not match")
+			testutil.Assert(t, labels.Equal(extLabels, labels.FromMap(meta.Thanos.Labels)), "ext labels does not match")
 			testutil.Equals(t, int64(124), meta.Thanos.Downsample.Resolution)
 		}
 		{
@@ -401,7 +402,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 			testutil.Equals(t, []ulid.ULID{metas[6].ULID, metas[7].ULID}, meta.Compaction.Sources)
 
 			// Check thanos meta.
-			testutil.Assert(t, extLabels2.Equals(labels.FromMap(meta.Thanos.Labels)), "ext labels does not match")
+			testutil.Assert(t, labels.Equal(extLabels2, labels.FromMap(meta.Thanos.Labels)), "ext labels does not match")
 			testutil.Equals(t, int64(124), meta.Thanos.Downsample.Resolution)
 		}
 	})

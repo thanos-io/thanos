@@ -23,6 +23,7 @@ import (
 	"github.com/prometheus/prometheus/storage/tsdb"
 	qapi "github.com/thanos-io/thanos/pkg/query/api"
 	thanosrule "github.com/thanos-io/thanos/pkg/rule"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 // NewStorage returns a new storage for testing purposes
@@ -62,8 +63,6 @@ type rulesRetrieverMock struct {
 }
 
 func (m rulesRetrieverMock) RuleGroups() []thanosrule.Group {
-	var ar rulesRetrieverMock
-	arules := ar.AlertingRules()
 	storage := newStorage(m.testing)
 
 	engineOpts := promql.EngineOpts{
@@ -83,9 +82,8 @@ func (m rulesRetrieverMock) RuleGroups() []thanosrule.Group {
 	}
 
 	var r []rules.Rule
-
-	for _, alertrule := range arules {
-		r = append(r, alertrule)
+	for _, ar := range alertingRules(m.testing) {
+		r = append(r, ar)
 	}
 
 	recordingExpr, err := promql.ParseExpr(`vector(1)`)
@@ -95,44 +93,54 @@ func (m rulesRetrieverMock) RuleGroups() []thanosrule.Group {
 	recordingRule := rules.NewRecordingRule("recording-rule-1", recordingExpr, labels.Labels{})
 	r = append(r, recordingRule)
 
-	group := rules.NewGroup("grp", "/path/to/file", time.Second, r, false, opts)
-	return []thanosrule.Group{{Group: group}}
+	return []thanosrule.Group{
+		thanosrule.Group{
+			Group:                   rules.NewGroup("grp", "/path/to/file", time.Second, r, false, opts),
+			PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
+		},
+	}
 }
 
 func (m rulesRetrieverMock) AlertingRules() []thanosrule.AlertingRule {
+	var ars []thanosrule.AlertingRule
+	for _, ar := range alertingRules(m.testing) {
+		ars = append(ars, thanosrule.AlertingRule{AlertingRule: ar})
+	}
+	return ars
+}
+
+func alertingRules(t *testing.T) []*rules.AlertingRule {
 	expr1, err := promql.ParseExpr(`absent(test_metric3) != 1`)
 	if err != nil {
-		m.testing.Fatalf("unable to parse alert expression: %s", err)
+		t.Fatalf("unable to parse alert expression: %s", err)
 	}
 	expr2, err := promql.ParseExpr(`up == 1`)
 	if err != nil {
-		m.testing.Fatalf("Unable to parse alert expression: %s", err)
+		t.Fatalf("unable to parse alert expression: %s", err)
 	}
 
-	rule1 := rules.NewAlertingRule(
-		"test_metric3",
-		expr1,
-		time.Second,
-		labels.Labels{},
-		labels.Labels{},
-		labels.Labels{},
-		true,
-		log.NewNopLogger(),
-	)
-	rule2 := rules.NewAlertingRule(
-		"test_metric4",
-		expr2,
-		time.Second,
-		labels.Labels{},
-		labels.Labels{},
-		labels.Labels{},
-		true,
-		log.NewNopLogger(),
-	)
-	var r []thanosrule.AlertingRule
-	r = append(r, thanosrule.AlertingRule{AlertingRule: rule1})
-	r = append(r, thanosrule.AlertingRule{AlertingRule: rule2})
-	return r
+	return []*rules.AlertingRule{
+		rules.NewAlertingRule(
+			"test_metric3",
+			expr1,
+			time.Second,
+			labels.Labels{},
+			labels.Labels{},
+			labels.Labels{},
+			true,
+			log.NewNopLogger(),
+		),
+		rules.NewAlertingRule(
+			"test_metric4",
+			expr2,
+			time.Second,
+			labels.Labels{},
+			labels.Labels{},
+			labels.Labels{},
+			true,
+			log.NewNopLogger(),
+		),
+	}
 }
 
 func TestEndpoints(t *testing.T) {
@@ -171,21 +179,22 @@ func TestEndpoints(t *testing.T) {
 }
 
 func testEndpoints(t *testing.T, api *API) {
-
 	type test struct {
-		endpoint qapi.ApiFunc
-		params   map[string]string
-		query    url.Values
-		response interface{}
+		endpointFn   qapi.ApiFunc
+		endpointName string
+		params       map[string]string
+		query        url.Values
+		response     interface{}
 	}
 	var tests = []test{
 		{
-			endpoint: api.rules,
+			endpointFn:   api.rules,
+			endpointName: "rules",
 			response: &RuleDiscovery{
 				RuleGroups: []*RuleGroup{
 					{
 						Name:                    "grp",
-						File:                    "/path/to/file",
+						File:                    "",
 						Interval:                1,
 						PartialResponseStrategy: "WARN",
 						Rules: []rule{
@@ -232,39 +241,41 @@ func testEndpoints(t *testing.T, api *API) {
 	request := func(m string, q url.Values) (*http.Request, error) {
 		return http.NewRequest(m, fmt.Sprintf("http://example.com?%s", q.Encode()), nil)
 	}
-	for i, test := range tests {
-		for _, method := range methods(test.endpoint) {
-			// Build a context with the correct request params.
-			ctx := context.Background()
-			for p, v := range test.params {
-				ctx = route.WithParam(ctx, p, v)
-			}
-			t.Logf("run %d\t%s\t%q", i, method, test.query.Encode())
+	for _, test := range tests {
+		for _, method := range methods(test.endpointFn) {
+			t.Run(fmt.Sprintf("endpoint=%s/method=%s/query=%q", test.endpointName, method, test.query.Encode()), func(t *testing.T) {
+				// Build a context with the correct request params.
+				ctx := context.Background()
+				for p, v := range test.params {
+					ctx = route.WithParam(ctx, p, v)
+				}
 
-			req, err := request(method, test.query)
-			if err != nil {
-				t.Fatal(err)
-			}
-			endpoint, errors, apiError := test.endpoint(req.WithContext(ctx))
+				req, err := request(method, test.query)
+				if err != nil {
+					t.Fatal(err)
+				}
+				endpoint, errors, apiError := test.endpointFn(req.WithContext(ctx))
 
-			if errors != nil {
-				t.Fatalf("Unexpected errors: %s", errors)
-				return
-			}
-			assertAPIError(t, apiError)
-			assertAPIResponse(t, endpoint, test.response)
+				if errors != nil {
+					t.Fatalf("Unexpected errors: %s", errors)
+					return
+				}
+				assertAPIError(t, apiError)
+				assertAPIResponse(t, endpoint, test.response)
+			})
 		}
 	}
 }
 
 func assertAPIError(t *testing.T, got *qapi.ApiError) {
+	t.Helper()
 	if got != nil {
 		t.Fatalf("Unexpected error: %s", got)
-		return
 	}
 }
 
 func assertAPIResponse(t *testing.T, got interface{}, exp interface{}) {
+	t.Helper()
 	if !reflect.DeepEqual(exp, got) {
 		respJSON, err := json.Marshal(got)
 		if err != nil {

@@ -6,9 +6,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/thanos-io/thanos/pkg/extflag"
-	"github.com/thanos-io/thanos/pkg/server"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -23,10 +20,12 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -34,8 +33,7 @@ func registerDownsample(m map[string]setupFunc, app *kingpin.Application) {
 	comp := component.Downsample
 	cmd := app.Command(comp.String(), "continuously downsamples blocks in an object store bucket")
 
-	httpAddr := regHTTPAddrFlag(cmd)
-	httpGracePeriod := regHTTPGracePeriodFlag(cmd)
+	httpAddr, httpGracePeriod := regHTTPFlags(cmd)
 
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process downsamplings.").
 		Default("./data").String()
@@ -98,14 +96,14 @@ func runDownsample(
 	}()
 
 	metrics := newDownsampleMetrics(reg)
-	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	statusProber := prober.New(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	// Start cycle of syncing blocks from the bucket and garbage collecting the bucket.
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
-			statusProber.SetReady()
+			statusProber.Ready()
 
 			level.Info(logger).Log("msg", "start first pass of downsampling")
 
@@ -126,11 +124,20 @@ func runDownsample(
 	}
 
 	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-	srv := server.NewHTTP(logger, reg, comp, statusProber,
-		server.WithListen(httpBindAddr),
-		server.WithGracePeriod(httpGracePeriod),
+	srv := httpserver.New(logger, reg, comp, statusProber,
+		httpserver.WithListen(httpBindAddr),
+		httpserver.WithGracePeriod(httpGracePeriod),
 	)
-	g.Add(srv.ListenAndServe, srv.Shutdown)
+	g.Add(func() error {
+		statusProber.Healthy()
+
+		return srv.ListenAndServe()
+	}, func(err error) {
+		statusProber.NotReady(err)
+		defer statusProber.NotHealthy(err)
+
+		srv.Shutdown(err)
+	})
 
 	level.Info(logger).Log("msg", "starting downsample node")
 	return nil

@@ -125,6 +125,16 @@ func (c *Container) GetRange(ctx context.Context, name string, off, length int64
 	return response.Body, response.Err
 }
 
+// ObjectSize returns the size of the specified object.
+func (c *Container) ObjectSize(ctx context.Context, name string) (uint64, error) {
+	response := objects.Get(c.client, c.name, name, nil)
+	headers, err := response.Extract()
+	if err != nil {
+		return 0, err
+	}
+	return uint64(headers.ContentLength), nil
+}
+
 // Exists checks if the given object exists.
 func (c *Container) Exists(ctx context.Context, name string) (bool, error) {
 	err := objects.Get(c.client, c.name, name, nil).Err

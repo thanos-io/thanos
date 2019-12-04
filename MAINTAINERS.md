@@ -1,13 +1,14 @@
 # Core Maintainers of this repository
 
-| Name                  | Email                  | Slack                    | GitHub                                                     |
-|-----------------------|------------------------|--------------------------|------------------------------------------------------------|
-| Bartłomiej Płotka     | bwplotka@gmail.com     | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)                   |
-| Dominic Green         | dom@improbable.io      | `@domgreen`              | [@domgreen](https://github.com/domgreen)                   |
-| Frederic Branczyk     | fbranczyk@gmail.com    | `@brancz`                | [@brancz](https://github.com/brancz)                       |
-| Giedrius Statkevičius | giedriuswork@gmail.com | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)                 |
-| Povilas Versockas     | p.versockas@gmail.com  | `@povilasv`              | [@povilasv](https://github.com/povilasv)                   |
-| Matthias Loibl        | mail@matthiasloibl.com | `@metalmatze`            | [@metalmatze](https://github.com/metalmatze)               |
+| Name                  | Email                  | Slack                    | GitHub                                      | Company           |
+|-----------------------|------------------------|--------------------------|---------------------------------------------|-------------------|
+| Bartłomiej Płotka     | bwplotka@gmail.com     | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)    | Red Hat           |
+| Dominic Green         | dom@improbable.io      | `@domgreen`              | [@domgreen](https://github.com/domgreen)    | Improbable        |
+| Frederic Branczyk     | fbranczyk@gmail.com    | `@brancz`                | [@brancz](https://github.com/brancz)        | Red Hat           |
+| Giedrius Statkevičius | giedriuswork@gmail.com | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)  | AdForm            |
+| Povilas Versockas     | p.versockas@gmail.com  | `@povilasv`              | [@povilasv](https://github.com/povilasv)    | Utility Warehouse |
+| Matthias Loibl        | mail@matthiasloibl.com | `@metalmatze`            | [@metalmatze](https://github.com/metalmatze)| Red Hat           |
+| Lucas Servén Marín    | lserven@gmail.com      |  `@squat`                  | [@squat](https://github.com/squat)          | Red Hat           |
 
 We are bunch of people from different companies with various interests and skills.
 We are from different parts of Europe: Germany, Lithuania, Poland and UK. 

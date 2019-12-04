@@ -10,9 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/thanos-io/thanos/pkg/extflag"
-	"github.com/thanos-io/thanos/pkg/server"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -25,10 +22,12 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -79,8 +78,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 		"Compaction index verification will ignore out of order label names.").
 		Hidden().Default("false").Bool()
 
-	httpAddr := regHTTPAddrFlag(cmd)
-	httpGracePeriod := regHTTPGracePeriodFlag(cmd)
+	httpAddr, httpGracePeriod := regHTTPFlags(cmd)
 
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache blocks and process compactions.").
 		Default("./data").String()
@@ -170,21 +168,35 @@ func runCompact(
 		Name: "thanos_compactor_retries_total",
 		Help: "Total number of retries after retriable compactor error",
 	})
+	iterations := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compactor_iterations_total",
+		Help: "Total number of iterations that were executed successfully",
+	})
 	halted.Set(0)
 
 	reg.MustRegister(halted)
 	reg.MustRegister(retried)
+	reg.MustRegister(iterations)
 
 	downsampleMetrics := newDownsampleMetrics(reg)
 
-	statusProber := prober.NewProber(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	statusProber := prober.New(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-	srv := server.NewHTTP(logger, reg, component, statusProber,
-		server.WithListen(httpBindAddr),
-		server.WithGracePeriod(httpGracePeriod),
+	srv := httpserver.New(logger, reg, component, statusProber,
+		httpserver.WithListen(httpBindAddr),
+		httpserver.WithGracePeriod(httpGracePeriod),
 	)
 
-	g.Add(srv.ListenAndServe, srv.Shutdown)
+	g.Add(func() error {
+		statusProber.Healthy()
+
+		return srv.ListenAndServe()
+	}, func(err error) {
+		statusProber.NotReady(err)
+		defer statusProber.NotHealthy(err)
+
+		srv.Shutdown(err)
+	})
 
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
@@ -315,6 +327,7 @@ func runCompact(
 		return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
 			err := f()
 			if err == nil {
+				iterations.Inc()
 				return nil
 			}
 
@@ -346,7 +359,7 @@ func runCompact(
 	})
 
 	level.Info(logger).Log("msg", "starting compact node")
-	statusProber.SetReady()
+	statusProber.Ready()
 	return nil
 }
 

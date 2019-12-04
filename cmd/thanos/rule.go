@@ -17,9 +17,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/thanos-io/thanos/pkg/extflag"
-	"github.com/thanos-io/thanos/pkg/server"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
@@ -30,17 +27,17 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
-	promlabels "github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage/tsdb"
-	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/prometheus/prometheus/util/strutil"
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
+	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
@@ -49,9 +46,12 @@ import (
 	thanosrule "github.com/thanos-io/thanos/pkg/rule"
 	v1 "github.com/thanos-io/thanos/pkg/rule/api"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
+	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/ui"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -62,9 +62,8 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 	comp := component.Rule
 	cmd := app.Command(comp.String(), "ruler evaluating Prometheus rules against given Query nodes, exposing Store API and storing old blocks in bucket")
 
-	httpBindAddr := regHTTPAddrFlag(cmd)
-	httpGracePeriod := regHTTPGracePeriodFlag(cmd)
-	grpcBindAddr, cert, key, clientCA := regGRPCFlags(cmd)
+	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
+	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := regGRPCFlags(cmd)
 
 	labelStrs := cmd.Flag("label", "Labels to be applied to all generated metrics (repeated). Similar to external labels for Prometheus, used to identify ruler and its blocks as unique source.").
 		PlaceHolder("<name>=\"<value>\"").Strings()
@@ -159,9 +158,10 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			*alertmgrs,
 			*alertmgrsTimeout,
 			*grpcBindAddr,
-			*cert,
-			*key,
-			*clientCA,
+			time.Duration(*grpcGracePeriod),
+			*grpcCert,
+			*grpcKey,
+			*grpcClientCA,
 			*httpBindAddr,
 			time.Duration(*httpGracePeriod),
 			*webRoutePrefix,
@@ -195,9 +195,10 @@ func runRule(
 	alertmgrURLs []string,
 	alertmgrsTimeout time.Duration,
 	grpcBindAddr string,
-	cert string,
-	key string,
-	clientCA string,
+	grpcGracePeriod time.Duration,
+	grpcCert string,
+	grpcKey string,
+	grpcClientCA string,
 	httpBindAddr string,
 	httpGracePeriod time.Duration,
 	webRoutePrefix string,
@@ -289,7 +290,7 @@ func runRule(
 	var (
 		alertmgrs = newAlertmanagerSet(logger, alertmgrURLs, dns.ResolverType(dnsSDResolver))
 		alertQ    = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(lset), alertExcludeLabels)
-		ruleMgrs  = thanosrule.Managers{}
+		ruleMgr   = thanosrule.NewManager(dataDir)
 	)
 	{
 		notify := func(ctx context.Context, expr string, alerts ...*rules.Alert) {
@@ -325,6 +326,7 @@ func runRule(
 			ResendDelay: resendDelay,
 		}
 
+		// TODO(bwplotka): Hide this behind thanos rules.Manager.
 		for _, strategy := range storepb.PartialResponseStrategy_value {
 			s := storepb.PartialResponseStrategy(strategy)
 
@@ -336,15 +338,16 @@ func runRule(
 			opts.Context = ctx
 			opts.QueryFunc = queryFunc(logger, dnsProvider, duplicatedQuery, ruleEvalWarnings, s)
 
-			ruleMgrs[s] = rules.NewManager(&opts)
+			mgr := rules.NewManager(&opts)
+			ruleMgr.SetRuleManager(s, mgr)
 			g.Add(func() error {
-				ruleMgrs[s].Run()
+				mgr.Run()
 				<-ctx.Done()
 
 				return nil
 			}, func(error) {
 				cancel()
-				ruleMgrs[s].Stop()
+				mgr.Stop()
 			})
 		}
 	}
@@ -445,7 +448,7 @@ func runRule(
 
 				level.Info(logger).Log("msg", "reload rule files", "numFiles", len(files))
 
-				if err := ruleMgrs.Update(dataDir, evalInterval, files); err != nil {
+				if err := ruleMgr.Update(evalInterval, files); err != nil {
 					configSuccess.Set(0)
 					level.Error(logger).Log("msg", "reloading rules failed", "err", err)
 					continue
@@ -455,10 +458,8 @@ func runRule(
 				configSuccessTime.Set(float64(time.Now().UnixNano()) / 1e9)
 
 				rulesLoaded.Reset()
-				for s, mgr := range ruleMgrs {
-					for _, group := range mgr.RuleGroups() {
-						rulesLoaded.WithLabelValues(s.String(), group.File(), group.Name()).Set(float64(len(group.Rules())))
-					}
+				for _, group := range ruleMgr.RuleGroups() {
+					rulesLoaded.WithLabelValues(group.PartialResponseStrategy.String(), group.File(), group.Name()).Set(float64(len(group.Rules())))
 				}
 
 			}
@@ -499,28 +500,28 @@ func runRule(
 			cancel()
 		})
 	}
-	statusProber := prober.NewProber(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	statusProber := prober.New(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	// Start gRPC server.
 	{
-		l, err := net.Listen("tcp", grpcBindAddr)
-		if err != nil {
-			return errors.Wrap(err, "listen API address")
-		}
-		logger := log.With(logger, "component", component.Rule.String())
-
 		store := store.NewTSDBStore(logger, reg, db, component.Rule, lset)
 
-		opts, err := defaultGRPCTLSServerOpts(logger, cert, key, clientCA)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), grpcCert, grpcKey, grpcClientCA)
 		if err != nil {
-			return errors.Wrap(err, "setup gRPC options")
+			return errors.Wrap(err, "setup gRPC server")
 		}
-		s := newStoreGRPCServer(logger, reg, tracer, store, opts)
+
+		s := grpcserver.New(logger, reg, tracer, comp, store,
+			grpcserver.WithListen(grpcBindAddr),
+			grpcserver.WithGracePeriod(grpcGracePeriod),
+			grpcserver.WithTLSConfig(tlsCfg),
+		)
 
 		g.Add(func() error {
-			statusProber.SetReady()
-			return errors.Wrap(s.Serve(l), "serve gRPC")
-		}, func(error) {
-			s.Stop()
+			statusProber.Ready()
+			return s.ListenAndServe()
+		}, func(err error) {
+			statusProber.NotReady(err)
+			s.Shutdown(err)
 		})
 	}
 	// Start UI & metrics HTTP server.
@@ -546,19 +547,28 @@ func runRule(
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg)
 
-		ui.NewRuleUI(logger, reg, ruleMgrs, alertQueryURL.String(), flagsMap).Register(router.WithPrefix(webRoutePrefix), ins)
+		ui.NewRuleUI(logger, reg, ruleMgr, alertQueryURL.String(), flagsMap).Register(router.WithPrefix(webRoutePrefix), ins)
 
-		api := v1.NewAPI(logger, reg, ruleMgrs)
+		api := v1.NewAPI(logger, reg, ruleMgr)
 		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
 
 		// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-		srv := server.NewHTTP(logger, reg, comp, statusProber,
-			server.WithListen(httpBindAddr),
-			server.WithGracePeriod(httpGracePeriod),
+		srv := httpserver.New(logger, reg, comp, statusProber,
+			httpserver.WithListen(httpBindAddr),
+			httpserver.WithGracePeriod(httpGracePeriod),
 		)
 		srv.Handle("/", router)
 
-		g.Add(srv.ListenAndServe, srv.Shutdown)
+		g.Add(func() error {
+			statusProber.Healthy()
+
+			return srv.ListenAndServe()
+		}, func(err error) {
+			statusProber.NotReady(err)
+			defer statusProber.NotHealthy(err)
+
+			srv.Shutdown(err)
+		})
 	}
 
 	confContentYaml, err := objStoreConfig.Content()
@@ -566,13 +576,7 @@ func runRule(
 		return err
 	}
 
-	uploads := true
-	if len(confContentYaml) == 0 {
-		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
-		uploads = false
-	}
-
-	if uploads {
+	if len(confContentYaml) > 0 {
 		// The background shipper continuously scans the data directory and uploads
 		// new blocks to Google Cloud Storage or an S3-compatible storage service.
 		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Rule.String())
@@ -603,6 +607,8 @@ func runRule(
 		}, func(error) {
 			cancel()
 		})
+	} else {
+		level.Info(logger).Log("msg", "no supported bucket was configured, uploads will be disabled")
 	}
 
 	level.Info(logger).Log("msg", "starting rule node")
@@ -712,9 +718,9 @@ func parseFlagLabels(s []string) (labels.Labels, error) {
 	return lset, nil
 }
 
-func labelsTSDBToProm(lset labels.Labels) (res promlabels.Labels) {
+func labelsTSDBToProm(lset labels.Labels) (res labels.Labels) {
 	for _, l := range lset {
-		res = append(res, promlabels.Label{
+		res = append(res, labels.Label{
 			Name:  l.Name,
 			Value: l.Value,
 		})
@@ -726,7 +732,7 @@ func removeDuplicateQueryAddrs(logger log.Logger, duplicatedQueriers prometheus.
 	set := make(map[string]struct{})
 	for _, addr := range addrs {
 		if _, ok := set[addr]; ok {
-			level.Warn(logger).Log("msg", "Duplicate query address is provided - %v", addr)
+			level.Warn(logger).Log("msg", "duplicate query address is provided - %v", addr)
 			duplicatedQueriers.Inc()
 		}
 		set[addr] = struct{}{}

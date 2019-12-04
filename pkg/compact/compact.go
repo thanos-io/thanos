@@ -20,11 +20,10 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	promlables "github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
-	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
@@ -86,11 +85,9 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 		Help: "Total number of failed sync meta operations.",
 	})
 	m.syncMetaDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name: "thanos_compact_sync_meta_duration_seconds",
-		Help: "Time it took to sync meta files.",
-		Buckets: []float64{
-			0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 30, 60, 100, 200, 500,
-		},
+		Name:    "thanos_compact_sync_meta_duration_seconds",
+		Help:    "Time it took to sync meta files.",
+		Buckets: []float64{0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720},
 	})
 
 	m.garbageCollectedBlocks = prometheus.NewCounter(prometheus.CounterOpts{
@@ -106,11 +103,9 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 		Help: "Total number of failed garbage collection operations.",
 	})
 	m.garbageCollectionDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name: "thanos_compact_garbage_collection_duration_seconds",
-		Help: "Time it took to perform garbage collection iteration.",
-		Buckets: []float64{
-			0.25, 0.6, 1, 2, 3.5, 5, 7.5, 10, 15, 30, 60, 100, 200, 500,
-		},
+		Name:    "thanos_compact_garbage_collection_duration_seconds",
+		Help:    "Time it took to perform garbage collection iteration.",
+		Buckets: []float64{0.01, 0.1, 0.3, 0.6, 1, 3, 6, 9, 20, 30, 60, 90, 120, 240, 360, 720},
 	})
 
 	m.compactions = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -239,7 +234,7 @@ func (c *Syncer) syncMetas(ctx context.Context) error {
 
 				// Check for block labels by relabeling.
 				// If output is empty, the block will be dropped.
-				lset := promlables.FromMap(meta.Thanos.Labels)
+				lset := labels.FromMap(meta.Thanos.Labels)
 				processedLabels := relabel.Process(lset, c.relabelConfig...)
 				if processedLabels == nil {
 					level.Debug(c.logger).Log("msg", "dropping block(drop in relabeling)", "block", id)
@@ -573,7 +568,7 @@ func (cg *Group) Add(meta *metadata.Meta) error {
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
 
-	if !cg.labels.Equals(labels.FromMap(meta.Thanos.Labels)) {
+	if !labels.Equal(cg.labels, labels.FromMap(meta.Thanos.Labels)) {
 		return errors.New("block and group labels do not match")
 	}
 	if cg.resolution != meta.Thanos.Downsample.Resolution {

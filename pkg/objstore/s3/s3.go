@@ -251,6 +251,10 @@ func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (
 		if err := opts.SetRange(off, off+length-1); err != nil {
 			return nil, err
 		}
+	} else if off > 0 {
+		if err := opts.SetRange(off, 0); err != nil {
+			return nil, err
+		}
 	}
 	r, err := b.client.GetObjectWithContext(ctx, b.name, name, *opts)
 	if err != nil {
@@ -332,6 +336,15 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	}
 
 	return nil
+}
+
+// ObjectSize returns the size of the specified object.
+func (b *Bucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
+	objInfo, err := b.client.StatObject(b.name, name, minio.StatObjectOptions{})
+	if err != nil {
+		return 0, err
+	}
+	return uint64(objInfo.Size), nil
 }
 
 // Delete removes the object with the given name.

@@ -15,6 +15,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/azure"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/cos"
+	"github.com/thanos-io/thanos/pkg/objstore/filesystem"
 	"github.com/thanos-io/thanos/pkg/objstore/gcs"
 	"github.com/thanos-io/thanos/pkg/objstore/oss"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
@@ -22,6 +23,7 @@ import (
 	trclient "github.com/thanos-io/thanos/pkg/tracing/client"
 	"github.com/thanos-io/thanos/pkg/tracing/elasticapm"
 	"github.com/thanos-io/thanos/pkg/tracing/jaeger"
+	"github.com/thanos-io/thanos/pkg/tracing/lightstep"
 	"github.com/thanos-io/thanos/pkg/tracing/stackdriver"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 	yaml "gopkg.in/yaml.v2"
@@ -29,17 +31,19 @@ import (
 
 var (
 	bucketConfigs = map[client.ObjProvider]interface{}{
-		client.AZURE:     azure.Config{},
-		client.GCS:       gcs.Config{},
-		client.S3:        s3.DefaultConfig,
-		client.SWIFT:     swift.SwiftConfig{},
-		client.COS:       cos.Config{},
-		client.ALIYUNOSS: oss.Config{},
+		client.AZURE:      azure.Config{},
+		client.GCS:        gcs.Config{},
+		client.S3:         s3.DefaultConfig,
+		client.SWIFT:      swift.SwiftConfig{},
+		client.COS:        cos.Config{},
+		client.ALIYUNOSS:  oss.Config{},
+		client.FILESYSTEM: filesystem.Config{},
 	}
 	tracingConfigs = map[trclient.TracingProvider]interface{}{
 		trclient.JAEGER:      jaeger.Config{},
 		trclient.STACKDRIVER: stackdriver.Config{},
 		trclient.ELASTIC_APM: elasticapm.Config{},
+		trclient.LIGHTSTEP:   lightstep.Config{},
 	}
 )
 

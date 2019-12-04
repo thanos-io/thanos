@@ -201,9 +201,6 @@ Decisions of the design have consequences some of which will show themselves in 
 
 * Bursting remote write API requests (after a rollout or easing of rate limiting), as Prometheuses may attempt to push their data simultaneously.
   - This could be solved with a combination of rate limiting and back-off on Prometheus’ side, plus alerts if replication lag gets too large due to rate limiting (or other factors).
-* This proposal describes the write-ahead-log based remote write, which is not (yet) merged in Prometheus: https://github.com/prometheus/prometheus/pull/4588. This landing may impact durability characteristics.
-  - While there is work left the pull request seems to be close to completion
-* For compaction to work as described in this proposal, vertical compaction in TSDB needs to be possible. Implemented but not merged yet: https://github.com/prometheus/tsdb/pull/370
 * Additional safeguards may need to be put in place to ensure that hashring resizes do not occur on failed nodes, only once they have recovered and have successfully uploaded their blocks.
 
 [xxhash]: http://cyan4973.github.io/xxHash/

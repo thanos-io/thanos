@@ -20,9 +20,9 @@ import (
 	"github.com/leanovate/gopter/prop"
 	"github.com/oklog/ulid"
 	prommodel "github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/pkg/timestamp"
-	"github.com/prometheus/prometheus/tsdb/labels"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
@@ -301,37 +301,37 @@ func TestBucketBlockSet_labelMatchers(t *testing.T) {
 	set := newBucketBlockSet(labels.FromStrings("a", "b", "c", "d"))
 
 	cases := []struct {
-		in    []labels.Matcher
-		res   []labels.Matcher
+		in    []*labels.Matcher
+		res   []*labels.Matcher
 		match bool
 	}{
 		{
-			in:    []labels.Matcher{},
-			res:   []labels.Matcher{},
+			in:    []*labels.Matcher{},
+			res:   []*labels.Matcher{},
 			match: true,
 		},
 		{
-			in: []labels.Matcher{
-				labels.NewEqualMatcher("a", "b"),
-				labels.NewEqualMatcher("c", "d"),
+			in: []*labels.Matcher{
+				{Type: labels.MatchEqual, Name: "a", Value: "b"},
+				{Type: labels.MatchEqual, Name: "c", Value: "d"},
 			},
-			res:   []labels.Matcher{},
+			res:   []*labels.Matcher{},
 			match: true,
 		},
 		{
-			in: []labels.Matcher{
-				labels.NewEqualMatcher("a", "b"),
-				labels.NewEqualMatcher("c", "b"),
+			in: []*labels.Matcher{
+				{Type: labels.MatchEqual, Name: "a", Value: "b"},
+				{Type: labels.MatchEqual, Name: "c", Value: "b"},
 			},
 			match: false,
 		},
 		{
-			in: []labels.Matcher{
-				labels.NewEqualMatcher("a", "b"),
-				labels.NewEqualMatcher("e", "f"),
+			in: []*labels.Matcher{
+				{Type: labels.MatchEqual, Name: "a", Value: "b"},
+				{Type: labels.MatchEqual, Name: "e", Value: "f"},
 			},
-			res: []labels.Matcher{
-				labels.NewEqualMatcher("e", "f"),
+			res: []*labels.Matcher{
+				{Type: labels.MatchEqual, Name: "e", Value: "f"},
 			},
 			match: true,
 		},
@@ -339,20 +339,20 @@ func TestBucketBlockSet_labelMatchers(t *testing.T) {
 		// We want to provide explicit tests that says when Thanos supports its and when not. We don't support it here in
 		// external labelset level.
 		{
-			in: []labels.Matcher{
-				labels.Not(labels.NewEqualMatcher("", "x")),
+			in: []*labels.Matcher{
+				{Type: labels.MatchNotEqual, Name: "", Value: "x"},
 			},
-			res: []labels.Matcher{
-				labels.Not(labels.NewEqualMatcher("", "x")),
+			res: []*labels.Matcher{
+				{Type: labels.MatchNotEqual, Name: "", Value: "x"},
 			},
 			match: true,
 		},
 		{
-			in: []labels.Matcher{
-				labels.Not(labels.NewEqualMatcher("", "d")),
+			in: []*labels.Matcher{
+				{Type: labels.MatchNotEqual, Name: "", Value: "d"},
 			},
-			res: []labels.Matcher{
-				labels.Not(labels.NewEqualMatcher("", "d")),
+			res: []*labels.Matcher{
+				{Type: labels.MatchNotEqual, Name: "", Value: "d"},
 			},
 			match: true,
 		},
@@ -432,6 +432,8 @@ func TestBucketStore_Info(t *testing.T) {
 
 	dir, err := ioutil.TempDir("", "bucketstore-test")
 	testutil.Ok(t, err)
+
+	defer testutil.Ok(t, os.RemoveAll(dir))
 
 	bucketStore, err := NewBucketStore(
 		nil,

@@ -50,8 +50,8 @@ In fact, downsampling doesn't save you any space but instead it adds 2 more bloc
 
 ## Groups
 
-The compactor groups blocks using the [external_labels](https://thanos.io/getting-started.md/#external-labels) added by the
-Prometheus who produced the block. The labels must be both _unique_ and _persistent_ across different Prometheus instances.
+The compactor groups blocks using the external_labels added by the Prometheus who produced the block.
+The labels must be both _unique_ and _persistent_ across different Prometheus instances.
 
 By _unique_, we mean that the set of labels in a Prometheus instance must be different from all other sets of labels of
 your Prometheus instances, so that the compactor will be able to group blocks by Prometheus instance.
@@ -84,7 +84,7 @@ Flags:
                                https://thanos.io/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                Listen host:port for HTTP endpoints.
-      --http-grace-period=5s   Time to wait after an interrupt received for HTTP
+      --http-grace-period=2m   Time to wait after an interrupt received for HTTP
                                Server.
       --data-dir="./data"      Data directory in which to cache blocks and
                                process compactions.

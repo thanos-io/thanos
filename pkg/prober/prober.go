@@ -1,24 +1,22 @@
 package prober
 
 import (
-	"fmt"
 	"io"
 	"net/http"
-	"sync"
+	"sync/atomic"
 
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/prometheus/common/route"
 	"github.com/thanos-io/thanos/pkg/component"
 )
 
+type check func() bool
+
 const (
-	healthyEndpointPath  = "/-/healthy"
-	readyEndpointPath    = "/-/ready"
-	probeErrorHTTPStatus = 503
-	initialErrorFmt      = "thanos %s is initializing"
+	ready   = "ready"
+	healthy = "healthy"
 )
 
 // Prober represents health and readiness status of given component.
@@ -36,135 +34,106 @@ const (
 //              and mitigate these situations. A pod with containers reporting that they are not ready
 //              does not receive traffic through Kubernetes Services.
 type Prober struct {
-	logger             log.Logger
-	component          component.Component
-	readyMtx           sync.RWMutex
-	readiness          error
-	healthyMtx         sync.RWMutex
-	healthiness        error
-	readyStateMetric   prometheus.Gauge
-	healthyStateMetric prometheus.Gauge
+	component component.Component
+	logger    log.Logger
+
+	ready   uint32
+	healthy uint32
+
+	status *prometheus.GaugeVec
 }
 
-// NewProber returns Prober representing readiness and healthiness of given component.
-func NewProber(component component.Component, logger log.Logger, reg prometheus.Registerer) *Prober {
-	initialErr := fmt.Errorf(initialErrorFmt, component)
+// New returns Prober representing readiness and healthiness of given component.
+func New(component component.Component, logger log.Logger, reg prometheus.Registerer) *Prober {
 	p := &Prober{
-		component:   component,
-		logger:      logger,
-		healthiness: initialErr,
-		readiness:   initialErr,
-		readyStateMetric: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name:        "prober_ready",
-			Help:        "Represents readiness status of the component Prober.",
+		component: component,
+		logger:    logger,
+		status: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name:        "status",
+			Help:        "Represents status (0 indicates success, 1 indicates failure) of the component.",
 			ConstLabels: map[string]string{"component": component.String()},
-		}),
-		healthyStateMetric: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name:        "prober_healthy",
-			Help:        "Represents health status of the component Prober.",
-			ConstLabels: map[string]string{"component": component.String()},
-		}),
+		},
+			[]string{"check"},
+		),
 	}
+
 	if reg != nil {
-		reg.MustRegister(p.readyStateMetric, p.healthyStateMetric)
+		reg.MustRegister(p.status)
 	}
+
 	return p
 }
 
-// RegisterInRouter registers readiness and liveness probes to router.
-func (p *Prober) RegisterInRouter(router *route.Router) {
-	router.Get(healthyEndpointPath, p.probeHandlerFunc(p.IsHealthy, "healthy"))
-	router.Get(readyEndpointPath, p.probeHandlerFunc(p.IsReady, "ready"))
+// HealthyHandler returns a HTTP Handler which responds health checks.
+func (p *Prober) HealthyHandler() http.HandlerFunc {
+	return p.handler(p.isHealthy)
 }
 
-// RegisterInMux registers readiness and liveness probes to mux.
-func (p *Prober) RegisterInMux(mux *http.ServeMux) {
-	mux.HandleFunc(healthyEndpointPath, p.probeHandlerFunc(p.IsHealthy, "healthy"))
-	mux.HandleFunc(readyEndpointPath, p.probeHandlerFunc(p.IsReady, "ready"))
+// ReadyHandler returns a HTTP Handler which responds readiness checks.
+func (p *Prober) ReadyHandler() http.HandlerFunc {
+	return p.handler(p.isReady)
 }
 
-func (p *Prober) writeResponse(w http.ResponseWriter, probeFn func() error, probeType string) {
-	if err := probeFn(); err != nil {
-		http.Error(w, fmt.Sprintf("thanos %v is not %v. Reason: %v", p.component, probeType, err), probeErrorHTTPStatus)
-		return
-	}
-	if _, err := io.WriteString(w, fmt.Sprintf("thanos %v is %v", p.component, probeType)); err != nil {
-		level.Error(p.logger).Log("msg", "failed to write probe response", "probe type", probeType, "err", err)
-	}
-}
-
-func (p *Prober) probeHandlerFunc(probeFunc func() error, probeType string) func(http.ResponseWriter, *http.Request) {
+func (p *Prober) handler(c check) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
-		p.writeResponse(w, probeFunc, probeType)
-	}
-}
-
-// IsReady returns error if component is not ready and nil otherwise.
-func (p *Prober) IsReady() error {
-	p.readyMtx.RLock()
-	defer p.readyMtx.RUnlock()
-	return p.readiness
-}
-
-// SetReady sets components status to ready.
-func (p *Prober) SetReady() {
-	p.readyMtx.Lock()
-	defer p.readyMtx.Unlock()
-	if p.readiness != nil {
-		level.Info(p.logger).Log("msg", "changing probe status", "status", "ready")
-		p.readyStateMetric.Set(1)
-	}
-	p.readiness = nil
-}
-
-// SetNotReady sets components status to not ready with given error as a cause.
-func (p *Prober) SetNotReady(err error) {
-	p.readyMtx.Lock()
-	defer p.readyMtx.Unlock()
-	if err != nil && p.readiness == nil {
-		level.Warn(p.logger).Log("msg", "changing probe status", "status", "not-ready", "reason", err)
-		p.readyStateMetric.Set(0)
-	}
-	p.readiness = err
-}
-
-// IsHealthy returns error if component is not healthy and nil if it is.
-func (p *Prober) IsHealthy() error {
-	p.healthyMtx.RLock()
-	defer p.healthyMtx.RUnlock()
-	return p.healthiness
-}
-
-// SetHealthy sets components status to healthy.
-func (p *Prober) SetHealthy() {
-	p.healthyMtx.Lock()
-	defer p.healthyMtx.Unlock()
-	if p.healthiness != nil {
-		level.Info(p.logger).Log("msg", "changing probe status", "status", "healthy")
-		p.healthyStateMetric.Set(1)
-	}
-	p.healthiness = nil
-}
-
-// SetNotHealthy sets components status to not healthy with given error as a cause.
-func (p *Prober) SetNotHealthy(err error) {
-	p.healthyMtx.Lock()
-	defer p.healthyMtx.Unlock()
-	if err != nil && p.healthiness == nil {
-		level.Warn(p.logger).Log("msg", "changing probe status", "status", "unhealthy", "reason", err)
-		p.healthyStateMetric.Set(0)
-	}
-	p.healthiness = err
-}
-
-// HandleIfReady if probe is ready calls the function otherwise returns 503.
-func (p *Prober) HandleIfReady(f http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		ready := p.IsReady()
-		if ready == nil {
-			f(w, r)
+		if !c() {
+			http.Error(w, "NOT OK", http.StatusServiceUnavailable)
 			return
 		}
-		p.writeResponse(w, func() error { return ready }, "ready")
+		if _, err := io.WriteString(w, "OK"); err != nil {
+			level.Error(p.logger).Log("msg", "failed to write probe response", "err", err)
+		}
+	}
+}
+
+// isReady returns true if component is ready.
+func (p *Prober) isReady() bool {
+	ready := atomic.LoadUint32(&p.ready)
+	return ready > 0
+}
+
+// isHealthy returns true if component is healthy.
+func (p *Prober) isHealthy() bool {
+	healthy := atomic.LoadUint32(&p.healthy)
+	return healthy > 0
+}
+
+// Ready sets components status to ready.
+func (p *Prober) Ready() {
+	old := atomic.SwapUint32(&p.ready, 1)
+
+	if old == 0 {
+		p.status.WithLabelValues(ready).Set(1)
+		level.Info(p.logger).Log("msg", "changing probe status", "status", "ready")
+	}
+}
+
+// NotReady sets components status to not ready with given error as a cause.
+func (p *Prober) NotReady(err error) {
+	old := atomic.SwapUint32(&p.ready, 0)
+
+	if old == 1 {
+		p.status.WithLabelValues(ready).Set(0)
+		level.Warn(p.logger).Log("msg", "changing probe status", "status", "not-ready", "reason", err)
+	}
+}
+
+// Healthy sets components status to healthy.
+func (p *Prober) Healthy() {
+	old := atomic.SwapUint32(&p.healthy, 1)
+
+	if old == 0 {
+		p.status.WithLabelValues(healthy).Set(1)
+		level.Info(p.logger).Log("msg", "changing probe status", "status", "healthy")
+	}
+}
+
+// NotHealthy sets components status to not healthy with given error as a cause.
+func (p *Prober) NotHealthy(err error) {
+	old := atomic.SwapUint32(&p.healthy, 0)
+
+	if old == 1 {
+		p.status.WithLabelValues(healthy).Set(0)
+		level.Info(p.logger).Log("msg", "changing probe status", "status", "not-healthy", "reason", err)
 	}
 }

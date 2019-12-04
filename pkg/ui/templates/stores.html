@@ -28,21 +28,25 @@
             <td>{{$store.Name}}</td>
             <td class="state">
                 {{if not $store.LastError}}
-                <span class="alert alert-success state_indicator text-uppercase">
-                up
-                </span>
+                <span class="alert alert-success state_indicator text-uppercase">up</span>
                 {{else}}
-                <span class="alert alert-danger state_indicator text-uppercase">
-                down
-                </span>
+                <span class="alert alert-danger state_indicator text-uppercase">down</span>
                 {{end}}
             </td>
             <td>
-            {{range $labelSets := $store.LabelSets}}
-                {{range $label := $labelSets.Labels}}
-                    <span class="badge badge-primary">{{$label.Name}}="{{$label.Value}}"</span>
+                <table class="table table-bordered">
+                <tbody>
+                {{range $labelSets := $store.LabelSets}}
+                <tr>
+                    <td>
+                    {{range $label := $labelSets.Labels}}
+                        <span class="badge badge-primary">{{$label.Name}}="{{$label.Value}}"</span>
+                    {{end}}
+                    </td>
+                </tr>
                 {{end}}
-            {{end}}
+                </tbody>
+                </table>
             </td>
             <td>{{formatTimestamp $store.MinTime}}</td>
             <td>{{formatTimestamp $store.MaxTime}}</td>

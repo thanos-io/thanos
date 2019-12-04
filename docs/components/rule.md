@@ -81,7 +81,7 @@ The most important metrics to alert on are:
 indicate connection, incompatibility or misconfiguration problems.
 
 * `prometheus_rule_evaluation_failures_total`. If greater than 0, it means that that rule failed to be evaluated, which results in
-either gap in rule or potentially ignored alert. Alert heavily on this if this happens for longer than your alert thresholds.
+either gap in rule or potentially ignored alert. This metric might indicate problems on the queryAPI endpoint you use. Alert heavily on this if this happens for longer than your alert thresholds.
 `strategy` label will tell you if failures comes from rules that tolerate [partial response](rule.md#partial-response) or not.
 
 * `prometheus_rule_group_last_duration_seconds < prometheus_rule_group_interval_seconds`  If the difference is large, it means 
@@ -168,12 +168,14 @@ Flags:
                                  https://thanos.io/tracing.md/#configuration
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
-      --http-grace-period=5s     Time to wait after an interrupt received for
+      --http-grace-period=2m     Time to wait after an interrupt received for
                                  HTTP Server.
       --grpc-address="0.0.0.0:10901"
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
                                  from other components.
+      --grpc-grace-period=2m     Time to wait after an interrupt received for
+                                 GRPC Server.
       --grpc-server-tls-cert=""  TLS Certificate for gRPC server, leave blank to
                                  disable TLS
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to

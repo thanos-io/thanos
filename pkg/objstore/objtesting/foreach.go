@@ -1,8 +1,11 @@
 package objtesting
 
 import (
+	"io/ioutil"
 	"os"
 	"testing"
+
+	"github.com/thanos-io/thanos/pkg/objstore/filesystem"
 
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/azure"
@@ -26,6 +29,21 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 	if ok := t.Run("inmem", func(t *testing.T) {
 		t.Parallel()
 		testFn(t, inmem.NewBucket())
+	}); !ok {
+		return
+	}
+
+	// Mandatory Filesystem.
+	if ok := t.Run("filesystem", func(t *testing.T) {
+		t.Parallel()
+
+		dir, err := ioutil.TempDir("", "filesystem-foreach-store-test")
+		testutil.Ok(t, err)
+		defer testutil.Ok(t, os.RemoveAll(dir))
+
+		b, err := filesystem.NewBucket(dir)
+		testutil.Ok(t, err)
+		testFn(t, b)
 	}); !ok {
 		return
 	}

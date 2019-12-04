@@ -20,7 +20,7 @@ Prometheus always stays as integral foundation for *collecting metrics* and aler
 
 Thanos bases itself on vanilla [Prometheus](https://prometheus.io/) (v2.2.1+). We plan to support *all* Prometheus version beyond this version.
 
-NOTE: It is highly recommended to use Prometheus 2.13 (available in next Prometheus release) due to Prometheus remote read improvements.
+NOTE: It is highly recommended to use Prometheus v2.13+ due to Prometheus remote read improvements.
 
 Always make sure to run Prometheus as recommended by Prometheus team, so:
 
@@ -72,8 +72,7 @@ Rolling this out has little to zero impact on the running Prometheus instance. I
 
 If you are not interested in backing up any data, the `--objstore.config-file` flag can simply be omitted.
 
-* _[Example Kubernetes manifest](/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar.yaml)_
-* _[Example Kubernetes manifest with Minio upload](/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar-lts.yaml)_
+* _[Example Kubernetes manifests using Prometheus operator](https://github.com/coreos/prometheus-operator/tree/master/example/thanos)_
 * _[Example Deploying sidecar using official Prometheus Helm Chart](/tutorials/kubernetes-helm/README.md)_
 * _[Details & Config for other object stores](storage.md)_
 
@@ -92,8 +91,8 @@ thanos sidecar \
     --grpc-address              0.0.0.0:19090              # GRPC endpoint for StoreAPI
 ```
 
-* _[Example Kubernetes manifest](/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar.yaml)_
-* _[Example Kubernetes manifest with GCS upload](/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar-lts.yaml)_
+* _[Example Kubernetes manifests using Prometheus operator](https://github.com/coreos/prometheus-operator/tree/master/example/thanos)_
+
 
 #### External Labels
 
@@ -159,7 +158,7 @@ thanos query \
 
 Go to the configured HTTP address, and you should now be able to query across all Prometheus instances and receive de-duplicated data.
 
-* _[Example Kubernetes manifest](/tutorials/kubernetes-demo/manifests/thanos-querier.yaml)_
+* _[Example Kubernetes manifest](https://github.com/thanos-io/kube-thanos/blob/master/manifests/thanos-querier-deployment.yaml)_
 
 #### Communication Between Components
 
@@ -180,8 +179,7 @@ thanos query \
 
 Read more details [here](service-discovery.md).
 
-* _[Example Kubernetes manifest](/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar.yaml)_
-* _[Example Kubernetes manifest with GCS upload](/tutorials/kubernetes-demo/manifests/prometheus-ha-sidecar-lts.yaml)_
+* _[Example Kubernetes manifests using Prometheus operator](https://github.com/coreos/prometheus-operator/tree/master/example/thanos)_
 
 ### [Store Gateway](components/store.md)
 
@@ -199,7 +197,7 @@ thanos store \
 
 The store gateway occupies small amounts of disk space for caching basic information about data in the object storage. This will rarely exceed more than a few gigabytes and is used to improve restart times. It is useful but not required to preserve it across restarts.
 
-* _[Example Kubernetes manifest](/tutorials/kubernetes-demo/manifests/thanos-store-gateway.yaml)_
+* _[Example Kubernetes manifest](https://github.com/thanos-io/kube-thanos/blob/master/manifests/thanos-store-statefulSet.yaml)_
 
 ### [Compactor](components/compact.md)
 
@@ -218,7 +216,11 @@ The compactor is not in the critical path of querying or data backup. It can eit
 
 _NOTE: The compactor must be run as a **singleton** and must not run when manually modifying data in the bucket._
 
+* _[Example Kubernetes manifest](https://github.com/thanos-io/kube-thanos/blob/master/examples/all/manifests/thanos-compactor-statefulSet.yaml)_
+
 ### [Ruler/Rule](components/rule.md)
 
 In case of Prometheus with Thanos sidecar does not have enough retention, or if you want to have alerts or recording rules that requires global view, Thanos has just the component for that: the [Ruler](components/rule.md),
 which does rule and alert evaluation on top of a given Thanos Querier.
+
+

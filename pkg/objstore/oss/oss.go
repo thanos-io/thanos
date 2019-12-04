@@ -63,15 +63,13 @@ func NewTestBucket(t testing.TB) (objstore.Bucket, func(), error) {
 }
 
 func calculateChunks(name string, r io.Reader) (int, int64, error) {
-	switch r.(type) {
+	switch f := r.(type) {
 	case *os.File:
-		f, _ := r.(*os.File)
 		if fileInfo, err := f.Stat(); err == nil {
 			s := fileInfo.Size()
 			return int(math.Floor(float64(s) / PartSize)), s % PartSize, nil
 		}
 	case *strings.Reader:
-		f, _ := r.(*strings.Reader)
 		return int(math.Floor(float64(f.Size()) / PartSize)), f.Size() % PartSize, nil
 	}
 	return -1, 0, errors.New("unsupported implement of io.Reader")
@@ -137,6 +135,26 @@ func (b *Bucket) Delete(ctx context.Context, name string) error {
 		return errors.Wrap(err, "delete oss object")
 	}
 	return nil
+}
+
+// ObjectSize returns the size of the specified object.
+func (b *Bucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
+	// https://github.com/aliyun/aliyun-oss-go-sdk/blob/cee409f5b4d75d7ad077cacb7e6f4590a7f2e172/oss/bucket.go#L668
+	m, err := b.bucket.GetObjectMeta(name)
+	if err != nil {
+		return 0, err
+	}
+	if v, ok := m["Content-Length"]; ok {
+		if len(v) == 0 {
+			return 0, errors.New("content-length header has no values")
+		}
+		ret, err := strconv.ParseUint(v[0], 10, 64)
+		if err != nil {
+			return 0, errors.Wrap(err, "convert content-length")
+		}
+		return ret, nil
+	}
+	return 0, errors.New("content-length header not found")
 }
 
 // NewBucket returns a new Bucket using the provided oss config values.
