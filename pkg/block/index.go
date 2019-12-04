@@ -32,6 +32,10 @@ const (
 	IndexCacheVersion1 = iota + 1
 )
 
+const (
+	UnmarshalErrorMsg = "unmarshal index cache"
+)
+
 type postingsRange struct {
 	Name, Value string
 	Start, End  int64
@@ -194,7 +198,7 @@ func ReadIndexCache(logger log.Logger, fn string) (
 	}
 
 	if err = json.Unmarshal(bytes, &v); err != nil {
-		return 0, nil, nil, nil, errors.Wrap(err, "unmarshal index cache")
+		return 0, nil, nil, nil, errors.Wrap(err, UnmarshalErrorMsg)
 	}
 
 	strs := map[string]string{}
@@ -237,6 +241,10 @@ func ReadIndexCache(logger log.Logger, fn string) (
 		postings[l] = index.Range{Start: e.Start, End: e.End}
 	}
 	return v.Version, symbols, lvals, postings, nil
+}
+
+func IsUnmarshalError(err error) bool {
+	return strings.Contains(err.Error(), UnmarshalErrorMsg)
 }
 
 // VerifyIndex does a full run over a block index and verifies that it fulfills the order invariants.
