@@ -376,9 +376,8 @@ func (s *StoreSet) Update(ctx context.Context) {
 	s.storesMetric.Update(stats)
 	s.storesMtx.Lock()
 	s.stores = stores
-	s.storesMtx.Unlock()
-
 	s.cleanUpStoreStatuses(stores)
+	s.storesMtx.Unlock()
 }
 
 func (s *StoreSet) getHealthyStores(ctx context.Context, stores map[string]*storeRef) map[string]*storeRef {
