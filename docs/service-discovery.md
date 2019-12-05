@@ -96,6 +96,14 @@ An example using this lookup with a static flag:
 --store=dnssrv+_thanosstores._tcp.mycompany.org
 ```
 
+It is also work in kubernetes cluster. An example:
+
+```
+--store=dnssrv+_grpc._tcp.thanos-store.monitoring.svc
+```
+
+It means that in kubernetes cluster, there is a service named "thanos-store" in `monitoring` namespace with a port defined named "grpc".
+
 * `dnssrvnoa+` - the domain name after this prefix will be looked up as a SRV query, with no A/AAAA lookup made after that. Similar to the `dnssrv+` case, you do not need to specify a port. An example:
 
 ```
