@@ -53,8 +53,6 @@ type Meta struct {
 type Thanos struct {
 	Labels     map[string]string `json:"labels"`
 	Downsample ThanosDownsample  `json:"downsample"`
-	// Size of the block in bytes of the original block (before compaction and/or 1st upload).
-	SizeInBytes *uint64 `json:"size"`
 
 	// Source is a real upload source of the block.
 	Source SourceType `json:"source"`
@@ -64,31 +62,9 @@ type ThanosDownsample struct {
 	Resolution int64 `json:"resolution"`
 }
 
-// dirSize walks through the specified path recursively and returns
-// how many bytes does it take.
-func dirSize(path string) (uint64, error) {
-	var size uint64
-	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() {
-			size += uint64(info.Size())
-		}
-		return err
-	})
-	return size, err
-}
-
 // InjectThanos sets Thanos meta to the block meta JSON and saves it to the disk.
 // NOTE: It should be used after writing any block by any Thanos component, otherwise we will miss crucial metadata.
 func InjectThanos(logger log.Logger, bdir string, meta *Meta, downsampledMeta *tsdb.BlockMeta) (*Meta, error) {
-	sz, err := dirSize(bdir)
-	if err != nil {
-		return nil, errors.Wrap(err, "get block directory size")
-	}
-	meta.Thanos.SizeInBytes = &sz
-
 	// While downsampling we need to copy original compaction.
 	if downsampledMeta != nil {
 		meta.Compaction = downsampledMeta.Compaction
