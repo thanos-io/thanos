@@ -13,42 +13,6 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 )
 
-const (
-	cacheTypePostings string = "Postings"
-	cacheTypeSeries   string = "Series"
-
-	sliceHeaderSize = 16
-)
-
-type cacheKey struct {
-	block ulid.ULID
-	key   interface{}
-}
-
-func (c cacheKey) keyType() string {
-	switch c.key.(type) {
-	case cacheKeyPostings:
-		return cacheTypePostings
-	case cacheKeySeries:
-		return cacheTypeSeries
-	}
-	return "<unknown>"
-}
-
-func (c cacheKey) size() uint64 {
-	switch k := c.key.(type) {
-	case cacheKeyPostings:
-		// ULID + 2 slice headers + number of chars in value and name.
-		return 16 + 2*sliceHeaderSize + uint64(len(k.Value)+len(k.Name))
-	case cacheKeySeries:
-		return 16 + 8 // ULID + uint64.
-	}
-	return 0
-}
-
-type cacheKeyPostings labels.Label
-type cacheKeySeries uint64
-
 type InMemoryIndexCache struct {
 	mtx sync.Mutex
 
@@ -170,7 +134,7 @@ func NewInMemoryIndexCache(logger log.Logger, reg prometheus.Registerer, opts Op
 	c.lru = l
 
 	level.Info(logger).Log(
-		"msg", "created index cache",
+		"msg", "created in-memory index cache",
 		"maxItemSizeBytes", c.maxItemSizeBytes,
 		"maxSizeBytes", c.maxSizeBytes,
 		"maxItems", "math.MaxInt64",
