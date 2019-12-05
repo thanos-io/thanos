@@ -100,6 +100,7 @@ We also have example Grafana dashboards [here](/examples/grafana/monitoring.md) 
 * 02.2019: [FOSDEM + demo](https://fosdem.org/2019/schedule/event/thanos_transforming_prometheus_to_a_global_scale_in_a_seven_simple_steps/)
 * 09.2019: [CloudNative Warsaw Slides](https://docs.google.com/presentation/d/1cKpbJY3jIAtr03M-zcNujwBA38_LDj7NqE4LjNfvglE/edit?usp=sharing)
 * 11.2019: [CloudNative Deep Dive](https://www.youtube.com/watch?v=qQN0N14HXPM)
+* 11.2019: [CloudNative Intro](https://www.youtube.com/watch?v=m0JgWlTc60Q)
 
 ## Blog posts
 
