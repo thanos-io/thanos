@@ -1,6 +1,8 @@
 package storecache
 
 import (
+	"fmt"
+
 	"github.com/oklog/ulid"
 	"github.com/prometheus/prometheus/pkg/labels"
 )
@@ -53,6 +55,20 @@ func (c cacheKey) size() uint64 {
 		return 16 + 8 // ULID + uint64.
 	}
 	return 0
+}
+
+func (c cacheKey) string() string {
+	switch c.key.(type) {
+	case cacheKeyPostings:
+		// Do not use non cryptographically hash functions to avoid hash collisions
+		// which would end up in wrong query result
+		lbl := c.key.(cacheKeyPostings)
+		return fmt.Sprintf("P:%s:%s:%s", c.block.String(), lbl.Name, lbl.Value)
+	case cacheKeySeries:
+		return fmt.Sprintf("S:%s:%d", c.block.String(), c.key.(cacheKeySeries))
+	default:
+		return ""
+	}
 }
 
 type cacheKeyPostings labels.Label
