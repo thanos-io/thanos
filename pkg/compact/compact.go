@@ -761,19 +761,27 @@ func (cg *Group) isEnoughDiskSpace(ctx context.Context, dir string) error {
 	var smallestBlockBytes uint64 = math.MaxUint64
 
 	for blid := range cg.blocks {
-		sz, err := cg.bkt.ObjectSize(ctx, blid.String())
+		var thisBlockBytes uint64
+		err := cg.bkt.Iter(ctx, blid.String(), func(d string) error {
+			sz, err := cg.bkt.ObjectSize(ctx, d)
+			if err != nil {
+				return errors.Wrapf(err, "object size %s", d)
+			}
+			thisBlockBytes += sz
+			return nil
+		})
 		if err != nil {
-			return errors.Wrapf(err, "object size %s", blid.String())
+			return errors.Wrapf(err, "iter %s", blid.String())
 		}
-		sumTakenByBlocks += sz
-		if sz < smallestBlockBytes {
-			smallestBlockBytes = sz
+		sumTakenByBlocks += thisBlockBytes
+		if thisBlockBytes < smallestBlockBytes {
+			smallestBlockBytes = thisBlockBytes
 		}
 	}
 
 	neededBytes := smallestBlockBytes + sumTakenByBlocks
-	if neededBytes > uint64(du.AvailBytes) {
-		return errors.Errorf("needed %v available space, got %v", humanize.Bytes(neededBytes), humanize.Bytes(uint64(du.AvailBytes)))
+	if neededBytes > du.AvailBytes {
+		return errors.Errorf("needed %v available space, got %v", humanize.Bytes(neededBytes), humanize.Bytes(du.AvailBytes))
 	}
 	return nil
 }
