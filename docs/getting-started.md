@@ -99,6 +99,7 @@ We also have example Grafana dashboards [here](/examples/grafana/monitoring.md) 
 * 02.2018: [Very first Prometheus Meetup Slides](https://www.slideshare.net/BartomiejPotka/thanos-global-durable-prometheus-monitoring)
 * 02.2019: [FOSDEM + demo](https://fosdem.org/2019/schedule/event/thanos_transforming_prometheus_to_a_global_scale_in_a_seven_simple_steps/)
 * 09.2019: [CloudNative Warsaw Slides](https://docs.google.com/presentation/d/1cKpbJY3jIAtr03M-zcNujwBA38_LDj7NqE4LjNfvglE/edit?usp=sharing)
+* 11.2019: [CloudNative Deep Dive](https://www.youtube.com/watch?v=qQN0N14HXPM)
 
 ## Blog posts
 
