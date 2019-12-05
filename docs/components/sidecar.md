@@ -142,6 +142,12 @@ Flags:
                                  contains object store configuration. See format
                                  details:
                                  https://thanos.io/storage.md/#configuration
+      --shipper.upload-compacted
+                                 If true sidecar will try to upload compacted
+                                 blocks as well. Useful for migration purposes.
+                                 Works only if compaction is disabled on
+                                 Prometheus. Do it once and then disable the
+                                 flag when done.
       --min-time=0000-01-01T00:00:00Z
                                  Start of time range limit to serve. Thanos
                                  sidecar will serve only metrics, which happened
