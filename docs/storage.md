@@ -18,7 +18,7 @@ We recommend the latter as it gives an explicit static view of configuration for
 
 Don't be afraid of multiline flags!
 
-In Kubernetes it is as easy as (on Thanos sidecar example)::
+In Kubernetes it is as easy as (on Thanos sidecar example):
 
 ```yaml
       - args:
@@ -326,8 +326,8 @@ To use Tencent COS as storage store, you should apply a Tencent Account to creat
 
 To configure Tencent Account to use COS as storage store you need to set these parameters in yaml format stored in a file:
 
-[embedmd]:# (flags/config_bucket_cos.txt $)
-```$
+[embedmd]:# (flags/config_bucket_cos.txt yaml)
+```yaml
 type: COS
 config:
   bucket: ""
@@ -344,8 +344,8 @@ In order to use AliYun OSS object storage, you should first create a bucket with
 
 To use AliYun OSS object storage, please specify following yaml configuration file in `objstore.config*` flag.
 
-[embedmd]:# (flags/config_bucket_aliyunoss.txt $)
-```$
+[embedmd]:# (flags/config_bucket_aliyunoss.txt yaml)
+```yaml
 type: ALIYUNOSS
 config:
   endpoint: ""
