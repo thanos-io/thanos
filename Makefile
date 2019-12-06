@@ -163,6 +163,11 @@ check-docs: $(EMBEDMD) $(LICHE) build
 	@$(LICHE) --recursive docs --exclude "(cloud.tencent.com|alibabacloud.com)" --document-root .
 	@$(LICHE) --exclude "(cloud.tencent.com|goreportcard.com|alibabacloud.com)" --document-root . *.md
 
+# check-markdown-links checks if markdown files have broken links.
+.PHONY: check-markdown-links
+check-markdown-links:
+	./scripts/marker
+
 # checks Go code comments if they have trailing period (excludes protobuffers and vendor files).
 # Comments with more than 3 spaces at beginning are omitted from the check, example: '//    - foo'.
 .PHONY: check-comments
