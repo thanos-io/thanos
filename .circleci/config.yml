@@ -32,6 +32,7 @@ jobs:
       - run: make lint
       - run: make check-docs
       - run: make format
+      - run: make check-markdown-links
       - run:
           name: "Run all tests"
           # taskset sets CPU affinity to 2 (current CPU limit).
