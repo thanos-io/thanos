@@ -68,14 +68,14 @@ This design is trying to address those 4 problems.
 * Reduce confusion between index-cache.json and IndexCache for series and postings.
 * Do not keep large pieces of the blocks (e.g symbols, label values) in the memory for all blocks. Be able to load it quickly in query time from disk.
 * Use constant amount of memory for building index-header/index-cache; download only required pieces of index from bucket and compute new TOC file.
-* Leverage mmap and let OS to unload unused pages from the physical memory as needed to satisfy the queries against the block.
+* Leverage mmap and let OS unload unused pages from the physical memory as needed to satisfy the queries against the block.
  This is due to random access against label values and postings offsets.
 
 ## No Goals
 
-* Full, no initial startup as designed in [Cortex, no initial block sync](https://github.com/thanos-io/thanos/issues/1813)
+* Removing initial startup for Thanos Store Gateway completely as designed in [Cortex, no initial block sync](https://github.com/thanos-io/thanos/issues/1813)
   * However this proposal might a step towards that as we might be able to load index-cache/index quickly on demand from disk.
-  * In the same time be able to load `index-header` in query time directly from bucket is not a goal of this proposal.
+  * At the same time be able to load `index-header` in query time directly from bucket is not a goal of this proposal.
 * Decreasing size. While it would be nice to use less space; our aim is latency of building/loading the block. That might be correlated with size, but not necessarily (e.g when extra considering compression)
 
 ## Verification
@@ -98,8 +98,9 @@ The process for building this will be as follows:
   * Get the posting table and copy it to the local file.
   * Get the label offset table and copy it to the local file.
   * Get the label index and copy it to the local file.
+  * Open question: How to get [Posting size to fetch](./201912_thanos_binary_index_header.md#posting-size-to-fetch)?
   
-With that effort building time and resources should be compared with downloading the prebuild `index-header` from bucket. This allows us to reduce complexity of the system as 
+With that effort building time and resources should be compared with downloading the prebuilt `index-header` from the bucket. This allows us to reduce complexity of the system as 
 we don't need to cache that in object storage by compactor or even sidecar.
 
 Thanks to this format we can reuse most of the [FileReader](https://github.com/prometheus/prometheus/blob/de0a772b8e7d27dc744810a1a693d97be027049a/tsdb/index/index.go#L664) code
@@ -114,15 +115,38 @@ This proposes following algorithm:
 
 * blocks newer then X (e.g 2w) being always loaded
 * blocks older than X will be loaded on demand on query time and kept cached until evicted.
-* Background eviction process unloads blocks without pending reads to the amount of Y (e.g 100 blocks) in LRU fashion. 
+* background eviction process unloads blocks without pending reads to the amount of Y (e.g 100 blocks) in LRU fashion. 
  
 Both X and Y being configurable.
  
 ## Risks
 
+### Posting size to fetch
+
+While idea of combing different pieces of TSDB index as our index-header is great, unfortunately we heavily rely 
+on information about size of each posting represented as `postingRange.End`. 
+
+We need to know that apriori to know how to partition and how many bytes we need to fetch from the storage to get each posting: https://github.com/thanos-io/thanos/blob/7e11afe64af0c096743a3de8a594616abf52be45/pkg/store/bucket.go#L1567
+
+To calculate those sizes we use [`indexr.PostingsRanges()`](https://github.com/thanos-io/thanos/blob/7e11afe64af0c096743a3de8a594616abf52be45/pkg/block/index.go#L156-L155) which
+scans through `posting` section of the TSDB index. Having to fetch whole postings section just to get size of each posting 
+makes this proposal less valuable as we still need to download big part of index and traverse through it instead of what we propose in [#Proposal](./201912_thanos_binary_index_header.md#proposal)
+
+For series we don't know the exact size either, however we estimate max size of each series to be 64*1024. It depends on sane number of label pairs and chunks per series.
+We have really only one potential case when this was too low: https://github.com/thanos-io/thanos/issues/552. Decision about series this was made here: https://github.com/thanos-io/thanos/issues/146
+
+For postings it's more tricky as it depends on number of series in which given label pair exists. For worst case it can be even million label-pair for popular pairs like `__name__=http_request_http_duration_bucket` etc.
+
+We have few options:
+
+* Encode this posting size in TSDB index `PostingOffset`. 
+* Scan postings to fetch, which is something we wanted to avoid when building `index-header` without downloading full TSDB index.
+* Estimate some large value (will overfetch)
+* Estimate casual value and retry fetching remaining size on demand for data consistency.
+
 ### Unexpected memory usage
 
-Users cares the most about surprising spikes in memory usage. Currently Store Gateway caches the whole index-cache.json. While it's silly to do so for all blocks, this 
+Users care the most about surprising spikes in memory usage. Currently the Store Gateway caches the whole index-cache.json. While it's silly to do so for all blocks, this 
 will happen anyway if query will span over large number of blocks and series. This means that while baseline memory will be reduced, baseline vs request memory difference will be even more noticeable.
 
 This tradeoff is acceptable, due to total memory used for all operation should be much smaller. Additionally such query spanning all of the blocks and series are unlikely and should be blocked by simple `sample` limit.
