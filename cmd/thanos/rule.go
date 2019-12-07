@@ -472,13 +472,14 @@ func runRule(
 	}
 
 	// Handle reload and termination interrupts.
-	reload := make(chan struct{}, 1)
+	reload := make(chan chan error, 1)
 	{
 		cancel := make(chan struct{})
-		reload <- struct{}{} // Initial reload.
+		reload <- make(chan error, 1) // Initial reload.
 
 		g.Add(func() error {
 			for {
+				var rc chan error
 				select {
 				case <-cancel:
 					return errors.New("canceled")
@@ -492,6 +493,7 @@ func runRule(
 					fs, err := filepath.Glob(pat)
 					if err != nil {
 						// The only error can be a bad pattern.
+						rc <- errors.Wrapf(err, "retrieving rule files failed. Ignoring file. pattern %s", pat)
 						level.Error(logger).Log("msg", "retrieving rule files failed. Ignoring file.", "pattern", pat, "err", err)
 						continue
 					}
@@ -503,6 +505,7 @@ func runRule(
 
 				if err := ruleMgr.Update(evalInterval, files); err != nil {
 					configSuccess.Set(0)
+					rc <- errors.Wrap(err, "reloading rules failed")
 					level.Error(logger).Log("msg", "reloading rules failed", "err", err)
 					continue
 				}
@@ -514,7 +517,7 @@ func runRule(
 				for _, group := range ruleMgr.RuleGroups() {
 					rulesLoaded.WithLabelValues(group.PartialResponseStrategy.String(), group.File(), group.Name()).Set(float64(len(group.Rules())))
 				}
-
+				rc <- nil
 			}
 		}, func(error) {
 			close(cancel)
@@ -564,7 +567,11 @@ func runRule(
 		}
 
 		router.WithPrefix(webRoutePrefix).Post("/-/reload", func(w http.ResponseWriter, r *http.Request) {
-			reload <- struct{}{}
+			rc := make(chan error)
+			reload <- rc
+			if err := <-rc; err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
 		})
 
 		flagsMap := map[string]string{
