@@ -92,6 +92,7 @@ func (f *FlushableStorage) Flush() error {
 	if err != nil {
 		return errors.Wrap(err, "opening read-only DB")
 	}
+	defer ro.Close()
 	if err := ro.FlushWAL(f.path); err != nil {
 		return errors.Wrap(err, "flushing WAL")
 	}
