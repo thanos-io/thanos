@@ -86,9 +86,8 @@ func TestGRPCServerCertAutoRotate(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Equals(t, expMessage, resp.Message)
 
-	// Reload to a bad state.
+	// Reload the server certs and ensure that the tls handshake fails.
 	genCerts(t, certSrv, keySrv, "", serverName)
-	genCerts(t, certClt, keyClt, "", serverName)
 	time.Sleep(10 * time.Millisecond) // Wait for the server MaxConnectionAge to expire.
 	_, err = clt.UnaryEcho(context.Background(), &pb.EchoRequest{Message: expMessage})
 	checkAuthError(t, err)
@@ -101,7 +100,7 @@ func TestGRPCServerCertAutoRotate(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Equals(t, expMessage, resp.Message)
 
-	// Rotate the client certs and check for bad state.
+	// Reload the client certs and ensure that the tls handshake fails.
 	genCerts(t, certClt, keyClt, "", serverName)
 	time.Sleep(10 * time.Millisecond) // Wait for the server MaxConnectionAge to expire.
 	_, err = clt.UnaryEcho(context.Background(), &pb.EchoRequest{Message: expMessage})
