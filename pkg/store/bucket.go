@@ -1255,7 +1255,7 @@ func (b *bucketBlock) loadIndexCacheFile(ctx context.Context) (err error) {
 	if err = b.loadIndexCacheFileFromFile(ctx, cachefn); err == nil {
 		return nil
 	}
-	if !os.IsNotExist(errors.Cause(err)) {
+	if !os.IsNotExist(errors.Cause(err)) && errors.Cause(err) != block.IndexCacheUnmarshalError {
 		return errors.Wrap(err, "read index cache")
 	}
 
@@ -1264,7 +1264,7 @@ func (b *bucketBlock) loadIndexCacheFile(ctx context.Context) (err error) {
 		return b.loadIndexCacheFileFromFile(ctx, cachefn)
 	}
 
-	if !b.bucket.IsObjNotFoundErr(errors.Cause(err)) {
+	if !b.bucket.IsObjNotFoundErr(errors.Cause(err)) && errors.Cause(err) != block.IndexCacheUnmarshalError {
 		return errors.Wrap(err, "download index cache file")
 	}
 
