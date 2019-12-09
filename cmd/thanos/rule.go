@@ -297,7 +297,7 @@ func runRule(
 	)
 	if len(alertmgrsConfigYAML) > 0 {
 		if len(alertmgrURLs) != 0 {
-			level.Warn(logger).Log("msg", "ignoring --alertmanagers.url flag because --alertmanagers.config* flag is also defined")
+			return errors.New("--alertmanagers.url and --alertmanagers.config* flags cannot be defined at the same time")
 		}
 		alertingcfg, err = alert.LoadAlertingConfig(alertmgrsConfigYAML)
 		if err != nil {
