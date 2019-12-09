@@ -20,6 +20,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunks"
@@ -32,8 +33,8 @@ const (
 	IndexCacheVersion1 = iota + 1
 )
 
-const (
-	UnmarshalErrorMsg = "unmarshal index cache"
+var (
+	IndexCacheUnmarshalError = errors.New("unmarshal index cache")
 )
 
 type postingsRange struct {
@@ -198,7 +199,7 @@ func ReadIndexCache(logger log.Logger, fn string) (
 	}
 
 	if err = json.Unmarshal(bytes, &v); err != nil {
-		return 0, nil, nil, nil, errors.Wrap(err, UnmarshalErrorMsg)
+		return 0, nil, nil, nil, errors.Wrap(IndexCacheUnmarshalError, err.Error())
 	}
 
 	strs := map[string]string{}
@@ -241,10 +242,6 @@ func ReadIndexCache(logger log.Logger, fn string) (
 		postings[l] = index.Range{Start: e.Start, End: e.End}
 	}
 	return v.Version, symbols, lvals, postings, nil
-}
-
-func IsUnmarshalError(err error) bool {
-	return strings.Contains(err.Error(), UnmarshalErrorMsg)
 }
 
 // VerifyIndex does a full run over a block index and verifies that it fulfills the order invariants.
