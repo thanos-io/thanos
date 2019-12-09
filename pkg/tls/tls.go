@@ -15,7 +15,7 @@ import (
 )
 
 // NewServerConfig returns a new server tls config with auto reloading certificates.
-// It reload the key and certificates when the local mod time of any file has changed.
+// It reloads the key and certificates when the local mod time of any file has changed.
 func NewServerConfig(logger log.Logger, srvCertPath, srvKeyPath, cltCApath string) (*tls.Config, error) {
 	if srvCertPath == "" && srvKeyPath == "" {
 		if cltCApath != "" {
@@ -124,7 +124,7 @@ func (m *serverTLSManager) getConfigForClient(*tls.ClientHelloInfo) (*tls.Config
 }
 
 // NewClientConfig returns a new client tls config with auto reloading certificates.
-// It reload the key and certificates when the local mod time of any file has changed.
+// It reloads the key and certificates when the local mod time of any file has changed.
 func NewClientConfig(logger log.Logger, certPath, keyPath, caCertPath, serverName string) (*tls.Config, error) {
 	if (keyPath != "") != (certPath != "") {
 		return nil, errors.New("both client key and certificate must be provided")
@@ -159,10 +159,6 @@ func NewClientConfig(logger log.Logger, certPath, keyPath, caCertPath, serverNam
 		tlsCfg.ServerName = serverName
 	}
 
-	if (keyPath != "") != (certPath != "") {
-		return nil, errors.New("both client key and certificate must be provided or both should be empty")
-	}
-
 	if certPath != "" {
 		mngr := &clientTLSManager{
 			certPath: certPath,
@@ -173,6 +169,7 @@ func NewClientConfig(logger log.Logger, certPath, keyPath, caCertPath, serverNam
 		tlsCfg.GetClientCertificate = mngr.getClientCertificate
 		level.Info(logger).Log("msg", "TLS client authentication enabled")
 	}
+
 	return tlsCfg, nil
 }
 

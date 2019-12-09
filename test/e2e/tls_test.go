@@ -24,7 +24,6 @@ import (
 	"google.golang.org/grpc/keepalive"
 
 	thTLS "github.com/thanos-io/thanos/pkg/tls"
-
 	pb "google.golang.org/grpc/examples/features/proto/echo"
 )
 
@@ -74,7 +73,7 @@ func TestGRPCServerCertAutoRotate(t *testing.T) {
 	// Setup the connection and the client.
 	configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName)
 	testutil.Ok(t, err)
-	conn, err := grpc.Dial(addr, grpc.WithConnectParams(grpc.ConnectParams{MinConnectTimeout: 1 * time.Second}), grpc.WithTransportCredentials(credentials.NewTLS(configClt)))
+	conn, err := grpc.Dial(addr, grpc.WithConnectParams(grpc.ConnectParams{MinConnectTimeout: 1 * time.Minute}), grpc.WithTransportCredentials(credentials.NewTLS(configClt)))
 	testutil.Ok(t, err)
 	defer func() {
 		testutil.Ok(t, conn.Close())
@@ -88,21 +87,21 @@ func TestGRPCServerCertAutoRotate(t *testing.T) {
 
 	// Reload the server certs and ensure that the tls handshake fails.
 	genCerts(t, certSrv, keySrv, "", serverName)
-	time.Sleep(10 * time.Millisecond) // Wait for the server MaxConnectionAge to expire.
+	time.Sleep(50 * time.Millisecond) // Wait for the server MaxConnectionAge to expire.
 	_, err = clt.UnaryEcho(context.Background(), &pb.EchoRequest{Message: expMessage})
 	checkAuthError(t, err)
 
 	// Restore a good tls state.
 	genCerts(t, certSrv, keySrv, caClt, serverName)
 	genCerts(t, certClt, keyClt, caSrv, serverName)
-	time.Sleep(10 * time.Millisecond) // Wait for the server MaxConnectionAge to expire.
+	time.Sleep(50 * time.Millisecond) // Wait for the server MaxConnectionAge to expire.
 	resp, err = clt.UnaryEcho(context.Background(), &pb.EchoRequest{Message: expMessage})
 	testutil.Ok(t, err)
 	testutil.Equals(t, expMessage, resp.Message)
 
 	// Reload the client certs and ensure that the tls handshake fails.
 	genCerts(t, certClt, keyClt, "", serverName)
-	time.Sleep(10 * time.Millisecond) // Wait for the server MaxConnectionAge to expire.
+	time.Sleep(50 * time.Millisecond) // Wait for the server MaxConnectionAge to expire.
 	_, err = clt.UnaryEcho(context.Background(), &pb.EchoRequest{Message: expMessage})
 	checkAuthError(t, err)
 }
@@ -138,28 +137,22 @@ var cert = &x509.Certificate{
 // When the CA file already exists it is not overwritten and
 // it is used to sign the certificates.
 func genCerts(t *testing.T, certPath, privkeyPath, caPath, serverName string) {
-	caPrivKey, err := rsa.GenerateKey(rand.Reader, 1024)
-	testutil.Ok(t, err)
+	var (
+		err       error
+		caPrivKey *rsa.PrivateKey
+		caSrvPriv = caPath + ".priv"
+	)
 
-	if caPath != "" {
-		caSrvPriv := caPath + ".priv"
-		// When the CA private file exists don't overwrite it but
-		// use it to extract the private key to be used for signing the certificate.
-		if _, err := os.Stat(caSrvPriv); !os.IsNotExist(err) {
-			d, err := ioutil.ReadFile(caSrvPriv)
-			testutil.Ok(t, err)
-			caPrivKey, err = x509.ParsePKCS1PrivateKey(d)
-			testutil.Ok(t, err)
-		} else {
-			caBytes, err := x509.CreateCertificate(rand.Reader, caRoot, caRoot, &caPrivKey.PublicKey, caPrivKey)
-			testutil.Ok(t, err)
-			caPEM := pem.EncodeToMemory(&pem.Block{
-				Type:  "CERTIFICATE",
-				Bytes: caBytes,
-			})
-			testutil.Ok(t, ioutil.WriteFile(caPath, caPEM, 0644))
-			testutil.Ok(t, ioutil.WriteFile(caSrvPriv, x509.MarshalPKCS1PrivateKey(caPrivKey), 0644))
-		}
+	// When the CA private file exists don't overwrite it but
+	// use it to extract the private key to be used for signing the certificate.
+	if _, err := os.Stat(caSrvPriv); !os.IsNotExist(err) {
+		d, err := ioutil.ReadFile(caSrvPriv)
+		testutil.Ok(t, err)
+		caPrivKey, err = x509.ParsePKCS1PrivateKey(d)
+		testutil.Ok(t, err)
+	} else {
+		caPrivKey, err = rsa.GenerateKey(rand.Reader, 1024)
+		testutil.Ok(t, err)
 	}
 
 	certPrivKey, err := rsa.GenerateKey(rand.Reader, 1024)
@@ -169,22 +162,32 @@ func genCerts(t *testing.T, certPath, privkeyPath, caPath, serverName string) {
 	certBytes, err := x509.CreateCertificate(rand.Reader, cert, caRoot, &certPrivKey.PublicKey, caPrivKey)
 	testutil.Ok(t, err)
 
-	certPEM := new(bytes.Buffer)
-	testutil.Ok(t, pem.Encode(certPEM, &pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: certBytes,
-	}))
+	if caPath != "" {
+		caBytes, err := x509.CreateCertificate(rand.Reader, caRoot, caRoot, &caPrivKey.PublicKey, caPrivKey)
+		testutil.Ok(t, err)
+		caPEM := pem.EncodeToMemory(&pem.Block{
+			Type:  "CERTIFICATE",
+			Bytes: caBytes,
+		})
+		testutil.Ok(t, ioutil.WriteFile(caPath, caPEM, 0644))
+		testutil.Ok(t, ioutil.WriteFile(caSrvPriv, x509.MarshalPKCS1PrivateKey(caPrivKey), 0644))
+	}
 
 	if certPath != "" {
+		certPEM := new(bytes.Buffer)
+		testutil.Ok(t, pem.Encode(certPEM, &pem.Block{
+			Type:  "CERTIFICATE",
+			Bytes: certBytes,
+		}))
 		testutil.Ok(t, ioutil.WriteFile(certPath, certPEM.Bytes(), 0644))
 	}
 
-	certPrivKeyPEM := new(bytes.Buffer)
-	testutil.Ok(t, pem.Encode(certPrivKeyPEM, &pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(certPrivKey),
-	}))
 	if privkeyPath != "" {
+		certPrivKeyPEM := new(bytes.Buffer)
+		testutil.Ok(t, pem.Encode(certPrivKeyPEM, &pem.Block{
+			Type:  "RSA PRIVATE KEY",
+			Bytes: x509.MarshalPKCS1PrivateKey(certPrivKey),
+		}))
 		testutil.Ok(t, ioutil.WriteFile(privkeyPath, certPrivKeyPEM.Bytes(), 0644))
 	}
 }
