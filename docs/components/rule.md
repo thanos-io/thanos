@@ -184,6 +184,10 @@ Flags:
                                  TLS CA to verify clients against. If no client
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
+      --grpc-server-max-connection-age=1m
+                                 The grpc server max connection age. This
+                                 controls how often to re-read the tls
+                                 certificates and redo the TLS handshake
       --label=<name>="<value>" ...
                                  Labels to be applied to all generated metrics
                                  (repeated). Similar to external labels for

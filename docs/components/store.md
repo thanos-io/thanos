@@ -67,6 +67,10 @@ Flags:
                                  TLS CA to verify clients against. If no client
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
+      --grpc-server-max-connection-age=1m
+                                 The grpc server max connection age. This
+                                 controls how often to re-read the tls
+                                 certificates and redo the TLS handshake
       --data-dir="./data"        Data directory in which to cache remote blocks.
       --index-cache-size=250MB   Maximum size of items held in the index cache.
       --chunk-pool-size=2GB      Maximum size of concurrently allocatable bytes

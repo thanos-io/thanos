@@ -118,6 +118,10 @@ Flags:
                                  TLS CA to verify clients against. If no client
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
+      --grpc-server-max-connection-age=1m
+                                 The grpc server max connection age. This
+                                 controls how often to re-read the tls
+                                 certificates and redo the TLS handshake
       --prometheus.url=http://localhost:9090
                                  URL at which to reach Prometheus's API. For
                                  better performance use local network.
