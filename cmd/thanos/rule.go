@@ -63,7 +63,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 	cmd := app.Command(comp.String(), "ruler evaluating Prometheus rules against given Query nodes, exposing Store API and storing old blocks in bucket")
 
 	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
-	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := regGRPCFlags(cmd)
+	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA, grpcMaxConnAge := regGRPCFlags(cmd)
 
 	labelStrs := cmd.Flag("label", "Labels to be applied to all generated metrics (repeated). Similar to external labels for Prometheus, used to identify ruler and its blocks as unique source.").
 		PlaceHolder("<name>=\"<value>\"").Strings()
@@ -162,6 +162,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			*grpcCert,
 			*grpcKey,
 			*grpcClientCA,
+			*grpcMaxConnAge,
 			*httpBindAddr,
 			time.Duration(*httpGracePeriod),
 			*webRoutePrefix,
@@ -199,6 +200,7 @@ func runRule(
 	grpcCert string,
 	grpcKey string,
 	grpcClientCA string,
+	grpcMaxConnAge time.Duration,
 	httpBindAddr string,
 	httpGracePeriod time.Duration,
 	webRoutePrefix string,
@@ -514,6 +516,7 @@ func runRule(
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),
+			grpcserver.WithMaxConnAge(grpcMaxConnAge),
 		)
 
 		g.Add(func() error {

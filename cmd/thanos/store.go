@@ -31,7 +31,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 	cmd := app.Command(component.Store.String(), "store node giving access to blocks in a bucket provider. Now supported GCS, S3, Azure, Swift and Tencent COS.")
 
 	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
-	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := regGRPCFlags(cmd)
+	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA, grpcMaxConnAge := regGRPCFlags(cmd)
 
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache remote blocks.").
 		Default("./data").String()
@@ -84,6 +84,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 			*grpcCert,
 			*grpcKey,
 			*grpcClientCA,
+			*grpcMaxConnAge,
 			*httpBindAddr,
 			time.Duration(*httpGracePeriod),
 			uint64(*indexCacheSize),
@@ -117,6 +118,7 @@ func runStore(
 	grpcCert string,
 	grpcKey string,
 	grpcClientCA string,
+	grpcMaxConnAge time.Duration,
 	httpBindAddr string,
 	httpGracePeriod time.Duration,
 	indexCacheSizeBytes uint64,
@@ -246,6 +248,7 @@ func runStore(
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),
+			grpcserver.WithMaxConnAge(grpcMaxConnAge),
 		)
 
 		g.Add(func() error {

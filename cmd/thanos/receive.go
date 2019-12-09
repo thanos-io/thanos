@@ -36,7 +36,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 	cmd := app.Command(comp.String(), "Accept Prometheus remote write API requests and write to local tsdb (EXPERIMENTAL, this may change drastically without notice)")
 
 	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
-	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := regGRPCFlags(cmd)
+	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA, grpcMaxConnAge := regGRPCFlags(cmd)
 
 	rwAddress := cmd.Flag("remote-write.address", "Address to listen on for remote write requests.").
 		Default("0.0.0.0:19291").String()
@@ -109,6 +109,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			*grpcCert,
 			*grpcKey,
 			*grpcClientCA,
+			*grpcMaxConnAge,
 			*httpBindAddr,
 			time.Duration(*httpGracePeriod),
 			*rwAddress,
@@ -144,6 +145,7 @@ func runReceive(
 	grpcCert string,
 	grpcKey string,
 	grpcClientCA string,
+	grpcMaxConnAge time.Duration,
 	httpBindAddr string,
 	httpGracePeriod time.Duration,
 	rwAddress string,
@@ -370,6 +372,7 @@ func runReceive(
 					grpcserver.WithListen(grpcBindAddr),
 					grpcserver.WithGracePeriod(grpcGracePeriod),
 					grpcserver.WithTLSConfig(tlsCfg),
+					grpcserver.WithMaxConnAge(grpcMaxConnAge),
 				)
 				startGRPC <- struct{}{}
 			}

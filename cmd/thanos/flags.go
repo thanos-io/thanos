@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/thanos-io/thanos/pkg/extflag"
 
@@ -23,6 +24,7 @@ func regGRPCFlags(cmd *kingpin.CmdClause) (
 	grpcTLSSrvCert *string,
 	grpcTLSSrvKey *string,
 	grpcTLSSrvClientCA *string,
+	grpcMaxConnectionAge *time.Duration,
 ) {
 	grpcBindAddr = cmd.Flag("grpc-address", "Listen ip:port address for gRPC endpoints (StoreAPI). Make sure this address is routable from other components.").
 		Default("0.0.0.0:10901").String()
@@ -31,12 +33,14 @@ func regGRPCFlags(cmd *kingpin.CmdClause) (
 	grpcTLSSrvCert = cmd.Flag("grpc-server-tls-cert", "TLS Certificate for gRPC server, leave blank to disable TLS").Default("").String()
 	grpcTLSSrvKey = cmd.Flag("grpc-server-tls-key", "TLS Key for the gRPC server, leave blank to disable TLS").Default("").String()
 	grpcTLSSrvClientCA = cmd.Flag("grpc-server-tls-client-ca", "TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").Default("").String()
+	grpcMaxConnectionAge = cmd.Flag("grpc-server-max-connection-age", "The grpc server max connection age. This controls how often to re-read the tls certificates and redo the TLS handshake ").Default("1m").Duration()
 
 	return grpcBindAddr,
 		grpcGracePeriod,
 		grpcTLSSrvCert,
 		grpcTLSSrvKey,
-		grpcTLSSrvClientCA
+		grpcTLSSrvClientCA,
+		grpcMaxConnectionAge
 }
 
 func regHTTPFlags(cmd *kingpin.CmdClause) (httpBindAddr *string, httpGracePeriod *model.Duration) {

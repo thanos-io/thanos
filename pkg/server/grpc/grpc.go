@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 )
 
@@ -73,6 +74,9 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 
 	if options.tlsConfig != nil {
 		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(options.tlsConfig)))
+	}
+	if options.maxConnAge > 0 {
+		grpcOpts = append(grpcOpts, grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: options.maxConnAge}))
 	}
 	s := grpc.NewServer(grpcOpts...)
 

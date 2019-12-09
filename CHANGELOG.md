@@ -25,6 +25,8 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#1758](https://github.com/thanos-io/thanos/pull/1758) Bucket: `thanos bucket web` now supports `--web.external-prefix` for proxying on a subpath.
 - [#1770](https://github.com/thanos-io/thanos/pull/1770) Bucket: Add `--web.prefix-header` flags to allow for bucket UI to be accessible behind a reverse proxy.
 - [#1668](https://github.com/thanos-io/thanos/pull/1668) Receiver: Added TLS options for both server and client remote write.
+- [#1672](https://github.com/thanos-io/thanos/pull/1672) All components: Client and server certificates are auto reloaded when changed on disk.
+- [#1672](https://github.com/thanos-io/thanos/pull/1672) Add a new `--grpc-server-max-connection-age` CLI option which controls how often to re-do the tls handshake and re-read the certificates. This in reality controls the keep alive so when the connection is closed it requires a new tls handshake.
 
 ### Fixed
 
