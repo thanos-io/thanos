@@ -28,7 +28,7 @@ const (
 	ResLevel2 = int64(60 * 60 * 1000) // 1 hour in milliseconds.
 )
 
-// Downsampling ranges i.e. after what time we start to downsample blocks (in seconds).
+// Downsampling ranges i.e. minimum block size after which we start to downsample blocks (in seconds).
 const (
 	DownsampleRange0 = 40 * 60 * 60 * 1000      // 40 hours.
 	DownsampleRange1 = 10 * 24 * 60 * 60 * 1000 // 10 days.
