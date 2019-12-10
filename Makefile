@@ -47,7 +47,7 @@ GOJSONTOYAML            ?= $(GOBIN)/gojsontoyaml-$(GOJSONTOYAML_VERSION)
 JSONNET_VERSION         ?= fbde25be2182caa4345b03f1532450911ac7d1f3
 JSONNET                 ?= $(GOBIN)/jsonnet-$(JSONNET_VERSION)
 JSONNET_BUNDLER_VERSION ?= d7829f6c7e632e954c0e5db8b3eece8f111f9461
-JSONNET_BUNDLER         ?= $(GOBIN)/jsonnet-bundler-$(JSONNET_BUNDLER_VERSION)
+JSONNET_BUNDLER         ?= $(GOBIN)/jb-$(JSONNET_BUNDLER_VERSION)
 # Prometheus v2.14.0
 PROMTOOL_VERSION        ?= edeb7a44cbf745f1d8be4ea6f215e79e651bfe19
 PROMTOOL                ?= $(GOBIN)/promtool-$(PROMTOOL_VERSION)
@@ -416,7 +416,7 @@ $(GOJSONTOYAML):
 	$(call fetch_go_bin_version,github.com/brancz/gojsontoyaml,$(GOJSONTOYAML_VERSION))
 
 $(JSONNET_BUNDLER):
-	$(call fetch_go_bin_version,github.com/jsonnet-bundler/jsonnet-bundler,$(JSONNET_BUNDLER_VERSION))
+	$(call fetch_go_bin_version,github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb,$(JSONNET_BUNDLER_VERSION))
 
 $(PROMTOOL):
 	$(call fetch_go_bin_version,github.com/prometheus/prometheus/cmd/promtool,$(PROMTOOL_VERSION))
