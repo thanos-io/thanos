@@ -459,7 +459,7 @@ func runRule(
 
 				rulesLoaded.Reset()
 				for _, group := range ruleMgr.RuleGroups() {
-					rulesLoaded.WithLabelValues(group.PartialResponseStrategy.String(), group.File(), group.Name()).Set(float64(len(group.Rules())))
+					rulesLoaded.WithLabelValues(group.PartialResponseStrategy.String(), group.OriginalFile(), group.Name()).Set(float64(len(group.Rules())))
 				}
 
 			}
