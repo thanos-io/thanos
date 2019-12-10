@@ -472,52 +472,27 @@ func runRule(
 	}
 
 	// Handle reload and termination interrupts.
-	reload := make(chan chan error, 1)
 	{
 		cancel := make(chan struct{})
-		reload <- make(chan error, 1) // Initial reload.
-
 		g.Add(func() error {
+
+			//initialize rules
+			if err := reloadRules(logger, ruleFiles, ruleMgr, evalInterval, configSuccess, configSuccessTime, rulesLoaded); err != nil {
+				level.Error(logger).Log("msg", "initialize rules failed", "err", err)
+				//returns when initialize with invalid pattern error
+				if _, ok := err.(*errInvalidPattern); ok {
+					return err
+				}
+			}
 			for {
-				var rc chan error
 				select {
+				case <-reloadSignal:
+					if err := reloadRules(logger, ruleFiles, ruleMgr, evalInterval, configSuccess, configSuccessTime, rulesLoaded); err != nil {
+						level.Error(logger).Log("msg", "reload rules by sighup failed", "err", err)
+					}
 				case <-cancel:
 					return errors.New("canceled")
-				case <-reload:
-				case <-reloadSignal:
 				}
-
-				level.Debug(logger).Log("msg", "configured rule files", "files", strings.Join(ruleFiles, ","))
-				var files []string
-				for _, pat := range ruleFiles {
-					fs, err := filepath.Glob(pat)
-					if err != nil {
-						// The only error can be a bad pattern.
-						rc <- errors.Wrapf(err, "retrieving rule files failed. Ignoring file. pattern %s", pat)
-						level.Error(logger).Log("msg", "retrieving rule files failed. Ignoring file.", "pattern", pat, "err", err)
-						continue
-					}
-
-					files = append(files, fs...)
-				}
-
-				level.Info(logger).Log("msg", "reload rule files", "numFiles", len(files))
-
-				if err := ruleMgr.Update(evalInterval, files); err != nil {
-					configSuccess.Set(0)
-					rc <- errors.Wrap(err, "reloading rules failed")
-					level.Error(logger).Log("msg", "reloading rules failed", "err", err)
-					continue
-				}
-
-				configSuccess.Set(1)
-				configSuccessTime.SetToCurrentTime()
-
-				rulesLoaded.Reset()
-				for _, group := range ruleMgr.RuleGroups() {
-					rulesLoaded.WithLabelValues(group.PartialResponseStrategy.String(), group.File(), group.Name()).Set(float64(len(group.Rules())))
-				}
-				rc <- nil
 			}
 		}, func(error) {
 			close(cancel)
@@ -567,9 +542,8 @@ func runRule(
 		}
 
 		router.WithPrefix(webRoutePrefix).Post("/-/reload", func(w http.ResponseWriter, r *http.Request) {
-			rc := make(chan error)
-			reload <- rc
-			if err := <-rc; err != nil {
+			if err := reloadRules(logger, ruleFiles, ruleMgr, evalInterval, configSuccess, configSuccessTime, rulesLoaded); err != nil {
+				level.Error(logger).Log("msg", "reload rules by webhandler failed", "err", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 		})
@@ -764,4 +738,48 @@ func addDiscoveryGroups(g *run.Group, c *http_util.Client, interval time.Duratio
 	}, func(error) {
 		cancel()
 	})
+}
+
+type errInvalidPattern struct {
+	err error
+	pat string
+}
+
+func (e *errInvalidPattern) Error() string {
+	return errors.Wrapf(e.err, "retrieving rule files failed. Ignoring file. pattern %s", e.pat).Error()
+}
+func reloadRules(logger log.Logger,
+	ruleFiles []string,
+	ruleMgr *thanosrule.Manager,
+	evalInterval time.Duration,
+	configSuccess prometheus.Gauge,
+	configSuccessTime prometheus.Gauge,
+	rulesLoaded *prometheus.GaugeVec) error {
+	level.Debug(logger).Log("msg", "configured rule files", "files", strings.Join(ruleFiles, ","))
+	var files []string
+	for _, pat := range ruleFiles {
+		fs, err := filepath.Glob(pat)
+		if err != nil {
+			//check errInvalidPattern when initialize
+			return &errInvalidPattern{err, pat}
+		}
+
+		files = append(files, fs...)
+	}
+
+	level.Info(logger).Log("msg", "reload rule files", "numFiles", len(files))
+
+	if err := ruleMgr.Update(evalInterval, files); err != nil {
+		configSuccess.Set(0)
+		return errors.Wrap(err, "reloading rules failed")
+	}
+
+	configSuccess.Set(1)
+	configSuccessTime.Set(float64(time.Now().UnixNano()) / 1e9)
+
+	rulesLoaded.Reset()
+	for _, group := range ruleMgr.RuleGroups() {
+		rulesLoaded.WithLabelValues(group.PartialResponseStrategy.String(), group.File(), group.Name()).Set(float64(len(group.Rules())))
+	}
+	return nil
 }
