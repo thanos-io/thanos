@@ -238,15 +238,16 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		if object.Err != nil {
 			return object.Err
 		}
-		// This sometimes happens with empty buckets.
-		if object.Key == "" {
-			continue
-		}
 
 		key := strings.TrimPrefix(object.Key, b.path)
 
+		// This sometimes happens with empty buckets.
+		if key == "" {
+			continue
+		}
+
 		// The s3 client can also return the directory itself in the ListObjects call above.
-		if object.Key == dir || key == "" {
+		if key == dir {
 			continue
 		}
 
