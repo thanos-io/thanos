@@ -242,14 +242,14 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		if object.Key == "" {
 			continue
 		}
+
+		key := strings.TrimPrefix(object.Key, b.path)
+
 		// The s3 client can also return the directory itself in the ListObjects call above.
-		if object.Key == dir {
+		if object.Key == dir || key == "" {
 			continue
 		}
-		key := strings.TrimPrefix(object.Key, b.path)
-		if key == "" {
-			key = "/"
-		}
+
 		if err := f(key); err != nil {
 			return err
 		}
