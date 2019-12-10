@@ -132,4 +132,21 @@ http_config:
 	cfg2, err := parseConfig(input2)
 	testutil.Ok(t, err)
 	testutil.Assert(t, cfg2.PartSize == 1024*1024*100, "when part size should be set to 100MiB")
+
+	input3 := []byte(`bucket: "bucket-name"
+endpoint: "s3-endpoint"
+access_key: "access_key"
+insecure: false
+signature_version2: false
+encrypt_sse: false
+secret_key: "secret_key"
+part_size: 104857600
+path: thanos
+http_config:
+  insecure_skip_verify: false
+  idle_conn_timeout: 50s`)
+
+	cfg3, err := parseConfig(input3)
+	testutil.Ok(t, err)
+	testutil.Assert(t, cfg3.Path == "thanos", "when part size should be set to 'thanos'")
 }
