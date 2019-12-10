@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"path"
 	"regexp"
-	"sort"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -114,17 +113,21 @@ func ruleTmplFuncs(queryURL string) template.FuncMap {
 }
 
 func (ru *Rule) alerts(w http.ResponseWriter, r *http.Request) {
-	alerts := ru.ruleManager.AlertingRules()
-	alertsSorter := byAlertStateAndNameSorter{alerts: alerts}
-	sort.Sort(alertsSorter)
+	var groups []thanosrule.Group
+	for _, group := range ru.ruleManager.RuleGroups() {
+		if group.HasAlertingRules() {
+			groups = append(groups, group)
+		}
+	}
 
 	alertStatus := AlertStatus{
-		AlertingRules: alertsSorter.alerts,
+		Groups: groups,
 		AlertStateToRowClass: map[rules.AlertState]string{
 			rules.StateInactive: "success",
 			rules.StatePending:  "warning",
 			rules.StateFiring:   "danger",
 		},
+		Counts: alertCounts(groups),
 	}
 
 	prefix := GetWebPrefix(ru.logger, ru.flagsMap, r)
@@ -161,24 +164,30 @@ func (ru *Rule) Register(r *route.Router, ins extpromhttp.InstrumentationMiddlew
 
 // AlertStatus bundles alerting rules and the mapping of alert states to row classes.
 type AlertStatus struct {
-	AlertingRules        []thanosrule.AlertingRule
+	Groups               []thanosrule.Group
 	AlertStateToRowClass map[rules.AlertState]string
+	Counts               AlertByStateCount
 }
 
-type byAlertStateAndNameSorter struct {
-	alerts []thanosrule.AlertingRule
+type AlertByStateCount struct {
+	Inactive int32
+	Pending  int32
+	Firing   int32
 }
 
-func (s byAlertStateAndNameSorter) Len() int {
-	return len(s.alerts)
-}
-
-func (s byAlertStateAndNameSorter) Less(i, j int) bool {
-	return s.alerts[i].State() > s.alerts[j].State() ||
-		(s.alerts[i].State() == s.alerts[j].State() &&
-			s.alerts[i].Name() < s.alerts[j].Name())
-}
-
-func (s byAlertStateAndNameSorter) Swap(i, j int) {
-	s.alerts[i], s.alerts[j] = s.alerts[j], s.alerts[i]
+func alertCounts(groups []thanosrule.Group) AlertByStateCount {
+	result := AlertByStateCount{}
+	for _, group := range groups {
+		for _, alert := range group.AlertingRules() {
+			switch alert.State() {
+			case rules.StateInactive:
+				result.Inactive++
+			case rules.StatePending:
+				result.Pending++
+			case rules.StateFiring:
+				result.Firing++
+			}
+		}
+	}
+	return result
 }

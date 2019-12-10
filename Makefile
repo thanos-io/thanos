@@ -104,7 +104,7 @@ endef
 .PHONY: all
 all: format build
 
-# assets repacks all statis assets into go file for easier deploy.
+# assets repacks all static assets into go file for easier deploy.
 .PHONY: assets
 assets: $(GOBINDATA)
 	@echo ">> deleting asset file"

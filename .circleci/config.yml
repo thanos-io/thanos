@@ -8,7 +8,7 @@ jobs:
     working_directory: /go/src/github.com/thanos-io/thanos
     environment:
       GO111MODULE: 'on'
-      # Run garbage collection more aggresively to avoid getting OOMed during the lint phase (4GB limit).
+      # Run garbage collection more aggressively to avoid getting OOMed during the lint phase (4GB limit).
       GOGC: "20"
       # By default Go uses GOMAXPROCS but a Circle CI executor has many
       # cores (> 30) while the CPU and RAM resources are throttled. If we
