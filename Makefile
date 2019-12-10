@@ -315,6 +315,7 @@ mixin-generate-in-container:
 .PHONY: examples
 examples: examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards examples/tmp
 	$(EMBEDMD) -w examples/alerts/alerts.md
+	$(EMBEDMD) -w mixin/thanos/README.md
 
 .PHONY: examples/tmp
 examples/tmp:
