@@ -247,8 +247,12 @@ func runRule(
 			Help: "The total number of rule evaluation that were successful but had warnings which can indicate partial error.",
 		}, []string{"strategy"},
 	)
-	ruleEvalWarnings.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_ABORT.String()))
-	ruleEvalWarnings.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_WARN.String()))
+	ruleEvalError := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "thanos_rule_evaluation_error_total",
+			Help: "The total number of rule evaluation that error",
+		}, []string{"strategy"},
+	)
 
 	reg.MustRegister(configSuccess)
 	reg.MustRegister(configSuccessTime)
@@ -256,6 +260,12 @@ func runRule(
 	reg.MustRegister(alertMngrAddrResolutionErrors)
 	reg.MustRegister(rulesLoaded)
 	reg.MustRegister(ruleEvalWarnings)
+	reg.MustRegister(ruleEvalError)
+
+	ruleEvalWarnings.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_ABORT.String()))
+	ruleEvalWarnings.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_WARN.String()))
+	ruleEvalError.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_ABORT.String()))
+	ruleEvalError.WithLabelValues(strings.ToLower(storepb.PartialResponseStrategy_WARN.String()))
 
 	for _, addr := range queryAddrs {
 		if addr == "" {
@@ -336,7 +346,7 @@ func runRule(
 			opts := opts
 			opts.Registerer = extprom.WrapRegistererWith(prometheus.Labels{"strategy": strings.ToLower(s.String())}, reg)
 			opts.Context = ctx
-			opts.QueryFunc = queryFunc(logger, dnsProvider, duplicatedQuery, ruleEvalWarnings, s)
+			opts.QueryFunc = queryFunc(logger, dnsProvider, duplicatedQuery, ruleEvalWarnings, ruleEvalError, s)
 
 			mgr := rules.NewManager(&opts)
 			ruleMgr.SetRuleManager(s, mgr)
@@ -752,6 +762,7 @@ func queryFunc(
 	dnsProvider *dns.Provider,
 	duplicatedQuery prometheus.Counter,
 	ruleEvalWarnings *prometheus.CounterVec,
+	ruleEvalError *prometheus.CounterVec,
 	partialResponseStrategy storepb.PartialResponseStrategy,
 ) rules.QueryFunc {
 	var spanID string
@@ -787,12 +798,13 @@ func queryFunc(
 			span.Finish()
 
 			if err != nil {
-				level.Error(logger).Log("err", err, "query", q)
+				ruleEvalError.WithLabelValues(strings.ToLower(partialResponseStrategy.String())).Inc()
+				level.Error(logger).Log("err", err, "query", q, "addr", u)
 			} else {
 				if len(warns) > 0 {
 					ruleEvalWarnings.WithLabelValues(strings.ToLower(partialResponseStrategy.String())).Inc()
 					// TODO(bwplotka): Propagate those to UI, probably requires changing rule manager code ):
-					level.Warn(logger).Log("warnings", strings.Join(warns, ", "), "query", q)
+					level.Warn(logger).Log("warnings", strings.Join(warns, ", "), "query", q, "addr", u)
 				}
 				return v, nil
 			}
