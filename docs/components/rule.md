@@ -226,6 +226,9 @@ Flags:
                                  If defined, it takes precedence over the
                                  '--alertmanagers.url' and
                                  '--alertmanagers.send-timeout' flags.
+      --alertmanagers.sd-dns-interval=30s
+                                 Interval between DNS resolutions of
+                                 Alertmanager hosts.
       --alert.query-url=ALERT.QUERY-URL
                                  The external Thanos Query URL that would be set
                                  in all alerts 'Source' field

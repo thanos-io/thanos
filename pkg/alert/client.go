@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
@@ -331,9 +332,10 @@ func (a *Alertmanager) Discover(ctx context.Context) {
 func (a *Alertmanager) Update(ctx context.Context, resolver dns.Resolver) error {
 	var resolved []string
 	for _, addr := range append(a.fileSDCache.Addresses(), a.staticAddresses...) {
+		level.Debug(a.logger).Log("msg", "resolving address", "addr", addr)
 		qtypeAndName := strings.SplitN(addr, "+", 2)
 		if len(qtypeAndName) != 2 {
-			// No lookup needed. Add to the list and continue to the next address.
+			level.Debug(a.logger).Log("msg", "no lookup needed", "addr", addr)
 			resolved = append(resolved, addr)
 			continue
 		}
@@ -351,6 +353,7 @@ func (a *Alertmanager) Update(ctx context.Context, resolver dns.Resolver) error 
 		if err != nil {
 			return errors.Wrap(err, "failed to resolve alertmanager address")
 		}
+		level.Debug(a.logger).Log("msg", "address resolved", "addr", addr, "resolved", strings.Join(addrs, ","))
 		resolved = append(resolved, addrs...)
 	}
 	a.mtx.Lock()

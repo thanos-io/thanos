@@ -83,6 +83,8 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 		Strings()
 	alertmgrsTimeout := cmd.Flag("alertmanagers.send-timeout", "Timeout for sending alerts to Alertmanager").Default("10s").Duration()
 	alertmgrsConfig := extflag.RegisterPathOrContent(cmd, "alertmanagers.config", "YAML file that contains alerting configuration. See format details: https://thanos.io/components/rule.md/#configuration. If defined, it takes precedence over the '--alertmanagers.url' and '--alertmanagers.send-timeout' flags.", false)
+	alertmgrsDNSSDInterval := modelDuration(cmd.Flag("alertmanagers.sd-dns-interval", "Interval between DNS resolutions of Alertmanager hosts.").
+		Default("30s"))
 
 	alertQueryURL := cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field").String()
 
@@ -156,6 +158,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			*alertmgrs,
 			*alertmgrsTimeout,
 			alertmgrsConfig,
+			time.Duration(*alertmgrsDNSSDInterval),
 			*grpcBindAddr,
 			time.Duration(*grpcGracePeriod),
 			*grpcCert,
@@ -194,6 +197,7 @@ func runRule(
 	alertmgrURLs []string,
 	alertmgrsTimeout time.Duration,
 	alertmgrsConfig *extflag.PathOrContent,
+	alertmgrsDNSSDInterval time.Duration,
 	grpcBindAddr string,
 	grpcGracePeriod time.Duration,
 	grpcCert string,
@@ -403,7 +407,7 @@ func runRule(
 			})
 
 			g.Add(func() error {
-				return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+				return runutil.Repeat(alertmgrsDNSSDInterval, ctx.Done(), func() error {
 					if err := am.Update(ctx, resolver); err != nil {
 						level.Error(logger).Log("msg", "refreshing alertmanagers failed", "err", err)
 						alertMngrAddrResolutionErrors.Inc()

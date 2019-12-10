@@ -305,7 +305,7 @@ receivers:
 	}
 }
 
-func rule(http, grpc address, ruleDir string, am address, queryAddresses []address, queryFileSDAddresses []address) *serverScheduler {
+func rule(http, grpc address, ruleDir string, amCfg []byte, queryAddresses []address, queryFileSDAddresses []address) *serverScheduler {
 	return &serverScheduler{
 		HTTP: http,
 		GRPC: grpc,
@@ -317,12 +317,14 @@ func rule(http, grpc address, ruleDir string, am address, queryAddresses []addre
 				"--data-dir", filepath.Join(workDir, "data"),
 				"--rule-file", filepath.Join(ruleDir, "*.yaml"),
 				"--eval-interval", "1s",
-				"--alertmanagers.url", am.URL(),
+				"--alertmanagers.config", string(amCfg),
+				"--alertmanagers.sd-dns-interval", "5s",
 				"--grpc-address", grpc.HostPort(),
 				"--grpc-grace-period", "0s",
 				"--http-address", http.HostPort(),
 				"--log.level", "debug",
 				"--query.sd-dns-interval", "5s",
+				"--resend-delay", "5s",
 			}
 
 			for _, addr := range queryAddresses {

@@ -15,8 +15,12 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
+	yaml "gopkg.in/yaml.v2"
+
+	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	rapi "github.com/thanos-io/thanos/pkg/rule/api"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -62,10 +66,153 @@ func createRuleFiles(t *testing.T, dir string) {
 	}
 }
 
+func serializeAlertingConfiguration(t *testing.T, cfg alert.AlertmanagerConfig) []byte {
+	t.Helper()
+	amCfg := alert.AlertingConfig{
+		Alertmanagers: []alert.AlertmanagerConfig{cfg},
+	}
+	b, err := yaml.Marshal(&amCfg)
+	if err != nil {
+		t.Errorf("failed to serialize alerting configuration: %v", err)
+	}
+	return b
+}
+
+func writeAlertmanagerFileSD(t *testing.T, path string, addrs ...string) {
+	group := targetgroup.Group{Targets: []model.LabelSet{}}
+	for _, addr := range addrs {
+		group.Targets = append(group.Targets, model.LabelSet{model.LabelName(model.AddressLabel): model.LabelValue(addr)})
+	}
+
+	b, err := yaml.Marshal([]*targetgroup.Group{&group})
+	if err != nil {
+		t.Errorf("failed to serialize file SD configuration: %v", err)
+		return
+	}
+
+	err = ioutil.WriteFile(path+".tmp", b, 0660)
+	if err != nil {
+		t.Errorf("failed to write file SD configuration: %v", err)
+		return
+	}
+
+	err = os.Rename(path+".tmp", path)
+	testutil.Ok(t, err)
+}
+
+func TestRuleAlertmanagerFileSD(t *testing.T) {
+	a := newLocalAddresser()
+
+	am := alertManager(a.New())
+	amDir, err := ioutil.TempDir("", "am")
+	defer os.RemoveAll(amDir)
+	testutil.Ok(t, err)
+	amCfg := serializeAlertingConfiguration(
+		t,
+		alert.AlertmanagerConfig{
+			FileSDConfigs: []alert.FileSDConfig{
+				alert.FileSDConfig{
+					Files:           []string{filepath.Join(amDir, "*.yaml")},
+					RefreshInterval: model.Duration(time.Hour),
+				},
+			},
+			Scheme:  "http",
+			Timeout: model.Duration(time.Second),
+		},
+	)
+
+	rulesDir, err := ioutil.TempDir("", "rules")
+	defer os.RemoveAll(rulesDir)
+	testutil.Ok(t, err)
+	createRuleFiles(t, rulesDir)
+
+	qAddr := a.New()
+	r := rule(a.New(), a.New(), rulesDir, amCfg, []address{qAddr}, nil)
+	q := querier(qAddr, a.New(), []address{r.GRPC}, nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	exit, err := e2eSpinup(t, ctx, am, q, r)
+	if err != nil {
+		t.Errorf("spinup failed: %v", err)
+		cancel()
+		return
+	}
+
+	defer func() {
+		cancel()
+		<-exit
+	}()
+
+	// Wait for a couple of evaluations.
+	testutil.Ok(t, runutil.Retry(5*time.Second, ctx.Done(), func() (err error) {
+		select {
+		case <-exit:
+			cancel()
+			return nil
+		default:
+		}
+
+		// The time series written for the firing alerting rule must be queryable.
+		res, warnings, err := promclient.QueryInstant(ctx, nil, urlParse(t, q.HTTP.URL()), "max(count_over_time(ALERTS[1m])) > 2", time.Now(), promclient.QueryOptions{
+			Deduplicate: false,
+		})
+		if err != nil {
+			return err
+		}
+		if len(warnings) > 0 {
+			return errors.Errorf("unexpected warnings %s", warnings)
+		}
+		if len(res) == 0 {
+			return errors.Errorf("empty result")
+		}
+
+		alrts, err := queryAlertmanagerAlerts(ctx, am.HTTP.URL())
+		if err != nil {
+			return err
+		}
+		if len(alrts) != 0 {
+			return errors.Errorf("unexpected alerts length %d", len(alrts))
+		}
+
+		return nil
+	}))
+
+	// Update the Alertmanager file service discovery configuration.
+	writeAlertmanagerFileSD(t, filepath.Join(amDir, "targets.yaml"), am.HTTP.HostPort())
+
+	// Verify that alerts are received by Alertmanager.
+	testutil.Ok(t, runutil.Retry(5*time.Second, ctx.Done(), func() (err error) {
+		select {
+		case <-exit:
+			cancel()
+			return nil
+		default:
+		}
+		alrts, err := queryAlertmanagerAlerts(ctx, am.HTTP.URL())
+		if err != nil {
+			return err
+		}
+		if len(alrts) == 0 {
+			return errors.Errorf("expecting alerts")
+		}
+
+		return nil
+	}))
+}
+
 func TestRule(t *testing.T) {
 	a := newLocalAddresser()
 
 	am := alertManager(a.New())
+	amCfg := serializeAlertingConfiguration(
+		t,
+		alert.AlertmanagerConfig{
+			StaticAddresses: []string{am.HTTP.HostPort()},
+			Scheme:          "http",
+			Timeout:         model.Duration(time.Second),
+		},
+	)
+
 	qAddr := a.New()
 
 	rulesDir, err := ioutil.TempDir("", "rules")
@@ -73,8 +220,8 @@ func TestRule(t *testing.T) {
 	testutil.Ok(t, err)
 	createRuleFiles(t, rulesDir)
 
-	r1 := rule(a.New(), a.New(), rulesDir, am.HTTP, []address{qAddr}, nil)
-	r2 := rule(a.New(), a.New(), rulesDir, am.HTTP, nil, []address{qAddr})
+	r1 := rule(a.New(), a.New(), rulesDir, amCfg, []address{qAddr}, nil)
+	r2 := rule(a.New(), a.New(), rulesDir, amCfg, nil, []address{qAddr})
 
 	q := querier(qAddr, a.New(), []address{r1.GRPC, r2.GRPC}, nil)
 
@@ -282,19 +429,25 @@ func (a *failingStoreAPI) LabelValues(context.Context, *storepb.LabelValuesReque
 
 // Test Ruler behaviour on different storepb.PartialResponseStrategy when having partial response from single `failingStoreAPI`.
 func TestRulePartialResponse(t *testing.T) {
-	dir, err := ioutil.TempDir("", "test_rulepartial_response")
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
-
 	a := newLocalAddresser()
 	qAddr := a.New()
 
 	f := fakeStoreAPI(a.New(), &failingStoreAPI{})
 	am := alertManager(a.New())
+	amCfg := serializeAlertingConfiguration(
+		t,
+		alert.AlertmanagerConfig{
+			StaticAddresses: []string{am.HTTP.HostPort()},
+			Scheme:          "http",
+			Timeout:         model.Duration(time.Second),
+		},
+	)
+
 	rulesDir, err := ioutil.TempDir("", "rules")
 	defer os.RemoveAll(rulesDir)
 	testutil.Ok(t, err)
-	r := rule(a.New(), a.New(), rulesDir, am.HTTP, []address{qAddr}, nil)
+
+	r := rule(a.New(), a.New(), rulesDir, amCfg, []address{qAddr}, nil)
 	q := querier(qAddr, a.New(), []address{r.GRPC, f.GRPC}, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
