@@ -1,7 +1,7 @@
 # thanos-mixin
 
 > Note that everything is experimental and may change significantly at any time.
-> Also it still has missing definitions feel free to contribute.
+> Also it still has missing alert and dashboard definitions for certain components, e.g. rule and sidecar. Please feel free to contribute.
 
 This directory contains extensible and customizable monitoring definitons for Thanos. [Grafana](http://grafana.com/) dashboards, and [Prometheus rules](https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/) combined with documentation and scripts to provide easy monitoring experience for Thanos.
 
@@ -11,10 +11,33 @@ The content of this project is written in [jsonnet](http://jsonnet.org/). This p
 
 ## Requirements
 
+### jsonnet
+
 The content of this project consists of a set of [jsonnet](http://jsonnet.org/) files making up a library to be consumed.
+
+We recommend to use [go-jsonnet](https://github.com/google/go-jsonnet). It's an implementation of [Jsonnet](http://jsonnet.org/) in pure Go. It is feature complete but is not as heavily exercised as the [Jsonnet C++ implementation](https://github.com/google/jsonnet).
+
+To install:
+
+```shell
+go get github.com/google/go-jsonnet/cmd/jsonnet
+```
+
+### jsonnet-bundler
 
 Install this library in your own project with [jsonnet-bundler](https://github.com/jsonnet-bundler/jsonnet-bundler#install) (the jsonnet package manager):
 
+To install:
+
+```shell
+go get github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb
+```
+
+> An e.g. of how to install a given version of this library: `jb install github.com/thanos-io/thanos/mixin/thanos-mixin@master`.
+
+## Use as a library
+
+To use the `thanos-mixin` as a dependency, simply use the jsonnet-bundler install functionality:
 ```shell
 $ mkdir thanos-mixin; cd thanos-mixin
 $ jb init  # Creates the initial/empty `jsonnetfile.json`
@@ -22,17 +45,14 @@ $ jb init  # Creates the initial/empty `jsonnetfile.json`
 $ jb install github.com/thanos-io/thanos/mixin/thanos-mixin@master # Creates `vendor/` & `jsonnetfile.lock.json`, and fills in `jsonnetfile.json`
 ```
 
-> `jb` can be installed with `go get github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb`
-> An e.g. of how to install a given version of this library: `jb install github.com/thanos-io/thanos/mixin/thanos-mixin@master`
-
-In order to update the thanos-mixin dependency, simply use the jsonnet-bundler update functionality:
+To update the `thanos-mixin` as a dependency, simply use the jsonnet-bundler update functionality:
 ```shell
 $ jb update
 ```
 
-## Configure
+#### Configure
 
-This project is intended to be used as a library. You can extend and customize dashboards and alerting rules by creating for own generators, such as the generators ([alerts.jsonnet](alerts.jsonnet) and [dashboards.jsonnet](dashboards.jsonnet)) that are use to create [examples](examples). As a convention shared variables are collected in [config.jsonnet], feel free to modify and generate your own definitons.
+This project is intended to be used as a library. You can extend and customize dashboards and alerting rules by creating for own generators, such as the generators ([alerts.jsonnet](alerts.jsonnet) and [dashboards.jsonnet](dashboards.jsonnet)) that are use to create [examples](examples). As a convention shared variables are collected in [config.jsonnet](config.jsonnet), feel free to modify and generate your own definitons.
 
 [embedmd]:# (config.libsonnet)
 ```libsonnet
@@ -84,7 +104,22 @@ You can format your code using:
 $ make jsonnet-format
 ```
 
-## Generate
+## Examples
+
+This project is intended to be used as a library. However, it also provides drop-in examples to monitor Thanos.
+
+### Requirements
+
+#### gojsontoyaml
+
+`gojsontoyaml` is used to convert generated `json` definitons to `yaml`.
+
+To install:
+```shell
+go get github.com/brancz/gojsontoyaml
+```
+
+### Generate
 
 To generate examples after modifying, make sure `jsonnet` dependencies are installed.
 ```shell
@@ -101,11 +136,7 @@ Make action runs the jsonnet code, then reads each key of the generated json and
 
 > Make commands should handle dependecies for you.
 
-> In case it doesn't; before compiling, make sure `gojsontoyaml` is installed tool with `go get github.com/brancz/gojsontoyaml`.
-
-> And note that you need `jsonnet` (`go get github.com/google/go-jsonnet/cmd/jsonnet`) and `gojsontoyaml` (`go get github.com/brancz/gojsontoyaml`) installed to run `build.sh`. If you just want json output, not yaml, then you can skip the pipe and everything afterwards.
-
-## Test and validate
+### Test and validate
 
 You validate your structural correctness of your Prometheus [alerting rules](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/) or [recording rules](https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/) with:
 
