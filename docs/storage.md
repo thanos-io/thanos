@@ -78,6 +78,7 @@ NOTE: Minio client was mainly for AWS S3, but it can be configured against other
 type: S3
 config:
   bucket: ""
+  path: ""
   endpoint: ""
   region: ""
   access_key: ""
@@ -86,7 +87,6 @@ config:
   encrypt_sse: false
   secret_key: ""
   put_user_metadata: {}
-  path: "" 
   http_config:
     idle_conn_timeout: 90s
     response_header_timeout: 2m
