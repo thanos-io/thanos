@@ -4,7 +4,7 @@
             "name": "thanos-mixin",
             "source": {
                 "local": {
-                    "directory": "mixin/thanos-mixin"
+                    "directory": "mixin/thanos"
                 }
             },
             "version": "."

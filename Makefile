@@ -52,6 +52,9 @@ JSONNET_BUNDLER         ?= $(GOBIN)/jsonnet-bundler-$(JSONNET_BUNDLER_VERSION)
 PROMTOOL_VERSION        ?= edeb7a44cbf745f1d8be4ea6f215e79e651bfe19
 PROMTOOL                ?= $(GOBIN)/promtool-$(PROMTOOL_VERSION)
 
+MIXIN_ROOT              ?= mixin/thanos
+JSONNET_VENDOR_DIR      ?= mixin/vendor
+
 WEB_DIR           ?= website
 WEBSITE_BASE_URL  ?= https://thanos.io
 PUBLIC_DIR        ?= $(WEB_DIR)/public
@@ -317,24 +320,24 @@ examples: examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/
 examples/tmp:
 	-rm -rf examples/tmp/
 	-mkdir -p examples/tmp/
-	$(JSONNET) -J mixin/vendor -m examples/tmp/ mixin/thanos-mixin/separated_alerts.jsonnet | xargs -I{} sh -c 'cat {} | $(GOJSONTOYAML) > {}.yaml; rm -f {}' -- {}
+	$(JSONNET) -J ${JSONNET_VENDOR_DIR} -m examples/tmp/ ${MIXIN_ROOT}/separated_alerts.jsonnet | xargs -I{} sh -c 'cat {} | $(GOJSONTOYAML) > {}.yaml; rm -f {}' -- {}
 
 .PHONY: examples/dashboards
-examples/dashboards: $(JSONNET) mixin/thanos-mixin/mixin.libsonnet mixin/thanos-mixin/config.libsonnet mixin/thanos-mixin/dashboards/*
+examples/dashboards: $(JSONNET) ${MIXIN_ROOT}/mixin.libsonnet ${MIXIN_ROOT}/defaults.libsonnet ${MIXIN_ROOT}/dashboards/*
 	-rm -rf examples/dashboards/*.json
 	-mkdir -p examples/dashboards/
-	$(JSONNET) -J mixin/vendor -m examples/dashboards mixin/thanos-mixin/dashboards.jsonnet
+	$(JSONNET) -J ${JSONNET_VENDOR_DIR} -m examples/dashboards ${MIXIN_ROOT}/dashboards.jsonnet
 
-examples/alerts/alerts.yaml: $(JSONNET) $(GOJSONTOYAML) mixin/thanos-mixin/mixin.libsonnet mixin/thanos-mixin/config.libsonnet mixin/thanos-mixin/alerts/*
-	$(JSONNET) mixin/thanos-mixin/alerts.jsonnet | $(GOJSONTOYAML) > $@
+examples/alerts/alerts.yaml: $(JSONNET) $(GOJSONTOYAML) ${MIXIN_ROOT}/mixin.libsonnet ${MIXIN_ROOT}/defaults.libsonnet ${MIXIN_ROOT}/alerts/*
+	$(JSONNET) ${MIXIN_ROOT}/alerts.jsonnet | $(GOJSONTOYAML) > $@
 
-examples/alerts/rules.yaml: $(JSONNET) $(GOJSONTOYAML) mixin/thanos-mixin/mixin.libsonnet mixin/thanos-mixin/config.libsonnet mixin/thanos-mixin/rules/*
-	$(JSONNET) mixin/thanos-mixin/rules.jsonnet | $(GOJSONTOYAML) > $@
+examples/alerts/rules.yaml: $(JSONNET) $(GOJSONTOYAML) ${MIXIN_ROOT}/mixin.libsonnet ${MIXIN_ROOT}/defaults.libsonnet ${MIXIN_ROOT}/rules/*
+	$(JSONNET) ${MIXIN_ROOT}/rules.jsonnet | $(GOJSONTOYAML) > $@
 
 .PHONY: jsonnet-vendor
 jsonnet-vendor: $(JSONNET_BUNDLER) jsonnetfile.json jsonnetfile.lock.json
-	rm -rf mixin/vendor
-	$(JSONNET_BUNDLER) install --jsonnetpkg-home="mixin/vendor"
+	rm -rf ${JSONNET_VENDOR_DIR}
+	$(JSONNET_BUNDLER) install --jsonnetpkg-home="${JSONNET_VENDOR_DIR}"
 
 JSONNET_FMT := jsonnetfmt -n 2 --max-blank-lines 2 --string-style s --comment-style s
 

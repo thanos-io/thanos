@@ -1,4 +1,9 @@
 {
+  local thanos = self,
+  receive+:: {
+    jobPrefix: error 'must provide job prefix for Thanos Receive alerts',
+    selector: error 'must provide selector for Thanos Receive alerts',
+  },
   prometheusAlerts+:: {
     groups+: [
       {
@@ -11,11 +16,11 @@
             },
             expr: |||
               (
-                sum(rate(http_requests_total{code=~"5..", %(thanosReceiveSelector)s, handler="receive"}[5m]))
+                sum(rate(http_requests_total{code=~"5..", %(selector)s, handler="receive"}[5m]))
               /
-                sum(rate(http_requests_total{%(thanosReceiveSelector)s, handler="receive"}[5m]))
+                sum(rate(http_requests_total{%(selector)s, handler="receive"}[5m]))
               ) * 100 > 5
-            ||| % $._config,
+            ||| % thanos.receive,
             'for': '5m',
             labels: {
               severity: 'critical',
@@ -28,11 +33,11 @@
             },
             expr: |||
               (
-                histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{%(thanosReceiveSelector)s, handler="receive"})) > 10
+                histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{%(selector)s, handler="receive"})) > 10
               and
-                sum by (job) (rate(http_request_duration_seconds_count{%(thanosReceiveSelector)s, handler="receive"}[5m])) > 0
+                sum by (job) (rate(http_request_duration_seconds_count{%(selector)s, handler="receive"}[5m])) > 0
               )
-            ||| % $._config,
+            ||| % thanos.receive,
             'for': '10m',
             labels: {
               severity: 'critical',
@@ -45,12 +50,12 @@
             },
             expr: |||
               (
-                sum by (job) (rate(thanos_receive_forward_requests_total{result="error", %(thanosReceiveSelector)s}[5m]))
+                sum by (job) (rate(thanos_receive_forward_requests_total{result="error", %(selector)s}[5m]))
               /
-                sum by (job) (rate(thanos_receive_forward_requests_total{%(thanosReceiveSelector)s}[5m]))
+                sum by (job) (rate(thanos_receive_forward_requests_total{%(selector)s}[5m]))
               * 100 > 5
               )
-            ||| % $._config,
+            ||| % thanos.receive,
             'for': '5m',
             labels: {
               severity: 'critical',
@@ -63,12 +68,12 @@
             },
             expr: |||
               (
-                sum by (job) (rate(thanos_receive_hashrings_file_errors_total{%(thanosReceiveSelector)s}[5m]))
+                sum by (job) (rate(thanos_receive_hashrings_file_errors_total{%(selector)s}[5m]))
               /
-                sum by (job) (rate(thanos_receive_hashrings_file_refreshes_total{%(thanosReceiveSelector)s}[5m]))
+                sum by (job) (rate(thanos_receive_hashrings_file_refreshes_total{%(selector)s}[5m]))
               > 0
               )
-            ||| % $._config,
+            ||| % thanos.receive,
             'for': '15m',
             labels: {
               severity: 'warning',
@@ -79,7 +84,7 @@
             annotations: {
               message: 'Thanos Receive {{$labels.job}} has not been able to reload hashring configurations.',
             },
-            expr: 'avg(thanos_receive_config_last_reload_successful{%(thanosReceiveSelector)s}) by (job) != 1' % $._config,
+            expr: 'avg(thanos_receive_config_last_reload_successful{%(selector)s}) by (job) != 1' % thanos.receive,
             'for': '5m',
             labels: {
               severity: 'warning',

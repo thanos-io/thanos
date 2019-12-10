@@ -1,4 +1,9 @@
 {
+  local thanos = self,
+  query+:: {
+    jobPrefix: error 'must provide job prefix for Thanos Query alerts',
+    selector: error 'must provide selector for Thanos Query alerts',
+  },
   prometheusAlerts+:: {
     groups+: [
       {
@@ -11,11 +16,11 @@
             },
             expr: |||
               (
-                sum(rate(http_requests_total{code=~"5..", %(thanosQuerySelector)s, handler="query"}[5m]))
+                sum(rate(http_requests_total{code=~"5..", %(selector)s, handler="query"}[5m]))
               /
-                sum(rate(http_requests_total{%(thanosQuerySelector)s, handler="query"}[5m]))
+                sum(rate(http_requests_total{%(selector)s, handler="query"}[5m]))
               ) * 100 > 5
-            ||| % $._config,
+            ||| % thanos.query,
             'for': '5m',
             labels: {
               severity: 'critical',
@@ -28,11 +33,11 @@
             },
             expr: |||
               (
-                sum(rate(http_requests_total{code=~"5..", %(thanosQuerySelector)s, handler="query_range"}[5m]))
+                sum(rate(http_requests_total{code=~"5..", %(selector)s, handler="query_range"}[5m]))
               /
-                sum(rate(http_requests_total{%(thanosQuerySelector)s, handler="query_range"}[5m]))
+                sum(rate(http_requests_total{%(selector)s, handler="query_range"}[5m]))
               ) * 100 > 5
-            ||| % $._config,
+            ||| % thanos.query,
             'for': '5m',
             labels: {
               severity: 'critical',
@@ -45,12 +50,12 @@
             },
             expr: |||
               (
-                sum by (job) (rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded", %(thanosQuerySelector)s}[5m]))
+                sum by (job) (rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded", %(selector)s}[5m]))
               /
-                sum by (job) (rate(grpc_server_started_total{%(thanosQuerySelector)s}[5m]))
+                sum by (job) (rate(grpc_server_started_total{%(selector)s}[5m]))
               * 100 > 5
               )
-            ||| % $._config,
+            ||| % thanos.query,
             'for': '5m',
             labels: {
               severity: 'warning',
@@ -63,12 +68,12 @@
             },
             expr: |||
               (
-                sum by (job) (rate(grpc_client_handled_total{grpc_code!="OK", %(thanosQuerySelector)s}[5m]))
+                sum by (job) (rate(grpc_client_handled_total{grpc_code!="OK", %(selector)s}[5m]))
               /
-                sum by (job) (rate(grpc_client_started_total{%(thanosQuerySelector)s}[5m]))
+                sum by (job) (rate(grpc_client_started_total{%(selector)s}[5m]))
               * 100 > 5
               )
-            ||| % $._config,
+            ||| % thanos.query,
             'for': '5m',
             labels: {
               severity: 'warning',
@@ -81,12 +86,12 @@
             },
             expr: |||
               (
-                sum by (job) (rate(thanos_query_store_apis_dns_failures_total{%(thanosQuerySelector)s}[5m]))
+                sum by (job) (rate(thanos_query_store_apis_dns_failures_total{%(selector)s}[5m]))
               /
-                sum by (job) (rate(thanos_query_store_apis_dns_lookups_total{%(thanosQuerySelector)s}[5m]))
+                sum by (job) (rate(thanos_query_store_apis_dns_lookups_total{%(selector)s}[5m]))
               > 1
               )
-            ||| % $._config,
+            ||| % thanos.query,
             'for': '15m',
             labels: {
               severity: 'warning',
@@ -99,11 +104,11 @@
             },
             expr: |||
               (
-                histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{%(thanosQuerySelector)s, handler="query"})) > 10
+                histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{%(selector)s, handler="query"})) > 10
               and
-                sum by (job) (rate(http_request_duration_seconds_bucket{%(thanosQuerySelector)s, handler="query"}[5m])) > 0
+                sum by (job) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="query"}[5m])) > 0
               )
-            ||| % $._config,
+            ||| % thanos.query,
             'for': '10m',
             labels: {
               severity: 'critical',
@@ -116,11 +121,11 @@
             },
             expr: |||
               (
-                histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{%(thanosQuerySelector)s, handler="query_range"})) > 10
+                histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{%(selector)s, handler="query_range"})) > 10
               and
-                sum by (job) (rate(http_request_duration_seconds_count{%(thanosQuerySelector)s, handler="query_range"}[5m])) > 0
+                sum by (job) (rate(http_request_duration_seconds_count{%(selector)s, handler="query_range"}[5m])) > 0
               )
-            ||| % $._config,
+            ||| % thanos.query,
             'for': '10m',
             labels: {
               severity: 'critical',

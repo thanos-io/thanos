@@ -1,4 +1,9 @@
 {
+  local thanos = self,
+  sidecar+:: {
+    jobPrefix: error 'must provide job prefix for Thanos Sidecar alerts',
+    selector: error 'must provide selector for Thanos Sidecar alerts',
+  },
   prometheusAlerts+:: {
     groups+: [
       {
@@ -10,8 +15,8 @@
               message: 'Thanos Sidecar {{$labels.job}} {{$labels.pod}} is unhealthy for {{ $value }} seconds.',
             },
             expr: |||
-              count(time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{%(thanosSidecarSelector)s}) by (job, pod) >= 300) > 0
-            ||| % $._config,
+              count(time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{%(selector)s}) by (job, pod) >= 300) > 0
+            ||| % thanos.sidecar,
             labels: {
               severity: 'critical',
             },

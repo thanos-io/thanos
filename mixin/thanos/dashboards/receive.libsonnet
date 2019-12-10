@@ -1,9 +1,15 @@
-local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
+local g = import '../thanos-grafana-builder/builder.libsonnet';
 
 {
+  local thanos = self,
+  receive+:: {
+    jobPrefix: error 'must provide job prefix for Thanos Receive dashboard',
+    selector: error 'must provide selector for Thanos Receive dashboard',
+    title: error 'must provide title for Thanos Receive dashboard',
+  },
   grafanaDashboards+:: {
     'receive.json':
-      g.dashboard($._config.grafanaThanos.dashboardReceiveTitle)
+      g.dashboard(thanos.receive.title)
       .addRow(
         g.row('Incoming Request')
         .addPanel(
@@ -133,32 +139,32 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
       .addRow(
         g.resourceUtilizationRow()
       ) +
-      g.template('namespace', 'kube_pod_info') +
-      g.template('job', 'up', 'namespace="$namespace",%(thanosReceiveSelector)s' % $._config, true, '%(thanosReceiveJobPrefix)s.*' % $._config) +
-      g.template('pod', 'kube_pod_info', 'namespace="$namespace",created_by_name=~"%(thanosReceiveJobPrefix)s.*"' % $._config, true, '.*'),
+      g.template('namespace', thanos.dashboard.namespaceQuery) +
+      g.template('job', 'up', 'namespace="$namespace",%(selector)s' % thanos.receive, true, '%(jobPrefix)s.*' % thanos.receive) +
+      g.template('pod', 'kube_pod_info', 'namespace="$namespace",created_by_name=~"%(jobPrefix)s.*"' % thanos.receive, true, '.*'),
 
     __overviewRows__+:: [
       g.row('Receive')
       .addPanel(
         g.panel('Incoming Requests Rate', 'Shows rate of incoming requests.') +
-        g.httpQpsPanel('http_requests_total', 'handler="receive",namespace="$namespace",%(thanosReceiveSelector)s' % $._config) +
-        g.addDashboardLink($._config.grafanaThanos.dashboardReceiveTitle)
+        g.httpQpsPanel('http_requests_total', 'handler="receive",namespace="$namespace",%(selector)s' % thanos.receive) +
+        g.addDashboardLink(thanos.receive.title)
       )
       .addPanel(
         g.panel('Incoming Requests Errors', 'Shows ratio of errors compared to the total number of handled incoming requests.') +
-        g.httpErrPanel('http_requests_total', 'handler="receive",namespace="$namespace",%(thanosReceiveSelector)s' % $._config) +
-        g.addDashboardLink($._config.grafanaThanos.dashboardReceiveTitle)
+        g.httpErrPanel('http_requests_total', 'handler="receive",namespace="$namespace",%(selector)s' % thanos.receive) +
+        g.addDashboardLink(thanos.receive.title)
       )
       .addPanel(
         g.sloLatency(
           'Incoming Requests Latency 99th Percentile',
           'Shows how long has it taken to handle incoming requests.',
-          'http_request_duration_seconds_bucket{handler="receive",namespace="$namespace",%(thanosReceiveSelector)s}' % $._config,
+          'http_request_duration_seconds_bucket{handler="receive",namespace="$namespace",%(selector)s}' % thanos.receive,
           0.99,
           0.5,
           1
         ) +
-        g.addDashboardLink($._config.grafanaThanos.dashboardReceiveTitle)
+        g.addDashboardLink(thanos.receive.title)
       ),
     ],
   },

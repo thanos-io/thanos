@@ -33,7 +33,7 @@ To install:
 go get github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb
 ```
 
-> An e.g. of how to install a given version of this library: `jb install github.com/thanos-io/thanos/mixin/thanos-mixin@master`.
+> An e.g. of how to install a given version of this library: `jb install github.com/thanos-io/thanos/jsonnet/thanos-mixin@master`.
 
 ## Use as a library
 
@@ -42,7 +42,7 @@ To use the `thanos-mixin` as a dependency, simply use the jsonnet-bundler instal
 $ mkdir thanos-mixin; cd thanos-mixin
 $ jb init  # Creates the initial/empty `jsonnetfile.json`
 # Install the thanos-mixin dependency
-$ jb install github.com/thanos-io/thanos/mixin/thanos-mixin@master # Creates `vendor/` & `jsonnetfile.lock.json`, and fills in `jsonnetfile.json`
+$ jb install github.com/thanos-io/thanos/jsonnet/thanos-mixin@master # Creates `vendor/` & `jsonnetfile.lock.json`, and fills in `jsonnetfile.json`
 ```
 
 To update the `thanos-mixin` as a dependency, simply use the jsonnet-bundler update functionality:
@@ -52,9 +52,9 @@ $ jb update
 
 #### Configure
 
-This project is intended to be used as a library. You can extend and customize dashboards and alerting rules by creating for own generators, such as the generators ([alerts.jsonnet](alerts.jsonnet) and [dashboards.jsonnet](dashboards.jsonnet)) that are use to create [examples](examples). As a convention shared variables are collected in [config.jsonnet](config.jsonnet), feel free to modify and generate your own definitons.
+This project is intended to be used as a library. You can extend and customize dashboards and alerting rules by creating for own generators, such as the generators ([alerts.jsonnet](alerts.jsonnet) and [dashboards.jsonnet](dashboards.jsonnet)) that are use to create [examples](examples). Default parameters are collected in [defaults.jsonnet](defaults.jsonnet), feel free to modify and generate your own definitons.
 
-[embedmd]:# (config.libsonnet)
+[embedmd]:# (defaults.libsonnet)
 ```libsonnet
 {
   _config+:: {

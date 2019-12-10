@@ -1,9 +1,15 @@
-local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
+local g = import '../thanos-grafana-builder/builder.libsonnet';
 
 {
+  local thanos = self,
+  store+:: {
+    jobPrefix: error 'must provide job prefix for Thanos Store dashboard',
+    selector: error 'must provide selector for Thanos Store dashboard',
+    title: error 'must provide title for Thanos Store dashboard',
+  },
   grafanaDashboards+:: {
     'store.json':
-      g.dashboard($._config.grafanaThanos.dashboardStoreTitle)
+      g.dashboard(thanos.store.title)
       .addRow(
         g.row('gRPC (Unary)')
         .addPanel(
@@ -238,32 +244,32 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
       .addRow(
         g.resourceUtilizationRow()
       ) +
-      g.template('namespace', 'kube_pod_info') +
-      g.template('job', 'up', 'namespace="$namespace",%(thanosStoreSelector)s' % $._config, true, '%(thanosStoreJobPrefix)s.*' % $._config) +
-      g.template('pod', 'kube_pod_info', 'namespace="$namespace",created_by_name=~"%(thanosStoreJobPrefix)s.*"' % $._config, true, '.*'),
+      g.template('namespace', thanos.dashboard.namespaceQuery) +
+      g.template('job', 'up', 'namespace="$namespace",%(selector)s' % thanos.store, true, '%(jobPrefix)s.*' % thanos.store) +
+      g.template('pod', 'kube_pod_info', 'namespace="$namespace",created_by_name=~"%(jobPrefix)s.*"' % thanos.store, true, '.*'),
 
     __overviewRows__+:: [
       g.row('Store')
       .addPanel(
         g.panel('gPRC (Unary) Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
-        g.grpcQpsPanel('server', 'namespace="$namespace",%(thanosStoreSelector)s,grpc_type="unary"' % $._config) +
-        g.addDashboardLink($._config.grafanaThanos.dashboardStoreTitle)
+        g.grpcQpsPanel('server', 'namespace="$namespace",%(selector)s,grpc_type="unary"' % thanos.store) +
+        g.addDashboardLink(thanos.store.title)
       )
       .addPanel(
         g.panel('gPRC (Unary) Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
-        g.grpcErrorsPanel('server', 'namespace="$namespace",%(thanosStoreSelector)s,grpc_type="unary"' % $._config) +
-        g.addDashboardLink($._config.grafanaThanos.dashboardStoreTitle)
+        g.grpcErrorsPanel('server', 'namespace="$namespace",%(selector)s,grpc_type="unary"' % thanos.store) +
+        g.addDashboardLink(thanos.store.title)
       )
       .addPanel(
         g.sloLatency(
           'gRPC Latency 99th Percentile',
           'Shows how long has it taken to handle requests from queriers.',
-          'grpc_server_handling_seconds_bucket{grpc_type="unary",namespace="$namespace",%(thanosStoreSelector)s}' % $._config,
+          'grpc_server_handling_seconds_bucket{grpc_type="unary",namespace="$namespace",%(selector)s}' % thanos.store,
           0.99,
           0.5,
           1
         ) +
-        g.addDashboardLink($._config.grafanaThanos.dashboardStoreTitle)
+        g.addDashboardLink(thanos.store.title)
       ),
     ],
   },

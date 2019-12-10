@@ -1,10 +1,14 @@
-local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
+local g = import '../thanos-grafana-builder/builder.libsonnet';
 
 {
+  local thanos = self,
+  overview:: {
+    title: error 'must provide title for Thanos Overview dashboard',
+  },
   grafanaDashboards+:: {
     'overview.json':
-      g.dashboard($._config.grafanaThanos.dashboardOverviewTitle) +
-      g.template('namespace', 'kube_pod_info'),
+      g.dashboard(thanos.overview.title) +
+      g.template('namespace', thanos.dashboard.namespaceQuery),
   },
 } +
 {

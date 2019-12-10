@@ -1,9 +1,15 @@
-local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
+local g = import '../thanos-grafana-builder/builder.libsonnet';
 
 {
+  local thanos = self,
+  sidecar+:: {
+    jobPrefix: error 'must provide job prefix for Thanos Sidecar dashboard',
+    selector: error 'must provide selector for Thanos Sidecar dashboard',
+    title: error 'must provide title for Thanos Sidecar dashboard',
+  },
   grafanaDashboards+:: {
     'sidecar.json':
-      g.dashboard($._config.grafanaThanos.dashboardSidecarTitle)
+      g.dashboard(thanos.sidecar.title)
       .addRow(
         g.row('gRPC (Unary)')
         .addPanel(
@@ -107,32 +113,32 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
       .addRow(
         g.resourceUtilizationRow()
       ) +
-      g.template('namespace', 'kube_pod_info') +
-      g.template('job', 'up', 'namespace="$namespace",%(thanosSidecarSelector)s' % $._config, true, '%(thanosSidecarJobPrefix)s.*' % $._config) +
-      g.template('pod', 'kube_pod_info', 'namespace="$namespace",created_by_name=~"%(thanosSidecarJobPrefix)s.*"' % $._config, true, '.*'),
+      g.template('namespace', thanos.dashboard.namespaceQuery) +
+      g.template('job', 'up', 'namespace="$namespace",%(selector)s' % thanos.sidecar, true, '%(jobPrefix)s.*' % thanos.sidecar) +
+      g.template('pod', 'kube_pod_info', 'namespace="$namespace",created_by_name=~"%(jobPrefix)s.*"' % thanos.sidecar, true, '.*'),
 
     __overviewRows__+:: [
       g.row('Sidecar')
       .addPanel(
         g.panel('gPRC (Unary) Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
-        g.grpcQpsPanel('server', 'namespace="$namespace",%(thanosSidecarSelector)s,grpc_type="unary"' % $._config) +
-        g.addDashboardLink($._config.grafanaThanos.dashboardSidecarTitle)
+        g.grpcQpsPanel('server', 'namespace="$namespace",%(selector)s,grpc_type="unary"' % thanos.sidecar) +
+        g.addDashboardLink(thanos.sidecar.title)
       )
       .addPanel(
         g.panel('gPRC (Unary) Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
-        g.grpcErrorsPanel('server', 'namespace="$namespace",%(thanosSidecarSelector)s,grpc_type="unary"' % $._config) +
-        g.addDashboardLink($._config.grafanaThanos.dashboardSidecarTitle)
+        g.grpcErrorsPanel('server', 'namespace="$namespace",%(selector)s,grpc_type="unary"' % thanos.sidecar) +
+        g.addDashboardLink(thanos.sidecar.title)
       )
       .addPanel(
         g.sloLatency(
           'gPRC (Unary) Latency 99th Percentile',
           'Shows how long has it taken to handle requests from queriers, in quantiles.',
-          'grpc_server_handling_seconds_bucket{grpc_type="unary",namespace="$namespace",%(thanosSidecarSelector)s}' % $._config,
+          'grpc_server_handling_seconds_bucket{grpc_type="unary",namespace="$namespace",%(selector)s}' % thanos.sidecar,
           0.99,
           0.5,
           1
         ) +
-        g.addDashboardLink($._config.grafanaThanos.dashboardSidecarTitle)
+        g.addDashboardLink(thanos.sidecar.title)
       ),
     ],
   },
