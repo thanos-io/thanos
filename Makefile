@@ -155,6 +155,7 @@ docker-push:
 .PHONY: docs
 docs: $(EMBEDMD) build
 	@EMBEDMD_BIN="$(EMBEDMD)" scripts/genflagdocs.sh
+	@find -type f -name "*.md" | xargs scripts/cleanup-white-noise.sh
 
 # check-docs checks:
 # - discrepancy with flags is valid
@@ -165,7 +166,7 @@ check-docs: $(EMBEDMD) $(LICHE) build
 	@EMBEDMD_BIN="$(EMBEDMD)" scripts/genflagdocs.sh check
 	@$(LICHE) --recursive docs --exclude "(cloud.tencent.com|alibabacloud.com)" --document-root .
 	@$(LICHE) --exclude "(cloud.tencent.com|goreportcard.com|alibabacloud.com)" --document-root . *.md
-	@find -name "*.md" | xargs scripts/cleanup-white-noise.sh
+	@find -type f -name "*.md" | xargs scripts/cleanup-white-noise.sh
 	@if [[ ! git diff-files --quiet --ignore-submodules -- ]]; then \
 		echo >&2 "please clean up white noise in all docs"; \
 		exit 1; \
@@ -178,16 +179,14 @@ check-comments:
 	@printf ">> checking Go comments trailing periods\n\n\n"
 	@./scripts/build-check-comments.sh
 
-# format formats the code (including imports format).
+# format the code:
+# - format code (including imports format)
+# - clean up all white noise
 .PHONY: format
 format: $(GOIMPORTS) check-comments
 	@echo ">> formatting code"
 	@$(GOIMPORTS) -w $(FILES_TO_FMT)
 	@scripts/cleanup-white-noise.sh $(FILES_TO_FMT)
-	@if [[ ! git diff-files --quiet --ignore-submodules -- ]]; then \
-		echo >&2 "please clean up white noise in all go files"; \
-		exit 1; \
-	fi
 
 # proto generates golang files from Thanos proto files.
 .PHONY: proto
@@ -289,6 +288,12 @@ lint: check-git $(GOLANGCILINT) $(MISSPELL)
 	@$(GOLANGCILINT) run --enable goimports --enable goconst --skip-dirs vendor
 	@echo ">> detecting misspells"
 	@find . -type f | grep -v vendor/ | grep -vE '\./\..*' | xargs $(MISSPELL) -error
+	@echo ">> detecting white noise"
+	@find . -type f \( -name "*.md" -o -name "*.go" \) | xargs scripts/cleanup-white-noise.sh
+	@if [[ ! git diff-files --quiet --ignore-submodules -- ]]; then \
+		echo >&2 "please clean up white noise in all docs or Go files"; \
+		exit 1; \
+	fi
 
 .PHONY: web-serve
 web-serve: web-pre-process $(HUGO)
