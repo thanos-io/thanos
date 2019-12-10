@@ -475,11 +475,10 @@ func runRule(
 	{
 		cancel := make(chan struct{})
 		g.Add(func() error {
-
-			//initialize rules
+			//initialize rules.
 			if err := reloadRules(logger, ruleFiles, ruleMgr, evalInterval, configSuccess, configSuccessTime, rulesLoaded); err != nil {
 				level.Error(logger).Log("msg", "initialize rules failed", "err", err)
-				//returns when initialize with invalid pattern error
+				//returns when initialize with invalid pattern error.
 				if _, ok := err.(*errInvalidPattern); ok {
 					return err
 				}
@@ -760,7 +759,7 @@ func reloadRules(logger log.Logger,
 	for _, pat := range ruleFiles {
 		fs, err := filepath.Glob(pat)
 		if err != nil {
-			//check errInvalidPattern when initialize
+			//check errInvalidPattern when initialize.
 			return &errInvalidPattern{err, pat}
 		}
 
