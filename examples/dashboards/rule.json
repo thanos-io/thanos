@@ -482,7 +482,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(grpc_server_handled_total{grpc_code~=\"Unknown|ResourceExhausted|Internal|Unavailable\",namespace=\"$namespace\",job=~\"$job\",grpc_type=\"unary\"}[$interval])) / sum(rate(grpc_server_started_total{namespace=\"$namespace\",job=~\"$job\",grpc_type=\"unary\"}[$interval]))",
+                     "expr": "sum(rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable\",namespace=\"$namespace\",job=~\"$job\",grpc_type=\"unary\"}[$interval])) / sum(rate(grpc_server_started_total{namespace=\"$namespace\",job=~\"$job\",grpc_type=\"unary\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -1021,7 +1021,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(grpc_server_handled_total{grpc_code~=\"Unknown|ResourceExhausted|Internal|Unavailable\",namespace=\"$namespace\",job=~\"$job\",grpc_type=\"server_stream\"}[$interval])) / sum(rate(grpc_server_started_total{namespace=\"$namespace\",job=~\"$job\",grpc_type=\"server_stream\"}[$interval]))",
+                     "expr": "sum(rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable\",namespace=\"$namespace\",job=~\"$job\",grpc_type=\"server_stream\"}[$interval])) / sum(rate(grpc_server_started_total{namespace=\"$namespace\",job=~\"$job\",grpc_type=\"server_stream\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",

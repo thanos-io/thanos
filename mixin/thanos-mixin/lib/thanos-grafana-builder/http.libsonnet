@@ -37,7 +37,7 @@
 
   httpErrPanel(metricName, selector)::
     $.qpsErrTotalPanel(
-      '%s{%s,code~="5.."}' % [metricName, selector],
+      '%s{%s,code=~"5.."}' % [metricName, selector],
       '%s{%s}' % [metricName, selector],
     ),
 

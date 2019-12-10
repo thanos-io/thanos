@@ -51,7 +51,7 @@
   grpcErrorsPanel(type, selector)::
     local prefix = if type == 'client' then 'grpc_client' else 'grpc_server';
     $.qpsErrTotalPanel(
-      '%s_handled_total{grpc_code~="Unknown|ResourceExhausted|Internal|Unavailable",%s}' % [prefix, selector],
+      '%s_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable",%s}' % [prefix, selector],
       '%s_started_total{%s}' % [prefix, selector],
     ),
 
