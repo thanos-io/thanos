@@ -175,15 +175,17 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		logWriter := log.NewStdlibAdapter(level.Debug(logger), log.MessageKey("s3TraceMsg"))
 		client.TraceOn(logWriter)
 	}
+	var pathprefix string
 
 	if config.Path != "" {
 		level.Info(logger).Log("msg", "data will be stored under the path", "path", config.Path)
+		pathprefix = path.Clean(config.Path) + DirDelim
 	}
 
 	bkt := &Bucket{
 		logger:          logger,
 		name:            config.Bucket,
-		path:            path.Clean(config.Path) + DirDelim,
+		path:            pathprefix,
 		client:          client,
 		sse:             sse,
 		putUserMetadata: config.PutUserMetadata,
