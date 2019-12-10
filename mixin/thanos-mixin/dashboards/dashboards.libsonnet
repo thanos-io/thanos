@@ -1,4 +1,4 @@
-(import 'querier.libsonnet') +
+(import 'query.libsonnet') +
 (import 'store.libsonnet') +
 (import 'sidecar.libsonnet') +
 (import 'receive.libsonnet') +

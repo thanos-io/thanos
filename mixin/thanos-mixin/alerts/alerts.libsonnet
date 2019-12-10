@@ -1,5 +1,5 @@
 (import 'compact.libsonnet') +
-(import 'querier.libsonnet') +
+(import 'query.libsonnet') +
 (import 'receive.libsonnet') +
 (import 'sidecar.libsonnet') +
 (import 'store.libsonnet') +

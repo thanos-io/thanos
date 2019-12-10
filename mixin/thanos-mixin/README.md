@@ -38,14 +38,14 @@ This project is intended to be used as a library. You can extend and customize d
 ```libsonnet
 {
   _config+:: {
-    thanosQuerierJobPrefix: 'thanos-querier',
+    thanosQueryJobPrefix: 'thanos-querier',
     thanosStoreJobPrefix: 'thanos-store',
     thanosReceiveJobPrefix: 'thanos-receive',
     thanosRuleJobPrefix: 'thanos-rule',
     thanosCompactJobPrefix: 'thanos-compact',
     thanosSidecarJobPrefix: 'thanos-sidecar',
 
-    thanosQuerierSelector: 'job=~"%s.*"' % self.thanosQuerierJobPrefix,
+    thanosQuerySelector: 'job=~"%s.*"' % self.thanosQueryJobPrefix,
     thanosStoreSelector: 'job=~"%s.*"' % self.thanosStoreJobPrefix,
     thanosReceiveSelector: 'job=~"%s.*"' % self.thanosReceiveJobPrefix,
     thanosRuleSelector: 'job=~"%s.*"' % self.thanosRuleJobPrefix,
@@ -54,7 +54,7 @@ This project is intended to be used as a library. You can extend and customize d
 
     // We build alerts for the presence of all these jobs.
     jobs: {
-      ThanosQuerier: $._config.thanosQuerierSelector,
+      ThanosQuerier: $._config.thanosQuerySelector,
       ThanosStore: $._config.thanosStoreSelector,
       ThanosReceive: $._config.thanosReceiveSelector,
       ThanosRule: $._config.thanosRuleSelector,

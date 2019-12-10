@@ -1,13 +1,13 @@
 {
   _config+:: {
-    thanosQuerierJobPrefix: 'thanos-querier',
+    thanosQueryJobPrefix: 'thanos-query',
     thanosStoreJobPrefix: 'thanos-store',
     thanosReceiveJobPrefix: 'thanos-receive',
     thanosRuleJobPrefix: 'thanos-rule',
     thanosCompactJobPrefix: 'thanos-compact',
     thanosSidecarJobPrefix: 'thanos-sidecar',
 
-    thanosQuerierSelector: 'job=~"%s.*"' % self.thanosQuerierJobPrefix,
+    thanosQuerySelector: 'job=~"%s.*"' % self.thanosQueryJobPrefix,
     thanosStoreSelector: 'job=~"%s.*"' % self.thanosStoreJobPrefix,
     thanosReceiveSelector: 'job=~"%s.*"' % self.thanosReceiveJobPrefix,
     thanosRuleSelector: 'job=~"%s.*"' % self.thanosRuleJobPrefix,
@@ -16,7 +16,7 @@
 
     // We build alerts for the presence of all these jobs.
     jobs: {
-      ThanosQuerier: $._config.thanosQuerierSelector,
+      ThanosQuery: $._config.thanosQuerySelector,
       ThanosStore: $._config.thanosStoreSelector,
       ThanosReceive: $._config.thanosReceiveSelector,
       ThanosRule: $._config.thanosRuleSelector,
@@ -24,14 +24,14 @@
       ThanosSidecar: $._config.thanosSidecarSelector,
     },
 
-    // Config for the Grafana dashboards in the thanos-mixin
+    // Config for the Grafana dashboards in the thanos-mixin.
     grafanaThanos: {
       dashboardNamePrefix: 'Thanos / ',
       dashboardTags: ['thanos-mixin'],
 
       dashboardOverviewTitle: '%(dashboardNamePrefix)sOverview' % $._config.grafanaThanos,
       dashboardCompactTitle: '%(dashboardNamePrefix)sCompact' % $._config.grafanaThanos,
-      dashboardQuerierTitle: '%(dashboardNamePrefix)sQuerier' % $._config.grafanaThanos,
+      dashboardQueryTitle: '%(dashboardNamePrefix)sQuery' % $._config.grafanaThanos,
       dashboardReceiveTitle: '%(dashboardNamePrefix)sReceive' % $._config.grafanaThanos,
       dashboardRuleTitle: '%(dashboardNamePrefix)sRule' % $._config.grafanaThanos,
       dashboardSidecarTitle: '%(dashboardNamePrefix)sSidecar' % $._config.grafanaThanos,
