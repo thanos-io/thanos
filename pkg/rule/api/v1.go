@@ -3,6 +3,7 @@ package v1
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/NYTimes/gziphandler"
@@ -141,7 +142,7 @@ type Alert struct {
 	Annotations             labels.Labels `json:"annotations"`
 	State                   string        `json:"state"`
 	ActiveAt                *time.Time    `json:"activeAt,omitempty"`
-	Value                   float64       `json:"value"`
+	Value                   string        `json:"value"`
 	PartialResponseStrategy string        `json:"partial_response_strategy"`
 }
 
@@ -154,7 +155,7 @@ func rulesAlertsToAPIAlerts(s storepb.PartialResponseStrategy, rulesAlerts []*ru
 			Annotations:             ruleAlert.Annotations,
 			State:                   ruleAlert.State.String(),
 			ActiveAt:                &ruleAlert.ActiveAt,
-			Value:                   ruleAlert.Value,
+			Value:                   strconv.FormatFloat(ruleAlert.Value, 'e', -1, 64),
 		}
 	}
 
