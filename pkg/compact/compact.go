@@ -982,7 +982,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		Source:     metadata.CompactorSource,
 	}
 
-	newMeta, err := metadata.Write(cg.logger, bdir, meta)
+	err := metadata.Write(cg.logger, bdir, meta)
 	if err != nil {
 		return false, ulid.ULID{}, errors.Wrapf(err, "failed to finalize the block %s", bdir)
 	}
@@ -992,12 +992,12 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	}
 
 	// Ensure the output block is valid.
-	if err := block.VerifyIndex(cg.logger, index, newMeta.MinTime, newMeta.MaxTime); !cg.acceptMalformedIndex && err != nil {
+	if err := block.VerifyIndex(cg.logger, index, meta.MinTime, meta.MaxTime); !cg.acceptMalformedIndex && err != nil {
 		return false, ulid.ULID{}, halt(errors.Wrapf(err, "invalid result block %s", bdir))
 	}
 
 	// Ensure the output block is not overlapping with anything else.
-	if err := cg.areBlocksOverlapping(newMeta, plan...); err != nil {
+	if err := cg.areBlocksOverlapping(meta, plan...); err != nil {
 		return false, ulid.ULID{}, halt(errors.Wrapf(err, "resulted compacted block %s overlaps with something", bdir))
 	}
 
