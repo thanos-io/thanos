@@ -10,7 +10,7 @@ menu: contributing
 
 However the aim for those is to also have those `*.md` files renderable and usable (including links) via GitHub.
 
-To make that happen we use following rules and helpers that are listed here
+To make that happen we use following rules and helpers that are listed here.
 
 ## Front Matter
 
@@ -84,6 +84,11 @@ Copy your company's logo in [`website/static/logos`](/website/static/logos), mak
 * Keep it under 50KB
 
 and create PR against Thanos `master` branch.
+
+## White noise
+
+We want all docs do not have any white noise. To achieve it, we provide cleanup-white-noise.sh under `scripts` to check.
+You can call it before pull a request, also PR test would call it too.
 
 ## Testing
 

@@ -6,7 +6,7 @@ weight: 1
 slug: /quick-tutorial.md
 ---
 
-# Quick Tutorial 
+# Quick Tutorial
 
 Feel free to check the free, in-browser interactive tutorial [as Katacoda Thanos Course](https://katacoda.com/bwplotka/courses/thanos)
 We will be progressively updating our Katacoda Course with more scenarios.
@@ -27,8 +27,8 @@ Always make sure to run Prometheus as recommended by Prometheus team, so:
 * Put Prometheus in the same failure domain. This means same network, same datacenter as monitoring services.
 * Use persistent disk to persist data across Prometheus restarts.
 * Use local compaction for longer retentions.
-* Do not change min TSDB block durations. 
-* Do not scale out Prometheus unless necessary. Single Prometheus is highly efficient (: 
+* Do not change min TSDB block durations.
+* Do not scale out Prometheus unless necessary. Single Prometheus is highly efficient (:
 
 We recommend using Thanos when you need to scale out your Prometheus instance.
 
@@ -49,7 +49,7 @@ See those components on this diagram:
 
 ### [Sidecar](components/sidecar.md)
 
-Thanos integrates with existing Prometheus servers through a [Sidecar process](https://docs.microsoft.com/en-us/azure/architecture/patterns/sidecar#solution), which runs on the same machine or in the same pod as the Prometheus server. 
+Thanos integrates with existing Prometheus servers through a [Sidecar process](https://docs.microsoft.com/en-us/azure/architecture/patterns/sidecar#solution), which runs on the same machine or in the same pod as the Prometheus server.
 
 The purpose of the Sidecar is to backup Prometheus data into an Object Storage bucket, and give other Thanos components access to the Prometheus metrics via a gRPC API.
 
@@ -121,7 +121,7 @@ The Query component is stateless and horizontally scalable and can be deployed w
 
 Query also implements Prometheus's official HTTP API and can thus be used with external tools such as Grafana. It also serves a derivative of Prometheus's UI for ad-hoc querying and stores status.
 
-Below, we will set up a Query to connect to our Sidecars, and expose its HTTP UI. 
+Below, we will set up a Query to connect to our Sidecars, and expose its HTTP UI.
 
 ```bash
 thanos query \
@@ -168,9 +168,9 @@ Go to the configured HTTP address, and you should now be able to query across al
 #### Communication Between Components
 
 The only required communication between nodes is for Thanos Querier to be able to reach gRPC storeAPIs you provide. Thanos Querier periodically calls Info endpoint to collect up-to-date metadata as well as checking the health of given StoreAPI.
-The metadata includes the information about time windows and external labels for each node. 
+The metadata includes the information about time windows and external labels for each node.
 
-There are various ways to tell query component about the StoreAPIs it should query data from. The simplest way is to use a static list of well known addresses to query. 
+There are various ways to tell query component about the StoreAPIs it should query data from. The simplest way is to use a static list of well known addresses to query.
 These are repeatable so can add as many endpoint as needed. You can put DNS domain prefixed by `dns+` or `dnssrv+` to have Thanos Query do an `A` or `SRV` lookup to get all required IPs to communicate with.
 
 ```bash
@@ -179,7 +179,7 @@ thanos query \
     --grpc-address 0.0.0.0:19092 \              # gRPC endpoint for Store API
     --store        1.2.3.4:19090 \              # Static gRPC Store API Address for the query node to query
     --store        1.2.3.5:19090 \              # Also repeatable
-    --store        dns+rest.thanos.peers:19092  # Use DNS lookup for getting all registered IPs as separate StoreAPIs    
+    --store        dns+rest.thanos.peers:19092  # Use DNS lookup for getting all registered IPs as separate StoreAPIs
 ```
 
 Read more details [here](service-discovery.md).

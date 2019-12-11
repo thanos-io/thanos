@@ -155,13 +155,22 @@ docker-push:
 .PHONY: docs
 docs: $(EMBEDMD) build
 	@EMBEDMD_BIN="$(EMBEDMD)" scripts/genflagdocs.sh
+	@find -type f -name "*.md" | xargs scripts/cleanup-white-noise.sh
 
-# check-docs checks if documentation have discrepancy with flags and if the links are valid.
+# check-docs checks:
+# - discrepancy with flags is valid
+# - links are valid
+# - white noise
 .PHONY: check-docs
 check-docs: $(EMBEDMD) $(LICHE) build
 	@EMBEDMD_BIN="$(EMBEDMD)" scripts/genflagdocs.sh check
 	@$(LICHE) --recursive docs --exclude "(cloud.tencent.com|alibabacloud.com)" --document-root .
 	@$(LICHE) --exclude "(cloud.tencent.com|goreportcard.com|alibabacloud.com)" --document-root . *.md
+	@find -type f -name "*.md" | xargs scripts/cleanup-white-noise.sh
+	@if [[ ! git diff-files --quiet --ignore-submodules -- ]]; then \
+		echo >&2 "please clean up white noise in all docs"; \
+		exit 1; \
+	fi
 
 # checks Go code comments if they have trailing period (excludes protobuffers and vendor files).
 # Comments with more than 3 spaces at beginning are omitted from the check, example: '//    - foo'.
@@ -170,11 +179,14 @@ check-comments:
 	@printf ">> checking Go comments trailing periods\n\n\n"
 	@./scripts/build-check-comments.sh
 
-# format formats the code (including imports format).
+# format the code:
+# - format code (including imports format)
+# - clean up all white noise
 .PHONY: format
 format: $(GOIMPORTS) check-comments
 	@echo ">> formatting code"
 	@$(GOIMPORTS) -w $(FILES_TO_FMT)
+	@scripts/cleanup-white-noise.sh $(FILES_TO_FMT)
 
 # proto generates golang files from Thanos proto files.
 .PHONY: proto
@@ -276,6 +288,12 @@ lint: check-git $(GOLANGCILINT) $(MISSPELL)
 	@$(GOLANGCILINT) run --enable goimports --enable goconst --skip-dirs vendor
 	@echo ">> detecting misspells"
 	@find . -type f | grep -v vendor/ | grep -vE '\./\..*' | xargs $(MISSPELL) -error
+	@echo ">> detecting white noise"
+	@find . -type f \( -name "*.md" -o -name "*.go" \) | xargs scripts/cleanup-white-noise.sh
+	@if [[ ! git diff-files --quiet --ignore-submodules -- ]]; then \
+		echo >&2 "please clean up white noise in all docs or Go files"; \
+		exit 1; \
+	fi
 
 .PHONY: web-serve
 web-serve: web-pre-process $(HUGO)

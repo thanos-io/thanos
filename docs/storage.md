@@ -13,7 +13,7 @@ All clients are configured using `--objstore.config-file` to reference to the co
 
 ## How to use `config` flags?
 
-You can either pass YAML file defined below in `--objstore.config-file` or pass the YAML content directly using `--objstore.config`. 
+You can either pass YAML file defined below in `--objstore.config-file` or pass the YAML content directly using `--objstore.config`.
 We recommend the latter as it gives an explicit static view of configuration for each component. It also saves you the fuss of creating and managing additional file.
 
 Don't be afraid of multiline flags!
@@ -49,7 +49,7 @@ In Kubernetes it is as easy as (on Thanos sidecar example):
 
 At that point, anyone can use your provider by spec.
 
-## Configuration 
+## Configuration
 
 Current object storage client implementations:
 
@@ -296,8 +296,8 @@ config:
 
 Thanos uses [gophercloud](http://gophercloud.io/) client to upload Prometheus data into [OpenStack Swift](https://docs.openstack.org/swift/latest/).
 
-Below is an example configuration file for thanos to use OpenStack swift container as an object store.  
-Note that if the `name` of a user, project or tenant is used one must also specify its domain by ID or name.  
+Below is an example configuration file for thanos to use OpenStack swift container as an object store.
+Note that if the `name` of a user, project or tenant is used one must also specify its domain by ID or name.
 Various examples for OpenStack authentication can be found in the [official documentation](https://developer.openstack.org/api-ref/identity/v3/index.html?expanded=password-authentication-with-scoped-authorization-detail#password-authentication-with-unscoped-authorization).
 
 [embedmd]:# (flags/config_bucket_swift.txt yaml)
@@ -359,7 +359,7 @@ Use --objstore.config-file to reference to this configuration file.
 ### Filesystem
 
 This storage type is used when user wants to store and access the bucket in the local filesystem.
-We treat filesystem the same way we would treat object storage, so all optimization for remote bucket applies even though, 
+We treat filesystem the same way we would treat object storage, so all optimization for remote bucket applies even though,
 we might have the files locally.
 
 NOTE: This storage type is experimental and might be inefficient. It is NOT advised to use it as the main storage for metrics
