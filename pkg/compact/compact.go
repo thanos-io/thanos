@@ -982,8 +982,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		Source:     metadata.CompactorSource,
 	}
 
-	err := metadata.Write(cg.logger, bdir, meta)
-	if err != nil {
+	if err = metadata.Write(cg.logger, bdir, meta); err != nil {
 		return false, ulid.ULID{}, errors.Wrapf(err, "failed to finalize the block %s", bdir)
 	}
 
