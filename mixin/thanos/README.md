@@ -111,6 +111,8 @@ This project is intended to be used as a library. However, it also provides drop
 
 ### Requirements
 
+Although all the required dependencies are handled by `Makefile`, keep in mind that in addition the dependencies that are listed above we have following dependencies:
+
 #### gojsontoyaml
 
 `gojsontoyaml` is used to convert generated `json` definitons to `yaml`.
@@ -142,7 +144,7 @@ Make action runs the jsonnet code, then reads each key of the generated json and
 You validate your structural correctness of your Prometheus [alerting rules](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/) or [recording rules](https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/) with:
 
 ```shell
-$ make rules-lint
+$ make example-rules-lint
 ```
 
 Check out [test.yaml](examples/alerts/tests.yaml) to add/modify tests for the mixin. To learn more about how to write test for Prometheus, check out [official documentation](https://www.prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/).

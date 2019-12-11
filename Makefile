@@ -296,6 +296,7 @@ web-serve: web-pre-process $(HUGO)
 	@echo ">> serving documentation website"
 	@cd $(WEB_DIR) && $(HUGO) --config hugo.yaml -v server
 
+# Check https://github.com/coreos/prometheus-operator/blob/master/scripts/jsonnet/Dockerfile for the image.
 JSONNET_CONTAINER_CMD:=docker run --rm \
 		-u="$(shell id -u):$(shell id -g)" \
 		-v "$(shell go env GOCACHE):/.cache/go-build" \
@@ -305,15 +306,21 @@ JSONNET_CONTAINER_CMD:=docker run --rm \
 		-e GO111MODULE=on \
 		quay.io/coreos/jsonnet-ci
 
-.PHONY: mixin-generate-in-container
-mixin-generate-in-container:
+.PHONY: examples-generate-in-container
+examples-generate-in-container:
 	@echo ">> Compiling and generating thanos-mixin"
-	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) jsonnet-vendor
-	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) jsonnet-format
-	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) examples
+	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) JSONNET_BUNDLER='/go/bin/jb' jsonnet-vendor
+	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) \
+		EMBEDMD='/go/bin/embedmd' \
+		JSONNET='/go/bin/jsonnet' \
+		JSONNET_BUNDLER='/go/bin/jb' \
+		PROMTOOL='/go/bin/promtool' \
+		GOJSONTOYAML='/go/bin/gojsontoyaml' \
+		GOLANGCILINT='/go/bin/golangci-lint' \
+		examples
 
 .PHONY: examples
-examples: examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards examples/tmp
+examples: jsonnet-format mixin/thanos/README.md examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards examples/tmp
 	$(EMBEDMD) -w examples/alerts/alerts.md
 	$(EMBEDMD) -w mixin/thanos/README.md
 
@@ -323,7 +330,6 @@ examples/tmp:
 	-mkdir -p examples/tmp/
 	$(JSONNET) -J ${JSONNET_VENDOR_DIR} -m examples/tmp/ ${MIXIN_ROOT}/separated_alerts.jsonnet | xargs -I{} sh -c 'cat {} | $(GOJSONTOYAML) > {}.yaml; rm -f {}' -- {}
 
-.PHONY: examples/dashboards
 examples/dashboards: $(JSONNET) ${MIXIN_ROOT}/mixin.libsonnet ${MIXIN_ROOT}/defaults.libsonnet ${MIXIN_ROOT}/dashboards/*
 	-rm -rf examples/dashboards/*.json
 	-mkdir -p examples/dashboards/
@@ -351,12 +357,9 @@ jsonnet-format:
 jsonnet-format-in-container:
 	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) jsonnet-format
 
-.PHONY: rules-lint
-rules-lint: $(PROMTOOL) examples/alerts/alerts.yaml examples/alerts/rules.yaml
+.PHONY: example-rules-lint
+example-rules-lint: $(PROMTOOL) examples/alerts/alerts.yaml examples/alerts/rules.yaml
 	$(PROMTOOL) check rules examples/alerts/alerts.yaml examples/alerts/rules.yaml
-
-.PHONY: alerts-test
-alerts-test: rules-lint
 	$(PROMTOOL) test rules examples/alerts/tests.yaml
 
 .PHONY: examples-clean
