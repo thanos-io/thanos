@@ -194,46 +194,62 @@ Prometheus.Graph.prototype.initialize = function() {
     self.updateGraph();
   });
 
+  // Toggle functions.
+  self.toggleOn = function(targetEl, item) {
+    $(targetEl).addClass('glyphicon-check').removeClass('glyphicon-unchecked');
+    localStorage.setItem(item, '1');
+  };
+  self.toggleOff = function(targetEl, item) {
+    $(targetEl).addClass('glyphicon-unchecked').removeClass('glyphicon-check');
+    localStorage.setItem(item, '0');
+  };
+
   // Deduplication.
+  let dedup_icon = self.dedupBtn.find('.glyphicon');
   self.isDedupEnabled = function() {
-      return self.enableDedup.val() === '1';
+    let v = localStorage.getItem('enable-dedup');
+
+    // If not set in localstorage, make it enabled.
+    return v === '1' || v === null;
   };
-  var styleDedupBtn = function() {
-      var icon = self.dedupBtn.find('.glyphicon');
-      if (self.isDedupEnabled()) {
-          icon.addClass("glyphicon-check");
-          icon.removeClass("glyphicon-unchecked");
-      } else {
-          icon.addClass("glyphicon-unchecked");
-          icon.removeClass("glyphicon-check");
-      }
-  };
-  styleDedupBtn();
+
+  if (self.isDedupEnabled()) {
+    self.toggleOn(dedup_icon, 'enable-dedup');
+  } else {
+    self.toggleOff(dedup_icon, 'enable-dedup');
+  }
 
   self.dedupBtn.click(function() {
     self.enableDedup.val(self.isDedupEnabled() ? '0' : '1');
-    styleDedupBtn();
+    if (dedup_icon.hasClass('glyphicon-unchecked')) {
+      self.toggleOn(dedup_icon, 'enable-dedup');
+    } else if (dedup_icon.hasClass('glyphicon-check')) {
+      self.toggleOff(dedup_icon, 'enable-dedup');
+    }
   });
 
   // Partial response.
+  let partial_response_icon = self.partialResponseBtn.find('.glyphicon');
   self.isPartialResponseEnabled = function() {
-    return self.partialResponse.val() === '1';
+    let v = localStorage.getItem('enable-partial-response');
+
+    // If not set in localstorage, make it enabled.
+    return v === '1' || v === null;
   };
-  var stylePartialResponseBtn = function() {
-    var icon = self.partialResponseBtn.find('.glyphicon');
-    if (self.isPartialResponseEnabled()) {
-      icon.addClass("glyphicon-check");
-      icon.removeClass("glyphicon-unchecked");
-    } else {
-      icon.addClass("glyphicon-unchecked");
-      icon.removeClass("glyphicon-check");
-    }
-  };
-  stylePartialResponseBtn();
+
+  if (self.isPartialResponseEnabled()) {
+    self.toggleOn(partial_response_icon, 'enable-partial-response');
+  } else {
+    self.toggleOff(partial_response_icon, 'enable-partial-response');
+  }
 
   self.partialResponseBtn.click(function() {
     self.partialResponse.val(self.isPartialResponseEnabled() ? '0' : '1');
-    stylePartialResponseBtn();
+    if (partial_response_icon.hasClass('glyphicon-unchecked')) {
+      self.toggleOn(partial_response_icon, 'enable-partial-response');
+    } else if (partial_response_icon.hasClass('glyphicon-check')) {
+      self.toggleOff(partial_response_icon, 'enable-partial-response');
+    }
   });
 
   self.maxSourceResolutionInput.val(self.options.max_source_resolution);
