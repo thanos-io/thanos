@@ -1,15 +1,19 @@
 package e2e_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io/ioutil"
 	"math"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 	"testing"
 	"time"
 
@@ -66,10 +70,10 @@ func createRuleFiles(t *testing.T, dir string) {
 	}
 }
 
-func serializeAlertingConfiguration(t *testing.T, cfg alert.AlertmanagerConfig) []byte {
+func serializeAlertingConfiguration(t *testing.T, cfg ...alert.AlertmanagerConfig) []byte {
 	t.Helper()
 	amCfg := alert.AlertingConfig{
-		Alertmanagers: []alert.AlertmanagerConfig{cfg},
+		Alertmanagers: cfg,
 	}
 	b, err := yaml.Marshal(&amCfg)
 	if err != nil {
@@ -98,6 +102,165 @@ func writeAlertmanagerFileSD(t *testing.T, path string, addrs ...string) {
 
 	err = os.Rename(path+".tmp", path)
 	testutil.Ok(t, err)
+}
+
+type mockAlertmanager struct {
+	path      string
+	token     string
+	mtx       sync.Mutex
+	alerts    []*model.Alert
+	lastError error
+}
+
+func newMockAlertmanager(path string, token string) *mockAlertmanager {
+	return &mockAlertmanager{
+		path:   path,
+		token:  token,
+		alerts: make([]*model.Alert, 0),
+	}
+}
+
+func (m *mockAlertmanager) setLastError(err error) {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+	m.lastError = err
+}
+
+func (m *mockAlertmanager) LastError() error {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+	return m.lastError
+}
+
+func (m *mockAlertmanager) Alerts() []*model.Alert {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+	return m.alerts
+}
+
+func (m *mockAlertmanager) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
+	if req.Method != "POST" {
+		m.setLastError(errors.Errorf("invalid method: %s", req.Method))
+		resp.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	if req.URL.Path != m.path {
+		m.setLastError(errors.Errorf("invalid path: %s", req.URL.Path))
+		resp.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	if m.token != "" {
+		auth := req.Header.Get("Authorization")
+		if auth != fmt.Sprintf("Bearer %s", m.token) {
+			m.setLastError(errors.Errorf("invalid auth: %s", req.URL.Path))
+			resp.WriteHeader(http.StatusForbidden)
+			return
+		}
+	}
+
+	b, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		m.setLastError(err)
+		resp.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	var alerts []*model.Alert
+	if err := json.Unmarshal(b, &alerts); err != nil {
+		m.setLastError(err)
+		resp.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	m.mtx.Lock()
+	m.alerts = append(m.alerts, alerts...)
+	m.mtx.Unlock()
+}
+
+func TestRuleAlertmanagerHTTPClient(t *testing.T) {
+	a := newLocalAddresser()
+
+	// Plain HTTP with a prefix.
+	handler1 := newMockAlertmanager("/prefix/api/v1/alerts", "")
+	srv1 := httptest.NewServer(handler1)
+	defer srv1.Close()
+	// HTTPS with authentication.
+	handler2 := newMockAlertmanager("/api/v1/alerts", "secret")
+	srv2 := httptest.NewTLSServer(handler2)
+	defer srv2.Close()
+
+	// Write the server's certificate to disk for the alerting configuration.
+	tlsDir, err := ioutil.TempDir("", "tls")
+	defer os.RemoveAll(tlsDir)
+	testutil.Ok(t, err)
+	var out bytes.Buffer
+	err = pem.Encode(&out, &pem.Block{Type: "CERTIFICATE", Bytes: srv2.TLS.Certificates[0].Certificate[0]})
+	testutil.Ok(t, err)
+	caFile := filepath.Join(tlsDir, "ca.crt")
+	err = ioutil.WriteFile(caFile, out.Bytes(), 0640)
+	testutil.Ok(t, err)
+
+	amCfg := serializeAlertingConfiguration(
+		t,
+		alert.AlertmanagerConfig{
+			StaticAddresses: []string{srv1.Listener.Addr().String()},
+			Scheme:          "http",
+			Timeout:         model.Duration(time.Second),
+			PathPrefix:      "/prefix/",
+		},
+		alert.AlertmanagerConfig{
+			HTTPClientConfig: alert.HTTPClientConfig{
+				TLSConfig: alert.TLSConfig{
+					CAFile: caFile,
+				},
+				BearerToken: "secret",
+			},
+			StaticAddresses: []string{srv2.Listener.Addr().String()},
+			Scheme:          "https",
+			Timeout:         model.Duration(time.Second),
+		},
+	)
+
+	rulesDir, err := ioutil.TempDir("", "rules")
+	defer os.RemoveAll(rulesDir)
+	testutil.Ok(t, err)
+	createRuleFiles(t, rulesDir)
+
+	qAddr := a.New()
+	r := rule(a.New(), a.New(), rulesDir, amCfg, []address{qAddr}, nil)
+	q := querier(qAddr, a.New(), []address{r.GRPC}, nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	exit, err := e2eSpinup(t, ctx, q, r)
+	if err != nil {
+		t.Errorf("spinup failed: %v", err)
+		cancel()
+		return
+	}
+
+	defer func() {
+		cancel()
+		<-exit
+	}()
+
+	testutil.Ok(t, runutil.Retry(5*time.Second, ctx.Done(), func() (err error) {
+		select {
+		case <-exit:
+			cancel()
+			return nil
+		default:
+		}
+
+		for i, am := range []*mockAlertmanager{handler1, handler2} {
+			if len(am.Alerts()) == 0 {
+				return errors.Errorf("no alert received from handler%d, last error: %v", i, am.LastError())
+			}
+		}
+
+		return nil
+	}))
 }
 
 func TestRuleAlertmanagerFileSD(t *testing.T) {
