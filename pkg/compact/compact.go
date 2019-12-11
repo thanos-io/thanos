@@ -982,7 +982,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		Source:     metadata.CompactorSource,
 	}
 
-	newMeta, err := metadata.InjectThanos(cg.logger, bdir, meta, nil)
+	newMeta, err := metadata.Write(cg.logger, bdir, meta)
 	if err != nil {
 		return false, ulid.ULID{}, errors.Wrapf(err, "failed to finalize the block %s", bdir)
 	}

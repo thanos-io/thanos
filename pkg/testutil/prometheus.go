@@ -374,7 +374,7 @@ func createBlock(
 		Source:     metadata.TestSource,
 	}
 
-	if _, err = metadata.InjectThanos(log.NewNopLogger(), bdir, meta, nil); err != nil {
+	if _, err = metadata.Write(log.NewNopLogger(), bdir, meta); err != nil {
 		return id, errors.Wrap(err, "finalize block")
 	}
 

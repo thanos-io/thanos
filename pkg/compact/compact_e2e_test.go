@@ -496,7 +496,7 @@ func createEmptyBlock(dir string, mint int64, maxt int64, extLset labels.Labels,
 		Source:     metadata.TestSource,
 	}
 
-	if _, err = metadata.InjectThanos(log.NewNopLogger(), bdir, meta, nil); err != nil {
+	if _, err = metadata.Write(log.NewNopLogger(), bdir, meta); err != nil {
 		return ulid.ULID{}, errors.Wrap(err, "finalize block")
 	}
 

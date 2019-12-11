@@ -274,6 +274,6 @@ func (w *streamedBlockWriter) writeMetaFile() error {
 	w.meta.Stats.NumSamples = w.totalSamples
 	w.meta.Stats.NumSeries = w.postings
 
-	_, err := metadata.InjectThanos(w.logger, w.blockDir, &w.meta, nil)
+	_, err := metadata.Write(w.logger, w.blockDir, &w.meta)
 	return err
 }

@@ -514,12 +514,12 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceT
 	if err := rewrite(logger, indexr, chunkr, indexw, chunkw, &resmeta, ignoreChkFns); err != nil {
 		return resid, errors.Wrap(err, "rewrite block")
 	}
-	if _, err := metadata.InjectThanos(logger, resdir, &resmeta, nil); err != nil {
+	if _, err := metadata.Write(logger, resdir, &resmeta); err != nil {
 		return resid, err
 	}
 	// TSDB may rewrite metadata in bdir.
 	// TODO: This is not needed in newer TSDB code. See https://github.com/prometheus/tsdb/pull/637.
-	if _, err := metadata.InjectThanos(logger, bdir, meta, nil); err != nil {
+	if _, err := metadata.Write(logger, bdir, meta); err != nil {
 		return resid, err
 	}
 	return resid, nil
