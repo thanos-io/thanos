@@ -17,8 +17,9 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-
+	"github.com/prometheus/common/version"
 	"github.com/prometheus/prometheus/pkg/labels"
+
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
@@ -26,6 +27,8 @@ const (
 	alertPushEndpoint = "/api/v1/alerts"
 	contentTypeJSON   = "application/json"
 )
+
+var userAgent = fmt.Sprintf("Thanos/%s", version.Version)
 
 // Alert is a generic representation of an alert in the Prometheus eco-system.
 type Alert struct {
@@ -369,6 +372,7 @@ func (s *Sender) sendOne(ctx context.Context, url string, b []byte) error {
 	}
 	req = req.WithContext(ctx)
 	req.Header.Set("Content-Type", contentTypeJSON)
+	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := s.doReq(req)
 	if err != nil {
