@@ -25,7 +25,9 @@ go get github.com/google/go-jsonnet/cmd/jsonnet
 
 ### jsonnet-bundler
 
-Install this library in your own project with [jsonnet-bundler](https://github.com/jsonnet-bundler/jsonnet-bundler#install) (the jsonnet package manager):
+`thanos-mixin` uses [jsonnet-bundler](https://github.com/jsonnet-bundler/jsonnet-bundler#install) (the jsonnet package manager) to manage its dependencies.
+
+We also recommend you to use `jsonnet-bundler` to install or update if you decide to use `thanos-mixin` as a dependency for your custom configurations.
 
 To install:
 
@@ -37,7 +39,7 @@ go get github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb
 
 ## Use as a library
 
-To use the `thanos-mixin` as a dependency, simply use the jsonnet-bundler install functionality:
+To use the `thanos-mixin` as a dependency, simply use the `jsonnet-bundler` install functionality:
 ```shell
 $ mkdir thanos-mixin; cd thanos-mixin
 $ jb init  # Creates the initial/empty `jsonnetfile.json`
@@ -45,7 +47,7 @@ $ jb init  # Creates the initial/empty `jsonnetfile.json`
 $ jb install github.com/thanos-io/thanos/jsonnet/thanos-mixin@master # Creates `vendor/` & `jsonnetfile.lock.json`, and fills in `jsonnetfile.json`
 ```
 
-To update the `thanos-mixin` as a dependency, simply use the jsonnet-bundler update functionality:
+To update the `thanos-mixin` as a dependency, simply use the `jsonnet-bundler` update functionality:
 ```shell
 $ jb update
 ```
