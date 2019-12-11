@@ -18,8 +18,8 @@ func Get(path string) (Usage, error) {
 		return Usage{}, errors.Wrapf(err, "statfs %s", path)
 	}
 	return Usage{
-		FreeBytes:  stat.Bfree * uint64(stat.Bsize),
-		TotalBytes: stat.Blocks * uint64(stat.Bsize),
-		AvailBytes: stat.Bavail * uint64(stat.Bsize),
+		FreeBytes:  uint64(stat.Bfree) * uint64(stat.Bsize),
+		TotalBytes: uint64(stat.Blocks) * uint64(stat.Bsize),
+		AvailBytes: uint64(stat.Bavail) * uint64(stat.Bsize),
 	}, nil
 }
