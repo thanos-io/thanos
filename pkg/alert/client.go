@@ -183,6 +183,10 @@ type Alertmanager struct {
 
 // NewAlertmanager returns a new Alertmanager client.
 func NewAlertmanager(logger log.Logger, cfg AlertmanagerConfig) (*Alertmanager, error) {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
+
 	httpClientConfig, err := cfg.HTTPClientConfig.convert()
 	if err != nil {
 		return nil, err
