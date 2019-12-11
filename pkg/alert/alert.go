@@ -166,6 +166,9 @@ func (q *Queue) Len() int {
 
 // Cap returns the fixed capacity of the queue.
 func (q *Queue) Cap() int {
+	q.mtx.Lock()
+	defer q.mtx.Unlock()
+
 	return q.capacity
 }
 
