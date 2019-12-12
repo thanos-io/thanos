@@ -303,11 +303,11 @@ groups:
     for: 5m
     labels:
       severity: critical
-  - alert: ThanosRuleIsDown
+  - alert: ThanosRulerIsDown
     annotations:
-      message: ThanosRule has disappeared from Prometheus target discovery.
+      message: ThanosRuler has disappeared from Prometheus target discovery.
     expr: |
-      absent(up{job=~"thanos-rule.*"} == 1)
+      absent(up{job=~"thanos-ruler.*"} == 1)
     for: 5m
     labels:
       severity: critical

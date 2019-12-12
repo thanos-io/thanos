@@ -14,15 +14,15 @@
     selector: 'job=~"%s.*"' % self.jobPrefix,
     title: '%(prefix)sReceiver' % $.dashboard.prefix,
   },
-  rule+:: {
-    jobPrefix: 'thanos-rule',
+  ruler+:: {
+    jobPrefix: 'thanos-ruler',
     selector: 'job=~"%s.*"' % self.jobPrefix,
-    title: '%(prefix)sRule' % $.dashboard.prefix,
+    title: '%(prefix)sRuler' % $.dashboard.prefix,
   },
   compactor+:: {
     jobPrefix: 'thanos-compactor',
     selector: 'job=~"%s.*"' % self.jobPrefix,
-    title: '%(prefix)sCompact' % $.dashboard.prefix,
+    title: '%(prefix)sCompactor' % $.dashboard.prefix,
   },
   sidecar+:: {
     jobPrefix: 'thanos-sidecar',

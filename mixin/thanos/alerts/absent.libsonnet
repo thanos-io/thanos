@@ -6,7 +6,7 @@
     ThanosQuerier: thanos.querier.selector,
     ThanosStore: thanos.store.selector,
     ThanosReceiver: thanos.receiver.selector,
-    ThanosRule: thanos.rule.selector,
+    ThanosRuler: thanos.ruler.selector,
     ThanosCompactor: thanos.compactor.selector,
     ThanosSidecar: thanos.sidecar.selector,
   },

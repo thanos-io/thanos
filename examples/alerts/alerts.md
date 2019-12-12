@@ -65,10 +65,10 @@ rules:
 For Thanos ruler we run some alerts in local Prometheus, to make sure that Thanos Rule is working:
 
 [//]: # "TODO(kakkoyun): Generate rule rules using thanos-mixin."
-<!-- [embedmd]:# (../tmp/thanos-rule.rules.yaml yaml) -->
+<!-- [embedmd]:# (../tmp/thanos-ruler.rules.yaml yaml) -->
 ```yaml
 - alert: ThanosRuleIsDown
-  expr: up{app="thanos-rule"} == 0 or absent(up{app="thanos-rule"})
+  expr: up{app="thanos-ruler"} == 0 or absent(up{app="thanos-ruler"})
   for: 5m
   labels:
     team: TEAM
@@ -78,7 +78,7 @@ For Thanos ruler we run some alerts in local Prometheus, to make sure that Thano
     action: 'check {{ $labels.kubernetes_pod_name }} pod in {{ $labels.kubernetes_namespace}} namespace'
     dashboard: RULE_DASHBOARD
 - alert: ThanosRuleIsDroppingAlerts
-  expr: rate(thanos_alert_queue_alerts_dropped_total{app="thanos-rule"}[5m]) > 0
+  expr: rate(thanos_alert_queue_alerts_dropped_total{app="thanos-ruler"}[5m]) > 0
   for: 5m
   labels:
     team: TEAM
@@ -88,7 +88,7 @@ For Thanos ruler we run some alerts in local Prometheus, to make sure that Thano
     action: 'check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace'
     dashboard: RULE_DASHBOARD
 - alert: ThanosRuleGrpcErrorRate
-  expr: rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable",app="thanos-rule"}[5m]) > 0
+  expr: rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable",app="thanos-ruler"}[5m]) > 0
   for: 5m
   labels:
     team: TEAM
@@ -401,11 +401,11 @@ rules:
   for: 5m
   labels:
     severity: critical
-- alert: ThanosRuleIsDown
+- alert: ThanosRulerIsDown
   annotations:
-    message: ThanosRule has disappeared from Prometheus target discovery.
+    message: ThanosRuler has disappeared from Prometheus target discovery.
   expr: |
-    absent(up{job=~"thanos-rule.*"} == 1)
+    absent(up{job=~"thanos-ruler.*"} == 1)
   for: 5m
   labels:
     severity: critical

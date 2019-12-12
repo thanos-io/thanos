@@ -1748,7 +1748,7 @@
             "useTags": false
          },
          {
-            "allValue": "thanos-rule.*",
+            "allValue": "thanos-ruler.*",
             "current": {
                "text": "all",
                "value": "$__all"
@@ -1760,7 +1760,7 @@
             "multi": false,
             "name": "job",
             "options": [ ],
-            "query": "label_values(up{namespace=\"$namespace\",job=~\"thanos-rule.*\"}, job)",
+            "query": "label_values(up{namespace=\"$namespace\",job=~\"thanos-ruler.*\"}, job)",
             "refresh": 1,
             "regex": "",
             "sort": 2,
@@ -1783,7 +1783,7 @@
             "multi": false,
             "name": "pod",
             "options": [ ],
-            "query": "label_values(kube_pod_info{namespace=\"$namespace\",created_by_name=~\"thanos-rule.*\"}, pod)",
+            "query": "label_values(kube_pod_info{namespace=\"$namespace\",created_by_name=~\"thanos-ruler.*\"}, pod)",
             "refresh": 1,
             "regex": "",
             "sort": 2,
@@ -1840,7 +1840,7 @@
       ]
    },
    "timezone": "",
-   "title": "Thanos / Rule",
-   "uid": "35da848f5f92b2dc612e0c3a0577b8a1",
+   "title": "Thanos / Ruler",
+   "uid": "ecc62fafbb8ae0213cb9188ec4f3b553",
    "version": 0
 }
