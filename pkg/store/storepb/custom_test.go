@@ -141,11 +141,13 @@ func TestMergeSeriesSet(t *testing.T) {
 					{
 						lset:   labels.FromStrings("a", "a"),
 						chunks: [][]sample{{{1, 1}, {2, 2}}, {{3, 3}, {4, 4}}},
-					}, {
-					lset:   labels.FromStrings("a", "c"),
-					chunks: [][]sample{{{11, 1}, {12, 2}}, {{13, 3}, {14, 4}}},
+					},
+					{
+						lset:   labels.FromStrings("a", "c"),
+						chunks: [][]sample{{{11, 1}, {12, 2}}, {{13, 3}, {14, 4}}},
+					},
 				},
-				}, {
+				{
 					{
 						lset:   labels.FromStrings("a", "c"),
 						chunks: [][]sample{{{7, 1}, {8, 2}}, {{9, 3}, {10, 4}, {11, 4444}}}, // Last sample overlaps, merge ignores that.
@@ -172,13 +174,15 @@ func TestMergeSeriesSet(t *testing.T) {
 					{
 						lset:   labels.FromStrings("a", "a"),
 						chunks: [][]sample{{{1, 1}, {2, 2}}, {{3, 3}, {4, 4}}},
-					}, {
-					lset:   labels.FromStrings("a", "c"),
-					chunks: [][]sample{{{7, 1}, {8, 2}}, {{9, 3}, {10, 4}, {11, 4444}}},
-				}, {
-					lset:   labels.FromStrings("a", "c"),
-					chunks: [][]sample{{{11, 1}, {12, 2}}, {{13, 3}, {14, 4}}},
-				},
+					},
+					{
+						lset:   labels.FromStrings("a", "c"),
+						chunks: [][]sample{{{7, 1}, {8, 2}}, {{9, 3}, {10, 4}, {11, 4444}}},
+					},
+					{
+						lset:   labels.FromStrings("a", "c"),
+						chunks: [][]sample{{{11, 1}, {12, 2}}, {{13, 3}, {14, 4}}},
+					},
 				},
 			},
 
