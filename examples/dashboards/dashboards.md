@@ -3,7 +3,7 @@
 There exists Grafana dashboards for each component (not all of them complete) targeted for environments running Kubernetes:
 
 - [Thanos Overview](thanos-overview.json)
-- [Thanos Compact](thanos-compact.json)
+- [Thanos Compact](thanos-compactor.json)
 - [Thanos Query](thanos-querier.json)
 - [Thanos Store](thanos-store.json)
 - [Thanos Receive](thanos-receiver.json)

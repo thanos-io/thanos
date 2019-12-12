@@ -8,7 +8,7 @@ local g = import '../thanos-grafana-builder/builder.libsonnet';
     title: error 'must provide title for Thanos Receive dashboard',
   },
   grafanaDashboards+:: {
-    'receive.json':
+    'receiver.json':
       g.dashboard(thanos.receiver.title)
       .addRow(
         g.row('Incoming Request')

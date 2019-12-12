@@ -7,7 +7,7 @@
     ThanosStore: thanos.store.selector,
     ThanosReceiver: thanos.receiver.selector,
     ThanosRule: thanos.rule.selector,
-    ThanosCompact: thanos.compact.selector,
+    ThanosCompactor: thanos.compactor.selector,
     ThanosSidecar: thanos.sidecar.selector,
   },
 

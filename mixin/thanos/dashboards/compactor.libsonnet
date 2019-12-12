@@ -2,14 +2,14 @@ local g = import '../thanos-grafana-builder/builder.libsonnet';
 
 {
   local thanos = self,
-  compact+:: {
+  compactor+:: {
     jobPrefix: error 'must provide job prefix for Thanos Compact dashboard',
     selector: error 'must provide selector for Thanos Compact dashboard',
     title: error 'must provide title for Thanos Compact dashboard',
   },
   grafanaDashboards+:: {
-    'compact.json':
-      g.dashboard(thanos.compact.title)
+    'compactor.json':
+      g.dashboard(thanos.compactor.title)
       .addRow(
         g.row('Group Compaction')
         .addPanel(
@@ -131,8 +131,8 @@ local g = import '../thanos-grafana-builder/builder.libsonnet';
         g.resourceUtilizationRow()
       ) +
       g.template('namespace', thanos.dashboard.namespaceQuery) +
-      g.template('job', 'up', 'namespace="$namespace",%(selector)s' % thanos.compact, true, '%(jobPrefix)s.*' % thanos.compact) +
-      g.template('pod', 'kube_pod_info', 'namespace="$namespace",created_by_name=~"%(jobPrefix)s.*"' % thanos.compact, true, '.*'),
+      g.template('job', 'up', 'namespace="$namespace",%(selector)s' % thanos.compactor, true, '%(jobPrefix)s.*' % thanos.compactor) +
+      g.template('pod', 'kube_pod_info', 'namespace="$namespace",created_by_name=~"%(jobPrefix)s.*"' % thanos.compactor, true, '.*'),
 
     __overviewRows__+:: [
       g.row('Compact')
@@ -142,11 +142,11 @@ local g = import '../thanos-grafana-builder/builder.libsonnet';
           'Shows rate of execution for compactions against blocks that are stored in the bucket by compaction group.'
         ) +
         g.queryPanel(
-          'sum(rate(thanos_compact_group_compactions_total{namespace="$namespace",%(selector)s}[$interval])) by (job)' % thanos.compact,
+          'sum(rate(thanos_compact_group_compactions_total{namespace="$namespace",%(selector)s}[$interval])) by (job)' % thanos.compactor,
           'compaction {{job}}'
         ) +
         g.stack +
-        g.addDashboardLink(thanos.compact.title)
+        g.addDashboardLink(thanos.compactor.title)
       )
       .addPanel(
         g.panel(
@@ -154,10 +154,10 @@ local g = import '../thanos-grafana-builder/builder.libsonnet';
           'Shows ratio of errors compared to the total number of executed compactions against blocks that are stored in the bucket.'
         ) +
         g.qpsErrTotalPanel(
-          'thanos_compact_group_compactions_failures_total{namespace="$namespace",%(selector)s}' % thanos.compact,
-          'thanos_compact_group_compactions_total{namespace="$namespace",%(selector)s}' % thanos.compact,
+          'thanos_compact_group_compactions_failures_total{namespace="$namespace",%(selector)s}' % thanos.compactor,
+          'thanos_compact_group_compactions_total{namespace="$namespace",%(selector)s}' % thanos.compactor,
         ) +
-        g.addDashboardLink(thanos.compact.title)
+        g.addDashboardLink(thanos.compactor.title)
       ) +
       g.collapse,
     ],

@@ -4,57 +4,57 @@ Here are some example alerts configured for Kubernetes environment.
 
 ## Compaction
 
-[embedmd]:# (../tmp/thanos-compact.rules.yaml yaml)
+[embedmd]:# (../tmp/thanos-compactor.rules.yaml yaml)
 ```yaml
-name: thanos-compact.rules
+name: thanos-compactor.rules
 rules:
-- alert: ThanosCompactMultipleCompactsAreRunning
+- alert: ThanosCompactorMultipleCompactsAreRunning
   annotations:
     message: You should never run more than one Thanos Compact at once. You have {{
       $value }}
-  expr: sum(up{job=~"thanos-compact.*"}) > 1
+  expr: sum(up{job=~"thanos-compactor.*"}) > 1
   for: 5m
   labels:
     severity: warning
-- alert: ThanosCompactHalted
+- alert: ThanosCompactorHalted
   annotations:
     message: Thanos Compact {{$labels.job}} has failed to run and now is halted.
-  expr: thanos_compactor_halted{job=~"thanos-compact.*"} == 1
+  expr: thanos_compactor_halted{job=~"thanos-compactor.*"} == 1
   for: 5m
   labels:
     severity: warning
-- alert: ThanosCompactHighCompactionFailures
+- alert: ThanosCompactorHighCompactionFailures
   annotations:
     message: Thanos Compact {{$labels.job}} is failing to execute {{ $value | humanize
       }}% of compactions.
   expr: |
     (
-      sum by (job) (rate(thanos_compact_group_compactions_failures_total{job=~"thanos-compact.*"}[5m]))
+      sum by (job) (rate(thanos_compact_group_compactions_failures_total{job=~"thanos-compactor.*"}[5m]))
     /
-      sum by (job) (rate(thanos_compact_group_compactions_total{job=~"thanos-compact.*"}[5m]))
+      sum by (job) (rate(thanos_compact_group_compactions_total{job=~"thanos-compactor.*"}[5m]))
     * 100 > 5
     )
   for: 15m
   labels:
     severity: warning
-- alert: ThanosCompactBucketHighOperationFailures
+- alert: ThanosCompactorBucketHighOperationFailures
   annotations:
     message: Thanos Compact {{$labels.job}} Bucket is failing to execute {{ $value
       | humanize }}% of operations.
   expr: |
     (
-      sum by (job) (rate(thanos_objstore_bucket_operation_failures_total{job=~"thanos-compact.*"}[5m]))
+      sum by (job) (rate(thanos_objstore_bucket_operation_failures_total{job=~"thanos-compactor.*"}[5m]))
     /
-      sum by (job) (rate(thanos_objstore_bucket_operations_total{job=~"thanos-compact.*"}[5m]))
+      sum by (job) (rate(thanos_objstore_bucket_operations_total{job=~"thanos-compactor.*"}[5m]))
     * 100 > 5
     )
   for: 15m
   labels:
     severity: warning
-- alert: ThanosCompactHasNotRun
+- alert: ThanosCompactorHasNotRun
   annotations:
     message: Thanos Compact {{$labels.job}} has not uploaded anything for 24 hours.
-  expr: (time() - max(thanos_objstore_bucket_last_successful_upload_time{job=~"thanos-compact.*"}))
+  expr: (time() - max(thanos_objstore_bucket_last_successful_upload_time{job=~"thanos-compactor.*"}))
     / 60 / 60 > 24
   labels:
     severity: warning
@@ -311,9 +311,9 @@ rules:
       }}% of requests.
   expr: |
     (
-      sum(rate(http_requests_total{code=~"5..", job=~"thanos-receive.*", handler="receive"}[5m]))
+      sum(rate(http_requests_total{code=~"5..", job=~"thanos-receiver.*", handler="receive"}[5m]))
     /
-      sum(rate(http_requests_total{job=~"thanos-receive.*", handler="receive"}[5m]))
+      sum(rate(http_requests_total{job=~"thanos-receiver.*", handler="receive"}[5m]))
     ) * 100 > 5
   for: 5m
   labels:
@@ -324,9 +324,9 @@ rules:
       }} seconds for requests.
   expr: |
     (
-      histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{job=~"thanos-receive.*", handler="receive"})) > 10
+      histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{job=~"thanos-receiver.*", handler="receive"})) > 10
     and
-      sum by (job) (rate(http_request_duration_seconds_count{job=~"thanos-receive.*", handler="receive"}[5m])) > 0
+      sum by (job) (rate(http_request_duration_seconds_count{job=~"thanos-receiver.*", handler="receive"}[5m])) > 0
     )
   for: 10m
   labels:
@@ -337,9 +337,9 @@ rules:
       }}% of requests.
   expr: |
     (
-      sum by (job) (rate(thanos_receive_forward_requests_total{result="error", job=~"thanos-receive.*"}[5m]))
+      sum by (job) (rate(thanos_receive_forward_requests_total{result="error", job=~"thanos-receiver.*"}[5m]))
     /
-      sum by (job) (rate(thanos_receive_forward_requests_total{job=~"thanos-receive.*"}[5m]))
+      sum by (job) (rate(thanos_receive_forward_requests_total{job=~"thanos-receiver.*"}[5m]))
     * 100 > 5
     )
   for: 5m
@@ -351,9 +351,9 @@ rules:
       $value | humanize }} of attempts failed.
   expr: |
     (
-      sum by (job) (rate(thanos_receive_hashrings_file_errors_total{job=~"thanos-receive.*"}[5m]))
+      sum by (job) (rate(thanos_receive_hashrings_file_errors_total{job=~"thanos-receiver.*"}[5m]))
     /
-      sum by (job) (rate(thanos_receive_hashrings_file_refreshes_total{job=~"thanos-receive.*"}[5m]))
+      sum by (job) (rate(thanos_receive_hashrings_file_refreshes_total{job=~"thanos-receiver.*"}[5m]))
     > 0
     )
   for: 15m
@@ -362,7 +362,7 @@ rules:
 - alert: ThanosReceiverConfigReloadFailure
   annotations:
     message: Thanos Receive {{$labels.job}} has not been able to reload hashring configurations.
-  expr: avg(thanos_receive_config_last_reload_successful{job=~"thanos-receive.*"})
+  expr: avg(thanos_receive_config_last_reload_successful{job=~"thanos-receiver.*"})
     by (job) != 1
   for: 5m
   labels:
@@ -377,11 +377,11 @@ rules:
 ```yaml
 name: thanos-component-absent.rules
 rules:
-- alert: ThanosCompactIsDown
+- alert: ThanosCompactorIsDown
   annotations:
-    message: ThanosCompact has disappeared from Prometheus target discovery.
+    message: ThanosCompactor has disappeared from Prometheus target discovery.
   expr: |
-    absent(up{job=~"thanos-compact.*"} == 1)
+    absent(up{job=~"thanos-compactor.*"} == 1)
   for: 5m
   labels:
     severity: critical
@@ -397,7 +397,7 @@ rules:
   annotations:
     message: ThanosReceiver has disappeared from Prometheus target discovery.
   expr: |
-    absent(up{job=~"thanos-receive.*"} == 1)
+    absent(up{job=~"thanos-receiver.*"} == 1)
   for: 5m
   labels:
     severity: critical

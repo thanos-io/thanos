@@ -70,17 +70,17 @@ This project is intended to be used as a library. You can extend and customize d
     title: '%(prefix)sStore' % $.dashboard.prefix,
   },
   receiver+:: {
-    jobPrefix: 'thanos-receive',
+    jobPrefix: 'thanos-receiver',
     selector: 'job=~"%s.*"' % self.jobPrefix,
-    title: '%(prefix)sReceive' % $.dashboard.prefix,
+    title: '%(prefix)sReceiver' % $.dashboard.prefix,
   },
   rule+:: {
     jobPrefix: 'thanos-rule',
     selector: 'job=~"%s.*"' % self.jobPrefix,
     title: '%(prefix)sRule' % $.dashboard.prefix,
   },
-  compact+:: {
-    jobPrefix: 'thanos-compact',
+  compactor+:: {
+    jobPrefix: 'thanos-compactor',
     selector: 'job=~"%s.*"' % self.jobPrefix,
     title: '%(prefix)sCompact' % $.dashboard.prefix,
   },

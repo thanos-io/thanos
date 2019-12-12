@@ -1451,7 +1451,7 @@
             "useTags": false
          },
          {
-            "allValue": "thanos-compact.*",
+            "allValue": "thanos-compactor.*",
             "current": {
                "text": "all",
                "value": "$__all"
@@ -1463,7 +1463,7 @@
             "multi": false,
             "name": "job",
             "options": [ ],
-            "query": "label_values(up{namespace=\"$namespace\",job=~\"thanos-compact.*\"}, job)",
+            "query": "label_values(up{namespace=\"$namespace\",job=~\"thanos-compactor.*\"}, job)",
             "refresh": 1,
             "regex": "",
             "sort": 2,
@@ -1486,7 +1486,7 @@
             "multi": false,
             "name": "pod",
             "options": [ ],
-            "query": "label_values(kube_pod_info{namespace=\"$namespace\",created_by_name=~\"thanos-compact.*\"}, pod)",
+            "query": "label_values(kube_pod_info{namespace=\"$namespace\",created_by_name=~\"thanos-compactor.*\"}, pod)",
             "refresh": 1,
             "regex": "",
             "sort": 2,
@@ -1544,6 +1544,6 @@
    },
    "timezone": "",
    "title": "Thanos / Compact",
-   "uid": "651943d05a8123e32867b4673963f42b",
+   "uid": "8378cc7f803b0bfae5809a101991ed76",
    "version": 0
 }
