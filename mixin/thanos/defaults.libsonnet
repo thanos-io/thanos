@@ -1,6 +1,6 @@
 {
-  query+:: {
-    jobPrefix: 'thanos-query',
+  querier+:: {
+    jobPrefix: 'thanos-querier',
     selector: 'job=~"%s.*"' % self.jobPrefix,
     title: '%(prefix)sQuery' % $.dashboard.prefix,
   },

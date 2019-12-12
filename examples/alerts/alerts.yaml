@@ -51,97 +51,97 @@ groups:
       / 60 / 60 > 24
     labels:
       severity: warning
-- name: thanos-query.rules
+- name: thanos-querier.rules
   rules:
-  - alert: ThanosQueryHttpRequestQueryErrorRateHigh
+  - alert: ThanosQuerierHttpRequestQueryErrorRateHigh
     annotations:
       message: Thanos Query {{$labels.job}} is failing to handle {{ $value | humanize
         }}% of "query" requests.
     expr: |
       (
-        sum(rate(http_requests_total{code=~"5..", job=~"thanos-query.*", handler="query"}[5m]))
+        sum(rate(http_requests_total{code=~"5..", job=~"thanos-querier.*", handler="query"}[5m]))
       /
-        sum(rate(http_requests_total{job=~"thanos-query.*", handler="query"}[5m]))
+        sum(rate(http_requests_total{job=~"thanos-querier.*", handler="query"}[5m]))
       ) * 100 > 5
     for: 5m
     labels:
       severity: critical
-  - alert: ThanosQueryHttpRequestQueryRangeErrorRateHigh
+  - alert: ThanosQuerierHttpRequestQueryRangeErrorRateHigh
     annotations:
       message: Thanos Query {{$labels.job}} is failing to handle {{ $value | humanize
         }}% of "query_range" requests.
     expr: |
       (
-        sum(rate(http_requests_total{code=~"5..", job=~"thanos-query.*", handler="query_range"}[5m]))
+        sum(rate(http_requests_total{code=~"5..", job=~"thanos-querier.*", handler="query_range"}[5m]))
       /
-        sum(rate(http_requests_total{job=~"thanos-query.*", handler="query_range"}[5m]))
+        sum(rate(http_requests_total{job=~"thanos-querier.*", handler="query_range"}[5m]))
       ) * 100 > 5
     for: 5m
     labels:
       severity: critical
-  - alert: ThanosQueryGrpcServerErrorRate
+  - alert: ThanosQuerierGrpcServerErrorRate
     annotations:
       message: Thanos Query {{$labels.job}} is failing to handle {{ $value | humanize
         }}% of requests.
     expr: |
       (
-        sum by (job) (rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded", job=~"thanos-query.*"}[5m]))
+        sum by (job) (rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded", job=~"thanos-querier.*"}[5m]))
       /
-        sum by (job) (rate(grpc_server_started_total{job=~"thanos-query.*"}[5m]))
+        sum by (job) (rate(grpc_server_started_total{job=~"thanos-querier.*"}[5m]))
       * 100 > 5
       )
     for: 5m
     labels:
       severity: warning
-  - alert: ThanosQueryGrpcClientErrorRate
+  - alert: ThanosQuerierGrpcClientErrorRate
     annotations:
       message: Thanos Query {{$labels.job}} is failing to send {{ $value | humanize
         }}% of requests.
     expr: |
       (
-        sum by (job) (rate(grpc_client_handled_total{grpc_code!="OK", job=~"thanos-query.*"}[5m]))
+        sum by (job) (rate(grpc_client_handled_total{grpc_code!="OK", job=~"thanos-querier.*"}[5m]))
       /
-        sum by (job) (rate(grpc_client_started_total{job=~"thanos-query.*"}[5m]))
+        sum by (job) (rate(grpc_client_started_total{job=~"thanos-querier.*"}[5m]))
       * 100 > 5
       )
     for: 5m
     labels:
       severity: warning
-  - alert: ThanosQueryHighDNSFailures
+  - alert: ThanosQuerierHighDNSFailures
     annotations:
       message: Thanos Querys {{$labels.job}} have {{ $value }} of failing DNS queries.
     expr: |
       (
-        sum by (job) (rate(thanos_query_store_apis_dns_failures_total{job=~"thanos-query.*"}[5m]))
+        sum by (job) (rate(thanos_query_store_apis_dns_failures_total{job=~"thanos-querier.*"}[5m]))
       /
-        sum by (job) (rate(thanos_query_store_apis_dns_lookups_total{job=~"thanos-query.*"}[5m]))
+        sum by (job) (rate(thanos_query_store_apis_dns_lookups_total{job=~"thanos-querier.*"}[5m]))
       > 1
       )
     for: 15m
     labels:
       severity: warning
-  - alert: ThanosQueryInstantLatencyHigh
+  - alert: ThanosQuerierInstantLatencyHigh
     annotations:
       message: Thanos Query {{$labels.job}} has a 99th percentile latency of {{ $value
         }} seconds for instant queries.
     expr: |
       (
-        histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query"})) > 10
+        histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{job=~"thanos-querier.*", handler="query"})) > 10
       and
-        sum by (job) (rate(http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query"}[5m])) > 0
+        sum by (job) (rate(http_request_duration_seconds_bucket{job=~"thanos-querier.*", handler="query"}[5m])) > 0
       )
     for: 10m
     labels:
       severity: critical
-  - alert: ThanosQueryRangeLatencyHigh
+  - alert: ThanosQuerierRangeLatencyHigh
     annotations:
       message: Thanos Query {{$labels.job}} has a 99th percentile latency of {{ $value
         }} seconds for instant queries.
     expr: |
       (
-        histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{job=~"thanos-query.*", handler="query_range"})) > 10
+        histogram_quantile(0.99, sum by (job, le) (http_request_duration_seconds_bucket{job=~"thanos-querier.*", handler="query_range"})) > 10
       and
-        sum by (job) (rate(http_request_duration_seconds_count{job=~"thanos-query.*", handler="query_range"}[5m])) > 0
+        sum by (job) (rate(http_request_duration_seconds_count{job=~"thanos-querier.*", handler="query_range"}[5m])) > 0
       )
     for: 10m
     labels:
@@ -287,11 +287,11 @@ groups:
     for: 5m
     labels:
       severity: critical
-  - alert: ThanosQueryIsDown
+  - alert: ThanosQuerierIsDown
     annotations:
-      message: ThanosQuery has disappeared from Prometheus target discovery.
+      message: ThanosQuerier has disappeared from Prometheus target discovery.
     expr: |
-      absent(up{job=~"thanos-query.*"} == 1)
+      absent(up{job=~"thanos-querier.*"} == 1)
     for: 5m
     labels:
       severity: critical

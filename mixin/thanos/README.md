@@ -59,8 +59,8 @@ This project is intended to be used as a library. You can extend and customize d
 [embedmd]:# (defaults.libsonnet)
 ```libsonnet
 {
-  query+:: {
-    jobPrefix: 'thanos-query',
+  querier+:: {
+    jobPrefix: 'thanos-querier',
     selector: 'job=~"%s.*"' % self.jobPrefix,
     title: '%(prefix)sQuery' % $.dashboard.prefix,
   },

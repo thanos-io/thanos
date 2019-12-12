@@ -330,9 +330,9 @@ examples/tmp:
 	-mkdir -p examples/tmp/
 	$(JSONNET) -J ${JSONNET_VENDOR_DIR} -m examples/tmp/ ${MIXIN_ROOT}/separated_alerts.jsonnet | xargs -I{} sh -c 'cat {} | $(GOJSONTOYAML) > {}.yaml; rm -f {}' -- {}
 
+.PHONY: examples/dashboards # to keep examples/dashboards/dashboards.md.
 examples/dashboards: $(JSONNET) ${MIXIN_ROOT}/mixin.libsonnet ${MIXIN_ROOT}/defaults.libsonnet ${MIXIN_ROOT}/dashboards/*
 	-rm -rf examples/dashboards/*.json
-	-mkdir -p examples/dashboards/
 	$(JSONNET) -J ${JSONNET_VENDOR_DIR} -m examples/dashboards ${MIXIN_ROOT}/dashboards.jsonnet
 
 examples/alerts/alerts.yaml: $(JSONNET) $(GOJSONTOYAML) ${MIXIN_ROOT}/mixin.libsonnet ${MIXIN_ROOT}/defaults.libsonnet ${MIXIN_ROOT}/alerts/*
