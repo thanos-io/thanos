@@ -2,7 +2,7 @@
   querier+:: {
     jobPrefix: 'thanos-querier',
     selector: 'job=~"%s.*"' % self.jobPrefix,
-    title: '%(prefix)sQuery' % $.dashboard.prefix,
+    title: '%(prefix)sQuerier' % $.dashboard.prefix,
   },
   store+:: {
     jobPrefix: 'thanos-store',

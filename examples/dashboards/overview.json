@@ -43,10 +43,10 @@
                "linewidth": 0,
                "links": [
                   {
-                     "dashboard": "Thanos / Query",
+                     "dashboard": "Thanos / Querier",
                      "includeVars": true,
                      "keepTime": true,
-                     "title": "Thanos / Query",
+                     "title": "Thanos / Querier",
                      "type": "dashboard"
                   }
                ],
@@ -130,10 +130,10 @@
                "linewidth": 0,
                "links": [
                   {
-                     "dashboard": "Thanos / Query",
+                     "dashboard": "Thanos / Querier",
                      "includeVars": true,
                      "keepTime": true,
-                     "title": "Thanos / Query",
+                     "title": "Thanos / Querier",
                      "type": "dashboard"
                   }
                ],
@@ -215,10 +215,10 @@
                "linewidth": 1,
                "links": [
                   {
-                     "dashboard": "Thanos / Query",
+                     "dashboard": "Thanos / Querier",
                      "includeVars": true,
                      "keepTime": true,
-                     "title": "Thanos / Query",
+                     "title": "Thanos / Querier",
                      "type": "dashboard"
                   }
                ],
@@ -337,10 +337,10 @@
                "linewidth": 0,
                "links": [
                   {
-                     "dashboard": "Thanos / Query",
+                     "dashboard": "Thanos / Querier",
                      "includeVars": true,
                      "keepTime": true,
-                     "title": "Thanos / Query",
+                     "title": "Thanos / Querier",
                      "type": "dashboard"
                   }
                ],
@@ -424,10 +424,10 @@
                "linewidth": 0,
                "links": [
                   {
-                     "dashboard": "Thanos / Query",
+                     "dashboard": "Thanos / Querier",
                      "includeVars": true,
                      "keepTime": true,
-                     "title": "Thanos / Query",
+                     "title": "Thanos / Querier",
                      "type": "dashboard"
                   }
                ],
@@ -509,10 +509,10 @@
                "linewidth": 1,
                "links": [
                   {
-                     "dashboard": "Thanos / Query",
+                     "dashboard": "Thanos / Querier",
                      "includeVars": true,
                      "keepTime": true,
-                     "title": "Thanos / Query",
+                     "title": "Thanos / Querier",
                      "type": "dashboard"
                   }
                ],
