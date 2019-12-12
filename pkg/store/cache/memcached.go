@@ -19,6 +19,11 @@ const (
 type MemcachedIndexCache struct {
 	logger    log.Logger
 	memcached cacheutil.MemcachedClient
+
+	// Metrics.
+	requests *prometheus.CounterVec
+	hits     *prometheus.CounterVec
+	failures *prometheus.CounterVec
 }
 
 // NewMemcachedIndexCache makes a new MemcachedIndexCache.
@@ -26,6 +31,31 @@ func NewMemcachedIndexCache(logger log.Logger, memcached cacheutil.MemcachedClie
 	c := &MemcachedIndexCache{
 		logger:    logger,
 		memcached: memcached,
+	}
+
+	c.requests = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_store_index_cache_requests_total",
+		Help: "Total number of items requests to the cache.",
+	}, []string{"item_type"})
+	c.requests.WithLabelValues(cacheTypePostings)
+	c.requests.WithLabelValues(cacheTypeSeries)
+
+	c.hits = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_store_index_cache_hits_total",
+		Help: "Total number of items requests to the cache that were a hit.",
+	}, []string{"item_type"})
+	c.hits.WithLabelValues(cacheTypePostings)
+	c.hits.WithLabelValues(cacheTypeSeries)
+
+	c.failures = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_store_index_cache_failures_total",
+		Help: "Total number of items requested to the cache that failed to be fetched.",
+	}, []string{"item_type"})
+	c.failures.WithLabelValues(cacheTypePostings)
+	c.failures.WithLabelValues(cacheTypeSeries)
+
+	if reg != nil {
+		reg.MustRegister(c.requests, c.hits)
 	}
 
 	level.Info(logger).Log(
@@ -63,8 +93,11 @@ func (c *MemcachedIndexCache) FetchMultiPostings(blockID ulid.ULID, lbls []label
 	}
 
 	// Fetch the keys from memcached in a single request.
+	c.requests.WithLabelValues(cacheTypePostings).Add(float64(len(keys)))
 	results, err := c.memcached.GetMulti(keys)
+
 	if err != nil {
+		c.failures.WithLabelValues(cacheTypePostings).Add(float64(len(keys)))
 		level.Warn(c.logger).Log("msg", "failed to fetch postings from memcached", "err", err)
 		return nil, lbls
 	} else if len(results) == 0 {
@@ -93,6 +126,7 @@ func (c *MemcachedIndexCache) FetchMultiPostings(blockID ulid.ULID, lbls []label
 		hits[lbl] = value
 	}
 
+	c.hits.WithLabelValues(cacheTypePostings).Add(float64(len(hits)))
 	return hits, misses
 }
 
@@ -124,8 +158,11 @@ func (c *MemcachedIndexCache) FetchMultiSeries(blockID ulid.ULID, ids []uint64) 
 	}
 
 	// Fetch the keys from memcached in a single request.
+	c.requests.WithLabelValues(cacheTypeSeries).Add(float64(len(ids)))
 	results, err := c.memcached.GetMulti(keys)
+
 	if err != nil {
+		c.failures.WithLabelValues(cacheTypeSeries).Add(float64(len(ids)))
 		level.Warn(c.logger).Log("msg", "failed to fetch series from memcached", "err", err)
 		return nil, ids
 	} else if len(results) == 0 {
@@ -154,5 +191,6 @@ func (c *MemcachedIndexCache) FetchMultiSeries(blockID ulid.ULID, ids []uint64) 
 		hits[id] = value
 	}
 
+	c.hits.WithLabelValues(cacheTypeSeries).Add(float64(len(hits)))
 	return hits, misses
 }

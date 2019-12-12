@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
+	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -24,12 +25,13 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 	value3 := []byte{3}
 
 	tests := map[string]struct {
-		setup          []mockedPostings
-		mockedErr      error
-		fetchBlockID   ulid.ULID
-		fetchLabels    []labels.Label
-		expectedHits   map[labels.Label][]byte
-		expectedMisses []labels.Label
+		setup            []mockedPostings
+		mockedErr        error
+		fetchBlockID     ulid.ULID
+		fetchLabels      []labels.Label
+		expectedHits     map[labels.Label][]byte
+		expectedMisses   []labels.Label
+		expectedFailures int
 	}{
 		"should return no hits on empty cache": {
 			setup:          []mockedPostings{},
@@ -68,11 +70,12 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 				{block: block1, label: label2, value: value2},
 				{block: block2, label: label1, value: value3},
 			},
-			mockedErr:      errors.New("mocked error"),
-			fetchBlockID:   block1,
-			fetchLabels:    []labels.Label{label1, label2},
-			expectedHits:   nil,
-			expectedMisses: []labels.Label{label1, label2},
+			mockedErr:        errors.New("mocked error"),
+			fetchBlockID:     block1,
+			fetchLabels:      []labels.Label{label1, label2},
+			expectedHits:     nil,
+			expectedMisses:   []labels.Label{label1, label2},
+			expectedFailures: 2,
 		},
 	}
 
@@ -91,6 +94,14 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 			hits, misses := c.FetchMultiPostings(testData.fetchBlockID, testData.fetchLabels)
 			testutil.Equals(t, testData.expectedHits, hits)
 			testutil.Equals(t, testData.expectedMisses, misses)
+
+			// Assert on metrics.
+			testutil.Equals(t, float64(len(testData.fetchLabels)), prom_testutil.ToFloat64(c.requests.WithLabelValues(cacheTypePostings)))
+			testutil.Equals(t, float64(len(testData.expectedHits)), prom_testutil.ToFloat64(c.hits.WithLabelValues(cacheTypePostings)))
+			testutil.Equals(t, float64(testData.expectedFailures), prom_testutil.ToFloat64(c.failures.WithLabelValues(cacheTypePostings)))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.requests.WithLabelValues(cacheTypeSeries)))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.hits.WithLabelValues(cacheTypeSeries)))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.failures.WithLabelValues(cacheTypeSeries)))
 		})
 	}
 }
@@ -106,12 +117,13 @@ func TestMemcachedIndexCache_FetchMultiSeries(t *testing.T) {
 	value3 := []byte{3}
 
 	tests := map[string]struct {
-		setup          []mockedSeries
-		mockedErr      error
-		fetchBlockID   ulid.ULID
-		fetchIds       []uint64
-		expectedHits   map[uint64][]byte
-		expectedMisses []uint64
+		setup            []mockedSeries
+		mockedErr        error
+		fetchBlockID     ulid.ULID
+		fetchIds         []uint64
+		expectedHits     map[uint64][]byte
+		expectedMisses   []uint64
+		expectedFailures int
 	}{
 		"should return no hits on empty cache": {
 			setup:          []mockedSeries{},
@@ -150,11 +162,12 @@ func TestMemcachedIndexCache_FetchMultiSeries(t *testing.T) {
 				{block: block1, id: 2, value: value2},
 				{block: block2, id: 1, value: value3},
 			},
-			mockedErr:      errors.New("mocked error"),
-			fetchBlockID:   block1,
-			fetchIds:       []uint64{1, 2},
-			expectedHits:   nil,
-			expectedMisses: []uint64{1, 2},
+			mockedErr:        errors.New("mocked error"),
+			fetchBlockID:     block1,
+			fetchIds:         []uint64{1, 2},
+			expectedHits:     nil,
+			expectedMisses:   []uint64{1, 2},
+			expectedFailures: 2,
 		},
 	}
 
@@ -173,6 +186,14 @@ func TestMemcachedIndexCache_FetchMultiSeries(t *testing.T) {
 			hits, misses := c.FetchMultiSeries(testData.fetchBlockID, testData.fetchIds)
 			testutil.Equals(t, testData.expectedHits, hits)
 			testutil.Equals(t, testData.expectedMisses, misses)
+
+			// Assert on metrics.
+			testutil.Equals(t, float64(len(testData.fetchIds)), prom_testutil.ToFloat64(c.requests.WithLabelValues(cacheTypeSeries)))
+			testutil.Equals(t, float64(len(testData.expectedHits)), prom_testutil.ToFloat64(c.hits.WithLabelValues(cacheTypeSeries)))
+			testutil.Equals(t, float64(testData.expectedFailures), prom_testutil.ToFloat64(c.failures.WithLabelValues(cacheTypeSeries)))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.requests.WithLabelValues(cacheTypePostings)))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.hits.WithLabelValues(cacheTypePostings)))
+			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.failures.WithLabelValues(cacheTypePostings)))
 		})
 	}
 }
