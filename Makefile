@@ -285,7 +285,7 @@ web: web-pre-process $(HUGO)
 # to debug big allocations during linting.
 lint: check-git $(GOLANGCILINT) $(MISSPELL)
 	@echo ">> linting all of the Go files GOGC=${GOGC}"
-	@$(GOLANGCILINT) run --enable goimports --enable goconst --skip-dirs vendor
+	@$(GOLANGCILINT) run
 	@echo ">> detecting misspells"
 	@find . -type f | grep -v vendor/ | grep -vE '\./\..*' | xargs $(MISSPELL) -error
 	@echo ">> detecting white noise"
