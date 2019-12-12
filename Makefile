@@ -306,8 +306,8 @@ JSONNET_CONTAINER_CMD:=docker run --rm \
 		-e GO111MODULE=on \
 		quay.io/coreos/jsonnet-ci
 
-.PHONY: examples-generate-in-container
-examples-generate-in-container:
+.PHONY: examples-in-container
+examples-in-container:
 	@echo ">> Compiling and generating thanos-mixin"
 	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) JSONNET_BUNDLER='/go/bin/jb' jsonnet-vendor
 	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) \
