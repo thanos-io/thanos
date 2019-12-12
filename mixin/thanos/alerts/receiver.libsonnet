@@ -1,16 +1,16 @@
 {
   local thanos = self,
-  receive+:: {
+  receiver+:: {
     jobPrefix: error 'must provide job prefix for Thanos Receive alerts',
     selector: error 'must provide selector for Thanos Receive alerts',
   },
   prometheusAlerts+:: {
     groups+: [
       {
-        name: 'thanos-receive.rules',
+        name: 'thanos-receiver.rules',
         rules: [
           {
-            alert: 'ThanosReceiveHttpRequestErrorRateHigh',
+            alert: 'ThanosReceiverHttpRequestErrorRateHigh',
             annotations: {
               message: 'Thanos Receive {{$labels.job}} is failing to handle {{ $value | humanize }}% of requests.',
             },
@@ -20,14 +20,14 @@
               /
                 sum(rate(http_requests_total{%(selector)s, handler="receive"}[5m]))
               ) * 100 > 5
-            ||| % thanos.receive,
+            ||| % thanos.receiver,
             'for': '5m',
             labels: {
               severity: 'critical',
             },
           },
           {
-            alert: 'ThanosReceiveHttpRequestLatencyHigh',
+            alert: 'ThanosReceiverHttpRequestLatencyHigh',
             annotations: {
               message: 'Thanos Receive {{$labels.job}} has a 99th percentile latency of {{ $value }} seconds for requests.',
             },
@@ -37,14 +37,14 @@
               and
                 sum by (job) (rate(http_request_duration_seconds_count{%(selector)s, handler="receive"}[5m])) > 0
               )
-            ||| % thanos.receive,
+            ||| % thanos.receiver,
             'for': '10m',
             labels: {
               severity: 'critical',
             },
           },
           {
-            alert: 'ThanosReceiveHighForwardRequestFailures',
+            alert: 'ThanosReceiverHighForwardRequestFailures',
             annotations: {
               message: 'Thanos Receive {{$labels.job}} is failing to forward {{ $value | humanize }}% of requests.',
             },
@@ -55,14 +55,14 @@
                 sum by (job) (rate(thanos_receive_forward_requests_total{%(selector)s}[5m]))
               * 100 > 5
               )
-            ||| % thanos.receive,
+            ||| % thanos.receiver,
             'for': '5m',
             labels: {
               severity: 'critical',
             },
           },
           {
-            alert: 'ThanosReceiveHighHashringFileRefreshFailures',
+            alert: 'ThanosReceiverHighHashringFileRefreshFailures',
             annotations: {
               message: 'Thanos Receive {{$labels.job}} is failing to refresh hashring file, {{ $value | humanize }} of attempts failed.',
             },
@@ -73,18 +73,18 @@
                 sum by (job) (rate(thanos_receive_hashrings_file_refreshes_total{%(selector)s}[5m]))
               > 0
               )
-            ||| % thanos.receive,
+            ||| % thanos.receiver,
             'for': '15m',
             labels: {
               severity: 'warning',
             },
           },
           {
-            alert: 'ThanosReceiveConfigReloadFailure',
+            alert: 'ThanosReceiverConfigReloadFailure',
             annotations: {
               message: 'Thanos Receive {{$labels.job}} has not been able to reload hashring configurations.',
             },
-            expr: 'avg(thanos_receive_config_last_reload_successful{%(selector)s}) by (job) != 1' % thanos.receive,
+            expr: 'avg(thanos_receive_config_last_reload_successful{%(selector)s}) by (job) != 1' % thanos.receiver,
             'for': '5m',
             labels: {
               severity: 'warning',

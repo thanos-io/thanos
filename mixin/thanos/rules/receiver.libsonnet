@@ -1,12 +1,12 @@
 {
   local thanos = self,
-  receive+:: {
+  receiver+:: {
     selector: error 'must provide selector for Thanos Receive recording rules',
   },
   prometheusRules+:: {
     groups+: [
       {
-        name: 'thanos-receive.rules',
+        name: 'thanos-receiver.rules',
         rules: [
           {
             record: ':grpc_server_failures_per_unary:sum_rate',
@@ -16,7 +16,7 @@
               /
                 rate(grpc_server_started_total{%(selector)s, grpc_type="unary"}[5m])
               )
-            ||| % thanos.receive,
+            ||| % thanos.receiver,
             labels: {
             },
           },
@@ -28,7 +28,7 @@
               /
                 rate(grpc_server_started_total{%(selector)s, grpc_type="server_stream"}[5m])
               )
-            ||| % thanos.receive,
+            ||| % thanos.receiver,
             labels: {
             },
           },
@@ -40,7 +40,7 @@
               /
                 rate(http_requests_total{handler="receive", %(selector)s}[5m])
               )
-            ||| % thanos.receive,
+            ||| % thanos.receiver,
             labels: {
             },
           },
@@ -50,7 +50,7 @@
               histogram_quantile(0.99,
                 sum(rate(http_request_duration_seconds_bucket{handler="receive", %(selector)s}[5m])) by (le)
               )
-            ||| % thanos.receive,
+            ||| % thanos.receiver,
             labels: {
               quantile: '0.99',
             },
@@ -63,7 +63,7 @@
               /
                 sum(rate(thanos_receive_forward_requests_total{%(selector)s}[5m]))
               )
-            ||| % thanos.receive,
+            ||| % thanos.receiver,
             labels: {
             },
           },
@@ -75,7 +75,7 @@
               /
                 sum(rate(thanos_receive_hashrings_file_refreshes_total{%(selector)s}[5m]))
               )
-            ||| % thanos.receive,
+            ||| % thanos.receiver,
             labels: {
             },
           },

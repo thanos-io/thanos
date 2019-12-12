@@ -69,7 +69,7 @@ This project is intended to be used as a library. You can extend and customize d
     selector: 'job=~"%s.*"' % self.jobPrefix,
     title: '%(prefix)sStore' % $.dashboard.prefix,
   },
-  receive+:: {
+  receiver+:: {
     jobPrefix: 'thanos-receive',
     selector: 'job=~"%s.*"' % self.jobPrefix,
     title: '%(prefix)sReceive' % $.dashboard.prefix,

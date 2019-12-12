@@ -301,11 +301,11 @@ rules:
 
 ## Receive
 
-[embedmd]:# (../tmp/thanos-receive.rules.yaml yaml)
+[embedmd]:# (../tmp/thanos-receiver.rules.yaml yaml)
 ```yaml
-name: thanos-receive.rules
+name: thanos-receiver.rules
 rules:
-- alert: ThanosReceiveHttpRequestErrorRateHigh
+- alert: ThanosReceiverHttpRequestErrorRateHigh
   annotations:
     message: Thanos Receive {{$labels.job}} is failing to handle {{ $value | humanize
       }}% of requests.
@@ -318,7 +318,7 @@ rules:
   for: 5m
   labels:
     severity: critical
-- alert: ThanosReceiveHttpRequestLatencyHigh
+- alert: ThanosReceiverHttpRequestLatencyHigh
   annotations:
     message: Thanos Receive {{$labels.job}} has a 99th percentile latency of {{ $value
       }} seconds for requests.
@@ -331,7 +331,7 @@ rules:
   for: 10m
   labels:
     severity: critical
-- alert: ThanosReceiveHighForwardRequestFailures
+- alert: ThanosReceiverHighForwardRequestFailures
   annotations:
     message: Thanos Receive {{$labels.job}} is failing to forward {{ $value | humanize
       }}% of requests.
@@ -345,7 +345,7 @@ rules:
   for: 5m
   labels:
     severity: critical
-- alert: ThanosReceiveHighHashringFileRefreshFailures
+- alert: ThanosReceiverHighHashringFileRefreshFailures
   annotations:
     message: Thanos Receive {{$labels.job}} is failing to refresh hashring file, {{
       $value | humanize }} of attempts failed.
@@ -359,7 +359,7 @@ rules:
   for: 15m
   labels:
     severity: warning
-- alert: ThanosReceiveConfigReloadFailure
+- alert: ThanosReceiverConfigReloadFailure
   annotations:
     message: Thanos Receive {{$labels.job}} has not been able to reload hashring configurations.
   expr: avg(thanos_receive_config_last_reload_successful{job=~"thanos-receive.*"})
@@ -393,9 +393,9 @@ rules:
   for: 5m
   labels:
     severity: critical
-- alert: ThanosReceiveIsDown
+- alert: ThanosReceiverIsDown
   annotations:
-    message: ThanosReceive has disappeared from Prometheus target discovery.
+    message: ThanosReceiver has disappeared from Prometheus target discovery.
   expr: |
     absent(up{job=~"thanos-receive.*"} == 1)
   for: 5m

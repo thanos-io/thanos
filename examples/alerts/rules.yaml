@@ -39,7 +39,7 @@ groups:
     labels:
       quantile: "0.99"
     record: :api_range_query_duration_seconds:histogram_quantile
-- name: thanos-receive.rules
+- name: thanos-receiver.rules
   rules:
   - expr: |
       sum(

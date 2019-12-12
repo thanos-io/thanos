@@ -1,6 +1,6 @@
 (import 'compact.libsonnet') +
 (import 'querier.libsonnet') +
-(import 'receive.libsonnet') +
+(import 'receiver.libsonnet') +
 (import 'sidecar.libsonnet') +
 (import 'store.libsonnet') +
 (import 'absent.libsonnet')

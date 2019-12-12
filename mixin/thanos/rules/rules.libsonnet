@@ -1,3 +1,3 @@
 (import 'querier.libsonnet') +
-(import 'receive.libsonnet') +
+(import 'receiver.libsonnet') +
 (import 'store.libsonnet')

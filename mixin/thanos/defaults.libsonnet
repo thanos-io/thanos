@@ -9,7 +9,7 @@
     selector: 'job=~"%s.*"' % self.jobPrefix,
     title: '%(prefix)sStore' % $.dashboard.prefix,
   },
-  receive+:: {
+  receiver+:: {
     jobPrefix: 'thanos-receive',
     selector: 'job=~"%s.*"' % self.jobPrefix,
     title: '%(prefix)sReceive' % $.dashboard.prefix,

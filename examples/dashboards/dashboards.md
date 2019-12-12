@@ -6,7 +6,7 @@ There exists Grafana dashboards for each component (not all of them complete) ta
 - [Thanos Compact](thanos-compact.json)
 - [Thanos Query](thanos-querier.json)
 - [Thanos Store](thanos-store.json)
-- [Thanos Receive](thanos-receive.json)
+- [Thanos Receive](thanos-receiver.json)
 - [Thanos Sidecar](thanos-sidecar.json)
 - [Thanos Rule](thanos-rule.json)
 

@@ -5,7 +5,7 @@
   jobs:: {
     ThanosQuerier: thanos.querier.selector,
     ThanosStore: thanos.store.selector,
-    ThanosReceive: thanos.receive.selector,
+    ThanosReceiver: thanos.receiver.selector,
     ThanosRule: thanos.rule.selector,
     ThanosCompact: thanos.compact.selector,
     ThanosSidecar: thanos.sidecar.selector,
