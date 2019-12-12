@@ -140,9 +140,9 @@ you might lucky enough that you actually get the correct data as the broken Stor
 
 If partial response happen QueryAPI returns human readable warnings explained [here](query.md#custom-response-fields).
 
-Now support two strategy:
+Now it supports two strategies:
 * "warn"
-* "abort"(defalut)
+* "abort" (defalut)
 
 NOTE: Having warning does not necessary means partial response (e.g no store matched query warning).
 
