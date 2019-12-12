@@ -3,6 +3,7 @@ package cacheutil
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -219,11 +220,15 @@ func (c *memcachedClient) Stop() {
 
 func (c *memcachedClient) SetAsync(key string, value []byte, ttl time.Duration) error {
 	return c.enqueueAsync(func() {
-		c.client.Set(&memcache.Item{
+		err := c.client.Set(&memcache.Item{
 			Key:        key,
 			Value:      value,
 			Expiration: int32(time.Now().Add(ttl).Unix()),
 		})
+
+		if err != nil {
+			level.Warn(c.logger).Log("msg", fmt.Sprintf("failed to store item with key %s to memcached", key), "err", err)
+		}
 	})
 }
 

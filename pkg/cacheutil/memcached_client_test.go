@@ -59,8 +59,11 @@ func TestMemcachedClient_SetAsync(t *testing.T) {
 	testutil.Ok(t, err)
 	defer client.Stop()
 
-	client.SetAsync("key-1", []byte("value-1"), time.Second)
-	client.SetAsync("key-2", []byte("value-2"), time.Second)
+	err = client.SetAsync("key-1", []byte("value-1"), time.Second)
+	testutil.Ok(t, err)
+
+	err = client.SetAsync("key-2", []byte("value-2"), time.Second)
+	testutil.Ok(t, err)
 
 	err = backendMock.waitItems(2)
 	testutil.Ok(t, err)
@@ -200,7 +203,8 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 
 			// Populate memcached with the initial items.
 			for _, item := range testData.initialItems {
-				client.SetAsync(item.Key, item.Value, time.Second)
+				err := client.SetAsync(item.Key, item.Value, time.Second)
+				testutil.Ok(t, err)
 			}
 
 			// Wait until initial items have been added.
@@ -212,7 +216,7 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 			testutil.Equals(t, testData.expectedHits, hits)
 			testutil.Equals(t, testData.expectedErr, err)
 
-			// Ensure the client has interected with the backend as expected.
+			// Ensure the client has interacted with the backend as expected.
 			backendMock.lock.Lock()
 			defer backendMock.lock.Unlock()
 			testutil.Equals(t, testData.expectedGetMultiCount, backendMock.getMultiCount)
@@ -251,7 +255,7 @@ func (c *memcachedClientBackendMock) GetMulti(keys []string) (map[string]*memcac
 		return nil, errors.New("mocked GetMulti error")
 	}
 
-	items := make(map[string]*memcache.Item, 0)
+	items := make(map[string]*memcache.Item)
 	for _, key := range keys {
 		if item, ok := c.items[key]; ok {
 			items[key] = item

@@ -60,11 +60,12 @@ func TestMemcachedJumpHashSelector_Each_ShouldRespectServersOrdering(t *testing.
 		testutil.Ok(t, err)
 
 		actual := make([]string, 0, 3)
-		s.Each(func(addr net.Addr) error {
+		err = s.Each(func(addr net.Addr) error {
 			actual = append(actual, addr.String())
 			return nil
 		})
 
+		testutil.Ok(t, err)
 		testutil.Equals(t, test.expected, actual)
 	}
 }
@@ -170,11 +171,17 @@ func BenchmarkMemcachedJumpHashSelector_PickServer(b *testing.B) {
 	}
 
 	selector := MemcachedJumpHashSelector{}
-	selector.SetServers(servers...)
+	err := selector.SetServers(servers...)
+	if err != nil {
+		b.Error(err)
+	}
 
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		selector.PickServer(string(i))
+		_, err := selector.PickServer(string(i))
+		if err != nil {
+			b.Error(err)
+		}
 	}
 }

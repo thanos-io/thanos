@@ -12,7 +12,8 @@ import (
 var (
 	addrsPool = sync.Pool{
 		New: func() interface{} {
-			return make([]net.Addr, 0, 64)
+			addrs := make([]net.Addr, 0, 64)
+			return &addrs
 		},
 	}
 )
@@ -57,27 +58,34 @@ func (s *MemcachedJumpHashSelector) SetServers(servers ...string) error {
 func (s *MemcachedJumpHashSelector) PickServer(key string) (net.Addr, error) {
 	// Unfortunately we can't read the list of server addresses from
 	// the original implementation, so we use Each() to fetch all of them.
-	addrs := addrsPool.Get().([]net.Addr)
-	s.servers.Each(func(addr net.Addr) error {
+	addrs := *(addrsPool.Get().(*[]net.Addr))
+	err := s.servers.Each(func(addr net.Addr) error {
 		addrs = append(addrs, addr)
 		return nil
 	})
 
+	if err != nil {
+		return nil, err
+	}
+
 	// No need of a jump hash in case of 0 or 1 servers.
 	if len(addrs) == 0 {
-		addrsPool.Put(addrs[:0])
+		addrs = (addrs)[:0]
+		addrsPool.Put(&addrs)
 		return nil, memcache.ErrNoServers
 	} else if len(addrs) == 1 {
-		addrsPool.Put(addrs[:0])
-		return addrs[0], nil
+		addrs = (addrs)[:0]
+		addrsPool.Put(&addrs)
+		return (addrs)[0], nil
 	}
 
 	// Pick a server using the jump hash.
 	cs := xxhash.Sum64String(key)
 	idx := JumpHash(cs, len(addrs))
-	picked := addrs[idx]
+	picked := (addrs)[idx]
 
-	addrsPool.Put(addrs[:0])
+	addrs = (addrs)[:0]
+	addrsPool.Put(&addrs)
 
 	return picked, nil
 }
