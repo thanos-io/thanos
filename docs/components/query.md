@@ -1,12 +1,12 @@
 ---
-title: Query
+title: Querier
 type: docs
 menu: components
 ---
 
-# Querier/Query
+# Querier
 
-The Querier component (also known as "Query") implements the [Prometheus HTTP v1 API](https://prometheus.io/docs/prometheus/latest/querying/api/) to query data in a Thanos cluster via PromQL.
+The Querier component implements the [Prometheus HTTP v1 API](https://prometheus.io/docs/prometheus/latest/querying/api/) to query data in a Thanos cluster via PromQL.
 
 In short, it gathers the data needed to evaluate the query from underlying [StoreAPIs](../../pkg/store/storepb/rpc.proto), evaluates the query and returns the result.
 
@@ -67,7 +67,7 @@ See [here](../service-discovery.md) on how to connect Querier with desired Store
 ###  Deduplication
 
 The query layer can deduplicate series that were collected from high-availability pairs of data sources such as Prometheus.
-A fixed single or multiple replica labels must be chosen for the entire cluster and can then be passed to query nodes on startup.
+A fixed single or multiple replica labels must be chosen for the entire cluster and can then be passed to queriers on startup.
 
 Two or more series that are only distinguished by the given replica label, will be merged into a single time series.
 This also hides gaps in collection of a single data source.
@@ -241,7 +241,7 @@ Then, `thanos query --web.prefix-header=X-Forwarded-Prefix` will serve correct H
 ```$
 usage: thanos query [<flags>]
 
-query node exposing PromQL enabled Query API with data retrieved from multiple
+querier exposing PromQL enabled Query API with data retrieved from multiple
 store nodes
 
 Flags:
@@ -311,9 +311,9 @@ Flags:
                                  stripped prefix value in X-Forwarded-Prefix
                                  header. This allows thanos UI to be served on a
                                  sub-path.
-      --query.timeout=2m         Maximum time to process query by query node.
+      --query.timeout=2m         Maximum time to process query by querier.
       --query.max-concurrent=20  Maximum number of queries processed
-                                 concurrently by query node.
+                                 concurrently by querier.
       --query.replica-label=QUERY.REPLICA-LABEL ...
                                  Labels to treat as a replica indicator along
                                  which data is deduplicated. Still you will be

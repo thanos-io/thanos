@@ -16,14 +16,14 @@ The Prometheus metric data model and the 2.0 storage format ([spec][tsdb-format]
 Thanos is a clustered system of components with distinct and decoupled purposes. Clustered components can be categorized as follows:
 
 * Metric sources
-* Stores
+* Store Gateways
 * Queriers
 
 ### Metric Sources
 
 A data source is a very generalized definition of a component that produces or collects metric data. Source advertise this data in the cluster to potential clients. Metric data can be retrieved via a well-known gRPC service.
 
-Thanos provides two components that act as data sources: the Prometheus sidecar and rule nodes.
+Thanos provides three components that act as data sources: the Prometheus sidecar, Ruler and Receiver.
 
 The sidecar implements the gRPC service on top of Prometheus' [HTTP and remote-read APIs][prom-http-api]. The rule node directly implements it on top of the Prometheus storage engine it is running.
 
@@ -54,7 +54,7 @@ The meta.json is updated during upload time on sidecars.
 
 ```
 ┌────────────┬─────────┐         ┌────────────┬─────────┐     ┌─────────┐
-│ Prometheus │ Sidecar │   ...   │ Prometheus │ Sidecar │     │   Rule  │
+│ Prometheus │ Sidecar │   ...   │ Prometheus │ Sidecar │     │  Ruler  │
 └────────────┴────┬────┘         └────────────┴────┬────┘     └┬────────┘
                   │                                │           │
                 Blocks                           Blocks      Blocks
@@ -65,9 +65,9 @@ The meta.json is updated during upload time on sidecars.
               └──────────────────────────────────────────────────┘
 ```
 
-### Stores
+### Store Gateway
 
-A store node acts as a gateway to block data that is stored in an object storage bucket. It implements the same gRPC API as data sources to provide access to all metric data found in the bucket.
+A store gateway acts as a gateway to block data that is stored in an object storage bucket. It implements the same gRPC API as data sources to provide access to all metric data found in the bucket.
 
 It continuously synchronizes which blocks exist in the bucket and translates requests for metric data into object storage requests. It implements various strategies to minimize the number of requests to the object storage such as filtering relevant blocks by their metadata (e.g. time range and labels) and caching frequent index lookups.
 
@@ -85,7 +85,7 @@ In its essence, the Store API allows to look up data by a set of label matchers 
 
 ```
 ┌──────────────────────┐  ┌────────────┬─────────┐   ┌────────────┐
-│ Google Cloud Storage │  │ Prometheus │ Sidecar │   │    Rule    │
+│ Google Cloud Storage │  │ Prometheus │ Sidecar │   │    Ruler   │
 └─────────────────┬────┘  └────────────┴────┬────┘   └─┬──────────┘
                   │                         │          │
          Block File Ranges                  │          │
@@ -114,7 +114,7 @@ Based on the metadata of store and source nodes, they attempt to minimize the re
 
 ```
 ┌──────────────────┐  ┌────────────┬─────────┐   ┌────────────┐
-│    Store Node    │  │ Prometheus │ Sidecar │   │    Rule    │
+│    Store Node    │  │ Prometheus │ Sidecar │   │    Ruler   │
 └─────────────┬────┘  └────────────┴────┬────┘   └─┬──────────┘
               │                         │          │
               │                         │          │

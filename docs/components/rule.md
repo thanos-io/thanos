@@ -1,22 +1,22 @@
 ---
-title: Rule
+title: Ruler
 type: docs
 menu: components
 ---
 
-# Rule (aka Ruler)
+# Ruler
 
 _**NOTE:** It is recommended to keep deploying rules inside the relevant Prometheus servers locally. Use ruler only on specific cases. Read details [below](rule.md#risk) why._
 
-_The rule component should in particular not be used to circumvent solving rule deployment properly at the configuration management level._
+_The ruler component should in particular not be used to circumvent solving rule deployment properly at the configuration management level._
 
-The rule component evaluates Prometheus recording and alerting rules against chosen query API via repeated `--query` (or FileSD via `--query.sd`). If more than one query is passed, round robin balancing is performed.
+The ruler component evaluates Prometheus recording and alerting rules against chosen query API via repeated `--query` (or FileSD via `--query.sd`). If more than one query is passed, round robin balancing is performed.
 
-Rule results are written back to disk in the Prometheus 2.0 storage format. Rule nodes at the same time participate in the system as source store nodes, which means that they expose StoreAPI and upload their generated TSDB blocks to an object store.
+Ruler results are written back to disk in the Prometheus 2.0 storage format. Rules at the same time participate in the system as source store nodes, which means that they expose StoreAPI and upload their generated TSDB blocks to an object store.
 
-You can think of Rule as a simplified Prometheus that does not require a sidecar and does not scrape and do PromQL evaluation (no QueryAPI).
+You can think of Ruler as a simplified Prometheus that does not require a sidecar and does not scrape and do PromQL evaluation (no QueryAPI).
 
-The data of each Rule node can be labeled to satisfy the clusters labeling scheme. High-availability pairs can be run in parallel and should be distinguished by the designated replica label, just like regular Prometheus servers.
+The data of each Ruler can be labeled to satisfy the clusters labeling scheme. High-availability pairs can be run in parallel and should be distinguished by the designated replica label, just like regular Prometheus servers.
 Read more about Ruler in HA [here](rule.md#ruler-ha)
 
 ```bash
@@ -131,7 +131,7 @@ annotations:
 
 See [this](query.md#partial-response) on initial info.
 
-Rule allows you to specify rule groups with additional fields that control PartialResponseStrategy e.g:
+Ruler allows you to specify rule groups with additional fields that control PartialResponseStrategy e.g:
 
 ```yaml
 groups:
@@ -161,7 +161,7 @@ To be sure that alerting works it is essential to monitor Ruler and alert from a
 
 The most important metrics to alert on are:
 
-* `thanos_alert_sender_alerts_dropped_total`. If greater than 0, it means that alerts triggered by Rule are not being sent to alertmanager which might
+* `thanos_alert_sender_alerts_dropped_total`. If greater than 0, it means that alerts triggered by Ruler are not being sent to alertmanager which might
 indicate connection, incompatibility or misconfiguration problems.
 
 * `prometheus_rule_evaluation_failures_total`. If greater than 0, it means that that rule failed to be evaluated, which results in
@@ -188,7 +188,7 @@ to check if Querier is live.
 
 ## Performance.
 
-As rule nodes outsource query processing to query nodes, they should generally experience little load. If necessary, functional sharding can be applied by splitting up the sets of rules between HA pairs.
+As ruler nodes outsource query processing to query nodes, they should generally experience little load. If necessary, functional sharding can be applied by splitting up the sets of rules between HA pairs.
 Rules are processed with deduplicated data according to the replica label configured on query nodes.
 
 ## External labels

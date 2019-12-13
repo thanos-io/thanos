@@ -9,7 +9,7 @@ But before that, let's take a closer look at what the Querier component does:
 
 ## Querier
 
-The Querier component (also called "Query") is essentially a vanilla PromQL Prometheus engine that fetches the data from any service
+The Querier component is essentially a vanilla PromQL Prometheus engine that fetches the data from any service
 that implements Thanos [StoreAPI](https://thanos.io/integrations.md/#storeapi). This means that Querier exposes the Prometheus HTTP v1 API to query the data in a common PromQL language.
 This allows compatibility with Grafana or other consumers of Prometheus' API.
 
@@ -111,7 +111,7 @@ deduplicate by `replica` we can transparently handle this High Available pair of
 
 Normally Querier runs in some central global location (e.g next to Grafana) with remote access to all Prometheus-es (e.g via ingress, proxies vpn or peering)
 
-You can also stack (federate) Queriers on top of other Queries, as Query expose `StoreAPI` as well!
+You can also stack (federate) Queriers on top of other Queries, as Querier expose `StoreAPI` as well!
 
 More information about those advanced topics can be found in the next courses that will be added soon.
 

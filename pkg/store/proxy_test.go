@@ -310,7 +310,7 @@ func TestProxyStore_Series(t *testing.T) {
 			expectedWarningsLen: 2,
 		},
 		{
-			title: "same external labels are validated during upload and on querier storeset, proxy does not care",
+			title: "same external labels are validated during upload and on query storeset, proxy does not care",
 			storeAPIs: []Client{
 				&testClient{
 					StoreClient: &mockedStoreAPI{

@@ -40,8 +40,8 @@ Following the [KISS](https://en.wikipedia.org/wiki/KISS_principle) and Unix phil
 * Store Gateway: serves metrics inside of a cloud storage bucket.
 * Compactor: compacts, downsamples and applies retention on the data stored in cloud storage bucket.
 * Receiver: receives data from Prometheus' remote-write WAL, exposes it and/or upload it to cloud storage.
-* Ruler/Rule: evaluates recording and alerting rules against data in Thanos for exposition and/or upload.
-* Querier/Query: implements Prometheus' v1 API to aggregate data from the underlying components.
+* Ruler: evaluates recording and alerting rules against data in Thanos for exposition and/or upload.
+* Querier: implements Prometheus' v1 API to aggregate data from the underlying components.
 
 See those components on this diagram:
 
@@ -223,7 +223,7 @@ _NOTE: The compactor must be run as a **singleton** and must not run when manual
 
 * _[Example Kubernetes manifest](https://github.com/thanos-io/kube-thanos/blob/master/examples/all/manifests/thanos-compactor-statefulSet.yaml)_
 
-### [Ruler/Rule](components/rule.md)
+### [Ruler](components/rule.md)
 
 In case of Prometheus with Thanos sidecar does not have enough retention, or if you want to have alerts or recording rules that requires global view, Thanos has just the component for that: the [Ruler](components/rule.md),
 which does rule and alert evaluation on top of a given Thanos Querier.
