@@ -142,7 +142,7 @@ If partial response happen QueryAPI returns human readable warnings explained [h
 
 Now it supports two strategies:
 * "warn"
-* "abort" (defalut)
+* "abort" (default)
 
 NOTE: Having warning does not necessary means partial response (e.g no store matched query warning).
 
