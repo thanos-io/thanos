@@ -1,0 +1,94 @@
+rule_files:
+  - alerts.yaml
+  - rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+- interval: 1m
+  input_series:
+  - series: 'thanos_sidecar_last_heartbeat_success_time_seconds{namespace="production", job="thanos-sidecar", pod="thanos-sidecar-pod-0"}'
+    values: '5 10 43 17 11 0 0 0'
+  - series: 'thanos_sidecar_last_heartbeat_success_time_seconds{namespace="production", job="thanos-sidecar", pod="thanos-sidecar-pod-1"}'
+    values: '4 9 42 15 10 0 0 0'
+  promql_expr_test:
+    - expr: time()
+      eval_time: 1m
+      exp_samples:
+        - labels: '{}'
+          value: 60
+    - expr: time()
+      eval_time: 2m
+      exp_samples:
+        - labels: '{}'
+          value: 120
+    - expr: max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (pod)
+      eval_time: 2m
+      exp_samples:
+        - labels: '{pod="thanos-sidecar-pod-0"}'
+          value: 43
+        - labels: '{pod="thanos-sidecar-pod-1"}'
+          value: 42
+    - expr: max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (pod)
+      eval_time: 5m
+      exp_samples:
+        - labels: '{pod="thanos-sidecar-pod-0"}'
+          value: 0
+        - labels: '{pod="thanos-sidecar-pod-1"}'
+          value: 0
+    - expr: max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (pod)
+      eval_time: 6m
+      exp_samples:
+        - labels: '{pod="thanos-sidecar-pod-0"}'
+          value: 0
+        - labels: '{pod="thanos-sidecar-pod-1"}'
+          value: 0
+    - expr: time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (pod)
+      eval_time: 5m
+      exp_samples:
+        - labels: '{pod="thanos-sidecar-pod-0"}'
+          value: 300
+        - labels: '{pod="thanos-sidecar-pod-1"}'
+          value: 300
+    - expr: time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (pod)
+      eval_time: 6m
+      exp_samples:
+        - labels: '{pod="thanos-sidecar-pod-0"}'
+          value: 360
+        - labels: '{pod="thanos-sidecar-pod-1"}'
+          value: 360
+    - expr: time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{job="thanos-sidecar"}) by (pod) >= 300
+      eval_time: 12m
+      exp_samples:
+        - labels: '{pod="thanos-sidecar-pod-0"}'
+          value: 720
+        - labels: '{pod="thanos-sidecar-pod-1"}'
+          value: 720
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: ThanosSidecarUnhealthy
+  - eval_time: 2m
+    alertname: ThanosSidecarUnhealthy
+  - eval_time: 3m
+    alertname: ThanosSidecarUnhealthy
+  - eval_time: 5m
+    alertname: ThanosSidecarUnhealthy
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+      exp_annotations:
+        message: 'Thanos Sidecar   is unhealthy for 2 seconds.'
+  - eval_time: 6m
+    alertname: ThanosSidecarUnhealthy
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+      exp_annotations:
+        message: 'Thanos Sidecar   is unhealthy for 2 seconds.'
+  - eval_time: 12m
+    alertname: ThanosSidecarUnhealthy
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+      exp_annotations:
+        message: 'Thanos Sidecar   is unhealthy for 2 seconds.'

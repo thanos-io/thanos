@@ -41,6 +41,20 @@ GOLANGCILINT         ?= $(GOBIN)/golangci-lint-$(GOLANGCILINT_VERSION)
 MISSPELL_VERSION     ?= c0b55c8239520f6b5aa15a0207ca8b28027ba49e
 MISSPELL             ?= $(GOBIN)/misspell-$(MISSPELL_VERSION)
 
+GOJSONTOYAML_VERSION    ?= e8bd32d46b3d764bef60f12b3bada1c132c4be55
+GOJSONTOYAML            ?= $(GOBIN)/gojsontoyaml-$(GOJSONTOYAML_VERSION)
+# v0.14.0
+JSONNET_VERSION         ?= fbde25be2182caa4345b03f1532450911ac7d1f3
+JSONNET                 ?= $(GOBIN)/jsonnet-$(JSONNET_VERSION)
+JSONNET_BUNDLER_VERSION ?= d7829f6c7e632e954c0e5db8b3eece8f111f9461
+JSONNET_BUNDLER         ?= $(GOBIN)/jb-$(JSONNET_BUNDLER_VERSION)
+# Prometheus v2.14.0
+PROMTOOL_VERSION        ?= edeb7a44cbf745f1d8be4ea6f215e79e651bfe19
+PROMTOOL                ?= $(GOBIN)/promtool-$(PROMTOOL_VERSION)
+
+MIXIN_ROOT              ?= mixin/thanos
+JSONNET_VENDOR_DIR      ?= mixin/vendor
+
 WEB_DIR           ?= website
 WEBSITE_BASE_URL  ?= https://thanos.io
 PUBLIC_DIR        ?= $(WEB_DIR)/public
@@ -300,6 +314,79 @@ web-serve: web-pre-process $(HUGO)
 	@echo ">> serving documentation website"
 	@cd $(WEB_DIR) && $(HUGO) --config hugo.yaml -v server
 
+# Check https://github.com/coreos/prometheus-operator/blob/master/scripts/jsonnet/Dockerfile for the image.
+JSONNET_CONTAINER_CMD:=docker run --rm \
+		-u="$(shell id -u):$(shell id -g)" \
+		-v "$(shell go env GOCACHE):/.cache/go-build" \
+		-v "$(PWD):/go/src/github.com/thanos-io/thanos:Z" \
+		-w "/go/src/github.com/thanos-io/thanos" \
+		-e USER=deadbeef \
+		-e GO111MODULE=on \
+		quay.io/coreos/jsonnet-ci
+
+.PHONY: examples-in-container
+examples-in-container:
+	@echo ">> Compiling and generating thanos-mixin"
+	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) JSONNET_BUNDLER='/go/bin/jb' jsonnet-vendor
+	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) \
+		EMBEDMD='/go/bin/embedmd' \
+		JSONNET='/go/bin/jsonnet' \
+		JSONNET_BUNDLER='/go/bin/jb' \
+		PROMTOOL='/go/bin/promtool' \
+		GOJSONTOYAML='/go/bin/gojsontoyaml' \
+		GOLANGCILINT='/go/bin/golangci-lint' \
+		examples
+
+.PHONY: examples
+examples: jsonnet-format mixin/thanos/README.md examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards examples/tmp
+	$(EMBEDMD) -w examples/alerts/alerts.md
+	$(EMBEDMD) -w mixin/thanos/README.md
+
+.PHONY: examples/tmp
+examples/tmp:
+	-rm -rf examples/tmp/
+	-mkdir -p examples/tmp/
+	$(JSONNET) -J ${JSONNET_VENDOR_DIR} -m examples/tmp/ ${MIXIN_ROOT}/separated_alerts.jsonnet | xargs -I{} sh -c 'cat {} | $(GOJSONTOYAML) > {}.yaml; rm -f {}' -- {}
+
+.PHONY: examples/dashboards # to keep examples/dashboards/dashboards.md.
+examples/dashboards: $(JSONNET) ${MIXIN_ROOT}/mixin.libsonnet ${MIXIN_ROOT}/defaults.libsonnet ${MIXIN_ROOT}/dashboards/*
+	-rm -rf examples/dashboards/*.json
+	$(JSONNET) -J ${JSONNET_VENDOR_DIR} -m examples/dashboards ${MIXIN_ROOT}/dashboards.jsonnet
+
+examples/alerts/alerts.yaml: $(JSONNET) $(GOJSONTOYAML) ${MIXIN_ROOT}/mixin.libsonnet ${MIXIN_ROOT}/defaults.libsonnet ${MIXIN_ROOT}/alerts/*
+	$(JSONNET) ${MIXIN_ROOT}/alerts.jsonnet | $(GOJSONTOYAML) > $@
+
+examples/alerts/rules.yaml: $(JSONNET) $(GOJSONTOYAML) ${MIXIN_ROOT}/mixin.libsonnet ${MIXIN_ROOT}/defaults.libsonnet ${MIXIN_ROOT}/rules/*
+	$(JSONNET) ${MIXIN_ROOT}/rules.jsonnet | $(GOJSONTOYAML) > $@
+
+.PHONY: jsonnet-vendor
+jsonnet-vendor: $(JSONNET_BUNDLER) jsonnetfile.json jsonnetfile.lock.json
+	rm -rf ${JSONNET_VENDOR_DIR}
+	$(JSONNET_BUNDLER) install --jsonnetpkg-home="${JSONNET_VENDOR_DIR}"
+
+JSONNET_FMT := jsonnetfmt -n 2 --max-blank-lines 2 --string-style s --comment-style s
+
+.PHONY: jsonnet-format
+jsonnet-format:
+	find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
+		xargs -n 1 -- $(JSONNET_FMT) -i
+
+.PHONY: jsonnet-format-in-container
+jsonnet-format-in-container:
+	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) jsonnet-format
+
+.PHONY: example-rules-lint
+example-rules-lint: $(PROMTOOL) examples/alerts/alerts.yaml examples/alerts/rules.yaml
+	$(PROMTOOL) check rules examples/alerts/alerts.yaml examples/alerts/rules.yaml
+	$(PROMTOOL) test rules examples/alerts/tests.yaml
+
+.PHONY: examples-clean
+examples-clean:
+	rm -f examples/alerts/alerts.yaml
+	rm -f examples/alerts/rules.yaml
+	rm -f examples/dashboards/*.json
+	rm -f examples/tmp/*.yaml
+
 # non-phony targets
 $(EMBEDMD):
 	$(call fetch_go_bin_version,github.com/campoy/embedmd,$(EMBEDMD_VERSION))
@@ -343,3 +430,15 @@ $(PROTOC):
 	@echo ">> installing protoc@${PROTOC_VERSION}"
 	@mv -- "$(TMP_GOPATH)/bin/protoc" "$(GOBIN)/protoc-$(PROTOC_VERSION)"
 	@echo ">> produced $(GOBIN)/protoc-$(PROTOC_VERSION)"
+
+$(JSONNET):
+	$(call fetch_go_bin_version,github.com/google/go-jsonnet/cmd/jsonnet,$(JSONNET_VERSION))
+
+$(GOJSONTOYAML):
+	$(call fetch_go_bin_version,github.com/brancz/gojsontoyaml,$(GOJSONTOYAML_VERSION))
+
+$(JSONNET_BUNDLER):
+	$(call fetch_go_bin_version,github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb,$(JSONNET_BUNDLER_VERSION))
+
+$(PROMTOOL):
+	$(call fetch_go_bin_version,github.com/prometheus/prometheus/cmd/promtool,$(PROMTOOL_VERSION))

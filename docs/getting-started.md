@@ -91,8 +91,8 @@ If you want to add yourself to this list, let us know!
 
 ## Operating
 
-See up to date [jsonnet mixins](https://github.com/thanos-io/kube-thanos/tree/master/jsonnet/thanos-mixin)
-We also have example Grafana dashboards [here](/examples/grafana/monitoring.md) and some [alerts](/examples/alerts/alerts.md) to get you started.
+See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/master/jsonnet/thanos-mixin)
+We also have example Grafana dashboards [here](/examples/dashboards/dashboards.md) and some [alerts](/examples/alerts/alerts.md) to get you started.
 
 ## Talks
 
