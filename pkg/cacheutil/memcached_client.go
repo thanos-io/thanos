@@ -267,9 +267,16 @@ func (c *memcachedClient) getMultiBatched(keys []string) ([]map[string]*memcache
 		return []map[string]*memcache.Item{items}, nil
 	}
 
-	// Split input keys into batches and schedule a job for it.
-	results := make(chan *memcachedGetMultiResult)
+	// Calculate the number of expected results.
 	batchSize := c.config.MaxGetMultiBatchSize
+	numResults := len(keys) / batchSize
+	if len(keys)%batchSize != 0 {
+		numResults++
+	}
+
+	// Split input keys into batches and schedule a job for it.
+	results := make(chan *memcachedGetMultiResult, numResults)
+	defer close(results)
 
 	go func() {
 		for batchStart := 0; batchStart < len(keys); batchStart += batchSize {
@@ -285,12 +292,6 @@ func (c *memcachedClient) getMultiBatched(keys []string) ([]map[string]*memcache
 		}
 	}()
 
-	// Calculate the number of expected results.
-	numResults := len(keys) / batchSize
-	if len(keys)%batchSize != 0 {
-		numResults++
-	}
-
 	// Wait for all batch results. In case of error, we keep
 	// track of the last error occurred.
 	items := make([]map[string]*memcache.Item, 0, numResults)
@@ -305,7 +306,6 @@ func (c *memcachedClient) getMultiBatched(keys []string) ([]map[string]*memcache
 
 		items = append(items, result.items)
 	}
-	close(results)
 
 	return items, lastErr
 }
