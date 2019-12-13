@@ -136,12 +136,13 @@ type memcachedClient struct {
 	stop chan struct{}
 
 	// Channel used to enqueue async operations.
-	asyncQueue   chan func()
-	asyncWorkers sync.WaitGroup
+	asyncQueue chan func()
 
 	// Channel used to enqueue get multi operations.
-	getMultiQueue   chan *memcachedGetMultiBatch
-	getMultiWorkers sync.WaitGroup
+	getMultiQueue chan *memcachedGetMultiBatch
+
+	// Wait group used to wait all workers on stopping.
+	workers sync.WaitGroup
 }
 
 type memcachedGetMultiBatch struct {
@@ -195,14 +196,14 @@ func newMemcachedClient(logger log.Logger, client memcachedClientBackend, select
 
 	// Start a number of goroutines - processing async operations - equal
 	// to the max concurrency we have.
-	c.asyncWorkers.Add(c.config.MaxAsyncConcurrency)
+	c.workers.Add(c.config.MaxAsyncConcurrency)
 	for i := 0; i < c.config.MaxAsyncConcurrency; i++ {
 		go c.asyncQueueProcessLoop()
 	}
 
 	// Start a number of goroutines - processing get multi batch operations - equal
 	// to the max concurrency we have.
-	c.getMultiWorkers.Add(c.config.MaxGetMultiBatchConcurrency)
+	c.workers.Add(c.config.MaxGetMultiBatchConcurrency)
 	for i := 0; i < c.config.MaxGetMultiBatchConcurrency; i++ {
 		go c.getMultiQueueProcessLoop()
 	}
@@ -214,8 +215,7 @@ func (c *memcachedClient) Stop() {
 	close(c.stop)
 
 	// Wait until all workers have terminated.
-	c.asyncWorkers.Wait()
-	c.getMultiWorkers.Wait()
+	c.workers.Wait()
 }
 
 func (c *memcachedClient) SetAsync(key string, value []byte, ttl time.Duration) error {
@@ -320,7 +320,7 @@ func (c *memcachedClient) enqueueAsync(op func()) error {
 }
 
 func (c *memcachedClient) asyncQueueProcessLoop() {
-	defer c.asyncWorkers.Done()
+	defer c.workers.Done()
 
 	for {
 		select {
@@ -333,7 +333,7 @@ func (c *memcachedClient) asyncQueueProcessLoop() {
 }
 
 func (c *memcachedClient) getMultiQueueProcessLoop() {
-	defer c.getMultiWorkers.Done()
+	defer c.workers.Done()
 
 	for {
 		select {
