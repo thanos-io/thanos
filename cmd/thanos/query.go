@@ -272,9 +272,6 @@ func runQuery(
 				for _, addr := range dnsProvider.Addresses() {
 					specs = append(specs, query.NewGRPCStoreSpec(addr))
 				}
-
-				specs = removeDuplicateStoreSpecs(logger, duplicatedStores, specs)
-
 				return specs
 			},
 			dialOpts,
@@ -421,21 +418,4 @@ func runQuery(
 
 	level.Info(logger).Log("msg", "starting query node")
 	return nil
-}
-
-func removeDuplicateStoreSpecs(logger log.Logger, duplicatedStores prometheus.Counter, specs []query.StoreSpec) []query.StoreSpec {
-	set := make(map[string]query.StoreSpec)
-	for _, spec := range specs {
-		addr := spec.Addr()
-		if _, ok := set[addr]; ok {
-			level.Warn(logger).Log("msg", "Duplicate store address is provided - %v", addr)
-			duplicatedStores.Inc()
-		}
-		set[addr] = spec
-	}
-	deduplicated := make([]query.StoreSpec, 0, len(set))
-	for _, value := range set {
-		deduplicated = append(deduplicated, value)
-	}
-	return deduplicated
 }

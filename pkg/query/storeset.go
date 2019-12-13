@@ -166,6 +166,8 @@ type StoreSet struct {
 	// Map of statuses used only by UI.
 	storeStatuses         map[string]*StoreStatus
 	unhealthyStoreTimeout time.Duration
+
+	duplicatedStores prometheus.Counter
 }
 
 // NewStoreSet returns a new set of stores from cluster peers and statically configured ones.
@@ -177,8 +179,13 @@ func NewStoreSet(
 	unhealthyStoreTimeout time.Duration,
 ) *StoreSet {
 	storesMetric := newStoreSetNodeCollector()
+	duplicatedStores := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_query_duplicated_store_address",
+		Help: "The number of times a duplicated store addresses is detected from the different configs in query",
+	})
 	if reg != nil {
 		reg.MustRegister(storesMetric)
+		reg.MustRegister(duplicatedStores)
 	}
 
 	if logger == nil {
@@ -197,6 +204,7 @@ func NewStoreSet(
 		stores:                make(map[string]*storeRef),
 		storeStatuses:         make(map[string]*StoreStatus),
 		unhealthyStoreTimeout: unhealthyStoreTimeout,
+		duplicatedStores:      duplicatedStores,
 	}
 	return ss
 }
@@ -393,6 +401,7 @@ func (s *StoreSet) getHealthyStores(ctx context.Context, stores map[string]*stor
 	for _, storeSpec := range s.storeSpecs() {
 		if _, ok := unique[storeSpec.Addr()]; ok {
 			level.Warn(s.logger).Log("msg", "duplicated address in store nodes", "address", storeSpec.Addr())
+			s.duplicatedStores.Inc()
 			continue
 		}
 		unique[storeSpec.Addr()] = struct{}{}
