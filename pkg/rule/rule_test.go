@@ -63,15 +63,19 @@ groups:
 		Appendable: nopAppendable{},
 	}
 	thanosRuleMgr := NewManager(dir)
-	ruleMgr := rules.NewManager(&opts)
-	thanosRuleMgr.SetRuleManager(storepb.PartialResponseStrategy_ABORT, ruleMgr)
-	thanosRuleMgr.SetRuleManager(storepb.PartialResponseStrategy_WARN, ruleMgr)
+	//init abort manager.
+	ruleMgrAbort := rules.NewManager(&opts)
+	ruleMgrAbort.Run()
+	defer ruleMgrAbort.Stop()
+	//init warn manager.
+	ruleMgrWarn := rules.NewManager(&opts)
+	ruleMgrWarn.Run()
+	defer ruleMgrWarn.Stop()
+
+	thanosRuleMgr.SetRuleManager(storepb.PartialResponseStrategy_ABORT, ruleMgrAbort)
+	thanosRuleMgr.SetRuleManager(storepb.PartialResponseStrategy_WARN, ruleMgrWarn)
 
 	testutil.Ok(t, thanosRuleMgr.Update(10*time.Second, []string{filepath.Join(dir, "rule.yaml")}))
-
-	ruleMgr.Run()
-	defer ruleMgr.Stop()
-
 	select {
 	case <-time.After(2 * time.Minute):
 		t.Fatal("timeout while waiting on rule manager query evaluation")
