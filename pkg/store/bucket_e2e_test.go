@@ -363,7 +363,7 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 }
 
 func TestBucketStore_e2e(t *testing.T) {
-	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
+	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
@@ -411,7 +411,7 @@ func (g naivePartitioner) Partition(length int, rng func(int) (uint64, uint64)) 
 // This tests if our, sometimes concurrent, fetches for different parts works.
 // Regression test against: https://github.com/thanos-io/thanos/issues/829.
 func TestBucketStore_ManyParts_e2e(t *testing.T) {
-	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
+	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
