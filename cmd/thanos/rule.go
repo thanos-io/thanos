@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,7 +12,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -33,6 +31,7 @@ import (
 	"github.com/prometheus/prometheus/storage/tsdb"
 	"github.com/prometheus/prometheus/util/strutil"
 	"github.com/thanos-io/thanos/pkg/alert"
+	"github.com/thanos-io/thanos/pkg/alertmanager"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
@@ -288,7 +287,7 @@ func runRule(
 
 	// Run rule evaluation and alert notifications.
 	var (
-		alertmgrs = newAlertmanagerSet(logger, alertmgrURLs, dns.ResolverType(dnsSDResolver))
+		alertmgrs = alertmanager.NewAlertmanagerSet(logger, alertmgrURLs, dns.ResolverType(dnsSDResolver))
 		alertQ    = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(lset), alertExcludeLabels)
 		ruleMgr   = thanosrule.NewManager(dataDir)
 	)
@@ -353,7 +352,7 @@ func runRule(
 	}
 	{
 		// TODO(bwplotka): https://github.com/thanos-io/thanos/issues/660.
-		sdr := alert.NewSender(logger, reg, alertmgrs.get, nil, alertmgrsTimeout)
+		sdr := alert.NewSender(logger, reg, alertmgrs.Get, nil, alertmgrsTimeout)
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {
@@ -375,7 +374,7 @@ func runRule(
 
 		g.Add(func() error {
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
-				if err := alertmgrs.update(ctx); err != nil {
+				if err := alertmgrs.Update(ctx); err != nil {
 					level.Error(logger).Log("msg", "refreshing alertmanagers failed", "err", err)
 					alertMngrAddrResolutionErrors.Inc()
 				}
@@ -612,90 +611,6 @@ func runRule(
 	}
 
 	level.Info(logger).Log("msg", "starting rule node")
-	return nil
-}
-
-type alertmanagerSet struct {
-	resolver dns.Resolver
-	addrs    []string
-	mtx      sync.Mutex
-	current  []*url.URL
-}
-
-func newAlertmanagerSet(logger log.Logger, addrs []string, dnsSDResolver dns.ResolverType) *alertmanagerSet {
-	return &alertmanagerSet{
-		resolver: dns.NewResolver(dnsSDResolver.ToResolver(logger)),
-		addrs:    addrs,
-	}
-}
-
-func (s *alertmanagerSet) get() []*url.URL {
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
-	return s.current
-}
-
-const defaultAlertmanagerPort = 9093
-
-func parseAlertmanagerAddress(addr string) (qType dns.QType, parsedUrl *url.URL, err error) {
-	qType = ""
-	parsedUrl, err = url.Parse(addr)
-	if err != nil {
-		return qType, nil, err
-	}
-	// The Scheme might contain DNS resolver type separated by + so we split it a part.
-	if schemeParts := strings.Split(parsedUrl.Scheme, "+"); len(schemeParts) > 1 {
-		parsedUrl.Scheme = schemeParts[len(schemeParts)-1]
-		qType = dns.QType(strings.Join(schemeParts[:len(schemeParts)-1], "+"))
-	}
-	return qType, parsedUrl, err
-}
-
-func (s *alertmanagerSet) update(ctx context.Context) error {
-	var result []*url.URL
-	for _, addr := range s.addrs {
-		var (
-			qtype          dns.QType
-			resolvedDomain []string
-		)
-
-		qtype, u, err := parseAlertmanagerAddress(addr)
-		if err != nil {
-			return errors.Wrapf(err, "parse URL %q", addr)
-		}
-
-		// Get only the host and resolve it if needed.
-		host := u.Host
-		if qtype != "" {
-			if qtype == dns.A {
-				_, _, err = net.SplitHostPort(host)
-				if err != nil {
-					// The host could be missing a port. Append the defaultAlertmanagerPort.
-					host = host + ":" + strconv.Itoa(defaultAlertmanagerPort)
-				}
-			}
-			resolvedDomain, err = s.resolver.Resolve(ctx, host, qtype)
-			if err != nil {
-				return errors.Wrap(err, "alertmanager resolve")
-			}
-		} else {
-			resolvedDomain = []string{host}
-		}
-
-		for _, resolved := range resolvedDomain {
-			result = append(result, &url.URL{
-				Scheme: u.Scheme,
-				Host:   resolved,
-				Path:   u.Path,
-				User:   u.User,
-			})
-		}
-	}
-
-	s.mtx.Lock()
-	s.current = result
-	s.mtx.Unlock()
-
 	return nil
 }
 
