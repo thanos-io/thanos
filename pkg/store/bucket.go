@@ -22,7 +22,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
@@ -190,7 +189,7 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 	return &m
 }
 
-// FilterConfig is a configuration, which Store uses for filtering metrics.
+// FilterConfig is a configuration, which Store uses for filtering metrics based on time.
 type FilterConfig struct {
 	MinTime, MaxTime model.TimeOrDurationValue
 }
@@ -201,6 +200,7 @@ type BucketStore struct {
 	logger     log.Logger
 	metrics    *bucketStoreMetrics
 	bucket     objstore.BucketReader
+	fetcher    block.MetadataFetcher
 	dir        string
 	indexCache storecache.IndexCache
 	chunkPool  *pool.BytesPool
@@ -222,9 +222,7 @@ type BucketStore struct {
 	samplesLimiter *Limiter
 	partitioner    partitioner
 
-	filterConfig  *FilterConfig
-	relabelConfig []*relabel.Config
-
+	filterConfig             *FilterConfig
 	advLabelSets             []storepb.LabelSet
 	enableCompatibilityLabel bool
 }
@@ -235,6 +233,7 @@ func NewBucketStore(
 	logger log.Logger,
 	reg prometheus.Registerer,
 	bucket objstore.BucketReader,
+	fetcher block.MetadataFetcher,
 	dir string,
 	indexCache storecache.IndexCache,
 	maxChunkPoolBytes uint64,
@@ -242,8 +241,7 @@ func NewBucketStore(
 	maxConcurrent int,
 	debugLogging bool,
 	blockSyncConcurrency int,
-	filterConf *FilterConfig,
-	relabelConfig []*relabel.Config,
+	filterConfig *FilterConfig,
 	enableCompatibilityLabel bool,
 ) (*BucketStore, error) {
 	if logger == nil {
@@ -265,6 +263,7 @@ func NewBucketStore(
 	s := &BucketStore{
 		logger:               logger,
 		bucket:               bucket,
+		fetcher:              fetcher,
 		dir:                  dir,
 		indexCache:           indexCache,
 		chunkPool:            chunkPool,
@@ -272,14 +271,13 @@ func NewBucketStore(
 		blockSets:            map[uint64]*bucketBlockSet{},
 		debugLogging:         debugLogging,
 		blockSyncConcurrency: blockSyncConcurrency,
+		filterConfig:         filterConfig,
 		queryGate: gate.NewGate(
 			maxConcurrent,
 			extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg),
 		),
 		samplesLimiter:           NewLimiter(maxSampleCount, metrics.queriesDropped),
 		partitioner:              gapBasedPartitioner{maxGapSize: maxGapSize},
-		filterConfig:             filterConf,
-		relabelConfig:            relabelConfig,
 		enableCompatibilityLabel: enableCompatibilityLabel,
 	}
 	s.metrics = metrics
@@ -310,6 +308,12 @@ func (s *BucketStore) Close() (err error) {
 // SyncBlocks synchronizes the stores state with the Bucket bucket.
 // It will reuse disk space as persistent cache based on s.dir param.
 func (s *BucketStore) SyncBlocks(ctx context.Context) error {
+	metas, _, metaFetchErr := s.fetcher.Fetch(ctx)
+	// For partial view allow adding new blocks at least.
+	if metaFetchErr != nil && metas == nil {
+		return metaFetchErr
+	}
+
 	var wg sync.WaitGroup
 	blockc := make(chan *metadata.Meta)
 
@@ -318,7 +322,6 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 		go func() {
 			for meta := range blockc {
 				if err := s.addBlock(ctx, meta); err != nil {
-					level.Warn(s.logger).Log("msg", "loading block failed", "id", meta.ULID, "err", err)
 					continue
 				}
 			}
@@ -326,65 +329,33 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 		}()
 	}
 
-	allIDs := map[ulid.ULID]struct{}{}
-
-	err := s.bucket.Iter(ctx, "", func(name string) error {
-		// Strip trailing slash indicating a directory.
-		id, err := ulid.Parse(name[:len(name)-1])
-		if err != nil {
-			return nil
-		}
-
-		bdir := path.Join(s.dir, id.String())
-		meta, err := loadMeta(ctx, s.logger, s.bucket, bdir, id)
-		if err != nil {
-			return errors.Wrap(err, "load meta")
-		}
-
-		inRange, err := s.isBlockInMinMaxRange(ctx, meta)
-		if err != nil {
-			level.Warn(s.logger).Log("msg", "error parsing block range", "block", id, "err", err)
-			return os.RemoveAll(bdir)
-		}
-
-		if !inRange {
-			return os.RemoveAll(bdir)
-		}
-
-		// Check for block labels by relabeling.
-		// If output is empty, the block will be dropped.
-		if processedLabels := relabel.Process(labels.FromMap(meta.Thanos.Labels), s.relabelConfig...); processedLabels == nil {
-			level.Debug(s.logger).Log("msg", "ignoring block (drop in relabeling)", "block", id)
-			return os.RemoveAll(bdir)
-		}
-
-		allIDs[id] = struct{}{}
-
+	for id, meta := range metas {
 		if b := s.getBlock(id); b != nil {
-			return nil
+			continue
 		}
 		select {
 		case <-ctx.Done():
 		case blockc <- meta:
 		}
-		return nil
-	})
+	}
 
 	close(blockc)
 	wg.Wait()
 
-	if err != nil {
-		return errors.Wrap(err, "iter")
+	if metaFetchErr != nil {
+		return metaFetchErr
 	}
+
 	// Drop all blocks that are no longer present in the bucket.
 	for id := range s.blocks {
-		if _, ok := allIDs[id]; ok {
+		if _, ok := metas[id]; ok {
 			continue
 		}
 		if err := s.removeBlock(id); err != nil {
-			level.Warn(s.logger).Log("msg", "drop outdated block", "block", id, "err", err)
+			level.Warn(s.logger).Log("msg", "drop outdated block failed", "block", id, "err", err)
 			s.metrics.blockDropFailures.Inc()
 		}
+		level.Debug(s.logger).Log("msg", "dropped outdated block", "block", id)
 		s.metrics.blockDrops.Inc()
 	}
 
@@ -436,25 +407,6 @@ func (s *BucketStore) InitialSync(ctx context.Context) error {
 	return nil
 }
 
-func (s *BucketStore) numBlocks() int {
-	s.mtx.RLock()
-	defer s.mtx.RUnlock()
-	return len(s.blocks)
-}
-
-func (s *BucketStore) isBlockInMinMaxRange(ctx context.Context, meta *metadata.Meta) (bool, error) {
-	// We check for blocks in configured minTime, maxTime range.
-	switch {
-	case meta.MaxTime <= s.filterConfig.MinTime.PrometheusTimestamp():
-		return false, nil
-
-	case meta.MinTime >= s.filterConfig.MaxTime.PrometheusTimestamp():
-		return false, nil
-	}
-
-	return true, nil
-}
-
 func (s *BucketStore) getBlock(id ulid.ULID) *bucketBlock {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
@@ -463,13 +415,22 @@ func (s *BucketStore) getBlock(id ulid.ULID) *bucketBlock {
 
 func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err error) {
 	dir := filepath.Join(s.dir, meta.ULID.String())
+	start := time.Now()
 
+	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+		return errors.Wrap(err, "create dir")
+	}
+
+	level.Debug(s.logger).Log("msg", "loading new block", "id", meta.ULID)
 	defer func() {
 		if err != nil {
 			s.metrics.blockLoadFailures.Inc()
 			if err2 := os.RemoveAll(dir); err2 != nil {
 				level.Warn(s.logger).Log("msg", "failed to remove block we cannot load", "err", err2)
 			}
+			level.Warn(s.logger).Log("msg", "loading block failed", "elapsed", time.Since(start), "id", meta.ULID, "err", err)
+		} else {
+			level.Debug(s.logger).Log("msg", "loaded block", "elapsed", time.Since(start), "id", meta.ULID)
 		}
 	}()
 	s.metrics.blockLoads.Inc()
@@ -1229,31 +1190,6 @@ func (b *bucketBlock) indexFilename() string {
 
 func (b *bucketBlock) indexCacheFilename() string {
 	return path.Join(b.meta.ULID.String(), block.IndexCacheFilename)
-}
-
-func loadMeta(ctx context.Context, logger log.Logger, bkt objstore.BucketReader, dir string, id ulid.ULID) (*metadata.Meta, error) {
-	// If we haven't seen the block before or it is missing the meta.json, download it.
-	if _, err := os.Stat(path.Join(dir, block.MetaFilename)); os.IsNotExist(err) {
-		if err := os.MkdirAll(dir, 0777); err != nil {
-			return nil, errors.Wrap(err, "create dir")
-		}
-		src := path.Join(id.String(), block.MetaFilename)
-
-		if err := objstore.DownloadFile(ctx, logger, bkt, src, dir); err != nil {
-			if bkt.IsObjNotFoundErr(errors.Cause(err)) {
-				level.Debug(logger).Log("msg", "meta file wasn't found. Block not ready or being deleted.", "block", id.String())
-			}
-			return nil, errors.Wrap(err, "download meta.json")
-		}
-	} else if err != nil {
-		return nil, err
-	}
-	meta, err := metadata.Read(dir)
-	if err != nil {
-		return nil, errors.Wrap(err, "read meta.json")
-	}
-
-	return meta, err
 }
 
 func (b *bucketBlock) loadIndexCacheFile(ctx context.Context) (err error) {

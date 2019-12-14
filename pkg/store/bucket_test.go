@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"math"
@@ -19,14 +20,11 @@ import (
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
 	"github.com/oklog/ulid"
-	prommodel "github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
-	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
-	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/inmem"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -439,6 +437,7 @@ func TestBucketStore_Info(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		dir,
 		noopCache{},
 		2e5,
@@ -446,8 +445,7 @@ func TestBucketStore_Info(t *testing.T) {
 		0,
 		false,
 		20,
-		filterConf,
-		emptyRelabelConfig,
+		allowAllFilterConf,
 		true,
 	)
 	testutil.Ok(t, err)
@@ -460,67 +458,6 @@ func TestBucketStore_Info(t *testing.T) {
 	testutil.Equals(t, int64(math.MinInt64), resp.MaxTime)
 	testutil.Equals(t, []storepb.LabelSet(nil), resp.LabelSets)
 	testutil.Equals(t, []storepb.Label(nil), resp.Labels)
-}
-
-func TestBucketStore_isBlockInMinMaxRange(t *testing.T) {
-	ctx := context.TODO()
-	dir, err := ioutil.TempDir("", "block-min-max-test")
-	testutil.Ok(t, err)
-
-	series := []labels.Labels{labels.FromStrings("a", "1", "b", "1")}
-	extLset := labels.FromStrings("ext1", "value1")
-
-	// Create a block in range [-2w, -1w].
-	id1, err := testutil.CreateBlock(ctx, dir, series, 10,
-		timestamp.FromTime(time.Now().Add(-14*24*time.Hour)),
-		timestamp.FromTime(time.Now().Add(-7*24*time.Hour)),
-		extLset, 0)
-	testutil.Ok(t, err)
-
-	// Create a block in range [-1w, 0w].
-	id2, err := testutil.CreateBlock(ctx, dir, series, 10,
-		timestamp.FromTime(time.Now().Add(-7*24*time.Hour)),
-		timestamp.FromTime(time.Now().Add(-0*24*time.Hour)),
-		extLset, 0)
-	testutil.Ok(t, err)
-
-	// Create a block in range [+1w, +2w].
-	id3, err := testutil.CreateBlock(ctx, dir, series, 10,
-		timestamp.FromTime(time.Now().Add(7*24*time.Hour)),
-		timestamp.FromTime(time.Now().Add(14*24*time.Hour)),
-		extLset, 0)
-	testutil.Ok(t, err)
-
-	meta1, err := metadata.Read(path.Join(dir, id1.String()))
-	testutil.Ok(t, err)
-	meta2, err := metadata.Read(path.Join(dir, id2.String()))
-	testutil.Ok(t, err)
-	meta3, err := metadata.Read(path.Join(dir, id3.String()))
-	testutil.Ok(t, err)
-
-	// Run actual test.
-	hourBeforeDur := prommodel.Duration(-1 * time.Hour)
-	hourBefore := model.TimeOrDurationValue{Dur: &hourBeforeDur}
-
-	// bucketStore accepts blocks in range [0, now-1h].
-	bucketStore, err := NewBucketStore(nil, nil, inmem.NewBucket(), dir, noopCache{}, 0, 0, 20, false, 20,
-		&FilterConfig{
-			MinTime: minTimeDuration,
-			MaxTime: hourBefore,
-		}, emptyRelabelConfig, true)
-	testutil.Ok(t, err)
-
-	inRange, err := bucketStore.isBlockInMinMaxRange(context.TODO(), meta1)
-	testutil.Ok(t, err)
-	testutil.Equals(t, true, inRange)
-
-	inRange, err = bucketStore.isBlockInMinMaxRange(context.TODO(), meta2)
-	testutil.Ok(t, err)
-	testutil.Equals(t, true, inRange)
-
-	inRange, err = bucketStore.isBlockInMinMaxRange(context.TODO(), meta3)
-	testutil.Ok(t, err)
-	testutil.Equals(t, false, inRange)
 }
 
 type recorder struct {
@@ -731,11 +668,29 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 			testutil.Ok(t, yaml.Unmarshal([]byte(sc.relabel), &relabelConf))
 
 			rec := &recorder{Bucket: bkt}
-			bucketStore, err := NewBucketStore(logger, nil, rec, dir, noopCache{}, 0, 0, 99, false, 20,
-				filterConf, relabelConf, true)
+			metaFetcher, err := block.NewMetaFetcher(logger, 20, bkt, dir, nil,
+				block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime).Filter,
+				block.NewLabelShardedMetaFilter(relabelConf).Filter,
+			)
 			testutil.Ok(t, err)
 
-			testutil.Ok(t, bucketStore.SyncBlocks(context.Background()))
+			bucketStore, err := NewBucketStore(
+				logger,
+				nil,
+				rec,
+				metaFetcher,
+				dir,
+				noopCache{},
+				0,
+				0,
+				99,
+				false,
+				20,
+				allowAllFilterConf,
+				true)
+			testutil.Ok(t, err)
+
+			testutil.Ok(t, bucketStore.InitialSync(context.Background()))
 
 			// Check "stored" blocks.
 			ids := make([]ulid.ULID, 0, len(bucketStore.blocks))
@@ -761,6 +716,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 			// Sort records. We load blocks concurrently so operations might be not ordered.
 			sort.Strings(rec.touched)
 
+			fmt.Println(cached, sc.expectedIDs, all, rec.touched)
 			if reuseDisk != "" {
 				testutil.Equals(t, expectedTouchedBlockOps(all, sc.expectedIDs, cached), rec.touched)
 				cached = sc.expectedIDs
@@ -794,7 +750,6 @@ func expectedTouchedBlockOps(all []ulid.ULID, expected []ulid.ULID, cached []uli
 			}
 		}
 
-		ops = append(ops, path.Join(id.String(), block.MetaFilename))
 		if found {
 			ops = append(ops,
 				path.Join(id.String(), block.IndexCacheFilename),

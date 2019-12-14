@@ -11,8 +11,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/relabel"
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
@@ -25,6 +27,8 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 	yaml "gopkg.in/yaml.v2"
 )
+
+const fetcherConcurrency = 32
 
 // registerStore registers a store command.
 func registerStore(m map[string]setupFunc, app *kingpin.Application) {
@@ -47,7 +51,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 		Default("2GB").Bytes()
 
 	maxSampleCount := cmd.Flag("store.grpc.series-sample-limit",
-		"Maximum amount of samples returned via a single Series call. 0 means no limit. NOTE: for efficiency we take 120 as the number of samples in chunk (it cannot be bigger than that), so the actual number of samples might be lower, even though the maximum could be hit.").
+		"Maximum amount of samples returned via a single Series call. 0 means no limit. NOTE: For efficiency we take 120 as the number of samples in chunk (it cannot be bigger than that), so the actual number of samples might be lower, even though the maximum could be hit.").
 		Default("0").Uint()
 
 	maxConcurrent := cmd.Flag("store.grpc.series-max-concurrency", "Maximum number of concurrent Series calls.").Default("20").Int()
@@ -57,7 +61,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 	syncInterval := cmd.Flag("sync-block-duration", "Repeat interval for syncing the blocks between local and remote view.").
 		Default("3m").Duration()
 
-	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing blocks from object storage.").
+	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when constructing index-cache.json blocks from object storage.").
 		Default("20").Int()
 
 	minTime := model.TimeOrDuration(cmd.Flag("min-time", "Start of time range limit to serve. Thanos Store will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
@@ -128,7 +132,7 @@ func runStore(
 	indexCacheSizeBytes uint64,
 	chunkPoolSizeBytes uint64,
 	maxSampleCount uint64,
-	maxConcurrent int,
+	maxConcurrency int,
 	component component.Component,
 	verbose bool,
 	syncInterval time.Duration,
@@ -202,19 +206,27 @@ func runStore(
 		return errors.Wrap(err, "create index cache")
 	}
 
+	metaFetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
+		block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime).Filter,
+		block.NewLabelShardedMetaFilter(relabelConfig).Filter,
+	)
+	if err != nil {
+		return errors.Wrap(err, "meta fetcher")
+	}
+
 	bs, err := store.NewBucketStore(
 		logger,
 		reg,
 		bkt,
+		metaFetcher,
 		dataDir,
 		indexCache,
 		chunkPoolSizeBytes,
 		maxSampleCount,
-		maxConcurrent,
+		maxConcurrency,
 		verbose,
 		blockSyncConcurrency,
 		filterConf,
-		relabelConfig,
 		advertiseCompatibilityLabel,
 	)
 	if err != nil {
