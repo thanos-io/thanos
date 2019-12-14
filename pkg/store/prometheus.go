@@ -21,6 +21,7 @@ import (
 	"github.com/golang/snappy"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/version"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage/remote"
@@ -40,6 +41,8 @@ var statusToCode = map[int]codes.Code{
 	http.StatusServiceUnavailable:  codes.Unavailable,
 	http.StatusInternalServerError: codes.Internal,
 }
+
+var userAgent = fmt.Sprintf("Thanos/%s", version.Version)
 
 // PrometheusStore implements the store node API on top of the Prometheus remote read API.
 type PrometheusStore struct {
@@ -399,6 +402,7 @@ func (p *PrometheusStore) startPromSeries(ctx context.Context, q *prompb.Query) 
 	}
 	preq.Header.Add("Content-Encoding", "snappy")
 	preq.Header.Set("Content-Type", "application/x-stream-protobuf")
+	preq.Header.Set("User-Agent", userAgent)
 	spanReqDo, ctx := tracing.StartSpan(ctx, "query_prometheus_request")
 	preq = preq.WithContext(ctx)
 	presp, err := p.client.Do(preq)
@@ -507,6 +511,7 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesR
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	req.Header.Set("User-Agent", userAgent)
 
 	span, ctx := tracing.StartSpan(ctx, "/prom_label_names HTTP[client]")
 	defer span.Finish()
@@ -567,6 +572,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	req.Header.Set("User-Agent", userAgent)
 
 	span, ctx := tracing.StartSpan(ctx, "/prom_label_values HTTP[client]")
 	defer span.Finish()
