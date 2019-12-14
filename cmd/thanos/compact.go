@@ -13,6 +13,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
+	"github.com/oklog/ulid"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -23,12 +24,18 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"gopkg.in/alecthomas/kingpin.v2"
+)
+
+const (
+	metricIndexGenerateName = "thanos_compact_generated_index_total"
+	metricIndexGenerateHelp = "Total number of generated indexes."
 )
 
 var (
@@ -85,7 +92,7 @@ func registerCompact(m map[string]setupFunc, app *kingpin.Application) {
 
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", true)
 
-	consistencyDelay := modelDuration(cmd.Flag("consistency-delay", fmt.Sprintf("Minimum age of fresh (non-compacted) blocks before they are being processed. Malformed blocks older than the maximum of consistency-delay and %s will be removed.", compact.MinimumAgeForRemoval)).
+	consistencyDelay := modelDuration(cmd.Flag("consistency-delay", fmt.Sprintf("Minimum age of fresh (non-compacted) blocks before they are being processed. Malformed blocks older than the maximum of consistency-delay and %v will be removed.", compact.PartialUploadThresholdAge)).
 		Default("30m"))
 
 	retentionRaw := modelDuration(cmd.Flag("retention.resolution-raw", "How long to retain raw samples in bucket. 0d - disables this retention").Default("0d"))
@@ -162,21 +169,28 @@ func runCompact(
 ) error {
 	halted := prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_compactor_halted",
-		Help: "Set to 1 if the compactor halted due to an unexpected error",
+		Help: "Set to 1 if the compactor halted due to an unexpected error.",
 	})
+	halted.Set(0)
 	retried := prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compactor_retries_total",
-		Help: "Total number of retries after retriable compactor error",
+		Help: "Total number of retries after retriable compactor error.",
 	})
 	iterations := prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "thanos_compactor_iterations_total",
-		Help: "Total number of iterations that were executed successfully",
+		Help: "Total number of iterations that were executed successfully.",
 	})
-	halted.Set(0)
-
-	reg.MustRegister(halted)
-	reg.MustRegister(retried)
-	reg.MustRegister(iterations)
+	consistencyDelayMetric := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "thanos_consistency_delay_seconds",
+		Help: "Configured consistency delay in seconds.",
+	}, func() float64 {
+		return consistencyDelay.Seconds()
+	})
+	partialUploadDeleteAttempts := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_compactor_aborted_partial_uploads_deletion_attempts_total",
+		Help: "Total number of started deletions of blocks that are assumed aborted and only partially uploaded.",
+	})
+	reg.MustRegister(halted, retried, iterations, consistencyDelayMetric, partialUploadDeleteAttempts)
 
 	downsampleMetrics := newDownsampleMetrics(reg)
 
@@ -225,8 +239,15 @@ func runCompact(
 		}
 	}()
 
-	sy, err := compact.NewSyncer(logger, reg, bkt, consistencyDelay,
-		blockSyncConcurrency, acceptMalformedIndex, false, relabelConfig)
+	metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg),
+		block.NewLabelShardedMetaFilter(relabelConfig).Filter,
+		(&consistencyDelayMetaFilter{logger: logger, consistencyDelay: consistencyDelay}).Filter,
+	)
+	if err != nil {
+		return errors.Wrap(err, "create meta fetcher")
+	}
+
+	sy, err := compact.NewSyncer(logger, reg, bkt, metaFetcher, blockSyncConcurrency, acceptMalformedIndex, false)
 	if err != nil {
 		return errors.Wrap(err, "create syncer")
 	}
@@ -276,26 +297,24 @@ func runCompact(
 		level.Info(logger).Log("msg", "retention policy of 1 hour aggregated samples is enabled", "duration", retentionByResolution[compact.ResolutionLevel1h])
 	}
 
-	f := func() error {
+	compactMainFn := func() error {
 		if err := compactor.Compact(ctx); err != nil {
 			return errors.Wrap(err, "compaction failed")
 		}
-		level.Info(logger).Log("msg", "compaction iterations done")
 
-		// TODO(bplotka): Remove "disableDownsampling" once https://github.com/thanos-io/thanos/issues/297 is fixed.
 		if !disableDownsampling {
 			// After all compactions are done, work down the downsampling backlog.
 			// We run two passes of this to ensure that the 1h downsampling is generated
 			// for 5m downsamplings created in the first run.
 			level.Info(logger).Log("msg", "start first pass of downsampling")
 
-			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, downsamplingDir); err != nil {
+			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, metaFetcher, downsamplingDir); err != nil {
 				return errors.Wrap(err, "first pass of downsampling failed")
 			}
 
 			level.Info(logger).Log("msg", "start second pass of downsampling")
 
-			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, downsamplingDir); err != nil {
+			if err := downsampleBucket(ctx, logger, downsampleMetrics, bkt, metaFetcher, downsamplingDir); err != nil {
 				return errors.Wrap(err, "second pass of downsampling failed")
 			}
 			level.Info(logger).Log("msg", "downsampling iterations done")
@@ -303,9 +322,11 @@ func runCompact(
 			level.Warn(logger).Log("msg", "downsampling was explicitly disabled")
 		}
 
-		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, retentionByResolution); err != nil {
+		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, metaFetcher, retentionByResolution); err != nil {
 			return errors.Wrap(err, fmt.Sprintf("retention failed"))
 		}
+
+		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, metaFetcher, bkt, partialUploadDeleteAttempts)
 		return nil
 	}
 
@@ -314,18 +335,18 @@ func runCompact(
 
 		// Generate index file.
 		if generateMissingIndexCacheFiles {
-			if err := genMissingIndexCacheFiles(ctx, logger, reg, bkt, indexCacheDir); err != nil {
+			if err := genMissingIndexCacheFiles(ctx, logger, reg, bkt, metaFetcher, indexCacheDir); err != nil {
 				return err
 			}
 		}
 
 		if !wait {
-			return f()
+			return compactMainFn()
 		}
 
 		// --wait=true is specified.
 		return runutil.Repeat(5*time.Minute, ctx.Done(), func() error {
-			err := f()
+			err := compactMainFn()
 			if err == nil {
 				iterations.Inc()
 				return nil
@@ -363,13 +384,27 @@ func runCompact(
 	return nil
 }
 
-const (
-	metricIndexGenerateName = "thanos_compact_generated_index_total"
-	metricIndexGenerateHelp = "Total number of generated indexes."
-)
+type consistencyDelayMetaFilter struct {
+	logger           log.Logger
+	consistencyDelay time.Duration
+}
+
+func (f *consistencyDelayMetaFilter) Filter(metas map[ulid.ULID]*metadata.Meta, synced block.GaugeLabeled, _ bool) {
+	for id, meta := range metas {
+		if ulid.Now()-id.Time() < uint64(f.consistencyDelay/time.Millisecond) &&
+			meta.Thanos.Source != metadata.BucketRepairSource &&
+			meta.Thanos.Source != metadata.CompactorSource &&
+			meta.Thanos.Source != metadata.CompactorRepairSource {
+
+			level.Debug(f.logger).Log("msg", "block is too fresh for now", "block", id)
+			synced.WithLabelValues(block.TooFreshMeta).Inc()
+			delete(metas, id)
+		}
+	}
+}
 
 // genMissingIndexCacheFiles scans over all blocks, generates missing index cache files and uploads them to object storage.
-func genMissingIndexCacheFiles(ctx context.Context, logger log.Logger, reg *prometheus.Registry, bkt objstore.Bucket, dir string) error {
+func genMissingIndexCacheFiles(ctx context.Context, logger log.Logger, reg *prometheus.Registry, bkt objstore.Bucket, fetcher block.MetadataFetcher, dir string) error {
 	genIndex := prometheus.NewCounter(prometheus.CounterOpts{
 		Name: metricIndexGenerateName,
 		Help: metricIndexGenerateHelp,
@@ -391,38 +426,18 @@ func genMissingIndexCacheFiles(ctx context.Context, logger log.Logger, reg *prom
 
 	level.Info(logger).Log("msg", "start index cache processing")
 
-	var metas []*metadata.Meta
-
-	if err := bkt.Iter(ctx, "", func(name string) error {
-		id, ok := block.IsBlockDir(name)
-		if !ok {
-			return nil
-		}
-
-		meta, err := block.DownloadMeta(ctx, logger, bkt, id)
-		if err != nil {
-			// Probably not finished block, skip it.
-			if bkt.IsObjNotFoundErr(errors.Cause(err)) {
-				level.Warn(logger).Log("msg", "meta file wasn't found", "block", id.String())
-				return nil
-			}
-			return errors.Wrap(err, "download metadata")
-		}
-
-		// New version of compactor pushes index cache along with data block.
-		// Skip uncompacted blocks.
-		if meta.Compaction.Level == 1 {
-			return nil
-		}
-
-		metas = append(metas, &meta)
-
-		return nil
-	}); err != nil {
-		return errors.Wrap(err, "retrieve bucket block metas")
+	metas, _, err := fetcher.Fetch(ctx)
+	if err != nil {
+		return errors.Wrap(err, "fetch metas")
 	}
 
 	for _, meta := range metas {
+		// New version of compactor pushes index cache along with data block.
+		// Skip uncompacted blocks.
+		if meta.Compaction.Level == 1 {
+			continue
+		}
+
 		if err := generateIndexCacheFile(ctx, bkt, logger, dir, meta); err != nil {
 			return err
 		}

@@ -128,7 +128,7 @@ func NewStreamedBlockWriter(
 	}, nil
 }
 
-// WriteSeries writes chunks data to the chunkWriter, writes lset and chunks Metas to indexWrites and adds label sets to
+// WriteSeries writes chunks data to the chunkWriter, writes lset and chunks MetasFetcher to indexWrites and adds label sets to
 // labelsValues sets and memPostings to be written on the finalize state in the end of downsampling process.
 func (w *streamedBlockWriter) WriteSeries(lset labels.Labels, chunks []chunks.Meta) error {
 	if w.finalized || w.ignoreFinalize {
