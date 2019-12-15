@@ -279,7 +279,7 @@ func runSidecar(
 			}
 		}()
 
-		if err := promclient.IsWALDirAccesible(dataDir); err != nil {
+		if err := promclient.IsWALDirAccessible(dataDir); err != nil {
 			level.Error(logger).Log("err", err)
 		}
 

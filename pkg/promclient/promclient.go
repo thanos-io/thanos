@@ -37,9 +37,9 @@ import (
 
 var ErrFlagEndpointNotFound = errors.New("no flag endpoint found")
 
-// IsWALDirAccesible returns no error if WAL dir can be found. This helps to tell
+// IsWALDirAccessible returns no error if WAL dir can be found. This helps to tell
 // if we have access to Prometheus TSDB directory.
-func IsWALDirAccesible(dir string) error {
+func IsWALDirAccessible(dir string) error {
 	const errMsg = "WAL dir is not accessible. Is this dir a TSDB directory? If yes it is shared with TSDB?"
 
 	f, err := os.Stat(filepath.Join(dir, "wal"))
