@@ -55,20 +55,20 @@ func (c *swappableCache) SwapWith(ptr2 storecache.IndexCache) {
 	c.ptr = ptr2
 }
 
-func (c *swappableCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte) {
-	c.ptr.StorePostings(blockID, l, v)
+func (c *swappableCache) StorePostings(ctx context.Context, blockID ulid.ULID, l labels.Label, v []byte) {
+	c.ptr.StorePostings(ctx, blockID, l, v)
 }
 
-func (c *swappableCache) FetchMultiPostings(blockID ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
-	return c.ptr.FetchMultiPostings(blockID, keys)
+func (c *swappableCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
+	return c.ptr.FetchMultiPostings(ctx, blockID, keys)
 }
 
-func (c *swappableCache) StoreSeries(blockID ulid.ULID, id uint64, v []byte) {
-	c.ptr.StoreSeries(blockID, id, v)
+func (c *swappableCache) StoreSeries(ctx context.Context, blockID ulid.ULID, id uint64, v []byte) {
+	c.ptr.StoreSeries(ctx, blockID, id, v)
 }
 
-func (c *swappableCache) FetchMultiSeries(blockID ulid.ULID, ids []uint64) (map[uint64][]byte, []uint64) {
-	return c.ptr.FetchMultiSeries(blockID, ids)
+func (c *swappableCache) FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []uint64) (map[uint64][]byte, []uint64) {
+	return c.ptr.FetchMultiSeries(ctx, blockID, ids)
 }
 
 type storeSuite struct {
