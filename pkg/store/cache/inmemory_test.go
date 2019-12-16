@@ -19,11 +19,39 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
+func TestNewInMemoryIndexCache(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	// Should return error on invalid YAML config.
+	conf := []byte("invalid")
+	cache, err := NewInMemoryIndexCache(log.NewNopLogger(), nil, conf)
+	testutil.NotOk(t, err)
+	testutil.Equals(t, (*InMemoryIndexCache)(nil), cache)
+
+	// Should instance an in-memory index cache with default config
+	// on empty YAML config.
+	conf = []byte{}
+	cache, err = NewInMemoryIndexCache(log.NewNopLogger(), nil, conf)
+	testutil.Ok(t, err)
+	testutil.Equals(t, DefaultInMemoryIndexCacheConfig.MaxSizeBytes, cache.maxSizeBytes)
+	testutil.Equals(t, DefaultInMemoryIndexCacheConfig.MaxItemSizeBytes, cache.maxItemSizeBytes)
+
+	// Should instance an in-memory index cache with specified YAML config.
+	conf = []byte(`
+max_size_bytes: 200
+max_item_size_bytes: 100
+`)
+	cache, err = NewInMemoryIndexCache(log.NewNopLogger(), nil, conf)
+	testutil.Ok(t, err)
+	testutil.Equals(t, uint64(200), cache.maxSizeBytes)
+	testutil.Equals(t, uint64(100), cache.maxItemSizeBytes)
+}
+
 func TestInMemoryIndexCache_AvoidsDeadlock(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	metrics := prometheus.NewRegistry()
-	cache, err := NewInMemoryIndexCache(log.NewNopLogger(), metrics, Opts{
+	cache, err := NewInMemoryIndexCacheWithConfig(log.NewNopLogger(), metrics, InMemoryIndexCacheConfig{
 		MaxItemSizeBytes: sliceHeaderSize + 5,
 		MaxSizeBytes:     sliceHeaderSize + 5,
 	})
@@ -76,7 +104,7 @@ func TestInMemoryIndexCache_UpdateItem(t *testing.T) {
 	})
 
 	metrics := prometheus.NewRegistry()
-	cache, err := NewInMemoryIndexCache(log.NewSyncLogger(errorLogger), metrics, Opts{
+	cache, err := NewInMemoryIndexCacheWithConfig(log.NewSyncLogger(errorLogger), metrics, InMemoryIndexCacheConfig{
 		MaxItemSizeBytes: maxSize,
 		MaxSizeBytes:     maxSize,
 	})
@@ -162,7 +190,7 @@ func TestInMemoryIndexCache_MaxNumberOfItemsHit(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	metrics := prometheus.NewRegistry()
-	cache, err := NewInMemoryIndexCache(log.NewNopLogger(), metrics, Opts{
+	cache, err := NewInMemoryIndexCacheWithConfig(log.NewNopLogger(), metrics, InMemoryIndexCacheConfig{
 		MaxItemSizeBytes: 2*sliceHeaderSize + 10,
 		MaxSizeBytes:     2*sliceHeaderSize + 10,
 	})
@@ -196,7 +224,7 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	metrics := prometheus.NewRegistry()
-	cache, err := NewInMemoryIndexCache(log.NewNopLogger(), metrics, Opts{
+	cache, err := NewInMemoryIndexCacheWithConfig(log.NewNopLogger(), metrics, InMemoryIndexCacheConfig{
 		MaxItemSizeBytes: 2*sliceHeaderSize + 5,
 		MaxSizeBytes:     2*sliceHeaderSize + 5,
 	})

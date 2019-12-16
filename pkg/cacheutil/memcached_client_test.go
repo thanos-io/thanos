@@ -11,7 +11,6 @@ import (
 	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -41,24 +40,73 @@ func TestMemcachedClientConfig_validate(t *testing.T) {
 	}
 }
 
-func TestMemcachedClientConfig_applyDefault(t *testing.T) {
-	c := MemcachedClientConfig{}
-	c.applyDefaults()
+func TestNewMemcachedClient(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
-	testutil.Equals(t, defaultTimeout, c.Timeout)
-	testutil.Equals(t, defaultMaxIdleConnections, c.MaxIdleConnections)
-	testutil.Equals(t, defaultMaxAsyncConcurrency, c.MaxAsyncConcurrency)
-	testutil.Equals(t, defaultMaxAsyncBufferSize, c.MaxAsyncBufferSize)
-	testutil.Equals(t, defaultDNSProviderUpdateInterval, c.DNSProviderUpdateInterval)
-	testutil.Equals(t, defaultMaxGetMultiBatchConcurrency, c.MaxGetMultiBatchConcurrency)
-	testutil.Equals(t, defaultMaxGetMultiBatchSize, c.MaxGetMultiBatchSize)
+	// Should return error on empty YAML config.
+	conf := []byte{}
+	cache, err := NewMemcachedClient(log.NewNopLogger(), "test", conf, nil)
+	testutil.NotOk(t, err)
+	testutil.Equals(t, (*memcachedClient)(nil), cache)
+
+	// Should return error on invalid YAML config.
+	conf = []byte("invalid")
+	cache, err = NewMemcachedClient(log.NewNopLogger(), "test", conf, nil)
+	testutil.NotOk(t, err)
+	testutil.Equals(t, (*memcachedClient)(nil), cache)
+
+	// Should instance a memcached client with minimum YAML config.
+	conf = []byte(`
+addrs:
+  - 127.0.0.1:11211
+  - 127.0.0.2:11211
+`)
+	cache, err = NewMemcachedClient(log.NewNopLogger(), "test", conf, nil)
+	testutil.Ok(t, err)
+	defer cache.Stop()
+
+	testutil.Equals(t, []string{"127.0.0.1:11211", "127.0.0.2:11211"}, cache.config.Addrs)
+	testutil.Equals(t, defaultMemcachedClientConfig.Timeout, cache.config.Timeout)
+	testutil.Equals(t, defaultMemcachedClientConfig.MaxIdleConnections, cache.config.MaxIdleConnections)
+	testutil.Equals(t, defaultMemcachedClientConfig.MaxAsyncConcurrency, cache.config.MaxAsyncConcurrency)
+	testutil.Equals(t, defaultMemcachedClientConfig.MaxAsyncBufferSize, cache.config.MaxAsyncBufferSize)
+	testutil.Equals(t, defaultMemcachedClientConfig.DNSProviderUpdateInterval, cache.config.DNSProviderUpdateInterval)
+	testutil.Equals(t, defaultMemcachedClientConfig.MaxGetMultiBatchConcurrency, cache.config.MaxGetMultiBatchConcurrency)
+	testutil.Equals(t, defaultMemcachedClientConfig.MaxGetMultiBatchSize, cache.config.MaxGetMultiBatchSize)
+
+	// Should instance a memcached client with configured YAML config.
+	conf = []byte(`
+addrs:
+  - 127.0.0.1:11211
+  - 127.0.0.2:11211
+timeout: 1s
+max_idle_connections: 1
+max_async_concurrency: 1
+max_async_buffer_size: 1
+max_get_multi_batch_concurrency: 1
+max_get_multi_batch_size: 1
+dns_provider_update_interval: 1s
+`)
+	cache, err = NewMemcachedClient(log.NewNopLogger(), "test", conf, nil)
+	testutil.Ok(t, err)
+	defer cache.Stop()
+
+	testutil.Equals(t, []string{"127.0.0.1:11211", "127.0.0.2:11211"}, cache.config.Addrs)
+	testutil.Equals(t, 1*time.Second, cache.config.Timeout)
+	testutil.Equals(t, 1, cache.config.MaxIdleConnections)
+	testutil.Equals(t, 1, cache.config.MaxAsyncConcurrency)
+	testutil.Equals(t, 1, cache.config.MaxAsyncBufferSize)
+	testutil.Equals(t, 1*time.Second, cache.config.DNSProviderUpdateInterval)
+	testutil.Equals(t, 1, cache.config.MaxGetMultiBatchConcurrency)
+	testutil.Equals(t, 1, cache.config.MaxGetMultiBatchSize)
 }
 
 func TestMemcachedClient_SetAsync(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	ctx := context.Background()
-	config := MemcachedClientConfig{Addrs: []string{"127.0.0.1:11211"}}
+	config := defaultMemcachedClientConfig
+	config.Addrs = []string{"127.0.0.1:11211"}
 	backendMock := newMemcachedClientBackendMock()
 
 	client, err := prepare(config, backendMock)
@@ -192,11 +240,10 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
 			ctx := context.Background()
-			config := MemcachedClientConfig{
-				Addrs:                       []string{"127.0.0.1:11211"},
-				MaxGetMultiBatchSize:        testData.maxBatchSize,
-				MaxGetMultiBatchConcurrency: testData.maxBatchConcurrency,
-			}
+			config := defaultMemcachedClientConfig
+			config.Addrs = []string{"127.0.0.1:11211"}
+			config.MaxGetMultiBatchSize = testData.maxBatchSize
+			config.MaxGetMultiBatchConcurrency = testData.maxBatchConcurrency
 
 			backendMock := newMemcachedClientBackendMock()
 			backendMock.getMultiErrors = testData.mockedGetMultiErrors
@@ -231,8 +278,7 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 func prepare(config MemcachedClientConfig, backendMock *memcachedClientBackendMock) (*memcachedClient, error) {
 	logger := log.NewNopLogger()
 	selector := &MemcachedJumpHashSelector{}
-	provider := dns.NewProvider(logger, nil, dns.GolangResolverType)
-	client, err := newMemcachedClient(logger, "test", backendMock, selector, provider, config, nil)
+	client, err := newMemcachedClient(logger, "test", backendMock, selector, config, nil)
 
 	return client, err
 }

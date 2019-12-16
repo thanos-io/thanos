@@ -12,18 +12,12 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
+	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/tracing"
+	"gopkg.in/yaml.v2"
 )
 
 const (
-	defaultTimeout                     = 100 * time.Millisecond
-	defaultMaxIdleConnections          = 100
-	defaultMaxAsyncConcurrency         = 20
-	defaultMaxAsyncBufferSize          = 10000
-	defaultDNSProviderUpdateInterval   = 10 * time.Second
-	defaultMaxGetMultiBatchConcurrency = 20
-	defaultMaxGetMultiBatchSize        = 1024
-
 	opSet      = "set"
 	opGetMulti = "getmulti"
 )
@@ -31,6 +25,16 @@ const (
 var (
 	errMemcachedAsyncBufferFull = errors.New("the async buffer is full")
 	errMemcachedConfigNoAddrs   = errors.New("no memcached addrs provided")
+
+	defaultMemcachedClientConfig = MemcachedClientConfig{
+		Timeout:                     100 * time.Millisecond,
+		MaxIdleConnections:          100,
+		MaxAsyncConcurrency:         20,
+		MaxAsyncBufferSize:          10000,
+		DNSProviderUpdateInterval:   10 * time.Second,
+		MaxGetMultiBatchConcurrency: 20,
+		MaxGetMultiBatchSize:        1024,
+	}
 )
 
 // MemcachedClient is a high level client to interact with memcached.
@@ -56,69 +60,39 @@ type memcachedClientBackend interface {
 type MemcachedClientConfig struct {
 	// Addrs specifies the list of memcached addresses. The addresses get
 	// resolved with the DNS provider.
-	Addrs []string
+	Addrs []string `yaml:"addrs"`
 
 	// Timeout specifies the socket read/write timeout.
-	Timeout time.Duration
+	Timeout time.Duration `yaml:"timeout"`
 
 	// MaxIdleConnections specifies the maximum number of idle connections that
 	// will be maintained per address. For better performances, this should be
 	// set to a number higher than your peak parallel requests.
-	MaxIdleConnections int
+	MaxIdleConnections int `yaml:"max_idle_connections"`
 
 	// MaxAsyncConcurrency specifies the maximum number of concurrent asynchronous
 	// operations can occur.
-	MaxAsyncConcurrency int
+	MaxAsyncConcurrency int `yaml:"max_async_concurrency"`
 
 	// MaxAsyncBufferSize specifies the maximum number of enqueued asynchronous
 	// operations allowed.
-	MaxAsyncBufferSize int
+	MaxAsyncBufferSize int `yaml:"max_async_buffer_size"`
 
 	// MaxGetMultiBatchConcurrency specifies the maximum number of concurrent batch
 	// executions by GetMulti().
 	// TODO(pracucci) Should this be a global (per-client) limit or a per-single MultiGet()
 	//                limit? The latter would allow us to avoid a single very large MultiGet()
 	//                will slow down other requests.
-	MaxGetMultiBatchConcurrency int
+	MaxGetMultiBatchConcurrency int `yaml:"max_get_multi_batch_concurrency"`
 
 	// MaxGetMultiBatchSize specified the maximum number of keys a single underlying
 	// GetMulti() should run. If more keys are specified, internally keys are splitted
 	// into multiple batches and fetched concurrently up to MaxGetMultiBatchConcurrency
 	// parallelism.
-	MaxGetMultiBatchSize int
+	MaxGetMultiBatchSize int `yaml:"max_get_multi_batch_size"`
 
 	// DNSProviderUpdateInterval specifies the DNS discovery update interval.
-	DNSProviderUpdateInterval time.Duration
-}
-
-func (c *MemcachedClientConfig) applyDefaults() {
-	if c.Timeout == 0 {
-		c.Timeout = defaultTimeout
-	}
-
-	if c.MaxIdleConnections == 0 {
-		c.MaxIdleConnections = defaultMaxIdleConnections
-	}
-
-	if c.MaxAsyncConcurrency == 0 {
-		c.MaxAsyncConcurrency = defaultMaxAsyncConcurrency
-	}
-
-	if c.MaxAsyncBufferSize == 0 {
-		c.MaxAsyncBufferSize = defaultMaxAsyncBufferSize
-	}
-
-	if c.DNSProviderUpdateInterval == 0 {
-		c.DNSProviderUpdateInterval = defaultDNSProviderUpdateInterval
-	}
-
-	if c.MaxGetMultiBatchConcurrency == 0 {
-		c.MaxGetMultiBatchConcurrency = defaultMaxGetMultiBatchConcurrency
-	}
-
-	if c.MaxGetMultiBatchSize == 0 {
-		c.MaxGetMultiBatchSize = defaultMaxGetMultiBatchSize
-	}
+	DNSProviderUpdateInterval time.Duration `yaml:"dns_provider_update_interval"`
 }
 
 func (c *MemcachedClientConfig) validate() error {
@@ -129,6 +103,16 @@ func (c *MemcachedClientConfig) validate() error {
 	return nil
 }
 
+// parseMemcachedClientConfig unmarshals a buffer into a MemcachedClientConfig with default values.
+func parseMemcachedClientConfig(conf []byte) (MemcachedClientConfig, error) {
+	config := defaultMemcachedClientConfig
+	if err := yaml.Unmarshal(conf, &config); err != nil {
+		return MemcachedClientConfig{}, err
+	}
+
+	return config, nil
+}
+
 type memcachedClient struct {
 	logger   log.Logger
 	config   MemcachedClientConfig
@@ -136,7 +120,7 @@ type memcachedClient struct {
 	selector *MemcachedJumpHashSelector
 
 	// DNS provider used to keep the memcached servers list updated.
-	provider *dns.Provider
+	dnsProvider *dns.Provider
 
 	// Channel used to notify internal goroutines when they should quit.
 	stop chan struct{}
@@ -168,7 +152,21 @@ type memcachedGetMultiResult struct {
 }
 
 // NewMemcachedClient makes a new MemcachedClient.
-func NewMemcachedClient(logger log.Logger, name string, provider *dns.Provider, config MemcachedClientConfig, reg prometheus.Registerer) (*memcachedClient, error) {
+func NewMemcachedClient(logger log.Logger, name string, conf []byte, reg prometheus.Registerer) (*memcachedClient, error) {
+	config, err := parseMemcachedClientConfig(conf)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewMemcachedClientWithConfig(logger, name, config, reg)
+}
+
+// NewMemcachedClientWithConfig makes a new MemcachedClient.
+func NewMemcachedClientWithConfig(logger log.Logger, name string, config MemcachedClientConfig, reg prometheus.Registerer) (*memcachedClient, error) {
+	if err := config.validate(); err != nil {
+		return nil, err
+	}
+
 	// We use a custom servers selector in order to use a jump hash
 	// for servers selection.
 	selector := &MemcachedJumpHashSelector{}
@@ -177,7 +175,7 @@ func NewMemcachedClient(logger log.Logger, name string, provider *dns.Provider, 
 	client.Timeout = config.Timeout
 	client.MaxIdleConns = config.MaxIdleConnections
 
-	return newMemcachedClient(logger, name, client, selector, provider, config, reg)
+	return newMemcachedClient(logger, name, client, selector, config, reg)
 }
 
 func newMemcachedClient(
@@ -185,21 +183,21 @@ func newMemcachedClient(
 	name string,
 	client memcachedClientBackend,
 	selector *MemcachedJumpHashSelector,
-	provider *dns.Provider,
 	config MemcachedClientConfig,
 	reg prometheus.Registerer,
 ) (*memcachedClient, error) {
-	config.applyDefaults()
-	if err := config.validate(); err != nil {
-		return nil, err
-	}
+	dnsProvider := dns.NewProvider(
+		logger,
+		extprom.WrapRegistererWithPrefix("thanos_memcached_", reg),
+		dns.ResolverType(dns.GolangResolverType),
+	)
 
 	c := &memcachedClient{
 		logger:        logger,
 		config:        config,
 		client:        client,
 		selector:      selector,
-		provider:      provider,
+		dnsProvider:   dnsProvider,
 		asyncQueue:    make(chan func(), config.MaxAsyncBufferSize),
 		getMultiQueue: make(chan *memcachedGetMultiBatch),
 		stop:          make(chan struct{}, 1),
@@ -441,10 +439,10 @@ func (c *memcachedClient) resolveAddrs() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	c.provider.Resolve(ctx, c.config.Addrs)
+	c.dnsProvider.Resolve(ctx, c.config.Addrs)
 
 	// Fail in case no server address is resolved.
-	servers := c.provider.Addresses()
+	servers := c.dnsProvider.Addresses()
 	if len(servers) == 0 {
 		return errors.New("no server address resolved")
 	}

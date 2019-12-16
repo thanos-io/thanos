@@ -12,6 +12,14 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"gopkg.in/yaml.v2"
+)
+
+var (
+	DefaultInMemoryIndexCacheConfig = InMemoryIndexCacheConfig{
+		MaxSizeBytes:     250 * 1024 * 1024,
+		MaxItemSizeBytes: 125 * 1024 * 1024,
+	}
 )
 
 type InMemoryIndexCache struct {
@@ -34,24 +42,45 @@ type InMemoryIndexCache struct {
 	overflow         *prometheus.CounterVec
 }
 
-type Opts struct {
+type InMemoryIndexCacheConfig struct {
 	// MaxSizeBytes represents overall maximum number of bytes cache can contain.
-	MaxSizeBytes uint64
+	MaxSizeBytes uint64 `yaml:"max_size_bytes"`
 	// MaxItemSizeBytes represents maximum size of single item.
-	MaxItemSizeBytes uint64
+	MaxItemSizeBytes uint64 `yaml:"max_item_size_bytes"`
+}
+
+// parseInMemoryIndexCacheConfig unmarshals a buffer into a InMemoryIndexCacheConfig with default values.
+func parseInMemoryIndexCacheConfig(conf []byte) (InMemoryIndexCacheConfig, error) {
+	config := DefaultInMemoryIndexCacheConfig
+	if err := yaml.Unmarshal(conf, &config); err != nil {
+		return InMemoryIndexCacheConfig{}, err
+	}
+
+	return config, nil
 }
 
 // NewInMemoryIndexCache creates a new thread-safe LRU cache for index entries and ensures the total cache
 // size approximately does not exceed maxBytes.
-func NewInMemoryIndexCache(logger log.Logger, reg prometheus.Registerer, opts Opts) (*InMemoryIndexCache, error) {
-	if opts.MaxItemSizeBytes > opts.MaxSizeBytes {
-		return nil, errors.Errorf("max item size (%v) cannot be bigger than overall cache size (%v)", opts.MaxItemSizeBytes, opts.MaxSizeBytes)
+func NewInMemoryIndexCache(logger log.Logger, reg prometheus.Registerer, conf []byte) (*InMemoryIndexCache, error) {
+	config, err := parseInMemoryIndexCacheConfig(conf)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewInMemoryIndexCacheWithConfig(logger, reg, config)
+}
+
+// NewInMemoryIndexCacheWithConfig creates a new thread-safe LRU cache for index entries and ensures the total cache
+// size approximately does not exceed maxBytes.
+func NewInMemoryIndexCacheWithConfig(logger log.Logger, reg prometheus.Registerer, config InMemoryIndexCacheConfig) (*InMemoryIndexCache, error) {
+	if config.MaxItemSizeBytes > config.MaxSizeBytes {
+		return nil, errors.Errorf("max item size (%v) cannot be bigger than overall cache size (%v)", config.MaxItemSizeBytes, config.MaxSizeBytes)
 	}
 
 	c := &InMemoryIndexCache{
 		logger:           logger,
-		maxSizeBytes:     opts.MaxSizeBytes,
-		maxItemSizeBytes: opts.MaxItemSizeBytes,
+		maxSizeBytes:     config.MaxSizeBytes,
+		maxItemSizeBytes: config.MaxItemSizeBytes,
 	}
 
 	c.evicted = prometheus.NewCounterVec(prometheus.CounterOpts{
