@@ -40,7 +40,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 		Default("250MB").Bytes()
 
 	indexCacheConfig := extflag.RegisterPathOrContent(cmd, "index-cache.config",
-		"YAML file that contains index cache configuration. See format details: https://thanos.io/components/store.md/",
+		"YAML file that contains index cache configuration. See format details: https://thanos.io/components/store.md/#index-cache",
 		false)
 
 	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes for chunks.").

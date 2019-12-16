@@ -74,12 +74,13 @@ Flags:
       --index-cache.config-file=<file-path>
                                  Path to YAML file that contains index cache
                                  configuration. See format details:
-                                 https://thanos.io/components/store.md/
+                                 https://thanos.io/components/store.md/#index-cache
       --index-cache.config=<content>
                                  Alternative to 'index-cache.config-file' flag
                                  (lower priority). Content of YAML file that
                                  contains index cache configuration. See format
-                                 details: https://thanos.io/components/store.md/
+                                 details:
+                                 https://thanos.io/components/store.md/#index-cache
       --chunk-pool-size=2GB      Maximum size of concurrently allocatable bytes
                                  for chunks.
       --store.grpc.series-sample-limit=0
@@ -162,3 +163,67 @@ Filtering is done on a Chunk level, so Thanos Store might still return Samples w
   - `/-/ready` starts after all the bootstrapping completed (e.g initial index building) and ready to serve traffic.
 
 > NOTE: Metric endpoint starts immediately so, make sure you set up readiness probe on designated HTTP `/-/ready` path.
+
+## Index cache
+
+Thanos Store Gateway supports an index cache to speed up postings and series lookups from TSDB blocks indexes. Two types of caches are supported:
+
+- `in-memory` (_default_)
+- `memcached`
+
+### In-memory index cache
+
+The `in-memory` index cache is enabled by default and its max size can be configured through the flag `--index-cache-size`.
+
+Alternatively, the `in-memory` index cache can also by configured using `--index-cache.config-file` to reference to the configuration file or `--index-cache.config` to put yaml config directly:
+
+```
+type: in-memory
+config:
+  # Maximum number of bytes the cache can contain (defaults to 250MB).
+  max_size_bytes: 262144000
+
+  # Maximum size of a single item in the cache (defaults to 125MB).
+  max_item_size_bytes: 131072000
+```
+
+### Memcached index cache
+
+The `memcached` index cache allows to use [Memcached](https://memcached.org) as cache backend. This cache type is configured using `--index-cache.config-file` to reference to the configuration file or `--index-cache.config` to put yaml config directly:
+
+```
+type: memcached
+config:
+  # List of addresses of statically configured memcached servers. The scheme
+  # may be prefixed with 'dns+' or 'dnssrv+' to detect memcached servers through
+  # respective DNS lookups.
+  addrs:
+    - memcached-1:11211
+    - memcached-2:11211
+
+  # Socket read/write timeout.
+  timeout: 100ms
+
+  # Maximum number of idle connections that will be maintained per address.
+  # For better performances, this should be set to a number higher than your
+  # peak parallel requests.
+  max_idle_connections: 100
+
+  # Maximum number of concurrent asynchronous operations can occur.
+  max_async_concurrency: 20
+
+  # Maximum number of enqueued asynchronous operations allowed.
+  max_async_buffer_size: 10000
+
+  # Maximum number of concurrent batch executions when fetching keys from memcached.
+  # Each batch can fetch up to max_get_multi_batch_size keys.
+  max_get_multi_batch_concurrency: 20
+
+  # Maximum number of keys a single underlying GetMulti() operation should run. If
+  # more keys are specified, internally keys are splitted into multiple batches and
+  # fetched concurrently up to max_get_multi_batch_concurrency parallelism.
+  max_get_multi_batch_size: 1024
+
+  # DNS discovery update interval.
+  dns_provider_update_interval: 10s
+```

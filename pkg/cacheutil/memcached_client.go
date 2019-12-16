@@ -31,9 +31,9 @@ var (
 		MaxIdleConnections:          100,
 		MaxAsyncConcurrency:         20,
 		MaxAsyncBufferSize:          10000,
-		DNSProviderUpdateInterval:   10 * time.Second,
 		MaxGetMultiBatchConcurrency: 20,
 		MaxGetMultiBatchSize:        1024,
+		DNSProviderUpdateInterval:   10 * time.Second,
 	}
 )
 
