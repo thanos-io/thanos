@@ -57,6 +57,10 @@ type PrometheusStore struct {
 	remoteReadAcceptableResponses []prompb.ReadRequest_ResponseType
 }
 
+const (
+	initialBufSize = 32 * 1024 // 32KB seems like a good minimum starting size.
+)
+
 // NewPrometheusStore returns a new PrometheusStore that uses the given HTTP client
 // to talk to Prometheus.
 // It attaches the provided external labels to all results.
@@ -84,6 +88,10 @@ func NewPrometheusStore(
 		externalLabels:                externalLabels,
 		timestamps:                    timestamps,
 		remoteReadAcceptableResponses: []prompb.ReadRequest_ResponseType{prompb.ReadRequest_STREAMED_XOR_CHUNKS, prompb.ReadRequest_SAMPLES},
+		buffers: sync.Pool{New: func() interface{} {
+			b := make([]byte, 0, initialBufSize)
+			return &b
+		}},
 	}
 	return p, nil
 }
@@ -121,10 +129,6 @@ func (p *PrometheusStore) Info(ctx context.Context, r *storepb.InfoRequest) (*st
 
 func (p *PrometheusStore) getBuffer() *[]byte {
 	b := p.buffers.Get()
-	if b == nil {
-		buf := make([]byte, 0, 32*1024) // 32KB seems like a good minimum starting size.
-		return &buf
-	}
 	return b.(*[]byte)
 }
 
