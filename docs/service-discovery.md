@@ -13,7 +13,7 @@ SD is currently used in the following places within Thanos:
 
 * `Thanos Query` needs to know about [StoreAPI](https://github.com/thanos-io/thanos/blob/d3fb337da94d11c78151504b1fccb1d7e036f394/pkg/store/storepb/rpc.proto#L14) servers in order to query metrics from them.
 * `Thanos Rule` needs to know about `QueryAPI` servers in order to evaluate recording and alerting rules.
-* `Thanos Rule` needs to know about `Alertmanagers` HA replicas in order to send alerts; only static option with DNS discovery. 
+* `Thanos Rule` needs to know about `Alertmanagers` HA replicas in order to send alerts; only static option with DNS discovery.
 
 There are currently several ways to configure SD, described below in more detail:
 

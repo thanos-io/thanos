@@ -95,7 +95,7 @@ thanos sidecar \
 
 ### Uploading old metrics.
 
-When sidecar is run with the `--shipper.upload-compacted` flag it will sync all older existing blocks from the Prometheus local storage on startup. 
+When sidecar is run with the `--shipper.upload-compacted` flag it will sync all older existing blocks from the Prometheus local storage on startup.
 NOTE: This assumes you never run sidecar with block uploading against this bucket. Otherwise manual steps are needed to remove overlapping blocks from the bucket.
 Those will be suggested by the sidecar verification process.
 
