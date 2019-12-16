@@ -2,6 +2,7 @@ package alert
 
 import (
 	"context"
+	"io"
 	"net/url"
 	"sync"
 	"testing"
@@ -46,18 +47,18 @@ func assertSameHosts(t *testing.T, expected []*url.URL, found []*url.URL) {
 	}
 }
 
-type fakeDoer struct {
+type fakeClient struct {
 	urls  []*url.URL
 	postf func(u *url.URL) error
 	mtx   sync.Mutex
 	seen  []*url.URL
 }
 
-func (f *fakeDoer) Endpoints() []*url.URL {
+func (f *fakeClient) Endpoints() []*url.URL {
 	return f.urls
 }
 
-func (f *fakeDoer) Do(ctx context.Context, u *url.URL, b []byte) error {
+func (f *fakeClient) Do(ctx context.Context, u *url.URL, r io.Reader) error {
 	f.mtx.Lock()
 	defer f.mtx.Unlock()
 	f.seen = append(f.seen, u)
@@ -68,10 +69,10 @@ func (f *fakeDoer) Do(ctx context.Context, u *url.URL, b []byte) error {
 }
 
 func TestSenderSendsOk(t *testing.T) {
-	poster := &fakeDoer{
+	poster := &fakeClient{
 		urls: []*url.URL{{Host: "am1:9090"}, {Host: "am2:9090"}},
 	}
-	s := NewSender(nil, nil, []AlertmanagerDoer{poster})
+	s := NewSender(nil, nil, []AlertmanagerClient{poster})
 
 	s.Send(context.Background(), []*Alert{{}, {}})
 
@@ -86,7 +87,7 @@ func TestSenderSendsOk(t *testing.T) {
 }
 
 func TestSenderSendsOneFails(t *testing.T) {
-	poster := &fakeDoer{
+	poster := &fakeClient{
 		urls: []*url.URL{{Host: "am1:9090"}, {Host: "am2:9090"}},
 		postf: func(u *url.URL) error {
 			if u.Host == "am1:9090" {
@@ -95,7 +96,7 @@ func TestSenderSendsOneFails(t *testing.T) {
 			return nil
 		},
 	}
-	s := NewSender(nil, nil, []AlertmanagerDoer{poster})
+	s := NewSender(nil, nil, []AlertmanagerClient{poster})
 
 	s.Send(context.Background(), []*Alert{{}, {}})
 
@@ -110,13 +111,13 @@ func TestSenderSendsOneFails(t *testing.T) {
 }
 
 func TestSenderSendsAllFail(t *testing.T) {
-	poster := &fakeDoer{
+	poster := &fakeClient{
 		urls: []*url.URL{{Host: "am1:9090"}, {Host: "am2:9090"}},
 		postf: func(u *url.URL) error {
 			return errors.New("no such host")
 		},
 	}
-	s := NewSender(nil, nil, []AlertmanagerDoer{poster})
+	s := NewSender(nil, nil, []AlertmanagerClient{poster})
 
 	s.Send(context.Background(), []*Alert{{}, {}})
 

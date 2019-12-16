@@ -296,14 +296,14 @@ func runRule(
 		return err
 	}
 	var (
-		alertingcfg alert.AlertingConfig
+		alertingCfg alert.AlertingConfig
 		alertmgrs   []*alert.Alertmanager
 	)
 	if len(alertmgrsConfigYAML) > 0 {
 		if len(alertmgrURLs) != 0 {
 			return errors.New("--alertmanagers.url and --alertmanagers.config* flags cannot be defined at the same time")
 		}
-		alertingcfg, err = alert.LoadAlertingConfig(alertmgrsConfigYAML)
+		alertingCfg, err = alert.LoadAlertingConfig(alertmgrsConfigYAML)
 		if err != nil {
 			return err
 		}
@@ -314,13 +314,13 @@ func runRule(
 			if err != nil {
 				return err
 			}
-			alertingcfg.Alertmanagers = append(alertingcfg.Alertmanagers, cfg)
+			alertingCfg.Alertmanagers = append(alertingCfg.Alertmanagers, cfg)
 		}
 	}
-	if len(alertingcfg.Alertmanagers) == 0 {
+	if len(alertingCfg.Alertmanagers) == 0 {
 		level.Warn(logger).Log("msg", "no alertmanager configured")
 	}
-	for _, cfg := range alertingcfg.Alertmanagers {
+	for _, cfg := range alertingCfg.Alertmanagers {
 		am, err := alert.NewAlertmanager(logger, cfg)
 		if err != nil {
 			return err
@@ -421,11 +421,11 @@ func runRule(
 	}
 	// Run the alert sender.
 	{
-		doers := make([]alert.AlertmanagerDoer, len(alertmgrs))
+		clients := make([]alert.AlertmanagerClient, len(alertmgrs))
 		for i := range alertmgrs {
-			doers[i] = alertmgrs[i]
+			clients[i] = alertmgrs[i]
 		}
-		sdr := alert.NewSender(logger, reg, doers)
+		sdr := alert.NewSender(logger, reg, clients)
 		ctx, cancel := context.WithCancel(context.Background())
 
 		g.Add(func() error {

@@ -1,9 +1,9 @@
 package alert
 
 import (
-	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -158,10 +158,7 @@ func DefaultAlertmanagerConfig() AlertmanagerConfig {
 func (c *AlertmanagerConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	*c = DefaultAlertmanagerConfig()
 	type plain AlertmanagerConfig
-	if err := unmarshal((*plain)(c)); err != nil {
-		return err
-	}
-	return nil
+	return unmarshal((*plain)(c))
 }
 
 // Alertmanager represents an HTTP client that can send alerts to a cluster of Alertmanager endpoints.
@@ -279,8 +276,8 @@ func (a *Alertmanager) Endpoints() []*url.URL {
 }
 
 // Post sends a POST request to the given URL.
-func (a *Alertmanager) Do(ctx context.Context, u *url.URL, b []byte) error {
-	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(b))
+func (a *Alertmanager) Do(ctx context.Context, u *url.URL, r io.Reader) error {
+	req, err := http.NewRequest("POST", u.String(), r)
 	if err != nil {
 		return err
 	}

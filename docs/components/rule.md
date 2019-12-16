@@ -290,7 +290,9 @@ Flags:
 
 ### Alertmanager
 
-The configuration format supported by the `--alertmanagers.config` and `--alertmanagers.config-file` flags is the following:
+The `--alertmanagers.config` and `--alertmanagers.config-file` flags allow specifying multiple Alertmanagers. Those entries are treated as a single HA group. This means that alert send failure is claimed only if the Ruler fails to send to all instances.
+
+The configuration format is the following:
 
 [embedmd]:# (../flags/config_rule_alerting.txt yaml)
 ```yaml

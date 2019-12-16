@@ -82,28 +82,6 @@ func serializeAlertingConfiguration(t *testing.T, cfg ...alert.AlertmanagerConfi
 	return b
 }
 
-func writeAlertmanagerFileSD(t *testing.T, path string, addrs ...string) {
-	group := targetgroup.Group{Targets: []model.LabelSet{}}
-	for _, addr := range addrs {
-		group.Targets = append(group.Targets, model.LabelSet{model.LabelName(model.AddressLabel): model.LabelValue(addr)})
-	}
-
-	b, err := yaml.Marshal([]*targetgroup.Group{&group})
-	if err != nil {
-		t.Errorf("failed to serialize file SD configuration: %v", err)
-		return
-	}
-
-	err = ioutil.WriteFile(path+".tmp", b, 0660)
-	if err != nil {
-		t.Errorf("failed to write file SD configuration: %v", err)
-		return
-	}
-
-	err = os.Rename(path+".tmp", path)
-	testutil.Ok(t, err)
-}
-
 type mockAlertmanager struct {
 	path      string
 	token     string
@@ -232,7 +210,7 @@ func TestRuleAlertmanagerHTTPClient(t *testing.T) {
 	r := rule(a.New(), a.New(), rulesDir, amCfg, []address{qAddr}, nil)
 	q := querier(qAddr, a.New(), []address{r.GRPC}, nil)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	exit, err := e2eSpinup(t, ctx, q, r)
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)
@@ -293,7 +271,7 @@ func TestRuleAlertmanagerFileSD(t *testing.T) {
 	r := rule(a.New(), a.New(), rulesDir, amCfg, []address{qAddr}, nil)
 	q := querier(qAddr, a.New(), []address{r.GRPC}, nil)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	exit, err := e2eSpinup(t, ctx, am, q, r)
 	if err != nil {
 		t.Errorf("spinup failed: %v", err)
@@ -306,7 +284,7 @@ func TestRuleAlertmanagerFileSD(t *testing.T) {
 		<-exit
 	}()
 
-	// Wait for a couple of evaluations.
+	// Wait for a couple of evaluations and make sure that Alertmanager didn't receive anything.
 	testutil.Ok(t, runutil.Retry(5*time.Second, ctx.Done(), func() (err error) {
 		select {
 		case <-exit:
@@ -340,8 +318,21 @@ func TestRuleAlertmanagerFileSD(t *testing.T) {
 		return nil
 	}))
 
-	// Update the Alertmanager file service discovery configuration.
-	writeAlertmanagerFileSD(t, filepath.Join(amDir, "targets.yaml"), am.HTTP.HostPort())
+	// Add the Alertmanager address to the file SD directory.
+	fileSDPath := filepath.Join(amDir, "targets.yaml")
+	b, err := yaml.Marshal([]*targetgroup.Group{
+		&targetgroup.Group{
+			Targets: []model.LabelSet{
+				model.LabelSet{
+					model.LabelName(model.AddressLabel): model.LabelValue(am.HTTP.HostPort()),
+				},
+			},
+		},
+	})
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, ioutil.WriteFile(fileSDPath+".tmp", b, 0660))
+	testutil.Ok(t, os.Rename(fileSDPath+".tmp", fileSDPath))
 
 	// Verify that alerts are received by Alertmanager.
 	testutil.Ok(t, runutil.Retry(5*time.Second, ctx.Done(), func() (err error) {

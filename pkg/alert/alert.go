@@ -2,9 +2,11 @@
 package alert
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
 	"sync"
 	"sync/atomic"
@@ -238,15 +240,15 @@ func (q *Queue) Push(alerts []*Alert) {
 	}
 }
 
-type AlertmanagerDoer interface {
+type AlertmanagerClient interface {
 	Endpoints() []*url.URL
-	Do(context.Context, *url.URL, []byte) error
+	Do(context.Context, *url.URL, io.Reader) error
 }
 
 // Sender sends notifications to a dynamic set of alertmanagers.
 type Sender struct {
 	logger        log.Logger
-	alertmanagers []AlertmanagerDoer
+	alertmanagers []AlertmanagerClient
 
 	sent    *prometheus.CounterVec
 	errs    *prometheus.CounterVec
@@ -259,7 +261,7 @@ type Sender struct {
 func NewSender(
 	logger log.Logger,
 	reg prometheus.Registerer,
-	alertmanagers []AlertmanagerDoer,
+	alertmanagers []AlertmanagerClient,
 ) *Sender {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -294,7 +296,7 @@ func NewSender(
 	return s
 }
 
-// Send an alert batch to all given Alertmanager client.
+// Send an alert batch to all given Alertmanager clients.
 // TODO(bwplotka): https://github.com/thanos-io/thanos/issues/660.
 func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 	if len(alerts) == 0 {
@@ -313,17 +315,18 @@ func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 	for _, amc := range s.alertmanagers {
 		for _, u := range amc.Endpoints() {
 			wg.Add(1)
-			go func(amc AlertmanagerDoer, u *url.URL) {
+			go func(amc AlertmanagerClient, u *url.URL) {
 				defer wg.Done()
 
 				level.Debug(s.logger).Log("msg", "sending alerts", "alertmanager", u.Host, "numAlerts", len(alerts))
 				start := time.Now()
-				if err := amc.Do(ctx, u, b); err != nil {
+				if err := amc.Do(ctx, u, bytes.NewReader(b)); err != nil {
 					level.Warn(s.logger).Log(
 						"msg", "sending alerts failed",
 						"alertmanager", u.Host,
 						"numAlerts", len(alerts),
-						"err", err)
+						"err", err,
+					)
 					s.errs.WithLabelValues(u.Host).Inc()
 					return
 				}

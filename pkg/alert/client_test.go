@@ -75,6 +75,10 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 				Scheme:          "http",
 			},
 		},
+		{
+			address: "://user:pass@localhost:9093",
+			err:     true,
+		},
 	} {
 		t.Run(tc.address, func(t *testing.T) {
 			cfg, err := BuildAlertmanagerConfig(nil, tc.address, time.Duration(0))
