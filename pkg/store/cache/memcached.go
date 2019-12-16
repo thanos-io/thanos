@@ -58,9 +58,7 @@ func NewMemcachedIndexCache(logger log.Logger, memcached cacheutil.MemcachedClie
 		reg.MustRegister(c.requests, c.hits)
 	}
 
-	level.Info(logger).Log(
-		"msg", "created memcached index cache",
-	)
+	level.Info(logger).Log("msg", "created memcached index cache")
 
 	return c, nil
 }
@@ -95,12 +93,12 @@ func (c *MemcachedIndexCache) FetchMultiPostings(blockID ulid.ULID, lbls []label
 	// Fetch the keys from memcached in a single request.
 	c.requests.WithLabelValues(cacheTypePostings).Add(float64(len(keys)))
 	results, err := c.memcached.GetMulti(keys)
-
 	if err != nil {
 		c.failures.WithLabelValues(cacheTypePostings).Add(float64(len(keys)))
 		level.Warn(c.logger).Log("msg", "failed to fetch postings from memcached", "err", err)
 		return nil, lbls
-	} else if len(results) == 0 {
+	}
+	if len(results) == 0 {
 		return nil, lbls
 	}
 
@@ -160,12 +158,12 @@ func (c *MemcachedIndexCache) FetchMultiSeries(blockID ulid.ULID, ids []uint64) 
 	// Fetch the keys from memcached in a single request.
 	c.requests.WithLabelValues(cacheTypeSeries).Add(float64(len(ids)))
 	results, err := c.memcached.GetMulti(keys)
-
 	if err != nil {
 		c.failures.WithLabelValues(cacheTypeSeries).Add(float64(len(ids)))
 		level.Warn(c.logger).Log("msg", "failed to fetch series from memcached", "err", err)
 		return nil, ids
-	} else if len(results) == 0 {
+	}
+	if len(results) == 0 {
 		return nil, ids
 	}
 

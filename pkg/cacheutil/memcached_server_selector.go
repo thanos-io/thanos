@@ -63,7 +63,6 @@ func (s *MemcachedJumpHashSelector) PickServer(key string) (net.Addr, error) {
 		addrs = append(addrs, addr)
 		return nil
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +72,8 @@ func (s *MemcachedJumpHashSelector) PickServer(key string) (net.Addr, error) {
 		addrs = (addrs)[:0]
 		addrsPool.Put(&addrs)
 		return nil, memcache.ErrNoServers
-	} else if len(addrs) == 1 {
+	}
+	if len(addrs) == 1 {
 		addrs = (addrs)[:0]
 		addrsPool.Put(&addrs)
 		return (addrs)[0], nil

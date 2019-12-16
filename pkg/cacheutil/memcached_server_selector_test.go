@@ -56,11 +56,10 @@ func TestMemcachedJumpHashSelector_Each_ShouldRespectServersOrdering(t *testing.
 	s := MemcachedJumpHashSelector{}
 
 	for _, test := range tests {
-		err := s.SetServers(test.input...)
-		testutil.Ok(t, err)
+		testutil.Ok(t, s.SetServers(test.input...))
 
 		actual := make([]string, 0, 3)
-		err = s.Each(func(addr net.Addr) error {
+		err := s.Each(func(addr net.Addr) error {
 			actual = append(actual, addr.String())
 			return nil
 		})
@@ -75,8 +74,7 @@ func TestMemcachedJumpHashSelector_PickServer_ShouldEvenlyDistributeKeysToServer
 
 	servers := []string{"127.0.0.1:11211", "127.0.0.2:11211", "127.0.0.3:11211"}
 	selector := MemcachedJumpHashSelector{}
-	err := selector.SetServers(servers...)
-	testutil.Ok(t, err)
+	testutil.Ok(t, selector.SetServers(servers...))
 
 	// Calculate the distribution of keys
 	distribution := make(map[string]int)
@@ -115,8 +113,7 @@ func TestMemcachedJumpHashSelector_PickServer_ShouldUseConsistentHashing(t *test
 	}
 
 	selector := MemcachedJumpHashSelector{}
-	err := selector.SetServers(servers...)
-	testutil.Ok(t, err)
+	testutil.Ok(t, selector.SetServers(servers...))
 
 	// Pick a server for each key
 	distribution := make(map[string]string)
@@ -131,8 +128,7 @@ func TestMemcachedJumpHashSelector_PickServer_ShouldUseConsistentHashing(t *test
 
 	// Add 1 more server that - in a natural ordering - is added as last
 	servers = append(servers, "127.0.0.10:11211")
-	err = selector.SetServers(servers...)
-	testutil.Ok(t, err)
+	testutil.Ok(t, selector.SetServers(servers...))
 
 	// Calculate the number of keys who has been moved due to the resharding
 	moved := 0

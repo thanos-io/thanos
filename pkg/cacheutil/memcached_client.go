@@ -226,7 +226,6 @@ func (c *memcachedClient) SetAsync(key string, value []byte, ttl time.Duration) 
 			Value:      value,
 			Expiration: int32(time.Now().Add(ttl).Unix()),
 		})
-
 		if err != nil {
 			level.Warn(c.logger).Log("msg", fmt.Sprintf("failed to store item with key %s to memcached", key), "err", err)
 		}

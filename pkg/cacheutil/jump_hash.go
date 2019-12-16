@@ -5,7 +5,6 @@ package cacheutil
 //
 // Copied from github.com/dgryski/go-jump/blob/master/jump.go (MIT license)
 func JumpHash(key uint64, numBuckets int) int32 {
-
 	var b int64 = -1
 	var j int64
 
