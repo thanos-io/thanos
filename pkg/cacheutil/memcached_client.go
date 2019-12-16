@@ -156,7 +156,7 @@ type memcachedGetMultiResult struct {
 }
 
 // NewMemcachedClient makes a new MemcachedClient.
-func NewMemcachedClient(logger log.Logger, provider *dns.Provider, config MemcachedClientConfig) (MemcachedClient, error) {
+func NewMemcachedClient(logger log.Logger, provider *dns.Provider, config MemcachedClientConfig) (*memcachedClient, error) {
 	// We use a custom servers selector in order to use a jump hash
 	// for servers selection.
 	selector := &MemcachedJumpHashSelector{}
@@ -168,7 +168,7 @@ func NewMemcachedClient(logger log.Logger, provider *dns.Provider, config Memcac
 	return newMemcachedClient(logger, client, selector, provider, config)
 }
 
-func newMemcachedClient(logger log.Logger, client memcachedClientBackend, selector *MemcachedJumpHashSelector, provider *dns.Provider, config MemcachedClientConfig) (MemcachedClient, error) {
+func newMemcachedClient(logger log.Logger, client memcachedClientBackend, selector *MemcachedJumpHashSelector, provider *dns.Provider, config MemcachedClientConfig) (*memcachedClient, error) {
 	config.applyDefaults()
 	if err := config.validate(); err != nil {
 		return nil, err
