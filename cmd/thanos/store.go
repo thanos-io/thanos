@@ -36,11 +36,11 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache remote blocks.").
 		Default("./data").String()
 
-	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the in-memory index cache. Ignored if --index-cache.config option is specified.").
+	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the in-memory index cache. Ignored if --index-cache.config or --index-cache.config-file option is specified.").
 		Default("250MB").Bytes()
 
 	indexCacheConfig := extflag.RegisterPathOrContent(cmd, "index-cache.config",
-		"YAML file that contains index cache configuration. See format details: https://thanos.io/caching.md/",
+		"YAML file that contains index cache configuration. See format details: https://thanos.io/components/store.md/",
 		false)
 
 	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes for chunks.").

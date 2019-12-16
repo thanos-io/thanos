@@ -68,7 +68,18 @@ Flags:
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
       --data-dir="./data"        Data directory in which to cache remote blocks.
-      --index-cache-size=250MB   Maximum size of items held in the index cache.
+      --index-cache-size=250MB   Maximum size of items held in the in-memory
+                                 index cache. Ignored if --index-cache.config or
+                                 --index-cache.config-file option is specified.
+      --index-cache.config-file=<file-path>
+                                 Path to YAML file that contains index cache
+                                 configuration. See format details:
+                                 https://thanos.io/components/store.md/
+      --index-cache.config=<content>
+                                 Alternative to 'index-cache.config-file' flag
+                                 (lower priority). Content of YAML file that
+                                 contains index cache configuration. See format
+                                 details: https://thanos.io/components/store.md/
       --chunk-pool-size=2GB      Maximum size of concurrently allocatable bytes
                                  for chunks.
       --store.grpc.series-sample-limit=0
