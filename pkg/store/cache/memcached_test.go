@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
 	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
@@ -15,6 +16,7 @@ import (
 
 func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 	t.Parallel()
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	// Init some data to conveniently define test cases later one.
 	block1 := ulid.MustNew(1, nil)
@@ -106,6 +108,7 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 
 func TestMemcachedIndexCache_FetchMultiSeries(t *testing.T) {
 	t.Parallel()
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	// Init some data to conveniently define test cases later one.
 	block1 := ulid.MustNew(1, nil)

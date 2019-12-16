@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bradfitz/gomemcache/memcache"
+	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
 	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
@@ -54,6 +55,8 @@ func TestMemcachedClientConfig_applyDefault(t *testing.T) {
 }
 
 func TestMemcachedClient_SetAsync(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	ctx := context.Background()
 	config := MemcachedClientConfig{Addrs: []string{"127.0.0.1:11211"}}
 	backendMock := newMemcachedClientBackendMock()
@@ -72,6 +75,8 @@ func TestMemcachedClient_SetAsync(t *testing.T) {
 }
 
 func TestMemcachedClient_GetMulti(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
 	tests := map[string]struct {
 		maxBatchSize          int
 		maxBatchConcurrency   int
