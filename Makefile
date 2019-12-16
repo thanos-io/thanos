@@ -181,6 +181,7 @@ check-docs: $(EMBEDMD) $(LICHE) build
 	@$(LICHE) --recursive docs --exclude "(cloud.tencent.com|alibabacloud.com)" --document-root .
 	@$(LICHE) --exclude "(cloud.tencent.com|goreportcard.com|alibabacloud.com)" --document-root . *.md
 	@find -type f -name "*.md" | xargs scripts/cleanup-white-noise.sh
+	@git update-index -q --ignore-submodules --refresh
 	@if ! git diff-files --quiet --ignore-submodules -- ; then \
 		echo >&2 "please clean up white noise in all docs"; \
 		exit 1; \
@@ -304,6 +305,7 @@ lint: check-git $(GOLANGCILINT) $(MISSPELL)
 	@find . -type f | grep -v vendor/ | grep -vE '\./\..*' | xargs $(MISSPELL) -error
 	@echo ">> detecting white noise"
 	@find . -type f \( -name "*.md" -o -name "*.go" \) | xargs scripts/cleanup-white-noise.sh
+	@git update-index -q --ignore-submodules --refresh
 	@if ! git diff-files --quiet --ignore-submodules -- ; then \
 		echo >&2 "please clean up white noise in all docs or Go files"; \
 		exit 1; \
