@@ -242,7 +242,7 @@ func (c *memcachedClient) GetMulti(keys []string) (map[string][]byte, error) {
 
 		// In case we have both results and an error, it means some batch requests
 		// failed and other succeeded. In this case we prefer to log it and move on,
-		// given returning from results from the cache is better than returning
+		// given returning some results from the cache is better than returning
 		// nothing.
 		level.Warn(c.logger).Log("msg", "failed to fetch some keys batches from memcached", "err", err)
 	}
