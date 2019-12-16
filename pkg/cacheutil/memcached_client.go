@@ -192,6 +192,7 @@ func newMemcachedClient(logger log.Logger, client memcachedClientBackend, select
 		return nil, err
 	}
 
+	c.workers.Add(1)
 	go c.resolveAddrsLoop()
 
 	// Start a number of goroutines - processing async operations - equal
@@ -349,6 +350,8 @@ func (c *memcachedClient) getMultiQueueProcessLoop() {
 }
 
 func (c *memcachedClient) resolveAddrsLoop() {
+	defer c.workers.Done()
+
 	ticker := time.NewTicker(c.config.DNSProviderUpdateInterval)
 	defer ticker.Stop()
 
