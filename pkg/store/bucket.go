@@ -1527,7 +1527,7 @@ func (r *bucketIndexReader) fetchPostings(groups []*postingGroup) error {
 		keys = append(keys, g.keys...)
 	}
 
-	fromCache, _ := r.cache.FetchMultiPostings(r.block.meta.ULID, keys)
+	fromCache, _ := r.cache.FetchMultiPostings(r.ctx, r.block.meta.ULID, keys)
 
 	// Iterate over all groups and fetch posting from cache.
 	// If we have a miss, mark key to be fetched in `ptrs` slice.
@@ -1606,7 +1606,7 @@ func (r *bucketIndexReader) fetchPostings(groups []*postingGroup) error {
 
 				// Return postings and fill LRU cache.
 				groups[p.groupID].Fill(p.keyID, fetchedPostings)
-				r.cache.StorePostings(r.block.meta.ULID, groups[p.groupID].keys[p.keyID], c)
+				r.cache.StorePostings(r.ctx, r.block.meta.ULID, groups[p.groupID].keys[p.keyID], c)
 
 				// If we just fetched it we still have to update the stats for touched postings.
 				r.stats.postingsTouched++
@@ -1624,7 +1624,7 @@ func (r *bucketIndexReader) PreloadSeries(ids []uint64) error {
 
 	// Load series from cache, overwriting the list of ids to preload
 	// with the missing ones.
-	fromCache, ids := r.cache.FetchMultiSeries(r.block.meta.ULID, ids)
+	fromCache, ids := r.cache.FetchMultiSeries(r.ctx, r.block.meta.ULID, ids)
 	for id, b := range fromCache {
 		r.loadedSeries[id] = b
 	}
@@ -1672,7 +1672,7 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []uint64, start,
 		}
 		c = c[n : n+int(l)]
 		r.loadedSeries[id] = c
-		r.cache.StoreSeries(r.block.meta.ULID, id, c)
+		r.cache.StoreSeries(r.ctx, r.block.meta.ULID, id, c)
 	}
 	return nil
 }

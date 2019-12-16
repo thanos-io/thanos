@@ -37,13 +37,13 @@ var (
 
 type noopCache struct{}
 
-func (noopCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte) {}
-func (noopCache) FetchMultiPostings(blockID ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
+func (noopCache) StorePostings(ctx context.Context, blockID ulid.ULID, l labels.Label, v []byte) {}
+func (noopCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
 	return map[labels.Label][]byte{}, keys
 }
 
-func (noopCache) StoreSeries(blockID ulid.ULID, id uint64, v []byte) {}
-func (noopCache) FetchMultiSeries(blockID ulid.ULID, ids []uint64) (map[uint64][]byte, []uint64) {
+func (noopCache) StoreSeries(ctx context.Context, blockID ulid.ULID, id uint64, v []byte) {}
+func (noopCache) FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []uint64) (map[uint64][]byte, []uint64) {
 	return map[uint64][]byte{}, ids
 }
 

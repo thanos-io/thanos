@@ -1,6 +1,7 @@
 package cacheutil
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"testing"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/go-kit/kit/log"
+	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -52,6 +54,7 @@ func TestMemcachedClientConfig_applyDefault(t *testing.T) {
 }
 
 func TestMemcachedClient_SetAsync(t *testing.T) {
+	ctx := context.Background()
 	config := MemcachedClientConfig{Addrs: []string{"127.0.0.1:11211"}}
 	backendMock := newMemcachedClientBackendMock()
 
@@ -59,9 +62,13 @@ func TestMemcachedClient_SetAsync(t *testing.T) {
 	testutil.Ok(t, err)
 	defer client.Stop()
 
-	testutil.Ok(t, client.SetAsync("key-1", []byte("value-1"), time.Second))
-	testutil.Ok(t, client.SetAsync("key-2", []byte("value-2"), time.Second))
+	testutil.Ok(t, client.SetAsync(ctx, "key-1", []byte("value-1"), time.Second))
+	testutil.Ok(t, client.SetAsync(ctx, "key-2", []byte("value-2"), time.Second))
 	testutil.Ok(t, backendMock.waitItems(2))
+
+	testutil.Equals(t, 2.0, prom_testutil.ToFloat64(client.operations.WithLabelValues(opSet)))
+	testutil.Equals(t, 0.0, prom_testutil.ToFloat64(client.operations.WithLabelValues(opGetMulti)))
+	testutil.Equals(t, 0.0, prom_testutil.ToFloat64(client.failures.WithLabelValues(opSet)))
 }
 
 func TestMemcachedClient_GetMulti(t *testing.T) {
@@ -72,7 +79,6 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 		initialItems          []memcache.Item
 		getKeys               []string
 		expectedHits          map[string][]byte
-		expectedErr           error
 		expectedGetMultiCount int
 	}{
 		"should fetch keys in a single batch if the input keys is <= the max batch size": {
@@ -148,7 +154,6 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 			},
 			getKeys:               []string{"key-1", "key-2", "key-3", "key-4"},
 			expectedHits:          map[string][]byte{"key-3": []byte("value-3")},
-			expectedErr:           nil,
 			expectedGetMultiCount: 2,
 		},
 		"should return no error on partial errors while fetching batches and no items found": {
@@ -162,7 +167,6 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 			},
 			getKeys:               []string{"key-5", "key-6", "key-7"},
 			expectedHits:          map[string][]byte{},
-			expectedErr:           nil,
 			expectedGetMultiCount: 2,
 		},
 		"should return error on all errors while fetching batches": {
@@ -176,13 +180,13 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 			},
 			getKeys:               []string{"key-5", "key-6", "key-7"},
 			expectedHits:          nil,
-			expectedErr:           errors.New("mocked GetMulti error"),
 			expectedGetMultiCount: 2,
 		},
 	}
 
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
+			ctx := context.Background()
 			config := MemcachedClientConfig{
 				Addrs:                       []string{"127.0.0.1:11211"},
 				MaxGetMultiBatchSize:        testData.maxBatchSize,
@@ -198,30 +202,32 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 
 			// Populate memcached with the initial items.
 			for _, item := range testData.initialItems {
-				testutil.Ok(t, client.SetAsync(item.Key, item.Value, time.Second))
+				testutil.Ok(t, client.SetAsync(ctx, item.Key, item.Value, time.Second))
 			}
 
 			// Wait until initial items have been added.
 			testutil.Ok(t, backendMock.waitItems(len(testData.initialItems)))
 
 			// Read back the items.
-			hits, err := client.GetMulti(testData.getKeys)
-			testutil.Equals(t, testData.expectedHits, hits)
-			testutil.Equals(t, testData.expectedErr, err)
+			testutil.Equals(t, testData.expectedHits, client.GetMulti(ctx, testData.getKeys))
 
 			// Ensure the client has interacted with the backend as expected.
 			backendMock.lock.Lock()
 			defer backendMock.lock.Unlock()
 			testutil.Equals(t, testData.expectedGetMultiCount, backendMock.getMultiCount)
+
+			// Ensure metrics are tracked.
+			testutil.Equals(t, float64(testData.expectedGetMultiCount), prom_testutil.ToFloat64(client.operations.WithLabelValues(opGetMulti)))
+			testutil.Equals(t, float64(testData.mockedGetMultiErrors), prom_testutil.ToFloat64(client.failures.WithLabelValues(opGetMulti)))
 		})
 	}
 }
 
-func prepare(config MemcachedClientConfig, backendMock *memcachedClientBackendMock) (MemcachedClient, error) {
+func prepare(config MemcachedClientConfig, backendMock *memcachedClientBackendMock) (*memcachedClient, error) {
 	logger := log.NewNopLogger()
 	selector := &MemcachedJumpHashSelector{}
 	provider := dns.NewProvider(logger, nil, dns.GolangResolverType)
-	client, err := newMemcachedClient(logger, backendMock, selector, provider, config)
+	client, err := newMemcachedClient(logger, "test", backendMock, selector, provider, config, nil)
 
 	return client, err
 }

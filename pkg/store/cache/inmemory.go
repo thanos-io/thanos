@@ -1,6 +1,7 @@
 package storecache
 
 import (
+	"context"
 	"math"
 	"sync"
 
@@ -237,13 +238,13 @@ func (c *InMemoryIndexCache) reset() {
 
 // StorePostings sets the postings identified by the ulid and label to the value v,
 // if the postings already exists in the cache it is not mutated.
-func (c *InMemoryIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte) {
+func (c *InMemoryIndexCache) StorePostings(ctx context.Context, blockID ulid.ULID, l labels.Label, v []byte) {
 	c.set(cacheTypePostings, cacheKey{blockID, cacheKeyPostings(l)}, v)
 }
 
 // FetchMultiPostings fetches multiple postings - each identified by a label -
 // and returns a map containing cache hits, along with a list of missing keys.
-func (c *InMemoryIndexCache) FetchMultiPostings(blockID ulid.ULID, keys []labels.Label) (hits map[labels.Label][]byte, misses []labels.Label) {
+func (c *InMemoryIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label) (hits map[labels.Label][]byte, misses []labels.Label) {
 	hits = map[labels.Label][]byte{}
 
 	for _, key := range keys {
@@ -260,13 +261,13 @@ func (c *InMemoryIndexCache) FetchMultiPostings(blockID ulid.ULID, keys []labels
 
 // StoreSeries sets the series identified by the ulid and id to the value v,
 // if the series already exists in the cache it is not mutated.
-func (c *InMemoryIndexCache) StoreSeries(blockID ulid.ULID, id uint64, v []byte) {
+func (c *InMemoryIndexCache) StoreSeries(ctx context.Context, blockID ulid.ULID, id uint64, v []byte) {
 	c.set(cacheTypeSeries, cacheKey{blockID, cacheKeySeries(id)}, v)
 }
 
 // FetchMultiSeries fetches multiple series - each identified by ID - from the cache
 // and returns a map containing cache hits, along with a list of missing IDs.
-func (c *InMemoryIndexCache) FetchMultiSeries(blockID ulid.ULID, ids []uint64) (hits map[uint64][]byte, misses []uint64) {
+func (c *InMemoryIndexCache) FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []uint64) (hits map[uint64][]byte, misses []uint64) {
 	hits = map[uint64][]byte{}
 
 	for _, id := range ids {

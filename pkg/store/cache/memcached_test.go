@@ -1,6 +1,7 @@
 package storecache
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -25,13 +26,12 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 	value3 := []byte{3}
 
 	tests := map[string]struct {
-		setup            []mockedPostings
-		mockedErr        error
-		fetchBlockID     ulid.ULID
-		fetchLabels      []labels.Label
-		expectedHits     map[labels.Label][]byte
-		expectedMisses   []labels.Label
-		expectedFailures int
+		setup          []mockedPostings
+		mockedErr      error
+		fetchBlockID   ulid.ULID
+		fetchLabels    []labels.Label
+		expectedHits   map[labels.Label][]byte
+		expectedMisses []labels.Label
 	}{
 		"should return no hits on empty cache": {
 			setup:          []mockedPostings{},
@@ -70,12 +70,11 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 				{block: block1, label: label2, value: value2},
 				{block: block2, label: label1, value: value3},
 			},
-			mockedErr:        errors.New("mocked error"),
-			fetchBlockID:     block1,
-			fetchLabels:      []labels.Label{label1, label2},
-			expectedHits:     nil,
-			expectedMisses:   []labels.Label{label1, label2},
-			expectedFailures: 2,
+			mockedErr:      errors.New("mocked error"),
+			fetchBlockID:   block1,
+			fetchLabels:    []labels.Label{label1, label2},
+			expectedHits:   nil,
+			expectedMisses: []labels.Label{label1, label2},
 		},
 	}
 
@@ -86,22 +85,21 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 			testutil.Ok(t, err)
 
 			// Store the postings expected before running the test.
+			ctx := context.Background()
 			for _, p := range testData.setup {
-				c.StorePostings(p.block, p.label, p.value)
+				c.StorePostings(ctx, p.block, p.label, p.value)
 			}
 
 			// Fetch postings from cached and assert on it.
-			hits, misses := c.FetchMultiPostings(testData.fetchBlockID, testData.fetchLabels)
+			hits, misses := c.FetchMultiPostings(ctx, testData.fetchBlockID, testData.fetchLabels)
 			testutil.Equals(t, testData.expectedHits, hits)
 			testutil.Equals(t, testData.expectedMisses, misses)
 
 			// Assert on metrics.
 			testutil.Equals(t, float64(len(testData.fetchLabels)), prom_testutil.ToFloat64(c.requests.WithLabelValues(cacheTypePostings)))
 			testutil.Equals(t, float64(len(testData.expectedHits)), prom_testutil.ToFloat64(c.hits.WithLabelValues(cacheTypePostings)))
-			testutil.Equals(t, float64(testData.expectedFailures), prom_testutil.ToFloat64(c.failures.WithLabelValues(cacheTypePostings)))
 			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.requests.WithLabelValues(cacheTypeSeries)))
 			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.hits.WithLabelValues(cacheTypeSeries)))
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.failures.WithLabelValues(cacheTypeSeries)))
 		})
 	}
 }
@@ -117,13 +115,12 @@ func TestMemcachedIndexCache_FetchMultiSeries(t *testing.T) {
 	value3 := []byte{3}
 
 	tests := map[string]struct {
-		setup            []mockedSeries
-		mockedErr        error
-		fetchBlockID     ulid.ULID
-		fetchIds         []uint64
-		expectedHits     map[uint64][]byte
-		expectedMisses   []uint64
-		expectedFailures int
+		setup          []mockedSeries
+		mockedErr      error
+		fetchBlockID   ulid.ULID
+		fetchIds       []uint64
+		expectedHits   map[uint64][]byte
+		expectedMisses []uint64
 	}{
 		"should return no hits on empty cache": {
 			setup:          []mockedSeries{},
@@ -162,12 +159,11 @@ func TestMemcachedIndexCache_FetchMultiSeries(t *testing.T) {
 				{block: block1, id: 2, value: value2},
 				{block: block2, id: 1, value: value3},
 			},
-			mockedErr:        errors.New("mocked error"),
-			fetchBlockID:     block1,
-			fetchIds:         []uint64{1, 2},
-			expectedHits:     nil,
-			expectedMisses:   []uint64{1, 2},
-			expectedFailures: 2,
+			mockedErr:      errors.New("mocked error"),
+			fetchBlockID:   block1,
+			fetchIds:       []uint64{1, 2},
+			expectedHits:   nil,
+			expectedMisses: []uint64{1, 2},
 		},
 	}
 
@@ -178,22 +174,21 @@ func TestMemcachedIndexCache_FetchMultiSeries(t *testing.T) {
 			testutil.Ok(t, err)
 
 			// Store the series expected before running the test.
+			ctx := context.Background()
 			for _, p := range testData.setup {
-				c.StoreSeries(p.block, p.id, p.value)
+				c.StoreSeries(ctx, p.block, p.id, p.value)
 			}
 
 			// Fetch series from cached and assert on it.
-			hits, misses := c.FetchMultiSeries(testData.fetchBlockID, testData.fetchIds)
+			hits, misses := c.FetchMultiSeries(ctx, testData.fetchBlockID, testData.fetchIds)
 			testutil.Equals(t, testData.expectedHits, hits)
 			testutil.Equals(t, testData.expectedMisses, misses)
 
 			// Assert on metrics.
 			testutil.Equals(t, float64(len(testData.fetchIds)), prom_testutil.ToFloat64(c.requests.WithLabelValues(cacheTypeSeries)))
 			testutil.Equals(t, float64(len(testData.expectedHits)), prom_testutil.ToFloat64(c.hits.WithLabelValues(cacheTypeSeries)))
-			testutil.Equals(t, float64(testData.expectedFailures), prom_testutil.ToFloat64(c.failures.WithLabelValues(cacheTypeSeries)))
 			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.requests.WithLabelValues(cacheTypePostings)))
 			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.hits.WithLabelValues(cacheTypePostings)))
-			testutil.Equals(t, 0.0, prom_testutil.ToFloat64(c.failures.WithLabelValues(cacheTypePostings)))
 		})
 	}
 }
@@ -222,9 +217,9 @@ func newMockedMemcachedClient(mockedGetMultiErr error) *mockedMemcachedClient {
 	}
 }
 
-func (c *mockedMemcachedClient) GetMulti(keys []string) (map[string][]byte, error) {
+func (c *mockedMemcachedClient) GetMulti(ctx context.Context, keys []string) map[string][]byte {
 	if c.mockedGetMultiErr != nil {
-		return nil, c.mockedGetMultiErr
+		return nil
 	}
 
 	hits := map[string][]byte{}
@@ -235,10 +230,10 @@ func (c *mockedMemcachedClient) GetMulti(keys []string) (map[string][]byte, erro
 		}
 	}
 
-	return hits, nil
+	return hits
 }
 
-func (c *mockedMemcachedClient) SetAsync(key string, value []byte, ttl time.Duration) error {
+func (c *mockedMemcachedClient) SetAsync(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	c.cache[key] = value
 
 	return nil

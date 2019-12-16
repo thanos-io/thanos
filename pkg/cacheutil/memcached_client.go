@@ -10,7 +10,9 @@ import (
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 const (
@@ -21,6 +23,9 @@ const (
 	defaultDNSProviderUpdateInterval   = 10 * time.Second
 	defaultMaxGetMultiBatchConcurrency = 20
 	defaultMaxGetMultiBatchSize        = 1024
+
+	opSet      = "set"
+	opGetMulti = "getmulti"
 )
 
 var (
@@ -30,11 +35,12 @@ var (
 
 // MemcachedClient is a high level client to interact with memcached.
 type MemcachedClient interface {
-	// GetMulti fetches multiple keys at once from memcached.
-	GetMulti(keys []string) (map[string][]byte, error)
+	// GetMulti fetches multiple keys at once from memcached. In case of error,
+	// an empty map is returned and the error tracked/logged.
+	GetMulti(ctx context.Context, keys []string) map[string][]byte
 
 	// SetAsync enqueues an asynchronous operation to store a key into memcached.
-	SetAsync(key string, value []byte, ttl time.Duration) error
+	SetAsync(ctx context.Context, key string, value []byte, ttl time.Duration) error
 
 	// Stop client and release underlying resources.
 	Stop()
@@ -143,9 +149,15 @@ type memcachedClient struct {
 
 	// Wait group used to wait all workers on stopping.
 	workers sync.WaitGroup
+
+	// Tracked metrics.
+	operations *prometheus.CounterVec
+	failures   *prometheus.CounterVec
+	duration   *prometheus.HistogramVec
 }
 
 type memcachedGetMultiBatch struct {
+	ctx     context.Context
 	keys    []string
 	results chan<- *memcachedGetMultiResult
 }
@@ -156,7 +168,7 @@ type memcachedGetMultiResult struct {
 }
 
 // NewMemcachedClient makes a new MemcachedClient.
-func NewMemcachedClient(logger log.Logger, provider *dns.Provider, config MemcachedClientConfig) (*memcachedClient, error) {
+func NewMemcachedClient(logger log.Logger, name string, provider *dns.Provider, config MemcachedClientConfig, reg prometheus.Registerer) (*memcachedClient, error) {
 	// We use a custom servers selector in order to use a jump hash
 	// for servers selection.
 	selector := &MemcachedJumpHashSelector{}
@@ -165,10 +177,18 @@ func NewMemcachedClient(logger log.Logger, provider *dns.Provider, config Memcac
 	client.Timeout = config.Timeout
 	client.MaxIdleConns = config.MaxIdleConnections
 
-	return newMemcachedClient(logger, client, selector, provider, config)
+	return newMemcachedClient(logger, name, client, selector, provider, config, reg)
 }
 
-func newMemcachedClient(logger log.Logger, client memcachedClientBackend, selector *MemcachedJumpHashSelector, provider *dns.Provider, config MemcachedClientConfig) (*memcachedClient, error) {
+func newMemcachedClient(
+	logger log.Logger,
+	name string,
+	client memcachedClientBackend,
+	selector *MemcachedJumpHashSelector,
+	provider *dns.Provider,
+	config MemcachedClientConfig,
+	reg prometheus.Registerer,
+) (*memcachedClient, error) {
 	config.applyDefaults()
 	if err := config.validate(); err != nil {
 		return nil, err
@@ -183,6 +203,29 @@ func newMemcachedClient(logger log.Logger, client memcachedClientBackend, select
 		asyncQueue:    make(chan func(), config.MaxAsyncBufferSize),
 		getMultiQueue: make(chan *memcachedGetMultiBatch),
 		stop:          make(chan struct{}, 1),
+	}
+
+	c.operations = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name:        "thanos_memcached_operations_total",
+		Help:        "Total number of operations against memcached.",
+		ConstLabels: prometheus.Labels{"name": name},
+	}, []string{"operation"})
+
+	c.failures = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name:        "thanos_memcached_operation_failures_total",
+		Help:        "Total number of operations against memcached that failed.",
+		ConstLabels: prometheus.Labels{"name": name},
+	}, []string{"operation"})
+
+	c.duration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:        "thanos_memcached_operation_duration_seconds",
+		Help:        "Duration of operations against memcached.",
+		ConstLabels: prometheus.Labels{"name": name},
+		Buckets:     []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1},
+	}, []string{"operation"})
+
+	if reg != nil {
+		reg.MustRegister(c.operations, c.failures, c.duration)
 	}
 
 	// As soon as the client is created it must ensure that memcached server
@@ -219,31 +262,40 @@ func (c *memcachedClient) Stop() {
 	c.workers.Wait()
 }
 
-func (c *memcachedClient) SetAsync(key string, value []byte, ttl time.Duration) error {
+func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	return c.enqueueAsync(func() {
+		start := time.Now()
+		c.operations.WithLabelValues(opSet).Inc()
+
+		span, _ := tracing.StartSpan(ctx, "memcached_set")
 		err := c.client.Set(&memcache.Item{
 			Key:        key,
 			Value:      value,
 			Expiration: int32(time.Now().Add(ttl).Unix()),
 		})
+		span.Finish()
 		if err != nil {
+			c.failures.WithLabelValues(opSet).Inc()
 			level.Warn(c.logger).Log("msg", fmt.Sprintf("failed to store item with key %s to memcached", key), "err", err)
+			return
 		}
+
+		c.duration.WithLabelValues(opSet).Observe(time.Since(start).Seconds())
 	})
 }
 
-func (c *memcachedClient) GetMulti(keys []string) (map[string][]byte, error) {
-	batches, err := c.getMultiBatched(keys)
+func (c *memcachedClient) GetMulti(ctx context.Context, keys []string) map[string][]byte {
+	batches, err := c.getMultiBatched(ctx, keys)
 	if err != nil {
-		if len(batches) == 0 {
-			return nil, err
-		}
+		level.Warn(c.logger).Log("msg", "failed to fetch keys from memcached", "err", err)
 
 		// In case we have both results and an error, it means some batch requests
 		// failed and other succeeded. In this case we prefer to log it and move on,
 		// given returning some results from the cache is better than returning
 		// nothing.
-		level.Warn(c.logger).Log("msg", "failed to fetch some keys batches from memcached", "err", err)
+		if len(batches) == 0 {
+			return nil
+		}
 	}
 
 	hits := map[string][]byte{}
@@ -253,13 +305,13 @@ func (c *memcachedClient) GetMulti(keys []string) (map[string][]byte, error) {
 		}
 	}
 
-	return hits, nil
+	return hits
 }
 
-func (c *memcachedClient) getMultiBatched(keys []string) ([]map[string]*memcache.Item, error) {
+func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([]map[string]*memcache.Item, error) {
 	// Do not batch if the input keys are less then the max batch size.
 	if len(keys) <= c.config.MaxGetMultiBatchSize {
-		items, err := c.client.GetMulti(keys)
+		items, err := c.getMultiSingle(ctx, keys)
 		if err != nil {
 			return nil, err
 		}
@@ -286,6 +338,7 @@ func (c *memcachedClient) getMultiBatched(keys []string) ([]map[string]*memcache
 			}
 
 			c.getMultiQueue <- &memcachedGetMultiBatch{
+				ctx:     ctx,
 				keys:    keys[batchStart:batchEnd],
 				results: results,
 			}
@@ -308,6 +361,22 @@ func (c *memcachedClient) getMultiBatched(keys []string) ([]map[string]*memcache
 	}
 
 	return items, lastErr
+}
+
+func (c *memcachedClient) getMultiSingle(ctx context.Context, keys []string) (map[string]*memcache.Item, error) {
+	start := time.Now()
+	c.operations.WithLabelValues(opGetMulti).Inc()
+
+	span, _ := tracing.StartSpan(ctx, "memcached_get_multi")
+	items, err := c.client.GetMulti(keys)
+	span.Finish()
+	if err != nil {
+		c.failures.WithLabelValues(opGetMulti).Inc()
+	} else {
+		c.duration.WithLabelValues(opGetMulti).Observe(time.Since(start).Seconds())
+	}
+
+	return items, err
 }
 
 func (c *memcachedClient) enqueueAsync(op func()) error {
@@ -339,7 +408,7 @@ func (c *memcachedClient) getMultiQueueProcessLoop() {
 		select {
 		case batch := <-c.getMultiQueue:
 			res := &memcachedGetMultiResult{}
-			res.items, res.err = c.client.GetMulti(batch.keys)
+			res.items, res.err = c.getMultiSingle(batch.ctx, batch.keys)
 
 			batch.results <- res
 		case <-c.stop:
