@@ -2,10 +2,12 @@ package storecache
 
 import (
 	"context"
-	"fmt"
+	"encoding/base64"
+	"strconv"
 
 	"github.com/oklog/ulid"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"golang.org/x/crypto/blake2b"
 )
 
 const (
@@ -62,11 +64,12 @@ func (c cacheKey) string() string {
 	switch c.key.(type) {
 	case cacheKeyPostings:
 		// Do not use non cryptographically hash functions to avoid hash collisions
-		// which would end up in wrong query result
+		// which would end up in wrong query results
 		lbl := c.key.(cacheKeyPostings)
-		return fmt.Sprintf("P:%s:%s:%s", c.block.String(), lbl.Name, lbl.Value)
+		lblHash := blake2b.Sum256([]byte(lbl.Name + ":" + lbl.Value))
+		return "P:" + c.block.String() + ":" + base64.RawURLEncoding.EncodeToString(lblHash[0:])
 	case cacheKeySeries:
-		return fmt.Sprintf("S:%s:%d", c.block.String(), c.key.(cacheKeySeries))
+		return "S:" + c.block.String() + ":" + strconv.FormatUint(uint64(c.key.(cacheKeySeries)), 10)
 	default:
 		return ""
 	}
