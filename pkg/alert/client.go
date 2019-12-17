@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
@@ -161,6 +160,11 @@ func (c *AlertmanagerConfig) UnmarshalYAML(unmarshal func(interface{}) error) er
 	return unmarshal((*plain)(c))
 }
 
+type AddressProvider interface {
+	Resolve(context.Context, []string)
+	Addresses() []string
+}
+
 // Alertmanager represents an HTTP client that can send alerts to a cluster of Alertmanager endpoints.
 type Alertmanager struct {
 	logger log.Logger
@@ -174,12 +178,11 @@ type Alertmanager struct {
 	fileSDCache     *cache.Cache
 	fileDiscoverers []*file.Discovery
 
-	mtx      sync.RWMutex
-	resolved []string
+	provider AddressProvider
 }
 
 // NewAlertmanager returns a new Alertmanager client.
-func NewAlertmanager(logger log.Logger, cfg AlertmanagerConfig) (*Alertmanager, error) {
+func NewAlertmanager(logger log.Logger, cfg AlertmanagerConfig, provider AddressProvider) (*Alertmanager, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -210,6 +213,7 @@ func NewAlertmanager(logger log.Logger, cfg AlertmanagerConfig) (*Alertmanager, 
 		staticAddresses: cfg.StaticAddresses,
 		fileSDCache:     cache.New(),
 		fileDiscoverers: discoverers,
+		provider:        provider,
 	}, nil
 }
 
@@ -237,6 +241,12 @@ func BuildAlertmanagerConfig(logger log.Logger, address string, timeout time.Dur
 			// Scheme is of the form "<dns type>+<http scheme>".
 			scheme = strings.TrimPrefix(scheme, prefix)
 			host = prefix + parsed.Host
+			if qType == dns.A {
+				if _, _, err := net.SplitHostPort(parsed.Host); err != nil {
+					// The host port could be missing. Append the defaultAlertmanagerPort.
+					host = host + ":" + strconv.Itoa(defaultAlertmanagerPort)
+				}
+			}
 			break
 		}
 	}
@@ -260,10 +270,8 @@ func BuildAlertmanagerConfig(logger log.Logger, address string, timeout time.Dur
 
 // Endpoints returns the list of known Alertmanager endpoints.
 func (a *Alertmanager) Endpoints() []*url.URL {
-	a.mtx.RLock()
-	defer a.mtx.RUnlock()
 	var urls []*url.URL
-	for _, addr := range a.resolved {
+	for _, addr := range a.provider.Addresses() {
 		urls = append(urls,
 			&url.URL{
 				Scheme: a.scheme,
@@ -275,7 +283,7 @@ func (a *Alertmanager) Endpoints() []*url.URL {
 	return urls
 }
 
-// Post sends a POST request to the given URL.
+// Do sends a POST request to the given URL.
 func (a *Alertmanager) Do(ctx context.Context, u *url.URL, r io.Reader) error {
 	req, err := http.NewRequest("POST", u.String(), r)
 	if err != nil {
@@ -329,36 +337,7 @@ func (a *Alertmanager) Discover(ctx context.Context) {
 	wg.Wait()
 }
 
-// Update refreshes and resolves the list of targets.
-func (a *Alertmanager) Update(ctx context.Context, resolver dns.Resolver) error {
-	var resolved []string
-	for _, addr := range append(a.fileSDCache.Addresses(), a.staticAddresses...) {
-		level.Debug(a.logger).Log("msg", "resolving address", "addr", addr)
-		qtypeAndName := strings.SplitN(addr, "+", 2)
-		if len(qtypeAndName) != 2 {
-			level.Debug(a.logger).Log("msg", "no lookup needed", "addr", addr)
-			resolved = append(resolved, addr)
-			continue
-		}
-		qtype, name := dns.QType(qtypeAndName[0]), qtypeAndName[1]
-
-		// Get only the host and resolve it if needed.
-		host := name
-		if qtype == dns.A {
-			if _, _, err := net.SplitHostPort(host); err != nil {
-				// The host port could be missing. Append the defaultAlertmanagerPort.
-				host = host + ":" + strconv.Itoa(defaultAlertmanagerPort)
-			}
-		}
-		addrs, err := resolver.Resolve(ctx, host, qtype)
-		if err != nil {
-			return errors.Wrap(err, "failed to resolve alertmanager address")
-		}
-		level.Debug(a.logger).Log("msg", "address resolved", "addr", addr, "resolved", strings.Join(addrs, ","))
-		resolved = append(resolved, addrs...)
-	}
-	a.mtx.Lock()
-	a.resolved = resolved
-	a.mtx.Unlock()
-	return nil
+// Resolve refreshes and resolves the list of Alertmanager targets.
+func (a *Alertmanager) Resolve(ctx context.Context) {
+	a.provider.Resolve(ctx, append(a.fileSDCache.Addresses(), a.staticAddresses...))
 }

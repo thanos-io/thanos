@@ -317,11 +317,19 @@ func runRule(
 			alertingCfg.Alertmanagers = append(alertingCfg.Alertmanagers, cfg)
 		}
 	}
+
 	if len(alertingCfg.Alertmanagers) == 0 {
 		level.Warn(logger).Log("msg", "no alertmanager configured")
 	}
+
+	amProvider := dns.NewProvider(
+		logger,
+		extprom.WrapRegistererWithPrefix("thanos_ruler_alertmanagers_", reg),
+		dns.ResolverType(dnsSDResolver),
+	)
 	for _, cfg := range alertingCfg.Alertmanagers {
-		am, err := alert.NewAlertmanager(logger, cfg)
+		// Each Alertmanager client needs its own DNS provider.
+		am, err := alert.NewAlertmanager(logger, cfg, amProvider.Clone())
 		if err != nil {
 			return err
 		}
@@ -394,8 +402,6 @@ func runRule(
 	}
 	// Discover and resolve Alertmanager addresses.
 	{
-		resolver := dns.NewResolver(dns.ResolverType(dnsSDResolver).ToResolver(logger))
-
 		for i := range alertmgrs {
 			am := alertmgrs[i]
 			ctx, cancel := context.WithCancel(context.Background())
@@ -408,10 +414,7 @@ func runRule(
 
 			g.Add(func() error {
 				return runutil.Repeat(alertmgrsDNSSDInterval, ctx.Done(), func() error {
-					if err := am.Update(ctx, resolver); err != nil {
-						level.Error(logger).Log("msg", "refreshing alertmanagers failed", "err", err)
-						alertMngrAddrResolutionErrors.Inc()
-					}
+					am.Resolve(ctx)
 					return nil
 				})
 			}, func(error) {
