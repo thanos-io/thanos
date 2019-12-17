@@ -27,7 +27,7 @@ var (
 	errMemcachedConfigNoAddrs   = errors.New("no memcached addrs provided")
 
 	defaultMemcachedClientConfig = MemcachedClientConfig{
-		Timeout:                     100 * time.Millisecond,
+		Timeout:                     500 * time.Millisecond,
 		MaxIdleConnections:          100,
 		MaxAsyncConcurrency:         20,
 		MaxAsyncBufferSize:          10000,

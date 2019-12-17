@@ -202,7 +202,7 @@ config:
     - memcached-2:11211
 
   # Socket read/write timeout.
-  timeout: 100ms
+  timeout: 500ms
 
   # Maximum number of idle connections that will be maintained per address.
   # For better performances, this should be set to a number higher than your
