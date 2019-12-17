@@ -33,7 +33,7 @@ The repeatable flag `--store=<store>` can be used to specify a `StoreAPI` that `
 
 The repeatable flag `--query=<query>` can be used to specify a `QueryAPI` that `Thanos Rule` should use.
 
-The repeatable flag `--alertmanagers.url=<alertmanager>` can be used to specify a `Alertmanager API` that `Thanos Rule` should use.
+`Thanos Rule` also supports the configuration of Alertmanager endpoints using YAML with the `--alertmanagers.config=<content>` and `--alertmanagers.config-file=<path>` flags in the `StaticAddress` section.
 
 ## File Service Discovery
 
@@ -77,7 +77,7 @@ Again, the `<path>` can be a glob pattern.
 
 The flag `--query.sd-interval=<5m>` can be used to change the fallback re-read interval.
 
-`Thanos Rule` also supports the configuration of Alertmanager endpoints using YAML with the `--alertmanagers.config=<content>` and `--alertmanagers.config-file=<path>` flags.
+`Thanos Rule` also supports the configuration of Alertmanager endpoints using YAML with the `--alertmanagers.config=<content>` and `--alertmanagers.config-file=<path>` flags in the `FileSDfiles` section..
 
 ## DNS Service Discovery
 

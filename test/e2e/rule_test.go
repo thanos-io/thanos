@@ -157,6 +157,17 @@ func (m *mockAlertmanager) ServeHTTP(resp http.ResponseWriter, req *http.Request
 	m.mtx.Unlock()
 }
 
+// TestRuleAlertmanagerHTTPClient verifies that Thanos Ruler can send alerts to
+// Alertmanager in various setups:
+// * Plain HTTP.
+// * HTTPS with custom CA.
+// * API with a prefix.
+// * API protected by bearer token authentication.
+//
+// Because Alertmanager supports HTTP only and no authentication, the test uses
+// a mocked server instead of the "real" Alertmanager service.
+// The other end-to-end tests exercise against the "real" Alertmanager
+// implementation.
 func TestRuleAlertmanagerHTTPClient(t *testing.T) {
 	a := newLocalAddresser()
 

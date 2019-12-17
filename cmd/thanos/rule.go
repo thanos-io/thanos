@@ -328,7 +328,7 @@ func runRule(
 		dns.ResolverType(dnsSDResolver),
 	)
 	for _, cfg := range alertingCfg.Alertmanagers {
-		// Each Alertmanager client needs its own DNS provider.
+		// Each Alertmanager client has a different list of targets thus each needs its own DNS provider.
 		am, err := alert.NewAlertmanager(logger, cfg, amProvider.Clone())
 		if err != nil {
 			return err
