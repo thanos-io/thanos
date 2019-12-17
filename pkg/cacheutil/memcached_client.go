@@ -80,9 +80,6 @@ type MemcachedClientConfig struct {
 
 	// MaxGetMultiBatchConcurrency specifies the maximum number of concurrent batch
 	// executions by GetMulti().
-	// TODO(pracucci) Should this be a global (per-client) limit or a per-single MultiGet()
-	//                limit? The latter would allow us to avoid a single very large MultiGet()
-	//                will slow down other requests.
 	MaxGetMultiBatchConcurrency int `yaml:"max_get_multi_batch_concurrency"`
 
 	// MaxGetMultiBatchSize specifies the maximum number of keys a single underlying
