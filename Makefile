@@ -96,15 +96,25 @@ define fetch_go_bin_version
 
 endef
 
-# require_clean_work_tree check git tree and exit if any unstanged change.
+# ensure_no_staged_changes check git tree and exit if any unstanged change.
 # arguments:
 # $(1): Help info. (e.g "Please clean up white noise"). It is optional.
 # The default help info does not need quote or would print quote.
-define require_clean_work_tree
+define ensure_no_staged_changes
 	@git update-index -q --ignore-submodules --refresh
 
     @if ! git diff-files --quiet --ignore-submodules --; then \
         echo >&2 "$(if $1,$1,You have unstaged changes. Please commit or stash them.)"; \
+        exit 1; \
+    fi
+endef
+
+# ensure_no_uncommitted_changes check git tree and exit if any uncommitted change.
+define ensure_no_uncommitted_changes
+	@if ! git diff-index --cached --quiet HEAD --ignore-submodules --; then \
+		echo >&2 "Your index contains uncommitted changes:"; \
+		git diff-index --cached --name-status -r --ignore-submodules HEAD -- >&2; \
+		echo >&2 "Please commit or stash them."; \
         exit 1; \
     fi
 endef
@@ -175,7 +185,7 @@ check-docs: $(EMBEDMD) $(LICHE) build
 	@$(LICHE) --recursive docs --exclude "(cloud.tencent.com|alibabacloud.com)" --document-root .
 	@$(LICHE) --exclude "(cloud.tencent.com|goreportcard.com|alibabacloud.com)" --document-root . *.md
 	@find -type f -name "*.md" | xargs scripts/cleanup-white-noise.sh
-	$(call require_clean_work_tree,"Please clean up white noise in all docs")
+	$(call ensure_no_staged_changes,"Please clean up white noise in all docs")
 
 # checks Go code comments if they have trailing period (excludes protobuffers and vendor files).
 # Comments with more than 3 spaces at beginning are omitted from the check, example: '//    - foo'.
@@ -295,7 +305,7 @@ lint: check-git $(GOLANGCILINT) $(MISSPELL)
 	@find . -type f | grep -v vendor/ | grep -vE '\./\..*' | xargs $(MISSPELL) -error
 	@echo ">> detecting white noise"
 	@find . -type f \( -name "*.md" -o -name "*.go" \) | xargs scripts/cleanup-white-noise.sh
-	$(call require_clean_work_tree,"Please clean up white noise in all docs or Go files")
+	$(call ensure_no_staged_changes,"Please clean up white noise in all docs or Go files")
 
 .PHONY: web-serve
 web-serve: web-pre-process $(HUGO)
