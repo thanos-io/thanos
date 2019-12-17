@@ -217,12 +217,13 @@ config:
 
   # Maximum number of concurrent batch executions when fetching keys from memcached.
   # Each batch can fetch up to max_get_multi_batch_size keys.
-  max_get_multi_batch_concurrency: 20
+  max_get_multi_batch_concurrency: 0
 
   # Maximum number of keys a single underlying GetMulti() operation should run. If
   # more keys are specified, internally keys are splitted into multiple batches and
   # fetched concurrently up to max_get_multi_batch_concurrency parallelism.
-  max_get_multi_batch_size: 1024
+  # If set to 0, the max batch size is unlimited.
+  max_get_multi_batch_size: 0
 
   # DNS discovery update interval.
   dns_provider_update_interval: 10s

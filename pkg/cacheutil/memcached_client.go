@@ -32,7 +32,7 @@ var (
 		MaxAsyncConcurrency:         20,
 		MaxAsyncBufferSize:          10000,
 		MaxGetMultiBatchConcurrency: 20,
-		MaxGetMultiBatchSize:        1024,
+		MaxGetMultiBatchSize:        0,
 		DNSProviderUpdateInterval:   10 * time.Second,
 	}
 )
@@ -85,10 +85,10 @@ type MemcachedClientConfig struct {
 	//                will slow down other requests.
 	MaxGetMultiBatchConcurrency int `yaml:"max_get_multi_batch_concurrency"`
 
-	// MaxGetMultiBatchSize specified the maximum number of keys a single underlying
+	// MaxGetMultiBatchSize specifies the maximum number of keys a single underlying
 	// GetMulti() should run. If more keys are specified, internally keys are splitted
 	// into multiple batches and fetched concurrently up to MaxGetMultiBatchConcurrency
-	// parallelism.
+	// parallelism. If set to 0, the max batch size is unlimited.
 	MaxGetMultiBatchSize int `yaml:"max_get_multi_batch_size"`
 
 	// DNSProviderUpdateInterval specifies the DNS discovery update interval.
@@ -308,7 +308,7 @@ func (c *memcachedClient) GetMulti(ctx context.Context, keys []string) map[strin
 
 func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([]map[string]*memcache.Item, error) {
 	// Do not batch if the input keys are less then the max batch size.
-	if len(keys) <= c.config.MaxGetMultiBatchSize {
+	if (c.config.MaxGetMultiBatchSize <= 0) || (len(keys) <= c.config.MaxGetMultiBatchSize) {
 		items, err := c.getMultiSingle(ctx, keys)
 		if err != nil {
 			return nil, err

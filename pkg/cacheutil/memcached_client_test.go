@@ -182,6 +182,24 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 			},
 			expectedGetMultiCount: 2,
 		},
+		"should fetch keys in a single batch if max batch size is disabled (0)": {
+			maxBatchSize:        0,
+			maxBatchConcurrency: 5,
+			initialItems: []memcache.Item{
+				{Key: "key-1", Value: []byte("value-1")},
+				{Key: "key-2", Value: []byte("value-2")},
+				{Key: "key-3", Value: []byte("value-3")},
+				{Key: "key-4", Value: []byte("value-4")},
+			},
+			getKeys: []string{"key-1", "key-2", "key-3", "key-4"},
+			expectedHits: map[string][]byte{
+				"key-1": []byte("value-1"),
+				"key-2": []byte("value-2"),
+				"key-3": []byte("value-3"),
+				"key-4": []byte("value-4"),
+			},
+			expectedGetMultiCount: 1,
+		},
 		"should return no error on key misses": {
 			maxBatchSize:        2,
 			maxBatchConcurrency: 5,
