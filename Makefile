@@ -299,7 +299,7 @@ web: web-pre-process $(HUGO)
 # to debug big allocations during linting.
 lint: check-git $(GOLANGCILINT) $(MISSPELL)
 	@echo ">> examining all of the Go files"
-	@go vet -stdmethods=false
+	@go vet -stdmethods=false ./pkg/... ./cmd/... && go vet doc.go
 	@echo ">> linting all of the Go files GOGC=${GOGC}"
 	@$(GOLANGCILINT) run
 	@echo ">> detecting misspells"
