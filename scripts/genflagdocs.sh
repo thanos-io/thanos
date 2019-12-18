@@ -50,7 +50,7 @@ for x in "${checkCommands[@]}"; do
 done
 
 # remove white noise
-sed -i 's/[ \t]*$//' docs/components/flags/*.txt
+sed -i -e 's/[ \t]*$//' docs/components/flags/*.txt
 
 go run scripts/cfggen/main.go --output-dir=docs/flags
 
