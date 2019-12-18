@@ -80,7 +80,7 @@ func TestMemcachedJumpHashSelector_PickServer_ShouldEvenlyDistributeKeysToServer
 	selector := MemcachedJumpHashSelector{}
 	testutil.Ok(t, selector.SetServers(servers...))
 
-	// Calculate the distribution of keys
+	// Calculate the distribution of keys.
 	distribution := make(map[string]int)
 
 	for i := 0; i < 1000; i++ {
@@ -120,7 +120,7 @@ func TestMemcachedJumpHashSelector_PickServer_ShouldUseConsistentHashing(t *test
 	selector := MemcachedJumpHashSelector{}
 	testutil.Ok(t, selector.SetServers(servers...))
 
-	// Pick a server for each key
+	// Pick a server for each key.
 	distribution := make(map[string]string)
 	numKeys := 1000
 
@@ -131,11 +131,11 @@ func TestMemcachedJumpHashSelector_PickServer_ShouldUseConsistentHashing(t *test
 		distribution[key] = addr.String()
 	}
 
-	// Add 1 more server that - in a natural ordering - is added as last
+	// Add 1 more server that - in a natural ordering - is added as last.
 	servers = append(servers, "127.0.0.10:11211")
 	testutil.Ok(t, selector.SetServers(servers...))
 
-	// Calculate the number of keys who has been moved due to the resharding
+	// Calculate the number of keys who has been moved due to the resharding.
 	moved := 0
 
 	for i := 0; i < 1000; i++ {
@@ -148,7 +148,7 @@ func TestMemcachedJumpHashSelector_PickServer_ShouldUseConsistentHashing(t *test
 		}
 	}
 
-	// Expect we haven't moved more than (1/shards)% +2% tolerance
+	// Expect we haven't moved more than (1/shards)% +2% tolerance.
 	maxExpectedMovedPerc := (1.0 / float64(len(servers))) + 0.02
 	maxExpectedMoved := int(float64(numKeys) * maxExpectedMovedPerc)
 	if moved > maxExpectedMoved {
@@ -166,7 +166,7 @@ func TestMemcachedJumpHashSelector_PickServer_ShouldReturnErrNoServersOnNoServer
 }
 
 func BenchmarkMemcachedJumpHashSelector_PickServer(b *testing.B) {
-	// Create a pretty long list of servers
+	// Create a pretty long list of servers.
 	servers := make([]string, 0)
 	for i := 1; i <= 60; i++ {
 		servers = append(servers, fmt.Sprintf("127.0.0.%d:11211", i))

@@ -3,7 +3,6 @@ package cacheutil
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -271,7 +270,7 @@ func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte
 		span.Finish()
 		if err != nil {
 			c.failures.WithLabelValues(opSet).Inc()
-			level.Warn(c.logger).Log("msg", fmt.Sprintf("failed to store item with key %s to memcached", key), "err", err)
+			level.Warn(c.logger).Log("msg", "failed to store item memcached", "key", key, "err", err)
 			return
 		}
 
@@ -304,7 +303,7 @@ func (c *memcachedClient) GetMulti(ctx context.Context, keys []string) map[strin
 }
 
 func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([]map[string]*memcache.Item, error) {
-	// Do not batch if the input keys are less then the max batch size.
+	// Do not batch if the input keys are less than the max batch size.
 	if (c.config.MaxGetMultiBatchSize <= 0) || (len(keys) <= c.config.MaxGetMultiBatchSize) {
 		items, err := c.getMultiSingle(ctx, keys)
 		if err != nil {

@@ -63,8 +63,8 @@ func (c cacheKey) size() uint64 {
 func (c cacheKey) string() string {
 	switch c.key.(type) {
 	case cacheKeyPostings:
-		// Do not use non cryptographically hash functions to avoid hash collisions
-		// which would end up in wrong query results
+		// Use cryptographically hash functions to avoid hash collisions
+		// which would end up in wrong query results.
 		lbl := c.key.(cacheKeyPostings)
 		lblHash := blake2b.Sum256([]byte(lbl.Name + ":" + lbl.Value))
 		return "P:" + c.block.String() + ":" + base64.RawURLEncoding.EncodeToString(lblHash[0:])

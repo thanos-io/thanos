@@ -379,8 +379,8 @@ func TestBucketStore_e2e(t *testing.T) {
 
 		t.Log("Test with large, sufficient index cache")
 		indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(s.logger, nil, storecache.InMemoryIndexCacheConfig{
-			MaxItemSizeBytes: 1e5,
-			MaxSizeBytes:     2e5,
+			MaxItemSize: 1e5,
+			MaxSize:     2e5,
 		})
 		testutil.Ok(t, err)
 		s.cache.SwapWith(indexCache)
@@ -388,8 +388,8 @@ func TestBucketStore_e2e(t *testing.T) {
 
 		t.Log("Test with small index cache")
 		indexCache2, err := storecache.NewInMemoryIndexCacheWithConfig(s.logger, nil, storecache.InMemoryIndexCacheConfig{
-			MaxItemSizeBytes: 50,
-			MaxSizeBytes:     100,
+			MaxItemSize: 50,
+			MaxSize:     100,
 		})
 		testutil.Ok(t, err)
 		s.cache.SwapWith(indexCache2)
@@ -422,8 +422,8 @@ func TestBucketStore_ManyParts_e2e(t *testing.T) {
 		s := prepareStoreWithTestBlocks(t, dir, bkt, true, 0, emptyRelabelConfig)
 
 		indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(s.logger, nil, storecache.InMemoryIndexCacheConfig{
-			MaxItemSizeBytes: 1e5,
-			MaxSizeBytes:     2e5,
+			MaxItemSize: 1e5,
+			MaxSize:     2e5,
 		})
 		testutil.Ok(t, err)
 		s.cache.SwapWith(indexCache)
