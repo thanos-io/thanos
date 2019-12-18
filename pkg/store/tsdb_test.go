@@ -73,7 +73,7 @@ func TestTSDBStore_LabelNames(t *testing.T) {
 		{
 			title:  "add another label",
 			labels: []string{"bar", "bar"},
-			// we will get two labels here
+			// We will get two labels here.
 			expectedNames: []string{"bar", "foo"},
 		},
 	} {
