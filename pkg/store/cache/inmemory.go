@@ -17,8 +17,8 @@ import (
 
 var (
 	DefaultInMemoryIndexCacheConfig = InMemoryIndexCacheConfig{
-		MaxSizeBytes:     250 * 1024 * 1024,
-		MaxItemSizeBytes: 125 * 1024 * 1024,
+		MaxSize:     250 * 1024 * 1024,
+		MaxItemSize: 125 * 1024 * 1024,
 	}
 )
 
@@ -42,11 +42,12 @@ type InMemoryIndexCache struct {
 	overflow         *prometheus.CounterVec
 }
 
+// InMemoryIndexCacheConfig holds the in-memory index cache config.
 type InMemoryIndexCacheConfig struct {
-	// MaxSizeBytes represents overall maximum number of bytes cache can contain.
-	MaxSizeBytes uint64 `yaml:"max_size_bytes"`
-	// MaxItemSizeBytes represents maximum size of single item.
-	MaxItemSizeBytes uint64 `yaml:"max_item_size_bytes"`
+	// MaxSize represents overall maximum number of bytes cache can contain.
+	MaxSize Bytes `yaml:"max_size"`
+	// MaxItemSize represents maximum size of single item.
+	MaxItemSize Bytes `yaml:"max_item_size"`
 }
 
 // parseInMemoryIndexCacheConfig unmarshals a buffer into a InMemoryIndexCacheConfig with default values.
@@ -73,14 +74,14 @@ func NewInMemoryIndexCache(logger log.Logger, reg prometheus.Registerer, conf []
 // NewInMemoryIndexCacheWithConfig creates a new thread-safe LRU cache for index entries and ensures the total cache
 // size approximately does not exceed maxBytes.
 func NewInMemoryIndexCacheWithConfig(logger log.Logger, reg prometheus.Registerer, config InMemoryIndexCacheConfig) (*InMemoryIndexCache, error) {
-	if config.MaxItemSizeBytes > config.MaxSizeBytes {
-		return nil, errors.Errorf("max item size (%v) cannot be bigger than overall cache size (%v)", config.MaxItemSizeBytes, config.MaxSizeBytes)
+	if config.MaxItemSize > config.MaxSize {
+		return nil, errors.Errorf("max item size (%v) cannot be bigger than overall cache size (%v)", config.MaxItemSize, config.MaxSize)
 	}
 
 	c := &InMemoryIndexCache{
 		logger:           logger,
-		maxSizeBytes:     config.MaxSizeBytes,
-		maxItemSizeBytes: config.MaxItemSizeBytes,
+		maxSizeBytes:     uint64(config.MaxSize),
+		maxItemSizeBytes: uint64(config.MaxItemSize),
 	}
 
 	c.evicted = prometheus.NewCounterVec(prometheus.CounterOpts{

@@ -33,18 +33,18 @@ func TestNewInMemoryIndexCache(t *testing.T) {
 	conf = []byte{}
 	cache, err = NewInMemoryIndexCache(log.NewNopLogger(), nil, conf)
 	testutil.Ok(t, err)
-	testutil.Equals(t, DefaultInMemoryIndexCacheConfig.MaxSizeBytes, cache.maxSizeBytes)
-	testutil.Equals(t, DefaultInMemoryIndexCacheConfig.MaxItemSizeBytes, cache.maxItemSizeBytes)
+	testutil.Equals(t, uint64(DefaultInMemoryIndexCacheConfig.MaxSize), cache.maxSizeBytes)
+	testutil.Equals(t, uint64(DefaultInMemoryIndexCacheConfig.MaxItemSize), cache.maxItemSizeBytes)
 
-	// Should instance an in-memory index cache with specified YAML config.
+	// Should instance an in-memory index cache with specified YAML config.s with units.
 	conf = []byte(`
-max_size_bytes: 200
-max_item_size_bytes: 100
+max_size: 1MB
+max_item_size: 2KB
 `)
 	cache, err = NewInMemoryIndexCache(log.NewNopLogger(), nil, conf)
 	testutil.Ok(t, err)
-	testutil.Equals(t, uint64(200), cache.maxSizeBytes)
-	testutil.Equals(t, uint64(100), cache.maxItemSizeBytes)
+	testutil.Equals(t, uint64(1024*1024), cache.maxSizeBytes)
+	testutil.Equals(t, uint64(2*1024), cache.maxItemSizeBytes)
 }
 
 func TestInMemoryIndexCache_AvoidsDeadlock(t *testing.T) {
@@ -52,8 +52,8 @@ func TestInMemoryIndexCache_AvoidsDeadlock(t *testing.T) {
 
 	metrics := prometheus.NewRegistry()
 	cache, err := NewInMemoryIndexCacheWithConfig(log.NewNopLogger(), metrics, InMemoryIndexCacheConfig{
-		MaxItemSizeBytes: sliceHeaderSize + 5,
-		MaxSizeBytes:     sliceHeaderSize + 5,
+		MaxItemSize: sliceHeaderSize + 5,
+		MaxSize:     sliceHeaderSize + 5,
 	})
 	testutil.Ok(t, err)
 
@@ -105,8 +105,8 @@ func TestInMemoryIndexCache_UpdateItem(t *testing.T) {
 
 	metrics := prometheus.NewRegistry()
 	cache, err := NewInMemoryIndexCacheWithConfig(log.NewSyncLogger(errorLogger), metrics, InMemoryIndexCacheConfig{
-		MaxItemSizeBytes: maxSize,
-		MaxSizeBytes:     maxSize,
+		MaxItemSize: maxSize,
+		MaxSize:     maxSize,
 	})
 	testutil.Ok(t, err)
 
@@ -191,8 +191,8 @@ func TestInMemoryIndexCache_MaxNumberOfItemsHit(t *testing.T) {
 
 	metrics := prometheus.NewRegistry()
 	cache, err := NewInMemoryIndexCacheWithConfig(log.NewNopLogger(), metrics, InMemoryIndexCacheConfig{
-		MaxItemSizeBytes: 2*sliceHeaderSize + 10,
-		MaxSizeBytes:     2*sliceHeaderSize + 10,
+		MaxItemSize: 2*sliceHeaderSize + 10,
+		MaxSize:     2*sliceHeaderSize + 10,
 	})
 	testutil.Ok(t, err)
 
@@ -225,8 +225,8 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 
 	metrics := prometheus.NewRegistry()
 	cache, err := NewInMemoryIndexCacheWithConfig(log.NewNopLogger(), metrics, InMemoryIndexCacheConfig{
-		MaxItemSizeBytes: 2*sliceHeaderSize + 5,
-		MaxSizeBytes:     2*sliceHeaderSize + 5,
+		MaxItemSize: 2*sliceHeaderSize + 5,
+		MaxSize:     2*sliceHeaderSize + 5,
 	})
 	testutil.Ok(t, err)
 

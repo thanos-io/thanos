@@ -180,11 +180,11 @@ Alternatively, the `in-memory` index cache can also by configured using `--index
 ```
 type: in-memory
 config:
-  # Maximum number of bytes the cache can contain (defaults to 250MB).
-  max_size_bytes: 262144000
+  # Maximum number of bytes the cache can contain.
+  max_size: 250MB
 
-  # Maximum size of a single item in the cache (defaults to 125MB).
-  max_item_size_bytes: 131072000
+  # Maximum size of a single item in the cache.
+  max_item_size: 125MB
 ```
 
 ### Memcached index cache
@@ -217,7 +217,7 @@ config:
 
   # Maximum number of concurrent batch executions when fetching keys from memcached.
   # Each batch can fetch up to max_get_multi_batch_size keys.
-  max_get_multi_batch_concurrency: 0
+  max_get_multi_batch_concurrency: 20
 
   # Maximum number of keys a single underlying GetMulti() operation should run. If
   # more keys are specified, internally keys are splitted into multiple batches and
