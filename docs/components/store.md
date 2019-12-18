@@ -177,54 +177,47 @@ The `in-memory` index cache is enabled by default and its max size can be config
 
 Alternatively, the `in-memory` index cache can also by configured using `--index-cache.config-file` to reference to the configuration file or `--index-cache.config` to put yaml config directly:
 
-```
-type: in-memory
+[embedmd]:# (../flags/config_index_cache_in_memory.txt yaml)
+```yaml
+type: IN-MEMORY
 config:
-  # Maximum number of bytes the cache can contain.
-  max_size: 250MB
-
-  # Maximum size of a single item in the cache.
-  max_item_size: 125MB
+  max_size: 0
+  max_item_size: 0
 ```
+
+All the settings are **optional**:
+
+- `max_size`: overall maximum number of bytes cache can contain. The value should be specified with a bytes unit (ie. `250MB`).
+- `max_item_size`: maximum size of single item, in bytes. The value should be specified with a bytes unit (ie. `125MB`).
 
 ### Memcached index cache
 
 The `memcached` index cache allows to use [Memcached](https://memcached.org) as cache backend. This cache type is configured using `--index-cache.config-file` to reference to the configuration file or `--index-cache.config` to put yaml config directly:
 
-```
-type: memcached
+[embedmd]:# (../flags/config_index_cache_memcached.txt yaml)
+```yaml
+type: MEMCACHED
 config:
-  # List of addresses of statically configured memcached servers. The scheme
-  # may be prefixed with 'dns+' or 'dnssrv+' to detect memcached servers through
-  # respective DNS lookups.
-  addrs:
-    - memcached-1:11211
-    - memcached-2:11211
-
-  # Socket read/write timeout.
-  timeout: 500ms
-
-  # Maximum number of idle connections that will be maintained per address.
-  # For better performances, this should be set to a number higher than your
-  # peak parallel requests.
-  max_idle_connections: 100
-
-  # Maximum number of concurrent asynchronous operations can occur.
-  max_async_concurrency: 20
-
-  # Maximum number of enqueued asynchronous operations allowed.
-  max_async_buffer_size: 10000
-
-  # Maximum number of concurrent batch executions when fetching keys from memcached.
-  # Each batch can fetch up to max_get_multi_batch_size keys.
-  max_get_multi_batch_concurrency: 20
-
-  # Maximum number of keys a single underlying GetMulti() operation should run. If
-  # more keys are specified, internally keys are splitted into multiple batches and
-  # fetched concurrently up to max_get_multi_batch_concurrency parallelism.
-  # If set to 0, the max batch size is unlimited.
+  addrs: []
+  timeout: 0s
+  max_idle_connections: 0
+  max_async_concurrency: 0
+  max_async_buffer_size: 0
+  max_get_multi_batch_concurrency: 0
   max_get_multi_batch_size: 0
-
-  # DNS discovery update interval.
-  dns_provider_update_interval: 10s
+  dns_provider_update_interval: 0s
 ```
+
+The **required** settings are:
+
+- `addrs`: list of memcached addresses, that will get resolved with the [DNS service discovery](../service-discovery.md/#dns-service-discovery) provider.
+
+While the remaining settings are **optional**:
+
+- `timeout`: the socket read/write timeout.
+- `max_idle_connections`: maximum number of idle connections that will be maintained per address.
+- `max_async_concurrency`: maximum number of concurrent asynchronous operations can occur.
+- `max_async_buffer_size`: maximum number of enqueued asynchronous operations allowed.
+- `max_get_multi_batch_concurrency`: maximum number of concurrent batch executions when fetching keys.
+- `max_get_multi_batch_size`: maximum number of keys a single underlying operation should fetch. If more keys are specified, internally keys are splitted into multiple batches and fetched concurrently up to `max_get_multi_batch_concurrency` parallelism. If set to `0`, the max batch size is unlimited.
+- `dns_provider_update_interval`: the DNS discovery update interval.

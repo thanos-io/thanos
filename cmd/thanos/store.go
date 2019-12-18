@@ -194,8 +194,8 @@ func runStore(
 		indexCache, err = storecache.NewIndexCache(logger, indexCacheContentYaml, reg)
 	} else {
 		indexCache, err = storecache.NewInMemoryIndexCacheWithConfig(logger, reg, storecache.InMemoryIndexCacheConfig{
-			MaxSizeBytes:     storecache.Bytes(indexCacheSizeBytes),
-			MaxItemSizeBytes: storecache.DefaultInMemoryIndexCacheConfig.MaxItemSizeBytes,
+			MaxSize:     storecache.Bytes(indexCacheSizeBytes),
+			MaxItemSize: storecache.DefaultInMemoryIndexCacheConfig.MaxItemSize,
 		})
 	}
 	if err != nil {

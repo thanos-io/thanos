@@ -12,10 +12,17 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+type IndexCacheProvider string
+
+const (
+	INMEMORY  IndexCacheProvider = "IN-MEMORY"
+	MEMCACHED IndexCacheProvider = "MEMCACHED"
+)
+
 // IndexCacheConfig specifies the index cache config.
 type IndexCacheConfig struct {
-	Type   string      `yaml:"type"`
-	Config interface{} `yaml:"config"`
+	Type   IndexCacheProvider `yaml:"type"`
+	Config interface{}        `yaml:"config"`
 }
 
 // NewIndexCache initializes and returns new index cache.
@@ -32,10 +39,10 @@ func NewIndexCache(logger log.Logger, confContentYaml []byte, reg prometheus.Reg
 	}
 
 	var cache IndexCache
-	switch strings.ToLower(string(cacheConfig.Type)) {
-	case "in-memory":
+	switch strings.ToUpper(string(cacheConfig.Type)) {
+	case string(INMEMORY):
 		cache, err = NewInMemoryIndexCache(logger, reg, backendConfig)
-	case "memcached":
+	case string(MEMCACHED):
 		var memcached cacheutil.MemcachedClient
 		memcached, err = cacheutil.NewMemcachedClient(logger, "index-cache", backendConfig, reg)
 		if err == nil {
