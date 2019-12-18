@@ -181,10 +181,7 @@ check-docs: $(EMBEDMD) $(LICHE) build
 	@$(LICHE) --recursive docs --exclude "(cloud.tencent.com|alibabacloud.com)" --document-root .
 	@$(LICHE) --exclude "(cloud.tencent.com|goreportcard.com|alibabacloud.com)" --document-root . *.md
 	@find -type f -name "*.md" | xargs scripts/cleanup-white-noise.sh
-	@if [[ ! git diff-files --quiet --ignore-submodules -- ]]; then \
-		echo >&2 "please clean up white noise in all docs"; \
-		exit 1; \
-	fi
+	$(call require_clean_work_tree,"check documentation")
 
 # checks Go code comments if they have trailing period (excludes protobuffers and vendor files).
 # Comments with more than 3 spaces at beginning are omitted from the check, example: '//    - foo'.
@@ -304,10 +301,7 @@ lint: check-git $(GOLANGCILINT) $(MISSPELL)
 	@find . -type f | grep -v vendor/ | grep -vE '\./\..*' | xargs $(MISSPELL) -error
 	@echo ">> detecting white noise"
 	@find . -type f \( -name "*.md" -o -name "*.go" \) | xargs scripts/cleanup-white-noise.sh
-	@if [[ ! git diff-files --quiet --ignore-submodules -- ]]; then \
-		echo >&2 "please clean up white noise in all docs or Go files"; \
-		exit 1; \
-	fi
+	$(call require_clean_work_tree,"lint")
 
 .PHONY: web-serve
 web-serve: web-pre-process $(HUGO)
