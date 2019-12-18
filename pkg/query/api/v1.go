@@ -293,7 +293,7 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
 	defer span.Finish()
 
-	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDedup, replicaLabels, maxSourceResolution, enablePartialResponse), r.FormValue("query"), ts)
+	qry, err := api.queryEngine.NewInstantQuery(api.queryableCreate(enableDedup, replicaLabels, maxSourceResolution, enablePartialResponse, false), r.FormValue("query"), ts)
 	if err != nil {
 		return nil, nil, &ApiError{errorBadData, err}
 	}
@@ -386,7 +386,7 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 	defer span.Finish()
 
 	qry, err := api.queryEngine.NewRangeQuery(
-		api.queryableCreate(enableDedup, replicaLabels, maxSourceResolution, enablePartialResponse),
+		api.queryableCreate(enableDedup, replicaLabels, maxSourceResolution, enablePartialResponse, false),
 		r.FormValue("query"),
 		start,
 		end,
@@ -426,7 +426,7 @@ func (api *API) labelValues(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	q, err := api.queryableCreate(true, nil, 0, enablePartialResponse).Querier(ctx, math.MinInt64, math.MaxInt64)
+	q, err := api.queryableCreate(true, nil, 0, enablePartialResponse, false).Querier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
@@ -503,7 +503,7 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 	}
 
 	// TODO(bwplotka): Support downsampling?
-	q, err := api.queryableCreate(enableDedup, replicaLabels, 0, enablePartialResponse).
+	q, err := api.queryableCreate(enableDedup, replicaLabels, 0, enablePartialResponse, true).
 		Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
@@ -607,7 +607,7 @@ func (api *API) labelNames(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
-	q, err := api.queryableCreate(true, nil, 0, enablePartialResponse).Querier(ctx, math.MinInt64, math.MaxInt64)
+	q, err := api.queryableCreate(true, nil, 0, enablePartialResponse, false).Querier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}

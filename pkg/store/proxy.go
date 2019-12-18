@@ -211,6 +211,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 				Matchers:                newMatchers,
 				Aggregates:              r.Aggregates,
 				MaxResolutionWindow:     r.MaxResolutionWindow,
+				SkipChunks:              r.SkipChunks,
 				PartialResponseDisabled: r.PartialResponseDisabled,
 			}
 			wg = &sync.WaitGroup{}
