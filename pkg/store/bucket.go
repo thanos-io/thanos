@@ -32,6 +32,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/pool"
@@ -215,7 +216,7 @@ type BucketStore struct {
 	blockSyncConcurrency int
 
 	// Query gate which limits the maximum amount of concurrent queries.
-	queryGate *Gate
+	queryGate *gate.Gate
 
 	// samplesLimiter limits the number of samples per each Series() call.
 	samplesLimiter *Limiter
@@ -271,7 +272,7 @@ func NewBucketStore(
 		blockSets:            map[uint64]*bucketBlockSet{},
 		debugLogging:         debugLogging,
 		blockSyncConcurrency: blockSyncConcurrency,
-		queryGate: NewGate(
+		queryGate: gate.NewGate(
 			maxConcurrent,
 			extprom.WrapRegistererWithPrefix("thanos_bucket_store_series_", reg),
 		),

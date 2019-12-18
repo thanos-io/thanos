@@ -203,7 +203,7 @@ config:
   max_idle_connections: 0
   max_async_concurrency: 0
   max_async_buffer_size: 0
-  max_get_multi_batch_concurrency: 0
+  max_get_multi_concurrency: 0
   max_get_multi_batch_size: 0
   dns_provider_update_interval: 0s
 ```
@@ -218,6 +218,6 @@ While the remaining settings are **optional**:
 - `max_idle_connections`: maximum number of idle connections that will be maintained per address.
 - `max_async_concurrency`: maximum number of concurrent asynchronous operations can occur.
 - `max_async_buffer_size`: maximum number of enqueued asynchronous operations allowed.
-- `max_get_multi_batch_concurrency`: maximum number of concurrent batch executions when fetching keys.
-- `max_get_multi_batch_size`: maximum number of keys a single underlying operation should fetch. If more keys are specified, internally keys are splitted into multiple batches and fetched concurrently up to `max_get_multi_batch_concurrency` parallelism. If set to `0`, the max batch size is unlimited.
+- `max_get_multi_concurrency`: maximum number of concurrent connections when fetching keys. If set to `0`, the concurrency is unlimited.
+- `max_get_multi_batch_size`: maximum number of keys a single underlying operation should fetch. If more keys are specified, internally keys are splitted into multiple batches and fetched concurrently, honoring `max_get_multi_concurrency`. If set to `0`, the batch size is unlimited.
 - `dns_provider_update_interval`: the DNS discovery update interval.
