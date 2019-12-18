@@ -13,7 +13,6 @@ import (
 )
 
 func TestNatSort(t *testing.T) {
-	t.Parallel()
 
 	// Validate that the order of SRV records returned by a DNS
 	// lookup for a k8s StatefulSet are ordered as expected when
@@ -39,7 +38,6 @@ func TestNatSort(t *testing.T) {
 }
 
 func TestMemcachedJumpHashSelector_Each_ShouldRespectServersOrdering(t *testing.T) {
-	t.Parallel()
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	tests := []struct {
@@ -73,7 +71,6 @@ func TestMemcachedJumpHashSelector_Each_ShouldRespectServersOrdering(t *testing.
 }
 
 func TestMemcachedJumpHashSelector_PickServer_ShouldEvenlyDistributeKeysToServers(t *testing.T) {
-	t.Parallel()
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	servers := []string{"127.0.0.1:11211", "127.0.0.2:11211", "127.0.0.3:11211"}
@@ -102,7 +99,6 @@ func TestMemcachedJumpHashSelector_PickServer_ShouldEvenlyDistributeKeysToServer
 }
 
 func TestMemcachedJumpHashSelector_PickServer_ShouldUseConsistentHashing(t *testing.T) {
-	t.Parallel()
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	servers := []string{
@@ -157,7 +153,6 @@ func TestMemcachedJumpHashSelector_PickServer_ShouldUseConsistentHashing(t *test
 }
 
 func TestMemcachedJumpHashSelector_PickServer_ShouldReturnErrNoServersOnNoServers(t *testing.T) {
-	t.Parallel()
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	s := MemcachedJumpHashSelector{}

@@ -81,7 +81,7 @@ func (s *MemcachedJumpHashSelector) PickServer(key string) (net.Addr, error) {
 
 	// Pick a server using the jump hash.
 	cs := xxhash.Sum64String(key)
-	idx := JumpHash(cs, len(addrs))
+	idx := jumpHash(cs, len(addrs))
 	picked := (addrs)[idx]
 
 	addrs = (addrs)[:0]

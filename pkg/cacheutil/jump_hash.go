@@ -1,10 +1,10 @@
 package cacheutil
 
-// JumpHash consistently chooses a hash bucket number in the range
+// jumpHash consistently chooses a hash bucket number in the range
 // [0, numBuckets) for the given key. numBuckets must be >= 1.
 //
 // Copied from github.com/dgryski/go-jump/blob/master/jump.go (MIT license)
-func JumpHash(key uint64, numBuckets int) int32 {
+func jumpHash(key uint64, numBuckets int) int32 {
 	var b int64 = -1
 	var j int64
 
