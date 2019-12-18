@@ -182,7 +182,7 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 			},
 			expectedGetMultiCount: 2,
 		},
-		"should fetch keys in a multiple batches on input keys exact multiple of batch size if max concurrency is disabled (0)": {
+		"should fetch keys in a multiple batches on input keys exact multiple of batch size with max concurrency disabled (0)": {
 			maxBatchSize:   2,
 			maxConcurrency: 0,
 			initialItems: []memcache.Item{
@@ -199,6 +199,24 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 				"key-4": []byte("value-4"),
 			},
 			expectedGetMultiCount: 2,
+		},
+		"should fetch keys in a multiple batches on input keys exact multiple of batch size with max concurrency lower than the batches": {
+			maxBatchSize:   1,
+			maxConcurrency: 1,
+			initialItems: []memcache.Item{
+				{Key: "key-1", Value: []byte("value-1")},
+				{Key: "key-2", Value: []byte("value-2")},
+				{Key: "key-3", Value: []byte("value-3")},
+				{Key: "key-4", Value: []byte("value-4")},
+			},
+			getKeys: []string{"key-1", "key-2", "key-3", "key-4"},
+			expectedHits: map[string][]byte{
+				"key-1": []byte("value-1"),
+				"key-2": []byte("value-2"),
+				"key-3": []byte("value-3"),
+				"key-4": []byte("value-4"),
+			},
+			expectedGetMultiCount: 4,
 		},
 		"should fetch keys in a single batch if max batch size is disabled (0)": {
 			maxBatchSize:   0,
@@ -236,7 +254,7 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 			},
 			expectedGetMultiCount: 1,
 		},
-		"should return no error on key misses": {
+		"should no hits on all keys missing": {
 			maxBatchSize:   2,
 			maxConcurrency: 5,
 			initialItems: []memcache.Item{
@@ -250,22 +268,9 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 			},
 			expectedGetMultiCount: 2,
 		},
-		"should return no error on partial errors while fetching batches": {
+		"should no hits on partial errors while fetching batches and no items found": {
 			maxBatchSize:         2,
-			maxConcurrency:       1, // No parallelism to get predictable results.
-			mockedGetMultiErrors: 1,
-			initialItems: []memcache.Item{
-				{Key: "key-1", Value: []byte("value-1")},
-				{Key: "key-2", Value: []byte("value-2")},
-				{Key: "key-3", Value: []byte("value-3")},
-			},
-			getKeys:               []string{"key-1", "key-2", "key-3", "key-4"},
-			expectedHits:          map[string][]byte{"key-3": []byte("value-3")},
-			expectedGetMultiCount: 2,
-		},
-		"should return no error on partial errors while fetching batches and no items found": {
-			maxBatchSize:         2,
-			maxConcurrency:       1, // No parallelism to get predictable results.
+			maxConcurrency:       5,
 			mockedGetMultiErrors: 1,
 			initialItems: []memcache.Item{
 				{Key: "key-1", Value: []byte("value-1")},
@@ -276,9 +281,9 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 			expectedHits:          map[string][]byte{},
 			expectedGetMultiCount: 2,
 		},
-		"should return error on all errors while fetching batches": {
+		"should no hits on all errors while fetching batches": {
 			maxBatchSize:         2,
-			maxConcurrency:       1, // No parallelism to get predictable results.
+			maxConcurrency:       5,
 			mockedGetMultiErrors: 2,
 			initialItems: []memcache.Item{
 				{Key: "key-1", Value: []byte("value-1")},
