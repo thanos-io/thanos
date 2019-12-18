@@ -17,6 +17,10 @@ const (
 	sliceHeaderSize = 16
 )
 
+var (
+	ulidSize = uint64(len(ulid.ULID{}))
+)
+
 // IndexCache is the interface exported by index cache backends.
 type IndexCache interface {
 	// StorePostings stores postings for a single series.
@@ -53,9 +57,9 @@ func (c cacheKey) size() uint64 {
 	switch k := c.key.(type) {
 	case cacheKeyPostings:
 		// ULID + 2 slice headers + number of chars in value and name.
-		return 16 + 2*sliceHeaderSize + uint64(len(k.Value)+len(k.Name))
+		return ulidSize + 2*sliceHeaderSize + uint64(len(k.Value)+len(k.Name))
 	case cacheKeySeries:
-		return 16 + 8 // ULID + uint64.
+		return ulidSize + 8 // ULID + uint64.
 	}
 	return 0
 }
