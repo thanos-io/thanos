@@ -25,6 +25,7 @@ import (
 	yaml "gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/alert"
+	http_util "github.com/thanos-io/thanos/pkg/http"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	rapi "github.com/thanos-io/thanos/pkg/rule/api"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -200,8 +201,8 @@ func TestRuleAlertmanagerHTTPClient(t *testing.T) {
 			PathPrefix:      "/prefix/",
 		},
 		alert.AlertmanagerConfig{
-			HTTPClientConfig: alert.HTTPClientConfig{
-				TLSConfig: alert.TLSConfig{
+			HTTPClientConfig: http_util.ClientConfig{
+				TLSConfig: http_util.TLSConfig{
 					CAFile: caFile,
 				},
 				BearerToken: "secret",

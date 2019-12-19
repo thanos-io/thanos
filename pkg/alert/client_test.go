@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/http"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
@@ -60,8 +61,8 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 		{
 			address: "http://user:pass@localhost:9093",
 			expected: AlertmanagerConfig{
-				HTTPClientConfig: HTTPClientConfig{
-					BasicAuth: BasicAuth{
+				HTTPClientConfig: http.ClientConfig{
+					BasicAuth: http.BasicAuth{
 						Username: "user",
 						Password: "pass",
 					},

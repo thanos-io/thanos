@@ -2,7 +2,6 @@ package alert
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -15,15 +14,14 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
-	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
-	"github.com/prometheus/common/version"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
+	http_util "github.com/thanos-io/thanos/pkg/http"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
@@ -33,8 +31,6 @@ const (
 	contentTypeJSON         = "application/json"
 )
 
-var userAgent = fmt.Sprintf("Thanos/%s", version.Version)
-
 type AlertingConfig struct {
 	Alertmanagers []AlertmanagerConfig `yaml:"alertmanagers"`
 }
@@ -43,7 +39,7 @@ type AlertingConfig struct {
 // TODO(simonpasquier): add support for API version (v1 or v2).
 type AlertmanagerConfig struct {
 	// HTTP client configuration.
-	HTTPClientConfig HTTPClientConfig `yaml:"http_config"`
+	HTTPClientConfig http_util.ClientConfig `yaml:"http_config"`
 
 	// List of addresses with DNS prefixes.
 	StaticAddresses []string `yaml:"static_configs"`
@@ -58,72 +54,6 @@ type AlertmanagerConfig struct {
 
 	// The timeout used when sending alerts (default: 10s).
 	Timeout model.Duration `yaml:"timeout"`
-}
-
-type HTTPClientConfig struct {
-	// The HTTP basic authentication credentials for the targets.
-	BasicAuth BasicAuth `yaml:"basic_auth"`
-	// The bearer token for the targets.
-	BearerToken string `yaml:"bearer_token"`
-	// The bearer token file for the targets.
-	BearerTokenFile string `yaml:"bearer_token_file"`
-	// HTTP proxy server to use to connect to the targets.
-	ProxyURL string `yaml:"proxy_url"`
-	// TLSConfig to use to connect to the targets.
-	TLSConfig TLSConfig `yaml:"tls_config"`
-}
-
-type TLSConfig struct {
-	// The CA cert to use for the targets.
-	CAFile string `yaml:"ca_file"`
-	// The client cert file for the targets.
-	CertFile string `yaml:"cert_file"`
-	// The client key file for the targets.
-	KeyFile string `yaml:"key_file"`
-	// Used to verify the hostname for the targets.
-	ServerName string `yaml:"server_name"`
-	// Disable target certificate validation.
-	InsecureSkipVerify bool `yaml:"insecure_skip_verify"`
-}
-
-type BasicAuth struct {
-	Username     string `yaml:"username"`
-	Password     string `yaml:"password"`
-	PasswordFile string `yaml:"password_file"`
-}
-
-func (b BasicAuth) IsZero() bool {
-	return b.Username == "" && b.Password == "" && b.PasswordFile == ""
-}
-
-func (c HTTPClientConfig) convert() (config_util.HTTPClientConfig, error) {
-	httpClientConfig := config_util.HTTPClientConfig{
-		BearerToken:     config_util.Secret(c.BearerToken),
-		BearerTokenFile: c.BearerTokenFile,
-		TLSConfig: config_util.TLSConfig{
-			CAFile:             c.TLSConfig.CAFile,
-			CertFile:           c.TLSConfig.CertFile,
-			KeyFile:            c.TLSConfig.KeyFile,
-			ServerName:         c.TLSConfig.ServerName,
-			InsecureSkipVerify: c.TLSConfig.InsecureSkipVerify,
-		},
-	}
-	if c.ProxyURL != "" {
-		var proxy config_util.URL
-		err := yaml.Unmarshal([]byte(c.ProxyURL), &proxy)
-		if err != nil {
-			return httpClientConfig, err
-		}
-		httpClientConfig.ProxyURL = proxy
-	}
-	if !c.BasicAuth.IsZero() {
-		httpClientConfig.BasicAuth = &config_util.BasicAuth{
-			Username:     c.BasicAuth.Username,
-			Password:     config_util.Secret(c.BasicAuth.Password),
-			PasswordFile: c.BasicAuth.PasswordFile,
-		}
-	}
-	return httpClientConfig, httpClientConfig.Validate()
 }
 
 type FileSDConfig struct {
@@ -187,11 +117,7 @@ func NewAlertmanager(logger log.Logger, cfg AlertmanagerConfig, provider Address
 		logger = log.NewNopLogger()
 	}
 
-	httpClientConfig, err := cfg.HTTPClientConfig.convert()
-	if err != nil {
-		return nil, err
-	}
-	client, err := config_util.NewClientFromConfig(httpClientConfig, "alertmanager", false)
+	client, err := http_util.NewClient(cfg.HTTPClientConfig, "alertmanager")
 	if err != nil {
 		return nil, err
 	}
@@ -250,7 +176,7 @@ func BuildAlertmanagerConfig(logger log.Logger, address string, timeout time.Dur
 			break
 		}
 	}
-	var basicAuth BasicAuth
+	var basicAuth http_util.BasicAuth
 	if parsed.User != nil && parsed.User.String() != "" {
 		basicAuth.Username = parsed.User.Username()
 		pw, _ := parsed.User.Password()
@@ -262,7 +188,7 @@ func BuildAlertmanagerConfig(logger log.Logger, address string, timeout time.Dur
 		Scheme:          scheme,
 		StaticAddresses: []string{host},
 		Timeout:         model.Duration(timeout),
-		HTTPClientConfig: HTTPClientConfig{
+		HTTPClientConfig: http_util.ClientConfig{
 			BasicAuth: basicAuth,
 		},
 	}, nil
@@ -293,7 +219,6 @@ func (a *Alertmanager) Do(ctx context.Context, u *url.URL, r io.Reader) error {
 	defer cancel()
 	req = req.WithContext(ctx)
 	req.Header.Set("Content-Type", contentTypeJSON)
-	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := a.client.Do(req)
 	if err != nil {
