@@ -2,12 +2,22 @@
 package http
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"net/url"
+	"path"
+	"sync"
 
+	"github.com/go-kit/kit/log"
 	config_util "github.com/prometheus/common/config"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
+	"github.com/prometheus/prometheus/discovery/file"
+	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"gopkg.in/yaml.v2"
+
+	"github.com/thanos-io/thanos/pkg/discovery/cache"
 )
 
 // ClientConfig configures an HTTP client.
@@ -113,4 +123,139 @@ func (u userAgentRoundTripper) RoundTrip(r *http.Request) (*http.Response, error
 		r = r2
 	}
 	return u.rt.RoundTrip(r)
+}
+
+// EndpointsConfig configures a cluster of HTTP endpoints from static addresses and
+// file service discovery.
+type EndpointsConfig struct {
+	// List of addresses with DNS prefixes.
+	StaticAddresses []string `yaml:"static_configs"`
+	// List of file  configurations (our FileSD supports different DNS lookups).
+	FileSDConfigs []FileSDConfig `yaml:"file_sd_configs"`
+
+	// The URL scheme to use when talking to targets.
+	Scheme string `yaml:"scheme"`
+
+	// Path prefix to add in front of the endpoint path.
+	PathPrefix string `yaml:"path_prefix"`
+}
+
+// FileSDConfig represents a file service discovery configuration.
+type FileSDConfig struct {
+	Files           []string       `yaml:"files"`
+	RefreshInterval model.Duration `yaml:"refresh_interval"`
+}
+
+func (c FileSDConfig) convert() (file.SDConfig, error) {
+	var fileSDConfig file.SDConfig
+	b, err := yaml.Marshal(c)
+	if err != nil {
+		return fileSDConfig, err
+	}
+	err = yaml.Unmarshal(b, &fileSDConfig)
+	if err != nil {
+		return fileSDConfig, err
+	}
+	return fileSDConfig, nil
+}
+
+type AddressProvider interface {
+	Resolve(context.Context, []string)
+	Addresses() []string
+}
+
+// FanoutClient represents a client that can send requests to a cluster of HTTP-based endpoints.
+type FanoutClient struct {
+	logger log.Logger
+
+	httpClient *http.Client
+	scheme     string
+	prefix     string
+
+	staticAddresses []string
+	fileSDCache     *cache.Cache
+	fileDiscoverers []*file.Discovery
+
+	provider AddressProvider
+}
+
+// NewFanoutClient returns a new FanoutClient.
+func NewFanoutClient(logger log.Logger, cfg EndpointsConfig, client *http.Client, provider AddressProvider) (*FanoutClient, error) {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
+
+	var discoverers []*file.Discovery
+	for _, sdCfg := range cfg.FileSDConfigs {
+		fileSDCfg, err := sdCfg.convert()
+		if err != nil {
+			return nil, err
+		}
+		discoverers = append(discoverers, file.NewDiscovery(&fileSDCfg, logger))
+	}
+	return &FanoutClient{
+		logger:          logger,
+		httpClient:      client,
+		scheme:          cfg.Scheme,
+		prefix:          cfg.PathPrefix,
+		staticAddresses: cfg.StaticAddresses,
+		fileSDCache:     cache.New(),
+		fileDiscoverers: discoverers,
+		provider:        provider,
+	}, nil
+}
+
+// Do executes an HTTP request with the underlying HTTP client.
+func (f *FanoutClient) Do(req *http.Request) (*http.Response, error) {
+	return f.httpClient.Do(req)
+}
+
+// Endpoints returns the list of known endpoints.
+func (f *FanoutClient) Endpoints() []*url.URL {
+	var urls []*url.URL
+	for _, addr := range f.provider.Addresses() {
+		urls = append(urls,
+			&url.URL{
+				Scheme: f.scheme,
+				Host:   addr,
+				Path:   path.Join("/", f.prefix),
+			},
+		)
+	}
+	return urls
+}
+
+// Discover runs the service to discover endpoints until the given context is done.
+func (f *FanoutClient) Discover(ctx context.Context) {
+	var wg sync.WaitGroup
+	ch := make(chan []*targetgroup.Group)
+
+	for _, d := range f.fileDiscoverers {
+		wg.Add(1)
+		go func(d *file.Discovery) {
+			d.Run(ctx, ch)
+			wg.Done()
+		}(d)
+	}
+
+	func() {
+		for {
+			select {
+			case update := <-ch:
+				// Discoverers sometimes send nil updates so need to check for it to avoid panics.
+				if update == nil {
+					continue
+				}
+				f.fileSDCache.Update(update)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	wg.Wait()
+}
+
+// Resolve refreshes and resolves the list of targets.
+func (f *FanoutClient) Resolve(ctx context.Context) {
+	f.provider.Resolve(ctx, append(f.fileSDCache.Addresses(), f.staticAddresses...))
 }

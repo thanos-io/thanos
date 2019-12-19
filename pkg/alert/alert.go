@@ -7,16 +7,26 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
+	"path"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-
 	"github.com/prometheus/prometheus/pkg/labels"
+
+	"github.com/thanos-io/thanos/pkg/runutil"
+)
+
+const (
+	defaultAlertmanagerPort = 9093
+	alertPushEndpoint       = "/api/v1/alerts"
+	contentTypeJSON         = "application/json"
 )
 
 // Alert is a generic representation of an alert in the Prometheus eco-system.
@@ -240,15 +250,10 @@ func (q *Queue) Push(alerts []*Alert) {
 	}
 }
 
-type AlertmanagerClient interface {
-	Endpoints() []*url.URL
-	Do(context.Context, *url.URL, io.Reader) error
-}
-
 // Sender sends notifications to a dynamic set of alertmanagers.
 type Sender struct {
 	logger        log.Logger
-	alertmanagers []AlertmanagerClient
+	alertmanagers []*Alertmanager
 
 	sent    *prometheus.CounterVec
 	errs    *prometheus.CounterVec
@@ -261,7 +266,7 @@ type Sender struct {
 func NewSender(
 	logger log.Logger,
 	reg prometheus.Registerer,
-	alertmanagers []AlertmanagerClient,
+	alertmanagers []*Alertmanager,
 ) *Sender {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -312,15 +317,15 @@ func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 		wg         sync.WaitGroup
 		numSuccess uint64
 	)
-	for _, amc := range s.alertmanagers {
-		for _, u := range amc.Endpoints() {
+	for _, am := range s.alertmanagers {
+		for _, u := range am.dispatcher.Endpoints() {
 			wg.Add(1)
-			go func(amc AlertmanagerClient, u *url.URL) {
+			go func(am *Alertmanager, u *url.URL) {
 				defer wg.Done()
 
 				level.Debug(s.logger).Log("msg", "sending alerts", "alertmanager", u.Host, "numAlerts", len(alerts))
 				start := time.Now()
-				if err := amc.Do(ctx, u, bytes.NewReader(b)); err != nil {
+				if err := am.postAlerts(ctx, *u, bytes.NewReader(b)); err != nil {
 					level.Warn(s.logger).Log(
 						"msg", "sending alerts failed",
 						"alertmanager", u.Host,
@@ -334,7 +339,7 @@ func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 				s.sent.WithLabelValues(u.Host).Add(float64(len(alerts)))
 
 				atomic.AddUint64(&numSuccess, 1)
-			}(amc, u)
+			}(am, u)
 		}
 	}
 	wg.Wait()
@@ -345,4 +350,54 @@ func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 
 	s.dropped.Add(float64(len(alerts)))
 	level.Warn(s.logger).Log("msg", "failed to send alerts to all alertmanagers", "alerts", string(b))
+}
+
+type Dispatcher interface {
+	// Endpoints returns the list of endpoint URLs the dispatcher knows about.
+	Endpoints() []*url.URL
+	// Do sends an HTTP request and returns a response.
+	Do(*http.Request) (*http.Response, error)
+}
+
+// Alertmanager is an HTTP client that can send alerts to a cluster of Alertmanager endpoints.
+type Alertmanager struct {
+	logger     log.Logger
+	dispatcher Dispatcher
+	timeout    time.Duration
+}
+
+// NewAlertmanager returns a new Alertmanager client.
+func NewAlertmanager(logger log.Logger, dispatcher Dispatcher, timeout time.Duration) *Alertmanager {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
+
+	return &Alertmanager{
+		logger:     logger,
+		dispatcher: dispatcher,
+		timeout:    timeout,
+	}
+}
+
+func (a *Alertmanager) postAlerts(ctx context.Context, u url.URL, r io.Reader) error {
+	u.Path = path.Join(u.Path, alertPushEndpoint)
+	req, err := http.NewRequest("POST", u.String(), r)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, a.timeout)
+	defer cancel()
+	req = req.WithContext(ctx)
+	req.Header.Set("Content-Type", contentTypeJSON)
+
+	resp, err := a.dispatcher.Do(req)
+	if err != nil {
+		return errors.Wrapf(err, "send request to %q", u.String())
+	}
+	defer runutil.ExhaustCloseWithLogOnErr(a.logger, resp.Body, "send one alert")
+
+	if resp.StatusCode/100 != 2 {
+		return errors.Errorf("bad response status %v from %q", resp.Status, u.String())
+	}
+	return nil
 }
