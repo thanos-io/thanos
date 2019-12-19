@@ -148,7 +148,7 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 			},
 			expectedGetMultiCount: 1,
 		},
-		"should fetch keys in a multiple batches if the input keys is > the max batch size": {
+		"should fetch keys in multiple batches if the input keys is > the max batch size": {
 			maxBatchSize:   2,
 			maxConcurrency: 5,
 			initialItems: []memcache.Item{
@@ -164,7 +164,7 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 			},
 			expectedGetMultiCount: 2,
 		},
-		"should fetch keys in a multiple batches on input keys exact multiple of batch size": {
+		"should fetch keys in multiple batches on input keys exact multiple of batch size": {
 			maxBatchSize:   2,
 			maxConcurrency: 5,
 			initialItems: []memcache.Item{
@@ -182,7 +182,7 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 			},
 			expectedGetMultiCount: 2,
 		},
-		"should fetch keys in a multiple batches on input keys exact multiple of batch size with max concurrency disabled (0)": {
+		"should fetch keys in multiple batches on input keys exact multiple of batch size with max concurrency disabled (0)": {
 			maxBatchSize:   2,
 			maxConcurrency: 0,
 			initialItems: []memcache.Item{
@@ -200,7 +200,7 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 			},
 			expectedGetMultiCount: 2,
 		},
-		"should fetch keys in a multiple batches on input keys exact multiple of batch size with max concurrency lower than the batches": {
+		"should fetch keys in multiple batches on input keys exact multiple of batch size with max concurrency lower than the batches": {
 			maxBatchSize:   1,
 			maxConcurrency: 1,
 			initialItems: []memcache.Item{
@@ -254,7 +254,7 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 			},
 			expectedGetMultiCount: 1,
 		},
-		"should no hits on all keys missing": {
+		"should return no hits on all keys missing": {
 			maxBatchSize:   2,
 			maxConcurrency: 5,
 			initialItems: []memcache.Item{
@@ -268,7 +268,7 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 			},
 			expectedGetMultiCount: 2,
 		},
-		"should no hits on partial errors while fetching batches and no items found": {
+		"should return no hits on partial errors while fetching batches and no items found": {
 			maxBatchSize:         2,
 			maxConcurrency:       5,
 			mockedGetMultiErrors: 1,
@@ -281,7 +281,7 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 			expectedHits:          map[string][]byte{},
 			expectedGetMultiCount: 2,
 		},
-		"should no hits on all errors while fetching batches": {
+		"should return no hits on all errors while fetching batches": {
 			maxBatchSize:         2,
 			maxConcurrency:       5,
 			mockedGetMultiErrors: 2,

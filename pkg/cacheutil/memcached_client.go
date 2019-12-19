@@ -44,6 +44,8 @@ type MemcachedClient interface {
 	GetMulti(ctx context.Context, keys []string) map[string][]byte
 
 	// SetAsync enqueues an asynchronous operation to store a key into memcached.
+	// Returns an error in case it fails to enqueue the operation. In case the
+	// underlying async operation will fail, the error will be tracked/logged.
 	SetAsync(ctx context.Context, key string, value []byte, ttl time.Duration) error
 
 	// Stop client and release underlying resources.
@@ -261,7 +263,7 @@ func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte
 		span.Finish()
 		if err != nil {
 			c.failures.WithLabelValues(opSet).Inc()
-			level.Warn(c.logger).Log("msg", "failed to store item memcached", "key", key, "err", err)
+			level.Warn(c.logger).Log("msg", "failed to store item to memcached", "key", key, "err", err)
 			return
 		}
 
@@ -272,7 +274,7 @@ func (c *memcachedClient) SetAsync(ctx context.Context, key string, value []byte
 func (c *memcachedClient) GetMulti(ctx context.Context, keys []string) map[string][]byte {
 	batches, err := c.getMultiBatched(ctx, keys)
 	if err != nil {
-		level.Warn(c.logger).Log("msg", "failed to fetch keys from memcached", "err", err)
+		level.Warn(c.logger).Log("msg", "failed to fetch items from memcached", "err", err)
 
 		// In case we have both results and an error, it means some batch requests
 		// failed and other succeeded. In this case we prefer to log it and move on,
@@ -311,12 +313,11 @@ func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([
 		numResults++
 	}
 
-	// Split input keys into batches and schedule a job for it.
+	// Spawn a goroutine for each batch request. The max concurrency will be
+	// enforced by getMultiSingle().
 	results := make(chan *memcachedGetMultiResult, numResults)
 	defer close(results)
 
-	// Spawn a goroutine for each batch request. The max concurrency will be
-	// enforced by getMultiSingle().
 	for batchStart := 0; batchStart < len(keys); batchStart += batchSize {
 		batchEnd := batchStart + batchSize
 		if batchEnd > len(keys) {
