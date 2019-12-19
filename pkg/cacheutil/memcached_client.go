@@ -24,7 +24,7 @@ const (
 
 var (
 	errMemcachedAsyncBufferFull = errors.New("the async buffer is full")
-	errMemcachedConfigNoAddrs   = errors.New("no memcached addrs provided")
+	errMemcachedConfigNoAddrs   = errors.New("no memcached addresses provided")
 
 	defaultMemcachedClientConfig = MemcachedClientConfig{
 		Timeout:                   500 * time.Millisecond,
@@ -60,9 +60,9 @@ type memcachedClientBackend interface {
 
 // MemcachedClientConfig is the config accepted by MemcachedClient.
 type MemcachedClientConfig struct {
-	// Addrs specifies the list of memcached addresses. The addresses get
+	// Addresses specifies the list of memcached addresses. The addresses get
 	// resolved with the DNS provider.
-	Addrs []string `yaml:"addrs"`
+	Addresses []string `yaml:"addresses"`
 
 	// Timeout specifies the socket read/write timeout.
 	Timeout time.Duration `yaml:"timeout"`
@@ -95,7 +95,7 @@ type MemcachedClientConfig struct {
 }
 
 func (c *MemcachedClientConfig) validate() error {
-	if len(c.Addrs) == 0 {
+	if len(c.Addresses) == 0 {
 		return errMemcachedConfigNoAddrs
 	}
 
@@ -429,7 +429,7 @@ func (c *memcachedClient) resolveAddrs() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	c.dnsProvider.Resolve(ctx, c.config.Addrs)
+	c.dnsProvider.Resolve(ctx, c.config.Addresses)
 
 	// Fail in case no server address is resolved.
 	servers := c.dnsProvider.Addresses()

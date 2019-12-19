@@ -198,7 +198,7 @@ The `memcached` index cache allows to use [Memcached](https://memcached.org) as 
 ```yaml
 type: MEMCACHED
 config:
-  addrs: []
+  addresses: []
   timeout: 0s
   max_idle_connections: 0
   max_async_concurrency: 0
@@ -210,7 +210,7 @@ config:
 
 The **required** settings are:
 
-- `addrs`: list of memcached addresses, that will get resolved with the [DNS service discovery](../service-discovery.md/#dns-service-discovery) provider.
+- `addresses`: list of memcached addresses, that will get resolved with the [DNS service discovery](../service-discovery.md/#dns-service-discovery) provider.
 
 While the remaining settings are **optional**:
 

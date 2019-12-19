@@ -21,13 +21,13 @@ func TestMemcachedClientConfig_validate(t *testing.T) {
 	}{
 		"should pass on valid config": {
 			config: MemcachedClientConfig{
-				Addrs: []string{"127.0.0.1:11211"},
+				Addresses: []string{"127.0.0.1:11211"},
 			},
 			expected: nil,
 		},
-		"should fail on no addrs": {
+		"should fail on no addresses": {
 			config: MemcachedClientConfig{
-				Addrs: []string{},
+				Addresses: []string{},
 			},
 			expected: errMemcachedConfigNoAddrs,
 		},
@@ -57,7 +57,7 @@ func TestNewMemcachedClient(t *testing.T) {
 
 	// Should instance a memcached client with minimum YAML config.
 	conf = []byte(`
-addrs:
+addresses:
   - 127.0.0.1:11211
   - 127.0.0.2:11211
 `)
@@ -65,7 +65,7 @@ addrs:
 	testutil.Ok(t, err)
 	defer cache.Stop()
 
-	testutil.Equals(t, []string{"127.0.0.1:11211", "127.0.0.2:11211"}, cache.config.Addrs)
+	testutil.Equals(t, []string{"127.0.0.1:11211", "127.0.0.2:11211"}, cache.config.Addresses)
 	testutil.Equals(t, defaultMemcachedClientConfig.Timeout, cache.config.Timeout)
 	testutil.Equals(t, defaultMemcachedClientConfig.MaxIdleConnections, cache.config.MaxIdleConnections)
 	testutil.Equals(t, defaultMemcachedClientConfig.MaxAsyncConcurrency, cache.config.MaxAsyncConcurrency)
@@ -76,7 +76,7 @@ addrs:
 
 	// Should instance a memcached client with configured YAML config.
 	conf = []byte(`
-addrs:
+addresses:
   - 127.0.0.1:11211
   - 127.0.0.2:11211
 timeout: 1s
@@ -91,7 +91,7 @@ dns_provider_update_interval: 1s
 	testutil.Ok(t, err)
 	defer cache.Stop()
 
-	testutil.Equals(t, []string{"127.0.0.1:11211", "127.0.0.2:11211"}, cache.config.Addrs)
+	testutil.Equals(t, []string{"127.0.0.1:11211", "127.0.0.2:11211"}, cache.config.Addresses)
 	testutil.Equals(t, 1*time.Second, cache.config.Timeout)
 	testutil.Equals(t, 1, cache.config.MaxIdleConnections)
 	testutil.Equals(t, 1, cache.config.MaxAsyncConcurrency)
@@ -106,7 +106,7 @@ func TestMemcachedClient_SetAsync(t *testing.T) {
 
 	ctx := context.Background()
 	config := defaultMemcachedClientConfig
-	config.Addrs = []string{"127.0.0.1:11211"}
+	config.Addresses = []string{"127.0.0.1:11211"}
 	backendMock := newMemcachedClientBackendMock()
 
 	client, err := prepare(config, backendMock)
@@ -300,7 +300,7 @@ func TestMemcachedClient_GetMulti(t *testing.T) {
 		t.Run(testName, func(t *testing.T) {
 			ctx := context.Background()
 			config := defaultMemcachedClientConfig
-			config.Addrs = []string{"127.0.0.1:11211"}
+			config.Addresses = []string{"127.0.0.1:11211"}
 			config.MaxGetMultiBatchSize = testData.maxBatchSize
 			config.MaxGetMultiConcurrency = testData.maxConcurrency
 
