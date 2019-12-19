@@ -234,10 +234,6 @@ func runRule(
 		Name: "thanos_rule_duplicated_query_address",
 		Help: "The number of times a duplicated query addresses is detected from the different configs in rule",
 	})
-	alertMngrAddrResolutionErrors := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "thanos_rule_alertmanager_address_resolution_errors",
-		Help: "The number of times resolving an address of an alertmanager has failed inside Thanos Rule",
-	})
 	rulesLoaded := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "thanos_rule_loaded_rules",
@@ -257,7 +253,6 @@ func runRule(
 	reg.MustRegister(configSuccess)
 	reg.MustRegister(configSuccessTime)
 	reg.MustRegister(duplicatedQuery)
-	reg.MustRegister(alertMngrAddrResolutionErrors)
 	reg.MustRegister(rulesLoaded)
 	reg.MustRegister(ruleEvalWarnings)
 
