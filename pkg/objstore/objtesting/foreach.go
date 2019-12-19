@@ -3,8 +3,10 @@ package objtesting
 import (
 	"io/ioutil"
 	"os"
+	"strings"
 	"testing"
 
+	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/filesystem"
 
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -18,23 +20,38 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
+// IsObjStoreSkipped returns true if given provider ID is found in THANOS_TEST_OBJSTORE_SKIP array delimited by comma e.g:
+// THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS.
+func IsObjStoreSkipped(t *testing.T, provider client.ObjProvider) bool {
+	if e, ok := os.LookupEnv("THANOS_TEST_OBJSTORE_SKIP"); ok {
+		obstores := strings.Split(e, ",")
+		for _, objstore := range obstores {
+			if objstore == string(provider) {
+				t.Logf("%s found in THANOS_TEST_OBJSTORE_SKIP array. Skipping.", provider)
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 // ForeachStore runs given test using all available objstore implementations.
 // For each it creates a new bucket with a random name and a cleanup function
 // that deletes it after test was run.
-// Use THANOS_SKIP_<objstorename>_TESTS to skip explicitly certain tests.
+// Use THANOS_TEST_OBJSTORE_SKIP to skip explicitly certain object storages.
 func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) {
 	t.Parallel()
 
-	// Mandatory Inmem.
+	// Mandatory Inmem. Not parallel, to detect problem early.
 	if ok := t.Run("inmem", func(t *testing.T) {
-		t.Parallel()
 		testFn(t, inmem.NewBucket())
 	}); !ok {
 		return
 	}
 
 	// Mandatory Filesystem.
-	if ok := t.Run("filesystem", func(t *testing.T) {
+	t.Run("filesystem", func(t *testing.T) {
 		t.Parallel()
 
 		dir, err := ioutil.TempDir("", "filesystem-foreach-store-test")
@@ -44,12 +61,10 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 		b, err := filesystem.NewBucket(dir)
 		testutil.Ok(t, err)
 		testFn(t, b)
-	}); !ok {
-		return
-	}
+	})
 
 	// Optional GCS.
-	if _, ok := os.LookupEnv("THANOS_SKIP_GCS_TESTS"); !ok {
+	if !IsObjStoreSkipped(t, client.GCS) {
 		t.Run("gcs", func(t *testing.T) {
 			bkt, closeFn, err := gcs.NewTestBucket(t, os.Getenv("GCP_PROJECT"))
 			testutil.Ok(t, err)
@@ -60,13 +75,10 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 			// TODO(bwplotka): Add leaktest when https://github.com/GoogleCloudPlatform/google-cloud-go/issues/1025 is resolved.
 			testFn(t, bkt)
 		})
-
-	} else {
-		t.Log("THANOS_SKIP_GCS_TESTS envvar present. Skipping test against GCS.")
 	}
 
 	// Optional S3.
-	if _, ok := os.LookupEnv("THANOS_SKIP_S3_AWS_TESTS"); !ok {
+	if !IsObjStoreSkipped(t, client.S3) {
 		t.Run("aws s3", func(t *testing.T) {
 			// TODO(bwplotka): Allow taking location from envvar.
 			bkt, closeFn, err := s3.NewTestBucket(t, "us-west-2")
@@ -81,13 +93,10 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 
 			testFn(t, bkt)
 		})
-
-	} else {
-		t.Log("THANOS_SKIP_S3_AWS_TESTS envvar present. Skipping test against S3 AWS.")
 	}
 
 	// Optional Azure.
-	if _, ok := os.LookupEnv("THANOS_SKIP_AZURE_TESTS"); !ok {
+	if !IsObjStoreSkipped(t, client.AZURE) {
 		t.Run("azure", func(t *testing.T) {
 			bkt, closeFn, err := azure.NewTestBucket(t, "e2e-tests")
 			testutil.Ok(t, err)
@@ -97,13 +106,10 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 
 			testFn(t, bkt)
 		})
-
-	} else {
-		t.Log("THANOS_SKIP_AZURE_TESTS envvar present. Skipping test against Azure.")
 	}
 
 	// Optional SWIFT.
-	if _, ok := os.LookupEnv("THANOS_SKIP_SWIFT_TESTS"); !ok {
+	if !IsObjStoreSkipped(t, client.SWIFT) {
 		t.Run("swift", func(t *testing.T) {
 			container, closeFn, err := swift.NewTestContainer(t)
 			testutil.Ok(t, err)
@@ -113,13 +119,10 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 
 			testFn(t, container)
 		})
-
-	} else {
-		t.Log("THANOS_SKIP_SWIFT_TESTS envvar present. Skipping test against swift.")
 	}
 
 	// Optional COS.
-	if _, ok := os.LookupEnv("THANOS_SKIP_TENCENT_COS_TESTS"); !ok {
+	if !IsObjStoreSkipped(t, client.COS) {
 		t.Run("Tencent cos", func(t *testing.T) {
 			bkt, closeFn, err := cos.NewTestBucket(t)
 			testutil.Ok(t, err)
@@ -129,13 +132,10 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 
 			testFn(t, bkt)
 		})
-
-	} else {
-		t.Log("THANOS_SKIP_TENCENT_COS_TESTS envvar present. Skipping test against Tencent COS.")
 	}
 
 	// Optional OSS.
-	if _, ok := os.LookupEnv("THANOS_SKIP_ALIYUN_OSS_TESTS"); !ok {
+	if !IsObjStoreSkipped(t, client.ALIYUNOSS) {
 		bkt, closeFn, err := oss.NewTestBucket(t)
 		testutil.Ok(t, err)
 
@@ -147,7 +147,5 @@ func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) 
 		if !ok {
 			return
 		}
-	} else {
-		t.Log("THANOS_SKIP_ALIYUN_OSS_TESTS envvar present. Skipping test against AliYun OSS.")
 	}
 }
