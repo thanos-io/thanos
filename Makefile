@@ -52,6 +52,10 @@ JSONNET_BUNDLER         ?= $(GOBIN)/jb-$(JSONNET_BUNDLER_VERSION)
 PROMTOOL_VERSION        ?= edeb7a44cbf745f1d8be4ea6f215e79e651bfe19
 PROMTOOL                ?= $(GOBIN)/promtool-$(PROMTOOL_VERSION)
 
+# Support gsed on OSX (installed via brew), falling back to sed. On Linux
+# systems gsed won't be installed, so will use sed as expected.
+SED ?= $(shell which gsed || which sed)
+
 MIXIN_ROOT              ?= mixin/thanos
 JSONNET_VENDOR_DIR      ?= mixin/vendor
 
@@ -168,8 +172,8 @@ docker-push:
 # docs regenerates flags in docs for all thanos commands.
 .PHONY: docs
 docs: $(EMBEDMD) build
-	@EMBEDMD_BIN="$(EMBEDMD)" scripts/genflagdocs.sh
-	@find -type f -name "*.md" | xargs scripts/cleanup-white-noise.sh
+	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" scripts/genflagdocs.sh
+	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 
 # check-docs checks:
 # - discrepancy with flags is valid
@@ -177,10 +181,10 @@ docs: $(EMBEDMD) build
 # - white noise
 .PHONY: check-docs
 check-docs: $(EMBEDMD) $(LICHE) build
-	@EMBEDMD_BIN="$(EMBEDMD)" scripts/genflagdocs.sh check
+	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" scripts/genflagdocs.sh check
 	@$(LICHE) --recursive docs --exclude "(cloud.tencent.com|alibabacloud.com)" --document-root .
 	@$(LICHE) --exclude "(cloud.tencent.com|goreportcard.com|alibabacloud.com)" --document-root . *.md
-	@find -type f -name "*.md" | xargs scripts/cleanup-white-noise.sh
+	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 	$(call require_clean_work_tree,"check documentation")
 
 # checks Go code comments if they have trailing period (excludes protobuffers and vendor files).
@@ -197,7 +201,7 @@ check-comments:
 format: $(GOIMPORTS) check-comments
 	@echo ">> formatting code"
 	@$(GOIMPORTS) -w $(FILES_TO_FMT)
-	@scripts/cleanup-white-noise.sh $(FILES_TO_FMT)
+	@SED_BIN="$(SED)" scripts/cleanup-white-noise.sh $(FILES_TO_FMT)
 
 # proto generates golang files from Thanos proto files.
 .PHONY: proto
@@ -293,7 +297,7 @@ lint: check-git $(GOLANGCILINT) $(MISSPELL)
 	@echo ">> detecting misspells"
 	@find . -type f | grep -v vendor/ | grep -vE '\./\..*' | xargs $(MISSPELL) -error
 	@echo ">> detecting white noise"
-	@find . -type f \( -name "*.md" -o -name "*.go" \) | xargs scripts/cleanup-white-noise.sh
+	@find . -type f \( -name "*.md" -o -name "*.go" \) | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 	$(call require_clean_work_tree,"lint")
 
 .PHONY: web-serve
