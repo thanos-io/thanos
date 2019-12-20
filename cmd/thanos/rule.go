@@ -489,7 +489,10 @@ func runRule(
 				}
 
 				level.Debug(logger).Log("msg", "configured rule files", "files", strings.Join(ruleFiles, ","))
-				var files []string
+				var (
+					files     []string
+					seenFiles = make(map[string]struct{})
+				)
 				for _, pat := range ruleFiles {
 					fs, err := filepath.Glob(pat)
 					if err != nil {
@@ -497,8 +500,13 @@ func runRule(
 						level.Error(logger).Log("msg", "retrieving rule files failed. Ignoring file.", "pattern", pat, "err", err)
 						continue
 					}
-
-					files = append(files, fs...)
+					for _, fp := range fs {
+						if _, ok := seenFiles[fp]; ok {
+							continue
+						}
+						files = append(files, fp)
+						seenFiles[fp] = struct{}{}
+					}
 				}
 
 				level.Info(logger).Log("msg", "reload rule files", "numFiles", len(files))
