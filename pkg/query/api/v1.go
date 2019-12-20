@@ -164,6 +164,7 @@ func (api *API) Register(r *route.Router, tracer opentracing.Tracer, logger log.
 	r.Post("/series", instr("series", api.series))
 
 	r.Get("/labels", instr("label_names", api.labelNames))
+	r.Post("/labels", instr("label_names", api.labelNames))
 }
 
 type queryData struct {
