@@ -226,7 +226,7 @@ func runCompact(
 	}()
 
 	sy, err := compact.NewSyncer(logger, reg, bkt, consistencyDelay,
-		blockSyncConcurrency, acceptMalformedIndex, relabelConfig)
+		blockSyncConcurrency, acceptMalformedIndex, false, relabelConfig)
 	if err != nil {
 		return errors.Wrap(err, "create syncer")
 	}

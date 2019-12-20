@@ -37,7 +37,7 @@ func TestSyncer_SyncMetas_e2e(t *testing.T) {
 		defer cancel()
 
 		relabelConfig := make([]*relabel.Config, 0)
-		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false, relabelConfig)
+		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false, false, relabelConfig)
 		testutil.Ok(t, err)
 
 		// Generate 15 blocks. Initially the first 10 are synced into memory and only the last
@@ -140,7 +140,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		}
 
 		// Do one initial synchronization with the bucket.
-		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false, relabelConfig)
+		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false, false, relabelConfig)
 		testutil.Ok(t, err)
 		testutil.Ok(t, sy.SyncMetas(ctx))
 
@@ -209,7 +209,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 
 		reg := prometheus.NewRegistry()
 
-		sy, err := NewSyncer(logger, reg, bkt, 0*time.Second, 5, false, nil)
+		sy, err := NewSyncer(logger, reg, bkt, 0*time.Second, 5, false, false, nil)
 		testutil.Ok(t, err)
 
 		comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, []int64{1000, 3000}, nil)
@@ -515,7 +515,7 @@ func TestSyncer_SyncMetasFilter_e2e(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
-		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false, relabelConfig)
+		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false, false, relabelConfig)
 		testutil.Ok(t, err)
 
 		var ids []ulid.ULID
