@@ -226,28 +226,19 @@ test: check-git install-deps
 	@go install github.com/thanos-io/thanos/cmd/thanos
 	# Be careful on GOCACHE. Those tests are sometimes using built Thanos/Prometheus binaries directly. Don't cache those.
 	@rm -rf ${GOCACHE}
-	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS='true' or/and THANOS_SKIP_S3_AWS_TESTS='true' or/and THANOS_SKIP_AZURE_TESTS='true' and/or THANOS_SKIP_SWIFT_TESTS='true' and/or THANOS_SKIP_ALIYUN_OSS_TESTS='true' and/or THANOS_SKIP_TENCENT_COS_TESTS='true' if you want to skip e2e tests against real store buckets"
+	@echo ">> running all tests. Do export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS if you want to skip e2e tests against all real store buckets. Current value: ${THANOS_TEST_OBJSTORE_SKIP}"
 	@go test $(shell go list ./... | grep -v /vendor/);
 
 .PHONY: test-ci
-test-ci: export THANOS_SKIP_AZURE_TESTS = true
-test-ci: export THANOS_SKIP_SWIFT_TESTS = true
-test-ci: export THANOS_SKIP_TENCENT_COS_TESTS = true
-test-ci: export THANOS_SKIP_ALIYUN_OSS_TESTS = true
+test-ci: export THANOS_TEST_OBJSTORE_SKIP=AZURE,SWIFT,COS,ALIYUNOSS
 test-ci:
-	@echo ">> Skipping AZURE tests"
-	@echo ">> Skipping SWIFT tests"
-	@echo ">> Skipping TENCENT tests"
-	@echo ">> Skipping ALIYUN tests"
+	@echo ">> Skipping ${THANOS_TEST_OBJSTORE_SKIP} tests"
 	$(MAKE) test
 
 .PHONY: test-local
-test-local: export THANOS_SKIP_GCS_TESTS = true
-test-local: export THANOS_SKIP_S3_AWS_TESTS = true
+test-local: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS
 test-local:
-	@echo ">> Skipping GCE tests"
-	@echo ">> Skipping S3 tests"
-	$(MAKE) test-ci
+	$(MAKE) test
 
 # install-deps installs dependencies for e2e tetss.
 # It installs supported versions of Prometheus and alertmanager to test against in e2e.

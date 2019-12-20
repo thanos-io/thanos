@@ -51,13 +51,8 @@ $ make build
 $ <Iterate your development>
 $ git push origin <your_branch_for_new_pr>
 ```
-5. If you don't have a live object store ready add these envvars to skip tests for these:
-- THANOS_SKIP_GCS_TESTS to skip GCS tests.
-- THANOS_SKIP_S3_AWS_TESTS to skip AWS tests.
-- THANOS_SKIP_AZURE_TESTS to skip Azure tests.
-- THANOS_SKIP_SWIFT_TESTS to skip SWIFT tests.
-- THANOS_SKIP_TENCENT_COS_TESTS to skip Tencent COS tests.
-- THANOS_SKIP_ALIYUN_OSS_TESTS to skip Aliyun OSS tests.
+5. If you don't have a live object store ready add this envvar to skip tests for these:
+- THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS
 
 If you skip all of these, the store specific tests will be run against memory object storage only.
 CI runs GCS and inmem tests only for now. Not having these variables will produce auth errors against GCS, AWS, Azure or COS tests.
