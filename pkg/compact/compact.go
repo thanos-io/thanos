@@ -9,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -763,6 +764,9 @@ func (cg *Group) isEnoughDiskSpace(ctx context.Context, dir string) error {
 	for blid := range cg.blocks {
 		var thisBlockBytes uint64
 		err := cg.bkt.Iter(ctx, blid.String(), func(d string) error {
+			if strings.HasSuffix(d, objstore.DirDelim) {
+				return nil
+			}
 			sz, err := cg.bkt.ObjectSize(ctx, d)
 			if err != nil {
 				return errors.Wrapf(err, "object size %s", d)
