@@ -81,23 +81,15 @@ MINIO_SERVER            ?=$(GOBIN)/minio-$(MINIO_SERVER_VERSION)
 # arguments:
 # $(1): Install path. (e.g github.com/campoy/embedmd)
 # $(2): Tag or revision for checkout.
-# TODO(bwplotka): Move to just using modules, however make sure to not use or edit Thanos go.mod file!
+# cd TMP_GOPATH to ensure do not use or edit thanos go.mod file.
 define fetch_go_bin_version
 	@mkdir -p $(GOBIN)
 	@mkdir -p $(TMP_GOPATH)
 
 	@echo ">> fetching $(1)@$(2) revision/version"
-	@if [ ! -d '$(TMP_GOPATH)/src/$(1)' ]; then \
-    GOPATH='$(TMP_GOPATH)' GO111MODULE='off' go get -d -u '$(1)/...'; \
-  else \
-    CDPATH='' cd -- '$(TMP_GOPATH)/src/$(1)' && git fetch; \
-  fi
-	@CDPATH='' cd -- '$(TMP_GOPATH)/src/$(1)' && git checkout -f -q '$(2)'
-	@echo ">> installing $(1)@$(2)"
-	@GOBIN='$(TMP_GOPATH)/bin' GOPATH='$(TMP_GOPATH)' GO111MODULE='off' go install '$(1)'
+	@cd -- $(TMP_GOPATH) && GOPATH=$(TMP_GOPATH) GO111MODULE=on go get -u $(1)@$(2)
 	@mv -- '$(TMP_GOPATH)/bin/$(shell basename $(1))' '$(GOBIN)/$(shell basename $(1))-$(2)'
 	@echo ">> produced $(GOBIN)/$(shell basename $(1))-$(2)"
-
 endef
 
 define require_clean_work_tree
