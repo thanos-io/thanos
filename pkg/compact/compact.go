@@ -67,6 +67,7 @@ type syncerMetrics struct {
 	compactionRunsStarted     *prometheus.CounterVec
 	compactionRunsCompleted   *prometheus.CounterVec
 	compactionFailures        *prometheus.CounterVec
+	verticalCompactions       *prometheus.CounterVec
 }
 
 func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
@@ -120,6 +121,10 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 		Name: "thanos_compact_group_compactions_failures_total",
 		Help: "Total number of failed group compactions.",
 	}, []string{"group"})
+	m.verticalCompactions = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_compact_group_vertical_compactions_total",
+		Help: "Total number of group compaction attempts that resulted in a new block based on overlapping blocks.",
+	}, []string{"group"})
 
 	if reg != nil {
 		reg.MustRegister(
@@ -134,6 +139,7 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 			m.compactionRunsStarted,
 			m.compactionRunsCompleted,
 			m.compactionFailures,
+			m.verticalCompactions,
 		)
 	}
 	return &m
@@ -376,6 +382,7 @@ func (c *Syncer) Groups() (res []*Group, err error) {
 				c.metrics.compactionRunsStarted.WithLabelValues(GroupKey(m.Thanos)),
 				c.metrics.compactionRunsCompleted.WithLabelValues(GroupKey(m.Thanos)),
 				c.metrics.compactionFailures.WithLabelValues(GroupKey(m.Thanos)),
+				c.metrics.verticalCompactions.WithLabelValues(GroupKey(m.Thanos)),
 				c.metrics.garbageCollectedBlocks,
 			)
 			if err != nil {
@@ -525,6 +532,7 @@ type Group struct {
 	compactionRunsStarted       prometheus.Counter
 	compactionRunsCompleted     prometheus.Counter
 	compactionFailures          prometheus.Counter
+	verticalCompactions         prometheus.Counter
 	groupGarbageCollectedBlocks prometheus.Counter
 }
 
@@ -540,6 +548,7 @@ func newGroup(
 	compactionRunsStarted prometheus.Counter,
 	compactionRunsCompleted prometheus.Counter,
 	compactionFailures prometheus.Counter,
+	verticalCompactions prometheus.Counter,
 	groupGarbageCollectedBlocks prometheus.Counter,
 ) (*Group, error) {
 	if logger == nil {
@@ -552,10 +561,12 @@ func newGroup(
 		resolution:                  resolution,
 		blocks:                      map[ulid.ULID]*metadata.Meta{},
 		acceptMalformedIndex:        acceptMalformedIndex,
+		enableVerticalCompaction:    enableVerticalCompaction,
 		compactions:                 compactions,
 		compactionRunsStarted:       compactionRunsStarted,
 		compactionRunsCompleted:     compactionRunsCompleted,
 		compactionFailures:          compactionFailures,
+		verticalCompactions:         verticalCompactions,
 		groupGarbageCollectedBlocks: groupGarbageCollectedBlocks,
 	}
 	return g, nil
@@ -814,11 +825,14 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
 
-	// Check for overlapped blocks, unless vertical compaction has been enabled.
-	if !cg.enableVerticalCompaction {
-		if err := cg.areBlocksOverlapping(nil); err != nil {
+	// Check for overlapped blocks.
+	overlappingBlocks := false
+	if err := cg.areBlocksOverlapping(nil); err != nil {
+		if !cg.enableVerticalCompaction {
 			return false, ulid.ULID{}, halt(errors.Wrap(err, "pre compaction overlap check"))
 		}
+
+		overlappingBlocks = true
 	}
 
 	// Planning a compaction works purely based on the meta.json files in our future group's dir.
@@ -927,8 +941,11 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		return true, ulid.ULID{}, nil
 	}
 	cg.compactions.Inc()
+	if overlappingBlocks {
+		cg.verticalCompactions.Inc()
+	}
 	level.Debug(cg.logger).Log("msg", "compacted blocks",
-		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin))
+		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin), "overlapping_blocks", overlappingBlocks)
 
 	bdir := filepath.Join(dir, compID.String())
 	index := filepath.Join(bdir, block.IndexFilename)
