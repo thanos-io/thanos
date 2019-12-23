@@ -41,17 +41,18 @@ var blockTooFreshSentinelError = errors.New("Block too fresh")
 // Syncer syncronizes block metas from a bucket into a local directory.
 // It sorts them into compaction groups based on equal label sets.
 type Syncer struct {
-	logger               log.Logger
-	reg                  prometheus.Registerer
-	bkt                  objstore.Bucket
-	consistencyDelay     time.Duration
-	mtx                  sync.Mutex
-	blocks               map[ulid.ULID]*metadata.Meta
-	blocksMtx            sync.Mutex
-	blockSyncConcurrency int
-	metrics              *syncerMetrics
-	acceptMalformedIndex bool
-	relabelConfig        []*relabel.Config
+	logger                   log.Logger
+	reg                      prometheus.Registerer
+	bkt                      objstore.Bucket
+	consistencyDelay         time.Duration
+	mtx                      sync.Mutex
+	blocks                   map[ulid.ULID]*metadata.Meta
+	blocksMtx                sync.Mutex
+	blockSyncConcurrency     int
+	metrics                  *syncerMetrics
+	acceptMalformedIndex     bool
+	enableVerticalCompaction bool
+	relabelConfig            []*relabel.Config
 }
 
 type syncerMetrics struct {
@@ -66,6 +67,7 @@ type syncerMetrics struct {
 	compactionRunsStarted     *prometheus.CounterVec
 	compactionRunsCompleted   *prometheus.CounterVec
 	compactionFailures        *prometheus.CounterVec
+	verticalCompactions       *prometheus.CounterVec
 }
 
 func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
@@ -119,6 +121,10 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 		Name: "thanos_compact_group_compactions_failures_total",
 		Help: "Total number of failed group compactions.",
 	}, []string{"group"})
+	m.verticalCompactions = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_compact_group_vertical_compactions_total",
+		Help: "Total number of group compaction attempts that resulted in a new block based on overlapping blocks.",
+	}, []string{"group"})
 
 	if reg != nil {
 		reg.MustRegister(
@@ -133,6 +139,7 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 			m.compactionRunsStarted,
 			m.compactionRunsCompleted,
 			m.compactionFailures,
+			m.verticalCompactions,
 		)
 	}
 	return &m
@@ -140,7 +147,7 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 
 // NewSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, consistencyDelay time.Duration, blockSyncConcurrency int, acceptMalformedIndex bool, relabelConfig []*relabel.Config) (*Syncer, error) {
+func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, consistencyDelay time.Duration, blockSyncConcurrency int, acceptMalformedIndex bool, enableVerticalCompaction bool, relabelConfig []*relabel.Config) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -154,6 +161,10 @@ func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket
 		blockSyncConcurrency: blockSyncConcurrency,
 		acceptMalformedIndex: acceptMalformedIndex,
 		relabelConfig:        relabelConfig,
+		// The syncer offers an option to enable vertical compaction, even if it's
+		// not currently used by Thanos, because the compactor is also used by Cortex
+		// which needs vertical compaction.
+		enableVerticalCompaction: enableVerticalCompaction,
 	}, nil
 }
 
@@ -366,10 +377,12 @@ func (c *Syncer) Groups() (res []*Group, err error) {
 				labels.FromMap(m.Thanos.Labels),
 				m.Thanos.Downsample.Resolution,
 				c.acceptMalformedIndex,
+				c.enableVerticalCompaction,
 				c.metrics.compactions.WithLabelValues(GroupKey(m.Thanos)),
 				c.metrics.compactionRunsStarted.WithLabelValues(GroupKey(m.Thanos)),
 				c.metrics.compactionRunsCompleted.WithLabelValues(GroupKey(m.Thanos)),
 				c.metrics.compactionFailures.WithLabelValues(GroupKey(m.Thanos)),
+				c.metrics.verticalCompactions.WithLabelValues(GroupKey(m.Thanos)),
 				c.metrics.garbageCollectedBlocks,
 			)
 			if err != nil {
@@ -514,10 +527,12 @@ type Group struct {
 	mtx                         sync.Mutex
 	blocks                      map[ulid.ULID]*metadata.Meta
 	acceptMalformedIndex        bool
+	enableVerticalCompaction    bool
 	compactions                 prometheus.Counter
 	compactionRunsStarted       prometheus.Counter
 	compactionRunsCompleted     prometheus.Counter
 	compactionFailures          prometheus.Counter
+	verticalCompactions         prometheus.Counter
 	groupGarbageCollectedBlocks prometheus.Counter
 }
 
@@ -528,10 +543,12 @@ func newGroup(
 	lset labels.Labels,
 	resolution int64,
 	acceptMalformedIndex bool,
+	enableVerticalCompaction bool,
 	compactions prometheus.Counter,
 	compactionRunsStarted prometheus.Counter,
 	compactionRunsCompleted prometheus.Counter,
 	compactionFailures prometheus.Counter,
+	verticalCompactions prometheus.Counter,
 	groupGarbageCollectedBlocks prometheus.Counter,
 ) (*Group, error) {
 	if logger == nil {
@@ -544,10 +561,12 @@ func newGroup(
 		resolution:                  resolution,
 		blocks:                      map[ulid.ULID]*metadata.Meta{},
 		acceptMalformedIndex:        acceptMalformedIndex,
+		enableVerticalCompaction:    enableVerticalCompaction,
 		compactions:                 compactions,
 		compactionRunsStarted:       compactionRunsStarted,
 		compactionRunsCompleted:     compactionRunsCompleted,
 		compactionFailures:          compactionFailures,
+		verticalCompactions:         verticalCompactions,
 		groupGarbageCollectedBlocks: groupGarbageCollectedBlocks,
 	}
 	return g, nil
@@ -807,8 +826,13 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 	defer cg.mtx.Unlock()
 
 	// Check for overlapped blocks.
+	overlappingBlocks := false
 	if err := cg.areBlocksOverlapping(nil); err != nil {
-		return false, ulid.ULID{}, halt(errors.Wrap(err, "pre compaction overlap check"))
+		if !cg.enableVerticalCompaction {
+			return false, ulid.ULID{}, halt(errors.Wrap(err, "pre compaction overlap check"))
+		}
+
+		overlappingBlocks = true
 	}
 
 	// Planning a compaction works purely based on the meta.json files in our future group's dir.
@@ -917,8 +941,11 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		return true, ulid.ULID{}, nil
 	}
 	cg.compactions.Inc()
+	if overlappingBlocks {
+		cg.verticalCompactions.Inc()
+	}
 	level.Debug(cg.logger).Log("msg", "compacted blocks",
-		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin))
+		"blocks", fmt.Sprintf("%v", plan), "duration", time.Since(begin), "overlapping_blocks", overlappingBlocks)
 
 	bdir := filepath.Join(dir, compID.String())
 	index := filepath.Join(bdir, block.IndexFilename)
@@ -942,9 +969,12 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		return false, ulid.ULID{}, halt(errors.Wrapf(err, "invalid result block %s", bdir))
 	}
 
-	// Ensure the output block is not overlapping with anything else.
-	if err := cg.areBlocksOverlapping(newMeta, plan...); err != nil {
-		return false, ulid.ULID{}, halt(errors.Wrapf(err, "resulted compacted block %s overlaps with something", bdir))
+	// Ensure the output block is not overlapping with anything else,
+	// unless vertical compaction is enabled.
+	if !cg.enableVerticalCompaction {
+		if err := cg.areBlocksOverlapping(newMeta, plan...); err != nil {
+			return false, ulid.ULID{}, halt(errors.Wrapf(err, "resulted compacted block %s overlaps with something", bdir))
+		}
 	}
 
 	if err := block.WriteIndexCache(cg.logger, index, indexCache); err != nil {
