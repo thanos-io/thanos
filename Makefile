@@ -54,7 +54,7 @@ PROMTOOL                ?= $(GOBIN)/promtool-$(PROMTOOL_VERSION)
 
 # Support gsed on OSX (installed via brew), falling back to sed. On Linux
 # systems gsed won't be installed, so will use sed as expected.
-SED ?= $(shell which gsed || which sed)
+SED ?= $(shell which gsed 2>/dev/null || which sed)
 
 MIXIN_ROOT              ?= mixin/thanos
 JSONNET_VENDOR_DIR      ?= mixin/vendor
