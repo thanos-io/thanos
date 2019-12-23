@@ -2,6 +2,7 @@ package cache
 
 import (
 	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/prometheus/common/model"
@@ -12,16 +13,16 @@ func TestCacheAddresses(t *testing.T) {
 	tgs := make(map[string]*targetgroup.Group)
 	tgs["g1"] = &targetgroup.Group{
 		Targets: []model.LabelSet{
-			model.LabelSet{model.AddressLabel: "localhost:9090"},
-			model.LabelSet{model.AddressLabel: "localhost:9091"},
-			model.LabelSet{model.AddressLabel: "localhost:9092"},
+			{model.AddressLabel: "localhost:9090"},
+			{model.AddressLabel: "localhost:9091"},
+			{model.AddressLabel: "localhost:9092"},
 		},
 	}
 	tgs["g2"] = &targetgroup.Group{
 		Targets: []model.LabelSet{
-			model.LabelSet{model.AddressLabel: "localhost:9091"},
-			model.LabelSet{model.AddressLabel: "localhost:9092"},
-			model.LabelSet{model.AddressLabel: "localhost:9093"},
+			{model.AddressLabel: "localhost:9091"},
+			{model.AddressLabel: "localhost:9092"},
+			{model.AddressLabel: "localhost:9093"},
 		},
 	}
 
@@ -33,7 +34,12 @@ func TestCacheAddresses(t *testing.T) {
 		"localhost:9092",
 		"localhost:9093",
 	}
-	if got := c.Addresses(); !reflect.DeepEqual(got, expected) {
+
+	got := c.Addresses()
+	sort.Slice(got, func(i, j int) bool {
+		return i < j
+	})
+	if !reflect.DeepEqual(got, expected) {
 		t.Errorf("expected %v, want %v", got, expected)
 	}
 }
