@@ -1131,10 +1131,13 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 		}
 
 		// Send all groups found during this pass to the compaction workers.
+		var groupErrs terrors.MultiError
+
 	groupLoop:
 		for _, g := range groups {
 			select {
-			case err = <-errChan:
+			case groupErr := <-errChan:
+				groupErrs.Add(groupErr)
 				break groupLoop
 			case groupChan <- g:
 			}
@@ -1142,15 +1145,16 @@ func (c *BucketCompactor) Compact(ctx context.Context) error {
 		close(groupChan)
 		wg.Wait()
 
+		// Collect any other error reported by the workers, or any error reported
+		// while we were waiting for the last batch of groups to run the compaction.
 		close(errChan)
+		for groupErr := range errChan {
+			groupErrs.Add(groupErr)
+		}
+
 		workCtxCancel()
-		if err != nil {
-			errs := terrors.MultiError{err}
-			// Collect any other errors reported by the workers.
-			for e := range errChan {
-				errs.Add(e)
-			}
-			return errs
+		if len(groupErrs) > 0 {
+			return groupErrs
 		}
 
 		if finishedAllGroups {
