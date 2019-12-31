@@ -218,7 +218,7 @@ func Test_DiskUsage_Corner(t *testing.T) {
 	}
 	cg, err = newGroup(log.NewNopLogger(), bkt, lbls, 0, false, duEnough, nil, nil, nil, nil, nil)
 	testutil.Ok(t, err)
-	cg.Add(&metadata.Meta{
+	err = cg.Add(&metadata.Meta{
 		BlockMeta: tsdb.BlockMeta{
 			ULID: b1,
 		},
@@ -229,6 +229,7 @@ func Test_DiskUsage_Corner(t *testing.T) {
 			},
 		},
 	})
+	testutil.Ok(t, err)
 
 	err = cg.isEnoughDiskSpace(ctx, b1.String())
 	testutil.Ok(t, err)
