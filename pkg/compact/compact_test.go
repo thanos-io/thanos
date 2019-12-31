@@ -183,7 +183,7 @@ func Test_DiskUsage_Corner(t *testing.T) {
 		return diskusage.Usage{}, errors.New("sentinel")
 	}
 
-	cg, err := newGroup(log.NewNopLogger(), bkt, lbls, 0, false, duErr, nil, nil, nil, nil, nil)
+	cg, err := newGroup(log.NewNopLogger(), bkt, lbls, 0, false, duErr, false, nil, nil, nil, nil, nil, nil)
 	testutil.Ok(t, err)
 
 	err = cg.isEnoughDiskSpace(ctx, b1.String())
@@ -193,7 +193,7 @@ func Test_DiskUsage_Corner(t *testing.T) {
 	duNotEnough := func(p string) (diskusage.Usage, error) {
 		return diskusage.Usage{AvailBytes: 1500}, nil
 	}
-	cg, err = newGroup(log.NewNopLogger(), bkt, lbls, 0, false, duNotEnough, nil, nil, nil, nil, nil)
+	cg, err = newGroup(log.NewNopLogger(), bkt, lbls, 0, false, duNotEnough, false, nil, nil, nil, nil, nil, nil)
 	testutil.Ok(t, err)
 	err = cg.Add(&metadata.Meta{
 		BlockMeta: tsdb.BlockMeta{
@@ -216,7 +216,7 @@ func Test_DiskUsage_Corner(t *testing.T) {
 	duEnough := func(p string) (diskusage.Usage, error) {
 		return diskusage.Usage{AvailBytes: 1600}, nil
 	}
-	cg, err = newGroup(log.NewNopLogger(), bkt, lbls, 0, false, duEnough, nil, nil, nil, nil, nil)
+	cg, err = newGroup(log.NewNopLogger(), bkt, lbls, 0, false, duEnough, false, nil, nil, nil, nil, nil, nil)
 	testutil.Ok(t, err)
 	err = cg.Add(&metadata.Meta{
 		BlockMeta: tsdb.BlockMeta{
