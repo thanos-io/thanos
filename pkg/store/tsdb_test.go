@@ -34,6 +34,119 @@ func TestTSDBStore_Info(t *testing.T) {
 	testutil.Equals(t, int64(math.MaxInt64), resp.MaxTime)
 }
 
+func TestTSDBStore_LabelNames(t *testing.T) {
+	var err error
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	db, err := testutil.NewTSDB()
+	defer func() { testutil.Ok(t, db.Close()) }()
+	testutil.Ok(t, err)
+
+	appender := db.Appender()
+	addLabels := func(lbs []string) {
+		if len(lbs) > 0 {
+			_, err = appender.Add(labels.FromStrings(lbs...), math.MaxInt64, 1)
+			testutil.Ok(t, err)
+		}
+	}
+
+	tsdbStore := NewTSDBStore(nil, nil, db, component.Rule, labels.FromStrings("region", "eu-west"))
+
+	for _, tc := range []struct {
+		title         string
+		labels        []string
+		expectedNames []string
+	}{
+		{
+			title:         "no label in tsdb",
+			labels:        []string{},
+			expectedNames: []string{},
+		},
+		{
+			title:         "add one label",
+			labels:        []string{"foo", "foo"},
+			expectedNames: []string{"foo"},
+		},
+		{
+			title:  "add another label",
+			labels: []string{"bar", "bar"},
+			// We will get two labels here.
+			expectedNames: []string{"bar", "foo"},
+		},
+	} {
+		if ok := t.Run(tc.title, func(t *testing.T) {
+			addLabels(tc.labels)
+			resp, err := tsdbStore.LabelNames(ctx, &storepb.LabelNamesRequest{})
+			testutil.Ok(t, err)
+			testutil.Equals(t, tc.expectedNames, resp.Names)
+			testutil.Equals(t, 0, len(resp.Warnings))
+		}); !ok {
+			return
+		}
+	}
+}
+
+func TestTSDBStore_LabelValues(t *testing.T) {
+	var err error
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	db, err := testutil.NewTSDB()
+	defer func() { testutil.Ok(t, db.Close()) }()
+	testutil.Ok(t, err)
+
+	appender := db.Appender()
+	addLabels := func(lbs []string) {
+		if len(lbs) > 0 {
+			_, err = appender.Add(labels.FromStrings(lbs...), math.MaxInt64, 1)
+			testutil.Ok(t, err)
+		}
+	}
+
+	tsdbStore := NewTSDBStore(nil, nil, db, component.Rule, labels.FromStrings("region", "eu-west"))
+
+	for _, tc := range []struct {
+		title          string
+		addedLabels    []string
+		queryLabel     string
+		expectedValues []string
+	}{
+		{
+			title:          "no label in tsdb",
+			addedLabels:    []string{},
+			queryLabel:     "foo",
+			expectedValues: []string{},
+		},
+		{
+			title:          "add one label value",
+			addedLabels:    []string{"foo", "test"},
+			queryLabel:     "foo",
+			expectedValues: []string{"test"},
+		},
+		{
+			title:          "add another label value",
+			addedLabels:    []string{"foo", "test1"},
+			queryLabel:     "foo",
+			expectedValues: []string{"test", "test1"},
+		},
+	} {
+		if ok := t.Run(tc.title, func(t *testing.T) {
+			addLabels(tc.addedLabels)
+			resp, err := tsdbStore.LabelValues(ctx, &storepb.LabelValuesRequest{Label: tc.queryLabel})
+			testutil.Ok(t, err)
+			testutil.Equals(t, tc.expectedValues, resp.Values)
+			testutil.Equals(t, 0, len(resp.Warnings))
+		}); !ok {
+			return
+		}
+	}
+}
+
 // Regression test for https://github.com/thanos-io/thanos/issues/1038.
 func TestTSDBStore_Series_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()

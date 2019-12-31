@@ -94,12 +94,15 @@ function check_comments {
     # option is used and a selected line is found.
     if test "0" == "${res}"  # found something
     then
-      printf "\n\n\n Error: Found comments without trailing period. Comments has to be full sentences.\n\n\n."
+      printf "\n\n\n Error: Found comments without trailing period. Comments has to be full sentences.\n\n\n"
+      exit 1
     elif test "1" == "${res}" # nothing found, all clear
     then
       printf "\n\n\n All comment formatting is good, Spartan.\n\n\n"
+      exit 0
     else  # grep error
       printf "\n\n\n Hmmm something didn't work, issues with grep?.\n\n\n"
+      exit 2
     fi
 }
 

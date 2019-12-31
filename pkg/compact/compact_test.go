@@ -85,7 +85,7 @@ func TestSyncer_SyncMetas_HandlesMalformedBlocks(t *testing.T) {
 
 	bkt := inmem.NewBucket()
 	relabelConfig := make([]*relabel.Config, 0)
-	sy, err := NewSyncer(nil, nil, bkt, 10*time.Second, 1, false, relabelConfig)
+	sy, err := NewSyncer(nil, nil, bkt, 10*time.Second, 1, false, false, relabelConfig)
 	testutil.Ok(t, err)
 
 	// Generate 1 block which is older than MinimumAgeForRemoval which has chunk data but no meta.  Compactor should delete it.

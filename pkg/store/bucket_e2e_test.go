@@ -37,33 +37,38 @@ var (
 
 type noopCache struct{}
 
-func (noopCache) SetPostings(b ulid.ULID, l labels.Label, v []byte)   {}
-func (noopCache) Postings(b ulid.ULID, l labels.Label) ([]byte, bool) { return nil, false }
-func (noopCache) SetSeries(b ulid.ULID, id uint64, v []byte)          {}
-func (noopCache) Series(b ulid.ULID, id uint64) ([]byte, bool)        { return nil, false }
-
-type swappableCache struct {
-	ptr indexCache
+func (noopCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte) {}
+func (noopCache) FetchMultiPostings(blockID ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
+	return map[labels.Label][]byte{}, keys
 }
 
-func (c *swappableCache) SwapWith(ptr2 indexCache) {
+func (noopCache) StoreSeries(blockID ulid.ULID, id uint64, v []byte) {}
+func (noopCache) FetchMultiSeries(blockID ulid.ULID, ids []uint64) (map[uint64][]byte, []uint64) {
+	return map[uint64][]byte{}, ids
+}
+
+type swappableCache struct {
+	ptr storecache.IndexCache
+}
+
+func (c *swappableCache) SwapWith(ptr2 storecache.IndexCache) {
 	c.ptr = ptr2
 }
 
-func (c *swappableCache) SetPostings(b ulid.ULID, l labels.Label, v []byte) {
-	c.ptr.SetPostings(b, l, v)
+func (c *swappableCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte) {
+	c.ptr.StorePostings(blockID, l, v)
 }
 
-func (c *swappableCache) Postings(b ulid.ULID, l labels.Label) ([]byte, bool) {
-	return c.ptr.Postings(b, l)
+func (c *swappableCache) FetchMultiPostings(blockID ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
+	return c.ptr.FetchMultiPostings(blockID, keys)
 }
 
-func (c *swappableCache) SetSeries(b ulid.ULID, id uint64, v []byte) {
-	c.ptr.SetSeries(b, id, v)
+func (c *swappableCache) StoreSeries(blockID ulid.ULID, id uint64, v []byte) {
+	c.ptr.StoreSeries(blockID, id, v)
 }
 
-func (c *swappableCache) Series(b ulid.ULID, id uint64) ([]byte, bool) {
-	return c.ptr.Series(b, id)
+func (c *swappableCache) FetchMultiSeries(blockID ulid.ULID, ids []uint64) (map[uint64][]byte, []uint64) {
+	return c.ptr.FetchMultiSeries(blockID, ids)
 }
 
 type storeSuite struct {
@@ -373,7 +378,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		testBucketStore_e2e(t, ctx, s)
 
 		t.Log("Test with large, sufficient index cache")
-		indexCache, err := storecache.NewIndexCache(s.logger, nil, storecache.Opts{
+		indexCache, err := storecache.NewInMemoryIndexCache(s.logger, nil, storecache.Opts{
 			MaxItemSizeBytes: 1e5,
 			MaxSizeBytes:     2e5,
 		})
@@ -382,7 +387,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		testBucketStore_e2e(t, ctx, s)
 
 		t.Log("Test with small index cache")
-		indexCache2, err := storecache.NewIndexCache(s.logger, nil, storecache.Opts{
+		indexCache2, err := storecache.NewInMemoryIndexCache(s.logger, nil, storecache.Opts{
 			MaxItemSizeBytes: 50,
 			MaxSizeBytes:     100,
 		})
@@ -416,7 +421,7 @@ func TestBucketStore_ManyParts_e2e(t *testing.T) {
 
 		s := prepareStoreWithTestBlocks(t, dir, bkt, true, 0, emptyRelabelConfig)
 
-		indexCache, err := storecache.NewIndexCache(s.logger, nil, storecache.Opts{
+		indexCache, err := storecache.NewInMemoryIndexCache(s.logger, nil, storecache.Opts{
 			MaxItemSizeBytes: 1e5,
 			MaxSizeBytes:     2e5,
 		})

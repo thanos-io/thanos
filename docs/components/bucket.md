@@ -77,7 +77,7 @@ Subcommands:
 
 ```
 
-### Web 
+### Web
 
 `bucket web` is used to inspect bucket blocks in form of interactive web UI.
 

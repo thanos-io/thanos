@@ -38,12 +38,21 @@ func (c *Cache) Update(tgs []*targetgroup.Group) {
 
 // Addresses returns all the addresses from all target groups present in the Cache.
 func (c *Cache) Addresses() []string {
+	var addresses []string
+	var unique map[string]struct{}
+
 	c.Lock()
 	defer c.Unlock()
-	var addresses []string
+
+	unique = make(map[string]struct{})
 	for _, group := range c.tgs {
 		for _, target := range group.Targets {
-			addresses = append(addresses, string(target[model.AddressLabel]))
+			addr := string(target[model.AddressLabel])
+			if _, ok := unique[addr]; ok {
+				continue
+			}
+			addresses = append(addresses, addr)
+			unique[addr] = struct{}{}
 		}
 	}
 	return addresses

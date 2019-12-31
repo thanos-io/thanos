@@ -164,7 +164,7 @@ func runReceive(
 	replicaHeader string,
 	replicationFactor uint64,
 	tsdbBlockDuration model.Duration,
-	comp component.Component,
+	comp component.SourceStoreAPI,
 ) error {
 	logger = log.With(logger, "component", "receive")
 	level.Warn(logger).Log("msg", "setting up receive; the Thanos receive component is EXPERIMENTAL, it may break significantly without notice")
@@ -364,7 +364,7 @@ func runReceive(
 				if s != nil {
 					s.Shutdown(errors.New("reload hashrings"))
 				}
-				tsdbStore := store.NewTSDBStore(log.With(logger, "component", "thanos-tsdb-store"), nil, localStorage.Get(), component.Receive, lset)
+				tsdbStore := store.NewTSDBStore(log.With(logger, "component", "thanos-tsdb-store"), nil, localStorage.Get(), comp, lset)
 
 				s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, comp, tsdbStore,
 					grpcserver.WithListen(grpcBindAddr),
@@ -407,7 +407,7 @@ func runReceive(
 	if upload {
 		// The background shipper continuously scans the data directory and uploads
 		// new blocks to Google Cloud Storage or an S3-compatible storage service.
-		bkt, err := client.NewBucket(logger, confContentYaml, reg, component.Sidecar.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, reg, comp.String())
 		if err != nil {
 			return err
 		}

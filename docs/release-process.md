@@ -13,7 +13,7 @@ NOTE: As [Semantic Versioning](http://semver.org/spec/v2.0.0.html) states all 0.
 
 ## Cadence
 
-We aim for regular and strict one release per *6 weeks*. 6 weeks is counter from first release candidate to another. 
+We aim for regular and strict one release per *6 weeks*. 6 weeks is counter from first release candidate to another.
 This means that there is no *code freeze* or anything like that. We plan to stick to the exact 6 weeks, so there is no rush
 into being within release (except bug fixes).
 
@@ -21,7 +21,7 @@ No feature should block release.
 
 Additionally we (obviously) aim for `master` branch being stable.
 
-We are assigning a release shepherd for each minor release. 
+We are assigning a release shepherd for each minor release.
 
 Release shepherd responsibilities:
 
@@ -31,31 +31,33 @@ Release shepherd responsibilities:
 | Release   | Time of first RC         | Shepherd (Github handle) |
 |-----------|--------------------------|--------------------------|
 | v0.10.0   | (planned) 8.01.2019      | TBD                      |
-| v0.9.0    | (planned) 26.11.2019     | `@bwplotka`              |
-| v0.8.0    | (planned) 9.10.2019      | `@bwplotka`              |
-| v0.7.0    | (planned) 28.08.2019     | `@domgreen`              |
-| v0.6.0    | (planned) 12.07.2019     | `@GiedriusS`             |
+| v0.9.0    | 26.11.2019               | `@bwplotka`              |
+| v0.8.0    | 9.10.2019                | `@bwplotka`              |
+| v0.7.0    | 28.08.2019               | `@domgreen`              |
+| v0.6.0    | 12.07.2019               | `@GiedriusS`             |
 | v0.5.0    | 31.06.2019               | `@bwplotka`              |
 
-# For maintainers: Cutting individual release 
+# For maintainers: Cutting individual release
 
 Process of releasing a *minor* Thanos version:
 1. Release `v<major>.<minor+1>.0-rc.0`
 1. If after 3 work days there is no major bug, release `v<major>.<minor>.0`
 1. If within 3 work days there is major bug, let's triage it to fix it and then release `v<major>.<minor>.0-rc.++` Go to step 2.
-1. Do patch release if needed for any bugs afterwards. Use same `release-xxx` branch.
+1. Do patch release if needed for any bugs afterwards. Use same `release-xxx` branch and migrate fixes to master.
 
 ## How to release a version
 
-1. Add PR on branch `release-<major>.<minor>` that will start minor release branch and prepare changes to cut release.
-    
+Release is happening on separate `release-<major>.<minor>` branch.
+
+1. Prepare PR to branch `release-<major>.<minor>` that will start minor release branch and prepare changes to cut release.
+
   For release candidate just reuse same branch and rebase it on every candidate until the actual release happens.
-        
+
 1. Update [CHANGELOG file](/CHANGELOG.md)
 
   Note that `CHANGELOG.md` should only document changes relevant to users of Thanos, including external API changes, performance improvements, and new features. Do not document changes of internal interfaces, code refactorings and clean-ups, changes to the build process, etc. People interested in these are asked to refer to the git history.
   Format is described in `CHANGELOG.md`.
-  
+
   The whole release from release candidate `rc.0` to actual release should have exactly the same section. We don't separate
   what have changed between release candidates.
 
@@ -88,6 +90,8 @@ Process of releasing a *minor* Thanos version:
  1. Once tarballs are published on release page, you can click `Publish` and release is complete.
 
  1. Announce `#thanos` slack channel.
+
+ 1. Pull commits from release branch to master branch for non `rc` releases.
 
 ## Pre-releases (release candidates)
 

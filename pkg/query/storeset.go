@@ -81,23 +81,23 @@ type storeSetNodeCollector struct {
 	storeNodes      map[component.StoreAPI]map[string]int
 	storePerExtLset map[string]int
 
-	metricDesc  *prometheus.Desc
-	metricDesc2 *prometheus.Desc
+	connectionsDesc *prometheus.Desc
+	nodeInfoDesc    *prometheus.Desc
 }
 
 func newStoreSetNodeCollector() *storeSetNodeCollector {
 	return &storeSetNodeCollector{
 		storeNodes: map[component.StoreAPI]map[string]int{},
-		metricDesc: prometheus.NewDesc(
+		connectionsDesc: prometheus.NewDesc(
 			"thanos_store_nodes_grpc_connections",
 			"Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.",
 			[]string{"external_labels", "store_type"}, nil,
 		),
 		// TODO(bwplotka): Obsolete; Replaced by thanos_store_nodes_grpc_connections.
 		// Remove in next minor release.
-		metricDesc2: prometheus.NewDesc(
+		nodeInfoDesc: prometheus.NewDesc(
 			"thanos_store_node_info",
-			"Deprecated, use thanos_store_node_info instead.",
+			"Deprecated, use thanos_store_nodes_grpc_connections instead.",
 			[]string{"external_labels"}, nil,
 		),
 	}
@@ -122,8 +122,8 @@ func (c *storeSetNodeCollector) Update(nodes map[component.StoreAPI]map[string]i
 }
 
 func (c *storeSetNodeCollector) Describe(ch chan<- *prometheus.Desc) {
-	ch <- c.metricDesc
-	ch <- c.metricDesc2
+	ch <- c.connectionsDesc
+	ch <- c.nodeInfoDesc
 }
 
 func (c *storeSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
@@ -136,11 +136,11 @@ func (c *storeSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 			if storeType != nil {
 				storeTypeStr = storeType.String()
 			}
-			ch <- prometheus.MustNewConstMetric(c.metricDesc, prometheus.GaugeValue, float64(occurrences), externalLabels, storeTypeStr)
+			ch <- prometheus.MustNewConstMetric(c.connectionsDesc, prometheus.GaugeValue, float64(occurrences), externalLabels, storeTypeStr)
 		}
 	}
 	for externalLabels, occur := range c.storePerExtLset {
-		ch <- prometheus.MustNewConstMetric(c.metricDesc2, prometheus.GaugeValue, float64(occur), externalLabels)
+		ch <- prometheus.MustNewConstMetric(c.nodeInfoDesc, prometheus.GaugeValue, float64(occur), externalLabels)
 	}
 }
 
@@ -193,7 +193,7 @@ func NewStoreSet(
 		storeSpecs:            storeSpecs,
 		dialOpts:              dialOpts,
 		storesMetric:          storesMetric,
-		gRPCInfoCallTimeout:   10 * time.Second,
+		gRPCInfoCallTimeout:   5 * time.Second,
 		stores:                make(map[string]*storeRef),
 		storeStatuses:         make(map[string]*StoreStatus),
 		unhealthyStoreTimeout: unhealthyStoreTimeout,

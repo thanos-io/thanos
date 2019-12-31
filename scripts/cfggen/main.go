@@ -12,6 +12,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/objstore/azure"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/cos"
@@ -71,13 +72,20 @@ func main() {
 			os.Exit(1)
 		}
 	}
+
+	alertmgrCfg := alert.DefaultAlertmanagerConfig()
+	alertmgrCfg.FileSDConfigs = []alert.FileSDConfig{alert.FileSDConfig{}}
+	if err := generate(alert.AlertingConfig{Alertmanagers: []alert.AlertmanagerConfig{alertmgrCfg}}, "rule_alerting", *outputDir); err != nil {
+		level.Error(logger).Log("msg", "failed to generate", "type", "rule_alerting", "err", err)
+		os.Exit(1)
+	}
 	logger.Log("msg", "success")
 }
 
 func generate(obj interface{}, typ string, outputDir string) error {
 	// We forbid omitempty option. This is for simplification for doc generation.
 	if err := checkForOmitEmptyTagOption(obj); err != nil {
-		return err
+		return errors.Wrap(err, "invalid type")
 	}
 
 	out, err := yaml.Marshal(obj)
@@ -95,15 +103,15 @@ func checkForOmitEmptyTagOption(obj interface{}) error {
 func checkForOmitEmptyTagOptionRec(v reflect.Value) error {
 	switch v.Kind() {
 	case reflect.Struct:
-		for i := 0; i < v.NumField(); i += 1 {
+		for i := 0; i < v.NumField(); i++ {
 			tags, err := structtag.Parse(string(v.Type().Field(i).Tag))
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "%s: failed to parse tag %q", v.Type().Field(i).Name, v.Type().Field(i).Tag)
 			}
 
 			tag, err := tags.Get("yaml")
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "%s: failed to get tag %q", v.Type().Field(i).Name, v.Type().Field(i).Tag)
 			}
 
 			for _, opts := range tag.Options {
@@ -113,16 +121,12 @@ func checkForOmitEmptyTagOptionRec(v reflect.Value) error {
 			}
 
 			if err := checkForOmitEmptyTagOptionRec(v.Field(i)); err != nil {
-				return err
+				return errors.Wrapf(err, "%s", v.Type().Field(i).Name)
 			}
 		}
 
 	case reflect.Ptr:
-		if !v.IsValid() {
-			return errors.New("nil pointers are not allowed in configuration.")
-		}
-
-		return errors.New("nil pointers are not allowed in configuration.")
+		return errors.New("nil pointers are not allowed in configuration")
 
 	case reflect.Interface:
 		return checkForOmitEmptyTagOptionRec(v.Elem())

@@ -29,8 +29,10 @@ Prometheus servers connected to the Thanos cluster via the sidecar are subject t
 * The `--web.enable-admin-api` flag is enabled to support sidecar to get metadata from Prometheus like external labels.
 * The `--web.enable-lifecycle` flag is enabled if you want to use sidecar reloading features (`--reload.*` flags).
 
-If you choose to use the sidecar to also upload to object storage:
+If you choose to use the sidecar to also upload data to object storage:
 
+* Must specify object storage (`--objstore.*` flags)
+* It only uploads uncompacted Prometheus blocks. For compacted blocks, see [Upload compacted blocks](./sidecar.md/#upload-compacted-blocks-experimental).
 * The `--storage.tsdb.min-block-duration` and `--storage.tsdb.max-block-duration` must be set to equal values to disable local compaction on order to use Thanos sidecar upload, otherwise leave local compaction on if sidecar just exposes StoreAPI and your retention is normal. The default of `2h` is recommended.
   Mentioned parameters set to equal values disable the internal Prometheus compaction, which is needed to avoid the uploaded data corruption when Thanos compactor does its job, this is critical for data consistency and should not be ignored if you plan to use Thanos compactor. Even though you set mentioned parameters equal, you might observe Prometheus internal metric `prometheus_tsdb_compactions_total` being incremented, don't be confused by that: Prometheus writes initial head block to filesytem via its internal compaction mechanism, but if you have followed recommendations - data won't be modified by Prometheus before the sidecar uploads it. Thanos sidecar will also check sanity of the flags set to Prometheus on the startup and log errors or warning if they have been configured improperly (#838).
 * The retention is recommended to not be lower than three times the min block duration, so 6 hours. This achieves resilience in the face of connectivity issues to the object storage since all local data will remain available within the Thanos cluster. If connectivity gets restored the backlog of blocks gets uploaded to the object storage.
@@ -70,7 +72,7 @@ config:
 
 ## Upload compacted blocks (EXPERIMENTAL)
 
-If you want to migrate from a pure Prometheus setup to Thanos and have to keep the historical data, you can use the flag `--shipper.upload-compacted`. This will also upload blocks that were compacted by Prometheus.
+If you want to migrate from a pure Prometheus setup to Thanos and have to keep the historical data, you can use the flag `--shipper.upload-compacted`. This will also upload blocks that were compacted by Prometheus. Values greater than 1 in the `compaction.level` field of a Prometheus block’s `meta.json` file indicate level of compaction.
 
 To use this, the Prometheus compaction needs to be disabled. This can be done by setting the following flags for Prometheus:
 
@@ -142,6 +144,12 @@ Flags:
                                  contains object store configuration. See format
                                  details:
                                  https://thanos.io/storage.md/#configuration
+      --shipper.upload-compacted
+                                 If true sidecar will try to upload compacted
+                                 blocks as well. Useful for migration purposes.
+                                 Works only if compaction is disabled on
+                                 Prometheus. Do it once and then disable the
+                                 flag when done.
       --min-time=0000-01-01T00:00:00Z
                                  Start of time range limit to serve. Thanos
                                  sidecar will serve only metrics, which happened

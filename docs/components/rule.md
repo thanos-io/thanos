@@ -11,7 +11,7 @@ _**NOTE:** It is recommended to keep deploying rules inside the relevant Prometh
 _The rule component should in particular not be used to circumvent solving rule deployment properly at the configuration management level._
 
 The rule component evaluates Prometheus recording and alerting rules against chosen query API via repeated `--query` (or FileSD via `--query.sd`). If more than one query is passed, round robin balancing is performed.
- 
+
 Rule results are written back to disk in the Prometheus 2.0 storage format. Rule nodes at the same time participate in the system as source store nodes, which means that they expose StoreAPI and upload their generated TSDB blocks to an object store.
 
 You can think of Rule as a simplified Prometheus that does not require a sidecar and does not scrape and do PromQL evaluation (no QueryAPI).
@@ -35,13 +35,97 @@ $ thanos rule \
 
 ## Risk
 
-Ruler has conceptual tradeoffs that might not be favorable for most use cases. The main tradeoff is its dependence on 
+Ruler has conceptual tradeoffs that might not be favorable for most use cases. The main tradeoff is its dependence on
 query reliability. For Prometheus it is unlikely to have alert/recording rule evaluation failure as evaluation is local.
 
-For Ruler the read path is distributed, since most likely Ruler is querying Thanos Querier which gets data from remote Store APIs. 
+For Ruler the read path is distributed, since most likely Ruler is querying Thanos Querier which gets data from remote Store APIs.
 
 This means that **query failure** are more likely to happen, that's why clear strategy on what will happen to alert and during query
 unavailability is the key.
+
+
+## Configuring Rules
+
+
+Rule files use YAML, the syntax of a rule file is:
+
+```
+groups:
+  [ - <rule_group> ]
+```
+
+A simple example rules file would be:
+
+```
+groups:
+  - name: example
+    rules:
+    - record: job:http_inprogress_requests:sum
+      expr: sum(http_inprogress_requests) by (job)
+```
+
+<rule_group>
+
+```
+# The name of the group. Must be unique within a file.
+name: <string>
+
+# How often rules in the group are evaluated.
+[ interval: <duration> | default = global.evaluation_interval ]
+
+rules:
+  [ - <rule> ... ]
+```
+
+Thanos supports two types of rules which may be configured and then evaluated at regular intervals: recording rules and alerting rules.
+
+### Recording Rules
+
+Recording rules allow you to precompute frequently needed or computationally expensive expressions and save their result as a new set of time series. Querying the precomputed result will then often be much faster than executing the original expression every time it is needed. This is especially useful for dashboards, which need to query the same expression repeatedly every time they refresh.
+
+Recording and alerting rules exist in a rule group. Rules within a group are run sequentially at a regular interval.
+
+The syntax for recording rules is:
+
+```
+# The name of the time series to output to. Must be a valid metric name.
+record: <string>
+
+# The PromQL expression to evaluate. Every evaluation cycle this is
+# evaluated at the current time, and the result recorded as a new set of
+# time series with the metric name as given by 'record'.
+expr: <string>
+
+# Labels to add or overwrite before storing the result.
+labels:
+  [ <labelname>: <labelvalue> ]
+```
+
+### Alerting Rules
+
+The syntax for alerting rules is:
+
+```
+# The name of the alert. Must be a valid metric name.
+alert: <string>
+
+# The PromQL expression to evaluate. Every evaluation cycle this is
+# evaluated at the current time, and all resultant time series become
+# pending/firing alerts.
+expr: <string>
+
+# Alerts are considered firing once they have been returned for this long.
+# Alerts which have not yet fired for long enough are considered pending.
+[ for: <duration> | default = 0s ]
+
+# Labels to add or overwrite for each alert.
+labels:
+  [ <labelname>: <tmpl_string> ]
+
+# Annotations to add to each alert.
+annotations:
+  [ <labelname>: <tmpl_string> ]
+```
 
 ## Partial Response
 
@@ -71,7 +155,7 @@ It is recommended to keep partial response as `abort` for alerts and that is the
 
 Essentially, for alerting, having partial response can result in symptoms being missed by Rule's alert.
 
-## Must have: essential Ruler alerts! 
+## Must have: essential Ruler alerts!
 
 To be sure that alerting works it is essential to monitor Ruler and alert from another **Scraper (Prometheus + sidecar)** that sits in same cluster.
 
@@ -84,10 +168,10 @@ indicate connection, incompatibility or misconfiguration problems.
 either gap in rule or potentially ignored alert. This metric might indicate problems on the queryAPI endpoint you use. Alert heavily on this if this happens for longer than your alert thresholds.
 `strategy` label will tell you if failures comes from rules that tolerate [partial response](rule.md#partial-response) or not.
 
-* `prometheus_rule_group_last_duration_seconds < prometheus_rule_group_interval_seconds`  If the difference is large, it means 
-that rule evaluation took more time than the scheduled interval. It can indicate that your query backend (e.g Querier) takes too much time 
-to evaluate the query, i.e. that it is not fast enough to fill the rule. This might indicate other problems like slow StoreAPis or 
-too complex query expression in rule. 
+* `prometheus_rule_group_last_duration_seconds < prometheus_rule_group_interval_seconds`  If the difference is large, it means
+that rule evaluation took more time than the scheduled interval. It can indicate that your query backend (e.g Querier) takes too much time
+to evaluate the query, i.e. that it is not fast enough to fill the rule. This might indicate other problems like slow StoreAPis or
+too complex query expression in rule.
 
 * `thanos_rule_evaluation_with_warnings_total`. If you choose to use Rules and Alerts with [partial response strategy's](rule.md#partial-response)
 value as "warn", this metric will tell you how many evaluation ended up with some kind of warning. To see the actual warnings
@@ -97,7 +181,7 @@ Those metrics are important for vanilla Prometheus as well, but even more import
 
 // TODO(bwplotka): Rereview them after recent changes in metrics.
 
-See [alerts](/examples/alerts/alerts.md#Ruler) for more example alerts for ruler. 
+See [alerts](/examples/alerts/alerts.md#Ruler) for more example alerts for ruler.
 
 NOTE: It is also recommended to set a mocked Alert on Ruler that checks if Query is up. This might be something simple like `vector(1)` query, just
 to check if Querier is live.
@@ -109,7 +193,7 @@ Rules are processed with deduplicated data according to the replica label config
 
 ## External labels
 
-It is *mandatory* to add certain external labels to indicate the ruler origin (e.g `label='replica="A"'` or for `cluster`). 
+It is *mandatory* to add certain external labels to indicate the ruler origin (e.g `label='replica="A"'` or for `cluster`).
 Otherwise running multiple ruler replicas will be not possible, resulting in clash during compaction.
 
 NOTE: It is advised to put different external labels than labels given by other sources we are recording or alerting against.
@@ -135,7 +219,7 @@ Ruler aims to use a similar approach to the one that Prometheus has. You can con
 
 In case of Ruler in HA you need to make sure you have the following labelling setup:
 
-* Labels that identify the HA group ruler and replica label with different value for each ruler instance, e.g: 
+* Labels that identify the HA group ruler and replica label with different value for each ruler instance, e.g:
 `cluster="eu1", replica="A"` and `cluster=eu1, replica="B"` by using `--label` flag.
 * Labels that need to be dropped just before sending to alermanager in order for alertmanager to deduplicate alerts e.g
 `--alert.label-drop="replica"`.
@@ -201,14 +285,34 @@ Flags:
                                  Alertmanager replica URLs to push firing
                                  alerts. Ruler claims success if push to at
                                  least one alertmanager from discovered
-                                 succeeds. The scheme may be prefixed with
-                                 'dns+' or 'dnssrv+' to detect Alertmanager IPs
-                                 through respective DNS lookups. The port
-                                 defaults to 9093 or the SRV record's value. The
-                                 URL path is used as a prefix for the regular
-                                 Alertmanager API path.
+                                 succeeds. The scheme should not be empty e.g
+                                 `http` might be used. The scheme may be
+                                 prefixed with 'dns+' or 'dnssrv+' to detect
+                                 Alertmanager IPs through respective DNS
+                                 lookups. The port defaults to 9093 or the SRV
+                                 record's value. The URL path is used as a
+                                 prefix for the regular Alertmanager API path.
       --alertmanagers.send-timeout=10s
-                                 Timeout for sending alerts to alertmanager
+                                 Timeout for sending alerts to Alertmanager
+      --alertmanagers.config-file=<file-path>
+                                 Path to YAML file that contains alerting
+                                 configuration. See format details:
+                                 https://thanos.io/components/rule.md/#configuration.
+                                 If defined, it takes precedence over the
+                                 '--alertmanagers.url' and
+                                 '--alertmanagers.send-timeout' flags.
+      --alertmanagers.config=<content>
+                                 Alternative to 'alertmanagers.config-file' flag
+                                 (lower priority). Content of YAML file that
+                                 contains alerting configuration. See format
+                                 details:
+                                 https://thanos.io/components/rule.md/#configuration.
+                                 If defined, it takes precedence over the
+                                 '--alertmanagers.url' and
+                                 '--alertmanagers.send-timeout' flags.
+      --alertmanagers.sd-dns-interval=30s
+                                 Interval between DNS resolutions of
+                                 Alertmanager hosts.
       --alert.query-url=ALERT.QUERY-URL
                                  The external Thanos Query URL that would be set
                                  in all alerts 'Source' field
@@ -264,4 +368,38 @@ Flags:
       --query.sd-dns-interval=30s
                                  Interval between DNS resolutions.
 
+```
+
+## Configuration
+
+### Alertmanager
+
+The `--alertmanagers.config` and `--alertmanagers.config-file` flags allow specifying multiple Alertmanagers. Those entries are treated as a single HA group. This means that alert send failure is claimed only if the Ruler fails to send to all instances.
+
+The configuration format is the following:
+
+[embedmd]:# (../flags/config_rule_alerting.txt yaml)
+```yaml
+alertmanagers:
+- http_config:
+    basic_auth:
+      username: ""
+      password: ""
+      password_file: ""
+    bearer_token: ""
+    bearer_token_file: ""
+    proxy_url: ""
+    tls_config:
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      server_name: ""
+      insecure_skip_verify: false
+  static_configs: []
+  file_sd_configs:
+  - files: []
+    refresh_interval: 0s
+  scheme: http
+  path_prefix: ""
+  timeout: 10s
 ```

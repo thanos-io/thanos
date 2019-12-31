@@ -6,25 +6,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
+	"io"
 	"net/url"
-	"path"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/thanos-io/thanos/pkg/runutil"
-)
-
-const (
-	alertPushEndpoint = "/api/v1/alerts"
-	contentTypeJSON   = "application/json"
 )
 
 // Alert is a generic representation of an alert in the Prometheus eco-system.
@@ -248,12 +240,15 @@ func (q *Queue) Push(alerts []*Alert) {
 	}
 }
 
+type AlertmanagerClient interface {
+	Endpoints() []*url.URL
+	Do(context.Context, *url.URL, io.Reader) error
+}
+
 // Sender sends notifications to a dynamic set of alertmanagers.
 type Sender struct {
 	logger        log.Logger
-	alertmanagers func() []*url.URL
-	doReq         func(req *http.Request) (*http.Response, error)
-	timeout       time.Duration
+	alertmanagers []AlertmanagerClient
 
 	sent    *prometheus.CounterVec
 	errs    *prometheus.CounterVec
@@ -266,21 +261,14 @@ type Sender struct {
 func NewSender(
 	logger log.Logger,
 	reg prometheus.Registerer,
-	alertmanagers func() []*url.URL,
-	doReq func(req *http.Request) (*http.Response, error),
-	timeout time.Duration,
+	alertmanagers []AlertmanagerClient,
 ) *Sender {
-	if doReq == nil {
-		doReq = http.DefaultClient.Do
-	}
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
 	s := &Sender{
 		logger:        logger,
 		alertmanagers: alertmanagers,
-		doReq:         doReq,
-		timeout:       timeout,
 
 		sent: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_alert_sender_alerts_sent_total",
@@ -308,7 +296,7 @@ func NewSender(
 	return s
 }
 
-// Send an alert batch to all given Alertmanager URLs.
+// Send an alert batch to all given Alertmanager clients.
 // TODO(bwplotka): https://github.com/thanos-io/thanos/issues/660.
 func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 	if len(alerts) == 0 {
@@ -324,33 +312,30 @@ func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 		wg         sync.WaitGroup
 		numSuccess uint64
 	)
-	amrs := s.alertmanagers()
-	for _, u := range amrs {
-		amURL := *u
-		sendCtx, cancel := context.WithTimeout(ctx, s.timeout)
+	for _, amc := range s.alertmanagers {
+		for _, u := range amc.Endpoints() {
+			wg.Add(1)
+			go func(amc AlertmanagerClient, u *url.URL) {
+				defer wg.Done()
 
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer cancel()
+				level.Debug(s.logger).Log("msg", "sending alerts", "alertmanager", u.Host, "numAlerts", len(alerts))
+				start := time.Now()
+				if err := amc.Do(ctx, u, bytes.NewReader(b)); err != nil {
+					level.Warn(s.logger).Log(
+						"msg", "sending alerts failed",
+						"alertmanager", u.Host,
+						"numAlerts", len(alerts),
+						"err", err,
+					)
+					s.errs.WithLabelValues(u.Host).Inc()
+					return
+				}
+				s.latency.WithLabelValues(u.Host).Observe(time.Since(start).Seconds())
+				s.sent.WithLabelValues(u.Host).Add(float64(len(alerts)))
 
-			start := time.Now()
-			amURL.Path = path.Join(amURL.Path, alertPushEndpoint)
-
-			if err := s.sendOne(sendCtx, amURL.String(), b); err != nil {
-				level.Warn(s.logger).Log(
-					"msg", "sending alerts failed",
-					"alertmanager", amURL.Host,
-					"numAlerts", len(alerts),
-					"err", err)
-				s.errs.WithLabelValues(amURL.Host).Inc()
-				return
-			}
-			s.latency.WithLabelValues(amURL.Host).Observe(time.Since(start).Seconds())
-			s.sent.WithLabelValues(amURL.Host).Add(float64(len(alerts)))
-
-			atomic.AddUint64(&numSuccess, 1)
-		}()
+				atomic.AddUint64(&numSuccess, 1)
+			}(amc, u)
+		}
 	}
 	wg.Wait()
 
@@ -359,25 +344,5 @@ func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 	}
 
 	s.dropped.Add(float64(len(alerts)))
-	level.Warn(s.logger).Log("msg", "failed to send alerts to all alertmanagers", "alertmanagers", amrs, "alerts", string(b))
-}
-
-func (s *Sender) sendOne(ctx context.Context, url string, b []byte) error {
-	req, err := http.NewRequest("POST", url, bytes.NewReader(b))
-	if err != nil {
-		return err
-	}
-	req = req.WithContext(ctx)
-	req.Header.Set("Content-Type", contentTypeJSON)
-
-	resp, err := s.doReq(req)
-	if err != nil {
-		return errors.Wrapf(err, "send request to %q", url)
-	}
-	defer runutil.ExhaustCloseWithLogOnErr(s.logger, resp.Body, "send one alert")
-
-	if resp.StatusCode/100 != 2 {
-		return errors.Errorf("bad response status %v from %q", resp.Status, url)
-	}
-	return nil
+	level.Warn(s.logger).Log("msg", "failed to send alerts to all alertmanagers", "alerts", string(b))
 }

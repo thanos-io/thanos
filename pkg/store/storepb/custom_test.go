@@ -2,6 +2,9 @@ package storepb
 
 import (
 	"errors"
+	"fmt"
+	"path/filepath"
+	"sort"
 	"testing"
 
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -19,7 +22,7 @@ type listSeriesSet struct {
 	idx    int
 }
 
-func newSeries(t *testing.T, lset labels.Labels, smplChunks [][]sample) Series {
+func newSeries(tb testing.TB, lset labels.Labels, smplChunks [][]sample) Series {
 	var s Series
 
 	for _, l := range lset {
@@ -29,7 +32,7 @@ func newSeries(t *testing.T, lset labels.Labels, smplChunks [][]sample) Series {
 	for _, smpls := range smplChunks {
 		c := chunkenc.NewXORChunk()
 		a, err := c.Appender()
-		testutil.Ok(t, err)
+		testutil.Ok(tb, err)
 
 		for _, smpl := range smpls {
 			a.Append(smpl.t, smpl.v)
@@ -46,10 +49,10 @@ func newSeries(t *testing.T, lset labels.Labels, smplChunks [][]sample) Series {
 	return s
 }
 
-func newListSeriesSet(t *testing.T, raw []rawSeries) *listSeriesSet {
+func newListSeriesSet(tb testing.TB, raw []rawSeries) *listSeriesSet {
 	var series []Series
 	for _, s := range raw {
-		series = append(series, newSeries(t, s.lset, s.chunks))
+		series = append(series, newSeries(tb, s.lset, s.chunks))
 	}
 	return &listSeriesSet{
 		series: series,
@@ -138,11 +141,13 @@ func TestMergeSeriesSet(t *testing.T) {
 					{
 						lset:   labels.FromStrings("a", "a"),
 						chunks: [][]sample{{{1, 1}, {2, 2}}, {{3, 3}, {4, 4}}},
-					}, {
+					},
+					{
 						lset:   labels.FromStrings("a", "c"),
 						chunks: [][]sample{{{11, 1}, {12, 2}}, {{13, 3}, {14, 4}}},
 					},
-				}, {
+				},
+				{
 					{
 						lset:   labels.FromStrings("a", "c"),
 						chunks: [][]sample{{{7, 1}, {8, 2}}, {{9, 3}, {10, 4}, {11, 4444}}}, // Last sample overlaps, merge ignores that.
@@ -162,17 +167,19 @@ func TestMergeSeriesSet(t *testing.T) {
 		},
 		{
 			// SeriesSet can return same series within different iterations. MergeSeries should not try to merge those.
-			// We do it on last step possible: Qurier promSet.
+			// We do it on last step possible: Querier promSet.
 			desc: "single seriesSets, {a=c} series to merge.",
 			in: [][]rawSeries{
 				{
 					{
 						lset:   labels.FromStrings("a", "a"),
 						chunks: [][]sample{{{1, 1}, {2, 2}}, {{3, 3}, {4, 4}}},
-					}, {
+					},
+					{
 						lset:   labels.FromStrings("a", "c"),
 						chunks: [][]sample{{{7, 1}, {8, 2}}, {{9, 3}, {10, 4}, {11, 4444}}},
-					}, {
+					},
+					{
 						lset:   labels.FromStrings("a", "c"),
 						chunks: [][]sample{{{11, 1}, {12, 2}}, {{13, 3}, {14, 4}}},
 					},
@@ -259,4 +266,62 @@ func seriesEquals(t *testing.T, expected []rawSeries, gotSS SeriesSet) {
 		}
 	}
 
+}
+
+// Test the cost of merging series sets for different number of merged sets and their size.
+// The subset are all equivalent so this does not capture merging of partial or non-overlapping sets well.
+func BenchmarkMergedSeriesSet(b *testing.B) {
+	var sel func(sets []SeriesSet) SeriesSet
+	sel = func(sets []SeriesSet) SeriesSet {
+		if len(sets) == 0 {
+			return EmptySeriesSet()
+		}
+		if len(sets) == 1 {
+			return sets[0]
+		}
+		l := len(sets) / 2
+		return newMergedSeriesSet(sel(sets[:l]), sel(sets[l:]))
+	}
+
+	chunks := [][]sample{{{1, 1}, {2, 2}}, {{3, 3}, {4, 4}}}
+	for _, k := range []int{
+		100,
+		1000,
+		10000,
+		20000,
+	} {
+		for _, j := range []int{1, 2, 4, 8, 16, 32} {
+			b.Run(fmt.Sprintf("series=%d,blocks=%d", k, j), func(b *testing.B) {
+				lbls, err := labels.ReadLabels(filepath.Join("../../testutil/testdata", "20kseries.json"), k)
+				testutil.Ok(b, err)
+
+				sort.Sort(labels.Slice(lbls))
+
+				in := make([][]rawSeries, j)
+
+				for _, l := range lbls {
+					for j := range in {
+						in[j] = append(in[j], rawSeries{lset: l, chunks: chunks})
+					}
+				}
+
+				b.ResetTimer()
+
+				for i := 0; i < b.N; i++ {
+					var sets []SeriesSet
+					for _, s := range in {
+						sets = append(sets, newListSeriesSet(b, s))
+					}
+					ms := sel(sets)
+
+					i := 0
+					for ms.Next() {
+						i++
+					}
+					testutil.Ok(b, ms.Err())
+					testutil.Equals(b, len(lbls), i)
+				}
+			})
+		}
+	}
 }

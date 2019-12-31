@@ -21,6 +21,7 @@ import (
 	"github.com/golang/snappy"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/version"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage/remote"
@@ -41,6 +42,8 @@ var statusToCode = map[int]codes.Code{
 	http.StatusInternalServerError: codes.Internal,
 }
 
+var userAgent = fmt.Sprintf("Thanos/%s", version.Version)
+
 // PrometheusStore implements the store node API on top of the Prometheus remote read API.
 type PrometheusStore struct {
 	logger         log.Logger
@@ -53,6 +56,10 @@ type PrometheusStore struct {
 
 	remoteReadAcceptableResponses []prompb.ReadRequest_ResponseType
 }
+
+const (
+	initialBufSize = 32 * 1024 // 32KB seems like a good minimum starting size.
+)
 
 // NewPrometheusStore returns a new PrometheusStore that uses the given HTTP client
 // to talk to Prometheus.
@@ -81,6 +88,10 @@ func NewPrometheusStore(
 		externalLabels:                externalLabels,
 		timestamps:                    timestamps,
 		remoteReadAcceptableResponses: []prompb.ReadRequest_ResponseType{prompb.ReadRequest_STREAMED_XOR_CHUNKS, prompb.ReadRequest_SAMPLES},
+		buffers: sync.Pool{New: func() interface{} {
+			b := make([]byte, 0, initialBufSize)
+			return &b
+		}},
 	}
 	return p, nil
 }
@@ -118,10 +129,6 @@ func (p *PrometheusStore) Info(ctx context.Context, r *storepb.InfoRequest) (*st
 
 func (p *PrometheusStore) getBuffer() *[]byte {
 	b := p.buffers.Get()
-	if b == nil {
-		buf := make([]byte, 0, 32*1024) // 32KB seems like a good minimum starting size.
-		return &buf
-	}
 	return b.(*[]byte)
 }
 
@@ -399,6 +406,7 @@ func (p *PrometheusStore) startPromSeries(ctx context.Context, q *prompb.Query) 
 	}
 	preq.Header.Add("Content-Encoding", "snappy")
 	preq.Header.Set("Content-Type", "application/x-stream-protobuf")
+	preq.Header.Set("User-Agent", userAgent)
 	spanReqDo, ctx := tracing.StartSpan(ctx, "query_prometheus_request")
 	preq = preq.WithContext(ctx)
 	presp, err := p.client.Do(preq)
@@ -507,6 +515,7 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesR
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	req.Header.Set("User-Agent", userAgent)
 
 	span, ctx := tracing.StartSpan(ctx, "/prom_label_names HTTP[client]")
 	defer span.Finish()
@@ -567,6 +576,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	req.Header.Set("User-Agent", userAgent)
 
 	span, ctx := tracing.StartSpan(ctx, "/prom_label_values HTTP[client]")
 	defer span.Finish()
