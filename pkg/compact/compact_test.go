@@ -3,15 +3,21 @@ package compact
 import (
 	"bytes"
 	"context"
+	"io/ioutil"
 	"path"
 	"testing"
 	"time"
 
+	"github.com/go-kit/kit/log"
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/diskusage"
 
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
+	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/thanos-io/thanos/pkg/objstore/inmem"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -145,4 +151,83 @@ func TestGroupKey(t *testing.T) {
 			return
 		}
 	}
+}
+
+func Test_DiskUsage_Corner(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	tmpDir, err := ioutil.TempDir("", "test-block-delete")
+	bkt := inmem.NewBucket()
+
+	lbls := labels.Labels{{Name: "ext1", Value: "val1"}}
+	b1, err := testutil.CreateBlock(ctx, tmpDir, []labels.Labels{
+		{{Name: "a", Value: "1"}},
+		{{Name: "a", Value: "2"}},
+		{{Name: "a", Value: "3"}},
+		{{Name: "a", Value: "4"}},
+		{{Name: "b", Value: "1"}},
+	}, 100, 0, 1000, lbls, 124)
+	testutil.Ok(t, err)
+	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, b1.String())))
+	testutil.Equals(t, 4, len(bkt.Objects()))
+
+	defer func() {
+		// Full delete.
+		testutil.Ok(t, block.Delete(ctx, log.NewNopLogger(), bkt, b1))
+	}()
+
+	// Error case.
+	duErr := func(p string) (diskusage.Usage, error) {
+		return diskusage.Usage{}, errors.New("sentinel")
+	}
+
+	cg, err := newGroup(log.NewNopLogger(), bkt, lbls, 0, false, duErr, nil, nil, nil, nil, nil)
+	testutil.Ok(t, err)
+
+	err = cg.isEnoughDiskSpace(ctx, b1.String())
+	testutil.Equals(t, err.Error(), "get disk usage: sentinel")
+
+	// Not enough disk space case.
+	duNotEnough := func(p string) (diskusage.Usage, error) {
+		return diskusage.Usage{AvailBytes: 1500}, nil
+	}
+	cg, err = newGroup(log.NewNopLogger(), bkt, lbls, 0, false, duNotEnough, nil, nil, nil, nil, nil)
+	testutil.Ok(t, err)
+	cg.Add(&metadata.Meta{
+		BlockMeta: tsdb.BlockMeta{
+			ULID: b1,
+		},
+		Thanos: metadata.Thanos{
+			Labels: map[string]string{"ext1": "val1"},
+			Downsample: metadata.ThanosDownsample{
+				Resolution: 0,
+			},
+		},
+	})
+
+	err = cg.isEnoughDiskSpace(ctx, b1.String())
+	testutil.NotOk(t, err)
+	testutil.Equals(t, err.Error(), "needed 1.5 kB available space, got 1.5 kB")
+
+	// Just enough disk space case.
+	duEnough := func(p string) (diskusage.Usage, error) {
+		return diskusage.Usage{AvailBytes: 1600}, nil
+	}
+	cg, err = newGroup(log.NewNopLogger(), bkt, lbls, 0, false, duEnough, nil, nil, nil, nil, nil)
+	testutil.Ok(t, err)
+	cg.Add(&metadata.Meta{
+		BlockMeta: tsdb.BlockMeta{
+			ULID: b1,
+		},
+		Thanos: metadata.Thanos{
+			Labels: map[string]string{"ext1": "val1"},
+			Downsample: metadata.ThanosDownsample{
+				Resolution: 0,
+			},
+		},
+	})
+
+	err = cg.isEnoughDiskSpace(ctx, b1.String())
+	testutil.Ok(t, err)
 }

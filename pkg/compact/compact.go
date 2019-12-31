@@ -370,6 +370,7 @@ func (c *Syncer) Groups() (res []*Group, err error) {
 				labels.FromMap(m.Thanos.Labels),
 				m.Thanos.Downsample.Resolution,
 				c.acceptMalformedIndex,
+				diskusage.Get,
 				c.metrics.compactions.WithLabelValues(GroupKey(m.Thanos)),
 				c.metrics.compactionRunsStarted.WithLabelValues(GroupKey(m.Thanos)),
 				c.metrics.compactionRunsCompleted.WithLabelValues(GroupKey(m.Thanos)),
@@ -518,6 +519,7 @@ type Group struct {
 	mtx                         sync.Mutex
 	blocks                      map[ulid.ULID]*metadata.Meta
 	acceptMalformedIndex        bool
+	getDiskUsage                func(string) (diskusage.Usage, error)
 	compactions                 prometheus.Counter
 	compactionRunsStarted       prometheus.Counter
 	compactionRunsCompleted     prometheus.Counter
@@ -532,6 +534,7 @@ func newGroup(
 	lset labels.Labels,
 	resolution int64,
 	acceptMalformedIndex bool,
+	du func(string) (diskusage.Usage, error),
 	compactions prometheus.Counter,
 	compactionRunsStarted prometheus.Counter,
 	compactionRunsCompleted prometheus.Counter,
@@ -547,6 +550,7 @@ func newGroup(
 		labels:                      lset,
 		resolution:                  resolution,
 		blocks:                      map[ulid.ULID]*metadata.Meta{},
+		getDiskUsage:                du,
 		acceptMalformedIndex:        acceptMalformedIndex,
 		compactions:                 compactions,
 		compactionRunsStarted:       compactionRunsStarted,
@@ -753,7 +757,7 @@ func (cg *Group) areBlocksOverlapping(include *metadata.Meta, excludeDirs ...str
 // Doing this check prevents (in most cases) from downloading a lot of data and only then finding out that there is not
 // enough space.
 func (cg *Group) isEnoughDiskSpace(ctx context.Context, dir string) error {
-	du, err := diskusage.Get(dir)
+	du, err := cg.getDiskUsage(dir)
 	if err != nil {
 		return errors.Wrap(err, "get disk usage")
 	}
