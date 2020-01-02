@@ -281,6 +281,7 @@ Flags:
       --eval-interval=30s        The default evaluation interval to use.
       --tsdb.block-duration=2h   Block duration for TSDB block.
       --tsdb.retention=48h       Block retention time on local disk.
+      --tsdb.wal-compression     Compress the tsdb WAL.
       --alertmanagers.url=ALERTMANAGERS.URL ...
                                  Alertmanager replica URLs to push firing
                                  alerts. Ruler claims success if push to at

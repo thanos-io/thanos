@@ -13,7 +13,6 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage/tsdb"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -73,6 +72,8 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 
 	tsdbBlockDuration := modelDuration(cmd.Flag("tsdb.block-duration", "Duration for local TSDB blocks").Default("2h").Hidden())
 
+	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
+
 	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
@@ -85,6 +86,14 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			if err != nil {
 				return err
 			}
+		}
+
+		tsdbOpts := &tsdb.Options{
+			MinBlockDuration:  *tsdbBlockDuration,
+			MaxBlockDuration:  *tsdbBlockDuration,
+			RetentionDuration: *retention,
+			NoLockfile:        true,
+			WALCompression:    *walCompression,
 		}
 
 		// Local is empty, so try to generate a local endpoint
@@ -121,14 +130,13 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			*rwClientServerName,
 			*dataDir,
 			objStoreConfig,
+			tsdbOpts,
 			lset,
-			*retention,
 			cw,
 			*local,
 			*tenantHeader,
 			*replicaHeader,
 			*replicationFactor,
-			*tsdbBlockDuration,
 			comp,
 		)
 	}
@@ -156,26 +164,17 @@ func runReceive(
 	rwClientServerName string,
 	dataDir string,
 	objStoreConfig *extflag.PathOrContent,
+	tsdbOpts *tsdb.Options,
 	lset labels.Labels,
-	retention model.Duration,
 	cw *receive.ConfigWatcher,
 	endpoint string,
 	tenantHeader string,
 	replicaHeader string,
 	replicationFactor uint64,
-	tsdbBlockDuration model.Duration,
 	comp component.SourceStoreAPI,
 ) error {
 	logger = log.With(logger, "component", "receive")
 	level.Warn(logger).Log("msg", "setting up receive; the Thanos receive component is EXPERIMENTAL, it may break significantly without notice")
-
-	tsdbCfg := &tsdb.Options{
-		RetentionDuration: retention,
-		NoLockfile:        true,
-		MinBlockDuration:  tsdbBlockDuration,
-		MaxBlockDuration:  tsdbBlockDuration,
-		WALCompression:    true,
-	}
 
 	localStorage := &tsdb.ReadyStorage{}
 	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), rwServerCert, rwServerKey, rwServerClientCA)
@@ -225,7 +224,7 @@ func runReceive(
 	{
 		// TSDB.
 		cancel := make(chan struct{})
-		startTimeMargin := int64(2 * time.Duration(tsdbCfg.MinBlockDuration).Seconds() * 1000)
+		startTimeMargin := int64(2 * time.Duration(tsdbOpts.MinBlockDuration).Seconds() * 1000)
 		g.Add(func() error {
 			defer close(dbReady)
 			defer close(uploadC)
@@ -237,7 +236,7 @@ func runReceive(
 				dataDir,
 				log.With(logger, "component", "tsdb"),
 				reg,
-				tsdbCfg,
+				tsdbOpts,
 			)
 
 			// Before quitting, ensure the WAL is flushed and the DB is closed.
