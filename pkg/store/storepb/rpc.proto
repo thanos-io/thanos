@@ -92,6 +92,9 @@ message SeriesRequest {
 
   // TODO(bwplotka): Move Thanos components to use strategy instead. Including QueryAPI.
   PartialResponseStrategy partial_response_strategy = 7;
+
+  // skip_chunks controls whether sending chunks or not in series responses.
+  bool skip_chunks = 8;
 }
 
 enum Aggr {

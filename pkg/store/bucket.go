@@ -946,11 +946,16 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 		for set.Next() {
 			var series storepb.Series
 
-			series.Labels, series.Chunks = set.At()
-
 			stats.mergedSeriesCount++
-			stats.mergedChunksCount += len(series.Chunks)
-			s.metrics.chunkSizeBytes.Observe(float64(chunksSize(series.Chunks)))
+
+			if req.SkipChunks {
+				series.Labels, _ = set.At()
+			} else {
+				series.Labels, series.Chunks = set.At()
+
+				stats.mergedChunksCount += len(series.Chunks)
+				s.metrics.chunkSizeBytes.Observe(float64(chunksSize(series.Chunks)))
+			}
 
 			if err := srv.Send(storepb.NewSeriesResponse(&series)); err != nil {
 				return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())

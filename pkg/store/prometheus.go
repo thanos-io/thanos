@@ -19,7 +19,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -59,6 +59,8 @@ type PrometheusStore struct {
 
 const (
 	initialBufSize = 32 * 1024 // 32KB seems like a good minimum starting size.
+
+	SUCCESS = "success"
 )
 
 // NewPrometheusStore returns a new PrometheusStore that uses the given HTTP client
@@ -150,13 +152,39 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, s storepb.Store_Serie
 	}
 
 	if len(newMatchers) == 0 {
-		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding external labels)").Error())
+		return status.Error(codes.InvalidArgument, "no matchers specified (excluding external labels)")
 	}
 
 	// Don't ask for more than available time. This includes potential `minTime` flag limit.
 	availableMinTime, _ := p.timestamps()
 	if r.MinTime < availableMinTime {
 		r.MinTime = availableMinTime
+	}
+
+	if r.SkipChunks {
+		labelMaps, err := p.seriesLabels(s.Context(), newMatchers, r.MinTime, r.MaxTime)
+		if err != nil {
+			return err
+		}
+		for _, lbm := range labelMaps {
+			lset := make([]storepb.Label, 0, len(lbm)+len(externalLabels))
+			for k, v := range lbm {
+				lset = append(lset, storepb.Label{Name: k, Value: v})
+			}
+			for _, l := range externalLabels {
+				lset = append(lset, storepb.Label{
+					Name:  l.Name,
+					Value: l.Value,
+				})
+			}
+			sort.Slice(lset, func(i, j int) bool {
+				return lset[i].Name < lset[j].Name
+			})
+			if err = s.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: lset})); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 
 	q := &prompb.Query{StartTimestampMs: r.MinTime, EndTimestampMs: r.MaxTime}
@@ -427,7 +455,7 @@ func (p *PrometheusStore) startPromSeries(ctx context.Context, q *prompb.Query) 
 	return presp, nil
 }
 
-// matchesExternalLabels filters out external labels matching from matcher if exsits as the local storage does not have them.
+// matchesExternalLabels filters out external labels matching from matcher if exists as the local storage does not have them.
 // It also returns false if given matchers are not matching external labels.
 func matchesExternalLabels(ms []storepb.LabelMatcher, externalLabels labels.Labels) (bool, []storepb.LabelMatcher, error) {
 	if len(externalLabels) == 0 {
@@ -474,7 +502,7 @@ func (p *PrometheusStore) encodeChunk(ss []prompb.Sample) (storepb.Chunk_Encodin
 }
 
 // translateAndExtendLabels transforms a metrics into a protobuf label set. It additionally
-// attaches the given labels to it, overwriting existing ones on colllision.
+// attaches the given labels to it, overwriting existing ones on collision.
 func (p *PrometheusStore) translateAndExtendLabels(m []prompb.Label, extend labels.Labels) []storepb.Label {
 	lset := make([]storepb.Label, 0, len(m)+len(extend))
 
@@ -527,7 +555,7 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesR
 	defer runutil.ExhaustCloseWithLogOnErr(p.logger, resp.Body, "label names request body")
 
 	if resp.StatusCode/100 != 2 {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("request Prometheus server failed, code %s", resp.Status))
+		return nil, status.Errorf(codes.Internal, "request Prometheus server failed, code %s", resp.Status)
 	}
 
 	if resp.StatusCode == http.StatusNoContent {
@@ -549,7 +577,7 @@ func (p *PrometheusStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesR
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	if m.Status != "success" {
+	if m.Status != SUCCESS {
 		code, exists := statusToCode[resp.StatusCode]
 		if !exists {
 			return nil, status.Error(codes.Internal, m.Error)
@@ -588,7 +616,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	defer runutil.ExhaustCloseWithLogOnErr(p.logger, resp.Body, "label values request body")
 
 	if resp.StatusCode/100 != 2 {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("request Prometheus server failed, code %s", resp.Status))
+		return nil, status.Errorf(codes.Internal, "request Prometheus server failed, code %s", resp.Status)
 	}
 
 	if resp.StatusCode == http.StatusNoContent {
@@ -611,7 +639,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 
 	sort.Strings(m.Data)
 
-	if m.Status != "success" {
+	if m.Status != SUCCESS {
 		code, exists := statusToCode[resp.StatusCode]
 		if !exists {
 			return nil, status.Error(codes.Internal, m.Error)
@@ -620,4 +648,69 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 	}
 
 	return &storepb.LabelValuesResponse{Values: m.Data}, nil
+}
+
+// seriesLabels returns the labels from Prometheus series API.
+func (p *PrometheusStore) seriesLabels(ctx context.Context, matchers []storepb.LabelMatcher, startTime, endTime int64) ([]map[string]string, error) {
+	u := *p.base
+	u.Path = path.Join(u.Path, "/api/v1/series")
+	q := u.Query()
+
+	metric, err := matchersToString(matchers)
+	if err != nil {
+		return nil, errors.Wrap(err, "invalid matchers")
+	}
+
+	q.Add("match[]", metric)
+	u.RawQuery = q.Encode()
+	q.Add("start", string(startTime))
+	q.Add("end", string(endTime))
+
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	req.Header.Set("User-Agent", userAgent)
+
+	span, ctx := tracing.StartSpan(ctx, "/prom_series HTTP[client]")
+	defer span.Finish()
+
+	resp, err := p.client.Do(req.WithContext(ctx))
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	defer runutil.ExhaustCloseWithLogOnErr(p.logger, resp.Body, "series request body")
+
+	if resp.StatusCode/100 != 2 {
+		return nil, status.Errorf(codes.Internal, "request Prometheus server failed, code %s", resp.Status)
+	}
+
+	if resp.StatusCode == http.StatusNoContent {
+		return nil, nil
+	}
+
+	var m struct {
+		Data   []map[string]string `json:"data"`
+		Status string              `json:"status"`
+		Error  string              `json:"error"`
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	if err = json.Unmarshal(body, &m); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	if m.Status != SUCCESS {
+		code, exists := statusToCode[resp.StatusCode]
+		if !exists {
+			return nil, status.Error(codes.Internal, m.Error)
+		}
+		return nil, status.Error(code, m.Error)
+	}
+
+	return m.Data, nil
 }

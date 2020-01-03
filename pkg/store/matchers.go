@@ -33,3 +33,21 @@ func translateMatchers(ms []storepb.LabelMatcher) (res []*labels.Matcher, err er
 	}
 	return res, nil
 }
+
+// matchersToString converts label matchers to string format.
+func matchersToString(ms []storepb.LabelMatcher) (string, error) {
+	var res string
+	matchers, err := translateMatchers(ms)
+	if err != nil {
+		return "", err
+	}
+
+	for i, m := range matchers {
+		res += m.String()
+		if i < len(matchers)-1 {
+			res += ", "
+		}
+	}
+
+	return "{" + res + "}", nil
+}
