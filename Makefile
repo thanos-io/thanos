@@ -81,13 +81,12 @@ MINIO_SERVER            ?=$(GOBIN)/minio-$(MINIO_SERVER_VERSION)
 # arguments:
 # $(1): Install path. (e.g github.com/campoy/embedmd)
 # $(2): Tag or revision for checkout.
-# cd TMP_GOPATH to ensure do not use or edit thanos go.mod file.
 define fetch_go_bin_version
 	@mkdir -p $(GOBIN)
 	@mkdir -p $(TMP_GOPATH)
 
 	@echo ">> fetching $(1)@$(2) revision/version"
-	@cd -- $(TMP_GOPATH) && GOPATH=$(TMP_GOPATH) GO111MODULE=on go get -u $(1)@$(2)
+	@GOPATH=$(TMP_GOPATH) GO111MODULE=on go get -u $(1)@$(2)
 	@mv -- '$(TMP_GOPATH)/bin/$(shell basename $(1))' '$(GOBIN)/$(shell basename $(1))-$(2)'
 	@echo ">> produced $(GOBIN)/$(shell basename $(1))-$(2)"
 endef
