@@ -36,8 +36,12 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache remote blocks.").
 		Default("./data").String()
 
-	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the index cache.").
+	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the in-memory index cache. Ignored if --index-cache.config or --index-cache.config-file option is specified.").
 		Default("250MB").Bytes()
+
+	indexCacheConfig := extflag.RegisterPathOrContent(cmd, "index-cache.config",
+		"YAML file that contains index cache configuration. See format details: https://thanos.io/components/store.md/#index-cache",
+		false)
 
 	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes for chunks.").
 		Default("2GB").Bytes()
@@ -77,6 +81,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 			logger,
 			reg,
 			tracer,
+			indexCacheConfig,
 			objStoreConfig,
 			*dataDir,
 			*grpcBindAddr,
@@ -110,6 +115,7 @@ func runStore(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
+	indexCacheConfig *extflag.PathOrContent,
 	objStoreConfig *extflag.PathOrContent,
 	dataDir string,
 	grpcBindAddr string,
@@ -169,6 +175,11 @@ func runStore(
 		return err
 	}
 
+	indexCacheContentYaml, err := indexCacheConfig.Content()
+	if err != nil {
+		return errors.Wrap(err, "get content of index cache configuration")
+	}
+
 	// Ensure we close up everything properly.
 	defer func() {
 		if err != nil {
@@ -176,13 +187,17 @@ func runStore(
 		}
 	}()
 
-	// TODO(bwplotka): Add as a flag?
-	maxItemSizeBytes := indexCacheSizeBytes / 2
-
-	indexCache, err := storecache.NewInMemoryIndexCache(logger, reg, storecache.Opts{
-		MaxSizeBytes:     indexCacheSizeBytes,
-		MaxItemSizeBytes: maxItemSizeBytes,
-	})
+	// Create the index cache loading its config from config file, while keeping
+	// backward compatibility with the pre-config file era.
+	var indexCache storecache.IndexCache
+	if len(indexCacheContentYaml) > 0 {
+		indexCache, err = storecache.NewIndexCache(logger, indexCacheContentYaml, reg)
+	} else {
+		indexCache, err = storecache.NewInMemoryIndexCacheWithConfig(logger, reg, storecache.InMemoryIndexCacheConfig{
+			MaxSize:     storecache.Bytes(indexCacheSizeBytes),
+			MaxItemSize: storecache.DefaultInMemoryIndexCacheConfig.MaxItemSize,
+		})
+	}
 	if err != nil {
 		return errors.Wrap(err, "create index cache")
 	}

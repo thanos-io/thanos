@@ -1,4 +1,4 @@
-package store
+package gate
 
 import (
 	"context"
