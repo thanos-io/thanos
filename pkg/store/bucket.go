@@ -27,6 +27,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -199,7 +200,7 @@ type FilterConfig struct {
 type BucketStore struct {
 	logger     log.Logger
 	metrics    *bucketStoreMetrics
-	bucket     objstore.BucketReader
+	bkt        objstore.BucketReader
 	fetcher    block.MetadataFetcher
 	dir        string
 	indexCache storecache.IndexCache
@@ -262,7 +263,7 @@ func NewBucketStore(
 	metrics := newBucketStoreMetrics(reg)
 	s := &BucketStore{
 		logger:               logger,
-		bucket:               bucket,
+		bkt:                  bucket,
 		fetcher:              fetcher,
 		dir:                  dir,
 		indexCache:           indexCache,
@@ -438,14 +439,20 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 	lset := labels.FromMap(meta.Thanos.Labels)
 	h := lset.Hash()
 
+	jr, err := indexheader.NewJSONReader(ctx, s.logger, s.bkt, s.dir, meta.ULID)
+	if err != nil {
+		return errors.Wrap(err, "create index header reader")
+	}
+
 	b, err := newBucketBlock(
 		ctx,
 		log.With(s.logger, "block", meta.ULID),
 		meta,
-		s.bucket,
+		s.bkt,
 		dir,
 		s.indexCache,
 		s.chunkPool,
+		jr,
 		s.partitioner,
 	)
 	if err != nil {
@@ -952,7 +959,8 @@ func (s *BucketStore) LabelNames(ctx context.Context, _ *storepb.LabelNamesReque
 		g.Go(func() error {
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label names")
 
-			res := indexr.LabelNames()
+			// Do it via index reader to have pending reader registered correctly.
+			res := indexr.block.indexHeaderReader.LabelNames()
 			sort.Strings(res)
 
 			mtx.Lock()
@@ -984,12 +992,11 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 
 	for _, b := range s.blocks {
 		indexr := b.indexReader(gctx)
-		// TODO(fabxc): only aggregate chunk metas first and add a subsequent fetch stage
-		// where we consolidate requests.
 		g.Go(func() error {
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label values")
 
-			res := indexr.LabelValues(req.Label)
+			// Do it via index reader to have pending reader registered correctly.
+			res := indexr.block.indexHeaderReader.LabelValues(req.Label)
 
 			mtx.Lock()
 			sets = append(sets, res)
@@ -1139,10 +1146,7 @@ type bucketBlock struct {
 	indexCache storecache.IndexCache
 	chunkPool  *pool.BytesPool
 
-	indexVersion int
-	symbols      []string
-	lvals        map[string][]string
-	postings     map[labels.Label]index.Range
+	indexHeaderReader indexheader.Reader
 
 	chunkObjs []string
 
@@ -1159,20 +1163,20 @@ func newBucketBlock(
 	dir string,
 	indexCache storecache.IndexCache,
 	chunkPool *pool.BytesPool,
+	indexHeadReader indexheader.Reader,
 	p partitioner,
 ) (b *bucketBlock, err error) {
 	b = &bucketBlock{
-		logger:      logger,
-		bucket:      bkt,
-		indexCache:  indexCache,
-		chunkPool:   chunkPool,
-		dir:         dir,
-		partitioner: p,
-		meta:        meta,
+		logger:            logger,
+		bucket:            bkt,
+		indexCache:        indexCache,
+		chunkPool:         chunkPool,
+		dir:               dir,
+		partitioner:       p,
+		meta:              meta,
+		indexHeaderReader: indexHeadReader,
 	}
-	if err = b.loadIndexCacheFile(ctx); err != nil {
-		return nil, errors.Wrap(err, "load index cache")
-	}
+
 	// Get object handles for all chunk files.
 	err = bkt.Iter(ctx, path.Join(meta.ULID.String(), block.ChunksDirname), func(n string) error {
 		b.chunkObjs = append(b.chunkObjs, n)
@@ -1186,53 +1190,6 @@ func newBucketBlock(
 
 func (b *bucketBlock) indexFilename() string {
 	return path.Join(b.meta.ULID.String(), block.IndexFilename)
-}
-
-func (b *bucketBlock) indexCacheFilename() string {
-	return path.Join(b.meta.ULID.String(), block.IndexCacheFilename)
-}
-
-func (b *bucketBlock) loadIndexCacheFile(ctx context.Context) (err error) {
-	cachefn := filepath.Join(b.dir, block.IndexCacheFilename)
-	if err = b.loadIndexCacheFileFromFile(ctx, cachefn); err == nil {
-		return nil
-	}
-	if !os.IsNotExist(errors.Cause(err)) && errors.Cause(err) != block.IndexCacheUnmarshalError {
-		return errors.Wrap(err, "read index cache")
-	}
-
-	// Try to download index cache file from object store.
-	if err = objstore.DownloadFile(ctx, b.logger, b.bucket, b.indexCacheFilename(), cachefn); err == nil {
-		return b.loadIndexCacheFileFromFile(ctx, cachefn)
-	}
-
-	if !b.bucket.IsObjNotFoundErr(errors.Cause(err)) && errors.Cause(err) != block.IndexCacheUnmarshalError {
-		return errors.Wrap(err, "download index cache file")
-	}
-
-	// No cache exists on disk yet, build it from the downloaded index and retry.
-	fn := filepath.Join(b.dir, block.IndexFilename)
-
-	if err := objstore.DownloadFile(ctx, b.logger, b.bucket, b.indexFilename(), fn); err != nil {
-		return errors.Wrap(err, "download index file")
-	}
-
-	defer func() {
-		if rerr := os.Remove(fn); rerr != nil {
-			level.Error(b.logger).Log("msg", "failed to remove temp index file", "path", fn, "err", rerr)
-		}
-	}()
-
-	if err := block.WriteIndexCache(b.logger, fn, cachefn); err != nil {
-		return errors.Wrap(err, "write index cache")
-	}
-
-	return errors.Wrap(b.loadIndexCacheFileFromFile(ctx, cachefn), "read index cache")
-}
-
-func (b *bucketBlock) loadIndexCacheFileFromFile(ctx context.Context, cache string) (err error) {
-	b.indexVersion, b.symbols, b.lvals, b.postings, err = block.ReadIndexCache(b.logger, cache)
-	return err
 }
 
 func (b *bucketBlock) readIndexRange(ctx context.Context, off, length int64) ([]byte, error) {
@@ -1287,7 +1244,8 @@ func (b *bucketBlock) Close() error {
 	return nil
 }
 
-// bucketIndexReader is a custom index reader (not conforming index.Reader interface) that gets postings.
+// bucketIndexReader is a custom index reader (not conforming index.Reader interface) that reads index that is stored in
+// object storage without having to fully download it.
 type bucketIndexReader struct {
 	logger log.Logger
 	ctx    context.Context
@@ -1302,25 +1260,17 @@ type bucketIndexReader struct {
 
 func newBucketIndexReader(ctx context.Context, logger log.Logger, block *bucketBlock, cache storecache.IndexCache) *bucketIndexReader {
 	r := &bucketIndexReader{
-		logger:       logger,
-		ctx:          ctx,
-		block:        block,
-		dec:          &index.Decoder{},
+		logger: logger,
+		ctx:    ctx,
+		block:  block,
+		dec: &index.Decoder{
+			LookupSymbol: block.indexHeaderReader.LookupSymbol,
+		},
 		stats:        &queryStats{},
 		cache:        cache,
 		loadedSeries: map[uint64][]byte{},
 	}
-	r.dec.LookupSymbol = r.lookupSymbol
 	return r
-}
-
-func (r *bucketIndexReader) lookupSymbol(o uint32) (string, error) {
-	idx := int(o)
-	if idx >= len(r.block.symbols) {
-		return "", errors.Errorf("bucketIndexReader: unknown symbol offset %d", o)
-	}
-
-	return r.block.symbols[idx], nil
 }
 
 // ExpandedPostings returns postings in expanded list instead of index.Postings.
@@ -1338,7 +1288,7 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 	// NOTE: Derived from tsdb.PostingsForMatchers.
 	for _, m := range ms {
 		// Each group is separate to tell later what postings are intersecting with what.
-		postingGroups = append(postingGroups, toPostingGroup(r.LabelValues, m))
+		postingGroups = append(postingGroups, toPostingGroup(r.block.indexHeaderReader.LabelValues, m))
 	}
 
 	if len(postingGroups) == 0 {
@@ -1361,7 +1311,7 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 
 	// As of version two all series entries are 16 byte padded. All references
 	// we get have to account for that to get the correct offset.
-	if r.block.indexVersion >= 2 {
+	if r.block.indexHeaderReader.IndexVersion() >= 2 {
 		for i, id := range ps {
 			ps[i] = id * 16
 		}
@@ -1490,8 +1440,8 @@ func (r *bucketIndexReader) fetchPostings(groups []*postingGroup) error {
 			}
 
 			// Cache miss; save pointer for actual posting in index stored in object store.
-			ptr, ok := r.block.postings[key]
-			if !ok {
+			ptr := r.block.indexHeaderReader.PostingsOffset(key.Name, key.Value)
+			if ptr == indexheader.NotFoundRange {
 				// This block does not have any posting for given key.
 				g.Fill(j, index.EmptyPostings())
 				continue
@@ -1682,21 +1632,6 @@ func (r *bucketIndexReader) LoadedSeries(ref uint64, lset *labels.Labels, chks *
 	r.stats.seriesTouchedSizeSum += len(b)
 
 	return r.dec.Series(b, lset, chks)
-}
-
-// LabelValues returns label values for single name.
-func (r *bucketIndexReader) LabelValues(name string) []string {
-	res := make([]string, 0, len(r.block.lvals[name]))
-	return append(res, r.block.lvals[name]...)
-}
-
-// LabelNames returns a list of label names.
-func (r *bucketIndexReader) LabelNames() []string {
-	res := make([]string, 0, len(r.block.lvals))
-	for ln := range r.block.lvals {
-		res = append(res, ln)
-	}
-	return res
 }
 
 // Close released the underlying resources of the reader.

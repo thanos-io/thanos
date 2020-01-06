@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
@@ -194,7 +195,7 @@ func (w *streamedBlockWriter) Close() error {
 		merr.Add(cl.Close())
 	}
 
-	if err := block.WriteIndexCache(
+	if err := indexheader.WriteJSON(
 		w.logger,
 		filepath.Join(w.blockDir, block.IndexFilename),
 		filepath.Join(w.blockDir, block.IndexCacheFilename),
