@@ -32,7 +32,7 @@ import (
 )
 
 func TestSyncer_SyncMetas_e2e(t *testing.T) {
-	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
+	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
@@ -80,7 +80,7 @@ func TestSyncer_SyncMetas_e2e(t *testing.T) {
 }
 
 func TestSyncer_GarbageCollect_e2e(t *testing.T) {
-	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
+	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
@@ -196,7 +196,7 @@ func MetricCount(c prometheus.Collector) int {
 }
 
 func TestGroup_Compact_e2e(t *testing.T) {
-	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
+	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
@@ -511,7 +511,7 @@ func TestSyncer_SyncMetasFilter_e2e(t *testing.T) {
 
 	extLsets := []labels.Labels{{{Name: "cluster", Value: "A"}}, {{Name: "cluster", Value: "B"}}}
 
-	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
+	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 

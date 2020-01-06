@@ -20,8 +20,6 @@ import (
 	"github.com/oklog/ulid"
 )
 
-// NOTE(bplotka): For block packages we cannot use testutil, because they import block package. Consider moving simple
-// testutil methods to separate package.
 func TestIsBlockDir(t *testing.T) {
 	for _, tc := range []struct {
 		input string
@@ -58,10 +56,7 @@ func TestIsBlockDir(t *testing.T) {
 	} {
 		t.Run(tc.input, func(t *testing.T) {
 			id, ok := IsBlockDir(tc.input)
-			if ok != tc.bdir {
-				t.Errorf("expected block dir != %v", tc.bdir)
-				t.FailNow()
-			}
+			testutil.Equals(t, tc.bdir, ok)
 
 			if id.Compare(tc.id) != 0 {
 				t.Errorf("expected %s got %s", tc.id, id)
