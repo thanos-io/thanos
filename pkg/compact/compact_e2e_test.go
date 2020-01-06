@@ -192,7 +192,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 				numSamples: 100, mint: 0, maxt: 1000, extLset: extLabels, res: 124,
 				series: []labels.Labels{
 					{{Name: "a", Value: "1"}},
-					{{Name: "a", Value: "2"}, {Name: "a", Value: "2"}},
+					{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
 					{{Name: "a", Value: "3"}},
 					{{Name: "a", Value: "4"}},
 				},
@@ -247,7 +247,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 				numSamples: 100, mint: 0, maxt: 1000, extLset: extLabels2, res: 124,
 				series: []labels.Labels{
 					{{Name: "a", Value: "1"}},
-					{{Name: "a", Value: "2"}, {Name: "a", Value: "2"}},
+					{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
 					{{Name: "a", Value: "3"}},
 					{{Name: "a", Value: "4"}},
 				},
@@ -371,7 +371,7 @@ func createAndUpload(t testing.TB, bkt objstore.Bucket, blocks []blockgenSpec) (
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(prepareDir)) }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	for _, b := range blocks {
@@ -407,7 +407,7 @@ func createEmptyBlock(dir string, mint int64, maxt int64, extLset labels.Labels,
 		return ulid.ULID{}, errors.Wrap(err, "close index")
 	}
 
-	w, err := index.NewWriter(path.Join(dir, uid.String(), "index"))
+	w, err := index.NewWriter(context.Background(), path.Join(dir, uid.String(), "index"))
 	if err != nil {
 		return ulid.ULID{}, errors.Wrap(err, "new index")
 	}

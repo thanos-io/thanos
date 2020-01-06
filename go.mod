@@ -16,7 +16,6 @@ require (
 	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d
 	github.com/aliyun/aliyun-oss-go-sdk v2.0.4+incompatible
 	github.com/armon/go-metrics v0.3.0
-	github.com/aws/aws-sdk-go v1.25.35 // indirect
 	github.com/baiyubin/aliyun-sts-go-sdk v0.0.0-20180326062324-cfa1a18b161f // indirect
 	github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b
 	github.com/cespare/xxhash v1.1.0
@@ -71,7 +70,7 @@ require (
 	github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4
 	github.com/prometheus/common v0.7.0
 	github.com/prometheus/procfs v0.0.6 // indirect
-	github.com/prometheus/prometheus v1.8.2-0.20191126064551-80ba03c67da1 // Prometheus master v2.14.0
+	github.com/prometheus/prometheus v1.8.2-0.20200107122003-4708915ac6ef // master ~ v2.15.2
 	github.com/samuel/go-zookeeper v0.0.0-20190923202752-2cc03de413da // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect
 	github.com/smartystreets/assertions v1.0.1 // indirect

@@ -568,11 +568,11 @@ func (b *memBlock) Meta() tsdb.BlockMeta {
 	return tsdb.BlockMeta{}
 }
 
-func (b *memBlock) Postings(name, val string) (index.Postings, error) {
+func (b *memBlock) Postings(name string, val ...string) (index.Postings, error) {
 	allName, allVal := index.AllPostingsKey()
 
-	if name != allName || val != allVal {
-		return nil, errors.New("unsupported call to Postings()")
+	if name != allName || val[0] != allVal {
+		return nil, errors.New("unexpected call to Postings() that is not AllVall")
 	}
 	sort.Slice(b.postings, func(i, j int) bool {
 		return labels.Compare(b.series[b.postings[i]].lset, b.series[b.postings[j]].lset) < 0
@@ -593,15 +593,20 @@ func (b *memBlock) Series(id uint64, lset *labels.Labels, chks *[]chunks.Meta) e
 }
 
 func (b *memBlock) Chunk(id uint64) (chunkenc.Chunk, error) {
-	if id >= uint64(b.numberOfChunks) {
+	if id >= b.numberOfChunks {
 		return nil, errors.Wrapf(tsdb.ErrNotFound, "chunk with ID %d does not exist", id)
 	}
 
 	return b.chunks[id], nil
 }
 
-func (b *memBlock) Symbols() (map[string]struct{}, error) {
-	return b.symbols, nil
+func (b *memBlock) Symbols() index.StringIter {
+	res := make([]string, 0, len(b.symbols))
+	for s := range b.symbols {
+		res = append(res, s)
+	}
+	sort.Strings(res)
+	return index.NewStringListIter(res)
 }
 
 func (b *memBlock) SortedPostings(p index.Postings) index.Postings {
