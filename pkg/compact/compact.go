@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -793,7 +794,7 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 		}
 	}
 
-	if err := block.WriteIndexCache(cg.logger, index, indexCache); err != nil {
+	if err := indexheader.WriteJSON(cg.logger, index, indexCache); err != nil {
 		return false, ulid.ULID{}, errors.Wrap(err, "write index cache")
 	}
 

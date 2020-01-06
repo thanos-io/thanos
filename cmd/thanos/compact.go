@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
@@ -489,7 +490,7 @@ func generateIndexCacheFile(
 		return errors.Wrap(err, "download index file")
 	}
 
-	if err := block.WriteIndexCache(logger, indexPath, cachePath); err != nil {
+	if err := indexheader.WriteJSON(logger, indexPath, cachePath); err != nil {
 		return errors.Wrap(err, "write index cache")
 	}
 
