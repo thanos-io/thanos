@@ -1005,7 +1005,10 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 			defer runutil.CloseWithLogOnErr(s.logger, indexr, "label values")
 
 			// Do it via index reader to have pending reader registered correctly.
-			res := indexr.block.indexHeaderReader.LabelValues(req.Label)
+			res, err := indexr.block.indexHeaderReader.LabelValues(req.Label)
+			if err != nil {
+				return errors.Wrap(err, "index header label values")
+			}
 
 			mtx.Lock()
 			sets = append(sets, res)
@@ -1301,7 +1304,12 @@ func (r *bucketIndexReader) ExpandedPostings(ms []*labels.Matcher) ([]uint64, er
 	// NOTE: Derived from tsdb.PostingsForMatchers.
 	for _, m := range ms {
 		// Each group is separate to tell later what postings are intersecting with what.
-		postingGroups = append(postingGroups, toPostingGroup(r.block.indexHeaderReader.LabelValues, m))
+		pg, err := toPostingGroup(r.block.indexHeaderReader.LabelValues, m)
+		if err != nil {
+			return nil, errors.Wrap(err, "toPostingGroup")
+		}
+
+		postingGroups = append(postingGroups, pg)
 	}
 
 	if len(postingGroups) == 0 {
@@ -1376,7 +1384,7 @@ func allWithout(p []index.Postings) index.Postings {
 }
 
 // NOTE: Derived from tsdb.postingsForMatcher. index.Merge is equivalent to map duplication.
-func toPostingGroup(lvalsFn func(name string) []string, m *labels.Matcher) *postingGroup {
+func toPostingGroup(lvalsFn func(name string) ([]string, error), m *labels.Matcher) (*postingGroup, error) {
 	var matchingLabels labels.Labels
 
 	// If the matcher selects an empty value, it selects all the series which don't
@@ -1386,7 +1394,11 @@ func toPostingGroup(lvalsFn func(name string) []string, m *labels.Matcher) *post
 		allName, allValue := index.AllPostingsKey()
 
 		matchingLabels = append(matchingLabels, labels.Label{Name: allName, Value: allValue})
-		for _, val := range lvalsFn(m.Name) {
+		vals, err := lvalsFn(m.Name)
+		if err != nil {
+			return nil, err
+		}
+		for _, val := range vals {
 			if !m.Matches(val) {
 				matchingLabels = append(matchingLabels, labels.Label{Name: m.Name, Value: val})
 			}
@@ -1396,24 +1408,29 @@ func toPostingGroup(lvalsFn func(name string) []string, m *labels.Matcher) *post
 			// This is known hack to return all series.
 			// Ask for x != <not existing value>. Allow for that as Prometheus does,
 			// even though it is expensive.
-			return newPostingGroup(matchingLabels, merge)
+			return newPostingGroup(matchingLabels, merge), nil
 		}
 
-		return newPostingGroup(matchingLabels, allWithout)
+		return newPostingGroup(matchingLabels, allWithout), nil
 	}
 
 	// Fast-path for equal matching.
 	if m.Type == labels.MatchEqual {
-		return newPostingGroup(labels.Labels{{Name: m.Name, Value: m.Value}}, merge)
+		return newPostingGroup(labels.Labels{{Name: m.Name, Value: m.Value}}, merge), nil
 	}
 
-	for _, val := range lvalsFn(m.Name) {
+	vals, err := lvalsFn(m.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, val := range vals {
 		if m.Matches(val) {
 			matchingLabels = append(matchingLabels, labels.Label{Name: m.Name, Value: val})
 		}
 	}
 
-	return newPostingGroup(matchingLabels, merge)
+	return newPostingGroup(matchingLabels, merge), nil
 }
 
 type postingPtr struct {
@@ -1453,11 +1470,15 @@ func (r *bucketIndexReader) fetchPostings(groups []*postingGroup) error {
 			}
 
 			// Cache miss; save pointer for actual posting in index stored in object store.
-			ptr := r.block.indexHeaderReader.PostingsOffset(key.Name, key.Value)
-			if ptr == indexheader.NotFoundRange {
+			ptr, err := r.block.indexHeaderReader.PostingsOffset(key.Name, key.Value)
+			if err == indexheader.NotFoundRangeErr {
 				// This block does not have any posting for given key.
 				g.Fill(j, index.EmptyPostings())
 				continue
+			}
+
+			if err != nil {
+				return errors.Wrap(err, "index header PostingsOffset")
 			}
 
 			r.stats.postingsToFetch++

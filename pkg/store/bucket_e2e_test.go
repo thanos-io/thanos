@@ -520,7 +520,6 @@ func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
 	testutil.Equals(t, len(expectedLabels), len(srv.SeriesSet))
 
 	for i, s := range srv.SeriesSet {
-		fmt.Println(s.Labels)
 		testutil.Equals(t, expectedLabels[i], s.Labels)
 
 		// prepareTestBlocks makes 3 chunks containing 2 hour data,

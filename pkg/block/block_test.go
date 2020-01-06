@@ -2,7 +2,6 @@ package block
 
 import (
 	"context"
-	"io"
 	"io/ioutil"
 	"os"
 	"path"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/go-kit/kit/log"
-	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/objstore/inmem"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -104,7 +102,7 @@ func TestUpload(t *testing.T) {
 		testutil.NotOk(t, err)
 		testutil.Assert(t, strings.HasSuffix(err.Error(), "/meta.json: no such file or directory"), "")
 	}
-	testutil.Ok(t, cpy(path.Join(tmpDir, b1.String(), MetaFilename), path.Join(tmpDir, "test", b1.String(), MetaFilename)))
+	testutil.Copy(t, path.Join(tmpDir, b1.String(), MetaFilename), path.Join(tmpDir, "test", b1.String(), MetaFilename))
 	{
 		// Missing chunks.
 		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()))
@@ -115,7 +113,7 @@ func TestUpload(t *testing.T) {
 		testutil.Equals(t, 1, len(bkt.Objects()))
 	}
 	testutil.Ok(t, os.MkdirAll(path.Join(tmpDir, "test", b1.String(), ChunksDirname), os.ModePerm))
-	testutil.Ok(t, cpy(path.Join(tmpDir, b1.String(), ChunksDirname, "000001"), path.Join(tmpDir, "test", b1.String(), ChunksDirname, "000001")))
+	testutil.Copy(t, path.Join(tmpDir, b1.String(), ChunksDirname, "000001"), path.Join(tmpDir, "test", b1.String(), ChunksDirname, "000001"))
 	{
 		// Missing index file.
 		err := Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()))
@@ -125,7 +123,7 @@ func TestUpload(t *testing.T) {
 		// Only debug meta.json present.
 		testutil.Equals(t, 1, len(bkt.Objects()))
 	}
-	testutil.Ok(t, cpy(path.Join(tmpDir, b1.String(), IndexFilename), path.Join(tmpDir, "test", b1.String(), IndexFilename)))
+	testutil.Copy(t, path.Join(tmpDir, b1.String(), IndexFilename), path.Join(tmpDir, "test", b1.String(), IndexFilename))
 	testutil.Ok(t, os.Remove(path.Join(tmpDir, "test", b1.String(), MetaFilename)))
 	{
 		// Missing meta.json file.
@@ -136,7 +134,7 @@ func TestUpload(t *testing.T) {
 		// Only debug meta.json present.
 		testutil.Equals(t, 1, len(bkt.Objects()))
 	}
-	testutil.Ok(t, cpy(path.Join(tmpDir, b1.String(), MetaFilename), path.Join(tmpDir, "test", b1.String(), MetaFilename)))
+	testutil.Copy(t, path.Join(tmpDir, b1.String(), MetaFilename), path.Join(tmpDir, "test", b1.String(), MetaFilename))
 	{
 		// Full block.
 		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String())))
@@ -168,31 +166,6 @@ func TestUpload(t *testing.T) {
 		testutil.Equals(t, "empty external labels are not allowed for Thanos block.", err.Error())
 		testutil.Equals(t, 4, len(bkt.Objects()))
 	}
-}
-
-func cpy(src, dst string) error {
-	sourceFileStat, err := os.Stat(src)
-	if err != nil {
-		return err
-	}
-
-	if !sourceFileStat.Mode().IsRegular() {
-		return errors.Errorf("%s is not a regular file", src)
-	}
-
-	source, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer source.Close()
-
-	destination, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer destination.Close()
-	_, err = io.Copy(destination, source)
-	return err
 }
 
 func TestDelete(t *testing.T) {

@@ -3,7 +3,6 @@ package indexheader
 import (
 	"context"
 	"encoding/json"
-	"hash/crc32"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -56,15 +55,6 @@ func (b realByteSlice) Range(start, end int) []byte {
 
 func (b realByteSlice) Sub(start, end int) index.ByteSlice {
 	return b[start:end]
-}
-
-// The table gets initialized with sync.Once but may still cause a race
-// with any other use of the crc32 package anywhere. Thus we initialize it
-// before.
-var castagnoliTable *crc32.Table
-
-func init() {
-	castagnoliTable = crc32.MakeTable(crc32.Castagnoli)
 }
 
 // readSymbols reads the symbol table fully into memory and allocates proper strings for them.
@@ -126,7 +116,6 @@ func getSymbolTable(b index.ByteSlice) (map[uint32]string, error) {
 	for o, s := range symbolsV2 {
 		symbolsTable[uint32(o)] = s
 	}
-
 	return symbolsTable, nil
 }
 
@@ -206,11 +195,12 @@ type JSONReader struct {
 	postings     map[labels.Label]index.Range
 }
 
+// NewJSONReader loads or builds new index-cache.json if not present on disk or object storage.
 func NewJSONReader(ctx context.Context, logger log.Logger, bkt objstore.BucketReader, dir string, id ulid.ULID) (*JSONReader, error) {
 	cachefn := filepath.Join(dir, id.String(), block.IndexCacheFilename)
-	jr, err := newJSONReaderFromFile(logger, cachefn)
+	jr, err := newFileJSONReader(logger, cachefn)
 	if err == nil {
-		return jr, err
+		return jr, nil
 	}
 
 	if !os.IsNotExist(errors.Cause(err)) && errors.Cause(err) != jsonUnmarshalError {
@@ -219,7 +209,7 @@ func NewJSONReader(ctx context.Context, logger log.Logger, bkt objstore.BucketRe
 
 	// Try to download index cache file from object store.
 	if err = objstore.DownloadFile(ctx, logger, bkt, filepath.Join(id.String(), block.IndexCacheFilename), cachefn); err == nil {
-		return newJSONReaderFromFile(logger, cachefn)
+		return newFileJSONReader(logger, cachefn)
 	}
 
 	if !bkt.IsObjNotFoundErr(errors.Cause(err)) && errors.Cause(err) != jsonUnmarshalError {
@@ -243,16 +233,16 @@ func NewJSONReader(ctx context.Context, logger log.Logger, bkt objstore.BucketRe
 		return nil, errors.Wrap(err, "write index cache")
 	}
 
-	return newJSONReaderFromFile(logger, cachefn)
+	return newFileJSONReader(logger, cachefn)
 }
 
 // ReadJSON reads an index cache file.
-func newJSONReaderFromFile(logger log.Logger, fn string) (*JSONReader, error) {
+func newFileJSONReader(logger log.Logger, fn string) (*JSONReader, error) {
 	f, err := os.Open(fn)
 	if err != nil {
 		return nil, errors.Wrap(err, "open file")
 	}
-	defer runutil.CloseWithLogOnErr(logger, f, "index reader")
+	defer runutil.CloseWithLogOnErr(logger, f, "index cache json close")
 
 	var v indexCache
 
@@ -317,20 +307,29 @@ func (r *JSONReader) IndexVersion() int {
 func (r *JSONReader) LookupSymbol(o uint32) (string, error) {
 	idx := int(o)
 	if idx >= len(r.symbols) {
-		return "", errors.Errorf("bucketIndexReader: unknown symbol offset %d", o)
+		return "", errors.Errorf("indexJSONReader: unknown symbol offset %d", o)
 	}
-
+	// NOTE: This is not entirely correct, symbols slice can have gaps. Not fixing as JSON reader
+	// is replaced by index-header.
 	return r.symbols[idx], nil
 }
 
-func (r *JSONReader) PostingsOffset(name, value string) index.Range {
-	return r.postings[labels.Label{Name: name, Value: value}]
+func (r *JSONReader) PostingsOffset(name, value string) (index.Range, error) {
+	rng, ok := r.postings[labels.Label{Name: name, Value: value}]
+	if !ok {
+		return index.Range{}, NotFoundRangeErr
+	}
+	return rng, nil
 }
 
 // LabelValues returns label values for single name.
-func (r *JSONReader) LabelValues(name string) []string {
-	res := make([]string, 0, len(r.lvals[name]))
-	return append(res, r.lvals[name]...)
+func (r *JSONReader) LabelValues(name string) ([]string, error) {
+	vals, ok := r.lvals[name]
+	if !ok {
+		return nil, nil
+	}
+	res := make([]string, 0, len(vals))
+	return append(res, vals...), nil
 }
 
 // LabelNames returns a list of label names.
@@ -342,3 +341,5 @@ func (r *JSONReader) LabelNames() []string {
 	sort.Strings(res)
 	return res
 }
+
+func (r *JSONReader) Close() error { return nil }
