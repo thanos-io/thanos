@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -25,11 +26,11 @@ import (
 )
 
 var (
-	minTime         = time.Unix(0, 0)
-	maxTime, _      = time.Parse(time.RFC3339, "9999-12-31T23:59:59Z")
-	minTimeDuration = model.TimeOrDurationValue{Time: &minTime}
-	maxTimeDuration = model.TimeOrDurationValue{Time: &maxTime}
-	filterConf      = &FilterConfig{
+	minTime            = time.Unix(0, 0)
+	maxTime, _         = time.Parse(time.RFC3339, "9999-12-31T23:59:59Z")
+	minTimeDuration    = model.TimeOrDurationValue{Time: &minTime}
+	maxTimeDuration    = model.TimeOrDurationValue{Time: &maxTime}
+	allowAllFilterConf = &FilterConfig{
 		MinTime: minTimeDuration,
 		MaxTime: maxTimeDuration,
 	}
@@ -80,7 +81,7 @@ type storeSuite struct {
 }
 
 func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt objstore.Bucket,
-	series []labels.Labels, extLset labels.Labels) (blocks int, minTime, maxTime int64) {
+	series []labels.Labels, extLset labels.Labels) (minTime, maxTime int64) {
 	ctx := context.Background()
 	logger := log.NewNopLogger()
 
@@ -111,7 +112,6 @@ func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt o
 
 		testutil.Ok(t, block.Upload(ctx, logger, bkt, dir1))
 		testutil.Ok(t, block.Upload(ctx, logger, bkt, dir2))
-		blocks += 2
 
 		testutil.Ok(t, os.RemoveAll(dir1))
 		testutil.Ok(t, os.RemoveAll(dir2))
@@ -120,7 +120,7 @@ func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt o
 	return
 }
 
-func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, manyParts bool, maxSampleCount uint64, relabelConfig []*relabel.Config) *storeSuite {
+func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, manyParts bool, maxSampleCount uint64, relabelConfig []*relabel.Config, filterConf *FilterConfig) *storeSuite {
 	series := []labels.Labels{
 		labels.FromStrings("a", "1", "b", "1"),
 		labels.FromStrings("a", "1", "b", "2"),
@@ -133,7 +133,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	}
 	extLset := labels.FromStrings("ext1", "value1")
 
-	blocks, minTime, maxTime := prepareTestBlocks(t, time.Now(), 3, dir, bkt,
+	minTime, maxTime := prepareTestBlocks(t, time.Now(), 3, dir, bkt,
 		series, extLset)
 
 	s := &storeSuite{
@@ -143,7 +143,27 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		maxTime: maxTime,
 	}
 
-	store, err := NewBucketStore(s.logger, nil, bkt, dir, s.cache, 0, maxSampleCount, 20, false, 20, filterConf, relabelConfig, true)
+	metaFetcher, err := block.NewMetaFetcher(s.logger, 20, bkt, dir, nil,
+		block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime).Filter,
+		block.NewLabelShardedMetaFilter(relabelConfig).Filter,
+	)
+	testutil.Ok(t, err)
+
+	store, err := NewBucketStore(
+		s.logger,
+		nil,
+		bkt,
+		metaFetcher,
+		dir,
+		s.cache,
+		0,
+		maxSampleCount,
+		20,
+		false,
+		20,
+		filterConf,
+		true,
+	)
 	testutil.Ok(t, err)
 	s.store = store
 
@@ -155,10 +175,6 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	defer cancel()
 
 	testutil.Ok(t, store.SyncBlocks(ctx))
-
-	if store.numBlocks() < blocks {
-		t.Fatalf("not all blocks loaded got %v, expected %v", store.numBlocks(), blocks)
-	}
 	return s
 }
 
@@ -399,7 +415,7 @@ func TestBucketStore_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-		s := prepareStoreWithTestBlocks(t, dir, bkt, false, 0, emptyRelabelConfig)
+		s := prepareStoreWithTestBlocks(t, dir, bkt, false, 0, emptyRelabelConfig, allowAllFilterConf)
 
 		t.Log("Test with no index cache")
 		s.cache.SwapWith(noopCache{})
@@ -447,7 +463,7 @@ func TestBucketStore_ManyParts_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-		s := prepareStoreWithTestBlocks(t, dir, bkt, true, 0, emptyRelabelConfig)
+		s := prepareStoreWithTestBlocks(t, dir, bkt, true, 0, emptyRelabelConfig, allowAllFilterConf)
 
 		indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(s.logger, nil, storecache.InMemoryIndexCacheConfig{
 			MaxItemSize: 1e5,
@@ -469,69 +485,46 @@ func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-	series := []labels.Labels{
-		labels.FromStrings("a", "1", "b", "1"),
-		labels.FromStrings("a", "1", "b", "1"),
-		labels.FromStrings("a", "1", "b", "1"),
-		labels.FromStrings("a", "1", "b", "1"),
-		labels.FromStrings("a", "1", "b", "2"),
-		labels.FromStrings("a", "1", "b", "2"),
-		labels.FromStrings("a", "1", "b", "2"),
-		labels.FromStrings("a", "1", "b", "2"),
-	}
-	extLset := labels.FromStrings("ext1", "value1")
-
-	_, minTime, _ := prepareTestBlocks(t, time.Now(), 3, dir, bkt, series, extLset)
-
 	hourAfter := time.Now().Add(1 * time.Hour)
 	filterMaxTime := model.TimeOrDurationValue{Time: &hourAfter}
 
-	store, err := NewBucketStore(nil, nil, bkt, dir, noopCache{}, 0, 0, 20, false, 20,
-		&FilterConfig{
-			MinTime: minTimeDuration,
-			MaxTime: filterMaxTime,
-		}, emptyRelabelConfig, true)
-	testutil.Ok(t, err)
+	s := prepareStoreWithTestBlocks(t, dir, bkt, false, 241, emptyRelabelConfig, &FilterConfig{
+		MinTime: minTimeDuration,
+		MaxTime: filterMaxTime,
+	})
+	testutil.Ok(t, s.store.SyncBlocks(ctx))
 
-	err = store.SyncBlocks(ctx)
-	testutil.Ok(t, err)
-
-	mint, maxt := store.TimeRange()
-	testutil.Equals(t, minTime, mint)
+	mint, maxt := s.store.TimeRange()
+	testutil.Equals(t, s.minTime, mint)
 	testutil.Equals(t, filterMaxTime.PrometheusTimestamp(), maxt)
 
-	for i, tcase := range []struct {
-		req            *storepb.SeriesRequest
-		expectedLabels [][]storepb.Label
-		expectedChunks int
-	}{
-		{
-			req: &storepb.SeriesRequest{
-				Matchers: []storepb.LabelMatcher{
-					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
-				},
-				MinTime: mint,
-				MaxTime: timestamp.FromTime(time.Now().AddDate(0, 0, 1)),
-			},
-			expectedLabels: [][]storepb.Label{
-				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
-				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext2", Value: "value2"}},
-			},
-			// prepareTestBlocks makes 3 chunks containing 2 hour data,
-			// we should only get 1, as we are filtering.
-			expectedChunks: 1,
+	req := &storepb.SeriesRequest{
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 		},
-	} {
-		t.Log("Run", i)
+		MinTime: mint,
+		MaxTime: timestamp.FromTime(time.Now().AddDate(0, 0, 1)),
+	}
 
-		srv := newStoreSeriesServer(ctx)
+	expectedLabels := [][]storepb.Label{
+		{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+		{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+		{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+		{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+	}
 
-		testutil.Ok(t, store.Series(tcase.req, srv))
-		testutil.Equals(t, len(tcase.expectedLabels), len(srv.SeriesSet))
+	s.cache.SwapWith(noopCache{})
+	srv := newStoreSeriesServer(ctx)
 
-		for i, s := range srv.SeriesSet {
-			testutil.Equals(t, tcase.expectedLabels[i], s.Labels)
-			testutil.Equals(t, tcase.expectedChunks, len(s.Chunks))
-		}
+	testutil.Ok(t, s.store.Series(req, srv))
+	testutil.Equals(t, len(expectedLabels), len(srv.SeriesSet))
+
+	for i, s := range srv.SeriesSet {
+		fmt.Println(s.Labels)
+		testutil.Equals(t, expectedLabels[i], s.Labels)
+
+		// prepareTestBlocks makes 3 chunks containing 2 hour data,
+		// we should only get 1, as we are filtering by time.
+		testutil.Equals(t, 1, len(s.Chunks))
 	}
 }

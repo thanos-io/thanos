@@ -85,7 +85,7 @@ Flags:
                                  for chunks.
       --store.grpc.series-sample-limit=0
                                  Maximum amount of samples returned via a single
-                                 Series call. 0 means no limit. NOTE: for
+                                 Series call. 0 means no limit. NOTE: For
                                  efficiency we take 120 as the number of samples
                                  in chunk (it cannot be bigger than that), so
                                  the actual number of samples might be lower,
@@ -105,8 +105,8 @@ Flags:
       --sync-block-duration=3m   Repeat interval for syncing the blocks between
                                  local and remote view.
       --block-sync-concurrency=20
-                                 Number of goroutines to use when syncing blocks
-                                 from object storage.
+                                 Number of goroutines to use when constructing
+                                 index-cache.json blocks from object storage.
       --min-time=0000-01-01T00:00:00Z
                                  Start of time range limit to serve. Thanos
                                  Store will serve only metrics, which happened
