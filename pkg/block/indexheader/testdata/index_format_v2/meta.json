@@ -1,0 +1,27 @@
+{
+	"ulid": "01DRBP4RNVZ94135ZA6B10EMRR",
+	"minTime": 1570766415000,
+	"maxTime": 1570939215001,
+	"stats": {
+		"numSamples": 115210000,
+		"numSeries": 10000,
+		"numChunks": 990000
+	},
+	"compaction": {
+		"level": 1,
+		"sources": [
+			"01DRBP4RNVZ94135ZA6B10EMRR"
+		]
+	},
+	"version": 1,
+	"thanos": {
+		"labels": {
+			"cluster": "one",
+			"dataset": "continuous"
+		},
+		"downsample": {
+			"resolution": 0
+		},
+		"source": "blockgen"
+	}
+}

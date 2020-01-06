@@ -70,7 +70,7 @@ require (
 	github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4
 	github.com/prometheus/common v0.7.0
 	github.com/prometheus/procfs v0.0.6 // indirect
-	github.com/prometheus/prometheus v1.8.2-0.20200107122003-4708915ac6ef // master ~ v2.15.2
+	github.com/prometheus/prometheus v1.8.2-0.20200110114423-1e64d757f711 // master ~ v2.15.2
 	github.com/samuel/go-zookeeper v0.0.0-20190923202752-2cc03de413da // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect
 	github.com/smartystreets/assertions v1.0.1 // indirect
