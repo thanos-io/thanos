@@ -191,7 +191,7 @@ func (s *MetaFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 	r, err := s.bkt.Get(ctx, metaFile)
 	if s.bkt.IsObjNotFoundErr(err) {
 		// Meta.json was deleted between bkt.Exists and here.
-		return nil, errors.Wrapf(ErrorSyncMetaNotFound, "%v ", err)
+		return nil, errors.Wrapf(ErrorSyncMetaNotFound, "%v", err)
 	}
 	if err != nil {
 		return nil, errors.Wrapf(err, "get meta file: %v", metaFile)
@@ -206,7 +206,7 @@ func (s *MetaFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 
 	m := &metadata.Meta{}
 	if err := json.Unmarshal(metaContent, m); err != nil {
-		return nil, errors.Wrapf(ErrorSyncMetaCorrupted, "meta.json %v unmarshal: %v ", metaFile, err)
+		return nil, errors.Wrapf(ErrorSyncMetaCorrupted, "meta.json %v unmarshal: %v", metaFile, err)
 	}
 
 	if m.Version != metadata.MetaVersion1 {
