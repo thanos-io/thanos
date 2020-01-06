@@ -36,9 +36,7 @@ func TestCacheAddresses(t *testing.T) {
 	}
 
 	got := c.Addresses()
-	sort.Slice(got, func(i, j int) bool {
-		return i < j
-	})
+	sort.Strings(got)
 	if !reflect.DeepEqual(got, expected) {
 		t.Errorf("expected %v, want %v", got, expected)
 	}
