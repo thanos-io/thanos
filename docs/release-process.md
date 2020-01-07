@@ -30,13 +30,13 @@ Release shepherd responsibilities:
 
 | Release   | Time of first RC         | Shepherd (GitHub handle) |
 |-----------|--------------------------|--------------------------|
-| v0.11.0   | (planned) 19.02.2020     | TBD                      |
-| v0.10.0   | 8.01.2020                | `@GiedriusS`             |
-| v0.9.0    | 26.11.2019               | `@bwplotka`              |
-| v0.8.0    | 9.10.2019                | `@bwplotka`              |
-| v0.7.0    | 28.08.2019               | `@domgreen`              |
-| v0.6.0    | 12.07.2019               | `@GiedriusS`             |
-| v0.5.0    | 31.06.2019               | `@bwplotka`              |
+| v0.11.0   | (planned) 2020.02.19     | TBD                      |
+| v0.10.0   | 2020.01.08               | `@GiedriusS`             |
+| v0.9.0    | 2019.11.26               | `@bwplotka`              |
+| v0.8.0    | 2019.10.09               | `@bwplotka`              |
+| v0.7.0    | 2019.08.28               | `@domgreen`              |
+| v0.6.0    | 2019.07.12               | `@GiedriusS`             |
+| v0.5.0    | 2019.06.31               | `@bwplotka`              |
 
 # For maintainers: Cutting individual release
 
