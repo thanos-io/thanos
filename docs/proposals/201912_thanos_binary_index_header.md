@@ -32,8 +32,8 @@ For each block that we want to serve metrics from, the Store Gateway has to have
 The `sync` process includes:
 
 * Download meta.json or fetch from disk if cached.
-* Check if index-cache.json is present on the disk. If not: 
-  * Check if index-cache.json is present in the bucket. If not: 
+* Check if index-cache.json is present on the disk. If not:
+  * Check if index-cache.json is present in the bucket. If not:
     * Download the whole TSDB index file, mmap all of it.
     * Build index-cache.json
   * else:
@@ -46,26 +46,26 @@ The current, mentioned [index-cache.json][index-cache-code] holds block’s:
 * [Symbols][symbols]
 * LabelValues:
   * Calculated from all [LabelsIndicesTable][labels-indices-table], that each points to [LabelIndex][label-index] entry.
-  * Used for matching against request selectors and LabelValues/LabelNames calls. 
+  * Used for matching against request selectors and LabelValues/LabelNames calls.
 * [Postings Offsets][postings-offsets]
 
-There are few problems with this approach: 
+There are few problems with this approach:
 
 1. Downloading the whole TSDB index file (which can be from few MB up to 64GB or even more when limit will be increased soon) is expensive and might be slow.
 2. Building such index-cache requires at least 2x `index-cache.json` size of memory.
 3. Parsing large index-cache.json files (which can be from few KB to few GB) might be slow.
 4. We keep the full content of index-cache file in memory for all blocks.
-   * Some blocks are never queried. 
+   * Some blocks are never queried.
    * Some posting offsets and label values within each block are never used.
 
 1, 2 & 3 contributes to Store Gateway startup being slow and resource consuming: https://github.com/thanos-io/thanos/issues/448
 
 4. causes unnecessary constant cache for unused blocks.
 
-This design is trying to address those four problems. 
+This design is trying to address those four problems.
 
 ## Goals
-    
+
 * Reduce confusion between index-cache.json and IndexCache for series and postings.
 * Use constant amount of memory for building index-header/index-cache; download only required pieces of index from bucket and compute new TOC file.
 * Leverage mmap and let OS unload unused pages from the physical memory as needed to satisfy the queries against the block. We can leverage mmap due to random access against label values and postings offsets.
@@ -84,11 +84,11 @@ This design is trying to address those four problems.
 
 ## Proposal
 
-TSDB index is in binary [format](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md). 
+TSDB index is in binary [format](https://github.com/prometheus/prometheus/blob/master/tsdb/docs/format/index.md).
 
-To allow reduced resource consumption and effort when building (1), (2), "index-header" for blocks we plan to reuse similar format for sections like symbols, label indices and 
+To allow reduced resource consumption and effort when building (1), (2), "index-header" for blocks we plan to reuse similar format for sections like symbols, label indices and
 posting offsets in separate the file called `index-header` that will replace currently existing `index-cache.json`.
- 
+
 The process for building this will be as follows:
 
 * Thanks to https://github.com/thanos-io/thanos/pull/1792 we can check final size of index and scan for TOC file.
@@ -96,7 +96,7 @@ The process for building this will be as follows:
   * Get the symbols table and copy it to the local file.
   * Get the posting table and copy it to the local file.
 * Write new TOC file at the end of file.
-  
+
 With that effort building time and resources should be compared with downloading the prebuilt `index-header` from the bucket.
 This allows us to reduce complexity of the system as we don't need to cache that in object storage by compactor.
 
@@ -108,13 +108,13 @@ Given the minimal memory that each loaded block should take now, this is describ
 
 ### Length of Posting to fetch
 
-While idea of combing different pieces of TSDB index as our index-header is great, unfortunately we heavily rely 
-on information about size of each posting represented as `postingRange.End`. 
+While idea of combing different pieces of TSDB index as our index-header is great, unfortunately we heavily rely
+on information about size of each posting represented as `postingRange.End`.
 
-We need to know that apriori to know how to partition and how many bytes we need to fetch from the storage to get each posting: https://github.com/thanos-io/thanos/blob/7e11afe64af0c096743a3de8a594616abf52be45/pkg/store/bucket.go#L1567
+We need to know apriori how to partition and how many bytes we need to fetch from the storage to get each posting: https://github.com/thanos-io/thanos/blob/7e11afe64af0c096743a3de8a594616abf52be45/pkg/store/bucket.go#L1567
 
 To calculate those sizes we use [`indexr.PostingsRanges()`](https://github.com/thanos-io/thanos/blob/7e11afe64af0c096743a3de8a594616abf52be45/pkg/block/index.go#L156-L155) which
-scans through `posting` section of the TSDB index. Having to fetch whole postings section just to get size of each posting 
+scans through `posting` section of the TSDB index. Having to fetch whole postings section just to get size of each posting
 makes this proposal less valuable as we still need to download big part of index and traverse through it instead of what we propose in [#Proposal](./201912_thanos_binary_index_header.md#proposal)
 
 For series we don't know the exact size either, however we estimate max size of each series to be 64*1024. It depends on sane number of label pairs and chunks per series.
@@ -131,13 +131,13 @@ We have few options:
 
 However there is one that this proposal aims for:
 
-* We can deduce the length of posting by the beginning of the next posting offset in posting table. This is thanks to the sorted postings. 
+* We can deduce the length of posting by the beginning of the next posting offset in posting table. This is thanks to the sorted postings.
 
 ## Risk
 
 ### Unexpected memory usage
 
-Users care the most about surprising spikes in memory usage. Currently the Store Gateway caches the whole index-cache.json. While it's silly to do so for all blocks, this 
+Users care the most about surprising spikes in memory usage. Currently the Store Gateway caches the whole index-cache.json. While it's silly to do so for all blocks, this
 will happen anyway if query will span over large number of blocks and series. This means that while baseline memory will be reduced, baseline vs request memory difference will be even more noticeable.
 
 This tradeoff is acceptable, due to total memory used for all operation should be much smaller. Additionally such query spanning all of the blocks and series are unlikely and should be blocked by simple `sample` limit.
@@ -145,14 +145,14 @@ This tradeoff is acceptable, due to total memory used for all operation should b
 ### Benchmark
 
 How to micro-benchmark such change? mmaping is outside of Go run time, which counts allocations etc.
- 
+
 ### Do we need to mmap?
 
 mmap adds a lot of complexity and confusion especially around monitoring it's memory usage as it does not appear on Go profiles.
 
 While mmap is great for random access against a big file, in fact the current implementation of the [FileReader](https://github.com/prometheus/prometheus/blob/de0a772b8e7d27dc744810a1a693d97be027049a/tsdb/index/index.go#L664)
-reallocates symbols, offsets and label name=value pairs while reading. This really defies the purpose of mmap as we want to combine all info in a dense few sequential sections of index-header binary format, 
-this file will be mostly read sequentially. Still, label values can be accessed randomly, that's why we propose to start with mmap straight away. 
+reallocates symbols, offsets and label name=value pairs while reading. This really defies the purpose of mmap as we want to combine all info in a dense few sequential sections of index-header binary format,
+this file will be mostly read sequentially. Still, label values can be accessed randomly, that's why we propose to start with mmap straight away.
 
 ### Is initial long startup, really a problem?
 
@@ -160,21 +160,21 @@ After initial startup with persistent disk, next startup should be quick due to 
 Only new one will be iterated on. However still initial startup and adhoc syncs can be problematic for example: auto scaling.
 To adapt to high load you want component to start up quickly.
 
-### LabelNames and LabelValues. 
+### LabelNames and LabelValues.
 
 Currently all of those methods are getting labels values and label names across all blocks in the system.
 
 This will load **all** blocks to the system on every such call.
 
 We have couple of options:
- 
+
 * Limit with time range: https://github.com/thanos-io/thanos/issues/1811
 * Cache e.g popular label values queries like `__name__`
- 
+
 ## Alternatives
 
 * Introduce faster JSON parser like [json-iterator/go](https://github.com/json-iterator/go)
-  * However, this does not contribute towards faster creation of such `index-header` from TSDB index. 
+  * However, this does not contribute towards faster creation of such `index-header` from TSDB index.
 * Design external memory compatible index instead of TSDB index.
   * This is being discussed in another threads. While we should look on this ASAP, it's rather a long term plan.
 * Build `index-cache.json` on sidecar
@@ -182,7 +182,7 @@ We have couple of options:
 
 ## Work Plan
 
-Replace `index-cache.json` with `index-header`: 
+Replace `index-cache.json` with `index-header`:
   * Implement building `index-header` file from pieces of TSDB index.
   * Allow Store Gateway to build it instead of `index-cache.json` to disk.
   * Allow Store Gateway to use `index-header` instead of `index-cache.json` for queries.
@@ -194,15 +194,15 @@ Replace `index-cache.json` with `index-header`:
 * Load on demand at query time:
 
 We can maintain a pool with limited number of `index-header` files loaded at the time in Store Gateway.
-With an LRU logic we should be able to deduce which of blocks should be unloaded and left on the disk. 
+With an LRU logic we should be able to deduce which of blocks should be unloaded and left on the disk.
 
 This proposes following algorithm:
 
 * blocks newer then X (e.g 2w) being always loaded
 * blocks older than X will be loaded on demand on query time and kept cached until evicted.
-* background eviction process unloads blocks without pending reads to the amount of Y (e.g 100 blocks) in LRU fashion. 
- 
-Both X and Y being configurable. From UX perspective it would be nice to set configurable memory limit for loaded blocks. 
+* background eviction process unloads blocks without pending reads to the amount of Y (e.g 100 blocks) in LRU fashion.
+
+Both X and Y being configurable. From UX perspective it would be nice to set configurable memory limit for loaded blocks.
 
 * Build on demand at query time:
   * Allow Store Gateway to build `index-header` on demand from bucket at query time.
