@@ -408,6 +408,32 @@ func TestProxyStore_Series(t *testing.T) {
 			},
 			expectedErr: errors.New("fetch series for [name:\"ext\" value:\"1\" ] test: error!"),
 		},
+		{
+			title: "use no chunk to only get labels",
+			storeAPIs: []Client{
+				&testClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "a")),
+						},
+					},
+					minTime:   1,
+					maxTime:   300,
+					labelSets: []storepb.LabelSet{{Labels: []storepb.Label{{Name: "ext", Value: "1"}}}},
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime:    1,
+				MaxTime:    300,
+				Matchers:   []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				SkipChunks: true,
+			},
+			expectedSeries: []rawSeries{
+				{
+					lset: []storepb.Label{{Name: "a", Value: "a"}},
+				},
+			},
+		},
 	} {
 
 		if ok := t.Run(tc.title, func(t *testing.T) {

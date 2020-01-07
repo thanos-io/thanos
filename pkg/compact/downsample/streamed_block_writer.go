@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
@@ -128,7 +129,7 @@ func NewStreamedBlockWriter(
 	}, nil
 }
 
-// WriteSeries writes chunks data to the chunkWriter, writes lset and chunks Metas to indexWrites and adds label sets to
+// WriteSeries writes chunks data to the chunkWriter, writes lset and chunks MetasFetcher to indexWrites and adds label sets to
 // labelsValues sets and memPostings to be written on the finalize state in the end of downsampling process.
 func (w *streamedBlockWriter) WriteSeries(lset labels.Labels, chunks []chunks.Meta) error {
 	if w.finalized || w.ignoreFinalize {
@@ -194,7 +195,7 @@ func (w *streamedBlockWriter) Close() error {
 		merr.Add(cl.Close())
 	}
 
-	if err := block.WriteIndexCache(
+	if err := indexheader.WriteJSON(
 		w.logger,
 		filepath.Join(w.blockDir, block.IndexFilename),
 		filepath.Join(w.blockDir, block.IndexCacheFilename),
