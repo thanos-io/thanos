@@ -28,9 +28,10 @@ Release shepherd responsibilities:
 * Perform releases (from first RC to actual release).
 * Announce all releases on all communication channels.
 
-| Release   | Time of first RC         | Shepherd (Github handle) |
+| Release   | Time of first RC         | Shepherd (GitHub handle) |
 |-----------|--------------------------|--------------------------|
-| v0.10.0   | (planned) 8.01.2019      | TBD                      |
+| v0.11.0   | (planned) 19.02.2020     | TBD                      |
+| v0.10.0   | 8.01.2020                | `@GiedriusS`             |
 | v0.9.0    | 26.11.2019               | `@bwplotka`              |
 | v0.8.0    | 9.10.2019                | `@bwplotka`              |
 | v0.7.0    | 28.08.2019               | `@domgreen`              |
