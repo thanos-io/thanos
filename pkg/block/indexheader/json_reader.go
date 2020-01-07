@@ -3,6 +3,7 @@ package indexheader
 import (
 	"context"
 	"encoding/json"
+	"hash/crc32"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/thanos/pkg/block"
@@ -56,6 +58,50 @@ func (b realByteSlice) Sub(start, end int) index.ByteSlice {
 	return b[start:end]
 }
 
+// The table gets initialized with sync.Once but may still cause a race
+// with any other use of the crc32 package anywhere. Thus we initialize it
+// before.
+var castagnoliTable *crc32.Table
+
+func init() {
+	castagnoliTable = crc32.MakeTable(crc32.Castagnoli)
+}
+
+// readSymbols reads the symbol table fully into memory and allocates proper strings for them.
+// Strings backed by the mmap'd memory would cause memory faults if applications keep using them
+// after the reader is closed.
+func readSymbols(bs index.ByteSlice, version int, off int) ([]string, map[uint32]string, error) {
+	if off == 0 {
+		return nil, nil, nil
+	}
+	d := encoding.NewDecbufAt(bs, off, castagnoliTable)
+
+	var (
+		origLen     = d.Len()
+		cnt         = d.Be32int()
+		basePos     = uint32(off) + 4
+		nextPos     = basePos + uint32(origLen-d.Len())
+		symbolSlice []string
+		symbols     = map[uint32]string{}
+	)
+	if version == index.FormatV2 {
+		symbolSlice = make([]string, 0, cnt)
+	}
+
+	for d.Err() == nil && d.Len() > 0 && cnt > 0 {
+		s := d.UvarintStr()
+
+		if version == index.FormatV2 {
+			symbolSlice = append(symbolSlice, s)
+		} else {
+			symbols[nextPos] = s
+			nextPos = basePos + uint32(origLen-d.Len())
+		}
+		cnt--
+	}
+	return symbolSlice, symbols, errors.Wrap(d.Err(), "read symbols")
+}
+
 func getSymbolTable(b index.ByteSlice) (map[uint32]string, error) {
 	version := int(b.Range(4, 5)[0])
 
@@ -68,7 +114,7 @@ func getSymbolTable(b index.ByteSlice) (map[uint32]string, error) {
 		return nil, errors.Wrap(err, "read TOC")
 	}
 
-	symbolsV2, symbolsV1, err := index.ReadSymbols(b, version, int(toc.Symbols))
+	symbolsV2, symbolsV1, err := readSymbols(b, version, int(toc.Symbols))
 	if err != nil {
 		return nil, errors.Wrap(err, "read symbols")
 	}
@@ -120,31 +166,14 @@ func WriteJSON(logger log.Logger, indexFn string, fn string) error {
 	}
 
 	// Extract label value indices.
-	lnames, err := indexr.LabelIndices()
+	lnames, err := indexr.LabelNames()
 	if err != nil {
 		return errors.Wrap(err, "read label indices")
 	}
-	for _, lns := range lnames {
-		if len(lns) != 1 {
-			continue
-		}
-		ln := lns[0]
-
-		tpls, err := indexr.LabelValues(ln)
+	for _, ln := range lnames {
+		vals, err := indexr.LabelValues(ln)
 		if err != nil {
 			return errors.Wrap(err, "get label values")
-		}
-		vals := make([]string, 0, tpls.Len())
-
-		for i := 0; i < tpls.Len(); i++ {
-			v, err := tpls.At(i)
-			if err != nil {
-				return errors.Wrap(err, "get label value")
-			}
-			if len(v) != 1 {
-				return errors.Errorf("unexpected tuple length %d", len(v))
-			}
-			vals = append(vals, v[0])
 		}
 		v.LabelValues[ln] = vals
 	}

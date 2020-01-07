@@ -1,6 +1,7 @@
 package block
 
 import (
+	"context"
 	"fmt"
 	"hash/crc32"
 	"math/rand"
@@ -282,7 +283,7 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceT
 	}
 	defer runutil.CloseWithErrCapture(&err, chunkw, "repair chunk writer")
 
-	indexw, err := index.NewWriter(filepath.Join(resdir, IndexFilename))
+	indexw, err := index.NewWriter(context.TODO(), filepath.Join(resdir, IndexFilename))
 	if err != nil {
 		return resid, errors.Wrap(err, "open index writer")
 	}
@@ -406,17 +407,19 @@ func rewrite(
 	meta *metadata.Meta,
 	ignoreChkFns []ignoreFnType,
 ) error {
-	symbols, err := indexr.Symbols()
-	if err != nil {
-		return err
+	symbols := indexr.Symbols()
+	for symbols.Next() {
+		if err := indexw.AddSymbol(symbols.At()); err != nil {
+			return errors.Wrap(err, "add symbol")
+		}
 	}
-	if err := indexw.AddSymbols(symbols); err != nil {
-		return err
+	if symbols.Err() != nil {
+		return errors.Wrap(symbols.Err(), "next symbol")
 	}
 
 	all, err := indexr.Postings(index.AllPostingsKey())
 	if err != nil {
-		return err
+		return errors.Wrap(err, "postings")
 	}
 	all = indexr.SortedPostings(all)
 
@@ -434,7 +437,7 @@ func rewrite(
 		id := all.At()
 
 		if err := indexr.Series(id, &lset, &chks); err != nil {
-			return err
+			return errors.Wrap(err, "series")
 		}
 		// Make sure labels are in sorted order.
 		sort.Sort(lset)
@@ -442,7 +445,7 @@ func rewrite(
 		for i, c := range chks {
 			chks[i].Chunk, err = chunkr.Chunk(c.Ref)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "chunk read")
 			}
 		}
 
@@ -512,24 +515,6 @@ func rewrite(
 		postings.Add(i, s.lset)
 		i++
 		lastSet = s.lset
-	}
-
-	s := make([]string, 0, 256)
-	for n, v := range values {
-		s = s[:0]
-
-		for x := range v {
-			s = append(s, x)
-		}
-		if err := indexw.WriteLabelIndex([]string{n}, s); err != nil {
-			return errors.Wrap(err, "write label index")
-		}
-	}
-
-	for _, l := range postings.SortedKeys() {
-		if err := indexw.WritePostings(l.Name, l.Value, postings.Get(l.Name, l.Value)); err != nil {
-			return errors.Wrap(err, "write postings")
-		}
 	}
 	return nil
 }
