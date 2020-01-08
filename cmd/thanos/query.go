@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/logging"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
@@ -64,6 +65,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 
 	maxConcurrentQueries := cmd.Flag("query.max-concurrent", "Maximum number of queries processed concurrently by query node.").
 		Default("20").Int()
+
+	queryLogFile := cmd.Flag("query.log-file", "File to which PromQL queries are logged.").Default("").String()
 
 	replicaLabels := cmd.Flag("query.replica-label", "Labels to treat as a replica indicator along which data is deduplicated. Still you will be able to query without deduplication using 'dedup=false' parameter.").
 		Strings()
@@ -155,6 +158,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			*stores,
 			*enableAutodownsampling,
 			*enablePartialResponse,
+			*queryLogFile,
 			fileSD,
 			time.Duration(*dnsSDInterval),
 			*dnsSDResolver,
@@ -237,6 +241,7 @@ func runQuery(
 	storeAddrs []string,
 	enableAutodownsampling bool,
 	enablePartialResponse bool,
+	queryLogFile string,
 	fileSD *file.Discovery,
 	dnsSDInterval time.Duration,
 	dnsSDResolver string,
@@ -293,6 +298,16 @@ func runQuery(
 			},
 		)
 	)
+
+	if queryLogFile == "" {
+		engine.SetQueryLogger(nil)
+	} else {
+		l, err := logging.NewJSONFileLogger(queryLogFile)
+		if err != nil {
+			level.Error(logger).Log("msg", "failed to create query logger", "err", err)
+		}
+		engine.SetQueryLogger(l)
+	}
 	// Periodically update the store set with the addresses we see in our cluster.
 	{
 		ctx, cancel := context.WithCancel(context.Background())
