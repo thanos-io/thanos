@@ -374,8 +374,8 @@ Flags:
                                  If defined, it takes precedence over the
                                  '--query' and '--query.sd-files' flags.
       --query.sd-files=<path> ...
-                                 Path to file that contain addresses of query
-                                 peers. The path can be a glob pattern
+                                 Path to file that contains addresses of query
+                                 API servers. The path can be a glob pattern
                                  (repeatable).
       --query.sd-interval=5m     Refresh interval to re-read file SD files.
                                  (used as a fallback)
