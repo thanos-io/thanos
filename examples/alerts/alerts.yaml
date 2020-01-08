@@ -321,13 +321,13 @@ groups:
       severity: warning
   - alert: ThanosRulerRuleEvaluationLatencyHigh
     annotations:
-      message: Thanos Ruler {{$labels.job}} has higher evaluation latency than interval
-        for {{$labels.rule_group}}.
+      message: Thanos Ruler {{$labels.job}}/{{$labels.pod}} has higher evaluation
+        latency than interval for {{$labels.rule_group}}.
     expr: |
       (
-        sum by (job, rule_group) (prometheus_rule_group_last_duration_seconds{job=~"thanos-ruler.*"})
+        sum by (job, pod, rule_group) (prometheus_rule_group_last_duration_seconds{job=~"thanos-ruler.*"})
       >
-        sum by (job, rule_group) (prometheus_rule_group_interval_seconds{job=~"thanos-ruler.*"})
+        sum by (job, pod, rule_group) (prometheus_rule_group_interval_seconds{job=~"thanos-ruler.*"})
       )
     for: 5m
     labels:

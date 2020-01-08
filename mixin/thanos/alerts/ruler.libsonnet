@@ -71,13 +71,13 @@
           {
             alert: 'ThanosRulerRuleEvaluationLatencyHigh',
             annotations: {
-              message: 'Thanos Ruler {{$labels.job}} has higher evaluation latency than interval for {{$labels.rule_group}}.',
+              message: 'Thanos Ruler {{$labels.job}}/{{$labels.pod}} has higher evaluation latency than interval for {{$labels.rule_group}}.',
             },
             expr: |||
               (
-                sum by (job, rule_group) (prometheus_rule_group_last_duration_seconds{%(selector)s})
+                sum by (job, pod, rule_group) (prometheus_rule_group_last_duration_seconds{%(selector)s})
               >
-                sum by (job, rule_group) (prometheus_rule_group_interval_seconds{%(selector)s})
+                sum by (job, pod, rule_group) (prometheus_rule_group_interval_seconds{%(selector)s})
               )
             ||| % thanos.ruler,
             'for': '5m',
