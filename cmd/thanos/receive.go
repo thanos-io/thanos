@@ -70,7 +70,9 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 
 	replicationFactor := cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64()
 
-	tsdbBlockDuration := modelDuration(cmd.Flag("tsdb.block-duration", "Duration for local TSDB blocks").Default("2h").Hidden())
+	tsdbMinBlockDuration := modelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
+	tsdbMaxBlockDuration := modelDuration(cmd.Flag("tsdb.max-block-duration", "Max duration for local TSDB blocks").Default("2h").Hidden())
+	ignoreBlockSize := cmd.Flag("shipper.ignore-unequal-block-size", "If true receive will not require min and max block size flags to be set to the same value. Only use this if you want to keep long retention and compaction enabled, as in the worst case it can result in ~2h data loss for your Thanos bucket storage.").Default("false").Hidden().Bool()
 
 	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
 
@@ -89,8 +91,8 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 		}
 
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration:  *tsdbBlockDuration,
-			MaxBlockDuration:  *tsdbBlockDuration,
+			MinBlockDuration:  *tsdbMinBlockDuration,
+			MaxBlockDuration:  *tsdbMaxBlockDuration,
 			RetentionDuration: *retention,
 			NoLockfile:        true,
 			WALCompression:    *walCompression,
@@ -131,6 +133,7 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			*dataDir,
 			objStoreConfig,
 			tsdbOpts,
+			*ignoreBlockSize,
 			lset,
 			cw,
 			*local,
@@ -165,6 +168,7 @@ func runReceive(
 	dataDir string,
 	objStoreConfig *extflag.PathOrContent,
 	tsdbOpts *tsdb.Options,
+	ignoreBlockSize bool,
 	lset labels.Labels,
 	cw *receive.ConfigWatcher,
 	endpoint string,
@@ -206,6 +210,14 @@ func runReceive(
 	if len(confContentYaml) == 0 {
 		level.Info(logger).Log("msg", "No supported bucket was configured, uploads will be disabled")
 		upload = false
+	}
+
+	if upload && tsdbOpts.MinBlockDuration != tsdbOpts.MaxBlockDuration {
+		if !ignoreBlockSize {
+			return errors.Errorf("found that TSDB Max time is %s and Min time is %s. "+
+				"Compaction needs to be disabled (tsdb.min-block-duration = tsdb.max-block-duration)", tsdbOpts.MaxBlockDuration, tsdbOpts.MinBlockDuration)
+		}
+		level.Warn(logger).Log("msg", "flag to ignore min/max block duration flags differing is being used. If the upload of a 2h block fails and a tsdb compaction happens that block may be missing from your Thanos bucket storage.")
 	}
 
 	// Start all components while we wait for TSDB to open but only load

@@ -12,6 +12,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 ## Unreleased
 
 - [#1969](https://github.com/thanos-io/thanos/pull/1969) Sidecar: allow setting http connection pool size via flags
+- [#1967](https://github.com/thanos-io/thanos/issues/1967) Receive: Allow local TSDB compaction
 
 ### Fixed
 
