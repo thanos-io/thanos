@@ -309,14 +309,14 @@ func runRule(
 		extprom.WrapRegistererWithPrefix("thanos_ruler_query_apis_", reg),
 		dns.ResolverType(dnsSDResolver),
 	)
-	var queryClients []*http_util.FanoutClient
+	var queryClients []*http_util.Client
 	for _, cfg := range queryCfg {
-		c, err := http_util.NewClient(cfg.HTTPClientConfig, "query")
+		c, err := http_util.NewHTTPClient(cfg.HTTPClientConfig, "query")
 		if err != nil {
 			return err
 		}
 		c.Transport = tracing.HTTPTripperware(logger, c.Transport)
-		queryClient, err := http_util.NewFanoutClient(logger, cfg.EndpointsConfig, c, queryProvider.Clone())
+		queryClient, err := http_util.NewClient(logger, cfg.EndpointsConfig, c, queryProvider.Clone())
 		if err != nil {
 			return err
 		}
@@ -368,13 +368,13 @@ func runRule(
 	)
 	var alertmgrs []*alert.Alertmanager
 	for _, cfg := range alertingCfg.Alertmanagers {
-		c, err := http_util.NewClient(cfg.HTTPClientConfig, "alertmanager")
+		c, err := http_util.NewHTTPClient(cfg.HTTPClientConfig, "alertmanager")
 		if err != nil {
 			return err
 		}
 		c.Transport = tracing.HTTPTripperware(logger, c.Transport)
 		// Each Alertmanager client has a different list of targets thus each needs its own DNS provider.
-		amClient, err := http_util.NewFanoutClient(logger, cfg.EndpointsConfig, c, amProvider.Clone())
+		amClient, err := http_util.NewClient(logger, cfg.EndpointsConfig, c, amProvider.Clone())
 		if err != nil {
 			return err
 		}
@@ -700,7 +700,7 @@ func removeDuplicateQueryEndpoints(logger log.Logger, duplicatedQueriers prometh
 // back or the context get canceled.
 func queryFunc(
 	logger log.Logger,
-	queriers []*http_util.FanoutClient,
+	queriers []*http_util.Client,
 	duplicatedQuery prometheus.Counter,
 	ruleEvalWarnings *prometheus.CounterVec,
 	partialResponseStrategy storepb.PartialResponseStrategy,
@@ -750,7 +750,7 @@ func queryFunc(
 	}
 }
 
-func addDiscoveryGroups(g *run.Group, c *http_util.FanoutClient, interval time.Duration) {
+func addDiscoveryGroups(g *run.Group, c *http_util.Client, interval time.Duration) {
 	ctx, cancel := context.WithCancel(context.Background())
 	g.Add(func() error {
 		c.Discover(ctx)

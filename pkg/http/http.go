@@ -60,8 +60,8 @@ func (b BasicAuth) IsZero() bool {
 	return b.Username == "" && b.Password == "" && b.PasswordFile == ""
 }
 
-// NewClient returns a new HTTP client.
-func NewClient(cfg ClientConfig, name string) (*http.Client, error) {
+// NewHTTPClient returns a new HTTP client.
+func NewHTTPClient(cfg ClientConfig, name string) (*http.Client, error) {
 	httpClientConfig := config_util.HTTPClientConfig{
 		BearerToken:     config_util.Secret(cfg.BearerToken),
 		BearerTokenFile: cfg.BearerTokenFile,
@@ -164,8 +164,8 @@ type AddressProvider interface {
 	Addresses() []string
 }
 
-// FanoutClient represents a client that can send requests to a cluster of HTTP-based endpoints.
-type FanoutClient struct {
+// Client represents a client that can send requests to a cluster of HTTP-based endpoints.
+type Client struct {
 	logger log.Logger
 
 	httpClient *http.Client
@@ -179,8 +179,8 @@ type FanoutClient struct {
 	provider AddressProvider
 }
 
-// NewFanoutClient returns a new FanoutClient.
-func NewFanoutClient(logger log.Logger, cfg EndpointsConfig, client *http.Client, provider AddressProvider) (*FanoutClient, error) {
+// NewClient returns a new Client.
+func NewClient(logger log.Logger, cfg EndpointsConfig, client *http.Client, provider AddressProvider) (*Client, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -193,7 +193,7 @@ func NewFanoutClient(logger log.Logger, cfg EndpointsConfig, client *http.Client
 		}
 		discoverers = append(discoverers, file.NewDiscovery(&fileSDCfg, logger))
 	}
-	return &FanoutClient{
+	return &Client{
 		logger:          logger,
 		httpClient:      client,
 		scheme:          cfg.Scheme,
@@ -206,12 +206,12 @@ func NewFanoutClient(logger log.Logger, cfg EndpointsConfig, client *http.Client
 }
 
 // Do executes an HTTP request with the underlying HTTP client.
-func (f *FanoutClient) Do(req *http.Request) (*http.Response, error) {
+func (f *Client) Do(req *http.Request) (*http.Response, error) {
 	return f.httpClient.Do(req)
 }
 
 // Endpoints returns the list of known endpoints.
-func (f *FanoutClient) Endpoints() []*url.URL {
+func (f *Client) Endpoints() []*url.URL {
 	var urls []*url.URL
 	for _, addr := range f.provider.Addresses() {
 		urls = append(urls,
@@ -226,7 +226,7 @@ func (f *FanoutClient) Endpoints() []*url.URL {
 }
 
 // Discover runs the service to discover endpoints until the given context is done.
-func (f *FanoutClient) Discover(ctx context.Context) {
+func (f *Client) Discover(ctx context.Context) {
 	var wg sync.WaitGroup
 	ch := make(chan []*targetgroup.Group)
 
@@ -256,6 +256,6 @@ func (f *FanoutClient) Discover(ctx context.Context) {
 }
 
 // Resolve refreshes and resolves the list of targets.
-func (f *FanoutClient) Resolve(ctx context.Context) {
+func (f *Client) Resolve(ctx context.Context) {
 	f.provider.Resolve(ctx, append(f.fileSDCache.Addresses(), f.staticAddresses...))
 }
