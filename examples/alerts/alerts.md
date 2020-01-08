@@ -64,39 +64,84 @@ rules:
 
 For Thanos ruler we run some alerts in local Prometheus, to make sure that Thanos Rule is working:
 
-[//]: # "TODO(kakkoyun): Generate rule rules using thanos-mixin."
-<!-- [embedmd]:# (../tmp/thanos-ruler.rules.yaml yaml) -->
+[embedmd]:# (../tmp/thanos-ruler.rules.yaml yaml)
 ```yaml
-- alert: ThanosRuleIsDown
-  expr: up{app="thanos-ruler"} == 0 or absent(up{app="thanos-ruler"})
+name: thanos-ruler.rules
+rules:
+- alert: ThanosRulerQueueIsDroppingAlerts
+  annotations:
+    message: Thanos Ruler {{$labels.job}} {{$labels.pod}} is failing to queue alerts.
+  expr: |
+    sum by (job) (thanos_alert_queue_alerts_dropped_total{job=~"thanos-ruler.*"}) > 0
   for: 5m
   labels:
-    team: TEAM
+    severity: critical
+- alert: ThanosRulerSenderIsFailingAlerts
   annotations:
-    summary: Thanos Rule is down
-    impact: Alerts are not working
-    action: 'check {{ $labels.kubernetes_pod_name }} pod in {{ $labels.kubernetes_namespace}} namespace'
-    dashboard: RULE_DASHBOARD
-- alert: ThanosRuleIsDroppingAlerts
-  expr: rate(thanos_alert_queue_alerts_dropped_total{app="thanos-ruler"}[5m]) > 0
+    message: Thanos Ruler {{$labels.job}} {{$labels.pod}} is failing to send alerts
+      to alertmanager.
+  expr: |
+    sum by (job) (thanos_alert_sender_alerts_dropped_total{job=~"thanos-ruler.*"}) > 0
   for: 5m
   labels:
-    team: TEAM
+    severity: critical
+- alert: ThanosRulerHighRuleExaluationFailures
   annotations:
-    summary: Thanos Rule is dropping alerts
-    impact: Alerts are not working
-    action: 'check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace'
-    dashboard: RULE_DASHBOARD
-- alert: ThanosRuleGrpcErrorRate
-  expr: rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable",app="thanos-ruler"}[5m]) > 0
+    message: Thanos Ruler {{$labels.job}} {{$labels.pod}} is failing to evaluate rules.
+  expr: |
+    (
+      sum by (job) (rate(prometheus_rule_evaluation_failures_total{job=~"thanos-ruler.*"}[5m]))
+    /
+      sum by (job) (rate(prometheus_rule_evaluations_total{job=~"thanos-ruler.*"}[5m]))
+    * 100 > 5
+    )
   for: 5m
   labels:
-    team: TEAM
+    severity: warning
+- alert: ThanosRulerHighRuleExaluationWarnings
   annotations:
-    summary: Thanos Rule is returning Internal/Unavailable errors
-    impact: Recording Rules are not working
-    action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
-    dashboard: RULE_DASHBOARD
+    message: Thanos Ruler {{$labels.job}} {{$labels.pod}} has high number of evaluation
+      warnings.
+  expr: |
+    sum by (job) (rate(thanos_rule_evaluation_with_warnings_total{job=~"thanos-ruler.*"}[5m])) > 0
+  for: 5m
+  labels:
+    severity: warning
+- alert: ThanosRulerRuleEvaluationLatencyHigh
+  annotations:
+    message: Thanos Ruler {{$labels.job}} has higher evaluation latency than interval
+      for {{$labels.rule_group}}.
+  expr: |
+    (
+      sum by (job, rule_group) (prometheus_rule_group_last_duration_seconds{job=~"thanos-receiver.*"})
+    >
+      sum by (job, rule_group) (prometheus_rule_group_interval_seconds{job=~"thanos-receiver.*"})
+    )
+  for: 5m
+  labels:
+    severity: warning
+- alert: ThanosRulerGrpcErrorRate
+  annotations:
+    message: Thanos Ruler {{$labels.job}} is failing to handle {{ $value | humanize
+      }}% of requests.
+  expr: |
+    (
+      sum by (job) (rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded", job=~"thanos-ruler.*"}[5m]))
+    /
+      sum by (job) (rate(grpc_server_started_total{job=~"thanos-ruler.*"}[5m]))
+    * 100 > 5
+    )
+  for: 5m
+  labels:
+    severity: warning
+- alert: ThanosRulerConfigReloadFailure
+  annotations:
+    message: Thanos Ruler {{$labels.job}} has not been able to reload its configuration.
+  expr: avg(thanos_rule_config_last_reload_successful{job=~"thanos-ruler.*"}) by (job)
+    != 1
+  for: 5m
+  labels:
+    severity: warning
 ```
 
 ## Store Gateway

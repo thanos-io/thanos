@@ -352,6 +352,174 @@
          "height": "250px",
          "panels": [
             {
+               "aliasColors": { },
+               "bars": false,
+               "dashLength": 10,
+               "dashes": false,
+               "datasource": "$datasource",
+               "description": "Shows rate of queued alerts.",
+               "fill": 1,
+               "id": 5,
+               "legend": {
+                  "avg": false,
+                  "current": false,
+                  "max": false,
+                  "min": false,
+                  "show": true,
+                  "total": false,
+                  "values": false
+               },
+               "lines": true,
+               "linewidth": 1,
+               "links": [ ],
+               "nullPointMode": "null as zero",
+               "percentage": false,
+               "pointradius": 5,
+               "points": false,
+               "renderer": "flot",
+               "seriesOverrides": [ ],
+               "spaceLength": 10,
+               "span": 6,
+               "stack": false,
+               "steppedLine": false,
+               "targets": [
+                  {
+                     "expr": "sum(rate(thanos_alert_queue_alerts_dropped_total{namespace=\"$namespace\",job=~\"$job\"}[$interval])) by (job, pod)",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "{{job}} {{pod}}",
+                     "legendLink": null,
+                     "step": 10
+                  }
+               ],
+               "thresholds": [ ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "Push Rate",
+               "tooltip": {
+                  "shared": false,
+                  "sort": 0,
+                  "value_type": "individual"
+               },
+               "type": "graph",
+               "xaxis": {
+                  "buckets": null,
+                  "mode": "time",
+                  "name": null,
+                  "show": true,
+                  "values": [ ]
+               },
+               "yaxes": [
+                  {
+                     "format": "short",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": 0,
+                     "show": true
+                  },
+                  {
+                     "format": "short",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": null,
+                     "show": false
+                  }
+               ]
+            },
+            {
+               "aliasColors": {
+                  "error": "#E24D42"
+               },
+               "bars": false,
+               "dashLength": 10,
+               "dashes": false,
+               "datasource": "$datasource",
+               "description": "Shows ratio of dropped alerts compared to the total number of queued alerts.",
+               "fill": 10,
+               "id": 6,
+               "legend": {
+                  "avg": false,
+                  "current": false,
+                  "max": false,
+                  "min": false,
+                  "show": true,
+                  "total": false,
+                  "values": false
+               },
+               "lines": true,
+               "linewidth": 0,
+               "links": [ ],
+               "nullPointMode": "null as zero",
+               "percentage": false,
+               "pointradius": 5,
+               "points": false,
+               "renderer": "flot",
+               "seriesOverrides": [ ],
+               "spaceLength": 10,
+               "span": 6,
+               "stack": true,
+               "steppedLine": false,
+               "targets": [
+                  {
+                     "expr": "sum(rate(thanos_alert_queue_alerts_dropped_total{namespace=\"$namespace\",job=~\"$job\"}[$interval])) / sum(rate(thanos_alert_queue_alerts_pushed_total{namespace=\"$namespace\",job=~\"$job\"}[$interval]))",
+                     "format": "time_series",
+                     "intervalFactor": 2,
+                     "legendFormat": "error",
+                     "refId": "A",
+                     "step": 10
+                  }
+               ],
+               "thresholds": [ ],
+               "timeFrom": null,
+               "timeShift": null,
+               "title": "Drop Ratio",
+               "tooltip": {
+                  "shared": false,
+                  "sort": 0,
+                  "value_type": "individual"
+               },
+               "type": "graph",
+               "xaxis": {
+                  "buckets": null,
+                  "mode": "time",
+                  "name": null,
+                  "show": true,
+                  "values": [ ]
+               },
+               "yaxes": [
+                  {
+                     "format": "percentunit",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": 0,
+                     "show": true
+                  },
+                  {
+                     "format": "short",
+                     "label": null,
+                     "logBase": 1,
+                     "max": null,
+                     "min": null,
+                     "show": false
+                  }
+               ]
+            }
+         ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "Alert Queue",
+         "titleSize": "h6"
+      },
+      {
+         "collapse": false,
+         "height": "250px",
+         "panels": [
+            {
                "aliasColors": {
                   "Aborted": "#EAB839",
                   "AlreadyExists": "#7EB26D",
@@ -378,7 +546,7 @@
                "datasource": "$datasource",
                "description": "Shows rate of handled Unary gRPC requests.",
                "fill": 10,
-               "id": 5,
+               "id": 7,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -457,7 +625,7 @@
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of handled requests.",
                "fill": 10,
-               "id": 6,
+               "id": 8,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -534,7 +702,7 @@
                "datasource": "$datasource",
                "description": "Shows how long has it taken to handle requests, in quantiles.",
                "fill": 1,
-               "id": 7,
+               "id": 9,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -639,7 +807,7 @@
                "datasource": "$datasource",
                "description": "Shows rate of handled Unary gRPC requests.",
                "fill": 10,
-               "id": 8,
+               "id": 10,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -716,7 +884,7 @@
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of handled requests.",
                "fill": 10,
-               "id": 9,
+               "id": 11,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -793,7 +961,7 @@
                "datasource": "$datasource",
                "description": "Shows how long has it taken to handle requests, in quantiles.",
                "fill": 1,
-               "id": 10,
+               "id": 12,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -917,7 +1085,7 @@
                "datasource": "$datasource",
                "description": "Shows rate of handled Streamed gRPC requests.",
                "fill": 10,
-               "id": 11,
+               "id": 13,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -996,7 +1164,7 @@
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of handled requests.",
                "fill": 10,
-               "id": 12,
+               "id": 14,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1073,7 +1241,7 @@
                "datasource": "$datasource",
                "description": "Shows how long has it taken to handle requests, in quantiles",
                "fill": 1,
-               "id": 13,
+               "id": 15,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1178,7 +1346,7 @@
                "datasource": "$datasource",
                "description": "Shows rate of handled Streamed gRPC requests.",
                "fill": 10,
-               "id": 14,
+               "id": 16,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1255,7 +1423,7 @@
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of handled requests.",
                "fill": 10,
-               "id": 15,
+               "id": 17,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1332,7 +1500,7 @@
                "datasource": "$datasource",
                "description": "Shows how long has it taken to handle requests, in quantiles",
                "fill": 1,
-               "id": 16,
+               "id": 18,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1436,7 +1604,7 @@
                "dashes": false,
                "datasource": "$datasource",
                "fill": 1,
-               "id": 17,
+               "id": 19,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1552,7 +1720,7 @@
                "dashes": false,
                "datasource": "$datasource",
                "fill": 1,
-               "id": 18,
+               "id": 20,
                "legend": {
                   "avg": false,
                   "current": false,
@@ -1628,7 +1796,7 @@
                "dashes": false,
                "datasource": "$datasource",
                "fill": 1,
-               "id": 19,
+               "id": 21,
                "legend": {
                   "avg": false,
                   "current": false,
