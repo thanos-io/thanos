@@ -742,7 +742,7 @@ func queryFunc(
 		// TODO(bwplotka): Consider generating addresses in *url.URL.
 		addrs := dnsProvider.Addresses()
 
-		removeDuplicateQueryAddrs(logger, duplicatedQuery, addrs)
+		addrs = removeDuplicateQueryAddrs(logger, duplicatedQuery, addrs)
 
 		for _, i := range rand.Perm(len(addrs)) {
 			u, err := url.Parse(fmt.Sprintf("http://%s", addrs[i]))
