@@ -15,9 +15,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage/tsdb"
+	kingpin "gopkg.in/alecthomas/kingpin.v2"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/receive"
@@ -27,7 +30,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/tls"
-	kingpin "gopkg.in/alecthomas/kingpin.v2"
 )
 
 func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
@@ -189,6 +191,11 @@ func runReceive(
 	if err != nil {
 		return err
 	}
+	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, rwServerCert != "", rwClientCert, rwClientKey, rwClientServerCA, rwClientServerName)
+	if err != nil {
+		return err
+	}
+
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
 		ListenAddress:     rwAddress,
 		Registry:          reg,
@@ -199,6 +206,7 @@ func runReceive(
 		Tracer:            tracer,
 		TLSConfig:         rwTLSConfig,
 		TLSClientConfig:   rwTLSClientConfig,
+		DialOpts:          dialOpts,
 	})
 
 	statusProber := prober.New(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
@@ -376,8 +384,12 @@ func runReceive(
 					s.Shutdown(errors.New("reload hashrings"))
 				}
 				tsdbStore := store.NewTSDBStore(log.With(logger, "component", "thanos-tsdb-store"), nil, localStorage.Get(), comp, lset)
+				rw := store.ReadWriteTSDBStore{
+					StoreServer:          tsdbStore,
+					WriteableStoreServer: webHandler,
+				}
 
-				s = grpcserver.New(logger, &receive.UnRegisterer{Registerer: reg}, tracer, comp, tsdbStore,
+				s = grpcserver.NewReadWrite(logger, &receive.UnRegisterer{Registerer: reg}, tracer, comp, rw,
 					grpcserver.WithListen(grpcBindAddr),
 					grpcserver.WithGracePeriod(grpcGracePeriod),
 					grpcserver.WithTLSConfig(tlsCfg),

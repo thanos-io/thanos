@@ -127,3 +127,16 @@ func (s *Server) Shutdown(err error) {
 		cancel()
 	}
 }
+
+// ReadWriteStoreServer is a StoreServer and a WriteableStoreServer.
+type ReadWriteStoreServer interface {
+	storepb.StoreServer
+	storepb.WriteableStoreServer
+}
+
+// NewReadWrite creates a new server that can be written to.
+func NewReadWrite(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, storeSrv ReadWriteStoreServer, opts ...Option) *Server {
+	s := New(logger, reg, tracer, comp, storeSrv, opts...)
+	storepb.RegisterWriteableStoreServer(s.srv, storeSrv)
+	return s
+}

@@ -14,6 +14,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#1969](https://github.com/thanos-io/thanos/pull/1969) Sidecar: allow setting http connection pool size via flags
 - [#1967](https://github.com/thanos-io/thanos/issues/1967) Receive: Allow local TSDB compaction
 - [#1975](https://github.com/thanos-io/thanos/pull/1975) Store Gateway: fixed panic caused by memcached servers selector when there's 1 memcached node
+- [#1970](https://github.com/thanos-io/thanos/issues/1970) Receive: Use gRPC for forwarding requests between peers
 
 ### Fixed
 
