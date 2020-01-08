@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
+	"github.com/thanos-io/thanos/pkg/exthttp"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -50,7 +51,7 @@ type Options struct {
 	ReplicationFactor uint64
 	Tracer            opentracing.Tracer
 	TLSConfig         *tls.Config
-	TLSClientConfig   *tls.Config
+	Transport         *http.Transport
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -74,9 +75,11 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		logger = log.NewNopLogger()
 	}
 
-	transport := http.DefaultTransport.(*http.Transport)
-	transport.TLSClientConfig = o.TLSClientConfig
-	client := &http.Client{Transport: transport}
+	if o.Transport == nil {
+		o.Transport = exthttp.NewTransport()
+	}
+
+	client := &http.Client{Transport: o.Transport}
 	if o.Tracer != nil {
 		client.Transport = tracing.HTTPTripperware(logger, client.Transport)
 	}

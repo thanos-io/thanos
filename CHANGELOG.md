@@ -11,6 +11,8 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+- [#1966](https://github.com/thanos-io/thanos/issues/1966) Receive: Allow custom connection pool sizing
+
 ### Fixed
 
 - [#1919](https://github.com/thanos-io/thanos/issues/1919) Compactor: Fixed potential data loss when uploading older blocks, or upload taking long time while compactor is

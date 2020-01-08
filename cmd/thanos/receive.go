@@ -18,6 +18,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/receive"
@@ -71,6 +72,9 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 	replicationFactor := cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64()
 
 	tsdbBlockDuration := modelDuration(cmd.Flag("tsdb.block-duration", "Duration for local TSDB blocks").Default("2h").Hidden())
+
+	connectionPoolSize := cmd.Flag("receive.connection-pool-size", "Controls the http MaxIdleConns. Default is 0, which is unlimited").Int()
+	connectionPoolSizePerHost := cmd.Flag("receive.connection-pool-size-per-host", "Controls the http MaxIdleConnsPerHost").Default("100").Int()
 
 	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
 
@@ -138,6 +142,8 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			*replicaHeader,
 			*replicationFactor,
 			comp,
+			*connectionPoolSize,
+			*connectionPoolSizePerHost,
 		)
 	}
 }
@@ -172,6 +178,8 @@ func runReceive(
 	replicaHeader string,
 	replicationFactor uint64,
 	comp component.SourceStoreAPI,
+	connectionPoolSize int,
+	connectionPoolSizePerHost int,
 ) error {
 	logger = log.With(logger, "component", "receive")
 	level.Warn(logger).Log("msg", "setting up receive; the Thanos receive component is EXPERIMENTAL, it may break significantly without notice")
@@ -185,6 +193,12 @@ func runReceive(
 	if err != nil {
 		return err
 	}
+
+	transport := exthttp.NewTransport()
+	transport.MaxIdleConns = connectionPoolSize
+	transport.MaxIdleConnsPerHost = connectionPoolSizePerHost
+	transport.TLSClientConfig = rwTLSClientConfig
+
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
 		ListenAddress:     rwAddress,
 		Registry:          reg,
@@ -194,7 +208,7 @@ func runReceive(
 		ReplicationFactor: replicationFactor,
 		Tracer:            tracer,
 		TLSConfig:         rwTLSConfig,
-		TLSClientConfig:   rwTLSClientConfig,
+		Transport:         transport,
 	})
 
 	statusProber := prober.New(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
