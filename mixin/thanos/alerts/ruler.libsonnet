@@ -79,7 +79,7 @@
               >
                 sum by (job, rule_group) (prometheus_rule_group_interval_seconds{%(selector)s})
               )
-            ||| % thanos.receiver,
+            ||| % thanos.ruler,
             'for': '5m',
             labels: {
               severity: 'warning',

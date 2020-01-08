@@ -113,9 +113,9 @@ rules:
       for {{$labels.rule_group}}.
   expr: |
     (
-      sum by (job, rule_group) (prometheus_rule_group_last_duration_seconds{job=~"thanos-receiver.*"})
+      sum by (job, rule_group) (prometheus_rule_group_last_duration_seconds{job=~"thanos-ruler.*"})
     >
-      sum by (job, rule_group) (prometheus_rule_group_interval_seconds{job=~"thanos-receiver.*"})
+      sum by (job, rule_group) (prometheus_rule_group_interval_seconds{job=~"thanos-ruler.*"})
     )
   for: 5m
   labels:
