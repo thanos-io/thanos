@@ -9,7 +9,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking* word for marking changes that are not backward compatible (relates only to v0.y.z releases.)
 
-## Unreleased
+## [v0.10.0-rc.0](https://github.com/thanos-io/thanos/releases/tag/v0.10.0-rc.0) - 2020.01.08
 
 ### Fixed
 
