@@ -72,7 +72,7 @@ rules:
   annotations:
     message: Thanos Ruler {{$labels.job}} {{$labels.pod}} is failing to queue alerts.
   expr: |
-    sum by (job) (thanos_alert_queue_alerts_dropped_total{job=~"thanos-ruler.*"}) > 0
+    sum by (job) (rate(thanos_alert_queue_alerts_dropped_total{job=~"thanos-ruler.*"}[5m])) > 0
   for: 5m
   labels:
     severity: critical
@@ -81,7 +81,7 @@ rules:
     message: Thanos Ruler {{$labels.job}} {{$labels.pod}} is failing to send alerts
       to alertmanager.
   expr: |
-    sum by (job) (thanos_alert_sender_alerts_dropped_total{job=~"thanos-ruler.*"}) > 0
+    sum by (job) (rate(thanos_alert_sender_alerts_dropped_total{job=~"thanos-ruler.*"}[5m])) > 0
   for: 5m
   labels:
     severity: critical
@@ -104,7 +104,7 @@ rules:
       warnings.
   expr: |
     sum by (job) (rate(thanos_rule_evaluation_with_warnings_total{job=~"thanos-ruler.*"}[5m])) > 0
-  for: 5m
+  for: 15m
   labels:
     severity: warning
 - alert: ThanosRulerRuleEvaluationLatencyHigh

@@ -15,7 +15,7 @@
               message: 'Thanos Ruler {{$labels.job}} {{$labels.pod}} is failing to queue alerts.',
             },
             expr: |||
-              sum by (job) (thanos_alert_queue_alerts_dropped_total{%(selector)s}) > 0
+              sum by (job) (rate(thanos_alert_queue_alerts_dropped_total{%(selector)s}[5m])) > 0
             ||| % thanos.ruler,
             'for': '5m',
             labels: {
@@ -28,7 +28,7 @@
               message: 'Thanos Ruler {{$labels.job}} {{$labels.pod}} is failing to send alerts to alertmanager.',
             },
             expr: |||
-              sum by (job) (thanos_alert_sender_alerts_dropped_total{%(selector)s}) > 0
+              sum by (job) (rate(thanos_alert_sender_alerts_dropped_total{%(selector)s}[5m])) > 0
             ||| % thanos.ruler,
             'for': '5m',
             labels: {
@@ -63,7 +63,7 @@
               sum by (job) (rate(thanos_rule_evaluation_with_warnings_total{%(selector)s}[5m])) > 0
             ||| % thanos.ruler,
 
-            'for': '5m',
+            'for': '15m',
             labels: {
               severity: 'warning',
             },
