@@ -27,7 +27,6 @@ Compactor now properly handles partial block uploads for all operation like rete
 - [#1907](https://github.com/thanos-io/thanos/pull/1907) Store: Fixed the duration unit for the metric `thanos_bucket_store_series_gate_duration_seconds`.
 - [#1931](https://github.com/thanos-io/thanos/pull/1931) Compact: Fixed the compactor successfully exiting when actually an error occurred while compacting a blocks group.
 - [#1872](https://github.com/thanos-io/thanos/pull/1872) Ruler: `/api/v1/rules` now shows a properly formatted value
-- [#1888](https://github.com/thanos-io/thanos/pull/1888) Query: some typos were fixed in metric descriptions
 - [#1945](https://github.com/thanos-io/thanos/pull/1945) `master` container images are now built with Go 1.13
 - [#1956](https://github.com/thanos-io/thanos/pull/1956) Ruler: now properly ignores duplicated query addresses
 
@@ -39,7 +38,6 @@ Compactor now properly handles partial block uploads for all operation like rete
 - [#1838](https://github.com/thanos-io/thanos/pull/1838) Ruler: Add a new `--alertmanagers.sd-dns-interval` CLI option to specify the interval between DNS resolutions of Alertmanager hosts.
 - [#1881](https://github.com/thanos-io/thanos/pull/1881) Store Gateway: memcached support for index cache. See [documentation](docs/components/store.md/#index-cache) for further information.
 - [#1904](https://github.com/thanos-io/thanos/pull/1904) Add a skip-chunks option in Store Series API to improve the response time of `/api/v1/series` endpoint.
-- [#1902](https://github.com/thanos-io/thanos/pull/1902) Sidecar: learned about a new option `--shipper.ignore-unequal-block-size`. If specified then the check that the min block time is equal to the max block time will be ignored. Only use this if you want to keep a long retention time and compaction on your Prometheus instance.
 - [#1910](https://github.com/thanos-io/thanos/pull/1910) Query: `/api/v1/labels` now understands `POST` - useful for sending bigger requests
 
 ### Changed
