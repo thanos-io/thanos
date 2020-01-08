@@ -704,17 +704,15 @@ func labelsTSDBToProm(lset labels.Labels) (res labels.Labels) {
 
 func removeDuplicateQueryAddrs(logger log.Logger, duplicatedQueriers prometheus.Counter, addrs []string) []string {
 	set := make(map[string]struct{})
+	deduplicated := make([]string, 0, len(addrs))
 	for _, addr := range addrs {
 		if _, ok := set[addr]; ok {
 			level.Warn(logger).Log("msg", "duplicate query address is provided - %v", addr)
 			duplicatedQueriers.Inc()
+			continue
 		}
+		deduplicated = append(deduplicated, addr)
 		set[addr] = struct{}{}
-	}
-
-	deduplicated := make([]string, 0, len(set))
-	for key := range set {
-		deduplicated = append(deduplicated, key)
 	}
 	return deduplicated
 }
