@@ -126,6 +126,11 @@ Flags:
       --prometheus.ready_timeout=10m
                                  Maximum time to wait for the Prometheus
                                  instance to start up
+      --receive.connection-pool-size=RECEIVE.CONNECTION-POOL-SIZE
+                                 Controls the http MaxIdleConns. Default is 0,
+                                 which is unlimited
+      --receive.connection-pool-size-per-host=100
+                                 Controls the http MaxIdleConnsPerHost
       --tsdb.path="./data"       Data directory of TSDB.
       --reloader.config-file=""  Config file watched by the reloader.
       --reloader.config-envsubst-file=""

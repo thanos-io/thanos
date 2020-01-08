@@ -11,6 +11,8 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ## Unreleased
 
+- [#1969](https://github.com/thanos-io/thanos/pull/1969) Sidecar: allow setting http connection pool size via flags
+
 ### Fixed
 
 - [#1919](https://github.com/thanos-io/thanos/issues/1919) Compactor: Fixed potential data loss when uploading older blocks, or upload taking long time while compactor is

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"math"
+	"net/http"
 	"net/url"
 	"sync"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/exthttp"
 	thanosmodel "github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
@@ -30,6 +32,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tls"
+	"github.com/thanos-io/thanos/pkg/tracing"
+
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -44,6 +48,9 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application) {
 
 	promReadyTimeout := cmd.Flag("prometheus.ready_timeout", "Maximum time to wait for the Prometheus instance to start up").
 		Default("10m").Duration()
+
+	connectionPoolSize := cmd.Flag("receive.connection-pool-size", "Controls the http MaxIdleConns. Default is 0, which is unlimited").Int()
+	connectionPoolSizePerHost := cmd.Flag("receive.connection-pool-size-per-host", "Controls the http MaxIdleConnsPerHost").Default("100").Int()
 
 	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").
 		Default("./data").String()
@@ -95,6 +102,8 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application) {
 			*ignoreBlockSize,
 			component.Sidecar,
 			*minTime,
+			*connectionPoolSize,
+			*connectionPoolSizePerHost,
 		)
 	}
 }
@@ -120,6 +129,8 @@ func runSidecar(
 	ignoreBlockSize bool,
 	comp component.Component,
 	limitMinTime thanosmodel.TimeOrDurationValue,
+	connectionPoolSize int,
+	connectionPoolSizePerHost int,
 ) error {
 	var m = &promMetadata{
 		promURL: promURL,
@@ -243,8 +254,12 @@ func runSidecar(
 	}
 
 	{
-		promStore, err := store.NewPrometheusStore(
-			logger, nil, promURL, component.Sidecar, m.Labels, m.Timestamps)
+		t := exthttp.NewTransport()
+		t.MaxIdleConnsPerHost = connectionPoolSizePerHost
+		t.MaxIdleConns = connectionPoolSize
+		c := &http.Client{Transport: tracing.HTTPTripperware(logger, t)}
+
+		promStore, err := store.NewPrometheusStore(logger, c, promURL, component.Sidecar, m.Labels, m.Timestamps)
 		if err != nil {
 			return errors.Wrap(err, "create Prometheus store")
 		}
