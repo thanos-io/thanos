@@ -206,19 +206,19 @@ func NewClient(logger log.Logger, cfg EndpointsConfig, client *http.Client, prov
 }
 
 // Do executes an HTTP request with the underlying HTTP client.
-func (f *Client) Do(req *http.Request) (*http.Response, error) {
-	return f.httpClient.Do(req)
+func (c *Client) Do(req *http.Request) (*http.Response, error) {
+	return c.httpClient.Do(req)
 }
 
 // Endpoints returns the list of known endpoints.
-func (f *Client) Endpoints() []*url.URL {
+func (c *Client) Endpoints() []*url.URL {
 	var urls []*url.URL
-	for _, addr := range f.provider.Addresses() {
+	for _, addr := range c.provider.Addresses() {
 		urls = append(urls,
 			&url.URL{
-				Scheme: f.scheme,
+				Scheme: c.scheme,
 				Host:   addr,
-				Path:   path.Join("/", f.prefix),
+				Path:   path.Join("/", c.prefix),
 			},
 		)
 	}
@@ -226,11 +226,11 @@ func (f *Client) Endpoints() []*url.URL {
 }
 
 // Discover runs the service to discover endpoints until the given context is done.
-func (f *Client) Discover(ctx context.Context) {
+func (c *Client) Discover(ctx context.Context) {
 	var wg sync.WaitGroup
 	ch := make(chan []*targetgroup.Group)
 
-	for _, d := range f.fileDiscoverers {
+	for _, d := range c.fileDiscoverers {
 		wg.Add(1)
 		go func(d *file.Discovery) {
 			d.Run(ctx, ch)
@@ -246,7 +246,7 @@ func (f *Client) Discover(ctx context.Context) {
 				if update == nil {
 					continue
 				}
-				f.fileSDCache.Update(update)
+				c.fileSDCache.Update(update)
 			case <-ctx.Done():
 				return
 			}
@@ -256,6 +256,6 @@ func (f *Client) Discover(ctx context.Context) {
 }
 
 // Resolve refreshes and resolves the list of targets.
-func (f *Client) Resolve(ctx context.Context) {
-	f.provider.Resolve(ctx, append(f.fileSDCache.Addresses(), f.staticAddresses...))
+func (c *Client) Resolve(ctx context.Context) {
+	c.provider.Resolve(ctx, append(c.fileSDCache.Addresses(), c.staticAddresses...))
 }

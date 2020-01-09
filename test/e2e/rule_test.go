@@ -97,18 +97,14 @@ func serializeAlertingConfiguration(t *testing.T, cfg ...alert.AlertmanagerConfi
 		Alertmanagers: cfg,
 	}
 	b, err := yaml.Marshal(&amCfg)
-	if err != nil {
-		t.Errorf("failed to serialize alerting configuration: %v", err)
-	}
+	testutil.Ok(t, err)
 	return b
 }
 
 func serializeQueryConfiguration(t *testing.T, cfg ...query.Config) []byte {
 	t.Helper()
 	b, err := yaml.Marshal(&cfg)
-	if err != nil {
-		t.Errorf("failed to serialize query configuration: %v", err)
-	}
+	testutil.Ok(t, err)
 	return b
 }
 
