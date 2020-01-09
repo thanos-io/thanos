@@ -80,10 +80,14 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 	tsdbRetention := modelDuration(cmd.Flag("tsdb.retention", "Block retention time on local disk.").
 		Default("48h"))
 
+	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
+
 	alertmgrs := cmd.Flag("alertmanagers.url", "Alertmanager replica URLs to push firing alerts. Ruler claims success if push to at least one alertmanager from discovered succeeds. The scheme should not be empty e.g `http` might be used. The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Alertmanager IPs through respective DNS lookups. The port defaults to 9093 or the SRV record's value. The URL path is used as a prefix for the regular Alertmanager API path.").
 		Strings()
-
-	alertmgrsTimeout := cmd.Flag("alertmanagers.send-timeout", "Timeout for sending alerts to alertmanager").Default("10s").Duration()
+	alertmgrsTimeout := cmd.Flag("alertmanagers.send-timeout", "Timeout for sending alerts to Alertmanager").Default("10s").Duration()
+	alertmgrsConfig := extflag.RegisterPathOrContent(cmd, "alertmanagers.config", "YAML file that contains alerting configuration. See format details: https://thanos.io/components/rule.md/#configuration. If defined, it takes precedence over the '--alertmanagers.url' and '--alertmanagers.send-timeout' flags.", false)
+	alertmgrsDNSSDInterval := modelDuration(cmd.Flag("alertmanagers.sd-dns-interval", "Interval between DNS resolutions of Alertmanager hosts.").
+		Default("30s"))
 
 	alertQueryURL := cmd.Flag("alert.query-url", "The external Thanos Query URL that would be set in all alerts 'Source' field").String()
 
@@ -125,6 +129,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			MaxBlockDuration:  *tsdbBlockDuration,
 			RetentionDuration: *tsdbRetention,
 			NoLockfile:        true,
+			WALCompression:    *walCompression,
 		}
 
 		lookupQueries := map[string]struct{}{}
@@ -156,6 +161,8 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			lset,
 			*alertmgrs,
 			*alertmgrsTimeout,
+			alertmgrsConfig,
+			time.Duration(*alertmgrsDNSSDInterval),
 			*grpcBindAddr,
 			time.Duration(*grpcGracePeriod),
 			*grpcCert,
@@ -193,6 +200,8 @@ func runRule(
 	lset labels.Labels,
 	alertmgrURLs []string,
 	alertmgrsTimeout time.Duration,
+	alertmgrsConfig *extflag.PathOrContent,
+	alertmgrsDNSSDInterval time.Duration,
 	grpcBindAddr string,
 	grpcGracePeriod time.Duration,
 	grpcCert string,
@@ -229,10 +238,6 @@ func runRule(
 		Name: "thanos_rule_duplicated_query_address",
 		Help: "The number of times a duplicated query addresses is detected from the different configs in rule",
 	})
-	alertMngrAddrResolutionErrors := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "thanos_rule_alertmanager_address_resolution_errors",
-		Help: "The number of times resolving an address of an alertmanager has failed inside Thanos Rule",
-	})
 	rulesLoaded := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "thanos_rule_loaded_rules",
@@ -252,7 +257,6 @@ func runRule(
 	reg.MustRegister(configSuccess)
 	reg.MustRegister(configSuccessTime)
 	reg.MustRegister(duplicatedQuery)
-	reg.MustRegister(alertMngrAddrResolutionErrors)
 	reg.MustRegister(rulesLoaded)
 	reg.MustRegister(ruleEvalWarnings)
 
@@ -284,6 +288,52 @@ func runRule(
 		extprom.WrapRegistererWithPrefix("thanos_ruler_query_apis_", reg),
 		dns.ResolverType(dnsSDResolver),
 	)
+
+	// Build the Alertmanager clients.
+	alertmgrsConfigYAML, err := alertmgrsConfig.Content()
+	if err != nil {
+		return err
+	}
+	var (
+		alertingCfg alert.AlertingConfig
+		alertmgrs   []*alert.Alertmanager
+	)
+	if len(alertmgrsConfigYAML) > 0 {
+		if len(alertmgrURLs) != 0 {
+			return errors.New("--alertmanagers.url and --alertmanagers.config* flags cannot be defined at the same time")
+		}
+		alertingCfg, err = alert.LoadAlertingConfig(alertmgrsConfigYAML)
+		if err != nil {
+			return err
+		}
+	} else {
+		// Build the Alertmanager configuration from the legacy flags.
+		for _, addr := range alertmgrURLs {
+			cfg, err := alert.BuildAlertmanagerConfig(logger, addr, alertmgrsTimeout)
+			if err != nil {
+				return err
+			}
+			alertingCfg.Alertmanagers = append(alertingCfg.Alertmanagers, cfg)
+		}
+	}
+
+	if len(alertingCfg.Alertmanagers) == 0 {
+		level.Warn(logger).Log("msg", "no alertmanager configured")
+	}
+
+	amProvider := dns.NewProvider(
+		logger,
+		extprom.WrapRegistererWithPrefix("thanos_ruler_alertmanagers_", reg),
+		dns.ResolverType(dnsSDResolver),
+	)
+	for _, cfg := range alertingCfg.Alertmanagers {
+		// Each Alertmanager client has a different list of targets thus each needs its own DNS provider.
+		am, err := alert.NewAlertmanager(logger, cfg, amProvider.Clone())
+		if err != nil {
+			return err
+		}
+		alertmgrs = append(alertmgrs, am)
+	}
 
 	// Run rule evaluation and alert notifications.
 	var (
@@ -350,6 +400,7 @@ func runRule(
 			})
 		}
 	}
+	// Discover and resolve Alertmanager addresses.
 	{
 		// TODO(bwplotka): https://github.com/thanos-io/thanos/issues/660.
 		sdr := alert.NewSender(logger, reg, alertmgrs.Get, nil, alertmgrsTimeout)
@@ -369,6 +420,7 @@ func runRule(
 			cancel()
 		})
 	}
+
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 
@@ -384,6 +436,7 @@ func runRule(
 			cancel()
 		})
 	}
+  
 	// Run File Service Discovery and update the query addresses when the files are modified.
 	if fileSD != nil {
 		var fileSDUpdates chan []*targetgroup.Group
@@ -645,17 +698,15 @@ func labelsTSDBToProm(lset labels.Labels) (res labels.Labels) {
 
 func removeDuplicateQueryAddrs(logger log.Logger, duplicatedQueriers prometheus.Counter, addrs []string) []string {
 	set := make(map[string]struct{})
+	deduplicated := make([]string, 0, len(addrs))
 	for _, addr := range addrs {
 		if _, ok := set[addr]; ok {
 			level.Warn(logger).Log("msg", "duplicate query address is provided - %v", addr)
 			duplicatedQueriers.Inc()
+			continue
 		}
+		deduplicated = append(deduplicated, addr)
 		set[addr] = struct{}{}
-	}
-
-	deduplicated := make([]string, 0, len(set))
-	for key := range set {
-		deduplicated = append(deduplicated, key)
 	}
 	return deduplicated
 }
@@ -686,7 +737,7 @@ func queryFunc(
 		// TODO(bwplotka): Consider generating addresses in *url.URL.
 		addrs := dnsProvider.Addresses()
 
-		removeDuplicateQueryAddrs(logger, duplicatedQuery, addrs)
+		addrs = removeDuplicateQueryAddrs(logger, duplicatedQuery, addrs)
 
 		for _, i := range rand.Perm(len(addrs)) {
 			u, err := url.Parse(fmt.Sprintf("http://%s", addrs[i]))

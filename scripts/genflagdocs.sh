@@ -5,6 +5,7 @@ set -e
 set -u
 
 EMBEDMD_BIN=${EMBEDMD_BIN:-embedmd}
+SED_BIN=${SED_BIN:-sed}
 
 function docs {
 # if check arg was passed, instead of the docs generation verifies if docs coincide with the codebase
@@ -50,7 +51,7 @@ for x in "${checkCommands[@]}"; do
 done
 
 # remove white noise
-sed -i 's/[ \t]*$//' docs/components/flags/*.txt
+${SED_BIN} -i -e 's/[ \t]*$//' docs/components/flags/*.txt
 
 go run scripts/cfggen/main.go --output-dir=docs/flags
 

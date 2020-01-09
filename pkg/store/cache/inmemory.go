@@ -1,6 +1,7 @@
 package storecache
 
 import (
+	"context"
 	"math"
 	"sync"
 
@@ -11,43 +12,15 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"gopkg.in/yaml.v2"
 )
 
-const (
-	cacheTypePostings string = "Postings"
-	cacheTypeSeries   string = "Series"
-
-	sliceHeaderSize = 16
+var (
+	DefaultInMemoryIndexCacheConfig = InMemoryIndexCacheConfig{
+		MaxSize:     250 * 1024 * 1024,
+		MaxItemSize: 125 * 1024 * 1024,
+	}
 )
-
-type cacheKey struct {
-	block ulid.ULID
-	key   interface{}
-}
-
-func (c cacheKey) keyType() string {
-	switch c.key.(type) {
-	case cacheKeyPostings:
-		return cacheTypePostings
-	case cacheKeySeries:
-		return cacheTypeSeries
-	}
-	return "<unknown>"
-}
-
-func (c cacheKey) size() uint64 {
-	switch k := c.key.(type) {
-	case cacheKeyPostings:
-		// ULID + 2 slice headers + number of chars in value and name.
-		return 16 + 2*sliceHeaderSize + uint64(len(k.Value)+len(k.Name))
-	case cacheKeySeries:
-		return 16 + 8 // ULID + uint64.
-	}
-	return 0
-}
-
-type cacheKeyPostings labels.Label
-type cacheKeySeries uint64
 
 type InMemoryIndexCache struct {
 	mtx sync.Mutex
@@ -69,24 +42,46 @@ type InMemoryIndexCache struct {
 	overflow         *prometheus.CounterVec
 }
 
-type Opts struct {
-	// MaxSizeBytes represents overall maximum number of bytes cache can contain.
-	MaxSizeBytes uint64
-	// MaxItemSizeBytes represents maximum size of single item.
-	MaxItemSizeBytes uint64
+// InMemoryIndexCacheConfig holds the in-memory index cache config.
+type InMemoryIndexCacheConfig struct {
+	// MaxSize represents overall maximum number of bytes cache can contain.
+	MaxSize Bytes `yaml:"max_size"`
+	// MaxItemSize represents maximum size of single item.
+	MaxItemSize Bytes `yaml:"max_item_size"`
+}
+
+// parseInMemoryIndexCacheConfig unmarshals a buffer into a InMemoryIndexCacheConfig with default values.
+func parseInMemoryIndexCacheConfig(conf []byte) (InMemoryIndexCacheConfig, error) {
+	config := DefaultInMemoryIndexCacheConfig
+	if err := yaml.Unmarshal(conf, &config); err != nil {
+		return InMemoryIndexCacheConfig{}, err
+	}
+
+	return config, nil
 }
 
 // NewInMemoryIndexCache creates a new thread-safe LRU cache for index entries and ensures the total cache
 // size approximately does not exceed maxBytes.
-func NewInMemoryIndexCache(logger log.Logger, reg prometheus.Registerer, opts Opts) (*InMemoryIndexCache, error) {
-	if opts.MaxItemSizeBytes > opts.MaxSizeBytes {
-		return nil, errors.Errorf("max item size (%v) cannot be bigger than overall cache size (%v)", opts.MaxItemSizeBytes, opts.MaxSizeBytes)
+func NewInMemoryIndexCache(logger log.Logger, reg prometheus.Registerer, conf []byte) (*InMemoryIndexCache, error) {
+	config, err := parseInMemoryIndexCacheConfig(conf)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewInMemoryIndexCacheWithConfig(logger, reg, config)
+}
+
+// NewInMemoryIndexCacheWithConfig creates a new thread-safe LRU cache for index entries and ensures the total cache
+// size approximately does not exceed maxBytes.
+func NewInMemoryIndexCacheWithConfig(logger log.Logger, reg prometheus.Registerer, config InMemoryIndexCacheConfig) (*InMemoryIndexCache, error) {
+	if config.MaxItemSize > config.MaxSize {
+		return nil, errors.Errorf("max item size (%v) cannot be bigger than overall cache size (%v)", config.MaxItemSize, config.MaxSize)
 	}
 
 	c := &InMemoryIndexCache{
 		logger:           logger,
-		maxSizeBytes:     opts.MaxSizeBytes,
-		maxItemSizeBytes: opts.MaxItemSizeBytes,
+		maxSizeBytes:     uint64(config.MaxSize),
+		maxItemSizeBytes: uint64(config.MaxItemSize),
 	}
 
 	c.evicted = prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -170,7 +165,7 @@ func NewInMemoryIndexCache(logger log.Logger, reg prometheus.Registerer, opts Op
 	c.lru = l
 
 	level.Info(logger).Log(
-		"msg", "created index cache",
+		"msg", "created in-memory index cache",
 		"maxItemSizeBytes", c.maxItemSizeBytes,
 		"maxSizeBytes", c.maxSizeBytes,
 		"maxItems", "math.MaxInt64",
@@ -273,13 +268,13 @@ func (c *InMemoryIndexCache) reset() {
 
 // StorePostings sets the postings identified by the ulid and label to the value v,
 // if the postings already exists in the cache it is not mutated.
-func (c *InMemoryIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte) {
+func (c *InMemoryIndexCache) StorePostings(ctx context.Context, blockID ulid.ULID, l labels.Label, v []byte) {
 	c.set(cacheTypePostings, cacheKey{blockID, cacheKeyPostings(l)}, v)
 }
 
 // FetchMultiPostings fetches multiple postings - each identified by a label -
 // and returns a map containing cache hits, along with a list of missing keys.
-func (c *InMemoryIndexCache) FetchMultiPostings(blockID ulid.ULID, keys []labels.Label) (hits map[labels.Label][]byte, misses []labels.Label) {
+func (c *InMemoryIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label) (hits map[labels.Label][]byte, misses []labels.Label) {
 	hits = map[labels.Label][]byte{}
 
 	for _, key := range keys {
@@ -296,13 +291,13 @@ func (c *InMemoryIndexCache) FetchMultiPostings(blockID ulid.ULID, keys []labels
 
 // StoreSeries sets the series identified by the ulid and id to the value v,
 // if the series already exists in the cache it is not mutated.
-func (c *InMemoryIndexCache) StoreSeries(blockID ulid.ULID, id uint64, v []byte) {
+func (c *InMemoryIndexCache) StoreSeries(ctx context.Context, blockID ulid.ULID, id uint64, v []byte) {
 	c.set(cacheTypeSeries, cacheKey{blockID, cacheKeySeries(id)}, v)
 }
 
 // FetchMultiSeries fetches multiple series - each identified by ID - from the cache
 // and returns a map containing cache hits, along with a list of missing IDs.
-func (c *InMemoryIndexCache) FetchMultiSeries(blockID ulid.ULID, ids []uint64) (hits map[uint64][]byte, misses []uint64) {
+func (c *InMemoryIndexCache) FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []uint64) (hits map[uint64][]byte, misses []uint64) {
 	hits = map[uint64][]byte{}
 
 	for _, id := range ids {

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"math"
+	"net/http"
 	"net/url"
 	"sync"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/exthttp"
 	thanosmodel "github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
@@ -30,6 +32,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tls"
+	"github.com/thanos-io/thanos/pkg/tracing"
+
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -45,6 +49,9 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application) {
 	promReadyTimeout := cmd.Flag("prometheus.ready_timeout", "Maximum time to wait for the Prometheus instance to start up").
 		Default("10m").Duration()
 
+	connectionPoolSize := cmd.Flag("receive.connection-pool-size", "Controls the http MaxIdleConns. Default is 0, which is unlimited").Int()
+	connectionPoolSizePerHost := cmd.Flag("receive.connection-pool-size-per-host", "Controls the http MaxIdleConnsPerHost").Default("100").Int()
+
 	dataDir := cmd.Flag("tsdb.path", "Data directory of TSDB.").
 		Default("./data").String()
 
@@ -59,6 +66,8 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application) {
 	objStoreConfig := regCommonObjStoreFlags(cmd, "", false)
 
 	uploadCompacted := cmd.Flag("shipper.upload-compacted", "If true sidecar will try to upload compacted blocks as well. Useful for migration purposes. Works only if compaction is disabled on Prometheus. Do it once and then disable the flag when done.").Default("false").Bool()
+
+	ignoreBlockSize := cmd.Flag("shipper.ignore-unequal-block-size", "If true sidecar will not require prometheus min and max block size flags to be set to the same value. Only use this if you want to keep long retention and compaction enabled on your Prometheus instance, as in the worst case it can result in ~2h data loss for your Thanos bucket storage.").Default("false").Hidden().Bool()
 
 	minTime := thanosmodel.TimeOrDuration(cmd.Flag("min-time", "Start of time range limit to serve. Thanos sidecar will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("0000-01-01T00:00:00Z"))
@@ -90,8 +99,11 @@ func registerSidecar(m map[string]setupFunc, app *kingpin.Application) {
 			objStoreConfig,
 			rl,
 			*uploadCompacted,
+			*ignoreBlockSize,
 			component.Sidecar,
 			*minTime,
+			*connectionPoolSize,
+			*connectionPoolSizePerHost,
 		)
 	}
 }
@@ -114,8 +126,11 @@ func runSidecar(
 	objStoreConfig *extflag.PathOrContent,
 	reloader *reloader.Reloader,
 	uploadCompacted bool,
+	ignoreBlockSize bool,
 	comp component.Component,
 	limitMinTime thanosmodel.TimeOrDurationValue,
+	connectionPoolSize int,
+	connectionPoolSizePerHost int,
 ) error {
 	var m = &promMetadata{
 		promURL: promURL,
@@ -174,7 +189,7 @@ func runSidecar(
 			// Only check Prometheus's flags when upload is enabled.
 			if uploads {
 				// Check prometheus's flags to ensure sane sidecar flags.
-				if err := validatePrometheus(ctx, logger, m); err != nil {
+				if err := validatePrometheus(ctx, logger, ignoreBlockSize, m); err != nil {
 					return errors.Wrap(err, "validate Prometheus flags")
 				}
 			}
@@ -239,8 +254,12 @@ func runSidecar(
 	}
 
 	{
-		promStore, err := store.NewPrometheusStore(
-			logger, nil, promURL, component.Sidecar, m.Labels, m.Timestamps)
+		t := exthttp.NewTransport()
+		t.MaxIdleConnsPerHost = connectionPoolSizePerHost
+		t.MaxIdleConns = connectionPoolSize
+		c := &http.Client{Transport: tracing.HTTPTripperware(logger, t)}
+
+		promStore, err := store.NewPrometheusStore(logger, c, promURL, component.Sidecar, m.Labels, m.Timestamps)
 		if err != nil {
 			return errors.Wrap(err, "create Prometheus store")
 		}
@@ -279,7 +298,7 @@ func runSidecar(
 			}
 		}()
 
-		if err := promclient.IsWALDirAccesible(dataDir); err != nil {
+		if err := promclient.IsWALDirAccessible(dataDir); err != nil {
 			level.Error(logger).Log("err", err)
 		}
 
@@ -328,7 +347,7 @@ func runSidecar(
 	return nil
 }
 
-func validatePrometheus(ctx context.Context, logger log.Logger, m *promMetadata) error {
+func validatePrometheus(ctx context.Context, logger log.Logger, ignoreBlockSize bool, m *promMetadata) error {
 	var (
 		flagErr error
 		flags   promclient.Flags
@@ -351,10 +370,12 @@ func validatePrometheus(ctx context.Context, logger log.Logger, m *promMetadata)
 
 	// Check if compaction is disabled.
 	if flags.TSDBMinTime != flags.TSDBMaxTime {
-		return errors.Errorf("found that TSDB Max time is %s and Min time is %s. "+
-			"Compaction needs to be disabled (storage.tsdb.min-block-duration = storage.tsdb.max-block-duration)", flags.TSDBMaxTime, flags.TSDBMinTime)
+		if !ignoreBlockSize {
+			return errors.Errorf("found that TSDB Max time is %s and Min time is %s. "+
+				"Compaction needs to be disabled (storage.tsdb.min-block-duration = storage.tsdb.max-block-duration)", flags.TSDBMaxTime, flags.TSDBMinTime)
+		}
+		level.Warn(logger).Log("msg", "flag to ignore Prometheus min/max block duration flags differing is being used. If the upload of a 2h block fails and a Prometheus compaction happens that block may be missing from your Thanos bucket storage.")
 	}
-
 	// Check if block time is 2h.
 	if flags.TSDBMinTime != model.Duration(2*time.Hour) {
 		level.Warn(logger).Log("msg", "found that TSDB block time is not 2h. Only 2h block time is recommended.", "block-time", flags.TSDBMinTime)

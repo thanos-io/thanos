@@ -52,6 +52,10 @@ JSONNET_BUNDLER         ?= $(GOBIN)/jb-$(JSONNET_BUNDLER_VERSION)
 PROMTOOL_VERSION        ?= edeb7a44cbf745f1d8be4ea6f215e79e651bfe19
 PROMTOOL                ?= $(GOBIN)/promtool-$(PROMTOOL_VERSION)
 
+# Support gsed on OSX (installed via brew), falling back to sed. On Linux
+# systems gsed won't be installed, so will use sed as expected.
+SED ?= $(shell which gsed 2>/dev/null || which sed)
+
 MIXIN_ROOT              ?= mixin/thanos
 JSONNET_VENDOR_DIR      ?= mixin/vendor
 
@@ -168,8 +172,8 @@ docker-push:
 # docs regenerates flags in docs for all thanos commands.
 .PHONY: docs
 docs: $(EMBEDMD) build
-	@EMBEDMD_BIN="$(EMBEDMD)" scripts/genflagdocs.sh
-	@find -type f -name "*.md" | xargs scripts/cleanup-white-noise.sh
+	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" scripts/genflagdocs.sh
+	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 
 # check-docs checks:
 # - discrepancy with flags is valid
@@ -177,14 +181,11 @@ docs: $(EMBEDMD) build
 # - white noise
 .PHONY: check-docs
 check-docs: $(EMBEDMD) $(LICHE) build
-	@EMBEDMD_BIN="$(EMBEDMD)" scripts/genflagdocs.sh check
-	@$(LICHE) --recursive docs --exclude "(cloud.tencent.com|alibabacloud.com)" --document-root .
-	@$(LICHE) --exclude "(cloud.tencent.com|goreportcard.com|alibabacloud.com)" --document-root . *.md
-	@find -type f -name "*.md" | xargs scripts/cleanup-white-noise.sh
-	@if [[ ! git diff-files --quiet --ignore-submodules -- ]]; then \
-		echo >&2 "please clean up white noise in all docs"; \
-		exit 1; \
-	fi
+	@EMBEDMD_BIN="$(EMBEDMD)" SED_BIN="$(SED)" scripts/genflagdocs.sh check
+	@$(LICHE) --recursive docs --exclude "(couchdb.apache.org/bylaws.html|cloud.tencent.com|alibabacloud.com)" --document-root .
+	@$(LICHE) --exclude "goreportcard.com" --document-root . *.md
+	@find . -type f -name "*.md" | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
+	$(call require_clean_work_tree,"check documentation")
 
 # checks Go code comments if they have trailing period (excludes protobuffers and vendor files).
 # Comments with more than 3 spaces at beginning are omitted from the check, example: '//    - foo'.
@@ -200,7 +201,7 @@ check-comments:
 format: $(GOIMPORTS) check-comments
 	@echo ">> formatting code"
 	@$(GOIMPORTS) -w $(FILES_TO_FMT)
-	@scripts/cleanup-white-noise.sh $(FILES_TO_FMT)
+	@SED_BIN="$(SED)" scripts/cleanup-white-noise.sh $(FILES_TO_FMT)
 
 # proto generates golang files from Thanos proto files.
 .PHONY: proto
@@ -229,28 +230,19 @@ test: check-git install-deps
 	@go install github.com/thanos-io/thanos/cmd/thanos
 	# Be careful on GOCACHE. Those tests are sometimes using built Thanos/Prometheus binaries directly. Don't cache those.
 	@rm -rf ${GOCACHE}
-	@echo ">> running all tests. Do export THANOS_SKIP_GCS_TESTS='true' or/and THANOS_SKIP_S3_AWS_TESTS='true' or/and THANOS_SKIP_AZURE_TESTS='true' and/or THANOS_SKIP_SWIFT_TESTS='true' and/or THANOS_SKIP_ALIYUN_OSS_TESTS='true' and/or THANOS_SKIP_TENCENT_COS_TESTS='true' if you want to skip e2e tests against real store buckets"
+	@echo ">> running all tests. Do export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS if you want to skip e2e tests against all real store buckets. Current value: ${THANOS_TEST_OBJSTORE_SKIP}"
 	@go test $(shell go list ./... | grep -v /vendor/);
 
 .PHONY: test-ci
-test-ci: export THANOS_SKIP_AZURE_TESTS = true
-test-ci: export THANOS_SKIP_SWIFT_TESTS = true
-test-ci: export THANOS_SKIP_TENCENT_COS_TESTS = true
-test-ci: export THANOS_SKIP_ALIYUN_OSS_TESTS = true
+test-ci: export THANOS_TEST_OBJSTORE_SKIP=AZURE,SWIFT,COS,ALIYUNOSS
 test-ci:
-	@echo ">> Skipping AZURE tests"
-	@echo ">> Skipping SWIFT tests"
-	@echo ">> Skipping TENCENT tests"
-	@echo ">> Skipping ALIYUN tests"
+	@echo ">> Skipping ${THANOS_TEST_OBJSTORE_SKIP} tests"
 	$(MAKE) test
 
 .PHONY: test-local
-test-local: export THANOS_SKIP_GCS_TESTS = true
-test-local: export THANOS_SKIP_S3_AWS_TESTS = true
+test-local: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS
 test-local:
-	@echo ">> Skipping GCE tests"
-	@echo ">> Skipping S3 tests"
-	$(MAKE) test-ci
+	$(MAKE) test
 
 # install-deps installs dependencies for e2e tetss.
 # It installs supported versions of Prometheus and alertmanager to test against in e2e.
@@ -298,16 +290,15 @@ web: web-pre-process $(HUGO)
 #
 # to debug big allocations during linting.
 lint: check-git $(GOLANGCILINT) $(MISSPELL)
+	@echo ">> examining all of the Go files"
+	@go vet -stdmethods=false ./pkg/... ./cmd/... && go vet doc.go
 	@echo ">> linting all of the Go files GOGC=${GOGC}"
 	@$(GOLANGCILINT) run
 	@echo ">> detecting misspells"
 	@find . -type f | grep -v vendor/ | grep -vE '\./\..*' | xargs $(MISSPELL) -error
 	@echo ">> detecting white noise"
-	@find . -type f \( -name "*.md" -o -name "*.go" \) | xargs scripts/cleanup-white-noise.sh
-	@if [[ ! git diff-files --quiet --ignore-submodules -- ]]; then \
-		echo >&2 "please clean up white noise in all docs or Go files"; \
-		exit 1; \
-	fi
+	@find . -type f \( -name "*.md" -o -name "*.go" \) | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
+	$(call require_clean_work_tree,"detected white noise")
 
 .PHONY: web-serve
 web-serve: web-pre-process $(HUGO)

@@ -1,4 +1,4 @@
-package store
+package gate
 
 import (
 	"context"
@@ -41,7 +41,7 @@ func NewGate(maxConcurrent int, reg prometheus.Registerer) *Gate {
 func (g *Gate) IsMyTurn(ctx context.Context) error {
 	start := time.Now()
 	defer func() {
-		g.gateTiming.Observe(float64(time.Since(start)))
+		g.gateTiming.Observe(time.Since(start).Seconds())
 	}()
 
 	if err := g.g.Start(ctx); err != nil {

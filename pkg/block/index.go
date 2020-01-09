@@ -1,20 +1,16 @@
 package block
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"hash/crc32"
-	"io/ioutil"
 	"math/rand"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
-
-	"github.com/prometheus/prometheus/tsdb/fileutil"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -27,222 +23,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
-
-const (
-	// IndexCacheVersion is a enumeration of index cache versions supported by Thanos.
-	IndexCacheVersion1 = iota + 1
-)
-
-var (
-	IndexCacheUnmarshalError = errors.New("unmarshal index cache")
-)
-
-type postingsRange struct {
-	Name, Value string
-	Start, End  int64
-}
-
-type indexCache struct {
-	Version      int
-	CacheVersion int
-	Symbols      map[uint32]string
-	LabelValues  map[string][]string
-	Postings     []postingsRange
-}
-
-type realByteSlice []byte
-
-func (b realByteSlice) Len() int {
-	return len(b)
-}
-
-func (b realByteSlice) Range(start, end int) []byte {
-	return b[start:end]
-}
-
-func (b realByteSlice) Sub(start, end int) index.ByteSlice {
-	return b[start:end]
-}
-
-func getSymbolTable(b index.ByteSlice) (map[uint32]string, error) {
-	version := int(b.Range(4, 5)[0])
-
-	if version != 1 && version != 2 {
-		return nil, errors.Errorf("unknown index file version %d", version)
-	}
-
-	toc, err := index.NewTOCFromByteSlice(b)
-	if err != nil {
-		return nil, errors.Wrap(err, "read TOC")
-	}
-
-	symbolsV2, symbolsV1, err := index.ReadSymbols(b, version, int(toc.Symbols))
-	if err != nil {
-		return nil, errors.Wrap(err, "read symbols")
-	}
-
-	symbolsTable := make(map[uint32]string, len(symbolsV1)+len(symbolsV2))
-	for o, s := range symbolsV1 {
-		symbolsTable[o] = s
-	}
-	for o, s := range symbolsV2 {
-		symbolsTable[uint32(o)] = s
-	}
-
-	return symbolsTable, nil
-}
-
-// WriteIndexCache writes a cache file containing the first lookup stages
-// for an index file.
-func WriteIndexCache(logger log.Logger, indexFn string, fn string) error {
-	indexFile, err := fileutil.OpenMmapFile(indexFn)
-	if err != nil {
-		return errors.Wrapf(err, "open mmap index file %s", indexFn)
-	}
-	defer runutil.CloseWithLogOnErr(logger, indexFile, "close index cache mmap file from %s", indexFn)
-
-	b := realByteSlice(indexFile.Bytes())
-	indexr, err := index.NewReader(b)
-	if err != nil {
-		return errors.Wrap(err, "open index reader")
-	}
-	defer runutil.CloseWithLogOnErr(logger, indexr, "load index cache reader")
-
-	// We assume reader verified index already.
-	symbols, err := getSymbolTable(b)
-	if err != nil {
-		return err
-	}
-
-	f, err := os.Create(fn)
-	if err != nil {
-		return errors.Wrap(err, "create index cache file")
-	}
-	defer runutil.CloseWithLogOnErr(logger, f, "index cache writer")
-
-	v := indexCache{
-		Version:      indexr.Version(),
-		CacheVersion: IndexCacheVersion1,
-		Symbols:      symbols,
-		LabelValues:  map[string][]string{},
-	}
-
-	// Extract label value indices.
-	lnames, err := indexr.LabelIndices()
-	if err != nil {
-		return errors.Wrap(err, "read label indices")
-	}
-	for _, lns := range lnames {
-		if len(lns) != 1 {
-			continue
-		}
-		ln := lns[0]
-
-		tpls, err := indexr.LabelValues(ln)
-		if err != nil {
-			return errors.Wrap(err, "get label values")
-		}
-		vals := make([]string, 0, tpls.Len())
-
-		for i := 0; i < tpls.Len(); i++ {
-			v, err := tpls.At(i)
-			if err != nil {
-				return errors.Wrap(err, "get label value")
-			}
-			if len(v) != 1 {
-				return errors.Errorf("unexpected tuple length %d", len(v))
-			}
-			vals = append(vals, v[0])
-		}
-		v.LabelValues[ln] = vals
-	}
-
-	// Extract postings ranges.
-	pranges, err := indexr.PostingsRanges()
-	if err != nil {
-		return errors.Wrap(err, "read postings ranges")
-	}
-	for l, rng := range pranges {
-		v.Postings = append(v.Postings, postingsRange{
-			Name:  l.Name,
-			Value: l.Value,
-			Start: rng.Start,
-			End:   rng.End,
-		})
-	}
-
-	if err := json.NewEncoder(f).Encode(&v); err != nil {
-		return errors.Wrap(err, "encode file")
-	}
-	return nil
-}
-
-// ReadIndexCache reads an index cache file.
-func ReadIndexCache(logger log.Logger, fn string) (
-	version int,
-	symbols []string,
-	lvals map[string][]string,
-	postings map[labels.Label]index.Range,
-	err error,
-) {
-	f, err := os.Open(fn)
-	if err != nil {
-		return 0, nil, nil, nil, errors.Wrap(err, "open file")
-	}
-	defer runutil.CloseWithLogOnErr(logger, f, "index reader")
-
-	var v indexCache
-
-	bytes, err := ioutil.ReadFile(fn)
-	if err != nil {
-		return 0, nil, nil, nil, errors.Wrap(err, "read file")
-	}
-
-	if err = json.Unmarshal(bytes, &v); err != nil {
-		return 0, nil, nil, nil, errors.Wrap(IndexCacheUnmarshalError, err.Error())
-	}
-
-	strs := map[string]string{}
-	lvals = make(map[string][]string, len(v.LabelValues))
-	postings = make(map[labels.Label]index.Range, len(v.Postings))
-
-	var maxSymbolID uint32
-	for o := range v.Symbols {
-		if o > maxSymbolID {
-			maxSymbolID = o
-		}
-	}
-	symbols = make([]string, maxSymbolID+1)
-
-	// Most strings we encounter are duplicates. Dedup string objects that we keep
-	// around after the function returns to reduce total memory usage.
-	// NOTE(fabxc): it could even make sense to deduplicate globally.
-	getStr := func(s string) string {
-		if cs, ok := strs[s]; ok {
-			return cs
-		}
-		strs[s] = s
-		return s
-	}
-
-	for o, s := range v.Symbols {
-		symbols[o] = getStr(s)
-	}
-	for ln, vals := range v.LabelValues {
-		for i := range vals {
-			vals[i] = getStr(vals[i])
-		}
-		lvals[getStr(ln)] = vals
-	}
-	for _, e := range v.Postings {
-		l := labels.Label{
-			Name:  getStr(e.Name),
-			Value: getStr(e.Value),
-		}
-		postings[l] = index.Range{Start: e.Start, End: e.End}
-	}
-	return v.Version, symbols, lvals, postings, nil
-}
 
 // VerifyIndex does a full run over a block index and verifies that it fulfills the order invariants.
 func VerifyIndex(logger log.Logger, fn string, minTime int64, maxTime int64) error {
@@ -503,7 +283,7 @@ func Repair(logger log.Logger, dir string, id ulid.ULID, source metadata.SourceT
 	}
 	defer runutil.CloseWithErrCapture(&err, chunkw, "repair chunk writer")
 
-	indexw, err := index.NewWriter(filepath.Join(resdir, IndexFilename))
+	indexw, err := index.NewWriter(context.TODO(), filepath.Join(resdir, IndexFilename))
 	if err != nil {
 		return resid, errors.Wrap(err, "open index writer")
 	}
@@ -627,17 +407,19 @@ func rewrite(
 	meta *metadata.Meta,
 	ignoreChkFns []ignoreFnType,
 ) error {
-	symbols, err := indexr.Symbols()
-	if err != nil {
-		return err
+	symbols := indexr.Symbols()
+	for symbols.Next() {
+		if err := indexw.AddSymbol(symbols.At()); err != nil {
+			return errors.Wrap(err, "add symbol")
+		}
 	}
-	if err := indexw.AddSymbols(symbols); err != nil {
-		return err
+	if symbols.Err() != nil {
+		return errors.Wrap(symbols.Err(), "next symbol")
 	}
 
 	all, err := indexr.Postings(index.AllPostingsKey())
 	if err != nil {
-		return err
+		return errors.Wrap(err, "postings")
 	}
 	all = indexr.SortedPostings(all)
 
@@ -655,7 +437,7 @@ func rewrite(
 		id := all.At()
 
 		if err := indexr.Series(id, &lset, &chks); err != nil {
-			return err
+			return errors.Wrap(err, "series")
 		}
 		// Make sure labels are in sorted order.
 		sort.Sort(lset)
@@ -663,7 +445,7 @@ func rewrite(
 		for i, c := range chks {
 			chks[i].Chunk, err = chunkr.Chunk(c.Ref)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "chunk read")
 			}
 		}
 
@@ -733,24 +515,6 @@ func rewrite(
 		postings.Add(i, s.lset)
 		i++
 		lastSet = s.lset
-	}
-
-	s := make([]string, 0, 256)
-	for n, v := range values {
-		s = s[:0]
-
-		for x := range v {
-			s = append(s, x)
-		}
-		if err := indexw.WriteLabelIndex([]string{n}, s); err != nil {
-			return errors.Wrap(err, "write label index")
-		}
-	}
-
-	for _, l := range postings.SortedKeys() {
-		if err := indexw.WritePostings(l.Name, l.Value, postings.Get(l.Name, l.Value)); err != nil {
-			return errors.Wrap(err, "write postings")
-		}
 	}
 	return nil
 }

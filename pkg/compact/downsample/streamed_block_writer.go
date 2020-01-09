@@ -1,6 +1,7 @@
 package downsample
 
 import (
+	"context"
 	"io"
 	"path/filepath"
 
@@ -14,35 +15,10 @@ import (
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/indexheader"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
-
-type labelValues map[string]struct{}
-
-func (lv labelValues) add(value string) {
-	lv[value] = struct{}{}
-}
-
-func (lv labelValues) get(set *[]string) {
-	for value := range lv {
-		*set = append(*set, value)
-	}
-}
-
-type labelsValues map[string]labelValues
-
-func (lv labelsValues) add(labelSet labels.Labels) {
-	for _, label := range labelSet {
-		values, ok := lv[label.Name]
-		if !ok {
-			// Add new label.
-			values = labelValues{}
-			lv[label.Name] = values
-		}
-		values.add(label.Value)
-	}
-}
 
 // streamedBlockWriter writes downsampled blocks to a new data block. Implemented to save memory consumption
 // by writing chunks data right into the files, omitting keeping them in-memory. Index and meta data should be
@@ -61,9 +37,7 @@ type streamedBlockWriter struct {
 	indexReader tsdb.IndexReader
 	closers     []io.Closer
 
-	labelsValues labelsValues       // labelsValues list of used label sets: name -> []values.
-	memPostings  *index.MemPostings // memPostings contains references from label name:value -> postings.
-	postings     uint64             // postings is a current posting position.
+	seriesRefs uint64 // postings is a current posting position.
 }
 
 // NewStreamedBlockWriter returns streamedBlockWriter instance, it's not concurrency safe.
@@ -99,36 +73,34 @@ func NewStreamedBlockWriter(
 	}
 	closers = append(closers, chunkWriter)
 
-	indexWriter, err := index.NewWriter(filepath.Join(blockDir, block.IndexFilename))
+	indexWriter, err := index.NewWriter(context.TODO(), filepath.Join(blockDir, block.IndexFilename))
 	if err != nil {
 		return nil, errors.Wrap(err, "open index writer in streamedBlockWriter")
 	}
 	closers = append(closers, indexWriter)
 
-	symbols, err := indexReader.Symbols()
-	if err != nil {
+	symbols := indexReader.Symbols()
+	for symbols.Next() {
+		if err = indexWriter.AddSymbol(symbols.At()); err != nil {
+			return nil, errors.Wrap(err, "add symbols")
+		}
+	}
+	if err := symbols.Err(); err != nil {
 		return nil, errors.Wrap(err, "read symbols")
 	}
 
-	err = indexWriter.AddSymbols(symbols)
-	if err != nil {
-		return nil, errors.Wrap(err, "add symbols")
-	}
-
 	return &streamedBlockWriter{
-		logger:       logger,
-		blockDir:     blockDir,
-		indexReader:  indexReader,
-		indexWriter:  indexWriter,
-		chunkWriter:  chunkWriter,
-		meta:         originMeta,
-		closers:      closers,
-		labelsValues: make(labelsValues, 1024),
-		memPostings:  index.NewUnorderedMemPostings(),
+		logger:      logger,
+		blockDir:    blockDir,
+		indexReader: indexReader,
+		indexWriter: indexWriter,
+		chunkWriter: chunkWriter,
+		meta:        originMeta,
+		closers:     closers,
 	}, nil
 }
 
-// WriteSeries writes chunks data to the chunkWriter, writes lset and chunks Metas to indexWrites and adds label sets to
+// WriteSeries writes chunks data to the chunkWriter, writes lset and chunks MetasFetcher to indexWrites and adds label sets to
 // labelsValues sets and memPostings to be written on the finalize state in the end of downsampling process.
 func (w *streamedBlockWriter) WriteSeries(lset labels.Labels, chunks []chunks.Meta) error {
 	if w.finalized || w.ignoreFinalize {
@@ -145,14 +117,12 @@ func (w *streamedBlockWriter) WriteSeries(lset labels.Labels, chunks []chunks.Me
 		return errors.Wrap(err, "add chunks")
 	}
 
-	if err := w.indexWriter.AddSeries(w.postings, lset, chunks...); err != nil {
+	if err := w.indexWriter.AddSeries(w.seriesRefs, lset, chunks...); err != nil {
 		w.ignoreFinalize = true
 		return errors.Wrap(err, "add series")
 	}
 
-	w.labelsValues.add(lset)
-	w.memPostings.Add(w.postings, lset)
-	w.postings++
+	w.seriesRefs++
 
 	w.totalChunks += uint64(len(chunks))
 	for i := range chunks {
@@ -182,19 +152,11 @@ func (w *streamedBlockWriter) Close() error {
 
 	// Finalize saves prepared index and metadata to corresponding files.
 
-	if err := w.writeLabelSets(); err != nil {
-		return errors.Wrap(err, "write label sets")
-	}
-
-	if err := w.writeMemPostings(); err != nil {
-		return errors.Wrap(err, "write mem postings")
-	}
-
 	for _, cl := range w.closers {
 		merr.Add(cl.Close())
 	}
 
-	if err := block.WriteIndexCache(
+	if err := indexheader.WriteJSON(
 		w.logger,
 		filepath.Join(w.blockDir, block.IndexFilename),
 		filepath.Join(w.blockDir, block.IndexCacheFilename),
@@ -242,37 +204,13 @@ func (w *streamedBlockWriter) syncDir() (err error) {
 	return nil
 }
 
-// writeLabelSets fills the index writer with label sets.
-func (w *streamedBlockWriter) writeLabelSets() error {
-	s := make([]string, 0, 256)
-	for n, v := range w.labelsValues {
-		s = s[:0]
-		v.get(&s)
-		if err := w.indexWriter.WriteLabelIndex([]string{n}, s); err != nil {
-			return errors.Wrap(err, "write label index")
-		}
-	}
-	return nil
-}
-
-// writeMemPostings fills the index writer with mem postings.
-func (w *streamedBlockWriter) writeMemPostings() error {
-	w.memPostings.EnsureOrder()
-	for _, l := range w.memPostings.SortedKeys() {
-		if err := w.indexWriter.WritePostings(l.Name, l.Value, w.memPostings.Get(l.Name, l.Value)); err != nil {
-			return errors.Wrap(err, "write postings")
-		}
-	}
-	return nil
-}
-
 // writeMetaFile writes meta file.
 func (w *streamedBlockWriter) writeMetaFile() error {
 	w.meta.Version = metadata.MetaVersion1
 	w.meta.Thanos.Source = metadata.CompactorSource
 	w.meta.Stats.NumChunks = w.totalChunks
 	w.meta.Stats.NumSamples = w.totalSamples
-	w.meta.Stats.NumSeries = w.postings
+	w.meta.Stats.NumSeries = w.seriesRefs
 
 	return metadata.Write(w.logger, w.blockDir, &w.meta)
 }

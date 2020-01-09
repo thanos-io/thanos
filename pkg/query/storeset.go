@@ -193,7 +193,7 @@ func NewStoreSet(
 		storeSpecs:            storeSpecs,
 		dialOpts:              dialOpts,
 		storesMetric:          storesMetric,
-		gRPCInfoCallTimeout:   10 * time.Second,
+		gRPCInfoCallTimeout:   5 * time.Second,
 		stores:                make(map[string]*storeRef),
 		storeStatuses:         make(map[string]*StoreStatus),
 		unhealthyStoreTimeout: unhealthyStoreTimeout,

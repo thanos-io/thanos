@@ -76,6 +76,18 @@ func NewProvider(logger log.Logger, reg prometheus.Registerer, resolverType Reso
 	return p
 }
 
+// Clone returns a new provider from an existing one.
+func (p *Provider) Clone() *Provider {
+	return &Provider{
+		resolver:              p.resolver,
+		resolved:              make(map[string][]string),
+		logger:                p.logger,
+		resolverAddrs:         p.resolverAddrs,
+		resolverLookupsCount:  p.resolverLookupsCount,
+		resolverFailuresCount: p.resolverFailuresCount,
+	}
+}
+
 // Resolve stores a list of provided addresses or their DNS records if requested.
 // Addresses prefixed with `dns+` or `dnssrv+` will be resolved through respective DNS lookup (A/AAAA or SRV).
 // defaultPort is used for non-SRV records when a port is not supplied.

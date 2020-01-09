@@ -66,3 +66,9 @@ adopters:
 - name: Grofers
   url: https://grofers.com
   logo: grofers.png
+- name: Tencent
+  url: https://github.com/tkestack/tke
+  logo: tencent.png
+- name: VEXXHOST, Inc.
+  url: https://vexxhost.com
+  logo: vexxhost.png

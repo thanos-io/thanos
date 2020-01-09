@@ -13,7 +13,6 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage/tsdb"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -71,7 +70,11 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 
 	replicationFactor := cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64()
 
-	tsdbBlockDuration := modelDuration(cmd.Flag("tsdb.block-duration", "Duration for local TSDB blocks").Default("2h").Hidden())
+	tsdbMinBlockDuration := modelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
+	tsdbMaxBlockDuration := modelDuration(cmd.Flag("tsdb.max-block-duration", "Max duration for local TSDB blocks").Default("2h").Hidden())
+	ignoreBlockSize := cmd.Flag("shipper.ignore-unequal-block-size", "If true receive will not require min and max block size flags to be set to the same value. Only use this if you want to keep long retention and compaction enabled, as in the worst case it can result in ~2h data loss for your Thanos bucket storage.").Default("false").Hidden().Bool()
+
+	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
 
 	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
@@ -85,6 +88,14 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			if err != nil {
 				return err
 			}
+		}
+
+		tsdbOpts := &tsdb.Options{
+			MinBlockDuration:  *tsdbMinBlockDuration,
+			MaxBlockDuration:  *tsdbMaxBlockDuration,
+			RetentionDuration: *retention,
+			NoLockfile:        true,
+			WALCompression:    *walCompression,
 		}
 
 		// Local is empty, so try to generate a local endpoint
@@ -121,14 +132,14 @@ func registerReceive(m map[string]setupFunc, app *kingpin.Application) {
 			*rwClientServerName,
 			*dataDir,
 			objStoreConfig,
+			tsdbOpts,
+			*ignoreBlockSize,
 			lset,
-			*retention,
 			cw,
 			*local,
 			*tenantHeader,
 			*replicaHeader,
 			*replicationFactor,
-			*tsdbBlockDuration,
 			comp,
 		)
 	}
@@ -156,26 +167,18 @@ func runReceive(
 	rwClientServerName string,
 	dataDir string,
 	objStoreConfig *extflag.PathOrContent,
+	tsdbOpts *tsdb.Options,
+	ignoreBlockSize bool,
 	lset labels.Labels,
-	retention model.Duration,
 	cw *receive.ConfigWatcher,
 	endpoint string,
 	tenantHeader string,
 	replicaHeader string,
 	replicationFactor uint64,
-	tsdbBlockDuration model.Duration,
 	comp component.SourceStoreAPI,
 ) error {
 	logger = log.With(logger, "component", "receive")
 	level.Warn(logger).Log("msg", "setting up receive; the Thanos receive component is EXPERIMENTAL, it may break significantly without notice")
-
-	tsdbCfg := &tsdb.Options{
-		RetentionDuration: retention,
-		NoLockfile:        true,
-		MinBlockDuration:  tsdbBlockDuration,
-		MaxBlockDuration:  tsdbBlockDuration,
-		WALCompression:    true,
-	}
 
 	localStorage := &tsdb.ReadyStorage{}
 	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), rwServerCert, rwServerKey, rwServerClientCA)
@@ -209,6 +212,14 @@ func runReceive(
 		upload = false
 	}
 
+	if upload && tsdbOpts.MinBlockDuration != tsdbOpts.MaxBlockDuration {
+		if !ignoreBlockSize {
+			return errors.Errorf("found that TSDB Max time is %s and Min time is %s. "+
+				"Compaction needs to be disabled (tsdb.min-block-duration = tsdb.max-block-duration)", tsdbOpts.MaxBlockDuration, tsdbOpts.MinBlockDuration)
+		}
+		level.Warn(logger).Log("msg", "flag to ignore min/max block duration flags differing is being used. If the upload of a 2h block fails and a tsdb compaction happens that block may be missing from your Thanos bucket storage.")
+	}
+
 	// Start all components while we wait for TSDB to open but only load
 	// initial config and mark ourselves as ready after it completed.
 
@@ -225,7 +236,7 @@ func runReceive(
 	{
 		// TSDB.
 		cancel := make(chan struct{})
-		startTimeMargin := int64(2 * time.Duration(tsdbCfg.MinBlockDuration).Seconds() * 1000)
+		startTimeMargin := int64(2 * time.Duration(tsdbOpts.MinBlockDuration).Seconds() * 1000)
 		g.Add(func() error {
 			defer close(dbReady)
 			defer close(uploadC)
@@ -237,7 +248,7 @@ func runReceive(
 				dataDir,
 				log.With(logger, "component", "tsdb"),
 				reg,
-				tsdbCfg,
+				tsdbOpts,
 			)
 
 			// Before quitting, ensure the WAL is flushed and the DB is closed.

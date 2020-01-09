@@ -107,20 +107,23 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSer
 	for set.Next() {
 		series := set.At()
 
-		// TODO(fabxc): An improvement over this trivial approach would be to directly
-		// use the chunks provided by TSDB in the response.
-		// But since the sidecar has a similar approach, optimizing here has only
-		// limited benefit for now.
-		// NOTE: XOR encoding supports a max size of 2^16 - 1 samples, so we need
-		// to chunk all samples into groups of no more than 2^16 - 1
-		// See: https://github.com/thanos-io/thanos/pull/1038.
-		c, err := s.encodeChunks(series.Iterator(), math.MaxUint16)
-		if err != nil {
-			return status.Errorf(codes.Internal, "encode chunk: %s", err)
-		}
-
 		respSeries.Labels = s.translateAndExtendLabels(series.Labels(), s.externalLabels)
-		respSeries.Chunks = append(respSeries.Chunks[:0], c...)
+
+		if !r.SkipChunks {
+			// TODO(fabxc): An improvement over this trivial approach would be to directly
+			// use the chunks provided by TSDB in the response.
+			// But since the sidecar has a similar approach, optimizing here has only
+			// limited benefit for now.
+			// NOTE: XOR encoding supports a max size of 2^16 - 1 samples, so we need
+			// to chunk all samples into groups of no more than 2^16 - 1
+			// See: https://github.com/thanos-io/thanos/pull/1038.
+			c, err := s.encodeChunks(series.Iterator(), math.MaxUint16)
+			if err != nil {
+				return status.Errorf(codes.Internal, "encode chunk: %s", err)
+			}
+
+			respSeries.Chunks = append(respSeries.Chunks[:0], c...)
+		}
 
 		if err := srv.Send(storepb.NewSeriesResponse(&respSeries)); err != nil {
 			return status.Error(codes.Aborted, err.Error())

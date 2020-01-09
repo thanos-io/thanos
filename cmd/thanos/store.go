@@ -11,8 +11,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/relabel"
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
@@ -26,6 +28,8 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
+const fetcherConcurrency = 32
+
 // registerStore registers a store command.
 func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 	cmd := app.Command(component.Store.String(), "store node giving access to blocks in a bucket provider. Now supported GCS, S3, Azure, Swift and Tencent COS.")
@@ -36,14 +40,18 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 	dataDir := cmd.Flag("data-dir", "Data directory in which to cache remote blocks.").
 		Default("./data").String()
 
-	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the index cache.").
+	indexCacheSize := cmd.Flag("index-cache-size", "Maximum size of items held in the in-memory index cache. Ignored if --index-cache.config or --index-cache.config-file option is specified.").
 		Default("250MB").Bytes()
+
+	indexCacheConfig := extflag.RegisterPathOrContent(cmd, "index-cache.config",
+		"YAML file that contains index cache configuration. See format details: https://thanos.io/components/store.md/#index-cache",
+		false)
 
 	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes for chunks.").
 		Default("2GB").Bytes()
 
 	maxSampleCount := cmd.Flag("store.grpc.series-sample-limit",
-		"Maximum amount of samples returned via a single Series call. 0 means no limit. NOTE: for efficiency we take 120 as the number of samples in chunk (it cannot be bigger than that), so the actual number of samples might be lower, even though the maximum could be hit.").
+		"Maximum amount of samples returned via a single Series call. 0 means no limit. NOTE: For efficiency we take 120 as the number of samples in chunk (it cannot be bigger than that), so the actual number of samples might be lower, even though the maximum could be hit.").
 		Default("0").Uint()
 
 	maxConcurrent := cmd.Flag("store.grpc.series-max-concurrency", "Maximum number of concurrent Series calls.").Default("20").Int()
@@ -53,7 +61,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 	syncInterval := cmd.Flag("sync-block-duration", "Repeat interval for syncing the blocks between local and remote view.").
 		Default("3m").Duration()
 
-	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing blocks from object storage.").
+	blockSyncConcurrency := cmd.Flag("block-sync-concurrency", "Number of goroutines to use when constructing index-cache.json blocks from object storage.").
 		Default("20").Int()
 
 	minTime := model.TimeOrDuration(cmd.Flag("min-time", "Start of time range limit to serve. Thanos Store will serve only metrics, which happened later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
@@ -77,6 +85,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 			logger,
 			reg,
 			tracer,
+			indexCacheConfig,
 			objStoreConfig,
 			*dataDir,
 			*grpcBindAddr,
@@ -110,6 +119,7 @@ func runStore(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
+	indexCacheConfig *extflag.PathOrContent,
 	objStoreConfig *extflag.PathOrContent,
 	dataDir string,
 	grpcBindAddr string,
@@ -122,7 +132,7 @@ func runStore(
 	indexCacheSizeBytes uint64,
 	chunkPoolSizeBytes uint64,
 	maxSampleCount uint64,
-	maxConcurrent int,
+	maxConcurrency int,
 	component component.Component,
 	verbose bool,
 	syncInterval time.Duration,
@@ -169,6 +179,11 @@ func runStore(
 		return err
 	}
 
+	indexCacheContentYaml, err := indexCacheConfig.Content()
+	if err != nil {
+		return errors.Wrap(err, "get content of index cache configuration")
+	}
+
 	// Ensure we close up everything properly.
 	defer func() {
 		if err != nil {
@@ -176,30 +191,42 @@ func runStore(
 		}
 	}()
 
-	// TODO(bwplotka): Add as a flag?
-	maxItemSizeBytes := indexCacheSizeBytes / 2
-
-	indexCache, err := storecache.NewInMemoryIndexCache(logger, reg, storecache.Opts{
-		MaxSizeBytes:     indexCacheSizeBytes,
-		MaxItemSizeBytes: maxItemSizeBytes,
-	})
+	// Create the index cache loading its config from config file, while keeping
+	// backward compatibility with the pre-config file era.
+	var indexCache storecache.IndexCache
+	if len(indexCacheContentYaml) > 0 {
+		indexCache, err = storecache.NewIndexCache(logger, indexCacheContentYaml, reg)
+	} else {
+		indexCache, err = storecache.NewInMemoryIndexCacheWithConfig(logger, reg, storecache.InMemoryIndexCacheConfig{
+			MaxSize:     storecache.Bytes(indexCacheSizeBytes),
+			MaxItemSize: storecache.DefaultInMemoryIndexCacheConfig.MaxItemSize,
+		})
+	}
 	if err != nil {
 		return errors.Wrap(err, "create index cache")
+	}
+
+	metaFetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
+		block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime).Filter,
+		block.NewLabelShardedMetaFilter(relabelConfig).Filter,
+	)
+	if err != nil {
+		return errors.Wrap(err, "meta fetcher")
 	}
 
 	bs, err := store.NewBucketStore(
 		logger,
 		reg,
 		bkt,
+		metaFetcher,
 		dataDir,
 		indexCache,
 		chunkPoolSizeBytes,
 		maxSampleCount,
-		maxConcurrent,
+		maxConcurrency,
 		verbose,
 		blockSyncConcurrency,
 		filterConf,
-		relabelConfig,
 		advertiseCompatibilityLabel,
 	)
 	if err != nil {

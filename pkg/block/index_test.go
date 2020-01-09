@@ -9,13 +9,17 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/chunks"
+	"github.com/prometheus/prometheus/tsdb/index"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-func TestWriteReadIndexCache(t *testing.T) {
+func TestRewrite(t *testing.T) {
 	ctx := context.Background()
 
-	tmpDir, err := ioutil.TempDir("", "test-compact-prepare")
+	tmpDir, err := ioutil.TempDir("", "test-indexheader")
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
@@ -24,26 +28,56 @@ func TestWriteReadIndexCache(t *testing.T) {
 		{{Name: "a", Value: "2"}},
 		{{Name: "a", Value: "3"}},
 		{{Name: "a", Value: "4"}},
-		{{Name: "b", Value: "1"}},
-	}, 100, 0, 1000, nil, 124)
+		{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}},
+	}, 150, 0, 1000, nil, 124)
 	testutil.Ok(t, err)
 
-	fn := filepath.Join(tmpDir, "index.cache.json")
-	testutil.Ok(t, WriteIndexCache(log.NewNopLogger(), filepath.Join(tmpDir, b.String(), "index"), fn))
-
-	version, symbols, lvals, postings, err := ReadIndexCache(log.NewNopLogger(), fn)
+	ir, err := index.NewFileReader(filepath.Join(tmpDir, b.String(), IndexFilename))
 	testutil.Ok(t, err)
 
-	testutil.Equals(t, 2, version)
-	testutil.Equals(t, 6, len(symbols))
-	testutil.Equals(t, 2, len(lvals))
+	defer func() { testutil.Ok(t, ir.Close()) }()
 
-	vals, ok := lvals["a"]
-	testutil.Assert(t, ok, "")
-	testutil.Equals(t, []string{"1", "2", "3", "4"}, vals)
+	cr, err := chunks.NewDirReader(filepath.Join(tmpDir, b.String(), "chunks"), nil)
+	testutil.Ok(t, err)
 
-	vals, ok = lvals["b"]
-	testutil.Assert(t, ok, "")
-	testutil.Equals(t, []string{"1"}, vals)
-	testutil.Equals(t, 6, len(postings))
+	defer func() { testutil.Ok(t, cr.Close()) }()
+
+	m := &metadata.Meta{
+		BlockMeta: tsdb.BlockMeta{ULID: ULID(1)},
+		Thanos:    metadata.Thanos{},
+	}
+
+	testutil.Ok(t, os.MkdirAll(filepath.Join(tmpDir, m.ULID.String()), os.ModePerm))
+	iw, err := index.NewWriter(ctx, filepath.Join(tmpDir, m.ULID.String(), IndexFilename))
+	testutil.Ok(t, err)
+	defer iw.Close()
+
+	cw, err := chunks.NewWriter(filepath.Join(tmpDir, m.ULID.String()))
+	testutil.Ok(t, err)
+
+	defer cw.Close()
+
+	testutil.Ok(t, rewrite(log.NewNopLogger(), ir, cr, iw, cw, m, []ignoreFnType{func(mint, maxt int64, prev *chunks.Meta, curr *chunks.Meta) (bool, error) {
+		return curr.MaxTime == 696, nil
+	}}))
+
+	testutil.Ok(t, iw.Close())
+	testutil.Ok(t, cw.Close())
+
+	ir2, err := index.NewFileReader(filepath.Join(tmpDir, m.ULID.String(), IndexFilename))
+	testutil.Ok(t, err)
+
+	defer func() { testutil.Ok(t, ir2.Close()) }()
+
+	all, err := ir2.Postings(index.AllPostingsKey())
+	testutil.Ok(t, err)
+
+	for p := ir2.SortedPostings(all); p.Next(); {
+		var lset labels.Labels
+		var chks []chunks.Meta
+
+		testutil.Ok(t, ir2.Series(p.At(), &lset, &chks))
+		testutil.Equals(t, 1, len(chks))
+	}
+
 }

@@ -43,6 +43,90 @@ For Ruler the read path is distributed, since most likely Ruler is querying Than
 This means that **query failure** are more likely to happen, that's why clear strategy on what will happen to alert and during query
 unavailability is the key.
 
+
+## Configuring Rules
+
+
+Rule files use YAML, the syntax of a rule file is:
+
+```
+groups:
+  [ - <rule_group> ]
+```
+
+A simple example rules file would be:
+
+```
+groups:
+  - name: example
+    rules:
+    - record: job:http_inprogress_requests:sum
+      expr: sum(http_inprogress_requests) by (job)
+```
+
+<rule_group>
+
+```
+# The name of the group. Must be unique within a file.
+name: <string>
+
+# How often rules in the group are evaluated.
+[ interval: <duration> | default = global.evaluation_interval ]
+
+rules:
+  [ - <rule> ... ]
+```
+
+Thanos supports two types of rules which may be configured and then evaluated at regular intervals: recording rules and alerting rules.
+
+### Recording Rules
+
+Recording rules allow you to precompute frequently needed or computationally expensive expressions and save their result as a new set of time series. Querying the precomputed result will then often be much faster than executing the original expression every time it is needed. This is especially useful for dashboards, which need to query the same expression repeatedly every time they refresh.
+
+Recording and alerting rules exist in a rule group. Rules within a group are run sequentially at a regular interval.
+
+The syntax for recording rules is:
+
+```
+# The name of the time series to output to. Must be a valid metric name.
+record: <string>
+
+# The PromQL expression to evaluate. Every evaluation cycle this is
+# evaluated at the current time, and the result recorded as a new set of
+# time series with the metric name as given by 'record'.
+expr: <string>
+
+# Labels to add or overwrite before storing the result.
+labels:
+  [ <labelname>: <labelvalue> ]
+```
+
+### Alerting Rules
+
+The syntax for alerting rules is:
+
+```
+# The name of the alert. Must be a valid metric name.
+alert: <string>
+
+# The PromQL expression to evaluate. Every evaluation cycle this is
+# evaluated at the current time, and all resultant time series become
+# pending/firing alerts.
+expr: <string>
+
+# Alerts are considered firing once they have been returned for this long.
+# Alerts which have not yet fired for long enough are considered pending.
+[ for: <duration> | default = 0s ]
+
+# Labels to add or overwrite for each alert.
+labels:
+  [ <labelname>: <tmpl_string> ]
+
+# Annotations to add to each alert.
+annotations:
+  [ <labelname>: <tmpl_string> ]
+```
+
 ## Partial Response
 
 See [this](query.md#partial-response) on initial info.
@@ -197,6 +281,7 @@ Flags:
       --eval-interval=30s        The default evaluation interval to use.
       --tsdb.block-duration=2h   Block duration for TSDB block.
       --tsdb.retention=48h       Block retention time on local disk.
+      --tsdb.wal-compression     Compress the tsdb WAL.
       --alertmanagers.url=ALERTMANAGERS.URL ...
                                  Alertmanager replica URLs to push firing
                                  alerts. Ruler claims success if push to at
@@ -209,7 +294,26 @@ Flags:
                                  record's value. The URL path is used as a
                                  prefix for the regular Alertmanager API path.
       --alertmanagers.send-timeout=10s
-                                 Timeout for sending alerts to alertmanager
+                                 Timeout for sending alerts to Alertmanager
+      --alertmanagers.config-file=<file-path>
+                                 Path to YAML file that contains alerting
+                                 configuration. See format details:
+                                 https://thanos.io/components/rule.md/#configuration.
+                                 If defined, it takes precedence over the
+                                 '--alertmanagers.url' and
+                                 '--alertmanagers.send-timeout' flags.
+      --alertmanagers.config=<content>
+                                 Alternative to 'alertmanagers.config-file' flag
+                                 (lower priority). Content of YAML file that
+                                 contains alerting configuration. See format
+                                 details:
+                                 https://thanos.io/components/rule.md/#configuration.
+                                 If defined, it takes precedence over the
+                                 '--alertmanagers.url' and
+                                 '--alertmanagers.send-timeout' flags.
+      --alertmanagers.sd-dns-interval=30s
+                                 Interval between DNS resolutions of
+                                 Alertmanager hosts.
       --alert.query-url=ALERT.QUERY-URL
                                  The external Thanos Query URL that would be set
                                  in all alerts 'Source' field
@@ -265,4 +369,38 @@ Flags:
       --query.sd-dns-interval=30s
                                  Interval between DNS resolutions.
 
+```
+
+## Configuration
+
+### Alertmanager
+
+The `--alertmanagers.config` and `--alertmanagers.config-file` flags allow specifying multiple Alertmanagers. Those entries are treated as a single HA group. This means that alert send failure is claimed only if the Ruler fails to send to all instances.
+
+The configuration format is the following:
+
+[embedmd]:# (../flags/config_rule_alerting.txt yaml)
+```yaml
+alertmanagers:
+- http_config:
+    basic_auth:
+      username: ""
+      password: ""
+      password_file: ""
+    bearer_token: ""
+    bearer_token_file: ""
+    proxy_url: ""
+    tls_config:
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      server_name: ""
+      insecure_skip_verify: false
+  static_configs: []
+  file_sd_configs:
+  - files: []
+    refresh_interval: 0s
+  scheme: http
+  path_prefix: ""
+  timeout: 10s
 ```

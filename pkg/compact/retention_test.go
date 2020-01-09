@@ -11,6 +11,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -236,7 +237,11 @@ func TestApplyRetentionPolicyByResolution(t *testing.T) {
 			for _, b := range tt.blocks {
 				uploadMockBlock(t, bkt, b.id, b.minTime, b.maxTime, int64(b.resolution))
 			}
-			if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, tt.retentionByResolution); (err != nil) != tt.wantErr {
+
+			metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, "", nil)
+			testutil.Ok(t, err)
+
+			if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, bkt, metaFetcher, tt.retentionByResolution); (err != nil) != tt.wantErr {
 				t.Errorf("ApplyRetentionPolicyByResolution() error = %v, wantErr %v", err, tt.wantErr)
 			}
 

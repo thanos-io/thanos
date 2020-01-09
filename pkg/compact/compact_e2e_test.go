@@ -20,7 +20,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/thanos/pkg/block"
@@ -28,59 +27,10 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/objtesting"
 	"github.com/thanos-io/thanos/pkg/testutil"
-	"gopkg.in/yaml.v2"
 )
 
-func TestSyncer_SyncMetas_e2e(t *testing.T) {
-	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
-		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-		defer cancel()
-
-		relabelConfig := make([]*relabel.Config, 0)
-		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false, relabelConfig)
-		testutil.Ok(t, err)
-
-		// Generate 15 blocks. Initially the first 10 are synced into memory and only the last
-		// 10 are in the bucket.
-		// After the first synchronization the first 5 should be dropped and the
-		// last 5 be loaded from the bucket.
-		var ids []ulid.ULID
-		var metas []*metadata.Meta
-
-		for i := 0; i < 15; i++ {
-			id, err := ulid.New(uint64(i), nil)
-			testutil.Ok(t, err)
-
-			var meta metadata.Meta
-			meta.Version = 1
-			meta.ULID = id
-
-			if i < 10 {
-				sy.blocks[id] = &meta
-			}
-			ids = append(ids, id)
-			metas = append(metas, &meta)
-		}
-		for _, m := range metas[5:] {
-			var buf bytes.Buffer
-			testutil.Ok(t, json.NewEncoder(&buf).Encode(&m))
-			testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), metadata.MetaFilename), &buf))
-		}
-
-		groups, err := sy.Groups()
-		testutil.Ok(t, err)
-		testutil.Equals(t, ids[:10], groups[0].IDs())
-
-		testutil.Ok(t, sy.SyncMetas(ctx))
-
-		groups, err = sy.Groups()
-		testutil.Ok(t, err)
-		testutil.Equals(t, ids[5:], groups[0].IDs())
-	})
-}
-
 func TestSyncer_GarbageCollect_e2e(t *testing.T) {
-	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
+	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
@@ -88,8 +38,6 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		// that are higher compactions of them.
 		var metas []*metadata.Meta
 		var ids []ulid.ULID
-
-		relabelConfig := make([]*relabel.Config, 0)
 
 		for i := 0; i < 10; i++ {
 			var m metadata.Meta
@@ -125,7 +73,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		m3.Thanos.Downsample.Resolution = 0
 
 		var m4 metadata.Meta
-		m4.Version = 14
+		m4.Version = 1
 		m4.ULID = ulid.MustNew(400, nil)
 		m4.Compaction.Level = 2
 		m4.Compaction.Sources = ids[9:] // covers the last block but is a different resolution. Must not trigger deletion.
@@ -139,11 +87,14 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 			testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), metadata.MetaFilename), &buf))
 		}
 
-		// Do one initial synchronization with the bucket.
-		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false, relabelConfig)
+		metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil)
 		testutil.Ok(t, err)
-		testutil.Ok(t, sy.SyncMetas(ctx))
 
+		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, 1, false, false)
+		testutil.Ok(t, err)
+
+		// Do one initial synchronization with the bucket.
+		testutil.Ok(t, sy.SyncMetas(ctx))
 		testutil.Ok(t, sy.GarbageCollect(ctx))
 
 		var rem []ulid.ULID
@@ -196,7 +147,7 @@ func MetricCount(c prometheus.Collector) int {
 }
 
 func TestGroup_Compact_e2e(t *testing.T) {
-	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
+	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 
@@ -209,7 +160,10 @@ func TestGroup_Compact_e2e(t *testing.T) {
 
 		reg := prometheus.NewRegistry()
 
-		sy, err := NewSyncer(logger, reg, bkt, 0*time.Second, 5, false, nil)
+		metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil)
+		testutil.Ok(t, err)
+
+		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, 5, false, false)
 		testutil.Ok(t, err)
 
 		comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, []int64{1000, 3000}, nil)
@@ -220,8 +174,6 @@ func TestGroup_Compact_e2e(t *testing.T) {
 
 		// Compaction on empty should not fail.
 		testutil.Ok(t, bComp.Compact(ctx))
-		testutil.Equals(t, 1.0, promtest.ToFloat64(sy.metrics.syncMetas))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.syncMetaFailures))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectedBlocks))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectionFailures))
 		testutil.Equals(t, 0, MetricCount(sy.metrics.compactions))
@@ -240,7 +192,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 				numSamples: 100, mint: 0, maxt: 1000, extLset: extLabels, res: 124,
 				series: []labels.Labels{
 					{{Name: "a", Value: "1"}},
-					{{Name: "a", Value: "2"}, {Name: "a", Value: "2"}},
+					{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
 					{{Name: "a", Value: "3"}},
 					{{Name: "a", Value: "4"}},
 				},
@@ -295,7 +247,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 				numSamples: 100, mint: 0, maxt: 1000, extLset: extLabels2, res: 124,
 				series: []labels.Labels{
 					{{Name: "a", Value: "1"}},
-					{{Name: "a", Value: "2"}, {Name: "a", Value: "2"}},
+					{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
 					{{Name: "a", Value: "3"}},
 					{{Name: "a", Value: "4"}},
 				},
@@ -310,8 +262,6 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		})
 
 		testutil.Ok(t, bComp.Compact(ctx))
-		testutil.Equals(t, 3.0, promtest.ToFloat64(sy.metrics.syncMetas))
-		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.syncMetaFailures))
 		testutil.Equals(t, 5.0, promtest.ToFloat64(sy.metrics.garbageCollectedBlocks))
 		testutil.Equals(t, 0.0, promtest.ToFloat64(sy.metrics.garbageCollectionFailures))
 		testutil.Equals(t, 4, MetricCount(sy.metrics.compactions))
@@ -421,7 +371,7 @@ func createAndUpload(t testing.TB, bkt objstore.Bucket, blocks []blockgenSpec) (
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(prepareDir)) }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	for _, b := range blocks {
@@ -457,7 +407,7 @@ func createEmptyBlock(dir string, mint int64, maxt int64, extLset labels.Labels,
 		return ulid.ULID{}, errors.Wrap(err, "close index")
 	}
 
-	w, err := index.NewWriter(path.Join(dir, uid.String(), "index"))
+	w, err := index.NewWriter(context.Background(), path.Join(dir, uid.String(), "index"))
 	if err != nil {
 		return ulid.ULID{}, errors.Wrap(err, "new index")
 	}
@@ -494,87 +444,4 @@ func createEmptyBlock(dir string, mint int64, maxt int64, extLset labels.Labels,
 	}
 
 	return uid, nil
-}
-
-func TestSyncer_SyncMetasFilter_e2e(t *testing.T) {
-	var err error
-
-	relabelContentYaml := `
-    - action: drop
-      regex: "A"
-      source_labels:
-      - cluster
-    `
-	var relabelConfig []*relabel.Config
-	err = yaml.Unmarshal([]byte(relabelContentYaml), &relabelConfig)
-	testutil.Ok(t, err)
-
-	extLsets := []labels.Labels{{{Name: "cluster", Value: "A"}}, {{Name: "cluster", Value: "B"}}}
-
-	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
-		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-		defer cancel()
-
-		sy, err := NewSyncer(nil, nil, bkt, 0, 1, false, relabelConfig)
-		testutil.Ok(t, err)
-
-		var ids []ulid.ULID
-		var metas []*metadata.Meta
-
-		for i := 0; i < 16; i++ {
-			id, err := ulid.New(uint64(i), nil)
-			testutil.Ok(t, err)
-
-			var meta metadata.Meta
-			meta.Version = 1
-			meta.ULID = id
-			meta.Thanos = metadata.Thanos{
-				Labels: extLsets[i%2].Map(),
-			}
-
-			ids = append(ids, id)
-			metas = append(metas, &meta)
-		}
-		for _, m := range metas[:10] {
-			var buf bytes.Buffer
-			testutil.Ok(t, json.NewEncoder(&buf).Encode(&m))
-			testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), metadata.MetaFilename), &buf))
-		}
-
-		testutil.Ok(t, sy.SyncMetas(ctx))
-
-		groups, err := sy.Groups()
-		testutil.Ok(t, err)
-		var evenIds []ulid.ULID
-		for i := 0; i < 10; i++ {
-			if i%2 != 0 {
-				evenIds = append(evenIds, ids[i])
-			}
-		}
-		testutil.Equals(t, evenIds, groups[0].IDs())
-
-		// Upload last 6 blocks.
-		for _, m := range metas[10:] {
-			var buf bytes.Buffer
-			testutil.Ok(t, json.NewEncoder(&buf).Encode(&m))
-			testutil.Ok(t, bkt.Upload(ctx, path.Join(m.ULID.String(), metadata.MetaFilename), &buf))
-		}
-
-		// Delete first 4 blocks.
-		for _, m := range metas[:4] {
-			testutil.Ok(t, block.Delete(ctx, log.NewNopLogger(), bkt, m.ULID))
-		}
-
-		testutil.Ok(t, sy.SyncMetas(ctx))
-
-		groups, err = sy.Groups()
-		testutil.Ok(t, err)
-		evenIds = make([]ulid.ULID, 0)
-		for i := 4; i < 16; i++ {
-			if i%2 != 0 {
-				evenIds = append(evenIds, ids[i])
-			}
-		}
-		testutil.Equals(t, evenIds, groups[0].IDs())
-	})
 }
