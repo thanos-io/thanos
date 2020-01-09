@@ -18,44 +18,56 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 		{
 			address: "http://localhost:9093",
 			expected: AlertmanagerConfig{
-				StaticAddresses: []string{"localhost:9093"},
-				Scheme:          "http",
+				EndpointsConfig: http.EndpointsConfig{
+					StaticAddresses: []string{"localhost:9093"},
+					Scheme:          "http",
+				},
 			},
 		},
 		{
 			address: "https://am.example.com",
 			expected: AlertmanagerConfig{
-				StaticAddresses: []string{"am.example.com"},
-				Scheme:          "https",
+				EndpointsConfig: http.EndpointsConfig{
+					StaticAddresses: []string{"am.example.com"},
+					Scheme:          "https",
+				},
 			},
 		},
 		{
 			address: "dns+http://localhost:9093",
 			expected: AlertmanagerConfig{
-				StaticAddresses: []string{"dns+localhost:9093"},
-				Scheme:          "http",
+				EndpointsConfig: http.EndpointsConfig{
+					StaticAddresses: []string{"dns+localhost:9093"},
+					Scheme:          "http",
+				},
 			},
 		},
 		{
 			address: "dnssrv+http://localhost",
 			expected: AlertmanagerConfig{
-				StaticAddresses: []string{"dnssrv+localhost"},
-				Scheme:          "http",
+				EndpointsConfig: http.EndpointsConfig{
+					StaticAddresses: []string{"dnssrv+localhost"},
+					Scheme:          "http",
+				},
 			},
 		},
 		{
 			address: "ssh+http://localhost",
 			expected: AlertmanagerConfig{
-				StaticAddresses: []string{"localhost"},
-				Scheme:          "ssh+http",
+				EndpointsConfig: http.EndpointsConfig{
+					StaticAddresses: []string{"localhost"},
+					Scheme:          "ssh+http",
+				},
 			},
 		},
 		{
 			address: "dns+https://localhost/path/prefix/",
 			expected: AlertmanagerConfig{
-				StaticAddresses: []string{"dns+localhost:9093"},
-				Scheme:          "https",
-				PathPrefix:      "/path/prefix/",
+				EndpointsConfig: http.EndpointsConfig{
+					StaticAddresses: []string{"dns+localhost:9093"},
+					Scheme:          "https",
+					PathPrefix:      "/path/prefix/",
+				},
 			},
 		},
 		{
@@ -67,8 +79,10 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 						Password: "pass",
 					},
 				},
-				StaticAddresses: []string{"localhost:9093"},
-				Scheme:          "http",
+				EndpointsConfig: http.EndpointsConfig{
+					StaticAddresses: []string{"localhost:9093"},
+					Scheme:          "http",
+				},
 			},
 		},
 		{
@@ -77,7 +91,7 @@ func TestBuildAlertmanagerConfiguration(t *testing.T) {
 		},
 	} {
 		t.Run(tc.address, func(t *testing.T) {
-			cfg, err := BuildAlertmanagerConfig(nil, tc.address, time.Duration(0))
+			cfg, err := BuildAlertmanagerConfig(tc.address, time.Duration(0))
 			if tc.err {
 				testutil.NotOk(t, err)
 				return
