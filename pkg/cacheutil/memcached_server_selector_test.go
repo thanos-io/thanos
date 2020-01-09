@@ -76,7 +76,7 @@ func TestMemcachedJumpHashSelector_PickServer(t *testing.T) {
 		actualAddr, err := s.PickServer(test.key)
 
 		if test.expectedErr != nil {
-			testutil.NotOk(t, err)
+			testutil.Equals(t, test.expectedErr, err)
 			testutil.Equals(t, nil, actualAddr)
 		} else {
 			testutil.Ok(t, err)
