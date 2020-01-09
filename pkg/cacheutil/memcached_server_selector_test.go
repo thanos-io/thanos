@@ -37,6 +37,54 @@ func TestNatSort(t *testing.T) {
 	testutil.Equals(t, expected, input)
 }
 
+func TestMemcachedJumpHashSelector_PickServer(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	tests := []struct {
+		addrs        []string
+		key          string
+		expectedAddr string
+		expectedErr  error
+	}{
+		{
+			addrs:       []string{},
+			key:         "test-1",
+			expectedErr: memcache.ErrNoServers,
+		},
+		{
+			addrs:        []string{"127.0.0.1:11211"},
+			key:          "test-1",
+			expectedAddr: "127.0.0.1:11211",
+		},
+		{
+			addrs:        []string{"127.0.0.1:11211", "127.0.0.2:11211"},
+			key:          "test-1",
+			expectedAddr: "127.0.0.1:11211",
+		},
+		{
+			addrs:        []string{"127.0.0.1:11211", "127.0.0.2:11211"},
+			key:          "test-2",
+			expectedAddr: "127.0.0.2:11211",
+		},
+	}
+
+	s := MemcachedJumpHashSelector{}
+
+	for _, test := range tests {
+		testutil.Ok(t, s.SetServers(test.addrs...))
+
+		actualAddr, err := s.PickServer(test.key)
+
+		if test.expectedErr != nil {
+			testutil.NotOk(t, err)
+			testutil.Equals(t, nil, actualAddr)
+		} else {
+			testutil.Ok(t, err)
+			testutil.Equals(t, test.expectedAddr, actualAddr.String())
+		}
+	}
+}
+
 func TestMemcachedJumpHashSelector_Each_ShouldRespectServersOrdering(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
