@@ -9,7 +9,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking* word for marking changes that are not backward compatible (relates only to v0.y.z releases.)
 
-## [v0.10.0-rc.0](https://github.com/thanos-io/thanos/releases/tag/v0.10.0-rc.0) - 2020.01.08
+## [v0.10.0-rc.1](https://github.com/thanos-io/thanos/releases/tag/v0.10.0-rc.1) - 2020.01.10
 
 ### Fixed
 
@@ -29,6 +29,7 @@ Compactor now properly handles partial block uploads for all operation like rete
 - [#1872](https://github.com/thanos-io/thanos/pull/1872) Ruler: `/api/v1/rules` now shows a properly formatted value
 - [#1945](https://github.com/thanos-io/thanos/pull/1945) `master` container images are now built with Go 1.13
 - [#1956](https://github.com/thanos-io/thanos/pull/1956) Ruler: now properly ignores duplicated query addresses
+- [#1975](https://github.com/thanos-io/thanos/pull/1975) Store Gateway: fixed panic caused by memcached servers selector when there's 1 memcached node
 
 ### Added
 
