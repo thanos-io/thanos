@@ -452,6 +452,7 @@ func runRule(
 	{
 		sdr := alert.NewSender(logger, reg, alertmgrs)
 		ctx, cancel := context.WithCancel(context.Background())
+		ctx = tracing.ContextWithTracer(ctx, tracer)
 
 		g.Add(func() error {
 			for {

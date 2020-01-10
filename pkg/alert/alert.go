@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 const (
@@ -304,6 +305,8 @@ func NewSender(
 // Send an alert batch to all given Alertmanager clients.
 // TODO(bwplotka): https://github.com/thanos-io/thanos/issues/660.
 func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
+	span, ctx := tracing.StartSpan(ctx, "/send_alerts")
+	defer span.Finish()
 	if len(alerts) == 0 {
 		return
 	}
@@ -325,6 +328,8 @@ func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 
 				level.Debug(s.logger).Log("msg", "sending alerts", "alertmanager", u.Host, "numAlerts", len(alerts))
 				start := time.Now()
+				span, ctx := tracing.StartSpan(ctx, "post_alerts HTTP[client]")
+				defer span.Finish()
 				if err := am.postAlerts(ctx, *u, bytes.NewReader(b)); err != nil {
 					level.Warn(s.logger).Log(
 						"msg", "sending alerts failed",
