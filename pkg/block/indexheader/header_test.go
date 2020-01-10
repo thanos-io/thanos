@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"io/ioutil"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -171,6 +172,8 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 	expRanges, err := indexReader.PostingsRanges()
 	testutil.Ok(t, err)
 
+	minStart := int64(math.MaxInt64)
+	maxEnd := int64(math.MinInt64)
 	for _, lname := range expLabelNames {
 		expectedLabelVals, err := indexReader.LabelValues(lname)
 		testutil.Ok(t, err)
@@ -180,8 +183,16 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 		testutil.Equals(t, expectedLabelVals, vals)
 
 		for i, v := range vals {
+			if minStart > expRanges[labels.Label{Name: lname, Value: v}].Start {
+				minStart = expRanges[labels.Label{Name: lname, Value: v}].Start
+			}
+			if maxEnd < expRanges[labels.Label{Name: lname, Value: v}].End {
+				maxEnd = expRanges[labels.Label{Name: lname, Value: v}].End
+			}
+
 			ptr, err := headerReader.PostingsOffset(lname, v)
 			testutil.Ok(t, err)
+
 			// For index-cache those values are exact.
 			//
 			// For binary they are exact except:
@@ -195,6 +206,12 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 			testutil.Equals(t, expRanges[labels.Label{Name: lname, Value: v}], ptr)
 		}
 	}
+
+	ptr, err := headerReader.PostingsOffset(index.AllPostingsKey())
+	testutil.Ok(t, err)
+	// For AllPostingsKey ending has also too large ending which is well handled further on.
+	testutil.Equals(t, expRanges[labels.Label{Name: "", Value: ""}].Start, ptr.Start)
+	testutil.Assert(t, expRanges[labels.Label{Name: "", Value: ""}].End <= ptr.End, "got offset %v earlier than actual posting end %v ", ptr.End, expRanges[labels.Label{Name: "", Value: ""}].End)
 
 	vals, err := indexReader.LabelValues("not-existing")
 	testutil.Ok(t, err)

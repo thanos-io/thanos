@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
+	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/thanos/pkg/block"
@@ -234,6 +235,7 @@ type BucketStore struct {
 	filterConfig             *FilterConfig
 	advLabelSets             []storepb.LabelSet
 	enableCompatibilityLabel bool
+	enableIndexHeader        bool
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -252,6 +254,7 @@ func NewBucketStore(
 	blockSyncConcurrency int,
 	filterConfig *FilterConfig,
 	enableCompatibilityLabel bool,
+	enableIndexHeader bool,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -288,6 +291,7 @@ func NewBucketStore(
 		samplesLimiter:           NewLimiter(maxSampleCount, metrics.queriesDropped),
 		partitioner:              gapBasedPartitioner{maxGapSize: maxGapSize},
 		enableCompatibilityLabel: enableCompatibilityLabel,
+		enableIndexHeader:        enableIndexHeader,
 	}
 	s.metrics = metrics
 
@@ -447,9 +451,17 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 	lset := labels.FromMap(meta.Thanos.Labels)
 	h := lset.Hash()
 
-	jr, err := indexheader.NewJSONReader(ctx, s.logger, s.bkt, s.dir, meta.ULID)
-	if err != nil {
-		return errors.Wrap(err, "create index header reader")
+	var indexHeaderReader indexheader.Reader
+	if s.enableIndexHeader {
+		indexHeaderReader, err = indexheader.NewBinaryReader(ctx, s.logger, s.bkt, s.dir, meta.ULID)
+		if err != nil {
+			return errors.Wrap(err, "create index header reader")
+		}
+	} else {
+		indexHeaderReader, err = indexheader.NewJSONReader(ctx, s.logger, s.bkt, s.dir, meta.ULID)
+		if err != nil {
+			return errors.Wrap(err, "create index cache reader")
+		}
 	}
 
 	b, err := newBucketBlock(
@@ -460,7 +472,7 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 		dir,
 		s.indexCache,
 		s.chunkPool,
-		jr,
+		indexHeaderReader,
 		s.partitioner,
 		s.metrics.seriesRefetches,
 	)
@@ -1465,6 +1477,7 @@ func (r *bucketIndexReader) fetchPostings(groups []*postingGroup) error {
 				if err != nil {
 					return errors.Wrap(err, "decode postings")
 				}
+
 				g.Fill(j, l)
 				continue
 			}
@@ -1522,21 +1535,21 @@ func (r *bucketIndexReader) fetchPostings(groups []*postingGroup) error {
 			r.mtx.Unlock()
 
 			for _, p := range ptrs[i:j] {
-				c := b[p.ptr.Start-start : p.ptr.End-start]
-
-				_, fetchedPostings, err := r.dec.Postings(c)
+				// index-header can estimate endings, which means we need to resize the endings.
+				pBytes, err := resizePostings(b[p.ptr.Start-start : p.ptr.End-start])
 				if err != nil {
-					return errors.Wrap(err, "read postings list")
+					return err
 				}
 
 				r.mtx.Lock()
 				// Return postings and fill LRU cache.
-				groups[p.groupID].Fill(p.keyID, fetchedPostings)
-				r.cache.StorePostings(r.ctx, r.block.meta.ULID, groups[p.groupID].keys[p.keyID], c)
+				// Truncate first 4 bytes which are length of posting.
+				groups[p.groupID].Fill(p.keyID, newBigEndianPostings(pBytes[4:]))
+				r.cache.StorePostings(r.ctx, r.block.meta.ULID, groups[p.groupID].keys[p.keyID], pBytes)
 
 				// If we just fetched it we still have to update the stats for touched postings.
 				r.stats.postingsTouched++
-				r.stats.postingsTouchedSizeSum += len(c)
+				r.stats.postingsTouchedSizeSum += len(pBytes)
 				r.mtx.Unlock()
 			}
 			return nil
@@ -1544,6 +1557,65 @@ func (r *bucketIndexReader) fetchPostings(groups []*postingGroup) error {
 	}
 
 	return g.Wait()
+}
+
+func resizePostings(b []byte) ([]byte, error) {
+	d := encoding.Decbuf{B: b}
+	n := d.Be32int()
+	if d.Err() != nil {
+		return nil, errors.Wrap(d.Err(), "read postings list")
+	}
+	// 4 for posting length, then n * 4, foreach each big endian posting.
+	return b[:4+n*4], nil
+}
+
+// bigEndianPostings implements the Postings interface over a byte stream of
+// big endian numbers.
+type bigEndianPostings struct {
+	list []byte
+	cur  uint32
+}
+
+// TODO(bwplotka): Expose those inside Prometheus.
+func newBigEndianPostings(list []byte) *bigEndianPostings {
+	return &bigEndianPostings{list: list}
+}
+
+func (it *bigEndianPostings) At() uint64 {
+	return uint64(it.cur)
+}
+
+func (it *bigEndianPostings) Next() bool {
+	if len(it.list) >= 4 {
+		it.cur = binary.BigEndian.Uint32(it.list)
+		it.list = it.list[4:]
+		return true
+	}
+	return false
+}
+
+func (it *bigEndianPostings) Seek(x uint64) bool {
+	if uint64(it.cur) >= x {
+		return true
+	}
+
+	num := len(it.list) / 4
+	// Do binary search between current position and end.
+	i := sort.Search(num, func(i int) bool {
+		return binary.BigEndian.Uint32(it.list[i*4:]) >= uint32(x)
+	})
+	if i < num {
+		j := i * 4
+		it.cur = binary.BigEndian.Uint32(it.list[j:])
+		it.list = it.list[j+4:]
+		return true
+	}
+	it.list = nil
+	return false
+}
+
+func (it *bigEndianPostings) Err() error {
+	return nil
 }
 
 func (r *bucketIndexReader) PreloadSeries(ids []uint64) error {
