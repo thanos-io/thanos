@@ -28,6 +28,12 @@ type TSDBStore struct {
 	externalLabels labels.Labels
 }
 
+// ReadWriteTSDBStore is a TSDBStore that can also be written to.
+type ReadWriteTSDBStore struct {
+	storepb.StoreServer
+	storepb.WriteableStoreServer
+}
+
 // NewTSDBStore creates a new TSDBStore.
 func NewTSDBStore(logger log.Logger, _ prometheus.Registerer, db *tsdb.DB, component component.SourceStoreAPI, externalLabels labels.Labels) *TSDBStore {
 	if logger == nil {
