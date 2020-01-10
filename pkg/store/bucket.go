@@ -226,6 +226,7 @@ type BucketStore struct {
 	filterConfig             *FilterConfig
 	advLabelSets             []storepb.LabelSet
 	enableCompatibilityLabel bool
+	enableIndexHeader        bool
 }
 
 // NewBucketStore creates a new bucket backed store that implements the store API against
@@ -244,6 +245,7 @@ func NewBucketStore(
 	blockSyncConcurrency int,
 	filterConfig *FilterConfig,
 	enableCompatibilityLabel bool,
+	enableIndexHeader bool,
 ) (*BucketStore, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -280,6 +282,7 @@ func NewBucketStore(
 		samplesLimiter:           NewLimiter(maxSampleCount, metrics.queriesDropped),
 		partitioner:              gapBasedPartitioner{maxGapSize: maxGapSize},
 		enableCompatibilityLabel: enableCompatibilityLabel,
+		enableIndexHeader:        enableIndexHeader,
 	}
 	s.metrics = metrics
 
@@ -439,9 +442,17 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 	lset := labels.FromMap(meta.Thanos.Labels)
 	h := lset.Hash()
 
-	jr, err := indexheader.NewJSONReader(ctx, s.logger, s.bkt, s.dir, meta.ULID)
-	if err != nil {
-		return errors.Wrap(err, "create index header reader")
+	var indexHeaderReader indexheader.Reader
+	if s.enableIndexHeader {
+		indexHeaderReader, err = indexheader.NewBinaryReader(ctx, s.logger, s.bkt, s.dir, meta.ULID)
+		if err != nil {
+			return errors.Wrap(err, "create index header reader")
+		}
+	} else {
+		indexHeaderReader, err = indexheader.NewJSONReader(ctx, s.logger, s.bkt, s.dir, meta.ULID)
+		if err != nil {
+			return errors.Wrap(err, "create index cache reader")
+		}
 	}
 
 	b, err := newBucketBlock(
@@ -452,7 +463,7 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 		dir,
 		s.indexCache,
 		s.chunkPool,
-		jr,
+		indexHeaderReader,
 		s.partitioner,
 	)
 	if err != nil {

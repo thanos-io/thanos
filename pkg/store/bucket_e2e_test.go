@@ -163,6 +163,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		20,
 		filterConf,
 		true,
+		true,
 	)
 	testutil.Ok(t, err)
 	s.store = store
