@@ -167,7 +167,7 @@ func sidecar(http, grpc address, prom *prometheusScheduler) *serverScheduler {
 
 func receiver(http, grpc, metric address, replicationFactor int, hashring ...receive.HashringConfig) *serverScheduler {
 	if len(hashring) == 0 {
-		hashring = []receive.HashringConfig{{Endpoints: []string{remoteWriteEndpoint(http)}}}
+		hashring = []receive.HashringConfig{{Endpoints: []string{grpc.HostPort()}}}
 	}
 
 	return &serverScheduler{
@@ -198,7 +198,7 @@ func receiver(http, grpc, metric address, replicationFactor int, hashring ...rec
 				"--tsdb.path", filepath.Join(receiveDir, "tsdb"),
 				"--log.level", "debug",
 				"--receive.replication-factor", strconv.Itoa(replicationFactor),
-				"--receive.local-endpoint", remoteWriteEndpoint(http),
+				"--receive.local-endpoint", grpc.HostPort(),
 				"--receive.hashrings-file", filepath.Join(receiveDir, "hashrings.json"),
 				"--receive.hashrings-file-refresh-interval", "5s")), nil
 		},
