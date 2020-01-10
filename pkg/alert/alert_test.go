@@ -77,7 +77,7 @@ func TestSenderSendsOk(t *testing.T) {
 	poster := &fakeClient{
 		urls: []*url.URL{{Host: "am1:9090"}, {Host: "am2:9090"}},
 	}
-	s := NewSender(nil, nil, []*Alertmanager{NewAlertmanager(nil, poster, time.Minute)})
+	s := NewSender(nil, nil, []*Alertmanager{NewAlertmanager(nil, poster, time.Minute, APIv1)})
 
 	s.Send(context.Background(), []*Alert{{}, {}})
 
@@ -104,7 +104,7 @@ func TestSenderSendsOneFails(t *testing.T) {
 			return rec.Result(), nil
 		},
 	}
-	s := NewSender(nil, nil, []*Alertmanager{NewAlertmanager(nil, poster, time.Minute)})
+	s := NewSender(nil, nil, []*Alertmanager{NewAlertmanager(nil, poster, time.Minute, APIv1)})
 
 	s.Send(context.Background(), []*Alert{{}, {}})
 
@@ -125,7 +125,7 @@ func TestSenderSendsAllFail(t *testing.T) {
 			return nil, errors.New("no such host")
 		},
 	}
-	s := NewSender(nil, nil, []*Alertmanager{NewAlertmanager(nil, poster, time.Minute)})
+	s := NewSender(nil, nil, []*Alertmanager{NewAlertmanager(nil, poster, time.Minute, APIv1)})
 
 	s.Send(context.Background(), []*Alert{{}, {}})
 

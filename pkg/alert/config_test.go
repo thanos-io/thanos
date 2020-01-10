@@ -4,9 +4,42 @@ import (
 	"testing"
 	"time"
 
+	"gopkg.in/yaml.v2"
+
 	"github.com/thanos-io/thanos/pkg/http"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
+
+func TestUnmarshalAPIVersion(t *testing.T) {
+	for _, tc := range []struct {
+		v string
+
+		err      bool
+		expected APIVersion
+	}{
+		{
+			v:        "v1",
+			expected: APIv1,
+		},
+		{
+			v:   "v3",
+			err: true,
+		},
+		{
+			v:   "{}",
+			err: true,
+		},
+	} {
+		var got APIVersion
+		err := yaml.Unmarshal([]byte(tc.v), &got)
+		if tc.err {
+			testutil.NotOk(t, err)
+			continue
+		}
+		testutil.Ok(t, err)
+		testutil.Equals(t, tc.expected, got)
+	}
+}
 
 func TestBuildAlertmanagerConfiguration(t *testing.T) {
 	for _, tc := range []struct {

@@ -416,6 +416,7 @@ alertmanagers:
   scheme: http
   path_prefix: ""
   timeout: 10s
+  api_version: v1
 ```
 
 ### Query API

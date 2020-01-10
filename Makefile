@@ -71,7 +71,7 @@ ME                ?= $(shell whoami)
 PROM_VERSIONS           ?= v2.4.3 v2.5.0 v2.8.1 v2.9.2 v2.13.0
 PROMS ?= $(GOBIN)/prometheus-v2.4.3 $(GOBIN)/prometheus-v2.5.0 $(GOBIN)/prometheus-v2.8.1 $(GOBIN)/prometheus-v2.9.2 $(GOBIN)/prometheus-v2.13.0
 
-ALERTMANAGER_VERSION    ?= v0.15.2
+ALERTMANAGER_VERSION    ?= v0.20.0
 ALERTMANAGER            ?= $(GOBIN)/alertmanager-$(ALERTMANAGER_VERSION)
 
 MINIO_SERVER_VERSION    ?= RELEASE.2018-10-06T00-15-16Z
