@@ -447,6 +447,7 @@ func TestBucketStore_Info(t *testing.T) {
 		20,
 		allowAllFilterConf,
 		true,
+		true,
 	)
 	testutil.Ok(t, err)
 
@@ -687,7 +688,9 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				false,
 				20,
 				allowAllFilterConf,
-				true)
+				true,
+				true,
+			)
 			testutil.Ok(t, err)
 
 			testutil.Ok(t, bucketStore.InitialSync(context.Background()))

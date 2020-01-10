@@ -269,6 +269,7 @@ func storeGateway(http, grpc address, bucketConfig []byte, relabelConfig []byte)
 				// Accelerated sync time for quicker test (3m by default).
 				"--sync-block-duration", "5s",
 				"--selector.relabel-config", string(relabelConfig),
+				"--experimental.enable-index-header",
 			)), nil
 		},
 	}
