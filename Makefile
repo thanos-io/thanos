@@ -86,7 +86,7 @@ define fetch_go_bin_version
 	@mkdir -p $(TMP_GOPATH)
 
 	@echo ">> fetching $(1)@$(2) revision/version"
-	@GOPATH=$(TMP_GOPATH) GO111MODULE=on go get -u $(1)@$(2)
+	@GOBIN='$(TMP_GOPATH)/bin' GOPATH=$(TMP_GOPATH) GO111MODULE=on go get -u $(1)@$(2)
 	@mv -- '$(TMP_GOPATH)/bin/$(shell basename $(1))' '$(GOBIN)/$(shell basename $(1))-$(2)'
 	@echo ">> produced $(GOBIN)/$(shell basename $(1))-$(2)"
 endef
