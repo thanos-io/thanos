@@ -18,6 +18,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 ### Fixed
 
+- [1985](https://github.com/thanos-io/thanos/pull/1985) store gateway: Fixed case where series entry is larger than 64KB in index.
 - [#1919](https://github.com/thanos-io/thanos/issues/1919) Compactor: Fixed potential data loss when uploading older blocks, or upload taking long time while compactor is
 running.
 - [#1937](https://github.com/thanos-io/thanos/pull/1937) Compactor: Improved synchronization of meta JSON files.

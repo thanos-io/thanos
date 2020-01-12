@@ -57,6 +57,8 @@ const (
 
 	maxChunkSize = 16000
 
+	maxSeriesSize = 64 * 1024
+
 	// CompatibilityTypeLabelName is an artificial label that Store Gateway can optionally advertise. This is required for compatibility
 	// with pre v0.8.0 Querier. Previous Queriers was strict about duplicated external labels of all StoreAPIs that had any labels.
 	// Now with newer Store Gateway advertising all the external labels it has access to, there was simple case where
@@ -87,6 +89,7 @@ type bucketStoreMetrics struct {
 	chunkSizeBytes        prometheus.Histogram
 	queriesDropped        prometheus.Counter
 	queriesLimit          prometheus.Gauge
+	seriesRefetches       prometheus.Counter
 }
 
 func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
@@ -166,6 +169,10 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 		Name: "thanos_bucket_store_queries_concurrent_max",
 		Help: "Number of maximum concurrent queries.",
 	})
+	m.seriesRefetches = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_series_refetches_total",
+		Help: fmt.Sprintf("Total number of cases where %v bytes was not enough was to fetch series from index, resulting in refetch.", maxSeriesSize),
+	})
 
 	if reg != nil {
 		reg.MustRegister(
@@ -185,6 +192,7 @@ func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
 			m.chunkSizeBytes,
 			m.queriesDropped,
 			m.queriesLimit,
+			m.seriesRefetches,
 		)
 	}
 	return &m
@@ -454,6 +462,7 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 		s.chunkPool,
 		jr,
 		s.partitioner,
+		s.metrics.seriesRefetches,
 	)
 	if err != nil {
 		return errors.Wrap(err, "new bucket block")
@@ -601,8 +610,6 @@ func (s *bucketSeriesSet) Err() error {
 }
 
 func blockSeries(
-	ctx context.Context,
-	ulid ulid.ULID,
 	extLset map[string]string,
 	indexr *bucketIndexReader,
 	chunkr *bucketChunkReader,
@@ -845,8 +852,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, srv storepb.Store_Serie
 			defer runutil.CloseWithLogOnErr(s.logger, chunkr, "series block")
 
 			g.Go(func() error {
-				part, pstats, err := blockSeries(ctx,
-					b.meta.ULID,
+				part, pstats, err := blockSeries(
 					b.meta.Thanos.Labels,
 					indexr,
 					chunkr,
@@ -1156,6 +1162,8 @@ type bucketBlock struct {
 	pendingReaders sync.WaitGroup
 
 	partitioner partitioner
+
+	seriesRefetches prometheus.Counter
 }
 
 func newBucketBlock(
@@ -1168,6 +1176,7 @@ func newBucketBlock(
 	chunkPool *pool.BytesPool,
 	indexHeadReader indexheader.Reader,
 	p partitioner,
+	seriesRefetches prometheus.Counter,
 ) (b *bucketBlock, err error) {
 	b = &bucketBlock{
 		logger:            logger,
@@ -1178,6 +1187,7 @@ func newBucketBlock(
 		partitioner:       p,
 		meta:              meta,
 		indexHeaderReader: indexHeadReader,
+		seriesRefetches:   seriesRefetches,
 	}
 
 	// Get object handles for all chunk files.
@@ -1484,12 +1494,11 @@ func (r *bucketIndexReader) fetchPostings(groups []*postingGroup) error {
 			fetchTime := time.Since(begin)
 
 			r.mtx.Lock()
-			defer r.mtx.Unlock()
-
 			r.stats.postingsFetchCount++
 			r.stats.postingsFetched += j - i
 			r.stats.postingsFetchDurationSum += fetchTime
 			r.stats.postingsFetchedSizeSum += int(length)
+			r.mtx.Unlock()
 
 			for _, p := range ptrs[i:j] {
 				c := b[p.ptr.Start-start : p.ptr.End-start]
@@ -1499,6 +1508,7 @@ func (r *bucketIndexReader) fetchPostings(groups []*postingGroup) error {
 					return errors.Wrap(err, "read postings list")
 				}
 
+				r.mtx.Lock()
 				// Return postings and fill LRU cache.
 				groups[p.groupID].Fill(p.keyID, fetchedPostings)
 				r.cache.StorePostings(r.ctx, r.block.meta.ULID, groups[p.groupID].keys[p.keyID], c)
@@ -1506,6 +1516,7 @@ func (r *bucketIndexReader) fetchPostings(groups []*postingGroup) error {
 				// If we just fetched it we still have to update the stats for touched postings.
 				r.stats.postingsTouched++
 				r.stats.postingsTouchedSizeSum += len(c)
+				r.mtx.Unlock()
 			}
 			return nil
 		})
@@ -1515,8 +1526,6 @@ func (r *bucketIndexReader) fetchPostings(groups []*postingGroup) error {
 }
 
 func (r *bucketIndexReader) PreloadSeries(ids []uint64) error {
-	const maxSeriesSize = 64 * 1024
-
 	// Load series from cache, overwriting the list of ids to preload
 	// with the missing ones.
 	fromCache, ids := r.cache.FetchMultiSeries(r.ctx, r.block.meta.ULID, ids)
@@ -1533,13 +1542,13 @@ func (r *bucketIndexReader) PreloadSeries(ids []uint64) error {
 		i, j := p.elemRng[0], p.elemRng[1]
 
 		g.Go(func() error {
-			return r.loadSeries(ctx, ids[i:j], s, e)
+			return r.loadSeries(ctx, ids[i:j], false, s, e)
 		})
 	}
 	return g.Wait()
 }
 
-func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []uint64, start, end uint64) error {
+func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []uint64, refetch bool, start, end uint64) error {
 	begin := time.Now()
 
 	b, err := r.block.readIndexRange(ctx, int64(start), int64(end-start))
@@ -1548,14 +1557,13 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []uint64, start,
 	}
 
 	r.mtx.Lock()
-	defer r.mtx.Unlock()
-
 	r.stats.seriesFetchCount++
 	r.stats.seriesFetched += len(ids)
 	r.stats.seriesFetchDurationSum += time.Since(begin)
 	r.stats.seriesFetchedSizeSum += int(end - start)
+	r.mtx.Unlock()
 
-	for _, id := range ids {
+	for i, id := range ids {
 		c := b[id-start:]
 
 		l, n := binary.Uvarint(c)
@@ -1563,11 +1571,22 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []uint64, start,
 			return errors.New("reading series length failed")
 		}
 		if len(c) < n+int(l) {
-			return errors.Errorf("invalid remaining size %d, expected %d", len(c), n+int(l))
+			if i == 0 && refetch {
+				return errors.Errorf("invalid remaining size, even after refetch, remaining: %d, expected %d", len(c), n+int(l))
+			}
+
+			// Inefficient, but should be rare.
+			r.block.seriesRefetches.Inc()
+			level.Warn(r.logger).Log("msg", "series size exceeded expected size; refetching", "id", id, "series length", n+int(l), "maxSeriesSize", maxSeriesSize)
+
+			// Fetch plus to get the size of next one if exists.
+			return r.loadSeries(ctx, ids[i:], true, id, id+uint64(n+int(l)+1))
 		}
 		c = c[n : n+int(l)]
+		r.mtx.Lock()
 		r.loadedSeries[id] = c
 		r.cache.StoreSeries(r.ctx, r.block.meta.ULID, id, c)
+		r.mtx.Unlock()
 	}
 	return nil
 }
