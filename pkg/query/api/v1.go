@@ -536,6 +536,9 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 
 func Respond(w http.ResponseWriter, data interface{}, warnings []error) {
 	w.Header().Set("Content-Type", "application/json")
+	if len(warnings) > 0 {
+		w.Header().Set("Cache-Control", "no-store")
+	}
 	w.WriteHeader(http.StatusOK)
 
 	resp := &response{
@@ -550,6 +553,7 @@ func Respond(w http.ResponseWriter, data interface{}, warnings []error) {
 
 func RespondError(w http.ResponseWriter, apiErr *ApiError, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
 
 	var code int
 	switch apiErr.Typ {
