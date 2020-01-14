@@ -381,7 +381,7 @@ func runRule(
 		// Discover and resolve Alertmanager addresses.
 		addDiscoveryGroups(g, amClient, alertmgrsDNSSDInterval)
 
-		alertmgrs = append(alertmgrs, alert.NewAlertmanager(logger, amClient, time.Duration(cfg.Timeout)))
+		alertmgrs = append(alertmgrs, alert.NewAlertmanager(logger, amClient, time.Duration(cfg.Timeout), cfg.APIVersion))
 	}
 
 	// Run rule evaluation and alert notifications.

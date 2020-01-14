@@ -197,12 +197,12 @@ func (m *mockAlertmanager) ServeHTTP(resp http.ResponseWriter, req *http.Request
 func TestRuleAlertmanagerHTTPClient(t *testing.T) {
 	a := newLocalAddresser()
 
-	// Plain HTTP with a prefix.
+	// API v1 with plain HTTP and a prefix.
 	handler1 := newMockAlertmanager("/prefix/api/v1/alerts", "")
 	srv1 := httptest.NewServer(handler1)
 	defer srv1.Close()
-	// HTTPS with authentication.
-	handler2 := newMockAlertmanager("/api/v1/alerts", "secret")
+	// API v2 with HTTPS and authentication.
+	handler2 := newMockAlertmanager("/api/v2/alerts", "secret")
 	srv2 := httptest.NewTLSServer(handler2)
 	defer srv2.Close()
 
@@ -225,7 +225,8 @@ func TestRuleAlertmanagerHTTPClient(t *testing.T) {
 				Scheme:          "http",
 				PathPrefix:      "/prefix/",
 			},
-			Timeout: model.Duration(time.Second),
+			Timeout:    model.Duration(time.Second),
+			APIVersion: alert.APIv1,
 		},
 		alert.AlertmanagerConfig{
 			HTTPClientConfig: http_util.ClientConfig{
@@ -238,7 +239,8 @@ func TestRuleAlertmanagerHTTPClient(t *testing.T) {
 				StaticAddresses: []string{srv2.Listener.Addr().String()},
 				Scheme:          "https",
 			},
-			Timeout: model.Duration(time.Second),
+			Timeout:    model.Duration(time.Second),
+			APIVersion: alert.APIv2,
 		},
 	)
 
@@ -310,7 +312,8 @@ func TestRuleAlertmanagerFileSD(t *testing.T) {
 				},
 				Scheme: "http",
 			},
-			Timeout: model.Duration(time.Second),
+			Timeout:    model.Duration(time.Second),
+			APIVersion: alert.APIv1,
 		},
 	)
 
@@ -413,7 +416,8 @@ func TestRule(t *testing.T) {
 				StaticAddresses: []string{am.HTTP.HostPort()},
 				Scheme:          "http",
 			},
-			Timeout: model.Duration(time.Second),
+			Timeout:    model.Duration(time.Second),
+			APIVersion: alert.APIv2,
 		},
 	)
 
@@ -681,7 +685,8 @@ func TestRulePartialResponse(t *testing.T) {
 				StaticAddresses: []string{am.HTTP.HostPort()},
 				Scheme:          "http",
 			},
-			Timeout: model.Duration(time.Second),
+			Timeout:    model.Duration(time.Second),
+			APIVersion: alert.APIv2,
 		},
 	)
 

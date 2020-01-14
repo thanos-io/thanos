@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"gopkg.in/yaml.v2"
 
@@ -19,11 +20,39 @@ type AlertingConfig struct {
 }
 
 // AlertmanagerConfig represents a client to a cluster of Alertmanager endpoints.
-// TODO(simonpasquier): add support for API version (v1 or v2).
 type AlertmanagerConfig struct {
 	HTTPClientConfig http_util.ClientConfig    `yaml:"http_config"`
 	EndpointsConfig  http_util.EndpointsConfig `yaml:",inline"`
 	Timeout          model.Duration            `yaml:"timeout"`
+	APIVersion       APIVersion                `yaml:"api_version"`
+}
+
+// APIVersion represents the API version of the Alertmanager endpoint.
+type APIVersion string
+
+const (
+	APIv1 APIVersion = "v1"
+	APIv2 APIVersion = "v2"
+)
+
+var supportedAPIVersions = []APIVersion{
+	APIv1, APIv2,
+}
+
+// UnmarshalYAML implements the yaml.Unmarshaler interface.
+func (v *APIVersion) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var s string
+	if err := unmarshal(&s); err != nil {
+		return errors.Wrap(err, "invalid Alertmanager API version")
+	}
+
+	for _, ver := range supportedAPIVersions {
+		if APIVersion(s) == ver {
+			*v = ver
+			return nil
+		}
+	}
+	return errors.Errorf("expected Alertmanager API version to be one of %v but got %q", supportedAPIVersions, s)
 }
 
 func DefaultAlertmanagerConfig() AlertmanagerConfig {
@@ -33,7 +62,8 @@ func DefaultAlertmanagerConfig() AlertmanagerConfig {
 			StaticAddresses: []string{},
 			FileSDConfigs:   []http_util.FileSDConfig{},
 		},
-		Timeout: model.Duration(time.Second * 10),
+		Timeout:    model.Duration(time.Second * 10),
+		APIVersion: APIv1,
 	}
 }
 

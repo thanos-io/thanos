@@ -28,7 +28,7 @@ import (
 
 const (
 	defaultPrometheusVersion   = "v2.13.0"
-	defaultAlertmanagerVersion = "v0.15.2"
+	defaultAlertmanagerVersion = "v0.20.0"
 	defaultMinioVersion        = "RELEASE.2018-10-06T00-15-16Z"
 
 	// Space delimited list of versions.
