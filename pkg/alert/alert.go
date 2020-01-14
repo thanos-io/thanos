@@ -405,7 +405,7 @@ func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 	}
 
 	s.dropped.Add(float64(len(alerts)))
-	level.Warn(s.logger).Log("msg", "failed to send alerts to all alertmanagers")
+	level.Warn(s.logger).Log("msg", "failed to send alerts to all alertmanagers", "numAlerts", len(alerts))
 }
 
 type Dispatcher interface {

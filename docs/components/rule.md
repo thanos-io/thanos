@@ -419,6 +419,8 @@ alertmanagers:
   api_version: v1
 ```
 
+Supported values for `api_version` are `v1` or `v2`.
+
 ### Query API
 
 The `--query.config` and `--query.config-file` flags allow specifying multiple query endpoints. Those entries are treated as a single HA group. This means that query failure is claimed only if the Ruler fails to query all instances.
