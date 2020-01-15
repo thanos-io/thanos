@@ -46,7 +46,7 @@ func main() {
 
 	logLevel := app.Flag("log.level", "Log filtering level.").
 		Default("info").Enum("error", "warn", "info", "debug")
-	logFormat := app.Flag("log.format", "Log format to use.").
+	logFormat := app.Flag("log.format", "Log format to use. Possible options: logfmt or json.").
 		Default(logFormatLogfmt).Enum(logFormatLogfmt, logFormatJson)
 
 	tracingConfig := regCommonTracingFlags(app)
