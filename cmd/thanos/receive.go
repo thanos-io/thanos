@@ -286,7 +286,7 @@ func runReceive(
 					}
 					level.Info(logger).Log("msg", "tsdb started")
 					localStorage.Set(db.Get(), startTimeMargin)
-					webHandler.SetWriter(receive.NewWriter(log.With(logger, "component", "receive-writer"), localStorage))
+					webHandler.SetWriter(receive.NewWriter(log.With(logger, "component", "receive-writer"), reg, localStorage))
 					statusProber.Ready()
 					level.Info(logger).Log("msg", "server is ready to receive web requests.")
 					dbReady <- struct{}{}

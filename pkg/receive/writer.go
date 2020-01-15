@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/prompb"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
@@ -21,13 +22,37 @@ type Appendable interface {
 type Writer struct {
 	logger log.Logger
 	append Appendable
+
+	numOutOfOrder  prometheus.Gauge
+	numDuplicates  prometheus.Gauge
+	numOutOfBounds prometheus.Gauge
 }
 
-func NewWriter(logger log.Logger, app Appendable) *Writer {
-	return &Writer{
+func NewWriter(logger log.Logger, reg prometheus.Registerer, app Appendable) *Writer {
+	w := &Writer{
 		logger: logger,
 		append: app,
+		numOutOfOrder: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "thanos_receive_write_out_of_orders",
+			Help: "Out of order sample when handle write pb request",
+		}),
+		numDuplicates: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "thanos_receive_write_duplicates",
+			Help: "Duplicate sample for timestamp when handle write pb request",
+		}),
+		numOutOfBounds: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "thanos_receive_write_out_of_bounds",
+			Help: "Out of bounds metric when handle write pb request",
+		}),
 	}
+
+	if reg != nil {
+		reg.MustRegister(w.numOutOfOrder)
+		reg.MustRegister(w.numDuplicates)
+		reg.MustRegister(w.numOutOfBounds)
+	}
+
+	return w
 }
 
 func (r *Writer) Write(wreq *prompb.WriteRequest) error {
@@ -60,12 +85,15 @@ func (r *Writer) Write(wreq *prompb.WriteRequest) error {
 				continue
 			case storage.ErrOutOfOrderSample:
 				numOutOfOrder++
+				r.numOutOfBounds.Inc()
 				level.Debug(r.logger).Log("msg", "Out of order sample", "lset", lset.String(), "sample", s.String())
 			case storage.ErrDuplicateSampleForTimestamp:
 				numDuplicates++
+				r.numDuplicates.Inc()
 				level.Debug(r.logger).Log("msg", "Duplicate sample for timestamp", "lset", lset.String(), "sample", s.String())
 			case storage.ErrOutOfBounds:
 				numOutOfBounds++
+				r.numOutOfBounds.Inc()
 				level.Debug(r.logger).Log("msg", "Out of bounds metric", "lset", lset.String(), "sample", s.String())
 			}
 		}
