@@ -46,8 +46,11 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
 	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := regGRPCFlags(cmd)
 
+	client verifies the
+	  // server's certificate chain and host name
+
 	secure := cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").Bool()
-	skipVerify := cmd.Flag("grpc-client-skip-verify", "Controls whether a client verifies the server's certificate chain and host name").Default("false").Bool()
+	skipVerify := cmd.Flag("grpc-client-skip-verify", "Disable client verification of server's certificate chain and host name").Default("false").Bool()
 	cert := cmd.Flag("grpc-client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").String()
 	key := cmd.Flag("grpc-client-tls-key", "TLS Key for the client's certificate").Default("").String()
 	caCert := cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").Default("").String()

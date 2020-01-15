@@ -278,6 +278,8 @@ Flags:
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
       --grpc-client-tls-secure   Use TLS when talking to the gRPC server
+      --grpc-client-skip-verify  Disable client verification of server's certificate
+                                 chain and host name
       --grpc-client-tls-cert=""  TLS Certificates to use to identify this client
                                  to the server
       --grpc-client-tls-key=""   TLS Key for the client's certificate
