@@ -209,7 +209,7 @@ func runQuery(
 	})
 	reg.MustRegister(duplicatedStores)
 
-	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, secure, skipVerify, cert, key, caCert, serverName)
+	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, secure, cert, key, caCert, serverName, skipVerify)
 	if err != nil {
 		return errors.Wrap(err, "building gRPC client")
 	}
