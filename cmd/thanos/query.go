@@ -47,6 +47,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := regGRPCFlags(cmd)
 
 	secure := cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").Bool()
+	skipVerify := cmd.Flag("grpc-client-skip-verify", "Controls whether a client verifies the server's certificate chain and host name").Default("false").Bool()
 	cert := cmd.Flag("grpc-client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").String()
 	key := cmd.Flag("grpc-client-tls-key", "TLS Key for the client's certificate").Default("").String()
 	caCert := cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").Default("").String()
@@ -135,6 +136,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 			*grpcKey,
 			*grpcClientCA,
 			*secure,
+			*skipVerify,
 			*cert,
 			*key,
 			*caCert,
@@ -175,6 +177,7 @@ func runQuery(
 	grpcKey string,
 	grpcClientCA string,
 	secure bool,
+	skipVerify bool,
 	cert string,
 	key string,
 	caCert string,
@@ -206,7 +209,7 @@ func runQuery(
 	})
 	reg.MustRegister(duplicatedStores)
 
-	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, secure, cert, key, caCert, serverName)
+	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, secure, skipVerify, cert, key, caCert, serverName)
 	if err != nil {
 		return errors.Wrap(err, "building gRPC client")
 	}
