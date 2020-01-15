@@ -69,3 +69,9 @@ adopters:
 - name: Tencent
   url: https://github.com/tkestack/tke
   logo: tencent.png
+- name: VEXXHOST, Inc.
+  url: https://vexxhost.com
+  logo: vexxhost.png
+- name: World Wide Technology
+  url: https://www.wwt.com
+  logo: wwt.png

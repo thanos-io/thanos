@@ -7,16 +7,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
+	"path"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/go-openapi/strfmt"
+	"github.com/pkg/errors"
+	"github.com/prometheus/alertmanager/api/v2/models"
 	"github.com/prometheus/client_golang/prometheus"
-
 	"github.com/prometheus/prometheus/pkg/labels"
+
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/tracing"
+)
+
+const (
+	defaultAlertmanagerPort = 9093
+	contentTypeJSON         = "application/json"
 )
 
 // Alert is a generic representation of an alert in the Prometheus eco-system.
@@ -240,15 +252,11 @@ func (q *Queue) Push(alerts []*Alert) {
 	}
 }
 
-type AlertmanagerClient interface {
-	Endpoints() []*url.URL
-	Do(context.Context, *url.URL, io.Reader) error
-}
-
 // Sender sends notifications to a dynamic set of alertmanagers.
 type Sender struct {
 	logger        log.Logger
-	alertmanagers []AlertmanagerClient
+	alertmanagers []*Alertmanager
+	versions      []APIVersion
 
 	sent    *prometheus.CounterVec
 	errs    *prometheus.CounterVec
@@ -261,14 +269,25 @@ type Sender struct {
 func NewSender(
 	logger log.Logger,
 	reg prometheus.Registerer,
-	alertmanagers []AlertmanagerClient,
+	alertmanagers []*Alertmanager,
 ) *Sender {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
+	var (
+		versions       []APIVersion
+		versionPresent map[APIVersion]struct{}
+	)
+	for _, am := range alertmanagers {
+		if _, found := versionPresent[am.version]; found {
+			continue
+		}
+		versions = append(versions, am.version)
+	}
 	s := &Sender{
 		logger:        logger,
 		alertmanagers: alertmanagers,
+		versions:      versions,
 
 		sent: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_alert_sender_alerts_sent_total",
@@ -296,35 +315,77 @@ func NewSender(
 	return s
 }
 
+func toAPILabels(labels labels.Labels) models.LabelSet {
+	apiLabels := make(models.LabelSet, len(labels))
+	for _, label := range labels {
+		apiLabels[label.Name] = label.Value
+	}
+
+	return apiLabels
+}
+
 // Send an alert batch to all given Alertmanager clients.
 // TODO(bwplotka): https://github.com/thanos-io/thanos/issues/660.
 func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
+	span, ctx := tracing.StartSpan(ctx, "/send_alerts")
+	defer span.Finish()
 	if len(alerts) == 0 {
 		return
 	}
-	b, err := json.Marshal(alerts)
-	if err != nil {
-		level.Warn(s.logger).Log("msg", "sending alerts failed", "err", err)
-		return
+
+	payload := make(map[APIVersion][]byte)
+	for _, version := range s.versions {
+		var (
+			b   []byte
+			err error
+		)
+		switch version {
+		case APIv1:
+			if b, err = json.Marshal(alerts); err != nil {
+				level.Warn(s.logger).Log("msg", "encoding alerts for v1 API failed", "err", err)
+				return
+			}
+		case APIv2:
+			apiAlerts := make(models.PostableAlerts, 0, len(alerts))
+			for _, a := range alerts {
+				apiAlerts = append(apiAlerts, &models.PostableAlert{
+					Annotations: toAPILabels(a.Annotations),
+					EndsAt:      strfmt.DateTime(a.EndsAt),
+					StartsAt:    strfmt.DateTime(a.StartsAt),
+					Alert: models.Alert{
+						GeneratorURL: strfmt.URI(a.GeneratorURL),
+						Labels:       toAPILabels(a.Labels),
+					},
+				})
+			}
+			if b, err = json.Marshal(apiAlerts); err != nil {
+				level.Warn(s.logger).Log("msg", "encoding alerts for v2 API failed", "err", err)
+				return
+			}
+		}
+		payload[version] = b
 	}
 
 	var (
 		wg         sync.WaitGroup
 		numSuccess uint64
 	)
-	for _, amc := range s.alertmanagers {
-		for _, u := range amc.Endpoints() {
+	for _, am := range s.alertmanagers {
+		for _, u := range am.dispatcher.Endpoints() {
 			wg.Add(1)
-			go func(amc AlertmanagerClient, u *url.URL) {
+			go func(am *Alertmanager, u url.URL) {
 				defer wg.Done()
 
 				level.Debug(s.logger).Log("msg", "sending alerts", "alertmanager", u.Host, "numAlerts", len(alerts))
 				start := time.Now()
-				if err := amc.Do(ctx, u, bytes.NewReader(b)); err != nil {
+				u.Path = path.Join(u.Path, fmt.Sprintf("/api/%s/alerts", string(am.version)))
+				span, ctx := tracing.StartSpan(ctx, "post_alerts HTTP[client]")
+				defer span.Finish()
+				if err := am.postAlerts(ctx, u, bytes.NewReader(payload[am.version])); err != nil {
 					level.Warn(s.logger).Log(
 						"msg", "sending alerts failed",
 						"alertmanager", u.Host,
-						"numAlerts", len(alerts),
+						"alerts", string(payload[am.version]),
 						"err", err,
 					)
 					s.errs.WithLabelValues(u.Host).Inc()
@@ -334,7 +395,7 @@ func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 				s.sent.WithLabelValues(u.Host).Add(float64(len(alerts)))
 
 				atomic.AddUint64(&numSuccess, 1)
-			}(amc, u)
+			}(am, *u)
 		}
 	}
 	wg.Wait()
@@ -344,5 +405,56 @@ func (s *Sender) Send(ctx context.Context, alerts []*Alert) {
 	}
 
 	s.dropped.Add(float64(len(alerts)))
-	level.Warn(s.logger).Log("msg", "failed to send alerts to all alertmanagers", "alerts", string(b))
+	level.Warn(s.logger).Log("msg", "failed to send alerts to all alertmanagers", "numAlerts", len(alerts))
+}
+
+type Dispatcher interface {
+	// Endpoints returns the list of endpoint URLs the dispatcher knows about.
+	Endpoints() []*url.URL
+	// Do sends an HTTP request and returns a response.
+	Do(*http.Request) (*http.Response, error)
+}
+
+// Alertmanager is an HTTP client that can send alerts to a cluster of Alertmanager endpoints.
+type Alertmanager struct {
+	logger     log.Logger
+	dispatcher Dispatcher
+	timeout    time.Duration
+	version    APIVersion
+}
+
+// NewAlertmanager returns a new Alertmanager client.
+func NewAlertmanager(logger log.Logger, dispatcher Dispatcher, timeout time.Duration, version APIVersion) *Alertmanager {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
+
+	return &Alertmanager{
+		logger:     logger,
+		dispatcher: dispatcher,
+		timeout:    timeout,
+		version:    version,
+	}
+}
+
+func (a *Alertmanager) postAlerts(ctx context.Context, u url.URL, r io.Reader) error {
+	req, err := http.NewRequest("POST", u.String(), r)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, a.timeout)
+	defer cancel()
+	req = req.WithContext(ctx)
+	req.Header.Set("Content-Type", contentTypeJSON)
+
+	resp, err := a.dispatcher.Do(req)
+	if err != nil {
+		return errors.Wrapf(err, "send request to %q", u.String())
+	}
+	defer runutil.ExhaustCloseWithLogOnErr(a.logger, resp.Body, "send one alert")
+
+	if resp.StatusCode/100 != 2 {
+		return errors.Errorf("bad response status %v from %q", resp.Status, u.String())
+	}
+	return nil
 }

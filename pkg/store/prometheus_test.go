@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
@@ -364,8 +365,7 @@ func TestPrometheusStore_Series_MatchExternalLabel_e2e(t *testing.T) {
 
 	proxy, err := NewPrometheusStore(nil, nil, u, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
-		func() (int64, int64) { return 0, math.MaxInt64 },
-	)
+		func() (int64, int64) { return 0, math.MaxInt64 })
 	testutil.Ok(t, err)
 	srv := newStoreSeriesServer(ctx)
 
@@ -410,8 +410,7 @@ func TestPrometheusStore_Info(t *testing.T) {
 
 	proxy, err := NewPrometheusStore(nil, nil, nil, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
-		func() (int64, int64) { return 123, 456 },
-	)
+		func() (int64, int64) { return 123, 456 })
 	testutil.Ok(t, err)
 
 	resp, err := proxy.Info(ctx, &storepb.InfoRequest{})
@@ -489,8 +488,7 @@ func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t 
 
 		proxy, err := NewPrometheusStore(nil, nil, u, component.Sidecar,
 			func() labels.Labels { return labels.FromStrings("region", "eu-west") },
-			func() (int64, int64) { return 0, math.MaxInt64 },
-		)
+			func() (int64, int64) { return 0, math.MaxInt64 })
 		testutil.Ok(t, err)
 
 		// We build chunks only for SAMPLES method. Make sure we ask for SAMPLES only.

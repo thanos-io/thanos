@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
+	http_util "github.com/thanos-io/thanos/pkg/http"
 	"github.com/thanos-io/thanos/pkg/objstore/azure"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/cos"
@@ -22,6 +23,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/oss"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/objstore/swift"
+	"github.com/thanos-io/thanos/pkg/query"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	trclient "github.com/thanos-io/thanos/pkg/tracing/client"
 	"github.com/thanos-io/thanos/pkg/tracing/elasticapm"
@@ -87,9 +89,16 @@ func main() {
 	}
 
 	alertmgrCfg := alert.DefaultAlertmanagerConfig()
-	alertmgrCfg.FileSDConfigs = []alert.FileSDConfig{alert.FileSDConfig{}}
+	alertmgrCfg.EndpointsConfig.FileSDConfigs = []http_util.FileSDConfig{http_util.FileSDConfig{}}
 	if err := generate(alert.AlertingConfig{Alertmanagers: []alert.AlertmanagerConfig{alertmgrCfg}}, "rule_alerting", *outputDir); err != nil {
 		level.Error(logger).Log("msg", "failed to generate", "type", "rule_alerting", "err", err)
+		os.Exit(1)
+	}
+
+	queryCfg := query.DefaultConfig()
+	queryCfg.EndpointsConfig.FileSDConfigs = []http_util.FileSDConfig{http_util.FileSDConfig{}}
+	if err := generate([]query.Config{queryCfg}, "rule_query", *outputDir); err != nil {
+		level.Error(logger).Log("msg", "failed to generate", "type", "rule_query", "err", err)
 		os.Exit(1)
 	}
 	logger.Log("msg", "success")

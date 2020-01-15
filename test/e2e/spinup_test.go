@@ -167,7 +167,7 @@ func sidecar(http, grpc address, prom *prometheusScheduler) *serverScheduler {
 
 func receiver(http, grpc, metric address, replicationFactor int, hashring ...receive.HashringConfig) *serverScheduler {
 	if len(hashring) == 0 {
-		hashring = []receive.HashringConfig{{Endpoints: []string{remoteWriteEndpoint(http)}}}
+		hashring = []receive.HashringConfig{{Endpoints: []string{grpc.HostPort()}}}
 	}
 
 	return &serverScheduler{
@@ -198,7 +198,7 @@ func receiver(http, grpc, metric address, replicationFactor int, hashring ...rec
 				"--tsdb.path", filepath.Join(receiveDir, "tsdb"),
 				"--log.level", "debug",
 				"--receive.replication-factor", strconv.Itoa(replicationFactor),
-				"--receive.local-endpoint", remoteWriteEndpoint(http),
+				"--receive.local-endpoint", grpc.HostPort(),
 				"--receive.hashrings-file", filepath.Join(receiveDir, "hashrings.json"),
 				"--receive.hashrings-file-refresh-interval", "5s")), nil
 		},
@@ -305,11 +305,15 @@ receivers:
 	}
 }
 
-func rule(http, grpc address, ruleDir string, amCfg []byte, queryAddresses []address, queryFileSDAddresses []address) *serverScheduler {
+func rule(http, grpc address, ruleDir string, amCfg []byte, queryCfg []byte) *serverScheduler {
 	return &serverScheduler{
 		HTTP: http,
 		GRPC: grpc,
 		schedule: func(workDir string) (Exec, error) {
+			err := ioutil.WriteFile(filepath.Join(workDir, "query.cfg"), queryCfg, 0666)
+			if err != nil {
+				return nil, errors.Wrap(err, "creating query config for ruler")
+			}
 			args := []string{
 				"rule",
 				"--debug.name", fmt.Sprintf("rule-%s", http.Port),
@@ -323,19 +327,9 @@ func rule(http, grpc address, ruleDir string, amCfg []byte, queryAddresses []add
 				"--grpc-grace-period", "0s",
 				"--http-address", http.HostPort(),
 				"--log.level", "debug",
+				"--query.config-file", filepath.Join(workDir, "query.cfg"),
 				"--query.sd-dns-interval", "5s",
 				"--resend-delay", "5s",
-			}
-
-			for _, addr := range queryAddresses {
-				args = append(args, "--query", addr.HostPort())
-			}
-
-			if len(queryFileSDAddresses) > 0 {
-				if err := ioutil.WriteFile(filepath.Join(workDir, "filesd.json"), []byte(generateFileSD(queryFileSDAddresses)), 0666); err != nil {
-					return nil, errors.Wrap(err, "creating ruler filesd config")
-				}
-				args = append(args, "--query.sd-files", filepath.Join(workDir, "filesd.json"))
 			}
 			return newCmdExec(exec.Command("thanos", args...)), nil
 		},

@@ -27,6 +27,7 @@ import (
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -79,7 +80,7 @@ func NewPrometheusStore(
 	}
 	if client == nil {
 		client = &http.Client{
-			Transport: tracing.HTTPTripperware(logger, http.DefaultTransport),
+			Transport: tracing.HTTPTripperware(logger, exthttp.NewTransport()),
 		}
 	}
 	p := &PrometheusStore{
