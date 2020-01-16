@@ -20,6 +20,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/health"
+	grpc_health "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 )
 
@@ -78,6 +80,8 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 
 	storepb.RegisterStoreServer(s, storeSrv)
 	met.InitializeMetrics(s)
+
+	grpc_health.RegisterHealthServer(s, health.NewServer())
 
 	return &Server{
 		logger: log.With(logger, "service", "gRPC/server", "component", comp.String()),
