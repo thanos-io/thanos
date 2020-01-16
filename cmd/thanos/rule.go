@@ -50,6 +50,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/ui"
+	"google.golang.org/grpc/health"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -548,7 +549,8 @@ func runRule(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		s := grpcserver.New(logger, reg, tracer, comp, store,
+		grpcHealthSrv := health.NewServer()
+		s := grpcserver.New(logger, reg, tracer, comp, grpcHealthSrv, store,
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),
@@ -556,6 +558,7 @@ func runRule(
 
 		g.Add(func() error {
 			statusProber.Ready()
+			grpcHealthSrv.Resume()
 			return s.ListenAndServe()
 		}, func(err error) {
 			statusProber.NotReady(err)

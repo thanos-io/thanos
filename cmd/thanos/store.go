@@ -24,6 +24,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/tls"
+	"google.golang.org/grpc/health"
 	"gopkg.in/alecthomas/kingpin.v2"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -278,7 +279,8 @@ func runStore(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		s := grpcserver.New(logger, reg, tracer, component, bs,
+		grpcHealthSrv := health.NewServer()
+		s := grpcserver.New(logger, reg, tracer, component, grpcHealthSrv, bs,
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),
@@ -287,6 +289,7 @@ func runStore(
 		g.Add(func() error {
 			<-bucketStoreReady
 			statusProber.Ready()
+			grpcHealthSrv.Resume()
 			return s.ListenAndServe()
 		}, func(err error) {
 			statusProber.NotReady(err)

@@ -38,7 +38,7 @@ type Server struct {
 }
 
 // New creates a new Server.
-func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, storeSrv storepb.StoreServer, opts ...Option) *Server {
+func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, h *health.Server, storeSrv storepb.StoreServer, opts ...Option) *Server {
 	options := options{}
 	for _, o := range opts {
 		o.apply(&options)
@@ -82,8 +82,11 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	storepb.RegisterStoreServer(s, storeSrv)
 	met.InitializeMetrics(s)
 
-	h := health.NewServer()
-	h.SetServingStatus("", grpc_health.HealthCheckResponse_UNKNOWN)
+	if h == nil {
+		h = health.NewServer()
+	}
+
+	h.SetServingStatus("", grpc_health.HealthCheckResponse_NOT_SERVING)
 	grpc_health.RegisterHealthServer(s, h)
 
 	return &Server{
@@ -102,8 +105,6 @@ func (s *Server) ListenAndServe() error {
 		return errors.Wrapf(err, "listen gRPC on address %s", s.opts.listen)
 	}
 	s.listener = l
-
-	s.h.Resume()
 
 	level.Info(s.logger).Log("msg", "listening for StoreAPI gRPC", "address", s.opts.listen)
 	return errors.Wrap(s.srv.Serve(s.listener), "serve gRPC")
@@ -146,8 +147,8 @@ type ReadWriteStoreServer interface {
 }
 
 // NewReadWrite creates a new server that can be written to.
-func NewReadWrite(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, storeSrv ReadWriteStoreServer, opts ...Option) *Server {
-	s := New(logger, reg, tracer, comp, storeSrv, opts...)
+func NewReadWrite(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, h *health.Server, storeSrv ReadWriteStoreServer, opts ...Option) *Server {
+	s := New(logger, reg, tracer, comp, h, storeSrv, opts...)
 	storepb.RegisterWriteableStoreServer(s.srv, storeSrv)
 	return s
 }

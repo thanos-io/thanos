@@ -5,10 +5,9 @@ import (
 	"net/http"
 	"sync/atomic"
 
-	"github.com/prometheus/client_golang/prometheus"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/thanos/pkg/component"
 )
 

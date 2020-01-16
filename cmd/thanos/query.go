@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
+	"google.golang.org/grpc/health"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 
 	"github.com/thanos-io/thanos/pkg/component"
@@ -359,7 +360,8 @@ func runQuery(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		s := grpcserver.New(logger, reg, tracer, comp, proxy,
+		grpcHealthSrv := health.NewServer()
+		s := grpcserver.New(logger, reg, tracer, comp, grpcHealthSrv, proxy,
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),
@@ -367,6 +369,7 @@ func runQuery(
 
 		g.Add(func() error {
 			statusProber.Ready()
+			grpcHealthSrv.Resume()
 			return s.ListenAndServe()
 		}, func(error) {
 			statusProber.NotReady(err)

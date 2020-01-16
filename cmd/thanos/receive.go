@@ -15,6 +15,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/storage/tsdb"
+	"google.golang.org/grpc/health"
+	grpc_health "google.golang.org/grpc/health/grpc_health_v1"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -209,6 +211,7 @@ func runReceive(
 		DialOpts:          dialOpts,
 	})
 
+	grpcHealthSrv := health.NewServer()
 	statusProber := prober.New(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	confContentYaml, err := objStoreConfig.Content()
 	if err != nil {
@@ -288,6 +291,7 @@ func runReceive(
 					localStorage.Set(db.Get(), startTimeMargin)
 					webHandler.SetWriter(receive.NewWriter(log.With(logger, "component", "receive-writer"), localStorage))
 					statusProber.Ready()
+					grpcHealthSrv.Resume()
 					level.Info(logger).Log("msg", "server is ready to receive web requests.")
 					dbReady <- struct{}{}
 				}
@@ -338,6 +342,7 @@ func runReceive(
 					webHandler.Hashring(h)
 					msg := "hashring has changed; server is not ready to receive web requests."
 					statusProber.NotReady(errors.New(msg))
+					grpcHealthSrv.SetServingStatus("", grpc_health.HealthCheckResponse_NOT_SERVING)
 					level.Info(logger).Log("msg", msg)
 					updateDB <- struct{}{}
 				case <-cancel:
@@ -389,7 +394,7 @@ func runReceive(
 					WriteableStoreServer: webHandler,
 				}
 
-				s = grpcserver.NewReadWrite(logger, &receive.UnRegisterer{Registerer: reg}, tracer, comp, rw,
+				s = grpcserver.NewReadWrite(logger, &receive.UnRegisterer{Registerer: reg}, tracer, comp, grpcHealthSrv, rw,
 					grpcserver.WithListen(grpcBindAddr),
 					grpcserver.WithGracePeriod(grpcGracePeriod),
 					grpcserver.WithTLSConfig(tlsCfg),
