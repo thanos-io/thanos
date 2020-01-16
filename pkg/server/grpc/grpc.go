@@ -31,6 +31,7 @@ type Server struct {
 	comp   component.Component
 
 	srv      *grpc.Server
+	h        *health.Server
 	listener net.Listener
 
 	opts options
@@ -81,12 +82,15 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	storepb.RegisterStoreServer(s, storeSrv)
 	met.InitializeMetrics(s)
 
-	grpc_health.RegisterHealthServer(s, health.NewServer())
+	h := health.NewServer()
+	h.SetServingStatus("", grpc_health.HealthCheckResponse_UNKNOWN)
+	grpc_health.RegisterHealthServer(s, h)
 
 	return &Server{
 		logger: log.With(logger, "service", "gRPC/server", "component", comp.String()),
 		comp:   comp,
 		srv:    s,
+		h:      h,
 		opts:   options,
 	}
 }
@@ -99,6 +103,8 @@ func (s *Server) ListenAndServe() error {
 	}
 	s.listener = l
 
+	s.h.Resume()
+
 	level.Info(s.logger).Log("msg", "listening for StoreAPI gRPC", "address", s.opts.listen)
 	return errors.Wrap(s.srv.Serve(s.listener), "serve gRPC")
 }
@@ -107,6 +113,7 @@ func (s *Server) ListenAndServe() error {
 // for specified amount of time (by gracePeriod) for connections to return to idle and then shut down.
 func (s *Server) Shutdown(err error) {
 	defer level.Info(s.logger).Log("msg", "internal server shutdown", "err", err)
+	s.h.Shutdown()
 
 	if s.opts.gracePeriod == 0 {
 		s.srv.Stop()
