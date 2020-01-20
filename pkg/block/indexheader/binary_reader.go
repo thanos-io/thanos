@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 	"unsafe"
 
 	"github.com/go-kit/kit/log"
@@ -39,6 +40,8 @@ const (
 	MagicIndex = 0xBAAAD792
 
 	symbolFactor = 32
+
+	postingLengthFieldSize = 4
 )
 
 // The table gets initialized with sync.Once but may still cause a race
@@ -60,7 +63,7 @@ func newCRC32() hash.Hash32 {
 type BinaryTOC struct {
 	// Symbols holds start to the same symbols section as index related to this index header.
 	Symbols uint64
-	// PostingsTable holds start to the the same Postings Offset Table section as index related to this index header.
+	// PostingsOffsetTable holds start to the the same Postings Offset Table section as index related to this index header.
 	PostingsOffsetTable uint64
 }
 
@@ -383,6 +386,11 @@ func (w *binaryWriter) Close() error {
 	return w.f.Close()
 }
 
+type postingValueOffsets struct {
+	offsets       []postingOffset
+	lastValOffset int64
+}
+
 type postingOffset struct {
 	// label value.
 	value string
@@ -399,7 +407,7 @@ type BinaryReader struct {
 
 	// Map of LabelName to a list of some LabelValues's position in the offset table.
 	// The first and last values for each name are always present.
-	postings map[string][]postingOffset
+	postings map[string]*postingValueOffsets
 	// For the v1 format, labelname -> labelvalue -> offset.
 	postingsV1 map[string]map[string]index.Range
 
@@ -422,13 +430,14 @@ func NewBinaryReader(ctx context.Context, logger log.Logger, bkt objstore.Bucket
 		return br, nil
 	}
 
-	level.Warn(logger).Log("msg", "failed to read index-header from disk; recreating", "path", binfn, "err", err)
+	level.Debug(logger).Log("msg", "failed to read index-header from disk; recreating", "path", binfn, "err", err)
 
+	start := time.Now()
 	if err := WriteBinary(ctx, bkt, id, binfn); err != nil {
 		return nil, errors.Wrap(err, "write index header")
 	}
 
-	level.Debug(logger).Log("msg", "build index-header file", "path", binfn, "err", err)
+	level.Debug(logger).Log("msg", "built index-header file", "path", binfn, "elapsed", time.Since(start))
 
 	return newFileBinaryReader(binfn)
 }
@@ -447,7 +456,7 @@ func newFileBinaryReader(path string) (bw *BinaryReader, err error) {
 	r := &BinaryReader{
 		b:        realByteSlice(f.Bytes()),
 		c:        f,
-		postings: map[string][]postingOffset{},
+		postings: map[string]*postingValueOffsets{},
 	}
 
 	// Verify header.
@@ -487,9 +496,9 @@ func newFileBinaryReader(path string) (bw *BinaryReader, err error) {
 			if len(key) != 2 {
 				return errors.Errorf("unexpected key length for posting table %d", len(key))
 			}
-			// TODO(bwplotka): This is wrong, probably we have to sort.
+
 			if lastKey != nil {
-				prevRng.End = int64(off + 4)
+				prevRng.End = int64(off - crc32.Size)
 				r.postingsV1[lastKey[0]][lastKey[1]] = prevRng
 			}
 
@@ -499,13 +508,13 @@ func newFileBinaryReader(path string) (bw *BinaryReader, err error) {
 			}
 
 			lastKey = key
-			prevRng = index.Range{Start: int64(off + 4)}
+			prevRng = index.Range{Start: int64(off + postingLengthFieldSize)}
 			return nil
 		}); err != nil {
 			return nil, errors.Wrap(err, "read postings table")
 		}
 		if lastKey != nil {
-			prevRng.End = r.indexLastPostingEnd + 4
+			prevRng.End = r.indexLastPostingEnd - crc32.Size
 			r.postingsV1[lastKey[0]][lastKey[1]] = prevRng
 		}
 	} else {
@@ -521,20 +530,24 @@ func newFileBinaryReader(path string) (bw *BinaryReader, err error) {
 
 			if _, ok := r.postings[key[0]]; !ok {
 				// Next label name.
-				r.postings[key[0]] = []postingOffset{}
+				r.postings[key[0]] = &postingValueOffsets{}
 				if lastKey != nil {
-					// Always include last value for each label name.
-					r.postings[lastKey[0]] = append(r.postings[lastKey[0]], postingOffset{value: lastKey[1], tableOff: lastTableOff})
+					if valueCount%symbolFactor != 0 {
+						// Always include last value for each label name.
+						r.postings[lastKey[0]].offsets = append(r.postings[lastKey[0]].offsets, postingOffset{value: lastKey[1], tableOff: lastTableOff})
+					}
+					r.postings[lastKey[0]].lastValOffset = int64(off - crc32.Size)
+					lastKey = nil
 				}
 				valueCount = 0
 			}
 
+			lastKey = key
 			if valueCount%symbolFactor == 0 {
-				r.postings[key[0]] = append(r.postings[key[0]], postingOffset{value: key[1], tableOff: tableOff})
-				lastKey = nil
+				r.postings[key[0]].offsets = append(r.postings[key[0]].offsets, postingOffset{value: key[1], tableOff: tableOff})
 				return nil
 			}
-			lastKey = key
+
 			lastTableOff = tableOff
 			valueCount++
 			return nil
@@ -542,13 +555,16 @@ func newFileBinaryReader(path string) (bw *BinaryReader, err error) {
 			return nil, errors.Wrap(err, "read postings table")
 		}
 		if lastKey != nil {
-			r.postings[lastKey[0]] = append(r.postings[lastKey[0]], postingOffset{value: lastKey[1], tableOff: lastTableOff})
+			if valueCount%symbolFactor != 0 {
+				r.postings[lastKey[0]].offsets = append(r.postings[lastKey[0]].offsets, postingOffset{value: lastKey[1], tableOff: lastTableOff})
+			}
+			r.postings[lastKey[0]].lastValOffset = r.indexLastPostingEnd - crc32.Size
 		}
 		// Trim any extra space in the slices.
 		for k, v := range r.postings {
-			l := make([]postingOffset, len(v))
-			copy(l, v)
-			r.postings[k] = l
+			l := make([]postingOffset, len(v.offsets))
+			copy(l, v.offsets)
+			r.postings[k].offsets = l
 		}
 	}
 
@@ -637,7 +653,7 @@ func (r BinaryReader) postingsOffset(name string, values ...string) ([]index.Ran
 
 	skip := 0
 	valueIndex := 0
-	for valueIndex < len(values) && values[valueIndex] < e[0].value {
+	for valueIndex < len(values) && values[valueIndex] < e.offsets[0].value {
 		// Discard values before the start.
 		valueIndex++
 	}
@@ -646,19 +662,19 @@ func (r BinaryReader) postingsOffset(name string, values ...string) ([]index.Ran
 	for valueIndex < len(values) {
 		value := values[valueIndex]
 
-		i := sort.Search(len(e), func(i int) bool { return e[i].value >= value })
-		if i == len(e) {
+		i := sort.Search(len(e.offsets), func(i int) bool { return e.offsets[i].value >= value })
+		if i == len(e.offsets) {
 			// We're past the end.
 			break
 		}
-		if i > 0 && e[i].value != value {
+		if i > 0 && e.offsets[i].value != value {
 			// Need to look from previous entry.
 			i--
 		}
 		// Don't Crc32 the entire postings offset table, this is very slow
 		// so hope any issues were caught at startup.
 		d := encoding.NewDecbufAt(r.b, int(r.toc.PostingsOffsetTable), nil)
-		d.Skip(e[i].tableOff)
+		d.Skip(e.offsets[i].tableOff)
 
 		tmpRngs = tmpRngs[:0]
 		// Iterate on the offset table.
@@ -677,8 +693,7 @@ func (r BinaryReader) postingsOffset(name string, values ...string) ([]index.Ran
 			postingOffset := int64(d.Uvarint64()) // Offset.
 			for string(v) >= value {
 				if string(v) == value {
-					// Actual posting is 4 bytes after offset, which includes length.
-					tmpRngs = append(tmpRngs, index.Range{Start: postingOffset + 4})
+					tmpRngs = append(tmpRngs, index.Range{Start: postingOffset + postingLengthFieldSize})
 				}
 				valueIndex++
 				if valueIndex == len(values) {
@@ -686,22 +701,21 @@ func (r BinaryReader) postingsOffset(name string, values ...string) ([]index.Ran
 				}
 				value = values[valueIndex]
 			}
-			if i+1 == len(e) {
+			if i+1 == len(e.offsets) {
 				for i := range tmpRngs {
-					tmpRngs[i].End = r.indexLastPostingEnd
+					tmpRngs[i].End = e.lastValOffset
 				}
 				rngs = append(rngs, tmpRngs...)
 				// Need to go to a later postings offset entry, if there is one.
 				break
 			}
 
-			if value >= e[i+1].value || valueIndex == len(values) {
+			if value >= e.offsets[i+1].value || valueIndex == len(values) {
 				d.Skip(skip)
 				d.UvarintBytes()                      // Label value.
 				postingOffset := int64(d.Uvarint64()) // Offset.
 				for j := range tmpRngs {
-					// Actual posting end is 4 bytes before next offset.
-					tmpRngs[j].End = postingOffset - 4
+					tmpRngs[j].End = postingOffset - crc32.Size
 				}
 				rngs = append(rngs, tmpRngs...)
 				// Need to go to a later postings offset entry, if there is one.
@@ -748,14 +762,14 @@ func (r BinaryReader) LabelValues(name string) ([]string, error) {
 	if !ok {
 		return nil, nil
 	}
-	if len(e) == 0 {
+	if len(e.offsets) == 0 {
 		return nil, nil
 	}
-	values := make([]string, 0, len(e)*symbolFactor)
+	values := make([]string, 0, len(e.offsets)*symbolFactor)
 
 	d := encoding.NewDecbufAt(r.b, int(r.toc.PostingsOffsetTable), nil)
-	d.Skip(e[0].tableOff)
-	lastVal := e[len(e)-1].value
+	d.Skip(e.offsets[0].tableOff)
+	lastVal := e.offsets[len(e.offsets)-1].value
 
 	skip := 0
 	for d.Err() == nil {

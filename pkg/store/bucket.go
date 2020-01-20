@@ -1565,8 +1565,13 @@ func resizePostings(b []byte) ([]byte, error) {
 	if d.Err() != nil {
 		return nil, errors.Wrap(d.Err(), "read postings list")
 	}
-	// 4 for posting length, then n * 4, foreach each big endian posting.
-	return b[:4+n*4], nil
+
+	// 4 for postings number of entries, then 4, foreach each big endian posting.
+	size := 4 + n*4
+	if len(b) <= size {
+		return nil, encoding.ErrInvalidSize
+	}
+	return b[:size], nil
 }
 
 // bigEndianPostings implements the Postings interface over a byte stream of

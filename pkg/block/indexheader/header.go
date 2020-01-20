@@ -18,7 +18,7 @@ type Reader interface {
 	IndexVersion() int
 
 	// PostingsOffset returns start and end offsets of postings for given name and value.
-	// end offset might be bigger than actual posting ending, but not larger then the whole index file.
+	// The end offset might be bigger than the actual posting ending, but not larger than the whole index file.
 	// NotFoundRangeErr is returned when no index can be found for given name and value.
 	// TODO(bwplotka): Move to PostingsOffsets(name string, value ...string) []index.Range and benchmark.
 	PostingsOffset(name string, value string) (index.Range, error)
@@ -27,7 +27,9 @@ type Reader interface {
 	// Error is return if the symbol can't be found.
 	LookupSymbol(o uint32) (string, error)
 
-	// LabelValues returns all label values for given label name or error if not found.
+	// LabelValues returns all label values for given label name or error.
+	// If no values are found for label name, or label name does not exists,
+	// then empty string is returned and no error.
 	LabelValues(name string) ([]string, error)
 
 	// LabelNames returns all label names.

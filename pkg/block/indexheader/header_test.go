@@ -174,7 +174,7 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 
 	minStart := int64(math.MaxInt64)
 	maxEnd := int64(math.MinInt64)
-	for _, lname := range expLabelNames {
+	for il, lname := range expLabelNames {
 		expectedLabelVals, err := indexReader.LabelValues(lname)
 		testutil.Ok(t, err)
 
@@ -182,7 +182,7 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 		testutil.Ok(t, err)
 		testutil.Equals(t, expectedLabelVals, vals)
 
-		for i, v := range vals {
+		for iv, v := range vals {
 			if minStart > expRanges[labels.Label{Name: lname, Value: v}].Start {
 				minStart = expRanges[labels.Label{Name: lname, Value: v}].Start
 			}
@@ -195,13 +195,21 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 
 			// For index-cache those values are exact.
 			//
-			// For binary they are exact except:
-			// * formatV2: last item posting offset. It's good enough if the value is larger than exact posting ending.
-			// * formatV1: all items.
-			if i == len(vals)-1 || indexReader.Version() == index.FormatV1 {
-				testutil.Equals(t, expRanges[labels.Label{Name: lname, Value: v}].Start, ptr.Start)
-				testutil.Assert(t, expRanges[labels.Label{Name: lname, Value: v}].End <= ptr.End, "got offset %v earlier than actual posting end %v ", ptr.End, expRanges[labels.Label{Name: lname, Value: v}].End)
-				continue
+			// For binary they are exact except last item posting offset. It's good enough if the value is larger than exact posting ending.
+			if indexReader.Version() == index.FormatV2 {
+				if iv == len(vals)-1 && il == len(expLabelNames)-1 {
+					testutil.Equals(t, expRanges[labels.Label{Name: lname, Value: v}].Start, ptr.Start)
+					testutil.Assert(t, expRanges[labels.Label{Name: lname, Value: v}].End <= ptr.End, "got offset %v earlier than actual posting end %v ", ptr.End, expRanges[labels.Label{Name: lname, Value: v}].End)
+					continue
+				}
+			} else {
+				// For index formatV1 the last one does not mean literally last value, as postings were not sorted.
+				// Account for that. We know it's 40 label value.
+				if v == "40" {
+					testutil.Equals(t, expRanges[labels.Label{Name: lname, Value: v}].Start, ptr.Start)
+					testutil.Assert(t, expRanges[labels.Label{Name: lname, Value: v}].End <= ptr.End, "got offset %v earlier than actual posting end %v ", ptr.End, expRanges[labels.Label{Name: lname, Value: v}].End)
+					continue
+				}
 			}
 			testutil.Equals(t, expRanges[labels.Label{Name: lname, Value: v}], ptr)
 		}
@@ -209,15 +217,10 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 
 	ptr, err := headerReader.PostingsOffset(index.AllPostingsKey())
 	testutil.Ok(t, err)
-	// For AllPostingsKey ending has also too large ending which is well handled further on.
 	testutil.Equals(t, expRanges[labels.Label{Name: "", Value: ""}].Start, ptr.Start)
-	testutil.Assert(t, expRanges[labels.Label{Name: "", Value: ""}].End <= ptr.End, "got offset %v earlier than actual posting end %v ", ptr.End, expRanges[labels.Label{Name: "", Value: ""}].End)
+	testutil.Equals(t, expRanges[labels.Label{Name: "", Value: ""}].End, ptr.End)
 
 	vals, err := indexReader.LabelValues("not-existing")
-	testutil.Ok(t, err)
-	testutil.Equals(t, []string(nil), vals)
-
-	vals, err = headerReader.LabelValues("not-existing")
 	testutil.Ok(t, err)
 	testutil.Equals(t, []string(nil), vals)
 
