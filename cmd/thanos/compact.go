@@ -248,10 +248,12 @@ func runCompact(
 		return errors.Wrap(err, "create meta fetcher")
 	}
 
-	sy, err := compact.NewSyncer(logger, reg, bkt, metaFetcher, blockSyncConcurrency, acceptMalformedIndex, false)
+	sy, err := compact.NewSyncer(logger, reg, bkt, metaFetcher, blockSyncConcurrency, consistencyDelay.Milliseconds(), acceptMalformedIndex, false)
 	if err != nil {
 		return errors.Wrap(err, "create syncer")
 	}
+
+	metaFetcher.AddFilter(sy.DeleteDelayFilter)
 
 	levels, err := compactions.levels(maxCompactionLevel)
 	if err != nil {

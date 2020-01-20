@@ -42,6 +42,8 @@ type Syncer struct {
 	fetcher                  block.MetadataFetcher
 	mtx                      sync.Mutex
 	blocks                   map[ulid.ULID]*metadata.Meta
+	blocksToDelete           map[ulid.ULID]time.Time
+	consistencyDelay         int64
 	blockSyncConcurrency     int
 	metrics                  *syncerMetrics
 	acceptMalformedIndex     bool
@@ -120,7 +122,7 @@ func newSyncerMetrics(reg prometheus.Registerer) *syncerMetrics {
 
 // NewMetaSyncer returns a new Syncer for the given Bucket and directory.
 // Blocks must be at least as old as the sync delay for being considered.
-func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, blockSyncConcurrency int, acceptMalformedIndex bool, enableVerticalCompaction bool) (*Syncer, error) {
+func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket, fetcher block.MetadataFetcher, blockSyncConcurrency int, consistencyDelay int64, acceptMalformedIndex bool, enableVerticalCompaction bool) (*Syncer, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -130,7 +132,9 @@ func NewSyncer(logger log.Logger, reg prometheus.Registerer, bkt objstore.Bucket
 		bkt:                  bkt,
 		fetcher:              fetcher,
 		blocks:               map[ulid.ULID]*metadata.Meta{},
+		blocksToDelete:       map[ulid.ULID]time.Time{},
 		metrics:              newSyncerMetrics(reg),
+		consistencyDelay:     consistencyDelay,
 		blockSyncConcurrency: blockSyncConcurrency,
 		acceptMalformedIndex: acceptMalformedIndex,
 		// The syncer offers an option to enable vertical compaction, even if it's
@@ -326,12 +330,32 @@ func (s *Syncer) garbageCollect(ctx context.Context, resolution int64) error {
 			return retry(errors.Wrapf(err, "delete block %s from bucket", id))
 		}
 
-		// Immediately update our in-memory state so no further call to SyncMetas is needed
-		// after running garbage collection.
-		delete(s.blocks, id)
+		// Mark the blocks as to be removed from the blocks map so that
+		// it is not considered for the next round of compaction.
+		s.blocksToDelete[id] = time.Now().UTC()
 		s.metrics.garbageCollectedBlocks.Inc()
 	}
 	return nil
+}
+
+func (s *Syncer) DeleteDelayFilter(metas map[ulid.ULID]*metadata.Meta, synced block.GaugeLabeled, _ bool) {
+	for id := range metas {
+		blockMarkedTime, ok := s.blocksToDelete[id]
+
+		if !ok {
+			continue
+		}
+
+		// Wait for consistencyDelay for the compacted block to be successfully uploaded to bucket.
+		if ulid.Now()-ulid.Timestamp(blockMarkedTime) < uint64(s.consistencyDelay) {
+			level.Debug(s.logger).Log("msg", "block has been marked for deletion", "block", id)
+			synced.WithLabelValues(block.MarkedForDeletion).Inc()
+			delete(metas, id)
+		} else {
+			// If the compacted block is successfully uploaded, remove the old block from the group.
+			delete(s.blocks, id)
+		}
+	}
 }
 
 // Group captures a set of blocks that have the same origin labels and downsampling resolution.

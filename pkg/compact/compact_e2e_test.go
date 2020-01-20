@@ -90,7 +90,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil)
 		testutil.Ok(t, err)
 
-		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, 1, false, false)
+		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, 1, 0, false, false)
 		testutil.Ok(t, err)
 
 		// Do one initial synchronization with the bucket.
@@ -163,7 +163,7 @@ func TestGroup_Compact_e2e(t *testing.T) {
 		metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil)
 		testutil.Ok(t, err)
 
-		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, 5, false, false)
+		sy, err := NewSyncer(nil, nil, bkt, metaFetcher, 5, 0, false, false)
 		testutil.Ok(t, err)
 
 		comp, err := tsdb.NewLeveledCompactor(ctx, reg, logger, []int64{1000, 3000}, nil)

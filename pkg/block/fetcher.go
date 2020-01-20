@@ -47,6 +47,7 @@ const (
 	labelExcludedMeta = "label-excluded"
 	timeExcludedMeta  = "time-excluded"
 	TooFreshMeta      = "too-fresh"
+	MarkedForDeletion = "marked-for-deletion"
 )
 
 func newSyncMetrics(r prometheus.Registerer) *syncMetrics {
@@ -95,6 +96,7 @@ func newSyncMetrics(r prometheus.Registerer) *syncMetrics {
 
 type MetadataFetcher interface {
 	Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.Meta, partial map[ulid.ULID]error, err error)
+	AddFilter(filter MetaFetcherFilter)
 }
 
 type GaugeLabeled interface {
@@ -141,6 +143,11 @@ func NewMetaFetcher(logger log.Logger, concurrency int, bkt objstore.BucketReade
 		filters:     filters,
 		cached:      map[ulid.ULID]*metadata.Meta{},
 	}, nil
+}
+
+// AddFilter Adds a filter to fetch blocks from bucket.
+func (s *MetaFetcher) AddFilter(filter MetaFetcherFilter) {
+	s.filters = append(s.filters, filter)
 }
 
 var (
