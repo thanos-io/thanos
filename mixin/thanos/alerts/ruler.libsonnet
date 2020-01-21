@@ -36,7 +36,7 @@
             },
           },
           {
-            alert: 'ThanosRulerHighRuleExaluationFailures',
+            alert: 'ThanosRulerHighRuleEvaluationFailures',
             annotations: {
               message: 'Thanos Ruler {{$labels.job}} {{$labels.pod}} is failing to evaluate rules.',
             },
@@ -55,7 +55,7 @@
             },
           },
           {
-            alert: 'ThanosRulerHighRuleExaluationWarnings',
+            alert: 'ThanosRulerHighRuleEvaluationWarnings',
             annotations: {
               message: 'Thanos Ruler {{$labels.job}} {{$labels.pod}} has high number of evaluation warnings.',
             },
