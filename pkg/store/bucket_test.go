@@ -3,7 +3,6 @@ package store
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"math"
@@ -451,6 +450,7 @@ func TestBucketStore_Info(t *testing.T) {
 		20,
 		allowAllFilterConf,
 		true,
+		true,
 	)
 	testutil.Ok(t, err)
 
@@ -468,15 +468,24 @@ type recorder struct {
 	mtx sync.Mutex
 	objstore.Bucket
 
-	touched []string
+	getRangeTouched []string
+	getTouched      []string
 }
 
 func (r *recorder) Get(ctx context.Context, name string) (io.ReadCloser, error) {
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
 
-	r.touched = append(r.touched, name)
+	r.getTouched = append(r.getTouched, name)
 	return r.Bucket.Get(ctx, name)
+}
+
+func (r *recorder) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
+	r.mtx.Lock()
+	defer r.mtx.Unlock()
+
+	r.getRangeTouched = append(r.getRangeTouched, name)
+	return r.Bucket.GetRange(ctx, name, off, length)
 }
 
 func TestBucketStore_Sharding(t *testing.T) {
@@ -691,7 +700,9 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				false,
 				20,
 				allowAllFilterConf,
-				true)
+				true,
+				true,
+			)
 			testutil.Ok(t, err)
 
 			testutil.Ok(t, bucketStore.InitialSync(context.Background()))
@@ -718,16 +729,17 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 			// Regression test: https://github.com/thanos-io/thanos/issues/1664
 
 			// Sort records. We load blocks concurrently so operations might be not ordered.
-			sort.Strings(rec.touched)
+			sort.Strings(rec.getRangeTouched)
 
-			fmt.Println(cached, sc.expectedIDs, all, rec.touched)
+			// With binary header nothing should be downloaded fully.
+			testutil.Equals(t, []string(nil), rec.getTouched)
 			if reuseDisk != "" {
-				testutil.Equals(t, expectedTouchedBlockOps(all, sc.expectedIDs, cached), rec.touched)
+				testutil.Equals(t, expectedTouchedBlockOps(all, sc.expectedIDs, cached), rec.getRangeTouched)
 				cached = sc.expectedIDs
 				return
 			}
 
-			testutil.Equals(t, expectedTouchedBlockOps(all, sc.expectedIDs, nil), rec.touched)
+			testutil.Equals(t, expectedTouchedBlockOps(all, sc.expectedIDs, nil), rec.getRangeTouched)
 		})
 	}
 }
@@ -756,8 +768,11 @@ func expectedTouchedBlockOps(all []ulid.ULID, expected []ulid.ULID, cached []uli
 
 		if found {
 			ops = append(ops,
-				path.Join(id.String(), block.IndexCacheFilename),
-				path.Join(id.String(), block.IndexFilename),
+				// To create binary header we touch part of index few times.
+				path.Join(id.String(), block.IndexFilename), // Version.
+				path.Join(id.String(), block.IndexFilename), // TOC.
+				path.Join(id.String(), block.IndexFilename), // Symbols.
+				path.Join(id.String(), block.IndexFilename), // PostingOffsets.
 			)
 		}
 	}

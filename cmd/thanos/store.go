@@ -75,6 +75,9 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 
 	selectorRelabelConf := regSelectorRelabelFlags(cmd)
 
+	enableIndexHeader := cmd.Flag("experimental.enable-index-header", "If true, Store Gateway will recreate index-header instead of index-cache.json for each block. This will replace index-cache.json permanently once it will be out of experimental stage.").
+		Hidden().Default("false").Bool()
+
 	m[component.Store.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, debugLogging bool) error {
 		if minTime.PrometheusTimestamp() > maxTime.PrometheusTimestamp() {
 			return errors.Errorf("invalid argument: --min-time '%s' can't be greater than --max-time '%s'",
@@ -109,6 +112,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 			},
 			selectorRelabelConf,
 			*advertiseCompatibilityLabel,
+			*enableIndexHeader,
 		)
 	}
 }
@@ -140,6 +144,7 @@ func runStore(
 	filterConf *store.FilterConfig,
 	selectorRelabelConf *extflag.PathOrContent,
 	advertiseCompatibilityLabel bool,
+	enableIndexHeader bool,
 ) error {
 	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
 	statusProber := prober.New(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
@@ -214,6 +219,9 @@ func runStore(
 		return errors.Wrap(err, "meta fetcher")
 	}
 
+	if enableIndexHeader {
+		level.Info(logger).Log("msg", "index-header instead of index-cache.json enabled")
+	}
 	bs, err := store.NewBucketStore(
 		logger,
 		reg,
@@ -228,6 +236,7 @@ func runStore(
 		blockSyncConcurrency,
 		filterConf,
 		advertiseCompatibilityLabel,
+		enableIndexHeader,
 	)
 	if err != nil {
 		return errors.Wrap(err, "create object storage store")
