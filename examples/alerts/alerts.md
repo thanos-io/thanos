@@ -263,9 +263,9 @@ rules:
     message: Thanos Querys {{$labels.job}} have {{ $value }} of failing DNS queries.
   expr: |
     (
-      sum by (job) (rate(thanos_query_store_apis_dns_failures_total{job=~"thanos-querier.*"}[5m]))
+      sum by (job) (rate(thanos_querier_store_apis_dns_failures_total{job=~"thanos-querier.*"}[5m]))
     /
-      sum by (job) (rate(thanos_query_store_apis_dns_lookups_total{job=~"thanos-querier.*"}[5m]))
+      sum by (job) (rate(thanos_querier_store_apis_dns_lookups_total{job=~"thanos-querier.*"}[5m]))
     > 1
     )
   for: 15m
