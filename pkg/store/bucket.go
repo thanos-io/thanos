@@ -1568,7 +1568,7 @@ func resizePostings(b []byte) ([]byte, error) {
 
 	// 4 for postings number of entries, then 4, foreach each big endian posting.
 	size := 4 + n*4
-	if len(b) <= size {
+	if len(b) < size {
 		return nil, encoding.ErrInvalidSize
 	}
 	return b[:size], nil
