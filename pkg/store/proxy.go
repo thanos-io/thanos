@@ -198,12 +198,7 @@ func newRespCh(ctx context.Context, buffer int) (*ctxRespSender, <-chan *storepb
 }
 
 func (s ctxRespSender) send(r *storepb.SeriesResponse) {
-	select {
-	case <-s.ctx.Done():
-		return
-	case s.ch <- r:
-		return
-	}
+	s.ch <- r
 }
 
 // Series returns all series for a requested time range and label matcher. Requested series are taken from other
@@ -348,6 +343,21 @@ type streamSeriesSet struct {
 	closeSeries     context.CancelFunc
 }
 
+type recvResponse struct {
+	r   *storepb.SeriesResponse
+	err error
+}
+
+func startFrameCtx(responseTimeout time.Duration) (context.Context, context.CancelFunc) {
+	frameTimeoutCtx := context.Background()
+	var cancel context.CancelFunc
+	if responseTimeout != 0 {
+		frameTimeoutCtx, cancel = context.WithTimeout(frameTimeoutCtx, responseTimeout)
+		return frameTimeoutCtx, cancel
+	}
+	return frameTimeoutCtx, nil
+}
+
 func startStreamSeriesSet(
 	ctx context.Context,
 	logger log.Logger,
@@ -384,14 +394,34 @@ func startStreamSeriesSet(
 			}
 		}()
 		for {
-			r, err := s.stream.Recv()
+			frameTimeoutCtx, cancel := startFrameCtx(s.responseTimeout)
+			if cancel != nil {
+				defer cancel()
+			}
+			rCh := make(chan *recvResponse, 1)
+			var rr *recvResponse
+			go func() {
+				r, err := s.stream.Recv()
+				rCh <- &recvResponse{r: r, err: err}
+			}()
 
-			if err == io.EOF {
+			select {
+			case <-ctx.Done():
+				s.timeoutHandling(true, ctx)
+				return
+			case <-frameTimeoutCtx.Done():
+				s.timeoutHandling(false, frameTimeoutCtx)
+				return
+			case rr = <-rCh:
+			}
+			close(rCh)
+
+			if rr.err == io.EOF {
 				return
 			}
 
-			if err != nil {
-				wrapErr := errors.Wrapf(err, "receive series from %s", s.name)
+			if rr.err != nil {
+				wrapErr := errors.Wrapf(rr.err, "receive series from %s", s.name)
 				if partialResponse {
 					s.warnCh.send(storepb.NewWarnSeriesResponse(wrapErr))
 					return
@@ -402,59 +432,40 @@ func startStreamSeriesSet(
 				s.errMtx.Unlock()
 				return
 			}
-
 			numResponses++
 
-			if w := r.GetWarning(); w != "" {
+			if w := rr.r.GetWarning(); w != "" {
 				s.warnCh.send(storepb.NewWarnSeriesResponse(errors.New(w)))
 				continue
 			}
-
-			select {
-			case s.recvCh <- r.GetSeries():
-				continue
-			case <-ctx.Done():
-				return
-			}
-
+			s.recvCh <- rr.r.GetSeries()
 		}
 	}()
 	return s
 }
 
+func (s *streamSeriesSet) timeoutHandling(isQueryTimeout bool, ctx context.Context) {
+	var err error
+	if isQueryTimeout {
+		err = errors.Wrap(ctx.Err(), fmt.Sprintf("failed to receive any data from %s", s.name))
+	} else {
+		err = errors.Wrap(ctx.Err(), fmt.Sprintf("failed to receive any data in %s from %s", s.responseTimeout.String(), s.name))
+	}
+	s.closeSeries()
+	if s.partialResponse {
+		level.Warn(s.logger).Log("err", err, "msg", "returning partial response")
+		s.warnCh.send(storepb.NewWarnSeriesResponse(err))
+		return
+	}
+	s.errMtx.Lock()
+	s.err = err
+	s.errMtx.Unlock()
+}
+
 // Next blocks until new message is received or stream is closed or operation is timed out.
 func (s *streamSeriesSet) Next() (ok bool) {
-	ctx := s.ctx
-	timeoutMsg := fmt.Sprintf("failed to receive any data from %s", s.name)
-
-	if s.responseTimeout != 0 {
-		timeoutMsg = fmt.Sprintf("failed to receive any data in %s from %s", s.responseTimeout.String(), s.name)
-
-		timeoutCtx, done := context.WithTimeout(s.ctx, s.responseTimeout)
-		defer done()
-		ctx = timeoutCtx
-	}
-
-	select {
-	case s.currSeries, ok = <-s.recvCh:
-		return ok
-	case <-ctx.Done():
-		// closeSeries to shutdown a goroutine in startStreamSeriesSet.
-		s.closeSeries()
-
-		err := errors.Wrap(ctx.Err(), timeoutMsg)
-		if s.partialResponse {
-			level.Warn(s.logger).Log("err", err, "msg", "returning partial response")
-			s.warnCh.send(storepb.NewWarnSeriesResponse(err))
-			return false
-		}
-		s.errMtx.Lock()
-		s.err = err
-		s.errMtx.Unlock()
-
-		level.Warn(s.logger).Log("err", err, "msg", "partial response disabled; aborting request")
-		return false
-	}
+	s.currSeries, ok = <-s.recvCh
+	return ok
 }
 
 func (s *streamSeriesSet) At() ([]storepb.Label, []storepb.AggrChunk) {
