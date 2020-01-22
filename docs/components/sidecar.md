@@ -43,7 +43,7 @@ Thanos can watch changes in Prometheus configuration and refresh Prometheus conf
 
 You can configure watching for changes in directory via `--reloader.rule-dir=DIR_NAME` flag.
 
-Thanos sidecar can watch `--reloader.config-file=CONFIG_FILE` configuration file, evaluate environment variables found in there, and produce generated config in `--reloader.config-envsubst-file=OUT_CONFIG_FILE` file.
+Thanos sidecar can watch `--reloader.config-file=CONFIG_FILE` configuration file, replace environment variables found in there in `$(VARIABLE)` format, and produce generated config in `--reloader.config-envsubst-file=OUT_CONFIG_FILE` file.
 
 
 ## Example basic deployment
