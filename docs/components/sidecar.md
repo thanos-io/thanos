@@ -25,7 +25,6 @@ Prometheus servers connected to the Thanos cluster via the sidecar are subject t
 
   * [Querier](./query.md) to filter out store APIs to touch during query requests.
   * Many object storage readers like [compactor](./compact.md) and [store gateway](./store.md) which groups the blocks by Prometheus source. Each produced TSDB block by Prometheus is labelled with external label by sidecar before upload to object storage.
-  We support use env value to specify it, matching the regular expression `\$\(([a-zA-Z_0-9]+)\)`.
 
 * The `--web.enable-admin-api` flag is enabled to support sidecar to get metadata from Prometheus like external labels.
 * The `--web.enable-lifecycle` flag is enabled if you want to use sidecar reloading features (`--reload.*` flags).
@@ -44,7 +43,7 @@ Thanos can watch changes in Prometheus configuration and refresh Prometheus conf
 
 You can configure watching for changes in directory via `--reloader.rule-dir=DIR_NAME` flag.
 
-Thanos sidecar can watch `--reloader.config-file=CONFIG_FILE` configuration file, evaluate environment variables found in there, and produce generated config in `--reloader.config-envsubst-file=OUT_CONFIG_FILE` file.
+Thanos sidecar can watch `--reloader.config-file=CONFIG_FILE` configuration file, replace environment variables found in there in `$(VARIABLE)` format, and produce generated config in `--reloader.config-envsubst-file=OUT_CONFIG_FILE` file.
 
 
 ## Example basic deployment
