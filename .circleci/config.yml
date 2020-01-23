@@ -4,7 +4,7 @@ jobs:
   test:
     docker:
      # Build by Thanos make docker-ci
-      - image: quay.io/thanos/thanos-ci:v0.2.0
+      - image: quay.io/thanos/thanos-ci:v0.3.0
     working_directory: /go/src/github.com/thanos-io/thanos
     environment:
       GO111MODULE: 'on'

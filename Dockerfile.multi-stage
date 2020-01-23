@@ -1,4 +1,4 @@
-FROM golang:1.13.1-alpine3.10 as builder
+FROM golang:1.13.6-alpine3.11 as builder
 
 ADD . $GOPATH/src/github.com/thanos-io/thanos
 WORKDIR $GOPATH/src/github.com/thanos-io/thanos
