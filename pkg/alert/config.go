@@ -123,6 +123,7 @@ func BuildAlertmanagerConfig(address string, timeout time.Duration) (Alertmanage
 			Scheme:          scheme,
 			StaticAddresses: []string{host},
 		},
-		Timeout: model.Duration(timeout),
+		Timeout:    model.Duration(timeout),
+		APIVersion: APIv1,
 	}, nil
 }
