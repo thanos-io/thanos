@@ -12,8 +12,10 @@ import (
 	"net/url"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -23,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/version"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
@@ -662,9 +665,9 @@ func (p *PrometheusStore) seriesLabels(ctx context.Context, matchers []storepb.L
 	}
 
 	q.Add("match[]", metric)
+	q.Add("start", formatTime(timestamp.Time(startTime)))
+	q.Add("end", formatTime(timestamp.Time(endTime)))
 	u.RawQuery = q.Encode()
-	q.Add("start", string(startTime))
-	q.Add("end", string(endTime))
 
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
@@ -713,4 +716,8 @@ func (p *PrometheusStore) seriesLabels(ctx context.Context, matchers []storepb.L
 	}
 
 	return m.Data, nil
+}
+
+func formatTime(t time.Time) string {
+	return strconv.FormatFloat(float64(t.Unix())+float64(t.Nanosecond())/1e9, 'f', -1, 64)
 }
