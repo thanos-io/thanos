@@ -42,7 +42,7 @@ func (tdv *TimeOrDurationValue) Set(s string) error {
 	return nil
 }
 
-// String returns either tume or duration.
+// String returns either time or duration.
 func (tdv *TimeOrDurationValue) String() string {
 	switch {
 	case tdv.Time != nil:
