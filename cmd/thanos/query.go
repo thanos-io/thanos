@@ -201,7 +201,7 @@ func runQuery(
 ) error {
 	// TODO(bplotka in PR #513 review): Move arguments into struct.
 	duplicatedStores := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "thanos_query_duplicated_store_address",
+		Name: "thanos_query_duplicated_store_addresses_total",
 		Help: "The number of times a duplicated store addresses is detected from the different configs in query",
 	})
 	reg.MustRegister(duplicatedStores)

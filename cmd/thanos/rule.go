@@ -246,7 +246,7 @@ func runRule(
 		Help: "Timestamp of the last successful configuration reload.",
 	})
 	duplicatedQuery := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "thanos_rule_duplicated_query_address",
+		Name: "thanos_rule_duplicated_query_addresses_total",
 		Help: "The number of times a duplicated query addresses is detected from the different configs in rule",
 	})
 	rulesLoaded := prometheus.NewGaugeVec(
