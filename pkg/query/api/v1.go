@@ -32,6 +32,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/util/httputil"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/prometheus/prometheus/promql"
@@ -257,7 +258,10 @@ func (api *API) query(r *http.Request) (interface{}, []error, *ApiError) {
 		ts = api.now()
 	}
 
-	ctx := r.Context()
+	ctx, err := httputil.ContextFromRequest(r.Context(), r)
+	if err != nil {
+		return nil, nil, &ApiError{ErrorInternal, err}
+	}
 	if to := r.FormValue("timeout"); to != "" {
 		var cancel context.CancelFunc
 		timeout, err := parseDuration(to)
@@ -396,6 +400,10 @@ func (api *API) queryRange(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, &ApiError{errorBadData, err}
 	}
 
+	ctx, err = httputil.ContextFromRequest(ctx, r)
+	if err != nil {
+		return nil, nil, &ApiError{ErrorInternal, err}
+	}
 	res := qry.Exec(ctx)
 	if res.Err != nil {
 		switch res.Err.(type) {
@@ -426,6 +434,10 @@ func (api *API) labelValues(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
+	ctx, err := httputil.ContextFromRequest(ctx, r)
+	if err != nil {
+		return nil, nil, &ApiError{ErrorInternal, err}
+	}
 	q, err := api.queryableCreate(true, nil, 0, enablePartialResponse, false).Querier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
@@ -502,9 +514,13 @@ func (api *API) series(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
+	ctx, err := httputil.ContextFromRequest(r.Context(), r)
+	if err != nil {
+		return nil, nil, &ApiError{ErrorInternal, err}
+	}
 	// TODO(bwplotka): Support downsampling?
 	q, err := api.queryableCreate(enableDedup, replicaLabels, 0, enablePartialResponse, true).
-		Querier(r.Context(), timestamp.FromTime(start), timestamp.FromTime(end))
+		Querier(ctx, timestamp.FromTime(start), timestamp.FromTime(end))
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}
 	}
@@ -607,6 +623,10 @@ func (api *API) labelNames(r *http.Request) (interface{}, []error, *ApiError) {
 		return nil, nil, apiErr
 	}
 
+	ctx, err := httputil.ContextFromRequest(r.Context(), r)
+	if err != nil {
+		return nil, nil, &ApiError{ErrorInternal, err}
+	}
 	q, err := api.queryableCreate(true, nil, 0, enablePartialResponse, false).Querier(ctx, math.MinInt64, math.MaxInt64)
 	if err != nil {
 		return nil, nil, &ApiError{errorExec, err}

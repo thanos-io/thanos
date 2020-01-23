@@ -68,9 +68,9 @@ require (
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.2.1
 	github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4
-	github.com/prometheus/common v0.7.0
+	github.com/prometheus/common v0.8.0
 	github.com/prometheus/procfs v0.0.6 // indirect
-	github.com/prometheus/prometheus v1.8.2-0.20200108132843-9d9bc524e5e8 // master
+	github.com/prometheus/prometheus v1.8.2-0.20200122121347-fafb7940b1cd // master
 	github.com/samuel/go-zookeeper v0.0.0-20190923202752-2cc03de413da // indirect
 	github.com/satori/go.uuid v1.2.0 // indirect
 	github.com/smartystreets/assertions v1.0.1 // indirect
@@ -99,7 +99,7 @@ require (
 	gopkg.in/fsnotify.v1 v1.4.7
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.51.0 // indirect
-	gopkg.in/yaml.v2 v2.2.5
+	gopkg.in/yaml.v2 v2.2.7
 	k8s.io/api v0.0.0-20191115095533-47f6de673b26 // indirect
 	k8s.io/apimachinery v0.0.0-20191115015347-3c7067801da2 // indirect
 	k8s.io/klog v1.0.0 // indirect
