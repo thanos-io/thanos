@@ -198,6 +198,8 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 	testutil.Ok(t, err)
 	_, err = a.Add(labels.FromStrings("a", "d", "job", "test"), baseT+300, 3)
 	testutil.Ok(t, err)
+	_, err = a.Add(labels.FromStrings("job", "test"), baseT+400, 4)
+	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -208,14 +210,13 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 	u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
 	testutil.Ok(t, err)
 
-	limitMinT := int64(0)
-	proxy, err := NewPrometheusStore(nil, nil, u, component.Sidecar,
+	promStore, err := NewPrometheusStore(nil, nil, u, component.Sidecar,
 		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
-		func() (int64, int64) { return limitMinT, -1 }) // Maxt does not matter.
+		func() (int64, int64) { return math.MinInt64/1000 + 62135596801, math.MaxInt64/1000 - 62135596801 })
 	testutil.Ok(t, err)
 
 	{
-		res, err := proxy.seriesLabels(ctx, []storepb.LabelMatcher{
+		res, err := promStore.seriesLabels(ctx, []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
 		}, baseT, baseT+300)
 		testutil.Ok(t, err)
@@ -224,7 +225,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 		testutil.Equals(t, labels.FromMap(res[0]), labels.Labels{{Name: "a", Value: "b"}})
 	}
 	{
-		res, err := proxy.seriesLabels(ctx, []storepb.LabelMatcher{
+		res, err := promStore.seriesLabels(ctx, []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "foo"},
 		}, baseT, baseT+300)
 		testutil.Ok(t, err)
@@ -232,7 +233,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 		testutil.Equals(t, len(res), 0)
 	}
 	{
-		res, err := proxy.seriesLabels(ctx, []storepb.LabelMatcher{
+		res, err := promStore.seriesLabels(ctx, []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_NEQ, Name: "a", Value: "b"},
 			{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "test"},
 		}, baseT, baseT+300)
@@ -246,7 +247,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 		}
 	}
 	{
-		res, err := proxy.seriesLabels(ctx, []storepb.LabelMatcher{
+		res, err := promStore.seriesLabels(ctx, []storepb.LabelMatcher{
 			{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "test"},
 		}, baseT, baseT+300)
 		testutil.Ok(t, err)
@@ -255,6 +256,29 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 		testutil.Equals(t, len(res), 2)
 		for _, r := range res {
 			testutil.Equals(t, labels.FromMap(r).Has("a"), true)
+			testutil.Equals(t, labels.FromMap(r).Get("job"), "test")
+		}
+	}
+	{
+		res, err := promStore.seriesLabels(ctx, []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "test"},
+		}, baseT+400, baseT+400)
+		testutil.Ok(t, err)
+
+		// In baseT + 400 we can just get one series.
+		testutil.Equals(t, len(res), 1)
+		testutil.Equals(t, len(res[0]), 1)
+		testutil.Equals(t, labels.FromMap(res[0]).Get("job"), "test")
+	}
+	// This test case is to test when start time and end time is not specified.
+	{
+		minTime, maxTime := promStore.timestamps()
+		res, err := promStore.seriesLabels(ctx, []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "test"},
+		}, minTime, maxTime)
+		testutil.Ok(t, err)
+		testutil.Equals(t, len(res), 3)
+		for _, r := range res {
 			testutil.Equals(t, labels.FromMap(r).Get("job"), "test")
 		}
 	}
