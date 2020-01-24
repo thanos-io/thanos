@@ -505,7 +505,7 @@ func runRule(
 				}
 
 				configSuccess.Set(1)
-				configSuccessTime.Set(float64(time.Now().UnixNano()) / 1e9)
+				configSuccessTime.SetToCurrentTime()
 
 				rulesLoaded.Reset()
 				for _, group := range ruleMgr.RuleGroups() {
