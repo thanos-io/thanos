@@ -24,7 +24,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/tls"
-	"google.golang.org/grpc/health"
 	"gopkg.in/alecthomas/kingpin.v2"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -147,9 +146,11 @@ func runStore(
 	advertiseCompatibilityLabel bool,
 	enableIndexHeader bool,
 ) error {
-	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-	statusProber := prober.New(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
-	srv := httpserver.New(logger, reg, component, statusProber,
+	grpcProbe := prober.NewGRPC(component, logger)
+	httpProbe := prober.NewHTTP(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	statusProber := prober.Combine(httpProbe, grpcProbe)
+
+	srv := httpserver.New(logger, reg, component, httpProbe,
 		httpserver.WithListen(httpBindAddr),
 		httpserver.WithGracePeriod(httpGracePeriod),
 	)
@@ -279,8 +280,7 @@ func runStore(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		grpcHealthSrv := health.NewServer()
-		s := grpcserver.New(logger, reg, tracer, component, grpcHealthSrv, bs,
+		s := grpcserver.New(logger, reg, tracer, component, grpcProbe, bs,
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),
@@ -289,7 +289,6 @@ func runStore(
 		g.Add(func() error {
 			<-bucketStoreReady
 			statusProber.Ready()
-			grpcHealthSrv.Resume()
 			return s.ListenAndServe()
 		}, func(err error) {
 			statusProber.NotReady(err)

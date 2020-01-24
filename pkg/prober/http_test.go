@@ -13,38 +13,29 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-func doGet(ctx context.Context, url string) (*http.Response, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s", url), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return http.DefaultClient.Do(req.WithContext(ctx))
-}
-
-type TestComponent struct {
+type testComponent struct {
 	name string
 }
 
-func (c TestComponent) String() string {
+func (c testComponent) String() string {
 	return c.name
 }
 
-func TestProberHealthInitialState(t *testing.T) {
-	p := New(TestComponent{name: "test"}, log.NewNopLogger(), nil)
+func TestHTTPProberHealthInitialState(t *testing.T) {
+	p := NewHTTP(testComponent{name: "test"}, log.NewNopLogger(), nil)
 
 	testutil.Assert(t, !p.isHealthy(), "initially should not be healthy")
 }
 
-func TestProberReadinessInitialState(t *testing.T) {
-	p := New(TestComponent{name: "test"}, log.NewNopLogger(), nil)
+func TestHTTPProberReadinessInitialState(t *testing.T) {
+	p := NewHTTP(testComponent{name: "test"}, log.NewNopLogger(), nil)
 
 	testutil.Assert(t, !p.isReady(), "initially should not be ready")
 }
 
-func TestProberHealthyStatusSetting(t *testing.T) {
+func TestHTTPProberHealthyStatusSetting(t *testing.T) {
 	testError := fmt.Errorf("test error")
-	p := New(TestComponent{name: "test"}, log.NewNopLogger(), nil)
+	p := NewHTTP(testComponent{name: "test"}, log.NewNopLogger(), nil)
 
 	p.Healthy()
 
@@ -55,9 +46,9 @@ func TestProberHealthyStatusSetting(t *testing.T) {
 	testutil.Assert(t, !p.isHealthy(), "should not be healthy")
 }
 
-func TestProberReadyStatusSetting(t *testing.T) {
+func TestHTTPProberReadyStatusSetting(t *testing.T) {
 	testError := fmt.Errorf("test error")
-	p := New(TestComponent{name: "test"}, log.NewNopLogger(), nil)
+	p := NewHTTP(testComponent{name: "test"}, log.NewNopLogger(), nil)
 
 	p.Ready()
 
@@ -68,13 +59,13 @@ func TestProberReadyStatusSetting(t *testing.T) {
 	testutil.Assert(t, !p.isReady(), "should not be ready")
 }
 
-func TestProberMuxRegistering(t *testing.T) {
+func TestHTTPProberMuxRegistering(t *testing.T) {
 	serverAddress := fmt.Sprintf("localhost:%d", 8081)
 
 	l, err := net.Listen("tcp", serverAddress)
 	testutil.Ok(t, err)
 
-	p := New(TestComponent{name: "test"}, log.NewNopLogger(), nil)
+	p := NewHTTP(testComponent{name: "test"}, log.NewNopLogger(), nil)
 
 	healthyEndpointPath := "/-/healthy"
 	readyEndpointPath := "/-/ready"
@@ -136,4 +127,15 @@ func TestProberMuxRegistering(t *testing.T) {
 
 		testutil.Equals(t, resp.StatusCode, http.StatusOK, "should be ready, response code: %d", resp.StatusCode)
 	}
+}
+
+// Helpers
+
+func doGet(ctx context.Context, url string) (*http.Response, error) {
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s", url), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return http.DefaultClient.Do(req.WithContext(ctx))
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"google.golang.org/grpc"
@@ -38,7 +39,7 @@ type Server struct {
 }
 
 // New creates a new Server.
-func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, h *health.Server, storeSrv storepb.StoreServer, opts ...Option) *Server {
+func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, probe *prober.GRPCProbe, storeSrv storepb.StoreServer, opts ...Option) *Server {
 	options := options{}
 	for _, o := range opts {
 		o.apply(&options)
@@ -82,18 +83,12 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	storepb.RegisterStoreServer(s, storeSrv)
 	met.InitializeMetrics(s)
 
-	if h == nil {
-		h = health.NewServer()
-	}
-
-	h.SetServingStatus("", grpc_health.HealthCheckResponse_NOT_SERVING)
-	grpc_health.RegisterHealthServer(s, h)
+	grpc_health.RegisterHealthServer(s, probe.HealthServer())
 
 	return &Server{
 		logger: log.With(logger, "service", "gRPC/server", "component", comp.String()),
 		comp:   comp,
 		srv:    s,
-		h:      h,
 		opts:   options,
 	}
 }
@@ -114,7 +109,6 @@ func (s *Server) ListenAndServe() error {
 // for specified amount of time (by gracePeriod) for connections to return to idle and then shut down.
 func (s *Server) Shutdown(err error) {
 	defer level.Info(s.logger).Log("msg", "internal server shutdown", "err", err)
-	s.h.Shutdown()
 
 	if s.opts.gracePeriod == 0 {
 		s.srv.Stop()
@@ -147,8 +141,8 @@ type ReadWriteStoreServer interface {
 }
 
 // NewReadWrite creates a new server that can be written to.
-func NewReadWrite(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, h *health.Server, storeSrv ReadWriteStoreServer, opts ...Option) *Server {
-	s := New(logger, reg, tracer, comp, h, storeSrv, opts...)
+func NewReadWrite(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, probe *prober.GRPCProbe, storeSrv ReadWriteStoreServer, opts ...Option) *Server {
+	s := New(logger, reg, tracer, comp, probe, storeSrv, opts...)
 	storepb.RegisterWriteableStoreServer(s.srv, storeSrv)
 	return s
 }

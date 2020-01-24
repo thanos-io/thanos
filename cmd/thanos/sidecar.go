@@ -33,8 +33,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
-	"google.golang.org/grpc/health"
-	grpc_health "google.golang.org/grpc/health/grpc_health_v1"
 
 	"gopkg.in/alecthomas/kingpin.v2"
 )
@@ -156,11 +154,11 @@ func runSidecar(
 		uploads = false
 	}
 
-	grpcHealthSrv := health.NewServer()
+	grpcProbe := prober.NewGRPC(comp, logger)
+	httpProbe := prober.NewHTTP(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	statusProber := prober.Combine(httpProbe, grpcProbe)
 
-	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-	statusProber := prober.New(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
-	srv := httpserver.New(logger, reg, comp, statusProber,
+	srv := httpserver.New(logger, reg, comp, httpProbe,
 		httpserver.WithListen(httpBindAddr),
 		httpserver.WithGracePeriod(httpGracePeriod),
 	)
@@ -208,7 +206,6 @@ func runSidecar(
 					)
 					promUp.Set(0)
 					statusProber.NotReady(err)
-					grpcHealthSrv.SetServingStatus("", grpc_health.HealthCheckResponse_NOT_SERVING)
 					return err
 				}
 
@@ -218,7 +215,6 @@ func runSidecar(
 				)
 				promUp.Set(1)
 				statusProber.Ready()
-				grpcHealthSrv.Resume()
 				lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
 				return nil
 			})
@@ -275,15 +271,13 @@ func runSidecar(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		grpcHealthSrv := health.NewServer()
-		s := grpcserver.New(logger, reg, tracer, comp, grpcHealthSrv, promStore,
+		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe, promStore,
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),
 		)
 		g.Add(func() error {
 			statusProber.Ready()
-			grpcHealthSrv.Resume()
 			return s.ListenAndServe()
 		}, func(err error) {
 			statusProber.NotReady(err)

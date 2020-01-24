@@ -19,7 +19,6 @@ import (
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
-	"google.golang.org/grpc/health"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 
 	"github.com/thanos-io/thanos/pkg/component"
@@ -309,9 +308,12 @@ func runQuery(
 			cancel()
 		})
 	}
-	// Start query API + UI HTTP server.
 
-	statusProber := prober.New(comp, logger, reg)
+	grpcProbe := prober.NewGRPC(comp, logger)
+	httpProbe := prober.NewHTTP(comp, logger, reg)
+	statusProber := prober.Combine(httpProbe, grpcProbe)
+
+	// Start query API + UI HTTP server.
 	{
 		router := route.New()
 
@@ -335,8 +337,7 @@ func runQuery(
 
 		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
 
-		// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-		srv := httpserver.New(logger, reg, comp, statusProber,
+		srv := httpserver.New(logger, reg, comp, httpProbe,
 			httpserver.WithListen(httpBindAddr),
 			httpserver.WithGracePeriod(httpGracePeriod),
 		)
@@ -360,8 +361,7 @@ func runQuery(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		grpcHealthSrv := health.NewServer()
-		s := grpcserver.New(logger, reg, tracer, comp, grpcHealthSrv, proxy,
+		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe, proxy,
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),
@@ -369,7 +369,6 @@ func runQuery(
 
 		g.Add(func() error {
 			statusProber.Ready()
-			grpcHealthSrv.Resume()
 			return s.ListenAndServe()
 		}, func(error) {
 			statusProber.NotReady(err)

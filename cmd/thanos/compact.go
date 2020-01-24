@@ -195,8 +195,7 @@ func runCompact(
 
 	downsampleMetrics := newDownsampleMetrics(reg)
 
-	statusProber := prober.New(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
-	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
+	statusProber := prober.NewHTTP(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	srv := httpserver.New(logger, reg, component, statusProber,
 		httpserver.WithListen(httpBindAddr),
 		httpserver.WithGracePeriod(httpGracePeriod),

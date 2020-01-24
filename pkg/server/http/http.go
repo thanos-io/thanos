@@ -18,7 +18,7 @@ import (
 type Server struct {
 	logger log.Logger
 	comp   component.Component
-	prober *prober.Prober
+	prober *prober.HTTPProbe
 
 	mux *http.ServeMux
 	srv *http.Server
@@ -27,7 +27,7 @@ type Server struct {
 }
 
 // New creates a new Server.
-func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, prober *prober.Prober, opts ...Option) *Server {
+func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, prober *prober.HTTPProbe, opts ...Option) *Server {
 	options := options{}
 	for _, o := range opts {
 		o.apply(&options)
@@ -96,7 +96,7 @@ func registerMetrics(mux *http.ServeMux, g prometheus.Gatherer) {
 	}
 }
 
-func registerProbes(mux *http.ServeMux, p *prober.Prober) {
+func registerProbes(mux *http.ServeMux, p *prober.HTTPProbe) {
 	if p != nil {
 		mux.Handle("/-/healthy", p.HealthyHandler())
 		mux.Handle("/-/ready", p.ReadyHandler())

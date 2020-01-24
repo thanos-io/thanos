@@ -50,7 +50,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/ui"
-	"google.golang.org/grpc/health"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -539,7 +538,11 @@ func runRule(
 			close(cancel)
 		})
 	}
-	statusProber := prober.New(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+
+	grpcProbe := prober.NewGRPC(comp, logger)
+	httpProbe := prober.NewHTTP(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	statusProber := prober.Combine(httpProbe, grpcProbe)
+
 	// Start gRPC server.
 	{
 		store := store.NewTSDBStore(logger, reg, db, component.Rule, lset)
@@ -549,8 +552,7 @@ func runRule(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		grpcHealthSrv := health.NewServer()
-		s := grpcserver.New(logger, reg, tracer, comp, grpcHealthSrv, store,
+		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe, store,
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),
@@ -558,7 +560,6 @@ func runRule(
 
 		g.Add(func() error {
 			statusProber.Ready()
-			grpcHealthSrv.Resume()
 			return s.ListenAndServe()
 		}, func(err error) {
 			statusProber.NotReady(err)
@@ -593,8 +594,7 @@ func runRule(
 		api := v1.NewAPI(logger, reg, ruleMgr)
 		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
 
-		// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-		srv := httpserver.New(logger, reg, comp, statusProber,
+		srv := httpserver.New(logger, reg, comp, httpProbe,
 			httpserver.WithListen(httpBindAddr),
 			httpserver.WithGracePeriod(httpGracePeriod),
 		)
