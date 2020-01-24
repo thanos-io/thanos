@@ -318,6 +318,9 @@ Flags:
                                  which data is deduplicated. Still you will be
                                  able to query without deduplication using
                                  'dedup=false' parameter.
+      --query.max-samples=2147483647
+                                 Maximum number of samples a single query can
+                                 load into memory.
       --selector-label=<name>="<value>" ...
                                  Query selector labels that will be exposed in
                                  info endpoint (repeated).
