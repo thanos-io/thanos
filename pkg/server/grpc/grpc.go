@@ -21,7 +21,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/health"
 	grpc_health "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 )
@@ -32,7 +31,6 @@ type Server struct {
 	comp   component.Component
 
 	srv      *grpc.Server
-	h        *health.Server
 	listener net.Listener
 
 	opts options

@@ -129,8 +129,6 @@ func TestHTTPProberMuxRegistering(t *testing.T) {
 	}
 }
 
-// Helpers
-
 func doGet(ctx context.Context, url string) (*http.Response, error) {
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s", url), nil)
 	if err != nil {
