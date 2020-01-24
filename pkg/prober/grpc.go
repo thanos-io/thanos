@@ -50,6 +50,5 @@ func (p *GRPCProbe) Healthy() {
 // NotHealthy sets components status to not healthy with given error as a cause.
 func (p *GRPCProbe) NotHealthy(err error) {
 	p.h.Shutdown()
-
 	level.Info(p.logger).Log("msg", "changing probe status", "status", "not-healthy", "reason", err)
 }

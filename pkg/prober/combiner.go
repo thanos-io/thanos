@@ -3,8 +3,7 @@ package prober
 import "sync"
 
 type combined struct {
-	mu sync.Mutex
-
+	mu     sync.Mutex
 	probes []Probe
 }
 
