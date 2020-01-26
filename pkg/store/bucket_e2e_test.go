@@ -191,9 +191,8 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 
 	// TODO(bwplotka): Add those test cases to TSDB querier_test.go as well, there are no tests for matching.
 	for i, tcase := range []struct {
-		req              *storepb.SeriesRequest
-		expected         [][]storepb.Label
-		expectedChunkLen int
+		req      *storepb.SeriesRequest
+		expected [][]storepb.Label
 	}{
 		{
 			req: &storepb.SeriesRequest{
@@ -203,7 +202,6 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 				MinTime: mint,
 				MaxTime: maxt,
 			},
-			expectedChunkLen: 3,
 			expected: [][]storepb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
@@ -223,7 +221,6 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 				MinTime: mint,
 				MaxTime: maxt,
 			},
-			expectedChunkLen: 3,
 			expected: [][]storepb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
@@ -239,7 +236,6 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 				MinTime: mint,
 				MaxTime: maxt,
 			},
-			expectedChunkLen: 3,
 			expected: [][]storepb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
@@ -255,7 +251,6 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 				MinTime: mint,
 				MaxTime: maxt,
 			},
-			expectedChunkLen: 3,
 			expected: [][]storepb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
@@ -275,7 +270,6 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 				MinTime: mint,
 				MaxTime: maxt,
 			},
-			expectedChunkLen: 3,
 			expected: [][]storepb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
@@ -295,7 +289,6 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 				MinTime: mint,
 				MaxTime: maxt,
 			},
-			expectedChunkLen: 3,
 			expected: [][]storepb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
@@ -311,7 +304,6 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 				MinTime: mint,
 				MaxTime: maxt,
 			},
-			expectedChunkLen: 3,
 			expected: [][]storepb.Label{
 				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
 				{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
@@ -335,7 +327,6 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 				MinTime: mint,
 				MaxTime: maxt,
 			},
-			expectedChunkLen: 3,
 			expected: [][]storepb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
@@ -351,7 +342,6 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 				MinTime: mint,
 				MaxTime: maxt,
 			},
-			expectedChunkLen: 3,
 			expected: [][]storepb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
@@ -385,7 +375,6 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 				MaxTime:    maxt,
 				SkipChunks: true,
 			},
-			expectedChunkLen: 0,
 			expected: [][]storepb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
@@ -402,7 +391,9 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 
 			for i, s := range srv.SeriesSet {
 				testutil.Equals(t, tcase.expected[i], s.Labels)
-				testutil.Equals(t, tcase.expectedChunkLen, len(s.Chunks))
+				if tcase.req.SkipChunks {
+					testutil.Equals(t, 0, len(s.Chunks))
+				}
 			}
 		}); !ok {
 			return
