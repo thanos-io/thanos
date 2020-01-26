@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -37,7 +38,7 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
-	p, err := testutil.NewPrometheusOnPath(prefix)
+	p, err := e2eutil.NewPrometheusOnPath(prefix)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
@@ -189,7 +190,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
-	p, err := testutil.NewPrometheus()
+	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
@@ -291,7 +292,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
-	p, err := testutil.NewPrometheus()
+	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
@@ -327,7 +328,7 @@ func TestPrometheusStore_LabelValues_e2e(t *testing.T) {
 func TestPrometheusStore_ExternalLabelValues_e2e(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
-	p, err := testutil.NewPrometheus()
+	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
@@ -367,7 +368,7 @@ func TestPrometheusStore_ExternalLabelValues_e2e(t *testing.T) {
 func TestPrometheusStore_Series_MatchExternalLabel_e2e(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
-	p, err := testutil.NewPrometheus()
+	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
@@ -503,7 +504,7 @@ func testSeries_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t *testing.T, appe
 func TestPrometheusStore_Series_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
-	p, err := testutil.NewPrometheus()
+	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, p.Stop()) }()
 

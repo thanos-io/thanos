@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
 func TestRewrite(t *testing.T) {
@@ -26,7 +27,7 @@ func TestRewrite(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(tmpDir)) }()
 
-	b, err := testutil.CreateBlock(ctx, tmpDir, []labels.Labels{
+	b, err := e2eutil.CreateBlock(ctx, tmpDir, []labels.Labels{
 		{{Name: "a", Value: "1"}},
 		{{Name: "a", Value: "2"}},
 		{{Name: "a", Value: "3"}},

@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package testutil
+package e2eutil
 
 import (
 	"io"
@@ -10,10 +10,11 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
+	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
 func Copy(t testing.TB, src, dst string) {
-	Ok(t, copyRecursive(src, dst))
+	testutil.Ok(t, copyRecursive(src, dst))
 }
 
 func copyRecursive(src, dst string) error {

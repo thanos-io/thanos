@@ -3,7 +3,7 @@
 
 // +build !linux
 
-package testutil
+package e2eutil
 
 import "syscall"
 

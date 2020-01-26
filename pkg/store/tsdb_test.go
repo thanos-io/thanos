@@ -14,6 +14,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
 func TestTSDBStore_Info(t *testing.T) {
@@ -22,7 +23,7 @@ func TestTSDBStore_Info(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, err := testutil.NewTSDB()
+	db, err := e2eutil.NewTSDB()
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 
@@ -43,7 +44,7 @@ func TestTSDBStore_Series(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, err := testutil.NewTSDB()
+	db, err := e2eutil.NewTSDB()
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 
@@ -169,7 +170,7 @@ func TestTSDBStore_LabelNames(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, err := testutil.NewTSDB()
+	db, err := e2eutil.NewTSDB()
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 
@@ -224,7 +225,7 @@ func TestTSDBStore_LabelValues(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, err := testutil.NewTSDB()
+	db, err := e2eutil.NewTSDB()
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 
@@ -279,7 +280,7 @@ func TestTSDBStore_LabelValues(t *testing.T) {
 func TestTSDBStore_Series_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
-	db, err := testutil.NewTSDB()
+	db, err := e2eutil.NewTSDB()
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 

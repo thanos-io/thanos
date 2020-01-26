@@ -30,6 +30,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/objtesting"
 	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
 func TestSyncer_GarbageCollect_e2e(t *testing.T) {
@@ -383,7 +384,7 @@ func createAndUpload(t testing.TB, bkt objstore.Bucket, blocks []blockgenSpec) (
 		if b.numSamples == 0 {
 			id, err = createEmptyBlock(prepareDir, b.mint, b.maxt, b.extLset, b.res)
 		} else {
-			id, err = testutil.CreateBlock(ctx, prepareDir, b.series, b.numSamples, b.mint, b.maxt, b.extLset, b.res)
+			id, err = e2eutil.CreateBlock(ctx, prepareDir, b.series, b.numSamples, b.mint, b.maxt, b.extLset, b.res)
 		}
 		testutil.Ok(t, err)
 

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/thanos-io/thanos/pkg/objstore/inmem"
+	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
@@ -172,7 +173,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 }
 
 func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
-	testutil.ForeachPrometheus(t, func(t testing.TB, p *testutil.Prometheus) {
+	e2eutil.ForeachPrometheus(t, func(t testing.TB, p *e2eutil.Prometheus) {
 		dir, err := ioutil.TempDir("", "shipper-e2e-test")
 		testutil.Ok(t, err)
 		defer func() {
