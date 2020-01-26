@@ -235,9 +235,17 @@ func newBinaryWriter(fn string, buf []byte) (w *binaryWriter, err error) {
 	dir := filepath.Dir(fn)
 
 	df, err := fileutil.OpenDir(dir)
+	if os.IsNotExist(err) {
+		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+			return nil, err
+		}
+		df, err = fileutil.OpenDir(dir)
+	}
 	if err != nil {
+
 		return nil, err
 	}
+
 	defer runutil.CloseWithErrCapture(&err, df, "dir close")
 
 	if err := os.RemoveAll(fn); err != nil {

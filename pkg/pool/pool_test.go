@@ -16,7 +16,7 @@ import (
 )
 
 func TestBytesPool(t *testing.T) {
-	chunkPool, err := NewBytesPool(10, 100, 2, 1000)
+	chunkPool, err := NewBucketedBytesPool(10, 100, 2, 1000)
 	testutil.Ok(t, err)
 
 	testutil.Equals(t, []int{10, 20, 40, 80}, chunkPool.sizes)
@@ -61,7 +61,7 @@ func TestBytesPool(t *testing.T) {
 }
 
 func TestRacePutGet(t *testing.T) {
-	chunkPool, err := NewBytesPool(3, 100, 2, 5000)
+	chunkPool, err := NewBucketedBytesPool(3, 100, 2, 5000)
 	testutil.Ok(t, err)
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 

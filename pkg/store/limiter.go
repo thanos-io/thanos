@@ -8,6 +8,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+type SampleLimiter interface {
+	Check(num uint64) error
+}
+
 // Limiter is a simple mechanism for checking if something has passed a certain threshold.
 type Limiter struct {
 	limit uint64

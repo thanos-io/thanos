@@ -9,10 +9,15 @@ import (
 	"github.com/pkg/errors"
 )
 
-// BytesPool is a bucketed pool for variably sized byte slices. It can be configured to not allow
+type BytesPool interface {
+	Get(sz int) (*[]byte, error)
+	Put(b *[]byte)
+}
+
+// BucketedBytesPool is a bucketed pool for variably sized byte slices. It can be configured to not allow
 // more than a maximum number of bytes being used at a given time.
 // Every byte slice obtained from the pool must be returned.
-type BytesPool struct {
+type BucketedBytesPool struct {
 	buckets   []sync.Pool
 	sizes     []int
 	maxTotal  uint64
@@ -25,7 +30,7 @@ type BytesPool struct {
 // NewBytesPool returns a new BytesPool with size buckets for minSize to maxSize
 // increasing by the given factor and maximum number of used bytes.
 // No more than maxTotal bytes can be used at any given time unless maxTotal is set to 0.
-func NewBytesPool(minSize, maxSize int, factor float64, maxTotal uint64) (*BytesPool, error) {
+func NewBucketedBytesPool(minSize, maxSize int, factor float64, maxTotal uint64) (*BucketedBytesPool, error) {
 	if minSize < 1 {
 		return nil, errors.New("invalid minimum pool size")
 	}
@@ -41,7 +46,7 @@ func NewBytesPool(minSize, maxSize int, factor float64, maxTotal uint64) (*Bytes
 	for s := minSize; s <= maxSize; s = int(float64(s) * factor) {
 		sizes = append(sizes, s)
 	}
-	p := &BytesPool{
+	p := &BucketedBytesPool{
 		buckets:  make([]sync.Pool, len(sizes)),
 		sizes:    sizes,
 		maxTotal: maxTotal,
@@ -57,7 +62,7 @@ func NewBytesPool(minSize, maxSize int, factor float64, maxTotal uint64) (*Bytes
 var ErrPoolExhausted = errors.New("pool exhausted")
 
 // Get returns a new byte slices that fits the given size.
-func (p *BytesPool) Get(sz int) (*[]byte, error) {
+func (p *BucketedBytesPool) Get(sz int) (*[]byte, error) {
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
 
@@ -84,7 +89,7 @@ func (p *BytesPool) Get(sz int) (*[]byte, error) {
 }
 
 // Put returns a byte slice to the right bucket in the pool.
-func (p *BytesPool) Put(b *[]byte) {
+func (p *BucketedBytesPool) Put(b *[]byte) {
 	if b == nil {
 		return
 	}
