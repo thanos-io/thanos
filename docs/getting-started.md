@@ -98,14 +98,35 @@ We also have example Grafana dashboards [here](/examples/dashboards/dashboards.m
 
 * 02.2018: [Very first Prometheus Meetup Slides](https://www.slideshare.net/BartomiejPotka/thanos-global-durable-prometheus-monitoring)
 * 02.2019: [FOSDEM + demo](https://fosdem.org/2019/schedule/event/thanos_transforming_prometheus_to_a_global_scale_in_a_seven_simple_steps/)
+* 03.2019: [Alibaba Cloud user story](https://www.youtube.com/watch?v=ZS6zMksfipc)
 * 09.2019: [CloudNative Warsaw Slides](https://docs.google.com/presentation/d/1cKpbJY3jIAtr03M-zcNujwBA38_LDj7NqE4LjNfvglE/edit?usp=sharing)
 * 11.2019: [CloudNative Deep Dive](https://www.youtube.com/watch?v=qQN0N14HXPM)
 * 11.2019: [CloudNative Intro](https://www.youtube.com/watch?v=m0JgWlTc60Q)
+* 2019: [Prometheus in Practice: HA with Thanos](https://www.slideshare.net/ThomasRiley45/prometheus-in-practice-high-availability-with-thanos-devopsdays-edinburgh-2019)
 
 ## Blog posts
 
-* 2018: [Introduction blog post](https://improbable.io/games/blog/thanos-prometheus-at-scale)
-* 2019: [Metric monitoring architecture](https://improbable.io/blog/thanos-architecture-at-improbable)
+* 2018:
+
+  * [Introduction blog post](https://improbable.io/games/blog/thanos-prometheus-at-scale)
+  * [Monzo user story](https://monzo.com/blog/2018/07/27/how-we-monitor-monzo)
+  * [Banzai Cloud hand's on](https://banzaicloud.com/blog/hands-on-thanos/)
+  * [uSwitch user story](https://medium.com/uswitch-labs/making-prometheus-more-awesome-with-thanos-fbec8c6c28ad)
+  * [Thanos usage](https://www.infracloud.io/thanos-ha-scalable-prometheus/)
+
+* 2019:
+
+  * [Metric monitoring architecture](https://improbable.io/blog/thanos-architecture-at-improbable)
+  * [Red Hat user story](https://blog.openshift.com/federated-prometheus-with-thanos-receive/)
+  * [HelloFresh blog posts part 1](https://engineering.hellofresh.com/monitoring-at-hellofresh-part-1-architecture-677b4bd6b728)
+  * [HelloFresh blog posts part 2](https://engineering.hellofresh.com/monitoring-at-hellofresh-part-2-operating-the-monitoring-system-8175cd939c1d)
+  * [Thanos deployment](https://www.metricfire.com/blog/ha-kubernetes-monitoring-using-prometheus-and-thanos)
+  * [Taboola user story](https://engineering.taboola.com/monitoring-and-metering-scale/)
+  * [Thanos via Prometheus Operator](https://kkc.github.io/2019/02/10/prometheus-operator-with-thanos/)
+
+* 2020:
+
+  * [Banzai Cloud user story](https://monzo.com/blog/2018/07/27/how-we-monitor-monzo)
 
 ## Integrations
 

@@ -42,7 +42,7 @@ menu: contributing
 ---
 EOT
 )" > ${OUTPUT_CONTENT_DIR}/CODE_OF_CONDUCT.md
-tail -n +2 CODE_OF_CONDUCT.md >> ${OUTPUT_CONTENT_DIR}/CODE_OF_CONDUCT.md
+cat CODE_OF_CONDUCT.md >> ${OUTPUT_CONTENT_DIR}/CODE_OF_CONDUCT.md
 
 echo "$(cat <<EOT
 ---
@@ -52,7 +52,7 @@ menu: contributing
 ---
 EOT
 )" > ${OUTPUT_CONTENT_DIR}/CONTRIBUTING.md
-tail -n +2 CONTRIBUTING.md >> ${OUTPUT_CONTENT_DIR}/CONTRIBUTING.md
+cat CONTRIBUTING.md >> ${OUTPUT_CONTENT_DIR}/CONTRIBUTING.md
 
 echo "$(cat <<EOT
 ---
@@ -62,7 +62,7 @@ menu: thanos
 ---
 EOT
 )" > ${OUTPUT_CONTENT_DIR}/CHANGELOG.md
-tail -n +2 CHANGELOG.md >> ${OUTPUT_CONTENT_DIR}/CHANGELOG.md
+cat CHANGELOG.md >> ${OUTPUT_CONTENT_DIR}/CHANGELOG.md
 
 echo "$(cat <<EOT
 ---
@@ -72,7 +72,17 @@ menu: thanos
 ---
 EOT
 )" > ${OUTPUT_CONTENT_DIR}/MAINTAINERS.md
-tail -n +2 MAINTAINERS.md >> ${OUTPUT_CONTENT_DIR}/MAINTAINERS.md
+cat MAINTAINERS.md >> ${OUTPUT_CONTENT_DIR}/MAINTAINERS.md
+
+echo "$(cat <<EOT
+---
+title: Security
+type: docs
+menu: thanos
+---
+EOT
+)" > ${OUTPUT_CONTENT_DIR}/SECURITY.md
+cat SECURITY.md >> ${OUTPUT_CONTENT_DIR}/SECURITY.md
 
 # Glob again to include new docs.
 ALL_DOC_CONTENT_FILES=$(echo "${OUTPUT_CONTENT_DIR}/**/*.md ${OUTPUT_CONTENT_DIR}/*.md")
