@@ -24,6 +24,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#1939](https://github.com/thanos-io/thanos/pull/1939) Ruler: Add TLS and authentication support for query endpoints with the `--query.config` and `--query.config-file` CLI flags. See [documentation](docs/components/rule.md/#configuration) for further information.
 - [#1982](https://github.com/thanos-io/thanos/pull/1982) Ruler: Add support for Alertmanager v2 API endpoints.
 - #2030 Query: Add `thanos_proxy_store_empty_stream_responses_total` metric for number of empty responses from stores.
+- [#2049](https://github.com/thanos-io/thanos/pull/2049) Tracing: Support sampling on Elastic APM with new sample_rate setting.
 
 ### Changed
 
