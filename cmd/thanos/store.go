@@ -146,9 +146,13 @@ func runStore(
 	advertiseCompatibilityLabel bool,
 	enableIndexHeader bool,
 ) error {
-	grpcProbe := prober.NewGRPC(component, logger)
-	httpProbe := prober.NewHTTP(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
-	statusProber := prober.Combine(httpProbe, grpcProbe)
+	grpcProbe := prober.NewGRPC()
+	httpProbe := prober.NewHTTP()
+	statusProber := prober.Combine(
+		httpProbe,
+		grpcProbe,
+		prober.NewInstrumentation(component, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg)),
+	)
 
 	srv := httpserver.New(logger, reg, component, httpProbe,
 		httpserver.WithListen(httpBindAddr),

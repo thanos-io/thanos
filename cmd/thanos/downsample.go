@@ -101,7 +101,11 @@ func runDownsample(
 		}
 	}()
 
-	statusProber := prober.NewHTTP(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
+	httpProbe := prober.NewHTTP()
+	statusProber := prober.Combine(
+		httpProbe,
+		prober.NewInstrumentation(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg)),
+	)
 
 	metrics := newDownsampleMetrics(reg)
 	// Start cycle of syncing blocks from the bucket and garbage collecting the bucket.
@@ -130,10 +134,11 @@ func runDownsample(
 		})
 	}
 
-	srv := httpserver.New(logger, reg, comp, statusProber,
+	srv := httpserver.New(logger, reg, comp, httpProbe,
 		httpserver.WithListen(httpBindAddr),
 		httpserver.WithGracePeriod(httpGracePeriod),
 	)
+
 	g.Add(func() error {
 		statusProber.Healthy()
 

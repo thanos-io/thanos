@@ -316,8 +316,14 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 	m[name+" web"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ bool) error {
 		ctx, cancel := context.WithCancel(context.Background())
 
-		statusProber := prober.NewHTTP(component.Bucket, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
-		srv := httpserver.New(logger, reg, component.Bucket, statusProber,
+		comp := component.Bucket
+		httpProbe := prober.NewHTTP()
+		statusProber := prober.Combine(
+			httpProbe,
+			prober.NewInstrumentation(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg)),
+		)
+
+		srv := httpserver.New(logger, reg, comp, httpProbe,
 			httpserver.WithListen(*httpBindAddr),
 			httpserver.WithGracePeriod(time.Duration(*httpGracePeriod)),
 		)

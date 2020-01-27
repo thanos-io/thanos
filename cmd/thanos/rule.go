@@ -539,9 +539,13 @@ func runRule(
 		})
 	}
 
-	grpcProbe := prober.NewGRPC(comp, logger)
-	httpProbe := prober.NewHTTP(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
-	statusProber := prober.Combine(httpProbe, grpcProbe)
+	grpcProbe := prober.NewGRPC()
+	httpProbe := prober.NewHTTP()
+	statusProber := prober.Combine(
+		httpProbe,
+		grpcProbe,
+		prober.NewInstrumentation(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg)),
+	)
 
 	// Start gRPC server.
 	{

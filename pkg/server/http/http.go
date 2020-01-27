@@ -35,7 +35,7 @@ func New(logger log.Logger, reg *prometheus.Registry, comp component.Component, 
 
 	mux := http.NewServeMux()
 	registerMetrics(mux, reg)
-	registerProbes(mux, prober)
+	registerProbes(mux, prober, logger)
 	registerProfiler(mux)
 
 	return &Server{
@@ -96,9 +96,9 @@ func registerMetrics(mux *http.ServeMux, g prometheus.Gatherer) {
 	}
 }
 
-func registerProbes(mux *http.ServeMux, p *prober.HTTPProbe) {
+func registerProbes(mux *http.ServeMux, p *prober.HTTPProbe, logger log.Logger) {
 	if p != nil {
-		mux.Handle("/-/healthy", p.HealthyHandler())
-		mux.Handle("/-/ready", p.ReadyHandler())
+		mux.Handle("/-/healthy", p.HealthyHandler(logger))
+		mux.Handle("/-/ready", p.ReadyHandler(logger))
 	}
 }

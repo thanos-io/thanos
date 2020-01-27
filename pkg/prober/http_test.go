@@ -13,29 +13,21 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
 
-type testComponent struct {
-	name string
-}
-
-func (c testComponent) String() string {
-	return c.name
-}
-
 func TestHTTPProberHealthInitialState(t *testing.T) {
-	p := NewHTTP(testComponent{name: "test"}, log.NewNopLogger(), nil)
+	p := NewHTTP()
 
 	testutil.Assert(t, !p.isHealthy(), "initially should not be healthy")
 }
 
 func TestHTTPProberReadinessInitialState(t *testing.T) {
-	p := NewHTTP(testComponent{name: "test"}, log.NewNopLogger(), nil)
+	p := NewHTTP()
 
 	testutil.Assert(t, !p.isReady(), "initially should not be ready")
 }
 
 func TestHTTPProberHealthyStatusSetting(t *testing.T) {
 	testError := fmt.Errorf("test error")
-	p := NewHTTP(testComponent{name: "test"}, log.NewNopLogger(), nil)
+	p := NewHTTP()
 
 	p.Healthy()
 
@@ -48,7 +40,7 @@ func TestHTTPProberHealthyStatusSetting(t *testing.T) {
 
 func TestHTTPProberReadyStatusSetting(t *testing.T) {
 	testError := fmt.Errorf("test error")
-	p := NewHTTP(testComponent{name: "test"}, log.NewNopLogger(), nil)
+	p := NewHTTP()
 
 	p.Ready()
 
@@ -65,14 +57,14 @@ func TestHTTPProberMuxRegistering(t *testing.T) {
 	l, err := net.Listen("tcp", serverAddress)
 	testutil.Ok(t, err)
 
-	p := NewHTTP(testComponent{name: "test"}, log.NewNopLogger(), nil)
+	p := NewHTTP()
 
 	healthyEndpointPath := "/-/healthy"
 	readyEndpointPath := "/-/ready"
 
 	mux := http.NewServeMux()
-	mux.HandleFunc(healthyEndpointPath, p.HealthyHandler())
-	mux.HandleFunc(readyEndpointPath, p.ReadyHandler())
+	mux.HandleFunc(healthyEndpointPath, p.HealthyHandler(log.NewNopLogger()))
+	mux.HandleFunc(readyEndpointPath, p.ReadyHandler(log.NewNopLogger()))
 
 	var g run.Group
 	g.Add(func() error {

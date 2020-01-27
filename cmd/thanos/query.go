@@ -309,9 +309,13 @@ func runQuery(
 		})
 	}
 
-	grpcProbe := prober.NewGRPC(comp, logger)
-	httpProbe := prober.NewHTTP(comp, logger, reg)
-	statusProber := prober.Combine(httpProbe, grpcProbe)
+	grpcProbe := prober.NewGRPC()
+	httpProbe := prober.NewHTTP()
+	statusProber := prober.Combine(
+		httpProbe,
+		grpcProbe,
+		prober.NewInstrumentation(comp, logger, reg),
+	)
 
 	// Start query API + UI HTTP server.
 	{
