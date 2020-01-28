@@ -1,0 +1,24 @@
+name: fuzzy-test-on-master
+on:
+  # TODO: Remove before test - for testing purposes.
+  pull_request:
+  # For all master builds as well releases.
+  push:
+    branches:
+      - master
+  release:
+    types:
+      - created
+jobs:
+  fuzzy-test:
+    name: Handle Release
+    jobs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Go
+        uses: actions/setup-go@v1
+        with:
+          go-version: [1.13.6]
+      - uses: actions/checkout@master
+      - name: Go fuzz test
+        run: go help test
