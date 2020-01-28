@@ -51,8 +51,9 @@ func (s *testStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 }
 
 type testStoreMeta struct {
-	extlsetFn func(addr string) []storepb.LabelSet
-	storeType component.StoreAPI
+	extlsetFn        func(addr string) []storepb.LabelSet
+	storeType        component.StoreAPI
+	minTime, maxTime int64
 }
 
 type testStores struct {
@@ -78,6 +79,8 @@ func startTestStores(storeMetas []testStoreMeta) (*testStores, error) {
 		storeSrv := &testStore{
 			info: storepb.InfoResponse{
 				LabelSets: meta.extlsetFn(listener.Addr().String()),
+				MaxTime:   meta.maxTime,
+				MinTime:   meta.minTime,
 			},
 		}
 		if meta.storeType != nil {
@@ -538,4 +541,55 @@ func TestStoreSet_Update_NoneAvailable(t *testing.T) {
 
 	expected := newStoreAPIStats()
 	testutil.Equals(t, expected, storeSet.storesMetric.storeNodes)
+}
+
+// TestStickyStores tests what happens when some stores are sticky.
+// Their information must be retained between loops if it exists.
+func TestStickyStores(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	st, err := startTestStores([]testStoreMeta{
+		{
+			minTime: 12345,
+			maxTime: 54321,
+			extlsetFn: func(addr string) []storepb.LabelSet {
+				return []storepb.LabelSet{
+					{
+						Labels: []storepb.Label{
+							{
+								Name:  "addr",
+								Value: addr,
+							},
+						},
+					},
+				}
+			},
+			storeType: component.Sidecar,
+		},
+	})
+
+	testutil.Ok(t, err)
+	defer st.Close()
+
+	storeAddr := st.StoreAddresses()[0]
+	storeSet := NewStoreSet(nil, nil, func() (specs []StoreSpec) {
+		return []StoreSpec{NewGRPCStoreSpec(storeAddr, true)}
+	}, testGRPCOpts, time.Minute)
+	storeSet.gRPCInfoCallTimeout = 2 * time.Second
+
+	// Initial update.
+	storeSet.Update(context.Background())
+	testutil.Assert(t, len(storeSet.stores) == 1, "one client must be available for a running store node")
+
+	// The store is sticky so its client + information must be retained.
+	curMin, curMax := storeSet.stores[storeAddr].minTime, storeSet.stores[storeAddr].maxTime
+
+	// Update again.
+	storeSet.Update(context.Background())
+
+	// Check that the information is the same.
+	testutil.Assert(t, len(storeSet.stores) == 1, "one client must remain available for a store node that is down")
+	testutil.Assert(t, storeSet.stores[storeAddr].minTime == curMin, "minimum time reported by the store node is different")
+	testutil.Assert(t, storeSet.stores[storeAddr].maxTime == curMax, "minimum time reported by the store node is different")
+	testutil.Assert(t, storeSet.stores[storeAddr].sticky == true, "the store must be sticky")
 }
