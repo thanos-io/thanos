@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 // Package http is a wrapper around github.com/prometheus/common/config.
 package http
 

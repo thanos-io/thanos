@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 // Package gcs implements common object storage abstractions against Google Cloud Storage.
 package gcs
 

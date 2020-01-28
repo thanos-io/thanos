@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 // Package thanos is a set of components that
 // can provide highly available Prometheus
 // setup with long term storage capabilities.

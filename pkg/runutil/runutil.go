@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 // Package runutil provides helpers to advanced function scheduling control like repeat or retry.
 //
 // It's very often the case when you need to excutes some code every fixed intervals or have it retried automatically.
