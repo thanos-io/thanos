@@ -126,7 +126,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
       g.template('pod', 'kube_pod_info', 'namespace="$namespace",created_by_name=~"%(jobPrefix)s.*"' % thanos.ruler, true, '.*'),
 
     __overviewRows__+:: [
-      g.row('Rule')
+      g.row('Ruler')
       .addPanel(
         g.panel('Alert Sent Rate', 'Shows rate of alerts that successfully sent to alert manager.') +
         g.queryPanel(
