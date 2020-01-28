@@ -8,24 +8,24 @@ Here are some example alerts configured for Kubernetes environment.
 ```yaml
 name: thanos-compactor.rules
 rules:
-- alert: ThanosCompactorMultipleCompactsAreRunning
+- alert: ThanosCompactorMultipleCompactorsAreRunning
   annotations:
-    message: You should never run more than one Thanos Compact at once. You have {{
-      $value }}
+    message: You should never run more than one Thanos Compactor at once. You have
+      {{ $value }}
   expr: sum(up{job=~"thanos-compactor.*"}) > 1
   for: 5m
   labels:
     severity: warning
 - alert: ThanosCompactorHalted
   annotations:
-    message: Thanos Compact {{$labels.job}} has failed to run and now is halted.
+    message: Thanos Compactor {{$labels.job}} has failed to run and now is halted.
   expr: thanos_compactor_halted{job=~"thanos-compactor.*"} == 1
   for: 5m
   labels:
     severity: warning
 - alert: ThanosCompactorHighCompactionFailures
   annotations:
-    message: Thanos Compact {{$labels.job}} is failing to execute {{ $value | humanize
+    message: Thanos Compactor {{$labels.job}} is failing to execute {{ $value | humanize
       }}% of compactions.
   expr: |
     (
@@ -39,7 +39,7 @@ rules:
     severity: warning
 - alert: ThanosCompactorBucketHighOperationFailures
   annotations:
-    message: Thanos Compact {{$labels.job}} Bucket is failing to execute {{ $value
+    message: Thanos Compactor {{$labels.job}} Bucket is failing to execute {{ $value
       | humanize }}% of operations.
   expr: |
     (
@@ -53,7 +53,7 @@ rules:
     severity: warning
 - alert: ThanosCompactorHasNotRun
   annotations:
-    message: Thanos Compact {{$labels.job}} has not uploaded anything for 24 hours.
+    message: Thanos Compactor {{$labels.job}} has not uploaded anything for 24 hours.
   expr: (time() - max(thanos_objstore_bucket_last_successful_upload_time{job=~"thanos-compactor.*"}))
     / 60 / 60 > 24
   labels:

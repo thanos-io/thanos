@@ -1,8 +1,8 @@
 {
   local thanos = self,
   compactor+:: {
-    jobPrefix: error 'must provide job prefix for Thanos Compact alerts',
-    selector: error 'must provide selector for Thanos Compact alerts',
+    jobPrefix: error 'must provide job prefix for Thanos Compactor alerts',
+    selector: error 'must provide selector for Thanos Compactor alerts',
   },
   prometheusAlerts+:: {
     groups+: [
@@ -10,9 +10,9 @@
         name: 'thanos-compactor.rules',
         rules: [
           {
-            alert: 'ThanosCompactorMultipleCompactsAreRunning',
+            alert: 'ThanosCompactorMultipleCompactorsAreRunning',
             annotations: {
-              message: 'You should never run more than one Thanos Compact at once. You have {{ $value }}',
+              message: 'You should never run more than one Thanos Compactor at once. You have {{ $value }}',
             },
             expr: 'sum(up{%(selector)s}) > 1' % thanos.compactor,
             'for': '5m',
@@ -23,7 +23,7 @@
           {
             alert: 'ThanosCompactorHalted',
             annotations: {
-              message: 'Thanos Compact {{$labels.job}} has failed to run and now is halted.',
+              message: 'Thanos Compactor {{$labels.job}} has failed to run and now is halted.',
             },
             expr: 'thanos_compactor_halted{%(selector)s} == 1' % thanos.compactor,
             'for': '5m',
@@ -34,7 +34,7 @@
           {
             alert: 'ThanosCompactorHighCompactionFailures',
             annotations: {
-              message: 'Thanos Compact {{$labels.job}} is failing to execute {{ $value | humanize }}% of compactions.',
+              message: 'Thanos Compactor {{$labels.job}} is failing to execute {{ $value | humanize }}% of compactions.',
             },
             expr: |||
               (
@@ -52,7 +52,7 @@
           {
             alert: 'ThanosCompactorBucketHighOperationFailures',
             annotations: {
-              message: 'Thanos Compact {{$labels.job}} Bucket is failing to execute {{ $value | humanize }}% of operations.',
+              message: 'Thanos Compactor {{$labels.job}} Bucket is failing to execute {{ $value | humanize }}% of operations.',
             },
             expr: |||
               (
@@ -70,7 +70,7 @@
           {
             alert: 'ThanosCompactorHasNotRun',
             annotations: {
-              message: 'Thanos Compact {{$labels.job}} has not uploaded anything for 24 hours.',
+              message: 'Thanos Compactor {{$labels.job}} has not uploaded anything for 24 hours.',
             },
             expr: '(time() - max(thanos_objstore_bucket_last_successful_upload_time{%(selector)s})) / 60 / 60 > 24' % thanos.compactor,
             labels: {
