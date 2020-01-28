@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 // Package shipper detects directories on the local file system and uploads
 // them to a block storage.
 package shipper

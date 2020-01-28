@@ -299,6 +299,9 @@ lint: check-git $(GOLANGCILINT) $(MISSPELL)
 	@echo ">> detecting white noise"
 	@find . -type f \( -name "*.md" -o -name "*.go" \) | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 	$(call require_clean_work_tree,"detected white noise")
+	@echo ">> ensuring Copyright headers"
+	@go run ./scripts/copyright
+	$(call require_clean_work_tree,"detected files without copyright")
 
 .PHONY: web-serve
 web-serve: web-pre-process $(HUGO)

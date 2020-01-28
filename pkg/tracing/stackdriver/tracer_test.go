@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 // This file includes unit tests that test only tiny logic in this package, but are here mainly as a showcase on how tracing can
 // be configured.
 

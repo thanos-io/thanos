@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package metadata
 
 // metadata package implements writing and reading wrapped meta.json where Thanos puts its metadata.

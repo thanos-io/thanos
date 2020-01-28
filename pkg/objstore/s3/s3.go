@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 // Package s3 implements common object storage abstractions against s3-compatible APIs.
 package s3
 

@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 // Package swift implements common object storage abstractions against OpenStack swift APIs.
 package swift
 

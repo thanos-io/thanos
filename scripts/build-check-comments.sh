@@ -85,7 +85,10 @@ fi
 function check_comments {
     # no bombing out on errors with grep
     set +e
-    grep -Przo --color --include \*.go --exclude \*.pb.go --exclude bindata.go --exclude-dir vendor '\n.*\s+//(\s{0,3}[^\s][^\n]+[^.?!:]{2}|[^\s].*)\n[ \t]*[^/\s].*\n' ./
+
+    # This is quite mad but don't fear the https://regex101.com/ helps a lot.
+    grep -Przo --color --include \*.go --exclude \*.pb.go --exclude bindata.go --exclude-dir vendor \
+     '\n.*\s+//(\s{0,3}[^\s^+][^\n]+[^.?!:]{2}|[^\s].*)\n[ \t]*[^/\s].*\n' ./
     res=$?
     set -e
 

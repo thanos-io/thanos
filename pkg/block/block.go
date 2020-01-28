@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 // Package block contains common functionality for interacting with TSDB blocks
 // in the context of Thanos.
 package block
