@@ -15,6 +15,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 - [#2033](https://github.com/thanos-io/thanos/pull/2033) minio-go: Fixed Issue #1494 support Web Identity providers for IAM credentials for AWS EKS
 - [#1985](https://github.com/thanos-io/thanos/pull/1985) store gateway: Fixed case where series entry is larger than 64KB in index.
+- [#2051](https://github.com/thanos-io/thanos/pull/2051) ruler: Fixed issue where ruler does not expose shipper metrics.
 
 ### Added
 

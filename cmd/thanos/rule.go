@@ -629,7 +629,7 @@ func runRule(
 			}
 		}()
 
-		s := shipper.New(logger, nil, dataDir, bkt, func() labels.Labels { return lset }, metadata.RulerSource)
+		s := shipper.New(logger, reg, dataDir, bkt, func() labels.Labels { return lset }, metadata.RulerSource)
 
 		ctx, cancel := context.WithCancel(context.Background())
 
