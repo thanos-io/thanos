@@ -119,28 +119,26 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string) {
 	for _, addr := range addrs {
 		var resolved []string
 		var sticky bool
-		var qtype, name string
 
-		addrParsed := strings.SplitN(addr, "+", 3)
-
-		switch len(addrParsed) {
-		case 2:
-			qtype, name = addrParsed[0], addrParsed[1]
-		case 3:
-			qtype, name = addrParsed[0], addrParsed[1]
+		if strings.HasSuffix(addr, "+sticky") {
 			sticky = true
-		default:
+			addr = strings.TrimSuffix(addr, "+sticky")
+		}
+
+		qtypeAndName := strings.SplitN(addr, "+", 2)
+		if len(qtypeAndName) != 2 {
 			// No lookup specified. Add to results and continue to the next address.
-			p.resolved[addr] = []MetaTarget{MetaTarget{addr: addr}}
+			p.resolved[addr] = []MetaTarget{MetaTarget{addr: addr, sticky: sticky}}
 			continue
 		}
+		qtype, name := qtypeAndName[0], qtypeAndName[1]
 
 		resolved, err := p.resolver.Resolve(ctx, name, QType(qtype))
 		p.resolverLookupsCount.Inc()
 		if err != nil {
 			// The DNS resolution failed. Continue without modifying the old records.
 			p.resolverFailuresCount.Inc()
-			level.Error(p.logger).Log("msg", "dns resolution failed", "addr", addr, "err", err)
+			level.Error(p.logger).Log("msg", "dns resolution failed", "addr", addr, "err", err, "sticky", sticky)
 			continue
 		}
 		metaTargets := []MetaTarget{}
