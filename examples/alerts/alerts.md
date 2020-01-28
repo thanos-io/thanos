@@ -8,7 +8,7 @@ Here are some example alerts configured for Kubernetes environment.
 ```yaml
 name: thanos-compactor.rules
 rules:
-- alert: ThanosCompactorMultipleCompactsAreRunning
+- alert: ThanosCompactorMultipleCompactorsAreRunning
   annotations:
     message: You should never run more than one Thanos Compactor at once. You have
       {{ $value }}
