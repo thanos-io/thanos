@@ -219,7 +219,7 @@ func runSidecar(
 				)
 				promUp.Set(1)
 				statusProber.Ready()
-				lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
+				lastHeartbeat.SetToCurrentTime()
 				return nil
 			})
 			if err != nil {
@@ -241,7 +241,7 @@ func runSidecar(
 					promUp.Set(0)
 				} else {
 					promUp.Set(1)
-					lastHeartbeat.Set(float64(time.Now().UnixNano()) / 1e9)
+					lastHeartbeat.SetToCurrentTime()
 				}
 
 				return nil

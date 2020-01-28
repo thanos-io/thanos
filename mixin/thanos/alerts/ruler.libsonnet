@@ -114,6 +114,42 @@
               severity: 'warning',
             },
           },
+          {
+            alert: 'ThanosRulerQueryHighDNSFailures',
+            annotations: {
+              message: 'Thanos Ruler {{$labels.job}} have {{ $value | humanize }}% of failing DNS queries for query endpoints.',
+            },
+            expr: |||
+              (
+                sum by (job) (rate(thanos_ruler_query_apis_dns_failures_total{%(selector)s}[5m]))
+              /
+                sum by (job) (rate(thanos_ruler_query_apis_dns_lookups_total{%(selector)s}[5m]))
+              * 100 > 1
+              )
+            ||| % thanos.ruler,
+            'for': '15m',
+            labels: {
+              severity: 'warning',
+            },
+          },
+          {
+            alert: 'ThanosRulerAlertmanagerHighDNSFailures',
+            annotations: {
+              message: 'Thanos Ruler {{$labels.job}} have {{ $value | humanize }}% of failing DNS queries for Alertmanager endpoints.',
+            },
+            expr: |||
+              (
+                sum by (job) (rate(thanos_ruler_alertmanagers_dns_failures_total{%(selector)s}[5m]))
+              /
+                sum by (job) (rate(thanos_ruler_alertmanagers_dns_lookups_total{%(selector)s}[5m]))
+              * 100 > 1
+              )
+            ||| % thanos.ruler,
+            'for': '15m',
+            labels: {
+              severity: 'warning',
+            },
+          },
         ],
       },
     ],

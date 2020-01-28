@@ -187,26 +187,27 @@ func (s *Syncer) Groups() (res []*Group, err error) {
 
 	groups := map[string]*Group{}
 	for _, m := range s.blocks {
-		g, ok := groups[GroupKey(m.Thanos)]
+		groupKey := GroupKey(m.Thanos)
+		g, ok := groups[groupKey]
 		if !ok {
 			g, err = newGroup(
-				log.With(s.logger, "compactionGroup", GroupKey(m.Thanos)),
+				log.With(s.logger, "compactionGroup", groupKey),
 				s.bkt,
 				labels.FromMap(m.Thanos.Labels),
 				m.Thanos.Downsample.Resolution,
 				s.acceptMalformedIndex,
 				s.enableVerticalCompaction,
-				s.metrics.compactions.WithLabelValues(GroupKey(m.Thanos)),
-				s.metrics.compactionRunsStarted.WithLabelValues(GroupKey(m.Thanos)),
-				s.metrics.compactionRunsCompleted.WithLabelValues(GroupKey(m.Thanos)),
-				s.metrics.compactionFailures.WithLabelValues(GroupKey(m.Thanos)),
-				s.metrics.verticalCompactions.WithLabelValues(GroupKey(m.Thanos)),
+				s.metrics.compactions.WithLabelValues(groupKey),
+				s.metrics.compactionRunsStarted.WithLabelValues(groupKey),
+				s.metrics.compactionRunsCompleted.WithLabelValues(groupKey),
+				s.metrics.compactionFailures.WithLabelValues(groupKey),
+				s.metrics.verticalCompactions.WithLabelValues(groupKey),
 				s.metrics.garbageCollectedBlocks,
 			)
 			if err != nil {
 				return nil, errors.Wrap(err, "create compaction group")
 			}
-			groups[GroupKey(m.Thanos)] = g
+			groups[groupKey] = g
 			res = append(res, g)
 		}
 		if err := g.Add(m); err != nil {
@@ -687,8 +688,9 @@ func (cg *Group) compact(ctx context.Context, dir string, comp tsdb.Compactor) (
 			return false, ulid.ULID{}, errors.Wrapf(err, "read meta from %s", pdir)
 		}
 
-		if cg.Key() != GroupKey(meta.Thanos) {
-			return false, ulid.ULID{}, halt(errors.Wrapf(err, "compact planned compaction for mixed groups. group: %s, planned block's group: %s", cg.Key(), GroupKey(meta.Thanos)))
+		cgKey, groupKey := cg.Key(), GroupKey(meta.Thanos)
+		if cgKey != groupKey {
+			return false, ulid.ULID{}, halt(errors.Wrapf(err, "compact planned compaction for mixed groups. group: %s, planned block's group: %s", cgKey, groupKey))
 		}
 
 		for _, s := range meta.Compaction.Sources {

@@ -142,6 +142,34 @@ rules:
   for: 5m
   labels:
     severity: warning
+- alert: ThanosRulerQueryHighDNSFailures
+  annotations:
+    message: Thanos Ruler {{$labels.job}} have {{ $value | humanize }}% of failing
+      DNS queries for query endpoints.
+  expr: |
+    (
+      sum by (job) (rate(thanos_ruler_query_apis_dns_failures_total{job=~"thanos-ruler.*"}[5m]))
+    /
+      sum by (job) (rate(thanos_ruler_query_apis_dns_lookups_total{job=~"thanos-ruler.*"}[5m]))
+    * 100 > 1
+    )
+  for: 15m
+  labels:
+    severity: warning
+- alert: ThanosRulerAlertmanagerHighDNSFailures
+  annotations:
+    message: Thanos Ruler {{$labels.job}} have {{ $value | humanize }}% of failing
+      DNS queries for Alertmanager endpoints.
+  expr: |
+    (
+      sum by (job) (rate(thanos_ruler_alertmanagers_dns_failures_total{job=~"thanos-ruler.*"}[5m]))
+    /
+      sum by (job) (rate(thanos_ruler_alertmanagers_dns_lookups_total{job=~"thanos-ruler.*"}[5m]))
+    * 100 > 1
+    )
+  for: 15m
+  labels:
+    severity: warning
 ```
 
 ## Store Gateway
@@ -308,9 +336,9 @@ rules:
     message: Thanos Querys {{$labels.job}} have {{ $value }} of failing DNS queries.
   expr: |
     (
-      sum by (job) (rate(thanos_querier_store_apis_dns_failures_total{job=~"thanos-querier.*"}[5m]))
+      sum by (job) (rate(thanos_query_store_apis_dns_failures_total{job=~"thanos-querier.*"}[5m]))
     /
-      sum by (job) (rate(thanos_querier_store_apis_dns_lookups_total{job=~"thanos-querier.*"}[5m]))
+      sum by (job) (rate(thanos_query_store_apis_dns_lookups_total{job=~"thanos-querier.*"}[5m]))
     > 1
     )
   for: 15m

@@ -224,7 +224,7 @@ func (cw *ConfigWatcher) refresh(ctx context.Context) {
 	// Save the last known configuration.
 	cw.last = config
 	cw.successGauge.Set(1)
-	cw.lastSuccessTimeGauge.Set(float64(time.Now().Unix()))
+	cw.lastSuccessTimeGauge.SetToCurrentTime()
 	cw.hashGauge.Set(hashAsMetricValue(cfgContent))
 
 	for _, c := range config {

@@ -100,6 +100,7 @@ config:
   service_name: ""
   service_version: ""
   service_environment: ""
+  sample_rate: 0
 ```
 
 ### Lightstep
