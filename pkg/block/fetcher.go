@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
+	"github.com/prometheus/prometheus/tsdb"
 	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -50,6 +52,7 @@ const (
 	labelExcludedMeta = "label-excluded"
 	timeExcludedMeta  = "time-excluded"
 	TooFreshMeta      = "too-fresh"
+	duplicateMeta     = "duplicate"
 )
 
 func newSyncMetrics(r prometheus.Registerer) *syncMetrics {
@@ -84,6 +87,7 @@ func newSyncMetrics(r prometheus.Registerer) *syncMetrics {
 		[]string{failedMeta},
 		[]string{labelExcludedMeta},
 		[]string{timeExcludedMeta},
+		[]string{duplicateMeta},
 	)
 	if r != nil {
 		r.MustRegister(
@@ -409,4 +413,96 @@ func (f *LabelShardedMetaFilter) Filter(metas map[ulid.ULID]*metadata.Meta, sync
 		synced.WithLabelValues(labelExcludedMeta).Inc()
 		delete(metas, id)
 	}
+}
+
+// DeduplicateFilter is a MetaFetcher filter that filters out older blocks that have exactly the same data.
+type DeduplicateFilter struct {
+	DuplicateIDs []ulid.ULID
+}
+
+// NewDeduplicateFilter creates DeduplicateFilter.
+func NewDeduplicateFilter() *DeduplicateFilter {
+	return &DeduplicateFilter{}
+}
+
+// Filter filters out duplicate blocks that can be formed
+// from two or more overlapping blocks that fully submatches the source blocks of the older blocks.
+func (f *DeduplicateFilter) Filter(metas map[ulid.ULID]*metadata.Meta, synced GaugeLabeled, _ bool) {
+	root := NewNode(&metadata.Meta{
+		BlockMeta: tsdb.BlockMeta{
+			ULID: ulid.MustNew(uint64(0), nil),
+		},
+	})
+
+	metaSlice := []*metadata.Meta{}
+	for _, meta := range metas {
+		metaSlice = append(metaSlice, meta)
+	}
+	sort.Slice(metaSlice, func(i, j int) bool {
+		ilen := len(metaSlice[i].Compaction.Sources)
+		jlen := len(metaSlice[j].Compaction.Sources)
+
+		if ilen == jlen {
+			return metaSlice[i].ULID.Compare(metaSlice[j].ULID) < 0
+		}
+
+		return ilen-jlen > 0
+	})
+
+	for _, meta := range metaSlice {
+		addNodeBySources(root, NewNode(meta))
+	}
+
+	duplicateULIDs := getNonRootIDs(root)
+	for _, id := range duplicateULIDs {
+		if metas[id] != nil {
+			f.DuplicateIDs = append(f.DuplicateIDs, id)
+		}
+		synced.WithLabelValues(duplicateMeta).Inc()
+		delete(metas, id)
+	}
+}
+
+func addNodeBySources(root *Node, add *Node) bool {
+	var rootNode *Node
+	for _, node := range root.Children {
+		parentSources := node.Compaction.Sources
+		childSources := add.Compaction.Sources
+
+		// Block exists with same sources, add as child.
+		if contains(parentSources, childSources) && contains(childSources, parentSources) {
+			node.Children = append(node.Children, add)
+			return true
+		}
+
+		// Block's sources are present in other block's sources, add as child.
+		if contains(parentSources, childSources) {
+			rootNode = node
+			break
+		}
+	}
+
+	// Block cannot be attached to any child nodes, add it as child of root.
+	if rootNode == nil {
+		root.Children = append(root.Children, add)
+		return true
+	}
+
+	return addNodeBySources(rootNode, add)
+}
+
+func contains(s1 []ulid.ULID, s2 []ulid.ULID) bool {
+	for _, a := range s2 {
+		found := false
+		for _, e := range s1 {
+			if a.Compare(e) == 0 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }

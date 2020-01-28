@@ -223,6 +223,7 @@ func runStore(
 	metaFetcher, err := block.NewMetaFetcher(logger, fetcherConcurrency, bkt, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
 		block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime).Filter,
 		block.NewLabelShardedMetaFilter(relabelConfig).Filter,
+		block.NewDeduplicateFilter().Filter,
 	)
 	if err != nil {
 		return errors.Wrap(err, "meta fetcher")
