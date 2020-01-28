@@ -393,3 +393,117 @@ func TestTimePartitionMetaFilter_Filter(t *testing.T) {
 	testutil.Equals(t, expected, input)
 
 }
+
+func TestDeduplicateFilter_Filter(t *testing.T) {
+	for _, tcase := range []struct {
+		name     string
+		input    map[ulid.ULID][]ulid.ULID
+		expected []ulid.ULID
+	}{
+		{
+			name: "3 non compacted blocks in bucket",
+			input: map[ulid.ULID][]ulid.ULID{
+				ULID(1): []ulid.ULID{ULID(1)},
+				ULID(2): []ulid.ULID{ULID(2)},
+				ULID(3): []ulid.ULID{ULID(3)},
+			},
+			expected: []ulid.ULID{
+				ULID(1),
+				ULID(2),
+				ULID(3),
+			},
+		},
+		{
+			name: "compacted block with sources in bucket",
+			input: map[ulid.ULID][]ulid.ULID{
+				ULID(4): []ulid.ULID{ULID(1), ULID(2), ULID(3)},
+			},
+			expected: []ulid.ULID{
+				ULID(4),
+			},
+		},
+		{
+			name: "two compacted blocks with same sources",
+			input: map[ulid.ULID][]ulid.ULID{
+				ULID(3): []ulid.ULID{ULID(1), ULID(2)},
+				ULID(4): []ulid.ULID{ULID(1), ULID(2)},
+			},
+			expected: []ulid.ULID{
+				ULID(3),
+			},
+		},
+		{
+			name: "two compacted blocks with overlapping sources",
+			input: map[ulid.ULID][]ulid.ULID{
+				ULID(4): []ulid.ULID{ULID(1), ULID(2)},
+				ULID(5): []ulid.ULID{ULID(1), ULID(2), ULID(3)},
+			},
+			expected: []ulid.ULID{
+				ULID(5),
+			},
+		},
+		{
+			name: "3 non compacted blocks and compacted block of level 2 in bucket",
+			input: map[ulid.ULID][]ulid.ULID{
+				ULID(1): []ulid.ULID{ULID(1)},
+				ULID(2): []ulid.ULID{ULID(2)},
+				ULID(3): []ulid.ULID{ULID(3)},
+				ULID(4): []ulid.ULID{ULID(1), ULID(2), ULID(3)},
+			},
+			expected: []ulid.ULID{
+				ULID(4),
+			},
+		},
+		{
+			name: "3 compacted blocks of level 2 and one compacted block of level 3 in bucket",
+			input: map[ulid.ULID][]ulid.ULID{
+				ULID(10): []ulid.ULID{ULID(1), ULID(2), ULID(3)},
+				ULID(11): []ulid.ULID{ULID(4), ULID(5), ULID(6)},
+				ULID(12): []ulid.ULID{ULID(7), ULID(8), ULID(9)},
+				ULID(13): []ulid.ULID{ULID(1), ULID(2), ULID(3), ULID(4), ULID(5), ULID(6), ULID(7), ULID(8), ULID(9)},
+			},
+			expected: []ulid.ULID{
+				ULID(13),
+			},
+		},
+		{
+			name: "compacted blocks with overlapping sources",
+			input: map[ulid.ULID][]ulid.ULID{
+				ULID(1): []ulid.ULID{ULID(1)},
+				ULID(5): []ulid.ULID{ULID(1), ULID(2)},
+				ULID(6): []ulid.ULID{ULID(1), ULID(2), ULID(3), ULID(4)},
+				ULID(7): []ulid.ULID{ULID(1), ULID(2), ULID(3)},
+				ULID(8): []ulid.ULID{ULID(1), ULID(2), ULID(3), ULID(4)},
+			},
+			expected: []ulid.ULID{
+				ULID(6),
+			},
+		},
+	} {
+		f := NewDeduplicateFilter()
+		if ok := t.Run(tcase.name, func(t *testing.T) {
+			synced := prometheus.NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
+			metas := make(map[ulid.ULID]*metadata.Meta)
+			for id, sources := range tcase.input {
+				metas[id] = &metadata.Meta{
+					BlockMeta: tsdb.BlockMeta{
+						ULID: id,
+						Compaction: tsdb.BlockMetaCompaction{
+							Sources: sources,
+						},
+					},
+				}
+			}
+			f.Filter(metas, synced, false)
+
+			var unfilteredMetas []ulid.ULID
+			for id := range metas {
+				unfilteredMetas = append(unfilteredMetas, id)
+			}
+
+			testutil.Equals(t, tcase.expected, unfilteredMetas)
+		}); !ok {
+			return
+		}
+	}
+}
