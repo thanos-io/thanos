@@ -48,6 +48,7 @@ type StoreStatus struct {
 	StoreType component.StoreAPI
 	MinTime   int64
 	MaxTime   int64
+	Sticky    bool
 }
 
 type grpcStoreSpec struct {
@@ -67,7 +68,7 @@ func (s *grpcStoreSpec) Addr() string {
 }
 
 func (s *grpcStoreSpec) Sticky() bool {
-	return s.Sticky()
+	return s.sticky
 }
 
 // Metadata method for gRPC store API tries to reach host Info method until context timeout. If we are unable to get metadata after
@@ -359,7 +360,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 
 		st.Close()
 		delete(stores, addr)
-		s.updateStoreStatus(st, errors.New(unhealthyStoreMessage))
+		s.updateStoreStatus(st, st.sticky, errors.New(unhealthyStoreMessage))
 		level.Info(s.logger).Log("msg", unhealthyStoreMessage, "address", addr, "extLset", st.LabelSetsString())
 	}
 
@@ -383,7 +384,7 @@ func (s *StoreSet) Update(ctx context.Context) {
 		stats[st.StoreType()][st.LabelSetsString()]++
 
 		stores[addr] = st
-		s.updateStoreStatus(st, nil)
+		s.updateStoreStatus(st, st.sticky, nil)
 		level.Info(s.logger).Log("msg", "adding new storeAPI to query storeset", "address", addr, "extLset", extLset)
 	}
 
@@ -425,7 +426,7 @@ func (s *StoreSet) getHealthyStores(ctx context.Context, stores map[string]*stor
 				// New store or was unhealthy and was removed in the past - create new one.
 				conn, err := grpc.DialContext(ctx, addr, s.dialOpts...)
 				if err != nil {
-					s.updateStoreStatus(&storeRef{addr: addr}, err)
+					s.updateStoreStatus(&storeRef{addr: addr}, spec.Sticky(), err)
 					level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "dialing connection"), "address", addr)
 					return
 				}
@@ -445,10 +446,10 @@ func (s *StoreSet) getHealthyStores(ctx context.Context, stores map[string]*stor
 					healthyStores[addr] = st
 					mtx.Unlock()
 				}
-				s.updateStoreStatus(st, err)
+				s.updateStoreStatus(st, spec.Sticky(), err)
 				return
 			}
-			s.updateStoreStatus(st, nil)
+			s.updateStoreStatus(st, spec.Sticky(), nil)
 			st.Update(labelSets, minTime, maxTime, storeType)
 
 			mtx.Lock()
@@ -461,7 +462,7 @@ func (s *StoreSet) getHealthyStores(ctx context.Context, stores map[string]*stor
 	return healthyStores
 }
 
-func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
+func (s *StoreSet) updateStoreStatus(store *storeRef, sticky bool, err error) {
 	s.storesStatusesMtx.Lock()
 	defer s.storesStatusesMtx.Unlock()
 
@@ -473,8 +474,9 @@ func (s *StoreSet) updateStoreStatus(store *storeRef, err error) {
 
 	status.LastError = err
 	status.LastCheck = time.Now()
+	status.Sticky = sticky
 
-	if err == nil {
+	if !sticky && err == nil {
 
 		mint, maxt := store.TimeRange()
 		status.LabelSets = store.LabelSets()

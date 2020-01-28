@@ -162,6 +162,8 @@ This is useful in the cases where you have some kind of caching layer in front o
 
 To make a node sticky you need to add a suffix `+sticky` to the end of the address.
 
+Sticky nodes have a yellow `UP` status in the `Stores` page if we have failed to check their data but we still consider them available.
+
 ### Deduplication replica labels.
 
 | HTTP URL/FORM parameter | Type | Default | Example |
