@@ -47,7 +47,7 @@ func registerStore(m map[string]setupFunc, app *kingpin.Application) {
 		"YAML file that contains index cache configuration. See format details: https://thanos.io/components/store.md/#index-cache",
 		false)
 
-	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes for chunks.").
+	chunkPoolSize := cmd.Flag("chunk-pool-size", "Maximum size of concurrently allocatable bytes reserved strictly to reuse for chunks in memory.").
 		Default("2GB").Bytes()
 
 	maxSampleCount := cmd.Flag("store.grpc.series-sample-limit",

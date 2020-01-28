@@ -82,7 +82,8 @@ Flags:
                                  details:
                                  https://thanos.io/components/store.md/#index-cache
       --chunk-pool-size=2GB      Maximum size of concurrently allocatable bytes
-                                 for chunks.
+                                 reserved strictly to reuse for chunks in
+                                 memory.
       --store.grpc.series-sample-limit=0
                                  Maximum amount of samples returned via a single
                                  Series call. 0 means no limit. NOTE: For
