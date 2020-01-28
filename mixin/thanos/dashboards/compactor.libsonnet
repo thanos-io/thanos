@@ -3,9 +3,9 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
 {
   local thanos = self,
   compactor+:: {
-    jobPrefix: error 'must provide job prefix for Thanos Compact dashboard',
-    selector: error 'must provide selector for Thanos Compact dashboard',
-    title: error 'must provide title for Thanos Compact dashboard',
+    jobPrefix: error 'must provide job prefix for Thanos Compactor dashboard',
+    selector: error 'must provide selector for Thanos Compactor dashboard',
+    title: error 'must provide title for Thanos Compactor dashboard',
   },
   grafanaDashboards+:: {
     'compactor.json':
@@ -135,7 +135,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
       g.template('pod', 'kube_pod_info', 'namespace="$namespace",created_by_name=~"%(jobPrefix)s.*"' % thanos.compactor, true, '.*'),
 
     __overviewRows__+:: [
-      g.row('Compact')
+      g.row('Compactor')
       .addPanel(
         g.panel(
           'Compaction Rate',
