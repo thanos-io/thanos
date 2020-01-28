@@ -308,9 +308,16 @@ func runQuery(
 			cancel()
 		})
 	}
-	// Start query API + UI HTTP server.
 
-	statusProber := prober.New(comp, logger, reg)
+	grpcProbe := prober.NewGRPC()
+	httpProbe := prober.NewHTTP()
+	statusProber := prober.Combine(
+		httpProbe,
+		grpcProbe,
+		prober.NewInstrumentation(comp, logger, reg),
+	)
+
+	// Start query API + UI HTTP server.
 	{
 		router := route.New()
 
@@ -334,8 +341,7 @@ func runQuery(
 
 		api.Register(router.WithPrefix(path.Join(webRoutePrefix, "/api/v1")), tracer, logger, ins)
 
-		// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-		srv := httpserver.New(logger, reg, comp, statusProber,
+		srv := httpserver.New(logger, reg, comp, httpProbe,
 			httpserver.WithListen(httpBindAddr),
 			httpserver.WithGracePeriod(httpGracePeriod),
 		)
@@ -359,7 +365,7 @@ func runQuery(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		s := grpcserver.New(logger, reg, tracer, comp, proxy,
+		s := grpcserver.New(logger, reg, tracer, comp, grpcProbe, proxy,
 			grpcserver.WithListen(grpcBindAddr),
 			grpcserver.WithGracePeriod(grpcGracePeriod),
 			grpcserver.WithTLSConfig(tlsCfg),
