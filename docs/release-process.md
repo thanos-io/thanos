@@ -5,6 +5,8 @@ menu: thanos
 slug: /release-process.md
 ---
 
+# Release Process
+
 This page describes the release cadence and process for Thanos project.
 
 We use [Semantic Versioning](http://semver.org/).
