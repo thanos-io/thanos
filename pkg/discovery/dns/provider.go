@@ -15,12 +15,28 @@ import (
 	"github.com/thanos-io/thanos/pkg/discovery/dns/miekgdns"
 )
 
+// MetaTarget stores the information about a resolved target and its sticky bit.
+type MetaTarget struct {
+	addr   string
+	sticky bool
+}
+
+// GetAddr returns the MetaTarget's address.
+func (mt *MetaTarget) GetAddr() string {
+	return mt.addr
+}
+
+// IsSticky returns true if the target ought to be sticky.
+func (mt *MetaTarget) IsSticky() bool {
+	return mt.sticky
+}
+
 // Provider is a stateful cache for asynchronous DNS resolutions. It provides a way to resolve addresses and obtain them.
 type Provider struct {
 	sync.Mutex
 	resolver Resolver
-	// A map from domain name to a slice of resolved targets.
-	resolved map[string][]string
+	// A map from domain name to a slice of resolved targets + their sticky bits.
+	resolved map[string][]MetaTarget
 	logger   log.Logger
 
 	resolverAddrs         *prometheus.GaugeVec
@@ -54,7 +70,7 @@ func (t ResolverType) ToResolver(logger log.Logger) ipLookupResolver {
 func NewProvider(logger log.Logger, reg prometheus.Registerer, resolverType ResolverType) *Provider {
 	p := &Provider{
 		resolver: NewResolver(resolverType.ToResolver(logger)),
-		resolved: make(map[string][]string),
+		resolved: make(map[string][]MetaTarget),
 		logger:   logger,
 		resolverAddrs: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "dns_provider_results",
@@ -83,7 +99,7 @@ func NewProvider(logger log.Logger, reg prometheus.Registerer, resolverType Reso
 func (p *Provider) Clone() *Provider {
 	return &Provider{
 		resolver:              p.resolver,
-		resolved:              make(map[string][]string),
+		resolved:              make(map[string][]MetaTarget),
 		logger:                p.logger,
 		resolverAddrs:         p.resolverAddrs,
 		resolverLookupsCount:  p.resolverLookupsCount,
@@ -93,6 +109,8 @@ func (p *Provider) Clone() *Provider {
 
 // Resolve stores a list of provided addresses or their DNS records if requested.
 // Addresses prefixed with `dns+` or `dnssrv+` will be resolved through respective DNS lookup (A/AAAA or SRV).
+// Addresses with a suffix `+sticky` will be made sticky i.e. we will always consider them
+// as part of the active storeset.
 // defaultPort is used for non-SRV records when a port is not supplied.
 func (p *Provider) Resolve(ctx context.Context, addrs []string) {
 	p.Lock()
@@ -100,13 +118,22 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string) {
 
 	for _, addr := range addrs {
 		var resolved []string
-		qtypeAndName := strings.SplitN(addr, "+", 2)
-		if len(qtypeAndName) != 2 {
+		var sticky bool
+		var qtype, name string
+
+		addrParsed := strings.SplitN(addr, "+", 3)
+
+		switch len(addrParsed) {
+		case 2:
+			qtype, name = addrParsed[0], addrParsed[1]
+		case 3:
+			qtype, name = addrParsed[0], addrParsed[1]
+			sticky = true
+		default:
 			// No lookup specified. Add to results and continue to the next address.
-			p.resolved[addr] = []string{addr}
+			p.resolved[addr] = []MetaTarget{MetaTarget{addr: addr}}
 			continue
 		}
-		qtype, name := qtypeAndName[0], qtypeAndName[1]
 
 		resolved, err := p.resolver.Resolve(ctx, name, QType(qtype))
 		p.resolverLookupsCount.Inc()
@@ -116,7 +143,11 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string) {
 			level.Error(p.logger).Log("msg", "dns resolution failed", "addr", addr, "err", err)
 			continue
 		}
-		p.resolved[addr] = resolved
+		metaTargets := []MetaTarget{}
+		for _, rTarget := range resolved {
+			metaTargets = append(metaTargets, MetaTarget{addr: rTarget, sticky: sticky})
+		}
+		p.resolved[addr] = metaTargets
 	}
 
 	// Remove stored addresses that are no longer requested.
@@ -131,11 +162,11 @@ func (p *Provider) Resolve(ctx context.Context, addrs []string) {
 }
 
 // Addresses returns the latest addresses present in the Provider.
-func (p *Provider) Addresses() []string {
+func (p *Provider) Addresses() []MetaTarget {
 	p.Lock()
 	defer p.Unlock()
 
-	var result []string
+	var result []MetaTarget
 	for _, addrs := range p.resolved {
 		result = append(result, addrs...)
 	}

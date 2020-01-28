@@ -73,7 +73,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 	selectorLabels := cmd.Flag("selector-label", "Query selector labels that will be exposed in info endpoint (repeated).").
 		PlaceHolder("<name>=\"<value>\"").Strings()
 
-	stores := cmd.Flag("store", "Addresses of statically configured store API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect store API servers through respective DNS lookups.").
+	stores := cmd.Flag("store", "Addresses of statically configured store API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect store API servers through respective DNS lookups. The suffix '+sticky' will make the store API server sticky.").
 		PlaceHolder("<store>").Strings()
 
 	fileSDFiles := cmd.Flag("store.sd-files", "Path to files that contain addresses of store API servers. The path can be a glob pattern (repeatable).").
@@ -227,8 +227,8 @@ func runQuery(
 			reg,
 			func() (specs []query.StoreSpec) {
 				// Add DNS resolved addresses from static flags and file SD.
-				for _, addr := range dnsProvider.Addresses() {
-					specs = append(specs, query.NewGRPCStoreSpec(addr))
+				for _, mt := range dnsProvider.Addresses() {
+					specs = append(specs, query.NewGRPCStoreSpec(mt.GetAddr(), mt.IsSticky()))
 				}
 
 				specs = removeDuplicateStoreSpecs(logger, duplicatedStores, specs)

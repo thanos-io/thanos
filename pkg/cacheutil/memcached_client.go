@@ -435,9 +435,13 @@ func (c *memcachedClient) resolveAddrs() error {
 	c.dnsProvider.Resolve(ctx, c.config.Addresses)
 
 	// Fail in case no server address is resolved.
-	servers := c.dnsProvider.Addresses()
-	if len(servers) == 0 {
+	metatargets := c.dnsProvider.Addresses()
+	if len(metatargets) == 0 {
 		return errors.New("no server address resolved")
+	}
+	servers := []string{}
+	for _, mt := range metatargets {
+		servers = append(servers, mt.GetAddr())
 	}
 
 	return c.selector.SetServers(servers...)

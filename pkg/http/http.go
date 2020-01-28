@@ -21,6 +21,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
+	"github.com/thanos-io/thanos/pkg/discovery/dns"
 )
 
 // ClientConfig configures an HTTP client.
@@ -164,7 +165,7 @@ func (c FileSDConfig) convert() (file.SDConfig, error) {
 
 type AddressProvider interface {
 	Resolve(context.Context, []string)
-	Addresses() []string
+	Addresses() []dns.MetaTarget
 }
 
 // Client represents a client that can send requests to a cluster of HTTP-based endpoints.
@@ -216,11 +217,11 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 // Endpoints returns the list of known endpoints.
 func (c *Client) Endpoints() []*url.URL {
 	var urls []*url.URL
-	for _, addr := range c.provider.Addresses() {
+	for _, mt := range c.provider.Addresses() {
 		urls = append(urls,
 			&url.URL{
 				Scheme: c.scheme,
-				Host:   addr,
+				Host:   mt.GetAddr(),
 				Path:   path.Join("/", c.prefix),
 			},
 		)

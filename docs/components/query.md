@@ -154,6 +154,14 @@ Querier also allows to configure different timeouts:
 If you prefer availability over accuracy you can set tighter timeout to underlying StoreAPI than overall query timeout. If partial response
 strategy is NOT `abort`, this will "ignore" slower StoreAPIs producing just warning with 200 status code response.
 
+#### Sticky StoreAPI nodes
+
+Thanos Query periodically checks the health of the StoreAPI nodes that it knows about via the `Info()` gRPC call. However, if one is failing then it is not considered a part of the active set of StoreAPI nodes. To make them always part of the active set, you need to make them "sticky" - their last available information will be retained even in the face of a failure of a health-check.
+
+This is useful in the cases where you have some kind of caching layer in front of Thanos Query i.e. Cortex's `query-frontend` and you know that certain nodes must always be alive. It allows you to get a partial response when one of the sticky nodes goes down.
+
+To make a node sticky you need to add a suffix `+sticky` to the end of the address.
+
 ### Deduplication replica labels.
 
 | HTTP URL/FORM parameter | Type | Default | Example |
@@ -325,7 +333,8 @@ Flags:
                                  servers (repeatable). The scheme may be
                                  prefixed with 'dns+' or 'dnssrv+' to detect
                                  store API servers through respective DNS
-                                 lookups.
+                                 lookups. The suffix '+sticky' will make the
+                                 store API server sticky.
       --store.sd-files=<path> ...
                                  Path to files that contain addresses of store
                                  API servers. The path can be a glob pattern

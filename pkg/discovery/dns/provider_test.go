@@ -35,33 +35,45 @@ func TestProvider(t *testing.T) {
 
 	prv.Resolve(ctx, []string{"any+x"})
 	result := prv.Addresses()
-	sort.Strings(result)
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].GetAddr() < result[j].GetAddr()
+	})
 	testutil.Equals(t, []string(nil), result)
 
 	prv.Resolve(ctx, []string{"any+a", "any+b", "any+c"})
 	result = prv.Addresses()
-	sort.Strings(result)
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].GetAddr() < result[j].GetAddr()
+	})
 	testutil.Equals(t, ips, result)
 
 	prv.Resolve(ctx, []string{"any+b", "any+c"})
 	result = prv.Addresses()
-	sort.Strings(result)
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].GetAddr() < result[j].GetAddr()
+	})
 	testutil.Equals(t, ips[2:], result)
 
 	prv.Resolve(ctx, []string{"any+x"})
 	result = prv.Addresses()
-	sort.Strings(result)
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].GetAddr() < result[j].GetAddr()
+	})
 	testutil.Equals(t, []string(nil), result)
 
 	prv.Resolve(ctx, []string{"any+a", "any+b", "any+c"})
 	result = prv.Addresses()
-	sort.Strings(result)
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].GetAddr() < result[j].GetAddr()
+	})
 	testutil.Equals(t, ips, result)
 
 	prv.resolver = &mockResolver{err: errors.New("failed to resolve urls")}
 	prv.Resolve(ctx, []string{"any+a", "any+b", "any+c"})
 	result = prv.Addresses()
-	sort.Strings(result)
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].GetAddr() < result[j].GetAddr()
+	})
 	testutil.Equals(t, ips, result)
 }
 

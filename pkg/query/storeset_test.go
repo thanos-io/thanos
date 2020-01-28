@@ -181,7 +181,7 @@ func TestStoreSet_Update(t *testing.T) {
 	discoveredStoreAddr = append(discoveredStoreAddr, discoveredStoreAddr[0])
 	storeSet := NewStoreSet(nil, nil, func() (specs []StoreSpec) {
 		for _, addr := range discoveredStoreAddr {
-			specs = append(specs, NewGRPCStoreSpec(addr))
+			specs = append(specs, NewGRPCStoreSpec(addr, false))
 		}
 		return specs
 	}, testGRPCOpts, time.Minute)
@@ -523,7 +523,7 @@ func TestStoreSet_Update_NoneAvailable(t *testing.T) {
 
 	storeSet := NewStoreSet(nil, nil, func() (specs []StoreSpec) {
 		for _, addr := range initialStoreAddr {
-			specs = append(specs, NewGRPCStoreSpec(addr))
+			specs = append(specs, NewGRPCStoreSpec(addr, false))
 		}
 		return specs
 	}, testGRPCOpts, time.Minute)

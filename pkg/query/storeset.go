@@ -36,6 +36,8 @@ type StoreSpec interface {
 	// NOTE: It is implementation responsibility to retry until context timeout, but a caller responsibility to manage
 	// given store connection.
 	Metadata(ctx context.Context, client storepb.StoreClient) (labelSets []storepb.LabelSet, mint int64, maxt int64, storeType component.StoreAPI, err error)
+	// Sticky tells us whether the StoreSpec should always be considered healthy.
+	Sticky() bool
 }
 
 type StoreStatus struct {
@@ -49,18 +51,23 @@ type StoreStatus struct {
 }
 
 type grpcStoreSpec struct {
-	addr string
+	addr   string
+	sticky bool
 }
 
 // NewGRPCStoreSpec creates store pure gRPC spec.
 // It uses Info gRPC call to get Metadata.
-func NewGRPCStoreSpec(addr string) StoreSpec {
-	return &grpcStoreSpec{addr: addr}
+func NewGRPCStoreSpec(addr string, sticky bool) StoreSpec {
+	return &grpcStoreSpec{addr: addr, sticky: sticky}
 }
 
 func (s *grpcStoreSpec) Addr() string {
 	// API addr should not change between state changes.
 	return s.addr
+}
+
+func (s *grpcStoreSpec) Sticky() bool {
+	return s.Sticky()
 }
 
 // Metadata method for gRPC store API tries to reach host Info method until context timeout. If we are unable to get metadata after
@@ -210,6 +217,10 @@ type storeRef struct {
 	mtx  sync.RWMutex
 	cc   *grpc.ClientConn
 	addr string
+
+	// If true then we will consider this StoreAPI node
+	// as always healthy after the first successful health-check.
+	sticky bool
 
 	// Meta (can change during runtime).
 	labelSets []storepb.LabelSet
@@ -428,17 +439,21 @@ func (s *StoreSet) getHealthyStores(ctx context.Context, stores map[string]*stor
 					// Close only if new. Unhealthy `s.stores` will be closed later on.
 					st.Close()
 				}
+				level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "getting metadata"), "address", addr, "sticky", spec.Sticky())
+				if seenAlready && spec.Sticky() {
+					mtx.Lock()
+					healthyStores[addr] = st
+					mtx.Unlock()
+				}
 				s.updateStoreStatus(st, err)
-				level.Warn(s.logger).Log("msg", "update of store node failed", "err", errors.Wrap(err, "getting metadata"), "address", addr)
 				return
 			}
 			s.updateStoreStatus(st, nil)
 			st.Update(labelSets, minTime, maxTime, storeType)
 
 			mtx.Lock()
-			defer mtx.Unlock()
-
 			healthyStores[addr] = st
+			mtx.Unlock()
 		}(storeSpec)
 	}
 	wg.Wait()
