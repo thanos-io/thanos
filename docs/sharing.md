@@ -58,4 +58,8 @@ Example usages would be:
   - cluster
 ```
 
-By controling which labels should be included in the blocks, we can do sharing.
+By controlling which labels should be included in the blocks, we can do sharing.
+
+### Time Partitioning
+
+For store gateway, we can specify `--min-time` and `--max-time` flags to filter for what blocks store gateway should be responsible for.
