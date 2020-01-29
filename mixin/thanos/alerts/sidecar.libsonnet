@@ -10,6 +10,18 @@
         name: 'thanos-sidecar.rules',
         rules: [
           {
+            alert: 'ThanosSidecarPrometheusDown',
+            annotations: {
+              message: 'The prometheus which Thanos Sidecar {{$labels.job}} {{$labels.pod}} listened is down.',
+            },
+            expr: |||
+              thanos_sidecar_prometheus_up{%(selector)s} == 0
+            ||| % thanos.sidecar,
+            labels: {
+              severity: 'critical',
+            },
+          },
+          {
             alert: 'ThanosSidecarUnhealthy',
             annotations: {
               message: 'Thanos Sidecar {{$labels.job}} {{$labels.pod}} is unhealthy for {{ $value }} seconds.',
