@@ -417,7 +417,7 @@ func (f *LabelShardedMetaFilter) Filter(metas map[ulid.ULID]*metadata.Meta, sync
 
 // DeduplicateFilter is a MetaFetcher filter that filters out older blocks that have exactly the same data.
 type DeduplicateFilter struct {
-	DuplicateIDs []ulid.ULID
+	duplicateIDs []ulid.ULID
 }
 
 // NewDeduplicateFilter creates DeduplicateFilter.
@@ -428,16 +428,30 @@ func NewDeduplicateFilter() *DeduplicateFilter {
 // Filter filters out duplicate blocks that can be formed
 // from two or more overlapping blocks that fully submatches the source blocks of the older blocks.
 func (f *DeduplicateFilter) Filter(metas map[ulid.ULID]*metadata.Meta, synced GaugeLabeled, _ bool) {
-	root := NewNode(&metadata.Meta{
-		BlockMeta: tsdb.BlockMeta{
-			ULID: ulid.MustNew(uint64(0), nil),
-		},
-	})
+	var wg sync.WaitGroup
 
-	metaSlice := []*metadata.Meta{}
+	metasByResolution := make(map[int64][]*metadata.Meta)
 	for _, meta := range metas {
-		metaSlice = append(metaSlice, meta)
+		res := meta.Thanos.Downsample.Resolution
+		metasByResolution[res] = append(metasByResolution[res], meta)
 	}
+
+	for res := range metasByResolution {
+		wg.Add(1)
+		go func(res int64) {
+			defer wg.Done()
+			f.filterForResolution(NewNode(&metadata.Meta{
+				BlockMeta: tsdb.BlockMeta{
+					ULID: ulid.MustNew(uint64(0), nil),
+				},
+			}), metasByResolution[res], metas, res, synced)
+		}(res)
+	}
+
+	wg.Wait()
+}
+
+func (f *DeduplicateFilter) filterForResolution(root *Node, metaSlice []*metadata.Meta, metas map[ulid.ULID]*metadata.Meta, res int64, synced GaugeLabeled) {
 	sort.Slice(metaSlice, func(i, j int) bool {
 		ilen := len(metaSlice[i].Compaction.Sources)
 		jlen := len(metaSlice[j].Compaction.Sources)
@@ -456,11 +470,17 @@ func (f *DeduplicateFilter) Filter(metas map[ulid.ULID]*metadata.Meta, synced Ga
 	duplicateULIDs := getNonRootIDs(root)
 	for _, id := range duplicateULIDs {
 		if metas[id] != nil {
-			f.DuplicateIDs = append(f.DuplicateIDs, id)
+			f.duplicateIDs = append(f.duplicateIDs, id)
 		}
 		synced.WithLabelValues(duplicateMeta).Inc()
 		delete(metas, id)
 	}
+}
+
+// DuplicateIDs returns slice of block ids
+// that are filtered out by DeduplicateFilter.
+func (f *DeduplicateFilter) DuplicateIDs() []ulid.ULID {
+	return f.duplicateIDs
 }
 
 func addNodeBySources(root *Node, add *Node) bool {
@@ -505,4 +525,44 @@ func contains(s1 []ulid.ULID, s2 []ulid.ULID) bool {
 		}
 	}
 	return true
+}
+
+// ConsistencyDelayMetaFilter is a MetaFetcher filter that filters out blocks that are created before a specified consistency delay.
+type ConsistencyDelayMetaFilter struct {
+	logger           log.Logger
+	consistencyDelay time.Duration
+}
+
+// NewConsistencyDelayMetaFilter creates ConsistencyDelayMetaFilter.
+func NewConsistencyDelayMetaFilter(logger log.Logger, consistencyDelay time.Duration, reg prometheus.Registerer) *ConsistencyDelayMetaFilter {
+	consistencyDelayMetric := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "consistency_delay_seconds",
+		Help: "Configured consistency delay in seconds.",
+	}, func() float64 {
+		return consistencyDelay.Seconds()
+	})
+	reg.MustRegister(consistencyDelayMetric)
+
+	return &ConsistencyDelayMetaFilter{
+		logger:           logger,
+		consistencyDelay: consistencyDelay,
+	}
+}
+
+// Filter filters out blocks that filters blocks that have are created before a specified consistency delay.
+func (f *ConsistencyDelayMetaFilter) Filter(metas map[ulid.ULID]*metadata.Meta, synced GaugeLabeled, _ bool) {
+	for id, meta := range metas {
+		// TODO(khyatisoneji): Remove the checks about Thanos Source
+		//  by implementing delete delay to fetch metas.
+		// TODO(bwplotka): Check consistency delay based on file upload / modification time instead of ULID.
+		if ulid.Now()-id.Time() < uint64(f.consistencyDelay/time.Millisecond) &&
+			meta.Thanos.Source != metadata.BucketRepairSource &&
+			meta.Thanos.Source != metadata.CompactorSource &&
+			meta.Thanos.Source != metadata.CompactorRepairSource {
+
+			level.Debug(f.logger).Log("msg", "block is too fresh for now", "block", id)
+			synced.WithLabelValues(TooFreshMeta).Inc()
+			delete(metas, id)
+		}
+	}
 }

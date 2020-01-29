@@ -396,18 +396,32 @@ func TestTimePartitionMetaFilter_Filter(t *testing.T) {
 
 }
 
+type sourcesAndResolution struct {
+	sources    []ulid.ULID
+	resolution int64
+}
+
 func TestDeduplicateFilter_Filter(t *testing.T) {
 	for _, tcase := range []struct {
 		name     string
-		input    map[ulid.ULID][]ulid.ULID
+		input    map[ulid.ULID]*sourcesAndResolution
 		expected []ulid.ULID
 	}{
 		{
 			name: "3 non compacted blocks in bucket",
-			input: map[ulid.ULID][]ulid.ULID{
-				ULID(1): []ulid.ULID{ULID(1)},
-				ULID(2): []ulid.ULID{ULID(2)},
-				ULID(3): []ulid.ULID{ULID(3)},
+			input: map[ulid.ULID]*sourcesAndResolution{
+				ULID(1): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1)},
+					resolution: 0,
+				},
+				ULID(2): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(2)},
+					resolution: 0,
+				},
+				ULID(3): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(3)},
+					resolution: 0,
+				},
 			},
 			expected: []ulid.ULID{
 				ULID(1),
@@ -417,10 +431,19 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 		},
 		{
 			name: "compacted block with sources in bucket",
-			input: map[ulid.ULID][]ulid.ULID{
-				ULID(6): []ulid.ULID{ULID(6)},
-				ULID(4): []ulid.ULID{ULID(1), ULID(3), ULID(2)},
-				ULID(5): []ulid.ULID{ULID(5)},
+			input: map[ulid.ULID]*sourcesAndResolution{
+				ULID(6): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(6)},
+					resolution: 0,
+				},
+				ULID(4): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1), ULID(3), ULID(2)},
+					resolution: 0,
+				},
+				ULID(5): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(5)},
+					resolution: 0,
+				},
 			},
 			expected: []ulid.ULID{
 				ULID(4),
@@ -430,11 +453,23 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 		},
 		{
 			name: "two compacted blocks with same sources",
-			input: map[ulid.ULID][]ulid.ULID{
-				ULID(5): []ulid.ULID{ULID(5)},
-				ULID(6): []ulid.ULID{ULID(6)},
-				ULID(3): []ulid.ULID{ULID(1), ULID(2)},
-				ULID(4): []ulid.ULID{ULID(1), ULID(2)},
+			input: map[ulid.ULID]*sourcesAndResolution{
+				ULID(5): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(5)},
+					resolution: 0,
+				},
+				ULID(6): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(6)},
+					resolution: 0,
+				},
+				ULID(3): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1), ULID(2)},
+					resolution: 0,
+				},
+				ULID(4): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1), ULID(2)},
+					resolution: 0,
+				},
 			},
 			expected: []ulid.ULID{
 				ULID(3),
@@ -444,10 +479,19 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 		},
 		{
 			name: "two compacted blocks with overlapping sources",
-			input: map[ulid.ULID][]ulid.ULID{
-				ULID(4): []ulid.ULID{ULID(1), ULID(2)},
-				ULID(6): []ulid.ULID{ULID(6)},
-				ULID(5): []ulid.ULID{ULID(1), ULID(3), ULID(2)},
+			input: map[ulid.ULID]*sourcesAndResolution{
+				ULID(4): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1), ULID(2)},
+					resolution: 0,
+				},
+				ULID(6): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(6)},
+					resolution: 0,
+				},
+				ULID(5): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1), ULID(3), ULID(2)},
+					resolution: 0,
+				},
 			},
 			expected: []ulid.ULID{
 				ULID(5),
@@ -456,12 +500,27 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 		},
 		{
 			name: "3 non compacted blocks and compacted block of level 2 in bucket",
-			input: map[ulid.ULID][]ulid.ULID{
-				ULID(6): []ulid.ULID{ULID(6)},
-				ULID(1): []ulid.ULID{ULID(1)},
-				ULID(2): []ulid.ULID{ULID(2)},
-				ULID(3): []ulid.ULID{ULID(3)},
-				ULID(4): []ulid.ULID{ULID(2), ULID(1), ULID(3)},
+			input: map[ulid.ULID]*sourcesAndResolution{
+				ULID(6): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(6)},
+					resolution: 0,
+				},
+				ULID(1): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1)},
+					resolution: 0,
+				},
+				ULID(2): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(2)},
+					resolution: 0,
+				},
+				ULID(3): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(3)},
+					resolution: 0,
+				},
+				ULID(4): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(2), ULID(1), ULID(3)},
+					resolution: 0,
+				},
 			},
 			expected: []ulid.ULID{
 				ULID(4),
@@ -470,13 +529,31 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 		},
 		{
 			name: "3 compacted blocks of level 2 and one compacted block of level 3 in bucket",
-			input: map[ulid.ULID][]ulid.ULID{
-				ULID(10): []ulid.ULID{ULID(1), ULID(2), ULID(3)},
-				ULID(11): []ulid.ULID{ULID(6), ULID(4), ULID(5)},
-				ULID(14): []ulid.ULID{ULID(14)},
-				ULID(1):  []ulid.ULID{ULID(1)},
-				ULID(13): []ulid.ULID{ULID(1), ULID(6), ULID(2), ULID(3), ULID(5), ULID(7), ULID(4), ULID(8), ULID(9)},
-				ULID(12): []ulid.ULID{ULID(7), ULID(9), ULID(8)},
+			input: map[ulid.ULID]*sourcesAndResolution{
+				ULID(10): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1), ULID(2), ULID(3)},
+					resolution: 0,
+				},
+				ULID(11): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(6), ULID(4), ULID(5)},
+					resolution: 0,
+				},
+				ULID(14): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(14)},
+					resolution: 0,
+				},
+				ULID(1): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1)},
+					resolution: 0,
+				},
+				ULID(13): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1), ULID(6), ULID(2), ULID(3), ULID(5), ULID(7), ULID(4), ULID(8), ULID(9)},
+					resolution: 0,
+				},
+				ULID(12): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(7), ULID(9), ULID(8)},
+					resolution: 0,
+				},
 			},
 			expected: []ulid.ULID{
 				ULID(14),
@@ -485,12 +562,27 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 		},
 		{
 			name: "compacted blocks with overlapping sources",
-			input: map[ulid.ULID][]ulid.ULID{
-				ULID(8): []ulid.ULID{ULID(1), ULID(3), ULID(2), ULID(4)},
-				ULID(1): []ulid.ULID{ULID(1)},
-				ULID(5): []ulid.ULID{ULID(1), ULID(2)},
-				ULID(6): []ulid.ULID{ULID(1), ULID(3), ULID(2), ULID(4)},
-				ULID(7): []ulid.ULID{ULID(3), ULID(1), ULID(2)},
+			input: map[ulid.ULID]*sourcesAndResolution{
+				ULID(8): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1), ULID(3), ULID(2), ULID(4)},
+					resolution: 0,
+				},
+				ULID(1): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1)},
+					resolution: 0,
+				},
+				ULID(5): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1), ULID(2)},
+					resolution: 0,
+				},
+				ULID(6): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1), ULID(3), ULID(2), ULID(4)},
+					resolution: 0,
+				},
+				ULID(7): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(3), ULID(1), ULID(2)},
+					resolution: 0,
+				},
 			},
 			expected: []ulid.ULID{
 				ULID(6),
@@ -498,10 +590,19 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 		},
 		{
 			name: "compacted blocks of level 3 with overlapping sources of equal length",
-			input: map[ulid.ULID][]ulid.ULID{
-				ULID(10): []ulid.ULID{ULID(1), ULID(2), ULID(6), ULID(7)},
-				ULID(1):  []ulid.ULID{ULID(1)},
-				ULID(11): []ulid.ULID{ULID(6), ULID(8), ULID(1), ULID(2)},
+			input: map[ulid.ULID]*sourcesAndResolution{
+				ULID(10): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1), ULID(2), ULID(6), ULID(7)},
+					resolution: 0,
+				},
+				ULID(1): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1)},
+					resolution: 0,
+				},
+				ULID(11): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(6), ULID(8), ULID(1), ULID(2)},
+					resolution: 0,
+				},
 			},
 			expected: []ulid.ULID{
 				ULID(10),
@@ -510,15 +611,109 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 		},
 		{
 			name: "compacted blocks of level 3 with overlapping sources of different length",
-			input: map[ulid.ULID][]ulid.ULID{
-				ULID(10): []ulid.ULID{ULID(6), ULID(7), ULID(1), ULID(2)},
-				ULID(1):  []ulid.ULID{ULID(1)},
-				ULID(5):  []ulid.ULID{ULID(1), ULID(2)},
-				ULID(11): []ulid.ULID{ULID(2), ULID(3), ULID(1)},
+			input: map[ulid.ULID]*sourcesAndResolution{
+				ULID(10): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(6), ULID(7), ULID(1), ULID(2)},
+					resolution: 0,
+				},
+				ULID(1): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1)},
+					resolution: 0,
+				},
+				ULID(5): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1), ULID(2)},
+					resolution: 0,
+				},
+				ULID(11): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(2), ULID(3), ULID(1)},
+					resolution: 0,
+				},
 			},
 			expected: []ulid.ULID{
 				ULID(10),
 				ULID(11),
+			},
+		},
+		{
+			name: "blocks with same sources and different resolutions",
+			input: map[ulid.ULID]*sourcesAndResolution{
+				ULID(1): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1)},
+					resolution: 0,
+				},
+				ULID(2): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1)},
+					resolution: 1000,
+				},
+				ULID(3): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1)},
+					resolution: 10000,
+				},
+			},
+			expected: []ulid.ULID{
+				ULID(1),
+				ULID(2),
+				ULID(3),
+			},
+		},
+		{
+			name: "compacted blocks with overlapping sources and different resolutions",
+			input: map[ulid.ULID]*sourcesAndResolution{
+				ULID(1): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1)},
+					resolution: 0,
+				},
+				ULID(6): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(6)},
+					resolution: 10000,
+				},
+				ULID(4): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1), ULID(3), ULID(2)},
+					resolution: 0,
+				},
+				ULID(5): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(2), ULID(3), ULID(1)},
+					resolution: 1000,
+				},
+			},
+			expected: []ulid.ULID{
+				ULID(4),
+				ULID(5),
+				ULID(6),
+			},
+		},
+		{
+			name: "compacted blocks of level 3 with overlapping sources of different length and different resolutions",
+			input: map[ulid.ULID]*sourcesAndResolution{
+				ULID(10): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(7), ULID(5), ULID(1), ULID(2)},
+					resolution: 0,
+				},
+				ULID(12): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(6), ULID(7), ULID(1)},
+					resolution: 10000,
+				},
+				ULID(1): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1)},
+					resolution: 0,
+				},
+				ULID(13): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1)},
+					resolution: 10000,
+				},
+				ULID(5): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(1), ULID(2)},
+					resolution: 0,
+				},
+				ULID(11): &sourcesAndResolution{
+					sources:    []ulid.ULID{ULID(2), ULID(3), ULID(1)},
+					resolution: 0,
+				},
+			},
+			expected: []ulid.ULID{
+				ULID(10),
+				ULID(11),
+				ULID(12),
 			},
 		},
 	} {
@@ -527,12 +722,17 @@ func TestDeduplicateFilter_Filter(t *testing.T) {
 			synced := prometheus.NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
 			metas := make(map[ulid.ULID]*metadata.Meta)
 			inputLen := len(tcase.input)
-			for id, sources := range tcase.input {
+			for id, metaInfo := range tcase.input {
 				metas[id] = &metadata.Meta{
 					BlockMeta: tsdb.BlockMeta{
 						ULID: id,
 						Compaction: tsdb.BlockMetaCompaction{
-							Sources: sources,
+							Sources: metaInfo.sources,
+						},
+					},
+					Thanos: metadata.Thanos{
+						Downsample: metadata.ThanosDownsample{
+							Resolution: metaInfo.resolution,
 						},
 					},
 				}
