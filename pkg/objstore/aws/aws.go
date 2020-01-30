@@ -16,7 +16,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/minio/minio-go/v6/pkg/encrypt"
@@ -113,13 +112,6 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize s3 client")
 	}
-	svc := sts.New(session)
-	input := &sts.GetCallerIdentityInput{}
-	result, err := svc.GetCallerIdentity(input)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to call sts")
-	}
-	level.Info(logger).Log("msg", "sts result", "arn", result.Arn)
 
 	//client.SetAppInfo(fmt.Sprintf("thanos-%s", component), fmt.Sprintf("%s (%s)", version.Version, runtime.Version()))
 	//client.SetCustomTransport(&http.Transport{
@@ -302,7 +294,6 @@ func (b *Bucket) guessFileSize(name string, r io.Reader) int64 {
 
 // Upload the contents of the reader as an object into the bucket.
 func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
-	level.Info(b.logger).Log("msg", "in upload", "name", name)
 	// TODO(https://github.com/thanos-io/thanos/issues/678): Remove guessing length when minio provider will support multipart upload without this.
 	size := b.guessFileSize(name, r)
 
