@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/objstore/aws"
 	"github.com/thanos-io/thanos/pkg/objstore/azure"
 	"github.com/thanos-io/thanos/pkg/objstore/cos"
 	"github.com/thanos-io/thanos/pkg/objstore/filesystem"
@@ -26,6 +27,7 @@ const (
 	FILESYSTEM ObjProvider = "FILESYSTEM"
 	GCS        ObjProvider = "GCS"
 	S3         ObjProvider = "S3"
+	AWS        ObjProvider = "AWS_S3"
 	AZURE      ObjProvider = "AZURE"
 	SWIFT      ObjProvider = "SWIFT"
 	COS        ObjProvider = "COS"
@@ -57,6 +59,8 @@ func NewBucket(logger log.Logger, confContentYaml []byte, reg prometheus.Registe
 		bucket, err = gcs.NewBucket(context.Background(), logger, config, component)
 	case string(S3):
 		bucket, err = s3.NewBucket(logger, config, component)
+	case string(AWS):
+		bucket, err = aws.NewBucket(logger, config, component)
 	case string(AZURE):
 		bucket, err = azure.NewBucket(logger, config, component)
 	case string(SWIFT):

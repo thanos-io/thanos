@@ -1,0 +1,441 @@
+// Package aws implements common object storage abstractions against s3-compatible APIs.
+package aws
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/sts"
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
+	"github.com/minio/minio-go/v6/pkg/encrypt"
+	"github.com/pkg/errors"
+	"github.com/prometheus/common/model"
+	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"gopkg.in/yaml.v2"
+)
+
+// DirDelim is the delimiter used to model a directory structure in an object store bucket.
+const DirDelim = "/"
+
+var DefaultConfig = Config{
+	PutUserMetadata: map[string]*string{},
+	HTTPConfig: HTTPConfig{
+		IdleConnTimeout:       model.Duration(90 * time.Second),
+		ResponseHeaderTimeout: model.Duration(2 * time.Minute),
+	},
+	// Minimum file size after which an HTTP multipart request should be used to upload objects to storage.
+	// Set to 128 MiB as in the minio client.
+	PartSize: 1024 * 1024 * 128,
+}
+
+// Config stores the configuration for s3 bucket.
+type Config struct {
+	Bucket          string             `yaml:"bucket"`
+	Endpoint        string             `yaml:"endpoint"`
+	Region          string             `yaml:"region"`
+	AccessKey       string             `yaml:"access_key"`
+	ACL             string             `yaml:"acl"`
+	Insecure        bool               `yaml:"insecure"`
+	SignatureV2     bool               `yaml:"signature_version2"`
+	SSEEncryption   bool               `yaml:"encrypt_sse"`
+	SecretKey       string             `yaml:"secret_key"`
+	PutUserMetadata map[string]*string `yaml:"put_user_metadata"`
+	HTTPConfig      HTTPConfig         `yaml:"http_config"`
+	TraceConfig     TraceConfig        `yaml:"trace"`
+	// PartSize used for multipart upload. Only used if uploaded object size is known and larger than configured PartSize.
+	PartSize uint64 `yaml:"part_size"`
+}
+
+// TraceConfig enables or disables tracing.
+type TraceConfig struct {
+	Enable bool `yaml:"enable"`
+}
+
+// HTTPConfig stores the http.Transport configuration for the s3 minio client.
+type HTTPConfig struct {
+	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
+	ResponseHeaderTimeout model.Duration `yaml:"response_header_timeout"`
+	InsecureSkipVerify    bool           `yaml:"insecure_skip_verify"`
+}
+
+// Bucket implements the store.Bucket interface against s3-compatible APIs.
+type Bucket struct {
+	acl             string
+	logger          log.Logger
+	name            string
+	client          *s3.S3
+	sse             encrypt.ServerSide
+	putUserMetadata map[string]*string
+	partSize        uint64
+}
+
+// parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
+func parseConfig(conf []byte) (Config, error) {
+	config := DefaultConfig
+	if err := yaml.Unmarshal(conf, &config); err != nil {
+		return Config{}, err
+	}
+
+	return config, nil
+}
+
+// NewBucket returns a new Bucket using the provided s3 config values.
+func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error) {
+	config, err := parseConfig(conf)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewBucketWithConfig(logger, config, component)
+}
+
+// NewBucketWithConfig returns a new Bucket using the provided s3 config values.
+func NewBucketWithConfig(logger log.Logger, config Config, component string) (*Bucket, error) {
+
+	fmt.Print("In newBucketWithConfig")
+	session, err := session.NewSession(&aws.Config{
+		Region: aws.String("us-west-2")})
+	client := s3.New(session)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "initialize s3 client")
+	}
+	svc := sts.New(session)
+	input := &sts.GetCallerIdentityInput{}
+	result, err := svc.GetCallerIdentity(input)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to call sts")
+	}
+	level.Info(logger).Log("msg", "sts result", "arn", result.Arn)
+
+	//client.SetAppInfo(fmt.Sprintf("thanos-%s", component), fmt.Sprintf("%s (%s)", version.Version, runtime.Version()))
+	//client.SetCustomTransport(&http.Transport{
+	//	Proxy: http.ProxyFromEnvironment,
+	//	DialContext: (&net.Dialer{
+	//		Timeout:   30 * time.Second,
+	//		KeepAlive: 30 * time.Second,
+	//		DualStack: true,
+	//	}).DialContext,
+	//	MaxIdleConns:          100,
+	//	IdleConnTimeout:       time.Duration(config.HTTPConfig.IdleConnTimeout),
+	//	TLSHandshakeTimeout:   10 * time.Second,
+	//	ExpectContinueTimeout: 1 * time.Second,
+	// The ResponseHeaderTimeout here is the only change
+	// from the default minio transport, it was introduced
+	// to cover cases where the tcp connection works but
+	// the server never answers. Defaults to 2 minutes.
+	//	ResponseHeaderTimeout: time.Duration(config.HTTPConfig.ResponseHeaderTimeout),
+	// Set this value so that the underlying transport round-tripper
+	// doesn't try to auto decode the body of objects with
+	// content-encoding set to `gzip`.
+	//
+	// Refer: https://golang.org/src/net/http/transport.go?h=roundTrip#L1843.
+	//	DisableCompression: true,
+	//	TLSClientConfig:    &tls.Config{InsecureSkipVerify: config.HTTPConfig.InsecureSkipVerify},
+	//})
+
+	var sse encrypt.ServerSide
+	if config.SSEEncryption {
+		sse = encrypt.NewSSE()
+	}
+
+	//if config.TraceConfig.Enable {
+	//	logWriter := log.NewStdlibAdapter(level.Debug(logger), log.MessageKey("s3TraceMsg"))
+	//	client.TraceOn(logWriter)
+	//}
+
+	bkt := &Bucket{
+		logger:          logger,
+		name:            config.Bucket,
+		client:          client,
+		sse:             sse,
+		putUserMetadata: config.PutUserMetadata,
+		partSize:        config.PartSize,
+		acl:             config.ACL,
+	}
+	return bkt, nil
+}
+
+// Name returns the bucket name for s3.
+func (b *Bucket) Name() string {
+	return b.name
+}
+
+// validate checks to see the config options are set.
+func validate(conf Config) error {
+	if conf.Endpoint == "" {
+		return errors.New("no s3 endpoint in config file")
+	}
+
+	if conf.AccessKey == "" && conf.SecretKey != "" {
+		return errors.New("no s3 acccess_key specified while secret_key is present in config file; either both should be present in config or envvars/IAM should be used")
+	}
+
+	if conf.AccessKey != "" && conf.SecretKey == "" {
+		return errors.New("no s3 secret_key specified while access_key is present in config file; either both should be present in config or envvars/IAM should be used")
+	}
+	return nil
+}
+
+// ValidateForTests checks to see the config options for tests are set.
+func ValidateForTests(conf Config) error {
+	if conf.Endpoint == "" ||
+		conf.AccessKey == "" ||
+		conf.SecretKey == "" {
+		return errors.New("insufficient s3 test configuration information")
+	}
+	return nil
+}
+
+// Iter calls f for each entry in the given directory. The argument to f is the full
+// object name including the prefix of the inspected directory.
+func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) error {
+	// Ensure the object name actually ends with a dir suffix. Otherwise we'll just iterate the
+	// object itself as one prefix item.
+	if dir != "" {
+		dir = strings.TrimSuffix(dir, DirDelim) + DirDelim
+	}
+
+	object, err := b.client.ListObjects(&s3.ListObjectsInput{Bucket: &b.name,
+		Prefix: &dir})
+
+	if err != nil {
+		return err
+	}
+
+	for _, obj := range object.Contents {
+		if *obj.Key == "" {
+			continue
+		}
+
+		if *obj.Key == dir {
+			continue
+		}
+
+		if err := f(*obj.Key); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
+	byteRange := ""
+	if length < 0 && off < 0 {
+		byteRange = fmt.Sprintf("bytes=%d", off)
+	} else if length < 0 && off > 0 {
+		byteRange = fmt.Sprintf("bytes=%d-", off)
+	} else if length > 0 {
+		byteRange = fmt.Sprintf("bytes=%d-%d", off, off+length-1)
+	} else {
+		return nil, errors.New(fmt.Sprintf("Invalid range specified: start=%d end=%d", off, length))
+	}
+
+	getObjectInput := &s3.GetObjectInput{Bucket: &b.name, Key: &name, Range: aws.String(byteRange)}
+	object, err := b.client.GetObjectWithContext(ctx, getObjectInput)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// NotFoundObject error is revealed only after first Read. This does the initial GetRequest. Prefetch this here
+	// for convenience.
+	if _, err := object.Body.Read(nil); err != nil {
+		runutil.CloseWithLogOnErr(b.logger, object.Body, "s3 get range obj close")
+
+		// First GET Object request error.
+		return nil, err
+	}
+
+	return object.Body, nil
+}
+
+// Get returns a reader for the given object name.
+func (b *Bucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
+	return b.getRange(ctx, name, 0, -1)
+}
+
+// GetRange returns a new range reader for the given object name and range.
+func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
+	return b.getRange(ctx, name, off, length)
+}
+
+// Exists checks if the given object exists.
+func (b *Bucket) Exists(ctx context.Context, name string) (bool, error) {
+	_, err := b.client.HeadObject(&s3.HeadObjectInput{Bucket: &b.name, Key: &name})
+
+	if err != nil {
+		if b.IsObjNotFoundErr(err) {
+			return false, nil
+		}
+		return false, errors.WithMessage(err, "stat s3 object")
+	}
+	return true, nil
+}
+
+func (b *Bucket) guessFileSize(name string, r io.Reader) int64 {
+	if f, ok := r.(*os.File); ok {
+		fileInfo, err := f.Stat()
+		if err == nil {
+			return fileInfo.Size()
+		}
+		level.Warn(b.logger).Log("msg", "could not stat file for multipart upload", "name", name, "err", err)
+		return -1
+	}
+
+	level.Warn(b.logger).Log("msg", "could not guess file size for multipart upload", "name", name)
+	return -1
+}
+
+// Upload the contents of the reader as an object into the bucket.
+func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
+	level.Info(b.logger).Log("msg", "in upload", "name", name)
+	// TODO(https://github.com/thanos-io/thanos/issues/678): Remove guessing length when minio provider will support multipart upload without this.
+	size := b.guessFileSize(name, r)
+
+	// partSize cannot be larger than object size.
+	partSize := b.partSize
+	if size < int64(partSize) {
+		partSize = 0
+	}
+	buffer := make([]byte, size)
+	r.Read(buffer)
+	fileBytes := bytes.NewReader(buffer) // converted to io.ReadSeeker type.
+
+	if _, err := b.client.PutObjectWithContext(ctx, &s3.PutObjectInput{Bucket: aws.String(b.name),
+		Key:           aws.String(name),
+		ContentLength: &size,
+		Body:          fileBytes,
+		ACL:           aws.String(b.acl),
+	},
+	); err != nil {
+		return errors.Wrap(err, "upload s3 object")
+	}
+
+	return nil
+}
+
+// ObjectSize returns the size of the specified object.
+func (b *Bucket) ObjectSize(ctx context.Context, name string) (uint64, error) {
+	objInfo, err := b.client.HeadObject(&s3.HeadObjectInput{Bucket: &b.name, Key: &name})
+
+	if err != nil {
+		return 0, err
+	}
+	return uint64(*objInfo.ContentLength), nil
+}
+
+// Delete removes the object with the given name.
+func (b *Bucket) Delete(ctx context.Context, name string) error {
+	_, err := b.client.DeleteObject(&s3.DeleteObjectInput{Bucket: aws.String(b.name), Key: aws.String(name)})
+	if err != nil {
+		return err
+	}
+
+	b.client.WaitUntilObjectNotExists(&s3.HeadObjectInput{Bucket: aws.String(b.name), Key: aws.String(name)})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
+func (b *Bucket) IsObjNotFoundErr(err error) bool {
+	aerr, _ := err.(awserr.Error)
+	switch aerr.Code() {
+	// https://github.com/aws/aws-sdk-go/issues/2095.
+	// API for HeadObject returns 404 (NotFound) vs NoSuchKey.
+	case "NotFound":
+		return true
+	}
+	return false
+}
+
+func (b *Bucket) Close() error { return nil }
+
+func configFromEnv() Config {
+	c := Config{
+		Bucket:    os.Getenv("S3_BUCKET"),
+		Endpoint:  os.Getenv("S3_ENDPOINT"),
+		AccessKey: os.Getenv("S3_ACCESS_KEY"),
+		SecretKey: os.Getenv("S3_SECRET_KEY"),
+	}
+
+	c.Insecure, _ = strconv.ParseBool(os.Getenv("S3_INSECURE"))
+	c.HTTPConfig.InsecureSkipVerify, _ = strconv.ParseBool(os.Getenv("S3_INSECURE_SKIP_VERIFY"))
+	c.SignatureV2, _ = strconv.ParseBool(os.Getenv("S3_SIGNATURE_VERSION2"))
+	return c
+}
+
+// NewTestBucket creates test bkt client that before returning creates temporary bucket.
+// In a close function it empties and deletes the bucket.
+func NewTestBucket(t testing.TB, location string) (objstore.Bucket, func(), error) {
+	c := configFromEnv()
+	if err := ValidateForTests(c); err != nil {
+		return nil, nil, err
+	}
+
+	if c.Bucket != "" && os.Getenv("THANOS_ALLOW_EXISTING_BUCKET_USE") == "" {
+		return nil, nil, errors.New("S3_BUCKET is defined. Normally this tests will create temporary bucket " +
+			"and delete it after test. Unset S3_BUCKET env variable to use default logic. If you really want to run " +
+			"tests against provided (NOT USED!) bucket, set THANOS_ALLOW_EXISTING_BUCKET_USE=true. WARNING: That bucket " +
+			"needs to be manually cleared. This means that it is only useful to run one test in a time. This is due " +
+			"to safety (accidentally pointing prod bucket for test) as well as aws s3 not being fully strong consistent.")
+	}
+
+	return NewTestBucketFromConfig(t, location, c, true)
+}
+
+func NewTestBucketFromConfig(t testing.TB, location string, c Config, reuseBucket bool) (objstore.Bucket, func(), error) {
+	bc, err := yaml.Marshal(c)
+	if err != nil {
+		return nil, nil, err
+	}
+	b, err := NewBucket(log.NewNopLogger(), bc, "thanos-e2e-test")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	bktToCreate := c.Bucket
+	if c.Bucket != "" && reuseBucket {
+		if err := b.Iter(context.Background(), "", func(f string) error {
+			return errors.Errorf("bucket %s is not empty", c.Bucket)
+		}); err != nil {
+			return nil, nil, errors.Wrapf(err, "s3 check bucket %s", c.Bucket)
+		}
+
+		t.Log("WARNING. Reusing", c.Bucket, "AWS bucket for AWS tests. Manual cleanup afterwards is required")
+		return b, func() {}, nil
+	}
+
+	if c.Bucket == "" {
+		bktToCreate = objstore.CreateTemporaryTestBucketName(t)
+	}
+
+	if _, err := b.client.CreateBucket(&s3.CreateBucketInput{Bucket: aws.String(bktToCreate)}); err != nil {
+		return nil, nil, err
+	}
+	b.name = bktToCreate
+	t.Log("created temporary AWS bucket for AWS tests with name", bktToCreate, "in", location)
+
+	return b, func() {
+		objstore.EmptyBucket(t, context.Background(), b)
+		if _, err := b.client.DeleteBucket(&s3.DeleteBucketInput{Bucket: aws.String(bktToCreate)}); err != nil {
+			t.Logf("deleting bucket %s failed: %s", bktToCreate, err)
+		}
+	}, nil
+}
