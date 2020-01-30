@@ -21,7 +21,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/minio/minio-go/v6/pkg/encrypt"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -46,7 +45,6 @@ var defaultConfig = Config{
 // Config stores the configuration for s3 bucket.
 type Config struct {
 	Bucket          string             `yaml:"bucket"`
-	Endpoint        string             `yaml:"endpoint"`
 	Region          string             `yaml:"region"`
 	AccessKey       string             `yaml:"access_key"`
 	ACL             string             `yaml:"acl"`
@@ -79,7 +77,6 @@ type Bucket struct {
 	logger          log.Logger
 	name            string
 	client          *s3.S3
-	sse             encrypt.ServerSide
 	putUserMetadata map[string]*string
 	partSize        uint64
 }
@@ -136,21 +133,14 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		return nil, errors.Wrap(err, "initialize s3 client")
 	}
 
-	var sse encrypt.ServerSide
-	if config.SSEEncryption {
-		sse = encrypt.NewSSE()
+	if config.TraceConfig.Enable {
+		client.Config.Logger = aws.NewDefaultLogger()
 	}
-
-	//if config.TraceConfig.Enable {
-	//	logWriter := log.NewStdlibAdapter(level.Debug(logger), log.MessageKey("s3TraceMsg"))
-	//	client.TraceOn(logWriter)
-	//}
 
 	bkt := &Bucket{
 		logger:          logger,
 		name:            config.Bucket,
 		client:          client,
-		sse:             sse,
 		putUserMetadata: config.PutUserMetadata,
 		partSize:        config.PartSize,
 		acl:             config.ACL,
@@ -165,10 +155,6 @@ func (b *Bucket) Name() string {
 
 // validate checks to see the config options are set.
 func validate(conf Config) error {
-	if conf.Endpoint == "" {
-		return errors.New("no s3 endpoint in config file")
-	}
-
 	if conf.AccessKey == "" && conf.SecretKey != "" {
 		return errors.New("no s3 acccess_key specified while secret_key is present in config file; either both should be present in config or envvars/IAM should be used")
 	}
@@ -181,8 +167,7 @@ func validate(conf Config) error {
 
 // ValidateForTests checks to see the config options for tests are set.
 func ValidateForTests(conf Config) error {
-	if conf.Endpoint == "" ||
-		conf.AccessKey == "" ||
+	if conf.AccessKey == "" ||
 		conf.SecretKey == "" {
 		return errors.New("insufficient s3 test configuration information")
 	}
@@ -359,7 +344,6 @@ func (b *Bucket) Close() error { return nil }
 func configFromEnv() Config {
 	c := Config{
 		Bucket:    os.Getenv("S3_BUCKET"),
-		Endpoint:  os.Getenv("S3_ENDPOINT"),
 		AccessKey: os.Getenv("S3_ACCESS_KEY"),
 		SecretKey: os.Getenv("S3_SECRET_KEY"),
 	}
