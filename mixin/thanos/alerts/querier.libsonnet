@@ -12,7 +12,7 @@
           {
             alert: 'ThanosQuerierHttpRequestQueryErrorRateHigh',
             annotations: {
-              message: 'Thanos Query {{$labels.job}} is failing to handle {{ $value | humanize }}% of "query" requests.',
+              message: 'Thanos Querier {{$labels.job}} is failing to handle {{ $value | humanize }}% of "query" requests.',
             },
             expr: |||
               (
@@ -29,7 +29,7 @@
           {
             alert: 'ThanosQuerierHttpRequestQueryRangeErrorRateHigh',
             annotations: {
-              message: 'Thanos Query {{$labels.job}} is failing to handle {{ $value | humanize }}% of "query_range" requests.',
+              message: 'Thanos Querier {{$labels.job}} is failing to handle {{ $value | humanize }}% of "query_range" requests.',
             },
             expr: |||
               (
@@ -46,7 +46,7 @@
           {
             alert: 'ThanosQuerierGrpcServerErrorRate',
             annotations: {
-              message: 'Thanos Query {{$labels.job}} is failing to handle {{ $value | humanize }}% of requests.',
+              message: 'Thanos Querier {{$labels.job}} is failing to handle {{ $value | humanize }}% of requests.',
             },
             expr: |||
               (
@@ -64,15 +64,14 @@
           {
             alert: 'ThanosQuerierGrpcClientErrorRate',
             annotations: {
-              message: 'Thanos Query {{$labels.job}} is failing to send {{ $value | humanize }}% of requests.',
+              message: 'Thanos Querier {{$labels.job}} is failing to send {{ $value | humanize }}% of requests.',
             },
             expr: |||
               (
                 sum by (job) (rate(grpc_client_handled_total{grpc_code!="OK", %(selector)s}[5m]))
               /
                 sum by (job) (rate(grpc_client_started_total{%(selector)s}[5m]))
-              * 100 > 5
-              )
+              ) * 100 > 5
             ||| % thanos.querier,
             'for': '5m',
             labels: {
@@ -82,15 +81,14 @@
           {
             alert: 'ThanosQuerierHighDNSFailures',
             annotations: {
-              message: 'Thanos Querys {{$labels.job}} have {{ $value }} of failing DNS queries.',
+              message: 'Thanos Queriers {{$labels.job}} have {{ $value | humanize }}% of failing DNS queries for store endpoints.',
             },
             expr: |||
               (
-                sum by (job) (rate(thanos_query_store_apis_dns_failures_total{%(selector)s}[5m]))
+                sum by (job) (rate(thanos_querier_store_apis_dns_failures_total{%(selector)s}[5m]))
               /
-                sum by (job) (rate(thanos_query_store_apis_dns_lookups_total{%(selector)s}[5m]))
-              > 1
-              )
+                sum by (job) (rate(thanos_querier_store_apis_dns_lookups_total{%(selector)s}[5m]))
+              ) * 100 > 1
             ||| % thanos.querier,
             'for': '15m',
             labels: {
@@ -100,7 +98,7 @@
           {
             alert: 'ThanosQuerierInstantLatencyHigh',
             annotations: {
-              message: 'Thanos Query {{$labels.job}} has a 99th percentile latency of {{ $value }} seconds for instant queries.',
+              message: 'Thanos Querier {{$labels.job}} has a 99th percentile latency of {{ $value }} seconds for instant queries.',
             },
             expr: |||
               (
@@ -117,7 +115,7 @@
           {
             alert: 'ThanosQuerierRangeLatencyHigh',
             annotations: {
-              message: 'Thanos Query {{$labels.job}} has a 99th percentile latency of {{ $value }} seconds for instant queries.',
+              message: 'Thanos Querier {{$labels.job}} has a 99th percentile latency of {{ $value }} seconds for instant queries.',
             },
             expr: |||
               (
