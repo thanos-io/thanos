@@ -4,8 +4,11 @@ package aws
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -29,7 +32,7 @@ import (
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const DirDelim = "/"
 
-var DefaultConfig = Config{
+var defaultConfig = Config{
 	PutUserMetadata: map[string]*string{},
 	HTTPConfig: HTTPConfig{
 		IdleConnTimeout:       model.Duration(90 * time.Second),
@@ -83,7 +86,7 @@ type Bucket struct {
 
 // parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
 func parseConfig(conf []byte) (Config, error) {
-	config := DefaultConfig
+	config := defaultConfig
 	if err := yaml.Unmarshal(conf, &config); err != nil {
 		return Config{}, err
 	}
@@ -104,40 +107,34 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 // NewBucketWithConfig returns a new Bucket using the provided s3 config values.
 func NewBucketWithConfig(logger log.Logger, config Config, component string) (*Bucket, error) {
 
-	fmt.Print("In newBucketWithConfig")
+	httpClient := &http.Client{Transport: &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       time.Duration(config.HTTPConfig.IdleConnTimeout),
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		// Set this value so that the underlying transport round-tripper
+		// doesn't try to auto decode the body of objects with
+		// content-encoding set to `gzip`.
+		//
+		// Refer: https://golang.org/src/net/http/transport.go?h=roundTrip#L1843.
+		DisableCompression: true,
+		TLSClientConfig:    &tls.Config{InsecureSkipVerify: config.HTTPConfig.InsecureSkipVerify},
+	}}
 	session, err := session.NewSession(&aws.Config{
-		Region: aws.String("us-west-2")})
+		Region:     aws.String("us-west-2"),
+		HTTPClient: httpClient,
+	})
 	client := s3.New(session)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize s3 client")
 	}
-
-	//client.SetAppInfo(fmt.Sprintf("thanos-%s", component), fmt.Sprintf("%s (%s)", version.Version, runtime.Version()))
-	//client.SetCustomTransport(&http.Transport{
-	//	Proxy: http.ProxyFromEnvironment,
-	//	DialContext: (&net.Dialer{
-	//		Timeout:   30 * time.Second,
-	//		KeepAlive: 30 * time.Second,
-	//		DualStack: true,
-	//	}).DialContext,
-	//	MaxIdleConns:          100,
-	//	IdleConnTimeout:       time.Duration(config.HTTPConfig.IdleConnTimeout),
-	//	TLSHandshakeTimeout:   10 * time.Second,
-	//	ExpectContinueTimeout: 1 * time.Second,
-	// The ResponseHeaderTimeout here is the only change
-	// from the default minio transport, it was introduced
-	// to cover cases where the tcp connection works but
-	// the server never answers. Defaults to 2 minutes.
-	//	ResponseHeaderTimeout: time.Duration(config.HTTPConfig.ResponseHeaderTimeout),
-	// Set this value so that the underlying transport round-tripper
-	// doesn't try to auto decode the body of objects with
-	// content-encoding set to `gzip`.
-	//
-	// Refer: https://golang.org/src/net/http/transport.go?h=roundTrip#L1843.
-	//	DisableCompression: true,
-	//	TLSClientConfig:    &tls.Config{InsecureSkipVerify: config.HTTPConfig.InsecureSkipVerify},
-	//})
 
 	var sse encrypt.ServerSide
 	if config.SSEEncryption {
@@ -311,6 +308,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 		ContentLength: &size,
 		Body:          fileBytes,
 		ACL:           aws.String(b.acl),
+		Metadata:      b.putUserMetadata,
 	},
 	); err != nil {
 		return errors.Wrap(err, "upload s3 object")
