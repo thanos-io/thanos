@@ -45,6 +45,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
 func TestEndpoints(t *testing.T) {
@@ -85,7 +86,7 @@ func TestEndpoints(t *testing.T) {
 		},
 	}
 
-	db, err := testutil.NewTSDB()
+	db, err := e2eutil.NewTSDB()
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 

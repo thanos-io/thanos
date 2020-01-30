@@ -25,7 +25,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"google.golang.org/grpc"
 )
 
@@ -94,7 +94,7 @@ func newCmdExec(cmd *exec.Cmd) *cmdExec {
 func (c *cmdExec) Start(stdout io.Writer, stderr io.Writer) error {
 	c.Stderr = stderr
 	c.Stdout = stdout
-	c.SysProcAttr = testutil.SysProcAttr()
+	c.SysProcAttr = e2eutil.SysProcAttr()
 	return c.Cmd.Start()
 }
 
@@ -138,7 +138,7 @@ func prometheus(http address, config string) *prometheusScheduler {
 				return nil, errors.Wrap(err, "creating prom config failed")
 			}
 
-			return newCmdExec(exec.Command(testutil.PrometheusBinary(),
+			return newCmdExec(exec.Command(e2eutil.PrometheusBinary(),
 				"--config.file", promDir+"/prometheus.yml",
 				"--storage.tsdb.path", promDir,
 				"--storage.tsdb.max-block-duration", "2h",
@@ -299,7 +299,7 @@ receivers:
 			if err := ioutil.WriteFile(dir+"/config.yaml", []byte(config), 0666); err != nil {
 				return nil, errors.Wrap(err, "creating alertmanager config file failed")
 			}
-			return newCmdExec(exec.Command(testutil.AlertmanagerBinary(),
+			return newCmdExec(exec.Command(e2eutil.AlertmanagerBinary(),
 				"--config.file", dir+"/config.yaml",
 				"--web.listen-address", http.HostPort(),
 				"--cluster.listen-address", "",
@@ -418,7 +418,7 @@ func minio(http address, config s3.Config) *serverScheduler {
 				return nil, errors.Wrap(err, "creating minio dir failed")
 			}
 
-			cmd := exec.Command(testutil.MinioBinary(),
+			cmd := exec.Command(e2eutil.MinioBinary(),
 				"server",
 				"--address", http.HostPort(),
 				dbDir,

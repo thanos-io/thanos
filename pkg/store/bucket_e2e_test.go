@@ -26,6 +26,7 @@ import (
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
 var (
@@ -100,9 +101,9 @@ func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt o
 
 		// Create two blocks per time slot. Only add 10 samples each so only one chunk
 		// gets created each. This way we can easily verify we got 10 chunks per series below.
-		id1, err := testutil.CreateBlock(ctx, dir, series[:4], 10, mint, maxt, extLset, 0)
+		id1, err := e2eutil.CreateBlock(ctx, dir, series[:4], 10, mint, maxt, extLset, 0)
 		testutil.Ok(t, err)
-		id2, err := testutil.CreateBlock(ctx, dir, series[4:], 10, mint, maxt, extLset, 0)
+		id2, err := e2eutil.CreateBlock(ctx, dir, series[4:], 10, mint, maxt, extLset, 0)
 		testutil.Ok(t, err)
 
 		dir1, dir2 := filepath.Join(dir, id1.String()), filepath.Join(dir, id2.String())

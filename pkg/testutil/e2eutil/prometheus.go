@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package testutil
+package e2eutil
 
 import (
 	"context"
@@ -26,6 +26,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/testutil"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -98,10 +99,10 @@ func ForeachPrometheus(t *testing.T, testFn func(t testing.TB, p *Prometheus)) {
 	for _, ver := range strings.Split(vers, " ") {
 		if ok := t.Run(ver, func(t *testing.T) {
 			p, err := newPrometheus(ver, "")
-			Ok(t, err)
+			testutil.Ok(t, err)
 
 			testFn(t, p)
-			Ok(t, p.Stop())
+			testutil.Ok(t, p.Stop())
 		}); !ok {
 			return
 		}
