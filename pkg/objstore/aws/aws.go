@@ -332,7 +332,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 		level.Error(b.logger).Log("err", err.Error())
 		return err
 	}
-	level.Debug(b.logger).Log("msg", "Successfullly uploaded file", "name", completeResponse.String())
+	level.Debug(b.logger).Log("msg", "Successfully uploaded file", "name", completeResponse.String())
 
 	return nil
 }
