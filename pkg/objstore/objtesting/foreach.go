@@ -10,6 +10,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/filesystem"
 
 	"github.com/thanos-io/thanos/pkg/objstore"
+	"github.com/thanos-io/thanos/pkg/objstore/aws"
 	"github.com/thanos-io/thanos/pkg/objstore/azure"
 	"github.com/thanos-io/thanos/pkg/objstore/cos"
 	"github.com/thanos-io/thanos/pkg/objstore/gcs"
@@ -90,6 +91,19 @@ func ForeachStore(t *testing.T, testFn func(t *testing.T, bkt objstore.Bucket)) 
 			// TODO(bwplotka): Add leaktest when we fix potential leak in minio library.
 			// We cannot use leaktest for detecting our own potential leaks, when leaktest detects leaks in minio itself.
 			// This needs to be investigated more.
+
+			testFn(t, bkt)
+		})
+	}
+
+	// Optionals AWS S3.
+	if !IsObjStoreSkipped(t, client.AWS) {
+		t.Run("aws_sdk_s3", func(t *testing.T) {
+			bkt, closeFn, err := aws.NewTestBucket(t, "us-west-2")
+			testutil.Ok(t, err)
+
+			t.Parallel()
+			defer closeFn()
 
 			testFn(t, bkt)
 		})

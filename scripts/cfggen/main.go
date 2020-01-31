@@ -15,6 +15,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/alert"
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	http_util "github.com/thanos-io/thanos/pkg/http"
+	"github.com/thanos-io/thanos/pkg/objstore/aws"
 	"github.com/thanos-io/thanos/pkg/objstore/azure"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/cos"
@@ -39,6 +40,7 @@ var (
 		client.AZURE:      azure.Config{},
 		client.GCS:        gcs.Config{},
 		client.S3:         s3.DefaultConfig,
+		client.AWS:        aws.DefaultConfig,
 		client.SWIFT:      swift.SwiftConfig{},
 		client.COS:        cos.Config{},
 		client.ALIYUNOSS:  oss.Config{},

@@ -59,7 +59,8 @@ type HTTPConfig struct {
 	InsecureSkipVerify    bool           `yaml:"insecureSkipVerify"`
 }
 
-var defaultConfig = Config{
+// DefaultConfig for object storage.
+var DefaultConfig = Config{
 	UserMetadata: map[string]*string{},
 	HTTPConfig: HTTPConfig{
 		IdleConnTimeout:       model.Duration(90 * time.Second),
