@@ -48,8 +48,6 @@ type Config struct {
 	Region          string             `yaml:"region"`
 	AccessKey       string             `yaml:"access_key"`
 	ACL             string             `yaml:"acl"`
-	Insecure        bool               `yaml:"insecure"`
-	SignatureV2     bool               `yaml:"signature_version2"`
 	SSEEncryption   bool               `yaml:"encrypt_sse"`
 	SecretKey       string             `yaml:"secret_key"`
 	PutUserMetadata map[string]*string `yaml:"put_user_metadata"`
@@ -348,9 +346,7 @@ func configFromEnv() Config {
 		SecretKey: os.Getenv("S3_SECRET_KEY"),
 	}
 
-	c.Insecure, _ = strconv.ParseBool(os.Getenv("S3_INSECURE"))
 	c.HTTPConfig.InsecureSkipVerify, _ = strconv.ParseBool(os.Getenv("S3_INSECURE_SKIP_VERIFY"))
-	c.SignatureV2, _ = strconv.ParseBool(os.Getenv("S3_SIGNATURE_VERSION2"))
 	return c
 }
 
