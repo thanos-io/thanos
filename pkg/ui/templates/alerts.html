@@ -31,7 +31,7 @@
                         {{.OriginalFile}} > {{.Name}}
                     </td>
                 </tr>
-                {{range .AlertingRules}}
+                {{range .GetAlertingRules}}
                     {{$activeAlerts := .ActiveAlerts}}
                     <tr class="alert alert-{{index $alertStateToRowClass .State}} alert_header">
                         <td><i class="icon-chevron-down"></i> <b>{{.Name}}</b> ({{len $activeAlerts}} active)</td>

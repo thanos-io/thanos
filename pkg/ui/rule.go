@@ -135,14 +135,12 @@ func (ru *Rule) alerts(w http.ResponseWriter, r *http.Request) {
 
 	prefix := GetWebPrefix(ru.logger, ru.flagsMap, r)
 
-	// TODO(bwplotka): Update HTML to include partial response.
 	ru.executeTemplate(w, "alerts.html", prefix, alertStatus)
 }
 
 func (ru *Rule) rules(w http.ResponseWriter, r *http.Request) {
 	prefix := GetWebPrefix(ru.logger, ru.flagsMap, r)
 
-	// TODO(bwplotka): Update HTML to include partial response.
 	ru.executeTemplate(w, "rules.html", prefix, ru.ruleManager)
 }
 

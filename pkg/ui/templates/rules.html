@@ -22,7 +22,7 @@
             <td style="font-weight:bold">Last Evaluation</td>
             <td style="font-weight:bold">Evaluation Time</td>
           </tr>
-          {{range .Rules}}
+          {{range .GetRules}}
           <tr>
             <td class="rule_cell">{{.HTMLSnippet queryURL}}</td>
             <td class="state">

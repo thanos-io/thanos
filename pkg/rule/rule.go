@@ -6,17 +6,21 @@ package thanosrule
 import (
 	"crypto/sha256"
 	"fmt"
+	html_template "html/template"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/rulefmt"
 	"github.com/prometheus/prometheus/rules"
 	tsdberrors "github.com/prometheus/prometheus/tsdb/errors"
+	"github.com/prometheus/prometheus/util/strutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"gopkg.in/yaml.v2"
 )
@@ -33,9 +37,114 @@ func (g Group) OriginalFile() string {
 	return g.originalFile
 }
 
+// GetRules returns a list of rules, which is used in UI rules page.
+func (g *Group) GetRules() []rules.Rule {
+	var rs []rules.Rule
+	for _, rule := range g.Rules() {
+		switch r := rule.(type) {
+		case *rules.AlertingRule:
+			rs = append(rs, &AlertingRule{r, g.PartialResponseStrategy})
+		case *rules.RecordingRule:
+			rs = append(rs, &RecordingRule{r, g.PartialResponseStrategy})
+		}
+	}
+	return rs
+}
+
+// GetAlertingRules returns a list of alerting rules, which is used in UI alerts page.
+func (g Group) GetAlertingRules() []*AlertingRule {
+	var alerts []*AlertingRule
+	for _, rule := range g.Rules() {
+		if r, ok := rule.(*rules.AlertingRule); ok {
+			alerts = append(alerts, &AlertingRule{r, g.PartialResponseStrategy})
+		}
+	}
+	sort.Slice(alerts, func(i, j int) bool {
+		return alerts[i].State() > alerts[j].State() ||
+			(alerts[i].State() == alerts[j].State() &&
+				alerts[i].Name() < alerts[j].Name())
+	})
+	return alerts
+}
+
 type AlertingRule struct {
 	*rules.AlertingRule
 	PartialResponseStrategy storepb.PartialResponseStrategy
+}
+
+// HTMLSnippet returns a human-readable string representation of alerting rules,
+// decorated with HTML elements for use the web frontend.
+func (r *AlertingRule) HTMLSnippet(pathPrefix string) html_template.HTML {
+	alertMetric := model.Metric{
+		model.MetricNameLabel: "ALERTS",
+		"alertname":           model.LabelValue(r.Name()),
+	}
+
+	labelsMap := make(map[string]string, len(r.Labels()))
+	for _, l := range r.Labels() {
+		labelsMap[l.Name] = html_template.HTMLEscapeString(l.Value)
+	}
+
+	annotations := r.Annotations()
+	annotationsMap := make(map[string]string, len(annotations))
+	for _, l := range annotations {
+		annotationsMap[l.Name] = html_template.HTMLEscapeString(l.Value)
+	}
+
+	ar := ruleFormat{
+		Alert:                   fmt.Sprintf("<a href=%q>%s</a>", pathPrefix+strutil.TableLinkForExpression(alertMetric.String()), r.Name()),
+		Expr:                    fmt.Sprintf("<a href=%q>%s</a>", pathPrefix+strutil.TableLinkForExpression(r.Query().String()), html_template.HTMLEscapeString(r.Query().String())),
+		For:                     model.Duration(r.HoldDuration()),
+		Labels:                  labelsMap,
+		Annotations:             annotationsMap,
+		PartialResponseStrategy: storepb.PartialResponseStrategy_name[int32(r.PartialResponseStrategy)],
+	}
+
+	byt, err := yaml.Marshal(ar)
+	if err != nil {
+		return html_template.HTML(fmt.Sprintf("error marshaling alerting rule: %q", html_template.HTMLEscapeString(err.Error())))
+	}
+	return html_template.HTML(byt)
+}
+
+// RecordingRule represents a recording rule in ruler UI.
+type RecordingRule struct {
+	*rules.RecordingRule
+	PartialResponseStrategy storepb.PartialResponseStrategy
+}
+
+// HTMLSnippet returns a human-readable string representation of recording rules,
+// decorated with HTML elements for use the web frontend.
+func (r *RecordingRule) HTMLSnippet(pathPrefix string) html_template.HTML {
+	ruleExpr := r.Query().String()
+	labels := make(map[string]string, len(r.Labels()))
+	for _, l := range r.Labels() {
+		labels[l.Name] = html_template.HTMLEscapeString(l.Value)
+	}
+
+	rr := ruleFormat{
+		Record:                  fmt.Sprintf(`<a href="%s">%s</a>`, pathPrefix+strutil.TableLinkForExpression(r.Name()), r.Name()),
+		Expr:                    fmt.Sprintf(`<a href="%s">%s</a>`, pathPrefix+strutil.TableLinkForExpression(ruleExpr), html_template.HTMLEscapeString(ruleExpr)),
+		Labels:                  labels,
+		PartialResponseStrategy: storepb.PartialResponseStrategy_name[int32(r.PartialResponseStrategy)],
+	}
+
+	byt, err := yaml.Marshal(rr)
+	if err != nil {
+		return html_template.HTML(fmt.Sprintf("error marshaling recording rule: %q", html_template.HTMLEscapeString(err.Error())))
+	}
+
+	return html_template.HTML(byt)
+}
+
+type ruleFormat struct {
+	Record                  string            `yaml:"record,omitempty"`
+	Alert                   string            `yaml:"alert,omitempty"`
+	Expr                    string            `yaml:"expr"`
+	For                     model.Duration    `yaml:"for,omitempty"`
+	Labels                  map[string]string `yaml:"labels,omitempty"`
+	Annotations             map[string]string `yaml:"annotations,omitempty"`
+	PartialResponseStrategy string            `yaml:"partial_response_strategy,omitempty"`
 }
 
 type RuleGroups struct {
