@@ -283,7 +283,10 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 		partSize = 0
 	}
 	buffer := make([]byte, size)
-	r.Read(buffer)
+	_, err := r.Read(buffer)
+	if err != nil {
+		return errors.Wrap(err, "Upload: failed to read file into buffer")
+	}
 	fileBytes := bytes.NewReader(buffer) // converted to io.ReadSeeker type.
 
 	if _, err := b.client.PutObjectWithContext(ctx, &s3.PutObjectInput{Bucket: aws.String(b.name),
@@ -317,7 +320,7 @@ func (b *Bucket) Delete(ctx context.Context, name string) error {
 		return err
 	}
 
-	b.client.WaitUntilObjectNotExists(&s3.HeadObjectInput{Bucket: aws.String(b.name), Key: aws.String(name)})
+	err = b.client.WaitUntilObjectNotExists(&s3.HeadObjectInput{Bucket: aws.String(b.name), Key: aws.String(name)})
 	if err != nil {
 		return err
 	}
