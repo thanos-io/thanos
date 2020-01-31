@@ -123,7 +123,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		TLSClientConfig:    &tls.Config{InsecureSkipVerify: config.HTTPConfig.InsecureSkipVerify},
 	}}
 	session, err := session.NewSession(&aws.Config{
-		Region:     aws.String("us-west-2"),
+		Region:     aws.String(config.Region),
 		HTTPClient: httpClient,
 	})
 	client := s3.New(session)
@@ -155,6 +155,9 @@ func (b *Bucket) Name() string {
 
 // validate checks to see the config options are set.
 func validate(conf Config) error {
+	if conf.Region == "" {
+		return errors.New("Region not specified in config file")
+	}
 	if conf.AccessKey == "" && conf.SecretKey != "" {
 		return errors.New("no s3 acccess_key specified while secret_key is present in config file; either both should be present in config or envvars/IAM should be used")
 	}
