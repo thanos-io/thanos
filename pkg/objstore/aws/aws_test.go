@@ -102,18 +102,19 @@ http_config:
 
 	cfg, err := parseConfig(input)
 	testutil.Ok(t, err)
-	testutil.Assert(t, cfg.PartSize == 1024*1024*128, "when part size not set it should default to 128MiB")
+	testutil.Assert(t, cfg.maxPartSize == 1024*1024*5, "when part size not set it should default to 5MiB")
 
 	input2 := []byte(`bucket: "bucket-name"
 access_key: "access_key"
-encrypt_sse: false
+encrypt_sse: true
+maxRetries: 6
 secret_key: "secret_key"
-part_size: 104857600
+maxPartSize: 104857600
 http_config:
   insecure_skip_verify: false
   idle_conn_timeout: 50s`)
 
 	cfg2, err := parseConfig(input2)
 	testutil.Ok(t, err)
-	testutil.Assert(t, cfg2.PartSize == 1024*1024*100, "when part size should be set to 100MiB")
+	testutil.Assert(t, cfg2.maxPartSize == 1024*1024*5, "when part size should be set to 100MiB")
 }

@@ -52,9 +52,9 @@ type Config struct {
 	SecretKey       string             `yaml:"secret_key"`
 	PutUserMetadata map[string]*string `yaml:"put_user_metadata"`
 	HTTPConfig      HTTPConfig         `yaml:"http_config"`
-	TraceConfig     TraceConfig        `yaml:"trace"`
 	maxPartSize     int64              `yaml:"maxPartSize"`
 	maxRetries      int                `yaml:"maxRetries"`
+	TraceConfig     TraceConfig        `yaml:"trace"`
 }
 
 // TraceConfig enables or disables tracing.
