@@ -38,8 +38,8 @@ var defaultConfig = Config{
 		ResponseHeaderTimeout: model.Duration(2 * time.Minute),
 	},
 	// Minimum file size after which an HTTP multipart request should be used to upload objects to storage.
-	// Set to 128 MiB as in the minio client.
-	PartSize: 1024 * 1024 * 128,
+	maxPartSize: int64(5 * 1024 * 1024),
+	maxRetries:  3,
 }
 
 // Config stores the configuration for s3 bucket.
@@ -53,8 +53,8 @@ type Config struct {
 	PutUserMetadata map[string]*string `yaml:"put_user_metadata"`
 	HTTPConfig      HTTPConfig         `yaml:"http_config"`
 	TraceConfig     TraceConfig        `yaml:"trace"`
-	// PartSize used for multipart upload. Only used if uploaded object size is known and larger than configured PartSize.
-	PartSize uint64 `yaml:"part_size"`
+	maxPartSize     int64              `yaml:"maxPartSize"`
+	maxRetries      int                `yaml:"maxRetries"`
 }
 
 // TraceConfig enables or disables tracing.
@@ -76,7 +76,8 @@ type Bucket struct {
 	name            string
 	client          *s3.S3
 	putUserMetadata map[string]*string
-	partSize        uint64
+	maxPartSize     int64
+	maxRetries      int
 }
 
 // parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
@@ -140,7 +141,8 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		name:            config.Bucket,
 		client:          client,
 		putUserMetadata: config.PutUserMetadata,
-		partSize:        config.PartSize,
+		maxPartSize:     config.maxPartSize,
+		maxRetries:      config.maxRetries,
 		acl:             config.ACL,
 	}
 	return bkt, nil
@@ -277,30 +279,115 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 	// TODO(https://github.com/thanos-io/thanos/issues/678): Remove guessing length when minio provider will support multipart upload without this.
 	size := b.guessFileSize(name, r)
 
-	// partSize cannot be larger than object size.
-	partSize := b.partSize
-	if size < int64(partSize) {
-		partSize = 0
-	}
 	buffer := make([]byte, size)
 	_, err := r.Read(buffer)
 	if err != nil {
 		return errors.Wrap(err, "Upload: failed to read file into buffer")
 	}
-	fileBytes := bytes.NewReader(buffer) // converted to io.ReadSeeker type.
 
-	if _, err := b.client.PutObjectWithContext(ctx, &s3.PutObjectInput{Bucket: aws.String(b.name),
-		Key:           aws.String(name),
-		ContentLength: &size,
-		Body:          fileBytes,
-		ACL:           aws.String(b.acl),
-		Metadata:      b.putUserMetadata,
-	},
-	); err != nil {
-		return errors.Wrap(err, "upload s3 object")
+	input := &s3.CreateMultipartUploadInput{
+		Bucket:      aws.String(b.name),
+		Key:         aws.String(name),
+		ContentType: aws.String(http.DetectContentType(buffer)),
+		ACL:         aws.String(b.acl),
 	}
 
+	resp, err := b.client.CreateMultipartUpload(input)
+	if err != nil {
+		fmt.Println(err.Error())
+		return err
+	}
+	fmt.Println("Created multipart upload request")
+
+	var curr, partLength int64
+	var remaining = size
+	var completedParts []*s3.CompletedPart
+	partNumber := 1
+	for curr = 0; remaining != 0; curr += partLength {
+		if remaining < b.maxPartSize {
+			partLength = remaining
+		} else {
+			partLength = b.maxPartSize
+		}
+		completedPart, err := uploadPart(b.client, resp, buffer[curr:curr+partLength], partNumber, b.maxRetries)
+		if err != nil {
+			fmt.Println(err.Error())
+			err := abortMultipartUpload(b.client, resp)
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+			return err
+		}
+		remaining -= partLength
+		partNumber++
+		completedParts = append(completedParts, completedPart)
+	}
+
+	completeResponse, err := completeMultipartUpload(b.client, resp, completedParts)
+	if err != nil {
+		fmt.Println(err.Error())
+		return err
+	}
+
+	fmt.Printf("Successfully uploaded file: %s\n", completeResponse.String())
+
 	return nil
+}
+
+func completeMultipartUpload(svc *s3.S3, resp *s3.CreateMultipartUploadOutput, completedParts []*s3.CompletedPart) (*s3.CompleteMultipartUploadOutput, error) {
+	completeInput := &s3.CompleteMultipartUploadInput{
+		Bucket:   resp.Bucket,
+		Key:      resp.Key,
+		UploadId: resp.UploadId,
+		MultipartUpload: &s3.CompletedMultipartUpload{
+			Parts: completedParts,
+		},
+	}
+	return svc.CompleteMultipartUpload(completeInput)
+}
+
+func uploadPart(svc *s3.S3, resp *s3.CreateMultipartUploadOutput, fileBytes []byte, partNumber int, maxRetries int) (*s3.CompletedPart, error) {
+	tryNum := 1
+	partInput := &s3.UploadPartInput{
+		Body:          bytes.NewReader(fileBytes),
+		Bucket:        resp.Bucket,
+		Key:           resp.Key,
+		PartNumber:    aws.Int64(int64(partNumber)),
+		UploadId:      resp.UploadId,
+		ContentLength: aws.Int64(int64(len(fileBytes))),
+	}
+
+	for tryNum <= maxRetries {
+		uploadResult, err := svc.UploadPart(partInput)
+		if err != nil {
+			if tryNum == maxRetries {
+				if aerr, ok := err.(awserr.Error); ok {
+					return nil, aerr
+				}
+				return nil, err
+			}
+			fmt.Printf("Retrying to upload part #%v\n", partNumber)
+			tryNum++
+		} else {
+			fmt.Printf("Uploaded part #%v\n", partNumber)
+			return &s3.CompletedPart{
+				ETag:       uploadResult.ETag,
+				PartNumber: aws.Int64(int64(partNumber)),
+			}, nil
+		}
+	}
+	return nil, nil
+}
+
+func abortMultipartUpload(svc *s3.S3, resp *s3.CreateMultipartUploadOutput) error {
+	fmt.Println("Aborting multipart upload for UploadId#" + *resp.UploadId)
+	abortInput := &s3.AbortMultipartUploadInput{
+		Bucket:   resp.Bucket,
+		Key:      resp.Key,
+		UploadId: resp.UploadId,
+	}
+	_, err := svc.AbortMultipartUpload(abortInput)
+	return err
 }
 
 // ObjectSize returns the size of the specified object.
