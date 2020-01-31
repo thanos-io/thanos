@@ -17,6 +17,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/go-kit/kit/log"
@@ -102,6 +103,9 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 
 // NewBucketWithConfig returns a new Bucket using the provided s3 config values.
 func NewBucketWithConfig(logger log.Logger, config Config, component string) (*Bucket, error) {
+	if err := validate(config); err != nil {
+		return nil, err
+	}
 
 	httpClient := &http.Client{Transport: &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
@@ -126,8 +130,13 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		Region:     aws.String(config.Region),
 		HTTPClient: httpClient,
 	})
-	client := s3.New(session)
 
+	// If static credentials specified override default provider chain.
+	if config.AccessKey != "" {
+		session.Config.Credentials = credentials.NewStaticCredentials(config.AccessKey, config.SecretKey, "")
+	}
+
+	client := s3.New(session)
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize s3 client")
 	}
