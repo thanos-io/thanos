@@ -83,7 +83,6 @@ type Bucket struct {
 // parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
 func parseConfig(conf []byte) (Config, error) {
 	config := defaultConfig
-	fmt.Println(string(conf))
 	if err := yaml.Unmarshal(conf, &config); err != nil {
 		return Config{}, err
 	}
@@ -296,10 +295,10 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 
 	resp, err := b.client.CreateMultipartUpload(input)
 	if err != nil {
-		fmt.Println(err.Error())
+		level.Error(b.logger).Log("err", err.Error())
 		return err
 	}
-	fmt.Println("Created multipart upload request")
+	level.Debug(b.logger).Log("msg", "Created multipart upload request", "name", name)
 
 	var curr, partLength int64
 	var remaining = size
@@ -311,12 +310,12 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 		} else {
 			partLength = b.maxPartSize
 		}
-		completedPart, err := uploadPart(b.client, resp, buffer[curr:curr+partLength], partNumber, b.maxRetries)
+		completedPart, err := b.uploadPart(b.client, resp, buffer[curr:curr+partLength], partNumber, b.maxRetries)
 		if err != nil {
-			fmt.Println(err.Error())
-			err := abortMultipartUpload(b.client, resp)
+			level.Error(b.logger).Log("err", err.Error())
+			err := b.abortMultipartUpload(b.client, resp)
 			if err != nil {
-				fmt.Println(err.Error())
+				level.Error(b.logger).Log("err", err.Error())
 			}
 			return err
 		}
@@ -325,18 +324,17 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 		completedParts = append(completedParts, completedPart)
 	}
 
-	completeResponse, err := completeMultipartUpload(b.client, resp, completedParts)
+	completeResponse, err := b.completeMultipartUpload(b.client, resp, completedParts)
 	if err != nil {
-		fmt.Println(err.Error())
+		level.Error(b.logger).Log("err", err.Error())
 		return err
 	}
-
-	fmt.Printf("Successfully uploaded file: %s\n", completeResponse.String())
+	level.Debug(b.logger).Log("msg", "Successfullly uploaded file", "name", completeResponse.String())
 
 	return nil
 }
 
-func completeMultipartUpload(svc *s3.S3, resp *s3.CreateMultipartUploadOutput, completedParts []*s3.CompletedPart) (*s3.CompleteMultipartUploadOutput, error) {
+func (b *Bucket) completeMultipartUpload(svc *s3.S3, resp *s3.CreateMultipartUploadOutput, completedParts []*s3.CompletedPart) (*s3.CompleteMultipartUploadOutput, error) {
 	completeInput := &s3.CompleteMultipartUploadInput{
 		Bucket:   resp.Bucket,
 		Key:      resp.Key,
@@ -348,7 +346,7 @@ func completeMultipartUpload(svc *s3.S3, resp *s3.CreateMultipartUploadOutput, c
 	return svc.CompleteMultipartUpload(completeInput)
 }
 
-func uploadPart(svc *s3.S3, resp *s3.CreateMultipartUploadOutput, fileBytes []byte, partNumber int, maxRetries int) (*s3.CompletedPart, error) {
+func (b *Bucket) uploadPart(svc *s3.S3, resp *s3.CreateMultipartUploadOutput, fileBytes []byte, partNumber int, maxRetries int) (*s3.CompletedPart, error) {
 	tryNum := 1
 	partInput := &s3.UploadPartInput{
 		Body:          bytes.NewReader(fileBytes),
@@ -368,10 +366,10 @@ func uploadPart(svc *s3.S3, resp *s3.CreateMultipartUploadOutput, fileBytes []by
 				}
 				return nil, err
 			}
-			fmt.Printf("Retrying to upload part #%v\n", partNumber)
+			level.Debug(b.logger).Log("msg", "Retrying to upload part", "part", partNumber)
 			tryNum++
 		} else {
-			fmt.Printf("Uploaded part #%v\n", partNumber)
+			level.Debug(b.logger).Log("msg", "Uploaded part", "part", partNumber)
 			return &s3.CompletedPart{
 				ETag:       uploadResult.ETag,
 				PartNumber: aws.Int64(int64(partNumber)),
@@ -381,8 +379,8 @@ func uploadPart(svc *s3.S3, resp *s3.CreateMultipartUploadOutput, fileBytes []by
 	return nil, nil
 }
 
-func abortMultipartUpload(svc *s3.S3, resp *s3.CreateMultipartUploadOutput) error {
-	fmt.Println("Aborting multipart upload for UploadId#" + *resp.UploadId)
+func (b *Bucket) abortMultipartUpload(svc *s3.S3, resp *s3.CreateMultipartUploadOutput) error {
+	level.Debug(b.logger).Log("msg", "Aborting multipart upload for UploadId #", "uploadid", *resp.UploadId)
 	abortInput := &s3.AbortMultipartUploadInput{
 		Bucket:   resp.Bucket,
 		Key:      resp.Key,
