@@ -42,9 +42,9 @@ func TestParseConfig_DefaultHTTPConfig(t *testing.T) {
 func TestParseConfig_CustomHTTPConfig(t *testing.T) {
 	input := []byte(`bucket: abcd
 http_config:
-  insecure_skip_verify: true
-  idle_conn_timeout: 50s
-  response_header_timeout: 1m`)
+  insecureSkipVerify: true
+  idleConnectTimeout: 50s
+  responseHeaderTimeout: 1m`)
 	cfg, err := parseConfig(input)
 	testutil.Ok(t, err)
 
@@ -65,56 +65,55 @@ http_config:
 
 func TestValidate_OK(t *testing.T) {
 	input := []byte(`bucket: "bucket-name"
-access_key: "access_key"
-encrypt_sse: false
-secret_key: "secret_key"
-http_config:
-  insecure_skip_verify: false
-  idle_conn_timeout: 50s`)
+accessKey: "access_key"
+encryptSSE: false
+secretKey: "secret_key"
+httpConfig:
+  insecureSkipVerify: false
+  idleConnectTimeout: 50s`)
 	cfg, err := parseConfig(input)
 	testutil.Ok(t, err)
 	testutil.Ok(t, validate(cfg))
-	testutil.Assert(t, cfg.PutUserMetadata != nil, "map should not be nil")
+	testutil.Assert(t, cfg.UserMetadata != nil, "map should not be nil")
 
 	input2 := []byte(`bucket: "bucket-name"
-access_key: "access_key"
+accessKey: "access_key"
 encrypt_sse: false
-secret_key: "secret_key"
-put_user_metadata:
+secretKey: "secret_key"
+userMetadata:
   "X-Amz-Acl": "bucket-owner-full-control"
-http_config:
+httpConfig:
   idle_conn_timeout: 0s`)
 	cfg2, err := parseConfig(input2)
 	testutil.Ok(t, err)
 	testutil.Ok(t, validate(cfg2))
 
-	testutil.Equals(t, "bucket-owner-full-control", cfg2.PutUserMetadata["X-Amz-Acl"])
+	testutil.Equals(t, "bucket-owner-full-control", cfg2.UserMetadata["X-Amz-Acl"])
 }
 
 func TestParseConfig_PartSize(t *testing.T) {
 	input := []byte(`bucket: "bucket-name"
-access_key: "access_key"
-encrypt_sse: false
-secret_key: "secret_key"
-http_config:
-  insecure_skip_verify: false
-  idle_conn_timeout: 50s`)
+accessKey: "access_key"
+encryptSSE: false
+secretKey: "secret_key"
+httpConfig:
+  insecureSkipVerify: false
+  idleConnectTimeout: 50s`)
 
 	cfg, err := parseConfig(input)
 	testutil.Ok(t, err)
-	testutil.Assert(t, cfg.maxPartSize == 1024*1024*5, "when part size not set it should default to 5MiB")
+	testutil.Assert(t, cfg.PartSize == 1024*1024*5, "when part size not set it should default to 5MiB")
 
 	input2 := []byte(`bucket: "bucket-name"
-access_key: "access_key"
-encrypt_sse: true
-maxRetries: 6
-secret_key: "secret_key"
+accessKey: "access_key"
+encryptSSE: true
+secretKey: "secret_key"
 maxPartSize: 104857600
-http_config:
-  insecure_skip_verify: false
-  idle_conn_timeout: 50s`)
+httpConfig:
+  insecureSkipVerify: false
+  idleConnectTimeout: 50s`)
 
 	cfg2, err := parseConfig(input2)
 	testutil.Ok(t, err)
-	testutil.Assert(t, cfg2.maxPartSize == 1024*1024*5, "when part size should be set to 100MiB")
+	testutil.Assert(t, cfg2.PartSize == 1024*1024*100, "when part size should be set to 100MiB")
 }
