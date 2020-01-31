@@ -31,30 +31,19 @@ import (
 // DirDelim is the delimiter used to model a directory structure in an object store bucket.
 const DirDelim = "/"
 
-var defaultConfig = Config{
-	PutUserMetadata: map[string]*string{},
-	HTTPConfig: HTTPConfig{
-		IdleConnTimeout:       model.Duration(90 * time.Second),
-		ResponseHeaderTimeout: model.Duration(2 * time.Minute),
-	},
-	// Minimum file size after which an HTTP multipart request should be used to upload objects to storage.
-	maxPartSize: int64(5 * 1024 * 1024),
-	maxRetries:  3,
-}
-
 // Config stores the configuration for s3 bucket.
 type Config struct {
-	Bucket          string             `yaml:"bucket"`
-	Region          string             `yaml:"region"`
-	AccessKey       string             `yaml:"access_key"`
-	ACL             string             `yaml:"acl"`
-	SSEEncryption   bool               `yaml:"encrypt_sse"`
-	SecretKey       string             `yaml:"secret_key"`
-	PutUserMetadata map[string]*string `yaml:"put_user_metadata"`
-	HTTPConfig      HTTPConfig         `yaml:"http_config"`
-	maxPartSize     int64              `yaml:"maxPartSize"`
-	maxRetries      int                `yaml:"maxRetries"`
-	TraceConfig     TraceConfig        `yaml:"trace"`
+	Bucket        string             `yaml:"bucket"`
+	Region        string             `yaml:"region"`
+	AccessKey     string             `yaml:"accessKey"`
+	ACL           string             `yaml:"acl"`
+	SSEEncryption bool               `yaml:"encryptSSE"`
+	SecretKey     string             `yaml:"secretKey"`
+	UserMetadata  map[string]*string `yaml:"userMetadata"`
+	HTTPConfig    HTTPConfig         `yaml:"httpConfig"`
+	TraceConfig   TraceConfig        `yaml:"trace"`
+	PartSize      int64              `yaml:"maxPartSize"`
+	Retries       int                `yaml:"maxRetries"`
 }
 
 // TraceConfig enables or disables tracing.
@@ -64,25 +53,37 @@ type TraceConfig struct {
 
 // HTTPConfig stores the http.Transport configuration for the s3 minio client.
 type HTTPConfig struct {
-	IdleConnTimeout       model.Duration `yaml:"idle_conn_timeout"`
-	ResponseHeaderTimeout model.Duration `yaml:"response_header_timeout"`
-	InsecureSkipVerify    bool           `yaml:"insecure_skip_verify"`
+	IdleConnTimeout       model.Duration `yaml:"idleConnectTimeout"`
+	ResponseHeaderTimeout model.Duration `yaml:"responseHeaderTimeout"`
+	InsecureSkipVerify    bool           `yaml:"insecureSkipVerify"`
+}
+
+var defaultConfig = Config{
+	UserMetadata: map[string]*string{},
+	HTTPConfig: HTTPConfig{
+		IdleConnTimeout:       model.Duration(90 * time.Second),
+		ResponseHeaderTimeout: model.Duration(2 * time.Minute),
+	},
+	// Minimum file size after which an HTTP multipart request should be used to upload objects to storage.
+	PartSize: 5 * 1024 * 1024,
+	Retries:  3,
 }
 
 // Bucket implements the store.Bucket interface against s3-compatible APIs.
 type Bucket struct {
-	acl             string
-	logger          log.Logger
-	name            string
-	client          *s3.S3
-	putUserMetadata map[string]*string
-	maxPartSize     int64
-	maxRetries      int
+	acl          string
+	logger       log.Logger
+	name         string
+	client       *s3.S3
+	userMetadata map[string]*string
+	maxPartSize  int64
+	maxRetries   int
 }
 
 // parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
 func parseConfig(conf []byte) (Config, error) {
 	config := defaultConfig
+	fmt.Println(string(conf))
 	if err := yaml.Unmarshal(conf, &config); err != nil {
 		return Config{}, err
 	}
@@ -137,13 +138,13 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 	}
 
 	bkt := &Bucket{
-		logger:          logger,
-		name:            config.Bucket,
-		client:          client,
-		putUserMetadata: config.PutUserMetadata,
-		maxPartSize:     config.maxPartSize,
-		maxRetries:      config.maxRetries,
-		acl:             config.ACL,
+		logger:       logger,
+		name:         config.Bucket,
+		client:       client,
+		userMetadata: config.UserMetadata,
+		maxPartSize:  config.PartSize,
+		maxRetries:   config.Retries,
+		acl:          config.ACL,
 	}
 	return bkt, nil
 }
@@ -290,6 +291,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 		Key:         aws.String(name),
 		ContentType: aws.String(http.DetectContentType(buffer)),
 		ACL:         aws.String(b.acl),
+		Metadata:    b.userMetadata,
 	}
 
 	resp, err := b.client.CreateMultipartUpload(input)
