@@ -278,6 +278,12 @@ Flags:
                                  Can be in glob format (repeated).
       --resend-delay=1m          Minimum amount of time to wait before resending
                                  an alert to Alertmanager.
+      --for-outage-tolerance=1h  Max time to tolerate prometheus outage for
+                                 restoring "for" state of alert.
+      --for-grace-period=10m     Minimum duration between alert and restored
+                                 "for" state. This is maintained only for
+
+                                   alerts with configured \"for\" time greater than grace period.
       --eval-interval=30s        The default evaluation interval to use.
       --tsdb.block-duration=2h   Block duration for TSDB block.
       --tsdb.retention=48h       Block retention time on local disk.

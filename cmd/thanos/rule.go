@@ -73,6 +73,10 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 		Default("rules/").Strings()
 	resendDelay := modelDuration(cmd.Flag("resend-delay", "Minimum amount of time to wait before resending an alert to Alertmanager.").
 		Default("1m"))
+	outageTolerance := modelDuration(cmd.Flag("for-outage-tolerance", `Max time to tolerate prometheus outage for restoring "for" state of alert.`).
+		Default("1h"))
+	forGracePeriod := modelDuration(cmd.Flag("for-grace-period", `Minimum duration between alert and restored "for" state. This is maintained only for
+		alerts with configured \"for\" time greater than grace period.`).Default("10m"))
 	evalInterval := modelDuration(cmd.Flag("eval-interval", "The default evaluation interval to use.").
 		Default("30s"))
 	tsdbBlockDuration := modelDuration(cmd.Flag("tsdb.block-duration", "Block duration for TSDB block.").
@@ -183,6 +187,8 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			*webRoutePrefix,
 			*webExternalPrefix,
 			*webPrefixHeaderName,
+			time.Duration(*outageTolerance),
+			time.Duration(*forGracePeriod),
 			time.Duration(*resendDelay),
 			time.Duration(*evalInterval),
 			*dataDir,
@@ -224,6 +230,8 @@ func runRule(
 	webRoutePrefix string,
 	webExternalPrefix string,
 	webPrefixHeaderName string,
+	outageTolerance time.Duration,
+	forGracePeriod time.Duration,
 	resendDelay time.Duration,
 	evalInterval time.Duration,
 	dataDir string,
@@ -418,12 +426,14 @@ func runRule(
 		st := tsdb.Adapter(db, 0)
 
 		opts := rules.ManagerOptions{
-			NotifyFunc:  notify,
-			Logger:      log.With(logger, "component", "rules"),
-			Appendable:  st,
-			ExternalURL: nil,
-			TSDB:        st,
-			ResendDelay: resendDelay,
+			NotifyFunc:      notify,
+			Logger:          log.With(logger, "component", "rules"),
+			Appendable:      st,
+			ExternalURL:     nil,
+			TSDB:            st,
+			ResendDelay:     resendDelay,
+			OutageTolerance: outageTolerance,
+			ForGracePeriod:  forGracePeriod,
 		}
 
 		// TODO(bwplotka): Hide this behind thanos rules.Manager.
