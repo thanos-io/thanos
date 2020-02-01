@@ -205,11 +205,11 @@ func (s *Syncer) Groups() (res []*Group, err error) {
 				s.acceptMalformedIndex,
 				diskusage.Get,
 				s.enableVerticalCompaction,
-				s.metrics.compactions.WithLabelValues(GroupKey(m.Thanos)),
-				s.metrics.compactionRunsStarted.WithLabelValues(GroupKey(m.Thanos)),
-				s.metrics.compactionRunsCompleted.WithLabelValues(GroupKey(m.Thanos)),
-				s.metrics.compactionFailures.WithLabelValues(GroupKey(m.Thanos)),
-				s.metrics.verticalCompactions.WithLabelValues(GroupKey(m.Thanos)),
+				s.metrics.compactions.WithLabelValues(groupKey),
+				s.metrics.compactionRunsStarted.WithLabelValues(groupKey),
+				s.metrics.compactionRunsCompleted.WithLabelValues(groupKey),
+				s.metrics.compactionFailures.WithLabelValues(groupKey),
+				s.metrics.verticalCompactions.WithLabelValues(groupKey),
 				s.metrics.garbageCollectedBlocks,
 			)
 			if err != nil {
