@@ -249,16 +249,6 @@ rules:
     impact: Prometheus configuration is not being refreshed
     action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
     dashboard: SIDECAR_URL
-- alert: ThanosSidecarBucketOperationsFailed
-  expr: rate(thanos_objstore_bucket_operation_failures_total{name="prometheus"}[5m]) > 0
-  for: 5m
-  labels:
-    team: TEAM
-  annotations:
-    summary: Thanos Sidecar bucket operations are failing
-    impact: We will lose metrics data if not fixed in 24h
-    action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
-    dashboard: SIDECAR_URL
 - alert: ThanosSidecarGrpcErrorRate
   expr: rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable",name="prometheus"}[5m]) > 0
   for: 5m
