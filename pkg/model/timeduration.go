@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package model
 
 import (
@@ -42,7 +45,7 @@ func (tdv *TimeOrDurationValue) Set(s string) error {
 	return nil
 }
 
-// String returns either tume or duration.
+// String returns either time or duration.
 func (tdv *TimeOrDurationValue) String() string {
 	switch {
 	case tdv.Time != nil:

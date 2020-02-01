@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package objstore
 
 import (
@@ -316,8 +319,7 @@ func (b *metricBucket) Upload(ctx context.Context, name string, r io.Reader) err
 	if err != nil {
 		b.opsFailures.WithLabelValues(op).Inc()
 	} else {
-		// TODO: Use SetToCurrentTime() once we update the Prometheus client_golang.
-		b.lastSuccessfullUploadTime.WithLabelValues(b.bkt.Name()).Set(float64(time.Now().UnixNano()) / 1e9)
+		b.lastSuccessfullUploadTime.WithLabelValues(b.bkt.Name()).SetToCurrentTime()
 	}
 	b.ops.WithLabelValues(op).Inc()
 	b.opsDuration.WithLabelValues(op).Observe(time.Since(start).Seconds())

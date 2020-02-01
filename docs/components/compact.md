@@ -1,10 +1,10 @@
 ---
-title: Compact
+title: Compactor
 type: docs
 menu: components
 ---
 
-# Compact
+# Compactor
 
 The compactor component of Thanos applies the compaction procedure of the Prometheus 2.0 storage engine to block data stored in object storage.
 It is generally not semantically concurrency safe and must be deployed as a singleton against a bucket.
@@ -46,6 +46,8 @@ To avoid confusion - you might want to think about `raw` data as about "zoom in"
 There's also a case when you might want to disable downsampling at all with `debug.disable-downsampling`. You might want to do it when you know for sure that you are not going to request long ranges of data (obviously, because without downsampling those requests are going to be much much more expensive than with it). A valid example of that case if when you only care about the last couple of weeks of your data or use it only for alerting, but if it's your case - you also need to ask yourself if you want to introduce Thanos at all instead of vanilla Prometheus?
 
 Ideally, you will have equal retention set (or no retention at all) to all resolutions which allow both "zoom in" capabilities as well as performant long ranges queries. Since object storages are usually quite cheap, storage size might not matter that much, unless your goal with thanos is somewhat very specific and you know exactly what you're doing.
+
+Not setting this flag, or setting it to `0d`, i.e. `--retention.resolution-X=0d`, will mean that samples at the `X` resolution level will be kept forever.
 
 ## Storage space consumption
 
@@ -103,16 +105,19 @@ Flags:
       --consistency-delay=30m  Minimum age of fresh (non-compacted) blocks
                                before they are being processed. Malformed blocks
                                older than the maximum of consistency-delay and
-                               30m0s will be removed.
+                               48h0m0s will be removed.
       --retention.resolution-raw=0d
-                               How long to retain raw samples in bucket. 0d -
-                               disables this retention
+                               How long to retain raw samples in bucket. Setting
+                               this to 0d will retain samples of this resolution
+                               forever
       --retention.resolution-5m=0d
                                How long to retain samples of resolution 1 (5
-                               minutes) in bucket. 0d - disables this retention
+                               minutes) in bucket. Setting this to 0d will
+                               retain samples of this resolution forever
       --retention.resolution-1h=0d
                                How long to retain samples of resolution 2 (1
-                               hour) in bucket. 0d - disables this retention
+                               hour) in bucket. Setting this to 0d will retain
+                               samples of this resolution forever
   -w, --wait                   Do not exit after all compactions have been
                                processed and wait for new work.
       --downsampling.disable   Disables downsampling. This is not recommended as

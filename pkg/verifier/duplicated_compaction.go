@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package verifier
 
 import (
@@ -13,6 +16,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/objstore"
 )
 
@@ -23,14 +27,14 @@ const DuplicatedCompactionIssueID = "duplicated_compaction"
 // until sync-delay passes.
 // The expected print of this are same overlapped blocks with exactly the same sources, time ranges and stats.
 // If repair is enabled, all but one duplicates are safely deleted.
-func DuplicatedCompactionIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool) error {
+func DuplicatedCompactionIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool, fetcher *block.MetaFetcher) error {
 	if idMatcher != nil {
 		return errors.Errorf("id matching is not supported by issue %s verifier", DuplicatedCompactionIssueID)
 	}
 
 	level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", DuplicatedCompactionIssueID)
 
-	overlaps, err := fetchOverlaps(ctx, logger, bkt)
+	overlaps, err := fetchOverlaps(ctx, logger, bkt, fetcher)
 	if err != nil {
 		return errors.Wrap(err, DuplicatedCompactionIssueID)
 	}

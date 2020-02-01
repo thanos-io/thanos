@@ -281,6 +281,7 @@ Flags:
       --eval-interval=30s        The default evaluation interval to use.
       --tsdb.block-duration=2h   Block duration for TSDB block.
       --tsdb.retention=48h       Block retention time on local disk.
+      --tsdb.wal-compression     Compress the tsdb WAL.
       --alertmanagers.url=ALERTMANAGERS.URL ...
                                  Alertmanager replica URLs to push firing
                                  alerts. Ruler claims success if push to at
@@ -359,9 +360,22 @@ Flags:
                                  prefixed with 'dns+' or 'dnssrv+' to detect
                                  query API servers through respective DNS
                                  lookups.
+      --query.config-file=<file-path>
+                                 Path to YAML file that contains query API
+                                 servers configuration. See format details:
+                                 https://thanos.io/components/rule.md/#configuration.
+                                 If defined, it takes precedence over the
+                                 '--query' and '--query.sd-files' flags.
+      --query.config=<content>   Alternative to 'query.config-file' flag (lower
+                                 priority). Content of YAML file that contains
+                                 query API servers configuration. See format
+                                 details:
+                                 https://thanos.io/components/rule.md/#configuration.
+                                 If defined, it takes precedence over the
+                                 '--query' and '--query.sd-files' flags.
       --query.sd-files=<path> ...
-                                 Path to file that contain addresses of query
-                                 peers. The path can be a glob pattern
+                                 Path to file that contains addresses of query
+                                 API servers. The path can be a glob pattern
                                  (repeatable).
       --query.sd-interval=5m     Refresh interval to re-read file SD files.
                                  (used as a fallback)
@@ -402,4 +416,37 @@ alertmanagers:
   scheme: http
   path_prefix: ""
   timeout: 10s
+  api_version: v1
+```
+
+Supported values for `api_version` are `v1` or `v2`.
+
+### Query API
+
+The `--query.config` and `--query.config-file` flags allow specifying multiple query endpoints. Those entries are treated as a single HA group. This means that query failure is claimed only if the Ruler fails to query all instances.
+
+The configuration format is the following:
+
+[embedmd]:# (../flags/config_rule_query.txt yaml)
+```yaml
+- http_config:
+    basic_auth:
+      username: ""
+      password: ""
+      password_file: ""
+    bearer_token: ""
+    bearer_token_file: ""
+    proxy_url: ""
+    tls_config:
+      ca_file: ""
+      cert_file: ""
+      key_file: ""
+      server_name: ""
+      insecure_skip_verify: false
+  static_configs: []
+  file_sd_configs:
+  - files: []
+    refresh_interval: 0s
+  scheme: http
+  path_prefix: ""
 ```

@@ -3,9 +3,9 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
 {
   local thanos = self,
   compactor+:: {
-    jobPrefix: error 'must provide job prefix for Thanos Compact dashboard',
-    selector: error 'must provide selector for Thanos Compact dashboard',
-    title: error 'must provide title for Thanos Compact dashboard',
+    jobPrefix: error 'must provide job prefix for Thanos Compactor dashboard',
+    selector: error 'must provide selector for Thanos Compactor dashboard',
+    title: error 'must provide title for Thanos Compactor dashboard',
   },
   grafanaDashboards+:: {
     'compactor.json':
@@ -88,7 +88,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
             'Shows rate of execution for all meta files from blocks in the bucket into the memory.'
           ) +
           g.queryPanel(
-            'sum(rate(thanos_compact_sync_meta_total{namespace="$namespace",job=~"$job"}[$interval])) by (job)',
+            'sum(rate(thanos_blocks_meta_syncs_total{namespace="$namespace",job=~"$job"}[$interval])) by (job)',
             'sync {{job}}'
           ) +
           g.stack
@@ -96,13 +96,13 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         .addPanel(
           g.panel('Errors', 'Shows ratio of errors compared to the total number of executed meta file sync.') +
           g.qpsErrTotalPanel(
-            'thanos_compact_sync_meta_failures_total{namespace="$namespace",job=~"$job"}',
-            'thanos_compact_sync_meta_total{namespace="$namespace",job=~"$job"}',
+            'thanos_blocks_meta_sync_failures_total{namespace="$namespace",job=~"$job"}',
+            'thanos_blocks_meta_syncs_total{namespace="$namespace",job=~"$job"}',
           )
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to execute meta file sync, in quantiles.') +
-          g.latencyPanel('thanos_compact_sync_meta_duration_seconds', 'namespace="$namespace",job=~"$job"')
+          g.latencyPanel('thanos_blocks_meta_sync_duration_seconds', 'namespace="$namespace",job=~"$job"')
         )
       )
       .addRow(
@@ -135,7 +135,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
       g.template('pod', 'kube_pod_info', 'namespace="$namespace",created_by_name=~"%(jobPrefix)s.*"' % thanos.compactor, true, '.*'),
 
     __overviewRows__+:: [
-      g.row('Compact')
+      g.row('Compactor')
       .addPanel(
         g.panel(
           'Compaction Rate',

@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package verifier
 
 import (
@@ -25,15 +28,15 @@ const IndexIssueID = "index_issue"
 // If the replacement was created successfully it is uploaded to the bucket and the input
 // block is deleted.
 // NOTE: This also verifies all indexes against chunks mismatches and duplicates.
-func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool) error {
+func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, backupBkt objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool, fetcher *block.MetaFetcher) error {
 	level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", IndexIssueID)
 
-	err := bkt.Iter(ctx, "", func(name string) error {
-		id, ok := block.IsBlockDir(name)
-		if !ok {
-			return nil
-		}
+	metas, _, err := fetcher.Fetch(ctx)
+	if err != nil {
+		return err
+	}
 
+	for id, meta := range metas {
 		if idMatcher != nil && !idMatcher(id) {
 			return nil
 		}
@@ -50,11 +53,6 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 
 		if err = objstore.DownloadFile(ctx, logger, bkt, path.Join(id.String(), block.IndexFilename), filepath.Join(tmpdir, block.IndexFilename)); err != nil {
 			return errors.Wrapf(err, "download index file %s", path.Join(id.String(), block.IndexFilename))
-		}
-
-		meta, err := block.DownloadMeta(ctx, logger, bkt, id)
-		if err != nil {
-			return errors.Wrapf(err, "download meta file %s", id)
 		}
 
 		stats, err := block.GatherIndexIssueStats(logger, filepath.Join(tmpdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
@@ -122,9 +120,6 @@ func IndexIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bac
 		}
 		level.Info(logger).Log("msg", "all good, continuing", "id", id, "issue", IndexIssueID)
 		return nil
-	})
-	if err != nil {
-		return errors.Wrapf(err, "verify iter, issue %s", IndexIssueID)
 	}
 
 	level.Info(logger).Log("msg", "verified issue", "with-repair", repair, "issue", IndexIssueID)

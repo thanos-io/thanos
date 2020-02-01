@@ -30,8 +30,9 @@ echo "generating code"
 for dir in ${DIRS}; do
 	pushd ${dir}
 		${PROTOC_BIN} --gogofast_out=plugins=grpc:. -I=. \
-            -I="${GOGOPROTO_PATH}" \
-            *.proto
+			-I="${GOGOPROTO_PATH}" \
+			-I="../../../vendor" \
+			*.proto
 
 		sed -i.bak -E 's/import _ \"gogoproto\"//g' *.pb.go
 		sed -i.bak -E 's/import _ \"google\/protobuf\"//g' *.pb.go

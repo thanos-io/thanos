@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package receive
 
 import (
@@ -7,9 +10,8 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/prometheus/prometheus/prompb"
-
 	"github.com/cespare/xxhash"
+	"github.com/prometheus/prometheus/prompb"
 )
 
 const sep = '\xff'
@@ -120,12 +122,9 @@ func (m *multiHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (st
 		// considered a default hashring and matches everything.
 		if t == nil {
 			found = true
-		}
-		if _, ok := t[tenant]; ok {
+		} else if _, ok := t[tenant]; ok {
 			found = true
 		}
-		// If the hashring has no tenants, then it is
-		// considered a default hashring and matches everything.
 		if found {
 			m.mu.Lock()
 			m.cache[tenant] = m.hashrings[i]

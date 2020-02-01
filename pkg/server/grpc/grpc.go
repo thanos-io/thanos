@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package grpc
 
 import (
@@ -15,11 +18,13 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	grpc_health "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 )
 
@@ -35,7 +40,7 @@ type Server struct {
 }
 
 // New creates a new Server.
-func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, storeSrv storepb.StoreServer, opts ...Option) *Server {
+func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, probe *prober.GRPCProbe, storeSrv storepb.StoreServer, opts ...Option) *Server {
 	options := options{}
 	for _, o := range opts {
 		o.apply(&options)
@@ -78,6 +83,8 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 
 	storepb.RegisterStoreServer(s, storeSrv)
 	met.InitializeMetrics(s)
+
+	grpc_health.RegisterHealthServer(s, probe.HealthServer())
 
 	return &Server{
 		logger: log.With(logger, "service", "gRPC/server", "component", comp.String()),
@@ -126,4 +133,17 @@ func (s *Server) Shutdown(err error) {
 	case <-stopped:
 		cancel()
 	}
+}
+
+// ReadWriteStoreServer is a StoreServer and a WriteableStoreServer.
+type ReadWriteStoreServer interface {
+	storepb.StoreServer
+	storepb.WriteableStoreServer
+}
+
+// NewReadWrite creates a new server that can be written to.
+func NewReadWrite(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, comp component.Component, probe *prober.GRPCProbe, storeSrv ReadWriteStoreServer, opts ...Option) *Server {
+	s := New(logger, reg, tracer, comp, probe, storeSrv, opts...)
+	storepb.RegisterWriteableStoreServer(s.srv, storeSrv)
+	return s
 }

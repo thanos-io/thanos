@@ -71,7 +71,7 @@ ME                ?= $(shell whoami)
 PROM_VERSIONS           ?= v2.4.3 v2.5.0 v2.8.1 v2.9.2 v2.13.0
 PROMS ?= $(GOBIN)/prometheus-v2.4.3 $(GOBIN)/prometheus-v2.5.0 $(GOBIN)/prometheus-v2.8.1 $(GOBIN)/prometheus-v2.9.2 $(GOBIN)/prometheus-v2.13.0
 
-ALERTMANAGER_VERSION    ?= v0.15.2
+ALERTMANAGER_VERSION    ?= v0.20.0
 ALERTMANAGER            ?= $(GOBIN)/alertmanager-$(ALERTMANAGER_VERSION)
 
 MINIO_SERVER_VERSION    ?= RELEASE.2018-10-06T00-15-16Z
@@ -298,7 +298,10 @@ lint: check-git $(GOLANGCILINT) $(MISSPELL)
 	@find . -type f | grep -v vendor/ | grep -vE '\./\..*' | xargs $(MISSPELL) -error
 	@echo ">> detecting white noise"
 	@find . -type f \( -name "*.md" -o -name "*.go" \) | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
-	$(call require_clean_work_tree,"lint")
+	$(call require_clean_work_tree,"detected white noise")
+	@echo ">> ensuring Copyright headers"
+	@go run ./scripts/copyright
+	$(call require_clean_work_tree,"detected files without copyright")
 
 .PHONY: web-serve
 web-serve: web-pre-process $(HUGO)
@@ -313,7 +316,7 @@ JSONNET_CONTAINER_CMD:=docker run --rm \
 		-w "/go/src/github.com/thanos-io/thanos" \
 		-e USER=deadbeef \
 		-e GO111MODULE=on \
-		quay.io/coreos/jsonnet-ci
+		quay.io/coreos/jsonnet-ci:release-0.35
 
 .PHONY: examples-in-container
 examples-in-container:
@@ -359,6 +362,9 @@ JSONNET_FMT := jsonnetfmt -n 2 --max-blank-lines 2 --string-style s --comment-st
 
 .PHONY: jsonnet-format
 jsonnet-format:
+	@which jsonnetfmt 2>/dev/null || ( \
+		echo "Cannot find jsonnetfmt command, please install from https://github.com/google/jsonnet/releases. If your C++ does not support GLIBCXX_3.4.20, please use xxx-in-container target like jsonnet-format-in-container." && exit 1
+	)
 	find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
 		xargs -n 1 -- $(JSONNET_FMT) -i
 

@@ -1,15 +1,20 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package alert
 
 import (
 	"context"
-	"io"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"sync"
 	"testing"
-
-	"github.com/prometheus/prometheus/pkg/labels"
+	"time"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/labels"
+
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
 )
@@ -48,31 +53,34 @@ func assertSameHosts(t *testing.T, expected []*url.URL, found []*url.URL) {
 }
 
 type fakeClient struct {
-	urls  []*url.URL
-	postf func(u *url.URL) error
-	mtx   sync.Mutex
-	seen  []*url.URL
+	urls []*url.URL
+	dof  func(u *url.URL) (*http.Response, error)
+	mtx  sync.Mutex
+	seen []*url.URL
 }
 
 func (f *fakeClient) Endpoints() []*url.URL {
 	return f.urls
 }
 
-func (f *fakeClient) Do(ctx context.Context, u *url.URL, r io.Reader) error {
+func (f *fakeClient) Do(req *http.Request) (*http.Response, error) {
 	f.mtx.Lock()
 	defer f.mtx.Unlock()
+	u := req.URL
 	f.seen = append(f.seen, u)
-	if f.postf == nil {
-		return nil
+	if f.dof == nil {
+		rec := httptest.NewRecorder()
+		rec.WriteHeader(http.StatusOK)
+		return rec.Result(), nil
 	}
-	return f.postf(u)
+	return f.dof(u)
 }
 
 func TestSenderSendsOk(t *testing.T) {
 	poster := &fakeClient{
 		urls: []*url.URL{{Host: "am1:9090"}, {Host: "am2:9090"}},
 	}
-	s := NewSender(nil, nil, []AlertmanagerClient{poster})
+	s := NewSender(nil, nil, []*Alertmanager{NewAlertmanager(nil, poster, time.Minute, APIv1)})
 
 	s.Send(context.Background(), []*Alert{{}, {}})
 
@@ -89,14 +97,17 @@ func TestSenderSendsOk(t *testing.T) {
 func TestSenderSendsOneFails(t *testing.T) {
 	poster := &fakeClient{
 		urls: []*url.URL{{Host: "am1:9090"}, {Host: "am2:9090"}},
-		postf: func(u *url.URL) error {
+		dof: func(u *url.URL) (*http.Response, error) {
+			rec := httptest.NewRecorder()
 			if u.Host == "am1:9090" {
-				return errors.New("no such host")
+				rec.WriteHeader(http.StatusBadRequest)
+			} else {
+				rec.WriteHeader(http.StatusOK)
 			}
-			return nil
+			return rec.Result(), nil
 		},
 	}
-	s := NewSender(nil, nil, []AlertmanagerClient{poster})
+	s := NewSender(nil, nil, []*Alertmanager{NewAlertmanager(nil, poster, time.Minute, APIv1)})
 
 	s.Send(context.Background(), []*Alert{{}, {}})
 
@@ -113,11 +124,11 @@ func TestSenderSendsOneFails(t *testing.T) {
 func TestSenderSendsAllFail(t *testing.T) {
 	poster := &fakeClient{
 		urls: []*url.URL{{Host: "am1:9090"}, {Host: "am2:9090"}},
-		postf: func(u *url.URL) error {
-			return errors.New("no such host")
+		dof: func(u *url.URL) (*http.Response, error) {
+			return nil, errors.New("no such host")
 		},
 	}
-	s := NewSender(nil, nil, []AlertmanagerClient{poster})
+	s := NewSender(nil, nil, []*Alertmanager{NewAlertmanager(nil, poster, time.Minute, APIv1)})
 
 	s.Send(context.Background(), []*Alert{{}, {}})
 

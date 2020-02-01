@@ -40,6 +40,23 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         )
       )
       .addRow(
+        g.row('Alert Queue')
+        .addPanel(
+          g.panel('Push Rate', 'Shows rate of queued alerts.') +
+          g.queryPanel(
+            'sum(rate(thanos_alert_queue_alerts_dropped_total{namespace="$namespace",job=~"$job"}[$interval])) by (job, pod)',
+            '{{job}} {{pod}}'
+          )
+        )
+        .addPanel(
+          g.panel('Drop Ratio', 'Shows ratio of dropped alerts compared to the total number of queued alerts.') +
+          g.qpsErrTotalPanel(
+            'thanos_alert_queue_alerts_dropped_total{namespace="$namespace",job=~"$job"}',
+            'thanos_alert_queue_alerts_pushed_total{namespace="$namespace",job=~"$job"}',
+          )
+        )
+      )
+      .addRow(
         g.row('gRPC (Unary)')
         .addPanel(
           g.panel('Rate', 'Shows rate of handled Unary gRPC requests.') +

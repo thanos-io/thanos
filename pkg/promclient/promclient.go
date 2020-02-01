@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 // Package promclient offers helper client function for various API endpoints.
 
 package promclient
@@ -281,12 +284,42 @@ func (p *QueryOptions) AddTo(values url.Values) error {
 	return nil
 }
 
-// QueryInstant performs instant query and returns results in model.Vector type.
-func QueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query string, t time.Time, opts QueryOptions) (model.Vector, []string, error) {
+// HTTPClient sends an HTTP request and returns the response.
+type HTTPClient interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
+// Client represents a Prometheus API client.
+type Client struct {
+	httpClient HTTPClient
+	logger     log.Logger
+}
+
+// NewClient returns a new Prometheus API client.
+func NewClient(logger log.Logger, c HTTPClient) *Client {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
+	return &Client{
+		httpClient: c,
+		logger:     logger,
+	}
+}
 
+func defaultClient(logger log.Logger) *Client {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
+	return NewClient(
+		logger,
+		&http.Client{
+			Transport: tracing.HTTPTripperware(logger, http.DefaultTransport),
+		},
+	)
+}
+
+// QueryInstant performs an instant query and returns results in model.Vector type.
+func (c *Client) QueryInstant(ctx context.Context, base *url.URL, query string, t time.Time, opts QueryOptions) (model.Vector, []string, error) {
 	params, err := url.ParseQuery(base.RawQuery)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "parse raw query %s", base.RawQuery)
@@ -301,7 +334,7 @@ func QueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query s
 	u.Path = path.Join(u.Path, "/api/v1/query")
 	u.RawQuery = params.Encode()
 
-	level.Debug(logger).Log("msg", "querying instant", "url", u.String())
+	level.Debug(c.logger).Log("msg", "querying instant", "url", u.String())
 
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
@@ -310,14 +343,11 @@ func QueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query s
 
 	req = req.WithContext(ctx)
 
-	client := &http.Client{
-		Transport: tracing.HTTPTripperware(logger, http.DefaultTransport),
-	}
-	resp, err := client.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "perform GET request against %s", u.String())
 	}
-	defer runutil.ExhaustCloseWithLogOnErr(logger, resp.Body, "query body")
+	defer runutil.ExhaustCloseWithLogOnErr(c.logger, resp.Body, "query body")
 
 	// Decode only ResultType and load Result only as RawJson since we don't know
 	// structure of the Result yet.
@@ -369,9 +399,14 @@ func QueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query s
 	return vectorResult, m.Warnings, nil
 }
 
+// QueryInstant performs an instant query using a default HTTP client and returns results in model.Vector type.
+func QueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query string, t time.Time, opts QueryOptions) (model.Vector, []string, error) {
+	return defaultClient(logger).QueryInstant(ctx, base, query, t, opts)
+}
+
 // PromqlQueryInstant performs instant query and returns results in promql.Vector type that is compatible with promql package.
-func PromqlQueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query string, t time.Time, opts QueryOptions) (promql.Vector, []string, error) {
-	vectorResult, warnings, err := QueryInstant(ctx, logger, base, query, t, opts)
+func (c *Client) PromqlQueryInstant(ctx context.Context, base *url.URL, query string, t time.Time, opts QueryOptions) (promql.Vector, []string, error) {
+	vectorResult, warnings, err := c.QueryInstant(ctx, base, query, t, opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -396,6 +431,11 @@ func PromqlQueryInstant(ctx context.Context, logger log.Logger, base *url.URL, q
 	}
 
 	return vec, warnings, nil
+}
+
+// PromqlQueryInstant performs instant query and returns results in promql.Vector type that is compatible with promql package.
+func PromqlQueryInstant(ctx context.Context, logger log.Logger, base *url.URL, query string, t time.Time, opts QueryOptions) (promql.Vector, []string, error) {
+	return defaultClient(logger).PromqlQueryInstant(ctx, base, query, t, opts)
 }
 
 // Scalar response consists of array with mixed types so it needs to be

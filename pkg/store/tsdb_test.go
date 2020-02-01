@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package store
 
 import (
@@ -11,6 +14,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
 func TestTSDBStore_Info(t *testing.T) {
@@ -19,7 +23,7 @@ func TestTSDBStore_Info(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, err := testutil.NewTSDB()
+	db, err := e2eutil.NewTSDB()
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 
@@ -34,6 +38,131 @@ func TestTSDBStore_Info(t *testing.T) {
 	testutil.Equals(t, int64(math.MaxInt64), resp.MaxTime)
 }
 
+func TestTSDBStore_Series(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	db, err := e2eutil.NewTSDB()
+	defer func() { testutil.Ok(t, db.Close()) }()
+	testutil.Ok(t, err)
+
+	tsdbStore := NewTSDBStore(nil, nil, db, component.Rule, labels.FromStrings("region", "eu-west"))
+
+	appender := db.Appender()
+
+	for i := 1; i <= 3; i++ {
+		_, err = appender.Add(labels.FromStrings("a", "1"), int64(i), float64(i))
+		testutil.Ok(t, err)
+	}
+	err = appender.Commit()
+	testutil.Ok(t, err)
+
+	for _, tc := range []struct {
+		title          string
+		req            *storepb.SeriesRequest
+		expectedSeries []rawSeries
+		expectedError  string
+	}{
+		{
+			title: "total match series",
+			req: &storepb.SeriesRequest{
+				MinTime: 1,
+				MaxTime: 3,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+				},
+			},
+			expectedSeries: []rawSeries{
+				{
+					lset:   []storepb.Label{{Name: "a", Value: "1"}, {Name: "region", Value: "eu-west"}},
+					chunks: [][]sample{{{1, 1}, {2, 2}, {3, 3}}},
+				},
+			},
+		},
+		{
+			title: "partially match time range series",
+			req: &storepb.SeriesRequest{
+				MinTime: 1,
+				MaxTime: 2,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+				},
+			},
+			expectedSeries: []rawSeries{
+				{
+					lset:   []storepb.Label{{Name: "a", Value: "1"}, {Name: "region", Value: "eu-west"}},
+					chunks: [][]sample{{{1, 1}, {2, 2}}},
+				},
+			},
+		},
+		{
+			title: "dont't match time range series",
+			req: &storepb.SeriesRequest{
+				MinTime: 4,
+				MaxTime: 6,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+				},
+			},
+			expectedSeries: []rawSeries{},
+		},
+		{
+			title: "only match external label",
+			req: &storepb.SeriesRequest{
+				MinTime: 1,
+				MaxTime: 3,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"},
+				},
+			},
+			expectedError: "rpc error: code = InvalidArgument desc = no matchers specified (excluding external labels)",
+		},
+		{
+			title: "dont't match labels",
+			req: &storepb.SeriesRequest{
+				MinTime: 1,
+				MaxTime: 3,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "1"},
+				},
+			},
+			expectedSeries: []rawSeries{},
+		},
+		{
+			title: "no chunk",
+			req: &storepb.SeriesRequest{
+				MinTime: 1,
+				MaxTime: 3,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+				},
+				SkipChunks: true,
+			},
+			expectedSeries: []rawSeries{
+				{
+					lset: []storepb.Label{{Name: "a", Value: "1"}, {Name: "region", Value: "eu-west"}},
+				},
+			},
+		},
+	} {
+		if ok := t.Run(tc.title, func(t *testing.T) {
+			srv := newStoreSeriesServer(ctx)
+			err := tsdbStore.Series(tc.req, srv)
+			if len(tc.expectedError) > 0 {
+				testutil.NotOk(t, err)
+				testutil.Equals(t, tc.expectedError, err.Error())
+			} else {
+				testutil.Ok(t, err)
+				seriesEquals(t, tc.expectedSeries, srv.SeriesSet)
+			}
+		}); !ok {
+			return
+		}
+	}
+}
+
 func TestTSDBStore_LabelNames(t *testing.T) {
 	var err error
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
@@ -41,7 +170,7 @@ func TestTSDBStore_LabelNames(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, err := testutil.NewTSDB()
+	db, err := e2eutil.NewTSDB()
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 
@@ -96,7 +225,7 @@ func TestTSDBStore_LabelValues(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	db, err := testutil.NewTSDB()
+	db, err := e2eutil.NewTSDB()
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 
@@ -151,7 +280,7 @@ func TestTSDBStore_LabelValues(t *testing.T) {
 func TestTSDBStore_Series_SplitSamplesIntoChunksWithMaxSizeOfUint16_e2e(t *testing.T) {
 	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
-	db, err := testutil.NewTSDB()
+	db, err := e2eutil.NewTSDB()
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 

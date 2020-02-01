@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package promclient
 
 import (
@@ -17,10 +20,11 @@ import (
 	"github.com/prometheus/prometheus/pkg/timestamp"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
 func TestIsWALFileAccessible_e2e(t *testing.T) {
-	testutil.ForeachPrometheus(t, func(t testing.TB, p *testutil.Prometheus) {
+	e2eutil.ForeachPrometheus(t, func(t testing.TB, p *e2eutil.Prometheus) {
 		testutil.Ok(t, p.Start())
 
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
@@ -33,7 +37,7 @@ func TestIsWALFileAccessible_e2e(t *testing.T) {
 }
 
 func TestExternalLabels_e2e(t *testing.T) {
-	testutil.ForeachPrometheus(t, func(t testing.TB, p *testutil.Prometheus) {
+	e2eutil.ForeachPrometheus(t, func(t testing.TB, p *e2eutil.Prometheus) {
 		testutil.Ok(t, p.SetConfig(`
 global:
   external_labels:
@@ -56,7 +60,7 @@ global:
 }
 
 func TestConfiguredFlags_e2e(t *testing.T) {
-	testutil.ForeachPrometheus(t, func(t testing.TB, p *testutil.Prometheus) {
+	e2eutil.ForeachPrometheus(t, func(t testing.TB, p *e2eutil.Prometheus) {
 		testutil.Ok(t, p.Start())
 
 		u, err := url.Parse(fmt.Sprintf("http://%s", p.Addr()))
@@ -75,12 +79,12 @@ func TestConfiguredFlags_e2e(t *testing.T) {
 }
 
 func TestSnapshot_e2e(t *testing.T) {
-	testutil.ForeachPrometheus(t, func(t testing.TB, p *testutil.Prometheus) {
+	e2eutil.ForeachPrometheus(t, func(t testing.TB, p *e2eutil.Prometheus) {
 		now := time.Now()
 
 		ctx := context.Background()
 		// Create artificial block.
-		id, err := testutil.CreateBlockWithTombstone(
+		id, err := e2eutil.CreateBlockWithTombstone(
 			ctx,
 			p.Dir(),
 			[]labels.Labels{labels.FromStrings("a", "b")},

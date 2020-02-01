@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package main
 
 import (
@@ -13,6 +16,8 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/alert"
+	"github.com/thanos-io/thanos/pkg/cacheutil"
+	http_util "github.com/thanos-io/thanos/pkg/http"
 	"github.com/thanos-io/thanos/pkg/objstore/azure"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/objstore/cos"
@@ -21,6 +26,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore/oss"
 	"github.com/thanos-io/thanos/pkg/objstore/s3"
 	"github.com/thanos-io/thanos/pkg/objstore/swift"
+	"github.com/thanos-io/thanos/pkg/query"
+	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	trclient "github.com/thanos-io/thanos/pkg/tracing/client"
 	"github.com/thanos-io/thanos/pkg/tracing/elasticapm"
 	"github.com/thanos-io/thanos/pkg/tracing/jaeger"
@@ -46,6 +53,10 @@ var (
 		trclient.ELASTIC_APM: elasticapm.Config{},
 		trclient.LIGHTSTEP:   lightstep.Config{},
 	}
+	indexCacheConfigs = map[storecache.IndexCacheProvider]interface{}{
+		storecache.INMEMORY:  storecache.InMemoryIndexCacheConfig{},
+		storecache.MEMCACHED: cacheutil.MemcachedClientConfig{},
+	}
 )
 
 func main() {
@@ -60,23 +71,37 @@ func main() {
 	}
 
 	for typ, config := range bucketConfigs {
-		if err := generate(client.BucketConfig{Type: typ, Config: config}, "bucket_"+strings.ToLower(string(typ)), *outputDir); err != nil {
+		if err := generate(client.BucketConfig{Type: typ, Config: config}, generateName("bucket_", string(typ)), *outputDir); err != nil {
 			level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
 			os.Exit(1)
 		}
 	}
 
 	for typ, config := range tracingConfigs {
-		if err := generate(trclient.TracingConfig{Type: typ, Config: config}, "tracing_"+strings.ToLower(string(typ)), *outputDir); err != nil {
+		if err := generate(trclient.TracingConfig{Type: typ, Config: config}, generateName("tracing_", string(typ)), *outputDir); err != nil {
+			level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
+			os.Exit(1)
+		}
+	}
+
+	for typ, config := range indexCacheConfigs {
+		if err := generate(storecache.IndexCacheConfig{Type: typ, Config: config}, generateName("index_cache_", string(typ)), *outputDir); err != nil {
 			level.Error(logger).Log("msg", "failed to generate", "type", typ, "err", err)
 			os.Exit(1)
 		}
 	}
 
 	alertmgrCfg := alert.DefaultAlertmanagerConfig()
-	alertmgrCfg.FileSDConfigs = []alert.FileSDConfig{alert.FileSDConfig{}}
+	alertmgrCfg.EndpointsConfig.FileSDConfigs = []http_util.FileSDConfig{http_util.FileSDConfig{}}
 	if err := generate(alert.AlertingConfig{Alertmanagers: []alert.AlertmanagerConfig{alertmgrCfg}}, "rule_alerting", *outputDir); err != nil {
 		level.Error(logger).Log("msg", "failed to generate", "type", "rule_alerting", "err", err)
+		os.Exit(1)
+	}
+
+	queryCfg := query.DefaultConfig()
+	queryCfg.EndpointsConfig.FileSDConfigs = []http_util.FileSDConfig{http_util.FileSDConfig{}}
+	if err := generate([]query.Config{queryCfg}, "rule_query", *outputDir); err != nil {
+		level.Error(logger).Log("msg", "failed to generate", "type", "rule_query", "err", err)
 		os.Exit(1)
 	}
 	logger.Log("msg", "success")
@@ -94,6 +119,10 @@ func generate(obj interface{}, typ string, outputDir string) error {
 	}
 
 	return ioutil.WriteFile(filepath.Join(outputDir, fmt.Sprintf("config_%s.txt", typ)), out, os.ModePerm)
+}
+
+func generateName(prefix, typ string) string {
+	return prefix + strings.ReplaceAll(strings.ToLower(string(typ)), "-", "_")
 }
 
 func checkForOmitEmptyTagOption(obj interface{}) error {

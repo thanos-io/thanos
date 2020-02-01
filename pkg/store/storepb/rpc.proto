@@ -1,8 +1,12 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 syntax = "proto3";
 package thanos;
 
 import "types.proto";
 import "gogoproto/gogo.proto";
+import "github.com/prometheus/prometheus/prompb/types.proto";
 
 option go_package = "storepb";
 
@@ -37,6 +41,21 @@ service Store {
 
   /// LabelValues returns all label values for given label name.
   rpc LabelValues(LabelValuesRequest) returns (LabelValuesResponse);
+}
+
+/// WriteableStore reprents API against instance that stores XOR encoded values with label set metadata (e.g Prometheus metrics).
+service WriteableStore {
+  // WriteRequest allows you to write metrics to this store via remote write
+  rpc RemoteWrite(WriteRequest) returns (WriteResponse) {}
+}
+
+message WriteResponse {
+}
+
+message WriteRequest {
+  repeated prometheus.TimeSeries timeseries = 1 [(gogoproto.nullable) = false];
+  string tenant = 2;
+  int64 replica = 3;
 }
 
 message InfoRequest {
@@ -92,6 +111,9 @@ message SeriesRequest {
 
   // TODO(bwplotka): Move Thanos components to use strategy instead. Including QueryAPI.
   PartialResponseStrategy partial_response_strategy = 7;
+
+  // skip_chunks controls whether sending chunks or not in series responses.
+  bool skip_chunks = 8;
 }
 
 enum Aggr {
@@ -105,11 +127,11 @@ enum Aggr {
 
 message SeriesResponse {
   oneof result {
-      Series series = 1;
+    Series series = 1;
 
-      /// warning is considered an information piece in place of series for warning purposes.
-      /// It is used to warn query customer about suspicious cases or partial response (if enabled).
-      string warning = 2;
+    /// warning is considered an information piece in place of series for warning purposes.
+    /// It is used to warn query customer about suspicious cases or partial response (if enabled).
+    string warning = 2;
   }
 }
 

@@ -1,14 +1,16 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package inmem
 
 import (
+	"bytes"
 	"context"
 	"io"
-	"sort"
-	"sync"
-
-	"bytes"
 	"io/ioutil"
+	"sort"
 	"strings"
+	"sync"
 
 	"github.com/pkg/errors"
 	"github.com/thanos-io/thanos/pkg/objstore"
@@ -121,6 +123,10 @@ func (b *Bucket) GetRange(_ context.Context, name string, off, length int64) (io
 
 	if length == -1 {
 		return ioutil.NopCloser(bytes.NewReader(file[off:])), nil
+	}
+
+	if length <= 0 {
+		return ioutil.NopCloser(bytes.NewReader(nil)), errors.New("length cannot be smaller or equal 0")
 	}
 
 	if int64(len(file)) <= off+length {

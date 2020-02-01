@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package shipper
 
 import (
@@ -13,6 +16,7 @@ import (
 	"time"
 
 	"github.com/thanos-io/thanos/pkg/objstore/inmem"
+	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 
 	"github.com/go-kit/kit/log"
 	"github.com/oklog/ulid"
@@ -27,7 +31,7 @@ import (
 )
 
 func TestShipper_SyncBlocks_e2e(t *testing.T) {
-	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
+	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		dir, err := ioutil.TempDir("", "shipper-e2e-test")
 		testutil.Ok(t, err)
 		defer func() {
@@ -169,7 +173,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 }
 
 func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
-	testutil.ForeachPrometheus(t, func(t testing.TB, p *testutil.Prometheus) {
+	e2eutil.ForeachPrometheus(t, func(t testing.TB, p *e2eutil.Prometheus) {
 		dir, err := ioutil.TempDir("", "shipper-e2e-test")
 		testutil.Ok(t, err)
 		defer func() {

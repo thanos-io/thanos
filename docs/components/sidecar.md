@@ -43,7 +43,7 @@ Thanos can watch changes in Prometheus configuration and refresh Prometheus conf
 
 You can configure watching for changes in directory via `--reloader.rule-dir=DIR_NAME` flag.
 
-Thanos sidecar can watch `--reloader.config-file=CONFIG_FILE` configuration file, evaluate environment variables found in there, and produce generated config in `--reloader.config-envsubst-file=OUT_CONFIG_FILE` file.
+Thanos sidecar can watch `--reloader.config-file=CONFIG_FILE` configuration file, replace environment variables found in there in `$(VARIABLE)` format, and produce generated config in `--reloader.config-envsubst-file=OUT_CONFIG_FILE` file.
 
 
 ## Example basic deployment
@@ -126,6 +126,11 @@ Flags:
       --prometheus.ready_timeout=10m
                                  Maximum time to wait for the Prometheus
                                  instance to start up
+      --receive.connection-pool-size=RECEIVE.CONNECTION-POOL-SIZE
+                                 Controls the http MaxIdleConns. Default is 0,
+                                 which is unlimited
+      --receive.connection-pool-size-per-host=100
+                                 Controls the http MaxIdleConnsPerHost
       --tsdb.path="./data"       Data directory of TSDB.
       --reloader.config-file=""  Config file watched by the reloader.
       --reloader.config-envsubst-file=""

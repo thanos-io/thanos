@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package elasticapm
 
 import (
@@ -10,9 +13,10 @@ import (
 )
 
 type Config struct {
-	ServiceName        string `yaml:"service_name"`
-	ServiceVersion     string `yaml:"service_version"`
-	ServiceEnvironment string `yaml:"service_environment"`
+	ServiceName        string  `yaml:"service_name"`
+	ServiceVersion     string  `yaml:"service_version"`
+	ServiceEnvironment string  `yaml:"service_environment"`
+	SampleRate         float64 `yaml:"sample_rate"`
 }
 
 func NewTracer(conf []byte) (opentracing.Tracer, io.Closer, error) {
@@ -28,6 +32,7 @@ func NewTracer(conf []byte) (opentracing.Tracer, io.Closer, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	tracer.SetSampler(apm.NewRatioSampler(config.SampleRate))
 	return apmot.New(apmot.WithTracer(tracer)), tracerCloser{tracer}, nil
 }
 

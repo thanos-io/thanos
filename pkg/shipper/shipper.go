@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 // Package shipper detects directories on the local file system and uploads
 // them to a block storage.
 package shipper
@@ -39,7 +42,7 @@ func newMetrics(r prometheus.Registerer, uploadCompacted bool) *metrics {
 
 	m.dirSyncs = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "thanos_shipper_dir_syncs_total",
-		Help: "Total dir sync attempts",
+		Help: "Total number of dir syncs",
 	})
 	m.dirSyncFailures = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "thanos_shipper_dir_sync_failures_total",
@@ -47,11 +50,11 @@ func newMetrics(r prometheus.Registerer, uploadCompacted bool) *metrics {
 	})
 	m.uploads = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "thanos_shipper_uploads_total",
-		Help: "Total object upload attempts",
+		Help: "Total number of uploaded blocks",
 	})
 	m.uploadFailures = prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "thanos_shipper_upload_failures_total",
-		Help: "Total number of failed object uploads",
+		Help: "Total number of block upload failures",
 	})
 	m.uploadedCompacted = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "thanos_shipper_upload_compacted_done",

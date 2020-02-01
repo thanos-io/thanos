@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 /*
 This package is for compatibility testing purposes. It is a code from v0.7.0 Querier.
 */

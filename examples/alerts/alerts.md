@@ -8,24 +8,24 @@ Here are some example alerts configured for Kubernetes environment.
 ```yaml
 name: thanos-compactor.rules
 rules:
-- alert: ThanosCompactorMultipleCompactsAreRunning
+- alert: ThanosCompactorMultipleCompactorsAreRunning
   annotations:
-    message: You should never run more than one Thanos Compact at once. You have {{
-      $value }}
+    message: You should never run more than one Thanos Compactor at once. You have
+      {{ $value }}
   expr: sum(up{job=~"thanos-compactor.*"}) > 1
   for: 5m
   labels:
     severity: warning
 - alert: ThanosCompactorHalted
   annotations:
-    message: Thanos Compact {{$labels.job}} has failed to run and now is halted.
+    message: Thanos Compactor {{$labels.job}} has failed to run and now is halted.
   expr: thanos_compactor_halted{job=~"thanos-compactor.*"} == 1
   for: 5m
   labels:
     severity: warning
 - alert: ThanosCompactorHighCompactionFailures
   annotations:
-    message: Thanos Compact {{$labels.job}} is failing to execute {{ $value | humanize
+    message: Thanos Compactor {{$labels.job}} is failing to execute {{ $value | humanize
       }}% of compactions.
   expr: |
     (
@@ -39,7 +39,7 @@ rules:
     severity: warning
 - alert: ThanosCompactorBucketHighOperationFailures
   annotations:
-    message: Thanos Compact {{$labels.job}} Bucket is failing to execute {{ $value
+    message: Thanos Compactor {{$labels.job}} Bucket is failing to execute {{ $value
       | humanize }}% of operations.
   expr: |
     (
@@ -53,7 +53,7 @@ rules:
     severity: warning
 - alert: ThanosCompactorHasNotRun
   annotations:
-    message: Thanos Compact {{$labels.job}} has not uploaded anything for 24 hours.
+    message: Thanos Compactor {{$labels.job}} has not uploaded anything for 24 hours.
   expr: (time() - max(thanos_objstore_bucket_last_successful_upload_time{job=~"thanos-compactor.*"}))
     / 60 / 60 > 24
   labels:
@@ -64,39 +64,112 @@ rules:
 
 For Thanos ruler we run some alerts in local Prometheus, to make sure that Thanos Rule is working:
 
-[//]: # "TODO(kakkoyun): Generate rule rules using thanos-mixin."
-<!-- [embedmd]:# (../tmp/thanos-ruler.rules.yaml yaml) -->
+[embedmd]:# (../tmp/thanos-ruler.rules.yaml yaml)
 ```yaml
-- alert: ThanosRuleIsDown
-  expr: up{app="thanos-ruler"} == 0 or absent(up{app="thanos-ruler"})
+name: thanos-ruler.rules
+rules:
+- alert: ThanosRulerQueueIsDroppingAlerts
+  annotations:
+    message: Thanos Ruler {{$labels.job}} {{$labels.pod}} is failing to queue alerts.
+  expr: |
+    sum by (job) (rate(thanos_alert_queue_alerts_dropped_total{job=~"thanos-ruler.*"}[5m])) > 0
   for: 5m
   labels:
-    team: TEAM
+    severity: critical
+- alert: ThanosRulerSenderIsFailingAlerts
   annotations:
-    summary: Thanos Rule is down
-    impact: Alerts are not working
-    action: 'check {{ $labels.kubernetes_pod_name }} pod in {{ $labels.kubernetes_namespace}} namespace'
-    dashboard: RULE_DASHBOARD
-- alert: ThanosRuleIsDroppingAlerts
-  expr: rate(thanos_alert_queue_alerts_dropped_total{app="thanos-ruler"}[5m]) > 0
+    message: Thanos Ruler {{$labels.job}} {{$labels.pod}} is failing to send alerts
+      to alertmanager.
+  expr: |
+    sum by (job) (rate(thanos_alert_sender_alerts_dropped_total{job=~"thanos-ruler.*"}[5m])) > 0
   for: 5m
   labels:
-    team: TEAM
+    severity: critical
+- alert: ThanosRulerHighRuleEvaluationFailures
   annotations:
-    summary: Thanos Rule is dropping alerts
-    impact: Alerts are not working
-    action: 'check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace'
-    dashboard: RULE_DASHBOARD
-- alert: ThanosRuleGrpcErrorRate
-  expr: rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable",app="thanos-ruler"}[5m]) > 0
+    message: Thanos Ruler {{$labels.job}} {{$labels.pod}} is failing to evaluate rules.
+  expr: |
+    (
+      sum by (job) (rate(prometheus_rule_evaluation_failures_total{job=~"thanos-ruler.*"}[5m]))
+    /
+      sum by (job) (rate(prometheus_rule_evaluations_total{job=~"thanos-ruler.*"}[5m]))
+    * 100 > 5
+    )
   for: 5m
   labels:
-    team: TEAM
+    severity: warning
+- alert: ThanosRulerHighRuleEvaluationWarnings
   annotations:
-    summary: Thanos Rule is returning Internal/Unavailable errors
-    impact: Recording Rules are not working
-    action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
-    dashboard: RULE_DASHBOARD
+    message: Thanos Ruler {{$labels.job}} {{$labels.pod}} has high number of evaluation
+      warnings.
+  expr: |
+    sum by (job) (rate(thanos_rule_evaluation_with_warnings_total{job=~"thanos-ruler.*"}[5m])) > 0
+  for: 15m
+  labels:
+    severity: warning
+- alert: ThanosRulerRuleEvaluationLatencyHigh
+  annotations:
+    message: Thanos Ruler {{$labels.job}}/{{$labels.pod}} has higher evaluation latency
+      than interval for {{$labels.rule_group}}.
+  expr: |
+    (
+      sum by (job, pod, rule_group) (prometheus_rule_group_last_duration_seconds{job=~"thanos-ruler.*"})
+    >
+      sum by (job, pod, rule_group) (prometheus_rule_group_interval_seconds{job=~"thanos-ruler.*"})
+    )
+  for: 5m
+  labels:
+    severity: warning
+- alert: ThanosRulerGrpcErrorRate
+  annotations:
+    message: Thanos Ruler {{$labels.job}} is failing to handle {{ $value | humanize
+      }}% of requests.
+  expr: |
+    (
+      sum by (job) (rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded", job=~"thanos-ruler.*"}[5m]))
+    /
+      sum by (job) (rate(grpc_server_started_total{job=~"thanos-ruler.*"}[5m]))
+    * 100 > 5
+    )
+  for: 5m
+  labels:
+    severity: warning
+- alert: ThanosRulerConfigReloadFailure
+  annotations:
+    message: Thanos Ruler {{$labels.job}} has not been able to reload its configuration.
+  expr: avg(thanos_rule_config_last_reload_successful{job=~"thanos-ruler.*"}) by (job)
+    != 1
+  for: 5m
+  labels:
+    severity: warning
+- alert: ThanosRulerQueryHighDNSFailures
+  annotations:
+    message: Thanos Ruler {{$labels.job}} have {{ $value | humanize }}% of failing
+      DNS queries for query endpoints.
+  expr: |
+    (
+      sum by (job) (rate(thanos_ruler_query_apis_dns_failures_total{job=~"thanos-ruler.*"}[5m]))
+    /
+      sum by (job) (rate(thanos_ruler_query_apis_dns_lookups_total{job=~"thanos-ruler.*"}[5m]))
+    * 100 > 1
+    )
+  for: 15m
+  labels:
+    severity: warning
+- alert: ThanosRulerAlertmanagerHighDNSFailures
+  annotations:
+    message: Thanos Ruler {{$labels.job}} have {{ $value | humanize }}% of failing
+      DNS queries for Alertmanager endpoints.
+  expr: |
+    (
+      sum by (job) (rate(thanos_ruler_alertmanagers_dns_failures_total{job=~"thanos-ruler.*"}[5m]))
+    /
+      sum by (job) (rate(thanos_ruler_alertmanagers_dns_lookups_total{job=~"thanos-ruler.*"}[5m]))
+    * 100 > 1
+    )
+  for: 15m
+  labels:
+    severity: warning
 ```
 
 ## Store Gateway
@@ -206,7 +279,7 @@ name: thanos-querier.rules
 rules:
 - alert: ThanosQuerierHttpRequestQueryErrorRateHigh
   annotations:
-    message: Thanos Query {{$labels.job}} is failing to handle {{ $value | humanize
+    message: Thanos Querier {{$labels.job}} is failing to handle {{ $value | humanize
       }}% of "query" requests.
   expr: |
     (
@@ -219,7 +292,7 @@ rules:
     severity: critical
 - alert: ThanosQuerierHttpRequestQueryRangeErrorRateHigh
   annotations:
-    message: Thanos Query {{$labels.job}} is failing to handle {{ $value | humanize
+    message: Thanos Querier {{$labels.job}} is failing to handle {{ $value | humanize
       }}% of "query_range" requests.
   expr: |
     (
@@ -232,7 +305,7 @@ rules:
     severity: critical
 - alert: ThanosQuerierGrpcServerErrorRate
   annotations:
-    message: Thanos Query {{$labels.job}} is failing to handle {{ $value | humanize
+    message: Thanos Querier {{$labels.job}} is failing to handle {{ $value | humanize
       }}% of requests.
   expr: |
     (
@@ -246,34 +319,33 @@ rules:
     severity: warning
 - alert: ThanosQuerierGrpcClientErrorRate
   annotations:
-    message: Thanos Query {{$labels.job}} is failing to send {{ $value | humanize
+    message: Thanos Querier {{$labels.job}} is failing to send {{ $value | humanize
       }}% of requests.
   expr: |
     (
       sum by (job) (rate(grpc_client_handled_total{grpc_code!="OK", job=~"thanos-querier.*"}[5m]))
     /
       sum by (job) (rate(grpc_client_started_total{job=~"thanos-querier.*"}[5m]))
-    * 100 > 5
-    )
+    ) * 100 > 5
   for: 5m
   labels:
     severity: warning
 - alert: ThanosQuerierHighDNSFailures
   annotations:
-    message: Thanos Querys {{$labels.job}} have {{ $value }} of failing DNS queries.
+    message: Thanos Queriers {{$labels.job}} have {{ $value | humanize }}% of failing
+      DNS queries for store endpoints.
   expr: |
     (
-      sum by (job) (rate(thanos_query_store_apis_dns_failures_total{job=~"thanos-querier.*"}[5m]))
+      sum by (job) (rate(thanos_querier_store_apis_dns_failures_total{job=~"thanos-querier.*"}[5m]))
     /
-      sum by (job) (rate(thanos_query_store_apis_dns_lookups_total{job=~"thanos-querier.*"}[5m]))
-    > 1
-    )
+      sum by (job) (rate(thanos_querier_store_apis_dns_lookups_total{job=~"thanos-querier.*"}[5m]))
+    ) * 100 > 1
   for: 15m
   labels:
     severity: warning
 - alert: ThanosQuerierInstantLatencyHigh
   annotations:
-    message: Thanos Query {{$labels.job}} has a 99th percentile latency of {{ $value
+    message: Thanos Querier {{$labels.job}} has a 99th percentile latency of {{ $value
       }} seconds for instant queries.
   expr: |
     (
@@ -286,7 +358,7 @@ rules:
     severity: critical
 - alert: ThanosQuerierRangeLatencyHigh
   annotations:
-    message: Thanos Query {{$labels.job}} has a 99th percentile latency of {{ $value
+    message: Thanos Querier {{$labels.job}} has a 99th percentile latency of {{ $value
       }} seconds for instant queries.
   expr: |
     (

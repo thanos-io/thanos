@@ -1,7 +1,13 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package receive
 
 import (
 	"bytes"
+	"context"
+	"fmt"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -16,6 +22,9 @@ import (
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
+	"google.golang.org/grpc"
+
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
 func TestCountCause(t *testing.T) {
@@ -129,14 +138,27 @@ func TestCountCause(t *testing.T) {
 	}
 }
 
-func newHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64) ([]*Handler, Hashring, func()) {
+func newHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64) ([]*Handler, Hashring) {
 	cfg := []HashringConfig{
 		{
 			Hashring: "test",
 		},
 	}
-	var closers []func()
 	var handlers []*Handler
+	// create a fake peer group where we manually fill the cache with fake addresses pointed to our handlers
+	// This removes the network from the tests and creates a more consistent testing harness.
+	peers := &peerGroup{
+		dialOpts: nil,
+		m:        sync.RWMutex{},
+		cache:    map[string]storepb.WriteableStoreClient{},
+		dialer: func(context.Context, string, ...grpc.DialOption) (*grpc.ClientConn, error) {
+			// dialer should never be called since we are creating fake clients with fake addresses
+			// this protects against some leaking test that may attempt to dial random IP addresses
+			// which may pose a security risk.
+			return nil, errors.New("unexpected dial called in testing")
+		},
+	}
+
 	for i := range appendables {
 		h := NewHandler(nil, &Options{
 			TenantHeader:      DefaultTenantHeader,
@@ -145,21 +167,17 @@ func newHandlerHashring(appendables []*fakeAppendable, replicationFactor uint64)
 			Writer:            NewWriter(log.NewNopLogger(), appendables[i]),
 		})
 		handlers = append(handlers, h)
-		ts := httptest.NewServer(h.router)
-		closers = append(closers, ts.Close)
-		h.options.Endpoint = ts.URL + "/api/v1/receive"
+		h.peers = peers
+		addr := randomAddr()
+		h.options.Endpoint = addr
 		cfg[0].Endpoints = append(cfg[0].Endpoints, h.options.Endpoint)
+		peers.cache[addr] = &fakeRemoteWriteGRPCServer{h: h}
 	}
 	hashring := newMultiHashring(cfg)
 	for _, h := range handlers {
 		h.Hashring(hashring)
 	}
-	close := func() {
-		for _, closer := range closers {
-			closer()
-		}
-	}
-	return handlers, hashring, close
+	return handlers, hashring
 }
 
 func TestReceive(t *testing.T) {
@@ -454,53 +472,54 @@ func TestReceive(t *testing.T) {
 			},
 		},
 	} {
-		handlers, hashring, close := newHandlerHashring(tc.appendables, tc.replicationFactor)
-		defer close()
-		tenant := "test"
-		// Test from the point of view of every node
-		// so that we know status code does not depend
-		// on which node is erroring and which node is receiving.
-		for i, handler := range handlers {
-			// Test that the correct status is returned.
-			status, err := makeRequest(handler, tenant, tc.wreq)
-			if err != nil {
-				t.Fatalf("test case %q, handler %d: unexpectedly failed making HTTP request: %v", tc.name, tc.status, err)
-			}
-			if status != tc.status {
-				t.Errorf("test case %q, handler %d: got unexpected HTTP status code: expected %d, got %d", tc.name, i, tc.status, status)
-			}
-		}
-		// Test that each time series is stored
-		// the correct amount of times in each fake DB.
-		for _, ts := range tc.wreq.Timeseries {
-			lset := make(labels.Labels, len(ts.Labels))
-			for j := range ts.Labels {
-				lset[j] = labels.Label{
-					Name:  ts.Labels[j].Name,
-					Value: ts.Labels[j].Value,
+		t.Run(tc.name, func(t *testing.T) {
+			handlers, hashring := newHandlerHashring(tc.appendables, tc.replicationFactor)
+			tenant := "test"
+			// Test from the point of view of every node
+			// so that we know status code does not depend
+			// on which node is erroring and which node is receiving.
+			for i, handler := range handlers {
+				// Test that the correct status is returned.
+				status, err := makeRequest(handler, tenant, tc.wreq)
+				if err != nil {
+					t.Fatalf("handler %d: unexpectedly failed making HTTP request: %v", tc.status, err)
+				}
+				if status != tc.status {
+					t.Errorf("handler %d: got unexpected HTTP status code: expected %d, got %d", i, tc.status, status)
 				}
 			}
-			for j, a := range tc.appendables {
-				var expected int
-				got := uint64(len(a.appender.(*fakeAppender).samples[lset.String()]))
-				if a.appenderErr == nil && endpointHit(t, hashring, tc.replicationFactor, handlers[j].options.Endpoint, tenant, &ts) {
-					// We have len(handlers) copies of each sample because the test case
-					// is run once for each handler and they all use the same appender.
-					expected = len(handlers) * len(ts.Samples)
+			// Test that each time series is stored
+			// the correct amount of times in each fake DB.
+			for _, ts := range tc.wreq.Timeseries {
+				lset := make(labels.Labels, len(ts.Labels))
+				for j := range ts.Labels {
+					lset[j] = labels.Label{
+						Name:  ts.Labels[j].Name,
+						Value: ts.Labels[j].Value,
+					}
 				}
-				if uint64(expected) != got {
-					t.Errorf("test case %q, labels %q: expected %d samples, got %d", tc.name, lset.String(), expected, got)
+				for j, a := range tc.appendables {
+					var expected int
+					n := a.appender.(*fakeAppender).samples[lset.String()]
+					got := uint64(len(n))
+					if a.appenderErr == nil && endpointHit(t, hashring, tc.replicationFactor, handlers[j].options.Endpoint, tenant, &ts) {
+						// We have len(handlers) copies of each sample because the test case
+						// is run once for each handler and they all use the same appender.
+						expected = len(handlers) * len(ts.Samples)
+					}
+					if uint64(expected) != got {
+						t.Errorf("handler: %d, labels %q: expected %d samples, got %d", j, lset.String(), expected, got)
+					}
 				}
 			}
-		}
+		})
 	}
 }
 
 // endpointHit is a helper to determine if a given endpoint in a hashring would be selected
 // for a given time series, tenant, and replication factor.
 func endpointHit(t *testing.T, h Hashring, rf uint64, endpoint, tenant string, timeSeries *prompb.TimeSeries) bool {
-	var i uint64
-	for i = 0; i < rf; i++ {
+	for i := uint64(0); i < rf; i++ {
 		e, err := h.GetN(tenant, timeSeries, i)
 		if err != nil {
 			t.Fatalf("got unexpected error querying hashring: %v", err)
@@ -539,9 +558,22 @@ func makeRequest(h *Handler, tenant string, wreq *prompb.WriteRequest) (int, err
 		return 0, errors.Wrap(err, "create request")
 	}
 	req.Header.Add(h.options.TenantHeader, tenant)
-	res, err := h.client.Do(req)
-	if err != nil {
-		return 0, errors.Wrap(err, "make request")
-	}
-	return res.StatusCode, nil
+
+	rec := httptest.NewRecorder()
+	h.receiveHTTP(rec, req)
+	rec.Flush()
+
+	return rec.Code, nil
+}
+
+func randomAddr() string {
+	return fmt.Sprintf("http://%d.%d.%d.%d:%d", rand.Intn(256), rand.Intn(256), rand.Intn(256), rand.Intn(256), rand.Intn(35000)+30000)
+}
+
+type fakeRemoteWriteGRPCServer struct {
+	h storepb.WriteableStoreServer
+}
+
+func (f *fakeRemoteWriteGRPCServer) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, opts ...grpc.CallOption) (*storepb.WriteResponse, error) {
+	return f.h.RemoteWrite(ctx, in)
 }

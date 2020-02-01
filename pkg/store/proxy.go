@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package store
 
 import (
@@ -15,6 +18,7 @@ import (
 	grpc_opentracing "github.com/grpc-ecosystem/go-grpc-middleware/tracing/opentracing"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -49,12 +53,34 @@ type ProxyStore struct {
 	selectorLabels labels.Labels
 
 	responseTimeout time.Duration
+	metrics         *proxyStoreMetrics
+}
+
+type proxyStoreMetrics struct {
+	emptyStreamResponses prometheus.Counter
+}
+
+func newProxyStoreMetrics(reg prometheus.Registerer) *proxyStoreMetrics {
+	var m proxyStoreMetrics
+
+	m.emptyStreamResponses = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_proxy_store_empty_stream_responses_total",
+		Help: "Total number of empty responses received.",
+	})
+
+	if reg != nil {
+		reg.MustRegister(
+			m.emptyStreamResponses,
+		)
+	}
+	return &m
 }
 
 // NewProxyStore returns a new ProxyStore that uses the given clients that implements storeAPI to fan-in all series to the client.
 // Note that there is no deduplication support. Deduplication should be done on the highest level (just before PromQL).
 func NewProxyStore(
 	logger log.Logger,
+	reg prometheus.Registerer,
 	stores func() []Client,
 	component component.StoreAPI,
 	selectorLabels labels.Labels,
@@ -64,12 +90,14 @@ func NewProxyStore(
 		logger = log.NewNopLogger()
 	}
 
+	metrics := newProxyStoreMetrics(reg)
 	s := &ProxyStore{
 		logger:          logger,
 		stores:          stores,
 		component:       component,
 		selectorLabels:  selectorLabels,
 		responseTimeout: responseTimeout,
+		metrics:         metrics,
 	}
 	return s
 }
@@ -211,6 +239,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 				Matchers:                newMatchers,
 				Aggregates:              r.Aggregates,
 				MaxResolutionWindow:     r.MaxResolutionWindow,
+				SkipChunks:              r.SkipChunks,
 				PartialResponseDisabled: r.PartialResponseDisabled,
 			}
 			wg = &sync.WaitGroup{}
@@ -259,7 +288,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 			// Schedule streamSeriesSet that translates gRPC streamed response
 			// into seriesSet (if series) or respCh if warnings.
 			seriesSet = append(seriesSet, startStreamSeriesSet(seriesCtx, s.logger, closeSeries,
-				wg, sc, respSender, st.String(), !r.PartialResponseDisabled, s.responseTimeout))
+				wg, sc, respSender, st.String(), !r.PartialResponseDisabled, s.responseTimeout, s.metrics.emptyStreamResponses))
 		}
 
 		level.Debug(s.logger).Log("msg", strings.Join(storeDebugMsgs, ";"))
@@ -329,6 +358,7 @@ func startStreamSeriesSet(
 	name string,
 	partialResponse bool,
 	responseTimeout time.Duration,
+	emptyStreamResponses prometheus.Counter,
 ) *streamSeriesSet {
 	s := &streamSeriesSet{
 		ctx:             ctx,
@@ -347,6 +377,12 @@ func startStreamSeriesSet(
 		defer wg.Done()
 		defer close(s.recvCh)
 
+		numResponses := 0
+		defer func() {
+			if numResponses == 0 {
+				emptyStreamResponses.Inc()
+			}
+		}()
 		for {
 			r, err := s.stream.Recv()
 
@@ -366,6 +402,8 @@ func startStreamSeriesSet(
 				s.errMtx.Unlock()
 				return
 			}
+
+			numResponses++
 
 			if w := r.GetWarning(); w != "" {
 				s.warnCh.send(storepb.NewWarnSeriesResponse(errors.New(w)))

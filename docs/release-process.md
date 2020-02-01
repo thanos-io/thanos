@@ -5,6 +5,8 @@ menu: thanos
 slug: /release-process.md
 ---
 
+# Release Process
+
 This page describes the release cadence and process for Thanos project.
 
 We use [Semantic Versioning](http://semver.org/).
@@ -28,14 +30,15 @@ Release shepherd responsibilities:
 * Perform releases (from first RC to actual release).
 * Announce all releases on all communication channels.
 
-| Release   | Time of first RC         | Shepherd (Github handle) |
+| Release   | Time of first RC         | Shepherd (GitHub handle) |
 |-----------|--------------------------|--------------------------|
-| v0.10.0   | (planned) 8.01.2019      | TBD                      |
-| v0.9.0    | 26.11.2019               | `@bwplotka`              |
-| v0.8.0    | 9.10.2019                | `@bwplotka`              |
-| v0.7.0    | 28.08.2019               | `@domgreen`              |
-| v0.6.0    | 12.07.2019               | `@GiedriusS`             |
-| v0.5.0    | 31.06.2019               | `@bwplotka`              |
+| v0.11.0   | (planned) 2020.02.19     | TBD                      |
+| v0.10.0   | 2020.01.08               | `@GiedriusS`             |
+| v0.9.0    | 2019.11.26               | `@bwplotka`              |
+| v0.8.0    | 2019.10.09               | `@bwplotka`              |
+| v0.7.0    | 2019.08.28               | `@domgreen`              |
+| v0.6.0    | 2019.07.12               | `@GiedriusS`             |
+| v0.5.0    | 2019.06.31               | `@bwplotka`              |
 
 # For maintainers: Cutting individual release
 
@@ -65,6 +68,10 @@ Release is happening on separate `release-<major>.<minor>` branch.
     1. *In case of version after `v1+.y.z`*, double check if none of the changes break API compatibility. This should be done in PR review process, but double check is good to have.
     1. In case of `v0.y.z`, document all incompatibilities in changelog.
 
+1. Double check metric changes:
+    1. Note any changes in the changelog
+    1. If there were any changes then update the relevant alerting rules and/or dashboards since `thanos-mixin` is part of the repository now
+
 1. Update tutorials:
     1. Update the Thanos version used in the [tutorials](../tutorials) manifests.
     1. In case of any breaking changes or necessary updates adjust the manifests
@@ -80,6 +87,8 @@ Release is happening on separate `release-<major>.<minor>` branch.
     ```
 
     Signing a tag with a GPG key is appreciated, but in case you can't add a GPG key to your Github account using the following [procedure](https://help.github.com/articles/generating-a-gpg-key/), you can replace the `-s` flag by `-a` flag of the `git tag` command to only annotate the tag without signing.
+
+    Please make sure that you are tagging the merge commit because otherwise GitHub's UI will show that there were more commits after your release.
 
  1. Once a tag is created, the release process through CircleCI will be triggered for this tag.
 

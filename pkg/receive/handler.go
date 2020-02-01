@@ -1,7 +1,9 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package receive
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -24,8 +26,13 @@ import (
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage"
 	terrors "github.com/prometheus/prometheus/tsdb/errors"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -39,23 +46,25 @@ const (
 // conflictErr is returned whenever an operation fails due to any conflict-type error.
 var conflictErr = errors.New("conflict")
 
+var errBadReplica = errors.New("replica count exceeds replication factor")
+
 // Options for the web Handler.
 type Options struct {
 	Writer            *Writer
 	ListenAddress     string
 	Registry          prometheus.Registerer
-	Endpoint          string
 	TenantHeader      string
 	ReplicaHeader     string
+	Endpoint          string
 	ReplicationFactor uint64
 	Tracer            opentracing.Tracer
 	TLSConfig         *tls.Config
 	TLSClientConfig   *tls.Config
+	DialOpts          []grpc.DialOption
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
 type Handler struct {
-	client   *http.Client
 	logger   log.Logger
 	writer   *Writer
 	router   *route.Router
@@ -64,6 +73,7 @@ type Handler struct {
 
 	mtx      sync.RWMutex
 	hashring Hashring
+	peers    *peerGroup
 
 	// Metrics.
 	forwardRequestsTotal *prometheus.CounterVec
@@ -74,19 +84,12 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		logger = log.NewNopLogger()
 	}
 
-	transport := http.DefaultTransport.(*http.Transport)
-	transport.TLSClientConfig = o.TLSClientConfig
-	client := &http.Client{Transport: transport}
-	if o.Tracer != nil {
-		client.Transport = tracing.HTTPTripperware(logger, client.Transport)
-	}
-
 	h := &Handler{
-		client:  client,
 		logger:  logger,
 		writer:  o.Writer,
 		router:  route.New(),
 		options: o,
+		peers:   newPeerGroup(o.DialOpts...),
 		forwardRequestsTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_forward_requests_total",
@@ -109,7 +112,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		return ins.NewHandler(name, http.HandlerFunc(next))
 	}
 
-	h.router.Post("/api/v1/receive", instrf("receive", readyf(h.receive)))
+	h.router.Post("/api/v1/receive", instrf("receive", readyf(h.receiveHTTP)))
 
 	return h
 }
@@ -199,7 +202,35 @@ type replica struct {
 	replicated bool
 }
 
-func (h *Handler) receive(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenant string, wreq *prompb.WriteRequest) error {
+	// The replica value in the header is one-indexed, thus we need >.
+	if rep > h.options.ReplicationFactor {
+		return errBadReplica
+	}
+
+	r := replica{
+		n:          rep,
+		replicated: rep != 0,
+	}
+
+	// on-the-wire format is 1-indexed and in-code is 0-indexed so we decrement the value if it was already replicated.
+	if r.replicated {
+		r.n--
+	}
+
+	// Forward any time series as necessary. All time series
+	// destined for the local node will be written to the receiver.
+	// Time series will be replicated as necessary.
+	if err := h.forward(ctx, tenant, r, wreq); err != nil {
+		if countCause(err, isConflict) > 0 {
+			return conflictErr
+		}
+		return err
+	}
+	return nil
+}
+
+func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	compressed, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -219,34 +250,28 @@ func (h *Handler) receive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var rep replica
-	replicaRaw := r.Header.Get(h.options.ReplicaHeader)
+	rep := uint64(0)
 	// If the header is empty, we assume the request is not yet replicated.
-	if replicaRaw != "" {
-		if rep.n, err = strconv.ParseUint(replicaRaw, 10, 64); err != nil {
+	if replicaRaw := r.Header.Get(h.options.ReplicaHeader); replicaRaw != "" {
+		if rep, err = strconv.ParseUint(replicaRaw, 10, 64); err != nil {
 			http.Error(w, "could not parse replica header", http.StatusBadRequest)
 			return
 		}
-		rep.replicated = true
-	}
-	// The replica value in the header is zero-indexed, thus we need >=.
-	if rep.n >= h.options.ReplicationFactor {
-		http.Error(w, "replica count exceeds replication factor", http.StatusBadRequest)
-		return
 	}
 
 	tenant := r.Header.Get(h.options.TenantHeader)
 
-	// Forward any time series as necessary. All time series
-	// destined for the local node will be written to the receiver.
-	// Time series will be replicated as necessary.
-	if err := h.forward(r.Context(), tenant, rep, &wreq); err != nil {
-		if countCause(err, isConflict) > 0 {
-			http.Error(w, err.Error(), http.StatusConflict)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	err = h.handleRequest(r.Context(), rep, tenant, &wreq)
+	switch err {
+	case nil:
 		return
+	case conflictErr:
+		http.Error(w, err.Error(), http.StatusConflict)
+	case errBadReplica:
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	default:
+		level.Error(h.logger).Log("err", err, "msg", "internal server error")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -352,20 +377,7 @@ func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replic
 		}
 		// Make a request to the specified endpoint.
 		go func(endpoint string) {
-			buf, err := proto.Marshal(wreqs[endpoint])
-			if err != nil {
-				level.Error(h.logger).Log("msg", "marshaling proto", "err", err, "endpoint", endpoint)
-				ec <- err
-				return
-			}
-			req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(snappy.Encode(nil, buf)))
-			if err != nil {
-				level.Error(h.logger).Log("msg", "creating request", "err", err, "endpoint", endpoint)
-				ec <- err
-				return
-			}
-			req.Header.Add(h.options.TenantHeader, tenant)
-			req.Header.Add(h.options.ReplicaHeader, strconv.FormatUint(replicas[endpoint].n, 10))
+			var err error
 
 			// Increment the counters as necessary now that
 			// the requests will go out.
@@ -377,22 +389,26 @@ func (h *Handler) parallelizeRequests(ctx context.Context, tenant string, replic
 				h.forwardRequestsTotal.WithLabelValues("success").Inc()
 			}()
 
+			cl, err := h.peers.get(ctx, endpoint)
+			if err != nil {
+				level.Error(h.logger).Log("msg", "failed to get peer connection to forward request", "err", err, "endpoint", endpoint)
+				ec <- err
+				return
+			}
+
 			// Create a span to track the request made to another receive node.
 			span, ctx := tracing.StartSpan(ctx, "thanos_receive_forward")
 			defer span.Finish()
 
 			// Actually make the request against the endpoint
 			// we determined should handle these time series.
-			var res *http.Response
-			res, err = h.client.Do(req.WithContext(ctx))
+			_, err = cl.RemoteWrite(ctx, &storepb.WriteRequest{
+				Timeseries: wreqs[endpoint].Timeseries,
+				Tenant:     tenant,
+				Replica:    int64(replicas[endpoint].n + 1), // increment replica since on-the-wire format is 1-indexed and 0 indicates unreplicated.
+			})
 			if err != nil {
 				level.Error(h.logger).Log("msg", "forwarding request", "err", err, "endpoint", endpoint)
-				ec <- err
-				return
-			}
-			if res.StatusCode != http.StatusOK {
-				err = errors.New(strconv.Itoa(res.StatusCode))
-				level.Error(h.logger).Log("msg", "forwarding returned non-200 status", "err", err, "endpoint", endpoint)
 				ec <- err
 				return
 			}
@@ -456,6 +472,21 @@ func (h *Handler) replicate(ctx context.Context, tenant string, wreq *prompb.Wri
 	return errors.Wrap(err, "could not replicate write request")
 }
 
+// RemoteWrite implements the gRPC remote write handler for storepb.WriteableStore.
+func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*storepb.WriteResponse, error) {
+	err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
+	switch err {
+	case nil:
+		return &storepb.WriteResponse{}, nil
+	case conflictErr:
+		return nil, status.Error(codes.AlreadyExists, err.Error())
+	case errBadReplica:
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	default:
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+}
+
 // countCause counts the number of errors within the given error
 // whose causes satisfy the given function.
 // countCause will inspect the error's cause or, if the error is a MultiError,
@@ -479,5 +510,54 @@ func isConflict(err error) bool {
 	if err == nil {
 		return false
 	}
-	return err == conflictErr || err == storage.ErrDuplicateSampleForTimestamp || err == storage.ErrOutOfOrderSample || err == storage.ErrOutOfBounds || err.Error() == strconv.Itoa(http.StatusConflict)
+	return err == conflictErr ||
+		err == storage.ErrDuplicateSampleForTimestamp ||
+		err == storage.ErrOutOfOrderSample ||
+		err == storage.ErrOutOfBounds ||
+		err.Error() == strconv.Itoa(http.StatusConflict) ||
+		status.Code(err) == codes.AlreadyExists
+}
+
+func newPeerGroup(dialOpts ...grpc.DialOption) *peerGroup {
+	return &peerGroup{
+		dialOpts: dialOpts,
+		cache:    map[string]storepb.WriteableStoreClient{},
+		m:        sync.RWMutex{},
+		dialer:   grpc.DialContext,
+	}
+}
+
+type peerGroup struct {
+	dialOpts []grpc.DialOption
+	cache    map[string]storepb.WriteableStoreClient
+	m        sync.RWMutex
+
+	// dialer is used for testing.
+	dialer func(ctx context.Context, target string, opts ...grpc.DialOption) (conn *grpc.ClientConn, err error)
+}
+
+func (p *peerGroup) get(ctx context.Context, addr string) (storepb.WriteableStoreClient, error) {
+	// use a RLock first to prevent blocking if we don't need to.
+	p.m.RLock()
+	c, ok := p.cache[addr]
+	p.m.RUnlock()
+	if ok {
+		return c, nil
+	}
+
+	p.m.Lock()
+	defer p.m.Unlock()
+	// Make sure that another caller hasn't created the connection since obtaining the write lock.
+	c, ok = p.cache[addr]
+	if ok {
+		return c, nil
+	}
+	conn, err := p.dialer(ctx, addr, p.dialOpts...)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to dial peer")
+	}
+
+	client := storepb.NewWriteableStoreClient(conn)
+	p.cache[addr] = client
+	return client, nil
 }

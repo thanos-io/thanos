@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package query
 
 import (
@@ -19,11 +22,11 @@ import (
 // replicaLabels at query time.
 // maxResolutionMillis controls downsampling resolution that is allowed (specified in milliseconds).
 // partialResponse controls `partialResponseDisabled` option of StoreAPI and partial response behaviour of proxy.
-type QueryableCreator func(deduplicate bool, replicaLabels []string, maxResolutionMillis int64, partialResponse bool) storage.Queryable
+type QueryableCreator func(deduplicate bool, replicaLabels []string, maxResolutionMillis int64, partialResponse, skipChunks bool) storage.Queryable
 
 // NewQueryableCreator creates QueryableCreator.
 func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer) QueryableCreator {
-	return func(deduplicate bool, replicaLabels []string, maxResolutionMillis int64, partialResponse bool) storage.Queryable {
+	return func(deduplicate bool, replicaLabels []string, maxResolutionMillis int64, partialResponse, skipChunks bool) storage.Queryable {
 		return &queryable{
 			logger:              logger,
 			replicaLabels:       replicaLabels,
@@ -31,6 +34,7 @@ func NewQueryableCreator(logger log.Logger, proxy storepb.StoreServer) Queryable
 			deduplicate:         deduplicate,
 			maxResolutionMillis: maxResolutionMillis,
 			partialResponse:     partialResponse,
+			skipChunks:          skipChunks,
 		}
 	}
 }
@@ -42,11 +46,12 @@ type queryable struct {
 	deduplicate         bool
 	maxResolutionMillis int64
 	partialResponse     bool
+	skipChunks          bool
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(ctx context.Context, mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.proxy, q.deduplicate, int64(q.maxResolutionMillis), q.partialResponse), nil
+	return newQuerier(ctx, q.logger, mint, maxt, q.replicaLabels, q.proxy, q.deduplicate, int64(q.maxResolutionMillis), q.partialResponse, q.skipChunks), nil
 }
 
 type querier struct {
@@ -59,6 +64,7 @@ type querier struct {
 	deduplicate         bool
 	maxResolutionMillis int64
 	partialResponse     bool
+	skipChunks          bool
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -72,6 +78,7 @@ func newQuerier(
 	deduplicate bool,
 	maxResolutionMillis int64,
 	partialResponse bool,
+	skipChunks bool,
 ) *querier {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -93,6 +100,7 @@ func newQuerier(
 		deduplicate:         deduplicate,
 		maxResolutionMillis: maxResolutionMillis,
 		partialResponse:     partialResponse,
+		skipChunks:          skipChunks,
 	}
 }
 
@@ -185,6 +193,7 @@ func (q *querier) Select(params *storage.SelectParams, ms ...*labels.Matcher) (s
 		MaxResolutionWindow:     q.maxResolutionMillis,
 		Aggregates:              queryAggrs,
 		PartialResponseDisabled: !q.partialResponse,
+		SkipChunks:              q.skipChunks,
 	}, resp); err != nil {
 		return nil, nil, errors.Wrap(err, "proxy Series()")
 	}

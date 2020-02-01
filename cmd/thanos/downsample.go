@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package main
 
 import (
@@ -21,6 +24,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
+	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
@@ -88,6 +92,11 @@ func runDownsample(
 		return err
 	}
 
+	metaFetcher, err := block.NewMetaFetcher(logger, 32, bkt, "", extprom.WrapRegistererWithPrefix("thanos_", reg))
+	if err != nil {
+		return errors.Wrap(err, "create meta fetcher")
+	}
+
 	// Ensure we close up everything properly.
 	defer func() {
 		if err != nil {
@@ -95,8 +104,13 @@ func runDownsample(
 		}
 	}()
 
+	httpProbe := prober.NewHTTP()
+	statusProber := prober.Combine(
+		httpProbe,
+		prober.NewInstrumentation(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg)),
+	)
+
 	metrics := newDownsampleMetrics(reg)
-	statusProber := prober.New(comp, logger, prometheus.WrapRegistererWithPrefix("thanos_", reg))
 	// Start cycle of syncing blocks from the bucket and garbage collecting the bucket.
 	{
 		ctx, cancel := context.WithCancel(context.Background())
@@ -107,13 +121,13 @@ func runDownsample(
 
 			level.Info(logger).Log("msg", "start first pass of downsampling")
 
-			if err := downsampleBucket(ctx, logger, metrics, bkt, dataDir); err != nil {
+			if err := downsampleBucket(ctx, logger, metrics, bkt, metaFetcher, dataDir); err != nil {
 				return errors.Wrap(err, "downsampling failed")
 			}
 
 			level.Info(logger).Log("msg", "start second pass of downsampling")
 
-			if err := downsampleBucket(ctx, logger, metrics, bkt, dataDir); err != nil {
+			if err := downsampleBucket(ctx, logger, metrics, bkt, metaFetcher, dataDir); err != nil {
 				return errors.Wrap(err, "downsampling failed")
 			}
 
@@ -123,11 +137,11 @@ func runDownsample(
 		})
 	}
 
-	// Initiate HTTP listener providing metrics endpoint and readiness/liveness probes.
-	srv := httpserver.New(logger, reg, comp, statusProber,
+	srv := httpserver.New(logger, reg, comp, httpProbe,
 		httpserver.WithListen(httpBindAddr),
 		httpserver.WithGracePeriod(httpGracePeriod),
 	)
+
 	g.Add(func() error {
 		statusProber.Healthy()
 
@@ -148,6 +162,7 @@ func downsampleBucket(
 	logger log.Logger,
 	metrics *DownsampleMetrics,
 	bkt objstore.Bucket,
+	fetcher block.MetadataFetcher,
 	dir string,
 ) error {
 	if err := os.RemoveAll(dir); err != nil {
@@ -163,25 +178,9 @@ func downsampleBucket(
 		}
 	}()
 
-	var metas []*metadata.Meta
-
-	err := bkt.Iter(ctx, "", func(name string) error {
-		id, ok := block.IsBlockDir(name)
-		if !ok {
-			return nil
-		}
-
-		m, err := block.DownloadMeta(ctx, logger, bkt, id)
-		if err != nil {
-			return errors.Wrap(err, "download metadata")
-		}
-
-		metas = append(metas, &m)
-
-		return nil
-	})
+	metas, _, err := fetcher.Fetch(ctx)
 	if err != nil {
-		return errors.Wrap(err, "retrieve bucket block metas")
+		return errors.Wrap(err, "downsampling meta fetch")
 	}
 
 	// mapping from a hash over all source IDs to blocks. We don't need to downsample a block

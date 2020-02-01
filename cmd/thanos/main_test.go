@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package main
 
 import (
@@ -6,9 +9,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-
-	"github.com/thanos-io/thanos/pkg/block/metadata"
-
 	"testing"
 	"time"
 
@@ -18,10 +18,12 @@ import (
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/objstore/inmem"
 	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
 func TestCleanupIndexCacheFolder(t *testing.T) {
@@ -38,7 +40,7 @@ func TestCleanupIndexCacheFolder(t *testing.T) {
 	// Upload one compaction lvl = 2 block, one compaction lvl = 1.
 	// We generate index cache files only for lvl > 1 blocks.
 	{
-		id, err := testutil.CreateBlock(
+		id, err := e2eutil.CreateBlock(
 			ctx,
 			dir,
 			[]labels.Labels{{{Name: "a", Value: "1"}}},
@@ -56,7 +58,7 @@ func TestCleanupIndexCacheFolder(t *testing.T) {
 		testutil.Ok(t, block.Upload(ctx, logger, bkt, path.Join(dir, id.String())))
 	}
 	{
-		id, err := testutil.CreateBlock(
+		id, err := e2eutil.CreateBlock(
 			ctx,
 			dir,
 			[]labels.Labels{{{Name: "a", Value: "1"}}},
@@ -75,7 +77,10 @@ func TestCleanupIndexCacheFolder(t *testing.T) {
 	})
 	expReg.MustRegister(genIndexExp)
 
-	testutil.Ok(t, genMissingIndexCacheFiles(ctx, logger, reg, bkt, dir))
+	metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil)
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, genMissingIndexCacheFiles(ctx, logger, reg, bkt, metaFetcher, dir))
 
 	genIndexExp.Inc()
 	testutil.GatherAndCompare(t, expReg, reg, metricIndexGenerateName)
@@ -96,7 +101,7 @@ func TestCleanupDownsampleCacheFolder(t *testing.T) {
 	bkt := inmem.NewBucket()
 	var id ulid.ULID
 	{
-		id, err = testutil.CreateBlock(
+		id, err = e2eutil.CreateBlock(
 			ctx,
 			dir,
 			[]labels.Labels{{{Name: "a", Value: "1"}}},
@@ -112,7 +117,10 @@ func TestCleanupDownsampleCacheFolder(t *testing.T) {
 
 	metrics := newDownsampleMetrics(prometheus.NewRegistry())
 	testutil.Equals(t, 0.0, promtest.ToFloat64(metrics.downsamples.WithLabelValues(compact.GroupKey(meta.Thanos))))
-	testutil.Ok(t, downsampleBucket(ctx, logger, metrics, bkt, dir))
+	metaFetcher, err := block.NewMetaFetcher(nil, 32, bkt, "", nil)
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, downsampleBucket(ctx, logger, metrics, bkt, metaFetcher, dir))
 	testutil.Equals(t, 1.0, promtest.ToFloat64(metrics.downsamples.WithLabelValues(compact.GroupKey(meta.Thanos))))
 
 	_, err = os.Stat(dir)

@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package e2e_test
 
 import (
@@ -33,15 +36,15 @@ func TestReceive(t *testing.T) {
 		// receiver in the hashring than the one handling the request.
 		// The querier queries all the receivers and the test verifies
 		// the time series are forwarded to the correct receive node.
-		receiveHTTP1, receiveHTTP2, receiveHTTP3 := a.New(), a.New(), a.New()
+		receiveGRPC1, receiveGRPC2, receiveGRPC3 := a.New(), a.New(), a.New()
 
 		h := receive.HashringConfig{
-			Endpoints: []string{remoteWriteEndpoint(receiveHTTP1), remoteWriteEndpoint(receiveHTTP2), remoteWriteEndpoint(receiveHTTP3)},
+			Endpoints: []string{receiveGRPC1.HostPort(), receiveGRPC2.HostPort(), receiveGRPC3.HostPort()},
 		}
 
-		r1 := receiver(receiveHTTP1, a.New(), a.New(), 1, h)
-		r2 := receiver(receiveHTTP2, a.New(), a.New(), 1, h)
-		r3 := receiver(receiveHTTP3, a.New(), a.New(), 1, h)
+		r1 := receiver(a.New(), receiveGRPC1, a.New(), 1, h)
+		r2 := receiver(a.New(), receiveGRPC2, a.New(), 1, h)
+		r3 := receiver(a.New(), receiveGRPC3, a.New(), 1, h)
 
 		prom1 := prometheus(a.New(), defaultPromConfig("prom1", 1, remoteWriteEndpoint(r1.HTTP)))
 		prom2 := prometheus(a.New(), defaultPromConfig("prom2", 1, remoteWriteEndpoint(r2.HTTP)))
@@ -79,15 +82,15 @@ func TestReceive(t *testing.T) {
 		// receives Prometheus remote-written data. The querier queries all
 		// receivers and the test verifies that the time series are
 		// replicated to all of the nodes.
-		receiveHTTP1, receiveHTTP2, receiveHTTP3 := a.New(), a.New(), a.New()
+		receiveGRPC1, receiveGRPC2, receiveGRPC3 := a.New(), a.New(), a.New()
 
 		h := receive.HashringConfig{
-			Endpoints: []string{remoteWriteEndpoint(receiveHTTP1), remoteWriteEndpoint(receiveHTTP2), remoteWriteEndpoint(receiveHTTP3)},
+			Endpoints: []string{receiveGRPC1.HostPort(), receiveGRPC2.HostPort(), receiveGRPC3.HostPort()},
 		}
 
-		r1 := receiver(receiveHTTP1, a.New(), a.New(), 3, h)
-		r2 := receiver(receiveHTTP2, a.New(), a.New(), 3, h)
-		r3 := receiver(receiveHTTP3, a.New(), a.New(), 3, h)
+		r1 := receiver(a.New(), receiveGRPC1, a.New(), 3, h)
+		r2 := receiver(a.New(), receiveGRPC2, a.New(), 3, h)
+		r3 := receiver(a.New(), receiveGRPC3, a.New(), 3, h)
 
 		prom1 := prometheus(a.New(), defaultPromConfig("prom1", 1, remoteWriteEndpoint(r1.HTTP)))
 
@@ -122,14 +125,14 @@ func TestReceive(t *testing.T) {
 		// The replication suite creates a three-node hashring but one of the
 		// receivers is dead. In this case, replication should still
 		// succeed and the time series should be replicated to the other nodes.
-		receiveHTTP1, receiveHTTP2, receiveHTTP3 := a.New(), a.New(), a.New()
+		receiveGRPC1, receiveGRPC2, receiveGRPC3 := a.New(), a.New(), a.New()
 
 		h := receive.HashringConfig{
-			Endpoints: []string{remoteWriteEndpoint(receiveHTTP1), remoteWriteEndpoint(receiveHTTP2), remoteWriteEndpoint(receiveHTTP3)},
+			Endpoints: []string{receiveGRPC1.HostPort(), receiveGRPC2.HostPort(), receiveGRPC3.HostPort()},
 		}
 
-		r1 := receiver(receiveHTTP1, a.New(), a.New(), 3, h)
-		r2 := receiver(receiveHTTP2, a.New(), a.New(), 3, h)
+		r1 := receiver(a.New(), receiveGRPC1, a.New(), 3, h)
+		r2 := receiver(a.New(), receiveGRPC2, a.New(), 3, h)
 
 		prom1 := prometheus(a.New(), defaultPromConfig("prom1", 1, remoteWriteEndpoint(r1.HTTP)))
 

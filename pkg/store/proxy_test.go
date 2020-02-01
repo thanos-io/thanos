@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package store
 
 import (
@@ -53,6 +56,7 @@ func TestProxyStore_Info(t *testing.T) {
 	defer cancel()
 
 	q := NewProxyStore(nil,
+		nil,
 		func() []Client { return nil },
 		component.Query,
 		nil, 0*time.Second,
@@ -408,10 +412,37 @@ func TestProxyStore_Series(t *testing.T) {
 			},
 			expectedErr: errors.New("fetch series for [name:\"ext\" value:\"1\" ] test: error!"),
 		},
+		{
+			title: "use no chunk to only get labels",
+			storeAPIs: []Client{
+				&testClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "a")),
+						},
+					},
+					minTime:   1,
+					maxTime:   300,
+					labelSets: []storepb.LabelSet{{Labels: []storepb.Label{{Name: "ext", Value: "1"}}}},
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime:    1,
+				MaxTime:    300,
+				Matchers:   []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+				SkipChunks: true,
+			},
+			expectedSeries: []rawSeries{
+				{
+					lset: []storepb.Label{{Name: "a", Value: "a"}},
+				},
+			},
+		},
 	} {
 
 		if ok := t.Run(tc.title, func(t *testing.T) {
 			q := NewProxyStore(nil,
+				nil,
 				func() []Client { return tc.storeAPIs },
 				component.Query,
 				tc.selectorLabels,
@@ -534,6 +565,7 @@ func TestProxyStore_SeriesSlowStores(t *testing.T) {
 	} {
 		if ok := t.Run(tc.title, func(t *testing.T) {
 			q := NewProxyStore(nil,
+				nil,
 				func() []Client { return tc.storeAPIs },
 				component.Query,
 				tc.selectorLabels,
@@ -576,6 +608,7 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 		},
 	}
 	q := NewProxyStore(nil,
+		nil,
 		func() []Client { return cls },
 		component.Query,
 		nil,
@@ -635,6 +668,7 @@ func TestProxyStore_Series_RegressionFillResponseChannel(t *testing.T) {
 	}
 
 	q := NewProxyStore(nil,
+		nil,
 		func() []Client { return cls },
 		component.Query,
 		labels.FromStrings("fed", "a"),
@@ -673,6 +707,7 @@ func TestProxyStore_LabelValues(t *testing.T) {
 		}},
 	}
 	q := NewProxyStore(nil,
+		nil,
 		func() []Client { return cls },
 		component.Query,
 		nil,
@@ -775,6 +810,7 @@ func TestProxyStore_LabelNames(t *testing.T) {
 	} {
 		if ok := t.Run(tc.title, func(t *testing.T) {
 			q := NewProxyStore(
+				nil,
 				nil,
 				func() []Client { return tc.storeAPIs },
 				component.Query,

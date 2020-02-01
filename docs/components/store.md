@@ -68,12 +68,24 @@ Flags:
                                  CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
       --data-dir="./data"        Data directory in which to cache remote blocks.
-      --index-cache-size=250MB   Maximum size of items held in the index cache.
+      --index-cache-size=250MB   Maximum size of items held in the in-memory
+                                 index cache. Ignored if --index-cache.config or
+                                 --index-cache.config-file option is specified.
+      --index-cache.config-file=<file-path>
+                                 Path to YAML file that contains index cache
+                                 configuration. See format details:
+                                 https://thanos.io/components/store.md/#index-cache
+      --index-cache.config=<content>
+                                 Alternative to 'index-cache.config-file' flag
+                                 (lower priority). Content of YAML file that
+                                 contains index cache configuration. See format
+                                 details:
+                                 https://thanos.io/components/store.md/#index-cache
       --chunk-pool-size=2GB      Maximum size of concurrently allocatable bytes
                                  for chunks.
       --store.grpc.series-sample-limit=0
                                  Maximum amount of samples returned via a single
-                                 Series call. 0 means no limit. NOTE: for
+                                 Series call. 0 means no limit. NOTE: For
                                  efficiency we take 120 as the number of samples
                                  in chunk (it cannot be bigger than that), so
                                  the actual number of samples might be lower,
@@ -93,8 +105,8 @@ Flags:
       --sync-block-duration=3m   Repeat interval for syncing the blocks between
                                  local and remote view.
       --block-sync-concurrency=20
-                                 Number of goroutines to use when syncing blocks
-                                 from object storage.
+                                 Number of goroutines to use when constructing
+                                 index-cache.json blocks from object storage.
       --min-time=0000-01-01T00:00:00Z
                                  Start of time range limit to serve. Thanos
                                  Store will serve only metrics, which happened
@@ -151,3 +163,120 @@ Filtering is done on a Chunk level, so Thanos Store might still return Samples w
   - `/-/ready` starts after all the bootstrapping completed (e.g initial index building) and ready to serve traffic.
 
 > NOTE: Metric endpoint starts immediately so, make sure you set up readiness probe on designated HTTP `/-/ready` path.
+
+## Index cache
+
+Thanos Store Gateway supports an index cache to speed up postings and series lookups from TSDB blocks indexes. Two types of caches are supported:
+
+- `in-memory` (_default_)
+- `memcached`
+
+### In-memory index cache
+
+The `in-memory` index cache is enabled by default and its max size can be configured through the flag `--index-cache-size`.
+
+Alternatively, the `in-memory` index cache can also by configured using `--index-cache.config-file` to reference to the configuration file or `--index-cache.config` to put yaml config directly:
+
+[embedmd]:# (../flags/config_index_cache_in_memory.txt yaml)
+```yaml
+type: IN-MEMORY
+config:
+  max_size: 0
+  max_item_size: 0
+```
+
+All the settings are **optional**:
+
+- `max_size`: overall maximum number of bytes cache can contain. The value should be specified with a bytes unit (ie. `250MB`).
+- `max_item_size`: maximum size of single item, in bytes. The value should be specified with a bytes unit (ie. `125MB`).
+
+### Memcached index cache
+
+The `memcached` index cache allows to use [Memcached](https://memcached.org) as cache backend. This cache type is configured using `--index-cache.config-file` to reference to the configuration file or `--index-cache.config` to put yaml config directly:
+
+[embedmd]:# (../flags/config_index_cache_memcached.txt yaml)
+```yaml
+type: MEMCACHED
+config:
+  addresses: []
+  timeout: 0s
+  max_idle_connections: 0
+  max_async_concurrency: 0
+  max_async_buffer_size: 0
+  max_get_multi_concurrency: 0
+  max_get_multi_batch_size: 0
+  dns_provider_update_interval: 0s
+```
+
+The **required** settings are:
+
+- `addresses`: list of memcached addresses, that will get resolved with the [DNS service discovery](../service-discovery.md/#dns-service-discovery) provider.
+
+While the remaining settings are **optional**:
+
+- `timeout`: the socket read/write timeout.
+- `max_idle_connections`: maximum number of idle connections that will be maintained per address.
+- `max_async_concurrency`: maximum number of concurrent asynchronous operations can occur.
+- `max_async_buffer_size`: maximum number of enqueued asynchronous operations allowed.
+- `max_get_multi_concurrency`: maximum number of concurrent connections when fetching keys. If set to `0`, the concurrency is unlimited.
+- `max_get_multi_batch_size`: maximum number of keys a single underlying operation should fetch. If more keys are specified, internally keys are splitted into multiple batches and fetched concurrently, honoring `max_get_multi_concurrency`. If set to `0`, the batch size is unlimited.
+- `dns_provider_update_interval`: the DNS discovery update interval.
+
+
+## Index Header
+
+In order to query series inside blocks from object storage, Store Gateway has to know certain initial info about each block such as:
+
+* symbols table to unintern string values
+* postings offset for posting lookup
+
+In order to achieve so, on startup for each block `index-header` is built from pieces of original block's index and stored on disk.
+Such `index-header` file is then mmaped and used by Store Gateway.
+
+### Format (version 1)
+
+The following describes the format of the `index-header` file found in each block store gateway local directory.
+It is terminated by a table of contents which serves as an entry point into the index.
+
+```
+┌─────────────────────────────┬───────────────────────────────┐
+│    magic(0xBAAAD792) <4b>   │      version(1) <1 byte>      │
+├─────────────────────────────┬───────────────────────────────┤
+│  index version(2) <1 byte>  │ index PostingOffsetTable <8b> │
+├─────────────────────────────┴───────────────────────────────┤
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │      Symbol Table (exact copy from original index)      │ │
+│ ├─────────────────────────────────────────────────────────┤ │
+│ │      Posting Offset Table (exact copy from index)       │ │
+│ ├─────────────────────────────────────────────────────────┤ │
+│ │                          TOC                            │ │
+│ └─────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+```
+
+When the index is written, an arbitrary number of padding bytes may be added between the lined out main sections above. When sequentially scanning through the file, any zero bytes after a section's specified length must be skipped.
+
+Most of the sections described below start with a `len` field. It always specifies the number of bytes just before the trailing CRC32 checksum. The checksum is always calculated over those `len` bytes.
+
+### Symbol Table
+
+See [Symbols](https://github.com/prometheus/prometheus/blob/d782387f814753b0118d402ec8cdbdef01bf9079/tsdb/docs/format/index.md#symbol-table)
+
+### Postings Offset Table
+
+See [Posting Offset Table](https://github.com/prometheus/prometheus/blob/d782387f814753b0118d402ec8cdbdef01bf9079/tsdb/docs/format/index.md#postings-offset-table)
+
+### TOC
+
+The table of contents serves as an entry point to the entire index and points to various sections in the file.
+If a reference is zero, it indicates the respective section does not exist and empty results should be returned upon lookup.
+
+```
+┌─────────────────────────────────────────┐
+│ ref(symbols) <8b>                       │
+├─────────────────────────────────────────┤
+│ ref(postings offset table) <8b>         │
+├─────────────────────────────────────────┤
+│ CRC32 <4b>                              │
+└─────────────────────────────────────────┘
+```

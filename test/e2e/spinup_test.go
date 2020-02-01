@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package e2e_test
 
 import (
@@ -22,7 +25,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"google.golang.org/grpc"
 )
 
@@ -91,7 +94,7 @@ func newCmdExec(cmd *exec.Cmd) *cmdExec {
 func (c *cmdExec) Start(stdout io.Writer, stderr io.Writer) error {
 	c.Stderr = stderr
 	c.Stdout = stdout
-	c.SysProcAttr = testutil.SysProcAttr()
+	c.SysProcAttr = e2eutil.SysProcAttr()
 	return c.Cmd.Start()
 }
 
@@ -135,7 +138,7 @@ func prometheus(http address, config string) *prometheusScheduler {
 				return nil, errors.Wrap(err, "creating prom config failed")
 			}
 
-			return newCmdExec(exec.Command(testutil.PrometheusBinary(),
+			return newCmdExec(exec.Command(e2eutil.PrometheusBinary(),
 				"--config.file", promDir+"/prometheus.yml",
 				"--storage.tsdb.path", promDir,
 				"--storage.tsdb.max-block-duration", "2h",
@@ -167,7 +170,7 @@ func sidecar(http, grpc address, prom *prometheusScheduler) *serverScheduler {
 
 func receiver(http, grpc, metric address, replicationFactor int, hashring ...receive.HashringConfig) *serverScheduler {
 	if len(hashring) == 0 {
-		hashring = []receive.HashringConfig{{Endpoints: []string{remoteWriteEndpoint(http)}}}
+		hashring = []receive.HashringConfig{{Endpoints: []string{grpc.HostPort()}}}
 	}
 
 	return &serverScheduler{
@@ -198,7 +201,7 @@ func receiver(http, grpc, metric address, replicationFactor int, hashring ...rec
 				"--tsdb.path", filepath.Join(receiveDir, "tsdb"),
 				"--log.level", "debug",
 				"--receive.replication-factor", strconv.Itoa(replicationFactor),
-				"--receive.local-endpoint", remoteWriteEndpoint(http),
+				"--receive.local-endpoint", grpc.HostPort(),
 				"--receive.hashrings-file", filepath.Join(receiveDir, "hashrings.json"),
 				"--receive.hashrings-file-refresh-interval", "5s")), nil
 		},
@@ -269,6 +272,7 @@ func storeGateway(http, grpc address, bucketConfig []byte, relabelConfig []byte)
 				// Accelerated sync time for quicker test (3m by default).
 				"--sync-block-duration", "5s",
 				"--selector.relabel-config", string(relabelConfig),
+				"--experimental.enable-index-header",
 			)), nil
 		},
 	}
@@ -295,7 +299,7 @@ receivers:
 			if err := ioutil.WriteFile(dir+"/config.yaml", []byte(config), 0666); err != nil {
 				return nil, errors.Wrap(err, "creating alertmanager config file failed")
 			}
-			return newCmdExec(exec.Command(testutil.AlertmanagerBinary(),
+			return newCmdExec(exec.Command(e2eutil.AlertmanagerBinary(),
 				"--config.file", dir+"/config.yaml",
 				"--web.listen-address", http.HostPort(),
 				"--cluster.listen-address", "",
@@ -305,11 +309,15 @@ receivers:
 	}
 }
 
-func rule(http, grpc address, ruleDir string, amCfg []byte, queryAddresses []address, queryFileSDAddresses []address) *serverScheduler {
+func rule(http, grpc address, ruleDir string, amCfg []byte, queryCfg []byte) *serverScheduler {
 	return &serverScheduler{
 		HTTP: http,
 		GRPC: grpc,
 		schedule: func(workDir string) (Exec, error) {
+			err := ioutil.WriteFile(filepath.Join(workDir, "query.cfg"), queryCfg, 0666)
+			if err != nil {
+				return nil, errors.Wrap(err, "creating query config for ruler")
+			}
 			args := []string{
 				"rule",
 				"--debug.name", fmt.Sprintf("rule-%s", http.Port),
@@ -323,19 +331,9 @@ func rule(http, grpc address, ruleDir string, amCfg []byte, queryAddresses []add
 				"--grpc-grace-period", "0s",
 				"--http-address", http.HostPort(),
 				"--log.level", "debug",
+				"--query.config-file", filepath.Join(workDir, "query.cfg"),
 				"--query.sd-dns-interval", "5s",
 				"--resend-delay", "5s",
-			}
-
-			for _, addr := range queryAddresses {
-				args = append(args, "--query", addr.HostPort())
-			}
-
-			if len(queryFileSDAddresses) > 0 {
-				if err := ioutil.WriteFile(filepath.Join(workDir, "filesd.json"), []byte(generateFileSD(queryFileSDAddresses)), 0666); err != nil {
-					return nil, errors.Wrap(err, "creating ruler filesd config")
-				}
-				args = append(args, "--query.sd-files", filepath.Join(workDir, "filesd.json"))
 			}
 			return newCmdExec(exec.Command("thanos", args...)), nil
 		},
@@ -420,7 +418,7 @@ func minio(http address, config s3.Config) *serverScheduler {
 				return nil, errors.Wrap(err, "creating minio dir failed")
 			}
 
-			cmd := exec.Command(testutil.MinioBinary(),
+			cmd := exec.Command(e2eutil.MinioBinary(),
 				"server",
 				"--address", http.HostPort(),
 				dbDir,

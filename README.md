@@ -2,9 +2,10 @@
 
 [![CircleCI](https://circleci.com/gh/thanos-io/thanos.svg?style=svg)](https://circleci.com/gh/thanos-io/thanos)
 [![Go Report Card](https://goreportcard.com/badge/github.com/thanos-io/thanos)](https://goreportcard.com/report/github.com/thanos-io/thanos)
-[![GoDoc](https://godoc.org/github.com/thanos-io/thanos?status.svg)](https://godoc.org/github.com/thanos-io/thanos)
+[![Go Code reference](https://img.shields.io/badge/code%20reference-go.dev-darkblue.svg)](https://pkg.go.dev/github.com/thanos-io/thanos?tab=subdirectories)
 [![Slack](https://img.shields.io/badge/join%20slack-%23thanos-brightgreen.svg)](https://slack.cncf.io/)
 [![Netlify Status](https://api.netlify.com/api/v1/badges/664a5091-934c-4b0e-a7b6-bc12f822a590/deploy-status)](https://app.netlify.com/sites/thanos-io/deploys)
+[![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/3048/badge)](https://bestpractices.coreinfrastructure.org/projects/3048)
 
 ## Overview
 

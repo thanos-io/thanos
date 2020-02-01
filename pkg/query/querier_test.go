@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package query
 
 import (
@@ -28,7 +31,7 @@ func TestQueryableCreator_MaxResolution(t *testing.T) {
 	queryableCreator := NewQueryableCreator(nil, testProxy)
 
 	oneHourMillis := int64(1*time.Hour) / int64(time.Millisecond)
-	queryable := queryableCreator(false, nil, oneHourMillis, false)
+	queryable := queryableCreator(false, nil, oneHourMillis, false, false)
 
 	q, err := queryable.Querier(context.Background(), 0, 42)
 	testutil.Ok(t, err)
@@ -55,7 +58,7 @@ func TestQuerier_DownsampledData(t *testing.T) {
 		},
 	}
 
-	q := NewQueryableCreator(nil, testProxy)(false, nil, 9999999, false)
+	q := NewQueryableCreator(nil, testProxy)(false, nil, 9999999, false, false)
 
 	engine := promql.NewEngine(
 		promql.EngineOpts{
@@ -176,7 +179,7 @@ func TestQuerier_Series(t *testing.T) {
 
 	// Querier clamps the range to [1,300], which should drop some samples of the result above.
 	// The store API allows endpoints to send more data then initially requested.
-	q := newQuerier(context.Background(), nil, 1, 300, []string{""}, testProxy, false, 0, true)
+	q := newQuerier(context.Background(), nil, 1, 300, []string{""}, testProxy, false, 0, true, false)
 	defer func() { testutil.Ok(t, q.Close()) }()
 
 	res, _, err := q.Select(&storage.SelectParams{})

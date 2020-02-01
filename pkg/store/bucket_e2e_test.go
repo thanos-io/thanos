@@ -1,7 +1,11 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package store
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -22,14 +26,15 @@ import (
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
 var (
-	minTime         = time.Unix(0, 0)
-	maxTime, _      = time.Parse(time.RFC3339, "9999-12-31T23:59:59Z")
-	minTimeDuration = model.TimeOrDurationValue{Time: &minTime}
-	maxTimeDuration = model.TimeOrDurationValue{Time: &maxTime}
-	filterConf      = &FilterConfig{
+	minTime            = time.Unix(0, 0)
+	maxTime, _         = time.Parse(time.RFC3339, "9999-12-31T23:59:59Z")
+	minTimeDuration    = model.TimeOrDurationValue{Time: &minTime}
+	maxTimeDuration    = model.TimeOrDurationValue{Time: &maxTime}
+	allowAllFilterConf = &FilterConfig{
 		MinTime: minTimeDuration,
 		MaxTime: maxTimeDuration,
 	}
@@ -37,13 +42,13 @@ var (
 
 type noopCache struct{}
 
-func (noopCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte) {}
-func (noopCache) FetchMultiPostings(blockID ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
+func (noopCache) StorePostings(ctx context.Context, blockID ulid.ULID, l labels.Label, v []byte) {}
+func (noopCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
 	return map[labels.Label][]byte{}, keys
 }
 
-func (noopCache) StoreSeries(blockID ulid.ULID, id uint64, v []byte) {}
-func (noopCache) FetchMultiSeries(blockID ulid.ULID, ids []uint64) (map[uint64][]byte, []uint64) {
+func (noopCache) StoreSeries(ctx context.Context, blockID ulid.ULID, id uint64, v []byte) {}
+func (noopCache) FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []uint64) (map[uint64][]byte, []uint64) {
 	return map[uint64][]byte{}, ids
 }
 
@@ -55,20 +60,20 @@ func (c *swappableCache) SwapWith(ptr2 storecache.IndexCache) {
 	c.ptr = ptr2
 }
 
-func (c *swappableCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte) {
-	c.ptr.StorePostings(blockID, l, v)
+func (c *swappableCache) StorePostings(ctx context.Context, blockID ulid.ULID, l labels.Label, v []byte) {
+	c.ptr.StorePostings(ctx, blockID, l, v)
 }
 
-func (c *swappableCache) FetchMultiPostings(blockID ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
-	return c.ptr.FetchMultiPostings(blockID, keys)
+func (c *swappableCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label) (map[labels.Label][]byte, []labels.Label) {
+	return c.ptr.FetchMultiPostings(ctx, blockID, keys)
 }
 
-func (c *swappableCache) StoreSeries(blockID ulid.ULID, id uint64, v []byte) {
-	c.ptr.StoreSeries(blockID, id, v)
+func (c *swappableCache) StoreSeries(ctx context.Context, blockID ulid.ULID, id uint64, v []byte) {
+	c.ptr.StoreSeries(ctx, blockID, id, v)
 }
 
-func (c *swappableCache) FetchMultiSeries(blockID ulid.ULID, ids []uint64) (map[uint64][]byte, []uint64) {
-	return c.ptr.FetchMultiSeries(blockID, ids)
+func (c *swappableCache) FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []uint64) (map[uint64][]byte, []uint64) {
+	return c.ptr.FetchMultiSeries(ctx, blockID, ids)
 }
 
 type storeSuite struct {
@@ -80,7 +85,7 @@ type storeSuite struct {
 }
 
 func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt objstore.Bucket,
-	series []labels.Labels, extLset labels.Labels) (blocks int, minTime, maxTime int64) {
+	series []labels.Labels, extLset labels.Labels) (minTime, maxTime int64) {
 	ctx := context.Background()
 	logger := log.NewNopLogger()
 
@@ -96,9 +101,9 @@ func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt o
 
 		// Create two blocks per time slot. Only add 10 samples each so only one chunk
 		// gets created each. This way we can easily verify we got 10 chunks per series below.
-		id1, err := testutil.CreateBlock(ctx, dir, series[:4], 10, mint, maxt, extLset, 0)
+		id1, err := e2eutil.CreateBlock(ctx, dir, series[:4], 10, mint, maxt, extLset, 0)
 		testutil.Ok(t, err)
-		id2, err := testutil.CreateBlock(ctx, dir, series[4:], 10, mint, maxt, extLset, 0)
+		id2, err := e2eutil.CreateBlock(ctx, dir, series[4:], 10, mint, maxt, extLset, 0)
 		testutil.Ok(t, err)
 
 		dir1, dir2 := filepath.Join(dir, id1.String()), filepath.Join(dir, id2.String())
@@ -111,7 +116,6 @@ func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt o
 
 		testutil.Ok(t, block.Upload(ctx, logger, bkt, dir1))
 		testutil.Ok(t, block.Upload(ctx, logger, bkt, dir2))
-		blocks += 2
 
 		testutil.Ok(t, os.RemoveAll(dir1))
 		testutil.Ok(t, os.RemoveAll(dir2))
@@ -120,7 +124,7 @@ func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt o
 	return
 }
 
-func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, manyParts bool, maxSampleCount uint64, relabelConfig []*relabel.Config) *storeSuite {
+func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, manyParts bool, maxSampleCount uint64, relabelConfig []*relabel.Config, filterConf *FilterConfig) *storeSuite {
 	series := []labels.Labels{
 		labels.FromStrings("a", "1", "b", "1"),
 		labels.FromStrings("a", "1", "b", "2"),
@@ -133,7 +137,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	}
 	extLset := labels.FromStrings("ext1", "value1")
 
-	blocks, minTime, maxTime := prepareTestBlocks(t, time.Now(), 3, dir, bkt,
+	minTime, maxTime := prepareTestBlocks(t, time.Now(), 3, dir, bkt,
 		series, extLset)
 
 	s := &storeSuite{
@@ -143,7 +147,28 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		maxTime: maxTime,
 	}
 
-	store, err := NewBucketStore(s.logger, nil, bkt, dir, s.cache, 0, maxSampleCount, 20, false, 20, filterConf, relabelConfig, true)
+	metaFetcher, err := block.NewMetaFetcher(s.logger, 20, bkt, dir, nil,
+		block.NewTimePartitionMetaFilter(filterConf.MinTime, filterConf.MaxTime).Filter,
+		block.NewLabelShardedMetaFilter(relabelConfig).Filter,
+	)
+	testutil.Ok(t, err)
+
+	store, err := NewBucketStore(
+		s.logger,
+		nil,
+		bkt,
+		metaFetcher,
+		dir,
+		s.cache,
+		0,
+		maxSampleCount,
+		20,
+		false,
+		20,
+		filterConf,
+		true,
+		true,
+	)
 	testutil.Ok(t, err)
 	s.store = store
 
@@ -155,14 +180,11 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	defer cancel()
 
 	testutil.Ok(t, store.SyncBlocks(ctx))
-
-	if store.numBlocks() < blocks {
-		t.Fatalf("not all blocks loaded got %v, expected %v", store.numBlocks(), blocks)
-	}
 	return s
 }
 
-func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
+// TODO(bwplotka): Benchmark Series.
+func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 	mint, maxt := s.store.TimeRange()
 	testutil.Equals(t, s.minTime, mint)
 	testutil.Equals(t, s.maxTime, maxt)
@@ -173,8 +195,9 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 
 	// TODO(bwplotka): Add those test cases to TSDB querier_test.go as well, there are no tests for matching.
 	for i, tcase := range []struct {
-		req      *storepb.SeriesRequest
-		expected [][]storepb.Label
+		req              *storepb.SeriesRequest
+		expected         [][]storepb.Label
+		expectedChunkLen int
 	}{
 		{
 			req: &storepb.SeriesRequest{
@@ -184,6 +207,7 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 				MinTime: mint,
 				MaxTime: maxt,
 			},
+			expectedChunkLen: 3,
 			expected: [][]storepb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
@@ -203,6 +227,7 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 				MinTime: mint,
 				MaxTime: maxt,
 			},
+			expectedChunkLen: 3,
 			expected: [][]storepb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
@@ -218,6 +243,7 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 				MinTime: mint,
 				MaxTime: maxt,
 			},
+			expectedChunkLen: 3,
 			expected: [][]storepb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
@@ -233,6 +259,7 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 				MinTime: mint,
 				MaxTime: maxt,
 			},
+			expectedChunkLen: 3,
 			expected: [][]storepb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
@@ -252,6 +279,7 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 				MinTime: mint,
 				MaxTime: maxt,
 			},
+			expectedChunkLen: 3,
 			expected: [][]storepb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
@@ -271,6 +299,7 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 				MinTime: mint,
 				MaxTime: maxt,
 			},
+			expectedChunkLen: 3,
 			expected: [][]storepb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
@@ -286,6 +315,7 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 				MinTime: mint,
 				MaxTime: maxt,
 			},
+			expectedChunkLen: 3,
 			expected: [][]storepb.Label{
 				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
 				{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
@@ -309,6 +339,7 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 				MinTime: mint,
 				MaxTime: maxt,
 			},
+			expectedChunkLen: 3,
 			expected: [][]storepb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
@@ -324,6 +355,7 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 				MinTime: mint,
 				MaxTime: maxt,
 			},
+			expectedChunkLen: 3,
 			expected: [][]storepb.Label{
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
 				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
@@ -347,23 +379,43 @@ func testBucketStore_e2e(t testing.TB, ctx context.Context, s *storeSuite) {
 				MaxTime: maxt,
 			},
 		},
+		// Test no-chunk option.
+		{
+			req: &storepb.SeriesRequest{
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+				},
+				MinTime:    mint,
+				MaxTime:    maxt,
+				SkipChunks: true,
+			},
+			expectedChunkLen: 0,
+			expected: [][]storepb.Label{
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+				{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+			},
+		},
 	} {
-		t.Log("Run ", i)
+		if ok := t.Run(fmt.Sprint(i), func(t *testing.T) {
+			srv := newStoreSeriesServer(ctx)
 
-		srv := newStoreSeriesServer(ctx)
+			testutil.Ok(t, s.store.Series(tcase.req, srv))
+			testutil.Equals(t, len(tcase.expected), len(srv.SeriesSet))
 
-		testutil.Ok(t, s.store.Series(tcase.req, srv))
-		testutil.Equals(t, len(tcase.expected), len(srv.SeriesSet))
-
-		for i, s := range srv.SeriesSet {
-			testutil.Equals(t, tcase.expected[i], s.Labels)
-			testutil.Equals(t, 3, len(s.Chunks))
+			for i, s := range srv.SeriesSet {
+				testutil.Equals(t, tcase.expected[i], s.Labels)
+				testutil.Equals(t, tcase.expectedChunkLen, len(s.Chunks))
+			}
+		}); !ok {
+			return
 		}
 	}
 }
 
 func TestBucketStore_e2e(t *testing.T) {
-	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
+	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
@@ -371,29 +423,38 @@ func TestBucketStore_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-		s := prepareStoreWithTestBlocks(t, dir, bkt, false, 0, emptyRelabelConfig)
+		s := prepareStoreWithTestBlocks(t, dir, bkt, false, 0, emptyRelabelConfig, allowAllFilterConf)
 
-		t.Log("Test with no index cache")
-		s.cache.SwapWith(noopCache{})
-		testBucketStore_e2e(t, ctx, s)
+		if ok := t.Run("no index cache", func(t *testing.T) {
+			s.cache.SwapWith(noopCache{})
+			testBucketStore_e2e(t, ctx, s)
+		}); !ok {
+			return
+		}
 
-		t.Log("Test with large, sufficient index cache")
-		indexCache, err := storecache.NewInMemoryIndexCache(s.logger, nil, storecache.Opts{
-			MaxItemSizeBytes: 1e5,
-			MaxSizeBytes:     2e5,
-		})
-		testutil.Ok(t, err)
-		s.cache.SwapWith(indexCache)
-		testBucketStore_e2e(t, ctx, s)
+		if ok := t.Run("with large, sufficient index cache", func(t *testing.T) {
+			indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(s.logger, nil, storecache.InMemoryIndexCacheConfig{
+				MaxItemSize: 1e5,
+				MaxSize:     2e5,
+			})
+			testutil.Ok(t, err)
+			s.cache.SwapWith(indexCache)
+			testBucketStore_e2e(t, ctx, s)
+		}); !ok {
+			return
+		}
 
-		t.Log("Test with small index cache")
-		indexCache2, err := storecache.NewInMemoryIndexCache(s.logger, nil, storecache.Opts{
-			MaxItemSizeBytes: 50,
-			MaxSizeBytes:     100,
-		})
-		testutil.Ok(t, err)
-		s.cache.SwapWith(indexCache2)
-		testBucketStore_e2e(t, ctx, s)
+		if ok := t.Run("with small index cache", func(t *testing.T) {
+			indexCache2, err := storecache.NewInMemoryIndexCacheWithConfig(s.logger, nil, storecache.InMemoryIndexCacheConfig{
+				MaxItemSize: 50,
+				MaxSize:     100,
+			})
+			testutil.Ok(t, err)
+			s.cache.SwapWith(indexCache2)
+			testBucketStore_e2e(t, ctx, s)
+		}); !ok {
+			return
+		}
 	})
 }
 
@@ -411,7 +472,7 @@ func (g naivePartitioner) Partition(length int, rng func(int) (uint64, uint64)) 
 // This tests if our, sometimes concurrent, fetches for different parts works.
 // Regression test against: https://github.com/thanos-io/thanos/issues/829.
 func TestBucketStore_ManyParts_e2e(t *testing.T) {
-	objtesting.ForeachStore(t, func(t testing.TB, bkt objstore.Bucket) {
+	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
@@ -419,11 +480,11 @@ func TestBucketStore_ManyParts_e2e(t *testing.T) {
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-		s := prepareStoreWithTestBlocks(t, dir, bkt, true, 0, emptyRelabelConfig)
+		s := prepareStoreWithTestBlocks(t, dir, bkt, true, 0, emptyRelabelConfig, allowAllFilterConf)
 
-		indexCache, err := storecache.NewInMemoryIndexCache(s.logger, nil, storecache.Opts{
-			MaxItemSizeBytes: 1e5,
-			MaxSizeBytes:     2e5,
+		indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(s.logger, nil, storecache.InMemoryIndexCacheConfig{
+			MaxItemSize: 1e5,
+			MaxSize:     2e5,
 		})
 		testutil.Ok(t, err)
 		s.cache.SwapWith(indexCache)
@@ -441,69 +502,45 @@ func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, os.RemoveAll(dir)) }()
 
-	series := []labels.Labels{
-		labels.FromStrings("a", "1", "b", "1"),
-		labels.FromStrings("a", "1", "b", "1"),
-		labels.FromStrings("a", "1", "b", "1"),
-		labels.FromStrings("a", "1", "b", "1"),
-		labels.FromStrings("a", "1", "b", "2"),
-		labels.FromStrings("a", "1", "b", "2"),
-		labels.FromStrings("a", "1", "b", "2"),
-		labels.FromStrings("a", "1", "b", "2"),
-	}
-	extLset := labels.FromStrings("ext1", "value1")
-
-	_, minTime, _ := prepareTestBlocks(t, time.Now(), 3, dir, bkt, series, extLset)
-
 	hourAfter := time.Now().Add(1 * time.Hour)
 	filterMaxTime := model.TimeOrDurationValue{Time: &hourAfter}
 
-	store, err := NewBucketStore(nil, nil, bkt, dir, noopCache{}, 0, 0, 20, false, 20,
-		&FilterConfig{
-			MinTime: minTimeDuration,
-			MaxTime: filterMaxTime,
-		}, emptyRelabelConfig, true)
-	testutil.Ok(t, err)
+	s := prepareStoreWithTestBlocks(t, dir, bkt, false, 241, emptyRelabelConfig, &FilterConfig{
+		MinTime: minTimeDuration,
+		MaxTime: filterMaxTime,
+	})
+	testutil.Ok(t, s.store.SyncBlocks(ctx))
 
-	err = store.SyncBlocks(ctx)
-	testutil.Ok(t, err)
-
-	mint, maxt := store.TimeRange()
-	testutil.Equals(t, minTime, mint)
+	mint, maxt := s.store.TimeRange()
+	testutil.Equals(t, s.minTime, mint)
 	testutil.Equals(t, filterMaxTime.PrometheusTimestamp(), maxt)
 
-	for i, tcase := range []struct {
-		req            *storepb.SeriesRequest
-		expectedLabels [][]storepb.Label
-		expectedChunks int
-	}{
-		{
-			req: &storepb.SeriesRequest{
-				Matchers: []storepb.LabelMatcher{
-					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
-				},
-				MinTime: mint,
-				MaxTime: timestamp.FromTime(time.Now().AddDate(0, 0, 1)),
-			},
-			expectedLabels: [][]storepb.Label{
-				{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
-				{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext2", Value: "value2"}},
-			},
-			// prepareTestBlocks makes 3 chunks containing 2 hour data,
-			// we should only get 1, as we are filtering.
-			expectedChunks: 1,
+	req := &storepb.SeriesRequest{
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 		},
-	} {
-		t.Log("Run", i)
+		MinTime: mint,
+		MaxTime: timestamp.FromTime(time.Now().AddDate(0, 0, 1)),
+	}
 
-		srv := newStoreSeriesServer(ctx)
+	expectedLabels := [][]storepb.Label{
+		{{Name: "a", Value: "1"}, {Name: "b", Value: "1"}, {Name: "ext1", Value: "value1"}},
+		{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "ext1", Value: "value1"}},
+		{{Name: "a", Value: "1"}, {Name: "c", Value: "1"}, {Name: "ext2", Value: "value2"}},
+		{{Name: "a", Value: "1"}, {Name: "c", Value: "2"}, {Name: "ext2", Value: "value2"}},
+	}
 
-		testutil.Ok(t, store.Series(tcase.req, srv))
-		testutil.Equals(t, len(tcase.expectedLabels), len(srv.SeriesSet))
+	s.cache.SwapWith(noopCache{})
+	srv := newStoreSeriesServer(ctx)
 
-		for i, s := range srv.SeriesSet {
-			testutil.Equals(t, tcase.expectedLabels[i], s.Labels)
-			testutil.Equals(t, tcase.expectedChunks, len(s.Chunks))
-		}
+	testutil.Ok(t, s.store.Series(req, srv))
+	testutil.Equals(t, len(expectedLabels), len(srv.SeriesSet))
+
+	for i, s := range srv.SeriesSet {
+		testutil.Equals(t, expectedLabels[i], s.Labels)
+
+		// prepareTestBlocks makes 3 chunks containing 2 hour data,
+		// we should only get 1, as we are filtering by time.
+		testutil.Equals(t, 1, len(s.Chunks))
 	}
 }

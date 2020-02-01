@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 // Package block contains common functionality for interacting with TSDB blocks
 // in the context of Thanos.
 package block
@@ -27,8 +30,10 @@ const (
 	MetaFilename = "meta.json"
 	// IndexFilename is the known index file for block index.
 	IndexFilename = "index"
-	// IndexCacheFilename is the canonical name for index cache file that stores essential information needed.
+	// IndexCacheFilename is the canonical name for json index cache file that stores essential information.
 	IndexCacheFilename = "index.cache.json"
+	// IndexHeaderFilename is the canonical name for binary index header file that stores essential information.
+	IndexHeaderFilename = "index-header"
 	// ChunksDirname is the known dir name for chunks with compressed samples.
 	ChunksDirname = "chunks"
 

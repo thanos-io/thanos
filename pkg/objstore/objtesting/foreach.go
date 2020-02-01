@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package objtesting
 
 import (
@@ -40,7 +43,7 @@ func IsObjStoreSkipped(t *testing.T, provider client.ObjProvider) bool {
 // For each it creates a new bucket with a random name and a cleanup function
 // that deletes it after test was run.
 // Use THANOS_TEST_OBJSTORE_SKIP to skip explicitly certain object storages.
-func ForeachStore(t *testing.T, testFn func(t testing.TB, bkt objstore.Bucket)) {
+func ForeachStore(t *testing.T, testFn func(t *testing.T, bkt objstore.Bucket)) {
 	t.Parallel()
 
 	// Mandatory Inmem. Not parallel, to detect problem early.

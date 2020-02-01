@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package compact
 
 import (
@@ -13,21 +16,17 @@ import (
 
 // ApplyRetentionPolicyByResolution removes blocks depending on the specified retentionByResolution based on blocks MaxTime.
 // A value of 0 disables the retention for its resolution.
-func ApplyRetentionPolicyByResolution(ctx context.Context, logger log.Logger, bkt objstore.Bucket, retentionByResolution map[ResolutionLevel]time.Duration) error {
+func ApplyRetentionPolicyByResolution(ctx context.Context, logger log.Logger, bkt objstore.Bucket, fetcher block.MetadataFetcher, retentionByResolution map[ResolutionLevel]time.Duration) error {
 	level.Info(logger).Log("msg", "start optional retention")
-	if err := bkt.Iter(ctx, "", func(name string) error {
-		id, ok := block.IsBlockDir(name)
-		if !ok {
-			return nil
-		}
-		m, err := block.DownloadMeta(ctx, logger, bkt, id)
-		if err != nil {
-			return errors.Wrap(err, "download metadata")
-		}
+	metas, _, err := fetcher.Fetch(ctx)
+	if err != nil {
+		return errors.Wrap(err, "fetch metas")
+	}
 
+	for id, m := range metas {
 		retentionDuration := retentionByResolution[ResolutionLevel(m.Thanos.Downsample.Resolution)]
 		if retentionDuration.Seconds() == 0 {
-			return nil
+			continue
 		}
 
 		maxTime := time.Unix(m.MaxTime/1000, 0)
@@ -37,10 +36,6 @@ func ApplyRetentionPolicyByResolution(ctx context.Context, logger log.Logger, bk
 				return errors.Wrap(err, "delete block")
 			}
 		}
-
-		return nil
-	}); err != nil {
-		return errors.Wrap(err, "retention")
 	}
 
 	level.Info(logger).Log("msg", "optional retention apply done")

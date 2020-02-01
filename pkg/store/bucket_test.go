@@ -1,6 +1,10 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package store
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"io/ioutil"
@@ -19,18 +23,19 @@ import (
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
 	"github.com/oklog/ulid"
-	prommodel "github.com/prometheus/common/model"
+	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/relabel"
-	"github.com/prometheus/prometheus/pkg/timestamp"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
-	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/inmem"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/testutil"
+	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"gopkg.in/yaml.v2"
 )
 
@@ -439,6 +444,7 @@ func TestBucketStore_Info(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		dir,
 		noopCache{},
 		2e5,
@@ -446,8 +452,8 @@ func TestBucketStore_Info(t *testing.T) {
 		0,
 		false,
 		20,
-		filterConf,
-		emptyRelabelConfig,
+		allowAllFilterConf,
+		true,
 		true,
 	)
 	testutil.Ok(t, err)
@@ -462,80 +468,28 @@ func TestBucketStore_Info(t *testing.T) {
 	testutil.Equals(t, []storepb.Label(nil), resp.Labels)
 }
 
-func TestBucketStore_isBlockInMinMaxRange(t *testing.T) {
-	ctx := context.TODO()
-	dir, err := ioutil.TempDir("", "block-min-max-test")
-	testutil.Ok(t, err)
-
-	series := []labels.Labels{labels.FromStrings("a", "1", "b", "1")}
-	extLset := labels.FromStrings("ext1", "value1")
-
-	// Create a block in range [-2w, -1w].
-	id1, err := testutil.CreateBlock(ctx, dir, series, 10,
-		timestamp.FromTime(time.Now().Add(-14*24*time.Hour)),
-		timestamp.FromTime(time.Now().Add(-7*24*time.Hour)),
-		extLset, 0)
-	testutil.Ok(t, err)
-
-	// Create a block in range [-1w, 0w].
-	id2, err := testutil.CreateBlock(ctx, dir, series, 10,
-		timestamp.FromTime(time.Now().Add(-7*24*time.Hour)),
-		timestamp.FromTime(time.Now().Add(-0*24*time.Hour)),
-		extLset, 0)
-	testutil.Ok(t, err)
-
-	// Create a block in range [+1w, +2w].
-	id3, err := testutil.CreateBlock(ctx, dir, series, 10,
-		timestamp.FromTime(time.Now().Add(7*24*time.Hour)),
-		timestamp.FromTime(time.Now().Add(14*24*time.Hour)),
-		extLset, 0)
-	testutil.Ok(t, err)
-
-	meta1, err := metadata.Read(path.Join(dir, id1.String()))
-	testutil.Ok(t, err)
-	meta2, err := metadata.Read(path.Join(dir, id2.String()))
-	testutil.Ok(t, err)
-	meta3, err := metadata.Read(path.Join(dir, id3.String()))
-	testutil.Ok(t, err)
-
-	// Run actual test.
-	hourBeforeDur := prommodel.Duration(-1 * time.Hour)
-	hourBefore := model.TimeOrDurationValue{Dur: &hourBeforeDur}
-
-	// bucketStore accepts blocks in range [0, now-1h].
-	bucketStore, err := NewBucketStore(nil, nil, inmem.NewBucket(), dir, noopCache{}, 0, 0, 20, false, 20,
-		&FilterConfig{
-			MinTime: minTimeDuration,
-			MaxTime: hourBefore,
-		}, emptyRelabelConfig, true)
-	testutil.Ok(t, err)
-
-	inRange, err := bucketStore.isBlockInMinMaxRange(context.TODO(), meta1)
-	testutil.Ok(t, err)
-	testutil.Equals(t, true, inRange)
-
-	inRange, err = bucketStore.isBlockInMinMaxRange(context.TODO(), meta2)
-	testutil.Ok(t, err)
-	testutil.Equals(t, true, inRange)
-
-	inRange, err = bucketStore.isBlockInMinMaxRange(context.TODO(), meta3)
-	testutil.Ok(t, err)
-	testutil.Equals(t, false, inRange)
-}
-
 type recorder struct {
 	mtx sync.Mutex
 	objstore.Bucket
 
-	touched []string
+	getRangeTouched []string
+	getTouched      []string
 }
 
 func (r *recorder) Get(ctx context.Context, name string) (io.ReadCloser, error) {
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
 
-	r.touched = append(r.touched, name)
+	r.getTouched = append(r.getTouched, name)
 	return r.Bucket.Get(ctx, name)
+}
+
+func (r *recorder) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
+	r.mtx.Lock()
+	defer r.mtx.Unlock()
+
+	r.getRangeTouched = append(r.getRangeTouched, name)
+	return r.Bucket.GetRange(ctx, name, off, length)
 }
 
 func TestBucketStore_Sharding(t *testing.T) {
@@ -549,19 +503,19 @@ func TestBucketStore_Sharding(t *testing.T) {
 	bkt := inmem.NewBucket()
 	series := []labels.Labels{labels.FromStrings("a", "1", "b", "1")}
 
-	id1, err := testutil.CreateBlock(ctx, dir, series, 10, 0, 1000, labels.Labels{{Name: "cluster", Value: "a"}, {Name: "region", Value: "r1"}}, 0)
+	id1, err := e2eutil.CreateBlock(ctx, dir, series, 10, 0, 1000, labels.Labels{{Name: "cluster", Value: "a"}, {Name: "region", Value: "r1"}}, 0)
 	testutil.Ok(t, err)
 	testutil.Ok(t, block.Upload(ctx, logger, bkt, filepath.Join(dir, id1.String())))
 
-	id2, err := testutil.CreateBlock(ctx, dir, series, 10, 1000, 2000, labels.Labels{{Name: "cluster", Value: "a"}, {Name: "region", Value: "r1"}}, 0)
+	id2, err := e2eutil.CreateBlock(ctx, dir, series, 10, 1000, 2000, labels.Labels{{Name: "cluster", Value: "a"}, {Name: "region", Value: "r1"}}, 0)
 	testutil.Ok(t, err)
 	testutil.Ok(t, block.Upload(ctx, logger, bkt, filepath.Join(dir, id2.String())))
 
-	id3, err := testutil.CreateBlock(ctx, dir, series, 10, 0, 1000, labels.Labels{{Name: "cluster", Value: "b"}, {Name: "region", Value: "r1"}}, 0)
+	id3, err := e2eutil.CreateBlock(ctx, dir, series, 10, 0, 1000, labels.Labels{{Name: "cluster", Value: "b"}, {Name: "region", Value: "r1"}}, 0)
 	testutil.Ok(t, err)
 	testutil.Ok(t, block.Upload(ctx, logger, bkt, filepath.Join(dir, id3.String())))
 
-	id4, err := testutil.CreateBlock(ctx, dir, series, 10, 0, 1000, labels.Labels{{Name: "cluster", Value: "a"}, {Name: "region", Value: "r2"}}, 0)
+	id4, err := e2eutil.CreateBlock(ctx, dir, series, 10, 0, 1000, labels.Labels{{Name: "cluster", Value: "a"}, {Name: "region", Value: "r2"}}, 0)
 	testutil.Ok(t, err)
 	testutil.Ok(t, block.Upload(ctx, logger, bkt, filepath.Join(dir, id4.String())))
 
@@ -731,11 +685,31 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 			testutil.Ok(t, yaml.Unmarshal([]byte(sc.relabel), &relabelConf))
 
 			rec := &recorder{Bucket: bkt}
-			bucketStore, err := NewBucketStore(logger, nil, rec, dir, noopCache{}, 0, 0, 99, false, 20,
-				filterConf, relabelConf, true)
+			metaFetcher, err := block.NewMetaFetcher(logger, 20, bkt, dir, nil,
+				block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime).Filter,
+				block.NewLabelShardedMetaFilter(relabelConf).Filter,
+			)
 			testutil.Ok(t, err)
 
-			testutil.Ok(t, bucketStore.SyncBlocks(context.Background()))
+			bucketStore, err := NewBucketStore(
+				logger,
+				nil,
+				rec,
+				metaFetcher,
+				dir,
+				noopCache{},
+				0,
+				0,
+				99,
+				false,
+				20,
+				allowAllFilterConf,
+				true,
+				true,
+			)
+			testutil.Ok(t, err)
+
+			testutil.Ok(t, bucketStore.InitialSync(context.Background()))
 
 			// Check "stored" blocks.
 			ids := make([]ulid.ULID, 0, len(bucketStore.blocks))
@@ -759,15 +733,17 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 			// Regression test: https://github.com/thanos-io/thanos/issues/1664
 
 			// Sort records. We load blocks concurrently so operations might be not ordered.
-			sort.Strings(rec.touched)
+			sort.Strings(rec.getRangeTouched)
 
+			// With binary header nothing should be downloaded fully.
+			testutil.Equals(t, []string(nil), rec.getTouched)
 			if reuseDisk != "" {
-				testutil.Equals(t, expectedTouchedBlockOps(all, sc.expectedIDs, cached), rec.touched)
+				testutil.Equals(t, expectedTouchedBlockOps(all, sc.expectedIDs, cached), rec.getRangeTouched)
 				cached = sc.expectedIDs
 				return
 			}
 
-			testutil.Equals(t, expectedTouchedBlockOps(all, sc.expectedIDs, nil), rec.touched)
+			testutil.Equals(t, expectedTouchedBlockOps(all, sc.expectedIDs, nil), rec.getRangeTouched)
 		})
 	}
 }
@@ -794,14 +770,87 @@ func expectedTouchedBlockOps(all []ulid.ULID, expected []ulid.ULID, cached []uli
 			}
 		}
 
-		ops = append(ops, path.Join(id.String(), block.MetaFilename))
 		if found {
 			ops = append(ops,
-				path.Join(id.String(), block.IndexCacheFilename),
-				path.Join(id.String(), block.IndexFilename),
+				// To create binary header we touch part of index few times.
+				path.Join(id.String(), block.IndexFilename), // Version.
+				path.Join(id.String(), block.IndexFilename), // TOC.
+				path.Join(id.String(), block.IndexFilename), // Symbols.
+				path.Join(id.String(), block.IndexFilename), // PostingOffsets.
 			)
 		}
 	}
 	sort.Strings(ops)
 	return ops
+}
+
+// Regression tests against: https://github.com/thanos-io/thanos/issues/1983.
+func TestReadIndexCache_LoadSeries(t *testing.T) {
+	bkt := inmem.NewBucket()
+
+	s := newBucketStoreMetrics(nil)
+	b := &bucketBlock{
+		meta: &metadata.Meta{
+			BlockMeta: tsdb.BlockMeta{ULID: ulid.MustNew(1, nil)},
+		},
+		bucket:          bkt,
+		seriesRefetches: s.seriesRefetches,
+		logger:          log.NewNopLogger(),
+	}
+
+	buf := encoding.Encbuf{}
+	buf.PutByte(0)
+	buf.PutByte(0)
+	buf.PutUvarint(10)
+	buf.PutString("aaaaaaaaaa")
+	buf.PutUvarint(10)
+	buf.PutString("bbbbbbbbbb")
+	buf.PutUvarint(10)
+	buf.PutString("cccccccccc")
+	testutil.Ok(t, bkt.Upload(context.Background(), filepath.Join(b.meta.ULID.String(), block.IndexFilename), bytes.NewReader(buf.Get())))
+
+	r := bucketIndexReader{
+		block:        b,
+		stats:        &queryStats{},
+		loadedSeries: map[uint64][]byte{},
+		cache:        noopCache{},
+		logger:       log.NewNopLogger(),
+	}
+
+	// Success with no refetches.
+	testutil.Ok(t, r.loadSeries(context.TODO(), []uint64{2, 13, 24}, false, 2, 100))
+	testutil.Equals(t, map[uint64][]byte{
+		2:  []byte("aaaaaaaaaa"),
+		13: []byte("bbbbbbbbbb"),
+		24: []byte("cccccccccc"),
+	}, r.loadedSeries)
+	testutil.Equals(t, float64(0), promtest.ToFloat64(s.seriesRefetches))
+
+	// Success with 2 refetches.
+	r.loadedSeries = map[uint64][]byte{}
+	testutil.Ok(t, r.loadSeries(context.TODO(), []uint64{2, 13, 24}, false, 2, 15))
+	testutil.Equals(t, map[uint64][]byte{
+		2:  []byte("aaaaaaaaaa"),
+		13: []byte("bbbbbbbbbb"),
+		24: []byte("cccccccccc"),
+	}, r.loadedSeries)
+	testutil.Equals(t, float64(2), promtest.ToFloat64(s.seriesRefetches))
+
+	// Success with refetch on first element.
+	r.loadedSeries = map[uint64][]byte{}
+	testutil.Ok(t, r.loadSeries(context.TODO(), []uint64{2}, false, 2, 5))
+	testutil.Equals(t, map[uint64][]byte{
+		2: []byte("aaaaaaaaaa"),
+	}, r.loadedSeries)
+	testutil.Equals(t, float64(3), promtest.ToFloat64(s.seriesRefetches))
+
+	buf.Reset()
+	buf.PutByte(0)
+	buf.PutByte(0)
+	buf.PutUvarint(10)
+	buf.PutString("aaaaaaa")
+	testutil.Ok(t, bkt.Upload(context.Background(), filepath.Join(b.meta.ULID.String(), block.IndexFilename), bytes.NewReader(buf.Get())))
+
+	// Fail, but no recursion at least.
+	testutil.NotOk(t, r.loadSeries(context.TODO(), []uint64{2, 13, 24}, false, 1, 15))
 }

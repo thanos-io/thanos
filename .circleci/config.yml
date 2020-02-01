@@ -4,7 +4,7 @@ jobs:
   test:
     docker:
      # Build by Thanos make docker-ci
-      - image: quay.io/thanos/thanos-ci:v0.2.0
+      - image: quay.io/thanos/thanos-ci:v0.3.0
     working_directory: /go/src/github.com/thanos-io/thanos
     environment:
       GO111MODULE: 'on'
@@ -59,7 +59,7 @@ jobs:
   publish_master:
     docker:
       # Build by Thanos make docker-ci
-      - image: quay.io/thanos/thanos-ci:v0.1.0
+      - image: quay.io/thanos/thanos-ci:v0.2.0
     working_directory: /go/src/github.com/thanos-io/thanos
     steps:
       - checkout
@@ -78,8 +78,8 @@ jobs:
 
   publish_release:
     docker:
-      # Available from https://hub.docker.com/r/circleci/golang/
-      - image: circleci/golang:1.13.1
+      # Build by Thanos make docker-ci
+      - image: quay.io/thanos/thanos-ci:v0.2.0
     working_directory: /go/src/github.com/thanos-io/thanos
     environment:
       GOBIN: "/go/bin"

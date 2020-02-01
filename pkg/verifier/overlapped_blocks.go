@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package verifier
 
 import (
@@ -18,14 +21,14 @@ const OverlappedBlocksIssueID = "overlapped_blocks"
 
 // OverlappedBlocksIssue checks bucket for blocks with overlapped time ranges.
 // No repair is available for this issue.
-func OverlappedBlocksIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool) error {
+func OverlappedBlocksIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool, fetcher *block.MetaFetcher) error {
 	if idMatcher != nil {
 		return errors.Errorf("id matching is not supported by issue %s verifier", OverlappedBlocksIssueID)
 	}
 
 	level.Info(logger).Log("msg", "started verifying issue", "with-repair", repair, "issue", OverlappedBlocksIssueID)
 
-	overlaps, err := fetchOverlaps(ctx, logger, bkt)
+	overlaps, err := fetchOverlaps(ctx, logger, bkt, fetcher)
 	if err != nil {
 		return errors.Wrap(err, OverlappedBlocksIssueID)
 	}
@@ -45,28 +48,20 @@ func OverlappedBlocksIssue(ctx context.Context, logger log.Logger, bkt objstore.
 	return nil
 }
 
-func fetchOverlaps(ctx context.Context, logger log.Logger, bkt objstore.Bucket) (map[string]tsdb.Overlaps, error) {
-	metas := map[string][]tsdb.BlockMeta{}
-	err := bkt.Iter(ctx, "", func(name string) error {
-		id, ok := block.IsBlockDir(name)
-		if !ok {
-			return nil
-		}
-
-		m, err := block.DownloadMeta(ctx, logger, bkt, id)
-		if err != nil {
-			return err
-		}
-
-		metas[compact.GroupKey(m.Thanos)] = append(metas[compact.GroupKey(m.Thanos)], m.BlockMeta)
-		return nil
-	})
+func fetchOverlaps(ctx context.Context, logger log.Logger, bkt objstore.Bucket, fetcher *block.MetaFetcher) (map[string]tsdb.Overlaps, error) {
+	metas, _, err := fetcher.Fetch(ctx)
 	if err != nil {
 		return nil, err
 	}
 
+	groupMetasMap := map[string][]tsdb.BlockMeta{}
+	for _, meta := range metas {
+		groupKey := compact.GroupKey(meta.Thanos)
+		groupMetasMap[groupKey] = append(groupMetasMap[groupKey], meta.BlockMeta)
+	}
+
 	overlaps := map[string]tsdb.Overlaps{}
-	for k, groupMetas := range metas {
+	for k, groupMetas := range groupMetasMap {
 
 		sort.Slice(groupMetas, func(i, j int) bool {
 			return groupMetas[i].MinTime < groupMetas[j].MinTime
