@@ -1080,9 +1080,8 @@ func BenchmarkQueryResultEncoding(b *testing.B) {
 	}
 	b.ResetTimer()
 
-	c, err := json.Marshal(&input)
+	_, err := json.Marshal(&input)
 	testutil.Ok(b, err)
-	fmt.Println(len(c))
 }
 
 func TestParseDownsamplingParamMillis(t *testing.T) {

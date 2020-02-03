@@ -19,7 +19,6 @@ import (
 
 func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 	t.Parallel()
-	defer leaktest.CheckTimeout(t, 10*time.Second)()
 
 	// Init some data to conveniently define test cases later one.
 	block1 := ulid.MustNew(1, nil)

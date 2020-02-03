@@ -210,6 +210,11 @@ func NewJSONReader(ctx context.Context, logger log.Logger, bkt objstore.BucketRe
 		return nil, errors.Wrap(err, "read index cache")
 	}
 
+	// Just in case the dir was not created.
+	if err := os.MkdirAll(filepath.Join(dir, id.String()), os.ModePerm); err != nil {
+		return nil, errors.Wrap(err, "create dir")
+	}
+
 	// Try to download index cache file from object store.
 	if err = objstore.DownloadFile(ctx, logger, bkt, filepath.Join(id.String(), block.IndexCacheFilename), cachefn); err == nil {
 		return newFileJSONReader(logger, cachefn)
