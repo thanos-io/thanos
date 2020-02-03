@@ -34,7 +34,7 @@ fi
 
 CHECK=${1:-}
 
-commands=("compact" "query" "rule" "sidecar" "store" "bucket" "check")
+commands=("compact" "query" "rule" "sidecar" "store" "downsample" "bucket" "check")
 
 for x in "${commands[@]}"; do
     ./thanos "${x}" --help &> "docs/components/flags/${x}.txt"
