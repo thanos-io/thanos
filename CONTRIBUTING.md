@@ -40,8 +40,28 @@ Adding a large new feature or/and component to Thanos should be done by first cr
 
 * It is strongly recommended that you use OSX or popular Linux distributions systems e.g. Ubuntu, Redhat, or OpenSUSE for development.
 
-## Pull Request Process
+## Components Naming
 
+Thanos is a distributed system composed with several services and CLI tools as listed [here](cmd/thanos).
+
+When we refer to them as technical reference we use verb form: `store`, `compact`, `rule`, `query`. This includes:
+
+* Code
+* Metrics
+* Commands
+* Mixin examples: alerts, rules, dashboards
+* Container names
+* Flags and configuration
+* Package names
+* Log messages, traces
+
+However, when speaking about those or explaining we use `actor` noun form: `store gateway, compactor, ruler, querier`. This includes areas like:
+
+* Public communication
+* Documentation
+* Code comments
+
+## Pull Request Process
 
 1. Read [getting started docs](docs/getting-started.md) and prepare Thanos.
 2. Familiarize yourself with Go standard style guides Thanos follows: [this](https://golang.org/doc/effective_go.html) and [this](https://github.com/golang/go/wiki/CodeReviewComments).
