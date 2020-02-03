@@ -403,6 +403,7 @@ func startStreamSeriesSet(
 			go func() {
 				r, err := s.stream.Recv()
 				rCh <- &recvResponse{r: r, err: err}
+				close(rCh)
 			}()
 
 			select {
@@ -414,7 +415,6 @@ func startStreamSeriesSet(
 				return
 			case rr = <-rCh:
 			}
-			close(rCh)
 
 			if rr.err == io.EOF {
 				return
