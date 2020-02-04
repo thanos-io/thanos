@@ -77,6 +77,12 @@ ALERTMANAGER            ?= $(GOBIN)/alertmanager-$(ALERTMANAGER_VERSION)
 MINIO_SERVER_VERSION    ?= RELEASE.2018-10-06T00-15-16Z
 MINIO_SERVER            ?=$(GOBIN)/minio-$(MINIO_SERVER_VERSION)
 
+REACT_APP_PATH = pkg/ui/react-app
+REACT_APP_SOURCE_FILES = $(wildcard $(REACT_APP_PATH)/public/* $(REACT_APP_PATH)/src/* $(REACT_APP_PATH)/tsconfig.json)
+REACT_APP_OUTPUT_DIR = pkg/ui/static/react
+REACT_APP_NODE_MODULES_PATH = $(REACT_APP_PATH)/node_modules
+REACT_APP_NPM_LICENSES_TARBALL = "npm_licenses.tar.bz2"
+
 # fetch_go_bin_version downloads (go gets) the binary from specific version and installs it in $(GOBIN)/<bin>-<version>
 # arguments:
 # $(1): Install path. (e.g github.com/campoy/embedmd)
@@ -88,9 +94,9 @@ define fetch_go_bin_version
 
 	@echo ">> fetching $(1)@$(2) revision/version"
 	@if [ ! -d '$(TMP_GOPATH)/src/$(1)' ]; then \
-    GOPATH='$(TMP_GOPATH)' GO111MODULE='off' go get -d -u '$(1)/...'; \
+	GOPATH='$(TMP_GOPATH)' GO111MODULE='off' go get -d -u '$(1)/...'; \
   else \
-    CDPATH='' cd -- '$(TMP_GOPATH)/src/$(1)' && git fetch; \
+	CDPATH='' cd -- '$(TMP_GOPATH)/src/$(1)' && git fetch; \
   fi
 	@CDPATH='' cd -- '$(TMP_GOPATH)/src/$(1)' && git checkout -f -q '$(2)'
 	@echo ">> installing $(1)@$(2)"
@@ -103,34 +109,60 @@ endef
 define require_clean_work_tree
 	@git update-index -q --ignore-submodules --refresh
 
-    @if ! git diff-files --quiet --ignore-submodules --; then \
-        echo >&2 "cannot $1: you have unstaged changes."; \
-        git diff-files --name-status -r --ignore-submodules -- >&2; \
-        echo >&2 "Please commit or stash them."; \
-        exit 1; \
-    fi
+	@if ! git diff-files --quiet --ignore-submodules --; then \
+		echo >&2 "cannot $1: you have unstaged changes."; \
+		git diff-files --name-status -r --ignore-submodules -- >&2; \
+		echo >&2 "Please commit or stash them."; \
+		exit 1; \
+	fi
 
-    @if ! git diff-index --cached --quiet HEAD --ignore-submodules --; then \
-        echo >&2 "cannot $1: your index contains uncommitted changes."; \
-        git diff-index --cached --name-status -r --ignore-submodules HEAD -- >&2; \
-        echo >&2 "Please commit or stash them."; \
-        exit 1; \
-    fi
+	@if ! git diff-index --cached --quiet HEAD --ignore-submodules --; then \
+		echo >&2 "cannot $1: your index contains uncommitted changes."; \
+		git diff-index --cached --name-status -r --ignore-submodules HEAD -- >&2; \
+		echo >&2 "Please commit or stash them."; \
+		exit 1; \
+	fi
 
 endef
 
 .PHONY: all
 all: format build
 
+$(REACT_APP_NODE_MODULES_PATH): $(REACT_APP_PATH)/package.json $(REACT_APP_PATH)/yarn.lock
+	   cd $(REACT_APP_PATH) && yarn --frozen-lockfile
+
+$(REACT_APP_OUTPUT_DIR): $(REACT_APP_NODE_MODULES_PATH) $(REACT_APP_SOURCE_FILES)
+	   @echo ">> building React app"
+	   @./scripts/build-react-app.sh
+
 # assets repacks all static assets into go file for easier deploy.
 .PHONY: assets
-assets: $(GOBINDATA)
+assets: $(GOBINDATA) $(REACT_APP_OUTPUT_DIR)
 	@echo ">> deleting asset file"
 	@rm pkg/ui/bindata.go || true
 	@echo ">> writing assets"
 	@$(GOBINDATA) $(bindata_flags) -pkg ui -o pkg/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  pkg/ui/templates/... pkg/ui/static/...
 	@go fmt ./pkg/ui
 
+.PHONY: react-app-lint
+react-app-lint:
+	   @echo ">> running React app linting"
+	   cd $(REACT_APP_PATH) && yarn lint:ci
+
+.PHONY: react-app-lint-fix
+react-app-lint-fix:
+	@echo ">> running React app linting and fixing errors where possible"
+	cd $(REACT_APP_PATH) && yarn lint
+
+.PHONY: react-app-test
+react-app-test: | $(REACT_APP_NODE_MODULES_PATH) react-app-lint
+	@echo ">> running React app tests"
+	cd $(REACT_APP_PATH) && yarn test --no-watch --coverage
+
+.PHONY: react-app-start
+react-app-start: $(REACT_APP_NODE_MODULES_PATH)
+	@echo ">> running React app"
+	cd $(REACT_APP_PATH) && yarn start
 
 # build builds Thanos binary using `promu`.
 .PHONY: build
@@ -282,20 +314,23 @@ web: web-pre-process $(HUGO)
 	# TODO(bwplotka): Make it --gc
 	@cd $(WEB_DIR) && HUGO_ENV=production $(HUGO) --config hugo.yaml --minify -v -b $(WEBSITE_BASE_URL)
 
-.PHONY: lint
+.PHONY:lint
+lint: go-lint react-app-lint
+
+.PHONY: go-lint
 # PROTIP:
 # Add
 #      --cpu-profile-path string   Path to CPU profile output file
 #      --mem-profile-path string   Path to memory profile output file
 #
 # to debug big allocations during linting.
-lint: check-git $(GOLANGCILINT) $(MISSPELL)
+go-lint: check-git $(GOLANGCILINT) $(MISSPELL)
 	@echo ">> examining all of the Go files"
 	@go vet -stdmethods=false ./pkg/... ./cmd/... && go vet doc.go
 	@echo ">> linting all of the Go files GOGC=${GOGC}"
 	@$(GOLANGCILINT) run
 	@echo ">> detecting misspells"
-	@find . -type f | grep -v vendor/ | grep -vE '\./\..*' | xargs $(MISSPELL) -error
+	@find . -type f | grep -v vendor/ | grep -v pkg/ui/react-app/node_modules | grep -v pkg/ui/static | grep -vE '\./\..*' | xargs $(MISSPELL) -error
 	@echo ">> detecting white noise"
 	@find . -type f \( -name "*.md" -o -name "*.go" \) | SED_BIN="$(SED)" xargs scripts/cleanup-white-noise.sh
 	$(call require_clean_work_tree,"detected white noise")

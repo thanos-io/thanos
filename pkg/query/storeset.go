@@ -39,13 +39,13 @@ type StoreSpec interface {
 }
 
 type StoreStatus struct {
-	Name      string
-	LastCheck time.Time
-	LastError error
-	LabelSets []storepb.LabelSet
-	StoreType component.StoreAPI
-	MinTime   int64
-	MaxTime   int64
+	Name      string `json:"name"`
+	LastCheck time.Time `json:"last_check"`
+	LastError error `json:"last_error"`
+	LabelSets []storepb.LabelSet `json:"label_sets"`
+	StoreType component.StoreAPI `json:"store_type"`
+	MinTime   int64 `json:"min_time"`
+	MaxTime   int64 `json:"max_time"`
 }
 
 type grpcStoreSpec struct {

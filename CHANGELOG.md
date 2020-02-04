@@ -28,6 +28,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 - [#2030](https://github.com/thanos-io/thanos/pull/2030) Query: Add `thanos_proxy_store_empty_stream_responses_total` metric for number of empty responses from stores.
 - [#2049](https://github.com/thanos-io/thanos/pull/2049) Tracing: Support sampling on Elastic APM with new sample_rate setting.
 - [#2008](https://github.com/thanos-io/thanos/pull/2008) Querier, Receiver, Sidecar, Store: Add gRPC [health check](https://github.com/grpc/grpc/blob/master/doc/health-checking.md) endpoints.
+- [#2121](https://github.com/thanos-io/thanos/pull/2121) ui: Add React UI from Prometheus upstream
 
 ### Changed
 

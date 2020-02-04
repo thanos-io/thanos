@@ -7,9 +7,9 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
-	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -18,40 +18,103 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/common/version"
+	"github.com/thanos-io/thanos/pkg/component"
+)
+
+var (
+	reactAppPaths = []string{
+		"/",
+		"/alerts",
+		"/config",
+		"/flags",
+		"/graph",
+		"/rules",
+		"/service-discovery",
+		"/status",
+		"/targets",
+		"/tsdb-status",
+		"/version",
+	}
 )
 
 type BaseUI struct {
 	logger    log.Logger
 	menuTmpl  string
 	tmplFuncs template.FuncMap
+	flagsMap  map[string]string
+	component component.Component
 }
 
-func NewBaseUI(logger log.Logger, menuTmpl string, funcMap template.FuncMap) *BaseUI {
+func NewBaseUI(logger log.Logger, menuTmpl string, funcMap template.FuncMap, flagsMap map[string]string, component component.Component) *BaseUI {
 	funcMap["pathPrefix"] = func() string { return "" }
 	funcMap["buildVersion"] = func() string { return version.Revision }
 
-	return &BaseUI{logger: logger, menuTmpl: menuTmpl, tmplFuncs: funcMap}
+	return &BaseUI{logger: logger, menuTmpl: menuTmpl, tmplFuncs: funcMap, flagsMap: flagsMap, component: component}
 }
-
 func (bu *BaseUI) serveStaticAsset(w http.ResponseWriter, req *http.Request) {
 	fp := route.Param(req.Context(), "filepath")
 	fp = filepath.Join("pkg/ui/static", fp)
+	bu.serveAsset(fp, w, req)
+}
 
-	info, err := AssetInfo(fp)
-	if err != nil {
-		level.Warn(bu.logger).Log("msg", "Could not get file info", "err", err, "file", fp)
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-	file, err := Asset(fp)
-	if err != nil {
-		if err != io.EOF {
-			level.Warn(bu.logger).Log("msg", "Could not get file", "err", err, "file", fp)
+func (bu *BaseUI) serveReactUI(w http.ResponseWriter, req *http.Request) {
+	fp := route.Param(req.Context(), "filepath")
+	for _, rp := range reactAppPaths {
+		if fp != rp {
+			continue
 		}
+		bu.serveReactIndex("pkg/ui/static/react/index.html", w, req)
+		return
+	}
+	fp = filepath.Join("pkg/ui/static/react/", fp)
+	bu.serveAsset(fp, w, req)
+}
+
+func (bu *BaseUI) serveReactIndex(index string, w http.ResponseWriter, req *http.Request) {
+	_, file, err := bu.getAssetFile(index)
+	if err != nil {
+		level.Warn(bu.logger).Log("msg", "Could not get file", "err", err, "file", index)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
+	prefix := GetWebPrefix(bu.logger, bu.flagsMap, req)
 
+	tmpl, err := template.New("").Funcs(bu.tmplFuncs).
+		Funcs(template.FuncMap{"pathPrefix": func() string { return prefix }}).
+		Parse(string(file))
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := tmpl.Execute(w, struct {
+		Component string
+	}{
+		Component: bu.component.String(),
+	}); err != nil {
+		level.Warn(bu.logger).Log("msg", "template expansion failed", "err", err)
+	}
+}
+
+func (bu *BaseUI) getAssetFile(filename string) (os.FileInfo, []byte, error) {
+	info, err := AssetInfo(filename)
+	if err != nil {
+		return nil, nil, err
+	}
+	file, err := Asset(filename)
+	if err != nil {
+		return nil, nil, err
+	}
+	return info, file, nil
+}
+
+func (bu *BaseUI) serveAsset(fp string, w http.ResponseWriter, req *http.Request) {
+	info, file, err := bu.getAssetFile(fp)
+	if err != nil {
+		level.Warn(bu.logger).Log("msg", "Could not get file", "err", err, "file", fp)
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
 	http.ServeContent(w, req, info.Name(), info.ModTime(), bytes.NewReader(file))
 }
 

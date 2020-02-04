@@ -25,5 +25,8 @@ website/public/
 website/docs-pre-processed/
 !website/data
 
+# React build assets
+pkg/ui/static/react
+
 tmp/bin
 examples/tmp/
