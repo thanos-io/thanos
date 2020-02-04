@@ -419,56 +419,51 @@ type DeduplicateFilter struct {
 
 // NewDeduplicateFilter creates DeduplicateFilter.
 func NewDeduplicateFilter() *DeduplicateFilter {
-	return &DeduplicateFilter{
-		DuplicateIDs: []ulid.ULID{},
-	}
+	return &DeduplicateFilter{}
 }
 
 // Filter filters out duplicate blocks that can be formed
 // from two or more overlapping blocks that fully submatches the source blocks of the older blocks.
 func (f *DeduplicateFilter) Filter(metas map[ulid.ULID]*metadata.Meta, synced GaugeLabeled, _ bool) {
-	root := NewNode(ulid.MustNew(uint64(0), nil), nil)
+	root := &Node{}
 
-	metaSlice := []*metadata.Meta{}
 	for _, meta := range metas {
-		metaSlice = append(metaSlice, meta)
+		root.Children = append(root.Children, &Node{Meta: *meta})
 	}
-	sort.Slice(metaSlice, func(i, j int) bool {
-		ilen := len(metaSlice[i].Compaction.Sources)
-		jlen := len(metaSlice[j].Compaction.Sources)
+	sort.Slice(root.Children, func(i, j int) bool {
+		ilen := len(root.Children[i].Compaction.Sources)
+		jlen := len(root.Children[j].Compaction.Sources)
 
 		if ilen == jlen {
-			return metaSlice[i].ULID.Compare(metaSlice[j].ULID) < 0
+			return root.Children[i].ULID.Compare(root.Children[j].ULID) < 0
 		}
 
 		return ilen-jlen > 0
 	})
 
-	metaNodes := []*Node{}
-	for _, meta := range metaSlice {
-		metaNodes = append(metaNodes, NewNode(meta.ULID, meta))
+	for _, newNode := range root.Children {
+		addNodeBySources(root, newNode)
 	}
-	root.Add(metas, addNodeToRoot, metaNodes)
 
-	duplicateULIDs := root.GetNonRootIDs()
+	duplicateULIDs := getNonRootIDs(root)
 	for _, id := range duplicateULIDs {
 		if metas[id] != nil {
 			f.DuplicateIDs = append(f.DuplicateIDs, id)
 		}
+		// TODO(khyati): Increment synced metrics with proper state.
 		delete(metas, id)
 	}
 }
 
-func addNodeToRoot(startNode *Node, metas map[ulid.ULID]*metadata.Meta, newNode *Node) bool {
+func addNodeBySources(root *Node, add *Node) bool {
 	var rootNode *Node
-	id := newNode.ID
-	for _, node := range startNode.Children {
-		parentSources := metas[node.ID].Compaction.Sources
-		childSources := metas[id].Compaction.Sources
+	for _, node := range root.Children {
+		parentSources := node.Compaction.Sources
+		childSources := add.Compaction.Sources
 
 		// Block exists with same sources, add as child.
 		if contains(parentSources, childSources) && contains(childSources, parentSources) {
-			node.Children = append(node.Children, newNode)
+			node.Children = append(node.Children, add)
 			return true
 		}
 
@@ -479,12 +474,7 @@ func addNodeToRoot(startNode *Node, metas map[ulid.ULID]*metadata.Meta, newNode 
 		}
 	}
 
-	if rootNode == nil {
-		startNode.Children = append(startNode.Children, newNode)
-		return true
-	}
-
-	return addNodeToRoot(rootNode, metas, newNode)
+	return addNodeBySources(rootNode, add)
 }
 
 func contains(s1 []ulid.ULID, s2 []ulid.ULID) bool {

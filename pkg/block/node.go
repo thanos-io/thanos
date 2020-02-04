@@ -8,50 +8,26 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 )
 
-type addNode func(root *Node, metas map[ulid.ULID]*metadata.Meta, node *Node) bool
-
-// Node type implements a node of a tree.
+// Node type represents a node of a tree.
 type Node struct {
-	ID       ulid.ULID
-	Value    *metadata.Meta
+	metadata.Meta
 	Children []*Node
 }
 
-// NewNode creates a new node.
-func NewNode(id ulid.ULID, value *metadata.Meta) *Node {
-	return &Node{
-		ID:       id,
-		Children: []*Node{},
-		Value:    value,
-	}
-}
-
-// Add Inserts node as children to root node.
-func (n *Node) Add(metas map[ulid.ULID]*metadata.Meta, addNodeFn addNode, nodes []*Node) bool {
-	for _, newNode := range nodes {
-		addNodeResult := addNodeFn(n, metas, newNode)
-		if !addNodeResult {
-			return false
-		}
-	}
-	return true
-}
-
-// GetNonRootIDs returns list of ids which are not on root level.
-func (n *Node) GetNonRootIDs() []ulid.ULID {
+// getNonRootIDs returns list of ids which are not on root level.
+func getNonRootIDs(root *Node) []ulid.ULID {
 	var ulids []ulid.ULID
-	for _, node := range n.Children {
-		ulids = append(ulids, n.iterate(node)...)
-		ulids = remove(ulids, node.ID)
+	for _, node := range root.Children {
+		ulids = append(ulids, childrenToULIDs(root, node)...)
+		ulids = remove(ulids, root.ULID)
 	}
 	return ulids
 }
 
-func (n *Node) iterate(node *Node) []ulid.ULID {
-	var ulids []ulid.ULID
-	ulids = append(ulids, node.ID)
-	for _, childNode := range node.Children {
-		ulids = append(ulids, n.iterate(childNode)...)
+func childrenToULIDs(a, b *Node) []ulid.ULID {
+	var ulids = []ulid.ULID{b.ULID}
+	for _, childNode := range a.Children {
+		ulids = append(ulids, childrenToULIDs(a, childNode)...)
 	}
 	return ulids
 }
