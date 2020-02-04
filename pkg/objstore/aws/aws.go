@@ -84,7 +84,7 @@ type Bucket struct {
 
 // parseConfig unmarshals a buffer into a Config with default HTTPConfig values.
 func parseConfig(conf []byte) (Config, error) {
-	config := defaultConfig
+	config := DefaultConfig
 	if err := yaml.Unmarshal(conf, &config); err != nil {
 		return Config{}, err
 	}
@@ -197,7 +197,8 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 	}
 
 	object, err := b.client.ListObjects(&s3.ListObjectsInput{Bucket: &b.name,
-		Prefix: &dir})
+		Prefix:    aws.String(dir),
+		Delimiter: aws.String(DirDelim)})
 
 	if err != nil {
 		return err
@@ -213,6 +214,20 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		}
 
 		if err := f(*obj.Key); err != nil {
+			return err
+		}
+	}
+
+	for _, obj := range object.CommonPrefixes {
+		if *obj.Prefix == "" {
+			continue
+		}
+
+		if *obj.Prefix == dir {
+			continue
+		}
+
+		if err := f(*obj.Prefix); err != nil {
 			return err
 		}
 	}
