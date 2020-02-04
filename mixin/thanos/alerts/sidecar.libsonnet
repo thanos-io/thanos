@@ -12,11 +12,12 @@
           {
             alert: 'ThanosSidecarPrometheusDown',
             annotations: {
-              message: 'The prometheus which Thanos Sidecar {{$labels.job}} {{$labels.pod}} listened is down.',
+              message: 'Thanos Sidecar {{$labels.job}} {{$labels.pod}} cannot connect to Prometheus.',
             },
             expr: |||
               thanos_sidecar_prometheus_up{%(selector)s} == 0
             ||| % thanos.sidecar,
+            'for': '5m',
             labels: {
               severity: 'critical',
             },
