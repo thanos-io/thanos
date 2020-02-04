@@ -15,7 +15,7 @@
               message: 'Thanos Sidecar {{$labels.job}} {{$labels.pod}} cannot connect to Prometheus.',
             },
             expr: |||
-              thanos_sidecar_prometheus_up{%(selector)s} == 0
+              sum by (job, pod) (thanos_sidecar_prometheus_up{%(selector)s} == 0)
             ||| % thanos.sidecar,
             'for': '5m',
             labels: {
