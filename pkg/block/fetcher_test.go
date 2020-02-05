@@ -7,10 +7,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"testing"
 	"time"
@@ -392,4 +394,179 @@ func TestTimePartitionMetaFilter_Filter(t *testing.T) {
 	testutil.Equals(t, 2.0, promtest.ToFloat64(synced.WithLabelValues(timeExcludedMeta)))
 	testutil.Equals(t, expected, input)
 
+}
+
+func TestDeduplicateFilter_Filter(t *testing.T) {
+	for _, tcase := range []struct {
+		name     string
+		input    map[ulid.ULID][]ulid.ULID
+		expected []ulid.ULID
+	}{
+		{
+			name: "3 non compacted blocks in bucket",
+			input: map[ulid.ULID][]ulid.ULID{
+				ULID(1): []ulid.ULID{ULID(1)},
+				ULID(2): []ulid.ULID{ULID(2)},
+				ULID(3): []ulid.ULID{ULID(3)},
+			},
+			expected: []ulid.ULID{
+				ULID(1),
+				ULID(2),
+				ULID(3),
+			},
+		},
+		{
+			name: "compacted block with sources in bucket",
+			input: map[ulid.ULID][]ulid.ULID{
+				ULID(6): []ulid.ULID{ULID(6)},
+				ULID(4): []ulid.ULID{ULID(1), ULID(3), ULID(2)},
+				ULID(5): []ulid.ULID{ULID(5)},
+			},
+			expected: []ulid.ULID{
+				ULID(4),
+				ULID(5),
+				ULID(6),
+			},
+		},
+		{
+			name: "two compacted blocks with same sources",
+			input: map[ulid.ULID][]ulid.ULID{
+				ULID(5): []ulid.ULID{ULID(5)},
+				ULID(6): []ulid.ULID{ULID(6)},
+				ULID(3): []ulid.ULID{ULID(1), ULID(2)},
+				ULID(4): []ulid.ULID{ULID(1), ULID(2)},
+			},
+			expected: []ulid.ULID{
+				ULID(3),
+				ULID(5),
+				ULID(6),
+			},
+		},
+		{
+			name: "two compacted blocks with overlapping sources",
+			input: map[ulid.ULID][]ulid.ULID{
+				ULID(4): []ulid.ULID{ULID(1), ULID(2)},
+				ULID(6): []ulid.ULID{ULID(6)},
+				ULID(5): []ulid.ULID{ULID(1), ULID(3), ULID(2)},
+			},
+			expected: []ulid.ULID{
+				ULID(5),
+				ULID(6),
+			},
+		},
+		{
+			name: "3 non compacted blocks and compacted block of level 2 in bucket",
+			input: map[ulid.ULID][]ulid.ULID{
+				ULID(6): []ulid.ULID{ULID(6)},
+				ULID(1): []ulid.ULID{ULID(1)},
+				ULID(2): []ulid.ULID{ULID(2)},
+				ULID(3): []ulid.ULID{ULID(3)},
+				ULID(4): []ulid.ULID{ULID(2), ULID(1), ULID(3)},
+			},
+			expected: []ulid.ULID{
+				ULID(4),
+				ULID(6),
+			},
+		},
+		{
+			name: "3 compacted blocks of level 2 and one compacted block of level 3 in bucket",
+			input: map[ulid.ULID][]ulid.ULID{
+				ULID(10): []ulid.ULID{ULID(1), ULID(2), ULID(3)},
+				ULID(11): []ulid.ULID{ULID(6), ULID(4), ULID(5)},
+				ULID(14): []ulid.ULID{ULID(14)},
+				ULID(1):  []ulid.ULID{ULID(1)},
+				ULID(13): []ulid.ULID{ULID(1), ULID(6), ULID(2), ULID(3), ULID(5), ULID(7), ULID(4), ULID(8), ULID(9)},
+				ULID(12): []ulid.ULID{ULID(7), ULID(9), ULID(8)},
+			},
+			expected: []ulid.ULID{
+				ULID(14),
+				ULID(13),
+			},
+		},
+		{
+			name: "compacted blocks with overlapping sources",
+			input: map[ulid.ULID][]ulid.ULID{
+				ULID(8): []ulid.ULID{ULID(1), ULID(3), ULID(2), ULID(4)},
+				ULID(1): []ulid.ULID{ULID(1)},
+				ULID(5): []ulid.ULID{ULID(1), ULID(2)},
+				ULID(6): []ulid.ULID{ULID(1), ULID(3), ULID(2), ULID(4)},
+				ULID(7): []ulid.ULID{ULID(3), ULID(1), ULID(2)},
+			},
+			expected: []ulid.ULID{
+				ULID(6),
+			},
+		},
+		{
+			name: "compacted blocks of level 3 with overlapping sources of equal length",
+			input: map[ulid.ULID][]ulid.ULID{
+				ULID(10): []ulid.ULID{ULID(1), ULID(2), ULID(6), ULID(7)},
+				ULID(1):  []ulid.ULID{ULID(1)},
+				ULID(11): []ulid.ULID{ULID(6), ULID(8), ULID(1), ULID(2)},
+			},
+			expected: []ulid.ULID{
+				ULID(10),
+				ULID(11),
+			},
+		},
+		{
+			name: "compacted blocks of level 3 with overlapping sources of different length",
+			input: map[ulid.ULID][]ulid.ULID{
+				ULID(10): []ulid.ULID{ULID(6), ULID(7), ULID(1), ULID(2)},
+				ULID(1):  []ulid.ULID{ULID(1)},
+				ULID(5):  []ulid.ULID{ULID(1), ULID(2)},
+				ULID(11): []ulid.ULID{ULID(2), ULID(3), ULID(1)},
+			},
+			expected: []ulid.ULID{
+				ULID(10),
+				ULID(11),
+			},
+		},
+	} {
+		f := NewDeduplicateFilter()
+		if ok := t.Run(tcase.name, func(t *testing.T) {
+			synced := prometheus.NewGaugeVec(prometheus.GaugeOpts{}, []string{"state"})
+			metas := make(map[ulid.ULID]*metadata.Meta)
+			inputLen := len(tcase.input)
+			for id, sources := range tcase.input {
+				metas[id] = &metadata.Meta{
+					BlockMeta: tsdb.BlockMeta{
+						ULID: id,
+						Compaction: tsdb.BlockMetaCompaction{
+							Sources: sources,
+						},
+					},
+				}
+			}
+			f.Filter(metas, synced, false)
+
+			compareSliceWithMapKeys(t, metas, tcase.expected)
+			testutil.Equals(t, float64(inputLen-len(tcase.expected)), promtest.ToFloat64(synced.WithLabelValues(duplicateMeta)))
+		}); !ok {
+			return
+		}
+	}
+}
+
+func compareSliceWithMapKeys(tb testing.TB, m map[ulid.ULID]*metadata.Meta, s []ulid.ULID) {
+	_, file, line, _ := runtime.Caller(1)
+	matching := true
+	if len(m) != len(s) {
+		matching = false
+	}
+
+	for _, val := range s {
+		if m[val] == nil {
+			matching = false
+			break
+		}
+	}
+
+	if !matching {
+		var mapKeys []ulid.ULID
+		for id := range m {
+			mapKeys = append(mapKeys, id)
+		}
+		fmt.Printf("\033[31m%s:%d:\n\n\texp keys: %#v\n\n\tgot: %#v\033[39m\n\n", filepath.Base(file), line, mapKeys, s)
+		tb.FailNow()
+	}
 }
