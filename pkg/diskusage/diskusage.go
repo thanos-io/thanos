@@ -1,3 +1,6 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
 package diskusage
 
 // Usage holds information about total and available storage on a volume.
