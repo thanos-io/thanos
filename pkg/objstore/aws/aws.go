@@ -234,21 +234,17 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 	return nil
 }
 
-func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
-	byteRange := ""
-	if length < 0 && off < 0 {
-		byteRange = fmt.Sprintf("bytes=%d", off)
-	} else if length < 0 && off > 0 {
-		byteRange = fmt.Sprintf("bytes=%d-", off)
-	} else if length > 0 {
-		byteRange = fmt.Sprintf("bytes=%d-%d", off, off+length-1)
-	} else {
-		return nil, errors.New(fmt.Sprintf("Invalid range specified: start=%d end=%d", off, length))
+// Get returns a reader for the given object name.
+func (b *Bucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
+	return b.get(ctx, name, "")
+}
+
+func (b *Bucket) get(ctx context.Context, name string, byteRange string) (io.ReadCloser, error) {
+	getObjectInput := &s3.GetObjectInput{Bucket: aws.String(b.name), Key: aws.String(name)}
+	if byteRange != "" {
+		getObjectInput.Range = aws.String(byteRange)
 	}
-
-	getObjectInput := &s3.GetObjectInput{Bucket: &b.name, Key: &name, Range: aws.String(byteRange)}
 	object, err := b.client.GetObjectWithContext(ctx, getObjectInput)
-
 	if err != nil {
 		return nil, err
 	}
@@ -265,14 +261,19 @@ func (b *Bucket) getRange(ctx context.Context, name string, off, length int64) (
 	return object.Body, nil
 }
 
-// Get returns a reader for the given object name.
-func (b *Bucket) Get(ctx context.Context, name string) (io.ReadCloser, error) {
-	return b.getRange(ctx, name, 0, -1)
-}
-
 // GetRange returns a new range reader for the given object name and range.
 func (b *Bucket) GetRange(ctx context.Context, name string, off, length int64) (io.ReadCloser, error) {
-	return b.getRange(ctx, name, off, length)
+	byteRange := ""
+	if length < 0 && off < 0 {
+		byteRange = fmt.Sprintf("bytes=%d", off)
+	} else if length < 0 && off > 0 {
+		byteRange = fmt.Sprintf("bytes=%d-", off)
+	} else if length > 0 {
+		byteRange = fmt.Sprintf("bytes=%d-%d", off, off+length-1)
+	} else {
+		return nil, errors.New(fmt.Sprintf("Invalid range specified: start=%d end=%d", off, length))
+	}
+	return b.get(ctx, name, byteRange)
 }
 
 // Exists checks if the given object exists.
@@ -445,12 +446,16 @@ func (b *Bucket) Delete(ctx context.Context, name string) error {
 
 // IsObjNotFoundErr returns true if error means that object is not found. Relevant to Get operations.
 func (b *Bucket) IsObjNotFoundErr(err error) bool {
-	aerr, _ := err.(awserr.Error)
-	switch aerr.Code() {
-	// https://github.com/aws/aws-sdk-go/issues/2095.
-	// API for HeadObject returns 404 (NotFound) vs NoSuchKey.
-	case "NotFound":
-		return true
+	level.Debug(b.logger).Log("msg", "IsObjNotFoundError", "error", err)
+	if aerr, ok := err.(awserr.Error); ok {
+		switch aerr.Code() {
+		// https://github.com/aws/aws-sdk-go/issues/2095.
+		// API for HeadObject returns 404 (NotFound) vs NoSuchKey.
+		case "NotFound":
+			return true
+		case "NoSuchKey":
+			return true
+		}
 	}
 	return false
 }
