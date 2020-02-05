@@ -253,8 +253,10 @@ func (p *Prometheus) Stop() error {
 		return nil
 	}
 
-	if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
-		return errors.Wrapf(err, "failed to Prometheus. Kill it manually and clean %s dir", p.db.Dir())
+	if p.cmd.Process != nil {
+		if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+			return errors.Wrapf(err, "failed to Prometheus. Kill it manually and clean %s dir", p.db.Dir())
+		}
 	}
 	time.Sleep(time.Second / 2)
 	return p.cleanup()

@@ -11,6 +11,11 @@ import (
 	"github.com/prometheus/prometheus/pkg/gate"
 )
 
+type Gater interface {
+	IsMyTurn(ctx context.Context) error
+	Done()
+}
+
 // Gate wraps the Prometheus gate with extra metrics.
 type Gate struct {
 	g               *gate.Gate

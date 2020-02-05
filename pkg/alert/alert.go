@@ -313,7 +313,7 @@ func NewSender(
 		}, []string{"alertmanager"}),
 	}
 	if reg != nil {
-		reg.MustRegister(s.sent, s.dropped, s.latency)
+		reg.MustRegister(s.sent, s.errs, s.dropped, s.latency)
 	}
 	return s
 }

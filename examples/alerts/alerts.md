@@ -236,39 +236,26 @@ rules:
 
 ## Sidecar
 
-[//]: # "TODO(kakkoyun): Generate sidecar rules using thanos-mixin."
-<!-- [embedmd]:# (../tmp/thanos-sidecar.rules.yaml yaml) -->
+[embedmd]:# (../tmp/thanos-sidecar.rules.yaml yaml)
 ```yaml
+name: thanos-sidecar.rules
+rules:
 - alert: ThanosSidecarPrometheusDown
-  expr: thanos_sidecar_prometheus_up{name="prometheus"} == 0
+  annotations:
+    message: Thanos Sidecar {{$labels.job}} {{$labels.pod}} cannot connect to Prometheus.
+  expr: |
+    sum by (job, pod) (thanos_sidecar_prometheus_up{job=~"thanos-sidecar.*"} == 0)
   for: 5m
   labels:
-    team: TEAM
+    severity: critical
+- alert: ThanosSidecarUnhealthy
   annotations:
-    summary: Thanos Sidecar cannot connect to Prometheus
-    impact: Prometheus configuration is not being refreshed
-    action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
-    dashboard: SIDECAR_URL
-- alert: ThanosSidecarBucketOperationsFailed
-  expr: rate(thanos_objstore_bucket_operation_failures_total{name="prometheus"}[5m]) > 0
-  for: 5m
+    message: Thanos Sidecar {{$labels.job}} {{$labels.pod}} is unhealthy for {{ $value
+      }} seconds.
+  expr: |
+    count(time() - max(thanos_sidecar_last_heartbeat_success_time_seconds{job=~"thanos-sidecar.*"}) by (job, pod) >= 300) > 0
   labels:
-    team: TEAM
-  annotations:
-    summary: Thanos Sidecar bucket operations are failing
-    impact: We will lose metrics data if not fixed in 24h
-    action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
-    dashboard: SIDECAR_URL
-- alert: ThanosSidecarGrpcErrorRate
-  expr: rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable",name="prometheus"}[5m]) > 0
-  for: 5m
-  labels:
-    team: TEAM
-  annotations:
-    summary: Thanos Sidecar is returning Internal/Unavailable errors
-    impact: Prometheus queries are failing
-    action: Check {{ $labels.kubernetes_pod_name }} pod logs in {{ $labels.kubernetes_namespace}} namespace
-    dashboard: SIDECAR_URL
+    severity: critical
 ```
 
 ## Query

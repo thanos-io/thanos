@@ -10,6 +10,19 @@
         name: 'thanos-sidecar.rules',
         rules: [
           {
+            alert: 'ThanosSidecarPrometheusDown',
+            annotations: {
+              message: 'Thanos Sidecar {{$labels.job}} {{$labels.pod}} cannot connect to Prometheus.',
+            },
+            expr: |||
+              sum by (job, pod) (thanos_sidecar_prometheus_up{%(selector)s} == 0)
+            ||| % thanos.sidecar,
+            'for': '5m',
+            labels: {
+              severity: 'critical',
+            },
+          },
+          {
             alert: 'ThanosSidecarUnhealthy',
             annotations: {
               message: 'Thanos Sidecar {{$labels.job}} {{$labels.pod}} is unhealthy for {{ $value }} seconds.',
