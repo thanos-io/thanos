@@ -196,39 +196,51 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 		dir = strings.TrimSuffix(dir, DirDelim) + DirDelim
 	}
 
-	object, err := b.client.ListObjects(&s3.ListObjectsInput{Bucket: &b.name,
+	listObjectInput := &s3.ListObjectsV2Input{Bucket: aws.String(b.name),
 		Prefix:    aws.String(dir),
-		Delimiter: aws.String(DirDelim)})
+		Delimiter: aws.String(DirDelim)}
 
-	if err != nil {
-		return err
-	}
+	for {
+		object, err := b.client.ListObjectsV2(listObjectInput)
 
-	for _, obj := range object.Contents {
-		if *obj.Key == "" {
-			continue
-		}
-
-		if *obj.Key == dir {
-			continue
-		}
-
-		if err := f(*obj.Key); err != nil {
+		if err != nil {
 			return err
 		}
-	}
 
-	for _, obj := range object.CommonPrefixes {
-		if *obj.Prefix == "" {
-			continue
+		keys := []string{object.Contents.Keys}
+		for _, obj := range object.Contents {
+			if *obj.Key == "" {
+				continue
+			}
+
+			if *obj.Key == dir {
+				continue
+			}
+
+			if err := f(*obj.Key); err != nil {
+				return err
+			}
 		}
 
-		if *obj.Prefix == dir {
-			continue
+		for _, obj := range object.CommonPrefixes {
+			if *obj.Prefix == "" {
+				continue
+			}
+
+			if *obj.Prefix == dir {
+				continue
+			}
+
+			if err := f(*obj.Prefix); err != nil {
+				return err
+			}
 		}
 
-		if err := f(*obj.Prefix); err != nil {
-			return err
+		if *object.IsTruncated {
+			// there is more data so update continuation token and loop.
+			listObjectInput.SetContinuationToken(*object.NextContinuationToken)
+		} else {
+			break
 		}
 	}
 	return nil
