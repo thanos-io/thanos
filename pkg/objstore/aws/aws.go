@@ -207,7 +207,6 @@ func (b *Bucket) Iter(ctx context.Context, dir string, f func(string) error) err
 			return err
 		}
 
-		keys := []string{object.Contents.Keys}
 		for _, obj := range object.Contents {
 			if *obj.Key == "" {
 				continue
