@@ -294,7 +294,7 @@ func (s *ProxyStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesSe
 		level.Debug(s.logger).Log("msg", strings.Join(storeDebugMsgs, ";"))
 		if len(seriesSet) == 0 {
 			// This is indicates that configured StoreAPIs are not the ones end user expects.
-			err := errors.New("No store matched for this query")
+			err := errors.New("No StoreAPIs matched for this query")
 			level.Warn(s.logger).Log("err", err, "stores", strings.Join(storeDebugMsgs, ";"))
 			respSender.send(storepb.NewWarnSeriesResponse(err))
 			return nil
