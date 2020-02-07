@@ -312,7 +312,7 @@ web-serve: web-pre-process $(HUGO)
 JSONNET_CONTAINER_CMD:=docker run --rm \
 		-u="$(shell id -u):$(shell id -g)" \
 		-v "$(shell go env GOCACHE):/.cache/go-build" \
-		-v "$(PWD):/go/src/github.com/thanos-io/thanos:Z" \
+		-v "$(PWD):/go/src/github.com/thanos-io/thanos" \
 		-w "/go/src/github.com/thanos-io/thanos" \
 		-e USER=deadbeef \
 		-e GO111MODULE=on \
