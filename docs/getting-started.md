@@ -126,7 +126,7 @@ We also have example Grafana dashboards [here](/examples/dashboards/dashboards.m
 
 * 2020:
 
-  * [Banzai Cloud user story](https://monzo.com/blog/2018/07/27/how-we-monitor-monzo)
+  * [Banzai Cloud user story](https://banzaicloud.com/blog/multi-cluster-monitoring/)
 
 ## Integrations
 
