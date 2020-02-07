@@ -321,7 +321,7 @@ JSONNET_CONTAINER_CMD:=docker run --rm \
 .PHONY: examples-in-container
 examples-in-container:
 	@echo ">> Compiling and generating thanos-mixin"
-	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) JSONNET_BUNDLER='/go/bin/jb' jsonnet-vendor
+	$(JSONNET_CONTAINER_CMD) echo >/dev/null; make $(MFLAGS) JSONNET_BUNDLER='/go/bin/jb' jsonnet-vendor
 	$(JSONNET_CONTAINER_CMD) make $(MFLAGS) \
 		EMBEDMD='/go/bin/embedmd' \
 		JSONNET='/go/bin/jsonnet' \
