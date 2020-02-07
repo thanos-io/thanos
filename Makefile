@@ -289,7 +289,7 @@ web: web-pre-process $(HUGO)
 #      --mem-profile-path string   Path to memory profile output file
 #
 # to debug big allocations during linting.
-lint: check-git $(GOLANGCILINT) $(MISSPELL)
+lint: check-git $(GOLANGCILINT) $(MISSPELL) examples-in-container example-rules-lint
 	@echo ">> examining all of the Go files"
 	@go vet -stdmethods=false ./pkg/... ./cmd/... && go vet doc.go
 	@echo ">> linting all of the Go files GOGC=${GOGC}"
