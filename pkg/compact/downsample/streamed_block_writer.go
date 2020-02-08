@@ -7,6 +7,7 @@ import (
 	"context"
 	"io"
 	"path/filepath"
+	"strings"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -111,7 +112,7 @@ func (w *streamedBlockWriter) WriteSeries(lset labels.Labels, chunks []chunks.Me
 	}
 
 	if len(chunks) == 0 {
-		level.Warn(w.logger).Log("empty chunks happened, skip series", lset)
+		level.Warn(w.logger).Log("msg", "empty chunks happened, skip series", "series", strings.ReplaceAll(lset.String(), "\"", "'"))
 		return nil
 	}
 
