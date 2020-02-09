@@ -106,13 +106,10 @@ We also have example Grafana dashboards [here](/examples/dashboards/dashboards.m
 
 ## Blog posts
 
-* 2018:
+* 2020:
 
-  * [Introduction blog post](https://improbable.io/games/blog/thanos-prometheus-at-scale)
-  * [Monzo user story](https://monzo.com/blog/2018/07/27/how-we-monitor-monzo)
-  * [Banzai Cloud hand's on](https://banzaicloud.com/blog/hands-on-thanos/)
-  * [uSwitch user story](https://medium.com/uswitch-labs/making-prometheus-more-awesome-with-thanos-fbec8c6c28ad)
-  * [Thanos usage](https://www.infracloud.io/thanos-ha-scalable-prometheus/)
+  * [Banzai Cloud user story](https://banzaicloud.com/blog/multi-cluster-monitoring/)
+  * [A Production Thanos Deployment](https://www.omerlh.info/2020/02/08/a-production-thanos-deployment/)
 
 * 2019:
 
@@ -124,9 +121,13 @@ We also have example Grafana dashboards [here](/examples/dashboards/dashboards.m
   * [Taboola user story](https://engineering.taboola.com/monitoring-and-metering-scale/)
   * [Thanos via Prometheus Operator](https://kkc.github.io/2019/02/10/prometheus-operator-with-thanos/)
 
-* 2020:
+* 2018:
 
-  * [Banzai Cloud user story](https://banzaicloud.com/blog/multi-cluster-monitoring/)
+  * [Introduction blog post](https://improbable.io/games/blog/thanos-prometheus-at-scale)
+  * [Monzo user story](https://monzo.com/blog/2018/07/27/how-we-monitor-monzo)
+  * [Banzai Cloud hand's on](https://banzaicloud.com/blog/hands-on-thanos/)
+  * [uSwitch user story](https://medium.com/uswitch-labs/making-prometheus-more-awesome-with-thanos-fbec8c6c28ad)
+  * [Thanos usage](https://www.infracloud.io/thanos-ha-scalable-prometheus/)
 
 ## Integrations
 
