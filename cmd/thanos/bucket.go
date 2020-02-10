@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact"
+	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/extflag"
 	"github.com/thanos-io/thanos/pkg/extprom"
@@ -33,6 +35,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/objstore/client"
 	"github.com/thanos-io/thanos/pkg/prober"
+	"github.com/thanos-io/thanos/pkg/replicater"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/ui"
@@ -69,6 +72,7 @@ func registerBucket(m map[string]setupFunc, app *kingpin.Application, name strin
 	registerBucketLs(m, cmd, name, objStoreConfig)
 	registerBucketInspect(m, cmd, name, objStoreConfig)
 	registerBucketWeb(m, cmd, name, objStoreConfig)
+	registerBucketReplicate(m, cmd, name, objStoreConfig)
 }
 
 func registerBucketVerify(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
@@ -375,6 +379,38 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 
 		return nil
 	}
+}
+
+func registerBucketReplicate(m map[string]setupFunc, root *kingpin.CmdClause, name string, objStoreConfig *extflag.PathOrContent) {
+	cmd := root.Command("replicate", "Replicate data from one object storage to another")
+	httpMetricsBindAddr, _ := regHTTPFlags(cmd)
+	toObjStoreConfig := regCommonObjStoreFlags(cmd, "-to", false, "The object storage which replicate data to.")
+	resolution := cmd.Flag("resolution", "Only blocks with this resolution will be replicated.").Default(strconv.FormatInt(downsample.ResLevel0, 10)).Int64()
+	compaction := cmd.Flag("compaction", "Only blocks with this compaction level will be replicated.").Default("1").Int()
+	matcherStrs := cmd.Flag("matcher", "Only blocks whose labels match this matcher will be replicated.").PlaceHolder("key=\"value\"").Strings()
+	singleRun := cmd.Flag("single-run", "Run replication only one time, then exit.").Default("false").Bool()
+
+	m[name+" replicate"] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
+		matchers, err := replicater.ParseFlagMatchers(*matcherStrs)
+		if err != nil {
+			return errors.Wrap(err, "parse block label matchers")
+		}
+
+		return replicater.RunReplicate(
+			g,
+			logger,
+			reg,
+			tracer,
+			*httpMetricsBindAddr,
+			matchers,
+			compact.ResolutionLevel(*resolution),
+			*compaction,
+			objStoreConfig,
+			toObjStoreConfig,
+			*singleRun,
+		)
+	}
+
 }
 
 // refresh metadata from remote storage periodically and update UI.

@@ -95,4 +95,5 @@ var (
 	Sidecar    = sourceStoreAPI{component: component{name: "sidecar"}}
 	Store      = sourceStoreAPI{component: component{name: "store"}}
 	Receive    = sourceStoreAPI{component: component{name: "receive"}}
+	Replicate  = sourceStoreAPI{component: component{name: "replicate"}}
 )
