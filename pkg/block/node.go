@@ -23,6 +23,7 @@ func NewNode(meta *metadata.Meta) *Node {
 }
 
 // getNonRootIDs returns list of ids which are not on root level.
+// TODO(bwplotka): Find more efficient way?
 func getNonRootIDs(root *Node) []ulid.ULID {
 	var ulids []ulid.ULID
 	for _, node := range root.Children {
