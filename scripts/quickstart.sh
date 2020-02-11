@@ -212,4 +212,15 @@ for i in $(seq 0 1); do
     ${STORES} &
 done
 
+sleep 0.5
+
+if [ -n "${GCS_BUCKET}" -o -n "${S3_ENDPOINT}" ]; then
+  ${THANOS_EXECUTABLE} bucket web \
+    --debug.name bucket-web \
+    --log.level debug \
+    --http-address 0.0.0.0:10933 \
+    --http-grace-period 1s \
+    ${OBJSTORECFG} &
+fi
+
 wait
