@@ -2,7 +2,7 @@
 title: Thanos Sharding for Long Term Retention Storage
 type: proposal
 menu: proposals
-status: accepted
+status: complete
 owner: bwplotka
 ---
 
