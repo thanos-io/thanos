@@ -2,7 +2,7 @@
 title: Binary Format for Index-cache; Renaming to Index-header.
 type: proposal
 menu: proposals
-status: proposed
+status: complete
 owner: bwplotka
 ---
 
