@@ -355,6 +355,8 @@ func registerBucketWeb(m map[string]setupFunc, root *kingpin.CmdClause, name str
 		}
 
 		g.Add(func() error {
+			statusProber.Ready()
+
 			return refresh(ctx, logger, bucketUI, *interval, *timeout, name, reg, objStoreConfig)
 		}, func(error) {
 			cancel()
