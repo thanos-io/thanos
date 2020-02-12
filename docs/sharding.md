@@ -1,15 +1,11 @@
 ---
-title: Sharing
+title: Sharding
 type: docs
 menu: thanos
-slug: /Sharing.md
+slug: /sharding.md
 ---
 
-# Store and Compactor Sharding
-
-Store and Compactor Sharding is for Long Term Retention Storage.
-
-## Background
+# Background
 
 Currently all components that read from object store assume that all the operations and functionality should be done based
 on **all** the available blocks that are present in the certain bucket's root directory.
@@ -19,9 +15,9 @@ the number of objects in a bucket can grow drastically.
 
 This means that with time you might want to scale out certain components e.g:
 
-* Compactor: Larger number of objects does not matter much, however compactor has to scale (CPU, network) with number of Sources pushing blocks to the object storage.
+* Compactor: Larger number of objects does not matter much, however compactor has to scale (CPU, network, disk, memory) with number of Sources pushing blocks to the object storage.
 
-### Relabelling
+# Relabelling
 
 Similar to [promtail](https://github.com/grafana/loki/blob/master/docs/promtail.md#scrape-configs) this config will follow native
 [Prometheus relabel-config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config) syntax.
@@ -58,8 +54,10 @@ Example usages would be:
   - cluster
 ```
 
-By controlling which labels should be included in the blocks, we can do sharing.
+We can shard by adjusting which labels should be included in the blocks.
 
-### Time Partitioning
+# Time Partitioning
 
 For store gateway, we can specify `--min-time` and `--max-time` flags to filter for what blocks store gateway should be responsible for.
+
+More details can refer to "Time based partitioning" chapter in [Store gateway](components/store.md).
