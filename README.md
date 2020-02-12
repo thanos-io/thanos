@@ -78,7 +78,7 @@ Contributions are very welcome! See our [CONTRIBUTING.md](CONTRIBUTING.md) for m
 Thanos is an open source project and we value and welcome new contributors and members
 of the community. Here are ways to get in touch with the community:
 
-* Slack: [#thanos](https://cloud-native.slack.com/messages/CK5RSSC10)
+* Slack: [#thanos](https://cloud-native.slack.com/messages/CK5RSSC10) 
 * Issue Tracker: [GitHub Issues](https://github.com/thanos-io/thanos/issues)
 
 ## Maintainers
