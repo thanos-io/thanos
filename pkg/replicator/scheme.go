@@ -1,7 +1,7 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-package replicater
+package replicator
 
 import (
 	"bytes"
@@ -51,6 +51,11 @@ func NewBlockFilter(
 
 // Filter return true if block is non-compacted and matches selector.
 func (bf *BlockFilter) Filter(b *metadata.Meta) bool {
+	if len(b.Thanos.Labels) == 0 {
+		level.Error(bf.logger).Log("msg", "filtering block", "reason", "labels should not be empty")
+		return false
+	}
+
 	blockLabels := labels.FromMap(b.Thanos.Labels)
 
 	labelMatch := bf.labelSelector.Matches(blockLabels)
@@ -174,6 +179,7 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 
 	level.Debug(rs.logger).Log("msg", "scanning blocks available blocks for replication")
 
+	// TODO: Use block.MetaFetcher with filters instead.
 	if err := rs.fromBkt.Iter(ctx, "", func(name string) error {
 		rs.metrics.originIterations.Inc()
 

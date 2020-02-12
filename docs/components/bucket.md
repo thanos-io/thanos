@@ -75,7 +75,8 @@ Subcommands:
     Web interface for remote storage bucket
 
   bucket replicate [<flags>]
-    Replicate data from one object storage to another
+    Replicate data from one object storage to another. NOTE: Currently it works
+    only with Thanos blocks (meta.json has to have Thanos metadata).
 
 
 ```
@@ -323,6 +324,8 @@ Flags:
 
 `bucket replicate` is used to replicate buckets from one object storage to another.
 
+NOTE: Currently it works only with Thanos blocks (meta.json has to have Thanos metadata).
+
 Example:
 ```
 $ thanos bucket replicate --objstore.config-file="..." --objstore-to.config="..."
@@ -332,7 +335,8 @@ $ thanos bucket replicate --objstore.config-file="..." --objstore-to.config="...
 ```txt
 usage: thanos bucket replicate [<flags>]
 
-Replicate data from one object storage to another
+Replicate data from one object storage to another. NOTE: Currently it works only
+with Thanos blocks (meta.json has to have Thanos metadata).
 
 Flags:
   -h, --help                     Show context-sensitive help (also try
@@ -380,8 +384,8 @@ Flags:
                                  replicated.
       --compaction=1             Only blocks with this compaction level will be
                                  replicated.
-      --matcher=key="value" ...  Only blocks whose labels match this matcher
-                                 will be replicated.
+      --matcher=key="value" ...  Only blocks whose external labels exactly match
+                                 this matcher will be replicated.
       --single-run               Run replication only one time, then exit.
 
 ```
