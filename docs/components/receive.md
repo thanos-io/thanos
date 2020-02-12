@@ -11,7 +11,7 @@ It also implements the Store API, which allows being queried by Thanos query com
 In addition it allows writing to longterm Objectstorage, which in return is accessible to Thanos query component through Thanos store.
 
 In general the remote write functionality is the better way of propagating Prometheus data to a different store 
-and should be prefered over [Prometheus federation](https://prometheus.io/docs/prometheus/latest/federation),
+and should be preferred over [Prometheus federation](https://prometheus.io/docs/prometheus/latest/federation),
 especially when federation would return a lot of metrics.
 
 ## Load Distribution and Tenancy
@@ -25,7 +25,7 @@ The simplest HA setup is achieved by having two Thanos receive instances.
 The Prometheus instance is then configured to remote write to both of these Thanos receive endpoints.
 There's no need for the hashring functionality in this simple and zero-tenants setup.
 
-Exerpt from the `prometheus.yml` configuration file:
+Excerpt from the `prometheus.yml` configuration file:
 ```yaml
 remote_write:
   - url: http://thanos1.example:19291/api/v1/receive
