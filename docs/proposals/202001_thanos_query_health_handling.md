@@ -2,7 +2,7 @@
 title: Thanos Query store nodes healthiness handling
 type: proposal
 menu: proposals
-status: proposed
+status: accepted
 owner: GiedriusS
 ---
 
@@ -15,9 +15,9 @@ owner: GiedriusS
 
 ## Summary
 
-This proposal document describes how currently the healthiness of store nodes is handled and why it should be changed to work better in terms of end response caching.
+This proposal document describes how currently the healthiness of store nodes is handled and why it should be changed (e.g. to improve response caching and avoid surprises).
 
-It explores a few options that are available - weighs their pros and cons, and finally proposes one final variant which seems to be the best out of the possible ones.
+It explores a few options that are available - weighs their pros and cons, and finally proposes one final variant which we believe is the best out of the possible ones.
 
 ## Motivation
 
@@ -31,18 +31,18 @@ This is problematic in the cache of end-response caching. If we know that certai
 
 Thus, this logic needs to be changed somehow. There are a few possible options:
 
-* `--store.unhealthy-timeout` could be made to apply to this case as well - we could still consider it a part of the active store set while it is still visible in the UI
-* Another option could be introduced such as `--store.hold-timeout` which would be `--store.unhealthy-timeout`'s brother and we would hold the StoreAPI nodes for `max(hold_timeout, unhealthy_timeout)`.
-* Another option such as `--store.strict-mode` could be introduced which means that we would always retain the last information of the StoreAPI nodes after the first successful check
-* The StoreAPI node specification format that is used in `--store` could be extended to include another flag which would let specify the previous option per-specific node
+1. `--store.unhealthy-timeout` could be made to apply to this case as well - we could still consider it a part of the active store set while it is still visible in the UI.
+2. Another option could be introduced such as `--store.hold-timeout` which would be `--store.unhealthy-timeout`'s brother and we would hold the StoreAPI nodes for `max(hold_timeout, unhealthy_timeout)`.
+3. Another option such as `--store.strict-mode` could be introduced which means that we would always retain the last information of the StoreAPI nodes of the last successful check.
+4. The StoreAPI node specification format that is used in `--store` could be extended to include another flag which would let specify the previous option per-specific node.
 
 Lets look through their pros and cons:
 
-* In general it would be nice to avoid adding new options so the first option seems the most attractive in this regard but it is also the most invasive one;
-* Second option increases the configuration complexity the most since you would have to think about the other option `--store.unhealthy-timeout` as well while setting it;
-* The last option is the most complex from code's perspective but it is also least invasive; however it has some downsides like the syntax for specifying store nodes becomes really ugly and hard to understand because we would have not only the DNS query type in there but also a special marker to enable that mode
+* In general it would be nice to avoid adding new options so the first option seems the most attractive in this regard but it is also the most invasive one.
+* Second option increases the configuration complexity the most since you would have to think about the other option `--store.unhealthy-timeout` as well while setting it.
+* The last option is the most complex from code's perspective but it is also least invasive; however it has some downsides like the syntax for specifying store nodes becomes really ugly and hard to understand because we would have not only the DNS query type in there but also a special marker to enable that mode.
 
-If we were to graph these choices in terms of theirs incisiveness and complexity it would look something like this:
+If we were to graph these choices in terms of their incisiveness and complexity it would look something like this:
 
 ```text
 Most incisive / Least Complex ------------ Least incisive / Most Complex
@@ -50,37 +50,37 @@ Most incisive / Least Complex ------------ Least incisive / Most Complex
            #3
 ```
 
-At first there was an initial attempt to add the last option but it was met with some discussion if this is really the way to go forward. After careful consideration and with the rationale in this proposal we could go with the most invasive choice. But it also probably makes the most sense since it would logically follow that as long as a node is visible in the UI then we send a query to it.
+After careful consideration and with the rationale in this proposal, we have decided to go with the third option. It should provide a sweet spot between being too invasive and providing our users the ability to fall-back to the old behavior.
 
 ## Goals
 
-* Update the health check logic to properly handle the case when a node disappears in terms of a caching layer
+* Update the health check logic to properly handle the case when a node disappears in terms of a caching layer.
 
 ## No Goals
 
-* Fixing the cache handling in the cases where a **new** StoreAPI gets added to the active store set
+* Fixing the cache handling in the cases where a **new** StoreAPI gets added to the active store set.
 
 ## Verification
 
-* Unit tests which would fire up a dummy StoreAPI and check different scenarios
-* Ad-hoc testing
+* Unit tests which would fire up a dummy StoreAPI and check different scenarios.
+* Ad-hoc testing.
 
 ## Proposal
 
-* Keep store nodes around in the active store set in Thanos Query until `--store.unhealthy-timeout` passes
+* Add a new flag to Thanos Query `--store.strict-mode` which will make it always retain the last successfully retrieved information via the `Info()` gRPC method of **statically** defined nodes and thus always consider them part of the active store set.
 
 ## Risk
 
-* Users might start having partial responses with this implemented if they have certain nodes configured that are always down. However, one might argue that if the nodes go down then something like DNS service discovery needs to be used which would dynamically add and remove those nodes
+* Users might have problems removing the store nodes from the active store set since they will be there forever with this option set. However, one might argue that if the nodes go down then something like DNS service discovery needs to be used which would dynamically add and remove those nodes.
 
 ## Work Plan
 
-* Implement the change in logic not to remove nodes from the active store set immediately after one `Info()` gRPC call failure but until `--store.unhealthy-timeout` passes
-* Implement tests with dummy store nodes
-* Document the new behavior
+* Implement the new flag `--store.strict-mode` in Thanos Query which will make it keep around statically defined nodes. It will be disabled by default to reduce surprises when upgrading.
+* Implement tests with dummy store nodes.
+* Document the new behavior.
 
 ## Future Work
 
-* Handle the case when a new node appears in terms of the end-result cache
-  1. Need to somehow signal the upper layer to clear the end-result cache
-  1. Perhaps some kind of hashing can be used for this
+* Handle the case when a new node appears in terms of the end-result cache i.e. when using SD:
+  1. Need to somehow signal the upper layer to clear the end-result cache. Ideally we would only clear the relevant parts.
+  2. Perhaps some kind of hashing can be used for this.
