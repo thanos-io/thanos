@@ -313,10 +313,7 @@ func (s *BucketStore) Close() (err error) {
 	defer s.mtx.Unlock()
 
 	for _, b := range s.blocks {
-		if e := b.Close(); e != nil {
-			level.Warn(s.logger).Log("msg", "closing Bucket block failed", "err", err)
-			err = e
-		}
+		runutil.CloseWithErrCapture(&err, b, "closing Bucket Block")
 	}
 	return err
 }
@@ -462,6 +459,11 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 			return errors.Wrap(err, "create index cache reader")
 		}
 	}
+	defer func() {
+		if err != nil {
+			runutil.CloseWithErrCapture(&err, indexHeaderReader, "index-header")
+		}
+	}()
 
 	b, err := newBucketBlock(
 		ctx,
@@ -478,6 +480,12 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 	if err != nil {
 		return errors.Wrap(err, "new bucket block")
 	}
+	defer func() {
+		if err != nil {
+			runutil.CloseWithErrCapture(&err, b, "index-header")
+		}
+	}()
+
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -1216,11 +1224,10 @@ func newBucketBlock(
 	}
 
 	// Get object handles for all chunk files.
-	err = bkt.Iter(ctx, path.Join(meta.ULID.String(), block.ChunksDirname), func(n string) error {
+	if err = bkt.Iter(ctx, path.Join(meta.ULID.String(), block.ChunksDirname), func(n string) error {
 		b.chunkObjs = append(b.chunkObjs, n)
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, errors.Wrap(err, "list chunk files")
 	}
 	return b, nil
@@ -1279,7 +1286,8 @@ func (b *bucketBlock) chunkReader(ctx context.Context) *bucketChunkReader {
 // Close waits for all pending readers to finish and then closes all underlying resources.
 func (b *bucketBlock) Close() error {
 	b.pendingReaders.Wait()
-	return nil
+
+	return b.indexHeaderReader.Close()
 }
 
 // bucketIndexReader is a custom index reader (not conforming index.Reader interface) that reads index that is stored in
