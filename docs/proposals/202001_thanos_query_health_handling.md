@@ -60,6 +60,16 @@ After careful consideration and with the rationale in this proposal, we have dec
 
 * Fixing the cache handling in the cases where a **new** StoreAPI gets added to the active store set.
 
+This deserves a separate discussion and/or proposal. The issue when adding a completely new store node via service discovery is that a new node may suddenly provide new information in the past. In this paragraph when we are saying "new" it means new in terms of the data that it provides. Generally over time only a limited number of Prometheus instances will be providing data that can only change in the future (relatively to the current time).
+
+When this happens, we will need to most likely somehow signal the caching layer that it needs to drop (some of the) results cache that it has depending on:
+
+* Time ranges of a new node.
+* Its external labels.
+* The data that the node itself has by using some kind of hashing mechanism.
+
+The way this will need to be done should be as generic as possible so the design and solution of this is still an open question that this proposal does not solve.
+
 ## Verification
 
 * Unit tests which would fire up a dummy StoreAPI and check different scenarios.
