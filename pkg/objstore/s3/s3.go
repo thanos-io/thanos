@@ -148,7 +148,9 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 				filename = filepath.Join(homeDir, ".aws", "credentials")
 			}
 		}
-		startCredentialExpirer(creds, filename)
+		if err := startCredentialExpirer(creds, filename); err != nil {
+			logger.Log("msg", "failed to start credential expirer", err)
+		}
 	}
 
 	client, err := minio.NewWithCredentials(config.Endpoint, creds, !config.Insecure, config.Region)
