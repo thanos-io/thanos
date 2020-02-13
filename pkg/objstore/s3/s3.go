@@ -151,7 +151,7 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		startCredentialExpirer(creds, filename)
 	}
 
-	client, err := minio.NewWithCredentials(config.Endpoint, credentials.NewChainCredentials(chain), !config.Insecure, config.Region)
+	client, err := minio.NewWithCredentials(config.Endpoint, creds, !config.Insecure, config.Region)
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize s3 client")
 	}
