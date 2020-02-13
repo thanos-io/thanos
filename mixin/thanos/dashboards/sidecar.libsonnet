@@ -60,15 +60,15 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         g.row('Detailed')
         .addPanel(
           g.panel('Rate', 'Shows rate of handled Streamed gRPC requests from queriers.') +
-          g.grpcQpsPanelDetailed('client', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
+          g.grpcQpsPanelDetailed('server', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
         )
         .addPanel(
           g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
-          g.grpcErrDetailsPanel('client', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
+          g.grpcErrDetailsPanel('server', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
         )
         .addPanel(
           g.panel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
-          g.grpcLatencyPanelDetailed('client', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
+          g.grpcLatencyPanelDetailed('server', 'namespace="$namespace",job=~"$job",grpc_type="server_stream"')
         ) +
         g.collapse
       )
