@@ -46,7 +46,7 @@ GOJSONTOYAML            ?= $(GOBIN)/gojsontoyaml-$(GOJSONTOYAML_VERSION)
 # v0.14.0
 JSONNET_VERSION         ?= fbde25be2182caa4345b03f1532450911ac7d1f3
 JSONNET                 ?= $(GOBIN)/jsonnet-$(JSONNET_VERSION)
-JSONNET_BUNDLER_VERSION ?= d7829f6c7e632e954c0e5db8b3eece8f111f9461
+JSONNET_BUNDLER_VERSION ?= efe0c9e864431e93d5c3376bd5931d0fb9b2a296
 JSONNET_BUNDLER         ?= $(GOBIN)/jb-$(JSONNET_BUNDLER_VERSION)
 # Prometheus v2.14.0
 PROMTOOL_VERSION        ?= edeb7a44cbf745f1d8be4ea6f215e79e651bfe19
@@ -56,7 +56,8 @@ PROMTOOL                ?= $(GOBIN)/promtool-$(PROMTOOL_VERSION)
 # systems gsed won't be installed, so will use sed as expected.
 SED ?= $(shell which gsed 2>/dev/null || which sed)
 
-MIXIN_ROOT              ?= mixin/thanos
+MIXIN_ROOT              ?= mixin
+THANOS_MIXIN            ?= mixin/thanos
 JSONNET_VENDOR_DIR      ?= mixin/vendor
 
 WEB_DIR           ?= website
@@ -332,31 +333,31 @@ examples-in-container:
 		examples
 
 .PHONY: examples
-examples: jsonnet-format mixin/thanos/README.md examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards examples/tmp
+examples: jsonnet-format ${THANOS_MIXIN}/README.md examples/alerts/alerts.md examples/alerts/alerts.yaml examples/alerts/rules.yaml examples/dashboards examples/tmp
 	$(EMBEDMD) -w examples/alerts/alerts.md
-	$(EMBEDMD) -w mixin/thanos/README.md
+	$(EMBEDMD) -w ${THANOS_MIXIN}/README.md
 
 .PHONY: examples/tmp
 examples/tmp:
 	-rm -rf examples/tmp/
 	-mkdir -p examples/tmp/
-	$(JSONNET) -J ${JSONNET_VENDOR_DIR} -m examples/tmp/ ${MIXIN_ROOT}/separated_alerts.jsonnet | xargs -I{} sh -c 'cat {} | $(GOJSONTOYAML) > {}.yaml; rm -f {}' -- {}
+	$(JSONNET) -J ${JSONNET_VENDOR_DIR} -m examples/tmp/ ${THANOS_MIXIN}/separated_alerts.jsonnet | xargs -I{} sh -c 'cat {} | $(GOJSONTOYAML) > {}.yaml; rm -f {}' -- {}
 
 .PHONY: examples/dashboards # to keep examples/dashboards/dashboards.md.
-examples/dashboards: $(JSONNET) ${MIXIN_ROOT}/mixin.libsonnet ${MIXIN_ROOT}/defaults.libsonnet ${MIXIN_ROOT}/dashboards/*
+examples/dashboards: $(JSONNET) ${THANOS_MIXIN}/mixin.libsonnet ${THANOS_MIXIN}/defaults.libsonnet ${THANOS_MIXIN}/dashboards/*
 	-rm -rf examples/dashboards/*.json
-	$(JSONNET) -J ${JSONNET_VENDOR_DIR} -m examples/dashboards ${MIXIN_ROOT}/dashboards.jsonnet
+	$(JSONNET) -J ${JSONNET_VENDOR_DIR} -m examples/dashboards ${THANOS_MIXIN}/dashboards.jsonnet
 
-examples/alerts/alerts.yaml: $(JSONNET) $(GOJSONTOYAML) ${MIXIN_ROOT}/mixin.libsonnet ${MIXIN_ROOT}/defaults.libsonnet ${MIXIN_ROOT}/alerts/*
-	$(JSONNET) ${MIXIN_ROOT}/alerts.jsonnet | $(GOJSONTOYAML) > $@
+examples/alerts/alerts.yaml: $(JSONNET) $(GOJSONTOYAML) ${THANOS_MIXIN}/mixin.libsonnet ${THANOS_MIXIN}/defaults.libsonnet ${THANOS_MIXIN}/alerts/*
+	$(JSONNET) ${THANOS_MIXIN}/alerts.jsonnet | $(GOJSONTOYAML) > $@
 
-examples/alerts/rules.yaml: $(JSONNET) $(GOJSONTOYAML) ${MIXIN_ROOT}/mixin.libsonnet ${MIXIN_ROOT}/defaults.libsonnet ${MIXIN_ROOT}/rules/*
-	$(JSONNET) ${MIXIN_ROOT}/rules.jsonnet | $(GOJSONTOYAML) > $@
+examples/alerts/rules.yaml: $(JSONNET) $(GOJSONTOYAML) ${THANOS_MIXIN}/mixin.libsonnet ${THANOS_MIXIN}/defaults.libsonnet ${THANOS_MIXIN}/rules/*
+	$(JSONNET) ${THANOS_MIXIN}/rules.jsonnet | $(GOJSONTOYAML) > $@
 
 .PHONY: jsonnet-vendor
-jsonnet-vendor: $(JSONNET_BUNDLER) jsonnetfile.json jsonnetfile.lock.json
+jsonnet-vendor: $(JSONNET_BUNDLER) $(MIXIN_ROOT)/jsonnetfile.json $(MIXIN_ROOT)/jsonnetfile.lock.json
 	rm -rf ${JSONNET_VENDOR_DIR}
-	$(JSONNET_BUNDLER) install --jsonnetpkg-home="${JSONNET_VENDOR_DIR}"
+	cd ${MIXIN_ROOT} && $(JSONNET_BUNDLER) install
 
 JSONNET_FMT := jsonnetfmt -n 2 --max-blank-lines 2 --string-style s --comment-style s
 
