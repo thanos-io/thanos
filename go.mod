@@ -57,6 +57,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.6 // indirect
 	github.com/miekg/dns v1.1.22
 	github.com/minio/minio-go/v6 v6.0.45
+	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mozillazg/go-cos v0.13.0
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f
 	github.com/oklog/run v1.0.0

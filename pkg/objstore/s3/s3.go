@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -23,11 +24,13 @@ import (
 	"github.com/minio/minio-go/v6"
 	"github.com/minio/minio-go/v6/pkg/credentials"
 	"github.com/minio/minio-go/v6/pkg/encrypt"
+	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/version"
 	"github.com/thanos-io/thanos/pkg/objstore"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"gopkg.in/fsnotify.v1"
 	"gopkg.in/yaml.v2"
 )
 
@@ -105,7 +108,7 @@ func NewBucket(logger log.Logger, conf []byte, component string) (*Bucket, error
 
 // NewBucketWithConfig returns a new Bucket using the provided s3 config values.
 func NewBucketWithConfig(logger log.Logger, config Config, component string) (*Bucket, error) {
-	var chain []credentials.Provider
+	var creds *credentials.Credentials
 
 	if err := validate(config); err != nil {
 		return nil, err
@@ -117,15 +120,16 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 			signature = credentials.SignatureV2
 		}
 
-		chain = []credentials.Provider{&credentials.Static{
+		chain := []credentials.Provider{&credentials.Static{
 			Value: credentials.Value{
 				AccessKeyID:     config.AccessKey,
 				SecretAccessKey: config.SecretKey,
 				SignerType:      signature,
 			},
 		}}
+		creds = credentials.NewChainCredentials(chain)
 	} else {
-		chain = []credentials.Provider{
+		chain := []credentials.Provider{
 			&credentials.EnvAWS{},
 			&credentials.FileAWSCredentials{},
 			&credentials.IAM{
@@ -134,6 +138,17 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 				},
 			},
 		}
+		creds = credentials.NewChainCredentials(chain)
+
+		// We will watch for credential changes for non-static credentials
+		filename := os.Getenv("AWS_SHARED_CREDENTIALS_FILE")
+		if filename == "" {
+			homeDir, err := homedir.Dir()
+			if err == nil {
+				filename = filepath.Join(homeDir, ".aws", "credentials")
+			}
+		}
+		startCredentialExpirer(creds, filename)
 	}
 
 	client, err := minio.NewWithCredentials(config.Endpoint, credentials.NewChainCredentials(chain), !config.Insecure, config.Region)
@@ -190,6 +205,46 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 // Name returns the bucket name for s3.
 func (b *Bucket) Name() string {
 	return b.name
+}
+
+// startCredentialExpirer will start a watch of the file directory of AWS credentials and
+// if it is updated it will force expire credentials so they are fetched again next get.
+func startCredentialExpirer(creds *credentials.Credentials, filePath string) error {
+	// Will not start watch for empty filePath
+	if filePath == "" {
+		return nil
+	}
+
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return err
+	}
+
+	// Launch the watch which will expire the credentials when fired
+	go func() {
+		defer watcher.Close()
+		for {
+			select {
+			case _, ok := <-watcher.Events:
+				if !ok {
+					return
+				}
+				creds.Expire()
+			case _, ok := <-watcher.Errors:
+				if !ok {
+					return
+				}
+			}
+		}
+	}()
+
+	// We want to watch the parent because when files are rewritten watch will die
+	err = watcher.Add(filepath.Dir(filePath))
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // validate checks to see the config options are set.
