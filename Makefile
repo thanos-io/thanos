@@ -362,9 +362,9 @@ JSONNET_FMT := jsonnetfmt -n 2 --max-blank-lines 2 --string-style s --comment-st
 
 .PHONY: jsonnet-format
 jsonnet-format:
-	@which jsonnetfmt 2>/dev/null || ( \
-		echo "Cannot find jsonnetfmt command, please install from https://github.com/google/jsonnet/releases. If your C++ does not support GLIBCXX_3.4.20, please use xxx-in-container target like jsonnet-format-in-container." && exit 1
-	)
+	@which jsonnetfmt 2>&1 >/dev/null || ( \
+		echo "Cannot find jsonnetfmt command, please install from https://github.com/google/jsonnet/releases.\nIf your C++ does not support GLIBCXX_3.4.20, please use xxx-in-container target like jsonnet-format-in-container." \
+		&& exit 1)
 	find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print | \
 		xargs -n 1 -- $(JSONNET_FMT) -i
 
