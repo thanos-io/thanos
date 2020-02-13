@@ -234,11 +234,11 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
         )
         .addPanel(
           g.panel('Merge', 'Shows how long has it taken to merge series.') +
-          g.latencyPanel('thanos_bucket_store_series_merge_duration_seconds_bucket', 'namespace="$namespace",job=~"$job"')
+          g.latencyPanel('thanos_bucket_store_series_merge_duration_seconds', 'namespace="$namespace",job=~"$job"')
         )
         .addPanel(
           g.panel('Gate', 'Shows how long has it taken for a series to wait at the gate.') +
-          g.latencyPanel('thanos_bucket_store_series_gate_duration_seconds_bucket', 'namespace="$namespace",job=~"$job"')
+          g.latencyPanel('thanos_bucket_store_series_gate_duration_seconds', 'namespace="$namespace",job=~"$job"')
         )
       )
       .addRow(
