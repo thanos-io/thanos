@@ -3,7 +3,6 @@
 | Name                  | Email                  | Slack                    | GitHub                                      | Company           |
 |-----------------------|------------------------|--------------------------|---------------------------------------------|-------------------|
 | Bartłomiej Płotka     | bwplotka@gmail.com     | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)    | Red Hat           |
-| Dominic Green         | dom@improbable.io      | `@domgreen`              | [@domgreen](https://github.com/domgreen)    | Improbable        |
 | Frederic Branczyk     | fbranczyk@gmail.com    | `@brancz`                | [@brancz](https://github.com/brancz)        | Red Hat           |
 | Giedrius Statkevičius | giedriuswork@gmail.com | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)  | AdForm            |
 | Povilas Versockas     | p.versockas@gmail.com  | `@povilasv`              | [@povilasv](https://github.com/povilasv)    | Utility Warehouse |
