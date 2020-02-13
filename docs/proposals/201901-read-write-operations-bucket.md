@@ -138,7 +138,18 @@ manual actions. This is on purpose to not allow block malformation by blocks whi
 
 *Newer block from two or more overlapping blocks fully submatches the source blocks of older blocks. Older blocks can be then ignored.*
 
-The word **fully** is crucial. For example we won't be able to resolve case with block ABCD and CDEF. This is because there is no logic for decompact or vertical compaction.
+The word **fully** is crucial.
+
+We will determine overlaps in data by using **Full Overlap Block Detection Algorithm** which is defined as following:
+Consider the below diagram which shows different tsdb blocks:
+
+[![Diagram](https://docs.google.com/drawings/d/e/2PACX-1vTVX4WgIa4O0rcvN8R_oZJBDOGNe0-eTJW7Ucqw0CnwcjuswATupMRD3r97b94cW6xasVsU7MPQPpVf/pub?w=950&amp;h=720)](https://docs.google.com/drawings/d/1RsP7q2JPUrOZG_6uDAJo4D5hWM9zjqV0wHTLPQchpKE/edit?usp=sharing)
+
+In the first example, we see that the block F is a compacted block containing data of blocks ABCD. The blocks ABCD are source blocks that contain data of ABCD blocks.
+Since block F contains data for all blocks that blocks ABCD contain, the block F completely overlaps with blocks ABCD, we can safely delete ABCD.
+
+In the second example, the block F is a compacted block containing data of blocks ABCD. The blocks ABCD are blocks contains data of ABCDE blocks.
+Since block F doesn't contain data related to block E, the block F cannot be safely deleted.
 
 Having this kind of overlap support, we can delay deletion by forming 6th rule:
 
@@ -162,17 +173,23 @@ To match partial upload safeguards we want to delete block in reverse order:
 > 7 . To schedule delete operation, delete `meta.json` file. All components will exclude this block and compactor will do eventual deletion assuming the block is partially uploaded. [Compactor change needed]
 
 We schedule deletions instead of doing them straight away for 3 reasons:
+
 * Readers that have loaded this block can still access index and metrics for some time. On next sync they will notice lack of meta.json and assume partial block which excludes it from block being loaded.
 * Only compactor deletes metrics and index.
 * In further delete steps, starting with meta.json first ensures integrity mark being deleted first, so in case of deletion process being stopped, we can treat this block as partial block (rule 4th) and delete it gracefully.
+
+Along with this, we also store information about when the block was scheduled to be deleted so that it can be deleted at a later point in time.
+To do so, we create a file `compactor-meta.json` where we store information about when the block was scheduled to be deleted.
+Storing the information in a file makes it resilient to failures that result in restarts.
 
 There might be exception for malformed blocks that blocks compaction or reader operations. Since we may need to unblock the system
 immediately the block can be forcibly removed meaning that query failures may occur (reader loaded block, but not aware block was deleted).
 
 > 8 . Compactor waits minimum 15m (`deleteDelay`) before deleting the whole `To Delete` block. [Compactor change needed]
 
-This is to make sure we don't forcibly remove block which is still loaded on reader side. We do that by counting time from
-spotting lack of meta.json first. After 15 minutes we are ok to delete the whole directory.
+This is to make sure we don't forcibly remove block which is still loaded on reader side.
+
+We check the `compactor-meta.json` file to identify if the block has to be deleted. After 15 minutes of marking the block to be deleted, we are ok to delete the whole block directory.
 
 ## Risks
 
