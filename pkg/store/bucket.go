@@ -368,7 +368,7 @@ func (s *BucketStore) SyncBlocks(ctx context.Context) error {
 			level.Warn(s.logger).Log("msg", "drop outdated block failed", "block", id, "err", err)
 			s.metrics.blockDropFailures.Inc()
 		}
-		level.Debug(s.logger).Log("msg", "dropped outdated block", "block", id)
+		level.Info(s.logger).Log("msg", "unloaded outdated block", "block", id)
 		s.metrics.blockDrops.Inc()
 	}
 
@@ -439,7 +439,7 @@ func (s *BucketStore) addBlock(ctx context.Context, meta *metadata.Meta) (err er
 			}
 			level.Warn(s.logger).Log("msg", "loading block failed", "elapsed", time.Since(start), "id", meta.ULID, "err", err)
 		} else {
-			level.Debug(s.logger).Log("msg", "loaded block", "elapsed", time.Since(start), "id", meta.ULID)
+			level.Info(s.logger).Log("msg", "loaded new block", "elapsed", time.Since(start), "id", meta.ULID)
 		}
 	}()
 	s.metrics.blockLoads.Inc()

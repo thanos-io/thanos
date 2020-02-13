@@ -192,8 +192,6 @@ func (s *MetaFetcher) loadMeta(ctx context.Context, id ulid.ULID) (*metadata.Met
 		}
 	}
 
-	level.Debug(s.logger).Log("msg", "download meta", "name", metaFile)
-
 	r, err := s.bkt.Get(ctx, metaFile)
 	if s.bkt.IsObjNotFoundErr(err) {
 		// Meta.json was deleted between bkt.Exists and here.
@@ -364,7 +362,7 @@ func (s *MetaFetcher) Fetch(ctx context.Context) (metas map[ulid.ULID]*metadata.
 		return metas, partial, errors.Wrap(metaErrs, "incomplete view")
 	}
 
-	level.Info(s.logger).Log("msg", "successfully fetched block metadata", "duration", time.Since(start).String(), "cached", len(s.cached), "returned", len(metas), "partial", len(partial))
+	level.Debug(s.logger).Log("msg", "successfully fetched block metadata", "duration", time.Since(start).String(), "cached", len(s.cached), "returned", len(metas), "partial", len(partial))
 	return metas, partial, nil
 }
 
