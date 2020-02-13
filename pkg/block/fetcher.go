@@ -441,6 +441,22 @@ func NewDeduplicateFilter() *DeduplicateFilter {
 // TODO(bwplotka): change arg to have sorted meta instead?
 // TODO(bwplotka): Explore what we can improve here - it's bit slow.
 func (f *DeduplicateFilter) Filter(metas map[ulid.ULID]*metadata.Meta, synced GaugeLabeled, _ bool) {
+	var wg sync.WaitGroup
+
+	for _, res := range []int64{
+		int64(0), int64(5 * 60 * 1000), int64(60 * 60 * 1000),
+	} {
+		wg.Add(1)
+		go func(res int64) {
+			defer wg.Done()
+			f.filter(metas, res, synced)
+		}(res)
+	}
+
+	wg.Wait()
+}
+
+func (f *DeduplicateFilter) filter(metas map[ulid.ULID]*metadata.Meta, resolution int64, synced GaugeLabeled) {
 	if cap(f.metaSlice) < len(metas) {
 		f.metaSlice = make([]*metadata.Meta, 0, len(metas))
 	}
