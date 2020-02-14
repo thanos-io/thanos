@@ -178,7 +178,8 @@ func main() {
 		})
 	}
 
-	reloadCh := make(chan struct{})
+	// Create a signal channel to dispatch reload events to sub-commands.
+	reloadCh := make(chan struct{}, 1)
 
 	if err := cmds[cmd](&g, logger, metrics, tracer, reloadCh, *logLevel == "debug"); err != nil {
 		level.Error(logger).Log("err", errors.Wrapf(err, "%s command failed", cmd))
