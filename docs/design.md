@@ -16,7 +16,7 @@ The Prometheus metric data model and the 2.0 storage format ([spec][tsdb-format]
 Thanos is a clustered system of components with distinct and decoupled purposes. Clustered components can be categorized as follows:
 
 * Metric sources
-* Store Gateways
+* Stores
 * Queriers
 
 ### Metric Sources
@@ -72,7 +72,7 @@ A store gateway acts as a gateway to block data that is stored in an object stor
 It continuously synchronizes which blocks exist in the bucket and translates requests for metric data into object storage requests. It implements various strategies to minimize the number of requests to the object storage such as filtering relevant blocks by their metadata (e.g. time range and labels) and caching frequent index lookups.
 
 The Prometheus 2.0 storage layout is optimized for minimal read amplification. For example, sample data for the same time series is sequentially aligned in a chunk file. Similarly, series for the same metric name are sequentially aligned as well.
-The store node is aware of the files' layout and translates data requests into a plan of a minimum amount of object storage request. Each request may fetch up to hundreds of thousands of chunks at once. This is essential to satisfy even big queries with a limited amount of requests to the object storage.
+The store gateway is aware of the files' layout and translates data requests into a plan of a minimum amount of object storage request. Each request may fetch up to hundreds of thousands of chunks at once. This is essential to satisfy even big queries with a limited amount of requests to the object storage.
 
 Currently only index data is cached. Chunk data could be cached but is orders of magnitude larger in size. In the current state, fetching chunk data from the object storage already only accounts for a small fraction of end-to-end latency. Thus, there's currently no incentive to increase the store nodes resource requirements/limit its scalability by adding chunk caching.
 
@@ -91,9 +91,9 @@ In its essence, the Store API allows to look up data by a set of label matchers 
          Block File Ranges                  │          │
                   │                     Store API      │
                   v                         │          │
-                ┌──────────────┐            │          │
-                │     Store    │            │      Store API
-                └────────┬─────┘            │          │
+                ┌───────────────┐           │          │
+                │ Store Gateway │           │      Store API
+                └────────┬──────┘           │          │
                          │                  │          │
                      Store API              │          │
                          │                  │          │
@@ -114,7 +114,7 @@ Based on the metadata of store and source nodes, they attempt to minimize the re
 
 ```
 ┌──────────────────┐  ┌────────────┬─────────┐   ┌────────────┐
-│    Store Node    │  │ Prometheus │ Sidecar │   │    Ruler   │
+│  Store  Gateway  │  │ Prometheus │ Sidecar │   │    Ruler   │
 └─────────────┬────┘  └────────────┴────┬────┘   └─┬──────────┘
               │                         │          │
               │                         │          │
@@ -139,23 +139,23 @@ The compactor also does additional batch processing such as down-sampling and ap
 
 ## Scaling
 
-None of the Thanos components provides any means of sharding. The only explicitly scalable component are query nodes, which are stateless and can be scaled up arbitrarily. Scaling of storage capacity is ensured by relying on an external object storage system.
+None of the Thanos components provides any means of sharding. The only explicitly scalable component is querier, which is stateless and can be scaled up arbitrarily. Scaling of storage capacity is ensured by relying on an external object storage system.
 
-Store, rule, and compactor nodes are all expected to scale significantly within a single instance or high availability pair. Similar to Prometheus, functional sharding can be applied for rare cases in which this does not hold true.
+Store gateway, ruler, and compactor are all expected to scale significantly within a single instance or high availability pair. Similar to Prometheus, functional sharding can be applied for rare cases in which this does not hold true.
 
-For example, rule sets can be divided across multiple HA pairs of rule nodes. Store nodes likely are subject to functional sharding regardless by assigning dedicated buckets per region/datacenter.
+For example, rule sets can be divided across multiple HA pairs of rulers. Store gateways likely are subject to functional sharding regardless by assigning dedicated buckets per region/datacenter.
 
 Overall, first-class horizontal sharding is possible but will not be considered for the time being since there's no evidence that it is required in practical setups.
 
 ## Cost
 
-The only extra cost Thanos adds to an existing Prometheus setup is essentially the price of storing and querying data from the object storage and running of the store node.
+The only extra cost Thanos adds to an existing Prometheus setup is essentially the price of storing and querying data from the object storage and running of the store gateway.
 
-Queriers, compactors and rule nodes require as approximately as many compute resources as they save by not doing the same work directly on Prometheus servers.
+Queriers, compactors and rulers require as approximately as many compute resources as they save by not doing the same work directly on Prometheus servers.
 
 Data that is just accessed locally in conventional Prometheus setups has to be transferred over the network in Thanos. We generally expect this data shuffling to typically happen in unmetered networks and thus not causing any additional cost.
 
-Typical object storage prices per GB are at about $0.02. The number of retrievals (typically priced at $0.004 per 10,000) by the store nodes strongly depend on individual querying pattern. Adding 20% to the total storage cost to account for retrievals and running of store nodes seems like a conservative estimate.
+Typical object storage prices per GB are at about $0.02. The number of retrievals (typically priced at $0.004 per 10,000) by the store gateways strongly depend on individual querying pattern. Adding 20% to the total storage cost to account for retrievals and running of store gateways seems like a conservative estimate.
 
 Suppose we want to store 100TB of metric data. At about 1.07 bytes/sample in total data size, this is equivalent to:
 * storing 48.88 years of data across an average of 1 million active time series with default 15s scrape interval.

@@ -12,7 +12,7 @@ slug: /integrations.md
 [StoreAPI](https://github.com/thanos-io/thanos/blob/master/pkg/store/storepb/rpc.proto) is a common proto interface for gRPC component
 that can connect to [Querier](components/query.md) in order to fetch the metric series.
 Natively Thanos implements [Sidecar](components/sidecar.md) (local Prometheus data),
-[Ruler](components/rule.md) and [Store gateway](components/store.md).
+[Ruler](components/rule.md) and [Store Gateway](components/store.md).
 This solves fetching series from Prometheus or Prometheus TSDB format, however same interface can be used to fetch
 metrics from other storages.
 

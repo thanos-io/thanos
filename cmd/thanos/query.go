@@ -44,7 +44,7 @@ import (
 // registerQuery registers a query command.
 func registerQuery(m map[string]setupFunc, app *kingpin.Application) {
 	comp := component.Query
-	cmd := app.Command(comp.String(), "query node exposing PromQL enabled Query API with data retrieved from multiple store nodes")
+	cmd := app.Command(comp.String(), "querier exposing PromQL enabled Query API with data retrieved from multiple store nodes")
 
 	httpBindAddr, httpGracePeriod := regHTTPFlags(cmd)
 	grpcBindAddr, grpcGracePeriod, grpcCert, grpcKey, grpcClientCA := regGRPCFlags(cmd)

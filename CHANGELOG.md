@@ -33,7 +33,7 @@ We use *breaking* word for marking changes that are not backward compatible (rel
 
 - [#1933](https://github.com/thanos-io/thanos/pull/1933) Add a flag `--tsdb.wal-compression` to configure whether to enable tsdb wal compression in ruler and receiver.
 - [#2021](https://github.com/thanos-io/thanos/pull/2021) Rename metric `thanos_query_duplicated_store_address` to `thanos_query_duplicated_store_addresses_total` and `thanos_rule_duplicated_query_address` to `thanos_rule_duplicated_query_addresses_total`.
-- [#1891](https://github.com/thanos-io/thanos/pull/1891) Rename Rule to Ruler, Query to Querier, Receive to Receiver and Compact to Compactor.
+- [#1891](https://github.com/thanos-io/thanos/pull/1891) Rename several thanos components.
 
 ## [v0.10.1](https://github.com/thanos-io/thanos/releases/tag/v0.10.1) - 2020.01.24
 

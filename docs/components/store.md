@@ -1,12 +1,12 @@
 ---
-title: Store
+title: Store Gateway
 type: docs
 menu: components
 ---
 
-# Store
+# Store Gateway
 
-The store component of Thanos implements the Store API on top of historical data in an object storage bucket. It acts primarily as an API gateway and therefore does not need significant amounts of local disk space. It joins a Thanos cluster on startup and advertises the data it can access.
+The store gateway implements the Store API on top of historical data in an object storage bucket. It acts primarily as an API gateway and therefore does not need significant amounts of local disk space. It joins a Thanos cluster on startup and advertises the data it can access.
 It keeps a small amount of information about all remote blocks on local disk and keeps it in sync with the bucket. This data is generally safe to delete across restarts at the cost of increased startup times.
 
 ```bash
@@ -31,8 +31,8 @@ In general about 1MB of local disk space is required per TSDB block stored in th
 ```$
 usage: thanos store [<flags>]
 
-store node giving access to blocks in a bucket provider. Now supported GCS, S3,
-Azure, Swift and Tencent COS.
+store gateway giving access to blocks in a bucket provider. Now supported GCS,
+S3, Azure, Swift and Tencent COS.
 
 Flags:
   -h, --help                     Show context-sensitive help (also try
@@ -144,7 +144,7 @@ Flags:
 
 By default Thanos Store Gateway looks at all the data in Object Store and returns it based on query's time range.
 
-Thanos Store `--min-time`, `--max-time` flags allows you to shard Thanos Store based on constant time or time duration relative to current time.
+Thanos Store Gateway `--min-time`, `--max-time` flags allows you to shard Thanos Store Gateway based on constant time or time duration relative to current time.
 
 For example setting: `--min-time=-6w` & `--max-time==-2w` will make Thanos Store Gateway return metrics that fall within `now - 6 weeks` up to `now - 2 weeks` time range.
 
@@ -152,15 +152,15 @@ Constant time needs to be set in RFC3339 format. For example `--min-time=2018-01
 
 Thanos Store Gateway might not get new blocks immediately, as Time partitioning is partly done in asynchronous block synchronization job, which is by default done every 3 minutes. Additionally some of the Object Store implementations provide eventual read-after-write consistency, which means that Thanos Store might not immediately get newly created & uploaded blocks anyway.
 
-We recommend having overlapping time ranges with Thanos Sidecar and other Thanos Store gateways as this will improve your resiliency to failures.
+We recommend having overlapping time ranges with Thanos Sidecar and other Thanos Store Gateways as this will improve your resiliency to failures.
 
 Thanos Querier deals with overlapping time series by merging them together.
 
-Filtering is done on a Chunk level, so Thanos Store might still return Samples which are outside of `--min-time` & `--max-time`.
+Filtering is done on a Chunk level, so Thanos Store Gateway might still return Samples which are outside of `--min-time` & `--max-time`.
 
 ## Probes
 
-- Thanos Store exposes two endpoints for probing.
+- Thanos Store Gateway exposes two endpoints for probing.
   - `/-/healthy` starts as soon as initial setup completed.
   - `/-/ready` starts after all the bootstrapping completed (e.g initial index building) and ready to serve traffic.
 

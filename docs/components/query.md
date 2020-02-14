@@ -311,9 +311,9 @@ Flags:
                                  stripped prefix value in X-Forwarded-Prefix
                                  header. This allows thanos UI to be served on a
                                  sub-path.
-      --query.timeout=2m         Maximum time to process query by querier.
+      --query.timeout=2m         Maximum time to process query by query node.
       --query.max-concurrent=20  Maximum number of queries processed
-                                 concurrently by querier.
+                                 concurrently by query node.
       --query.replica-label=QUERY.REPLICA-LABEL ...
                                  Labels to treat as a replica indicator along
                                  which data is deduplicated. Still you will be

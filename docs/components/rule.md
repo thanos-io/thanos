@@ -12,7 +12,7 @@ _The ruler component should in particular not be used to circumvent solving rule
 
 The ruler component evaluates Prometheus recording and alerting rules against chosen query API via repeated `--query` (or FileSD via `--query.sd`). If more than one query is passed, round robin balancing is performed.
 
-Ruler results are written back to disk in the Prometheus 2.0 storage format. Rules at the same time participate in the system as source store nodes, which means that they expose StoreAPI and upload their generated TSDB blocks to an object store.
+Ruler results are written back to disk in the Prometheus 2.0 storage format. Rulers at the same time participate in the system as source store nodes, which means that they expose StoreAPI and upload their generated TSDB blocks to an object store.
 
 You can think of Ruler as a simplified Prometheus that does not require a sidecar and does not scrape and do PromQL evaluation (no QueryAPI).
 
@@ -188,7 +188,7 @@ to check if Querier is live.
 
 ## Performance.
 
-As ruler nodes outsource query processing to query nodes, they should generally experience little load. If necessary, functional sharding can be applied by splitting up the sets of rules between HA pairs.
+As rulers outsource query processing to query nodes, they should generally experience little load. If necessary, functional sharding can be applied by splitting up the sets of rules between HA pairs.
 Rules are processed with deduplicated data according to the replica label configured on query nodes.
 
 ## External labels

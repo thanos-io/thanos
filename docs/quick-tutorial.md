@@ -113,13 +113,13 @@ global:
     replica: A
 ```
 
-### [Querier/Query](components/query.md)
+### [Querier](components/query.md)
 
 Now that we have setup the Sidecar for one or more Prometheus instances, we want to use Thanos' global [Query Layer](components/query.md) to evaluate PromQL queries against all instances at once.
 
-The Query component is stateless and horizontally scalable and can be deployed with any number of replicas. Once connected to the Sidecars, it automatically detects which Prometheus servers need to be contacted for a given PromQL query.
+The Querier component is stateless and horizontally scalable and can be deployed with any number of replicas. Once connected to the Sidecars, it automatically detects which Prometheus servers need to be contacted for a given PromQL query.
 
-Query also implements Prometheus's official HTTP API and can thus be used with external tools such as Grafana. It also serves a derivative of Prometheus's UI for ad-hoc querying and stores status.
+Querier also implements Prometheus's official HTTP API and can thus be used with external tools such as Grafana. It also serves a derivative of Prometheus's UI for ad-hoc querying and stores status.
 
 Below, we will set up a Query to connect to our Sidecars, and expose its HTTP UI.
 
@@ -135,7 +135,7 @@ Go to the configured HTTP address that should now show a UI similar to that of P
 
 #### Deduplicating Data from Prometheus HA pairs
 
-The Query component is also capable of deduplicating data collected from Prometheus HA pairs. This requires configuring Prometheus's `global.external_labels` configuration block to identify the role of a given Prometheus instance.
+The Querier component is also capable of deduplicating data collected from Prometheus HA pairs. This requires configuring Prometheus's `global.external_labels` configuration block to identify the role of a given Prometheus instance.
 
 A typical choice is simply the label name "replica" while letting the value be whatever you wish. For example, you might set up the following in Prometheus's configuration file:
 
@@ -150,7 +150,7 @@ global:
 
 In a Kubernetes stateful deployment, the replica label can also be the pod name.
 
-Reload your Prometheus instances, and then, in Query, we will define `replica` as the label we want to enable deduplication to occur on:
+Reload your Prometheus instances, and then, in Querier, we will define `replica` as the label we want to enable deduplication to occur on:
 
 ```bash
 thanos query \
@@ -170,8 +170,8 @@ Go to the configured HTTP address, and you should now be able to query across al
 The only required communication between nodes is for Thanos Querier to be able to reach gRPC storeAPIs you provide. Thanos Querier periodically calls Info endpoint to collect up-to-date metadata as well as checking the health of given StoreAPI.
 The metadata includes the information about time windows and external labels for each node.
 
-There are various ways to tell query component about the StoreAPIs it should query data from. The simplest way is to use a static list of well known addresses to query.
-These are repeatable so can add as many endpoint as needed. You can put DNS domain prefixed by `dns+` or `dnssrv+` to have Thanos Query do an `A` or `SRV` lookup to get all required IPs to communicate with.
+There are various ways to tell querier about the StoreAPIs it should query data from. The simplest way is to use a static list of well known addresses to query.
+These are repeatable so can add as many endpoint as needed. You can put DNS domain prefixed by `dns+` or `dnssrv+` to have Thanos Querier do an `A` or `SRV` lookup to get all required IPs to communicate with.
 
 ```bash
 thanos query \
@@ -190,7 +190,7 @@ Read more details [here](service-discovery.md).
 
 As the sidecar backs up data into the object storage of your choice, you can decrease Prometheus retention and store less locally. However we need a way to query all that historical data again.
 The store gateway does just that by implementing the same gRPC data API as the sidecars but backing it with data it can find in your object storage bucket.
-Just like sidecars and query nodes, the store gateway exposes StoreAPI and needs to be discovered by Thanos Querier.
+Just like sidecars and queriers, the store gateway exposes StoreAPI and needs to be discovered by Thanos Querier.
 
 ```bash
 thanos store \
