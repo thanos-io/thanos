@@ -395,12 +395,12 @@ func startStreamSeriesSet(
 		}()
 
 		rCh := make(chan *recvResponse)
-		recvCancel := make(chan bool)
+		done := make(chan struct{})
 		go func() {
 			for {
 				r, err := s.stream.Recv()
 				select {
-				case <-recvCancel:
+				case <-done:
 					close(rCh)
 					return
 				case rCh <- &recvResponse{r: r, err: err}:
@@ -415,12 +415,12 @@ func startStreamSeriesSet(
 			var err error
 			select {
 			case <-ctx.Done():
-				close(recvCancel)
+				close(done)
 				err = errors.Wrap(ctx.Err(), fmt.Sprintf("failed to receive any data from %s", s.name))
 				s.handleErr(err)
 				return
 			case <-frameTimeoutCtx.Done():
-				close(recvCancel)
+				close(done)
 				err = errors.Wrap(frameTimeoutCtx.Err(), fmt.Sprintf("failed to receive any data in %s from %s", s.responseTimeout.String(), s.name))
 				s.handleErr(err)
 				return
@@ -428,14 +428,14 @@ func startStreamSeriesSet(
 			}
 
 			if rr.err == io.EOF {
-				close(recvCancel)
+				close(done)
 				return
 			}
 
 			if rr.err != nil {
 				wrapErr := errors.Wrapf(rr.err, "receive series from %s", s.name)
 				s.handleErr(wrapErr)
-				close(recvCancel)
+				close(done)
 				return
 			}
 			numResponses++
