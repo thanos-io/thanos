@@ -139,7 +139,10 @@ Flags:
                                  details:
                                  https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
       --consistency-delay=30m    Minimum age of all blocks before they are being read.
-
+      --ignore-deletion-marks-delay=24h
+                                 Duration after which the blocks marked for deletion will be filtered out while fetching blocks.
+                                 The idea of ignore-deletion-marks-delay is to ignore blocks that are marked for deletion with some delay. This ensures store can still serve blocks that are meant to be deleted but do not have a replacement yet. If delete-delay duration is provided to compactor or bucket verify component, it will upload deletion-mark.json file to mark after what duration the block should be deleted rather than deleting the block straight away.
+		                             If delete-delay is non-zero for compactor or bucket verify component, ignore-deletion-marks-delay should be set to (delete-delay)/2 so that blocks marked for deletion are filtered out while fetching blocks before being deleted from bucket. Default is 24h, half of the default value for --delete-delay on compactor.
 ```
 
 ## Time based partitioning

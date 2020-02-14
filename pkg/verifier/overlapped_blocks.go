@@ -6,6 +6,7 @@ package verifier
 import (
 	"context"
 	"sort"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -21,7 +22,7 @@ const OverlappedBlocksIssueID = "overlapped_blocks"
 
 // OverlappedBlocksIssue checks bucket for blocks with overlapped time ranges.
 // No repair is available for this issue.
-func OverlappedBlocksIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool, fetcher *block.MetaFetcher) error {
+func OverlappedBlocksIssue(ctx context.Context, logger log.Logger, bkt objstore.Bucket, _ objstore.Bucket, repair bool, idMatcher func(ulid.ULID) bool, fetcher *block.MetaFetcher, deleteDelay time.Duration, metrics *verifierMetrics) error {
 	if idMatcher != nil {
 		return errors.Errorf("id matching is not supported by issue %s verifier", OverlappedBlocksIssueID)
 	}
