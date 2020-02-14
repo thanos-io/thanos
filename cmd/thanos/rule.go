@@ -8,13 +8,10 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
-	"os"
-	"os/signal"
 	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -116,7 +113,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 	dnsSDResolver := cmd.Flag("query.sd-dns-resolver", "Resolver to use. Possible options: [golang, miekgdns]").
 		Default("golang").Hidden().String()
 
-	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, _ bool) error {
+	m[comp.String()] = func(g *run.Group, logger log.Logger, reg *prometheus.Registry, tracer opentracing.Tracer, reload <-chan struct{}, _ bool) error {
 		lset, err := parseFlagLabels(*labelStrs)
 		if err != nil {
 			return errors.Wrap(err, "parse labels")
@@ -168,6 +165,7 @@ func registerRule(m map[string]setupFunc, app *kingpin.Application) {
 			logger,
 			reg,
 			tracer,
+			reload,
 			lset,
 			*alertmgrs,
 			*alertmgrsTimeout,
@@ -209,6 +207,7 @@ func runRule(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
+	reloadSignal <-chan struct{},
 	lset labels.Labels,
 	alertmgrURLs []string,
 	alertmgrsTimeout time.Duration,
@@ -484,6 +483,7 @@ func runRule(
 				case <-cancel:
 					return errors.New("canceled")
 				case <-reload:
+				case <-reloadSignal:
 				}
 
 				level.Debug(logger).Log("msg", "configured rule files", "files", strings.Join(ruleFiles, ","))
@@ -515,27 +515,6 @@ func runRule(
 					rulesLoaded.WithLabelValues(group.PartialResponseStrategy.String(), group.File(), group.Name()).Set(float64(len(group.Rules())))
 				}
 
-			}
-		}, func(error) {
-			close(cancel)
-		})
-	}
-	{
-		cancel := make(chan struct{})
-
-		g.Add(func() error {
-			c := make(chan os.Signal, 1)
-			for {
-				signal.Notify(c, syscall.SIGHUP)
-				select {
-				case <-c:
-					select {
-					case reload <- struct{}{}:
-					default:
-					}
-				case <-cancel:
-					return errors.New("canceled")
-				}
 			}
 		}, func(error) {
 			close(cancel)
