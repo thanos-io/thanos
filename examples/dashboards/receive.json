@@ -2238,7 +2238,7 @@
             "useTags": false
          },
          {
-            "allValue": "thanos-receiver.*",
+            "allValue": "thanos-receive.*",
             "current": {
                "text": "all",
                "value": "$__all"
@@ -2250,7 +2250,7 @@
             "multi": false,
             "name": "job",
             "options": [ ],
-            "query": "label_values(up{namespace=\"$namespace\",job=~\"thanos-receiver.*\"}, job)",
+            "query": "label_values(up{namespace=\"$namespace\",job=~\"thanos-receive.*\"}, job)",
             "refresh": 1,
             "regex": "",
             "sort": 2,
@@ -2273,7 +2273,7 @@
             "multi": false,
             "name": "pod",
             "options": [ ],
-            "query": "label_values(kube_pod_info{namespace=\"$namespace\",created_by_name=~\"thanos-receiver.*\"}, pod)",
+            "query": "label_values(kube_pod_info{namespace=\"$namespace\",created_by_name=~\"thanos-receive.*\"}, pod)",
             "refresh": 1,
             "regex": "",
             "sort": 2,
@@ -2330,7 +2330,7 @@
       ]
    },
    "timezone": "",
-   "title": "Thanos / Receiver",
-   "uid": "b5958da86b143e45752506d3c09c4f92",
+   "title": "Thanos / Receive",
+   "uid": "916a852b00ccc5ed81056644718fa4fb",
    "version": 0
 }

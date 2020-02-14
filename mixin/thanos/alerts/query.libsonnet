@@ -1,18 +1,18 @@
 {
   local thanos = self,
-  querier+:: {
+  query+:: {
     jobPrefix: error 'must provide job prefix for Thanos Query alerts',
     selector: error 'must provide selector for Thanos Query alerts',
   },
   prometheusAlerts+:: {
     groups+: [
       {
-        name: 'thanos-querier.rules',
+        name: 'thanos-query.rules',
         rules: [
           {
-            alert: 'ThanosQuerierHttpRequestQueryErrorRateHigh',
+            alert: 'ThanosQueryHttpRequestQueryErrorRateHigh',
             annotations: {
-              message: 'Thanos Querier {{$labels.job}} is failing to handle {{ $value | humanize }}% of "query" requests.',
+              message: 'Thanos Query {{$labels.job}} is failing to handle {{ $value | humanize }}% of "query" requests.',
             },
             expr: |||
               (
@@ -20,16 +20,16 @@
               /
                 sum(rate(http_requests_total{%(selector)s, handler="query"}[5m]))
               ) * 100 > 5
-            ||| % thanos.querier,
+            ||| % thanos.query,
             'for': '5m',
             labels: {
               severity: 'critical',
             },
           },
           {
-            alert: 'ThanosQuerierHttpRequestQueryRangeErrorRateHigh',
+            alert: 'ThanosQueryHttpRequestQueryRangeErrorRateHigh',
             annotations: {
-              message: 'Thanos Querier {{$labels.job}} is failing to handle {{ $value | humanize }}% of "query_range" requests.',
+              message: 'Thanos Query {{$labels.job}} is failing to handle {{ $value | humanize }}% of "query_range" requests.',
             },
             expr: |||
               (
@@ -37,16 +37,16 @@
               /
                 sum(rate(http_requests_total{%(selector)s, handler="query_range"}[5m]))
               ) * 100 > 5
-            ||| % thanos.querier,
+            ||| % thanos.query,
             'for': '5m',
             labels: {
               severity: 'critical',
             },
           },
           {
-            alert: 'ThanosQuerierGrpcServerErrorRate',
+            alert: 'ThanosQueryGrpcServerErrorRate',
             annotations: {
-              message: 'Thanos Querier {{$labels.job}} is failing to handle {{ $value | humanize }}% of requests.',
+              message: 'Thanos Query {{$labels.job}} is failing to handle {{ $value | humanize }}% of requests.',
             },
             expr: |||
               (
@@ -55,16 +55,16 @@
                 sum by (job) (rate(grpc_server_started_total{%(selector)s}[5m]))
               * 100 > 5
               )
-            ||| % thanos.querier,
+            ||| % thanos.query,
             'for': '5m',
             labels: {
               severity: 'warning',
             },
           },
           {
-            alert: 'ThanosQuerierGrpcClientErrorRate',
+            alert: 'ThanosQueryGrpcClientErrorRate',
             annotations: {
-              message: 'Thanos Querier {{$labels.job}} is failing to send {{ $value | humanize }}% of requests.',
+              message: 'Thanos Query {{$labels.job}} is failing to send {{ $value | humanize }}% of requests.',
             },
             expr: |||
               (
@@ -72,16 +72,16 @@
               /
                 sum by (job) (rate(grpc_client_started_total{%(selector)s}[5m]))
               ) * 100 > 5
-            ||| % thanos.querier,
+            ||| % thanos.query,
             'for': '5m',
             labels: {
               severity: 'warning',
             },
           },
           {
-            alert: 'ThanosQuerierHighDNSFailures',
+            alert: 'ThanosQueryHighDNSFailures',
             annotations: {
-              message: 'Thanos Queriers {{$labels.job}} have {{ $value | humanize }}% of failing DNS queries for store endpoints.',
+              message: 'Thanos Query {{$labels.job}} have {{ $value | humanize }}% of failing DNS queries for store endpoints.',
             },
             expr: |||
               (
@@ -89,16 +89,16 @@
               /
                 sum by (job) (rate(thanos_querier_store_apis_dns_lookups_total{%(selector)s}[5m]))
               ) * 100 > 1
-            ||| % thanos.querier,
+            ||| % thanos.query,
             'for': '15m',
             labels: {
               severity: 'warning',
             },
           },
           {
-            alert: 'ThanosQuerierInstantLatencyHigh',
+            alert: 'ThanosQueryInstantLatencyHigh',
             annotations: {
-              message: 'Thanos Querier {{$labels.job}} has a 99th percentile latency of {{ $value }} seconds for instant queries.',
+              message: 'Thanos Query {{$labels.job}} has a 99th percentile latency of {{ $value }} seconds for instant queries.',
             },
             expr: |||
               (
@@ -106,16 +106,16 @@
               and
                 sum by (job) (rate(http_request_duration_seconds_bucket{%(selector)s, handler="query"}[5m])) > 0
               )
-            ||| % thanos.querier,
+            ||| % thanos.query,
             'for': '10m',
             labels: {
               severity: 'critical',
             },
           },
           {
-            alert: 'ThanosQuerierRangeLatencyHigh',
+            alert: 'ThanosQueryRangeLatencyHigh',
             annotations: {
-              message: 'Thanos Querier {{$labels.job}} has a 99th percentile latency of {{ $value }} seconds for instant queries.',
+              message: 'Thanos Query {{$labels.job}} has a 99th percentile latency of {{ $value }} seconds for instant queries.',
             },
             expr: |||
               (
@@ -123,7 +123,7 @@
               and
                 sum by (job) (rate(http_request_duration_seconds_count{%(selector)s, handler="query_range"}[5m])) > 0
               )
-            ||| % thanos.querier,
+            ||| % thanos.query,
             'for': '10m',
             labels: {
               severity: 'critical',

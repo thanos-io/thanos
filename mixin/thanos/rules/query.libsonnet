@@ -1,12 +1,12 @@
 {
   local thanos = self,
-  querier+:: {
+  query+:: {
     selector: error 'must provide selector for Thanos Query recording rules',
   },
   prometheusRules+:: {
     groups+: [
       {
-        name: 'thanos-querier.rules',
+        name: 'thanos-query.rules',
         rules: [
           {
             record: ':grpc_client_failures_per_unary:sum_rate',
@@ -16,7 +16,7 @@
               /
                 sum(rate(grpc_client_started_total{%(selector)s, grpc_type="unary"}[5m]))
               )
-            ||| % thanos.querier,
+            ||| % thanos.query,
             labels: {
             },
           },
@@ -28,7 +28,7 @@
               /
                 sum(rate(grpc_client_started_total{%(selector)s, grpc_type="server_stream"}[5m]))
               )
-            ||| % thanos.querier,
+            ||| % thanos.query,
             labels: {
             },
           },
@@ -40,7 +40,7 @@
               /
                 sum(rate(thanos_querier_store_apis_dns_lookups_total{%(selector)s}[5m]))
               )
-            ||| % thanos.querier,
+            ||| % thanos.query,
             labels: {
             },
           },
@@ -50,7 +50,7 @@
               histogram_quantile(0.99,
                 sum(rate(http_request_duration_seconds_bucket{%(selector)s, handler="query"}[5m])) by (le)
               )
-            ||| % thanos.querier,
+            ||| % thanos.query,
             labels: {
               quantile: '0.99',
             },
@@ -61,7 +61,7 @@
               histogram_quantile(0.99,
                 sum(rate(http_request_duration_seconds_bucket{%(selector)s, handler="query_range"}[5m])) by (le)
               )
-            ||| % thanos.querier,
+            ||| % thanos.query,
             labels: {
               quantile: '0.99',
             },

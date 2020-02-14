@@ -2383,7 +2383,7 @@
             "useTags": false
          },
          {
-            "allValue": "thanos-querier.*",
+            "allValue": "thanos-query.*",
             "current": {
                "text": "all",
                "value": "$__all"
@@ -2395,7 +2395,7 @@
             "multi": false,
             "name": "job",
             "options": [ ],
-            "query": "label_values(up{namespace=\"$namespace\",job=~\"thanos-querier.*\"}, job)",
+            "query": "label_values(up{namespace=\"$namespace\",job=~\"thanos-query.*\"}, job)",
             "refresh": 1,
             "regex": "",
             "sort": 2,
@@ -2418,7 +2418,7 @@
             "multi": false,
             "name": "pod",
             "options": [ ],
-            "query": "label_values(kube_pod_info{namespace=\"$namespace\",created_by_name=~\"thanos-querier.*\"}, pod)",
+            "query": "label_values(kube_pod_info{namespace=\"$namespace\",created_by_name=~\"thanos-query.*\"}, pod)",
             "refresh": 1,
             "regex": "",
             "sort": 2,
@@ -2475,7 +2475,7 @@
       ]
    },
    "timezone": "",
-   "title": "Thanos / Querier",
-   "uid": "98fde97ddeaf2981041745f1f2ba68c2",
+   "title": "Thanos / Query",
+   "uid": "af36c91291a603f1d9fbdabdd127ac4a",
    "version": 0
 }

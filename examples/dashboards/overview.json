@@ -43,10 +43,10 @@
                "linewidth": 0,
                "links": [
                   {
-                     "dashboard": "Thanos / Querier",
+                     "dashboard": "Thanos / Query",
                      "includeVars": true,
                      "keepTime": true,
-                     "title": "Thanos / Querier",
+                     "title": "Thanos / Query",
                      "type": "dashboard"
                   }
                ],
@@ -62,7 +62,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(label_replace(rate(http_requests_total{namespace=\"$namespace\",job=~\"thanos-querier.*\",handler=\"query\"}[$interval]),\"status_code\", \"${1}xx\", \"code\", \"([0-9])..\")) by (job, status_code)",
+                     "expr": "sum(label_replace(rate(http_requests_total{namespace=\"$namespace\",job=~\"thanos-query.*\",handler=\"query\"}[$interval]),\"status_code\", \"${1}xx\", \"code\", \"([0-9])..\")) by (job, status_code)",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{status_code}}",
@@ -130,10 +130,10 @@
                "linewidth": 0,
                "links": [
                   {
-                     "dashboard": "Thanos / Querier",
+                     "dashboard": "Thanos / Query",
                      "includeVars": true,
                      "keepTime": true,
-                     "title": "Thanos / Querier",
+                     "title": "Thanos / Query",
                      "type": "dashboard"
                   }
                ],
@@ -149,7 +149,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(http_requests_total{namespace=\"$namespace\",job=~\"thanos-querier.*\",handler=\"query\",code=~\"5..\"}[$interval])) / sum(rate(http_requests_total{namespace=\"$namespace\",job=~\"thanos-querier.*\",handler=\"query\"}[$interval]))",
+                     "expr": "sum(rate(http_requests_total{namespace=\"$namespace\",job=~\"thanos-query.*\",handler=\"query\",code=~\"5..\"}[$interval])) / sum(rate(http_requests_total{namespace=\"$namespace\",job=~\"thanos-query.*\",handler=\"query\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -215,10 +215,10 @@
                "linewidth": 1,
                "links": [
                   {
-                     "dashboard": "Thanos / Querier",
+                     "dashboard": "Thanos / Query",
                      "includeVars": true,
                      "keepTime": true,
-                     "title": "Thanos / Querier",
+                     "title": "Thanos / Query",
                      "type": "dashboard"
                   }
                ],
@@ -234,7 +234,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{namespace=\"$namespace\",job=~\"thanos-querier.*\",handler=\"query\"}[$interval])) by (job, le))",
+                     "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{namespace=\"$namespace\",job=~\"thanos-query.*\",handler=\"query\"}[$interval])) by (job, le))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
@@ -337,10 +337,10 @@
                "linewidth": 0,
                "links": [
                   {
-                     "dashboard": "Thanos / Querier",
+                     "dashboard": "Thanos / Query",
                      "includeVars": true,
                      "keepTime": true,
-                     "title": "Thanos / Querier",
+                     "title": "Thanos / Query",
                      "type": "dashboard"
                   }
                ],
@@ -356,7 +356,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(label_replace(rate(http_requests_total{namespace=\"$namespace\",job=~\"thanos-querier.*\",handler=\"query_range\"}[$interval]),\"status_code\", \"${1}xx\", \"code\", \"([0-9])..\")) by (job, status_code)",
+                     "expr": "sum(label_replace(rate(http_requests_total{namespace=\"$namespace\",job=~\"thanos-query.*\",handler=\"query_range\"}[$interval]),\"status_code\", \"${1}xx\", \"code\", \"([0-9])..\")) by (job, status_code)",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{status_code}}",
@@ -424,10 +424,10 @@
                "linewidth": 0,
                "links": [
                   {
-                     "dashboard": "Thanos / Querier",
+                     "dashboard": "Thanos / Query",
                      "includeVars": true,
                      "keepTime": true,
-                     "title": "Thanos / Querier",
+                     "title": "Thanos / Query",
                      "type": "dashboard"
                   }
                ],
@@ -443,7 +443,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(http_requests_total{namespace=\"$namespace\",job=~\"thanos-querier.*\",handler=\"query_range\",code=~\"5..\"}[$interval])) / sum(rate(http_requests_total{namespace=\"$namespace\",job=~\"thanos-querier.*\",handler=\"query_range\"}[$interval]))",
+                     "expr": "sum(rate(http_requests_total{namespace=\"$namespace\",job=~\"thanos-query.*\",handler=\"query_range\",code=~\"5..\"}[$interval])) / sum(rate(http_requests_total{namespace=\"$namespace\",job=~\"thanos-query.*\",handler=\"query_range\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -509,10 +509,10 @@
                "linewidth": 1,
                "links": [
                   {
-                     "dashboard": "Thanos / Querier",
+                     "dashboard": "Thanos / Query",
                      "includeVars": true,
                      "keepTime": true,
-                     "title": "Thanos / Querier",
+                     "title": "Thanos / Query",
                      "type": "dashboard"
                   }
                ],
@@ -528,7 +528,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{namespace=\"$namespace\",job=~\"thanos-querier.*\",handler=\"query_range\"}[$interval])) by (job, le))",
+                     "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{namespace=\"$namespace\",job=~\"thanos-query.*\",handler=\"query_range\"}[$interval])) by (job, le))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
@@ -1241,10 +1241,10 @@
                "linewidth": 0,
                "links": [
                   {
-                     "dashboard": "Thanos / Receiver",
+                     "dashboard": "Thanos / Receive",
                      "includeVars": true,
                      "keepTime": true,
-                     "title": "Thanos / Receiver",
+                     "title": "Thanos / Receive",
                      "type": "dashboard"
                   }
                ],
@@ -1260,7 +1260,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(label_replace(rate(http_requests_total{handler=\"receive\",namespace=\"$namespace\",job=~\"thanos-receiver.*\"}[$interval]),\"status_code\", \"${1}xx\", \"code\", \"([0-9])..\")) by (job, status_code)",
+                     "expr": "sum(label_replace(rate(http_requests_total{handler=\"receive\",namespace=\"$namespace\",job=~\"thanos-receive.*\"}[$interval]),\"status_code\", \"${1}xx\", \"code\", \"([0-9])..\")) by (job, status_code)",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{status_code}}",
@@ -1328,10 +1328,10 @@
                "linewidth": 0,
                "links": [
                   {
-                     "dashboard": "Thanos / Receiver",
+                     "dashboard": "Thanos / Receive",
                      "includeVars": true,
                      "keepTime": true,
-                     "title": "Thanos / Receiver",
+                     "title": "Thanos / Receive",
                      "type": "dashboard"
                   }
                ],
@@ -1347,7 +1347,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(http_requests_total{handler=\"receive\",namespace=\"$namespace\",job=~\"thanos-receiver.*\",code=~\"5..\"}[$interval])) / sum(rate(http_requests_total{handler=\"receive\",namespace=\"$namespace\",job=~\"thanos-receiver.*\"}[$interval]))",
+                     "expr": "sum(rate(http_requests_total{handler=\"receive\",namespace=\"$namespace\",job=~\"thanos-receive.*\",code=~\"5..\"}[$interval])) / sum(rate(http_requests_total{handler=\"receive\",namespace=\"$namespace\",job=~\"thanos-receive.*\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -1413,10 +1413,10 @@
                "linewidth": 1,
                "links": [
                   {
-                     "dashboard": "Thanos / Receiver",
+                     "dashboard": "Thanos / Receive",
                      "includeVars": true,
                      "keepTime": true,
-                     "title": "Thanos / Receiver",
+                     "title": "Thanos / Receive",
                      "type": "dashboard"
                   }
                ],
@@ -1432,7 +1432,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{handler=\"receive\",namespace=\"$namespace\",job=~\"thanos-receiver.*\"}[$interval])) by (job, le))",
+                     "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{handler=\"receive\",namespace=\"$namespace\",job=~\"thanos-receive.*\"}[$interval])) by (job, le))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
@@ -1527,10 +1527,10 @@
                "linewidth": 0,
                "links": [
                   {
-                     "dashboard": "Thanos / Ruler",
+                     "dashboard": "Thanos / Rule",
                      "includeVars": true,
                      "keepTime": true,
-                     "title": "Thanos / Ruler",
+                     "title": "Thanos / Rule",
                      "type": "dashboard"
                   }
                ],
@@ -1546,7 +1546,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(thanos_alert_sender_alerts_sent_total{namespace=\"$namespace\",job=~\"thanos-ruler.*\"}[$interval])) by (job, alertmanager)",
+                     "expr": "sum(rate(thanos_alert_sender_alerts_sent_total{namespace=\"$namespace\",job=~\"thanos-rule.*\"}[$interval])) by (job, alertmanager)",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} {{alertmanager}}",
@@ -1614,10 +1614,10 @@
                "linewidth": 0,
                "links": [
                   {
-                     "dashboard": "Thanos / Ruler",
+                     "dashboard": "Thanos / Rule",
                      "includeVars": true,
                      "keepTime": true,
-                     "title": "Thanos / Ruler",
+                     "title": "Thanos / Rule",
                      "type": "dashboard"
                   }
                ],
@@ -1633,7 +1633,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(thanos_alert_sender_errors_total{namespace=\"$namespace\",job=~\"thanos-ruler.*\"}[$interval])) / sum(rate(thanos_alert_sender_alerts_sent_total{namespace=\"$namespace\",job=~\"thanos-ruler.*\"}[$interval]))",
+                     "expr": "sum(rate(thanos_alert_sender_errors_total{namespace=\"$namespace\",job=~\"thanos-rule.*\"}[$interval])) / sum(rate(thanos_alert_sender_alerts_sent_total{namespace=\"$namespace\",job=~\"thanos-rule.*\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -1699,10 +1699,10 @@
                "linewidth": 1,
                "links": [
                   {
-                     "dashboard": "Thanos / Ruler",
+                     "dashboard": "Thanos / Rule",
                      "includeVars": true,
                      "keepTime": true,
-                     "title": "Thanos / Ruler",
+                     "title": "Thanos / Rule",
                      "type": "dashboard"
                   }
                ],
@@ -1718,7 +1718,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "histogram_quantile(0.99, sum(rate(thanos_alert_sender_latency_seconds_bucket{namespace=\"$namespace\",job=~\"thanos-ruler.*\"}[$interval])) by (job, le))",
+                     "expr": "histogram_quantile(0.99, sum(rate(thanos_alert_sender_latency_seconds_bucket{namespace=\"$namespace\",job=~\"thanos-rule.*\"}[$interval])) by (job, le))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
@@ -1813,10 +1813,10 @@
                "linewidth": 0,
                "links": [
                   {
-                     "dashboard": "Thanos / Compactor",
+                     "dashboard": "Thanos / Compact",
                      "includeVars": true,
                      "keepTime": true,
-                     "title": "Thanos / Compactor",
+                     "title": "Thanos / Compact",
                      "type": "dashboard"
                   }
                ],
@@ -1832,7 +1832,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(thanos_compact_group_compactions_total{namespace=\"$namespace\",job=~\"thanos-compactor.*\"}[$interval])) by (job)",
+                     "expr": "sum(rate(thanos_compact_group_compactions_total{namespace=\"$namespace\",job=~\"thanos-compact.*\"}[$interval])) by (job)",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "compaction {{job}}",
@@ -1900,10 +1900,10 @@
                "linewidth": 0,
                "links": [
                   {
-                     "dashboard": "Thanos / Compactor",
+                     "dashboard": "Thanos / Compact",
                      "includeVars": true,
                      "keepTime": true,
-                     "title": "Thanos / Compactor",
+                     "title": "Thanos / Compact",
                      "type": "dashboard"
                   }
                ],
@@ -1919,7 +1919,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(thanos_compact_group_compactions_failures_total{namespace=\"$namespace\",job=~\"thanos-compactor.*\"}[$interval])) / sum(rate(thanos_compact_group_compactions_total{namespace=\"$namespace\",job=~\"thanos-compactor.*\"}[$interval]))",
+                     "expr": "sum(rate(thanos_compact_group_compactions_failures_total{namespace=\"$namespace\",job=~\"thanos-compact.*\"}[$interval])) / sum(rate(thanos_compact_group_compactions_total{namespace=\"$namespace\",job=~\"thanos-compact.*\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -1968,7 +1968,7 @@
          "repeatIteration": null,
          "repeatRowId": null,
          "showTitle": true,
-         "title": "Compactor",
+         "title": "Compact",
          "titleSize": "h6"
       }
    ],

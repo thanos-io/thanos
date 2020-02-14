@@ -1,44 +1,44 @@
 {
   local thanos = self,
-  ruler+:: {
-    jobPrefix: error 'must provide job prefix for Thanos Ruler alerts',
-    selector: error 'must provide selector for Thanos Ruler alerts',
+  rule+:: {
+    jobPrefix: error 'must provide job prefix for Thanos Rule alerts',
+    selector: error 'must provide selector for Thanos Rule alerts',
   },
   prometheusAlerts+:: {
     groups+: [
       {
-        name: 'thanos-ruler.rules',
+        name: 'thanos-rule.rules',
         rules: [
           {
-            alert: 'ThanosRulerQueueIsDroppingAlerts',
+            alert: 'ThanosRuleQueueIsDroppingAlerts',
             annotations: {
-              message: 'Thanos Ruler {{$labels.job}} {{$labels.pod}} is failing to queue alerts.',
+              message: 'Thanos Rule {{$labels.job}} {{$labels.pod}} is failing to queue alerts.',
             },
             expr: |||
               sum by (job) (rate(thanos_alert_queue_alerts_dropped_total{%(selector)s}[5m])) > 0
-            ||| % thanos.ruler,
+            ||| % thanos.rule,
             'for': '5m',
             labels: {
               severity: 'critical',
             },
           },
           {
-            alert: 'ThanosRulerSenderIsFailingAlerts',
+            alert: 'ThanosRuleSenderIsFailingAlerts',
             annotations: {
-              message: 'Thanos Ruler {{$labels.job}} {{$labels.pod}} is failing to send alerts to alertmanager.',
+              message: 'Thanos Rule {{$labels.job}} {{$labels.pod}} is failing to send alerts to alertmanager.',
             },
             expr: |||
               sum by (job) (rate(thanos_alert_sender_alerts_dropped_total{%(selector)s}[5m])) > 0
-            ||| % thanos.ruler,
+            ||| % thanos.rule,
             'for': '5m',
             labels: {
               severity: 'critical',
             },
           },
           {
-            alert: 'ThanosRulerHighRuleEvaluationFailures',
+            alert: 'ThanosRuleHighRuleEvaluationFailures',
             annotations: {
-              message: 'Thanos Ruler {{$labels.job}} {{$labels.pod}} is failing to evaluate rules.',
+              message: 'Thanos Rule {{$labels.job}} {{$labels.pod}} is failing to evaluate rules.',
             },
             expr: |||
               (
@@ -47,7 +47,7 @@
                 sum by (job) (rate(prometheus_rule_evaluations_total{%(selector)s}[5m]))
               * 100 > 5
               )
-            ||| % thanos.ruler,
+            ||| % thanos.rule,
 
             'for': '5m',
             labels: {
@@ -55,13 +55,13 @@
             },
           },
           {
-            alert: 'ThanosRulerHighRuleEvaluationWarnings',
+            alert: 'ThanosRuleHighRuleEvaluationWarnings',
             annotations: {
-              message: 'Thanos Ruler {{$labels.job}} {{$labels.pod}} has high number of evaluation warnings.',
+              message: 'Thanos Rule {{$labels.job}} {{$labels.pod}} has high number of evaluation warnings.',
             },
             expr: |||
               sum by (job) (rate(thanos_rule_evaluation_with_warnings_total{%(selector)s}[5m])) > 0
-            ||| % thanos.ruler,
+            ||| % thanos.rule,
 
             'for': '15m',
             labels: {
@@ -69,9 +69,9 @@
             },
           },
           {
-            alert: 'ThanosRulerRuleEvaluationLatencyHigh',
+            alert: 'ThanosRuleRuleEvaluationLatencyHigh',
             annotations: {
-              message: 'Thanos Ruler {{$labels.job}}/{{$labels.pod}} has higher evaluation latency than interval for {{$labels.rule_group}}.',
+              message: 'Thanos Rule {{$labels.job}}/{{$labels.pod}} has higher evaluation latency than interval for {{$labels.rule_group}}.',
             },
             expr: |||
               (
@@ -79,16 +79,16 @@
               >
                 sum by (job, pod, rule_group) (prometheus_rule_group_interval_seconds{%(selector)s})
               )
-            ||| % thanos.ruler,
+            ||| % thanos.rule,
             'for': '5m',
             labels: {
               severity: 'warning',
             },
           },
           {
-            alert: 'ThanosRulerGrpcErrorRate',
+            alert: 'ThanosRuleGrpcErrorRate',
             annotations: {
-              message: 'Thanos Ruler {{$labels.job}} is failing to handle {{ $value | humanize }}% of requests.',
+              message: 'Thanos Rule {{$labels.job}} is failing to handle {{ $value | humanize }}% of requests.',
             },
             expr: |||
               (
@@ -97,27 +97,27 @@
                 sum by (job) (rate(grpc_server_started_total{%(selector)s}[5m]))
               * 100 > 5
               )
-            ||| % thanos.ruler,
+            ||| % thanos.rule,
             'for': '5m',
             labels: {
               severity: 'warning',
             },
           },
           {
-            alert: 'ThanosRulerConfigReloadFailure',
+            alert: 'ThanosRuleConfigReloadFailure',
             annotations: {
-              message: 'Thanos Ruler {{$labels.job}} has not been able to reload its configuration.',
+              message: 'Thanos Rule {{$labels.job}} has not been able to reload its configuration.',
             },
-            expr: 'avg(thanos_rule_config_last_reload_successful{%(selector)s}) by (job) != 1' % thanos.ruler,
+            expr: 'avg(thanos_rule_config_last_reload_successful{%(selector)s}) by (job) != 1' % thanos.rule,
             'for': '5m',
             labels: {
               severity: 'warning',
             },
           },
           {
-            alert: 'ThanosRulerQueryHighDNSFailures',
+            alert: 'ThanosRuleQueryHighDNSFailures',
             annotations: {
-              message: 'Thanos Ruler {{$labels.job}} have {{ $value | humanize }}% of failing DNS queries for query endpoints.',
+              message: 'Thanos Rule {{$labels.job}} have {{ $value | humanize }}% of failing DNS queries for query endpoints.',
             },
             expr: |||
               (
@@ -126,16 +126,16 @@
                 sum by (job) (rate(thanos_ruler_query_apis_dns_lookups_total{%(selector)s}[5m]))
               * 100 > 1
               )
-            ||| % thanos.ruler,
+            ||| % thanos.rule,
             'for': '15m',
             labels: {
               severity: 'warning',
             },
           },
           {
-            alert: 'ThanosRulerAlertmanagerHighDNSFailures',
+            alert: 'ThanosRuleAlertmanagerHighDNSFailures',
             annotations: {
-              message: 'Thanos Ruler {{$labels.job}} have {{ $value | humanize }}% of failing DNS queries for Alertmanager endpoints.',
+              message: 'Thanos Rule {{$labels.job}} have {{ $value | humanize }}% of failing DNS queries for Alertmanager endpoints.',
             },
             expr: |||
               (
@@ -144,7 +144,7 @@
                 sum by (job) (rate(thanos_ruler_alertmanagers_dns_lookups_total{%(selector)s}[5m]))
               * 100 > 1
               )
-            ||| % thanos.ruler,
+            ||| % thanos.rule,
             'for': '15m',
             labels: {
               severity: 'warning',
